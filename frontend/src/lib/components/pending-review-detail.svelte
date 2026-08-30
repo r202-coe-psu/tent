@@ -198,7 +198,7 @@
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<!-- Vehicle -->
 			<div class="rounded-xl border border-border/80 bg-card p-4">
-				<div class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground uppercase">
+				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
 					<Truck class="h-3.5 w-3.5 text-muted-foreground" />
 					<span>ยานพาหนะจัดส่ง</span>
 				</div>
@@ -209,7 +209,7 @@
 
 			<!-- Location / Shelter -->
 			<div class="rounded-xl border border-border/80 bg-card p-4">
-				<div class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground uppercase">
+				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
 					<MapPin class="h-3.5 w-3.5 text-muted-foreground" />
 					<span>อาคาร/พิกัดเสนอรับเข้า</span>
 				</div>
@@ -220,7 +220,7 @@
 
 			<!-- Appointment Date -->
 			<div class="rounded-xl border border-border/80 bg-card p-4 md:col-span-2">
-				<div class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground uppercase">
+				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
 					<Calendar class="h-3.5 w-3.5 text-muted-foreground" />
 					<span>นัดหมายเสนอขอบริจาค</span>
 				</div>

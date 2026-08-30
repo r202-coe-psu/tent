@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock } from '../application/queries';
@@ -11,7 +11,7 @@
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
-	import type { StockLot } from '../domain/operations';
+	import type { StockLot, StockLedger } from '../domain/operations';
 
 	let {
 		onsuccess,
@@ -20,7 +20,7 @@
 
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 
@@ -46,14 +46,16 @@
 		const supplyItems = itemsQuery.data ?? [];
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
-			reorder_level: null,
-			perishable: false
-		}));
+		const mappedItemMasters = itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				_id: im._id,
+				name: im.name,
+				category: im.category || 'other',
+				unit: itemMasterUnit(im),
+				reorder_level: null,
+				perishable: false
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
@@ -68,7 +70,7 @@
 	const itemLots = $derived.by(() => {
 		const currentItem = selectedItem;
 		if (!currentItem || !ledgerQuery.data) return [];
-		const entries = ledgerQuery.data.filter((e) => e.item_id === currentItem._id);
+		const entries = (ledgerQuery.data as StockLedger[]).filter((e: StockLedger) => e.item_id === currentItem._id);
 		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
 
 		for (const entry of entries) {
@@ -221,13 +223,17 @@
 		});
 	}
 
-	// Pre-fill
+	/**
+	 * Keep the modal's locked item pinned — see `receive-stock-form.svelte`.
+	 * Guarding on `selectedItem` also stops a background refetch of `items` from
+	 * re-running `selectItem()` mid-edit, which would wipe the lot, quantity and
+	 * reason the user is part-way through typing.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || selectedItem?._id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 
@@ -401,7 +407,7 @@
 					<div class="flex flex-col gap-0.5">
 						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
 						{#if selectedLotKey !== 'new'}
-							<span class="text-[11px] text-muted-foreground/80">
+							<span class="text-2xs text-muted-foreground/80">
 								(ยอดเดิมในคลัง: {currentLotQty}
 								{selectedItem.unit})
 							</span>

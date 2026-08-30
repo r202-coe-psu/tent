@@ -13,7 +13,7 @@ export const PUBLIC_SHELTERS_I18N = {
 		tryChangeFilter: 'ลองเปลี่ยนเงื่อนไขการค้นหาอีกครั้ง',
 		statusOpen: 'เปิดใช้งาน',
 		statusFull: 'เต็มความจุ',
-		statusPrepare: 'เตรียมพร้อม',
+		statusPrepare: 'กำลังเตรียมการ',
 		statusClosed: 'ปิดทำการ'
 	},
 	en: {

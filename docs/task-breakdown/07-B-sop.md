@@ -2,13 +2,14 @@
 title: "Task Breakdown — Module B — SOP & Resource Calc"
 status: active
 created: 2026-06-05
-updated: 2026-08-13
+updated: 2026-08-26
 module: B
 note: >
   decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown;
   CR-006 (SOP master/override) applied 2026-06-22;
   CR-042 (OD-1=A, OD-2=B, OD-3=A, OD-4=C) applied 2026-07-23;
-  2026-08-13 — CR-066 T-69 occupancy health **approved** (Wave 1–3); T-76 SOP-lite/Sphere = Wave 4 รอบ CR ถัดไป
+  2026-08-13 — CR-066 T-69 occupancy health **approved** (Wave 1–3); T-76 SOP-lite/Sphere = Wave 4 รอบ CR ถัดไป;
+  2026-08-26 — CR-079 owner clarification: saved Scenario ลบได้แบบ authorized tombstone แต่ห้าม update
 ---
 
 # Module B — SOP & Resource Calc
@@ -92,7 +93,8 @@ note: >
 **Definition of Done:**
 - ตั้ง scenario (occupancy สมมุติ, จำนวนวัน, ratio override) แล้วรันผลผ่าน engine เดียวกับ T-31 (ไม่ fork สูตร)
 - ผล simulation แยกขาดจากข้อมูลจริง (ไม่เขียนทับ calc รายวัน) + เทียบ scenario กับปัจจุบันได้
-- บันทึก/เปิด scenario ซ้ำได้ และ test + demo จำลองเหตุการณ์น้ำท่วมตัวอย่าง — ส่งมอบภายใน 14/09/2026
+- บันทึก/เปิด scenario ซ้ำได้ และลบ scenario ที่บันทึกโดย role ที่ได้รับอนุญาตได้ โดยไม่กระทบ
+  `daily_calc`; มี test + demo จำลองเหตุการณ์น้ำท่วมตัวอย่าง — ส่งมอบภายใน 14/09/2026
 
 ---
 

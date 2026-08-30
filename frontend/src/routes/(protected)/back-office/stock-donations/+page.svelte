@@ -14,6 +14,7 @@
 	import IncomingRedirectsBoard from '$lib/components/incoming-redirects-board.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import { useDonationNeedsBoard } from '$lib/features/operations';
 	import type { DonationRedirect, PendingDonationRow } from '$lib/features/donations';
 
@@ -29,6 +30,24 @@
 			viewState = 'list';
 		}
 	});
+
+	/**
+	 * T-22 / CR-052 §1.6 — closing a need by hand needs a reason, reopening does not.
+	 * `NeedsBoardAdmin` is shared with other screens and hands the action up as a prop, so
+	 * the prompt is intercepted here rather than inside the board.
+	 */
+	let cutOffTarget = $state<{ id: string; itemId: string; name: string } | null>(null);
+
+	function handleToggleCutOff(id: string, itemId: string) {
+		const need = needsBoard.derivedItems
+			.find((i) => i.id === id)
+			?.needs.find((n) => n.itemId === itemId);
+		if (need?.isManualClosed) {
+			needsBoard.toggleCutOff(id, itemId);
+			return;
+		}
+		cutOffTarget = { id, itemId, name: need?.name ?? itemId };
+	}
 
 	// R-16.1 — pending-review queue, loaded from the real intake API (no mock array).
 	let pendingRequests = $state<PendingDonationRow[]>([]);
@@ -221,7 +240,7 @@
 				รอการประเมิน
 				{#if pendingRequests.length > 0}
 					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{pendingRequests.length}</span
 					>
 				{/if}
@@ -238,7 +257,7 @@
 				กำลังตรวจรับ
 				{#if verifyingRequests.length > 0}
 					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{verifyingRequests.length}</span
 					>
 				{/if}
@@ -255,7 +274,7 @@
 				ส่งต่อเข้ามา
 				{#if incomingRedirects.length > 0}
 					<span
-						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{incomingRedirects.length}</span
 					>
 				{/if}
@@ -329,7 +348,7 @@
 				items={needsBoard.derivedItems}
 				onAddRequest={() => (viewState = 'create')}
 				onToggleShowOnHome={needsBoard.toggleShowOnHome}
-				onToggleCutOff={needsBoard.toggleCutOff}
+				onToggleCutOff={handleToggleCutOff}
 			/>
 		{:else}
 			<CreateCampaignForm
@@ -344,4 +363,14 @@
 	open={isModalOpen}
 	onclose={() => (isModalOpen = false)}
 	onsubmit={needsBoard.handleAddRequest}
+/>
+
+<ForceCutoffDialog
+	open={cutOffTarget !== null}
+	itemName={cutOffTarget?.name ?? ''}
+	oncancel={() => (cutOffTarget = null)}
+	onconfirm={(reason) => {
+		if (cutOffTarget) needsBoard.toggleCutOff(cutOffTarget.id, cutOffTarget.itemId, reason);
+		cutOffTarget = null;
+	}}
 />

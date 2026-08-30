@@ -41,6 +41,19 @@
 		open = false;
 		tick().then(() => triggerRef.focus());
 	}
+
+	function getItemKeywords(item: T): string[] {
+		const raw = item as { label?: string; sku?: string; keywords?: string[] };
+		const set = new Set<string>();
+		if (raw.label) set.add(raw.label);
+		if (raw.sku) set.add(raw.sku);
+		if (Array.isArray(raw.keywords)) {
+			for (const k of raw.keywords) {
+				if (k) set.add(k);
+			}
+		}
+		return Array.from(set);
+	}
 </script>
 
 <Popover.Root bind:open>
@@ -56,7 +69,16 @@
 				class={cn('w-full justify-between font-normal', className)}
 			>
 				<span class="truncate">
-					{selectedItem?.label ?? placeholder}
+					{#if selectedItem}
+						{selectedItem.label}
+						{#if (selectedItem as { sku?: string }).sku}
+							<span class="font-mono text-xs opacity-75">
+								({(selectedItem as { sku?: string }).sku})</span
+							>
+						{/if}
+					{:else}
+						{placeholder}
+					{/if}
 				</span>
 				<ChevronsUpDownIcon class="size-4 shrink-0 opacity-50" />
 			</Button>
@@ -74,14 +96,21 @@
 					{#each items as item (item.value)}
 						<Command.Item
 							value={item.value}
-							keywords={[item.label]}
+							keywords={getItemKeywords(item)}
 							onSelect={() => onSelect(item)}
 						>
 							<CheckIcon class={cn('size-4', value !== item.value && 'text-transparent')} />
 							{#if itemSnippet}
 								{@render itemSnippet({ item, selected: value === item.value })}
 							{:else}
-								{item.label}
+								<div class="flex items-center gap-2">
+									<span>{item.label}</span>
+									{#if (item as { sku?: string }).sku}
+										<span class="font-mono text-xs opacity-70"
+											>({(item as { sku?: string }).sku})</span
+										>
+									{/if}
+								</div>
 							{/if}
 						</Command.Item>
 					{/each}

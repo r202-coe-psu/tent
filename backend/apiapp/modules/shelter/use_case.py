@@ -126,22 +126,20 @@ class ShelterUseCase:
 
         m = doc.raw_data or {}
 
-        mapped_status = "CLOSED"
-        op_status = m.get("operation_status")
-        if op_status == "active":
-            mapped_status = "OPEN"
-        elif op_status == "full_capacity":
-            mapped_status = "FULL"
-        elif op_status == "standby":
-            mapped_status = "PREPARE"
+        status_ui = {
+            "open": "OPEN",
+            "full": "FULL",
+            "standby": "PREPARE",
+            "closed": "CLOSED",
+        }
+        # Prefer projected status (Mongo SoR for public) over re-deriving from raw_data.
+        mapped_status = status_ui.get(doc.status, "CLOSED")
 
-        occupancy = 0
-        if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find(
-                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
-            ).count()
+        occupancy = await PublicPerson.find(
+            {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+        ).count()
 
-        capacity_total = m.get("capacity") or 0
+        capacity_total = m.get("capacity") or doc.capacity or 0
         capacity_available = max(0, capacity_total - occupancy)
         occupancy_rate = round((occupancy / capacity_total) * 100) if capacity_total > 0 else 0
 
@@ -246,7 +244,29 @@ class ShelterUseCase:
                 },
                 "zones": mapped_zones,
                 "contact": {"manager": manager_name, "phone": manager_phone},
-                "faq": [],
+                "faq": m.get("faq")
+                or [
+                    {
+                        "q": "สามารถนำสัตว์เลี้ยงเข้ามาพักด้วยได้หรือไม่?",
+                        "a": (
+                            "อนุญาตให้นำสัตว์เลี้ยงขนาดเล็กและสุนัขเข้าพักได้ที่โซนสัตว์เลี้ยง"
+                            " โดยเจ้าของต้องเตรียมกรงหรือสายจูงมาด้วย"
+                        ),
+                    },
+                    {
+                        "q": "มีบริการอาหาร น้ำดื่ม และของใช้จำเป็นหรือไม่?",
+                        "a": (
+                            "มีบริการอาหารปรุงสุก 3 มื้อจากโรงครัวกลาง พร้อมน้ำดื่มสะอาดและถุงยังชีพตลอด 24 ชั่วโมง"
+                        ),
+                    },
+                    {
+                        "q": "การเดินทางและที่จอดรถเป็นอย่างไร?",
+                        "a": (
+                            "สามารถเดินทางเข้าทางประตู 10 มหาวิทยาลัยสงขลานครินทร์ (ถ.กาญจนวนิช)"
+                            " มีพื้นที่จอดรถยนต์และจักรยานยนต์รองรับ"
+                        ),
+                    },
+                ],
             }
         )
 

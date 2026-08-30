@@ -33,11 +33,15 @@ def is_shelter_open(doc: dict[str, Any]) -> bool:
 
 
 def map_public_shelter_status(doc: dict[str, Any]) -> str:
+    """Map registry operation_status → public_shelters.status (schema §9.1)."""
     status = resolve_operation_status(doc)
     if status in CLOSED_STATUSES:
         return "closed"
     if status == "full_capacity":
         return "full"
+    if status == "standby":
+        return "standby"
+    # active / legacy "open"
     return "open"
 
 

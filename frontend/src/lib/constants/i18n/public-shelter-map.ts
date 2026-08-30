@@ -1,6 +1,6 @@
 export const PUBLIC_SHELTER_MAP_I18N = {
 	th: {
-		yourLocation: '📍 ตำแหน่งของคุณ',
+		yourLocation: '📍 ตำแหน่งค้นหา',
 		shelter: 'ศูนย์พักพิง',
 		status: 'สถานะ:',
 		capacity: 'ความจุ:',
@@ -9,12 +9,17 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		km: 'กม.',
 		shelterStatus: 'สถานะศูนย์พักพิง',
 		statusOpen: 'เปิดใช้งาน',
-		statusStandby: 'เตรียมพร้อม',
+		statusStandby: 'กำลังเตรียมการ',
 		statusFull: 'เต็มความจุ',
-		statusClosed: 'ปิดทำการ'
+		statusClosed: 'ปิดทำการ',
+		placePin: 'วางหมุดค้นหา',
+		placingPin: 'คลิกบนแผนที่เพื่อวางหมุด',
+		cancelPlacePin: 'ยกเลิก',
+		evacCenter: 'ศูนย์อพยพ',
+		hostHouse: 'บ้านพี่เลี้ยง'
 	},
 	en: {
-		yourLocation: '📍 Your Location',
+		yourLocation: '📍 Search origin',
 		shelter: 'Shelter',
 		status: 'Status:',
 		capacity: 'Capacity:',
@@ -23,8 +28,13 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		km: 'km',
 		shelterStatus: 'Shelter Status',
 		statusOpen: 'Open',
-		statusStandby: 'Standby',
+		statusStandby: 'Preparing',
 		statusFull: 'Full',
-		statusClosed: 'Closed'
+		statusClosed: 'Closed',
+		placePin: 'Place search pin',
+		placingPin: 'Click the map to place a pin',
+		cancelPlacePin: 'Cancel',
+		evacCenter: 'Evacuation Center',
+		hostHouse: 'Host House'
 	}
 } as const;

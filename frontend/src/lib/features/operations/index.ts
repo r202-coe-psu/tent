@@ -32,6 +32,8 @@ export type {
 export {
 	ledgerReasonSchema,
 	donationStatusSchema,
+	DONATION_OUTSTANDING_STATUSES,
+	isDonationOutstanding,
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
@@ -64,6 +66,8 @@ export {
 	keyedDonationIds,
 	keyableDonations,
 	isNeedCutOff,
+	forceCutOffNeed,
+	reopenNeed,
 	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
@@ -96,7 +100,7 @@ export {
 
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
-export { operationsRepository } from './data/operations.remote';
+export { operationsRepository, OperationsRemoteRepository } from './data/operations.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {
@@ -123,6 +127,8 @@ export {
 	useDispatchTransfer,
 	useReceiveTransfer,
 	useCancelTransfer,
+	useCrossShelterStockBalances,
+	useCrossShelterLedger,
 	startOperationsLiveQuery
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';

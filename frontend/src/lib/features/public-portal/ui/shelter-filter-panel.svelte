@@ -67,14 +67,33 @@
 		userLng?: string;
 	} = $props();
 
+	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
+
 	let searchQuery = $state<string>('');
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
 	let selectedSiteKind = $state<string>('');
 	let distanceValue = $state<string>('5');
+	/** Draft for the custom km field (may differ from distanceValue while typing). */
+	let customDistanceDraft = $state<string>('');
+	let customDistanceError = $state(false);
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+
+	function isDistancePreset(value: string): boolean {
+		return (DISTANCE_PRESETS as readonly string[]).includes(value);
+	}
+
+	function normalizeDistanceKm(raw: string): string | null {
+		const trimmed = raw.trim().replace(',', '.');
+		if (!trimmed) return null;
+		const n = Number(trimmed);
+		if (!Number.isFinite(n) || n <= 0) return null;
+		// Trim excess float noise (e.g. 3.000 → 3).
+		const rounded = Math.round(n * 1000) / 1000;
+		return String(rounded);
+	}
 
 	$effect(() => {
 		searchQuery = filters.search ?? '';
@@ -82,11 +101,16 @@
 		selectedDistrict = filters.district ?? '';
 		selectedSubdistrict = filters.subdistrict ?? '';
 		selectedSiteKind = filters.site_kind ?? '';
-		distanceValue = filters.distance || '5';
+		const nextDistance = filters.distance || '5';
+		distanceValue = nextDistance;
+		customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
+		customDistanceError = false;
 
-		if (filters.user_lat && !userLat) userLat = filters.user_lat.toString();
-		if (filters.user_lng && !userLng) userLng = filters.user_lng.toString();
+		if (filters.user_lat) userLat = filters.user_lat.toString();
+		if (filters.user_lng) userLng = filters.user_lng.toString();
 	});
+
+	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
 
@@ -132,7 +156,13 @@
 	let hasPosition = $derived(Boolean(userLat && userLng));
 	let distanceLocked = $derived(!hasPosition && (locating || geoReason !== null));
 
+	// Map pin (or GPS) sets bindable lat/lng — clear GPS error so radius stays usable.
+	$effect(() => {
+		if (userLat && userLng) geoReason = null;
+	});
+
 	let geoHint = $derived.by(() => {
+		if (hasPosition) return '';
 		switch (geoReason) {
 			case 'insecure':
 				return t.geoInsecure;
@@ -144,7 +174,7 @@
 			case 'unavailable':
 				return t.geoUnsupported;
 			default:
-				return locating ? t.geoLocating : '';
+				return locating ? t.geoLocating : t.geoPinHint;
 		}
 	});
 
@@ -189,10 +219,74 @@
 	async function selectDistance(km: string) {
 		if (distanceValue === km) {
 			distanceValue = '';
+			customDistanceDraft = '';
+			customDistanceError = false;
 			return;
 		}
 		if (!(await ensureUserPosition())) return;
 		distanceValue = km;
+		customDistanceDraft = '';
+		customDistanceError = false;
+	}
+
+	async function applyCustomDistance() {
+		const normalized = normalizeDistanceKm(customDistanceDraft);
+		if (normalized === null) {
+			if (customDistanceDraft.trim() === '') {
+				customDistanceError = false;
+				if (isCustomDistance) distanceValue = '';
+				return;
+			}
+			customDistanceError = true;
+			return;
+		}
+		if (!(await ensureUserPosition())) return;
+		customDistanceError = false;
+		customDistanceDraft = normalized;
+		distanceValue = normalized;
+	}
+
+	async function onCustomDistanceFocus() {
+		customDistanceError = false;
+		if (!hasPosition) await ensureUserPosition();
+	}
+
+	/** Sync custom draft into distance before GET submit (covers submit without blur). */
+	function prepareDistanceForSubmit(): boolean {
+		const draft = customDistanceDraft.trim();
+		if (!draft) {
+			customDistanceError = false;
+			return true;
+		}
+		const normalized = normalizeDistanceKm(draft);
+		if (normalized === null) {
+			customDistanceError = true;
+			return false;
+		}
+		customDistanceError = false;
+		customDistanceDraft = normalized;
+		distanceValue = normalized;
+		return true;
+	}
+
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			ศาลาประชาคม: 'Community Hall',
+			ศูนย์กีฬา: 'Sports Centre',
+			อาคารราชการ: 'Government Building',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
 	}
 
 	let hideFullToggle = $state<boolean>(false);
@@ -209,7 +303,14 @@
 		<h3 class="font-bold text-foreground">{t.title}</h3>
 	</div>
 
-	<form method="GET" {action} class="flex min-h-0 flex-1 flex-col">
+	<form
+		method="GET"
+		{action}
+		class="flex min-h-0 flex-1 flex-col"
+		onsubmit={(e) => {
+			if (!prepareDistanceForSubmit()) e.preventDefault();
+		}}
+	>
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
 				<!-- Search -->
@@ -271,16 +372,16 @@
 				<!-- Site kind -->
 				<div class="space-y-1.5">
 					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
-						>ชนิดสถานที่</Label
+						>{t.siteKindLabel}</Label
 					>
 					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
 						<Select.Trigger class="w-full rounded-xl">
-							<Select.Value placeholder="ชนิดสถานที่ (ทั้งหมด)" />
+							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="">ชนิดสถานที่ (ทั้งหมด)</Select.Item>
-							<Select.Item value="evacuation_center">ศูนย์อพยพ</Select.Item>
-							<Select.Item value="host_house">บ้านพี่เลี้ยง</Select.Item>
+							<Select.Item value="">{t.siteKindAll}</Select.Item>
+							<Select.Item value="evacuation_center">{t.siteKindEvacCenter}</Select.Item>
+							<Select.Item value="host_house">{t.siteKindHostHouse}</Select.Item>
 						</Select.Content>
 					</Select.Root>
 				</div>
@@ -296,25 +397,25 @@
 						<Select.Content>
 							<Select.Item value="">{t.typePlaceholder}</Select.Item>
 							{#each availableTypes as tp (tp)}
-								<Select.Item value={tp}>{tp}</Select.Item>
+								<Select.Item value={tp}>{translateAdminType(tp)}</Select.Item>
 							{/each}
 						</Select.Content>
 					</Select.Root>
 				</div>
 
-				<!-- Distance radio pills -->
+				<!-- Distance presets + custom km -->
 				<div class="space-y-3">
 					<div class="text-xs font-bold text-foreground">{t.radiusLabel}</div>
 					<div
-						class="flex gap-2 rounded-lg border border-border bg-muted/20 p-1"
+						class="flex flex-wrap gap-1 rounded-lg border border-border bg-muted/20 p-1"
 						title={geoHint || undefined}
 					>
 						<input type="hidden" name="distance" value={hasPosition ? distanceValue : ''} />
-						{#each ['5', '10', '20'] as km (km)}
+						{#each DISTANCE_PRESETS as km (km)}
 							<button
 								type="button"
 								disabled={distanceLocked}
-								class="flex-1 rounded-md py-1.5 text-center text-[13px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
+								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
@@ -325,8 +426,34 @@
 							</button>
 						{/each}
 					</div>
+					<div class="flex items-center gap-2" title={geoHint || undefined}>
+						<span
+							class="shrink-0 text-xs font-medium {isCustomDistance
+								? 'font-bold text-foreground'
+								: 'text-muted-foreground'}">{t.radiusCustom}</span
+						>
+						<Input
+							type="text"
+							inputmode="decimal"
+							disabled={distanceLocked}
+							bind:value={customDistanceDraft}
+							placeholder={t.radiusCustomPlaceholder}
+							aria-invalid={customDistanceError}
+							aria-label={t.radiusCustom}
+							class="h-8 w-full rounded-md text-xs {isCustomDistance
+								? 'border-primary-dark/40'
+								: ''} {customDistanceError ? 'border-destructive' : ''}"
+							onfocus={() => onCustomDistanceFocus()}
+							onblur={() => applyCustomDistance()}
+							onchange={() => applyCustomDistance()}
+						/>
+						<span class="shrink-0 text-xs text-muted-foreground">{t.km}</span>
+					</div>
+					{#if customDistanceError}
+						<p class="text-2xs text-destructive">{t.radiusInvalid}</p>
+					{/if}
 					{#if geoHint}
-						<p class="text-[11px] text-muted-foreground">{geoHint}</p>
+						<p class="text-2xs text-muted-foreground">{geoHint}</p>
 					{/if}
 				</div>
 
@@ -350,7 +477,7 @@
 							class="cursor-pointer text-sm leading-tight font-bold text-foreground"
 							>{t.hideFullTitle}</Label
 						>
-						<span class="text-[11px] text-muted-foreground">{t.hideFullDesc}</span>
+						<span class="text-2xs text-muted-foreground">{t.hideFullDesc}</span>
 					</div>
 				</div>
 
@@ -367,7 +494,7 @@
 								<div class="space-y-6 px-2 pt-2 pb-2">
 									<!-- Category 1 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat1}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat1}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -428,7 +555,7 @@
 									</div>
 									<!-- Category 2 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat2}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat2}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -467,7 +594,7 @@
 									</div>
 									<!-- Category 3 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat3}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat3}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -506,7 +633,7 @@
 									</div>
 									<!-- Category 4 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">
+										<div class="text-xs font-bold text-foreground">
 											{t.cat4}
 										</div>
 										<div class="flex flex-col gap-3">

@@ -57,55 +57,67 @@ export type DonationTrackView = {
 	revisions: Array<Record<string, unknown>>;
 };
 
-const STATUS_LABELS: Record<string, string> = {
-	declared: 'จองคิวบริจาคแล้ว',
-	pending_review: 'รอตรวจสอบความเหมาะสม',
-	verifying: 'กำลังตรวจรับที่ศูนย์',
-	received: 'รับเข้าคลังเรียบร้อย',
-	redirected: 'ส่งต่อไปศูนย์อื่น',
-	rejected: 'ไม่รับรายการนี้',
-	expired: 'หมดอายุการจอง',
-	cancelled: 'ยกเลิกการจองแล้ว'
+const STATUS_LABELS: Record<string, { th: string; en: string }> = {
+	declared: { th: 'จองคิวบริจาคแล้ว', en: 'Donation Reserved' },
+	pending_review: { th: 'รอตรวจสอบความเหมาะสม', en: 'Pending Review' },
+	verifying: { th: 'กำลังตรวจรับที่ศูนย์', en: 'Checking in at Shelter' },
+	received: { th: 'รับเข้าคลังเรียบร้อย', en: 'Received into Warehouse' },
+	redirected: { th: 'ส่งต่อไปศูนย์อื่น', en: 'Redirected to Other Shelter' },
+	rejected: { th: 'ไม่รับรายการนี้', en: 'Rejected' },
+	expired: { th: 'หมดอายุการจอง', en: 'Reservation Expired' },
+	cancelled: { th: 'ยกเลิกการจองแล้ว', en: 'Reservation Cancelled' }
 };
 
-const DELIVERY_LABELS: Record<string, string> = {
-	self_dropoff: 'นำมาส่งเอง',
-	parcel: 'ส่งพัสดุ',
-	shelter_pickup: 'ให้รถศูนย์ไปรับ'
+const DELIVERY_LABELS: Record<string, { th: string; en: string }> = {
+	self_dropoff: { th: 'นำมาส่งเอง', en: 'Self Drop-off' },
+	parcel: { th: 'ส่งพัสดุ', en: 'Parcel / Courier' },
+	shelter_pickup: { th: 'ให้รถศูนย์ไปรับ', en: 'Shelter Pickup' }
 };
 
-const VEHICLE_LABELS: Record<string, string> = {
-	motorcycle: 'รถจักรยานยนต์',
-	car: 'รถยนต์',
-	pickup: 'รถกระบะ',
-	truck: 'รถบรรทุก'
+const VEHICLE_LABELS: Record<string, { th: string; en: string }> = {
+	motorcycle: { th: 'รถจักรยานยนต์', en: 'Motorcycle' },
+	car: { th: 'รถยนต์', en: 'Car / Sedan' },
+	pickup: { th: 'รถกระบะ', en: 'Pickup Truck' },
+	truck: { th: 'รถบรรทุก', en: 'Truck' }
 };
 
-export function donationStatusLabel(status: string): string {
-	return STATUS_LABELS[status] ?? status;
+export function donationStatusLabel(status: string, locale: 'th' | 'en' = 'th'): string {
+	return STATUS_LABELS[status]?.[locale] ?? STATUS_LABELS[status]?.th ?? status;
 }
 
-export function deliveryMethodLabel(method: string | undefined | null): string {
+export function deliveryMethodLabel(
+	method: string | undefined | null,
+	locale: 'th' | 'en' = 'th'
+): string {
 	if (!method) return '-';
-	return DELIVERY_LABELS[method] ?? method;
+	return DELIVERY_LABELS[method]?.[locale] ?? DELIVERY_LABELS[method]?.th ?? method;
 }
 
-export function vehicleLabel(vehicle: string | undefined | null): string {
+export function vehicleLabel(
+	vehicle: string | undefined | null,
+	locale: 'th' | 'en' = 'th'
+): string {
 	if (!vehicle) return '-';
-	return VEHICLE_LABELS[vehicle] ?? vehicle;
+	return VEHICLE_LABELS[vehicle]?.[locale] ?? VEHICLE_LABELS[vehicle]?.th ?? vehicle;
 }
 
-export function formatTrackTimestamp(iso: string | null | undefined): string {
+export function formatTrackTimestamp(
+	iso: string | null | undefined,
+	locale: 'th' | 'en' = 'th'
+): string {
 	if (!iso) return '-';
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleString('th-TH', {
+	return d.toLocaleString(locale === 'en' ? 'en-US' : 'th-TH', {
 		dateStyle: 'medium',
 		timeStyle: 'short'
 	});
 }
 
-export function formatTrackSchedule(logistics: DonationTrackLogistics | null): string {
+export function formatTrackSchedule(
+	logistics: DonationTrackLogistics | null,
+	locale: 'th' | 'en' = 'th'
+): string {
 	if (!logistics) return '-';
 	const slot = logistics.slot;
 	if (slot?.date) {
@@ -113,7 +125,7 @@ export function formatTrackSchedule(logistics: DonationTrackLogistics | null): s
 			slot.from && slot.to ? ` (${slot.from} - ${slot.to})` : slot.from ? ` (${slot.from})` : '';
 		return `${slot.date}${range}`;
 	}
-	if (logistics.eta) return formatTrackTimestamp(logistics.eta);
+	if (logistics.eta) return formatTrackTimestamp(logistics.eta, locale);
 	return '-';
 }
 

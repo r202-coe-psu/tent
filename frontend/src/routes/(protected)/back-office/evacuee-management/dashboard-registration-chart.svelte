@@ -92,7 +92,7 @@
 				},
 				xAxis: {
 					tickLabelProps: {
-						class: 'text-[10px] fill-muted-foreground',
+						class: 'text-2xs fill-muted-foreground',
 						dy: 10
 					}
 				},

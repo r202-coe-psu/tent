@@ -84,7 +84,13 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		storageZone: 'โซนเก็บของ',
 		adminZone: 'โซนเจ้าหน้าที่',
 		medicalZone: 'โซนปฐมพยาบาล',
-		zonePrefix: 'โซน'
+		zonePrefix: 'โซน',
+		backToShelters: 'ย้อนกลับหน้าตรวจสอบสถานะ',
+		bookThisShelter: 'จองที่ศูนย์นี้',
+		shelterDetailSubtitle: 'SMARTSHELTER • ข้อมูลศูนย์พักพิงฉบับสมบูรณ์',
+		shelterNotFound: 'ไม่พบข้อมูลศูนย์พักพิง',
+		shelterNotFoundDesc: 'ขออภัย ข้อมูลที่คุณต้องการค้นหาอาจถูกลบหรือไม่มีอยู่ในระบบ',
+		shelterDetailFallback: 'ข้อมูลศูนย์พักพิง'
 	},
 	en: {
 		openAdmission: 'Open for Admission',
@@ -171,6 +177,13 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		storageZone: 'Storage Zone',
 		adminZone: 'Admin Zone',
 		medicalZone: 'Medical Zone',
-		zonePrefix: 'Zone'
+		zonePrefix: 'Zone',
+		backToShelters: 'Back to Shelter Status',
+		bookThisShelter: 'Book This Shelter',
+		shelterDetailSubtitle: 'SMARTSHELTER • Complete Shelter Information',
+		shelterNotFound: 'Shelter Not Found',
+		shelterNotFoundDesc:
+			'Sorry, the information you are looking for may have been removed or does not exist.',
+		shelterDetailFallback: 'Shelter Information'
 	}
 } as const;

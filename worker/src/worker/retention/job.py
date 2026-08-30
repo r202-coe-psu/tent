@@ -19,6 +19,7 @@ from tent_model import (
 )
 
 from worker.couch.client import CouchClient
+from worker.donation_status import is_donation_outstanding
 from worker.quota.expiry import expire_declared_donations
 
 logger = logging.getLogger(__name__)
@@ -152,8 +153,10 @@ async def purge_expired_buffers(job_run_id: str) -> None:
 		# quota.settle — calling release_quota again here is a safe no-op (underflow
 		# guard). This guard only works because settle keeps the status truthful:
 		# before it, every synced row read "declared" forever and this branch handed
-		# back quota for goods already in the shelter.
-		if donation.status == "declared" and donation.campaign_id:
+		# back quota for goods already in the shelter. Since CR-052 a booking waits in
+		# "pending_review"/"verifying" rather than "declared", so the test is the whole
+		# outstanding set — otherwise a purged reservation keeps its quota forever.
+		if is_donation_outstanding(donation.status) and donation.campaign_id:
 			for item in donation.items_declared:
 				reserved_qty = item.get("reserved_qty")
 				item_id = item.get("item_id")
