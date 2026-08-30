@@ -85,6 +85,25 @@ export interface Recipe extends CatalogDoc {
 	override?: boolean;
 }
 
+// ---------------------------------------------------------------- unit resolution
+
+/** Fallback unit for `item_master` docs written before `base_unit` was required. */
+export const DEFAULT_ITEM_UNIT = 'ชิ้น';
+
+/**
+ * The stock-keeping unit of an `item_master`.
+ *
+ * `base_unit` is authoritative — every ledger row for the item must carry it.
+ * `unit` is the CR-013 transition field and only answers for docs written before
+ * `base_unit` existed. Everything that locks a unit for stock (item pickers, the
+ * receive/adjust catalog guards, stock-status) must read it through here: when
+ * the picker resolved `base_unit` and the guard read the bare `unit` field, every
+ * receipt for an `item_master` failed with `expected undefined, got <unit>`.
+ */
+export function itemMasterUnit(item: { base_unit?: string; unit?: string }): string {
+	return item.base_unit || item.unit || DEFAULT_ITEM_UNIT;
+}
+
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),

@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 import type { SupplyItem } from '$lib/features/supply';
+import type { ItemMaster } from '$lib/features/catalog';
 import { isAuditEntry } from '$lib/features/shared';
 
 vi.mock('$lib/db/shelter', () => ({
@@ -70,6 +71,63 @@ describe('assertReceiveAgainstCatalog', () => {
 
 	it('passes for a matching, non-perishable item', () => {
 		expect(() => assertReceiveAgainstCatalog(entry, { unit: 'kg' } as SupplyItem)).not.toThrow();
+	});
+
+	// CR-013 transition: the `catalog` DB also holds `item_master:{ulid}` docs, whose
+	// stock unit is `base_unit`. Reading the bare `unit` field failed every receipt
+	// for one with `expected undefined, got <unit>`.
+	it('resolves an item_master unit from base_unit', () => {
+		const masterEntry = createReceiveEntry(
+			{
+				item_id: 'item_master:01M0Y3R8JEJBW4HB8E9C4KX5N',
+				qty: 30,
+				unit: 'เม็ด',
+				source: 'donation',
+				ref_id: DONATION_REF
+			},
+			ctx
+		);
+		const master = { type: 'item_master', base_unit: 'เม็ด' } as unknown as ItemMaster;
+
+		expect(() => assertReceiveAgainstCatalog(masterEntry, master)).not.toThrow();
+		expect(() =>
+			assertReceiveAgainstCatalog(masterEntry, {
+				type: 'item_master',
+				base_unit: 'แผง'
+			} as unknown as ItemMaster)
+		).toThrow(
+			'Unit mismatch for item item_master:01M0Y3R8JEJBW4HB8E9C4KX5N: expected แผง, got เม็ด'
+		);
+	});
+
+	it('falls back to the legacy `unit` field on an item_master without base_unit', () => {
+		const masterEntry = createReceiveEntry(
+			{
+				item_id: 'item_master:legacy',
+				qty: 1,
+				unit: 'ขวด',
+				source: 'donation',
+				ref_id: DONATION_REF
+			},
+			ctx
+		);
+		expect(() =>
+			assertReceiveAgainstCatalog(masterEntry, { type: 'item_master', unit: 'ขวด' } as unknown as ItemMaster)
+		).not.toThrow();
+	});
+
+	it('never demands lot.expiry for an item_master (no perishable flag on that shape)', () => {
+		const masterEntry = createReceiveEntry(
+			{ item_id: 'item_master:milk', qty: 1, unit: 'l', source: 'donation', ref_id: DONATION_REF },
+			ctx
+		);
+		expect(() =>
+			assertReceiveAgainstCatalog(masterEntry, {
+				type: 'item_master',
+				base_unit: 'l',
+				perishable: true
+			} as unknown as ItemMaster)
+		).not.toThrow();
 	});
 
 	it('passes for a perishable item with lot.expiry set', () => {

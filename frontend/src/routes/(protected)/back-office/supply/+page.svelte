@@ -12,13 +12,14 @@
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const isOffline = $derived(authStore.needsReauth);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const shelterCode = $derived(
-		shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles) ?? ''
+		shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles) ?? getShelterCode()
 	);
 
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
@@ -59,10 +60,8 @@
 	{/if}
 
 	<!-- Title with Accent Line -->
-	<div class="flex items-center gap-3 border-l-4 border-orange-500 pl-3">
-		<h2 class="text-lg font-bold text-foreground sm:text-xl">
-			คลังทรัพยากร (Stock &amp; Donations)
-		</h2>
+	<div class="flex items-center gap-3 border-l-4 border-primary pl-3">
+		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock &amp; Donations)</h2>
 	</div>
 
 	<!-- Segmented Tabs (Pills Control) -->
@@ -72,7 +71,7 @@
 				onclick={() => setTab('inventory')}
 				class="flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'inventory'
-					? 'border border-border/60 bg-background text-primary shadow-sm'
+					? 'bg-primary text-primary-foreground shadow-sm'
 					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<Boxes class="h-4 w-4" />
@@ -82,7 +81,7 @@
 				onclick={() => setTab('sphere')}
 				class="flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'sphere'
-					? 'border border-border/60 bg-background text-primary shadow-sm'
+					? 'bg-primary text-primary-foreground shadow-sm'
 					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<Scale class="h-4 w-4" />

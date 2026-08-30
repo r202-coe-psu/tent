@@ -11,7 +11,7 @@ import {
 import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
-import { operationsRepository } from '../data/operations.remote';
+import { operationsRepository, OperationsRemoteRepository } from '../data/operations.remote';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -104,6 +104,56 @@ export const useStockBalance = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.balance(),
 		queryFn: () => operationsRepository().getBalance()
+	}));
+
+export const useCrossShelterStockBalances = (
+	shelterCodes: () => string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: ['operations', 'cross-shelter-balances', ...shelterCodes()] as const,
+		queryFn: async () => {
+			const codes = shelterCodes();
+			const results = await Promise.all(
+				codes.map(async (code) => {
+					const dbName = `shelter_${code.toLowerCase()}`;
+					const repo = new OperationsRemoteRepository(dbName);
+					try {
+						const balance = await repo.getBalance();
+						return { shelterCode: code, balance };
+					} catch {
+						return { shelterCode: code, balance: new Map<string, string>() };
+					}
+				})
+			);
+			return results;
+		},
+		enabled: enabled() && shelterCodes().length > 0
+	}));
+
+export const useCrossShelterLedger = (
+	shelterCodes: () => string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: ['operations', 'cross-shelter-ledger', ...shelterCodes()] as const,
+		queryFn: async () => {
+			const codes = shelterCodes();
+			const results = await Promise.all(
+				codes.map(async (code) => {
+					const dbName = `shelter_${code.toLowerCase()}`;
+					const repo = new OperationsRemoteRepository(dbName);
+					try {
+						const ledger = await repo.listLedger();
+						return ledger;
+					} catch {
+						return [];
+					}
+				})
+			);
+			return results.flat();
+		},
+		enabled: enabled() && shelterCodes().length > 0
 	}));
 
 /**

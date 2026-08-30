@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock } from '../application/queries';
@@ -11,7 +11,7 @@
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
-	import type { StockLot } from '../domain/operations';
+	import type { StockLot, StockLedger } from '../domain/operations';
 
 	let {
 		onsuccess,
@@ -52,7 +52,7 @@
 				_id: im._id,
 				name: im.name,
 				category: im.category || 'other',
-				unit: im.base_unit || 'ชิ้น',
+				unit: itemMasterUnit(im),
 				reorder_level: null,
 				perishable: false
 			}));
@@ -70,7 +70,7 @@
 	const itemLots = $derived.by(() => {
 		const currentItem = selectedItem;
 		if (!currentItem || !ledgerQuery.data) return [];
-		const entries = ledgerQuery.data.filter((e) => e.item_id === currentItem._id);
+		const entries = (ledgerQuery.data as StockLedger[]).filter((e: StockLedger) => e.item_id === currentItem._id);
 		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
 
 		for (const entry of entries) {
@@ -223,13 +223,17 @@
 		});
 	}
 
-	// Pre-fill
+	/**
+	 * Keep the modal's locked item pinned — see `receive-stock-form.svelte`.
+	 * Guarding on `selectedItem` also stops a background refetch of `items` from
+	 * re-running `selectItem()` mid-edit, which would wipe the lot, quantity and
+	 * reason the user is part-way through typing.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || selectedItem?._id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 

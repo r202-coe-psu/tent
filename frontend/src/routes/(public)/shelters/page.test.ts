@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { load } from './+page';
-import type { PublicShelterCardModel } from '$lib/features/public-portal';
 
 vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/features/public-portal')>();
@@ -14,7 +13,8 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 import {
 	listPublicShelters,
 	fetchShelterTypes,
-	type PublicShelterListResponse
+	type PublicShelterListResponse,
+	type PublicShelterCardModel
 } from '$lib/features/public-portal';
 
 type LoadResult = {
@@ -247,7 +247,11 @@ describe('public/shelters load function', () => {
 		const url = new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=50');
 		const result = await runLoad(url);
 
-		expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+		expect(result.shelters.map((s: PublicShelterCardModel) => s.code)).toEqual([
+			'NEAR',
+			'FAR',
+			'NOGEO'
+		]);
 		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
 	});
 

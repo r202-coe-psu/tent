@@ -18,6 +18,8 @@ export {
 	type ItemMasterInput,
 	createItemMaster,
 	isItemMaster,
+	itemMasterUnit,
+	DEFAULT_ITEM_UNIT,
 	// Recipe
 	recipeInputSchema,
 	type RecipeInput,
