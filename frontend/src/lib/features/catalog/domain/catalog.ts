@@ -100,7 +100,7 @@ export const DEFAULT_ITEM_UNIT = 'ชิ้น';
  * the picker resolved `base_unit` and the guard read the bare `unit` field, every
  * receipt for an `item_master` failed with `expected undefined, got <unit>`.
  */
-export function itemMasterUnit(item: Pick<ItemMaster, 'base_unit' | 'unit'>): string {
+export function itemMasterUnit(item: { base_unit?: string; unit?: string }): string {
 	return item.base_unit || item.unit || DEFAULT_ITEM_UNIT;
 }
 

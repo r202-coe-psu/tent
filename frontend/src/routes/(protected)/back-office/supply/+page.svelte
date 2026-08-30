@@ -5,6 +5,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Scale from '@lucide/svelte/icons/scale';
 	import Utensils from '@lucide/svelte/icons/utensils';
+	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';

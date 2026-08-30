@@ -11,7 +11,7 @@
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
-	import type { StockLot } from '../domain/operations';
+	import type { StockLot, StockLedger } from '../domain/operations';
 
 	let {
 		onsuccess,
@@ -70,7 +70,7 @@
 	const itemLots = $derived.by(() => {
 		const currentItem = selectedItem;
 		if (!currentItem || !ledgerQuery.data) return [];
-		const entries = ledgerQuery.data.filter((e) => e.item_id === currentItem._id);
+		const entries = (ledgerQuery.data as StockLedger[]).filter((e: StockLedger) => e.item_id === currentItem._id);
 		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
 
 		for (const entry of entries) {
