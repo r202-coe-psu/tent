@@ -22,6 +22,7 @@ from typing import Any
 
 from worker.couch.bootstrap import list_all_shelter_codes
 from worker.couch.client import CouchClient
+from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,11 @@ logger = logging.getLogger(__name__)
 #: Only a reservation still awaiting drop-off expires. ``received`` consumed the target
 #: for real; ``cancelled``/``expired`` are already released (schema.md §2.3 is
 #: forward-only, so re-expiring is not even a legal transition).
-EXPIRABLE_STATUSES = frozenset({"declared"})
+#:
+#: Every status still awaiting drop-off belongs here, not just ``declared``: CR-052 opens
+#: public bookings at ``pending_review``, so pinning this to ``declared`` would leave
+#: their TTL to lapse with the quota never handed back (CR-045).
+EXPIRABLE_STATUSES = DONATION_OUTSTANDING_STATUSES
 
 
 def _iso(value: datetime) -> str:

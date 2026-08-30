@@ -1,30 +1,42 @@
-# Pre-commit quality gate (frontend + backend).
+# Quality gate configuration (frontend + backend + worker)
 # Install: pnpm install (root) — runs `lefthook install` via prepare script.
 
 pre-commit:
   parallel: true
   commands:
-    frontend-lint:
+    frontend-format-lint:
       root: frontend/
-      glob: "*.{js,ts,svelte,css,json,md}"
-      run: pnpm exec prettier --check {staged_files} && pnpm exec eslint {staged_files}
+      glob: "**/*.{js,ts,svelte,css,json,md}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files} && pnpm exec eslint --fix --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+    backend-lint-format:
+      root: backend/
+      glob: "**/*.py"
+      run: poetry run ruff check --fix {staged_files} && poetry run ruff format {staged_files}
+      stage_fixed: true
+
+    worker-lint-format:
+      root: worker/
+      glob: "**/*.py"
+      run: uvx ruff check --fix {staged_files} && uvx ruff format {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
     frontend-check:
       root: frontend/
-      glob: "**/*"
       run: pnpm check
+
     frontend-test:
       root: frontend/
-      glob: "**/*"
       run: pnpm test
-    backend-check:
-      root: backend/
-      glob: '**/*.py'
-      run: poetry run ruff check . && poetry run ruff format --check .
+
     backend-test:
       root: backend/
-      glob: '**/*.py'
       run: poetry run pytest
+
     worker-test:
       root: worker/
-      glob: '**/*.py'
       run: uv run pytest tests

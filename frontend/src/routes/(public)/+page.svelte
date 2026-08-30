@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { onMount } from 'svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
@@ -30,47 +29,8 @@
 
 	let bookingOpen = $state(false);
 	let searchOpen = $state(false);
-	const alerts: { name: string; capacity: string; variant: string }[] = [];
-	let lastUpdated = $state(0);
-	$effect(() => {
-		if (!lastUpdated) lastUpdated = data.lastUpdated;
-	});
-	let isStale = $state(false);
 
 	const t = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
-
-	onMount(() => {
-		const pollInterval = setInterval(async () => {
-			try {
-				const response = await fetch('/api/public/v1/transparency/summary');
-				if (response.ok) {
-					const newData = await response.json();
-					data.summary = newData.summary;
-					lastUpdated = newData.lastUpdated;
-					isStale = newData.isStale;
-					data.flags = newData.flags;
-				}
-			} catch (e) {
-				console.error('Polling failed', e);
-			}
-		}, 600000); // 10 mins
-
-		// Stale threshold 30 minutes check
-		const staleCheck = setInterval(() => {
-			if (Date.now() - lastUpdated > 1800000) {
-				// 30 mins
-				isStale = true;
-			}
-		}, 60000); // Check every minute
-
-		return () => {
-			clearInterval(pollInterval);
-			clearInterval(staleCheck);
-		};
-	});
-
-	// Read emergency banner switch from API flags
-	let showDemoEmergency = $derived(data.flags?.emergency_mode ?? false);
 </script>
 
 <svelte:head>
@@ -80,27 +40,13 @@
 <PublicPageShell class="space-y-8">
 	<!-- 1. Urgent Announcements and Others -->
 	{#if data.announcements && data.announcements.length > 0}
-		{#each data.announcements as announcement (announcement._id || announcement.id)}
-			<!-- Show shelter alerts demo only in the first emergency announcement if emergency_mode is on -->
-			<PublicEmergencyBanner
-				{announcement}
-				alerts={announcement.severity === 'emergency' && showDemoEmergency ? alerts : []}
-			/>
+		{#each data.announcements as announcement (announcement._id)}
+			<PublicEmergencyBanner {announcement} />
 		{/each}
 	{/if}
 
-	<!-- 2. Hero & Real-Time Metrics (T-57) -->
-	{#if data.isError}
-		<div
-			class="rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive"
-		>
-			<ShieldAlert class="mx-auto mb-2 h-8 w-8" />
-			<h3 class="text-lg font-bold">{t.sysError}</h3>
-			<p class="text-sm">{t.sysErrorDesc}</p>
-		</div>
-	{:else}
-		<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
-	{/if}
+	<!-- 2. Hero Section -->
+	<PublicHeroMetrics />
 
 	<!-- 3. Service Menu and Eligibility Checking -->
 	<section>
@@ -305,7 +251,7 @@
 							{/if}
 							{#if data.configData?.line_oa_url}
 								<a
-									href={data.configData.line_oa_url}
+									href={String(data.configData.line_oa_url)}
 									target="_blank"
 									rel="noopener noreferrer"
 									class="flex items-center justify-between rounded-xl bg-[#00B900] px-5 py-3 font-bold transition-colors hover:bg-[#009900]"
@@ -318,7 +264,7 @@
 							{/if}
 							{#if data.configData?.facebook_url}
 								<a
-									href={data.configData.facebook_url}
+									href={String(data.configData.facebook_url)}
 									target="_blank"
 									rel="noopener noreferrer"
 									class="flex items-center justify-between rounded-xl bg-[#1877F2] px-5 py-3 font-bold transition-colors hover:bg-[#166FE5]"

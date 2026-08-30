@@ -93,13 +93,15 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
     assert stub is not None
     assert stub.booking_ref == booking_ref
-    assert stub.status == "declared"
+    # CR-052 §1.4 (Task #52): no submission skips the staff review step, so the public
+    # projection opens in review rather than at `declared`.
+    assert stub.status == "pending_review"
 
     track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
     assert track.status_code == 200
     tracked = track.json()
     assert tracked["donation"]["booking_ref"] == booking_ref
-    assert tracked["donation"]["status"] == "declared"
+    assert tracked["donation"]["status"] == "pending_review"
     assert tracked["donation"]["items"][0]["item_name"] == "ข้าวสาร"
     assert tracked["donation"]["donor"]["name"] == "Donor"
     assert tracked["donation"]["donor"]["phone_masked"] == "***-***-5678"
@@ -1045,14 +1047,19 @@ async def test_editing_does_not_extend_the_ttl(
     assert after == before
 
 
-@pytest.mark.parametrize("status_value", ["pending_review", "verifying", "received", "cancelled"])
-async def test_only_a_declared_booking_may_be_edited(
+@pytest.mark.parametrize("status_value", ["verifying", "received", "cancelled"])
+async def test_a_booking_taken_over_by_staff_may_not_be_edited(
     client: AsyncClient,
     open_shelter: PublicShelter,
     auth_headers: dict[str, str],
     status_value: str,
 ) -> None:
-    """CR-080 Q1 — once staff start assessing, the count is theirs."""
+    """CR-080 Q1 — once staff start assessing, the count is theirs.
+
+    ``pending_review`` is deliberately absent: CR-052 §1.4 opens every public booking
+    there, so it is the donor's own waiting room rather than staff territory. It has its
+    own test below.
+    """
     await _seed_counter("100")
     token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
@@ -1066,6 +1073,29 @@ async def test_only_a_declared_booking_may_be_edited(
 
     assert response.status_code == 400
     assert await _reserved() == Decimal("5")
+
+
+async def test_a_booking_awaiting_review_is_still_the_donors_to_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-052 §1.4 — every booking opens at ``pending_review``.
+
+    Gating edits on ``declared`` alone would therefore take edit and cancel away from
+    every booking the public wizard creates, which is the opposite of what CR-080 Q1
+    protects. Mirrors ``isDonorEditable`` on the BFF.
+    """
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.status == "pending_review", "a fresh booking should open in review"
+
+    response = await _edit(
+        client, auth_headers, token, [{"item_id": "item:rice", "qty": "9", "unit": "kg"}]
+    )
+
+    assert response.status_code == 200
+    assert await _reserved() == Decimal("9")
 
 
 async def test_an_empty_basket_is_refused(

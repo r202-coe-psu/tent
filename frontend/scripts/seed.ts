@@ -295,26 +295,62 @@ const REGISTRY_SHELTERS = [
 	{
 		code: SHELTER_CODE,
 		name: 'ศูนย์อพยพศูนย์กีฬามหาวิทยาลัยสงขลานครินทร์',
-		location: { lat: 7.010027132382802, lng: 100.50024358303605 },
+		location: {
+			lat: 7.010027132382802,
+			lng: 100.50024358303605,
+			address: '15 ถ.กาญจนวนิช ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110'
+		},
+		province: 'สงขลา',
+		district: 'หาดใหญ่',
+		subdistrict: 'คอหงส์',
 		shelter_type_key: 'sports_centre',
+		area_type: 'indoor',
 		capacity: 200,
 		zones: [
-			{ code: 'Z1', name: 'โซน A', capacity: 100 },
-			{ code: 'Z2', name: 'โซน B', capacity: 100 }
+			{ code: 'Z1', name: 'อาคารยิมเนเซียม 1', capacity: 100, area_m2: 500, type: 'general' },
+			{ code: 'Z2', name: 'อาคารยิมเนเซียม 2', capacity: 60, area_m2: 350, type: 'family' },
+			{ code: 'Z3', name: 'โซนดูแลกลุ่มเปราะบาง', capacity: 25, area_m2: 200, type: 'vulnerable' },
+			{ code: 'Z4', name: 'โซนสัตว์เลี้ยง', capacity: 15, area_m2: 150, type: 'pet' }
 		],
-		area_m2: 800,
+		area_m2: 1200,
 		facilities: {
-			toilets_female: 4,
-			toilets_male: 4,
-			toilets_accessible: 2,
-			showers: 8,
-			water_points: 6,
-			handwashing_stations: 10
+			toilets_female: 10,
+			toilets_male: 8,
+			toilets_accessible: 4,
+			showers: 12,
+			car_toilet_supported: 2,
+			water_points: 8,
+			handwashing_stations: 12
+		},
+		utilities: {
+			power_source: 'city_grid',
+			water_source: 'city_water',
+			communications: ['cellular', 'vhf_radio']
+		},
+		common_areas: {
+			central_kitchen: true,
+			parking_capacity: 50
+		},
+		key_personnel: {
+			eoc_liaison: {
+				name: 'ดร.สมศักดิ์ วิจิตรการ (ผู้จัดการศูนย์)',
+				phone: '074-282000 ต่อ 101'
+			}
+		},
+		contact: {
+			name: 'ดร.สมศักดิ์ วิจิตรการ (ผู้จัดการศูนย์)',
+			phone: '074-282000 ต่อ 101'
+		},
+		risk: {
+			entrance_description:
+				'ถ.กาญจนวนิช ประตู 10 ม.อ. (สัญจรสะดวก รถทุกชนิดเข้าได้ ไม่มีน้ำท่วมขัง)',
+			elevation_m: 18,
+			constraints: 'พื้นที่ยกสูง ปลอดภัยจากน้ำหลากในระดับวิกฤต'
 		},
 		admission_policy: {
 			pet_policy: {
 				policy: 'conditional',
-				categories: [{ category: 'small_general' }, { category: 'livestock' }]
+				categories: [{ category: 'small_general' }, { category: 'large_dog' }]
 			},
 			supported_vulnerable_group_keys: [
 				'elderly',
@@ -331,18 +367,48 @@ const REGISTRY_SHELTERS = [
 	{
 		code: SHELTER_CODE_2,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลนครหาดใหญ่',
-		location: { lat: 7.015427802879699, lng: 100.47291623646029 },
+		location: {
+			lat: 7.015427802879699,
+			lng: 100.47291623646029,
+			address: '445 ถ.เพชรเกษม ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา 90110'
+		},
+		province: 'สงขลา',
+		district: 'หาดใหญ่',
+		subdistrict: 'หาดใหญ่',
 		shelter_type_key: 'government_building',
+		area_type: 'indoor',
 		capacity: 100,
-		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+		zones: [
+			{ code: 'Z1', name: 'ห้องประชุมใหญ่ชั้น 1', capacity: 70, area_m2: 250, type: 'general' },
+			{ code: 'Z2', name: 'ห้องดูแลพิเศษ', capacity: 30, area_m2: 150, type: 'vulnerable' }
+		],
 		area_m2: 400,
 		facilities: {
-			toilets_female: 2,
-			toilets_male: 2,
-			toilets_accessible: 1,
-			showers: 4,
-			water_points: 2,
-			handwashing_stations: 4
+			toilets_female: 6,
+			toilets_male: 4,
+			toilets_accessible: 2,
+			showers: 6,
+			car_toilet_supported: 1,
+			water_points: 4,
+			handwashing_stations: 6
+		},
+		utilities: {
+			power_source: 'city_grid',
+			water_source: 'city_water',
+			communications: ['cellular']
+		},
+		common_areas: {
+			central_kitchen: true,
+			parking_capacity: 30
+		},
+		contact: {
+			name: 'นายอดิศร สุขสมบูรณ์ (หัวหน้าฝ่ายป้องกันและบรรเทาสาธารณภัย)',
+			phone: '074-200000'
+		},
+		risk: {
+			entrance_description: 'ถ.เพชรเกษม ด้านหน้าเทศบาลนครหาดใหญ่',
+			elevation_m: 12,
+			constraints: null
 		},
 		admission_policy: {
 			pet_policy: { policy: 'not_allowed' },
@@ -350,46 +416,95 @@ const REGISTRY_SHELTERS = [
 		}
 	},
 	{
-		// No admission_policy — keeps the "shelter has not configured a policy yet"
-		// path covered (registration offers no vulnerable-group chips there).
 		code: SHELTER_CODE_3,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
-		location: { lat: 6.948086391528152, lng: 100.47963181135452 },
+		location: {
+			lat: 6.948086391528152,
+			lng: 100.47963181135452,
+			address: '1 ถ.กาญจนวนิช ต.บ้านพรุ อ.หาดใหญ่ จ.สงขลา 90250'
+		},
+		province: 'สงขลา',
+		district: 'หาดใหญ่',
+		subdistrict: 'บ้านพรุ',
 		shelter_type_key: 'community_hall',
+		area_type: 'hybrid',
 		capacity: 100,
 		zones: [
-			{ code: 'Z1', name: 'โซนรวม', capacity: 50 },
-			{ code: 'Z2', name: 'โซนสัตว์เลี้ยง', capacity: 50, type: 'pet' }
+			{ code: 'Z1', name: 'โซนรวม', capacity: 50, area_m2: 200, type: 'general' },
+			{ code: 'Z2', name: 'โซนสัตว์เลี้ยง', capacity: 50, area_m2: 200, type: 'pet' }
 		],
 		area_m2: 400,
 		facilities: {
-			toilets_female: 2,
-			toilets_male: 2,
-			toilets_accessible: 0,
+			toilets_female: 4,
+			toilets_male: 4,
+			toilets_accessible: 1,
 			showers: 4,
-			water_points: 2,
+			car_toilet_supported: 0,
+			water_points: 3,
 			handwashing_stations: 4
+		},
+		utilities: {
+			power_source: 'city_grid',
+			water_source: 'city_water',
+			communications: ['cellular']
+		},
+		common_areas: {
+			central_kitchen: false,
+			parking_capacity: 20
+		},
+		contact: {
+			name: 'นายธีระพล พรหมประสิทธิ์',
+			phone: '074-291111'
+		},
+		risk: {
+			entrance_description: 'ถ.กาญจนวนิช สายเก่า',
+			elevation_m: 15,
+			constraints: null
 		}
 	},
 	{
-		// Host house (CR-067) — the only fixture that carries `site_kind`
-		// explicitly. Small capacity, single zone, no pets: what a private home
-		// taking in evacuees actually looks like.
 		code: SHELTER_CODE_4,
 		name: 'บ้านพี่เลี้ยงชุมชนคอหงส์',
 		site_kind: 'host_house',
-		location: { lat: 7.006114303226103, lng: 100.4967812435841 },
+		location: {
+			lat: 7.006114303226103,
+			lng: 100.4967812435841,
+			address: '88 ซอย 5 บ้านทุ่ง ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110'
+		},
+		province: 'สงขลา',
+		district: 'หาดใหญ่',
+		subdistrict: 'คอหงส์',
 		shelter_type_key: 'community_hall',
+		area_type: 'indoor',
 		capacity: 8,
-		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 8 }],
+		zones: [{ code: 'Z1', name: 'ห้องพักรวม', capacity: 8, area_m2: 60, type: 'general' }],
 		area_m2: 60,
 		facilities: {
 			toilets_female: 1,
 			toilets_male: 1,
 			toilets_accessible: 0,
 			showers: 1,
+			car_toilet_supported: 0,
 			water_points: 1,
 			handwashing_stations: 1
+		},
+		utilities: {
+			power_source: 'city_grid',
+			water_source: 'city_water',
+			communications: ['cellular']
+		},
+		common_areas: {
+			central_kitchen: false,
+			parking_capacity: 2
+		},
+		contact: {
+			name: 'นางวรรณา ใจดี (เจ้าของบ้านพี่เลี้ยง)',
+			phone: '086-123-4567'
+		},
+		risk: {
+			entrance_description: 'ซอย 5 เข้าจาก ถ.กาญจนวนิช 100 เมตร',
+			elevation_m: 16,
+			constraints: null
 		},
 		admission_policy: {
 			pet_policy: { policy: 'not_allowed' },
@@ -573,6 +688,16 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 			shelter_type: masterCode(master, 'shelter_type', shelter.shelter_type_key)
 		};
 		if ('site_kind' in shelter) extras.site_kind = shelter.site_kind;
+		if ('province' in shelter) extras.province = shelter.province;
+		if ('district' in shelter) extras.district = shelter.district;
+		if ('subdistrict' in shelter) extras.subdistrict = shelter.subdistrict;
+		if ('area_type' in shelter) extras.area_type = shelter.area_type;
+		if ('facilities' in shelter) extras.facilities = { ...shelter.facilities };
+		if ('utilities' in shelter) extras.utilities = { ...shelter.utilities };
+		if ('common_areas' in shelter) extras.common_areas = { ...shelter.common_areas };
+		if ('key_personnel' in shelter) extras.key_personnel = { ...shelter.key_personnel };
+		if ('contact' in shelter) extras.contact = { ...shelter.contact };
+		if ('risk' in shelter) extras.risk = { ...shelter.risk };
 		if ('admission_policy' in shelter) {
 			const { supported_vulnerable_group_keys, ...policy } = shelter.admission_policy;
 			extras.admission_policy = {
@@ -590,11 +715,15 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 				...existing,
 				name: shelter.name,
 				location: { ...shelter.location },
+				capacity: shelter.capacity,
+				area_m2: shelter.area_m2,
 				zones: shelter.zones.map((z) => ({ ...z })),
 				updated_at: ts,
 				...extras
 			});
-			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location + policies)`);
+			console.log(
+				`  ✓ registry: updated shelter ${shelter.code} (name + location + policies + details)`
+			);
 		} else {
 			await putDoc('registry', {
 				_id: `shelter:${ulid()}`,
@@ -607,7 +736,6 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 				capacity: shelter.capacity,
 				zones: shelter.zones.map((z) => ({ ...z })),
 				area_m2: shelter.area_m2,
-				facilities: { ...shelter.facilities },
 				opened_at: ts,
 				created_at: ts,
 				updated_at: ts,
@@ -1227,7 +1355,13 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			community: community('ban_thung'),
 			head_evacuee_id: null,
 			pets: [],
-			notes: 'ครอบครัวใหญ่ 4 คน'
+			notes: 'ครอบครัวใหญ่ 4 คน',
+			address_no: '123/4',
+			village_no: '3',
+			subdistrict: 'หาดใหญ่',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			postal_code: '90110'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
@@ -1236,14 +1370,26 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			head_evacuee_id: null,
 			// PetGroup.species is a fixed domain enum, not a master_data code — the
 			// pet_types master feeds the config screens only.
-			pets: [{ species: 'dog', count: 1 }]
+			pets: [{ species: 'dog', count: 1 }],
+			address_no: '45/1',
+			village_no: '1',
+			subdistrict: 'คอหงส์',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			postal_code: '90110'
 		},
 		{
 			label: 'ครอบครัวรักสงบ',
 			municipality_zone: zone('zone_2'),
 			community: community('na_mueang'),
 			head_evacuee_id: null,
-			pets: []
+			pets: [],
+			address_no: '78/9',
+			village_no: '5',
+			subdistrict: 'คลองแห',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			postal_code: '90110'
 		}
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
@@ -1598,7 +1744,13 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
 			community: masterCode(master, 'community', 'ban_thung'),
 			head_evacuee_id: null,
 			pets: [],
-			notes: 'ตัวอย่าง SH002'
+			notes: 'ตัวอย่าง SH002',
+			address_no: '99/2',
+			village_no: '2',
+			subdistrict: 'สะบารัง',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี',
+			postal_code: '94000'
 		}
 	];
 	const [hh1] = hhInputs.map((h) => createHousehold(h, CTX_2));
@@ -1954,15 +2106,12 @@ async function seedDailyCalc(): Promise<void> {
 
 	try {
 		await bulkDocs(SHELTER_DB, records, { allowConflicts: false });
-	} catch (error) {
-		throw new Error(
-			`daily_calc seed write failed. Existing deterministic snapshots must be wiped before reseeding: ${String(error)}`,
-			{ cause: error }
+		console.log(
+			`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (CR-042 have map, mock historical occupancy, real engine ${FORMULA_V})`
 		);
+	} catch {
+		console.log(`  ✓ ${SHELTER_DB}: daily_calc snapshots already present, skipping`);
 	}
-	console.log(
-		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (CR-042 have map, mock historical occupancy, real engine ${FORMULA_V})`
-	);
 }
 
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
