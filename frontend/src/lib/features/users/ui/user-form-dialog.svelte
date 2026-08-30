@@ -78,12 +78,6 @@
 	} = $props();
 
 	const sheltersQuery = useShelters();
-	// The registry lives in the volunteers slice (CR-096 §2.4) — read it through that barrel rather
-	// than re-implementing a second reader. `active` only: a retired profile is not something to
-	// hand a fresh login to. Scoped to the shelter *this form* targets, not the one the sidebar is
-	// viewing: an SA who picks another shelter must see that shelter's roster, and the link must be
-	// written into that shelter's DB.
-	const volunteersQuery = useVolunteers({ status: 'active' }, () => volunteerShelterCode);
 
 	const isEdit = $derived(user !== null);
 	const shelterLocked = $derived(Boolean(lockedShelterCode));
@@ -174,6 +168,25 @@
 	const { form: formData, errors, submitting } = form;
 	const formErrors = $derived($errors._errors ?? []);
 
+	const boundShelterCode = $derived(lockedShelterCode ?? $formData.shelter_id ?? null);
+	/**
+	 * Which shelter's volunteer registry to read and write. Platform-wide accounts have no
+	 * registry of their own, so they fall back to the active shelter (`undefined`).
+	 */
+	const volunteerShelterCode = $derived(
+		boundShelterCode && boundShelterCode !== PLATFORM_WIDE ? boundShelterCode : undefined
+	);
+
+	/**
+	 * The registry lives in the volunteers slice (CR-096 §2.4) — read it through that barrel rather
+	 * than re-implementing a second reader. `active` only: a retired profile is not something to
+	 * hand a fresh login to. Scoped to the shelter *this form* targets, not the one the sidebar is
+	 * viewing: an SA who picks another shelter must see that shelter's roster, and the link must be
+	 * written into that shelter's DB. Declared after `volunteerShelterCode` because the hook reads
+	 * the accessor while it is being created, which a `$derived` declared below cannot serve.
+	 */
+	const volunteersQuery = useVolunteers({ status: 'active' }, () => volunteerShelterCode);
+
 	const isSaCapability = $derived($formData.capability === SYSTEM_ADMIN);
 	const isVolunteer = $derived($formData.personnel_type === 'volunteer');
 	const isPending = $derived($submitting || pending);
@@ -253,14 +266,6 @@
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'))
 	]);
 
-	const boundShelterCode = $derived(lockedShelterCode ?? $formData.shelter_id ?? null);
-	/**
-	 * Which shelter's volunteer registry to read and write. Platform-wide accounts have no
-	 * registry of their own, so they fall back to the active shelter (`undefined`).
-	 */
-	const volunteerShelterCode = $derived(
-		boundShelterCode && boundShelterCode !== PLATFORM_WIDE ? boundShelterCode : undefined
-	);
 	const boundShelter = $derived(
 		boundShelterCode && boundShelterCode !== PLATFORM_WIDE
 			? (sheltersQuery.data ?? []).find((s) => s.code === boundShelterCode)
