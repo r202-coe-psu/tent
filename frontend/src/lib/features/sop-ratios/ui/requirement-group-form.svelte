@@ -46,7 +46,7 @@
 			value: im._id,
 			label: im.name,
 			sku: im.sku,
-			base_unit: im.base_unit || im.unit || '',
+			base_unit: im.base_unit || '',
 			keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
 		}));
 	});
@@ -59,7 +59,7 @@
 				value: currentId,
 				label: matched?.name ?? currentId,
 				sku: matched?.sku,
-				base_unit: matched?.base_unit || matched?.unit || '',
+				base_unit: matched?.base_unit || '',
 				keywords: matched
 					? [matched.name, matched.sku ?? '', matched._id].filter(Boolean)
 					: [currentId]
@@ -72,7 +72,7 @@
 		formItemMaps[index].item_id = selectedId;
 		const matched = itemMasters.find((im) => im._id === selectedId || im.sku === selectedId);
 		if (matched) {
-			formItemMaps[index].base_uom = matched.base_unit || matched.unit || '';
+			formItemMaps[index].base_uom = matched.base_unit || '';
 		}
 	}
 
@@ -107,7 +107,7 @@
 				if (map.item_id && !map.base_uom) {
 					const matched = itemMasters.find((im) => im._id === map.item_id);
 					if (matched) {
-						map.base_uom = matched.base_unit || matched.unit || '';
+						map.base_uom = matched.base_unit || '';
 					}
 				}
 			}

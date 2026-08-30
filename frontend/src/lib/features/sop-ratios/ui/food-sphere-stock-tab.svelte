@@ -125,8 +125,8 @@
 				name: im.name,
 				category: im.category,
 				sku: im.sku,
-				base_unit: im.base_unit || im.unit || 'ชิ้น',
-				unit: im.unit || im.base_unit || 'ชิ้น'
+				base_unit: im.base_unit || 'ชิ้น',
+				unit: im.base_unit || 'ชิ้น'
 			});
 		}
 
