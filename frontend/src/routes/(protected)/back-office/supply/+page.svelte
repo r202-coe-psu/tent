@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { StockTable } from '$lib/features/operations';
+	import { StockTable, TransferForm, TransferList } from '$lib/features/operations';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Scale from '@lucide/svelte/icons/scale';
+	import Truck from '@lucide/svelte/icons/truck';
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
@@ -25,13 +26,11 @@
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
-	type TabKey = 'inventory' | 'sphere' | 'food-sphere';
+	type TabKey = 'inventory' | 'sphere' | 'food-sphere' | 'transfer';
 	const activeTab = $derived<TabKey>(
-		page.url.searchParams.get('tab') === 'food-sphere'
-			? 'food-sphere'
-			: page.url.searchParams.get('tab') === 'sphere'
-				? 'sphere'
-				: 'inventory'
+		(['sphere', 'food-sphere', 'transfer'] as const).find(
+			(t) => t === page.url.searchParams.get('tab')
+		) ?? 'inventory'
 	);
 
 	function setTab(tab: TabKey) {
@@ -97,6 +96,16 @@
 				<Utensils class="h-4 w-4" />
 				วิเคราะห์เสบียงอาหาร
 			</button>
+			<button
+				onclick={() => setTab('transfer')}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
+				'transfer'
+					? 'border border-border/60 bg-background text-primary shadow-sm'
+					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<Truck class="h-4 w-4" />
+				โอนย้ายข้ามศูนย์ (Inter-Shelter Transfer)
+			</button>
 		</div>
 	</div>
 
@@ -112,6 +121,11 @@
 	{:else if activeTab === 'food-sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<FoodSphereStockTab {occupancy} {shelterCode} />
+		</div>
+	{:else if activeTab === 'transfer'}
+		<div class="flex animate-in flex-col gap-6 duration-300 fade-in slide-in-from-bottom-2">
+			<TransferForm />
+			<TransferList />
 		</div>
 	{/if}
 </div>
