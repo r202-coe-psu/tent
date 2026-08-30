@@ -20,6 +20,10 @@
 		type === 'warning' ||
 			message.includes('เคยเสียบบัตร') ||
 			message.includes('สแกนบัตรนี้รออยู่แล้ว') ||
+			message.includes('มีข้อมูลในระบบแล้ว') ||
+			message.includes('เช็คอิน') ||
+			message.includes('ออกชั่วคราว') ||
+			message.includes('ประวัติ') ||
 			page.url.searchParams.get('status') === 'duplicate_draft'
 	);
 </script>
@@ -144,13 +148,11 @@
 				<h2
 					class="text-3xl leading-tight font-black tracking-tight text-amber-950 sm:text-4xl lg:text-5xl"
 				>
-					ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว
+					{message.includes('เสียชีวิต') ? 'ไม่สามารถทำรายการได้' : 'พบข้อมูลของท่านในระบบแล้ว'}
 				</h2>
 
 				<p class="text-base font-bold text-amber-800 sm:text-lg">
-					{message.includes('เคยเสียบบัตร')
-						? 'ระบบมีข้อมูลการสแกนบัตรประชาชนนี้อยู่แล้ว กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล'
-						: message}
+					{message}
 				</p>
 			{:else}
 				<div

@@ -23,7 +23,10 @@ export type { ScannerDevice, SmartCardData };
 export type ProcessCardResult =
 	| { status: 'created_pre_registered'; evacuee: Evacuee; message: string }
 	| { status: 'already_pre_registered'; evacuee: Evacuee; error: string; message: string }
-	| { status: 'already_active'; evacuee: Evacuee; error: string; message: string };
+	| { status: 'already_active'; evacuee: Evacuee; error: string; message: string }
+	| { status: 'already_temporary_leave'; evacuee: Evacuee; error: string; message: string }
+	| { status: 'previously_stayed'; evacuee: Evacuee; error: string; message: string }
+	| { status: 'deceased_record'; evacuee: Evacuee; error: string; message: string };
 
 export class ScannerServerRepository {
 	async getDeviceByDeviceId(deviceId: string): Promise<ScannerDevice | null> {
@@ -61,8 +64,13 @@ export class ScannerServerRepository {
 	/**
 	 * Process card scan:
 	 * 1. If person does not exist -> Create evacuee doc in shelter DB with status=pre_registered, registered_via=kiosk, card_snapshot
-	 * 2. If person exists with pre_registered -> Return already_pre_registered notice without overwriting
-	 * 3. If person exists with active -> Return already_active notice
+	 * 2. If person exists:
+	 *    - active: Return already_active notice (409)
+	 *    - temporary_leave: Return already_temporary_leave notice (409)
+	 *    - pre_registered: Return already_pre_registered notice (409)
+	 *    - checked_out / transferred: Return previously_stayed notice (409) so staff can re-admit using existing doc
+	 *    - deceased: Return deceased_record rejection (409)
+	 *    - cancelled: Reactivate existing doc back to pre_registered with updated card_snapshot (200)
 	 */
 	async processCardScan(
 		shelterCode: string,
@@ -128,7 +136,7 @@ export class ScannerServerRepository {
 		if (existing) {
 			const stayStatus = existing.current_stay?.status;
 
-			// If already active in shelter
+			// 1. If already active in shelter
 			if (stayStatus === 'active') {
 				return {
 					status: 'already_active',
@@ -138,13 +146,75 @@ export class ScannerServerRepository {
 				};
 			}
 
-			// If pre_registered already exists -> notice without overwriting
+			// 2. If on temporary leave
+			if (stayStatus === 'temporary_leave') {
+				return {
+					status: 'already_temporary_leave',
+					evacuee: existing,
+					error: 'ท่านอยู่ในสถานะออกชั่วคราว กรุณาติดต่อเจ้าหน้าที่เพื่อบันทึกการกลับเข้าศูนย์',
+					message: 'ท่านอยู่ในสถานะออกชั่วคราว กรุณาติดต่อเจ้าหน้าที่เพื่อบันทึกการกลับเข้าศูนย์'
+				};
+			}
+
+			// 3. If pre_registered already exists -> notice without overwriting
 			if (stayStatus === 'pre_registered') {
 				return {
 					status: 'already_pre_registered',
 					evacuee: existing,
 					error: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่',
 					message: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่'
+				};
+			}
+
+			// 4. If previously checked out or transferred -> notify that historical record exists
+			if (stayStatus === 'checked_out' || stayStatus === 'transferred') {
+				return {
+					status: 'previously_stayed',
+					evacuee: existing,
+					error:
+						stayStatus === 'transferred'
+							? 'ท่านมีประวัติการย้ายศูนย์พักพิง กรุณาไปพบเจ้าหน้าที่เพื่อรับเข้าพักใหม่'
+							: 'ท่านเคยมีประวัติการเข้าพักในศูนย์แล้ว กรุณาไปพบเจ้าหน้าที่เพื่อรับเข้าพักใหม่',
+					message:
+						stayStatus === 'transferred'
+							? 'ท่านมีประวัติการย้ายศูนย์พักพิง กรุณาไปพบเจ้าหน้าที่เพื่อรับเข้าพักใหม่'
+							: 'ท่านเคยมีประวัติการเข้าพักในศูนย์แล้ว กรุณาไปพบเจ้าหน้าที่เพื่อรับเข้าพักใหม่'
+				};
+			}
+
+			// 5. If deceased -> reject (terminal state)
+			if (stayStatus === 'deceased') {
+				return {
+					status: 'deceased_record',
+					evacuee: existing,
+					error: 'ข้อมูลบุคคลนี้มีสถานะเสียชีวิตในระบบ กรุณาติดต่อเจ้าหน้าที่',
+					message: 'ข้อมูลบุคคลนี้มีสถานะเสียชีวิตในระบบ กรุณาติดต่อเจ้าหน้าที่'
+				};
+			}
+
+			// 6. If cancelled -> reactivate existing doc to pre_registered with updated snapshot to avoid duplicate doc
+			if (stayStatus === 'cancelled') {
+				const updated: Evacuee = {
+					...existing,
+					card_snapshot: cardSnapshot,
+					registered_via: 'kiosk',
+					current_stay: {
+						status: 'pre_registered',
+						zone: null,
+						since: now()
+					},
+					updated_at: now()
+				};
+
+				await adminFetch(`/${dbName}/${encodeURIComponent(existing._id)}`, {
+					method: 'PUT',
+					body: JSON.stringify(updated)
+				});
+
+				return {
+					status: 'created_pre_registered',
+					evacuee: updated,
+					message: 'อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล'
 				};
 			}
 		}

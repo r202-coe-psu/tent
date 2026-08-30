@@ -131,8 +131,15 @@ class ScannerClientManager:
                         # 4. Show Remove Card screen with message
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
-                    elif status == "duplicate_draft" or "เคยเสียบบัตร" in msg:
-                        # 4b. Show Yellow Warning screen for duplicate scans
+                    elif status in (
+                        "duplicate_draft",
+                        "already_pre_registered",
+                        "already_active",
+                        "already_temporary_leave",
+                        "previously_stayed",
+                        "deceased_record",
+                    ) or "เคยเสียบบัตร" in msg or "มีข้อมูล" in msg or "เช็คอิน" in msg or "ออกชั่วคราว" in msg or "ประวัติ" in msg:
+                        # 4b. Show Yellow Warning screen for duplicate/existing scans
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?type=warning&message={encoded_msg}")
                     else:

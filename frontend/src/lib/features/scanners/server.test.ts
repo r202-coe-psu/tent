@@ -140,4 +140,166 @@ describe('ScannerServerRepository.processCardScan', () => {
 			expect(res.error).toBe('ท่านได้เช็คอินเข้าพักในศูนย์แล้ว');
 		}
 	});
+
+	it('Branch 4: rejects with already_temporary_leave when evacuee is currently on temporary leave', async () => {
+		const existingLeave: Evacuee = {
+			_id: 'evacuee:LEAVE01',
+			type: 'evacuee',
+			schema_v: 8,
+			shelter_code: 'SH001',
+			created_by: 'staff1',
+			created_at: '2026-08-29T00:00:00Z',
+			updated_at: '2026-08-29T00:00:00Z',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id', number: '1234567890123' },
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: 'household:H1',
+			current_stay: { status: 'temporary_leave', zone: 'A1', since: '2026-08-29T00:00:00Z' },
+			privacy: { search_excluded: false },
+			registered_via: 'staff'
+		};
+
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {
+			if (url.includes('_find')) {
+				return { docs: [existingLeave] };
+			}
+			return { ok: true };
+		});
+
+		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
+
+		expect(res.status).toBe('already_temporary_leave');
+		if (res.status === 'already_temporary_leave') {
+			expect(res.error).toContain('ออกชั่วคราว');
+			expect(res.evacuee._id).toBe('evacuee:LEAVE01');
+		}
+	});
+
+	it('Branch 5: rejects with previously_stayed when evacuee is checked_out or transferred', async () => {
+		const existingCheckedOut: Evacuee = {
+			_id: 'evacuee:CHECKOUT01',
+			type: 'evacuee',
+			schema_v: 8,
+			shelter_code: 'SH001',
+			created_by: 'staff1',
+			created_at: '2026-08-29T00:00:00Z',
+			updated_at: '2026-08-29T00:00:00Z',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id', number: '1234567890123' },
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: 'household:H1',
+			current_stay: { status: 'checked_out', zone: 'A1', since: '2026-08-29T00:00:00Z' },
+			privacy: { search_excluded: false },
+			registered_via: 'staff'
+		};
+
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {
+			if (url.includes('_find')) {
+				return { docs: [existingCheckedOut] };
+			}
+			return { ok: true };
+		});
+
+		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
+
+		expect(res.status).toBe('previously_stayed');
+		if (res.status === 'previously_stayed') {
+			expect(res.error).toContain('ประวัติการเข้าพัก');
+			expect(res.evacuee._id).toBe('evacuee:CHECKOUT01');
+		}
+	});
+
+	it('Branch 6: rejects with deceased_record when evacuee record is deceased (terminal)', async () => {
+		const existingDeceased: Evacuee = {
+			_id: 'evacuee:DEC01',
+			type: 'evacuee',
+			schema_v: 8,
+			shelter_code: 'SH001',
+			created_by: 'staff1',
+			created_at: '2026-08-29T00:00:00Z',
+			updated_at: '2026-08-29T00:00:00Z',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id', number: '1234567890123' },
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: 'household:H1',
+			current_stay: { status: 'deceased', zone: null, since: '2026-08-29T00:00:00Z' },
+			privacy: { search_excluded: false },
+			registered_via: 'staff'
+		};
+
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {
+			if (url.includes('_find')) {
+				return { docs: [existingDeceased] };
+			}
+			return { ok: true };
+		});
+
+		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
+
+		expect(res.status).toBe('deceased_record');
+		if (res.status === 'deceased_record') {
+			expect(res.error).toContain('เสียชีวิต');
+			expect(res.evacuee._id).toBe('evacuee:DEC01');
+		}
+	});
+
+	it('Branch 7: reactivates cancelled evacuee doc to pre_registered without creating duplicate doc ID', async () => {
+		const existingCancelled: Evacuee = {
+			_id: 'evacuee:CANCEL01',
+			type: 'evacuee',
+			schema_v: 8,
+			shelter_code: 'SH001',
+			created_by: 'public',
+			created_at: '2026-08-29T00:00:00Z',
+			updated_at: '2026-08-29T00:00:00Z',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id', number: '1234567890123' },
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: null,
+			current_stay: { status: 'cancelled', zone: null, since: '2026-08-29T00:00:00Z' },
+			privacy: { search_excluded: false },
+			registered_via: 'web'
+		};
+
+		let putUrl = '';
+		let putBody = '';
+
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url, options) => {
+			if (url.includes('_find')) {
+				return { docs: [existingCancelled] };
+			}
+			if (options?.method === 'PUT') {
+				putUrl = url;
+				putBody = options.body as string;
+				return { ok: true };
+			}
+			return { ok: true };
+		});
+
+		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
+
+		expect(res.status).toBe('created_pre_registered');
+		expect(res.evacuee._id).toBe('evacuee:CANCEL01'); // preserves original doc ID
+		expect(res.evacuee.current_stay.status).toBe('pre_registered');
+		expect(res.evacuee.registered_via).toBe('kiosk');
+		expect(res.evacuee.card_snapshot?.citizen_id).toBe('1234567890123');
+		expect(putUrl).toContain('evacuee%3ACANCEL01');
+		expect(JSON.parse(putBody)._id).toBe('evacuee:CANCEL01');
+	});
 });
