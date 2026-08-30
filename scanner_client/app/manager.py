@@ -69,12 +69,12 @@ class ScannerClientManager:
 
                 if response.status_code == 200:
                     msg = resp_json.get("message", "อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล")
-                    status = resp_json.get("status", "created_draft")
+                    status = resp_json.get("status", "created_pre_registered")
                     logger.info(f"Successfully processed scan draft: Evacuee ID={resp_json.get('evacuee_id')}, Status={status}")
                     return True, msg, status
                 elif response.status_code == 409:
                     err_msg = resp_json.get("error") or resp_json.get("message") or "มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่"
-                    status = resp_json.get("status", "duplicate_draft")
+                    status = resp_json.get("status", "already_registered")
                     logger.warning(f"Inbound API 409 Notice: {err_msg}")
                     return False, err_msg, status
                 else:
@@ -128,21 +128,15 @@ class ScannerClientManager:
                     # 3. Submit to Tent Server
                     success, msg, status = await self.submit_draft(card_data)
                     if success:
-                        # 4. Show Remove Card screen with message
+                        # 4. Show Remove Card screen with message (Green success)
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
-                    elif status in (
-                        "duplicate_draft",
-                        "already_pre_registered",
-                        "already_active",
-                        "already_temporary_leave",
-                        "previously_stayed",
-                        "deceased_record",
-                    ) or "เคยเสียบบัตร" in msg or "มีข้อมูล" in msg or "เช็คอิน" in msg or "ออกชั่วคราว" in msg or "ประวัติ" in msg:
-                        # 4b. Show Yellow Warning screen for duplicate/existing scans
+                    elif status is not None:
+                        # 4b. Show Yellow Warning screen for all 409 notices (already active, pre_registered, leave, stayed, etc.)
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?type=warning&message={encoded_msg}")
                     else:
+                        # 4c. Show Red Error screen for HTTP 500 / server network failures
                         error_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.error_url}?error_msg={error_msg}")
 
