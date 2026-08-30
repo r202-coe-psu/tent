@@ -6,7 +6,10 @@
 		useSetOverrideInactive,
 		useCreateInitialOverride,
 		useSetMasterActive,
-		createProfileSlug
+		createProfileSlug,
+		useFoodSphereStandards,
+		useRequirementGroups,
+		useReplenishmentPolicies
 	} from '$lib/features/sop-ratios';
 	import {
 		SopTypeList,
@@ -15,6 +18,9 @@
 		AlertThresholdEditor,
 		VersionHistoryDrawer,
 		DeactivateConfirmDialog,
+		FoodSphereStandardTab,
+		RequirementGroupTab,
+		ReplenishmentPolicyTab,
 		type SopTabType
 	} from '$lib/features/sop-ratios/components';
 
@@ -55,6 +61,11 @@
 	const overrideQuery = useActiveSopOverride(() => shelterCode);
 	const activeOverride = $derived(overrideQuery.data ?? null);
 
+	// Food Sphere & Replenishment queries for badge counts
+	const foodSphereQuery = useFoodSphereStandards(() => shelterCode);
+	const reqGroupQuery = useRequirementGroups(() => shelterCode);
+	const replenishmentQuery = useReplenishmentPolicies(() => shelterCode);
+
 	const effectiveActiveContext = $derived(shelterCode ? activeContext : 'master');
 	const viewedProfile = $derived(
 		viewedMasterVersion &&
@@ -66,6 +77,7 @@
 	const activeProfile = $derived(
 		effectiveActiveContext === 'master' ? (viewedProfile ?? selectedMaster) : activeOverride
 	);
+
 	// Mutations
 	const setInactiveMutation = useSetOverrideInactive(() => shelterCode);
 	const initialOverrideMutation = useCreateInitialOverride(() => shelterCode);
@@ -147,13 +159,13 @@
 	<meta name="description" content="จัดการค่า SOP ratio มาตรฐานและการปรับแต่งเฉพาะศูนย์พักพิง" />
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner
 		title="5. พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
 		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
 	/>
 
-	{#if isSA && !masterQuery.isLoading && (masterQuery.data ?? []).length === 0}
+	{#if isSA && !masterQuery.isLoading && (masterQuery.data ?? []).length === 0 && activeTab === 'sphere_standard'}
 		<div class="rounded-xl border border-dashed p-6 text-center">
 			<p class="font-semibold">ยังไม่มี Master SOP Profile</p>
 			<button
@@ -163,13 +175,26 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
-		<SopTypeList bind:activeTab />
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+		<SopTypeList
+			bind:activeTab
+			foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
+			reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
+			replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
+			sphereCount={20}
+			alertCount={8}
+		/>
 
-		{#if activeTab === 'sphere_standard'}
+		{#if activeTab === 'food_sphere_standard'}
+			<FoodSphereStandardTab {shelterCode} {isSA} {canEditOverride} />
+		{:else if activeTab === 'requirement_group'}
+			<RequirementGroupTab {shelterCode} {isSA} {canEditOverride} />
+		{:else if activeTab === 'replenishment_policy'}
+			<ReplenishmentPolicyTab {shelterCode} {isSA} {canEditOverride} />
+		{:else if activeTab === 'sphere_standard'}
 			{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
 				<div
-					class="flex min-h-[600px] items-center justify-center rounded-xl border bg-card p-6 shadow-sm"
+					class="flex min-h-160 items-center justify-center rounded-xl border bg-card p-6 shadow-sm"
 				>
 					<div
 						class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
@@ -228,7 +253,7 @@
 			<AlertThresholdEditor />
 		{/if}
 	</div>
-</div>
+</main>
 
 {#if bulkEditOpen && activeProfile}
 	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />

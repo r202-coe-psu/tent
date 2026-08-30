@@ -9,6 +9,7 @@
  */
 
 import { serviceFetch } from '$lib/api/service';
+import type { DutyWindow } from '../domain/schema';
 
 const USERS_ENDPOINT = '/api/v1/users';
 
@@ -18,6 +19,12 @@ export interface UserSummary {
 	display_name?: string | null;
 	shelter_id?: string | null;
 	affiliation_tags?: string[];
+	/** `volunteer:{ulid}` this login is linked to, when it is a volunteer account (CR-094 §2.3). */
+	volunteer_id?: string | null;
+	/** Recorded duty window; `null`/absent means permanent access. Not enforced yet (CR-094 §2.3). */
+	duty_window?: DutyWindow | null;
+	/** `false` suspends the account. Recorded only — login is not blocked yet (CR-094 §2.3). */
+	active?: boolean;
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -30,6 +37,9 @@ export function createUser(input: {
 	display_name: string;
 	roles: string[];
 	affiliation_tags?: string[];
+	volunteer_id?: string | null;
+	duty_window?: DutyWindow | null;
+	active?: boolean;
 }): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }
@@ -45,6 +55,9 @@ export function updateUser(
 		display_name?: string;
 		roles?: string[];
 		affiliation_tags?: string[];
+		volunteer_id?: string | null;
+		duty_window?: DutyWindow | null;
+		active?: boolean;
 	}
 ): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, {

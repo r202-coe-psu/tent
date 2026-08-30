@@ -120,6 +120,19 @@ export function volunteerRepository(): VolunteerRepository {
 	return singleton;
 }
 
+/**
+ * Repository bound to one named shelter rather than the active one. Only for the cross-shelter
+ * write a platform-wide operator makes: user management links a `_users` account to a volunteer
+ * profile in the shelter *the form selected*, which for an SA is not necessarily the shelter the
+ * sidebar is currently viewing (CR-096 §2.4). Pass nothing for the active shelter.
+ */
+export function volunteerRepositoryFor(shelterCode?: string | null): VolunteerRepository {
+	if (!shelterCode) return volunteerRepository();
+	const db = `shelter_${shelterCode.toLowerCase()}`;
+	if (db === getShelterDb()) return volunteerRepository();
+	return new VolunteerRemoteRepository(db);
+}
+
 /** Test-only constructor that bypasses the `getShelterDb()` singleton. */
 export function createVolunteerRepositoryForTest(dbName: string): VolunteerRemoteRepository {
 	return new VolunteerRemoteRepository(dbName);

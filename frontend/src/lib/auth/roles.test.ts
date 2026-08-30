@@ -66,11 +66,17 @@ describe('roles kernel', () => {
 
 describe('roleDisplayLabel', () => {
 	it('maps every internal RoleKey to a Thai label', () => {
-		expect(roleDisplayLabel('system_admin')).toBe('ผู้ดูแลระบบ');
-		expect(roleDisplayLabel('shelter_manager')).toBe('ผู้จัดการศูนย์');
-		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียน');
-		expect(roleDisplayLabel('kitchen_staff')).toBe('เจ้าหน้าที่ครัว');
-		expect(roleDisplayLabel('warehouse_staff')).toBe('เจ้าหน้าที่คลัง');
+		// Labels follow CR-096 §2.1 — the wording the ops team uses on site.
+		expect(roleDisplayLabel('system_admin')).toBe('ผู้ดูแลระบบสูงสุด');
+		expect(roleDisplayLabel('shelter_manager')).toBe('ผู้จัดการศูนย์พักพิง');
+		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียนหน้าด่าน');
+		expect(roleDisplayLabel('kitchen_staff')).toBe('เจ้าหน้าที่ครัว / จัดเตรียมอาหาร');
+		expect(roleDisplayLabel('warehouse_staff')).toBe('ผู้จัดการคลังเสบียง / ส่งต่อสิ่งของ');
+		expect(roleDisplayLabel('team_coordinator')).toBe('ผู้ประสานงานทีม');
+		expect(roleDisplayLabel('operations_staff')).toBe('เจ้าหน้าที่ปฏิบัติการทั่วไป');
+		expect(roleDisplayLabel('medical_staff')).toBe('แพทย์ / เจ้าหน้าที่คัดกรองพยาบาล');
+		expect(roleDisplayLabel('triage_staff')).toBe('เจ้าหน้าที่คัดกรองเฉพาะทาง');
+		expect(roleDisplayLabel('volunteer_coordinator')).toBe('ผู้ประสานงานจิตอาสา');
 	});
 
 	it('renders a shelter-scope role with its code', () => {
@@ -91,7 +97,7 @@ describe('roleDisplayLabel', () => {
 describe('formatRoleList', () => {
 	it('joins multiple roles with ", "', () => {
 		expect(formatRoleList(['shelter:SH001', 'registration_staff'])).toBe(
-			'ศูนย์ SH001, เจ้าหน้าที่ลงทะเบียน'
+			'ศูนย์ SH001, เจ้าหน้าที่ลงทะเบียนหน้าด่าน'
 		);
 	});
 

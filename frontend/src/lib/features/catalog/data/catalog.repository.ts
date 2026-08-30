@@ -11,38 +11,61 @@ import type {
 
 export interface CatalogRepository {
 	// Item Category
-	createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): Promise<ItemCategory>;
+	createItemCategory(
+		input: ItemCategoryInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<ItemCategory>;
 
-	listItemCategories(): Promise<ItemCategory[]>;
+	listItemCategories(shelterCode?: string | null): Promise<ItemCategory[]>;
 
 	listItemCategoriesPaginated(
 		page: number,
-		pageSize: number
+		pageSize: number,
+		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemCategory>>;
 
-	getItemCategory(id: string): Promise<ItemCategory | null>;
+	getItemCategory(id: string, shelterCode?: string | null): Promise<ItemCategory | null>;
 
 	updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory>;
 
 	// Item Master
-	createItemMaster(input: ItemMasterInput, ctx: AuthorContext): Promise<ItemMaster>;
+	createItemMaster(
+		input: ItemMasterInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<ItemMaster>;
 
-	listItemMasters(): Promise<ItemMaster[]>;
+	listItemMasters(shelterCode?: string | null): Promise<ItemMaster[]>;
 
-	listItemMastersPaginated(page: number, pageSize: number): Promise<PaginatedResult<ItemMaster>>;
+	listItemMastersPaginated(
+		page: number,
+		pageSize: number,
+		shelterCode?: string | null
+	): Promise<PaginatedResult<ItemMaster>>;
 
-	getItemMaster(id: string): Promise<ItemMaster | null>;
+	getItemMaster(id: string, shelterCode?: string | null): Promise<ItemMaster | null>;
 
 	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster>;
 
 	// Recipe
-	createRecipe(input: RecipeInput, ctx: AuthorContext): Promise<Recipe>;
+	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe>;
 
-	listRecipes(): Promise<Recipe[]>;
+	listRecipes(shelterCode?: string | null): Promise<Recipe[]>;
 
-	listRecipesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Recipe>>;
+	listRecipesPaginated(
+		page: number,
+		pageSize: number,
+		shelterCode?: string | null
+	): Promise<PaginatedResult<Recipe>>;
 
-	getRecipe(id: string): Promise<Recipe | null>;
+	getRecipe(id: string, shelterCode?: string | null): Promise<Recipe | null>;
 
 	updateRecipe(recipe: Recipe): Promise<Recipe>;
+
+	deleteItemMaster(id: string, shelterCode?: string | null): Promise<boolean>;
+
+	deleteItemCategory(id: string, shelterCode?: string | null): Promise<boolean>;
+
+	deleteRecipe(id: string, shelterCode?: string | null): Promise<boolean>;
 }

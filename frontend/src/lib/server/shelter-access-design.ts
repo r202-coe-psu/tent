@@ -51,6 +51,60 @@ export const REFERRAL_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango index definitions required by stock_transfer list/find (CR-059). */
+export const TRANSFER_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'status'] },
+		name: 'transfer-type-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'from_shelter', 'created_at'] },
+		name: 'transfer-type-fromshelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'to_shelter', 'created_at'] },
+		name: 'transfer-type-toshelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
+		name: 'transfer-list-created-desc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'asc' }, { created_at: 'asc' }] },
+		name: 'transfer-list-created-asc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { status: 'desc' }, { created_at: 'desc' }] },
+		name: 'transfer-list-status-created-desc-idx',
+		type: 'json' as const
+	}
+];
+
+/**
+ * Mango index definitions required by `stock_ledger` `_find` lookups on a *shelter* DB
+ * (CR-059 T-13) — `TransferServerRepository.assertSufficientStock`'s `item_id: { $in }`
+ * balance check and `ledgerAlreadyWritten`'s `ref_id` + `item_id` + `reason` idempotency
+ * check. `stock_ledger` is append-only (grows unbounded), so without these, both queries
+ * fall back to a full DB scan as a shelter's ledger history grows.
+ */
+export const TRANSFER_LEDGER_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'item_id'] },
+		name: 'ledger-type-itemid-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'ref_id', 'item_id', 'reason'] },
+		name: 'ledger-type-refid-itemid-reason-idx',
+		type: 'json' as const
+	}
+];
+
 /**
  * Server-side `validate_doc_update` for a shelter db. Enforces the common
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
@@ -130,9 +184,11 @@ export function buildValidateDocUpdate(code: string): string {
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
-    'audit', 'daily_calc', 'purchase', 'referral',
+    'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
-    'volunteer', 'job', 'job_application', 'shift_assignment', 'volunteer_transfer'
+    'volunteer', 'job', 'job_application', 'shift_assignment', 'volunteer_transfer',
+    'item_category', 'item_master', 'recipe',
+    'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };

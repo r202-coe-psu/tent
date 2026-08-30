@@ -47,6 +47,7 @@ export * from './domain/hub-metrics';
 export * from './data/volunteer.repository';
 export {
 	volunteerRepository,
+	volunteerRepositoryFor,
 	VolunteerRemoteRepository,
 	createVolunteerRepositoryForTest,
 	clearVolunteerRepositoryCache

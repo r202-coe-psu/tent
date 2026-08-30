@@ -35,7 +35,7 @@ import type {
 import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
-import { volunteerRepository } from '../data/volunteer.remote';
+import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
 import { volunteerTransferRepository } from '../data/volunteer-transfer.remote';
 import type {
 	JobApplicationFilter,
@@ -80,9 +80,11 @@ export const volunteerKeys = {
 	todayAttendance: (date: string) =>
 		[...volunteerKeys.shiftAssignmentsAll(), 'today', date] as const,
 
-	volunteersAll: () => [...volunteerKeys.all, 'volunteers', getShelterCode()] as const,
-	volunteersList: (filter?: VolunteerFilter) =>
-		[...volunteerKeys.volunteersAll(), 'list', filter] as const,
+	/** `shelterCode` defaults to the active shelter; pass it only for a cross-shelter read. */
+	volunteersAll: (shelterCode: string = getShelterCode()) =>
+		[...volunteerKeys.all, 'volunteers', shelterCode] as const,
+	volunteersList: (filter?: VolunteerFilter, shelterCode?: string) =>
+		[...volunteerKeys.volunteersAll(shelterCode), 'list', filter] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
 	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const,
 
@@ -153,10 +155,16 @@ export const useTodayAttendance = () =>
 		queryFn: () => shiftAssignmentRepository().list({ date: todayDateString() })
 	}));
 
-export const useVolunteers = (filter?: VolunteerFilter) =>
+/**
+ * `shelterCode` is a getter, not a value, so a caller that lets an operator pick the shelter
+ * (user management: an SA may create an account for any shelter) re-keys and refetches when the
+ * pick changes instead of showing the active shelter's roster — CR-096 §2.4. Omit it and the
+ * list follows the active shelter as every other caller expects.
+ */
+export const useVolunteers = (filter?: VolunteerFilter, shelterCode?: () => string | undefined) =>
 	createQuery(() => ({
-		queryKey: volunteerKeys.volunteersList(filter),
-		queryFn: () => volunteerRepository().list(filter)
+		queryKey: volunteerKeys.volunteersList(filter, shelterCode?.()),
+		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter)
 	}));
 
 export const useVolunteer = (id: () => string, enabled: () => boolean = () => true) =>
@@ -320,6 +328,43 @@ export const useUpdateVolunteer = (queryClient: QueryClient) =>
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
+	}));
+
+/**
+ * The volunteer half of the two-way account link (CR-096 §2.3): `_users.volunteer_id` points at
+ * the profile and `volunteer.user_name` points back, which is what the roster reads to show
+ * "มีบัญชีหลังบ้าน". User management calls this after the `_users` write — once to claim the new
+ * profile and once per profile it stopped pointing at, so unlinking, re-linking, switching an
+ * account back to staff and deleting an account all leave the registry clean.
+ *
+ * `expectUserName` makes the clearing half safe against a race: the profile is only cleared while
+ * it still names the account being edited, so a link someone else made meanwhile survives.
+ * A profile that no longer exists is not an error — there is nothing left to point back.
+ */
+export const useSetVolunteerAccountLink = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: async ({
+			volunteerId,
+			userName,
+			shelterCode,
+			expectUserName
+		}: {
+			volunteerId: string;
+			/** `null` clears the link. */
+			userName: string | null;
+			/** Shelter DB the profile lives in; omit for the active shelter. */
+			shelterCode?: string;
+			expectUserName?: string;
+		}): Promise<Volunteer | null> => {
+			const repo = volunteerRepositoryFor(shelterCode);
+			const profile = await repo.get(volunteerId);
+			if (!profile) return null;
+			if (expectUserName !== undefined && profile.user_name !== expectUserName) return null;
+			if ((profile.user_name ?? null) === userName) return profile;
+			return repo.update({ ...profile, user_name: userName });
+		},
+		// Cross-shelter by nature, so invalidate the whole slice rather than one shelter's key.
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: volunteerKeys.all })
 	}));
 
 /**

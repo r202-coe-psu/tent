@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
 	// Component
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	// Icon
 	import Search from '@lucide/svelte/icons/search';
@@ -16,13 +18,77 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
-	import { useItemCategories } from '$lib/features/catalog';
-	import { ItemCategoryForm } from '$lib/features/catalog';
+	import {
+		useItemCategories,
+		ItemCategoryForm,
+		useDeleteItemCategory,
+		useItemMasters,
+		type ItemCategory
+	} from '$lib/features/catalog';
+
+	let {
+		basePath = '/back-office/catalog'
+	}: {
+		basePath?: string;
+	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
-	const query = useItemCategories();
+	const shelterCode = $derived(basePath.includes('system-management') ? null : getShelterCode());
+
+	const canWrite = $derived(
+		isSA ||
+			(basePath.includes('back-office') && (isShelterManager(roles) || isWarehouseStaff(roles)))
+	);
+
+	function canModifyCategory(cat: ItemCategory) {
+		if (basePath.includes('system-management')) {
+			return isSA && !cat.shelter_code;
+		}
+		return canWrite;
+	}
+
+	const query = useItemCategories(() => shelterCode);
+	const deleteMutation = useDeleteItemCategory();
+	const itemMastersQuery = useItemMasters(() => shelterCode);
+
+	const itemCounts = $derived.by(() => {
+		const masters = itemMastersQuery.data ?? [];
+		const counts: Record<string, number> = {};
+		for (const item of masters) {
+			if (item.category) {
+				counts[item.category] = (counts[item.category] || 0) + 1;
+			}
+		}
+		return counts;
+	});
+
+	let deleteConfirmOpen = $state(false);
+	let pendingDeleteCategory = $state<{ id: string; name: string } | null>(null);
+
+	function showDeleteConfirm(id: string, name: string) {
+		pendingDeleteCategory = { id, name };
+		deleteConfirmOpen = true;
+	}
+
+	function confirmDelete() {
+		if (!pendingDeleteCategory) return;
+		const { id, name } = pendingDeleteCategory;
+		deleteMutation.mutate(
+			{ id, shelterCode },
+			{
+				onSuccess: () => {
+					toast.success(`ลบหมวดหมู่ "${name}" สำเร็จ`);
+					deleteConfirmOpen = false;
+					pendingDeleteCategory = null;
+				},
+				onError: (err) => {
+					toast.error(err.message || 'เกิดข้อผิดพลาดในการลบหมวดหมู่');
+				}
+			}
+		);
+	}
 
 	// Pagination
 	const PAGE_SIZE = 10;
@@ -82,7 +148,7 @@
 					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>
-				{#if isSA}
+				{#if canWrite}
 					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
 						<Plus class="h-4 w-4" />
 						เพิ่มข้อมูล
@@ -117,37 +183,59 @@
 					{:else}
 						{#each paginatedItems as e (e._id)}
 							<Table.Row>
-								<Table.Cell class="font-bold text-foreground">{e.name}</Table.Cell>
-								<Table.Cell class="text-muted-foreground">
-									{#if e.is_default}
+								<Table.Cell class="font-bold text-foreground">
+									{e.name}
+									{#if !e.shelter_code}
 										<span
-											class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-600/20 ring-inset"
+											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
 										>
-											ค่าเริ่มต้น (Default)
+											ส่วนกลาง
+										</span>
+									{:else if e.override}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-600/10 ring-inset dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-500/20"
+										>
+											ปรับแต่งแล้ว
 										</span>
 									{:else}
 										<span
-											class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset"
+											class="ml-2 inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-600/10 ring-inset dark:bg-teal-950/40 dark:text-teal-400 dark:ring-teal-500/20"
 										>
-											-
+											เฉพาะศูนย์
 										</span>
 									{/if}
 								</Table.Cell>
+								<Table.Cell class="text-muted-foreground">
+									{itemCounts[e.name] || 0} รายการ
+								</Table.Cell>
 								<Table.Cell class="text-center">
-									{#if isSA}
-										<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
-											<Settings2 class="h-4 w-4" />
-											จัดการ
-										</Button>
+									{#if canModifyCategory(e)}
+										<div class="inline-flex gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => showEditForm(e._id)}
+												class="border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+											>
+												<Settings2 class="h-4 w-4" />
+												จัดการ
+											</Button>
+											{#if e.shelter_code === shelterCode}
+												<Button
+													variant="outline"
+													size="sm"
+													onclick={() => showDeleteConfirm(e._id, e.name)}
+													disabled={deleteMutation.isPending}
+													class={e.override
+														? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
+														: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
+												>
+													<Trash2 class="h-4 w-4" />
+													{e.override ? 'รีเซ็ต' : 'ลบ'}
+												</Button>
+											{/if}
+										</div>
 									{/if}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => toast.warning('ฟังก์ชันนี้จะมาในระบบถัดไป')}
-									>
-										<Trash2 class="h-4 w-4" />
-										ลบ
-									</Button>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -202,8 +290,13 @@
 			</div>
 		</div>
 		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
-		{#if isSA}
-			<ItemCategoryForm id={selectedId} isEdit={viewMode === 'edit'} onsuccess={backToList} />
+		{#if canWrite}
+			<ItemCategoryForm
+				id={selectedId}
+				isEdit={viewMode === 'edit'}
+				{basePath}
+				onsuccess={backToList}
+			/>
 		{:else}
 			<div class="py-12 text-center text-sm font-bold text-destructive">
 				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)
@@ -211,3 +304,66 @@
 		{/if}
 	</div>
 {/if}
+
+<Dialog.Root bind:open={deleteConfirmOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
+		<Dialog.Header>
+			<Dialog.Title class="text-lg font-bold text-red-600">
+				{#if pendingDeleteCategory && filteredAll.find((i) => i._id === pendingDeleteCategory?.id)?.override}
+					ยืนยันการคืนค่ามาตรฐาน
+				{:else}
+					ยืนยันการลบหมวดหมู่
+				{/if}
+			</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm text-slate-500">
+				{#if pendingDeleteCategory}
+					{@const pendingItem = filteredAll.find((i) => i._id === pendingDeleteCategory?.id)}
+					{#if pendingItem?.override}
+						คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตหมวดหมู่ <strong class="text-slate-900"
+							>{pendingDeleteCategory.name}</strong
+						>
+						กลับเป็นค่ามาตรฐานส่วนกลาง?
+						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
+							* ข้อมูลที่ศูนย์นี้ทำการปรับแต่งไว้จะถูกลบออกทั้งหมด
+							และจะกลับไปใช้ค่าเริ่มต้นจากส่วนกลางแทน
+						</span>
+					{:else}
+						คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่ <strong class="text-slate-900"
+							>{pendingDeleteCategory.name}</strong
+						>?
+						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
+							* ไม่สามารถลบหมวดหมู่ที่มีรายการสินค้าอ้างอิงอยู่ได้
+						</span>
+					{/if}
+				{/if}
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-2 flex justify-end gap-4 pt-4">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					deleteConfirmOpen = false;
+					pendingDeleteCategory = null;
+				}}
+				class="rounded-lg"
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				variant="destructive"
+				disabled={deleteMutation.isPending}
+				onclick={confirmDelete}
+				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
+			>
+				{#if deleteMutation.isPending}
+					กำลังดำเนินการ...
+				{:else if pendingDeleteCategory && filteredAll.find((i) => i._id === pendingDeleteCategory?.id)?.override}
+					ยืนยันการคืนค่า
+				{:else}
+					ยืนยันการลบ
+				{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>

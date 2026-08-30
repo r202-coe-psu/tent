@@ -12,7 +12,7 @@
 		type WalkInDonationInput
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
@@ -32,7 +32,7 @@
 
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -67,14 +67,16 @@
 		const supplyItems = itemsQuery.data ?? [];
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
-			reorder_level: null,
-			perishable: false
-		}));
+		const mappedItemMasters = itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				_id: im._id,
+				name: im.name,
+				category: im.category || 'other',
+				unit: itemMasterUnit(im),
+				reorder_level: null,
+				perishable: false
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
@@ -266,13 +268,22 @@
 		});
 	}
 
-	// Automatically pre-fill the selected item when preselectedItemId changes
+	/**
+	 * Keep the modal's locked item pinned to the form.
+	 *
+	 * More than a first-render pre-fill: a successful submit calls
+	 * `clearSelection()`, and the combobox is `disabled` whenever
+	 * `preselectedItemId` is set, so nothing could put the item back and every
+	 * later submit in the same modal failed on an empty `item_id`/`unit` the user
+	 * had no way to refill. Tracking `$formData.item_id` re-applies the pin after
+	 * each reset — `useReceiveStock` only invalidates the operations keys, so
+	 * `items` never changes identity to re-trigger the effect on its own.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || $formData.item_id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 
