@@ -32,13 +32,19 @@ from typing import Any
 from tent_model import DonationBuffer, DonationNeedCounter, set_reserved_qty
 
 from worker.couch.client import CouchClient
+from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
 
 logger = logging.getLogger(__name__)
 
 # A donation holds quota until it is explicitly given back. "cancelled"/"expired"
 # release via cancel()/purge_expired_buffers(); everything else still consumes.
-QUOTA_HOLDING_STATUSES = frozenset({"declared", "received"})
+#
+# The pre-shelf half of this is every outstanding status, not just "declared": since
+# CR-052 a public booking sits in "pending_review"/"verifying" while it waits, and
+# leaving those out would make reconcile read their quota as unheld and zero out
+# counters for reservations that are very much still live.
+QUOTA_HOLDING_STATUSES = DONATION_OUTSTANDING_STATUSES | {"received"}
 
 QuotaKey = tuple[str, str]  # (campaign_id, item_id)
 
@@ -114,7 +120,9 @@ def sum_reserved_by_key(
     return totals
 
 
-async def _collect_truth_set(couch: CouchClient, shelter_code: str) -> list[dict[str, Any]]:
+async def _collect_truth_set(
+    couch: CouchClient, shelter_code: str
+) -> list[dict[str, Any]]:
     donations: dict[str, dict[str, Any]] = {}
 
     database = shelter_db_name(shelter_code)
@@ -131,7 +139,7 @@ async def _collect_truth_set(couch: CouchClient, shelter_code: str) -> list[dict
 
     unsynced = await DonationBuffer.find(
         DonationBuffer.shelter_code == shelter_code,
-        DonationBuffer.synced_to_couch == False,  # noqa: E712
+        DonationBuffer.synced_to_couch == False,
     ).to_list()
     for buffer in unsynced:
         key = _normalize_donation_id(buffer.id)
@@ -165,7 +173,9 @@ async def reconcile_shelter(
 
     # Read raw so the exact Decimal128 can be handed back as the optimistic filter.
     collection = DonationNeedCounter.get_motor_collection()
-    counters = await collection.find({"shelter_code": shelter_code}).to_list(length=None)
+    counters = await collection.find({"shelter_code": shelter_code}).to_list(
+        length=None
+    )
 
     seen_keys: set[QuotaKey] = set()
     for counter in counters:

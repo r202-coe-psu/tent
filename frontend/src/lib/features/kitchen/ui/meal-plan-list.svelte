@@ -37,12 +37,13 @@
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
 	import { qtyGt } from '$lib/utils/qty';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
-	const itemMasters = useItemMasters();
+	const itemMasters = useItemMasters(() => getShelterCode());
 	const stockBalance = useStockBalance();
 	const gasTypes = useGasCylinderTypes();
 	const gasLedger = useGasLedger();

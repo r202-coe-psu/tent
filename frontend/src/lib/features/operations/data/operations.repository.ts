@@ -11,7 +11,10 @@ import type {
 	DonationSlot,
 	Purchase,
 	PurchaseInput,
-	CountedItem
+	CountedItem,
+	StockTransfer,
+	TransferInput,
+	TransferFilter
 } from '../domain/operations';
 import type { AuditAction } from '$lib/features/shared';
 
@@ -117,4 +120,20 @@ export interface OperationsRepository {
 		counted: CountedItem[],
 		ctx: AuthorContext
 	): Promise<StockLedger[]>;
+
+	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
+	// `stock_transfer` lives in `central_ops`, not this shelter's DB — every method here goes
+	// through the admin BFF (`/api/back-office/transfer/**`), not the session-authenticated write
+	// path every method above uses. See `data/transfer.server-repository.ts` for the write path.
+
+	listTransfers(filter?: TransferFilter): Promise<StockTransfer[]>;
+	getTransfer(id: string): Promise<StockTransfer | null>;
+	createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer>;
+	dispatchTransfer(id: string): Promise<StockTransfer>;
+	receiveTransfer(
+		id: string,
+		receivedItems: { item_id: string; qty: string | number }[],
+		notes?: string
+	): Promise<StockTransfer>;
+	cancelTransfer(id: string): Promise<StockTransfer>;
 }

@@ -136,7 +136,7 @@
 </script>
 
 <section
-	class="rounded-[24px] border border-border bg-card p-6 text-card-foreground shadow-md"
+	class="min-w-0 rounded-[24px] border border-border bg-card p-6 text-card-foreground shadow-md"
 	aria-label="ตั้งค่าเกณฑ์เตือนภัยเฉพาะศูนย์"
 >
 	<header

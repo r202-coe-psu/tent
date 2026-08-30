@@ -31,9 +31,9 @@ export {
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
 export {
 	familySearch,
-	fetchShelterTypeLabels,
-	fetchVulnerableGroupLabels,
-	listPublicShelters
+	listPublicShelters,
+	fetchShelterTypes,
+	type ShelterTypeOption
 } from './data/public-api';
 export {
 	publicPortalKeys,

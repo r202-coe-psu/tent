@@ -23,14 +23,8 @@ describe('catalog domain', () => {
 			name: 'ข้าวสาร',
 			base_unit: 'kg',
 			conversions: [],
-			distribution_type: 'consumable' as const,
-			target_audience_type: 'all' as const,
-			target_restrictions: {
-				genders: [],
-				vulnerable_groups: [],
-				diet_religions: []
-			},
-			is_default: false
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
 		};
 		const parsed = itemMasterInputSchema.parse(input);
 		expect(parsed.name).toBe('ข้าวสาร');
@@ -42,14 +36,8 @@ describe('catalog domain', () => {
 			name: 'ยาพาราเซตามอล',
 			base_unit: 'tablet',
 			conversions: [],
-			distribution_type: 'consumable' as const,
-			target_audience_type: 'all' as const,
-			target_restrictions: {
-				genders: [],
-				vulnerable_groups: [],
-				diet_religions: []
-			},
-			is_default: true
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
 		};
 
 		const doc = createItemMaster(input, ctx);
@@ -61,18 +49,15 @@ describe('catalog domain', () => {
 
 	it('should validate valid item category input', () => {
 		const input = {
-			name: 'อาหารแห้ง',
-			is_default: true
+			name: 'อาหารแห้ง'
 		};
 		const parsed = itemCategoryInputSchema.parse(input);
 		expect(parsed.name).toBe('อาหารแห้ง');
-		expect(parsed.is_default).toBe(true);
 	});
 
 	it('should create item category doc with item_category: prefix', () => {
 		const input = {
-			name: 'เครื่องมือแพทย์',
-			is_default: false
+			name: 'เครื่องมือแพทย์'
 		};
 		const doc = createItemCategory(input, ctx);
 		expect(doc._id).toMatch(/^item_category:[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -89,8 +74,7 @@ describe('catalog domain', () => {
 				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'ชิ้น' }
 			],
 			standard_portions: 100,
-			standard_duration_hours: 1.5,
-			is_default: true
+			standard_duration_hours: 1.5
 		};
 		const parsed = recipeInputSchema.parse(input);
 		expect(parsed.label).toBe('ข้าวผัดไข่มาตรฐาน');
@@ -103,8 +87,7 @@ describe('catalog domain', () => {
 			label: 'แกงจืดเต้าหู้หมูสับ',
 			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
 			standard_portions: '50',
-			standard_duration_hours: '0.5',
-			is_default: false
+			standard_duration_hours: '0.5'
 		};
 		const doc = createRecipe(input, ctx);
 		expect(doc._id).toMatch(/^recipe:[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -117,10 +100,8 @@ describe('catalog domain', () => {
 		const baseInput = {
 			name: 'น้ำดื่ม',
 			base_unit: 'bottle',
-			distribution_type: 'consumable' as const,
-			target_audience_type: 'all' as const,
-			target_restrictions: { genders: [], vulnerable_groups: [], diet_religions: [] },
-			is_default: false
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
 		};
 
 		// 0.5 is valid
@@ -151,8 +132,7 @@ describe('catalog domain', () => {
 		const baseRecipeInput = {
 			label: 'น้ำพริก',
 			standard_portions: 10,
-			standard_duration_hours: 0.5,
-			is_default: false
+			standard_duration_hours: 0.5
 		};
 
 		// 0.5 is valid
@@ -175,6 +155,135 @@ describe('catalog domain', () => {
 			recipeInputSchema.parse({
 				...baseRecipeInput,
 				ingredients: [{ item_master_id: 'item_1', quantity: -1, uom: 'kg' }]
+			})
+		).toThrow();
+	});
+
+	it('should support deactivated field defaulting to false and accepting true', () => {
+		const baseInput = {
+			name: 'น้ำดื่ม',
+			base_unit: 'bottle',
+			conversions: [],
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
+		};
+
+		const defaultParsed = itemMasterInputSchema.parse(baseInput);
+		expect(defaultParsed.deactivated).toBeUndefined();
+
+		const docWithDefault = createItemMaster(baseInput, ctx);
+		expect(docWithDefault.deactivated).toBe(false);
+
+		const deactivatedInput = {
+			...baseInput,
+			deactivated: true
+		};
+		const deactivatedParsed = itemMasterInputSchema.parse(deactivatedInput);
+		expect(deactivatedParsed.deactivated).toBe(true);
+
+		const docWithDeactivated = createItemMaster(deactivatedInput, ctx);
+		expect(docWithDeactivated.deactivated).toBe(true);
+	});
+
+	it('should support deactivated field for Recipe defaulting to false and accepting true', () => {
+		const baseInput = {
+			label: 'น้ำพริก',
+			ingredients: [{ item_master_id: 'item_1', quantity: '0.5', uom: 'kg' }],
+			standard_portions: '10',
+			standard_duration_hours: '0.5'
+		};
+
+		const defaultParsed = recipeInputSchema.parse(baseInput);
+		expect(defaultParsed.deactivated).toBeUndefined();
+
+		const docWithDefault = createRecipe(baseInput, ctx);
+		expect(docWithDefault.deactivated).toBe(false);
+
+		const deactivatedInput = {
+			...baseInput,
+			deactivated: true
+		};
+		const deactivatedParsed = recipeInputSchema.parse(deactivatedInput);
+		expect(deactivatedParsed.deactivated).toBe(true);
+
+		const docWithDeactivated = createRecipe(deactivatedInput, ctx);
+		expect(docWithDeactivated.deactivated).toBe(true);
+	});
+
+	it('should support item class specific validations and fields', () => {
+		// Consumable
+		const consumableInput = {
+			name: 'นมสด',
+			base_unit: 'ขวด',
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const,
+			shelf_life_days: 7,
+			storage_type: 'CHILLED' as const,
+			allergens: 'นม'
+		};
+		const consumableParsed = itemMasterInputSchema.parse(consumableInput);
+		expect(consumableParsed.shelf_life_days).toBe(7);
+		expect(consumableParsed.storage_type).toBe('CHILLED');
+
+		const consumableDoc = createItemMaster(consumableInput, ctx);
+		expect(consumableDoc.shelf_life_days).toBe(7);
+
+		// Durable
+		const durableInput = {
+			name: 'เต็นท์พักแรม',
+			base_unit: 'หลัง',
+			distribution_type: 'one_time' as const,
+			type_class: 'DURABLE' as const,
+			qty_per_person: 0.5,
+			returnable: true
+		};
+		const durableParsed = itemMasterInputSchema.parse(durableInput);
+		expect(durableParsed.qty_per_person).toBe(0.5);
+		expect(durableParsed.returnable).toBe(true);
+
+		const durableDoc = createItemMaster(durableInput, ctx);
+		expect(durableDoc.qty_per_person).toBe(0.5);
+		expect(durableDoc.returnable).toBe(true);
+
+		// Equipment
+		const equipmentInput = {
+			name: 'เครื่องปั่นไฟ',
+			type_class: 'EQUIPMENT' as const,
+			asset_status: 'READY' as const
+		};
+		const equipmentParsed = itemMasterInputSchema.parse(equipmentInput);
+		expect(equipmentParsed.asset_status).toBe('READY');
+		expect(equipmentParsed.base_unit).toBeUndefined();
+
+		const equipmentDoc = createItemMaster(equipmentInput, ctx);
+		expect(equipmentDoc.asset_status).toBe('READY');
+		expect(equipmentDoc.base_unit).toBe('ชิ้น');
+	});
+
+	it('should enforce required fields conditionally', () => {
+		// For Consumable/Durable, base_unit is required
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'นมสด',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow();
+
+		// For Consumable/Durable, distribution_type is required
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'นมสด',
+				base_unit: 'ขวด',
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow();
+
+		// For Equipment, asset_status is required
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'เครื่องปั่นไฟ',
+				type_class: 'EQUIPMENT' as const
 			})
 		).toThrow();
 	});

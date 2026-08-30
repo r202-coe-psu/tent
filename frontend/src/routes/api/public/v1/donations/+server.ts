@@ -12,6 +12,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
+import { isDonationOutstanding } from '$lib/features/operations';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
@@ -117,9 +118,13 @@ export const POST = async ({ request, getClientAddress }) => {
 				if (slotDoc.status === 'closed') {
 					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
 				}
+				// A booking holds its place in the queue from the moment it is made until the
+				// goods are keyed in (schema.md §2.13). Since CR-052 that opens at
+				// `pending_review` and walks through `verifying`, so counting `declared`
+				// alone would read every slot as empty and SLOT_FULL would never fire.
 				const bookedCount = donations.filter(
 					(d) =>
-						(d.status === 'declared' || d.status === 'received') &&
+						(isDonationOutstanding(d.status) || d.status === 'received') &&
 						d.logistics?.slot?.date === date &&
 						d.logistics?.slot?.from === from
 				).length;

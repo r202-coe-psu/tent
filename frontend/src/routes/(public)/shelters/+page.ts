@@ -1,5 +1,6 @@
 import type { PageLoad } from './$types';
 import {
+	fetchShelterTypes,
 	listPublicShelters,
 	toPublicShelterCard,
 	type PublicShelterListResponse,
@@ -27,6 +28,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const province = url.searchParams.get('province') || '';
 	const district = url.searchParams.get('district') || '';
 	const subdistrict = url.searchParams.get('subdistrict') || '';
+	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
 	const siteKindParam = url.searchParams.get('site_kind') || '';
 	const siteKind = SITE_KINDS.has(siteKindParam)
@@ -52,20 +54,32 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 
 	let data: PublicShelterListResponse | null;
+	let shelterTypes: { code: string; label: string; is_default?: boolean }[] = [];
 	try {
-		data = await listPublicShelters({
-			province: province || undefined,
-			district: district || undefined,
-			subdistrict: subdistrict || undefined,
-			status: status || undefined,
-			site_kind: siteKind,
-			lat: hasUser ? userLatNum : undefined,
-			lng: hasUser ? userLngNum : undefined,
-			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
-			fetch
-		});
+		const [sheltersRes, typesRes] = await Promise.all([
+			listPublicShelters({
+				province: province || undefined,
+				district: district || undefined,
+				subdistrict: subdistrict || undefined,
+				status: status || undefined,
+				site_kind: siteKind,
+				lat: hasUser ? userLatNum : undefined,
+				lng: hasUser ? userLngNum : undefined,
+				radius_km:
+					hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
+				fetch
+			}),
+			fetchShelterTypes(fetch)
+		]);
+		data = sheltersRes;
+		shelterTypes = typesRes;
 	} catch {
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
+	}
+
+	const typeMap = new Map<string, string>();
+	for (const t of shelterTypes) {
+		typeMap.set(t.code, t.label);
 	}
 
 	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
@@ -75,9 +89,16 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
 			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
 		}
+		const rawAdminType = item?.admin_type || (item as Record<string, unknown>)?.shelter_type;
+		const resolvedAdminType =
+			typeof rawAdminType === 'string'
+				? typeMap.get(rawAdminType) || (rawAdminType !== 'unspecified' ? rawAdminType : null)
+				: null;
+
 		return toPublicShelterCard(
 			{
 				...item,
+				admin_type: resolvedAdminType,
 				vulnerable_groups: item?.vulnerable_groups ?? undefined
 			},
 			dist
@@ -95,6 +116,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		);
 	}
 
+	if (typeFilter.trim()) {
+		const tf = typeFilter.trim();
+		shelters = shelters.filter((s) => s.admin_type === tf);
+	}
+
 	if (hasUser && !Number.isNaN(maxDistance) && maxDistance > 0) {
 		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
 	}
@@ -110,10 +136,18 @@ export const load: PageLoad = async ({ url, fetch }) => {
 
 	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
 
+	const available_types = Array.from(
+		new Set(
+			shelterTypes.length > 0
+				? shelterTypes.map((t) => t.label)
+				: (shelters.map((s) => s.admin_type).filter(Boolean) as string[])
+		)
+	).filter(Boolean);
+
 	return {
 		shelters,
 		count: shelters.length,
-		as_of: data.as_of ?? new Date().toISOString(),
+		as_of: data?.as_of ?? new Date().toISOString(),
 		summary: {
 			shelters_total: shelters.length,
 			shelters_open: openCount
@@ -123,12 +157,13 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			province,
 			district,
 			subdistrict,
+			type: typeFilter,
 			status: statusParam,
 			site_kind: siteKind,
 			distance,
 			user_lat,
 			user_lng
 		},
-		available_types: [] as string[]
+		available_types
 	};
 };
