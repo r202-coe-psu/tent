@@ -26,34 +26,9 @@ export const load: PageLoad = async ({ fetch }) => {
 		console.error('Failed to fetch announcements', e);
 	}
 
-	try {
-		const response = await fetch('/api/public/v1/transparency/summary');
-		if (response.ok) {
-			const data = await response.json();
-			return { ...data, configData, announcements, faqs };
-		}
-	} catch (e) {
-		console.error('Failed to fetch summary metrics', e);
-	}
-
-	// Fallback mock data if API fails
 	return {
-		summary: {
-			shelters_open: 0,
-			shelters_total: 0,
-			occupancy_total: null,
-			vulnerable_count: null
-		},
-		lastUpdated: Date.now(),
-		isStale: true,
-		flags: {
-			public_metrics_occupancy: true,
-			public_metrics_vulnerable: true,
-			public_metrics_volunteers: false,
-			emergency_mode: false
-		},
-		isError: true,
-		faqs,
-		announcements
+		configData,
+		announcements,
+		faqs
 	};
 };

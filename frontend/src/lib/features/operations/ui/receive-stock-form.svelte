@@ -32,7 +32,7 @@
 
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -67,14 +67,16 @@
 		const supplyItems = itemsQuery.data ?? [];
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: itemMasterUnit(im),
-			reorder_level: null,
-			perishable: false
-		}));
+		const mappedItemMasters = itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				_id: im._id,
+				name: im.name,
+				category: im.category || 'other',
+				unit: itemMasterUnit(im),
+				reorder_level: null,
+				perishable: false
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});

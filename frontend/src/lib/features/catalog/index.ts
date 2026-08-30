@@ -41,17 +41,20 @@ export {
 	useItemCategory,
 	useCreateItemCategory,
 	useUpdateItemCategory,
+	useDeleteItemCategory,
 	// Item Master
 	useItemMasters,
 	useItemMastersPaginated,
 	useCreateItemMaster,
 	useUpdateItemMaster,
+	useDeleteItemMaster,
 	// Recipes
 	useRecipes,
 	useRecipesPaginated,
 	useRecipe,
 	useCreateRecipe,
-	useUpdateRecipe
+	useUpdateRecipe,
+	useDeleteRecipe
 } from './application/queries';
 
 // UI — feature components

@@ -269,6 +269,26 @@
 		return true;
 	}
 
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			ศาลาประชาคม: 'Community Hall',
+			ศูนย์กีฬา: 'Sports Centre',
+			อาคารราชการ: 'Government Building',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
+	}
+
 	let hideFullToggle = $state<boolean>(false);
 	$effect(() => {
 		hideFullToggle = filters.hide_full === true || filters.hide_full === 'true';
@@ -352,16 +372,16 @@
 				<!-- Site kind -->
 				<div class="space-y-1.5">
 					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
-						>ชนิดสถานที่</Label
+						>{t.siteKindLabel}</Label
 					>
 					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
 						<Select.Trigger class="w-full rounded-xl">
-							<Select.Value placeholder="ชนิดสถานที่ (ทั้งหมด)" />
+							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="">ชนิดสถานที่ (ทั้งหมด)</Select.Item>
-							<Select.Item value="evacuation_center">ศูนย์อพยพ</Select.Item>
-							<Select.Item value="host_house">บ้านพี่เลี้ยง</Select.Item>
+							<Select.Item value="">{t.siteKindAll}</Select.Item>
+							<Select.Item value="evacuation_center">{t.siteKindEvacCenter}</Select.Item>
+							<Select.Item value="host_house">{t.siteKindHostHouse}</Select.Item>
 						</Select.Content>
 					</Select.Root>
 				</div>
@@ -377,7 +397,7 @@
 						<Select.Content>
 							<Select.Item value="">{t.typePlaceholder}</Select.Item>
 							{#each availableTypes as tp (tp)}
-								<Select.Item value={tp}>{tp}</Select.Item>
+								<Select.Item value={tp}>{translateAdminType(tp)}</Select.Item>
 							{/each}
 						</Select.Content>
 					</Select.Root>

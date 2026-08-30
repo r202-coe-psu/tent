@@ -31,9 +31,8 @@ import {
 	type CountedItem
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
-import type { OperationsRepository } from './operations.repository';
-import { supplyRepository, type SupplyItem } from '$lib/features/supply';
-import { isItemMaster, itemMasterUnit, type ItemMaster } from '$lib/features/catalog';
+import { supplyRepository, type SupplyItem, type SupplyCategory } from '$lib/features/supply';
+import { isItemMaster, itemMasterUnit, catalogRepository, type ItemMaster } from '$lib/features/catalog';
 import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
 /**
@@ -83,7 +82,17 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	 * discriminator, not the typing here, decides which rules apply.
 	 */
 	private async loadCatalogItem(itemId: string): Promise<CatalogItem | null> {
-		return supplyRepository().getItem(itemId);
+		const item = await supplyRepository().getItem(itemId);
+		if (item) return item;
+
+		if (itemId.startsWith('item_master:')) {
+			const shelterCode = this.dbName.startsWith('shelter_')
+				? this.dbName.replace('shelter_', '').toUpperCase()
+				: null;
+			const itemMaster = await catalogRepository().getItemMaster(itemId, shelterCode);
+			if (itemMaster) return itemMaster;
+		}
+		return null;
 	}
 
 	// --- Ledger Methods ---
@@ -352,7 +361,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const catalog = new Map<string, SupplyItem | null>();
 		for (const row of rows) {
 			if (!catalog.has(row.item_id)) {
-				catalog.set(row.item_id, await supplyRepository().getItem(row.item_id));
+				catalog.set(row.item_id, await this.findItem(row.item_id));
 			}
 			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
 		}
@@ -367,8 +376,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 let singleton: OperationsRepository | null = null;
 let singletonDbName: string | null = null;
 
-export function operationsRepository(): OperationsRepository {
-	const currentDb = getShelterDb();
+export function operationsRepository(shelterCode?: string): OperationsRepository {
+	const currentDb = getShelterDb(shelterCode);
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new OperationsRemoteRepository(currentDb);
 		singletonDbName = currentDb;

@@ -12,6 +12,8 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './ledger-table.svelte';
@@ -40,7 +42,7 @@
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -115,9 +117,9 @@
 			unit: itemMasterUnit(im),
 			reorder_level: null,
 			perishable: false,
-			target_reserve_days: im.target_reserve_days,
-			consumption_rate: im.consumption_rate,
-			timeframe: im.timeframe
+			target_reserve_days: undefined,
+			consumption_rate: undefined,
+			timeframe: undefined
 		}));
 
 		return [...supplyItems, ...mappedItemMasters];

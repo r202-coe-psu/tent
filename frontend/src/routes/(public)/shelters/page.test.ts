@@ -5,12 +5,14 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/features/public-portal')>();
 	return {
 		...actual,
-		listPublicShelters: vi.fn()
+		listPublicShelters: vi.fn(),
+		fetchShelterTypes: vi.fn().mockResolvedValue([])
 	};
 });
 
 import {
 	listPublicShelters,
+	fetchShelterTypes,
 	type PublicShelterListResponse,
 	type PublicShelterCardModel
 } from '$lib/features/public-portal';
@@ -251,5 +253,87 @@ describe('public/shelters load function', () => {
 			'NOGEO'
 		]);
 		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
+	});
+
+	it('resolves shelter_type / admin_type ref id to human-readable label', async () => {
+		vi.mocked(fetchShelterTypes).mockResolvedValue([
+			{ code: '01K_SCHOOL_ID', label: 'โรงเรียน' },
+			{ code: '01K_TEMPLE_ID', label: 'วัด' }
+		]);
+
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'SH001',
+					name: 'ศูนย์โรงเรียน',
+					admin_type: '01K_SCHOOL_ID',
+					status: 'open',
+					capacity: 100,
+					province: 'เชียงใหม่',
+					district: 'เมือง',
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'SH002',
+					name: 'ศูนย์วัด',
+					admin_type: '01K_TEMPLE_ID',
+					status: 'open',
+					capacity: 50,
+					province: 'เชียงใหม่',
+					district: 'เมือง',
+					updated_at: '2026-08-19T00:00:00Z'
+				}
+			],
+			count: 2,
+			as_of: '2026-08-19T10:00:00Z'
+		});
+
+		const url = new URL('http://localhost/shelters');
+		const result = await runLoad(url);
+
+		expect(result.shelters[0].admin_type).toBe('โรงเรียน');
+		expect(result.shelters[1].admin_type).toBe('วัด');
+		expect(result.available_types).toEqual(['โรงเรียน', 'วัด']);
+	});
+
+	it('filters by shelter_type label correctly', async () => {
+		vi.mocked(fetchShelterTypes).mockResolvedValue([
+			{ code: '01K_SCHOOL_ID', label: 'โรงเรียน' },
+			{ code: '01K_TEMPLE_ID', label: 'วัด' }
+		]);
+
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'SH001',
+					name: 'ศูนย์โรงเรียน',
+					admin_type: '01K_SCHOOL_ID',
+					status: 'open',
+					capacity: 100,
+					province: 'เชียงใหม่',
+					district: 'เมือง',
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'SH002',
+					name: 'ศูนย์วัด',
+					admin_type: '01K_TEMPLE_ID',
+					status: 'open',
+					capacity: 50,
+					province: 'เชียงใหม่',
+					district: 'เมือง',
+					updated_at: '2026-08-19T00:00:00Z'
+				}
+			],
+			count: 2,
+			as_of: '2026-08-19T10:00:00Z'
+		});
+
+		const url = new URL('http://localhost/shelters?type=โรงเรียน');
+		const result = await runLoad(url);
+
+		expect(result.shelters).toHaveLength(1);
+		expect(result.shelters[0].code).toBe('SH001');
+		expect(result.shelters[0].admin_type).toBe('โรงเรียน');
 	});
 });
