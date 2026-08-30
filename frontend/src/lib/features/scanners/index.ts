@@ -4,4 +4,3 @@ export * from './data/scanner.remote';
 export { default as CreateScannerDialog } from './ui/create-scanner-dialog.svelte';
 export { default as RevealScannerSecretDialog } from './ui/reveal-scanner-secret-dialog.svelte';
 export { default as ScannerList } from './ui/scanner-list.svelte';
-export { default as ScannerDraftModal } from './ui/scanner-draft-modal.svelte';

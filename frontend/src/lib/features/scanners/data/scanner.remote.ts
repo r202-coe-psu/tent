@@ -1,18 +1,13 @@
 import {
-	createScannerDraftDoc,
 	isScannerDevice,
-	isScannerDraft,
 	SCANNER_REGISTRY_DB,
 	SCANNER_SCHEMA_V,
 	type CreatedScannerDevice,
 	type ScannerDevice,
-	type ScannerDeviceInput,
-	type ScannerDraft,
-	type SmartCardData
+	type ScannerDeviceInput
 } from '../domain/scanner.schema';
 import { catalogDoc, now } from '$lib/db/model';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { getShelterDb } from '$lib/db/shelter';
 
 /** Generate random hex token */
 export function generateRandomSecret(length = 32): string {
@@ -52,8 +47,15 @@ export class ScannerRemoteRepository {
 
 	// ---------------------------------------------------------------- Device Management
 
-	async listDevices(): Promise<ScannerDevice[]> {
-		return this.registryRepo.allByType<ScannerDevice>('scanner_device', isScannerDevice);
+	async listDevices(shelterCode?: string): Promise<ScannerDevice[]> {
+		const devices = await this.registryRepo.allByType<ScannerDevice>(
+			'scanner_device',
+			isScannerDevice
+		);
+		if (shelterCode) {
+			return devices.filter((d) => d.shelter_code === shelterCode);
+		}
+		return devices;
 	}
 
 	async getDevice(id: string): Promise<ScannerDevice | null> {
@@ -134,69 +136,6 @@ export class ScannerRemoteRepository {
 		if (existing) {
 			await this.registryRepo.remove(existing);
 		}
-	}
-
-	// ---------------------------------------------------------------- Draft Scan Management
-
-	private getShelterRepo(shelterCode?: string): Repository {
-		const db = shelterCode ? `shelter_${shelterCode.toLowerCase()}` : getShelterDb();
-		return createRemoteRepository(db);
-	}
-
-	async listPendingDrafts(shelterCode?: string): Promise<ScannerDraft[]> {
-		const repo = this.getShelterRepo(shelterCode);
-		const drafts = await repo.allByType<ScannerDraft>('scanner_draft', isScannerDraft);
-		const nowTs = new Date().getTime();
-
-		return drafts
-			.filter(
-				(d) => d.status === 'pending' && (!d.expires_at || new Date(d.expires_at).getTime() > nowTs)
-			)
-			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-	}
-
-	async getDraft(id: string, shelterCode?: string): Promise<ScannerDraft | null> {
-		const repo = this.getShelterRepo(shelterCode);
-		return repo.get<ScannerDraft>(id);
-	}
-
-	async saveDraft(
-		shelterCode: string,
-		deviceId: string,
-		stationName: string,
-		cardData: SmartCardData,
-		expiryHours = 24
-	): Promise<ScannerDraft> {
-		const repo = this.getShelterRepo(shelterCode);
-		const draftDoc = createScannerDraftDoc(
-			shelterCode,
-			deviceId,
-			stationName,
-			cardData,
-			expiryHours
-		);
-		return repo.put(draftDoc);
-	}
-
-	async claimDraft(id: string, claimedBy: string, shelterCode?: string): Promise<ScannerDraft> {
-		const repo = this.getShelterRepo(shelterCode);
-		const draft = await repo.get<ScannerDraft>(id);
-		if (!draft) {
-			throw new Error(`Draft "${id}" not found`);
-		}
-		if (draft.status === 'claimed') {
-			return draft;
-		}
-
-		const updated: ScannerDraft = {
-			...draft,
-			status: 'claimed',
-			claimed_at: now(),
-			claimed_by: claimedBy,
-			updated_at: now()
-		};
-
-		return repo.put(updated);
 	}
 }
 

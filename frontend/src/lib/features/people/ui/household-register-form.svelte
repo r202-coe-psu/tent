@@ -21,10 +21,11 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import { toast } from 'svelte-sonner';
+
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
-	import { ScannerDraftModal, type ScannerDraft } from '$lib/features/scanners';
 	import { getTranslation } from '$lib/utils/i18n';
+
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { HOUSEHOLD_REGISTER_I18N } from './_constants/household-register.i18n';
 
@@ -124,8 +125,6 @@
 	let selectedHouseholdId = $state<string | null>(null);
 	let selectedResult = $derived(foundResults.find((r) => r.household._id === selectedHouseholdId));
 
-	let scannerDraftOpen = $state(false);
-
 	let formData = $state({
 		address_no: '',
 		village_no: '',
@@ -135,18 +134,8 @@
 		postal_code: ''
 	});
 
-	function handleSelectScannerDraft(draft: ScannerDraft) {
-		const card = draft.card_data;
-		if (card.address_no) formData.address_no = card.address_no;
-		if (card.village_no) formData.village_no = `หมู่ ${card.village_no}`;
-		if (card.province) formData.province = card.province;
-		if (card.district) formData.district = card.district;
-		if (card.subdistrict) formData.subdistrict = card.subdistrict;
-		showNewHouseholdForm = true;
-		toast.success(`ดึงที่อยู่จากบัตรของ "${card.full_name_th || card.first_name_th}" สำเร็จ`);
-	}
-
 	const provincesQuery = useProvinces();
+
 	const districtsQuery = useDistricts(() => formData.province || null);
 	const subdistrictsQuery = useSubdistricts(
 		() => formData.province || null,
@@ -651,16 +640,6 @@
 						{t.notFound.desc}
 					</p>
 				</div>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					class="shrink-0 gap-1.5 border-cyan-500/40 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
-					onclick={() => (scannerDraftOpen = true)}
-				>
-					<Cpu class="h-4 w-4" />
-					<span>ดึงที่อยู่จากเครื่องสแกน</span>
-				</Button>
 			</div>
 
 			{#if initialAddress && (initialAddress.province || initialAddress.address_no)}
@@ -778,5 +757,3 @@
 		</form>
 	{/if}
 </div>
-
-<ScannerDraftModal bind:open={scannerDraftOpen} onselect={handleSelectScannerDraft} />

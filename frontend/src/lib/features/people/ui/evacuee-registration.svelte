@@ -27,10 +27,9 @@
 	import Camera from '@lucide/svelte/icons/camera';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-	import Cpu from '@lucide/svelte/icons/cpu';
 	import { COUNTRIES } from '$lib/utils/country';
-	import { ScannerDraftModal, type ScannerDraft } from '$lib/features/scanners';
 	import { getTranslation } from '$lib/utils/i18n';
+
 	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
 
@@ -100,40 +99,6 @@
 	let medicalConditionsStr = $state(initial?.medical_conditions?.join(', ') ?? '');
 	let medicalMedicationsStr = $state(initial?.medical_medications?.join(', ') ?? '');
 	let medicalAllergiesStr = $state(initial?.medical_allergies?.join(', ') ?? '');
-
-	let scannerDraftOpen = $state(false);
-
-	function handleSelectScannerDraft(draft: ScannerDraft) {
-		const card = draft.card_data;
-		$formData.person_id = { cardType: 'national_id', number: card.citizen_id };
-		if (card.first_name_th) $formData.first_name = card.first_name_th;
-		if (card.last_name_th) $formData.last_name = card.last_name_th;
-		if (card.gender === 'male' || card.gender === 'female' || card.gender === 'other') {
-			$formData.gender = card.gender;
-		}
-		if (card.birth_year_ce) {
-			const beYear = card.birth_year_ce + 543;
-			$formData.birth_year = beYear;
-			birthYearBE = beYear.toString();
-			const calcAge =
-				card.age !== null && card.age !== undefined
-					? card.age
-					: Math.max(0, currentBEYear() - beYear);
-			$formData.age = calcAge;
-			age = calcAge.toString();
-		} else if (card.age !== null && card.age !== undefined) {
-			$formData.age = card.age;
-			age = card.age.toString();
-			const calcBE = currentBEYear() - card.age;
-			$formData.birth_year = calcBE;
-			birthYearBE = calcBE.toString();
-		}
-		if (card.photo_base64) {
-			facePhotoUrl = card.photo_base64;
-			$formData.photo = card.photo_base64;
-		}
-		toast.success(`ดึงข้อมูลบัตรประชาชนของ "${card.full_name_th || card.first_name_th}" สำเร็จ`);
-	}
 
 	$effect(() => {
 		if (initialInput) {
@@ -382,16 +347,6 @@
 					<span class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
 						>ข้อมูลประจำตัว</span
 					>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						class="h-8 gap-1.5 border-cyan-500/40 text-xs text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
-						onclick={() => (scannerDraftOpen = true)}
-					>
-						<Cpu class="h-3.5 w-3.5" />
-						<span>ดึงข้อมูลจากเครื่องสแกนบัตร</span>
-					</Button>
 				</div>
 
 				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
@@ -850,5 +805,3 @@
 		</div>
 	</Field.FieldGroup>
 </form>
-
-<ScannerDraftModal bind:open={scannerDraftOpen} onselect={handleSelectScannerDraft} />

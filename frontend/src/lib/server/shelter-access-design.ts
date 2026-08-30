@@ -106,8 +106,9 @@ export function buildValidateDocUpdate(code: string): string {
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
-    'audit', 'daily_calc', 'purchase', 'referral', 'scanner_draft',
+    'audit', 'daily_calc', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger'
+
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };

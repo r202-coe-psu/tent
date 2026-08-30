@@ -1,14 +1,11 @@
-import { adminFetch, adminRaw } from '$lib/server/couch-admin';
+import { adminFetch } from '$lib/server/couch-admin';
 import { now } from '$lib/db/model';
 import { lookupZipcode } from '$lib/server/thailand-location';
 import {
-	createScannerDraftDoc,
 	isScannerDevice,
-	isScannerDraft,
 	SCANNER_REGISTRY_DB,
 	smartCardDataSchema,
 	type ScannerDevice,
-	type ScannerDraft,
 	type SmartCardData
 } from './domain/scanner.schema';
 import {
@@ -21,7 +18,7 @@ import {
 import { hashSecret } from './data/scanner.remote';
 
 export { hashSecret, smartCardDataSchema };
-export type { ScannerDevice, ScannerDraft, SmartCardData };
+export type { ScannerDevice, SmartCardData };
 
 export type ProcessCardResult =
 	| { status: 'created_draft'; evacuee: Evacuee; message: string }
@@ -41,72 +38,79 @@ export class ScannerServerRepository {
 			})
 		}).catch(() => ({ docs: [] }));
 
-		return res.docs.find((d) => isScannerDevice(d) && d.device_id === deviceId) ?? null;
+		return res.docs.find((d) => isScannerDevice(d) && d.device_id === deviceId) || null;
 	}
 
 	async updateDeviceLastSeen(id: string): Promise<void> {
-		const res = await adminRaw(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, 'GET');
-		if (res.status === 200 && res.data && isScannerDevice(res.data)) {
-			const updated: ScannerDevice = {
-				...res.data,
-				last_seen_at: now(),
-				updated_at: now()
-			};
-			await adminRaw(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', updated);
-		}
+		const res = await adminFetch<ScannerDevice>(
+			`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`
+		);
+		if (!res || !isScannerDevice(res)) return;
+
+		const updated: ScannerDevice = {
+			...res,
+			last_seen_at: now(),
+			updated_at: now()
+		};
+
+		await adminFetch(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, {
+			method: 'PUT',
+			body: JSON.stringify(updated)
+		});
 	}
 
+	/**
+	 * Process card scan according to CR-097:
+	 * 1. If person does not exist -> Create draft evacuee doc in shelter DB with card_snapshot
+	 * 2. If person exists with pre_registered -> Overwrite personal data with authoritative card data and attach card_snapshot
+	 * 3. If person exists with draft -> Return duplicate_draft warning
+	 * 4. If person exists with active -> Return already_active notice
+	 */
 	async processCardScan(
 		shelterCode: string,
 		deviceId: string,
 		stationName: string,
-		cardData: SmartCardData,
-		expiryHours = 24
+		cardData: SmartCardData
 	): Promise<ProcessCardResult> {
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
-		const cid = cardData.citizen_id;
 
-		// Query existing evacuee by citizen_id
-		const res = await adminFetch<{ docs: Evacuee[] }>(`/${dbName}/_find`, {
+		// Find if citizen ID already exists in this shelter
+		const findRes = await adminFetch<{ docs: Evacuee[] }>(`/${dbName}/_find`, {
 			method: 'POST',
 			body: JSON.stringify({
 				selector: {
 					type: 'evacuee',
-					'person_id.number': cid
+					'person_id.number': cardData.citizen_id
 				}
 			})
 		}).catch(() => ({ docs: [] }));
 
-		const existing = res.docs.find(
-			(d) =>
-				isEvacuee(d) &&
-				d.person_id?.number === cid &&
-				d.current_stay.status !== 'cancelled' &&
-				d.current_stay.status !== 'deceased'
-		);
+		const existing = findRes.docs.find(isEvacuee);
+
+		// Resolve postal code automatically if missing from card data
+		let autoPostalCode: string | null = cardData.postal_code || null;
+		if (!autoPostalCode && (cardData.subdistrict || cardData.district || cardData.province)) {
+			autoPostalCode = lookupZipcode(cardData.province, cardData.district, cardData.subdistrict);
+		}
 
 		const birthYearBE = cardData.birth_year_ce ? cardData.birth_year_ce + 543 : undefined;
 		const currentYearBE = new Date().getFullYear() + 543;
 		const calculatedAge =
-			cardData.age !== null && cardData.age !== undefined
+			typeof cardData.age === 'number'
 				? cardData.age
 				: birthYearBE !== undefined
 					? Math.max(0, currentYearBE - birthYearBE)
 					: undefined;
 
-		const postalCode =
-			cardData.postal_code ||
-			lookupZipcode(cardData.province, cardData.district, cardData.subdistrict) ||
-			undefined;
-
+		// Prepare snapshot
 		const cardSnapshot: CardSnapshot = {
 			citizen_id: cardData.citizen_id,
 			title_th: cardData.title_th || undefined,
 			first_name_th: cardData.first_name_th || undefined,
 			last_name_th: cardData.last_name_th || undefined,
-			gender: cardData.gender,
+			gender: cardData.gender || undefined,
 			birth_date: cardData.birth_date || undefined,
-			birth_year_ce: cardData.birth_year_ce || undefined,
+			birth_year_ce: cardData.birth_year_ce ?? undefined,
 			age: calculatedAge,
 			address_no: cardData.address_no || undefined,
 			village_no: cardData.village_no || undefined,
@@ -115,26 +119,18 @@ export class ScannerServerRepository {
 			subdistrict: cardData.subdistrict || undefined,
 			district: cardData.district || undefined,
 			province: cardData.province || undefined,
-			postal_code: postalCode,
+			postal_code: autoPostalCode || undefined,
 			photo_base64: cardData.photo_base64 || undefined,
 			scanned_at: now(),
 			device_id: deviceId,
-			station_name: stationName,
-			expires_at: new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString()
+			station_name: stationName || undefined,
+			expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 		};
 
 		if (existing) {
-			const stayStatus = existing.current_stay.status;
+			const stayStatus = existing.current_stay?.status;
 
-			if (stayStatus === 'draft') {
-				return {
-					status: 'duplicate_draft',
-					evacuee: existing,
-					error: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว',
-					message: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว'
-				};
-			}
-
+			// If already active in shelter
 			if (stayStatus === 'active') {
 				return {
 					status: 'already_active',
@@ -144,8 +140,18 @@ export class ScannerServerRepository {
 				};
 			}
 
+			// If draft already exists -> duplicate scan warning
+			if (stayStatus === 'draft') {
+				return {
+					status: 'duplicate_draft',
+					evacuee: existing,
+					error: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว',
+					message: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว'
+				};
+			}
+
+			// If pre_registered -> overwrite personal info with authoritative card data
 			if (stayStatus === 'pre_registered') {
-				// Overwrite evacuee personal details from authoritative card data
 				const updated: Evacuee = {
 					...existing,
 					first_name: cardData.first_name_th || existing.first_name,
@@ -199,78 +205,6 @@ export class ScannerServerRepository {
 			evacuee: draftEvacuee,
 			message: 'อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล'
 		};
-	}
-
-	async saveDraft(
-		shelterCode: string,
-		deviceId: string,
-		stationName: string,
-		cardData: SmartCardData,
-		expiryHours = 24
-	): Promise<ScannerDraft> {
-		const dbName = `shelter_${shelterCode.toLowerCase()}`;
-		const draftDoc = createScannerDraftDoc(
-			shelterCode,
-			deviceId,
-			stationName,
-			cardData,
-			expiryHours
-		);
-
-		await adminFetch(`/${dbName}/${encodeURIComponent(draftDoc._id)}`, {
-			method: 'PUT',
-			body: JSON.stringify(draftDoc)
-		});
-
-		return draftDoc;
-	}
-
-	async listPendingDrafts(shelterCode: string): Promise<ScannerDraft[]> {
-		const dbName = `shelter_${shelterCode.toLowerCase()}`;
-		const res = await adminFetch<{ docs: ScannerDraft[] }>(`/${dbName}/_find`, {
-			method: 'POST',
-			body: JSON.stringify({
-				selector: {
-					type: 'scanner_draft',
-					status: 'pending'
-				}
-			})
-		}).catch(() => ({ docs: [] }));
-
-		const nowTs = new Date().getTime();
-		return res.docs
-			.filter(
-				(d) => isScannerDraft(d) && (!d.expires_at || new Date(d.expires_at).getTime() > nowTs)
-			)
-			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-	}
-
-	async claimDraft(id: string, claimedBy: string, shelterCode: string): Promise<ScannerDraft> {
-		const dbName = `shelter_${shelterCode.toLowerCase()}`;
-		const res = await adminRaw(`/${dbName}/${encodeURIComponent(id)}`, 'GET');
-		if (res.status !== 200 || !res.data || !isScannerDraft(res.data)) {
-			throw new Error(`Draft "${id}" not found`);
-		}
-
-		const existing = res.data;
-		if (existing.status === 'claimed') {
-			return existing;
-		}
-
-		const updated: ScannerDraft = {
-			...existing,
-			status: 'claimed',
-			claimed_at: now(),
-			claimed_by: claimedBy,
-			updated_at: now()
-		};
-
-		await adminFetch(`/${dbName}/${encodeURIComponent(id)}`, {
-			method: 'PUT',
-			body: JSON.stringify(updated)
-		});
-
-		return updated;
 	}
 }
 
