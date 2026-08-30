@@ -85,6 +85,7 @@
 	const checkInMutation = useSetVolunteerCheckedIn(queryClient);
 
 	const form = superForm(defaults(emptyValues(), zod4(walkInVolunteerFormSchema)), {
+		warnings: { duplicateId: false },
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(walkInVolunteerFormSchema),

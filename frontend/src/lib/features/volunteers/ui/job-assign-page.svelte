@@ -277,8 +277,10 @@
 			toast.error(`มอบหมายไม่สำเร็จ ${failed.length} คน: ${failed.join(', ')}`);
 	}
 
-	const SEGMENT_BASE =
-		'h-9 flex-1 rounded-lg px-2 text-xs font-medium transition-colors sm:flex-none sm:px-3';
+	// `flex-1` at every breakpoint (not just mobile) so each segmented row
+	// stretches to fill its grid column instead of shrinking to content width
+	// and leaving dead space beside it (owner feedback 2026-08-31).
+	const SEGMENT_BASE = 'h-9 flex-1 rounded-lg px-2 text-xs font-medium transition-colors sm:px-3';
 </script>
 
 <div class="space-y-4">
