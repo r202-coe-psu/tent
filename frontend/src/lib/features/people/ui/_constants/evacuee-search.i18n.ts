@@ -10,7 +10,6 @@ export const EVACUEE_SEARCH_I18N = {
 		foundTitle: (count: number) => `พบข้อมูลในระบบ ${count} ราย`,
 		statusLabel: 'สถานะ:',
 		statusLabels: {
-			draft: 'เสียบบัตรแล้ว (รอคัดกรอง)',
 			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 			active: 'เช็คอินเข้าพักแล้ว',
 			temporary_leave: 'ออกชั่วคราว',
@@ -34,7 +33,6 @@ export const EVACUEE_SEARCH_I18N = {
 		foundTitle: (count: number) => `Found ${count} record(s) in system`,
 		statusLabel: 'Status:',
 		statusLabels: {
-			draft: 'Card Inserted (Draft)',
 			pre_registered: 'Pre-registered (Not Checked In)',
 			active: 'Checked In',
 			temporary_leave: 'Temporary Leave',

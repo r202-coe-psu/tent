@@ -59,8 +59,7 @@
 								transferred: 'ย้ายศูนย์',
 								checked_out: 'ย้ายออก',
 								deceased: 'เสียชีวิต',
-								cancelled: 'ยกเลิก',
-								draft: 'เสียบบัตรแล้ว (รอคัดกรอง)'
+								cancelled: 'ยกเลิก'
 							}[m.current_stay.status] ?? m.current_stay.status}
 						</p>
 					</div>

@@ -40,7 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
-> **schema_v 8** — เพิ่ม `draft` ใน `current_stay.status` และเพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; ไม่นับ occupancy; ไม่แสดงใน public search.
+> **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
 > ผ่าน public portal (T-71). `api` (inbound, CR-071) ยังไม่เพิ่มในรอบนี้.
 > **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
@@ -68,17 +68,17 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `country` | str | req | ประเทศ | 
 | `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
-| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้เฉพาะเมื่อ `current_stay.status === 'draft'`) |
+| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` ก่อนจัดเข้าครัวเรือน) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`draft`,`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
-| `registered_via` | enum(`app`,`import`,`paper`,`web`,`kiosk`) | req | `web` = public portal (CR-070), `kiosk` = Smart Card Reader (CR-084) |
+| `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
 
 **Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
 
-**Migration (schema_v 7 → 8, CR-084):** purely additive — `draft` เป็นค่าใหม่ของ `current_stay.status` และเพิ่ม `card_snapshot` เป็น optional metadata; doc เดิมไม่ต้อง backfill. สถานะ `draft` ไม่นับรวมใน occupancy และไม่นำออกแสดงใน public portal
+**Migration:** ตัด `draft` ออกจาก `current_stay.status` โดยให้ Kiosk Walk-in ได้สถานะ `pre_registered` ทันทีพร้อม `registered_via: 'kiosk'`
 
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)

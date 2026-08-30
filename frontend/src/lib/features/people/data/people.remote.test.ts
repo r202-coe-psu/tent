@@ -101,6 +101,28 @@ describe('PeopleRemoteRepository', () => {
 			const saved = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
 			expect(saved.household_id).toBe(household._id);
 		});
+
+		it('updates pre_registered evacuee details when registered with draft_id', async () => {
+			const preRegEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
+				ctx
+			);
+
+			const registered = await repo.createEvacuee(
+				{
+					...evInput({ first_name: 'สมชาย', last_name: 'สแกน', registered_via: 'kiosk' }),
+					draft_id: preRegEvacuee._id
+				},
+				ctx
+			);
+
+			expect(registered._id).toBe(preRegEvacuee._id);
+			expect(registered.first_name).toBe('สมชาย');
+			expect(registered.current_stay.status).toBe('pre_registered');
+
+			const fetched = await repo.getEvacuee(preRegEvacuee._id);
+			expect(fetched?.current_stay.status).toBe('pre_registered');
+		});
 	});
 
 	describe('updateMedical', () => {
@@ -444,23 +466,20 @@ describe('check-in / check-out', () => {
 			expect(promoted?.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
 		});
 
-		it('successfully checks in an evacuee from draft status and sets zone', async () => {
-			const draftEvacuee = await repo.createEvacuee(
-				evInput({ first_name: 'บัตร', last_name: 'สแกน' }),
+		it('successfully checks in a pre-registered evacuee from kiosk and sets zone', async () => {
+			const kioskEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
 				ctx
 			);
-			// Manually set status to draft
-			const asDraft = await memoryRepo.put({
-				...draftEvacuee,
-				current_stay: { status: 'draft' as const, zone: null, since: '2026-08-29T10:00:00Z' }
-			});
 
-			const checkedIn = await repo.checkInEvacuee(asDraft, ctx, 'zone-b');
+			const checkedIn = await repo.checkInEvacuee(kioskEvacuee, ctx, 'zone-b');
 			expect(checkedIn.current_stay.status).toBe('active');
 			expect(checkedIn.current_stay.zone).toBe('zone-b');
 
 			const movements = await repo.listMovements();
-			expect(movements.some((m) => m.evacuee_id === asDraft._id && m.zone === 'zone-b')).toBe(true);
+			expect(movements.some((m) => m.evacuee_id === kioskEvacuee._id && m.zone === 'zone-b')).toBe(
+				true
+			);
 		});
 	});
 

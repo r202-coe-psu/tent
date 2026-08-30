@@ -65,7 +65,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			console.warn('[Scanner Inbound] Heartbeat update warning:', heartbeatErr);
 		}
 
-		if (scanResult.status === 'duplicate_draft' || scanResult.status === 'already_active') {
+		if (scanResult.status === 'already_pre_registered' || scanResult.status === 'already_active') {
 			return json(
 				{
 					ok: false,

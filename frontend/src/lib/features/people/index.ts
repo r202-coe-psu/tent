@@ -52,6 +52,7 @@ export {
 	screeningInputSchema,
 	createEvacuee,
 	createDraftEvacueeFromCard,
+	createKioskEvacueeFromCard,
 	createMedical,
 	createHousehold,
 	createMovement,

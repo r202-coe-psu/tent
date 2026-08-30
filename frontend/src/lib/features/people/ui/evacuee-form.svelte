@@ -176,7 +176,9 @@
 		// 3. Start at Step 2 (EWAR Symptoms)
 		goToStep(2);
 		toast.info(
-			`โหลดข้อมูลจากบัตร "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
+			card
+				? `โหลดข้อมูลจากบัตร "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
+				: `โหลดข้อมูล "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
 		);
 	}
 

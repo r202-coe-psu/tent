@@ -19,8 +19,7 @@
 		transferred: 'ย้ายศูนย์',
 		checked_out: 'เช็คเอาท์',
 		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิก',
-		draft: 'เสียบบัตรแล้ว'
+		cancelled: 'ยกเลิก'
 	};
 
 	let {

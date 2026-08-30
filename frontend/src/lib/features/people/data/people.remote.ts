@@ -130,7 +130,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					...(parsedInput.photo ? { photo: parsedInput.photo } : {}),
 					household_id: parsedInput.household_id,
 					current_stay: {
-						status: existing.current_stay.status,
+						status: existing.current_stay.status || 'pre_registered',
 						zone: existing.current_stay.zone ?? null,
 						since: now()
 					}

@@ -80,11 +80,6 @@
 			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
 			colorClass:
 				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
-		},
-		draft: {
-			label: 'เสียบบัตรแล้ว (รอคัดกรอง)',
-			colorClass:
-				'bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800'
 		}
 	} satisfies Record<StayStatus, { label: string; colorClass: string }>;
 

@@ -9,7 +9,7 @@ import {
 	type SmartCardData
 } from './domain/scanner.schema';
 import {
-	createDraftEvacueeFromCard,
+	createKioskEvacueeFromCard,
 	isEvacuee,
 	type Evacuee,
 	type CardSnapshot
@@ -21,9 +21,8 @@ export { hashSecret, smartCardDataSchema };
 export type { ScannerDevice, SmartCardData };
 
 export type ProcessCardResult =
-	| { status: 'created_draft'; evacuee: Evacuee; message: string }
-	| { status: 'attached_to_preregistered'; evacuee: Evacuee; message: string }
-	| { status: 'duplicate_draft'; evacuee: Evacuee; error: string; message: string }
+	| { status: 'created_pre_registered'; evacuee: Evacuee; message: string }
+	| { status: 'already_pre_registered'; evacuee: Evacuee; error: string; message: string }
 	| { status: 'already_active'; evacuee: Evacuee; error: string; message: string };
 
 export class ScannerServerRepository {
@@ -60,11 +59,10 @@ export class ScannerServerRepository {
 	}
 
 	/**
-	 * Process card scan according to CR-097:
-	 * 1. If person does not exist -> Create draft evacuee doc in shelter DB with card_snapshot
-	 * 2. If person exists with pre_registered -> Overwrite personal data with authoritative card data and attach card_snapshot
-	 * 3. If person exists with draft -> Return duplicate_draft warning
-	 * 4. If person exists with active -> Return already_active notice
+	 * Process card scan:
+	 * 1. If person does not exist -> Create evacuee doc in shelter DB with status=pre_registered, registered_via=kiosk, card_snapshot
+	 * 2. If person exists with pre_registered -> Return already_pre_registered notice without overwriting
+	 * 3. If person exists with active -> Return already_active notice
 	 */
 	async processCardScan(
 		shelterCode: string,
@@ -140,69 +138,33 @@ export class ScannerServerRepository {
 				};
 			}
 
-			// If draft already exists -> duplicate scan warning
-			if (stayStatus === 'draft') {
-				return {
-					status: 'duplicate_draft',
-					evacuee: existing,
-					error: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว',
-					message: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว'
-				};
-			}
-
-			// If pre_registered -> overwrite personal info with authoritative card data
+			// If pre_registered already exists -> notice without overwriting
 			if (stayStatus === 'pre_registered') {
-				const updated: Evacuee = {
-					...existing,
-					first_name: cardData.first_name_th || existing.first_name,
-					last_name: cardData.last_name_th || existing.last_name,
-					gender:
-						cardData.gender === 'male' ||
-						cardData.gender === 'female' ||
-						cardData.gender === 'other'
-							? cardData.gender
-							: existing.gender,
-					birth_year: birthYearBE ?? existing.birth_year,
-					age: calculatedAge ?? existing.age,
-					person_id: {
-						cardType: 'national_id',
-						number: cardData.citizen_id
-					},
-					photo: cardData.photo_base64 || existing.photo || null,
-					card_snapshot: cardSnapshot,
-					updated_at: now()
-				};
-
-				await adminFetch(`/${dbName}/${encodeURIComponent(existing._id)}`, {
-					method: 'PUT',
-					body: JSON.stringify(updated)
-				});
-
 				return {
-					status: 'attached_to_preregistered',
-					evacuee: updated,
-					message:
-						'อ่านบัตรสำเร็จ พบข้อมูลการจองล่วงหน้าและอัปเดตข้อมูลจากบัตรแล้ว กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรอง'
+					status: 'already_pre_registered',
+					evacuee: existing,
+					error: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่',
+					message: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่'
 				};
 			}
 		}
 
-		// New person -> create draft evacuee
+		// New person -> create pre_registered evacuee directly
 		const ctx = {
 			shelterCode,
 			createdBy: `scanner:${deviceId}`
 		};
 
-		const draftEvacuee = createDraftEvacueeFromCard(cardSnapshot, ctx);
+		const kioskEvacuee = createKioskEvacueeFromCard(cardSnapshot, ctx);
 
-		await adminFetch(`/${dbName}/${encodeURIComponent(draftEvacuee._id)}`, {
+		await adminFetch(`/${dbName}/${encodeURIComponent(kioskEvacuee._id)}`, {
 			method: 'PUT',
-			body: JSON.stringify(draftEvacuee)
+			body: JSON.stringify(kioskEvacuee)
 		});
 
 		return {
-			status: 'created_draft',
-			evacuee: draftEvacuee,
+			status: 'created_pre_registered',
+			evacuee: kioskEvacuee,
 			message: 'อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล'
 		};
 	}

@@ -117,37 +117,104 @@
 
 				<div class="space-y-2.5">
 					{#each searchResults as evacuee (evacuee._id)}
-						{@const isDraft = evacuee.current_stay.status === 'draft'}
 						{@const isPreReg = evacuee.current_stay.status === 'pre_registered'}
-						{@const hasCard = !!evacuee.card_snapshot}
+						{@const regVia = evacuee.registered_via}
 
-						{#if isDraft}
-							<!-- 🪪 Card Scanned Draft Card (Amber Theme) -->
+						{#if isPreReg}
+							{@const isKiosk = regVia === 'kiosk' || !!evacuee.card_snapshot}
+							{@const isWeb = regVia === 'web'}
+							{@const isBackoffice = regVia === 'backoffice'}
+
 							<div
-								class="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-700 dark:bg-amber-950/30"
+								class={`flex flex-col gap-3 rounded-xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+									isKiosk
+										? 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/30'
+										: isWeb
+											? 'border-purple-300 bg-purple-50/70 dark:border-purple-800 dark:bg-purple-950/30'
+											: isBackoffice
+												? 'border-indigo-300 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/30'
+												: 'border-blue-300 bg-blue-50/70 dark:border-blue-800 dark:bg-blue-950/30'
+								}`}
 							>
 								<div class="flex items-start gap-3">
 									<div
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 shadow-sm"
+										class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ${
+											isKiosk
+												? 'bg-amber-500 text-slate-950'
+												: isWeb
+													? 'bg-purple-600 text-white'
+													: isBackoffice
+														? 'bg-indigo-600 text-white'
+														: 'bg-blue-600 text-white'
+										}`}
 									>
-										<Cpu class="h-5 w-5 stroke-[2.5]" />
+										{#if isKiosk}
+											<Cpu class="h-5 w-5 stroke-[2.5]" />
+										{:else if isWeb}
+											<Sparkles class="h-5 w-5" />
+										{:else}
+											<UserPlus class="h-5 w-5" />
+										{/if}
 									</div>
 									<div class="min-w-0">
 										<div class="flex flex-wrap items-center gap-2">
-											<p class="font-bold text-amber-950 dark:text-amber-100">
+											<p
+												class={`font-bold ${
+													isKiosk
+														? 'text-amber-950 dark:text-amber-100'
+														: isWeb
+															? 'text-purple-950 dark:text-purple-100'
+															: isBackoffice
+																? 'text-indigo-950 dark:text-indigo-100'
+																: 'text-blue-950 dark:text-blue-100'
+												}`}
+											>
 												{evacuee.first_name}
 												{evacuee.last_name}
 											</p>
 											<span
-												class="inline-flex items-center gap-1 rounded-full bg-amber-200/90 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200"
+												class={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+													isKiosk
+														? 'bg-amber-200/90 font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200'
+														: isWeb
+															? 'bg-purple-200/80 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300'
+															: isBackoffice
+																? 'bg-indigo-200/80 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300'
+																: 'bg-blue-200/80 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300'
+												}`}
 											>
-												<Sparkles class="h-3 w-3" />
-												เสียบบัตรแล้ว (รอคัดกรอง)
+												{#if isKiosk}
+													<Sparkles class="h-3 w-3" />
+													🪪 สแกนบัตร Kiosk (รอคัดกรอง)
+												{:else if isWeb}
+													🌐 จองล่วงหน้า (Web)
+												{:else if isBackoffice}
+													💻 ลงทะเบียนล่วงหน้า (Backoffice)
+												{:else if regVia === 'import'}
+													📥 นำเข้าจากไฟล์
+												{:else if regVia === 'paper'}
+													📝 เอกสารกระดาษ
+												{:else}
+													🏢 ลงทะเบียนล่วงหน้า (Staff)
+												{/if}
 											</span>
 										</div>
-										<p class="mt-0.5 font-mono text-xs text-amber-900/80 dark:text-amber-300/80">
+										<p
+											class={`mt-0.5 text-xs ${
+												isKiosk
+													? 'font-mono text-amber-900/80 dark:text-amber-300/80'
+													: isWeb
+														? 'text-purple-800/80 dark:text-purple-300/80'
+														: isBackoffice
+															? 'text-indigo-800/80 dark:text-indigo-300/80'
+															: 'text-blue-800/80 dark:text-blue-300/80'
+											}`}
+										>
 											{#if evacuee.person_id?.number}
 												เลขบัตร: {evacuee.person_id.number}
+											{/if}
+											{#if evacuee.phone}
+												· เบอร์โทร: {evacuee.phone}
 											{/if}
 											{#if evacuee.card_snapshot?.station_name}
 												· จุดสแกน: {evacuee.card_snapshot.station_name}
@@ -157,56 +224,22 @@
 								</div>
 								<Button
 									type="button"
-									class="h-11 w-full shrink-0 gap-1.5 bg-amber-600 font-semibold text-white shadow hover:bg-amber-700 sm:h-9 sm:w-auto"
+									class={`h-11 w-full shrink-0 gap-1.5 font-semibold text-white shadow sm:h-9 sm:w-auto ${
+										isKiosk
+											? 'bg-amber-600 hover:bg-amber-700'
+											: isWeb
+												? 'bg-purple-700 hover:bg-purple-800'
+												: isBackoffice
+													? 'bg-indigo-700 hover:bg-indigo-800'
+													: 'bg-blue-700 hover:bg-blue-800'
+									}`}
 									onclick={() => (onSelectDraft ? onSelectDraft(evacuee) : onNext())}
 								>
-									<span>ดำเนินการคัดกรองและลงทะเบียน (Step 1)</span>
-								</Button>
-							</div>
-						{:else if isPreReg && hasCard}
-							<!-- ⚡ Pre-registered + Card Verified Card -->
-							<div
-								class="flex flex-col gap-3 rounded-xl border border-purple-300 bg-purple-50/70 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-purple-800 dark:bg-purple-950/30"
-							>
-								<div class="flex items-start gap-3">
-									<div
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-sm"
-									>
-										<Sparkles class="h-5 w-5" />
-									</div>
-									<div class="min-w-0">
-										<div class="flex flex-wrap items-center gap-2">
-											<p class="font-bold text-purple-950 dark:text-purple-100">
-												{evacuee.first_name}
-												{evacuee.last_name}
-											</p>
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-purple-200/80 px-2.5 py-0.5 text-xs font-semibold text-purple-800 dark:bg-purple-900/60 dark:text-purple-300"
-											>
-												⚡ จองล่วงหน้า + ยืนยันบัตรแล้ว
-											</span>
-										</div>
-										<p class="mt-0.5 text-xs text-purple-800/80 dark:text-purple-300/80">
-											{#if evacuee.phone}
-												เบอร์โทร: {evacuee.phone} ·
-											{/if}
-											{#if evacuee.person_id?.number}
-												เลขบัตร: {evacuee.person_id.number}
-											{/if}
-										</p>
-									</div>
-								</div>
-								<Button
-									type="button"
-									class="h-11 w-full shrink-0 gap-1.5 bg-purple-700 font-semibold text-white shadow hover:bg-purple-800 sm:h-9 sm:w-auto"
-									onclick={() =>
-										onSelectDraft ? onSelectDraft(evacuee) : viewEvacueeDetail(evacuee._id)}
-								>
-									<span>ดำเนินการคัดกรองและเช็คอิน (Step 1)</span>
+									<span>ดำเนินการคัดกรองและรับเข้าพัก</span>
 								</Button>
 							</div>
 						{:else}
-							<!-- Regular Evacuee Card -->
+							<!-- Regular Active / Other Status Evacuee Card -->
 							<div
 								class="flex flex-col gap-3 rounded-lg border border-green-200 bg-[#F0FDF4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-green-800 dark:bg-green-950/20"
 							>

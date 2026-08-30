@@ -37,7 +37,6 @@ export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other'
 export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
-	'draft',
 	'pre_registered',
 	'active',
 	'temporary_leave',
@@ -49,7 +48,6 @@ export const stayStatusSchema = z.enum([
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
-	draft: 'เสียบบัตรแล้ว (รอคัดกรอง)',
 	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 	active: 'เช็คอินเข้าพักแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
@@ -433,7 +431,7 @@ export const evacueeInputSchema = z.object({
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
-	registered_via: registeredViaSchema.default('app')
+	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
@@ -812,7 +810,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	);
 }
 
-export function createDraftEvacueeFromCard(
+export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
 	id?: string
@@ -846,7 +844,7 @@ export function createDraftEvacueeFromCard(
 			special_needs: [],
 			household_id: null,
 			card_snapshot: cardSnapshot,
-			current_stay: { status: 'draft', zone: null, since: now() },
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -854,6 +852,8 @@ export function createDraftEvacueeFromCard(
 		id
 	);
 }
+
+export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical {
 	const d = medicalInputSchema.parse(input);
@@ -967,7 +967,6 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 
 /** Stay statuses that may receive a scan/check-in (`check_in`) action. */
 export const CHECK_IN_ELIGIBLE_STATUSES = [
-	'draft',
 	'pre_registered',
 	'temporary_leave',
 	'checked_out',

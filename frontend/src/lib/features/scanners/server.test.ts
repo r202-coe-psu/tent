@@ -44,7 +44,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 		vi.clearAllMocks();
 	});
 
-	it('Branch 1: creates draft evacuee when no record exists', async () => {
+	it('Branch 1: creates pre_registered evacuee directly when no record exists', async () => {
 		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {
 			if (url.includes('_find')) {
 				return { docs: [] };
@@ -54,8 +54,9 @@ describe('ScannerServerRepository.processCardScan', () => {
 
 		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
 
-		expect(res.status).toBe('created_draft');
-		expect(res.evacuee.current_stay.status).toBe('draft');
+		expect(res.status).toBe('created_pre_registered');
+		expect(res.evacuee.current_stay.status).toBe('pre_registered');
+		expect(res.evacuee.registered_via).toBe('kiosk');
 		expect(res.evacuee.household_id).toBeNull();
 		expect(res.evacuee.first_name).toBe('สมชาย');
 		expect(res.evacuee.last_name).toBe('ใจดี');
@@ -65,7 +66,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 		expect(res.message).toContain('อ่านบัตรสำเร็จ');
 	});
 
-	it('Branch 2: overwrites evacuee personal details and attaches card_snapshot when pre_registered exists', async () => {
+	it('Branch 2: rejects with already_pre_registered when pre_registered evacuee scans again', async () => {
 		const existingPreReg: Evacuee = {
 			_id: 'evacuee:PREREG01',
 			type: 'evacuee',
@@ -74,9 +75,9 @@ describe('ScannerServerRepository.processCardScan', () => {
 			created_by: 'public',
 			created_at: '2026-08-29T00:00:00Z',
 			updated_at: '2026-08-29T00:00:00Z',
-			first_name: 'สมชายเก่า',
-			last_name: 'ใจดีเก่า',
-			gender: 'female',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
 			phone: '0812345678',
 			person_id: { cardType: 'national_id', number: '1234567890123' },
 			country: 'THAILAND',
@@ -96,58 +97,14 @@ describe('ScannerServerRepository.processCardScan', () => {
 
 		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
 
-		expect(res.status).toBe('attached_to_preregistered');
-		expect(res.evacuee.current_stay.status).toBe('pre_registered');
-		// Overwritten from card data
-		expect(res.evacuee.first_name).toBe('สมชาย');
-		expect(res.evacuee.last_name).toBe('ใจดี');
-		expect(res.evacuee.gender).toBe('male');
-		expect(res.evacuee.birth_year).toBe(2535); // 1992 + 543
-		expect(res.evacuee.age).toBe(34);
-		expect(res.evacuee.photo).toBe('data:image/jpeg;base64,...');
-		expect(res.evacuee.card_snapshot?.citizen_id).toBe('1234567890123');
-		expect(res.message).toContain('พบข้อมูลการจองล่วงหน้าและอัปเดตข้อมูลจากบัตรแล้ว');
-	});
-
-	it('Branch 3: rejects with duplicate_draft when draft already exists with custom warning message', async () => {
-		const existingDraft: Evacuee = {
-			_id: 'evacuee:DRAFT01',
-			type: 'evacuee',
-			schema_v: 8,
-			shelter_code: 'SH001',
-			created_by: 'scanner:DEV-01',
-			created_at: '2026-08-29T00:00:00Z',
-			updated_at: '2026-08-29T00:00:00Z',
-			first_name: 'สมชาย',
-			last_name: 'ใจดี',
-			gender: 'male',
-			phone: null,
-			person_id: { cardType: 'national_id', number: '1234567890123' },
-			country: 'THAILAND',
-			special_needs: [],
-			household_id: null,
-			current_stay: { status: 'draft', zone: null, since: '2026-08-29T00:00:00Z' },
-			privacy: { search_excluded: false },
-			registered_via: 'kiosk'
-		};
-
-		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {
-			if (url.includes('_find')) {
-				return { docs: [existingDraft] };
-			}
-			return { ok: true };
-		});
-
-		const res = await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', mockCard);
-
-		expect(res.status).toBe('duplicate_draft');
-		if (res.status === 'duplicate_draft') {
-			expect(res.error).toBe('ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว');
-			expect(res.message).toBe('ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว');
+		expect(res.status).toBe('already_pre_registered');
+		if (res.status === 'already_pre_registered') {
+			expect(res.error).toBe('ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่');
+			expect(res.message).toBe('ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่');
 		}
 	});
 
-	it('Branch 4: rejects with already_active when evacuee is currently active in shelter', async () => {
+	it('Branch 3: rejects with already_active when evacuee is currently active in shelter', async () => {
 		const existingActive: Evacuee = {
 			_id: 'evacuee:ACTIVE01',
 			type: 'evacuee',
@@ -166,7 +123,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 			household_id: 'household:H1',
 			current_stay: { status: 'active', zone: 'A1', since: '2026-08-29T00:00:00Z' },
 			privacy: { search_excluded: false },
-			registered_via: 'app'
+			registered_via: 'staff'
 		};
 
 		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url) => {

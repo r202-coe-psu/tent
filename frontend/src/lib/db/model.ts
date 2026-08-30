@@ -123,10 +123,23 @@ export const phoneSchema = z
 /**
  * Reusable enum for the registration channel.
  *
- * `web` = public self-booking through the portal (CR-070 D-REG-VIA, T-71).
- * `api` is reserved for the CR-071 inbound plane and is not accepted yet.
+ * `kiosk` = Smart Card Kiosk walk-in.
+ * `staff` = Onsite staff intake desk walk-in.
+ * `backoffice` = Back-office administrator intake.
+ * `web` = Public self-booking through the portal (CR-070 D-REG-VIA, T-71).
+ * `import` = Bulk spreadsheet import.
+ * `paper` = Paper-based intake.
+ * `app` = Legacy onsite application alias.
  */
-export const registeredViaSchema = z.enum(['app', 'import', 'paper', 'web', 'kiosk']);
+export const registeredViaSchema = z.enum([
+	'kiosk',
+	'staff',
+	'backoffice',
+	'app',
+	'web',
+	'import',
+	'paper'
+]);
 
 /**
  * Codify the shelter-code shape used across registry + docs (schema.md §3.1):
