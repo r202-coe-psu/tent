@@ -45,9 +45,7 @@ if (workers === 1) {
 
 	cluster.on('exit', (worker, code, signal) => {
 		if (shuttingDown) return;
-		console.warn(
-			`[cluster] worker ${worker.process.pid} exited (${signal || code}); restarting`
-		);
+		console.warn(`[cluster] worker ${worker.process.pid} exited (${signal || code}); restarting`);
 		cluster.fork();
 	});
 

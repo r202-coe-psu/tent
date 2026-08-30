@@ -11,16 +11,20 @@
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
 	import { env } from '$env/dynamic/public';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = setDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
-	const steps = [
-		{ id: 'needs', icon: AlertTriangle, label: 'ความต้องการ' },
-		{ id: 'form', icon: Package, label: 'รายการบริจาค' },
-		{ id: 'time', icon: MapPin, label: 'นัดหมาย' },
-		{ id: 'ticket', icon: QrCode, label: 'ตั๋วบริจาค' }
-	] as const;
+	const steps = $derived([
+		{ id: 'needs', icon: AlertTriangle, label: t.step1 },
+		{ id: 'form', icon: Package, label: t.step2 },
+		{ id: 'time', icon: MapPin, label: t.step3 },
+		{ id: 'ticket', icon: QrCode, label: t.step4 }
+	] as const);
 
 	const stepIndexMap: Record<string, number> = {
 		needs: 0,
@@ -43,7 +47,7 @@
 </script>
 
 <svelte:head>
-	<title>บริจาคและจองคิว — Smart Shelter</title>
+	<title>{t.pageTitle}</title>
 	{#if siteKey}
 		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
 	{/if}
@@ -64,13 +68,14 @@
 					<div
 						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-blue-100 uppercase"
 					>
-						<HeartHandshake class="h-3.5 w-3.5 text-blue-200" /> DONATION BOARD
+						<HeartHandshake class="h-3.5 w-3.5 text-blue-200" />
+						{t.donationBoard}
 					</div>
 					<h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-						กระดาน<span class="text-blue-200">ความต้องการด่วน</span>
+						{t.heroTitlePrefix} <span class="text-blue-200">{t.heroTitleHighlight}</span>
 					</h1>
 					<p class="text-sm leading-relaxed font-medium text-blue-100/80 sm:text-base">
-						อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที
+						{t.heroDesc}
 					</p>
 				</div>
 			</div>
@@ -123,7 +128,7 @@
 						</div>
 						<div class="mt-1 flex flex-col items-center sm:mt-0 sm:items-start">
 							<span
-								class="hidden text-[10px] font-bold tracking-widest uppercase sm:block
+								class="hidden text-2xs font-bold tracking-widest uppercase sm:block
 								{isActive || isCompleted ? 'text-[#013365]' : 'text-slate-400'}"
 							>
 								STEP 0{idx + 1}

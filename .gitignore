@@ -21,6 +21,11 @@ Thumbs.db
 # Private
 .private/
 
+# Local slides deck (not part of app repo)
+/slides/
+/frontend/slides/
+/frontend/scripts/capture-all.ts
+
 # Meeting notes (not shared with team)
 docs/meetings/
 couchdb-session.ini

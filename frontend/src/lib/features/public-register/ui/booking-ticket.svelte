@@ -4,7 +4,10 @@
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
+	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { downloadElementAsPdf } from '$lib/utils/pdf';
+	import { getTranslation } from '$lib/utils/i18n';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
 	interface Props {
@@ -14,6 +17,8 @@
 	}
 
 	const { ticket, showSuccessHeader = true }: Props = $props();
+
+	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 
 	/** Falls back to whichever half exists, so a blank never renders as a stray space. */
 	const fullName = $derived([ticket.first_name, ticket.last_name].filter(Boolean).join(' '));
@@ -39,7 +44,10 @@
 		const d = new Date(ticket.booked_at);
 		return Number.isNaN(d.getTime())
 			? ''
-			: d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+			: d.toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US', {
+					dateStyle: 'medium',
+					timeStyle: 'short'
+				});
 	});
 
 	/**
@@ -60,11 +68,7 @@
 		} catch (err) {
 			// Surface the real reason when there is one — a render that timed out
 			// says so, which tells the citizen retrying is worth it.
-			toast.error(
-				err instanceof Error && err.message
-					? err.message
-					: 'ดาวน์โหลดใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
-			);
+			toast.error(err instanceof Error && err.message ? err.message : t.downloadErrorFallback);
 		} finally {
 			downloading = false;
 		}
@@ -72,17 +76,13 @@
 
 	const statusLabel = $derived(
 		ticket.status === 'pre_registered'
-			? 'Pre-registered'
+			? t.statusPreRegistered
 			: ticket.status === 'active'
-				? 'เช็คอินเข้าศูนย์แล้ว'
+				? t.statusActive
 				: ticket.status === 'cancelled'
-					? 'การจองถูกยกเลิก'
+					? t.statusCancelled
 					: ticket.status
 	);
-	import { langState } from '$lib/states/i18n.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
-	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 </script>
 
 <div class="space-y-4">
@@ -92,9 +92,9 @@
 		>
 			<CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-success" />
 			<div>
-				<p class="text-sm font-bold text-foreground">จองเข้าศูนย์สำเร็จ</p>
+				<p class="text-sm font-bold text-foreground">{t.successHeaderTitle}</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					ระบบกันที่ให้ท่านแล้ว กรุณาบันทึกหรือ{t.printBtn}นี้ไว้แสดงที่ประตูศูนย์
+					{t.successHeaderDesc}
 				</p>
 			</div>
 		</div>
@@ -105,7 +105,7 @@
 	>
 		<div class="bg-primary-dark px-6 py-4 text-center text-white">
 			<p class="mt-1 text-base font-bold">{ticket.shelter_name}</p>
-			<p class="text-xs opacity-80">รหัสศูนย์ {ticket.shelter_code}</p>
+			<p class="text-xs opacity-80">{t.shelterCodeLabel} {ticket.shelter_code}</p>
 		</div>
 
 		<!--
@@ -130,18 +130,18 @@
 			{#await qrPromise}
 				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
 			{:then qrUrl}
-				<img src={qrUrl} alt="QR สำหรับยืนยันตัวตนที่ประตูศูนย์" class="h-44 w-44" />
+				<img src={qrUrl} alt={t.qrAlt} class="h-44 w-44" />
 			{:catch}
 				<p
 					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
 				>
-					สร้าง QR ไม่สำเร็จ กรุณาแจ้งชื่อ-นามสกุลกับเจ้าหน้าที่ที่ประตูศูนย์
+					{t.qrErrorFallback}
 				</p>
 			{/await}
 
 			<div class="text-center">
 				<p class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-					ชื่อผู้จอง
+					{t.bookerNameLabel}
 				</p>
 				<p class="text-base font-bold text-foreground">{fullName}</p>
 			</div>
@@ -150,12 +150,12 @@
 		<!-- The name lives in the QR block above (it prints); no need to repeat it here. -->
 		<dl class="space-y-2 border-t border-border px-6 py-4 text-sm">
 			<div class="flex justify-between gap-4">
-				<dt class="text-muted-foreground">สถานะ</dt>
+				<dt class="text-muted-foreground">{t.statusDtLabel}</dt>
 				<dd class="text-right font-semibold text-foreground">{statusLabel}</dd>
 			</div>
 			{#if bookedAt}
 				<div class="flex justify-between gap-4">
-					<dt class="text-muted-foreground">เวลาที่จอง</dt>
+					<dt class="text-muted-foreground">{t.bookedAtLabel}</dt>
 					<dd class="text-right font-semibold text-foreground">{bookedAt}</dd>
 				</div>
 			{/if}
@@ -165,7 +165,7 @@
 	<div class="flex justify-center print:hidden">
 		<Button type="button" variant="outline" disabled={downloading} onclick={downloadTicket}>
 			<Download class="h-4 w-4" />
-			{downloading ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดใบจอง (PDF)'}
+			{downloading ? t.downloadingBtn : t.downloadBtn}
 		</Button>
 	</div>
 </div>

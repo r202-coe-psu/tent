@@ -83,9 +83,9 @@
 										{m.first_name}
 										{m.last_name}
 									</p>
-									<p class="text-[10px] text-muted-foreground">
+									<p class="text-2xs text-muted-foreground">
 										{#if m._id === household.head_evacuee_id}
-											<Badge class="bg-green-600 px-1 py-0 text-[9px] text-white">หัวหน้า</Badge>
+											<Badge class="bg-green-600 px-1 py-0 text-3xs text-white">หัวหน้า</Badge>
 										{:else}
 											สมาชิก
 										{/if}
@@ -137,7 +137,7 @@
 											{c.last_name}
 										</p>
 										{#if c.phone}
-											<p class="text-[10px] text-muted-foreground">โทร: {c.phone}</p>
+											<p class="text-2xs text-muted-foreground">โทร: {c.phone}</p>
 										{/if}
 									</div>
 
@@ -145,12 +145,12 @@
 										<Button
 											size="sm"
 											disabled
-											class="h-7 bg-slate-100 px-2.5 text-[11px] text-slate-400"
+											class="h-7 bg-slate-100 px-2.5 text-2xs text-slate-400"
 										>
 											{STATUS_LABELS[c.current_stay.status] ?? 'ยังไม่เช็คอิน'}
 										</Button>
 									{:else}
-										<Button size="sm" class="h-7 px-2.5 text-[11px]" onclick={() => onAddMember(c)}>
+										<Button size="sm" class="h-7 px-2.5 text-2xs" onclick={() => onAddMember(c)}>
 											เพิ่มเข้ากลุ่ม
 										</Button>
 									{/if}

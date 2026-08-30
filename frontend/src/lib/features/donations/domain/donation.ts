@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type BaseDoc } from '$lib/db/model';
+import type { DonationStatus } from '$lib/features/operations';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export const PUBLIC_DONATION_CATEGORIES = [
@@ -24,7 +25,12 @@ export interface DonationPreDeclaration extends BaseDoc {
 		note?: string;
 	}[];
 	donor_phone_hash: string;
-	status: 'declared' | 'received' | 'expired';
+	/**
+	 * Same lifecycle as `donation.status` (schema.md §2.3) — CR-052 added the review
+	 * chain, so this union is the shared `DonationStatus` rather than its own list; two
+	 * copies is how one of them silently stops accepting `pending_review`.
+	 */
+	status: DonationStatus;
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';

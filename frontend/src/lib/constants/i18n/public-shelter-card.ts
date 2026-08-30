@@ -10,6 +10,8 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		petPolicy: 'นโยบายสัตว์เลี้ยง',
 		viewDetails: 'ดูรายละเอียด',
 		navigate: 'นำทาง',
+		preRegister: 'ลงทะเบียนล่วงหน้า',
+		preRegisterClosed: 'ศูนย์ปิดแล้ว — ไม่สามารถลงทะเบียนได้',
 		generalVulnerable: 'กลุ่มเปราะบางทั่วไป',
 		quarantine: 'ผู้ป่วยแยกกักโรค',
 		wheelchair: 'ผู้ใช้วีลแชร์',
@@ -19,7 +21,18 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		smallGeneral: 'สัตว์เล็กทั่วไป',
 		largeDog: 'สุนัขพันธุ์ใหญ่',
 		livestock: 'ปศุสัตว์',
-		conditionalAllowed: 'อนุญาตแบบมีเงื่อนไข'
+		conditionalAllowed: 'อนุญาตแบบมีเงื่อนไข',
+		evacCenter: 'ศูนย์อพยพ',
+		hostHouse: 'บ้านพี่เลี้ยง',
+		temple: 'วัด',
+		school: 'โรงเรียน',
+		governmentAgency: 'หน่วยงานราชการ',
+		university: 'มหาวิทยาลัย',
+		mosque: 'มัสยิด',
+		church: 'โบสถ์',
+		privateArea: 'พื้นที่เอกชน',
+		other: 'อื่นๆ',
+		unspecified: 'ไม่ระบุ'
 	},
 	en: {
 		districtPrefix: 'Dist.',
@@ -32,6 +45,8 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		petPolicy: 'Pet Policy',
 		viewDetails: 'View Details',
 		navigate: 'Navigate',
+		preRegister: 'Pre-register',
+		preRegisterClosed: 'Shelter closed — booking unavailable',
 		generalVulnerable: 'General Vulnerable',
 		quarantine: 'Quarantine',
 		wheelchair: 'Wheelchair User',
@@ -41,6 +56,17 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		smallGeneral: 'Small general pets',
 		largeDog: 'Large dogs',
 		livestock: 'Livestock',
-		conditionalAllowed: 'Allowed with conditions'
+		conditionalAllowed: 'Allowed with conditions',
+		evacCenter: 'Evacuation Center',
+		hostHouse: 'Host House',
+		temple: 'Temple',
+		school: 'School',
+		governmentAgency: 'Government Agency',
+		university: 'University',
+		mosque: 'Mosque',
+		church: 'Church',
+		privateArea: 'Private Area',
+		other: 'Other',
+		unspecified: 'Unspecified'
 	}
 } as const;

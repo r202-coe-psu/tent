@@ -472,6 +472,59 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.error).toBe('SLOT_FULL');
 	});
 
+	it.each(['pending_review', 'verifying'])(
+		'counts a %s booking against the slot, not just declared ones',
+		async (status) => {
+			// CR-052 opens every public booking at pending_review, so a slot filled by the
+			// wizard holds none of its places under a declared-only count — capacity would
+			// read as free forever and SLOT_FULL would never fire (schema.md §2.13).
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('donation_campaign:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				if (method === 'GET' && path.includes('donation_slot')) {
+					return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open' } });
+				}
+				if (method === 'GET' && path.includes('donation')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										_id: 'donation:d1',
+										type: 'donation',
+										status,
+										logistics: { slot: { date: '2026-06-27', from: '09:00', to: '10:00' } }
+									}
+								}
+							]
+						}
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await POST({
+				request: {
+					json: () =>
+						Promise.resolve({
+							...validPayload,
+							logistics: {
+								delivery_method: 'self_dropoff',
+								slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+							}
+						})
+				},
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+
+			const data = await response.json();
+			expect(response.status).toBe(409);
+			expect(data.error).toBe('SLOT_FULL');
+		}
+	);
+
 	it('returns 422 if input schema validation fails', async () => {
 		const invalidPayload = {
 			...validPayload,

@@ -46,7 +46,7 @@
 
 				<div class="flex items-center gap-2 md:gap-3">
 					<span
-						class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600"
+						class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-2xs font-bold text-emerald-600"
 					>
 						<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 						Online
