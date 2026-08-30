@@ -115,6 +115,16 @@ describe('CR-096 personnel type + duty window', () => {
 		expect(result.success).toBe(false);
 	});
 
+	it('rejects an unparseable instant instead of letting the ordering check pass it', () => {
+		const result = createUserSchema.safeParse({
+			...base,
+			duty_start: 'not-a-date',
+			duty_end: '2026-08-29T16:00'
+		});
+		expect(result.success).toBe(false);
+		expect(result.error?.issues[0]?.path).toEqual(['duty_start']);
+	});
+
 	it('allows platform-wide affiliation only for system_admin', () => {
 		expect(
 			createUserSchema.safeParse({
@@ -162,6 +172,11 @@ describe('duty window conversion', () => {
 	it('is null when either end is blank — that means permanent access', () => {
 		expect(toDutyWindow('2026-08-29T08:00', undefined)).toBeNull();
 		expect(toDutyWindow(undefined, undefined)).toBeNull();
+	});
+
+	it('is null for an unparseable instant rather than throwing a RangeError', () => {
+		expect(toDutyWindow('not-a-date', '2026-08-29T16:00')).toBeNull();
+		expect(toDutyWindow('2026-08-29T08:00', 'not-a-date')).toBeNull();
 	});
 
 	it('renders an empty string for a missing or unparseable instant', () => {

@@ -21,7 +21,7 @@
 	} from '../domain/schema';
 	import type { UserSummary } from '../data/users.api';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { useVolunteers, useUpdateVolunteer, type Volunteer } from '$lib/features/volunteers';
+	import { useSetVolunteerAccountLink } from '$lib/features/volunteers';
 	import { UserPlus, Search } from '@lucide/svelte';
 	import Gem from '@lucide/svelte/icons/gem';
 	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
@@ -61,26 +61,66 @@
 	// CR-096 §2.3 — the link is two-way: `_users.volunteer_id` points at the profile, and the
 	// profile's `user_name` points back, which is what the roster reads to show "มีบัญชีหลังบ้าน".
 	const queryClient = useQueryClient();
-	const volunteersQuery = useVolunteers({ status: 'active' });
-	const linkVolunteerMutation = useUpdateVolunteer(queryClient);
+	const linkVolunteerMutation = useSetVolunteerAccountLink(queryClient);
+
+	/** The registry to read/write for an affiliation — platform-wide accounts have none. */
+	function registryShelter(code: string | null | undefined): string | undefined {
+		return code && code !== PLATFORM_WIDE ? code : undefined;
+	}
 
 	/**
-	 * Write `volunteer.user_name` for the bound profile. Runs after the `_users` write succeeds, so
-	 * a failure here leaves a valid login with a half-made link — reported as a warning toast
-	 * rather than a save failure, since the account itself is fine (CR-096 open question #7).
+	 * Write one end of the link. Runs after the `_users` write succeeds, so a failure here leaves a
+	 * valid account with a half-made link — reported as a warning toast rather than a save failure,
+	 * since the account itself is fine (CR-096 open question #7).
 	 */
-	async function syncVolunteerLink(volunteerId: string | undefined, username: string) {
-		if (!volunteerId) return;
-		const profile: Volunteer | undefined = volunteersQuery.data?.find((v) => v._id === volunteerId);
-		if (!profile || profile.user_name === username) return;
+	async function writeVolunteerLink(args: {
+		volunteerId: string;
+		userName: string | null;
+		shelterCode?: string;
+		expectUserName?: string;
+	}) {
 		try {
-			await linkVolunteerMutation.mutateAsync({ ...profile, user_name: username });
+			await linkVolunteerMutation.mutateAsync(args);
 		} catch (err) {
+			const reason = err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ';
 			toast.warning(
-				`บันทึกบัญชีสำเร็จ แต่ผูกกับโปรไฟล์อาสาไม่สำเร็จ: ${
-					err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'
-				}`
+				args.userName === null
+					? `บันทึกบัญชีสำเร็จ แต่ปลดการผูกโปรไฟล์อาสาเดิมไม่สำเร็จ: ${reason}`
+					: `บันทึกบัญชีสำเร็จ แต่ผูกกับโปรไฟล์อาสาไม่สำเร็จ: ${reason}`
 			);
+		}
+	}
+
+	/**
+	 * Keep the registry in step with the account: claim the profile it now points at, and release
+	 * the one it stopped pointing at — unlinking, re-linking, switching back to staff and deleting
+	 * all go through here, so a profile can never keep advertising a login that no longer names it.
+	 * The old profile is looked up in the account's *previous* shelter, which an SA may have just
+	 * changed. `expectUserName` keeps the release from clobbering a link made meanwhile.
+	 */
+	async function syncVolunteerLinks(opts: {
+		username: string;
+		nextVolunteerId?: string | null;
+		nextShelterCode?: string;
+		previousVolunteerId?: string | null;
+		previousShelterCode?: string;
+	}) {
+		const next = opts.nextVolunteerId ?? null;
+		const previous = opts.previousVolunteerId ?? null;
+		if (previous && previous !== next) {
+			await writeVolunteerLink({
+				volunteerId: previous,
+				userName: null,
+				shelterCode: opts.previousShelterCode,
+				expectUserName: opts.username
+			});
+		}
+		if (next) {
+			await writeVolunteerLink({
+				volunteerId: next,
+				userName: opts.username,
+				shelterCode: opts.nextShelterCode
+			});
 		}
 	}
 
@@ -120,7 +160,11 @@
 			duty_window: toDutyWindow(input.duty_start, input.duty_end),
 			active: input.active
 		});
-		await syncVolunteerLink(input.volunteer_id, input.username);
+		await syncVolunteerLinks({
+			username: input.username,
+			nextVolunteerId: input.volunteer_id,
+			nextShelterCode: registryShelter(effectiveLock ?? input.shelter_id)
+		});
 		toast.success(`User "${input.username}" created`);
 		dialogOpen = false;
 	}
@@ -147,7 +191,13 @@
 			duty_window: toDutyWindow(input.duty_start, input.duty_end),
 			active: input.active
 		});
-		await syncVolunteerLink(input.volunteer_id, target.name);
+		await syncVolunteerLinks({
+			username: target.name,
+			nextVolunteerId: input.volunteer_id,
+			nextShelterCode: registryShelter(effectiveLock ?? input.shelter_id),
+			previousVolunteerId: target.volunteer_id,
+			previousShelterCode: registryShelter(target.shelter_id)
+		});
 		toast.success(`User "${target.name}" updated`);
 		editDialogOpen = false;
 		demoteDialogOpen = false;
@@ -180,16 +230,26 @@
 		deleteDialogOpen = true;
 	}
 
-	function handleDelete() {
-		if (!userToDelete) return;
-		deleteMutation.mutate(userToDelete, {
-			onSuccess: () => {
-				toast.success(`User "${userToDelete}" deleted`);
-				deleteDialogOpen = false;
-				userToDelete = null;
-			},
-			onError: (err: Error) => toast.error(err.message)
+	async function handleDelete() {
+		const name = userToDelete;
+		if (!name) return;
+		// Read the account before it is gone — deleting it is also what releases its volunteer
+		// profile, which would otherwise keep pointing at a login that no longer exists.
+		const target = usersQuery.data?.find((u) => u.name === name) ?? null;
+		try {
+			await deleteMutation.mutateAsync(name);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถลบผู้ใช้งานได้');
+			return;
+		}
+		await syncVolunteerLinks({
+			username: name,
+			previousVolunteerId: target?.volunteer_id,
+			previousShelterCode: registryShelter(target?.shelter_id)
 		});
+		toast.success(`User "${name}" deleted`);
+		deleteDialogOpen = false;
+		userToDelete = null;
 	}
 
 	const deletingIsSa = $derived(

@@ -222,6 +222,12 @@ export async function updateUser(
 				await assertNotLastAppSa(doc.roles ?? []);
 			}
 		}
+		// Suspending the last SA locks the platform out just as removing them would, so it is
+		// blocked on the same rule — even though `active` is not enforced at login yet (CR-094 §2.3).
+		const staysSa = isAppSystemAdmin(input.roles ?? doc.roles ?? []);
+		if (input.active === false && staysSa) {
+			await assertNotLastAppSa(doc.roles ?? []);
+		}
 	}
 
 	const updatedDoc = {

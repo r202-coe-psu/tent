@@ -37,13 +37,17 @@ interface UpdateUserBody {
 	active?: unknown;
 }
 
+/** `volunteer:{ulid}` — 26 Crockford base32 chars, the id shape every doc is minted with. */
+const VOLUNTEER_ID_PATTERN = /^volunteer:[0-9A-HJKMNP-TV-Z]{26}$/;
+
 /** `volunteer:{ulid}` or an explicit `null` to unlink; anything else is dropped. */
 function parseVolunteerId(raw: unknown): string | null | undefined {
 	if (raw === null) return null;
 	if (typeof raw !== 'string') return undefined;
 	const id = raw.trim();
 	if (!id) return null;
-	if (!id.startsWith('volunteer:')) {
+	// A prefix test alone accepts a bare `volunteer:`, which persists a link to nothing.
+	if (!VOLUNTEER_ID_PATTERN.test(id.toUpperCase())) {
 		throw new ServiceError('VALIDATION', 'volunteer_id must look like volunteer:{ulid}');
 	}
 	return id;

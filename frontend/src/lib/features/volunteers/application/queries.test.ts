@@ -58,8 +58,14 @@ const volunteerRepo = {
 	update: vi.fn(),
 	setCheckedIn: vi.fn()
 };
+/** Shelter code the last `volunteerRepositoryFor()` call asked for — `undefined` = active shelter. */
+let requestedVolunteerShelter: string | undefined;
 vi.mock('../data/volunteer.remote', () => ({
-	volunteerRepository: () => volunteerRepo
+	volunteerRepository: () => volunteerRepo,
+	volunteerRepositoryFor: (shelterCode?: string) => {
+		requestedVolunteerShelter = shelterCode;
+		return volunteerRepo;
+	}
 }));
 
 const volunteerTransferRepo = {
@@ -131,6 +137,7 @@ import {
 	useCheckIn,
 	useCheckOut,
 	useCreateWalkInVolunteer,
+	useSetVolunteerAccountLink,
 	useRequestTransfer,
 	useDecideTransfer,
 	startVolunteersLiveQuery
@@ -273,6 +280,13 @@ describe('list/detail query hooks', () => {
 		const filter = { status: 'active' as const };
 		(useVolunteers(filter) as unknown as { queryFn: () => unknown }).queryFn();
 		expect(volunteerRepo.list).toHaveBeenCalledWith(filter);
+	});
+
+	it('useVolunteers reads the shelter the caller names, not the active one', () => {
+		const hook = useVolunteers({ status: 'active' as const }, () => 'SH009');
+		expect((hook as unknown as { queryKey: readonly unknown[] }).queryKey).toContain('SH009');
+		(hook as unknown as { queryFn: () => unknown }).queryFn();
+		expect(requestedVolunteerShelter).toBe('SH009');
 	});
 
 	it('useVolunteer is keyed/enabled off the id accessor', () => {
@@ -431,5 +445,49 @@ describe('startVolunteersLiveQuery', () => {
 		]);
 		expect(keysForType('volunteer_transfer')).toEqual([volunteerKeys.transfersAll()]);
 		expect(keysForType('evacuee')).toEqual([]);
+	});
+});
+
+describe('useSetVolunteerAccountLink', () => {
+	const profile = { _id: 'volunteer:1', user_name: 'somchai' };
+
+	it('clears the link in the shelter the caller names', async () => {
+		volunteerRepo.get.mockResolvedValue({ ...profile });
+		volunteerRepo.update.mockImplementation(async (v: unknown) => v);
+		const client = fakeQueryClient();
+
+		await useSetVolunteerAccountLink(client).mutate({
+			volunteerId: 'volunteer:1',
+			userName: null,
+			shelterCode: 'SH009',
+			expectUserName: 'somchai'
+		});
+
+		expect(requestedVolunteerShelter).toBe('SH009');
+		expect(volunteerRepo.update).toHaveBeenCalledWith({ ...profile, user_name: null });
+		expect(client.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.all });
+	});
+
+	it('leaves a profile alone once someone else has claimed it', async () => {
+		volunteerRepo.get.mockResolvedValue({ ...profile, user_name: 'malee' });
+
+		await useSetVolunteerAccountLink(fakeQueryClient()).mutate({
+			volunteerId: 'volunteer:1',
+			userName: null,
+			expectUserName: 'somchai'
+		});
+
+		expect(volunteerRepo.update).not.toHaveBeenCalled();
+	});
+
+	it('is a no-op when the profile is already gone', async () => {
+		volunteerRepo.get.mockResolvedValue(null);
+
+		await useSetVolunteerAccountLink(fakeQueryClient()).mutate({
+			volunteerId: 'volunteer:1',
+			userName: 'somchai'
+		});
+
+		expect(volunteerRepo.update).not.toHaveBeenCalled();
 	});
 });

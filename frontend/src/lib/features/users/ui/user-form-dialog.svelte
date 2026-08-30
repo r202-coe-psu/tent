@@ -80,8 +80,10 @@
 	const sheltersQuery = useShelters();
 	// The registry lives in the volunteers slice (CR-096 §2.4) — read it through that barrel rather
 	// than re-implementing a second reader. `active` only: a retired profile is not something to
-	// hand a fresh login to.
-	const volunteersQuery = useVolunteers({ status: 'active' });
+	// hand a fresh login to. Scoped to the shelter *this form* targets, not the one the sidebar is
+	// viewing: an SA who picks another shelter must see that shelter's roster, and the link must be
+	// written into that shelter's DB.
+	const volunteersQuery = useVolunteers({ status: 'active' }, () => volunteerShelterCode);
 
 	const isEdit = $derived(user !== null);
 	const shelterLocked = $derived(Boolean(lockedShelterCode));
@@ -210,6 +212,17 @@
 	 * stored link. Selecting a profile fills the identity fields the operator would otherwise
 	 * retype.
 	 */
+	/**
+	 * A profile only exists inside one shelter's registry, so changing the affiliation invalidates
+	 * whatever was picked — clearing it here stops a save from writing `volunteer_id` into an
+	 * account whose shelter no longer holds that profile.
+	 */
+	function setShelter(code: string) {
+		const next = code || undefined;
+		if (next !== $formData.shelter_id) $formData.volunteer_id = undefined;
+		$formData.shelter_id = next;
+	}
+
 	function applyVolunteer(id: string) {
 		$formData.volunteer_id = id || undefined;
 		const picked = (volunteersQuery.data ?? []).find((v) => v._id === id);
@@ -241,6 +254,13 @@
 	]);
 
 	const boundShelterCode = $derived(lockedShelterCode ?? $formData.shelter_id ?? null);
+	/**
+	 * Which shelter's volunteer registry to read and write. Platform-wide accounts have no
+	 * registry of their own, so they fall back to the active shelter (`undefined`).
+	 */
+	const volunteerShelterCode = $derived(
+		boundShelterCode && boundShelterCode !== PLATFORM_WIDE ? boundShelterCode : undefined
+	);
 	const boundShelter = $derived(
 		boundShelterCode && boundShelterCode !== PLATFORM_WIDE
 			? (sheltersQuery.data ?? []).find((s) => s.code === boundShelterCode)
@@ -501,9 +521,7 @@
 							</Form.Label>
 							<Combobox
 								items={shelterItems}
-								bind:value={
-									() => $formData.shelter_id ?? '', (v) => ($formData.shelter_id = v || undefined)
-								}
+								bind:value={() => $formData.shelter_id ?? '', (v) => setShelter(v)}
 								placeholder={sheltersQuery.isLoading
 									? 'กำลังโหลดรายชื่อศูนย์พักพิง...'
 									: 'เลือกศูนย์พักพิง'}

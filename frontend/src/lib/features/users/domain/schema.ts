@@ -72,6 +72,16 @@ function refineUserForm(
 	if (duty_end && !duty_start) {
 		ctx.addIssue({ code: 'custom', path: ['duty_start'], message: 'กรุณาระบุเวลาเริ่มต้น' });
 	}
+	// An unparseable instant has to be caught explicitly: `NaN >= NaN` is false, so the ordering
+	// check below would wave it through and `toDutyWindow` would then be handed a bad string.
+	for (const [field, value] of [
+		['duty_start', duty_start],
+		['duty_end', duty_end]
+	] as const) {
+		if (value && Number.isNaN(Date.parse(value))) {
+			ctx.addIssue({ code: 'custom', path: [field], message: 'รูปแบบวันที่-เวลาไม่ถูกต้อง' });
+		}
+	}
 	if (duty_start && duty_end && Date.parse(duty_start) >= Date.parse(duty_end)) {
 		ctx.addIssue({
 			code: 'custom',
@@ -126,10 +136,12 @@ export function toDutyWindow(
 	duty_end: string | undefined
 ): DutyWindow | null {
 	if (!duty_start || !duty_end) return null;
-	return {
-		start_ts: new Date(duty_start).toISOString(),
-		end_ts: new Date(duty_end).toISOString()
-	};
+	const start = new Date(duty_start);
+	const end = new Date(duty_end);
+	// The schema rejects an unparseable instant before this runs; a caller that skips validation
+	// gets "no window" rather than the `RangeError` `toISOString()` throws on an invalid date.
+	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+	return { start_ts: start.toISOString(), end_ts: end.toISOString() };
 }
 
 /** Inverse of {@link toDutyWindow} — an ISO instant as the `datetime-local` value it came from. */
