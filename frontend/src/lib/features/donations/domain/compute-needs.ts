@@ -1,5 +1,5 @@
 import type { Donation, DonationCampaign, StockLedger } from '$lib/features/operations';
-import { keyedDonationIds, stockBalance } from '$lib/features/operations';
+import { isDonationOutstanding, keyedDonationIds, stockBalance } from '$lib/features/operations';
 import { addQty, subQty, qtyGt } from '$lib/utils/qty';
 
 /**
@@ -41,16 +41,10 @@ export function computeNeeds(
 		const covered = new Map(onHand);
 		for (const don of donations) {
 			if (don.campaign_id !== campaign._id) continue;
-			// Settled: the goods are never arriving here, so they cannot cover a need.
-			// `redirected` joins the set with CR-087 (it went to another shelter) —
-			// `rejected` belongs here for the same reason and had been missed.
-			if (
-				don.status === 'expired' ||
-				don.status === 'cancelled' ||
-				don.status === 'redirected' ||
-				don.status === 'rejected'
-			)
-				continue;
+			// Only goods that are still coming, or already here, cover a need. `redirected`
+			// and `rejected` joined the enum with CR-052 and release their share exactly as
+			// expiry does (CR-087). The set itself lives in `DONATION_OUTSTANDING_STATUSES`.
+			if (!isDonationOutstanding(don.status) && don.status !== 'received') continue;
 			// Received *and* already booked into the ledger: the goods are on the shelf,
 			// counted in onHand. Counting them again here closes the need at half.
 			if (don.status === 'received' && keyed.has(don._id)) continue;

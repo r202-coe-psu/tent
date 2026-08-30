@@ -1,6 +1,13 @@
 <script lang="ts">
-	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import type {
+		Map as MapLibreMap,
+		Marker as MapLibreMarker,
+		Popup as MapLibrePopup,
+		NavigationControl,
+		GeoJSONSource,
+		LngLatBounds as MapLibreLngLatBounds
+	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
 	import { resolveMasterLabel } from '../domain/master-labels';
@@ -10,6 +17,14 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
+
+	type MapLibreNamespace = {
+		Map: typeof MapLibreMap;
+		Marker: typeof MapLibreMarker;
+		Popup: typeof MapLibrePopup;
+		NavigationControl: typeof NavigationControl;
+		LngLatBounds: typeof MapLibreLngLatBounds;
+	};
 
 	interface ShelterGeo {
 		lat: number;
@@ -57,9 +72,9 @@
 	};
 
 	let mapElement: HTMLElement;
-	let mapInstance: any = null;
-	let markersLayer: any[] = [];
-	let L: any = null;
+	let mapInstance: MapLibreMap | null = null;
+	let markersLayer: MapLibreMarker[] = [];
+	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
 
@@ -130,9 +145,9 @@
 	function setSearchRadiusData(data: { type: 'FeatureCollection'; features: unknown[] }) {
 		if (!mapInstance) return;
 		ensureSearchRadiusLayers();
-		const source = mapInstance.getSource(SEARCH_RADIUS_SOURCE);
+		const source = mapInstance.getSource(SEARCH_RADIUS_SOURCE) as GeoJSONSource | undefined;
 		if (source && typeof source.setData === 'function') {
-			source.setData(data);
+			source.setData(data as never);
 		}
 	}
 
@@ -171,7 +186,7 @@
 	}
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
-		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
+		return siteKind === 'host_house' ? t.hostHouse : t.evacCenter;
 	}
 
 	function translateAdminType(type: string): string {
@@ -180,6 +195,9 @@
 				? {
 						วัด: 'Temple',
 						โรงเรียน: 'School',
+						ศาลาประชาคม: 'Community Hall',
+						ศูนย์กีฬา: 'Sports Centre',
+						อาคารราชการ: 'Government Building',
 						หน่วยงานราชการ: 'Government Agency',
 						ศูนย์อพยพ: 'Evacuation Center',
 						มหาวิทยาลัย: 'University',
@@ -195,21 +213,23 @@
 
 	onMount(async () => {
 		const maplibre = await import('maplibre-gl');
-		L = maplibre.default;
+		const namespace = maplibre.default as unknown as MapLibreNamespace;
+		L = namespace;
 
-		mapInstance = new L.Map({
+		const map = new namespace.Map({
 			container: mapElement,
 			style: DEFAULT_MAP_STYLE,
 			center,
 			zoom
 		});
+		mapInstance = map;
 
 		// Add zoom and rotation controls to the map.
-		mapInstance.addControl(new L.NavigationControl(), 'bottom-right');
+		map.addControl(new namespace.NavigationControl(), 'bottom-right');
 
 		const updateLabelsVisibility = () => {
-			if (mapInstance && mapElement) {
-				if (mapInstance.getZoom() >= 12) {
+			if (map && mapElement) {
+				if (map.getZoom() >= 12) {
 					mapElement.classList.add('show-labels');
 				} else {
 					mapElement.classList.remove('show-labels');
@@ -217,16 +237,16 @@
 			}
 		};
 
-		mapInstance.on('zoom', updateLabelsVisibility);
+		map.on('zoom', updateLabelsVisibility);
 
-		mapInstance.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
+		map.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
 			if (!placingPin) return;
 			const { lat, lng } = e.lngLat;
 			placingPin = false;
 			onLocationPick?.(lat, lng);
 		});
 
-		mapInstance.on('load', () => {
+		map.on('load', () => {
 			mapLoaded = true;
 			updateLabelsVisibility(); // Initial check
 		});
@@ -240,20 +260,18 @@
 	});
 
 	$effect(() => {
-		if (!mapElement) return;
-		mapElement.style.cursor = placingPin ? 'crosshair' : '';
+		// When placement mode turns on, switch cursor to crosshair; revert on off.
+		if (mapElement) {
+			mapElement.style.cursor = placingPin ? 'crosshair' : '';
+		}
 	});
 
-	// Search-radius circle — separate from markers so radius changes skip fitBounds/marker rebuild.
 	$effect(() => {
 		if (!mapLoaded || !mapInstance) return;
 
-		const rawLat = userLocation?.lat;
-		const rawLng = userLocation?.lng;
-		const uLat = rawLat != null && rawLat !== '' ? Number(rawLat) : NaN;
-		const uLng = rawLng != null && rawLng !== '' ? Number(rawLng) : NaN;
-		const radius =
-			typeof radiusKm === 'number' && Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : NaN;
+		const uLat = Number(userLocation?.lat);
+		const uLng = Number(userLocation?.lng);
+		const radius = Number(radiusKm);
 
 		if (!Number.isFinite(uLat) || !Number.isFinite(uLng) || !Number.isFinite(radius)) {
 			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
@@ -265,6 +283,9 @@
 
 	$effect(() => {
 		if (!mapLoaded || !L || !mapInstance) return;
+		const lib = L;
+		const map = mapInstance;
+
 		// Re-render popups when master-data labels arrive.
 		void shelterTypeLabels.data;
 
@@ -272,7 +293,7 @@
 		markersLayer.forEach((marker) => marker.remove());
 		markersLayer = [];
 
-		const bounds = new L.LngLatBounds();
+		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
 
 		// 1. Draw User Location if available
@@ -289,16 +310,16 @@
 					<div style="width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; border: 3px solid white; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0,0,0,0.4); cursor: pointer;"></div>
 				`;
 
-				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
+				const userPopup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
 						${t.yourLocation}
 					</div>
 				`);
 
-				const userMarker = new L.Marker({ element: userEl, anchor: 'center' })
+				const userMarker = new lib.Marker({ element: userEl, anchor: 'center' })
 					.setLngLat([uLng, uLat])
 					.setPopup(userPopup)
-					.addTo(mapInstance);
+					.addTo(map);
 
 				markersLayer.push(userMarker);
 			}
@@ -345,7 +366,7 @@
 					if (dot) dot.style.transform = 'scale(1)';
 				};
 
-				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
+				const popup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
 						<div style="margin-bottom:2px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
@@ -355,10 +376,10 @@
 					</div>
 				`);
 
-				const marker = new L.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
+				const marker = new lib.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
 					.setLngLat(lngLat)
 					.setPopup(popup)
-					.addTo(mapInstance);
+					.addTo(map);
 
 				markersLayer.push(marker);
 			});
@@ -367,10 +388,10 @@
 		if (hasMarkers) {
 			const markerCount = markersLayer.length;
 			if (markerCount === 1) {
-				// We already have bounds, just use bounds with maxZoom
-				mapInstance.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+				const centerLngLat = bounds.getCenter();
+				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 13 });
 			} else {
-				mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+				map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
 			}
 		}
 	});
