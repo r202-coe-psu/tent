@@ -4,6 +4,7 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -35,7 +36,7 @@
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -77,12 +78,12 @@
 			_id: im._id,
 			name: im.name,
 			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
+			unit: im.base_unit || 'ชิ้น',
 			reorder_level: null,
 			perishable: false,
-			target_reserve_days: im.target_reserve_days,
-			consumption_rate: im.consumption_rate,
-			timeframe: im.timeframe
+			target_reserve_days: undefined,
+			consumption_rate: undefined,
+			timeframe: undefined
 		}));
 
 		return [...supplyItems, ...mappedItemMasters];
@@ -429,7 +430,7 @@
 			>
 				<Table.Root class="min-w-[900px] text-xs whitespace-nowrap">
 					<Table.Header class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
-						<Table.Row class="text-[11px] font-bold tracking-wider text-foreground uppercase">
+						<Table.Row class="text-2xs font-bold tracking-wider text-foreground uppercase">
 							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
 							<Table.Head class="p-4">หมวดหมู่</Table.Head>
 							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
@@ -474,16 +475,16 @@
 									<!-- Item name + ID -->
 									<Table.Cell class="p-4 px-5">
 										<div class="flex flex-col gap-1">
-											<span class="text-[14px] font-semibold text-foreground">
+											<span class="text-sm font-semibold text-foreground">
 												{item.name}
 											</span>
 											<div class="flex items-center gap-2">
-												<span class="font-mono text-[11px] text-muted-foreground">
+												<span class="font-mono text-2xs text-muted-foreground">
 													{item._id}
 												</span>
 												{#if item.perishable}
 													<span
-														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400"
+														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-2xs font-bold text-orange-600 dark:text-orange-400"
 													>
 														เน่าเสียได้
 													</span>
@@ -495,7 +496,7 @@
 									<!-- Category badge -->
 									<Table.Cell class="p-4">
 										<span
-											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {getCategoryStyle(
+											class="rounded-md border px-2.5 py-1 text-center text-2xs font-bold whitespace-nowrap {getCategoryStyle(
 												item.category
 											)}"
 										>
@@ -507,7 +508,7 @@
 									<Table.Cell class="p-4 text-center">
 										{#if lot?.note}
 											<span
-												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-[12px] font-medium text-foreground"
+												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground"
 											>
 												📍 {lot.note}
 											</span>
@@ -520,7 +521,7 @@
 									<Table.Cell class="p-4 text-center">
 										{#if lot?.expiry}
 											<span
-												class="rounded-md px-2 py-1 text-[12px] font-bold {expired
+												class="rounded-md px-2 py-1 text-xs font-bold {expired
 													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
 													: expiring
 														? 'border border-orange-500/20 bg-orange-500/10 text-orange-600'
@@ -545,12 +546,10 @@
 														: 'border border-border/60 bg-muted/80 text-foreground'}"
 											>
 												{qty}
-												<span class="text-[11px] font-normal text-muted-foreground"
-													>{item.unit}</span
-												>
+												<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span>
 											</span>
 											{#if item.reorderThreshold !== null}
-												<span class="text-[10px] font-normal text-muted-foreground/60">
+												<span class="text-2xs font-normal text-muted-foreground/60">
 													เกณฑ์: {item.reorderThreshold}
 													{item.unit}
 												</span>
@@ -595,7 +594,7 @@
 												activeModalTab = 'checkin';
 												isManageModalOpen = true;
 											}}
-											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
+											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-xs font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
 										>
 											<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
 										</button>
@@ -662,11 +661,11 @@
 
 		<!-- Timing note -->
 		{#if !isLoading}
-			<p class="mt-3 text-right text-[10px] text-muted-foreground/50">
+			<p class="mt-3 text-right text-2xs text-muted-foreground/50">
 				<Clock class="mr-0.5 inline h-3 w-3" />
 				ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
 			</p>
-			<p class="mt-1 text-right text-[10px] text-muted-foreground/50">
+			<p class="mt-1 text-right text-2xs text-muted-foreground/50">
 				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
 			</p>
 		{/if}

@@ -6,7 +6,7 @@
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
@@ -52,13 +52,12 @@
 	// Get user roles and scoped shelter
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const isSM = $derived(isShelterManager(roles));
 	const userShelterCode = $derived(shelterCodeFromRoles(roles));
 
 	// Filter available shelters based on roles
 	const availableShelters = $derived.by(() => {
 		const allShelters = sheltersQuery.data ?? [];
-		if (isSA || isSM) {
+		if (isSA) {
 			return allShelters;
 		}
 		if (userShelterCode) {
@@ -135,7 +134,7 @@
 					{#if backofficeState.isOffline}
 						<button
 							type="button"
-							class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-600 hover:bg-amber-500/20"
+							class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-2xs font-bold text-amber-600 hover:bg-amber-500/20"
 							onclick={() => (reauthOpen = true)}
 						>
 							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
@@ -143,7 +142,7 @@
 						</button>
 					{:else}
 						<span
-							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600"
+							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-2xs font-bold text-emerald-600"
 						>
 							<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 							Online

@@ -32,7 +32,7 @@
 
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -67,14 +67,16 @@
 		const supplyItems = itemsQuery.data ?? [];
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
-			reorder_level: null,
-			perishable: false
-		}));
+		const mappedItemMasters = itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				_id: im._id,
+				name: im.name,
+				category: im.category || 'other',
+				unit: im.base_unit || 'ชิ้น',
+				reorder_level: null,
+				perishable: false
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
@@ -660,14 +662,14 @@
 						<div class="flex gap-1.5">
 							<button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
 								onclick={() => setQuickExpiry(3)}
 							>
 								+3 วัน
 							</button>
 							<button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
 								onclick={() => setQuickExpiry(7)}
 							>
 								+7 วัน

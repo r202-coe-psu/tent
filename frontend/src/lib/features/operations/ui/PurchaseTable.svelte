@@ -81,7 +81,7 @@
 							<span class="truncate">{purchase.vendor}</span>
 						</div>
 						{#if purchase.note}
-							<p class="mt-0.5 truncate text-[11px] font-normal text-muted-foreground">
+							<p class="mt-0.5 truncate text-2xs font-normal text-muted-foreground">
 								{purchase.note}
 							</p>
 						{/if}

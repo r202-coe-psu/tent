@@ -221,11 +221,11 @@
 							<td class="p-4 pl-5 font-semibold text-foreground">
 								<div class="flex flex-col gap-0.5">
 									<span class="text-sm">{item.name}</span>
-									<span class="font-mono text-[10px] text-muted-foreground">{item._id}</span>
+									<span class="font-mono text-2xs text-muted-foreground">{item._id}</span>
 								</div>
 							</td>
 							<td class="p-4 text-center">
-								<span class="rounded bg-muted px-2 py-0.5 text-[10px] font-bold">
+								<span class="rounded bg-muted px-2 py-0.5 text-2xs font-bold">
 									{SUPPLY_CATEGORY_LABELS[item.category as SupplyCategory] || item.category}
 								</span>
 							</td>

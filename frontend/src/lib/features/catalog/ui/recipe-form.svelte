@@ -1,7 +1,6 @@
 <!-- src/lib/features/catalog/ui/recipe-form.svelte -->
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -24,17 +23,26 @@
 	let {
 		id = '',
 		isEdit = false,
+		basePath = '/back-office/catalog',
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
+		basePath?: string;
 		onsuccess?: () => void;
 	} = $props();
 
-	const itemRecipeQuery = useRecipe(() => id);
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
+
+	const itemRecipeQuery = useRecipe(
+		() => id,
+		() => shelterCode ?? null
+	);
 	const createMutation = useCreateRecipe();
 	const updateMutation = useUpdateRecipe();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -43,7 +51,7 @@
 				ingredients: [{ item_master_id: '', quantity: '1', uom: '' }],
 				standard_portions: '100',
 				standard_duration_hours: '1',
-				is_default: false
+				deactivated: false
 			}
 		}),
 		{
@@ -67,20 +75,38 @@
 						toast.error('ไม่พบข้อมูลมาสเตอร์ต้นทาง');
 						return;
 					}
-					const updatedDoc: Recipe = {
-						...itemRecipeQuery.data,
-						...submitData
-					};
-					updateMutation.mutate(updatedDoc, {
-						onSuccess: () => {
-							toast.success(`ปรับปรุงข้อมูล ${validated.data.label} สำเร็จ`);
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
-					});
+					if (basePath.includes('back-office') && !itemRecipeQuery.data.shelter_code) {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						const { _rev, ...recipeData } = itemRecipeQuery.data;
+						const overrideDoc = {
+							...recipeData,
+							...submitData,
+							shelter_code: shelterCode,
+							override: true
+						};
+						updateMutation.mutate(overrideDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับแต่งสูตรอาหาร ${validated.data.label} สำหรับศูนย์นี้สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					} else {
+						const updatedDoc: Recipe = {
+							...itemRecipeQuery.data,
+							...submitData
+						};
+						updateMutation.mutate(updatedDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับปรุงข้อมูล ${validated.data.label} สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					}
 				} else {
 					createMutation.mutate(
-						{ input: submitData, ctx },
+						{ input: submitData, ctx, shelterCode },
 						{
 							onSuccess: () => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.label} สำเร็จ`);
@@ -102,7 +128,7 @@
 			$formData.ingredients = item.ingredients ? JSON.parse(JSON.stringify(item.ingredients)) : [];
 			$formData.standard_portions = item.standard_portions;
 			$formData.standard_duration_hours = item.standard_duration_hours;
-			$formData.is_default = item.is_default || false;
+			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
 
@@ -189,7 +215,9 @@
 								<ItemSelector
 									bind:value={conv.item_master_id}
 									bind:uom={conv.uom}
-									items={itemMastersQuery.data ?? []}
+									items={(itemMastersQuery.data ?? []).filter(
+										(im) => !im.deactivated || im._id === conv.item_master_id
+									)}
 								/>
 							</div>
 
@@ -294,28 +322,6 @@
 					</Form.Field>
 				</div>
 			</section>
-
-			<div
-				class="flex items-start gap-4 rounded-xl border border-blue-50/50 bg-[#f4f8fc] p-5 dark:border-zinc-800/60 dark:bg-zinc-900/30"
-			>
-				<Checkbox
-					id="is_default"
-					bind:checked={$formData.is_default}
-					class="mt-0.5 h-5 w-5 rounded border-slate-300 data-[state=checked]:border-[#002f6c] data-[state=checked]:bg-[#002f6c]"
-				/>
-				<div class="grid gap-1.5 leading-none">
-					<label
-						for="is_default"
-						class="cursor-pointer text-[13px] font-bold text-slate-800 dark:text-slate-200"
-					>
-						ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
-					</label>
-					<p class="text-[11px] leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
-						เมื่อเลือก
-						ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
-					</p>
-				</div>
-			</div>
 
 			<div class="flex items-center gap-3 pt-2">
 				<Button

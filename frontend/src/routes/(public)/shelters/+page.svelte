@@ -1,5 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	// Icons
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -15,6 +19,7 @@
 		PublicPageShell,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
+	import { BookingModal } from '$lib/features/public-register';
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTERS_I18N } from '$lib/constants/i18n';
@@ -24,6 +29,8 @@
 
 	let liveUserLat = $state('');
 	let liveUserLng = $state('');
+	let bookingOpen = $state(false);
+	let bookingShelterCode = $state('');
 
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 
@@ -41,8 +48,8 @@
 		return R * c;
 	}
 
-	let displayShelters = $derived(
-		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
+	let displayShelters = $derived.by(() => {
+		const mapped = ((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
 			if (liveUserLat && liveUserLng && s?.geo?.lat != null && s?.geo?.lng != null) {
 				const uLat = parseFloat(liveUserLat);
 				const uLng = parseFloat(liveUserLng);
@@ -52,13 +59,44 @@
 				}
 			}
 			return s;
-		})
-	);
+		});
+
+		if (!(liveUserLat && liveUserLng)) return mapped;
+
+		return [...mapped].sort((a, b) => {
+			const da = a.geo ? (a.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			const db = b.geo ? (b.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			return da - db;
+		});
+	});
+
+	let mapRadiusKm = $derived.by(() => {
+		const d = parseFloat(data?.filters?.distance ?? '');
+		return Number.isFinite(d) && d > 0 ? d : undefined;
+	});
 
 	$effect(() => {
 		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
 		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
+
+	function openBooking(shelterCode: string) {
+		bookingShelterCode = shelterCode;
+		bookingOpen = true;
+	}
+
+	/** Map pin / GPS origin → sync filter panel + reload list with radius. */
+	function applySearchOrigin(lat: number, lng: number) {
+		liveUserLat = lat.toFixed(6);
+		liveUserLng = lng.toFixed(6);
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.set('user_lat', liveUserLat);
+		params.set('user_lng', liveUserLng);
+		if (!params.get('distance')) {
+			params.set('distance', data?.filters?.distance || '5');
+		}
+		void goto(resolve(`/shelters?${params.toString()}`), { keepFocus: true, noScroll: true });
+	}
 
 	function getStatusColor(status: string) {
 		switch (status) {
@@ -145,6 +183,8 @@
 					userLocation={liveUserLat && liveUserLng
 						? { lat: liveUserLat, lng: liveUserLng }
 						: undefined}
+					radiusKm={mapRadiusKm}
+					onLocationPick={applySearchOrigin}
 				/>
 			</div>
 		</div>
@@ -165,7 +205,12 @@
 				style="max-height: 700px;"
 			>
 				{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
-					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
+					<PublicShelterCard
+						{shelter}
+						{getStatusColor}
+						{getStatusText}
+						onPreRegister={openBooking}
+					/>
 				{:else}
 					<div
 						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
@@ -179,6 +224,8 @@
 		</div>
 	</div>
 </PublicPageShell>
+
+<BookingModal bind:open={bookingOpen} shelterCode={bookingShelterCode} />
 
 <style>
 	/* Custom scrollbar for the list */

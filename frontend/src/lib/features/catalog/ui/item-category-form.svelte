@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -18,15 +17,24 @@
 	let {
 		id = '',
 		isEdit = false,
+		basePath = '/back-office/catalog',
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
+		basePath?: string;
 		onsuccess?: () => void;
 	} = $props();
 
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
+
 	// 1. Data queries and mutations
-	const categoryQuery = useItemCategory(() => id);
+	const categoryQuery = useItemCategory(
+		() => id,
+		() => shelterCode ?? null
+	);
 	const createMutation = useCreateItemCategory();
 	const updateMutation = useUpdateItemCategory();
 
@@ -47,21 +55,38 @@
 					toast.error('ไม่พบข้อมูลหมวดหมู่ต้นทาง');
 					return;
 				}
-				const updatedDoc = {
-					...categoryQuery.data,
-					name: validated.data.name,
-					is_default: validated.data.is_default
-				};
-				updateMutation.mutate(updatedDoc, {
-					onSuccess: () => {
-						toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-						onsuccess?.();
-					},
-					onError: (err: Error) => toast.error(err.message)
-				});
+				if (basePath.includes('back-office') && !categoryQuery.data.shelter_code) {
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					const { _rev, ...catData } = categoryQuery.data;
+					const overrideDoc = {
+						...catData,
+						name: validated.data.name,
+						shelter_code: shelterCode,
+						override: true
+					};
+					updateMutation.mutate(overrideDoc, {
+						onSuccess: () => {
+							toast.success(`ปรับแต่งหมวดหมู่ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
+							onsuccess?.();
+						},
+						onError: (err: Error) => toast.error(err.message)
+					});
+				} else {
+					const updatedDoc = {
+						...categoryQuery.data,
+						name: validated.data.name
+					};
+					updateMutation.mutate(updatedDoc, {
+						onSuccess: () => {
+							toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
+							onsuccess?.();
+						},
+						onError: (err: Error) => toast.error(err.message)
+					});
+				}
 			} else {
 				createMutation.mutate(
-					{ input: validated.data, ctx },
+					{ input: validated.data, ctx, shelterCode },
 					{
 						onSuccess: () => {
 							toast.success(`เพิ่มหมวดหมู่ ${validated.data.name} สำเร็จ`);
@@ -81,7 +106,6 @@
 	$effect(() => {
 		if (isEdit && categoryQuery.data) {
 			$formData.name = categoryQuery.data.name;
-			$formData.is_default = categoryQuery.data.is_default;
 		}
 	});
 
@@ -123,29 +147,6 @@
 				</Form.Control>
 				<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 			</Form.Field>
-
-			<!-- Field 3: ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option) -->
-			<div
-				class="flex items-start gap-4 rounded-xl border border-blue-50/50 bg-[#f4f8fc] p-5 dark:border-zinc-800/60 dark:bg-zinc-900/30"
-			>
-				<Checkbox
-					id="is_default"
-					bind:checked={$formData.is_default}
-					class="mt-0.5 h-5 w-5 rounded border-slate-300 data-[state=checked]:border-[#002f6c] data-[state=checked]:bg-[#002f6c]"
-				/>
-				<div class="grid gap-1.5 leading-none">
-					<label
-						for="is_default"
-						class="cursor-pointer text-[13px] font-bold text-slate-800 dark:text-slate-200"
-					>
-						ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
-					</label>
-					<p class="text-[11px] leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
-						เมื่อเลือก
-						ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
-					</p>
-				</div>
-			</div>
 		</div>
 
 		<div class="flex items-center gap-3 pt-2">

@@ -452,13 +452,12 @@
 												vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ??
 												need}
 											<span
-												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-medium text-amber-700"
 												>{label}</span
 											>
 										{/each}
 									{:else}
-										<span
-											class="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground"
+										<span class="rounded-full bg-muted px-2.5 py-0.5 text-2xs text-muted-foreground"
 											>ทั่วไป</span
 										>
 									{/if}
@@ -472,7 +471,7 @@
 							<Table.Cell class="text-center">
 								{@const config = statusConfig[e.current_stay.status]}
 								<span
-									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {config?.colorClass ??
+									class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-medium {config?.colorClass ??
 										'border-border bg-muted text-muted-foreground'}"
 								>
 									{config?.label ?? e.current_stay.status}

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -56,6 +57,87 @@ const donation = (over: Doc = {}): Doc => ({
 	...over
 });
 
+const ratios = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1']));
+const stock = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1000']));
+const asOf = '2026-08-17T10:00:00.000Z';
+const resourceInputs = SOP_RATIO_KEYS.map((key) => ({
+	key,
+	kind: SOP_RATIO_KIND[key],
+	ratio: '1',
+	have: '1000'
+}));
+const dailyResults = SOP_RATIO_KEYS.map((key, ordinal) => ({
+	ordinal,
+	key,
+	kind: SOP_RATIO_KIND[key],
+	input_valid: true,
+	ratio: '1',
+	need: '500',
+	have: '1000',
+	gap: '-500',
+	status: 'surplus',
+	data_status: 'complete',
+	as_of: asOf
+}));
+const horizonResults = SOP_RATIO_KEYS.map((key) => ({
+	key,
+	kind: SOP_RATIO_KIND[key],
+	daily_need: '500',
+	horizon_need: '7000',
+	have: '1000',
+	horizon_gap: '6000'
+}));
+const simulationResult = (shelterCode = 'SH001') => ({
+	input: {
+		name: 'Flood 14 days',
+		occupancy: 2000,
+		days: 14,
+		ratio_overrides: {}
+	},
+	snapshot: {
+		shelter_code: shelterCode,
+		as_of: asOf,
+		formula_v: '2.0.0',
+		profile: {
+			effective_id: 'sop_profile:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			effective_version: 1,
+			ratio_source: 'master',
+			base_profile_id: null,
+			override_id: null,
+			override_version: null
+		},
+		current_occupancy: 500,
+		current_ratios: ratios,
+		resource_inputs: resourceInputs,
+		stock_snapshot: stock
+	},
+	current: { occupancy: 500, ratios, daily_results: dailyResults, horizon_results: horizonResults },
+	scenario: {
+		occupancy: 2000,
+		ratios,
+		daily_results: dailyResults,
+		horizon_results: horizonResults
+	},
+	comparison: SOP_RATIO_KEYS.map((key) => ({
+		key,
+		kind: SOP_RATIO_KIND[key],
+		current_ratio: '1',
+		scenario_ratio: '1',
+		ratio_overridden: false,
+		current_daily_need: '500',
+		scenario_daily_need: '500',
+		current_horizon_need: '7000',
+		scenario_horizon_need: '7000',
+		have: '1000',
+		current_horizon_gap: '6000',
+		scenario_horizon_gap: '6000',
+		need_delta: '0',
+		gap_delta: '0',
+		current_data_status: 'complete',
+		scenario_data_status: 'complete'
+	}))
+});
+
 describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
@@ -64,8 +146,116 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'referral'");
 	});
 
+	it('includes catalog-related doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		expect(validateFn).toContain("'item_category'");
+		expect(validateFn).toContain("'item_master'");
+		expect(validateFn).toContain("'recipe'");
+	});
+
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
+	});
+
+	it('allows managers to create/delete immutable simulations and rejects staff or updates', () => {
+		const simulation = {
+			...envelope,
+			schema_v: 1,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			created_by: 'sm',
+			result: simulationResult()
+		};
+		expect(() =>
+			compile()(simulation, null, {
+				name: 'sm',
+				roles: ['shelter:SH001', 'shelter_manager']
+			})
+		).not.toThrow();
+		expectForbidden(
+			() => compile()(simulation, null, REGISTRATION),
+			/Only shelter managers or system admins/
+		);
+		expectForbidden(
+			() =>
+				compile()(simulation, simulation, {
+					name: 'sm',
+					roles: ['shelter:SH001', 'shelter_manager']
+				}),
+			/Saved simulations are immutable/
+		);
+		expect(() =>
+			compile()({ _id: simulation._id, _rev: '1-simulation', _deleted: true }, simulation, {
+				name: 'sm',
+				roles: ['shelter:SH001', 'shelter_manager']
+			})
+		).not.toThrow();
+		expectForbidden(
+			() =>
+				compile()(
+					{ _id: simulation._id, _rev: '1-simulation', _deleted: true },
+					simulation,
+					REGISTRATION
+				),
+			/Only shelter managers or system admins can delete simulations/
+		);
+	});
+
+	it('rejects forged, malformed, or cross-shelter simulation evidence', () => {
+		const valid = {
+			...envelope,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			schema_v: 1,
+			created_by: 'sm',
+			result: simulationResult()
+		};
+		const ctx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
+		expectForbidden(
+			() => compile()({ ...valid, created_by: 'forged' }, null, ctx),
+			/authenticated user/
+		);
+		expectForbidden(() => compile()({ ...valid, result: {} }, null, ctx), /shape is incomplete/);
+		expectForbidden(
+			() => compile()({ ...valid, result: simulationResult('SH002') }, null, ctx),
+			/snapshot shelter/
+		);
+		expectForbidden(
+			() => compile()({ ...valid, _id: 'simulation:not-a-ulid' }, null, ctx),
+			/simulation id/
+		);
+		const badOrder = structuredClone(simulationResult());
+		badOrder.comparison[0].key = SOP_RATIO_KEYS[1];
+		expectForbidden(() => compile()({ ...valid, result: badOrder }, null, ctx), /resource order/);
+		const badOccupancy = structuredClone(simulationResult());
+		badOccupancy.scenario.occupancy = 1999;
+		expectForbidden(
+			() => compile()({ ...valid, result: badOccupancy }, null, ctx),
+			/occupancy evidence/
+		);
+		for (const field of ['as_of', 'formula_v', 'profile', 'stock_snapshot'] as const) {
+			const incomplete = structuredClone(simulationResult());
+			delete (incomplete.snapshot as Record<string, unknown>)[field];
+			expectForbidden(
+				() => compile()({ ...valid, result: incomplete }, null, ctx),
+				/shape is incomplete/
+			);
+		}
+		const badKind = structuredClone(simulationResult());
+		badKind.snapshot.resource_inputs[0].kind = 'divide';
+		expectForbidden(() => compile()({ ...valid, result: badKind }, null, ctx), /resource order/);
+		const missingResultEvidence = structuredClone(simulationResult());
+		delete (missingResultEvidence.comparison[0] as Record<string, unknown>).scenario_data_status;
+		expectForbidden(
+			() => compile()({ ...valid, result: missingResultEvidence }, null, ctx),
+			/resource order/
+		);
+		const extraNestedField = structuredClone(simulationResult());
+		(extraNestedField.snapshot as Record<string, unknown>).unexpected = true;
+		expectForbidden(
+			() => compile()({ ...valid, result: extraNestedField }, null, ctx),
+			/shape is incomplete/
+		);
 	});
 
 	// CR-032: purchase docs are written to shelter dbs, so the server-side

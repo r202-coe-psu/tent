@@ -11,7 +11,9 @@ import {
 } from './queries';
 import {
 	deriveNeedAvailability,
+	forceCutOffNeed,
 	mapNeedItemHeuristic,
+	reopenNeed,
 	type SpecialRequestInput
 } from '../domain/operations';
 import type { NeedItem } from './need-item.types';
@@ -153,54 +155,54 @@ export function useDonationNeedsBoard(options?: {
 		}
 	}
 
-	function toggleCutOff(compoundId: string, itemId: string) {
+	/**
+	 * Force cut-off / restore for one need (T-22, CR-052 §1.6).
+	 *
+	 * `reason` is required when closing and is what lands in the audit entry — the
+	 * domain refuses a blank one, so the board must collect it before calling.
+	 */
+	function toggleCutOff(compoundId: string, itemId: string, reason?: string) {
 		const targetItem = derivedItems.find((i) => i.id === compoundId);
-		if (targetItem) {
-			const campaign = targetItem.campaignDoc;
+		if (!targetItem) return;
 
-			const targetNeed = campaign.needs.find((n) => n.item_id === itemId);
-			const toggledStatus: 'open' | 'closed' = targetNeed?.status === 'closed' ? 'open' : 'closed';
-			const updatedNeeds = campaign.needs.map((need) => {
-				if (need.item_id === itemId) {
-					return {
-						...need,
-						status: toggledStatus
-					};
-				}
-				return need;
-			});
+		const campaign = targetItem.campaignDoc;
+		const isClosing = campaign.needs.find((n) => n.item_id === itemId)?.status !== 'closed';
+		const name = itemDisplayName(itemId);
 
-			const name = itemDisplayName(itemId);
-
-			updateCampaignMutation.mutate(
-				{
-					campaign: {
-						...campaign,
-						needs: updatedNeeds
-					},
-					auditInput: {
-						action: 'manual_adjust',
-						reason:
-							toggledStatus === 'closed'
-								? `เจ้าหน้าที่บังคับปิดรับบริจาคสำหรับพัสดุ: ${name} ในแคมเปญ ${targetItem.title}`
-								: `เจ้าหน้าที่เปิดรับบริจาคพัสดุอีกครั้ง: ${name} ในแคมเปญ ${targetItem.title}`,
-						ctx: ctx
-					}
-				},
-				{
-					onSuccess: () => {
-						toast.success(
-							toggledStatus === 'closed'
-								? `ปิดรับบริจาคสำหรับ "${name}" แล้ว`
-								: `เปิดรับบริจาคสำหรับ "${name}" อีกครั้ง`
-						);
-					},
-					onError: (err) => {
-						toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
-					}
-				}
-			);
+		let updatedCampaign;
+		try {
+			updatedCampaign = isClosing
+				? forceCutOffNeed(campaign, itemId, reason ?? '')
+				: reopenNeed(campaign, itemId);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกสถานะได้');
+			return;
 		}
+
+		updateCampaignMutation.mutate(
+			{
+				campaign: updatedCampaign,
+				auditInput: {
+					action: 'manual_adjust',
+					reason: isClosing
+						? `เจ้าหน้าที่บังคับปิดรับบริจาคสำหรับพัสดุ: ${name} ในแคมเปญ ${targetItem.title} — เหตุผล: ${reason?.trim()}`
+						: `เจ้าหน้าที่เปิดรับบริจาคพัสดุอีกครั้ง: ${name} ในแคมเปญ ${targetItem.title}`,
+					ctx: ctx
+				}
+			},
+			{
+				onSuccess: () => {
+					toast.success(
+						isClosing
+							? `ปิดรับบริจาคสำหรับ "${name}" แล้ว`
+							: `เปิดรับบริจาคสำหรับ "${name}" อีกครั้ง`
+					);
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
+				}
+			}
+		);
 	}
 
 	function handleAddRequest(input: SpecialRequestInput) {

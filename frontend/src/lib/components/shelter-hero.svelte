@@ -3,31 +3,43 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import type { PublicShelterDetail } from '$lib/features/public-portal';
-
-	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+	import {
+		resolveMasterLabel,
+		useShelterTypeLabelMap,
+		type PublicShelterDetail
+	} from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
-	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
+	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
 
-	function translateAdminType(type: string): string {
-		if (langState.current !== 'en') return type;
-		const map: Record<string, string> = {
-			วัด: 'Temple',
-			โรงเรียน: 'School',
-			หน่วยงานราชการ: 'Government Agency',
-			ศูนย์อพยพ: 'Evacuation Center',
-			มหาวิทยาลัย: 'University',
-			มัสยิด: 'Mosque',
-			โบสถ์: 'Church',
-			พื้นที่เอกชน: 'Private Area',
-			อื่นๆ: 'Other',
-			unspecified: 'Unspecified'
-		};
-		return map[type] || type;
-	}
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
+	const shelterTypeLabels = useShelterTypeLabelMap();
+
+	let adminTypeDisplay = $derived.by(() => {
+		const code = shelter.admin_type;
+		if (!code || code === 'unspecified') return '';
+		const legacyEn: Record<string, string> =
+			langState.current === 'en'
+				? {
+						วัด: 'Temple',
+						โรงเรียน: 'School',
+						ศาลาประชาคม: 'Community Hall',
+						ศูนย์กีฬา: 'Sports Centre',
+						อาคารราชการ: 'Government Building',
+						หน่วยงานราชการ: 'Government Agency',
+						ศูนย์อพยพ: 'Evacuation Center',
+						มหาวิทยาลัย: 'University',
+						มัสยิด: 'Mosque',
+						โบสถ์: 'Church',
+						พื้นที่เอกชน: 'Private Area',
+						อื่นๆ: 'Other',
+						unspecified: 'Unspecified'
+					}
+				: {};
+		return resolveMasterLabel(code, shelterTypeLabels.data, legacyEn);
+	});
 </script>
 
 <!-- Hero Card -->
@@ -59,11 +71,11 @@
 				<MapPin class="h-4 w-4 text-warning" />
 				{shelter.address || t.addressNotSpecified}
 			</div>
-			{#if shelter.admin_type && shelter.admin_type !== 'unspecified'}
+			{#if adminTypeDisplay}
 				<span
 					class="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/90"
 				>
-					{translateAdminType(shelter.admin_type)}
+					{adminTypeDisplay}
 				</span>
 			{/if}
 		</div>

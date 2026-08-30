@@ -57,7 +57,7 @@
 						>
 							<div class="flex flex-col">
 								<span class="text-sm">{zone.name || zone.code}</span>
-								<span class="mt-0.5 text-[10px] font-normal text-muted-foreground">
+								<span class="mt-0.5 text-2xs font-normal text-muted-foreground">
 									Code: {zone.code.toUpperCase()}
 									{zone.type ? `| Type: ${zone.type}` : ''}
 								</span>
