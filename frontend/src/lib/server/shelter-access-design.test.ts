@@ -873,4 +873,239 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 	});
+
+	describe('distribution issue doc types access rules (Phase 3B)', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+
+		const validIssue = {
+			_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+			type: 'distribution_issue',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			qty: '1',
+			unit: 'ผืน',
+			distribution_type_snapshot: 'one_time',
+			eligibility_snapshot: {
+				eligible: true,
+				distribution_type: 'one_time',
+				decision: 'first_receipt',
+				had_previous_receipt: false,
+				previous_receipt_count: 0
+			},
+			idempotency_key: 'idem-key-1',
+			distributed_at: '2026-08-31T00:00:00.000Z',
+			distributed_by: 'staff-1'
+		};
+
+		const validIdempotency = {
+			_id: 'distribution_issue_idempotency:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_issue_idempotency',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			idempotency_key: 'idem-key-1',
+			issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			qty: '1'
+		};
+
+		const validCapacity = {
+			_id: 'distribution_issue_capacity:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_issue_capacity',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			item_id: 'item:blanket',
+			pending_claims: [
+				{
+					operation_id: 'op-1',
+					issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+					batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+					item_id: 'item:blanket',
+					qty: '1',
+					claimed_at: '2026-08-31T00:00:00.000Z'
+				}
+			]
+		};
+
+		const validGuard = {
+			_id: 'distribution_one_time_guard:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_one_time_guard',
+			...envelope,
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			pending_claims: [
+				{
+					operation_id: 'op-1',
+					issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+					evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+					item_id: 'item:blanket',
+					claimed_at: '2026-08-31T00:00:00.000Z'
+				}
+			]
+		};
+
+		it('allows registration_staff, shelter_manager, and system_admin to create distribution_issue', () => {
+			expect(() => compile()(validIssue, null, REGISTRATION)).not.toThrow();
+			expect(() => compile()(validIssue, null, MANAGER)).not.toThrow();
+			expect(() => compile()(validIssue, null, ADMIN)).not.toThrow();
+		});
+
+		it('rejects warehouse_staff from creating distribution_issue', () => {
+			expectForbidden(
+				() => compile()(validIssue, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin can write distribution issues/
+			);
+		});
+
+		it('rejects updating an existing distribution_issue (append-only)', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '2' }, validIssue, REGISTRATION),
+				/Cannot update append-only distribution_issue/
+			);
+		});
+
+		it('rejects deleting an existing distribution_issue (append-only)', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, _deleted: true }, validIssue, REGISTRATION),
+				/Cannot delete append-only distribution_issue/
+			);
+		});
+
+		it('rejects type-changing update of distribution_issue', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, type: 'audit' }, validIssue, REGISTRATION),
+				/Cannot update append-only distribution_issue/
+			);
+		});
+
+		it('rejects distribution_issue with invalid positive qty', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '0' }, null, REGISTRATION),
+				/positive qty decimal string/
+			);
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '-1' }, null, REGISTRATION),
+				/positive qty decimal string/
+			);
+		});
+
+		it('rejects distribution_issue with invalid batch_id or evacuee_id prefix', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, batch_id: 'invalid:123' }, null, REGISTRATION),
+				/valid batch_id/
+			);
+			expectForbidden(
+				() => compile()({ ...validIssue, evacuee_id: 'invalid:123' }, null, REGISTRATION),
+				/valid evacuee_id/
+			);
+		});
+
+		it('rejects distribution_issue with invalid eligibility snapshot', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							...validIssue,
+							eligibility_snapshot: {
+								eligible: false,
+								distribution_type: 'one_time',
+								decision: 'repeat_rejected'
+							}
+						},
+						null,
+						REGISTRATION
+					),
+				/eligibility_snapshot is structurally invalid/
+			);
+		});
+
+		it('allows valid repeat override snapshot matching repeat_override_reason', () => {
+			const overrideIssue = {
+				...validIssue,
+				repeat_override_reason: 'lost',
+				eligibility_snapshot: {
+					eligible: true,
+					distribution_type: 'one_time',
+					decision: 'repeat_override',
+					repeat_override_reason: 'lost',
+					had_previous_receipt: true,
+					previous_receipt_count: 1
+				}
+			};
+			expect(() => compile()(overrideIssue, null, REGISTRATION)).not.toThrow();
+
+			const mismatched = {
+				...overrideIssue,
+				repeat_override_reason: 'damaged'
+			};
+			expectForbidden(
+				() => compile()(mismatched, null, REGISTRATION),
+				/repeat_override_reason must match/
+			);
+		});
+
+		it('manages distribution_issue_idempotency and enforces immutability', () => {
+			expect(() => compile()(validIdempotency, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validIdempotency, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			expectForbidden(
+				() => compile()({ ...validIdempotency, qty: '2' }, validIdempotency, REGISTRATION),
+				/Cannot update append-only distribution_issue_idempotency documents/
+			);
+			expectForbidden(
+				() =>
+					compile()({ ...validIdempotency, item_id: 'item:other' }, validIdempotency, REGISTRATION),
+				/Cannot update append-only distribution_issue_idempotency documents/
+			);
+		});
+
+		it('manages distribution_issue_capacity and enforces immutability', () => {
+			expect(() => compile()(validCapacity, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validCapacity, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			const mutated = {
+				...validCapacity,
+				item_id: 'item:other',
+				pending_claims: [
+					{
+						...validCapacity.pending_claims[0],
+						item_id: 'item:other'
+					}
+				]
+			};
+			expectForbidden(
+				() => compile()(mutated, validCapacity, REGISTRATION),
+				/Cannot change item_id on capacity record/
+			);
+		});
+
+		it('manages distribution_one_time_guard and enforces immutability', () => {
+			expect(() => compile()(validGuard, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validGuard, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			const mutated = {
+				...validGuard,
+				evacuee_id: 'evacuee:other',
+				pending_claims: [
+					{
+						...validGuard.pending_claims[0],
+						evacuee_id: 'evacuee:other'
+					}
+				]
+			};
+			expectForbidden(
+				() => compile()(mutated, validGuard, REGISTRATION),
+				/Cannot change evacuee_id on one-time guard/
+			);
+		});
+	});
 });

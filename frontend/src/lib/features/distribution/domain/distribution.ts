@@ -18,6 +18,9 @@ const REQUEST_PREFIX = 'distribution_request:';
 const distributionRequestIdSchema = z.string().regex(/^distribution_request:.+/);
 const distributionBatchIdSchema = z.string().regex(/^distribution_batch:.+/);
 const stockLedgerIdSchema = z.string().regex(/^stock_ledger:.+/);
+export const distributionIssueIdSchema = z
+	.string()
+	.regex(/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/);
 
 const baseDocShape = {
 	_rev: z.string().optional(),
@@ -270,7 +273,7 @@ export const distributionIssueInputSchema = z
 export type DistributionIssueInput = z.input<typeof distributionIssueInputSchema>;
 
 export const distributionIssueDocSchema = distributionIssueInputSchema.safeExtend({
-	_id: z.string().regex(/^distribution_issue:.+/),
+	_id: distributionIssueIdSchema,
 	type: z.literal('distribution_issue'),
 	...baseDocShape,
 	distributed_at: z.string().datetime(),
@@ -336,6 +339,136 @@ export function createStockLotReservation(
 	return stockLotReservationDocSchema.parse(
 		makeDoc('stock_lot_reservation', 1, parsed, ctx, reservationHash)
 	) as StockLotReservation;
+}
+
+export function isDistributionIssue(doc: unknown): doc is DistributionIssue {
+	return (
+		typeof doc === 'object' &&
+		doc !== null &&
+		(doc as DistributionIssue).type === 'distribution_issue' &&
+		typeof (doc as DistributionIssue)._id === 'string' &&
+		(doc as DistributionIssue)._id.startsWith('distribution_issue:')
+	);
+}
+
+export const distributionIssueIdempotencyInputSchema = z.object({
+	batch_id: distributionBatchIdSchema,
+	idempotency_key: z.string().trim().min(1),
+	issue_id: distributionIssueIdSchema,
+	evacuee_id: z.string().regex(/^evacuee:.+/),
+	item_id: z.string().min(1),
+	qty: qtyStrCoercePositiveSchema,
+	repeat_override_reason: repeatOverrideReasonSchema.optional(),
+	repeat_override_note: z.string().trim().min(1).optional()
+});
+export type DistributionIssueIdempotencyInput = z.input<
+	typeof distributionIssueIdempotencyInputSchema
+>;
+
+export const distributionIssueIdempotencyDocSchema = z.object({
+	_id: z.string().regex(/^distribution_issue_idempotency:[0-9a-f]{64}$/),
+	type: z.literal('distribution_issue_idempotency'),
+	...baseDocShape,
+	batch_id: distributionBatchIdSchema,
+	idempotency_key: z.string().trim().min(1),
+	issue_id: distributionIssueIdSchema,
+	evacuee_id: z.string().regex(/^evacuee:.+/),
+	item_id: z.string().min(1),
+	qty: qtyStrCoercePositiveSchema,
+	repeat_override_reason: repeatOverrideReasonSchema.optional(),
+	repeat_override_note: z.string().trim().min(1).optional()
+});
+export type DistributionIssueIdempotency = BaseDoc &
+	z.infer<typeof distributionIssueIdempotencyDocSchema>;
+
+export function createDistributionIssueIdempotency(
+	input: DistributionIssueIdempotencyInput,
+	hash: string,
+	ctx: AuthorContext
+): DistributionIssueIdempotency {
+	const parsed = distributionIssueIdempotencyInputSchema.parse(input);
+	if (!hash.trim()) throw new Error('hash is required');
+	return distributionIssueIdempotencyDocSchema.parse(
+		makeDoc('distribution_issue_idempotency', 1, parsed, ctx, hash)
+	) as DistributionIssueIdempotency;
+}
+
+export const issueCapacityPendingClaimSchema = z.object({
+	operation_id: z.string().min(1),
+	issue_id: distributionIssueIdSchema,
+	batch_id: distributionBatchIdSchema,
+	item_id: z.string().min(1),
+	qty: qtyStrCoercePositiveSchema,
+	claimed_at: z.string().datetime()
+});
+export type IssueCapacityPendingClaim = z.infer<typeof issueCapacityPendingClaimSchema>;
+
+export const distributionIssueCapacityInputSchema = z.object({
+	batch_id: distributionBatchIdSchema,
+	item_id: z.string().min(1),
+	pending_claims: z.array(issueCapacityPendingClaimSchema).default([])
+});
+export type DistributionIssueCapacityInput = z.input<typeof distributionIssueCapacityInputSchema>;
+
+export const distributionIssueCapacityDocSchema = z.object({
+	_id: z.string().regex(/^distribution_issue_capacity:[0-9a-f]{64}$/),
+	type: z.literal('distribution_issue_capacity'),
+	...baseDocShape,
+	batch_id: distributionBatchIdSchema,
+	item_id: z.string().min(1),
+	pending_claims: z.array(issueCapacityPendingClaimSchema)
+});
+export type DistributionIssueCapacity = BaseDoc &
+	z.infer<typeof distributionIssueCapacityDocSchema>;
+
+export function createDistributionIssueCapacity(
+	input: DistributionIssueCapacityInput,
+	hash: string,
+	ctx: AuthorContext
+): DistributionIssueCapacity {
+	const parsed = distributionIssueCapacityInputSchema.parse(input);
+	if (!hash.trim()) throw new Error('hash is required');
+	return distributionIssueCapacityDocSchema.parse(
+		makeDoc('distribution_issue_capacity', 1, parsed, ctx, hash)
+	) as DistributionIssueCapacity;
+}
+
+export const oneTimeGuardPendingClaimSchema = z.object({
+	operation_id: z.string().min(1),
+	issue_id: distributionIssueIdSchema,
+	evacuee_id: z.string().regex(/^evacuee:.+/),
+	item_id: z.string().min(1),
+	claimed_at: z.string().datetime()
+});
+export type OneTimeGuardPendingClaim = z.infer<typeof oneTimeGuardPendingClaimSchema>;
+
+export const distributionOneTimeGuardInputSchema = z.object({
+	evacuee_id: z.string().regex(/^evacuee:.+/),
+	item_id: z.string().min(1),
+	pending_claims: z.array(oneTimeGuardPendingClaimSchema).default([])
+});
+export type DistributionOneTimeGuardInput = z.input<typeof distributionOneTimeGuardInputSchema>;
+
+export const distributionOneTimeGuardDocSchema = z.object({
+	_id: z.string().regex(/^distribution_one_time_guard:[0-9a-f]{64}$/),
+	type: z.literal('distribution_one_time_guard'),
+	...baseDocShape,
+	evacuee_id: z.string().regex(/^evacuee:.+/),
+	item_id: z.string().min(1),
+	pending_claims: z.array(oneTimeGuardPendingClaimSchema).max(1)
+});
+export type DistributionOneTimeGuard = BaseDoc & z.infer<typeof distributionOneTimeGuardDocSchema>;
+
+export function createDistributionOneTimeGuard(
+	input: DistributionOneTimeGuardInput,
+	hash: string,
+	ctx: AuthorContext
+): DistributionOneTimeGuard {
+	const parsed = distributionOneTimeGuardInputSchema.parse(input);
+	if (!hash.trim()) throw new Error('hash is required');
+	return distributionOneTimeGuardDocSchema.parse(
+		makeDoc('distribution_one_time_guard', 1, parsed, ctx, hash)
+	) as DistributionOneTimeGuard;
 }
 
 export const nfiTargetInputSchema = z.object({

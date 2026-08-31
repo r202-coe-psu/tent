@@ -4,8 +4,10 @@ import type {
 	DistributionRequestInput,
 	DistributionRequestStatus,
 	DistributionBatch,
-	DistributionBatchStatus
+	DistributionBatchStatus,
+	DistributionIssue
 } from '../domain/distribution';
+import type { RepeatOverrideReason } from '../domain/eligibility';
 
 export interface DistributionAllocationInput {
 	item_id: string;
@@ -16,6 +18,28 @@ export interface DistributionAllocationInput {
 		note?: string;
 		lot_no?: string;
 		storage_zone?: string;
+	};
+}
+
+export interface CreateDistributionIssueInput {
+	batch_id: string;
+	evacuee_id: string;
+	item_id: string;
+	qty: string;
+	idempotency_key: string;
+	repeat_override_reason?: RepeatOverrideReason;
+	repeat_override_note?: string;
+	distributed_at?: string;
+}
+
+export interface DistributionRecipient {
+	_id: string;
+	first_name: string;
+	last_name: string;
+	nickname?: string;
+	current_stay: {
+		status: 'active';
+		zone: string | null;
 	};
 }
 
@@ -35,4 +59,10 @@ export interface DistributionRepository {
 	): Promise<DistributionRequest>;
 	getBatch(id: string): Promise<DistributionBatch | null>;
 	listBatches(status?: DistributionBatchStatus): Promise<DistributionBatch[]>;
+
+	listActiveRecipients(ctx: AuthorContext, search?: string): Promise<DistributionRecipient[]>;
+	getRecipient(id: string, ctx: AuthorContext): Promise<DistributionRecipient | null>;
+	createIssue(input: CreateDistributionIssueInput, ctx: AuthorContext): Promise<DistributionIssue>;
+	getIssue(id: string): Promise<DistributionIssue | null>;
+	listIssuesByBatch(batchId: string): Promise<DistributionIssue[]>;
 }

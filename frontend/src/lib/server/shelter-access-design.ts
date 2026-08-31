@@ -129,10 +129,11 @@ export function buildValidateDocUpdate(code: string): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
-  // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit
+  // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
     'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
-    'kitchen_requisition', 'meal_service', 'gas_ledger'
+    'kitchen_requisition', 'meal_service', 'gas_ledger', 'distribution_issue',
+    'distribution_issue_idempotency'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
@@ -148,7 +149,10 @@ export function buildValidateDocUpdate(code: string): string {
       }
       return;
     }
-    if (wasAppendOnly) {
+    var protectedCoordinationDelete = oldDoc && [
+      'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard'
+    ].indexOf(oldDoc.type) !== -1;
+    if (wasAppendOnly || protectedCoordinationDelete) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
     }
     return;
@@ -158,8 +162,7 @@ export function buildValidateDocUpdate(code: string): string {
   if (wasAppendOnly) {
     throw { forbidden: 'Cannot update append-only ' + oldDoc.type + ' documents' };
   }
-  var phase3StableTypes = ['distribution_request', 'distribution_batch', 'stock_lot_reservation'];
-  if (oldDoc && phase3StableTypes.indexOf(oldDoc.type) !== -1 && newDoc.type !== oldDoc.type) {
+  if (oldDoc && newDoc.type !== oldDoc.type) {
     throw { forbidden: 'Cannot change type of ' + oldDoc.type + ' document' };
   }
   function require(field) {
@@ -191,7 +194,8 @@ export function buildValidateDocUpdate(code: string): string {
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
-    'distribution_request', 'distribution_batch', 'stock_lot_reservation'
+    'distribution_request', 'distribution_batch', 'stock_lot_reservation',
+    'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -584,6 +588,192 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.lot_ref !== oldDoc.lot_ref) {
         throw { forbidden: 'Cannot change lot_ref on stock_lot_reservation' };
       }
+    }
+  }
+  // 7. distribution_issue role and validation rules (CR-059 Phase 3B)
+  if (newDoc.type === 'distribution_issue') {
+    var isIssueStaff =
+      userCtx.roles.indexOf('registration_staff') !== -1 ||
+      userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isIssueStaff) {
+      throw { forbidden: 'Only registration staff, shelter manager, or system admin can write distribution issues' };
+    }
+    if (typeof newDoc._id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_issue requires valid ULID id distribution_issue:{ulid}' };
+    }
+    if (typeof newDoc.batch_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.batch_id)) {
+      throw { forbidden: 'distribution_issue requires valid batch_id' };
+    }
+    if (typeof newDoc.evacuee_id !== 'string' || !/^evacuee:.+/.test(newDoc.evacuee_id)) {
+      throw { forbidden: 'distribution_issue requires valid evacuee_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'distribution_issue requires non-empty item_id' };
+    }
+    if (typeof newDoc.qty !== 'string' || !/^(?:0\\.(?:0*[1-9]\\d{0,3})|[1-9]\\d*(?:\\.\\d{1,4})?)$/.test(newDoc.qty)) {
+      throw { forbidden: 'distribution_issue requires positive qty decimal string' };
+    }
+    if (typeof newDoc.unit !== 'string' || !newDoc.unit) {
+      throw { forbidden: 'distribution_issue requires non-empty unit' };
+    }
+    if (newDoc.distribution_type_snapshot !== 'consumable' && newDoc.distribution_type_snapshot !== 'one_time') {
+      throw { forbidden: 'distribution_issue requires valid distribution_type_snapshot' };
+    }
+    if (!newDoc.eligibility_snapshot || typeof newDoc.eligibility_snapshot !== 'object') {
+      throw { forbidden: 'distribution_issue requires eligibility_snapshot object' };
+    }
+    var snapshot = newDoc.eligibility_snapshot;
+    if (snapshot.eligible !== true ||
+        snapshot.distribution_type !== newDoc.distribution_type_snapshot ||
+        typeof snapshot.had_previous_receipt !== 'boolean' ||
+        typeof snapshot.previous_receipt_count !== 'number' ||
+        snapshot.previous_receipt_count < 0 ||
+        Math.floor(snapshot.previous_receipt_count) !== snapshot.previous_receipt_count ||
+        snapshot.had_previous_receipt !== (snapshot.previous_receipt_count > 0)) {
+      throw { forbidden: 'distribution_issue eligibility_snapshot is structurally invalid' };
+    }
+    var issueReason = newDoc.repeat_override_reason;
+    var snapshotReason = snapshot.repeat_override_reason;
+    if (issueReason !== snapshotReason) {
+      throw { forbidden: 'distribution_issue repeat_override_reason must match eligibility_snapshot' };
+    }
+    if (newDoc.distribution_type_snapshot === 'consumable') {
+      if (snapshot.decision !== 'consumable' || issueReason) throw { forbidden: 'Invalid consumable eligibility snapshot' };
+    } else if (snapshot.decision === 'first_receipt') {
+      if (snapshot.had_previous_receipt || snapshot.previous_receipt_count !== 0 || issueReason) throw { forbidden: 'Invalid first_receipt eligibility snapshot' };
+    } else if (snapshot.decision === 'repeat_override') {
+      if (!snapshot.had_previous_receipt || snapshot.previous_receipt_count <= 0 ||
+          (issueReason !== 'lost' && issueReason !== 'damaged')) throw { forbidden: 'Invalid repeat_override eligibility snapshot' };
+    } else {
+      throw { forbidden: 'distribution_issue eligibility_snapshot decision is invalid' };
+    }
+    if (typeof newDoc.idempotency_key !== 'string' || !newDoc.idempotency_key) {
+      throw { forbidden: 'distribution_issue requires non-empty idempotency_key' };
+    }
+    if (typeof newDoc.distributed_by !== 'string' || !newDoc.distributed_by) {
+      throw { forbidden: 'distribution_issue requires non-empty distributed_by' };
+    }
+  }
+  // 8. distribution_issue_idempotency role and validation rules (CR-059 Phase 3B)
+  if (newDoc.type === 'distribution_issue_idempotency') {
+    var isIssueStaffIdem =
+      userCtx.roles.indexOf('registration_staff') !== -1 ||
+      userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isIssueStaffIdem) {
+      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue idempotency' };
+    }
+    if (typeof newDoc._id !== 'string' || !/^distribution_issue_idempotency:[0-9a-f]{64}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_issue_idempotency requires deterministic SHA-256 id' };
+    }
+    if (typeof newDoc.batch_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.batch_id)) {
+      throw { forbidden: 'distribution_issue_idempotency requires valid batch_id' };
+    }
+    if (typeof newDoc.idempotency_key !== 'string' || !newDoc.idempotency_key) {
+      throw { forbidden: 'distribution_issue_idempotency requires non-empty idempotency_key' };
+    }
+    if (typeof newDoc.issue_id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.issue_id)) {
+      throw { forbidden: 'distribution_issue_idempotency requires valid issue_id' };
+    }
+    if (typeof newDoc.evacuee_id !== 'string' || !/^evacuee:.+/.test(newDoc.evacuee_id)) {
+      throw { forbidden: 'distribution_issue_idempotency requires valid evacuee_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'distribution_issue_idempotency requires non-empty item_id' };
+    }
+    if (typeof newDoc.qty !== 'string' || !/^(?:0\\.(?:0*[1-9]\\d{0,3})|[1-9]\\d*(?:\\.\\d{1,4})?)$/.test(newDoc.qty)) {
+      throw { forbidden: 'distribution_issue_idempotency requires positive qty decimal string' };
+    }
+    if (oldDoc) {
+      throw { forbidden: 'distribution_issue_idempotency is immutable after creation' };
+    }
+  }
+  // 9. distribution_issue_capacity role and validation rules (CR-059 Phase 3B)
+  if (newDoc.type === 'distribution_issue_capacity') {
+    var isIssueStaffCap =
+      userCtx.roles.indexOf('registration_staff') !== -1 ||
+      userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isIssueStaffCap) {
+      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue capacity' };
+    }
+    if (typeof newDoc._id !== 'string' || !/^distribution_issue_capacity:[0-9a-f]{64}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_issue_capacity requires deterministic SHA-256 id' };
+    }
+    if (typeof newDoc.batch_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.batch_id)) {
+      throw { forbidden: 'distribution_issue_capacity requires valid batch_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'distribution_issue_capacity requires non-empty item_id' };
+    }
+    if (!Array.isArray(newDoc.pending_claims)) {
+      throw { forbidden: 'distribution_issue_capacity pending_claims must be an array' };
+    }
+    for (var capIndex = 0; capIndex < newDoc.pending_claims.length; capIndex++) {
+      var capClaim = newDoc.pending_claims[capIndex];
+      if (!capClaim || typeof capClaim.operation_id !== 'string' || !capClaim.operation_id ||
+          typeof capClaim.issue_id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(capClaim.issue_id) ||
+          typeof capClaim.batch_id !== 'string' || capClaim.batch_id !== newDoc.batch_id ||
+          typeof capClaim.item_id !== 'string' || capClaim.item_id !== newDoc.item_id ||
+          typeof capClaim.qty !== 'string' || !/^(?:0\\.(?:0*[1-9]\\d{0,3})|[1-9]\\d*(?:\\.\\d{1,4})?)$/.test(capClaim.qty) ||
+          typeof capClaim.claimed_at !== 'string' || isNaN(Date.parse(capClaim.claimed_at))) {
+        throw { forbidden: 'distribution_issue_capacity contains invalid pending claim' };
+      }
+      for (var priorCapIndex = 0; priorCapIndex < capIndex; priorCapIndex++) {
+        if (newDoc.pending_claims[priorCapIndex].operation_id === capClaim.operation_id) {
+          throw { forbidden: 'distribution_issue_capacity cannot contain duplicate operation_id' };
+        }
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.batch_id !== oldDoc.batch_id) throw { forbidden: 'Cannot change batch_id on capacity record' };
+      if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on capacity record' };
+    }
+  }
+  // 10. distribution_one_time_guard role and validation rules (CR-059 Phase 3B)
+  if (newDoc.type === 'distribution_one_time_guard') {
+    var isIssueStaffGuard =
+      userCtx.roles.indexOf('registration_staff') !== -1 ||
+      userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isIssueStaffGuard) {
+      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage one-time guard' };
+    }
+    if (typeof newDoc._id !== 'string' || !/^distribution_one_time_guard:[0-9a-f]{64}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_one_time_guard requires deterministic SHA-256 id' };
+    }
+    if (typeof newDoc.evacuee_id !== 'string' || !/^evacuee:.+/.test(newDoc.evacuee_id)) {
+      throw { forbidden: 'distribution_one_time_guard requires valid evacuee_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'distribution_one_time_guard requires non-empty item_id' };
+    }
+    if (!Array.isArray(newDoc.pending_claims)) {
+      throw { forbidden: 'distribution_one_time_guard pending_claims must be an array' };
+    }
+    if (newDoc.pending_claims.length > 1) {
+      throw { forbidden: 'distribution_one_time_guard permits at most one pending claim' };
+    }
+    for (var guardIndex = 0; guardIndex < newDoc.pending_claims.length; guardIndex++) {
+      var guardClaim = newDoc.pending_claims[guardIndex];
+      if (!guardClaim || typeof guardClaim.operation_id !== 'string' || !guardClaim.operation_id ||
+          typeof guardClaim.issue_id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(guardClaim.issue_id) ||
+          typeof guardClaim.evacuee_id !== 'string' || guardClaim.evacuee_id !== newDoc.evacuee_id ||
+          typeof guardClaim.item_id !== 'string' || guardClaim.item_id !== newDoc.item_id ||
+          typeof guardClaim.claimed_at !== 'string' || isNaN(Date.parse(guardClaim.claimed_at))) {
+        throw { forbidden: 'distribution_one_time_guard contains invalid pending claim' };
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.evacuee_id !== oldDoc.evacuee_id) throw { forbidden: 'Cannot change evacuee_id on one-time guard' };
+      if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on one-time guard' };
     }
   }
 }`;

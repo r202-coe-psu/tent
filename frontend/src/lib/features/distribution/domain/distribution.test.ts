@@ -184,9 +184,9 @@ describe('distribution issue and reservation contracts', () => {
 				idempotency_key: 'device-operation-1'
 			},
 			ctx,
-			'ISSUE1'
+			'01JABCDEFGHJKMNPQRSTVWXYZ0'
 		);
-		expect(issue._id).toBe('distribution_issue:ISSUE1');
+		expect(issue._id).toBe('distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0');
 		expect(issue.distributed_by).toBe(ctx.createdBy);
 		expect(issue.idempotency_key).toBe('device-operation-1');
 	});

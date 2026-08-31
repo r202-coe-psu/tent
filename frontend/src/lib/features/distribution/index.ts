@@ -21,6 +21,18 @@ export {
 	distributionIssueInputSchema,
 	distributionIssueDocSchema,
 	createDistributionIssue,
+	isDistributionIssue,
+	distributionIssueIdempotencyInputSchema,
+	distributionIssueIdempotencyDocSchema,
+	createDistributionIssueIdempotency,
+	issueCapacityPendingClaimSchema,
+	distributionIssueCapacityInputSchema,
+	distributionIssueCapacityDocSchema,
+	createDistributionIssueCapacity,
+	oneTimeGuardPendingClaimSchema,
+	distributionOneTimeGuardInputSchema,
+	distributionOneTimeGuardDocSchema,
+	createDistributionOneTimeGuard,
 	stockLotPendingClaimSchema,
 	stockLotReservationInputSchema,
 	stockLotReservationDocSchema,
@@ -38,6 +50,14 @@ export {
 	type DistributionBatch,
 	type DistributionIssueInput,
 	type DistributionIssue,
+	type DistributionIssueIdempotencyInput,
+	type DistributionIssueIdempotency,
+	type IssueCapacityPendingClaim,
+	type DistributionIssueCapacityInput,
+	type DistributionIssueCapacity,
+	type OneTimeGuardPendingClaim,
+	type DistributionOneTimeGuardInput,
+	type DistributionOneTimeGuard,
 	type StockLotPendingClaim,
 	type StockLotReservationInput,
 	type StockLotReservation,
@@ -69,6 +89,8 @@ export {
 
 export {
 	type DistributionAllocationInput,
+	type CreateDistributionIssueInput,
+	type DistributionRecipient,
 	type DistributionRepository
 } from './data/distribution.repository';
 
@@ -79,7 +101,16 @@ export {
 	ApprovalConflictError,
 	InsufficientStockError,
 	ValidationError,
+	IssueConflictError,
+	IssueCapacityError,
+	RecipientNotActiveError,
+	DistributionEligibilityError,
 	makeLotReservationDocId,
+	makeIssueIdempotencyDocId,
+	makeIssueCapacityDocId,
+	makeOneTimeGuardDocId,
 	assertSemanticLedgerMatch,
-	assertSemanticBatchMatch
+	assertSemanticBatchMatch,
+	assertSemanticIdempotencyMatch,
+	assertSemanticIssueMatch
 } from './data/semantic-verify';
