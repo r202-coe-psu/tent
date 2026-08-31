@@ -9,13 +9,15 @@ type QueryDefinition = {
 
 type MutationDefinition = {
 	mutationFn: (variables: unknown) => Promise<unknown>;
-	onSuccess: (data: unknown, variables: unknown) => void;
+	onSuccess?: (data: unknown, variables: unknown) => void;
+	onError?: (error: unknown, variables: unknown) => void;
 };
 
 const mocks = vi.hoisted(() => ({
 	listRequests: vi.fn(),
 	createRequest: vi.fn(),
 	cancelRequest: vi.fn(),
+	approveRequest: vi.fn(),
 	invalidateQueries: vi.fn(),
 	query: null as QueryDefinition | null,
 	mutation: null as MutationDefinition | null
@@ -29,11 +31,19 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 	}
 }));
 
+vi.mock('$lib/features/operations', () => ({
+	operationsKeys: {
+		ledger: () => ['operations', 'ledger'],
+		stockLedgers: () => ['operations', 'stockLedgers']
+	}
+}));
+
 vi.mock('../data/distribution.remote', () => ({
 	DistributionRemoteRepository: class {
 		listRequests = mocks.listRequests;
 		createRequest = mocks.createRequest;
 		cancelRequest = mocks.cancelRequest;
+		approveRequest = mocks.approveRequest;
 	}
 }));
 
@@ -51,6 +61,7 @@ vi.mock('@tanstack/svelte-query', () => ({
 
 import {
 	distributionKeys,
+	useApproveDistributionRequest,
 	useCancelDistributionRequest,
 	useCreateDistributionRequest,
 	useDistributionRequests
@@ -96,7 +107,7 @@ describe('Distribution Phase 4A queries', () => {
 		mocks.cancelRequest.mockResolvedValue({ _id: variables.requestId, status: 'cancelled' });
 
 		const result = await mutation!.mutationFn(variables);
-		mutation!.onSuccess(result, variables);
+		mutation!.onSuccess?.(result, variables);
 
 		expect(mocks.cancelRequest).toHaveBeenCalledWith(variables.requestId, variables.ctx);
 		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
@@ -168,7 +179,7 @@ describe('Distribution Phase 4B create mutation', () => {
 		mocks.createRequest.mockResolvedValue(createdRequest);
 
 		const result = await mutation!.mutationFn(variables);
-		mutation!.onSuccess(result, variables);
+		mutation!.onSuccess?.(result, variables);
 
 		expect(mocks.createRequest).toHaveBeenCalledWith(variables.input, variables.ctx);
 		expect(mocks.invalidateQueries).toHaveBeenCalledTimes(1);
@@ -202,5 +213,121 @@ describe('Distribution Phase 4B create mutation', () => {
 			'Validation error: items required'
 		);
 		expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+	});
+});
+
+describe('Distribution Phase 4C approve mutation', () => {
+	it('calls approveRequest with requestId, allocations, and ctx, and invalidates related caches on success', async () => {
+		useApproveDistributionRequest();
+		const mutation = mocks.mutation;
+		expect(mutation).not.toBeNull();
+
+		const variables = {
+			requestId: 'distribution_request:01J8F2REQ111',
+			allocations: [
+				{
+					item_id: 'item_blanket',
+					lot_ref: 'stock_ledger:01J8LOT001',
+					qty: '50'
+				}
+			],
+			ctx: {
+				shelterCode: 'SH001',
+				createdBy: 'warehouse_user',
+				roles: ['warehouse_staff']
+			}
+		};
+
+		const approvedBatch = {
+			_id: 'distribution_batch:01J8F2REQ111',
+			type: 'distribution_batch',
+			request_id: variables.requestId,
+			status: 'active',
+			shelter_code: 'SH001',
+			created_by: 'warehouse_user',
+			activated_by: 'warehouse_user',
+			activated_at: '2026-09-01T00:00:00.000Z',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			schema_v: 1,
+			items: [],
+			allocations: [],
+			reconciliation: [],
+			return_ledger_ids: []
+		};
+		mocks.approveRequest.mockResolvedValue(approvedBatch);
+
+		const result = await mutation!.mutationFn(variables);
+		mutation!.onSuccess?.(result, variables);
+
+		expect(mocks.approveRequest).toHaveBeenCalledWith(
+			variables.requestId,
+			variables.allocations,
+			variables.ctx
+		);
+
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.requests('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.request('SH001', variables.requestId)
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.batches('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: ['operations', 'ledger']
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: ['operations', 'stockLedgers']
+		});
+	});
+
+	it('propagates failure and invalidates requests, batches, and stock ledgers for authoritative reread on error', async () => {
+		useApproveDistributionRequest();
+		const mutation = mocks.mutation;
+		expect(mutation).not.toBeNull();
+
+		const variables = {
+			requestId: 'distribution_request:01J8F2REQ111',
+			allocations: [
+				{
+					item_id: 'item_blanket',
+					lot_ref: 'stock_ledger:01J8LOT001',
+					qty: '50'
+				}
+			],
+			ctx: {
+				shelterCode: 'SH001',
+				createdBy: 'warehouse_user',
+				roles: ['warehouse_staff']
+			}
+		};
+
+		const err = new Error('Forward-commit boundary conflict: check request status');
+		mocks.approveRequest.mockRejectedValue(err);
+
+		await expect(mutation!.mutationFn(variables)).rejects.toThrow(
+			'Forward-commit boundary conflict: check request status'
+		);
+
+		// Trigger onError handler as TanStack Query does upon mutationFn rejection
+		mutation!.onError?.(err, variables);
+
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.requests('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.request('SH001', variables.requestId)
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.batches('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: ['operations', 'ledger']
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: ['operations', 'stockLedgers']
+		});
 	});
 });

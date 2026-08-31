@@ -645,6 +645,18 @@ function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): num
 }
 
 /**
+ * Sorts physical stock lots in canonical FEFO/FIFO consumption order:
+ * 1. Earliest expiry date first (lots with expiry before lots without expiry)
+ * 2. Earliest receipt time (occurred_at / received_at)
+ * 3. lot_ref ascending deterministic tie-breaker
+ */
+export function sortStockLotsByConsumptionOrder(
+	lots: readonly StockLotBalance[]
+): StockLotBalance[] {
+	return [...lots].sort(compareLotConsumptionOrder);
+}
+
+/**
  * Project exact per-lot balances from ledger history. Explicit `lot_ref` rows
  * target that physical lot. A legacy inbound row uses its own `_id` as a
  * virtual reference; a legacy outbound row consumes eligible lots FEFO, then

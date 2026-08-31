@@ -27,6 +27,7 @@ import {
 	createDistributionReturnEntry,
 	distributionReturnInputSchema,
 	projectStockLotBalances,
+	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
 	createPurchase,
 	keyPurchaseReceipt,
@@ -1720,5 +1721,78 @@ describe('projectStockLotBalances', () => {
 				legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')
 			])
 		).toThrow(StockLotIntegrityError);
+	});
+});
+
+describe('sortStockLotsByConsumptionOrder', () => {
+	it('sorts expiring lots before non-expiring lots, and earliest expiry first', () => {
+		const lots = [
+			{
+				lot_ref: 'stock_ledger:NO-EXPIRY',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				received_at: '2026-01-01T00:00:00Z'
+			},
+			{
+				lot_ref: 'stock_ledger:LATER',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				lot: { expiry: '2026-12-31' },
+				received_at: '2026-01-02T00:00:00Z'
+			},
+			{
+				lot_ref: 'stock_ledger:SOONER',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				lot: { expiry: '2026-06-30' },
+				received_at: '2026-01-03T00:00:00Z'
+			}
+		];
+
+		const sorted = sortStockLotsByConsumptionOrder(lots);
+		expect(sorted.map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:SOONER',
+			'stock_ledger:LATER',
+			'stock_ledger:NO-EXPIRY'
+		]);
+	});
+
+	it('uses received_at FIFO and lot_ref as tie-breakers when expiry matches', () => {
+		const lots = [
+			{
+				lot_ref: 'stock_ledger:B',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				lot: { expiry: '2026-06-30' },
+				received_at: '2026-01-02T00:00:00Z'
+			},
+			{
+				lot_ref: 'stock_ledger:A',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				lot: { expiry: '2026-06-30' },
+				received_at: '2026-01-02T00:00:00Z'
+			},
+			{
+				lot_ref: 'stock_ledger:EARLIER-RECEIPT',
+				item_id: 'item:water',
+				unit: 'bottle',
+				qty: '10',
+				lot: { expiry: '2026-06-30' },
+				received_at: '2026-01-01T00:00:00Z'
+			}
+		];
+
+		const sorted = sortStockLotsByConsumptionOrder(lots);
+		expect(sorted.map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:EARLIER-RECEIPT',
+			'stock_ledger:A',
+			'stock_ledger:B'
+		]);
 	});
 });

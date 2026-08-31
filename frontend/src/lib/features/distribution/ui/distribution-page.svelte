@@ -6,13 +6,20 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import SearchX from '@lucide/svelte/icons/search-x';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { hasStaffCapability, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import {
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin,
+		isWarehouseStaff
+	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
+	import type { DistributionRequest } from '../domain/distribution';
 	import { useDistributionRequests } from '../application/queries';
 	import RequestFilters from './request-filters.svelte';
 	import RequestStatsHeader from './request-stats-header.svelte';
 	import RequestTable from './request-table.svelte';
 	import CreateRequestDialog from './create-request-dialog.svelte';
+	import ApprovalDialog from './approval-dialog.svelte';
 	import { filterDistributionRequests, type RequestStatusFilter } from './request-ui';
 
 	const userRoles = $derived(authStore.user?.roles ?? []);
@@ -21,8 +28,11 @@
 			isShelterManager(userRoles) ||
 			hasStaffCapability(userRoles, 'registration_staff')
 	);
+	const canApprove = $derived(isSystemAdmin(userRoles) || isWarehouseStaff(userRoles));
 
 	let isCreateOpen = $state(false);
+	let isApprovalOpen = $state(false);
+	let approvingRequest = $state<DistributionRequest | null>(null);
 
 	const requestQuery = useDistributionRequests(
 		() => undefined,
@@ -35,6 +45,16 @@
 	const filteredRequests = $derived(filterDistributionRequests(requests, search, status));
 
 	const hasFilters = $derived(status !== 'all' || search.trim().length > 0);
+
+	function handleOpenApproval(req: DistributionRequest) {
+		approvingRequest = req;
+		isApprovalOpen = true;
+	}
+
+	function handleApprovalSuccess() {
+		isApprovalOpen = false;
+		approvingRequest = null;
+	}
 </script>
 
 <main class="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
@@ -60,6 +80,17 @@
 
 	{#if canCreateRequest}
 		<CreateRequestDialog bind:open={isCreateOpen} />
+	{/if}
+
+	{#if canApprove}
+		<ApprovalDialog
+			bind:open={isApprovalOpen}
+			request={approvingRequest}
+			onSuccess={handleApprovalSuccess}
+			onClose={() => {
+				approvingRequest = null;
+			}}
+		/>
 	{/if}
 
 	{#if requestQuery.isLoading}
@@ -108,7 +139,7 @@
 						</div>
 					</div>
 				{:else}
-					<RequestTable requests={filteredRequests} />
+					<RequestTable requests={filteredRequests} {canApprove} onApprove={handleOpenApproval} />
 				{/if}
 			</Card.Content>
 		</Card.Root>

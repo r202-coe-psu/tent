@@ -1,10 +1,18 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import type { DistributionRequest, DistributionRequestStatus } from '../domain/distribution';
 	import { distributionRequestStatusLabels } from './request-ui';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 
-	let { requests }: { requests: DistributionRequest[] } = $props();
+	interface Props {
+		requests: DistributionRequest[];
+		canApprove?: boolean;
+		onApprove?: (request: DistributionRequest) => void;
+	}
+
+	let { requests, canApprove = false, onApprove }: Props = $props();
 
 	const badgeClasses: Record<DistributionRequestStatus, string> = {
 		pending:
@@ -40,6 +48,9 @@
 			<Table.Head class="text-center">รายการ</Table.Head>
 			<Table.Head>วันที่ขอ</Table.Head>
 			<Table.Head>สถานะ</Table.Head>
+			{#if canApprove}
+				<Table.Head class="text-right">การดำเนินการ</Table.Head>
+			{/if}
 		</Table.Row>
 	</Table.Header>
 	<Table.Body>
@@ -61,6 +72,24 @@
 						{distributionRequestStatusLabels[request.status]}
 					</Badge>
 				</Table.Cell>
+				{#if canApprove}
+					<Table.Cell class="text-right">
+						{#if request.status === 'pending'}
+							<Button
+								size="sm"
+								class="bg-brand-600 hover:bg-brand-700 h-7 gap-1 text-xs font-bold text-white"
+								onclick={() => onApprove?.(request)}
+							>
+								<CheckCircle2 class="size-3.5" />
+								อนุมัติ
+							</Button>
+						{:else if request.status === 'approving'}
+							<span class="text-[11px] font-medium text-blue-700">กำลังดำเนินการ</span>
+						{:else}
+							<span class="text-xs text-muted-foreground">-</span>
+						{/if}
+					</Table.Cell>
+				{/if}
 			</Table.Row>
 		{/each}
 	</Table.Body>
