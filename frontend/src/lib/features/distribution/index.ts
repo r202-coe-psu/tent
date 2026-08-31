@@ -97,6 +97,14 @@ export {
 export { DistributionRemoteRepository } from './data/distribution.remote';
 
 export {
+	distributionKeys,
+	useDistributionRequests,
+	useCancelDistributionRequest
+} from './application/queries';
+
+export { default as DistributionPage } from './ui/distribution-page.svelte';
+
+export {
 	IntegrityError,
 	ApprovalConflictError,
 	InsufficientStockError,

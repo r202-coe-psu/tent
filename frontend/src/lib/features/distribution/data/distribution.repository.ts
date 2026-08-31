@@ -45,8 +45,12 @@ export interface DistributionRecipient {
 
 export interface DistributionRepository {
 	createRequest(input: DistributionRequestInput, ctx: AuthorContext): Promise<DistributionRequest>;
-	getRequest(id: string): Promise<DistributionRequest | null>;
-	listRequests(status?: DistributionRequestStatus): Promise<DistributionRequest[]>;
+	getRequest(id: string, ctx: AuthorContext): Promise<DistributionRequest | null>;
+	listRequests(
+		status: DistributionRequestStatus | undefined,
+		ctx: AuthorContext
+	): Promise<DistributionRequest[]>;
+	cancelRequest(requestId: string, ctx: AuthorContext): Promise<DistributionRequest>;
 	approveRequest(
 		requestId: string,
 		allocations: DistributionAllocationInput[],
@@ -57,8 +61,11 @@ export interface DistributionRepository {
 		reason: string,
 		ctx: AuthorContext
 	): Promise<DistributionRequest>;
-	getBatch(id: string): Promise<DistributionBatch | null>;
-	listBatches(status?: DistributionBatchStatus): Promise<DistributionBatch[]>;
+	getBatch(id: string, ctx: AuthorContext): Promise<DistributionBatch | null>;
+	listBatches(
+		status: DistributionBatchStatus | undefined,
+		ctx: AuthorContext
+	): Promise<DistributionBatch[]>;
 
 	listActiveRecipients(ctx: AuthorContext, search?: string): Promise<DistributionRecipient[]>;
 	getRecipient(id: string, ctx: AuthorContext): Promise<DistributionRecipient | null>;

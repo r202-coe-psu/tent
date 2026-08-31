@@ -14,6 +14,7 @@ import {
 	Warehouse,
 	Calculator,
 	HandHeart,
+	PackageCheck,
 	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
@@ -28,6 +29,7 @@ type Leaf = {
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
+	visibleToRoles?: readonly string[];
 };
 
 type Group = Leaf & {
@@ -89,6 +91,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ShoppingCart
 					}
 				]
+			},
+			{
+				label: 'จัดการคำร้องเบิกจ่าย',
+				href: resolve('/back-office/distribution'),
+				icon: PackageCheck,
+				visibleToRoles: ['system_admin', 'shelter_manager', 'warehouse_staff', 'registration_staff']
 			},
 			{
 				label: 'ครัวกลางและอาหาร',

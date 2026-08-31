@@ -512,6 +512,31 @@ export function buildValidateDocUpdate(code: string): string {
       if (fromStatus === 'pending' && toStatus === 'pending' && !isRequestEditor) {
         throw { forbidden: 'Only authorized request editors can edit pending distribution requests' };
       }
+      if (fromStatus === 'pending' && toStatus === 'cancelled') {
+        if (!isRequestEditor) {
+          throw { forbidden: 'Only authorized request editors can cancel distribution requests' };
+        }
+        if (newDoc.created_by !== oldDoc.created_by ||
+            newDoc.created_at !== oldDoc.created_at ||
+            newDoc.requested_by !== oldDoc.requested_by ||
+            newDoc.requested_at !== oldDoc.requested_at ||
+            newDoc.purpose !== oldDoc.purpose ||
+            newDoc.note !== oldDoc.note ||
+            newDoc.active_headcount_snapshot !== oldDoc.active_headcount_snapshot ||
+            newDoc.buffer_percent !== oldDoc.buffer_percent ||
+            JSON.stringify(newDoc.items) !== JSON.stringify(oldDoc.items)) {
+          throw { forbidden: 'Cannot modify request content or provenance while cancelling distribution_request' };
+        }
+        if (typeof newDoc.approval_operation_id !== 'undefined' ||
+            typeof newDoc.approved_by !== 'undefined' ||
+            typeof newDoc.approved_at !== 'undefined' ||
+            typeof newDoc.batch_id !== 'undefined' ||
+            typeof newDoc.rejected_by !== 'undefined' ||
+            typeof newDoc.rejected_at !== 'undefined' ||
+            typeof newDoc.rejection_reason !== 'undefined') {
+          throw { forbidden: 'Cannot inject approval or rejection metadata while cancelling distribution_request' };
+        }
+      }
       if ((toStatus === 'approving' || toStatus === 'approved' || toStatus === 'rejected' || (fromStatus === 'approving' && toStatus === 'pending')) && !isWarehouseOrAdminReq) {
         throw { forbidden: 'Only warehouse staff or system admin can approve or reject distribution requests' };
       }

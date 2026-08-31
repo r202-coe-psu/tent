@@ -106,7 +106,11 @@ import {
 	parseStockLedger,
 	type StockLedger
 } from '$lib/features/operations/domain/operations';
-import { createStockLotReservation, stockLotReservationDocSchema } from '../domain/distribution';
+import {
+	createDistributionBatch,
+	createStockLotReservation,
+	stockLotReservationDocSchema
+} from '../domain/distribution';
 import {
 	ApprovalConflictError,
 	InsufficientStockError,
@@ -136,17 +140,36 @@ const managerCtx: AuthorContext = {
 	createdBy: 'mgr_dave',
 	roles: ['shelter_manager']
 };
+const kitchenCtx: AuthorContext = {
+	shelterCode: 'SH001',
+	createdBy: 'kitchen_erin',
+	roles: ['kitchen_staff']
+};
+
+class Phase3TestRepository extends DistributionRemoteRepository {
+	async getRequest(id: string) {
+		return super.getRequest(id, adminCtx);
+	}
+
+	async getBatch(id: string) {
+		return super.getBatch(id, adminCtx);
+	}
+
+	async listBatches(status?: Parameters<DistributionRemoteRepository['listBatches']>[0]) {
+		return super.listBatches(status, adminCtx);
+	}
+}
 
 const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
 describe('DistributionRemoteRepository (Phase 3A)', () => {
-	let repo: DistributionRemoteRepository;
+	let repo: Phase3TestRepository;
 
 	beforeEach(() => {
 		store = new Map();
 		revCounters = new Map();
 		beforeStrictWrite = undefined;
-		repo = new DistributionRemoteRepository('shelter_sh001');
+		repo = new Phase3TestRepository('shelter_sh001');
 	});
 
 	async function seedInboundLot(
@@ -2596,5 +2619,173 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 				1
 			);
 		});
+	});
+});
+
+describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
+	let repo: DistributionRemoteRepository;
+
+	beforeEach(() => {
+		store = new Map();
+		revCounters = new Map();
+		beforeStrictWrite = undefined;
+		repo = new DistributionRemoteRepository('shelter_sh001');
+	});
+
+	async function createPendingRequest() {
+		return repo.createRequest(
+			{
+				purpose: 'Cancel pending request',
+				active_headcount_snapshot: '1',
+				buffer_percent: 10,
+				items: [
+					{
+						item_id: 'item:water',
+						requested_qty: '1',
+						unit: 'bottle',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '1'
+					}
+				]
+			},
+			regCtx
+		);
+	}
+
+	it.each([
+		['registration_staff', regCtx],
+		['shelter_manager', managerCtx],
+		['system_admin', adminCtx]
+	])('allows %s to cancel a same-shelter pending request', async (_role, ctx) => {
+		const request = await createPendingRequest();
+		const cancelled = await repo.cancelRequest(request._id, ctx);
+
+		expect(cancelled._id).toBe(request._id);
+		expect(cancelled.status).toBe('cancelled');
+		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('cancelled');
+		expect(
+			Array.from(store.values()).filter((doc) => doc.type === 'distribution_batch')
+		).toHaveLength(0);
+		expect(Array.from(store.values()).filter((doc) => doc.type === 'stock_ledger')).toHaveLength(0);
+	});
+
+	it('denies warehouse_staff, kitchen_staff, and callers without a qualifying role before cancelling', async () => {
+		const request = await createPendingRequest();
+		await expect(repo.cancelRequest(request._id, warehouseCtx)).rejects.toThrow(/Unauthorized/);
+		await expect(repo.cancelRequest(request._id, kitchenCtx)).rejects.toThrow(/Unauthorized/);
+		await expect(
+			repo.cancelRequest(request._id, { shelterCode: 'SH001', createdBy: 'unknown' })
+		).rejects.toThrow(/Unauthorized/);
+		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('pending');
+	});
+
+	it('denies cross-shelter cancellation without changing the request', async () => {
+		const request = await createPendingRequest();
+		await expect(
+			repo.cancelRequest(request._id, {
+				shelterCode: 'SH002',
+				createdBy: 'other_manager',
+				roles: ['shelter_manager']
+			})
+		).rejects.toThrow(/Cross-shelter/);
+		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('pending');
+	});
+
+	it.each(['approving', 'approved', 'rejected', 'cancelled'] as const)(
+		'rejects cancellation from %s',
+		async (status) => {
+			const request = await createPendingRequest();
+			store.set(request._id, { ...request, status, _rev: nextRev(request._id) });
+			await expect(repo.cancelRequest(request._id, regCtx)).rejects.toThrow(ValidationError);
+		}
+	);
+
+	it('surfaces a strict-write conflict instead of silently retrying cancellation', async () => {
+		const request = await createPendingRequest();
+		beforeStrictWrite = (doc) => {
+			if (doc._id !== request._id || doc.status !== 'cancelled') return;
+			const current = store.get(request._id);
+			if (current) store.set(request._id, { ...current, _rev: nextRev(request._id) });
+		};
+
+		await expect(repo.cancelRequest(request._id, regCtx)).rejects.toThrow(/Conflict/);
+		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('pending');
+	});
+
+	it.each([
+		['registration_staff', regCtx],
+		['shelter_manager', managerCtx],
+		['warehouse_staff', warehouseCtx],
+		['system_admin', adminCtx]
+	])('allows %s to list same-shelter distribution requests', async (_role, ctx) => {
+		const request = await createPendingRequest();
+		await expect(repo.listRequests(undefined, ctx)).resolves.toEqual([request]);
+	});
+
+	it('denies kitchen_staff and missing-role callers before returning distribution requests', async () => {
+		await createPendingRequest();
+		await expect(repo.listRequests(undefined, kitchenCtx)).rejects.toThrow(/Unauthorized/);
+		await expect(
+			repo.getRequest('distribution_request:unknown', {
+				shelterCode: 'SH001',
+				createdBy: 'unknown'
+			})
+		).rejects.toThrow(/Unauthorized/);
+	});
+
+	it('filters cross-shelter request documents and does not expose cross-shelter lookup data', async () => {
+		const request = await createPendingRequest();
+		const crossShelterId = 'distribution_request:01JCROSSSHELTER';
+		store.set(crossShelterId, {
+			...request,
+			_id: crossShelterId,
+			shelter_code: 'SH002',
+			_rev: nextRev(crossShelterId)
+		});
+
+		await expect(repo.listRequests(undefined, adminCtx)).resolves.toEqual([request]);
+		await expect(repo.getRequest(crossShelterId, adminCtx)).resolves.toBeNull();
+	});
+
+	it('applies the same view authorization and shelter scope to public batch reads', async () => {
+		const request = await createPendingRequest();
+		const batch = createDistributionBatch(
+			{
+				request_id: request._id,
+				items: [
+					{
+						item_id: 'item:water',
+						allocated_qty: '1',
+						unit: 'bottle',
+						distribution_type_snapshot: 'consumable'
+					}
+				],
+				allocations: [
+					{
+						item_id: 'item:water',
+						lot_ref: 'stock_ledger:01JREADLOT',
+						lot: {},
+						qty: '1',
+						allocation_ledger_id: 'stock_ledger:01JREADLEDGER'
+					}
+				]
+			},
+			adminCtx
+		);
+		store.set(batch._id, { ...batch, status: 'active', _rev: nextRev(batch._id) });
+		const crossShelterId = 'distribution_batch:01JCROSSSHELTER';
+		store.set(crossShelterId, {
+			...batch,
+			_id: crossShelterId,
+			request_id: 'distribution_request:01JCROSSSHELTER',
+			shelter_code: 'SH002',
+			_rev: nextRev(crossShelterId)
+		});
+
+		await expect(repo.listBatches(undefined, adminCtx)).resolves.toEqual([
+			expect.objectContaining({ _id: batch._id })
+		]);
+		await expect(repo.getBatch(crossShelterId, adminCtx)).resolves.toBeNull();
+		await expect(repo.listBatches(undefined, kitchenCtx)).rejects.toThrow(/Unauthorized/);
 	});
 });

@@ -18,7 +18,9 @@ import {
 	createDistributionIssueCapacity,
 	createDistributionOneTimeGuard,
 	createStockLotReservation,
+	canTransitionDistributionRequest,
 	distributionBatchDocSchema,
+	distributionRequestDocSchema,
 	distributionIssueDocSchema,
 	distributionIssueIdempotencyDocSchema,
 	distributionIssueCapacityDocSchema,
@@ -111,6 +113,41 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				`Unauthorized: distribution ${action} requires warehouse_staff or system_admin role`
 			);
 		}
+	}
+
+	private assertAuthorizedRequestCancellation(ctx: AuthorContext): void {
+		if (
+			!ctx.roles ||
+			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!isShelterManager(ctx.roles) &&
+				!isSystemAdmin(ctx.roles))
+		) {
+			throw new Error(
+				'Unauthorized: distribution cancellation requires registration_staff, shelter_manager, or system_admin role'
+			);
+		}
+	}
+
+	private assertAuthorizedDistributionView(ctx: AuthorContext): void {
+		if (
+			!ctx.roles ||
+			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!isWarehouseStaff(ctx.roles) &&
+				!isShelterManager(ctx.roles) &&
+				!isSystemAdmin(ctx.roles))
+		) {
+			throw new Error(
+				'Unauthorized: distribution view requires registration_staff, warehouse_staff, shelter_manager, or system_admin role'
+			);
+		}
+	}
+
+	private async getRequestRaw(id: string): Promise<DistributionRequest | null> {
+		return getDoc<DistributionRequest>(this.dbName, id);
+	}
+
+	private async getBatchRaw(id: string): Promise<DistributionBatch | null> {
+		return getDoc<DistributionBatch>(this.dbName, id);
 	}
 
 	private async releaseClaimWithRetry(
@@ -401,32 +438,95 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		return putDocStrict(this.dbName, doc);
 	}
 
-	async getRequest(id: string): Promise<DistributionRequest | null> {
-		return getDoc<DistributionRequest>(this.dbName, id);
+	async getRequest(id: string, ctx: AuthorContext): Promise<DistributionRequest | null> {
+		this.assertAuthorizedDistributionView(ctx);
+		const rawRequest = await this.getRequestRaw(id);
+		if (!rawRequest) return null;
+		const parsed = distributionRequestDocSchema.safeParse(rawRequest);
+		if (!parsed.success) {
+			throw new IntegrityError(`Distribution request ${id} is malformed`);
+		}
+		return parsed.data.shelter_code === ctx.shelterCode ? parsed.data : null;
 	}
 
-	async listRequests(status?: DistributionRequestStatus): Promise<DistributionRequest[]> {
+	async listRequests(
+		status: DistributionRequestStatus | undefined,
+		ctx: AuthorContext
+	): Promise<DistributionRequest[]> {
+		this.assertAuthorizedDistributionView(ctx);
 		const all = await allDocsByType<DistributionRequest>(
 			this.dbName,
 			'distribution_request',
 			isDistributionRequest
 		);
-		if (!status) return all;
-		return all.filter((r) => r.status === status);
+		const requests = all.map((request) => {
+			const parsed = distributionRequestDocSchema.safeParse(request);
+			if (!parsed.success) {
+				throw new IntegrityError(`Distribution request ${request._id} is malformed`);
+			}
+			return parsed.data;
+		});
+		return requests.filter(
+			(request) =>
+				request.shelter_code === ctx.shelterCode && (!status || request.status === status)
+		);
 	}
 
-	async getBatch(id: string): Promise<DistributionBatch | null> {
-		return getDoc<DistributionBatch>(this.dbName, id);
+	async cancelRequest(requestId: string, ctx: AuthorContext): Promise<DistributionRequest> {
+		this.assertAuthorizedRequestCancellation(ctx);
+		const rawRequest = await getDoc<{ _id: string }>(this.dbName, requestId);
+		if (!rawRequest) throw new Error(`Request not found: ${requestId}`);
+
+		const parsed = distributionRequestDocSchema.safeParse(rawRequest);
+		if (!parsed.success) {
+			throw new IntegrityError(`Distribution request ${requestId} is malformed`);
+		}
+		const request = parsed.data as DistributionRequest;
+		if (request.shelter_code !== ctx.shelterCode) {
+			throw new Error('Cross-shelter access denied');
+		}
+		if (!canTransitionDistributionRequest(request.status, 'cancelled')) {
+			throw new ValidationError(`Cannot cancel request in status ${request.status}`);
+		}
+
+		return putDocStrict<DistributionRequest>(this.dbName, {
+			...request,
+			status: 'cancelled' as const,
+			updated_at: now()
+		});
 	}
 
-	async listBatches(status?: DistributionBatchStatus): Promise<DistributionBatch[]> {
+	async getBatch(id: string, ctx: AuthorContext): Promise<DistributionBatch | null> {
+		this.assertAuthorizedDistributionView(ctx);
+		const rawBatch = await this.getBatchRaw(id);
+		if (!rawBatch) return null;
+		const parsed = distributionBatchDocSchema.safeParse(rawBatch);
+		if (!parsed.success) {
+			throw new IntegrityError(`Distribution batch ${id} is malformed`);
+		}
+		return parsed.data.shelter_code === ctx.shelterCode ? parsed.data : null;
+	}
+
+	async listBatches(
+		status: DistributionBatchStatus | undefined,
+		ctx: AuthorContext
+	): Promise<DistributionBatch[]> {
+		this.assertAuthorizedDistributionView(ctx);
 		const all = await allDocsByType<DistributionBatch>(
 			this.dbName,
 			'distribution_batch',
 			isDistributionBatch
 		);
-		if (!status) return all;
-		return all.filter((b) => b.status === status);
+		const batches = all.map((batch) => {
+			const parsed = distributionBatchDocSchema.safeParse(batch);
+			if (!parsed.success) {
+				throw new IntegrityError(`Distribution batch ${batch._id} is malformed`);
+			}
+			return parsed.data;
+		});
+		return batches.filter(
+			(batch) => batch.shelter_code === ctx.shelterCode && (!status || batch.status === status)
+		);
 	}
 
 	async rejectRequest(
@@ -435,7 +535,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		ctx: AuthorContext
 	): Promise<DistributionRequest> {
 		this.assertAuthorizedStaff(ctx, 'rejection');
-		const req = await this.getRequest(requestId);
+		const req = await this.getRequestRaw(requestId);
 		if (!req) throw new Error(`Request not found: ${requestId}`);
 		if (req.shelter_code !== ctx.shelterCode) throw new Error('Cross-shelter access denied');
 		if (req.status !== 'pending') {
@@ -462,7 +562,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		ctx: AuthorContext
 	): Promise<DistributionBatch> {
 		this.assertAuthorizedStaff(ctx, 'approval');
-		const initialReq = await this.getRequest(requestId);
+		const initialReq = await this.getRequestRaw(requestId);
 		if (!initialReq) throw new Error(`Request not found: ${requestId}`);
 		if (initialReq.shelter_code !== ctx.shelterCode) throw new Error('Cross-shelter access denied');
 
@@ -476,7 +576,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			if (!req.approval_operation_id) {
 				throw new IntegrityError(`Approved request ${req._id} missing approval_operation_id`);
 			}
-			const existingBatchRaw = await this.getBatch(req.batch_id);
+			const existingBatchRaw = await this.getBatchRaw(req.batch_id);
 			if (!existingBatchRaw) throw new IntegrityError(`Batch ${req.batch_id} not found`);
 			const existingBatch = await this.assertPersistedBatch(
 				existingBatchRaw,
@@ -534,7 +634,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 
 		// 3. Inspect deterministic batch if already existing.
 		// After this point the persisted plan is authoritative, but never trusted blindly.
-		const existingBatch = await this.getBatch(batchId);
+		const existingBatch = await this.getBatchRaw(batchId);
 		let batchDoc: DistributionBatch;
 		let canonicalAllocations: DistributionAllocation[];
 

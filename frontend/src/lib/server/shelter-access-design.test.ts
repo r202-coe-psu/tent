@@ -623,6 +623,10 @@ describe('buildValidateDocUpdate', () => {
 	});
 
 	describe('distribution doc types access rules', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+		const UNAUTHORIZED: UserCtx = { name: 'unknown', roles: ['shelter:SH001'] };
+
 		const reqDoc = (over: Doc = {}): Doc => ({
 			_id: 'distribution_request:01J',
 			type: 'distribution_request',
@@ -658,6 +662,139 @@ describe('buildValidateDocUpdate', () => {
 
 		it('allows registration_staff to create pending distribution_request', () => {
 			expect(() => compile()(reqDoc(), null, REGISTRATION)).not.toThrow();
+		});
+
+		it.each([
+			['registration_staff', REGISTRATION],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])('allows %s to cancel a pending distribution_request', (_role, userCtx) => {
+			const pending = reqDoc();
+			expect(() => compile()(reqDoc({ status: 'cancelled' }), pending, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['kitchen_staff', KITCHEN],
+			['missing role', UNAUTHORIZED]
+		])('rejects %s directly cancelling a pending distribution_request', (_role, userCtx) => {
+			const pending = reqDoc();
+			expectForbidden(
+				() => compile()(reqDoc({ status: 'cancelled' }), pending, userCtx),
+				/Only authorized request editors can cancel distribution requests/
+			);
+		});
+
+		it('allows valid cancellation with preserved request content and provenance', () => {
+			const pending = reqDoc({
+				purpose: 'Standard Issue',
+				note: 'Initial note',
+				requested_by: 'staff-1',
+				requested_at: '2026-08-30T10:00:00.000Z',
+				created_by: 'staff-1',
+				created_at: '2026-08-30T10:00:00.000Z',
+				active_headcount_snapshot: '100',
+				buffer_percent: 10
+			});
+			expect(() =>
+				compile()(
+					reqDoc({
+						...pending,
+						status: 'cancelled',
+						updated_at: '2026-08-30T10:30:00.000Z'
+					}),
+					pending,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it.each([
+			['note', { note: 'Tampered note' }],
+			['removing note', { note: undefined }],
+			['adding note when previously undefined', { note: 'New note' }],
+			['requested_by', { requested_by: 'imposter' }],
+			['requested_at', { requested_at: '2026-08-31T00:00:00.000Z' }],
+			['created_by', { created_by: 'attacker' }],
+			['created_at', { created_at: '2026-08-31T00:00:00.000Z' }],
+			['purpose', { purpose: 'Tampered purpose' }],
+			['active_headcount_snapshot', { active_headcount_snapshot: '999' }],
+			['buffer_percent', { buffer_percent: 5 }],
+			[
+				'items',
+				{
+					items: [
+						{
+							item_id: 'item:tampered',
+							requested_qty: '99',
+							unit: 'pcs',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '99'
+						}
+					]
+				}
+			]
+		])('rejects modifying %s during pending -> cancelled', (_field, override) => {
+			const pending = reqDoc({
+				purpose: 'Original purpose',
+				note: _field === 'adding note when previously undefined' ? undefined : 'Original note',
+				requested_by: 'original-requester',
+				requested_at: '2026-08-30T10:00:00.000Z',
+				created_by: 'original-creator',
+				created_at: '2026-08-30T10:00:00.000Z',
+				active_headcount_snapshot: '100',
+				buffer_percent: 10
+			});
+			const cancelled = reqDoc({
+				...pending,
+				status: 'cancelled',
+				...override
+			});
+			expectForbidden(
+				() => compile()(cancelled, pending, REGISTRATION),
+				/Cannot modify request content or provenance while cancelling distribution_request/
+			);
+		});
+
+		it.each([
+			['approval_operation_id', { approval_operation_id: '01JOP' }],
+			['approved_by', { approved_by: 'warehouse-1' }],
+			['approved_at', { approved_at: '2026-08-30T11:00:00.000Z' }],
+			['batch_id', { batch_id: 'distribution_batch:01JBATCH' }],
+			['rejected_by', { rejected_by: 'warehouse-1' }],
+			['rejected_at', { rejected_at: '2026-08-30T11:00:00.000Z' }],
+			['rejection_reason', { rejection_reason: 'Tampered reason' }]
+		])('rejects injecting %s during pending -> cancelled', (_field, override) => {
+			const pending = reqDoc();
+			const cancelled = reqDoc({
+				...pending,
+				status: 'cancelled',
+				...override
+			});
+			expectForbidden(
+				() => compile()(cancelled, pending, REGISTRATION),
+				/Cannot inject approval or rejection metadata while cancelling distribution_request/
+			);
+		});
+
+		it.each(['approving', 'approved', 'rejected'] as const)('rejects %s -> cancelled', (status) => {
+			const current = reqDoc({
+				status,
+				...(status === 'approving' ? { approval_operation_id: '01JOP' } : {})
+			});
+			expectForbidden(
+				() => compile()(reqDoc({ ...current, status: 'cancelled' }), current, REGISTRATION),
+				/Invalid distribution_request transition|Terminal distribution_request/
+			);
+		});
+
+		it('rejects mutations of a cancelled distribution_request', () => {
+			const cancelled = reqDoc({ status: 'cancelled', purpose: 'Original' });
+			expectForbidden(
+				() =>
+					compile()(reqDoc({ status: 'cancelled', purpose: 'Tampered' }), cancelled, REGISTRATION),
+				/Terminal distribution_request/
+			);
 		});
 
 		it('rejects registration_staff transitioning distribution_request to approving', () => {
