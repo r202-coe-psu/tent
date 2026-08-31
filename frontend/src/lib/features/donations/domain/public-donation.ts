@@ -57,7 +57,7 @@ export interface ScanDonationView {
 	booking_ref?: string;
 	shelter_code: string;
 	status: string;
-	donor: { name: string; phone: string | null };
+	donor: { name: string; phone: string | null; email?: string | null };
 	items: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 	logistics?: PublicDonationDoc['logistics'];
 }

@@ -10,7 +10,9 @@ import {
 	useUpdateCampaign
 } from './queries';
 import {
+	buildCampaignNotes,
 	deriveNeedAvailability,
+	editNeed,
 	forceCutOffNeed,
 	mapNeedItemHeuristic,
 	reopenNeed,
@@ -29,26 +31,6 @@ const ITEM_NAMES: Record<string, string> = {
 
 function itemDisplayName(itemId: string): string {
 	return ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId);
-}
-
-function buildCampaignNotes(input: {
-	location: string;
-	category?: string;
-	urgency?: 'critical' | 'important' | 'normal';
-	description?: string;
-}): string {
-	const parts: string[] = [];
-	if (input.urgency === 'critical') parts.push('[ด่วน]');
-	else if (input.urgency === 'important') parts.push('[สำคัญ]');
-	if (input.category && input.category !== 'ถูกกำหนดอัตโนมัติ') {
-		parts.push(`หมวด: ${input.category}`);
-	}
-	if (input.description?.trim()) {
-		parts.push(input.description.trim());
-	} else {
-		parts.push(`ประกาศสำหรับคลัง: ${input.location}`);
-	}
-	return parts.join(' ');
 }
 
 async function warnIfItemNotInCatalog(itemId: string, displayName: string): Promise<void> {
@@ -281,6 +263,76 @@ export function useDonationNeedsBoard(options?: {
 		);
 	}
 
+	/**
+	 * Save an edit from the needs-board row (T-22 edit).
+	 *
+	 * Takes `itemId` because the board renders ONE ROW PER NEED: editing
+	 * `campaign.needs[0]` would rewrite a different item than the row the user
+	 * clicked whenever a campaign carries more than one need.
+	 *
+	 * `notes` is rebuilt through `buildCampaignNotes` — the same encoder the create
+	 * form uses — so an edit cannot drop the urgency/category the campaign was
+	 * created with (§2.4 has no field for either; the notes string is where they live).
+	 */
+	function handleEditRequest(
+		compoundId: string,
+		itemId: string,
+		updated: {
+			title: string;
+			target: string;
+			unit?: string;
+			category?: string;
+			urgency?: 'critical' | 'important' | 'normal';
+			description?: string;
+		}
+	) {
+		const targetItem = derivedItems.find((i) => i.id === compoundId);
+		if (!targetItem) return;
+		const camp = targetItem.campaignDoc;
+
+		let updatedCampaign;
+		try {
+			updatedCampaign = editNeed(camp, itemId, {
+				qty_target: updated.target,
+				unit: updated.unit
+			});
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้');
+			return;
+		}
+
+		const title = updated.title.trim() || camp.title;
+		const notes = buildCampaignNotes({
+			urgency: updated.urgency,
+			category: updated.category,
+			description: updated.description
+		});
+
+		updateCampaignMutation.mutate(
+			{
+				campaign: {
+					...updatedCampaign,
+					title,
+					...(notes ? { notes } : {})
+				},
+				auditInput: {
+					action: 'manual_adjust',
+					reason:
+						`แก้ไขประกาศ "${title}" — ${itemDisplayName(itemId)}: เป้าหมาย ${updated.target} ${updated.unit ?? ''}`.trim(),
+					ctx: ctx
+				}
+			},
+			{
+				onSuccess: () => {
+					toast.success(`แก้ไขประกาศ "${title}" สำเร็จ`);
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${err.message}`);
+				}
+			}
+		);
+	}
+
 	return {
 		get derivedItems() {
 			return derivedItems;
@@ -288,6 +340,7 @@ export function useDonationNeedsBoard(options?: {
 		toggleShowOnHome,
 		toggleCutOff,
 		handleAddRequest,
-		handleAddRequestFromForm
+		handleAddRequestFromForm,
+		handleEditRequest
 	};
 }

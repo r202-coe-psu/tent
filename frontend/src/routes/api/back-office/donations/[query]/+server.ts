@@ -2,15 +2,16 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
+	assertCountedAgainstCatalog,
 	authorizeWarehouse,
 	findDonationByQuery,
 	isInCallerScope,
-	routeErrorResponse as toRouteError
+	routeErrorResponse as toRouteError,
+	toCountedItems
 } from '$lib/server/donation-intake';
 import {
 	type PublicDonationDoc,
 	type ScanDonationView,
-	type ReceiveDonationInput,
 	receiveDonationInputSchema
 } from '$lib/features/donations';
 import {
@@ -20,9 +21,6 @@ import {
 	type StockLedger
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
-import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
-import { isItemMaster, itemMasterUnit, type ItemMaster } from '$lib/features/catalog/server';
-import { fetchDocs } from '$lib/server/donation-docs';
 import { allocateLotNos } from '$lib/server/lot-number';
 
 function routeErrorResponse(e: unknown) {
@@ -37,7 +35,11 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
-		donor: { name: d.donor?.name ?? '', phone: d.donor?.phone ?? null },
+		donor: {
+			name: d.donor?.name ?? '',
+			phone: d.donor?.phone ?? null,
+			email: d.donor?.email ?? null
+		},
 		items: (d.items ?? []).map((it) => ({
 			item_id: it.item_id,
 			free_text: it.free_text,
@@ -46,60 +48,6 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 		})),
 		logistics: d.logistics
 	};
-}
-
-/**
- * A counted line that becomes stock. Only lines carrying an `item_id` qualify:
- * `stock_ledger.item_id` must point at a real catalog item and `unit` must equal
- * that item's `base_unit` (schema.md §2.1), so free-text donations stay on the
- * donation doc and never reach the ledger.
- */
-function toCountedItems(lines: ReceiveDonationInput['items']): CountedItem[] {
-	return (lines ?? [])
-		.filter((it): it is typeof it & { item_id: string } => !!it.item_id)
-		.map((it) => ({
-			item_id: it.item_id,
-			qty: it.qty,
-			unit: it.unit,
-			...(it.lot ? { lot: it.lot } : {})
-		}));
-}
-
-/**
- * Enforce the catalog invariants the client-side receive path already enforces
- * (`assertReceiveAgainstCatalog`) — this route writes with admin credentials, so
- * `validate_doc_update` does not run for it and the checks must happen here.
- */
-async function assertCountedAgainstCatalog(counted: CountedItem[]): Promise<void> {
-	if (counted.length === 0) return;
-
-	// Two shapes share the `catalog` database and the `_id` prefixes do not nest:
-	// `item:{ulid}` is the T-10 supply stub (`unit`, `perishable`), `item_master:{ulid}`
-	// the CR-013 master (`base_unit`, no perishable flag). Scanning only `item:` left
-	// every item_master line rejected as an unknown item.
-	const supplyItems = (await fetchDocs<SupplyItem>(CATALOG_DB, 'item:')).filter(isSupplyItem);
-	const itemMasters = (await fetchDocs<ItemMaster>(CATALOG_DB, 'item_master:')).filter(
-		isItemMaster
-	);
-	const byId = new Map<string, { unit: string; perishable: boolean }>([
-		...supplyItems.map((i) => [i._id, { unit: i.unit, perishable: i.perishable }] as const),
-		...itemMasters.map((m) => [m._id, { unit: itemMasterUnit(m), perishable: false }] as const)
-	]);
-
-	for (const line of counted) {
-		const item = byId.get(line.item_id);
-		if (!item) {
-			throw new Error(`Unknown item: ${line.item_id} — item must exist in the catalog`);
-		}
-		if (item.unit !== line.unit) {
-			throw new Error(
-				`Unit mismatch for item ${line.item_id}: expected ${item.unit}, got ${line.unit}`
-			);
-		}
-		if (item.perishable && !line.lot?.expiry) {
-			throw new Error(`Perishable item ${line.item_id} requires lot.expiry to be set`);
-		}
-	}
 }
 
 export const GET: RequestHandler = async ({ params, request }) => {
@@ -158,6 +106,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const { donation, dbName } = found;
 
+		/**
+		 * `received` is the only status this route refuses, and that is deliberate: it
+		 * does NOT gate on `canTransitionDonation`, so a `pending_review` booking can be
+		 * received straight from the counter.
+		 *
+		 * Scanning the QR is a DATA-ENTRY shortcut, not a shortcut past review — staff
+		 * still work the drop-off screen line by line (count, storage zone, "ผ่านการ
+		 * ตรวจสอบแล้ว" per item) before this request is sent; the scan only saves them
+		 * re-keying what the donor already declared, the way the walk-in form makes them
+		 * type it. The verification is the counting, not an intermediate doc status.
+		 *
+		 * So do not "tighten" this into `canTransitionDonation(status, 'received')`:
+		 * §2.3 has no `pending_review → received` edge and the whole scan flow would
+		 * start answering 422. Adding that edge to the transition table is a schema.md
+		 * change and needs a CR of its own.
+		 */
 		if (donation.status === 'received') {
 			return json(
 				{ success: false, error: 'Donation is already received (LOCKED)' },

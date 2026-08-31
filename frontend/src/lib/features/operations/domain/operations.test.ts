@@ -17,6 +17,10 @@ import {
 	keyableDonations,
 	isNeedCutOff,
 	forceCutOffNeed,
+	editNeed,
+	buildCampaignNotes,
+	parseCampaignNotes,
+	suggestNeedDefaults,
 	reopenNeed,
 	isDonationOutstanding,
 	deriveNeedAvailability,
@@ -76,10 +80,10 @@ describe('donation lifecycle (forward-only)', () => {
 
 	// CR-087 — redirecting hands the request to another shelter, and is terminal on
 	// THIS doc: the destination continues on its own `donation_redirect` ticket.
-	it('allows pending_review → redirected only, and never leaves redirected', () => {
+	it('allows pending_review/verifying → redirected, and never leaves redirected', () => {
 		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(true);
 		expect(canTransitionDonation('declared', 'redirected')).toBe(false);
-		expect(canTransitionDonation('verifying', 'redirected')).toBe(false);
 		expect(canTransitionDonation('received', 'redirected')).toBe(false);
 		expect(canTransitionDonation('redirected', 'received')).toBe(false);
 		expect(canTransitionDonation('redirected', 'pending_review')).toBe(false);
@@ -1353,6 +1357,14 @@ describe('donation statuses that still owe the shelter goods (CR-052)', () => {
 		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
 		expect(canTransitionDonation('pending_review', 'rejected')).toBe(true);
 
+		// Staff open the boxes at the counter, and that is where the expired tin or the
+		// wrong size turns up — so a delivery can still be turned away while `verifying`.
+		expect(canTransitionDonation('verifying', 'rejected')).toBe(true);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(true);
+
+		// It arrived, so it can no longer lapse on its reservation TTL.
+		expect(canTransitionDonation('verifying', 'expired')).toBe(false);
+
 		// No skipping the review step, and nothing comes back out of a terminal status.
 		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
 		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
@@ -1422,5 +1434,125 @@ describe('lot numbering (CR-088)', () => {
 		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
 		expect(entry.schema_v).toBe(4);
 		expect(parseStockLedger(entry)).toEqual(entry);
+	});
+});
+
+// The needs board renders ONE ROW PER NEED, so an edit has to name the item it is
+// for. The first version of the edit form always wrote `needs[0]`, which rewrote a
+// different item than the row the user clicked on any multi-need campaign.
+describe('editNeed (needs board edit)', () => {
+	const campaign = () =>
+		createCampaign(
+			{
+				title: 'ของใช้จำเป็น',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+	it('changes only the named need', () => {
+		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80', unit: 'ถุง' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')).toMatchObject({
+			qty_target: '80',
+			unit: 'ถุง'
+		});
+		expect(edited.needs.find((n) => n.item_id === 'item:water')).toMatchObject({
+			qty_target: '100',
+			unit: 'ขวด'
+		});
+	});
+
+	it('keeps the unit when the caller sends none', () => {
+		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')?.unit).toBe('kg');
+	});
+
+	it('leaves a hand-closed need closed — reopening is reopenNeed, with its own audit', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:rice', 'คลังเต็ม');
+		const edited = editNeed(closed, 'item:rice', { qty_target: '999' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('closed');
+	});
+
+	it('refuses a target of zero or less, and an item the campaign does not ask for', () => {
+		expect(() => editNeed(campaign(), 'item:rice', { qty_target: '0' })).toThrow();
+		expect(() => editNeed(campaign(), 'item:rice', { qty_target: '-5' })).toThrow();
+		expect(() => editNeed(campaign(), 'item:soap', { qty_target: '10' })).toThrow(/item:soap/);
+	});
+
+	it('does not mutate the campaign it was handed', () => {
+		const original = campaign();
+		editNeed(original, 'item:rice', { qty_target: '80' });
+		expect(original.needs.find((n) => n.item_id === 'item:rice')?.qty_target).toBe('50');
+	});
+});
+
+// `donation_campaign.notes` is the only place the board form's urgency/category
+// survive (§2.4 has no field for either). Create and edit therefore have to share
+// one encoder — an edit that rebuilt the string by hand silently downgraded every
+// campaign to "normal" and dropped its category.
+describe('campaign notes encode/decode', () => {
+	it('round-trips urgency, category and description', () => {
+		for (const urgency of ['critical', 'important', 'normal'] as const) {
+			const notes = buildCampaignNotes({ urgency, category: 'อาหาร', description: 'ต้องการด่วน' });
+			expect(parseCampaignNotes(notes)).toEqual({
+				urgency,
+				category: 'อาหาร',
+				description: 'ต้องการด่วน'
+			});
+		}
+	});
+
+	it('round-trips a description on its own', () => {
+		const notes = buildCampaignNotes({ description: 'ผู้ป่วยติดเตียง 3 ราย' });
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'normal',
+			description: 'ผู้ป่วยติดเตียง 3 ราย'
+		});
+	});
+
+	it('falls back to the warehouse line when there is no description', () => {
+		expect(buildCampaignNotes({ location: 'คลัง EOC' })).toBe('ประกาศสำหรับคลัง: คลัง EOC');
+	});
+
+	it('reads a blank or plain note as normal urgency', () => {
+		expect(parseCampaignNotes('')).toEqual({ urgency: 'normal' });
+		expect(parseCampaignNotes(null)).toEqual({ urgency: 'normal' });
+		expect(parseCampaignNotes('คลังช่วยเหลือภัยพิบัติ EOC')).toEqual({
+			urgency: 'normal',
+			description: 'คลังช่วยเหลือภัยพิบัติ EOC'
+		});
+	});
+
+	it('drops the placeholder category the create form shows before an item is picked', () => {
+		expect(buildCampaignNotes({ category: 'ถูกกำหนดอัตโนมัติ', description: 'x' })).toBe('x');
+	});
+});
+
+// The needs-board create form used to apply this inside an `$effect` that reassigned
+// the category and unit selects on every keystroke — so fixing a typo in the item
+// name silently reverted a unit the user had chosen. Pure and tested here; the form
+// now treats the result as a default.
+describe('suggestNeedDefaults (needs board form pre-fill)', () => {
+	it('suggests the unit the item is normally counted in', () => {
+		expect(suggestNeedDefaults('ข้าวสารหอมมะลิ')).toEqual({
+			category: 'อาหารและเครื่องดื่ม',
+			unit: 'ถุง'
+		});
+		expect(suggestNeedDefaults('น้ำดื่มขวด')).toMatchObject({ unit: 'ขวด' });
+		expect(suggestNeedDefaults('ผ้าห่มกันหนาว')).toEqual({
+			category: 'เครื่องนุ่งห่มและที่นอน',
+			unit: 'ผืน'
+		});
+		expect(suggestNeedDefaults('สบู่ก้อน')).toMatchObject({ unit: 'ก้อน' });
+		expect(suggestNeedDefaults('ผ้าอ้อมเด็ก')).toMatchObject({ category: 'แม่และเด็ก' });
+	});
+
+	it('suggests nothing for a blank or unrecognised name, so the caller keeps its own value', () => {
+		expect(suggestNeedDefaults('')).toEqual({});
+		expect(suggestNeedDefaults('   ')).toEqual({});
+		expect(suggestNeedDefaults('เต็นท์สนาม')).toEqual({});
 	});
 });

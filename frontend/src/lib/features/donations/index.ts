@@ -14,7 +14,8 @@ export {
 } from './domain/public-donation';
 export type { DonationUnitSource } from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
-export type { PendingDonationRow } from './domain/back-office';
+export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
+export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
 
 // Domain — redirect ticket (R-16.4 · CR-087)
 export type { DonationRedirect, DonationRedirectInput } from './domain/donation-redirect';

@@ -14,12 +14,16 @@
 	import IncomingRedirectsBoard from '$lib/components/incoming-redirects-board.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import EditCampaignForm from './components/edit-campaign-form.svelte';
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
-	import { useDonationNeedsBoard } from '$lib/features/operations';
+	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import type { DonationRedirect, PendingDonationRow } from '$lib/features/donations';
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'verifying', 'incoming', 'needs'
-	let viewState = $state<'list' | 'create'>('list');
+	let viewState = $state<'list' | 'create' | 'edit'>('list');
+	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
+	let selectedEditingItem = $state<NeedItem | null>(null);
+	let selectedEditingItemId = $state('');
 	let isModalOpen = $state(false);
 
 	const needsBoard = useDonationNeedsBoard({
@@ -349,12 +353,42 @@
 				onAddRequest={() => (viewState = 'create')}
 				onToggleShowOnHome={needsBoard.toggleShowOnHome}
 				onToggleCutOff={handleToggleCutOff}
+				onEdit={(item, itemId) => {
+					selectedEditingItem = item;
+					selectedEditingItemId = itemId;
+					viewState = 'edit';
+				}}
 			/>
-		{:else}
+		{:else if viewState === 'create'}
 			<CreateCampaignForm
 				onclose={() => (viewState = 'list')}
 				onsubmit={needsBoard.handleAddRequestFromForm}
 			/>
+		{:else if viewState === 'edit' && selectedEditingItem && selectedEditingItemId}
+			<!-- Keyed on the row: the form seeds its fields once, so a different row
+			     has to mount a fresh form rather than reuse the previous seed. -->
+			{#key `${selectedEditingItem.id}:${selectedEditingItemId}`}
+				<EditCampaignForm
+					item={selectedEditingItem}
+					itemId={selectedEditingItemId}
+					onclose={() => {
+						selectedEditingItem = null;
+						selectedEditingItemId = '';
+						viewState = 'list';
+					}}
+					onsubmit={(updatedData) => {
+						if (!selectedEditingItem || !selectedEditingItemId) return;
+						needsBoard.handleEditRequest(
+							selectedEditingItem.id,
+							selectedEditingItemId,
+							updatedData
+						);
+						selectedEditingItem = null;
+						selectedEditingItemId = '';
+						viewState = 'list';
+					}}
+				/>
+			{/key}
 		{/if}
 	{/if}
 </div>
