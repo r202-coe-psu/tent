@@ -13,7 +13,6 @@
 	import { isSystemAdmin } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './ledger-table.svelte';

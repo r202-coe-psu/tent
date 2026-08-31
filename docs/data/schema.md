@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
 > ผ่าน public portal (T-71). `api` (inbound, CR-071) ยังไม่เพิ่มในรอบนี้.
 > **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
@@ -67,14 +68,15 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `country` | str | req | ประเทศ | 
 | `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
-| `household_id` | str\|null | opt | → `household:{ulid}` |
+| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` ก่อนจัดเข้าครัวเรือน) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement (ยกเว้น `cancelled` จาก cancel-hold path, ไม่ผ่าน movement) |
+| `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
-| `registered_via` | enum(`app`,`import`,`paper`,`web`) | req | `web` = ประชาชนจองเองผ่าน public portal (CR-070 D-REG-VIA) |
+| `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
 
-**Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)`
+**Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
 
 **Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
 `checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
@@ -96,6 +98,9 @@ implement — ไม่กระทบ migration นี้
 `registered_via`; doc เดิมไม่ต้อง backfill และไม่มีโค้ดไหน branch บนค่านี้ (เขียนอย่างเดียว).
 เขียนโดย public booking BFF เท่านั้น (`POST /api/public/v1/registrations`, T-71); staff UI
 ยังใช้ `app` เหมือนเดิม. `api` (CR-071 inbound) ยังไม่เพิ่ม — รอ D-INBOUND-PLANE
+
+**Migration (schema_v 7 → 8, CR-097):** purely additive — เพิ่ม `card_snapshot`, เพิ่ม `registered_via: 'kiosk'`, `person_id.number` index; doc เดิมไม่ต้อง backfill
+
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
@@ -952,7 +957,28 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 **เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
 `createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
 
-**Index:** ไม่ต้องมี secondary index — prefix scan `import_log:` ผ่าน `_all_docs` เพียงพอ.
+---
+
+### 3.8 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
+
+ทะเบียนอุปกรณ์เครื่องอ่านบัตรประชาชน Smart Card Kiosk ประจำศูนย์พักพิง (Hardware Registry). เป็น registry doc กลางสำหรับ Authentication ตรวจสอบ API Key/Secret และกำกับสิทธิ์การ Inbound สแกนบัตรเข้าสู่ฐานข้อมูลศูนย์พักพิง.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `device_id` | str | req | unique id ของเครื่อง (เช่น `"kiosk-01"`, `"kiosk-test"`) |
+| `name` | str | req | ชื่อเรียกเครื่อง (เช่น `"จุดคัดกรองหน้าประตู 1"`) |
+| `shelter_code` | str | req | รหัสศูนย์พักพิงที่เครื่องนี้สังกัด (เช่น `"SH001"`) |
+| `station_name` | str | req | จุดติดตั้ง/สถานีคัดกรอง (default `"จุดคัดกรองทั่วไป"`) |
+| `secret_hash` | str | req | SHA-256 hash ของ Device Secret สำหรับ Inbound Authentication |
+| `secret_prefix` | str | req | 16 ตัวอักษรแรกของ secret เพื่อแสดงในหน้าตั้งค่า (เช่น `"sk_scan_a1b2c3d4..."`) |
+| `status` | enum(`active`,`inactive`) | req | สถานะเปิด/ปิดการใช้งานเครื่อง |
+| `last_seen_at` | ts\|null | sys | Timestamp ที่เครื่องยิง API ล่าสุด (Heartbeat) |
+
+**Index:** `(device_id)` · `(shelter_code)`
+
+> ❓ **Architecture Open Question (Registry vs Shelter DB):**
+> - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/draft`) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
+> - **ประเด็นพิจารณาในอนาคต (Future Consideration):** หากต้องการให้ศูนย์พักพิงมีอิสระในการเพิ่ม/จัดการเครื่องเอง (Shelter Autonomy) หรือรองรับ Edge Node ที่เน็ตตัดขาด อาจพิจารณาย้าย `scanner_device` ไปเก็บไว้ใน `shelter_{shelter_code}` โดยมีข้อกำหนดว่า Client Kiosk จะต้องส่ง Header `X-Shelter-Code` แนบมากับทุก request ด้วย
 
 ---
 

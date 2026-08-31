@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createEvacuee,
+	createDraftEvacueeFromCard,
 	createMovement,
 	createScreening,
 	applyMovementToStay,
@@ -40,7 +41,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(7);
+		expect(e.schema_v).toBe(8);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -49,8 +50,50 @@ describe('createEvacuee', () => {
 		expect(e.current_stay.status).toBe('pre_registered');
 		expect(e.country).toBe('THAILAND');
 		expect(e.special_needs).toEqual([]);
-		expect(e.registered_via).toBe('app');
+		expect(e.registered_via).toBe('staff');
 		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			title_th: 'นาย',
+			first_name_th: 'สมศักดิ์',
+			last_name_th: 'รักชาติ',
+			gender: 'male' as const,
+			birth_year_ce: 1990,
+			age: 36,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01',
+			station_name: 'จุดสแกน Kiosk 1'
+		};
+		const kioskEv = createDraftEvacueeFromCard(card, ctx);
+		expect(kioskEv._id.startsWith('evacuee:')).toBe(true);
+		expect(kioskEv.type).toBe('evacuee');
+		expect(kioskEv.schema_v).toBe(8);
+		expect(kioskEv.first_name).toBe('สมศักดิ์');
+		expect(kioskEv.last_name).toBe('รักชาติ');
+		expect(kioskEv.birth_year).toBe(2533);
+		expect(kioskEv.age).toBe(36);
+		expect(kioskEv.current_stay.status).toBe('pre_registered');
+		expect(kioskEv.household_id).toBeNull();
+		expect(kioskEv.registered_via).toBe('kiosk');
+		expect(kioskEv.person_id?.number).toBe('1234567890123');
+		expect(kioskEv.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
+	});
+
+	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			first_name_th: 'วิชัย',
+			last_name_th: 'ใจดี',
+			birth_year_ce: 1996,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01'
+		};
+		const draft = createDraftEvacueeFromCard(card, ctx);
+		expect(draft.birth_year).toBe(2539);
+		expect(draft.age).toBe(new Date().getFullYear() + 543 - 2539);
 	});
 
 	it('accepts "no phone" as null', () => {
@@ -303,6 +346,32 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.status).toBe('active');
 		expect(updated.current_stay.zone).toBe('Z1');
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
+	});
+
+	it('allows check_in from eligible stay statuses only', () => {
+		const statuses = [
+			'pre_registered',
+			'temporary_leave',
+			'checked_out',
+			'transferred',
+			'active',
+			'deceased',
+			'cancelled'
+		] as const;
+
+		const base = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx
+		);
+
+		const allowed = statuses.filter((status) =>
+			canCheckInEvacuee({
+				...base,
+				current_stay: { status, zone: null, since: base.current_stay.since }
+			})
+		);
+
+		expect(allowed).toEqual(['pre_registered', 'temporary_leave', 'checked_out', 'transferred']);
 	});
 
 	it('rejects check_in from deceased (terminal status)', () => {

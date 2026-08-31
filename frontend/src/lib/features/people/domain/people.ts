@@ -139,6 +139,31 @@ export interface EmergencyContact {
 	relation: string;
 }
 
+export const cardSnapshotSchema = z.object({
+	citizen_id: z.string(),
+	title_th: z.string().optional(),
+	first_name_th: z.string().optional(),
+	last_name_th: z.string().optional(),
+	gender: z.enum(['male', 'female', 'other']).optional(),
+	birth_date: z.string().optional(),
+	birth_year_ce: z.number().optional(),
+	age: z.number().optional(),
+	address_no: z.string().optional(),
+	village_no: z.string().optional(),
+	lane: z.string().optional(),
+	road: z.string().optional(),
+	subdistrict: z.string().optional(),
+	district: z.string().optional(),
+	province: z.string().optional(),
+	postal_code: z.string().optional(),
+	photo_base64: z.string().optional(),
+	scanned_at: z.string(),
+	device_id: z.string(),
+	station_name: z.string().optional(),
+	expires_at: z.string().optional()
+});
+export type CardSnapshot = z.infer<typeof cardSnapshotSchema>;
+
 export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
@@ -154,6 +179,7 @@ export interface Evacuee extends BaseDoc {
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	photo?: string | null;
+	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -404,7 +430,8 @@ export const evacueeInputSchema = z.object({
 		.optional(),
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
-	registered_via: registeredViaSchema.default('app')
+	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
+	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
@@ -758,7 +785,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		7, // schema_v 7: registered_via `web` (CR-070 D-REG-VIA); 6 = stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
+		8, // schema_v 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -773,6 +800,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			...(d.photo ? { photo: d.photo } : {}),
+			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
@@ -781,6 +809,51 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 		ctx
 	);
 }
+
+export function createKioskEvacueeFromCard(
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Evacuee {
+	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
+	const lastName = cardSnapshot.last_name_th || '';
+	const gender = cardSnapshot.gender || 'other';
+	const birthYearBE = cardSnapshot.birth_year_ce ? cardSnapshot.birth_year_ce + 543 : undefined;
+	const age =
+		cardSnapshot.age !== undefined
+			? cardSnapshot.age
+			: birthYearBE !== undefined
+				? Math.max(0, currentBEYear() - birthYearBE)
+				: undefined;
+
+	return makeDoc(
+		'evacuee',
+		8,
+		{
+			first_name: firstName,
+			last_name: lastName,
+			gender,
+			phone: null,
+			...(birthYearBE ? { birth_year: birthYearBE } : {}),
+			...(age !== undefined ? { age } : {}),
+			person_id: {
+				cardType: 'national_id',
+				number: cardSnapshot.citizen_id
+			},
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: null,
+			card_snapshot: cardSnapshot,
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			privacy: { search_excluded: false },
+			registered_via: 'kiosk'
+		},
+		ctx,
+		id
+	);
+}
+
+export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical {
 	const d = medicalInputSchema.parse(input);

@@ -19,16 +19,20 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
+	import Cpu from '@lucide/svelte/icons/cpu';
 	import { toast } from 'svelte-sonner';
+
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 	import { getTranslation } from '$lib/utils/i18n';
+
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { HOUSEHOLD_REGISTER_I18N } from './_constants/household-register.i18n';
 
 	let {
 		allEvacuees = [],
 		households = [],
+		initialAddress = null,
 		onsubmit,
 		onselect,
 		pending = false,
@@ -36,6 +40,7 @@
 	}: {
 		allEvacuees?: Evacuee[];
 		households?: Household[];
+		initialAddress?: Partial<HouseholdInput> | null;
 		onsubmit?: (input: Partial<HouseholdInput>) => void;
 		onselect?: (household: Household) => void;
 		pending?: boolean;
@@ -130,6 +135,7 @@
 	});
 
 	const provincesQuery = useProvinces();
+
 	const districtsQuery = useDistricts(() => formData.province || null);
 	const subdistrictsQuery = useSubdistricts(
 		() => formData.province || null,
@@ -161,6 +167,27 @@
 		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
 		formData.postal_code = match ? String(match.zipcode) : '';
 	}
+
+	$effect(() => {
+		if (initialAddress && (initialAddress.province || initialAddress.address_no)) {
+			if (initialAddress.address_no) formData.address_no = initialAddress.address_no;
+			if (initialAddress.village_no) formData.village_no = initialAddress.village_no;
+			if (initialAddress.province) formData.province = initialAddress.province;
+			if (initialAddress.district) formData.district = initialAddress.district;
+			if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
+			if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
+			showNewHouseholdForm = true;
+		}
+	});
+
+	$effect(() => {
+		if (formData.subdistrict && !formData.postal_code && subdistrictsQuery.data?.length) {
+			const match = subdistrictsQuery.data.find((s) => s.subdistrict === formData.subdistrict);
+			if (match) {
+				formData.postal_code = String(match.zipcode);
+			}
+		}
+	});
 
 	$effect(() => {
 		if (showNewHouseholdForm && selectedLocation) {
@@ -604,14 +631,32 @@
 	<!-- New Household Form -->
 	{#if showNewHouseholdForm}
 		<form class="space-y-6 border-t border-border pt-6" onsubmit={handleNewHouseholdSubmit}>
-			<div>
-				<h3 class="flex items-center gap-2 text-lg font-bold">
-					🏡 {t.newForm.title}
-				</h3>
-				<p class="mt-1 text-xs text-muted-foreground">
-					{t.notFound.desc}
-				</p>
+			<div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+				<div>
+					<h3 class="flex items-center gap-2 text-lg font-bold">
+						🏡 {t.newForm.title}
+					</h3>
+					<p class="mt-1 text-xs text-muted-foreground">
+						{t.notFound.desc}
+					</p>
+				</div>
 			</div>
+
+			{#if initialAddress && (initialAddress.province || initialAddress.address_no)}
+				<div
+					class="rounded-xl border border-cyan-300 bg-cyan-50/80 p-3.5 text-xs text-cyan-900 shadow-sm dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200"
+				>
+					<div class="flex items-center gap-2 font-bold text-cyan-950 dark:text-cyan-100">
+						<Cpu class="size-4 text-cyan-700 dark:text-cyan-400" />
+						<span>ที่อยู่ตามทะเบียนบ้านดึงมาจากบัตรประชาชน (Autofilled)</span>
+					</div>
+					<p class="mt-1 text-cyan-800/90 dark:text-cyan-300/90">
+						โปรดสอบถามยืนยันกับผู้ประสบภัยว่าปัจจุบันพักอาศัยอยู่ที่นี่จริงหรือไม่
+						หากไม่ตรงสามารถพิมพ์แก้ไขในช่องด้านล่างได้ทันที
+					</p>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-3">
 				<div class="space-y-3">
 					<Label class="font-semibold">{t.newForm.addressNoLabel}</Label>

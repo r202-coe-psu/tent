@@ -113,7 +113,10 @@ describe('assertReceiveAgainstCatalog', () => {
 			ctx
 		);
 		expect(() =>
-			assertReceiveAgainstCatalog(masterEntry, { type: 'item_master', unit: 'ขวด' } as unknown as ItemMaster)
+			assertReceiveAgainstCatalog(masterEntry, {
+				type: 'item_master',
+				unit: 'ขวด'
+			} as unknown as ItemMaster)
 		).not.toThrow();
 	});
 

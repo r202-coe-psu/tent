@@ -37,8 +37,13 @@ import {
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
-import { supplyRepository, type SupplyItem, type SupplyCategory } from '$lib/features/supply';
-import { isItemMaster, itemMasterUnit, catalogRepository, type ItemMaster } from '$lib/features/catalog';
+import { supplyRepository, type SupplyItem } from '$lib/features/supply';
+import {
+	isItemMaster,
+	itemMasterUnit,
+	catalogRepository,
+	type ItemMaster
+} from '$lib/features/catalog';
 import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
 /**

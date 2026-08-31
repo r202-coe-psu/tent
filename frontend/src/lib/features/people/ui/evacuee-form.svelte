@@ -117,16 +117,76 @@
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const checkInMutation = useCheckInEvacuee();
 
+	let activeDraftEvacuee = $state<Evacuee | null>(null);
+
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
 		if (next === 3) registrationDraftActive = true;
 		step = next;
 	}
 
+	function handleSelectDraft(draft: Evacuee) {
+		activeDraftEvacuee = draft;
+		const card = draft.card_snapshot;
+
+		const cardBirthYearBE = card?.birth_year_ce ? card.birth_year_ce + 543 : undefined;
+		const currentYearBE = new Date().getFullYear() + 543;
+		const cardAge =
+			card?.age !== undefined
+				? card.age
+				: cardBirthYearBE !== undefined
+					? Math.max(0, currentYearBE - cardBirthYearBE)
+					: undefined;
+
+		// 1. Populate Personal Info for Step 3 (prefer authoritative card data)
+		registrationDraft = {
+			first_name: card?.first_name_th || draft.first_name || '',
+			last_name: card?.last_name_th || draft.last_name || '',
+			gender: card?.gender || draft.gender || 'other',
+			phone: draft.phone ?? null,
+			birth_year: cardBirthYearBE ?? draft.birth_year,
+			age: cardAge ?? draft.age,
+			person_id: card?.citizen_id
+				? { cardType: 'national_id', number: card.citizen_id }
+				: (draft.person_id ?? { cardType: 'national_id', number: '' }),
+			country: draft.country || 'THAILAND',
+			religion: draft.religion || 'buddhist',
+			special_needs: draft.special_needs || [],
+			photo: card?.photo_base64 || draft.photo || null,
+			card_snapshot: card || null
+		};
+
+		if (card?.photo_base64 || draft.photo) {
+			registrationFacePhotoUrl = card?.photo_base64 || draft.photo || null;
+		}
+
+		// 2. Populate Address for Step 4 (Household)
+		if (card) {
+			newHouseholdAddress = {
+				address_no: card.address_no || null,
+				village_no: card.village_no ? `หมู่ ${card.village_no}` : null,
+				subdistrict: card.subdistrict || null,
+				district: card.district || null,
+				province: card.province || null,
+				postal_code: card.postal_code || null
+			};
+			isCreatingNewHousehold = true;
+		}
+
+		// 3. Start at Step 2 (EWAR Symptoms)
+		goToStep(2);
+		toast.info(
+			card
+				? `โหลดข้อมูลจากบัตร "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
+				: `โหลดข้อมูล "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
+		);
+	}
+
 	function clearRegistrationDraft() {
 		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
 		registrationDraft = null;
 		registrationFacePhotoUrl = null;
+		activeDraftEvacuee = null;
 	}
 
 	onDestroy(() => {
@@ -140,7 +200,14 @@
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
 		registrationDraft = structuredClone(input);
-		pendingEvacueeInput = input;
+		if (activeDraftEvacuee) {
+			pendingEvacueeInput = {
+				...input,
+				...(activeDraftEvacuee ? { draft_id: activeDraftEvacuee._id } : {})
+			} as EvacueeInput;
+		} else {
+			pendingEvacueeInput = input;
+		}
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
 		isHealthy = false;
@@ -347,7 +414,8 @@
 
 			// Notify parent to show the success/wristband screen
 			onComplete?.(finishedEvacuee);
-		} catch {
+		} catch (err) {
+			console.error('[EvacueeForm] Zone assignment check-in error:', err);
 			zoneError = t.zoneErrorRetry;
 			toast.error(t.toastZoneFailed);
 		}
@@ -454,7 +522,7 @@
 {/if}
 
 {#if step === 1}
-	<SearchSection onNext={() => goToStep(2)} />
+	<SearchSection onNext={() => goToStep(2)} onSelectDraft={handleSelectDraft} />
 {:else if step === 2}
 	<EwarSymptomSection
 		bind:isHealthy
@@ -494,12 +562,14 @@
 			<HouseholdRegisterForm
 				allEvacuees={combinedEvacuees}
 				households={householdsQuery.data ?? []}
+				initialAddress={newHouseholdAddress}
 				onsubmit={handleHouseholdRegisterSubmit}
 				onselect={handleHouseholdSelect}
 				pending={isSubmittingHousehold}
 				bind:showNewHouseholdForm={isCreatingNewHousehold}
 			/>
 		{/if}
+
 		<div
 			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
 		>

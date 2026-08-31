@@ -29,6 +29,7 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
 	import { getTranslation } from '$lib/utils/i18n';
+
 	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
 
@@ -77,7 +78,20 @@
 	]);
 
 	const initial = untrack(() => initialInput);
-	let birthYearBE = $state(initial?.birth_year?.toString() ?? '');
+	let birthYearBE = $state(
+		typeof initial?.birth_year === 'number'
+			? String(initial.birth_year)
+			: typeof initial?.age === 'number'
+				? String(currentBEYear() - initial.age)
+				: ''
+	);
+	let age = $state(
+		typeof initial?.age === 'number'
+			? String(initial.age)
+			: typeof initial?.birth_year === 'number'
+				? String(Math.max(0, currentBEYear() - initial.birth_year))
+				: ''
+	);
 	let uploadingPhoto = $state(false);
 	const saveImage = useSaveImage();
 	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
@@ -85,6 +99,22 @@
 	let medicalConditionsStr = $state(initial?.medical_conditions?.join(', ') ?? '');
 	let medicalMedicationsStr = $state(initial?.medical_medications?.join(', ') ?? '');
 	let medicalAllergiesStr = $state(initial?.medical_allergies?.join(', ') ?? '');
+
+	$effect(() => {
+		if (initialInput) {
+			if (typeof initialInput.birth_year === 'number') {
+				birthYearBE = String(initialInput.birth_year);
+				if (typeof initialInput.age === 'number') {
+					age = String(initialInput.age);
+				} else {
+					age = String(Math.max(0, currentBEYear() - initialInput.birth_year));
+				}
+			} else if (typeof initialInput.age === 'number') {
+				age = String(initialInput.age);
+				birthYearBE = String(currentBEYear() - initialInput.age);
+			}
+		}
+	});
 
 	const initialFormData = {
 		...initial,
@@ -177,8 +207,6 @@
 			.map((code) => ({ code, label: masterByCode.get(code)!.label }));
 	});
 
-	let age = $state('');
-
 	const birthYearError = $derived.by(() => {
 		if (!birthYearBE) return undefined;
 		const y = Number(birthYearBE);
@@ -198,15 +226,39 @@
 
 	function updateBirthYear(value: string) {
 		birthYearBE = value;
-		$formData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+		if (value && !isNaN(Number(value))) {
+			const y = Number(value);
+			$formData.birth_year = y;
+			if (y > minBirthYearBE() && y <= currentBEYear()) {
+				const calcAge = currentBEYear() - y;
+				age = calcAge.toString();
+				$formData.age = calcAge;
+			}
+		} else {
+			$formData.birth_year = undefined;
+			if (!value) {
+				age = '';
+				$formData.age = undefined;
+			}
+		}
 	}
 
 	function updateAge(value: string) {
 		age = value;
 		if (value && !isNaN(Number(value))) {
-			$formData.birth_year = currentBEYear() - Number(value);
-		} else if (!birthYearBE) {
-			$formData.birth_year = undefined;
+			const a = Number(value);
+			$formData.age = a;
+			if (a >= 0 && a <= MAX_AGE_YEARS) {
+				const calcBE = currentBEYear() - a;
+				birthYearBE = calcBE.toString();
+				$formData.birth_year = calcBE;
+			}
+		} else {
+			$formData.age = undefined;
+			if (!value) {
+				birthYearBE = '';
+				$formData.birth_year = undefined;
+			}
 		}
 	}
 
@@ -291,6 +343,12 @@
 
 			<!-- Column 2: Fields grid -->
 			<div class="space-y-5 sm:space-y-4">
+				<div class="flex items-center justify-between border-b border-border/60 pb-1">
+					<span class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+						>ข้อมูลประจำตัว</span
+					>
+				</div>
+
 				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 					<Form.Field {form} name="person_id.cardType">
 						<Form.Control>
