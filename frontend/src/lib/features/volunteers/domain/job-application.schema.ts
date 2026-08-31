@@ -22,6 +22,28 @@ export const jobApplicationStatusSchema = z.enum([
 ]);
 export type JobApplicationStatus = z.infer<typeof jobApplicationStatusSchema>;
 
+/**
+ * State machine transitions for JobApplication (CR-041 D-APP=A / CR-094 §3.4 / UX-DR6).
+ * - `pending_review`: default initial state, can transition to `confirmed`, `rejected`, or `cancelled`.
+ * - `confirmed`, `rejected`, `cancelled`: terminal states for application review lifecycle.
+ */
+export const JOB_APPLICATION_TRANSITIONS: Record<
+	JobApplicationStatus,
+	readonly JobApplicationStatus[]
+> = {
+	pending_review: ['confirmed', 'rejected', 'cancelled'],
+	confirmed: [],
+	rejected: [],
+	cancelled: []
+};
+
+export function canTransitionJobApplication(
+	from: JobApplicationStatus,
+	to: JobApplicationStatus
+): boolean {
+	return JOB_APPLICATION_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
 export const applicantSchema = z.object({
 	first_name: z.string().min(1),
 	last_name: z.string().min(1),

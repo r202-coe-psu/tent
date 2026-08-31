@@ -4,6 +4,8 @@ import {
 	isJobApplication,
 	makeJobApplication,
 	jobApplicationInputSchema,
+	canTransitionJobApplication,
+	JOB_APPLICATION_TRANSITIONS,
 	type JobApplicationInput
 } from './job-application.schema';
 
@@ -147,5 +149,47 @@ describe('makeJobApplication', () => {
 		expect(() =>
 			makeJobApplication({ ...baseInput, job_id: 'legacy' }, ctx, 'pending_review')
 		).toThrow();
+	});
+});
+
+describe('JOB_APPLICATION_TRANSITIONS and canTransitionJobApplication (Story 3.3 / UX-DR6)', () => {
+	it('allows valid transitions from pending_review to confirmed, rejected, and cancelled', () => {
+		expect(canTransitionJobApplication('pending_review', 'confirmed')).toBe(true);
+		expect(canTransitionJobApplication('pending_review', 'rejected')).toBe(true);
+		expect(canTransitionJobApplication('pending_review', 'cancelled')).toBe(true);
+	});
+
+	it('disallows transition from pending_review to pending_review', () => {
+		expect(canTransitionJobApplication('pending_review', 'pending_review')).toBe(false);
+	});
+
+	it('disallows transitions from terminal state confirmed', () => {
+		expect(canTransitionJobApplication('confirmed', 'pending_review')).toBe(false);
+		expect(canTransitionJobApplication('confirmed', 'rejected')).toBe(false);
+		expect(canTransitionJobApplication('confirmed', 'cancelled')).toBe(false);
+		expect(canTransitionJobApplication('confirmed', 'confirmed')).toBe(false);
+	});
+
+	it('disallows transitions from terminal state rejected', () => {
+		expect(canTransitionJobApplication('rejected', 'pending_review')).toBe(false);
+		expect(canTransitionJobApplication('rejected', 'confirmed')).toBe(false);
+		expect(canTransitionJobApplication('rejected', 'cancelled')).toBe(false);
+		expect(canTransitionJobApplication('rejected', 'rejected')).toBe(false);
+	});
+
+	it('disallows transitions from terminal state cancelled', () => {
+		expect(canTransitionJobApplication('cancelled', 'pending_review')).toBe(false);
+		expect(canTransitionJobApplication('cancelled', 'confirmed')).toBe(false);
+		expect(canTransitionJobApplication('cancelled', 'rejected')).toBe(false);
+		expect(canTransitionJobApplication('cancelled', 'cancelled')).toBe(false);
+	});
+
+	it('JOB_APPLICATION_TRANSITIONS matches the documented state machine graph', () => {
+		expect(JOB_APPLICATION_TRANSITIONS).toEqual({
+			pending_review: ['confirmed', 'rejected', 'cancelled'],
+			confirmed: [],
+			rejected: [],
+			cancelled: []
+		});
 	});
 });

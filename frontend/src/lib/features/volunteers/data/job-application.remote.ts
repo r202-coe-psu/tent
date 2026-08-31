@@ -5,6 +5,7 @@ import {
 	isJobApplication,
 	jobApplicationSchema,
 	makeJobApplication,
+	canTransitionJobApplication,
 	type JobApplication,
 	type JobApplicationInput,
 	type JobApplicationStatus
@@ -109,7 +110,7 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 	): Promise<JobApplication> {
 		const latest = await this.repo.get<JobApplication>(id);
 		if (!latest) throw new Error(`ไม่พบใบสมัคร: ${id}`);
-		if (latest.status !== 'pending_review') {
+		if (!canTransitionJobApplication(latest.status, decision)) {
 			throw new Error(`ใบสมัคร ${id} ถูกพิจารณาไปแล้ว (สถานะปัจจุบัน: ${latest.status})`);
 		}
 
@@ -152,7 +153,7 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 	async cancel(id: string, actor: string): Promise<JobApplication> {
 		const latest = await this.repo.get<JobApplication>(id);
 		if (!latest) throw new Error(`ไม่พบใบสมัคร: ${id}`);
-		if (latest.status !== 'pending_review') {
+		if (!canTransitionJobApplication(latest.status, 'cancelled')) {
 			throw new Error(`ใบสมัคร ${id} ยกเลิกไม่ได้แล้ว (สถานะปัจจุบัน: ${latest.status})`);
 		}
 		return this.save(
