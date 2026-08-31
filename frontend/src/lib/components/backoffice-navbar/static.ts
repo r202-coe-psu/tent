@@ -147,7 +147,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
+					{
+						label: '6. ทักษะอาสาสมัคร',
+						href: resolve('/back-office/volunteer-skills'),
+						icon: HandHeart
+					},
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
