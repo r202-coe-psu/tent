@@ -1,6 +1,6 @@
 ---
-id: CR-080
-title: Public family search — คืนสถานะจริงตาม backoffice (เลิก 3 bucket) + ค้นชื่อไทยแบบขึ้นต้นได้
+id: CR-099
+title: Public family search — คืนสถานะจริงตาม backoffice (เลิก 3 bucket) + ค้นชื่อไทยแบบขึ้นต้นได้ (renumbered from CR-080)
 status: proposed
 date: 2026-08-22
 requested_by: เจ้าของโครงการ (พบจากการทดลองใช้หน้า /search)
@@ -17,7 +17,7 @@ affects:
   - ไม่ bump schema_v (ไม่มี doc shape เปลี่ยน)
 ---
 
-# CR-080 — Public family search: สถานะจริง + ค้นชื่อไทยแบบขึ้นต้น
+# CR-099 — Public family search: สถานะจริง + ค้นชื่อไทยแบบขึ้นต้น
 
 ## Why
 
@@ -89,7 +89,7 @@ mockup ที่เจ้าของโครงการส่งมามี 
 - `docs/task-breakdown/11-famsearch.md` FS-2 — บรรทัด field list ระบุ `(in_shelter/moved/checked_out)`
 - `docs/features/public-tier-find-spec.html` บรรทัดที่อ้าง 3 bucket (2 จุด)
 - `docs/features/public-tier-flow-spec.html` บรรทัดที่อ้าง 3 bucket
-- `docs/changes/CR-005-*.md` ตาราง field — mark ว่า superseded โดย CR-080 ในส่วนสถานะ
+- `docs/changes/CR-005-*.md` ตาราง field — mark ว่า superseded โดย CR-099 ในส่วนสถานะ
 
 **Code + test ที่แก้แล้ว:**
 
@@ -128,7 +128,8 @@ index ใหม่ 2 ตัวถูกสร้างโดย Beanie ตอน
 
 ## Decision log
 
-- 2026-08-22 — เจ้าของโครงการขอ "แสดงสถานะจริงตาม label ใน backoffice" + ขอรายละเอียดครอบครัว
+- 2026-08-22 — เจ้าของโครงการขอ "แสดงสถานะจริงตาม label ใน backoffice" + ขอรายละเอียดครอบครัว (ร่างเดิมใช้รหัส CR-080)
 - 2026-08-22 — แจ้งว่าขัดกับ FS-2/CR-005 และเสนอ 3 ทางเลือก → เลือก "แสดงสถานะจริงทั้ง 7 ตัว"
 - 2026-08-22 — field ใน mockup ที่ไม่มีใน data model (ความสัมพันธ์/บทบาท/tag/พลัดหลง) → "ข้ามไปก่อน"
 - 2026-08-22 — เลือก track ด้วย CR ไฟล์ใน `docs/changes/` → proposed
+- 2026-08-31 — renumbered เป็น CR-099 เพื่อหลีกเลี่ยงการชนกับ CR-080 donor edit reservation via token

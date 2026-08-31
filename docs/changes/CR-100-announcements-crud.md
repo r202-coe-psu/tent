@@ -1,6 +1,6 @@
 ---
-id: CR-062
-title: "CR-062 - Announcements CRUD"
+id: CR-100
+title: Announcements CRUD (renumbered from CR-062 and CR-097)
 status: proposed
 date: 2026-07-29
 requested_by: ชิโน ทนุธรรม
@@ -16,7 +16,7 @@ affects:
   - backend/apiapp/modules/announcements/
 ---
 
-# CR-062 — Announcements CRUD
+# CR-100 — Announcements CRUD
 
 ## สรุป (TL;DR)
 
@@ -39,3 +39,8 @@ affects:
 ## ฝั่ง Public Plane
 - **Worker Projector:** คอยฟัง `announcement` จาก `registry` แล้ว upsert ลง MongoDB `public_announcements`
 - **FastAPI Backend:** เพิ่ม endpoint `GET /public/v1/announcements` เพื่อดึงประกาศ (อาจจะ filter เฉพาะที่ `is_active=true`)
+
+## Decision log
+- 2026-07-29 — proposed โดย ชิโน ทนุธรรม (ร่างเดิมใช้รหัส CR-062)
+- 2026-08-31 — renumbered เป็น CR-097 เพื่อหลีกเลี่ยงการชนกับ CR-062 external API keys
+
