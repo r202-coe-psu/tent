@@ -158,18 +158,26 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toBeVisible();
 		await expect(page.getByText('จุดปฏิบัติงาน: ครัวกลาง')).toBeVisible();
 		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย')).toBeVisible();
-		// The fixtures must not bleed into a live session.
-		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 	});
 
-	test('a fixture number still opens the demonstration', async ({ page }) => {
+	test('every number goes to the server — there is no built-in fixture session', async ({
+		page
+	}) => {
+		// The demonstration fixtures were removed once the portal was wired to the API.
+		// A number the server does not know opens an empty dashboard, never a made-up one.
 		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/schedule', (route) =>
+			route.fulfill(json({ success: true, shifts: [] }))
+		);
+		await page.route('**/api/public/v1/volunteer/ticket/find', (route) =>
+			route.fulfill(json({ success: true, tickets: [] }))
+		);
 		await openPortalTab(page);
 		await signIn(page, '081-9992211');
 
-		await expect(page.getByText('Heavy Lifting')).toBeVisible();
-		// …and reaches none of the live data.
-		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toHaveCount(0);
+		await expect(signOutButton(page)).toBeVisible();
+		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
+		await expect(page.getByText('นายเก่งกล้า')).toHaveCount(0);
 	});
 
 	test('accepts a phone number typed with separators', async ({ page }) => {

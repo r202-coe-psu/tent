@@ -2,7 +2,6 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -17,7 +16,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Shield from '@lucide/svelte/icons/shield';
 	import X from '@lucide/svelte/icons/x';
-	import Zap from '@lucide/svelte/icons/zap';
+	import { Html5Qrcode } from 'html5-qrcode';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
@@ -37,7 +36,7 @@
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
 	// One shape for both sources. The demo fixtures below and the live API are mapped
 	// into it, so the markup underneath never has to know which one it is rendering.
-	interface DemoShift {
+	interface PortalShift {
 		id: string;
 		shiftPeriod: string;
 		statusBadge: string;
@@ -49,15 +48,13 @@
 		checkinTime?: string;
 		checkoutTime?: string;
 		checkinBy?: string;
-		canCheckout?: boolean;
-		canCancel?: boolean;
 		/** `shift_assignment:{ulid}` — present only on live shifts. */
 		assignmentId?: string;
 		/** `dispatched` is an offer still awaiting an answer (CR-092 FR-VOL-06). */
 		dispatchStatus?: string | null;
 	}
 
-	interface DemoVolunteer {
+	interface PortalVolunteer {
 		id: string;
 		token: string;
 		name: string;
@@ -72,132 +69,16 @@
 		readiness: boolean;
 		scheduleCount: number;
 		openingsCount: number;
-		shifts: DemoShift[];
-		/**
-		 * True for the built-in fixtures. The demo session is editable in place —
-		 * check-out and cancel mutate the object — whereas a live session is a
-		 * projection of the server and must not be edited locally.
-		 */
-		isDemo?: boolean;
+		shifts: PortalShift[];
 	}
-
-	// ── DEMO FIXTURES ──────────────────────────────────────────────────────────
-	// Kept so the screen can be shown without a backend. A phone number that matches
-	// one of these opens the fixture; anything else goes to the live API.
-	const DEMO_VOLUNTEERS: DemoVolunteer[] = [
-		{
-			id: 'V-001',
-			token: 'PSU-VOL-V-001',
-			name: 'นายเก่งกล้า งานอาสา',
-			avatar: 'นา',
-			phone: '081-9992211',
-			shelterName: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-			shelterCode: 'PSU',
-			verified: true,
-			statusText: 'ปฏิบัติหน้าที่อยู่',
-			statusType: 'active',
-			roleType: '⚡ Operational (จิตอาสาทั่วไป)',
-			readiness: true,
-			scheduleCount: 2,
-			openingsCount: 5,
-			isDemo: true,
-			shifts: [
-				{
-					id: 'shift-1',
-					shiftPeriod: 'กะเช้า',
-					statusBadge: 'เช็คอินเข้างานแล้ว (Checked-In)',
-					statusVariant: 'checked_in',
-					title: 'ทีมพลบริการช่วยยกของ (Heavy Lifting)',
-					description:
-						'ช่วยขนย้ายสิ่งของบริจาคเข้าคลังสินค้า จัดเรียงกล่องและแพ็คเสบียงแจกจ่ายน้ำดื่มสำหรับแจกจ่าย',
-					location: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-					dateText: '2026-07-17 • 09:00 - 15:00',
-					checkinTime: '14:00:00 น.',
-					checkinBy: '🏷️ เจ้าหน้าที่เช็คให้',
-					canCheckout: true,
-					canCancel: true
-				},
-				{
-					id: 'shift-2',
-					shiftPeriod: 'กะบ่าย',
-					statusBadge: 'เสร็จสิ้นภารกิจแล้ว (Completed)',
-					statusVariant: 'completed',
-					title: 'ทีมจัดเตรียมและปรุงอาหารร้อน ครัวกลางหาดทอง',
-					description:
-						'ช่วยหั่นผัก เตรียมวัตถุดิบ บรรจุอาหารกล่องแจกจ่ายให้แก่ผู้ประสบภัยในพื้นที่ศูนย์พักพิงคลองแห',
-					location: 'ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)',
-					dateText: '2026-06-12 • 12:00 - 18:00',
-					checkinTime: '15:53:41 น.',
-					checkoutTime: '15:53:42 น.',
-					canCheckout: false,
-					canCancel: false
-				}
-			]
-		},
-		{
-			id: 'V-002',
-			token: 'PSU-VOL-V-002',
-			name: 'นส.ทิพยาพร แสนสุข',
-			avatar: 'นส',
-			phone: '081-9992222',
-			shelterName: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-			shelterCode: 'PSU',
-			verified: true,
-			statusText: 'ปฏิบัติหน้าที่อยู่',
-			statusType: 'active',
-			roleType: '🛡️ Staff-Capable (ช่วยงานเจ้าหน้าที่)',
-			readiness: true,
-			scheduleCount: 1,
-			openingsCount: 5,
-			isDemo: true,
-			shifts: [
-				{
-					id: 'shift-3',
-					shiftPeriod: 'กะเช้า',
-					statusBadge: 'เช็คอินเข้างานแล้ว (Checked-In)',
-					statusVariant: 'checked_in',
-					title: 'ทีมอำนวยการและต้อนรับประสานงาน EOC ม.อ.',
-					description:
-						'ช่วยงานอำนวยการ ต้อนรับผู้ประสานงานจากศูนย์ EOC ม.อ. คัดกรองและประสานงานผู้ประสบภัยที่เดินทางมาถึง',
-					location: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-					dateText: '2026-06-13 • 08:00 - 12:00',
-					checkinTime: '08:05:12 น.',
-					checkinBy: '🏷️ เช็คอินผ่านจุด Station',
-					canCheckout: true,
-					canCancel: true
-				}
-			]
-		},
-		{
-			id: 'V-003',
-			token: 'KLH-VOL-V-003',
-			name: 'นายใจมั่น มั่นคง',
-			avatar: 'นา',
-			phone: '081-9992233',
-			shelterName: 'ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)',
-			shelterCode: 'KLONGHAE',
-			verified: true,
-			statusText: 'รอการมอบหมาย',
-			statusType: 'pending',
-			roleType: '⚡ Operational (จิตอาสาทั่วไป)',
-			readiness: false,
-			scheduleCount: 0,
-			openingsCount: 5,
-			isDemo: true,
-			shifts: []
-		}
-	];
 
 	// ── STATE ──────────────────────────────────────────────────────────────────
 	let loginTab = $state<'phone' | 'qr'>('phone');
 	let inputPhone = $state('');
 	let inputToken = $state('');
 	let loginError = $state('');
-	let searchDemoQuery = $state('');
 
-	/** A fixture session. Editable in place, which is what check-out and cancel do. */
-	let demoVolunteer = $state<DemoVolunteer | null>(null);
-	/** The phone a live session signed in with. Empty = no live session. */
+	/** The phone this session signed in with. Empty = signed out. */
 	let livePhone = $state('');
 
 	const scheduleQuery = useVolunteerSchedule(() => livePhone);
@@ -210,7 +91,7 @@
 	let answering = $state<string | null>(null);
 	// ── LIVE SESSION → VIEW MODEL ──────────────────────────────────────────────
 
-	const SHIFT_BADGE: Record<string, { label: string; variant: DemoShift['statusVariant'] }> = {
+	const SHIFT_BADGE: Record<string, { label: string; variant: PortalShift['statusVariant'] }> = {
 		assigned: { label: 'ได้รับมอบหมาย (Assigned)', variant: 'pending' },
 		standby: { label: 'รอสแตนด์บาย (Standby)', variant: 'pending' },
 		checked_in: { label: 'เช็คอินเข้างานแล้ว (Checked-In)', variant: 'checked_in' },
@@ -239,7 +120,7 @@
 		return `${shift.date} • ${from}${to}`;
 	}
 
-	function toPortalShift(shift: ScheduleShift): DemoShift {
+	function toPortalShift(shift: ScheduleShift): PortalShift {
 		const badge = SHIFT_BADGE[shift.status] ?? {
 			label: shift.status,
 			variant: 'pending' as const
@@ -256,12 +137,7 @@
 			location: shift.shelter_name || shift.shelter_code,
 			dateText: timeRange(shift),
 			checkinTime: clockText(shift.check_in_at),
-			checkoutTime: clockText(shift.check_out_at),
-			// Neither is a public write path: checking out happens at the shelter's
-			// tablet station, and withdrawing from a roster is a manager action. The
-			// fixtures keep both because they are a demonstration, not a session.
-			canCheckout: false,
-			canCancel: false
+			checkoutTime: clockText(shift.check_out_at)
 		};
 	}
 
@@ -269,7 +145,7 @@
 		phone: string,
 		shifts: ScheduleShift[],
 		tickets: TicketSummary[]
-	): DemoVolunteer {
+	): PortalVolunteer {
 		const named = tickets.find((t) => t.applicant_name)?.applicant_name ?? '';
 		const first = shifts[0];
 		return {
@@ -293,8 +169,7 @@
 			readiness: shifts.length > 0,
 			scheduleCount: shifts.length,
 			openingsCount: tickets.length,
-			shifts: shifts.map(toPortalShift),
-			isDemo: false
+			shifts: shifts.map(toPortalShift)
 		};
 	}
 
@@ -306,14 +181,104 @@
 		return toPortalVolunteer(livePhone, scheduleQuery.data ?? [], ticketsQuery.data ?? []);
 	});
 
-	/** Whichever session is open. The markup below reads only this. */
-	const currentVolunteer = $derived(demoVolunteer ?? liveVolunteer);
+	/** The open session, or null when signed out. The markup below reads only this. */
+	const currentVolunteer = $derived(liveVolunteer);
 
 	let dashboardTab = $state<'schedule' | 'openings'>('schedule');
 	let searchJobQuery = $state('');
 	let selectedShelterFilter = $state('all');
 	let isPassModalOpen = $state(false);
+	let passModalEl = $state<HTMLElement | null>(null);
+	let isPassFullscreen = $state(false);
+
+	/**
+	 * Blow the pass up to the whole screen for the gate.
+	 *
+	 * The volunteer holds this out to be scanned, often outdoors — filling the screen
+	 * makes the QR bigger and lets the device brightness work on it. Fails quietly:
+	 * iOS Safari does not grant fullscreen on arbitrary elements, and the modal is
+	 * still perfectly usable without it.
+	 */
+	async function togglePassFullscreen() {
+		try {
+			if (document.fullscreenElement) {
+				await document.exitFullscreen();
+			} else if (passModalEl) {
+				await passModalEl.requestFullscreen();
+			}
+		} catch {
+			toast.info('อุปกรณ์นี้ไม่รองรับการขยายเต็มจอ');
+		}
+	}
+
+	function closePassModal() {
+		if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+		isPassModalOpen = false;
+	}
 	let isCameraModalOpen = $state(false);
+	let cameraError = $state('');
+
+	function closeCamera() {
+		isCameraModalOpen = false;
+		cameraError = '';
+	}
+
+	/**
+	 * Read a volunteer QR and sign in with what it contains.
+	 *
+	 * The pass encodes its own URL, so the payload is either a bare token or a link
+	 * ending in one — both reduce to the last path segment. Anything else is left for
+	 * `handleTokenLogin` to reject, rather than guessed at here.
+	 */
+	function tokenFromScan(decoded: string): string {
+		const trimmed = decoded.trim();
+		const withoutQuery = trimmed.split(/[?#]/)[0];
+		const lastSegment = withoutQuery.split('/').filter(Boolean).pop() ?? '';
+		return (lastSegment || trimmed).toUpperCase();
+	}
+
+	function cameraAttachment(node: HTMLDivElement) {
+		const reader = new Html5Qrcode(node.id);
+		let handled = false;
+
+		reader
+			.start(
+				{ facingMode: 'environment' },
+				{
+					fps: 10,
+					qrbox: (width, height) => {
+						const size = Math.floor(Math.min(width, height) * 0.7);
+						return { width: size, height: size };
+					}
+				},
+				(decodedText) => {
+					// One scan per opening. The camera keeps firing while the modal tears
+					// down, and a second hit would navigate twice.
+					if (handled) return;
+					const token = tokenFromScan(decodedText);
+					if (!token) return;
+					handled = true;
+					if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
+					isCameraModalOpen = false;
+					inputToken = token;
+					submitToken(token);
+				},
+				() => {
+					// Fires on every frame that does not contain a code — not an error.
+				}
+			)
+			.catch(() => {
+				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+			});
+
+		return () => {
+			if (reader.isScanning) {
+				reader.stop().catch(() => {
+					// The view is unmounting; nothing actionable to surface.
+				});
+			}
+		};
+	}
 	let qrDataUrl = $state<string>('');
 
 	// Generate QR Code data URL when volunteer is active
@@ -337,37 +302,12 @@
 	});
 
 	// Filter demo list
-	const filteredDemos = $derived(
-		DEMO_VOLUNTEERS.filter(
-			(d) =>
-				d.name.includes(searchDemoQuery.trim()) ||
-				d.id.toLowerCase().includes(searchDemoQuery.trim().toLowerCase()) ||
-				d.phone.includes(searchDemoQuery.trim())
-		)
-	);
-
-	function selectDemo(vol: DemoVolunteer) {
-		livePhone = '';
-		demoVolunteer = JSON.parse(JSON.stringify(vol));
-		loginError = '';
-		toast.success(`เข้าสู่ระบบในชื่อ ${vol.name}`);
-	}
-
 	function handlePhoneLogin(e: SubmitEvent) {
 		e.preventDefault();
 		loginError = '';
 		const trimmed = inputPhone.trim().replace(/[-\s]/g, '');
 		if (!trimmed) {
 			loginError = 'กรุณากรอกเบอร์โทรศัพท์ที่ลงทะเบียนไว้';
-			return;
-		}
-
-		// A fixture number opens the demonstration; everything else is a real lookup.
-		const match = DEMO_VOLUNTEERS.find((d) => d.phone.replace(/[-\s]/g, '') === trimmed);
-		if (match) {
-			livePhone = '';
-			demoVolunteer = JSON.parse(JSON.stringify(match));
-			toast.success(`เข้าสู่ระบบสำเร็จ: ${match.name}`);
 			return;
 		}
 
@@ -379,36 +319,32 @@
 		// The normalised form, so the query key matches however it was typed. What comes
 		// back is whatever the server holds — a number with no shifts opens an empty
 		// dashboard rather than a session invented on the spot.
-		demoVolunteer = null;
 		livePhone = parsed.data.phone;
 	}
 
-	function handleTokenLogin(e: SubmitEvent) {
-		e.preventDefault();
+	/**
+	 * Sign in with a ticket code, from the form or from a QR scan.
+	 *
+	 * A real code opens its own pass: that page resolves the token itself and is where
+	 * the QR for on-site check-in lives, so there is nothing to look up here.
+	 */
+	function submitToken(value: string) {
 		loginError = '';
-		const trimmed = inputToken.trim().toUpperCase();
+		const trimmed = value.trim().toUpperCase();
 		if (!trimmed) {
 			loginError = 'กรุณากรอกรหัส Token หรือรหัสตั๋วจิตอาสา';
 			return;
 		}
-
-		const match = DEMO_VOLUNTEERS.find(
-			(d) => d.token.toUpperCase().includes(trimmed) || d.id.toUpperCase() === trimmed
-		);
-		if (match) {
-			livePhone = '';
-			demoVolunteer = JSON.parse(JSON.stringify(match));
-			toast.success(`เข้าสู่ระบบสำเร็จ: ${match.name}`);
-			return;
-		}
-
-		// A real ticket code opens its own pass. That page resolves the token itself and
-		// is where the QR for on-site check-in lives, so there is nothing to look up here.
 		if (trimmed.startsWith('TKT-VOL-') || trimmed.startsWith('VIEW-')) {
 			void goto(resolve(`/volunteer/ticket/${encodeURIComponent(trimmed)}`));
 			return;
 		}
 		loginError = 'ไม่พบรหัสตั๋วหรือ Token ในระบบ กรุณาตรวจสอบอีกครั้ง';
+	}
+
+	function handleTokenLogin(e: SubmitEvent) {
+		e.preventDefault();
+		submitToken(inputToken);
 	}
 
 	/**
@@ -418,7 +354,7 @@
 	 * reads out on the phone. The phone alone is guessable and a declined shift cannot
 	 * be un-declined from here, so the code is what makes the write safe.
 	 */
-	async function answerDispatch(shift: DemoShift, action: 'accepted' | 'declined') {
+	async function answerDispatch(shift: PortalShift, action: 'accepted' | 'declined') {
 		const assignmentId = shift.assignmentId;
 		if (!assignmentId) return;
 
@@ -444,8 +380,8 @@
 	}
 
 	function handleLogout() {
-		demoVolunteer = null;
 		livePhone = '';
+		readinessOverride = null;
 		dispatchCodes = {};
 		dispatchErrors = {};
 		inputPhone = '';
@@ -454,46 +390,24 @@
 		toast.info('ออกจากระบบแล้ว');
 	}
 
-	function toggleReadiness() {
-		if (currentVolunteer) {
-			currentVolunteer.readiness = !currentVolunteer.readiness;
-			toast.success(
-				currentVolunteer.readiness
-					? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢'
-					: 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪'
-			);
-		}
-	}
+	/**
+	 * Availability, as the volunteer last set it in this session.
+	 *
+	 * Held separately from `currentVolunteer` because that is derived from the server
+	 * response: writing to it was lost the moment the schedule refetched, which is why
+	 * the two buttons appeared to do nothing.
+	 *
+	 * Not persisted yet — no endpoint accepts it. See the note in CR-096.
+	 */
+	let readinessOverride = $state<boolean | null>(null);
+	const isReady = $derived(readinessOverride ?? currentVolunteer?.readiness ?? false);
 
-	function handleCheckOut(shiftId: string) {
-		// Demonstration only. A live shift is checked out at the shelter's tablet
-		// station by a member of staff, not from the volunteer's own phone.
-		if (!demoVolunteer) return;
-		const currentVolunteer = demoVolunteer;
-		const shift = currentVolunteer.shifts.find((s) => s.id === shiftId);
-		if (shift) {
-			shift.statusBadge = 'เสร็จสิ้นภารกิจแล้ว (Completed)';
-			shift.statusVariant = 'completed';
-			shift.checkoutTime = new Date().toLocaleTimeString('th-TH', {
-				hour: '2-digit',
-				minute: '2-digit',
-				second: '2-digit'
-			});
-			shift.canCheckout = false;
-			shift.canCancel = false;
-			toast.success('เช็คเอาต์ออกจากภารกิจเรียบร้อยแล้ว บันทึกเวลาลงระบบ');
-		}
-	}
-
-	function handleCancelShift(shiftId: string) {
-		// Demonstration only — withdrawing from a roster is a manager action.
-		if (!demoVolunteer) return;
-		const currentVolunteer = demoVolunteer;
-		if (confirm('คุณต้องการขอยกเลิกกะงานนี้ใช่หรือไม่?')) {
-			currentVolunteer.shifts = currentVolunteer.shifts.filter((s) => s.id !== shiftId);
-			currentVolunteer.scheduleCount = currentVolunteer.shifts.length;
-			toast.info('ส่งคำขอยกเลิกกะงานเรียบร้อยแล้ว');
-		}
+	function setReadiness(value: boolean) {
+		// Two buttons, each setting one value. They used to share a toggle, so pressing
+		// the one already active flipped the state to the opposite of what it said.
+		if (isReady === value) return;
+		readinessOverride = value;
+		toast.success(value ? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢' : 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪');
 	}
 
 	function handleBookJob(jobTitle: string) {
@@ -662,91 +576,6 @@
 					</div>
 				{/if}
 			</div>
-
-			<!-- DEMO QUICK SELECT BOX -->
-			<div
-				class="rounded-3xl border-2 border-amber-300 bg-amber-50/40 p-5 shadow-sm md:p-6 dark:border-amber-700/60 dark:bg-amber-950/20"
-			>
-				<div class="mb-3 flex items-center justify-between gap-2">
-					<div
-						class="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1 text-2xs font-bold text-white shadow-xs"
-					>
-						<Zap class="size-3.5 fill-white" />
-						<span>DEMO QUICK SELECT โหมดสาธิตสำหรับทดสอบระบบ</span>
-					</div>
-					<span
-						class="rounded-md bg-amber-200 px-2 py-0.5 text-3xs font-black text-amber-900 dark:bg-amber-900 dark:text-amber-200"
-					>
-						DEMO ONLY
-					</span>
-				</div>
-
-				<p class="text-xs leading-relaxed text-amber-900 dark:text-amber-200">
-					⚠️ <strong>ทางลัดสำหรับผู้ทดสอบระบบ:</strong>
-					คุณสามารถกดเลือกบัญชีจิตอาสาตัวอย่างด้านล่างนี้เพื่อสลับโปรไฟล์เข้าดูตารางและลองเช็คอินได้ทันทีโดยไม่ต้องผ่าน
-					OTP
-				</p>
-
-				<!-- Demo Search Filter -->
-				<div class="relative my-3">
-					<Search
-						class="pointer-events-none absolute top-3 left-3.5 size-3.5 text-muted-foreground"
-					/>
-					<input
-						type="text"
-						bind:value={searchDemoQuery}
-						placeholder="ค้นหาชื่อ หรือรหัสจิตอาสาตัวอย่าง..."
-						class="w-full rounded-xl border border-amber-200 bg-card py-2.5 pr-4 pl-9 text-xs text-foreground outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-amber-800"
-					/>
-				</div>
-
-				<!-- Demo List Items -->
-				<div class="space-y-2.5">
-					{#each filteredDemos as demo (demo.id)}
-						<button
-							type="button"
-							onclick={() => selectDemo(demo)}
-							class="group flex w-full cursor-pointer items-center justify-between rounded-2xl border border-amber-200/80 bg-card p-3.5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-sm dark:border-amber-800/80"
-						>
-							<div class="flex items-center gap-3">
-								<div
-									class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 font-bold text-amber-900 dark:bg-amber-900 dark:text-amber-100"
-								>
-									{demo.avatar}
-								</div>
-								<div>
-									<div class="flex flex-wrap items-center gap-1.5">
-										<span class="text-xs font-bold text-foreground md:text-sm">{demo.name}</span>
-										<span class="text-2xs font-semibold text-destructive">({demo.id})</span>
-									</div>
-									<p class="flex items-center gap-1 text-2xs text-muted-foreground">
-										<MapPin class="size-3 shrink-0" />
-										<span class="truncate">{demo.shelterName}</span>
-									</p>
-								</div>
-							</div>
-
-							<div class="flex items-center gap-2">
-								<div class="hidden flex-col items-end gap-1 sm:flex">
-									<span
-										class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										<CircleCheck class="size-2.5" /> ยืนยันตัวตนแล้ว
-									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										{demo.statusText}
-									</span>
-								</div>
-								<ChevronRight
-									class="size-4 text-muted-foreground transition-transform group-hover:translate-x-1"
-								/>
-							</div>
-						</button>
-					{/each}
-				</div>
-			</div>
 		</div>
 	{:else}
 		<!-- ── SIGNED IN VOLUNTEER DASHBOARD ─────────────────────────────────── -->
@@ -805,8 +634,9 @@
 				<div class="flex rounded-xl border border-border bg-muted/30 p-1">
 					<button
 						type="button"
-						onclick={toggleReadiness}
-						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {currentVolunteer.readiness
+						onclick={() => setReadiness(true)}
+						aria-pressed={isReady}
+						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {isReady
 							? 'border border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs dark:bg-emerald-950/80 dark:text-emerald-200'
 							: 'text-muted-foreground'}"
 					>
@@ -815,8 +645,9 @@
 					</button>
 					<button
 						type="button"
-						onclick={toggleReadiness}
-						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {!currentVolunteer.readiness
+						onclick={() => setReadiness(false)}
+						aria-pressed={!isReady}
+						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {!isReady
 							? 'border border-border bg-card text-foreground shadow-xs'
 							: 'text-muted-foreground'}"
 					>
@@ -1022,27 +853,6 @@
 													</button>
 												</div>
 											</div>
-										{/if}
-
-										{#if shift.canCheckout}
-											<button
-												type="button"
-												onclick={() => handleCheckOut(shift.id)}
-												class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-95"
-											>
-												<Clock class="size-3.5" />
-												<span>เช็คเอาต์ออกจากงาน (Check-Out)</span>
-											</button>
-										{/if}
-
-										{#if shift.canCancel}
-											<button
-												type="button"
-												onclick={() => handleCancelShift(shift.id)}
-												class="rounded-xl border border-border px-4 py-2 text-xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
-											>
-												ขอยกเลิกกะงาน
-											</button>
 										{/if}
 									</div>
 								</div>
@@ -1558,6 +1368,11 @@
 	{/if}
 </div>
 
+<!-- Esc and the browser's own control leave fullscreen without touching our flag. -->
+<svelte:document
+	onfullscreenchange={() => (isPassFullscreen = Boolean(document.fullscreenElement))}
+/>
+
 <!-- ── MODAL: CAMERA QR SCANNER ────────────────────────────────────────────── -->
 {#if isCameraModalOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1566,42 +1381,37 @@
 				<h3 class="text-sm font-bold text-foreground">สแกน QR Code ตั๋วจิตอาสา</h3>
 				<button
 					type="button"
-					onclick={() => (isCameraModalOpen = false)}
+					onclick={closeCamera}
 					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
 				>
 					<X class="size-4" />
 				</button>
 			</div>
 
-			<div
-				class="my-6 rounded-2xl border-2 border-dashed border-primary/50 bg-muted/20 p-8 text-center"
-			>
-				<Camera class="mx-auto size-12 animate-pulse text-primary" />
-				<p class="mt-3 text-xs font-bold text-foreground">กำลังเชื่อมต่อกล้องอุปกรณ์...</p>
-				<p class="mt-1 text-2xs text-muted-foreground">
-					หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงาน
-				</p>
+			<!--
+				`{@attach}` rather than an $effect: the camera has to start when this node
+				enters the DOM and stop when it leaves, and the attachment's teardown is
+				what guarantees the stream is released if the modal is closed mid-scan.
+			-->
+			<div class="my-5 overflow-hidden rounded-2xl border-2 border-dashed border-primary/50">
+				<div id="volunteer-qr-reader" {@attach cameraAttachment}></div>
 			</div>
 
-			<div class="space-y-2">
-				<button
-					type="button"
-					onclick={() => {
-						isCameraModalOpen = false;
-						selectDemo(DEMO_VOLUNTEERS[0]);
-					}}
-					class="w-full rounded-xl bg-primary py-3 text-xs font-bold text-white shadow hover:opacity-95"
-				>
-					จำลองการสแกนสำเร็จ (V-001)
-				</button>
-				<button
-					type="button"
-					onclick={() => (isCameraModalOpen = false)}
-					class="w-full rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-muted"
-				>
-					ปิดหน้าต่าง
-				</button>
-			</div>
+			{#if cameraError}
+				<p class="mb-3 text-xs text-destructive" role="alert">{cameraError}</p>
+			{:else}
+				<p class="mb-3 text-center text-2xs text-muted-foreground">
+					หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงาน
+				</p>
+			{/if}
+
+			<button
+				type="button"
+				onclick={closeCamera}
+				class="w-full rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-muted"
+			>
+				ปิดหน้าต่าง
+			</button>
 		</div>
 	</div>
 {/if}
@@ -1610,12 +1420,23 @@
 {#if isPassModalOpen && currentVolunteer}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
 		<div
-			class="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"
+			bind:this={passModalEl}
+			class="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl {isPassFullscreen
+				? 'flex max-w-none flex-col justify-center'
+				: ''}"
 		>
-			<div class="flex justify-end">
+			<div class="flex justify-between">
 				<button
 					type="button"
-					onclick={() => (isPassModalOpen = false)}
+					onclick={togglePassFullscreen}
+					title={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
+					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+				>
+					<Maximize2 class="size-4" />
+				</button>
+				<button
+					type="button"
+					onclick={closePassModal}
 					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
 				>
 					<X class="size-4" />
@@ -1654,7 +1475,7 @@
 
 				<button
 					type="button"
-					onclick={() => (isPassModalOpen = false)}
+					onclick={closePassModal}
 					class="mt-2 w-full rounded-xl bg-primary py-3 text-xs font-bold text-white shadow hover:opacity-95"
 				>
 					ปิดหน้าต่าง
