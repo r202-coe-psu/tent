@@ -255,6 +255,7 @@
 				name: formatItemName(need.raw_name || need.name || need.item_id),
 				amount: need.qty_needed > 0 ? need.qty_needed : 1,
 				unit: formatUnit(need.unit),
+				unit_code: need.unit,
 				condition: 'new',
 				remark: '',
 				image: need.image || ''

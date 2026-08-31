@@ -133,3 +133,30 @@ const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 export function publicDonationErrorMessage(code: string): string {
 	return PUBLIC_DONATION_ERROR_MESSAGES[code] ?? 'ไม่สามารถจองคิวบริจาคได้ กรุณาลองใหม่อีกครั้ง';
 }
+
+/**
+ * One line of the public donate wizard's item list, as far as the unit rule cares
+ * (R-15.4). The wizard keeps a display label in `unit` because the donor sees it
+ * ("กก.", "ก้อน") and may type their own for a walk-in donation; `unit_code` is the
+ * catalog `item_master.base_unit` and is only set when the line came from a need
+ * card, together with `item_id`.
+ */
+export type DonationUnitSource = {
+	unit_code?: string;
+	unit?: string;
+};
+
+/**
+ * The `unit` to put in a `POST /public/v1/donations` item.
+ *
+ * `schema.md §2.1` requires `items[].unit` to equal `item_master.base_unit` whenever
+ * `item_id` is set, and the intake counter enforces it (422 `CATALOG_MISMATCH`) —
+ * sending the Thai label instead made every booking from a need card impossible to
+ * receive into stock, with no way for warehouse staff to fix it (R-15.4).
+ *
+ * So the catalog code always wins when present; the donor-visible label is only a
+ * fallback for free-text lines, which carry no `item_id` to be checked against.
+ */
+export function donationPayloadUnit(item: DonationUnitSource, fallback: string): string {
+	return item.unit_code?.trim() || item.unit?.trim() || fallback;
+}

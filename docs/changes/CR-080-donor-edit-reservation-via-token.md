@@ -1,8 +1,9 @@
 ---
 id: CR-080
 title: Donor แก้ไขรายการจองบริจาคผ่าน tracking_token (แก้จำนวน / เพิ่ม-ลบรายการ) + revision log
-status: approved
+status: done
 date: 2026-08-01
+updated: 2026-08-31
 requested_by: เจ้าของโครงการ (ตอบคำถามขอบเขตคำว่า "แก้" ใน DoD T-21 ข้อ 4)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -154,3 +155,4 @@ BFF  ──1─→ FastAPI: จอง delta (atomic)  ──ไม่พอ─�
   **3 → 4** (§2.3 ขึ้น 3 ไปแล้วตอน CR-038 `items[].qty` → `qty_str`), ระบุ baseline ของคอลัมน์
   "ตอนนี้" และแก้ตัวเลข rate-limit ให้ครบทั้งสองชั้น — ข้อเสนอ/กติกาไม่เปลี่ยน
 - 2026-08-21 — approved โดยเจ้าของโครงการ เคาะมติครบทั้ง 5 ข้อ: (1) แก้ได้เฉพาะ declared (2) reject ทั้งก้อนเมื่อ NEED_FULL (3) TTL นับต่อจาก declared_at เดิม (4) เก็บ revisions[] snapshot items ก่อน-หลังทั้งชุดใน donation doc (schema_v 3 → 4) (5) ไม่จำกัดจำนวนครั้งการแก้ต่อใบจอง (ใช้ rate-limit ต่อ IP)
+- 2026-08-31 — **done** — implement + merge เข้า `develop` แล้ว (สาขา `docs/cr-080` / T-21 reservation, commit `d189e481` `65483429`); ปิด CR ตาม change-management §3

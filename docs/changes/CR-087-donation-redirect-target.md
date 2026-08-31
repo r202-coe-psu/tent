@@ -1,8 +1,9 @@
 ---
 id: CR-087
 title: donation — เพิ่ม field ปลายทางที่ส่งต่อ (redirect_to_shelter_code) + ticket ฝั่งศูนย์ปลายทาง สำหรับสถานะ redirected (T-16 R-16.4)
-status: approved
+status: done
 date: 2026-08-25
+updated: 2026-08-31
 requested_by: Team A (T-16 intake review implementation) / Kunanon Nusaeng
 decided_by: project owner (อนุมัติ 2026-08-25)
 layer: volatile
@@ -106,3 +107,4 @@ CR นี้เป็นตัวปลดล็อกให้ต่อปุ�
 
 - 2026-08-25 — proposed
 - 2026-08-25 — approved by project owner
+- 2026-08-31 — **done** — implement + merge เข้า `develop` แล้ว (commit `ad5e8d59`, T-16 R-16.4); ปิด CR ตาม change-management §3 · **ข้อที่ยังไม่ตัดสิน** (เพดานการส่งต่อเป็นทอด ๆ และการที่ปลายทาง approve/reject ตั๋วเอง) ยกออกเป็นเรื่องใหม่ ไม่ค้างสถานะ CR นี้ไว้

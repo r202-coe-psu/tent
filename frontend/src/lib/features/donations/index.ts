@@ -9,8 +9,10 @@ export type {
 export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
-	isDonorEditable
+	isDonorEditable,
+	donationPayloadUnit
 } from './domain/public-donation';
+export type { DonationUnitSource } from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow } from './domain/back-office';
 
