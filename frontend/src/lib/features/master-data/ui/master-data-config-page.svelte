@@ -185,7 +185,7 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner {title} {description} />
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
@@ -201,7 +201,7 @@
 			onSetGlobalDefault={handleSetGlobalDefault}
 		/>
 	</div>
-</div>
+</main>
 
 <MasterDataEditModal
 	bind:open={modalOpen}

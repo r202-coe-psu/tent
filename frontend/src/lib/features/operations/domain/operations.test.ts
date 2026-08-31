@@ -16,6 +16,9 @@ import {
 	keyedDonationIds,
 	keyableDonations,
 	isNeedCutOff,
+	forceCutOffNeed,
+	reopenNeed,
+	isDonationOutstanding,
 	deriveNeedAvailability,
 	createReceiveEntry,
 	createDistributeEntry,
@@ -32,6 +35,10 @@ import {
 	purchaseReceiptInputSchema,
 	isPurchase,
 	mapNeedItemHeuristic,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
+	cancelTransfer,
 	nextLotNos,
 	lotDateStamp,
 	stockLotSchema,
@@ -1100,6 +1107,214 @@ describe('createDistributionReturnEntry', () => {
 	});
 });
 
+describe('Inter-shelter Transfers', () => {
+	it('creates and dispatches a transfer', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(t.status).toBe('requested');
+
+		const { transfer: shipped, ledgers } = dispatchTransfer(t, ctx);
+		expect(shipped.status).toBe('shipped');
+		expect(shipped.timeline.shipped).toBeDefined();
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('-100'); // outbound
+		expect(ledgers[0].reason).toBe('transfer_out');
+	});
+
+	it('receives a transfer completely', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 100 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('100');
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('100');
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles partial receipt (loss in transit)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver only gets 85
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 85 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('85');
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('85'); // Only 85 added to inventory
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles zero receipt (complete loss)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver gets 0
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 0 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('0');
+		expect(ledgers).toHaveLength(0); // No ledger entry since nothing was added
+	});
+
+	it('rejects dispatching a transfer that is not requested', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		expect(() => dispatchTransfer(shipped, ctx)).toThrow();
+	});
+
+	it('rejects receiving a transfer that has not shipped', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(() => receiveTransfer(t, [{ item_id: 'item:rice', qty: 100 }], ctx)).toThrow();
+	});
+
+	it('rejects receiving more than the dispatched quantity (over-receipt)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		expect(() => receiveTransfer(shipped, [{ item_id: 'item:rice', qty: 150 }], ctx)).toThrow(
+			/exceeds dispatched quantity/
+		);
+	});
+
+	it('keeps decimal qty exact through dispatch and receive (CR-038)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: '0.2', unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(t.items[0].qty).toBe('0.2');
+
+		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx);
+		expect(out[0].qty).toBe('-0.2');
+
+		// Partial receipt (0.1 of the 0.2 dispatched) — received qty can never exceed dispatched.
+		const { ledgers: incoming } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: '0.1' }],
+			ctx
+		);
+		expect(incoming[0].qty).toBe('0.1');
+
+		// The float trap CR-038 exists to close: -0.2 + 0.1 must not drift off of -0.1
+		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '-0.1']]));
+	});
+
+	it('records a discrepancy reason via notes on partial receipt', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		const { transfer: received } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 85 }],
+			ctx,
+			'15kg damaged in transit'
+		);
+
+		expect(received.notes).toBe('15kg damaged in transit');
+	});
+
+	it('cancels a requested transfer with no ledger impact', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+
+		const { transfer: cancelled } = cancelTransfer(t);
+		expect(cancelled.status).toBe('cancelled');
+	});
+
+	it('rejects cancelling a transfer that has already shipped', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		expect(() => cancelTransfer(shipped)).toThrow();
+	});
+});
+
 describe('mapNeedItemHeuristic', () => {
 	it('maps known items correctly', () => {
 		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
@@ -1113,6 +1328,137 @@ describe('mapNeedItemHeuristic', () => {
 	it('slugs unknown items correctly', () => {
 		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
 		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
+	});
+});
+
+// CR-052 §1.6 — a manual cut-off stops donors mid-flow while the target is still
+// short, so the reason is what the audit trail and the transparency report are built
+// from. Enforced in the domain, not the dialog, so no caller can skip it.
+describe('forceCutOffNeed + reopenNeed (T-22 manual force cut-off)', () => {
+	const campaign = () =>
+		createCampaign(
+			{
+				title: 'ของใช้จำเป็น',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+	it('refuses an empty reason', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:water', '')).toThrow(/reason/i);
+	});
+
+	it('refuses a whitespace-only reason', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:water', '     ')).toThrow(/reason/i);
+	});
+
+	it('closes only the named need when a reason is given', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		expect(closed.needs.find((n) => n.item_id === 'item:water')?.status).toBe('closed');
+		expect(closed.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('open');
+	});
+
+	it('does not mutate the campaign it was handed', () => {
+		const original = campaign();
+		forceCutOffNeed(original, 'item:water', 'พื้นที่คลังเต็ม');
+		expect(original.needs.find((n) => n.item_id === 'item:water')?.status).toBe('open');
+	});
+
+	it('rejects an item the campaign does not ask for', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:soap', 'พื้นที่คลังเต็ม')).toThrow(/item:soap/);
+	});
+
+	it('a closed need cuts off regardless of how far the target still is', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		const need = closed.needs.find((n) => n.item_id === 'item:water');
+		expect(isNeedCutOff(need!.qty_target, '0', '0', need!.status, closed.status)).toBe(true);
+	});
+
+	it('reopens without demanding a reason', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		const reopened = reopenNeed(closed, 'item:water');
+		expect(reopened.needs.find((n) => n.item_id === 'item:water')?.status).toBe('open');
+		expect(reopened.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('open');
+	});
+});
+
+// CR-052 moves a public booking through pending_review → verifying before it becomes
+// stock. Every quota/cut-off reader has to treat those as still owed to the shelter,
+// or the board reopens a need the donor is already on their way to fill.
+describe('donation statuses that still owe the shelter goods (CR-052)', () => {
+	it('counts declared, pending_review and verifying as outstanding', () => {
+		expect(isDonationOutstanding('declared')).toBe(true);
+		expect(isDonationOutstanding('pending_review')).toBe(true);
+		expect(isDonationOutstanding('verifying')).toBe(true);
+	});
+
+	it('does not count statuses whose goods will never arrive here', () => {
+		expect(isDonationOutstanding('received')).toBe(false);
+		expect(isDonationOutstanding('redirected')).toBe(false);
+		expect(isDonationOutstanding('rejected')).toBe(false);
+		expect(isDonationOutstanding('expired')).toBe(false);
+		expect(isDonationOutstanding('cancelled')).toBe(false);
+	});
+
+	it('reserves quota for a pending_review booking', () => {
+		const reserved = calculateReserved(
+			[
+				{
+					...declaredItemsDonation(),
+					status: 'pending_review',
+					items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+				}
+			],
+			[]
+		);
+		expect(reserved.get('item:rice')).toBe('10');
+	});
+
+	it('releases quota once a booking is redirected or rejected', () => {
+		for (const status of ['redirected', 'rejected'] as const) {
+			const reserved = calculateReserved(
+				[
+					{
+						...declaredItemsDonation(),
+						status,
+						items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				],
+				[]
+			);
+			expect(reserved.get('item:rice')).toBeUndefined();
+		}
+	});
+
+	it('offers a verifying booking to the receive form and drops a redirected one', () => {
+		const verifying = {
+			...declaredItemsDonation(),
+			_id: 'donation:A',
+			status: 'verifying' as const
+		};
+		const redirected = {
+			...declaredItemsDonation(),
+			_id: 'donation:B',
+			status: 'redirected' as const
+		};
+		expect(keyableDonations([verifying, redirected], []).map((d) => d._id)).toEqual(['donation:A']);
+	});
+
+	it('walks the CR-052 review chain forward only', () => {
+		expect(canTransitionDonation('declared', 'pending_review')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'verifying')).toBe(true);
+		expect(canTransitionDonation('verifying', 'received')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'rejected')).toBe(true);
+
+		// No skipping the review step, and nothing comes back out of a terminal status.
+		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
+		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
+		expect(canTransitionDonation('received', 'verifying')).toBe(false);
+		expect(canTransitionDonation('rejected', 'pending_review')).toBe(false);
 	});
 });
 

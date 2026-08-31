@@ -22,9 +22,12 @@ export const GET: RequestHandler = async () => {
 			.filter((item) => item.status !== 'inactive')
 			.map((item) => ({ code: item.code, label: item.label }));
 
-		return json({ types }, { headers: { 'Cache-Control': 'public, max-age=300' } });
+		return json(
+			{ types, shelterTypes: types },
+			{ headers: { 'Cache-Control': 'public, max-age=300' } }
+		);
 	} catch (e) {
 		console.warn('shelter-types lookup failed:', e);
-		return json({ types: [] }, { headers: { 'Cache-Control': 'no-store' } });
+		return json({ types: [], shelterTypes: [] }, { headers: { 'Cache-Control': 'no-store' } });
 	}
 };
