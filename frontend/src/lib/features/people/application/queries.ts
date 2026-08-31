@@ -27,6 +27,7 @@ import type {
 	HouseholdInput,
 	Medical,
 	MedicalInput,
+	MovementAction,
 	ScreeningInput
 } from '../domain/people';
 import { canCancelHold } from '$lib/auth/roles';
@@ -192,6 +193,26 @@ export const useCheckOutEvacuee = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
 			peopleRepository().checkOutEvacuee(evacuee, ctx),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
+export const useRecordMovement = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			evacuee,
+			action,
+			ctx
+		}: {
+			evacuee: Evacuee;
+			action: Exclude<MovementAction, 'check_in' | 'check_out'>;
+			ctx: AuthorContext;
+		}) => peopleRepository().recordMovement(evacuee, action, ctx),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

@@ -1047,6 +1047,34 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 	};
 }
 
+/**
+ * Map a manual "set stay status to X" pick (evacuee-status-modal) to the movement
+ * action that actually produces that status — `current_stay` is a snapshot only,
+ * the movement stream is the source of truth (schema.md §1.1). Returns `null` when
+ * the status is unchanged, or when no movement action reaches it: `pre_registered`
+ * is only ever an initial state, never a manual return target.
+ */
+export function resolveStatusChangeAction(
+	current: StayStatus,
+	target: StayStatus
+): MovementAction | null {
+	if (current === target) return null;
+	switch (target) {
+		case 'active':
+			return current === 'temporary_leave' ? 'return_from_leave' : 'check_in';
+		case 'checked_out':
+			return 'check_out';
+		case 'transferred':
+			return 'transfer_out';
+		case 'temporary_leave':
+			return 'leave_temporary';
+		case 'deceased':
+			return 'mark_deceased';
+		default:
+			return null;
+	}
+}
+
 // ---------------------------------------------------------------- display helpers
 
 export function maskNationalId(id: string | null | undefined): string {
@@ -1055,10 +1083,14 @@ export function maskNationalId(id: string | null | undefined): string {
 }
 
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
-export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
+export function matchesEvacueeSearch(
+	evacuee: Evacuee,
+	query: string,
+	options: { isPublicSearch?: boolean } = {}
+): boolean {
 	const q = query.trim().toLowerCase();
 	if (!q) return true;
-	if (evacuee.privacy?.search_excluded) return false;
+	if (options.isPublicSearch && evacuee.privacy?.search_excluded) return false;
 	if (
 		evacuee.first_name.toLowerCase().includes(q) ||
 		evacuee.last_name.toLowerCase().includes(q) ||

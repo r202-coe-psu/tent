@@ -18,7 +18,11 @@
 		useDeleteMedical,
 		useCreateScreening,
 		usePatchEvacuee,
-		usePatchHousehold
+		usePatchHousehold,
+		useCheckInEvacuee,
+		useCheckOutEvacuee,
+		useRecordMovement,
+		resolveStatusChangeAction
 	} from '$lib/features/people';
 	import {
 		hasStaffCapability,
@@ -134,6 +138,9 @@
 	const movementsQuery = useMovements();
 	const patchEvacueeMutation = usePatchEvacuee();
 	const patchHouseholdMutation = usePatchHousehold();
+	const checkInMutation = useCheckInEvacuee();
+	const checkOutMutation = useCheckOutEvacuee();
+	const recordMovementMutation = useRecordMovement();
 	const createMedicalMutation = useCreateMedical();
 	const patchMedicalMutation = usePatchMedical();
 	const deleteMedicalMutation = useDeleteMedical();
@@ -263,13 +270,23 @@
 		}
 	}
 
+	// Status changes go through the movement stream — current_stay is only a
+	// snapshot of it (schema.md §1.1) — so every transition here records a
+	// movement doc instead of patching current_stay directly.
 	async function updateStatus(status: StayStatus) {
 		if (!evacuee) return;
 		try {
-			await patchEvacueeMutation.mutateAsync({
-				id: evacuee._id,
-				patch: { current_stay: { ...evacuee.current_stay, status, since: now() } }
-			});
+			const action = resolveStatusChangeAction(evacuee.current_stay.status, status);
+			if (action) {
+				const ctx = getAuthorContext();
+				if (action === 'check_in') {
+					await checkInMutation.mutateAsync({ evacuee, ctx });
+				} else if (action === 'check_out') {
+					await checkOutMutation.mutateAsync({ evacuee, ctx });
+				} else {
+					await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
+				}
+			}
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
 			showStatusModal = false;
 		} catch (err: unknown) {
