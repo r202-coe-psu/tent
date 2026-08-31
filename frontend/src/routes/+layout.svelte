@@ -11,8 +11,28 @@
 
 	let { children, data } = $props();
 
+	/**
+	 * Drop cached data when a session ends, so one user's records are not sitting in
+	 * memory for whoever logs in next on the same device.
+	 *
+	 * Only on the transition out of a session. This used to clear whenever nobody was
+	 * authenticated, which is every visitor on the public plane — and it ran after the
+	 * page's own queries had already started, cancelling them. The query stayed
+	 * `pending`/`fetching` forever with its request sitting completed in the network
+	 * panel, so any public page whose data loads on first render rendered a skeleton
+	 * and nothing else.
+	 *
+	 * `hadSession` is a plain variable, not `$state`: it is a latch this effect reads
+	 * and writes, and nothing renders from it.
+	 */
+	let hadSession = false;
 	$effect(() => {
-		if (authStore.isAuthenticated) return;
+		if (authStore.isAuthenticated) {
+			hadSession = true;
+			return;
+		}
+		if (!hadSession) return;
+		hadSession = false;
 		data.queryClient.clear();
 	});
 </script>

@@ -408,6 +408,151 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/transparency/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Transparency Summary
+		 * @description System-wide public metrics from public_shelters + public_persons.
+		 */
+		get: operations['get_transparency_summary_public_v1_transparency_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Jobs */
+		get: operations['list_jobs_public_v1_jobs_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs/{job_id}/apply': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Apply To Job */
+		post: operations['apply_to_job_public_v1_jobs__job_id__apply_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Ticket */
+		get: operations['get_ticket_public_v1_volunteer_ticket__token__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/find': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Find Tickets */
+		post: operations['find_tickets_public_v1_volunteer_ticket_find_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Cancel Ticket */
+		post: operations['cancel_ticket_public_v1_volunteer_ticket__token__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule
+		 * @description ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).
+		 */
+		post: operations['volunteer_schedule_public_v1_volunteer_schedule_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule/respond': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Respond To Dispatch
+		 * @description Accept or decline an offered shift with the code a manager read out.
+		 */
+		post: operations['respond_to_dispatch_public_v1_volunteer_schedule_respond_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -531,6 +676,39 @@ export interface components {
 			facebook_url?: string | null;
 			/** Phone Number */
 			phone_number?: string | null;
+		};
+		/**
+		 * DispatchRespondRequest
+		 * @description Answering an offered shift — two factors, neither enough alone.
+		 *
+		 *     ``phone`` is what the portal signed in with and must match the assignment;
+		 *     ``code`` is the short code a manager read out. A six-character code is only safe
+		 *     because the caller has to know whose shift it is as well.
+		 */
+		DispatchRespondRequest: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Phone */
+			phone: string;
+			/** Code */
+			code: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'accepted' | 'declined';
+		};
+		/** DispatchRespondResponse */
+		DispatchRespondResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Dispatch Status */
+			dispatch_status: string;
 		};
 		/** DonationCancelResponse */
 		DonationCancelResponse: {
@@ -701,6 +879,10 @@ export interface components {
 			question: string;
 			/** Answer */
 			answer: string;
+			/** Question En */
+			question_en?: string | null;
+			/** Answer En */
+			answer_en?: string | null;
 			/**
 			 * Is Published
 			 * @default true
@@ -738,6 +920,26 @@ export interface components {
 		HealthCheckResponse: {
 			/** Status */
 			status: string;
+		};
+		/** JobShiftTemplate */
+		JobShiftTemplate: {
+			/**
+			 * Shift Name
+			 * @default
+			 */
+			shift_name: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Days */
+			days?: string[];
 		};
 		/** M2ErrorDetail */
 		M2ErrorDetail: {
@@ -855,6 +1057,10 @@ export interface components {
 			title: string;
 			/** Description */
 			description: string;
+			/** Title En */
+			title_en?: string | null;
+			/** Description En */
+			description_en?: string | null;
 			/**
 			 * Severity
 			 * @enum {string}
@@ -867,6 +1073,118 @@ export interface components {
 			 * Format: date-time
 			 */
 			updated_at: string;
+		};
+		/**
+		 * PublicJobItem
+		 * @description One card on the board (CR-092 screen 1).
+		 *
+		 *     Carries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,
+		 *     ``dispatched``, is a back-office state and is folded into "not available" here
+		 *     rather than shown to the public.
+		 */
+		PublicJobItem: {
+			/** Job Id */
+			job_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Tier */
+			tier: string;
+			/** Skills Required */
+			skills_required?: string[];
+			shift_template?: components['schemas']['JobShiftTemplate'];
+			/** Quota */
+			quota: number;
+			/** Slots Confirmed */
+			slots_confirmed: number;
+			/** Slots Remaining */
+			slots_remaining: number;
+			/** Status */
+			status: string;
+			/**
+			 * Requires Review
+			 * @default false
+			 */
+			requires_review: boolean;
+		};
+		/** PublicJobListResponse */
+		PublicJobListResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Jobs */
+			jobs?: components['schemas']['PublicJobItem'][];
+		};
+		/**
+		 * ScheduleLookupRequest
+		 * @description Same key as the ticket lookup — the portal signs in by phone.
+		 */
+		ScheduleLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * ScheduleShift
+		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
+		 *
+		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
+		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
+		 *     and the check-in stamps the tablet station writes.
+		 */
+		ScheduleShift: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Shift
+			 * @default
+			 */
+			shift: string;
+			/**
+			 * Station
+			 * @default
+			 */
+			station: string;
+			/** Start Ts */
+			start_ts?: string | null;
+			/** End Ts */
+			end_ts?: string | null;
+			/** Check In At */
+			check_in_at?: string | null;
+			/** Check Out At */
+			check_out_at?: string | null;
+			/** Status */
+			status: string;
+			/** Dispatch Status */
+			dispatch_status?: string | null;
 		};
 		/** SearchRequest */
 		SearchRequest: {
@@ -1082,6 +1400,106 @@ export interface components {
 			/** Area M2 */
 			area_m2?: number | null;
 		};
+		/** TicketFindItem */
+		TicketFindItem: {
+			/** View Token */
+			view_token: string;
+			/**
+			 * Applicant Name
+			 * @default
+			 */
+			applicant_name: string;
+			/** Status */
+			status: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shift Date
+			 * @default
+			 */
+			shift_date: string;
+		};
+		/**
+		 * TicketFindRequest
+		 * @description Tab 2 — "ค้นหาตั๋วของฉัน" by the phone the application was made with.
+		 */
+		TicketFindRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/** TicketFindResponse */
+		TicketFindResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tickets */
+			tickets?: components['schemas']['TicketFindItem'][];
+		};
+		/** TicketShift */
+		TicketShift: {
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+		};
+		/** TransparencySummary */
+		TransparencySummary: {
+			/** Shelters Total */
+			shelters_total: number;
+			/**
+			 * Shelters Open
+			 * @description status in {open, full}
+			 */
+			shelters_open: number;
+			/**
+			 * Occupancy Total
+			 * @description active + pre_registered across projected shelters (CR-070)
+			 */
+			occupancy_total?: number | null;
+			/**
+			 * Vulnerable Count
+			 * @description Not projected in public_persons yet — always null until schema adds age
+			 */
+			vulnerable_count?: number | null;
+		};
+		/** TransparencySummaryResponse */
+		TransparencySummaryResponse: {
+			summary: components['schemas']['TransparencySummary'];
+			/**
+			 * Last Updated
+			 * Format: date-time
+			 */
+			last_updated: string;
+			/**
+			 * Is Stale
+			 * @default false
+			 */
+			is_stale: boolean;
+			/** Flags */
+			flags?: {
+				[key: string]: boolean;
+			};
+		};
 		/** ValidationError */
 		ValidationError: {
 			/** Location */
@@ -1102,6 +1520,121 @@ export interface components {
 			 * @default ok
 			 */
 			status: string;
+		};
+		/**
+		 * VolunteerApplyRequest
+		 * @description The 4-field quick-apply form (FR-VOL-02.2).
+		 *
+		 *     ``national_id`` is optional here even though CR-092 lists it as a main field: a
+		 *     volunteer with a passport or a pink card has no 13-digit number, and refusing them
+		 *     at the form would be a worse failure than a profile that dedupes on phone alone.
+		 */
+		VolunteerApplyRequest: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Phone */
+			phone: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Email */
+			email?: string | null;
+			/** Skills */
+			skills?: string[];
+			/** Shift Date */
+			shift_date?: string | null;
+			/** Station */
+			station?: string | null;
+		};
+		/** VolunteerApplyResponse */
+		VolunteerApplyResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+		};
+		/** VolunteerCancelResponse */
+		VolunteerCancelResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Application cancelled
+			 */
+			message: string;
+		};
+		/** VolunteerScheduleResponse */
+		VolunteerScheduleResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Shifts */
+			shifts?: components['schemas']['ScheduleShift'][];
+		};
+		/**
+		 * VolunteerTicket
+		 * @description What the Digital Pass may show.
+		 *
+		 *     No ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed
+		 *     because the pass displays it as the human-readable ticket id.
+		 */
+		VolunteerTicket: {
+			/** Token */
+			token: string;
+			/**
+			 * Can Cancel
+			 * @default true
+			 */
+			can_cancel: boolean;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Applicant Name */
+			applicant_name: string;
+			/** Phone Masked */
+			phone_masked: string;
+			/** Skills */
+			skills?: string[];
+			selected_shift?: components['schemas']['TicketShift'];
+			/** Applied At */
+			applied_at: string;
+			/** Qr Payload */
+			qr_payload: string;
+		};
+		/** VolunteerTicketResponse */
+		VolunteerTicketResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			ticket: components['schemas']['VolunteerTicket'];
 		};
 	};
 	responses: never;
@@ -1490,7 +2023,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1617,7 +2150,7 @@ export interface operations {
 					'application/json': components['schemas']['M2ErrorResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1710,7 +2243,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1883,6 +2416,254 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ShelterDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_transparency_summary_public_v1_transparency_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TransparencySummaryResponse'];
+				};
+			};
+		};
+	};
+	list_jobs_public_v1_jobs_get: {
+		parameters: {
+			query?: {
+				shelter_code?: string | null;
+				skill?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PublicJobListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	apply_to_job_public_v1_jobs__job_id__apply_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				job_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerApplyRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerApplyResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_ticket_public_v1_volunteer_ticket__token__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerTicketResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	find_tickets_public_v1_volunteer_ticket_find_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TicketFindRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TicketFindResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	cancel_ticket_public_v1_volunteer_ticket__token__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerCancelResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_schedule_public_v1_volunteer_schedule_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerScheduleResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	respond_to_dispatch_public_v1_volunteer_schedule_respond_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DispatchRespondRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DispatchRespondResponse'];
 				};
 			};
 			/** @description Validation Error */

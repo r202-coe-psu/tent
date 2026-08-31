@@ -131,6 +131,7 @@ import { bangkokDateString, resolveDutyWindow } from '$lib/features/volunteers/d
 import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
 import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
+import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
@@ -2617,6 +2618,271 @@ async function deleteDashboardData(): Promise<void> {
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Volunteer Job Board fixtures (CR-092 / T-28) for SH001 + SH002.
+ *
+ * Without these the public board at `/volunteers/jobs` is empty on a fresh database
+ * and there is no way to fill it: the back-office screen that posts a job is T-29 and
+ * does not exist yet, so the only alternative is hand-writing docs into CouchDB.
+ *
+ * Deliberately spans the three outcomes the apply flow can produce, because each takes
+ * a different path through `_needs_review` and the slot counter:
+ *
+ * - `auto_accept` operational → confirmed ticket, takes a slot
+ * - `staff-capable` → always queued for review whatever the flag says (F-AUTO)
+ * - a controlled skill (พยาบาล) → queued even on an auto-accept operational job
+ *
+ * No `job_application` fixtures: an application must own a `tracking_token` its
+ * applicant holds, and seeding one would either invent a token nobody has or leave a
+ * ticket that cannot be opened. Apply through the UI to create them.
+ */
+async function seedVolunteerJobs(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+	await ensureDb(SHELTER_DB_2);
+
+	const jobs: { db: string; ctx: AuthorContext; body: Record<string, unknown> }[] = [
+		{
+			db: SHELTER_DB,
+			ctx: SH001_CTX,
+			body: {
+				title: 'ผู้ช่วยครัวจัดเตรียมอาหาร',
+				description:
+					'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย แต่งกายสุภาพ สวมรองเท้าหุ้มส้น',
+				tier: 'operational',
+				required_roles: [],
+				skills_required: ['ครัว'],
+				quota: 8,
+				slots_confirmed: 0,
+				slots_dispatched: 0,
+				shift_template: {
+					shift_name: 'เช้า',
+					start_time: '08:00',
+					end_time: '12:00',
+					days: ['mon', 'tue', 'wed', 'thu', 'fri']
+				},
+				auto_accept: true,
+				status: 'open'
+			}
+		},
+		{
+			db: SHELTER_DB,
+			ctx: SH001_CTX,
+			body: {
+				title: 'ทีมยกของและจัดเรียงคลังสิ่งของบริจาค',
+				description: 'ขนย้ายและจัดเรียงสิ่งของบริจาคเข้าคลัง ต้องยกของหนักได้',
+				tier: 'operational',
+				required_roles: [],
+				skills_required: [],
+				quota: 6,
+				// Zero, like every other fixture. A non-zero count here would not show up on
+				// the board: the public plane reads head count from the atomic VolunteerJobSlot
+				// counter, which starts at zero and only moves when somebody applies. Seeding
+				// `slots_confirmed: 4` looked like a filled job but rendered as an empty one.
+				// Fill this bar by applying through the UI — that exercises the real path.
+				slots_confirmed: 0,
+				slots_dispatched: 0,
+				shift_template: {
+					shift_name: 'บ่าย',
+					start_time: '13:00',
+					end_time: '17:00',
+					days: ['sat', 'sun']
+				},
+				auto_accept: true,
+				status: 'open'
+			}
+		},
+		{
+			db: SHELTER_DB,
+			ctx: SH001_CTX,
+			body: {
+				title: 'พยาบาลอาสาประจำจุดปฐมพยาบาล',
+				description: 'ดูแลจุดปฐมพยาบาล คัดกรองอาการเบื้องต้น ต้องมีใบประกอบวิชาชีพ',
+				tier: 'operational',
+				required_roles: [],
+				skills_required: ['พยาบาล'],
+				quota: 4,
+				slots_confirmed: 0,
+				slots_dispatched: 0,
+				shift_template: {
+					shift_name: 'เช้า',
+					start_time: '08:00',
+					end_time: '16:00',
+					days: ['mon', 'wed', 'fri']
+				},
+				// On, so that a review still happens purely because of the controlled
+				// skill — the licence is checked by a person, not by a flag.
+				auto_accept: true,
+				status: 'open'
+			}
+		},
+		{
+			db: SHELTER_DB_2,
+			ctx: CTX_2,
+			body: {
+				title: 'เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย',
+				description:
+					'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน ได้สิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะที่เช็คอินแล้ว',
+				tier: 'staff-capable',
+				required_roles: ['registration_staff'],
+				skills_required: ['คีย์ข้อมูล'],
+				quota: 3,
+				slots_confirmed: 0,
+				slots_dispatched: 0,
+				shift_template: {
+					shift_name: 'เช้า',
+					start_time: '09:00',
+					end_time: '15:00',
+					days: ['mon', 'tue', 'wed', 'thu', 'fri']
+				},
+				// F-AUTO forbids auto-accept on staff-capable; the API enforces it too,
+				// but a fixture that contradicted the rule would be a misleading example.
+				auto_accept: false,
+				status: 'open'
+			}
+		},
+		{
+			db: SHELTER_DB_2,
+			ctx: CTX_2,
+			body: {
+				title: 'อาสาสมัครดูแลเด็กและกิจกรรมสันทนาการ',
+				description: 'จัดกิจกรรมให้เด็กในศูนย์พักพิงช่วงเย็น',
+				tier: 'operational',
+				required_roles: [],
+				skills_required: ['สันทนาการ'],
+				quota: 5,
+				slots_confirmed: 0,
+				slots_dispatched: 0,
+				shift_template: {
+					shift_name: 'เย็น',
+					start_time: '16:00',
+					end_time: '19:00',
+					days: ['sat', 'sun']
+				},
+				auto_accept: true,
+				status: 'open'
+			}
+		}
+	];
+
+	for (const [index, job] of jobs.entries()) {
+		// Fixed ids so re-running the seed updates these jobs instead of posting a
+		// second copy of every one — a ULID per run would multiply the board.
+		const id = `seedjob${String(index + 1).padStart(3, '0')}`;
+		await putDoc(job.db, makeDoc('job', 1, job.body, job.ctx, id));
+	}
+
+	console.log(`  ✓ volunteer jobs: ${jobs.length} postings across SH001 + SH002`);
+}
+
+/**
+ * A rostered volunteer for the Access Portal (CR-092 หน้าจอ 6 / T-28).
+ *
+ * `shift_assignment` is what ตารางทำงานจิตอาสา reads, and nothing can create one yet:
+ * the screen that rosters people is the Dispatch Workspace in T-29. Without a fixture
+ * the schedule is empty on a fresh database with no way to fill it.
+ *
+ * Sign in to the portal with **0891112222** to see these.
+ *
+ * The profile is seeded alongside because the worker reads `volunteer.phone_hash` when
+ * projecting an assignment — that hash is the only route from a phone number to a
+ * schedule, so an assignment whose volunteer is missing projects unreachable.
+ */
+async function seedVolunteerSchedule(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	const phone = '0891112222';
+	const volunteerId = 'seedvol001';
+	// Typed as a Record so makeDoc's result keeps the index signature putDoc expects —
+	// an object literal narrows to an exact shape that no longer matches it.
+	const volunteerBody: Record<string, unknown> = {
+		first_name: 'อาสา',
+		last_name: 'ทดสอบ',
+		phone,
+		phone_hash: await sha256Hex(phone),
+		email: null,
+		skills: ['ครัว', 'ยกของ'],
+		organization: null,
+		tracking_token: null,
+		status: 'active',
+		user_name: null,
+		central_profile_id: `volunteer:${volunteerId}`,
+		checked_in: false,
+		current_shelter_code: null
+	};
+	await putDoc(SHELTER_DB, makeDoc('volunteer', 1, volunteerBody, SH001_CTX, volunteerId));
+
+	// Relative to today so the fixture does not rot into a schedule of past shifts.
+	const day = (offset: number) => {
+		const d = new Date();
+		d.setDate(d.getDate() + offset);
+		return d.toISOString().slice(0, 10);
+	};
+	const at = (date: string, time: string) => `${date}T${time}:00.000Z`;
+
+	const shifts = [
+		{
+			id: 'seedshift001',
+			date: day(1),
+			station: 'ครัวกลาง',
+			start: '01:00',
+			end: '05:00',
+			status: 'assigned',
+			// Awaiting the volunteer's answer — this is what renders the Dispatch Card
+			// with its accept / decline buttons.
+			dispatch_status: 'dispatched',
+			// The code a manager reads out over the phone. Fixed so the flow can be walked
+			// through; real ones are minted when the shift is offered. Every character is
+			// from the spoken alphabet — no 0/1/I/L/O/U, which is why it is not `SEED-01`.
+			response_code: 'SEED-99'
+		},
+		{
+			id: 'seedshift002',
+			date: day(3),
+			station: 'จุดลงทะเบียน',
+			start: '02:00',
+			end: '08:00',
+			status: 'standby',
+			dispatch_status: 'accepted'
+		},
+		{
+			id: 'seedshift003',
+			date: day(-2),
+			station: 'คลังสิ่งของ',
+			start: '01:00',
+			end: '05:00',
+			// A finished shift, so the portal has both an upcoming and a past entry to lay out.
+			status: 'completed',
+			dispatch_status: 'accepted'
+		}
+	];
+
+	for (const shift of shifts) {
+		const body: Record<string, unknown> = {
+			job_id: 'job:seedjob001',
+			volunteer_id: `volunteer:${volunteerId}`,
+			date: shift.date,
+			shift: 'custom',
+			station: shift.station,
+			duty_window: {
+				start_ts: at(shift.date, shift.start),
+				end_ts: at(shift.date, shift.end)
+			},
+			check_in_at: shift.status === 'completed' ? at(shift.date, shift.start) : null,
+			check_out_at: shift.status === 'completed' ? at(shift.date, shift.end) : null,
+			check_in_by: shift.status === 'completed' ? 'seed' : null,
+			status: shift.status,
+			dispatch_status: shift.dispatch_status,
+			response_code: shift.response_code ?? null,
+			responded_at: null
+		};
+		await putDoc(SHELTER_DB, makeDoc('shift_assignment', 2, body, SH001_CTX, shift.id));
+	}
+
+	console.log(
+		`  ✓ volunteer schedule: 1 profile + ${shifts.length} shifts (login ${phone}, offer code SEED-99)`
+	);
+}
+
 async function main() {
 	if (process.argv.includes('--delete-dashboard')) {
 		await deleteDashboardData();
@@ -2640,6 +2906,11 @@ async function main() {
 		await seedShelter2(master);
 		await seedVolunteers();
 		await seedDashboardData(master);
+		// Before seedDailyCalc: that step refuses to run against a database that already
+		// holds its deterministic snapshots, and it must not take the job board down with
+		// it on a re-seed. This one is idempotent — fixed ids, existing docs left alone.
+		await seedVolunteerJobs();
+		await seedVolunteerSchedule();
 		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {

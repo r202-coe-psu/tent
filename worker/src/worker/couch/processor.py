@@ -10,22 +10,27 @@ from worker.couch.checkpoint import save_checkpoint
 from worker.masking import shelter_code_from_db_name
 from worker.mongo import (
     apply_donation,
+    apply_job,
+    apply_job_application,
     apply_need,
     apply_need_counters,
     apply_person,
     apply_shelter,
+    apply_shift_assignment,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
     resolve_shelter_code_for_registry_delete,
 )
 from worker.mongo.announcement import apply_announcement
+from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.announcement import project_announcement
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.mongo.on_hand import refresh_on_hand
+from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
+from worker.projectors.shift_assignment import project_shift_assignment
 from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
 
 logger = logging.getLogger(__name__)
@@ -70,6 +75,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
                     await _reproject_needs(couch, shelter_code)
+                elif doc_id.startswith("job:"):
+                    await apply_job("delete", {"_id": doc_id})
+                elif doc_id.startswith("job_application:"):
+                    await apply_job_application("delete", {"_id": doc_id})
+                elif doc_id.startswith("shift_assignment:"):
+                    await apply_shift_assignment("delete", {"_id": doc_id})
                 elif doc_id.startswith("stock_ledger:"):
                     # A deleted entry raises the shortfall again, so the ceiling has to
                     # go back up with it — a delete row carries no doc to read a type
@@ -146,6 +157,23 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # kept accepting bookings against the bare target.
                 await refresh_on_hand(couch, shelter_code)
                 await _reproject_needs(couch, shelter_code)
+            elif doc_type == "job":
+                action, payload = project_job(doc, shelter_code=shelter_code)
+                await apply_job(action, payload)
+            elif doc_type == "job_application":
+                action, payload = project_job_application(doc, shelter_code=shelter_code)
+                await apply_job_application(action, payload)
+            elif doc_type == "shift_assignment":
+                # The assignee's profile is the only source of the phone hash the
+                # portal looks a schedule up by, so it has to be read alongside.
+                volunteer = None
+                volunteer_id = doc.get("volunteer_id")
+                if volunteer_id:
+                    volunteer = await couch.get_doc(database, str(volunteer_id))
+                action, payload = project_shift_assignment(
+                    doc, shelter_code=shelter_code, volunteer=volunteer
+                )
+                await apply_shift_assignment(action, payload)
             elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
 
