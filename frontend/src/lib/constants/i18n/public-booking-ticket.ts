@@ -7,7 +7,21 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		howToUseLabel: 'วิธีใช้งานใบจองนี้:',
 		step1: 'บันทึกภาพหน้าจอนี้ หรือกดปุ่ม "พิมพ์ใบจอง"',
 		step2: 'เดินทางไปยังศูนย์พักพิงที่เลือกไว้',
-		step3: 'แสดงรหัสการจอง หรือ QR Code ให้เจ้าหน้าที่คัดกรองที่หน้าประตูศูนย์'
+		step3: 'แสดงรหัสการจอง หรือ QR Code ให้เจ้าหน้าที่คัดกรองที่หน้าประตูศูนย์',
+		successHeaderTitle: 'จองเข้าศูนย์สำเร็จ',
+		successHeaderDesc: 'ระบบกันที่ให้ท่านแล้ว กรุณาบันทึกหรือพิมพ์ใบจองนี้ไว้แสดงที่ประตูศูนย์',
+		shelterCodeLabel: 'รหัสศูนย์',
+		qrAlt: 'QR สำหรับยืนยันตัวตนที่ประตูศูนย์',
+		qrErrorFallback: 'สร้าง QR ไม่สำเร็จ กรุณาแจ้งชื่อ-นามสกุลกับเจ้าหน้าที่ที่ประตูศูนย์',
+		bookerNameLabel: 'ชื่อผู้จอง',
+		statusDtLabel: 'สถานะ',
+		bookedAtLabel: 'เวลาที่จอง',
+		statusPreRegistered: 'ลงทะเบียนล่วงหน้า',
+		statusActive: 'เช็คอินเข้าศูนย์แล้ว',
+		statusCancelled: 'การจองถูกยกเลิก',
+		downloadingBtn: 'กำลังสร้างไฟล์…',
+		downloadBtn: 'ดาวน์โหลดใบจอง (PDF)',
+		downloadErrorFallback: 'ดาวน์โหลดใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
 	},
 	en: {
 		successMsg: 'Advance Booking Successful!',
@@ -17,6 +31,21 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		howToUseLabel: 'How to use this ticket:',
 		step1: 'Save a screenshot of this page or click "Print Ticket"',
 		step2: 'Travel to the selected shelter',
-		step3: 'Show this booking code or QR code to the screening staff at the shelter entrance'
+		step3: 'Show this booking code or QR code to the screening staff at the shelter entrance',
+		successHeaderTitle: 'Booking Successful',
+		successHeaderDesc:
+			'Your spot has been reserved. Please save or print this ticket to show at the shelter gate.',
+		shelterCodeLabel: 'Shelter Code',
+		qrAlt: 'QR code for identity verification at the shelter gate',
+		qrErrorFallback: 'Failed to generate QR code. Please tell staff your full name at the gate.',
+		bookerNameLabel: "Booker's Name",
+		statusDtLabel: 'Status',
+		bookedAtLabel: 'Booked At',
+		statusPreRegistered: 'Pre-registered',
+		statusActive: 'Checked in',
+		statusCancelled: 'Booking cancelled',
+		downloadingBtn: 'Generating file…',
+		downloadBtn: 'Download Ticket (PDF)',
+		downloadErrorFallback: 'Failed to download ticket. Please try again.'
 	}
 } as const;

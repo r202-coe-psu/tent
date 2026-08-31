@@ -89,9 +89,12 @@ export async function fetchShelterTypeLabels(
 		if (!response.ok) return [];
 		const body = (await response.json().catch(() => null)) as {
 			types?: MasterLabelOption[];
+			shelterTypes?: MasterLabelOption[];
 		} | null;
-		return body?.types ?? [];
+		return body?.types ?? body?.shelterTypes ?? [];
 	} catch {
 		return [];
 	}
 }
+
+export { fetchShelterTypeLabels as fetchShelterTypes, type MasterLabelOption as ShelterTypeOption };

@@ -9,3 +9,12 @@
 
 export { CATALOG_DB, isSupplyItem, supplyItemSchema, supplyCategorySchema } from './domain/supply';
 export type { SupplyItem, SupplyCategory } from './domain/supply';
+export {
+	isStockThresholdOverride,
+	stockThresholdOverrideSchema
+} from './domain/threshold-override';
+export type {
+	StockThresholdOverride,
+	SaveThresholdOverrideInput
+} from './domain/threshold-override';
+export { calculateReorderLevel } from './domain/threshold-calc';

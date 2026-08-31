@@ -1,6 +1,6 @@
 import { bulkDocs } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign as buildCampaign,
@@ -10,6 +10,7 @@ import {
 	isDonation,
 	isDonationSlot,
 	isPurchase,
+	isStockTransfer,
 	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
@@ -28,25 +29,46 @@ import {
 	type DonationSlot,
 	type Purchase,
 	type PurchaseInput,
-	type CountedItem
+	type CountedItem,
+	type StockTransfer,
+	type TransferInput,
+	type TransferFilter,
+	type TransferStatus
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
-import { supplyRepository, type SupplyItem } from '$lib/features/supply';
+import { supplyRepository, type SupplyItem, type SupplyCategory } from '$lib/features/supply';
+import { isItemMaster, itemMasterUnit, catalogRepository, type ItemMaster } from '$lib/features/catalog';
 import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
-export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
+/**
+ * A catalog row a ledger entry can point at. The `catalog` database holds two
+ * shapes: the T-10 `item:{ulid}` supply stub (`unit`, `perishable`) and the
+ * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag). Item
+ * pickers already offer both, so both must survive the guards below.
+ */
+export type CatalogItem = SupplyItem | ItemMaster;
+
+/** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
+export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
+	return isItemMaster(item)
+		? { unit: itemMasterUnit(item), perishable: false }
+		: { unit: item.unit, perishable: item.perishable };
+}
+
+export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogItem | null): void {
 	if (!item) {
 		throw new Error(
 			`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
 		);
 	}
-	if (item.unit !== entry.unit) {
+	const rules = catalogItemRules(item);
+	if (rules.unit !== entry.unit) {
 		throw new Error(
-			`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
+			`Unit mismatch for item ${entry.item_id}: expected ${rules.unit}, got ${entry.unit}`
 		);
 	}
-	if (item.perishable && !entry.lot?.expiry) {
+	if (rules.perishable && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
 }
@@ -58,6 +80,25 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	constructor(dbName: string = getShelterDb()) {
 		this.dbName = dbName;
 		this.repo = createRemoteRepository(dbName);
+	}
+
+	/**
+	 * Read the catalog row backing a ledger entry. `getItem` fetches by `_id` from
+	 * the single `catalog` database, so it returns either shape — the `type`
+	 * discriminator, not the typing here, decides which rules apply.
+	 */
+	private async loadCatalogItem(itemId: string): Promise<CatalogItem | null> {
+		const item = await supplyRepository().getItem(itemId);
+		if (item) return item;
+
+		if (itemId.startsWith('item_master:')) {
+			const shelterCode = this.dbName.startsWith('shelter_')
+				? this.dbName.replace('shelter_', '').toUpperCase()
+				: null;
+			const itemMaster = await catalogRepository().getItemMaster(itemId, shelterCode);
+			if (itemMaster) return itemMaster;
+		}
+		return null;
 	}
 
 	// --- Ledger Methods ---
@@ -82,7 +123,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
 	}
@@ -100,7 +141,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			ctx
 		);
 
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 
 		// One request for both docs (mirrors kitchen `issueRequisition` and
@@ -152,20 +193,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createAdjustEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		if (!item) {
 			throw new Error(
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
 			);
 		}
-		if (item.unit !== entry.unit) {
-			throw new Error(
-				`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
-			);
-		}
-		if (item.perishable && !entry.lot?.expiry) {
-			throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
-		}
+		assertReceiveAgainstCatalog(entry, item);
 
 		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
 		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
@@ -330,10 +364,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			throw new Error(`receivePurchase: ${purchase._id} needs at least one counted line`);
 		}
 
-		const catalog = new Map<string, SupplyItem | null>();
+		const catalog = new Map<string, CatalogItem | null>();
 		for (const row of rows) {
 			if (!catalog.has(row.item_id)) {
-				catalog.set(row.item_id, await supplyRepository().getItem(row.item_id));
+				catalog.set(row.item_id, await this.loadCatalogItem(row.item_id));
 			}
 			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
 		}
@@ -343,13 +377,112 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// the missing lines — the purchase doc stays valid either way.
 		return bulkDocs(this.dbName, rows);
 	}
+
+	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
+	// `stock_transfer` lives in `central_ops`, not this shelter's DB, so these go through the
+	// admin BFF (`fetch`), not `this.repo` — mirrors `referral.remote.ts`'s BFF calls.
+
+	async listTransfers(filter?: TransferFilter): Promise<StockTransfer[]> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		if (filter?.status) qs.append('status', filter.status);
+		const res = await fetch(`/api/back-office/transfer?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (!res.ok) {
+			throw new Error(`Failed to list transfers: ${res.statusText}`);
+		}
+		const list = await res.json();
+		return Array.isArray(list) ? list.filter(isStockTransfer) : [];
+	}
+
+	async getTransfer(id: string): Promise<StockTransfer | null> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer/${encodeURIComponent(id)}?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (res.status === 404) return null;
+		if (!res.ok) {
+			throw new Error(`Failed to get transfer: ${res.statusText}`);
+		}
+		const doc = await res.json();
+		return isStockTransfer(doc) ? doc : null;
+	}
+
+	async createTransfer(input: TransferInput): Promise<StockTransfer> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer?${qs}`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify(input)
+		});
+		const payload = await res.json().catch(() => null);
+		if (!res.ok) {
+			const message =
+				payload && typeof payload === 'object' && 'error' in payload
+					? String((payload as { error: unknown }).error)
+					: `Failed to create transfer (${res.status})`;
+			throw new Error(message);
+		}
+		if (!isStockTransfer(payload)) {
+			throw new Error('Create transfer returned an invalid transfer document');
+		}
+		return payload;
+	}
+
+	private async transitionTransfer(
+		id: string,
+		to: TransferStatus,
+		opts?: { receivedItems?: { item_id: string; qty: string | number }[]; notes?: string }
+	): Promise<StockTransfer> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(
+			`/api/back-office/transfer/${encodeURIComponent(id)}/transition?${qs}`,
+			{
+				method: 'PATCH',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+				body: JSON.stringify({ to, ...opts })
+			}
+		);
+		const payload = await res.json().catch(() => null);
+		if (!res.ok) {
+			const message =
+				payload && typeof payload === 'object' && 'error' in payload
+					? String((payload as { error: unknown }).error)
+					: `Transfer transition failed (${res.status})`;
+			throw new Error(message);
+		}
+		if (!isStockTransfer(payload)) {
+			throw new Error('Transfer transition returned an invalid transfer document');
+		}
+		return payload;
+	}
+
+	async dispatchTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'shipped');
+	}
+
+	async receiveTransfer(
+		id: string,
+		receivedItems: { item_id: string; qty: string | number }[],
+		notes?: string
+	): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'received', { receivedItems, notes });
+	}
+
+	async cancelTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'cancelled');
+	}
 }
 
 let singleton: OperationsRepository | null = null;
 let singletonDbName: string | null = null;
 
-export function operationsRepository(): OperationsRepository {
-	const currentDb = getShelterDb();
+export function operationsRepository(shelterCode?: string): OperationsRepository {
+	const currentDb = getShelterDb(shelterCode);
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new OperationsRemoteRepository(currentDb);
 		singletonDbName = currentDb;
