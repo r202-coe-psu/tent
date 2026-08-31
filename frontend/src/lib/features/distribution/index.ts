@@ -99,10 +99,28 @@ export { DistributionRemoteRepository } from './data/distribution.remote';
 export {
 	distributionKeys,
 	useDistributionRequests,
+	useCreateDistributionRequest,
 	useCancelDistributionRequest
 } from './application/queries';
 
 export { default as DistributionPage } from './ui/distribution-page.svelte';
+export { default as CreateRequestDialog } from './ui/create-request-dialog.svelte';
+export { default as RequestItemEditor } from './ui/request-item-editor.svelte';
+export { default as NfiTemplatePicker } from './ui/nfi-template-picker.svelte';
+export {
+	ALLOWED_BUFFER_PERCENTS,
+	DEFAULT_BUFFER_PERCENT,
+	NFI_TEMPLATE_PRESETS,
+	catalogDistributionTypeToSnapshot,
+	createInitialFormItem,
+	createInitialFormState,
+	validateCreateRequestForm,
+	type AllowedBufferPercent,
+	type CreateRequestFormItem,
+	type CreateRequestFormState,
+	type NfiTemplatePreset,
+	type FormValidationResult
+} from './ui/create-request-form';
 
 export {
 	IntegrityError,

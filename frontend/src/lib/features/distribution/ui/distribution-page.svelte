@@ -1,14 +1,28 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { Button } from '$lib/components/ui/button';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import Plus from '@lucide/svelte/icons/plus';
 	import SearchX from '@lucide/svelte/icons/search-x';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { hasStaffCapability, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributionRequests } from '../application/queries';
 	import RequestFilters from './request-filters.svelte';
 	import RequestStatsHeader from './request-stats-header.svelte';
 	import RequestTable from './request-table.svelte';
+	import CreateRequestDialog from './create-request-dialog.svelte';
 	import { filterDistributionRequests, type RequestStatusFilter } from './request-ui';
+
+	const userRoles = $derived(authStore.user?.roles ?? []);
+	const canCreateRequest = $derived(
+		isSystemAdmin(userRoles) ||
+			isShelterManager(userRoles) ||
+			hasStaffCapability(userRoles, 'registration_staff')
+	);
+
+	let isCreateOpen = $state(false);
 
 	const requestQuery = useDistributionRequests(
 		() => undefined,
@@ -24,10 +38,29 @@
 </script>
 
 <main class="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-	<header class="space-y-1 border-b border-border/60 pb-5">
-		<h1 class="text-3xl font-extrabold tracking-tight">จัดการคำร้องเบิกจ่าย</h1>
-		<p class="text-sm text-muted-foreground">ติดตามสถานะคำร้องเบิกจ่ายสิ่งของภายในศูนย์พักพิง</p>
+	<header
+		class="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between"
+	>
+		<div class="space-y-1">
+			<h1 class="text-3xl font-extrabold tracking-tight">จัดการคำร้องเบิกจ่าย</h1>
+			<p class="text-sm text-muted-foreground">ติดตามสถานะคำร้องเบิกจ่ายสิ่งของภายในศูนย์พักพิง</p>
+		</div>
+
+		{#if canCreateRequest}
+			<Button
+				type="button"
+				class="gap-1.5 self-start sm:self-auto"
+				onclick={() => (isCreateOpen = true)}
+			>
+				<Plus class="h-4 w-4" />
+				สร้างคำร้องเบิกจ่าย
+			</Button>
+		{/if}
 	</header>
+
+	{#if canCreateRequest}
+		<CreateRequestDialog bind:open={isCreateOpen} />
+	{/if}
 
 	{#if requestQuery.isLoading}
 		<Card.Root class="border-border/80 shadow-xs">

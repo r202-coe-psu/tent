@@ -2,7 +2,7 @@ import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-qu
 import { getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { authStore } from '$lib/stores/auth.svelte';
-import type { DistributionRequestStatus } from '../domain/distribution';
+import type { DistributionRequestInput, DistributionRequestStatus } from '../domain/distribution';
 import { DistributionRemoteRepository } from '../data/distribution.remote';
 
 export const distributionKeys = {
@@ -37,6 +37,17 @@ export const useDistributionRequests = (
 		},
 		enabled: !!shelterCode() && !!authStore.user?.name
 	}));
+
+export const useCreateDistributionRequest = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: DistributionRequestInput; ctx: AuthorContext }) =>
+			distributionRepository().createRequest(input, ctx),
+		onSuccess: (_request, { ctx }) => {
+			queryClient.invalidateQueries({ queryKey: distributionKeys.requests(ctx.shelterCode) });
+		}
+	}));
+};
 
 export const useCancelDistributionRequest = () => {
 	const queryClient = useQueryClient();

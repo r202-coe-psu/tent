@@ -115,6 +115,19 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		}
 	}
 
+	private assertAuthorizedRequestCreation(ctx: AuthorContext): void {
+		if (
+			!ctx.roles ||
+			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!isShelterManager(ctx.roles) &&
+				!isSystemAdmin(ctx.roles))
+		) {
+			throw new Error(
+				'Unauthorized: distribution request creation requires registration_staff, shelter_manager, or system_admin role'
+			);
+		}
+	}
+
 	private assertAuthorizedRequestCancellation(ctx: AuthorContext): void {
 		if (
 			!ctx.roles ||
@@ -434,6 +447,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		input: DistributionRequestInput,
 		ctx: AuthorContext
 	): Promise<DistributionRequest> {
+		this.assertAuthorizedRequestCreation(ctx);
 		const doc = createDistributionRequest(input, ctx);
 		return putDocStrict(this.dbName, doc);
 	}

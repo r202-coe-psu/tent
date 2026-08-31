@@ -463,6 +463,21 @@ export function buildValidateDocUpdate(code: string): string {
       if (!isRequestEditor) {
         throw { forbidden: 'Only registration staff, shelter manager, or system admin can create distribution requests' };
       }
+      if (newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'created_by must match authenticated user' };
+      }
+      if (newDoc.requested_by !== userCtx.name) {
+        throw { forbidden: 'requested_by must match authenticated user' };
+      }
+      if (typeof newDoc.approval_operation_id !== 'undefined' ||
+          typeof newDoc.approved_by !== 'undefined' ||
+          typeof newDoc.approved_at !== 'undefined' ||
+          typeof newDoc.batch_id !== 'undefined' ||
+          typeof newDoc.rejected_by !== 'undefined' ||
+          typeof newDoc.rejected_at !== 'undefined' ||
+          typeof newDoc.rejection_reason !== 'undefined') {
+        throw { forbidden: 'New distribution_request cannot contain lifecycle metadata' };
+      }
     }
     if (oldDoc) {
       if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };

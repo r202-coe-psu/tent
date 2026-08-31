@@ -627,13 +627,15 @@ describe('buildValidateDocUpdate', () => {
 		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 		const UNAUTHORIZED: UserCtx = { name: 'unknown', roles: ['shelter:SH001'] };
 
-		const reqDoc = (over: Doc = {}): Doc => ({
+		const reqDoc = (over: Doc = {}, user: UserCtx = REGISTRATION): Doc => ({
 			_id: 'distribution_request:01J',
 			type: 'distribution_request',
 			status: 'pending',
 			purpose: 'Flood relief',
 			items: [{ item_id: 'item:soap', requested_qty: '10', unit: 'bar' }],
 			...envelope,
+			created_by: user.name,
+			requested_by: user.name,
 			schema_v: 1,
 			...over
 		});
@@ -660,8 +662,75 @@ describe('buildValidateDocUpdate', () => {
 			...over
 		});
 
-		it('allows registration_staff to create pending distribution_request', () => {
-			expect(() => compile()(reqDoc(), null, REGISTRATION)).not.toThrow();
+		it.each([
+			['registration_staff', REGISTRATION],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])(
+			'allows %s to create pending distribution_request with matching provenance',
+			(_role, userCtx) => {
+				expect(() => compile()(reqDoc({}, userCtx), null, userCtx)).not.toThrow();
+			}
+		);
+
+		it('rejects creating distribution_request with forged created_by', () => {
+			expectForbidden(
+				() => compile()(reqDoc({ created_by: 'forged_author' }, REGISTRATION), null, REGISTRATION),
+				/created_by must match authenticated user/
+			);
+		});
+
+		it('rejects creating distribution_request with forged requested_by', () => {
+			expectForbidden(
+				() =>
+					compile()(reqDoc({ requested_by: 'forged_requester' }, REGISTRATION), null, REGISTRATION),
+				/requested_by must match authenticated user/
+			);
+		});
+
+		it('rejects creating distribution_request with forged created_by and requested_by', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						reqDoc({ created_by: 'attacker', requested_by: 'attacker' }, REGISTRATION),
+						null,
+						REGISTRATION
+					),
+				/created_by must match authenticated user/
+			);
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['kitchen_staff', KITCHEN],
+			['missing role', UNAUTHORIZED]
+		])('rejects %s directly creating a distribution_request', (_role, userCtx) => {
+			expectForbidden(
+				() => compile()(reqDoc({}, userCtx), null, userCtx),
+				/Only registration staff, shelter manager, or system admin can create distribution requests/
+			);
+		});
+
+		it('rejects creating distribution_request with non-pending status', () => {
+			expectForbidden(
+				() => compile()(reqDoc({ status: 'approving' }), null, REGISTRATION),
+				/New distribution_request must start pending/
+			);
+		});
+
+		it.each([
+			['approval_operation_id', { approval_operation_id: 'op-123' }],
+			['approved_by', { approved_by: 'admin' }],
+			['approved_at', { approved_at: '2026-08-31T12:00:00.000Z' }],
+			['batch_id', { batch_id: 'distribution_batch:01J' }],
+			['rejected_by', { rejected_by: 'admin' }],
+			['rejected_at', { rejected_at: '2026-08-31T12:00:00.000Z' }],
+			['rejection_reason', { rejection_reason: 'Not needed' }]
+		])('rejects creating distribution_request with injected %s', (_field, over) => {
+			expectForbidden(
+				() => compile()(reqDoc(over), null, REGISTRATION),
+				/New distribution_request cannot contain lifecycle metadata/
+			);
 		});
 
 		it.each([
