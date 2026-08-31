@@ -40,7 +40,7 @@ function assignment(overrides: Partial<ShiftAssignment> & { _id: string }): Shif
 }
 
 function volunteersById(
-	entries: [string, Pick<Volunteer, 'first_name' | 'last_name' | 'volunteer_code'>][]
+	entries: [string, Pick<Volunteer, 'first_name' | 'last_name' | 'volunteer_code' | 'phone'>][]
 ) {
 	return new Map(entries);
 }
@@ -52,7 +52,10 @@ describe('shiftRoster', () => {
 			'job:A',
 			[assignment({ _id: 'a:1', volunteer_id: 'volunteer:1' })],
 			volunteersById([
-				['volunteer:1', { first_name: 'สมชาย', last_name: 'ใจดี', volunteer_code: 'V-001' }]
+				[
+					'volunteer:1',
+					{ first_name: 'สมชาย', last_name: 'ใจดี', volunteer_code: 'V-001', phone: '0812345678' }
+				]
 			])
 		);
 		expect(roster).toEqual([
@@ -62,7 +65,11 @@ describe('shiftRoster', () => {
 				volunteerName: 'สมชาย ใจดี',
 				volunteerCode: 'V-001',
 				status: 'assigned',
-				dispatchStatus: 'accepted'
+				dispatchStatus: 'accepted',
+				phone: '0812345678',
+				station: 'ครัวกลาง',
+				checkInAt: null,
+				checkOutAt: null
 			}
 		]);
 	});

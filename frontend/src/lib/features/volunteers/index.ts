@@ -97,6 +97,7 @@ export { default as JobLifecyclePanel } from './ui/job-lifecycle-panel.svelte';
 export { default as JobShiftsTab } from './ui/job-shifts-tab.svelte';
 export { default as JobShiftCard } from './ui/job-shift-card.svelte';
 export { default as JobShiftEditDialog } from './ui/job-shift-edit-dialog.svelte';
+export { default as JobShiftRosterDialog } from './ui/job-shift-roster-dialog.svelte';
 export { default as JobApplicantsTab } from './ui/job-applicants-tab.svelte';
 
 // ui — Tab 2 (Roster & Live Attendance / ตารางกะและเช็คอิน)

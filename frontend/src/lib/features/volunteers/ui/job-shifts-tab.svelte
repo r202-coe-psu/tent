@@ -34,6 +34,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import JobShiftCard from './job-shift-card.svelte';
 	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
+	import JobShiftRosterDialog from './job-shift-roster-dialog.svelte';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
 	import { shiftRoster, type ShiftRosterEntry } from '../domain/shift-roster';
 	import { totalShiftQuota, type Job, type JobShift } from '../domain/job.schema';
@@ -221,6 +222,14 @@
 	let editOpen = $state(false);
 	let editShiftId = $state<string | null>(null);
 	let removeShiftId = $state<string | null>(null);
+	let rosterOpen = $state(false);
+	let rosterShiftId = $state<string | null>(null);
+	const rosterRow = $derived(rows.find((r) => r.shift.id === rosterShiftId) ?? null);
+
+	function openRoster(shiftId: string) {
+		rosterShiftId = shiftId;
+		rosterOpen = true;
+	}
 
 	const editRow = $derived(rows.find((r) => r.shift.id === editShiftId) ?? null);
 	/** Every OTHER shift — the edit dialog's duplicate check must not match the row itself. */
@@ -289,7 +298,11 @@
 						: 'ไม่พบข้อมูลอาสาสมัคร',
 					volunteerCode: volunteer?.volunteer_code ?? '—',
 					status: a.status,
-					dispatchStatus: a.dispatch_status ?? null
+					dispatchStatus: a.dispatch_status ?? null,
+					phone: volunteer?.phone ?? null,
+					station: a.station,
+					checkInAt: a.check_in_at ?? null,
+					checkOutAt: a.check_out_at ?? null
 				};
 			});
 		return { needed, candidates };
@@ -556,11 +569,19 @@
 					onedit={openEdit}
 					onremove={(id) => (removeShiftId = id)}
 					onassign={openAssign}
-					onunassign={(entry) => (unassignTarget = entry)}
+					onviewroster={openRoster}
 				/>
 			{/each}
 		</div>
 	</div>
+
+	<JobShiftRosterDialog
+		bind:open={rosterOpen}
+		shift={rosterRow?.shift ?? null}
+		roster={rosterRow?.roster ?? []}
+		pending={saving || unassignMutation.isPending}
+		onunassign={(entry) => (unassignTarget = entry)}
+	/>
 
 	<JobShiftEditDialog
 		bind:open={editOpen}
