@@ -303,6 +303,8 @@ export const stockLotPendingClaimSchema = z.object({
 	operation_id: z.string().min(1),
 	request_id: distributionRequestIdSchema,
 	batch_id: distributionBatchIdSchema,
+	item_id: z.string().min(1),
+	lot_ref: stockLedgerIdSchema,
 	qty: qtyStrCoercePositiveSchema,
 	claimed_at: z.string().datetime()
 });

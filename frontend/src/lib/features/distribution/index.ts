@@ -1,4 +1,4 @@
-/** Public domain API for CR-059 Flow 2. Persistence and UI land in later phases. */
+/** Public API for CR-059 Flow 2 (Distribution). */
 
 export {
 	activeHeadcountSchema,
@@ -66,3 +66,20 @@ export {
 	type ReconciliationInput,
 	type ReconciliationRow
 } from './domain/reconciliation';
+
+export {
+	type DistributionAllocationInput,
+	type DistributionRepository
+} from './data/distribution.repository';
+
+export { DistributionRemoteRepository } from './data/distribution.remote';
+
+export {
+	IntegrityError,
+	ApprovalConflictError,
+	InsufficientStockError,
+	ValidationError,
+	makeLotReservationDocId,
+	assertSemanticLedgerMatch,
+	assertSemanticBatchMatch
+} from './data/semantic-verify';

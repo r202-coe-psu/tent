@@ -81,6 +81,15 @@ export function buildValidateDocUpdate(code: string): string {
     }
     return;
   }
+  // Base append-only policy on the persisted document identity as well as the
+  // proposed type so an update cannot evade the guard by changing the type field.
+  if (wasAppendOnly) {
+    throw { forbidden: 'Cannot update append-only ' + oldDoc.type + ' documents' };
+  }
+  var phase3StableTypes = ['distribution_request', 'distribution_batch', 'stock_lot_reservation'];
+  if (oldDoc && phase3StableTypes.indexOf(oldDoc.type) !== -1 && newDoc.type !== oldDoc.type) {
+    throw { forbidden: 'Cannot change type of ' + oldDoc.type + ' document' };
+  }
   function require(field) {
     if (typeof newDoc[field] === 'undefined' || newDoc[field] === null) {
       throw { forbidden: field + ' is required' };
@@ -107,7 +116,8 @@ export function buildValidateDocUpdate(code: string): string {
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'purchase', 'referral',
-    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger'
+    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+    'distribution_request', 'distribution_batch', 'stock_lot_reservation'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -124,12 +134,169 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 3. only warehouse staff / managers may write stock
   if (newDoc.type === 'stock_ledger') {
-    var isStaff =
+    var isWarehouseOrAdmin =
       userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
       userCtx.roles.indexOf('system_admin') !== -1;
+    var isStaff = isWarehouseOrAdmin || userCtx.roles.indexOf('shelter_manager') !== -1;
     if (!isStaff) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
+    }
+    if (newDoc.reason === 'distribute' && !isWarehouseOrAdmin) {
+      throw { forbidden: 'Only warehouse staff or system admin can write distribute stock ledger' };
+    }
+    if (newDoc.reason === 'distribute') {
+      if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
+        throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id' };
+      }
+      if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
+        throw { forbidden: 'Distribute stock ledger requires physical stock_ledger lot_ref' };
+      }
+      if (typeof newDoc.qty !== 'string' || !/^-\\d+(\\.\\d{1,4})?$/.test(newDoc.qty)) {
+        throw { forbidden: 'Distribute stock ledger qty must be a negative decimal string' };
+      }
+    }
+  }
+  // 4. distribution_request lifecycle and role rules
+  if (newDoc.type === 'distribution_request') {
+    var isWarehouseOrAdminReq =
+      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    var isRequestEditor =
+      userCtx.roles.indexOf('registration_staff') !== -1 ||
+      userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!oldDoc) {
+      if (newDoc.status !== 'pending') {
+        throw { forbidden: 'New distribution_request must start pending' };
+      }
+      if (!isRequestEditor) {
+        throw { forbidden: 'Only registration staff, shelter manager, or system admin can create distribution requests' };
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      var fromStatus = oldDoc.status;
+      var toStatus = newDoc.status;
+      var validTransitions = {
+        pending: ['approving', 'rejected', 'cancelled'],
+        approving: ['approved', 'pending'],
+        approved: [],
+        rejected: [],
+        cancelled: []
+      };
+      var allowedNext = validTransitions[fromStatus] || [];
+      if (fromStatus !== toStatus && allowedNext.indexOf(toStatus) === -1) {
+        throw { forbidden: 'Invalid distribution_request transition from ' + fromStatus + ' to ' + toStatus };
+      }
+      if (fromStatus === 'approved' || fromStatus === 'rejected' || fromStatus === 'cancelled') {
+        throw { forbidden: 'Terminal distribution_request cannot be modified' };
+      }
+      // Once a request has left pending, no transition (including rollback)
+      // may change the immutable business payload in the same write.
+      if (fromStatus !== 'pending') {
+        if (JSON.stringify(newDoc.items) !== JSON.stringify(oldDoc.items)) {
+          throw { forbidden: 'Cannot modify items on non-pending distribution_request' };
+        }
+        if (newDoc.purpose !== oldDoc.purpose) {
+          throw { forbidden: 'Cannot modify purpose on non-pending distribution_request' };
+        }
+        if (newDoc.active_headcount_snapshot !== oldDoc.active_headcount_snapshot) {
+          throw { forbidden: 'Cannot modify active_headcount_snapshot on non-pending distribution_request' };
+        }
+        if (newDoc.buffer_percent !== oldDoc.buffer_percent) {
+          throw { forbidden: 'Cannot modify buffer_percent on non-pending distribution_request' };
+        }
+      }
+      if (fromStatus === 'approving') {
+        if (toStatus === 'pending') {
+          if (typeof newDoc.approval_operation_id !== 'undefined' && newDoc.approval_operation_id !== oldDoc.approval_operation_id) {
+            throw { forbidden: 'Cannot replace approval_operation_id during rollback' };
+          }
+        } else if (!oldDoc.approval_operation_id || newDoc.approval_operation_id !== oldDoc.approval_operation_id) {
+          throw { forbidden: 'Cannot replace approval_operation_id once approval is in progress' };
+        }
+      }
+      if (fromStatus === 'pending' && toStatus === 'pending' && !isRequestEditor) {
+        throw { forbidden: 'Only authorized request editors can edit pending distribution requests' };
+      }
+      if ((toStatus === 'approving' || toStatus === 'approved' || toStatus === 'rejected' || (fromStatus === 'approving' && toStatus === 'pending')) && !isWarehouseOrAdminReq) {
+        throw { forbidden: 'Only warehouse staff or system admin can approve or reject distribution requests' };
+      }
+      if (fromStatus === 'pending' && toStatus === 'approving' && (typeof newDoc.approval_operation_id !== 'string' || !newDoc.approval_operation_id)) {
+        throw { forbidden: 'Approving distribution_request requires approval_operation_id' };
+      }
+    }
+    if (newDoc.status === 'approved' && (typeof newDoc.batch_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.batch_id))) {
+      throw { forbidden: 'Approved distribution_request must include valid batch_id' };
+    }
+  }
+  // 5. distribution_batch lifecycle and role rules
+  if (newDoc.type === 'distribution_batch') {
+    var isWarehouseOrAdminBatch =
+      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isWarehouseOrAdminBatch) {
+      throw { forbidden: 'Only warehouse staff or system admin can manage distribution batches' };
+    }
+    if (!oldDoc && newDoc.status !== 'activating') {
+      throw { forbidden: 'New distribution_batch must start activating' };
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.request_id !== oldDoc.request_id) {
+        throw { forbidden: 'Cannot change request_id on distribution_batch' };
+      }
+      if (JSON.stringify(newDoc.items) !== JSON.stringify(oldDoc.items)) {
+        throw { forbidden: 'Cannot modify items on distribution_batch' };
+      }
+      if (JSON.stringify(newDoc.allocations) !== JSON.stringify(oldDoc.allocations)) {
+        throw { forbidden: 'Cannot modify allocations on distribution_batch' };
+      }
+      if (oldDoc.status === 'activating' && newDoc.status !== 'active') {
+        throw { forbidden: 'Activating batch can only transition to active' };
+      }
+      if (oldDoc.status === 'active' && newDoc.status !== 'active') {
+        throw { forbidden: 'Active batch status cannot be changed' };
+      }
+    }
+  }
+  // 6. stock_lot_reservation role rules
+  if (newDoc.type === 'stock_lot_reservation') {
+    var isWarehouseOrAdminRes =
+      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
+      userCtx.roles.indexOf('system_admin') !== -1;
+    if (!isWarehouseOrAdminRes) {
+      throw { forbidden: 'Only warehouse staff or system admin can manage stock lot reservations' };
+    }
+    if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
+      throw { forbidden: 'stock_lot_reservation requires stock_ledger lot_ref' };
+    }
+    if (!Array.isArray(newDoc.pending_claims)) {
+      throw { forbidden: 'stock_lot_reservation pending_claims must be an array' };
+    }
+    for (var claimIndex = 0; claimIndex < newDoc.pending_claims.length; claimIndex++) {
+      var claim = newDoc.pending_claims[claimIndex];
+      if (!claim || typeof claim.operation_id !== 'string' || !claim.operation_id ||
+          typeof claim.request_id !== 'string' || !/^distribution_request:.+/.test(claim.request_id) ||
+          typeof claim.batch_id !== 'string' || !/^distribution_batch:.+/.test(claim.batch_id) ||
+          typeof claim.item_id !== 'string' || !claim.item_id ||
+          typeof claim.lot_ref !== 'string' || claim.lot_ref !== newDoc.lot_ref ||
+          typeof claim.qty !== 'string' || !/^(?:0\\.(?:0*[1-9]\\d{0,3})|[1-9]\\d*(?:\\.\\d{1,4})?)$/.test(claim.qty) ||
+          typeof claim.claimed_at !== 'string' || isNaN(Date.parse(claim.claimed_at))) {
+        throw { forbidden: 'stock_lot_reservation contains invalid pending claim' };
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.lot_ref !== oldDoc.lot_ref) {
+        throw { forbidden: 'Cannot change lot_ref on stock_lot_reservation' };
+      }
     }
   }
 }`;

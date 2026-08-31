@@ -364,5 +364,311 @@ describe('buildValidateDocUpdate', () => {
 				})
 			).not.toThrow();
 		});
+
+		it('rejects distribute stock_ledger from shelter_manager (requires warehouse_staff or system_admin)', () => {
+			const distLedger = ledger({
+				qty: '-10',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(
+				() =>
+					compile()(distLedger, null, { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] }),
+				/Only warehouse staff or system admin can write distribute stock ledger/
+			);
+		});
+
+		it('allows distribute stock_ledger from warehouse_staff', () => {
+			const distLedger = ledger({
+				qty: '-10',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expect(() => compile()(distLedger, null, WAREHOUSE)).not.toThrow();
+		});
+
+		it('enforces distribute ref, lot, qty, and old-document append-only invariants', () => {
+			const valid = ledger({
+				qty: '-1.5',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(
+				() => compile()({ ...valid, ref_id: null }, null, WAREHOUSE),
+				/distribution_batch ref_id/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, ref_id: 'donation:01J' }, null, WAREHOUSE),
+				/distribution_batch ref_id/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, lot_ref: undefined }, null, WAREHOUSE),
+				/physical stock_ledger lot_ref/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, lot_ref: 'lot:01J' }, null, WAREHOUSE),
+				/physical stock_ledger lot_ref/
+			);
+			expectForbidden(() => compile()({ ...valid, qty: '1' }, null, WAREHOUSE), /negative decimal/);
+			expectForbidden(
+				() => compile()({ ...valid, type: 'donation' }, valid, WAREHOUSE),
+				/append-only/
+			);
+		});
+	});
+
+	describe('distribution doc types access rules', () => {
+		const reqDoc = (over: Doc = {}): Doc => ({
+			_id: 'distribution_request:01J',
+			type: 'distribution_request',
+			status: 'pending',
+			purpose: 'Flood relief',
+			items: [{ item_id: 'item:soap', requested_qty: '10', unit: 'bar' }],
+			...envelope,
+			schema_v: 1,
+			...over
+		});
+
+		const batchDoc = (over: Doc = {}): Doc => ({
+			_id: 'distribution_batch:01J',
+			type: 'distribution_batch',
+			request_id: 'distribution_request:01J',
+			status: 'activating',
+			items: [{ item_id: 'item:soap', allocated_qty: '10', unit: 'bar' }],
+			allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '10' }],
+			...envelope,
+			schema_v: 1,
+			...over
+		});
+
+		const resDoc = (over: Doc = {}): Doc => ({
+			_id: 'stock_lot_reservation:hash123',
+			type: 'stock_lot_reservation',
+			lot_ref: 'stock_ledger:01J',
+			pending_claims: [],
+			...envelope,
+			schema_v: 1,
+			...over
+		});
+
+		it('allows registration_staff to create pending distribution_request', () => {
+			expect(() => compile()(reqDoc(), null, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects registration_staff transitioning distribution_request to approving', () => {
+			const pending = reqDoc();
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			expectForbidden(
+				() => compile()(approving, pending, REGISTRATION),
+				/Only warehouse staff or system admin can approve or reject distribution requests/
+			);
+		});
+
+		it('allows warehouse_staff transitioning distribution_request from pending to approving to approved', () => {
+			const pending = reqDoc();
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			const approved = reqDoc({
+				status: 'approved',
+				approval_operation_id: '01JOP',
+				batch_id: 'distribution_batch:01J'
+			});
+			expect(() => compile()(approving, pending, WAREHOUSE)).not.toThrow();
+			expect(() => compile()(approved, approving, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects illegal transition from pending directly to approved', () => {
+			const pending = reqDoc();
+			const approved = reqDoc({ status: 'approved', batch_id: 'distribution_batch:01J' });
+			expectForbidden(
+				() => compile()(approved, pending, WAREHOUSE),
+				/Invalid distribution_request transition from pending to approved/
+			);
+		});
+
+		it('rejects approved distribution_request without batch_id', () => {
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			const approvedNoBatch = reqDoc({ status: 'approved', approval_operation_id: '01JOP' });
+			expectForbidden(
+				() => compile()(approvedNoBatch, approving, WAREHOUSE),
+				/Approved distribution_request must include valid batch_id/
+			);
+		});
+
+		it('rejects distribution_batch creation from registration_staff', () => {
+			expectForbidden(
+				() => compile()(batchDoc(), null, REGISTRATION),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('allows warehouse_staff to create activating batch and transition to active', () => {
+			const activating = batchDoc();
+			const active = batchDoc({ status: 'active' });
+			expect(() => compile()(activating, null, WAREHOUSE)).not.toThrow();
+			expect(() => compile()(active, activating, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects modifying request_id on existing batch', () => {
+			const activating = batchDoc({ status: 'activating' });
+			const tampered = batchDoc({
+				status: 'activating',
+				request_id: 'distribution_request:01JOTHER'
+			});
+			expectForbidden(
+				() => compile()(tampered, activating, WAREHOUSE),
+				/Cannot change request_id on distribution_batch/
+			);
+		});
+
+		it('rejects stock_lot_reservation mutation from non-warehouse staff', () => {
+			expectForbidden(
+				() => compile()(resDoc(), null, REGISTRATION),
+				/Only warehouse staff or system admin can manage stock lot reservations/
+			);
+		});
+
+		it('allows warehouse_staff to manage stock_lot_reservation', () => {
+			expect(() => compile()(resDoc(), null, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects malformed reservation claims and non-authorized pending request edits', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						resDoc({
+							pending_claims: [
+								{
+									operation_id: 'op',
+									request_id: 'distribution_request:01J',
+									batch_id: 'distribution_batch:01J',
+									item_id: 'item:soap',
+									lot_ref: 'stock_ledger:OTHER',
+									qty: '1',
+									claimed_at: '2026-08-29T00:00:00.000Z'
+								}
+							]
+						}),
+						null,
+						WAREHOUSE
+					),
+				/invalid pending claim/
+			);
+			expectForbidden(() => compile()(reqDoc(), null, KITCHEN), /Only registration staff/);
+		});
+
+		it('rejects modifying purpose, headcount, buffer, or items on non-pending request', () => {
+			const approving = reqDoc({
+				status: 'approving',
+				approval_operation_id: '01JOP',
+				purpose: 'Initial',
+				active_headcount_snapshot: '50',
+				buffer_percent: 10
+			});
+
+			expectForbidden(
+				() => compile()({ ...approving, purpose: 'Changed' }, approving, WAREHOUSE),
+				/Cannot modify purpose on non-pending distribution_request/
+			);
+			expectForbidden(
+				() => compile()({ ...approving, active_headcount_snapshot: '60' }, approving, WAREHOUSE),
+				/Cannot modify active_headcount_snapshot on non-pending distribution_request/
+			);
+			expectForbidden(
+				() => compile()({ ...approving, buffer_percent: 20 }, approving, WAREHOUSE),
+				/Cannot modify buffer_percent on non-pending distribution_request/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...approving, items: [{ item_id: 'item:other', requested_qty: '10', unit: 'bar' }] },
+						approving,
+						WAREHOUSE
+					),
+				/Cannot modify items on non-pending distribution_request/
+			);
+		});
+
+		it('rejects replacing approval_operation_id during approving', () => {
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP1' });
+			const replaced = reqDoc({ status: 'approving', approval_operation_id: '01JOP2' });
+			expectForbidden(
+				() => compile()(replaced, approving, WAREHOUSE),
+				/Cannot replace approval_operation_id once approval is in progress/
+			);
+		});
+
+		it('keeps payload and approval operation immutable through approval and rollback', () => {
+			const approving = reqDoc({
+				status: 'approving',
+				approval_operation_id: '01JOP1',
+				active_headcount_snapshot: '10',
+				buffer_percent: 10
+			});
+			expectForbidden(
+				() =>
+					compile()({ ...approving, status: 'pending', purpose: 'Changed' }, approving, WAREHOUSE),
+				/Cannot modify purpose/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							...approving,
+							status: 'approved',
+							approval_operation_id: '01JOP2',
+							batch_id: 'distribution_batch:01J'
+						},
+						approving,
+						WAREHOUSE
+					),
+				/Cannot replace approval_operation_id/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...approving, status: 'pending', approval_operation_id: '01JOP2' },
+						approving,
+						WAREHOUSE
+					),
+				/Cannot replace approval_operation_id during rollback/
+			);
+		});
+
+		it('rejects modifying items or allocations on distribution_batch after creation', () => {
+			const activating = batchDoc();
+			const modifiedItems = batchDoc({
+				items: [{ item_id: 'item:soap', allocated_qty: '99', unit: 'bar' }]
+			});
+			const modifiedAllocs = batchDoc({
+				allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '99' }]
+			});
+			expectForbidden(
+				() => compile()(modifiedItems, activating, WAREHOUSE),
+				/Cannot modify items on distribution_batch/
+			);
+			expectForbidden(
+				() => compile()(modifiedAllocs, activating, WAREHOUSE),
+				/Cannot modify allocations on distribution_batch/
+			);
+		});
+
+		it('rejects changing status of active batch', () => {
+			const active = batchDoc({ status: 'active' });
+			const tampered = batchDoc({ status: 'activating' });
+			expectForbidden(
+				() => compile()(tampered, active, WAREHOUSE),
+				/Active batch status cannot be changed/
+			);
+		});
+
+		it('rejects direct active batch creation', () => {
+			expectForbidden(
+				() => compile()(batchDoc({ status: 'active' }), null, WAREHOUSE),
+				/start activating/
+			);
+		});
 	});
 });

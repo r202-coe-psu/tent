@@ -200,6 +200,8 @@ describe('distribution issue and reservation contracts', () => {
 						operation_id: 'approval-operation-1',
 						request_id: 'distribution_request:REQUEST1',
 						batch_id: 'distribution_batch:REQUEST1',
+						item_id: 'item:soap',
+						lot_ref: 'stock_ledger:LOT1',
 						qty: '5',
 						claimed_at: '2026-08-29T00:00:00Z'
 					}
@@ -213,6 +215,8 @@ describe('distribution issue and reservation contracts', () => {
 			operation_id: 'approval-operation-1',
 			request_id: 'distribution_request:REQUEST1',
 			batch_id: 'distribution_batch:REQUEST1',
+			item_id: 'item:soap',
+			lot_ref: 'stock_ledger:LOT1',
 			qty: '5'
 		});
 	});
