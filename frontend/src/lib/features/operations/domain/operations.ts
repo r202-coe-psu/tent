@@ -4,11 +4,13 @@ import {
 	addQty,
 	persistQty,
 	qtyAbs,
+	qtyGt,
 	qtyGte,
 	qtyNeg,
 	qtyStrSignedNonZeroSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceSignedNonZeroSchema,
+	qtyStrCoerceNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
 
@@ -88,6 +90,11 @@ export type TransferStatus = z.infer<typeof transferStatusSchema>;
 
 export const donationChannelSchema = z.enum(['public', 'walk_in']);
 export type DonationChannel = z.infer<typeof donationChannelSchema>;
+
+export interface TransferTimelineEvent {
+	at: Timestamp;
+	by: string; // _users name
+}
 
 // ---------------------------------------------------------------- documents
 
@@ -243,7 +250,28 @@ export interface DonationCampaign extends BaseDoc {
 	visible_on_home?: boolean;
 }
 
-export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase;
+export interface StockTransferItem {
+	item_id: string;
+	qty: string; // qty_str > 0, as dispatched by the source shelter
+	unit: string;
+	received_qty?: string; // qty_str >= 0, as counted at the destination
+}
+
+export interface StockTransfer extends BaseDoc {
+	type: 'stock_transfer';
+	from_shelter: string;
+	to_shelter: string;
+	items: StockTransferItem[];
+	status: TransferStatus;
+	timeline: {
+		requested: TransferTimelineEvent;
+		shipped?: TransferTimelineEvent;
+		received?: TransferTimelineEvent;
+	};
+	notes?: string;
+}
+
+export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase | StockTransfer;
 
 // ---------------------------------------------------------------- stock_ledger
 
@@ -810,6 +838,172 @@ export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[])
 	return purchaseReceiptStatus(purchase, stockLedgers) === 'not_received';
 }
 
+// ---------------------------------------------------------------- transfer
+
+export const transferItemSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoercePositiveSchema,
+	unit: z.string().trim().min(1)
+});
+
+export const transferInputSchema = z.object({
+	from_shelter: z.string().min(1),
+	to_shelter: z.string().min(1),
+	items: z.array(transferItemSchema).min(1, 'A transfer needs at least one item'),
+	notes: z.string().trim().optional()
+});
+export type TransferInput = z.input<typeof transferInputSchema>;
+
+export const receivedItemSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceNonNegativeSchema
+});
+export type ReceivedItemInput = z.input<typeof receivedItemSchema>;
+
+export const transferFilterSchema = z.object({
+	status: transferStatusSchema.optional(),
+	limit: z.number().int().positive().max(1000).default(50),
+	skip: z.number().int().nonnegative().default(0),
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+});
+export type TransferFilter = z.input<typeof transferFilterSchema>;
+
+export function createTransfer(input: TransferInput, ctx: AuthorContext): StockTransfer {
+	const d = transferInputSchema.parse(input);
+	return makeDoc(
+		'stock_transfer',
+		2,
+		{
+			from_shelter: d.from_shelter,
+			to_shelter: d.to_shelter,
+			items: d.items.map((i) => ({ ...i, qty: persistQty(i.qty) })),
+			status: 'requested',
+			timeline: {
+				requested: { at: now(), by: ctx.createdBy }
+			},
+			...(d.notes ? { notes: d.notes } : {})
+		},
+		ctx
+	);
+}
+
+/**
+ * Dispatches a transfer (changes status to shipped and creates corresponding transfer_out ledger entries).
+ * This function returns both the updated Transfer document and the StockLedger entries that must be persisted.
+ */
+export function dispatchTransfer(
+	transfer: StockTransfer,
+	ctx: AuthorContext
+): { transfer: StockTransfer; ledgers: StockLedger[] } {
+	if (transfer.status !== 'requested') {
+		throw new Error(`Cannot dispatch transfer in status "${transfer.status}"`);
+	}
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'shipped',
+		timeline: {
+			...transfer.timeline,
+			shipped: { at: now(), by: ctx.createdBy }
+		},
+		updated_at: now()
+	};
+
+	const ledgers = transfer.items.map((item) =>
+		createStockLedger(
+			{
+				item_id: item.item_id,
+				qty: qtyNeg(qtyAbs(item.qty)), // ensure negative delta for transfer out
+				unit: item.unit,
+				reason: 'transfer_out',
+				ref_id: transfer._id,
+				occurred_at: now()
+			},
+			ctx
+		)
+	);
+
+	return { transfer: updatedTransfer, ledgers };
+}
+
+/**
+ * Receives a transfer (changes status to received and creates corresponding transfer_in ledger entries).
+ * This function supports partial receipt by allowing the user to specify actual received quantities.
+ */
+export function receiveTransfer(
+	transfer: StockTransfer,
+	receivedItems: { item_id: string; qty: string | number }[],
+	ctx: AuthorContext,
+	notes?: string
+): { transfer: StockTransfer; ledgers: StockLedger[] } {
+	if (transfer.status !== 'shipped') {
+		throw new Error(`Cannot receive transfer in status "${transfer.status}"`);
+	}
+
+	const receivedQtyMap = new Map(receivedItems.map((i) => [i.item_id, persistQty(i.qty)]));
+
+	const updatedItems = transfer.items.map((item) => {
+		const receivedQty = receivedQtyMap.get(item.item_id) ?? '0';
+		if (qtyGt(receivedQty, item.qty)) {
+			throw new Error(
+				`Received quantity for item "${item.item_id}" (${receivedQty}) exceeds dispatched quantity (${item.qty})`
+			);
+		}
+		return { ...item, received_qty: receivedQty };
+	});
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		items: updatedItems,
+		status: 'received',
+		timeline: {
+			...transfer.timeline,
+			received: { at: now(), by: ctx.createdBy }
+		},
+		updated_at: now(),
+		...(notes ? { notes } : {})
+	};
+
+	const ledgers = updatedItems
+		.filter((item) => qtyGt(item.received_qty, 0))
+		.map((item) =>
+			createStockLedger(
+				{
+					item_id: item.item_id,
+					qty: qtyAbs(item.received_qty), // ensure positive delta for transfer in
+					unit: item.unit,
+					reason: 'transfer_in',
+					ref_id: transfer._id,
+					occurred_at: now()
+				},
+				ctx
+			)
+		);
+
+	return { transfer: updatedTransfer, ledgers };
+}
+
+/**
+ * Cancels a transfer before it has shipped. No ledger entries — nothing was
+ * ever deducted from source stock, so there is nothing to return. Does not add
+ * a `timeline` key (schema.md's `timeline` shape has no `cancelled` slot —
+ * adding one is a persisted-doc shape change that needs its own CR); `status`
+ * + `updated_at` (common envelope) already record the transition.
+ */
+export function cancelTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
+	if (transfer.status !== 'requested') {
+		throw new Error(`Cannot cancel transfer in status "${transfer.status}"`);
+	}
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'cancelled',
+		updated_at: now()
+	};
+
+	return { transfer: updatedTransfer };
+}
+
 // ---------------------------------------------------------------- campaign
 
 export const campaignInputSchema = z.object({
@@ -996,6 +1190,8 @@ export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
 export const isPurchase = (d: unknown): d is Purchase =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'purchase';
+export const isStockTransfer = (d: unknown): d is StockTransfer =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
 // ---------------------------------------------------------------- special request form schema
 export const specialRequestSchema = z.object({

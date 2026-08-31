@@ -146,6 +146,13 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'referral'");
 	});
 
+	it('includes catalog-related doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		expect(validateFn).toContain("'item_category'");
+		expect(validateFn).toContain("'item_master'");
+		expect(validateFn).toContain("'recipe'");
+	});
+
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
 	});
@@ -263,6 +270,18 @@ describe('buildValidateDocUpdate', () => {
 	it('includes people-plane doc types in the allowed whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		for (const type of ['household', 'medical', 'screening', 'movement', 'image'] as const) {
+			expect(validateFn).toContain(`'${type}'`);
+		}
+	});
+
+	it('includes sop and food sphere doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		for (const type of [
+			'requirement_group',
+			'food_sphere_standard',
+			'replenishment_policy',
+			'sop_override'
+		] as const) {
 			expect(validateFn).toContain(`'${type}'`);
 		}
 	});

@@ -102,8 +102,7 @@ describe('calculateMealIngredientsFromRecipe — catalog Recipe (BOM)', () => {
 		label: 'ทดสอบ',
 		ingredients,
 		standard_portions: standardPortions,
-		standard_duration_hours: '1',
-		is_default: false
+		standard_duration_hours: '1'
 	});
 
 	it('scales each ingredient from standard_portions to actual headcount', () => {
@@ -197,10 +196,9 @@ describe('resolveItemMasterStock — auto-match item_master ↔ supply_item', ()
 		name: 'ข้าวสาร',
 		base_unit: 'kg',
 		conversions: [],
-		distribution_type: 'consumable',
-		target_audience_type: 'all',
-		target_restrictions: {},
-		is_default: false,
+		distribution_type: 'recurring',
+		type_class: 'CONSUMABLE',
+		dietary: [],
 		...overrides
 	});
 

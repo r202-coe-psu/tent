@@ -247,7 +247,11 @@ describe('public/shelters load function', () => {
 		const url = new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=50');
 		const result = await runLoad(url);
 
-		expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+		expect(result.shelters.map((s: PublicShelterCardModel) => s.code)).toEqual([
+			'NEAR',
+			'FAR',
+			'NOGEO'
+		]);
 		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
 	});
 

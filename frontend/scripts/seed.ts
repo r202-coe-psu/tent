@@ -88,6 +88,9 @@ import {
 	type SopRatioKey
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
+import { DEFAULT_FOOD_SPHERE_STANDARDS } from '$lib/features/sop-ratios/domain/food-sphere.fixture';
+import { DEFAULT_REPLENISHMENT_POLICIES } from '$lib/features/sop-ratios/domain/replenishment-policy.fixture';
+import { DEFAULT_REQUIREMENT_GROUPS } from '$lib/features/sop-ratios/domain/requirement-group.fixture';
 import {
 	calculateResources,
 	FORMULA_V,
@@ -224,10 +227,11 @@ async function setSecurity(db: string, security: CouchDbSecurity): Promise<void>
 }
 
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
-async function putDoc(db: string, doc: Record<string, unknown>): Promise<void> {
-	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id as string)}`, doc);
+async function putDoc(db: string, doc: Record<string, unknown> | { _id: string }): Promise<void> {
+	const id = (doc as { _id: string })._id;
+	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(id)}`, doc);
 	if (status !== 201 && status !== 409)
-		throw new Error(`PUT ${doc._id} → ${db} failed (HTTP ${status})`);
+		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
 }
 
 async function bulkDocs(
@@ -1023,7 +1027,18 @@ async function seedCatalog(): Promise<void> {
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
-  throw({ forbidden: 'Only System Admins can write to the catalog database.' });
+  if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
+    throw({ forbidden: 'shelter_code is immutable' });
+  }
+  if (newDoc.shelter_code) {
+    var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
+    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
+    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
+    if (hasScope && (isManager || isWS)) {
+      return;
+    }
+  }
+  throw({ forbidden: 'Only System Admins can write to global catalog documents, and only authorized shelter staff can write local documents.' });
 }`;
 	await couchReq('PUT', `/catalog/${encodeURIComponent(ddocId)}`, {
 		_id: ddocId,
@@ -1090,35 +1105,34 @@ async function seedCatalog(): Promise<void> {
 	// stays "unresolved" (demonstrates the block-on-unlinked-ingredient path).
 	const itemMasterBase = {
 		conversions: [],
-		distribution_type: 'consumable',
-		target_audience_type: 'all',
-		target_restrictions: {},
-		is_default: false
+		distribution_type: 'recurring',
+		type_class: 'CONSUMABLE',
+		dietary: []
 	} as const;
 	const itemMasters = [
 		catalogDoc(
 			'item_master:rice',
 			'item_master',
 			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:egg',
 			'item_master',
 			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:vegetable',
 			'item_master',
 			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:canned-fish',
 			'item_master',
 			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
-			3
+			4
 		)
 	];
 	const recipes = [
@@ -1132,10 +1146,9 @@ async function seedCatalog(): Promise<void> {
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
 					{ item_master_id: 'item_master:egg', quantity: '2', uom: 'piece' }
-				],
-				is_default: false
+				]
 			},
-			3
+			4
 		),
 		catalogDoc(
 			'recipe:congee',
@@ -1144,10 +1157,9 @@ async function seedCatalog(): Promise<void> {
 				label: 'ข้าวต้ม',
 				standard_portions: '1',
 				standard_duration_hours: '1',
-				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }],
-				is_default: false
+				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }]
 			},
-			3
+			4
 		),
 		// Uses canned-fish (no matching supply_item) → BOM stays unresolved, so the
 		// plan can't be confirmed/withdrawn until the name is linked (demo step 2).
@@ -1161,10 +1173,9 @@ async function seedCatalog(): Promise<void> {
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
 					{ item_master_id: 'item_master:canned-fish', quantity: '0.5', uom: 'can' }
-				],
-				is_default: false
+				]
 			},
-			3
+			4
 		)
 	];
 
@@ -1245,6 +1256,28 @@ async function seedCatalogSopRatios(): Promise<void> {
 
 	await bulkDocs('catalog', [profile, audit, pointerDoc]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
+}
+
+async function seedCatalogFoodSphereParameters(): Promise<void> {
+	await ensureDb('catalog');
+
+	for (const doc of DEFAULT_REQUIREMENT_GROUPS) {
+		await putDoc('catalog', doc);
+	}
+
+	for (const doc of DEFAULT_FOOD_SPHERE_STANDARDS) {
+		await putDoc('catalog', doc);
+	}
+
+	for (const doc of DEFAULT_REPLENISHMENT_POLICIES) {
+		await putDoc('catalog', doc);
+	}
+
+	console.log(
+		`  ✓ catalog: ${DEFAULT_REQUIREMENT_GROUPS.length} requirement groups, ` +
+			`${DEFAULT_FOOD_SPHERE_STANDARDS.length} food sphere standards, ` +
+			`${DEFAULT_REPLENISHMENT_POLICIES.length} replenishment policies seeded`
+	);
 }
 
 async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
@@ -1349,7 +1382,19 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 		name: 'catalog-type-target-idx',
 		type: 'json'
 	});
-	console.log(`  ✓ ${db}: Mango indexes for sop_profile and audit queries deployed`);
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'target_segment', 'req_group_id', 'effective_date'] },
+		name: 'catalog-food-sphere-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'scope_type', 'target_id'] },
+		name: 'catalog-replenishment-policy-idx',
+		type: 'json'
+	});
+	console.log(
+		`  ✓ ${db}: Mango indexes for sop_profile, audit, food_sphere, replenishment_policy deployed`
+	);
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -2219,6 +2264,7 @@ async function main() {
 		await provisionRegistryShelterDbs();
 		await seedCatalog();
 		await seedCatalogSopRatios();
+		await seedCatalogFoodSphereParameters();
 		await seedShelter(master);
 		await seedShelter2(master);
 		await seedDashboardData(master);
