@@ -298,7 +298,11 @@
 						: 'ไม่พบข้อมูลอาสาสมัคร',
 					volunteerCode: volunteer?.volunteer_code ?? '—',
 					status: a.status,
-					dispatchStatus: a.dispatch_status ?? null
+					dispatchStatus: a.dispatch_status ?? null,
+					phone: volunteer?.phone ?? null,
+					station: a.station,
+					checkInAt: a.check_in_at ?? null,
+					checkOutAt: a.check_out_at ?? null
 				};
 			});
 		return { needed, candidates };

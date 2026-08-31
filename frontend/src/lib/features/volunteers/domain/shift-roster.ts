@@ -26,6 +26,10 @@ export interface ShiftRosterEntry {
 	volunteerCode: string;
 	status: ShiftAssignmentStatus;
 	dispatchStatus: DispatchStatus | null;
+	phone: string | null;
+	station: string;
+	checkInAt: string | null;
+	checkOutAt: string | null;
 }
 
 /**
@@ -55,7 +59,7 @@ export function shiftRoster(
 	assignments: readonly ShiftAssignment[],
 	volunteersById: ReadonlyMap<
 		string,
-		Pick<Volunteer, 'first_name' | 'last_name' | 'volunteer_code'>
+		Pick<Volunteer, 'first_name' | 'last_name' | 'volunteer_code' | 'phone'>
 	>
 ): ShiftRosterEntry[] {
 	let window: ReturnType<typeof shiftDutyWindow>;
@@ -80,7 +84,11 @@ export function shiftRoster(
 					: 'ไม่พบข้อมูลอาสาสมัคร',
 				volunteerCode: volunteer?.volunteer_code ?? '—',
 				status: a.status,
-				dispatchStatus: a.dispatch_status ?? null
+				dispatchStatus: a.dispatch_status ?? null,
+				phone: volunteer?.phone ?? null,
+				station: a.station,
+				checkInAt: a.check_in_at ?? null,
+				checkOutAt: a.check_out_at ?? null
 			};
 		});
 }
@@ -93,4 +101,11 @@ export const SHIFT_ASSIGNMENT_STATUS_LABEL: Record<ShiftAssignmentStatus, string
 	completed: 'ปฏิบัติงานเสร็จแล้ว',
 	no_show: 'ไม่มาตามนัด',
 	cancelled: 'ยกเลิกแล้ว'
+};
+
+/** Thai label for a roster entry's `dispatchStatus` — an outstanding dispatch offer's state. */
+export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
+	dispatched: 'เสนองานแล้ว รอตอบรับ',
+	accepted: 'ตอบรับแล้ว',
+	declined: 'ปฏิเสธแล้ว'
 };
