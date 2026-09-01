@@ -284,7 +284,8 @@
 	}
 
 	async function saveNewAssessment(): Promise<void> {
-		const hasAnswer = Object.values(draft.answeredControls).some(Boolean) ||
+		const hasAnswer =
+			Object.values(draft.answeredControls).some(Boolean) ||
 			Object.values(draft.lifelines).some((status) => status !== null);
 		if (!hasAnswer) {
 			toast.error('ยังไม่มีข้อมูลให้บันทึก');
@@ -495,7 +496,8 @@
 										<td class="px-6 py-4 text-center">
 											<span
 												class={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold ${assessmentStatusClass(item.status)}`}
-												><CheckCircle2 class="size-3.5" /> {assessmentStatusLabel(item.status)}</span
+												><CheckCircle2 class="size-3.5" />
+												{assessmentStatusLabel(item.status)}</span
 											>
 										</td>
 										<td class="px-6 py-4 text-right">
@@ -716,7 +718,7 @@
 									{#if isReadOnly}<div
 											class="mt-4 rounded-xl bg-[#f5f5f7] px-3 py-2 text-sm font-bold text-[#1d1d1f]"
 										>
-										{lifelineStatusLabel(snapshot?.lifelines[lifeline.id])}
+											{lifelineStatusLabel(snapshot?.lifelines[lifeline.id])}
 										</div>{:else}<select
 											data-testid="lifeline-select"
 											class="mt-4 h-11 w-full rounded-xl border border-black/[0.06] bg-[#f5f5f7] px-3 text-sm font-bold text-[#1d1d1f]"
@@ -725,7 +727,7 @@
 												selectLifeline(lifeline.id, event.currentTarget.value as LifelineStatus)}
 											><option value="" disabled>เลือกสถานะ</option>
 											>{#each ['Operational', 'Interrupted', 'Critical'] as status (status)}<option
-											value={status}>{lifelineStatusLabel(status as LifelineStatus)}</option
+													value={status}>{lifelineStatusLabel(status as LifelineStatus)}</option
 												>
 											{/each}</select
 										>{/if}
@@ -802,9 +804,7 @@
 						pending={isEditing ? updateMutation.isPending : createMutation.isPending}
 						testId={isEditing ? 'save-edited-section' : 'save-section-draft'}
 						saveLabel={!isEditing && canComplete(draft) ? 'บันทึกผลการประเมิน' : undefined}
-						onSave={isEditing
-							? updateAssessment
-							: saveNewAssessment}
+						onSave={isEditing ? updateAssessment : saveNewAssessment}
 						onBack={() => navigate(isEditing ? 'edit-menu' : 'menu')}
 					/>
 				{/if}

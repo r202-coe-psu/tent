@@ -138,9 +138,7 @@ test.describe('Daily SOP — Design workflow', () => {
 		await expect(page.getByText('Online', { exact: true })).toBeVisible();
 	});
 
-	test('Saving one answer creates an in-progress history row', async ({
-		page
-	}) => {
+	test('Saving one answer creates an in-progress history row', async ({ page }) => {
 		ownsTodayAssessment = true;
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();
@@ -214,9 +212,7 @@ test.describe('Daily SOP — Design workflow', () => {
 		await expect(page.getByText(/ประเมินโดย staff03/).first()).toBeVisible();
 	});
 
-	test('Selected Pending creates an in-progress record', async ({
-		page
-	}) => {
+	test('Selected Pending creates an in-progress record', async ({ page }) => {
 		ownsTodayAssessment = true;
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();

@@ -136,9 +136,11 @@
 						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
 						<Select type="single" bind:value={shelterStore.selectedShelterCode}>
 							<SelectTrigger
-								class={`h-9 ${isDailySopPage
-									? 'w-[min(45vw,200px)] md:w-[240px] 2xl:w-[280px]'
-									: 'w-[200px] md:w-[280px]'}`}
+								class={`h-9 ${
+									isDailySopPage
+										? 'w-[min(45vw,200px)] md:w-[240px] 2xl:w-[280px]'
+										: 'w-[200px] md:w-[280px]'
+								}`}
 							>
 								<span class="truncate">{selectedShelterLabel}</span>
 							</SelectTrigger>
@@ -182,7 +184,9 @@
 							onclick={retryDailySopConnection}
 							aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
 						>
-							<RotateCcw class="size-3.5" /> <span class="hidden sm:inline">สลับโหมดเน็ต</span><span class="sm:hidden">รีเฟรช</span>
+							<RotateCcw class="size-3.5" /> <span class="hidden sm:inline">สลับโหมดเน็ต</span><span
+								class="sm:hidden">รีเฟรช</span
+							>
 						</button>
 					{:else if backofficeState.isOffline}
 						<button
