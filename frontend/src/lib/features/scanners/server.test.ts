@@ -304,10 +304,10 @@ describe('ScannerServerRepository.processCardScan', () => {
 	});
 
 	it('optimizes Mango index selector when citizen_id contains only digits', async () => {
-		let findPayload: { selector: Record<string, unknown> } | null = null;
+		let findBody = '';
 		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url, options) => {
 			if (url.includes('_find')) {
-				findPayload = JSON.parse(options?.body as string);
+				findBody = (options?.body as string) || '';
 				return { docs: [] };
 			}
 			return { ok: true };
@@ -318,18 +318,19 @@ describe('ScannerServerRepository.processCardScan', () => {
 			citizen_id: '1234567890123'
 		});
 
-		expect(findPayload?.selector).toEqual({
+		const payload = JSON.parse(findBody) as { selector: Record<string, unknown> };
+		expect(payload.selector).toEqual({
 			type: 'evacuee',
 			'person_id.number': '1234567890123'
 		});
-		expect(findPayload?.selector.$or).toBeUndefined();
+		expect(payload.selector.$or).toBeUndefined();
 	});
 
 	it('uses $or in Mango selector when citizen_id contains formatted characters', async () => {
-		let findPayload: { selector: Record<string, unknown> } | null = null;
+		let findBody = '';
 		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url, options) => {
 			if (url.includes('_find')) {
-				findPayload = JSON.parse(options?.body as string);
+				findBody = (options?.body as string) || '';
 				return { docs: [] };
 			}
 			return { ok: true };
@@ -340,7 +341,8 @@ describe('ScannerServerRepository.processCardScan', () => {
 			citizen_id: '1-2345-67890-12-3'
 		});
 
-		expect(findPayload?.selector).toEqual({
+		const payload = JSON.parse(findBody) as { selector: Record<string, unknown> };
+		expect(payload.selector).toEqual({
 			type: 'evacuee',
 			$or: [{ 'person_id.number': '1-2345-67890-12-3' }, { 'person_id.number': '1234567890123' }]
 		});
