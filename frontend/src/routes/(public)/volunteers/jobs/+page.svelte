@@ -7,12 +7,15 @@
 	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
 	import TicketSearch from '$lib/features/volunteers/components/TicketSearch.svelte';
 
+	import { goto } from '$app/navigation';
+
 	let activeTab = $state('jobs'); // 'jobs' | 'ticket'
 
 	function handleSearchTicket(query: string) {
-		console.log('Search for ticket:', query);
-		// In a real app, this would query the API and redirect to the ticket page
-		alert(`ค้นหาตั๋ว: ${query} (Mock)`);
+		const token = query.trim();
+		if (token) {
+			goto(`/volunteers/ticket/${encodeURIComponent(token)}`);
+		}
 	}
 </script>
 
