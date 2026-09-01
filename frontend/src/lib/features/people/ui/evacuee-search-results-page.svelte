@@ -26,7 +26,8 @@
 	}
 
 	function viewEvacuee(id: string) {
-		goto(resolve(`/onsite/people/evacuee-profile-view/${id}`));
+		const from = `${page.url.pathname}${page.url.search}`;
+		goto(resolve(`/onsite/people/evacuee-profile-view/${id}?from=${encodeURIComponent(from)}`));
 	}
 </script>
 
@@ -104,7 +105,7 @@
 									class="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3"
 								>
 									<p class="truncate text-xs text-muted-foreground">
-										Zone {zoneLabel(evacuee.current_stay.zone)} · เตียง -
+										Zone {zoneLabel(evacuee.current_stay.zone)}
 									</p>
 									<Button
 										type="button"

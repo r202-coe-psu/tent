@@ -277,15 +277,17 @@
 		if (!evacuee) return;
 		try {
 			const action = resolveStatusChangeAction(evacuee.current_stay.status, status);
-			if (action) {
-				const ctx = getAuthorContext();
-				if (action === 'check_in') {
-					await checkInMutation.mutateAsync({ evacuee, ctx });
-				} else if (action === 'check_out') {
-					await checkOutMutation.mutateAsync({ evacuee, ctx });
-				} else {
-					await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
-				}
+			if (!action) {
+				showStatusModal = false;
+				return;
+			}
+			const ctx = getAuthorContext();
+			if (action === 'check_in') {
+				await checkInMutation.mutateAsync({ evacuee, ctx });
+			} else if (action === 'check_out') {
+				await checkOutMutation.mutateAsync({ evacuee, ctx });
+			} else {
+				await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
 			}
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
 			showStatusModal = false;

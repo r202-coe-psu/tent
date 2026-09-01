@@ -5,7 +5,7 @@ import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch, url }) => {
 	await requireEvacueeRegistration(fetch);
-	if (!url.searchParams.get('q')) {
+	if (!url.searchParams.get('q')?.trim()) {
 		throw redirect(302, resolve('/onsite/search-edit'));
 	}
 }) satisfies PageLoad;

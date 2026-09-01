@@ -21,7 +21,8 @@
 	}
 
 	function viewEvacuee(id: string) {
-		goto(resolve(`/onsite/people/evacuee-profile-view/${id}`));
+		const from = resolve('/onsite/search-edit');
+		goto(resolve(`/onsite/people/evacuee-profile-view/${id}?from=${encodeURIComponent(from)}`));
 	}
 </script>
 
