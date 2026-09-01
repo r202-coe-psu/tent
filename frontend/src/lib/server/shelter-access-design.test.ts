@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
+import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop/domain/daily-sop';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -155,6 +156,105 @@ describe('buildValidateDocUpdate', () => {
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
+	});
+
+	it('accepts Daily SOP snapshots and preserves edit boundaries', () => {
+		const dailySop = {
+			_id: 'daily_sop_assessment:SH001:2026-06-11',
+			type: 'daily_sop_assessment',
+			...envelope,
+			schema_v: 1,
+			assessment_date: '2026-06-11',
+			assessed_at: '2026-06-11T08:00:00.000Z',
+			assessor_name: 'reg',
+			status: 'Completed',
+			progress_percent: 100,
+			pass_percent: 100,
+			risk_label: 'ไม่พบความเสี่ยง',
+			controls: DAILY_SOP_QUESTIONS.map((question) => ({
+				id: question.id,
+				section_id: question.sectionId,
+				question: question.prompt,
+				status: 'Yes',
+				answered: true,
+				checked_by: 'reg',
+				checked_at: '2026-06-11T08:00:00.000Z'
+			})),
+			lifelines: {
+				electricity: 'Operational',
+				water: 'Operational',
+				gas: 'Operational',
+				telecom: 'Operational'
+			}
+		};
+		expect(() => compile()(dailySop, null, REGISTRATION)).not.toThrow();
+		expect(() =>
+			compile()(
+				{
+					...dailySop,
+					status: 'InProgress',
+					progress_percent: 91,
+					pass_percent: 100,
+					risk_label: 'พบความเสี่ยง',
+					lifelines: { ...dailySop.lifelines, electricity: null },
+					controls: dailySop.controls.map((control, index) =>
+						index === 0 ? { ...control, status: 'Pending', answered: false } : control
+					)
+				},
+				null,
+				REGISTRATION
+			)
+		).not.toThrow();
+		expectForbidden(
+			() =>
+				compile()(
+					{ ...dailySop, controls: dailySop.controls.map((control, index) => index === 0 ? { ...control, answered: false, status: 'Pending' } : control) },
+					null,
+					REGISTRATION
+				),
+			/Daily SOP status must match answer completion/
+		);
+		const edited = {
+			...dailySop,
+			updated_at: '2026-07-23T00:00:00.000Z',
+			pass_percent: 95,
+			risk_label: 'พบความเสี่ยง',
+			controls: dailySop.controls.map((control, index) =>
+				index === 0 ? { ...control, status: 'No' } : control
+			)
+		};
+		expect(() => compile()(edited, dailySop, REGISTRATION)).not.toThrow();
+		expectForbidden(
+			() => compile()({ ...edited, assessment_date: '2026-06-12' }, dailySop, REGISTRATION),
+			/Daily SOP identity and creation metadata cannot change/
+		);
+		expectForbidden(
+			() =>
+				compile()(
+					{ ...edited, assessor_name: 'another-user', assessed_at: '2026-06-12T00:00:00.000Z' },
+					dailySop,
+					REGISTRATION
+				),
+			/Daily SOP identity and creation metadata cannot change/
+		);
+		expectForbidden(
+			() =>
+				compile()(
+					{
+						...edited,
+						controls: edited.controls.map((control, index) =>
+							index === 0 ? { ...control, checked_by: '' } : control
+						)
+					},
+					dailySop,
+					REGISTRATION
+				),
+			/Daily SOP control shape\/status is invalid/
+		);
+		expectForbidden(
+			() => compile()({ ...dailySop, schema_v: 2 }, null, REGISTRATION),
+			/Daily SOP assessment schema\/status is invalid/
+		);
 	});
 
 	it('allows managers to create/delete immutable simulations and rejects staff or updates', () => {
