@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
+	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop/ui/connection-action';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
@@ -178,16 +179,17 @@
 								<span class="size-1.5 rounded-full bg-amber-500"></span> Offline
 							{/if}
 						</span>
-						<button
-							type="button"
-							class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-2xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 sm:px-3 sm:text-xs"
-							onclick={retryDailySopConnection}
-							aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
-						>
-							<RotateCcw class="size-3.5" /> <span class="hidden sm:inline">สลับโหมดเน็ต</span><span
-								class="sm:hidden">รีเฟรช</span
+						{#if shouldShowDailySopReconnect(endpointStore.status)}<button
+								type="button"
+								class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-2xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 sm:px-3 sm:text-xs"
+								onclick={retryDailySopConnection}
+								aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
 							>
-						</button>
+								<RotateCcw class="size-3.5" />
+								<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span><span class="sm:hidden"
+									>ลองใหม่</span
+								>
+							</button>{/if}
 					{:else if backofficeState.isOffline}
 						<button
 							type="button"
