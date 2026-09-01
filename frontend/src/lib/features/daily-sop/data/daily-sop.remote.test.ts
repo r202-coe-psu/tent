@@ -75,6 +75,7 @@ describe('Daily SOP repository contract', () => {
 				section_id: question.sectionId,
 				question: question.prompt,
 				status: 'Yes',
+				answered: true,
 				checked_by: ctx.createdBy,
 				checked_at: '2026-06-11T15:00:00.000Z'
 			})),

@@ -58,7 +58,8 @@ export class DailySopRemoteRepository implements DailySopRepository {
 		const hasAnswer =
 			Object.values(draft.answeredControls).some(Boolean) ||
 			LIFELINE_KEYS.some((key) => draft.lifelines[key] !== null);
-		if (!hasAnswer) throw new Error('Daily SOP requires at least one selected status before saving.');
+		if (!hasAnswer)
+			throw new Error('Daily SOP requires at least one selected status before saving.');
 		const assessedAt = new Date().toISOString();
 		const summary = summarizeDraft(draft);
 		const body = {
@@ -133,10 +134,11 @@ export class DailySopRemoteRepository implements DailySopRepository {
 					),
 					id: question.id,
 					section_id: question.sectionId,
-				question: question.prompt,
-				status: toStoredStatus(draft.controls[question.id]),
-				answered:
-					draft.answeredControls[question.id] === true || draft.controls[question.id] !== 'Pending'
+					question: question.prompt,
+					status: toStoredStatus(draft.controls[question.id]),
+					answered:
+						draft.answeredControls[question.id] === true ||
+						draft.controls[question.id] !== 'Pending'
 				};
 			}),
 			lifelines: Object.fromEntries(
