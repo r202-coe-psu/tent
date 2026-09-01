@@ -644,13 +644,13 @@
 
 			{#if initialAddress && (initialAddress.province || initialAddress.address_no)}
 				<div
-					class="rounded-xl border border-cyan-300 bg-cyan-50/80 p-3.5 text-xs text-cyan-900 shadow-sm dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200"
+					class="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-foreground shadow-xs dark:border-primary/30 dark:bg-primary/10"
 				>
-					<div class="flex items-center gap-2 font-bold text-cyan-950 dark:text-cyan-100">
-						<Cpu class="size-4 text-cyan-700 dark:text-cyan-400" />
+					<div class="flex items-center gap-2 font-bold text-primary">
+						<Cpu class="size-4" />
 						<span>ที่อยู่ตามทะเบียนบ้านดึงมาจากบัตรประชาชน (Autofilled)</span>
 					</div>
-					<p class="mt-1 text-cyan-800/90 dark:text-cyan-300/90">
+					<p class="mt-1 text-muted-foreground">
 						โปรดสอบถามยืนยันกับผู้ประสบภัยว่าปัจจุบันพักอาศัยอยู่ที่นี่จริงหรือไม่
 						หากไม่ตรงสามารถพิมพ์แก้ไขในช่องด้านล่างได้ทันที
 					</p>

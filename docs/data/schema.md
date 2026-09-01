@@ -1312,18 +1312,26 @@ closed   → (terminal)
 ## 6. DB `_users` (CouchDB system DB — central-managed)
 
 CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — ไม่มี common envelope; managed ผ่าน `/api/v1/users`
-(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 (Compound Scoped Roles Architecture)**
+(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `name` | str | req | CouchDB username (login id / email) |
+| `name` | str | req | CouchDB username — เบอร์โทรศัพท์มือถือ 10 หลัก (สำหรับเจ้าหน้าที่/อาสา) หรือ alphanumeric (สำหรับ `sa01`/System Admin) |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
-| `display_name` | str\|null | opt | ชื่อแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "SH001:volunteer_coordinator", "shelter:SH002", "SH002:supply_coordinator"]` (ระบุรหัสศูนย์คู่กับ RoleKey ป้องกัน Privilege Bleeding ข้ามศูนย์) |
-| `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์ชั่วคราว) |
+| `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
+| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "registration_staff", "triage_staff"]` (ระบุรหัสศูนย์คู่กับ Capability RoleKeys) |
+| `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
+| `organization` | str\|null | opt/req | หน่วยงานต้นสังกัด (**Required** สำหรับ staff, **Optional** สำหรับ volunteer) |
+| `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |
+| `phone` | str | req | เบอร์โทรศัพท์ติดต่อ 10 หลัก |
+| `email` | str\|null | opt | อีเมลติดต่อ |
+| `notes` | str\|null | opt | หมายเหตุเพิ่มเติม |
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |
+| `duty_window` | object\|null | opt | `{ start_ts: ISO, end_ts: ISO }` ช่วงเวลากะงานสำหรับตัดสิทธิ์อัตโนมัตินอกเวลา |
+| `security_question` | object\|null | opt | `{ question_id: enum, answer_hash: str, salt: str, set_at: ISO }` สำหรับกู้คืนรหัสผ่านด้วยตนเอง (6 คำถามมาตรฐาน, Salted SHA-256) |
 | `active` | bool | req | default `true` (เปิด/ปิดการเข้าใช้งานระบบ) |
-| `must_change_password` | bool | opt | default `false` (บังคับเปลี่ยนรหัสผ่านในการเข้าใช้งานครั้งแรก) |
+| `must_change_password` | bool | opt | default `false` (บังคับเปลี่ยนรหัสผ่านและตั้งคำถามความปลอดภัยเมื่อเข้าสู่ระบบ) |
+| `affiliation_tags` | [str] | opt | แท็กสังกัดหรือกลุ่มสังกัดเพิ่มเติม |
 
 **กฎความปลอดภัยของ Compound Roles (CR-093 / CR-104):**
 - กุญแจผ่านประตูฐานข้อมูล (`shelter:{code}`): กำหนดใน `_security.members.roles` ของฐานข้อมูล `shelter_{code}`

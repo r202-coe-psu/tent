@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type {
 		EvacueeInput,
@@ -118,11 +118,43 @@
 	const checkInMutation = useCheckInEvacuee();
 
 	let activeDraftEvacuee = $state<Evacuee | null>(null);
+	let topAnchorRef = $state<HTMLElement | null>(null);
+
+	async function scrollToTop() {
+		if (typeof window === 'undefined') return;
+		await tick();
+		requestAnimationFrame(() => {
+			if (topAnchorRef) {
+				topAnchorRef.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+			document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+			document.body.scrollTo({ top: 0, behavior: 'smooth' });
+
+			const scrollContainers = document.querySelectorAll(
+				'.overflow-y-auto, .overflow-auto, [class*="overflow-y-auto"], main'
+			);
+			scrollContainers.forEach((el) => {
+				el.scrollTo({ top: 0, behavior: 'smooth' });
+			});
+		});
+	}
+
+	let mounted = false;
+	$effect(() => {
+		const _currentStep = step;
+		if (!mounted) {
+			mounted = true;
+			return;
+		}
+		scrollToTop();
+	});
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
 		if (next === 3) registrationDraftActive = true;
 		step = next;
+		scrollToTop();
 	}
 
 	function handleSelectDraft(draft: Evacuee) {
@@ -421,6 +453,8 @@
 		}
 	}
 </script>
+
+<div bind:this={topAnchorRef} class="scroll-mt-6"></div>
 
 <!-- ── Step progress ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 space-y-3">
