@@ -17,10 +17,13 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Truck from '@lucide/svelte/icons/truck';
-	import Info from '@lucide/svelte/icons/info';
+	import Package from '@lucide/svelte/icons/package';
 
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { qtyGt } from '$lib/utils/qty';
@@ -700,13 +703,13 @@
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<!-- Warning card (Unsolicited Notice) -->
 						<div
-							class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 text-xs dark:border-rose-900/50 dark:bg-rose-950/20"
+							class="rounded-2xl border border-rose-200 bg-rose-50/70 p-5 text-sm dark:border-rose-900/50 dark:bg-rose-950/20"
 						>
 							<div class="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-400">
-								<AlertTriangle class="h-4 w-4 shrink-0" />
+								<AlertTriangle class="h-4.5 w-4.5 shrink-0" />
 								<span>คำชี้แจง / เงื่อนไขตรวจสอบพัสดุพิเศษระวัง</span>
 							</div>
-							<p class="mt-2 text-2xs font-medium text-rose-600 dark:text-rose-300">
+							<p class="mt-2 text-xs leading-relaxed text-rose-700 dark:text-rose-300">
 								<strong class="font-bold">ประเภท:</strong> รายการไม่อยู่ในประกาศ (Unsolicited)<br />
 								สิ่งของนอกเหนือรายการแจ้งความต้องการ (Unsolicited Donation)
 							</p>
@@ -714,17 +717,19 @@
 
 						<!-- Donor Contact Card -->
 						<div
-							class="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 text-xs dark:border-blue-900/50 dark:bg-blue-950/20"
+							class="rounded-2xl border border-blue-200 bg-blue-50/70 p-5 text-sm dark:border-blue-900/50 dark:bg-blue-950/20"
 						>
 							<div class="flex items-center gap-2 font-bold text-blue-700 dark:text-blue-400">
-								<User class="h-4 w-4 shrink-0" />
+								<User class="h-4.5 w-4.5 shrink-0" />
 								<span>ข้อมูลผู้บริจาค / จุดประสานงาน</span>
 							</div>
-							<div class="mt-2 space-y-0.5 text-2xs text-blue-900 dark:text-blue-200">
+							<div class="mt-2 space-y-1 text-sm text-blue-950 dark:text-blue-200">
 								<div class="font-bold text-foreground">{donorName || 'ไม่ระบุชื่อ'}</div>
-								<div class="text-muted-foreground">โทร. {donorPhone || 'ไม่ระบุเบอร์โทร'}</div>
+								<div class="text-xs text-muted-foreground">
+									โทร. {donorPhone || 'ไม่ระบุเบอร์โทร'}
+								</div>
 								{#if donorEmail}
-									<div class="text-muted-foreground">{donorEmail}</div>
+									<div class="text-xs text-muted-foreground">{donorEmail}</div>
 								{/if}
 							</div>
 						</div>
@@ -733,8 +738,8 @@
 					<!-- Section: Item Mapping -->
 					<div class="space-y-4">
 						<div class="flex items-center justify-between">
-							<h3 class="flex items-center gap-2 text-xs font-bold text-foreground md:text-sm">
-								<ClipboardCheck class="h-4 w-4 text-primary" />
+							<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
+								<ClipboardCheck class="h-5 w-5 text-primary" />
 								ตรวจสอบและจับคู่ข้อมูล (Item Mapping)
 							</h3>
 						</div>
@@ -742,171 +747,196 @@
 						<div class="space-y-4">
 							{#each scannedItems as item, idx (item.key)}
 								<div
-									class="rounded-2xl border border-border/80 bg-card p-5 shadow-xs transition-all {item.verified
-										? 'border-emerald-500/40 bg-emerald-50/10'
+									class="rounded-2xl border border-border/80 bg-card p-5 shadow-xs transition-all md:p-6 {item.verified
+										? 'border-emerald-500/50 bg-emerald-50/15'
 										: ''}"
 								>
 									<!-- Item Header & Verified Checkbox -->
 									<div
-										class="mb-4 flex items-center justify-between border-b border-border/60 pb-3"
+										class="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4"
 									>
-										<div class="flex items-center gap-2 text-sm font-bold text-foreground">
-											<span class="text-primary">📦</span>
-											<span>{item.name} {item.declaredQty} {item.unit}</span>
+										<div class="flex flex-wrap items-center gap-2.5">
+											<div
+												class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"
+											>
+												<Package class="h-5 w-5" />
+											</div>
+											<span class="text-base font-bold text-foreground">{item.name}</span>
+											<Badge variant="secondary" class="h-6 px-2.5 text-xs font-semibold">
+												แจ้งไว้: {item.declaredQty}
+												{item.unit}
+											</Badge>
+											{#if item.qty === item.declaredQty}
+												<Badge
+													variant="outline"
+													class="h-6 border-emerald-300/80 bg-emerald-50 px-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+												>
+													✓ ครบถ้วน
+												</Badge>
+											{:else}
+												<Badge
+													variant="outline"
+													class="h-6 border-amber-300/80 bg-amber-50 px-2 text-xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+												>
+													⚠ มีส่วนต่าง
+												</Badge>
+											{/if}
 										</div>
 
 										<label
-											class="flex cursor-pointer items-center gap-2 text-xs font-bold text-foreground"
+											class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border/80 bg-background/80 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/60 {item.verified
+												? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+												: ''}"
 										>
-											<input
-												type="checkbox"
-												bind:checked={item.verified}
-												class="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
-											/>
-											<span>ผ่านการตรวจสอบแล้ว</span>
+											<Checkbox bind:checked={item.verified} />
+											<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
 										</label>
 									</div>
 
-									<!-- Row 1: Map to Master & Storage Zone -->
-									<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-										<!-- Map to master -->
-										<div>
-											<div class="mb-1.5 flex items-center justify-between">
-												<label
-													for="map-master-{idx}"
-													class="block text-xs font-bold text-foreground"
-												>
-													จับคู่ฐานข้อมูลหลัก (Map to Master) <span class="text-rose-500">*</span>
-												</label>
-												<button
-													type="button"
-													onclick={() => openQuickCreate(idx)}
-													class="cursor-pointer text-3xs font-bold text-blue-600 hover:underline dark:text-blue-400"
-												>
-													+ สร้างรายการใหม่
-												</button>
+									<!-- Form Fields Grid -->
+									<div class="space-y-4">
+										<!-- Row 1: Map to Master & Storage Zone -->
+										<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+											<!-- Map to master -->
+											<div class="space-y-1.5">
+												<div class="flex items-center justify-between">
+													<Label
+														for="map-master-{idx}"
+														class="text-sm font-semibold text-foreground"
+													>
+														จับคู่ฐานข้อมูลหลัก (Map to Master) <span class="text-rose-500">*</span>
+													</Label>
+													<button
+														type="button"
+														onclick={() => openQuickCreate(idx)}
+														class="cursor-pointer text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+													>
+														+ สร้างรายการใหม่
+													</button>
+												</div>
+
+												<div class="flex items-center gap-2">
+													<select
+														id="map-master-{idx}"
+														bind:value={item.item_id}
+														class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+													>
+														<option value="">-- เลือกรายการสินค้าหลัก --</option>
+														{#each catalogItems as c (c._id)}
+															<option value={c._id}>
+																{c.name} ({c.unit})
+															</option>
+														{/each}
+													</select>
+
+													<Button
+														type="button"
+														variant="outline"
+														size="icon"
+														onclick={() => openQuickCreate(idx)}
+														class="h-10 w-10 shrink-0 rounded-xl border-blue-200 bg-blue-50/70 text-blue-600 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400"
+														title="สร้างสินค้าใหม่"
+													>
+														<PlusCircle class="h-4 w-4" />
+													</Button>
+												</div>
 											</div>
 
-											<div class="flex items-center gap-2">
+											<!-- Storage Zone -->
+											<div class="space-y-1.5">
+												<Label
+													for="storage-zone-{idx}"
+													class="text-sm font-semibold text-foreground"
+												>
+													โซนจัดเก็บ <span class="text-rose-500">*</span>
+												</Label>
 												<select
-													id="map-master-{idx}"
-													bind:value={item.item_id}
-													class="h-10 flex-1 rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
+													id="storage-zone-{idx}"
+													bind:value={item.storage_zone}
+													class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
 												>
-													<option value="">-- ค้นหาและเลือก Item --</option>
-													{#each catalogItems as c (c._id)}
-														<option value={c._id}>
-															{c.name} ({c.unit})
-														</option>
-													{/each}
+													<option value="">-- เลือกโซนจัดเก็บ * --</option>
+													<option value="Zone A (อาหารแห้งและเครื่องดื่ม)"
+														>Zone A (อาหารแห้งและเครื่องดื่ม)</option
+													>
+													<option value="Zone B (ยาและเวชภัณฑ์)">Zone B (ยาและเวชภัณฑ์)</option>
+													<option value="Zone C (ของใช้ทั่วไปและสุขอนามัย)"
+														>Zone C (ของใช้ทั่วไปและสุขอนามัย)</option
+													>
+													<option value="Zone D (เครื่องนุ่งห่มและที่นอน)"
+														>Zone D (เครื่องนุ่งห่มและที่นอน)</option
+													>
+													<option value="Zone E (อุปกรณ์และเครื่องมือช่าง)"
+														>Zone E (อุปกรณ์และเครื่องมือช่าง)</option
+													>
+													<option value="Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)"
+														>Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)</option
+													>
 												</select>
-
-												<button
-													type="button"
-													onclick={() => openQuickCreate(idx)}
-													class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-blue-200 bg-blue-50/70 text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400"
-													title="สร้างสินค้าใหม่"
-												>
-													<PlusCircle class="h-4 w-4" />
-												</button>
 											</div>
 										</div>
 
-										<!-- Storage Zone -->
-										<div>
-											<label
-												for="storage-zone-{idx}"
-												class="mb-1.5 block text-xs font-bold text-foreground"
-											>
-												โซนจัดเก็บ <span class="text-rose-500">*</span>
-											</label>
-											<select
-												id="storage-zone-{idx}"
-												bind:value={item.storage_zone}
-												class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-											>
-												<option value="">-- เลือกโซนจัดเก็บ * --</option>
-												<option value="Zone A (อาหารแห้งและเครื่องดื่ม)"
-													>Zone A (อาหารแห้งและเครื่องดื่ม)</option
+										<!-- Row 2: Expiry date & Real quantity & Difference reason -->
+										<div class="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-12">
+											<!-- Expiry date -->
+											<div class="space-y-1.5 md:col-span-3">
+												<Label
+													for="item-expiry-{idx}"
+													class="text-sm font-semibold text-foreground"
 												>
-												<option value="Zone B (ยาและเวชภัณฑ์)">Zone B (ยาและเวชภัณฑ์)</option>
-												<option value="Zone C (ของใช้ทั่วไปและสุขอนามัย)"
-													>Zone C (ของใช้ทั่วไปและสุขอนามัย)</option
-												>
-												<option value="Zone D (เครื่องนุ่งห่มและที่นอน)"
-													>Zone D (เครื่องนุ่งห่มและที่นอน)</option
-												>
-												<option value="Zone E (อุปกรณ์และเครื่องมือช่าง)"
-													>Zone E (อุปกรณ์และเครื่องมือช่าง)</option
-												>
-												<option value="Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)"
-													>Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)</option
-												>
-											</select>
-										</div>
-									</div>
-
-									<!-- Row 2: Expiry date & Real quantity & Difference reason -->
-									<div class="mt-4 grid grid-cols-1 items-end gap-4 md:grid-cols-12">
-										<!-- Expiry date -->
-										<div class="md:col-span-3">
-											<label
-												for="item-expiry-{idx}"
-												class="mb-1.5 block text-3xs font-medium text-muted-foreground"
-											>
-												วันหมดอายุ (ถ้ามี)
-											</label>
-											<Input
-												id="item-expiry-{idx}"
-												type="date"
-												bind:value={item.expiry}
-												class="h-9 rounded-xl text-xs"
-											/>
-										</div>
-
-										<!-- Quantities -->
-										<div class="md:col-span-4">
-											<div
-												class="mb-1.5 flex items-center justify-between text-3xs text-muted-foreground"
-											>
-												<span>แจ้งไว้: {item.declaredQty} {item.unit}</span>
-												{#if item.qty === item.declaredQty}
-													<span class="font-bold text-emerald-600 dark:text-emerald-400"
-														>ครบถ้วน</span
-													>
-												{:else}
-													<span class="font-bold text-amber-600 dark:text-amber-400"
-														>มีส่วนต่าง</span
-													>
-												{/if}
-											</div>
-											<div class="flex items-center gap-2">
-												<span class="text-2xs font-bold text-foreground">รับจริง:</span>
+													วันหมดอายุ (ถ้ามี)
+												</Label>
 												<Input
-													type="text"
-													inputmode="decimal"
-													bind:value={item.qty}
-													class="h-9 rounded-xl text-center text-xs font-bold"
+													id="item-expiry-{idx}"
+													type="date"
+													bind:value={item.expiry}
+													class="h-10 rounded-xl text-sm"
 												/>
-												<span class="w-12 text-2xs text-muted-foreground">{item.unit}</span>
 											</div>
-										</div>
 
-										<!-- Difference remark -->
-										<div class="md:col-span-5">
-											<label
-												for="item-remark-{idx}"
-												class="mb-1.5 block text-3xs font-medium text-muted-foreground"
-											>
-												หมายเหตุ / เหตุผลส่วนต่าง
-											</label>
-											<Input
-												id="item-remark-{idx}"
-												type="text"
-												placeholder="ระบุข้อความสั้นๆ (ถ้ามี)"
-												bind:value={item.diffReason}
-												class="h-9 rounded-xl text-xs"
-											/>
+											<!-- Real Quantity -->
+											<div class="space-y-1.5 md:col-span-4">
+												<div class="flex items-center justify-between">
+													<Label for="item-qty-{idx}" class="text-sm font-semibold text-foreground">
+														จำนวนรับจริง <span class="text-rose-500">*</span>
+													</Label>
+													<span class="text-xs text-muted-foreground">
+														แจ้งไว้: {item.declaredQty}
+														{item.unit}
+													</span>
+												</div>
+												<div class="relative flex items-center">
+													<Input
+														id="item-qty-{idx}"
+														type="text"
+														inputmode="decimal"
+														bind:value={item.qty}
+														class="h-10 rounded-xl pr-14 text-sm font-bold"
+													/>
+													<span
+														class="pointer-events-none absolute right-3 text-sm font-medium text-muted-foreground"
+													>
+														{item.unit}
+													</span>
+												</div>
+											</div>
+
+											<!-- Difference remark -->
+											<div class="space-y-1.5 md:col-span-5">
+												<Label
+													for="item-remark-{idx}"
+													class="text-sm font-semibold text-foreground"
+												>
+													หมายเหตุ / เหตุผลส่วนต่าง
+												</Label>
+												<Input
+													id="item-remark-{idx}"
+													type="text"
+													placeholder="ระบุข้อความสั้นๆ (ถ้ามี)"
+													bind:value={item.diffReason}
+													class="h-10 rounded-xl text-sm"
+												/>
+											</div>
 										</div>
 									</div>
 								</div>
@@ -916,12 +946,12 @@
 
 					<!-- Additional Statement / Condition Details -->
 					<div class="space-y-2">
-						<div class="flex items-center gap-2 text-xs font-bold text-foreground">
-							<Info class="h-4 w-4 text-muted-foreground" />
-							คำชี้แจงและกรณีศึกษาสภาพสิ่งของเพิ่มเติม
+						<div class="flex items-center gap-2 text-sm font-bold text-foreground">
+							<PackageCheck class="h-4.5 w-4.5 text-muted-foreground" />
+							<span>คำชี้แจงและกรณีศึกษาสภาพสิ่งของเพิ่มเติม</span>
 						</div>
 						<div
-							class="rounded-2xl border border-border/80 bg-muted/15 p-4 text-xs text-foreground"
+							class="rounded-2xl border border-border/80 bg-muted/15 p-4.5 text-sm leading-relaxed text-foreground"
 						>
 							{donorNote}
 						</div>
@@ -929,30 +959,30 @@
 
 					<!-- Logistics Info (3 boxes) -->
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						<div class="rounded-2xl border border-border/80 bg-card p-4 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-2xs font-semibold text-muted-foreground">
-								<Truck class="h-3.5 w-3.5 text-blue-600" />
-								ยานพาหนะจัดส่ง
+						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
+							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+								<Truck class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+								<span>ยานพาหนะจัดส่ง</span>
 							</div>
-							<p class="mt-2 text-xs font-bold text-foreground">
+							<p class="mt-2 text-sm font-bold text-foreground">
 								{vehicleLabel}
 							</p>
 						</div>
 
-						<div class="rounded-2xl border border-border/80 bg-card p-4 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-2xs font-semibold text-muted-foreground">
-								<MapPin class="h-3.5 w-3.5 text-blue-600" />
-								อาคาร/พิกัดเสนอรับเข้า
+						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
+							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+								<MapPin class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+								<span>อาคาร/พิกัดเสนอรับเข้า</span>
 							</div>
-							<p class="mt-2 text-xs font-bold text-foreground">จุดรับบริจาคส่วนหน้า</p>
+							<p class="mt-2 text-sm font-bold text-foreground">จุดรับบริจาคส่วนหน้า</p>
 						</div>
 
-						<div class="rounded-2xl border border-border/80 bg-card p-4 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-2xs font-semibold text-muted-foreground">
-								<Calendar class="h-3.5 w-3.5 text-blue-600" />
-								นัดหมายเสนอขอบริจาค
+						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
+							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+								<Calendar class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+								<span>นัดหมายเสนอขอบริจาค</span>
 							</div>
-							<p class="mt-2 text-xs font-bold text-foreground">
+							<p class="mt-2 text-sm font-bold text-foreground">
 								{appointmentLabel}
 							</p>
 						</div>
@@ -960,25 +990,25 @@
 
 					<!-- Staff Review Memo Textarea -->
 					<div class="space-y-2">
-						<label for="review-memo-input" class="block text-xs font-bold text-foreground">
+						<Label for="review-memo-input" class="text-sm font-bold text-foreground">
 							บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
-						</label>
+						</Label>
 						<textarea
 							id="review-memo-input"
 							rows="3"
 							placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
 							bind:value={remarks}
-							class="w-full rounded-2xl border border-border/80 bg-card p-3.5 text-xs text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+							class="w-full rounded-2xl border border-border/80 bg-card p-3.5 text-sm text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
 						></textarea>
 					</div>
 
 					<!-- Bottom Validation Alert Box (Clean, above action buttons) -->
 					{#if !canReceive}
 						<div
-							class="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-xs text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400"
+							class="rounded-2xl border border-rose-200 bg-rose-50/80 p-4.5 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400"
 						>
 							<div class="font-bold">ไม่สามารถกด "ยืนยันรับเข้าคลัง" ได้เนื่องจาก:</div>
-							<ul class="mt-1.5 list-inside list-disc space-y-0.5 text-2xs">
+							<ul class="mt-1.5 list-inside list-disc space-y-1 text-xs">
 								{#if scannedItems.some((it) => !it.item_id || !it.qty)}
 									<li>ยังจับคู่ข้อมูลสินค้า หรือกรอกจำนวนรับไม่ครบถ้วน</li>
 								{/if}
@@ -1002,9 +1032,9 @@
 								type="button"
 								onclick={handleSaveScan}
 								disabled={saving || !canReceive}
-								class="inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-6 text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+								class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								<Check class="h-4 w-4" />
+								<Check class="h-4.5 w-4.5" />
 								{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
 							</button>
 
@@ -1013,9 +1043,9 @@
 								type="button"
 								onclick={() => (actionPanel = actionPanel === 'redirect' ? 'none' : 'redirect')}
 								disabled={saving}
-								class="inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#002D5B] px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-700"
+								class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-5 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-700"
 							>
-								<MapPin class="h-3.5 w-3.5" />
+								<MapPin class="h-4 w-4" />
 								ประสานงานส่งต่อ
 							</button>
 						</div>
@@ -1025,7 +1055,7 @@
 							type="button"
 							onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
 							disabled={saving}
-							class="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
+							class="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 px-5 text-sm font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
 						>
 							ปฏิเสธคำขอ
 						</button>
@@ -1036,19 +1066,16 @@
 						<div
 							class="animate-in space-y-4 rounded-2xl border-2 border-blue-500 bg-card p-5 shadow-sm fade-in slide-in-from-top-2"
 						>
-							<div>
-								<label
-									for="target-shelter-select"
-									class="mb-1.5 block text-xs font-bold text-foreground"
-								>
+							<div class="space-y-1.5">
+								<Label for="target-shelter-select" class="text-sm font-bold text-foreground">
 									เลือกศูนย์พักพิงปลายทางแห่งใหม่ (Target Shelter Reroute) <span
 										class="text-rose-500">*</span
 									>
-								</label>
+								</Label>
 								<select
 									id="target-shelter-select"
 									bind:value={selectedTargetShelter}
-									class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
+									class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
 								>
 									<option value="">-- เลือกศูนย์พักพิงปลายทาง --</option>
 									{#each redirectTargets as s (s.code)}
@@ -1057,19 +1084,16 @@
 								</select>
 							</div>
 
-							<div>
-								<label
-									for="redirect-remark-input"
-									class="mb-1.5 block text-xs font-bold text-foreground"
-								>
+							<div class="space-y-1.5">
+								<Label for="redirect-remark-input" class="text-sm font-bold text-foreground">
 									หมายเหตุสำหรับการส่งต่อ (Remark)
-								</label>
+								</Label>
 								<textarea
 									id="redirect-remark-input"
 									rows="2"
 									placeholder="ระบุเหตุผลการส่งต่อ เช่น คลังเต็ม หรือต้องการการดูแลเฉพาะทาง..."
 									bind:value={redirectNote}
-									class="w-full rounded-xl border border-border/80 bg-muted/10 p-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+									class="w-full rounded-xl border border-border/80 bg-muted/10 p-3 text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
 								></textarea>
 							</div>
 
@@ -1078,7 +1102,7 @@
 									type="button"
 									onclick={handleConfirmRedirect}
 									disabled={saving || !selectedTargetShelter}
-									class="h-10 rounded-xl bg-[#002D5B] px-6 text-xs font-bold text-white hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+									class="h-10 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 								>
 									{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการประสานงานส่งต่อ'}
 								</Button>
@@ -1086,7 +1110,7 @@
 									variant="ghost"
 									type="button"
 									onclick={() => (actionPanel = 'none')}
-									class="h-10 rounded-xl px-5 text-xs font-bold"
+									class="h-10 rounded-xl px-5 text-sm font-bold"
 								>
 									ยกเลิก
 								</Button>
@@ -1099,19 +1123,16 @@
 						<div
 							class="animate-in space-y-4 rounded-2xl border border-rose-200 bg-white p-5 shadow-2xs fade-in slide-in-from-top-2 dark:border-rose-900/50 dark:bg-card"
 						>
-							<div>
-								<label
-									for="reject-reason-input"
-									class="mb-2 block text-xs font-bold text-foreground"
-								>
+							<div class="space-y-1.5">
+								<Label for="reject-reason-input" class="text-sm font-bold text-foreground">
 									ระบุเหตุผลในการปฏิเสธคำขอ (Reject Reason)
-								</label>
+								</Label>
 								<Input
 									id="reject-reason-input"
 									type="text"
 									placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
 									bind:value={rejectReason}
-									class="h-10 rounded-xl border border-border/80 bg-background text-xs text-foreground placeholder:text-muted-foreground focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+									class="h-10 rounded-xl border border-border/80 bg-background text-sm text-foreground placeholder:text-muted-foreground focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
 								/>
 							</div>
 
@@ -1120,14 +1141,14 @@
 									type="button"
 									onclick={handleConfirmReject}
 									disabled={saving || !rejectReason.trim()}
-									class="h-10 flex-1 cursor-pointer rounded-xl bg-[#E11D48] px-6 text-xs font-bold text-white shadow-xs transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+									class="h-10 flex-1 cursor-pointer rounded-xl bg-[#E11D48] px-6 text-sm font-bold text-white shadow-xs transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
 								</button>
 								<button
 									type="button"
 									onclick={() => (actionPanel = 'none')}
-									class="h-10 cursor-pointer rounded-xl bg-slate-100 px-6 text-xs font-bold text-slate-700 hover:bg-slate-200 dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
+									class="h-10 cursor-pointer rounded-xl bg-slate-100 px-6 text-sm font-bold text-slate-700 hover:bg-slate-200 dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
 								>
 									ยกเลิก
 								</button>
@@ -1385,54 +1406,48 @@
 			<div class="space-y-8 bg-card p-6 md:p-8">
 				<!-- Section 1: ข้อมูลผู้บริจาค (Donor Information) -->
 				<div>
-					<h3 class="mb-4 flex items-center gap-2 text-xs font-bold text-foreground md:text-sm">
-						<User class="h-4 w-4 text-muted-foreground" />
-						ข้อมูลผู้บริจาค (Donor Information)
+					<h3 class="mb-4 flex items-center gap-2 text-sm font-bold text-foreground md:text-base">
+						<User class="h-4.5 w-4.5 text-muted-foreground" />
+						<span>ข้อมูลผู้บริจาค (Donor Information)</span>
 					</h3>
 
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						<div>
-							<label for="donor-name-input" class="mb-1.5 block text-xs font-bold text-foreground">
+						<div class="space-y-1.5">
+							<Label for="donor-name-input" class="text-sm font-semibold text-foreground">
 								ชื่อผู้บริจาค/ผู้ติดต่อ <span class="text-rose-500">*</span>
-							</label>
+							</Label>
 							<Input
 								id="donor-name-input"
 								type="text"
 								placeholder="เช่น คุณสมศักดิ์ รักดี"
 								bind:value={walkinDonorName}
-								class="h-10 rounded-xl text-xs"
+								class="h-10 rounded-xl text-sm"
 							/>
 						</div>
 
-						<div>
-							<label
-								for="donor-phone-input"
-								class="mb-1.5 block text-xs font-medium text-foreground"
-							>
+						<div class="space-y-1.5">
+							<Label for="donor-phone-input" class="text-sm font-semibold text-foreground">
 								เบอร์โทรศัพท์ (ถ้ามี)
-							</label>
+							</Label>
 							<Input
 								id="donor-phone-input"
 								type="text"
 								placeholder="เช่น 089-XXX-XXXX"
 								bind:value={walkinDonorPhone}
-								class="h-10 rounded-xl text-xs"
+								class="h-10 rounded-xl text-sm"
 							/>
 						</div>
 
-						<div>
-							<label
-								for="donor-email-input"
-								class="mb-1.5 block text-xs font-medium text-foreground"
-							>
+						<div class="space-y-1.5">
+							<Label for="donor-email-input" class="text-sm font-semibold text-foreground">
 								อีเมล (ถ้ามี)
-							</label>
+							</Label>
 							<Input
 								id="donor-email-input"
 								type="email"
 								placeholder="เช่น donor@example.com"
 								bind:value={walkinDonorEmail}
-								class="h-10 rounded-xl text-xs"
+								class="h-10 rounded-xl text-sm"
 							/>
 						</div>
 					</div>
@@ -1441,35 +1456,35 @@
 				<!-- Section 2: รายการสิ่งของบริจาค (Items List) -->
 				<div>
 					<div class="mb-4 flex items-center justify-between">
-						<h3 class="flex items-center gap-2 text-xs font-bold text-foreground md:text-sm">
-							<PlusCircle class="h-4 w-4 text-muted-foreground" />
-							รายการสิ่งของบริจาค (Items List)
+						<h3 class="flex items-center gap-2 text-sm font-bold text-foreground md:text-base">
+							<PlusCircle class="h-4.5 w-4.5 text-muted-foreground" />
+							<span>รายการสิ่งของบริจาค (Items List)</span>
 						</h3>
 
 						<button
 							type="button"
 							onclick={addWalkinItem}
-							class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-1.5 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
+							class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
 						>
-							<PlusCircle class="h-3.5 w-3.5" />
+							<PlusCircle class="h-4 w-4" />
 							เพิ่มรายการสิ่งของ
 						</button>
 					</div>
 
-					<div class="space-y-3">
+					<div class="space-y-4">
 						{#each walkinItems as item, idx (item.id)}
 							<div
-								class="relative rounded-2xl border border-border/70 bg-muted/20 p-4 transition-all hover:border-border"
+								class="relative rounded-2xl border border-border/70 bg-muted/20 p-5 transition-all hover:border-border"
 							>
-								<div class="mb-2 flex items-center justify-between">
-									<span class="text-xs font-medium text-muted-foreground">
-										เลือกประเภทสิ่งของ / ค้นหาสินค้าหลัก
+								<div class="mb-3 flex items-center justify-between">
+									<span class="text-sm font-semibold text-foreground">
+										รายการที่ #{idx + 1}
 									</span>
-									<div class="flex items-center gap-2">
+									<div class="flex items-center gap-3">
 										<button
 											type="button"
 											onclick={() => openQuickCreate(idx)}
-											class="cursor-pointer text-2xs font-bold text-blue-600 transition-colors hover:underline dark:text-blue-400"
+											class="cursor-pointer text-xs font-semibold text-blue-600 transition-colors hover:underline dark:text-blue-400"
 										>
 											+ สร้างรายการใหม่
 										</button>
@@ -1477,23 +1492,26 @@
 											<button
 												type="button"
 												onclick={() => removeWalkinItem(item.id)}
-												class="cursor-pointer p-1 text-muted-foreground transition-colors hover:text-rose-600"
+												class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
 												title="ลบรายการนี้"
 											>
-												<Trash2 class="h-3.5 w-3.5" />
+												<Trash2 class="h-4 w-4" />
 											</button>
 										{/if}
 									</div>
 								</div>
 
-								<div class="grid grid-cols-1 items-end gap-3 md:grid-cols-12">
+								<div class="grid grid-cols-1 items-start gap-4 md:grid-cols-12">
 									<!-- Item Select -->
-									<div class="md:col-span-8">
+									<div class="space-y-1.5 md:col-span-8">
+										<Label class="text-sm font-semibold text-foreground">
+											เลือกประเภทสิ่งของ / ค้นหาสินค้าหลัก <span class="text-rose-500">*</span>
+										</Label>
 										<select
 											value={item.itemId}
 											onchange={(e) =>
 												handleWalkinItemSelect(idx, (e.target as HTMLSelectElement).value)}
-											class="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs text-foreground transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+											class="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-sm text-foreground transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
 										>
 											<option value="">-- ค้นหาและเลือก Item --</option>
 											{#each catalogItems as c (c._id)}
@@ -1505,35 +1523,32 @@
 									</div>
 
 									<!-- Qty Input -->
-									<div class="md:col-span-2">
-										<label
-											for="walkin-qty-{item.id}"
-											class="mb-1 block text-2xs font-medium text-muted-foreground"
-										>
-											จำนวนที่รับจริง
-										</label>
+									<div class="space-y-1.5 md:col-span-2">
+										<Label for="walkin-qty-{item.id}" class="text-sm font-semibold text-foreground">
+											จำนวนที่รับจริง <span class="text-rose-500">*</span>
+										</Label>
 										<Input
 											id="walkin-qty-{item.id}"
 											type="text"
 											inputmode="decimal"
 											bind:value={item.qty}
-											class="h-10 rounded-xl text-center text-xs font-bold"
+											class="h-10 rounded-xl text-center text-sm font-bold"
 										/>
 									</div>
 
 									<!-- Unit Display / Input -->
-									<div class="md:col-span-2">
-										<label
+									<div class="space-y-1.5 md:col-span-2">
+										<Label
 											for="walkin-unit-{item.id}"
-											class="mb-1 block text-2xs font-medium text-muted-foreground"
+											class="text-sm font-semibold text-foreground"
 										>
 											หน่วย
-										</label>
+										</Label>
 										<Input
 											id="walkin-unit-{item.id}"
 											type="text"
 											bind:value={item.unit}
-											class="h-10 rounded-xl text-center text-xs"
+											class="h-10 rounded-xl text-center text-sm"
 										/>
 									</div>
 								</div>
@@ -1548,7 +1563,7 @@
 						variant="ghost"
 						type="button"
 						onclick={() => (activeView = 'scan')}
-						class="h-10 rounded-xl px-5 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground"
+						class="h-11 rounded-xl px-5 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
 					>
 						ยกเลิก
 					</Button>
@@ -1557,7 +1572,7 @@
 						type="button"
 						onclick={handleSaveWalkin}
 						disabled={walkinSaving}
-						class="flex h-10 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-xs font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+						class="flex h-11 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 					>
 						{#if walkinSaving}
 							<Loader2 class="h-4 w-4 animate-spin" />
@@ -1582,8 +1597,8 @@
 			class="w-full max-w-md animate-in rounded-3xl border border-border bg-card p-6 shadow-2xl zoom-in-95"
 		>
 			<div class="mb-4 flex items-center justify-between border-b border-border/60 pb-3">
-				<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
-					<PackagePlus class="h-4 w-4 text-primary" />
+				<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
+					<PackagePlus class="h-5 w-5 text-primary" />
 					สร้างรายการสินค้าใหม่ในคลัง
 				</h3>
 				<button
@@ -1596,28 +1611,28 @@
 			</div>
 
 			<div class="space-y-4">
-				<div>
-					<label for="new-item-name" class="mb-1.5 block text-xs font-bold text-foreground">
+				<div class="space-y-1.5">
+					<Label for="new-item-name" class="text-sm font-semibold text-foreground">
 						ชื่อสิ่งของ/รายการสินค้า <span class="text-rose-500">*</span>
-					</label>
+					</Label>
 					<Input
 						id="new-item-name"
 						type="text"
 						placeholder="เช่น ปลากระป๋องตราสามแม่ครัว"
 						bind:value={newItemName}
-						class="h-10 rounded-xl text-xs"
+						class="h-10 rounded-xl text-sm"
 					/>
 				</div>
 
-				<div class="grid grid-cols-2 gap-3">
-					<div>
-						<label for="new-item-category" class="mb-1.5 block text-xs font-bold text-foreground">
+				<div class="grid grid-cols-2 gap-4">
+					<div class="space-y-1.5">
+						<Label for="new-item-category" class="text-sm font-semibold text-foreground">
 							หมวดหมู่
-						</label>
+						</Label>
 						<select
 							id="new-item-category"
 							bind:value={newItemCategory}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
+							class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
 						>
 							<option value="food">อาหารและเครื่องดื่ม</option>
 							<option value="medicine">ยารักษาโรค/เวชภัณฑ์</option>
@@ -1629,16 +1644,16 @@
 						</select>
 					</div>
 
-					<div>
-						<label for="new-item-unit" class="mb-1.5 block text-xs font-bold text-foreground">
+					<div class="space-y-1.5">
+						<Label for="new-item-unit" class="text-sm font-semibold text-foreground">
 							หน่วยนับมาตรฐาน
-						</label>
+						</Label>
 						<Input
 							id="new-item-unit"
 							type="text"
 							placeholder="เช่น กระป๋อง, ชิ้น"
 							bind:value={newItemUnit}
-							class="h-10 rounded-xl text-xs"
+							class="h-10 rounded-xl text-sm"
 						/>
 					</div>
 				</div>
@@ -1648,7 +1663,7 @@
 						variant="ghost"
 						type="button"
 						onclick={() => (isQuickCreateOpen = false)}
-						class="h-10 rounded-xl px-4 text-xs font-bold text-muted-foreground"
+						class="h-10 rounded-xl px-4 text-sm font-semibold text-muted-foreground"
 					>
 						ยกเลิก
 					</Button>
@@ -1656,10 +1671,10 @@
 						type="button"
 						onclick={handleCreateNewItemMaster}
 						disabled={creatingItem}
-						class="h-10 rounded-xl bg-primary px-5 text-xs font-bold text-primary-foreground"
+						class="h-10 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground"
 					>
 						{#if creatingItem}
-							<Loader2 class="h-3.5 w-3.5 animate-spin" />
+							<Loader2 class="h-4 w-4 animate-spin" />
 							กำลังสร้าง…
 						{:else}
 							บันทึกรายการใหม่

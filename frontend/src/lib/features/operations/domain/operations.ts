@@ -625,11 +625,15 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	// `redirected` is terminal HERE — the destination shelter continues on its own
 	// `donation_redirect` ticket, not on this doc (CR-087).
 	pending_review: ['verifying', 'redirected', 'rejected', 'expired', 'cancelled'],
-	// The goods are on the counter and being opened here, which is exactly when the
-	// expired tin or the wrong size turns up — so `verifying` keeps the same two exits
-	// as `pending_review` (CR-087 / R-16.3), minus expiry: a delivery that arrived
-	// cannot lapse on TTL any more.
-	verifying: ['received', 'redirected', 'rejected', 'cancelled'],
+	// `verifying` spans "approved, waiting for the donor to turn up" AND "the boxes are
+	// open on the counter" — so it keeps every exit `pending_review` has:
+	//   · `redirected` / `rejected` — staff open the boxes and find the expired tin or
+	//     the wrong size (CR-087 / R-16.3);
+	//   · `expired` — the donor never came and the TTL lapsed. The worker's expiry job
+	//     already writes this for every outstanding status (`quota/expiry.py`,
+	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
+	//     disagree about a transition that happens nightly.
+	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1385,6 +1389,36 @@ export function parseCampaignNotes(notes?: string | null): CampaignNotesParts {
 // The slot is “used” when a donation is received into it.
 export const isDonationSlot = (d: unknown): d is DonationSlot =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';
+
+/**
+ * How many OPEN campaigns of this shelter ask for the same item, and what the donor
+ * board therefore shows as one number.
+ *
+ * The public projection is keyed `{shelter}:{item_id}` (schema.md §2.4 / T-60): two
+ * campaigns for `item:water` are one card whose quantity is their sum. Staff who filed
+ * the second campaign kept reporting it "missing" from `/donate` — it had merged. This
+ * is what the board row uses to say so.
+ *
+ * Counts only what the public side counts: a campaign that is closed, hidden
+ * (`visible_on_home === false`), or whose own need is closed contributes nothing.
+ */
+export function publicItemAggregate(
+	campaigns: DonationCampaign[],
+	itemId: string
+): { campaignCount: number; totalTarget: string } {
+	let campaignCount = 0;
+	let totalTarget = '0';
+
+	for (const campaign of campaigns) {
+		if (campaign.status !== 'open' || campaign.visible_on_home === false) continue;
+		const need = campaign.needs.find((n) => n.item_id === itemId && n.status !== 'closed');
+		if (!need) continue;
+		campaignCount += 1;
+		totalTarget = addQty(totalTarget, need.qty_target);
+	}
+
+	return { campaignCount, totalTarget };
+}
 
 /**
  * Category + unit the needs-board form pre-fills from what staff typed.

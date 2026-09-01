@@ -79,6 +79,7 @@ export {
 	isDonationSlot,
 	mapNeedItemHeuristic,
 	suggestNeedDefaults,
+	publicItemAggregate,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,

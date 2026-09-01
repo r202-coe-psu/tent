@@ -468,6 +468,43 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(appendedDocs()).toHaveLength(0);
 		});
 
+		/**
+		 * Every terminal status, not just `received`. The nightly TTL job flips any
+		 * booking still awaiting drop-off — `verifying` included — so a delivery being
+		 * counted at midnight can lapse mid-count; and a redirected donation is being
+		 * held by the destination shelter on its own ticket. Receiving either would put
+		 * one delivery on two shelves, or on a shelf the audit trail says it never
+		 * reached.
+		 */
+		it.each(['rejected', 'redirected', 'expired', 'cancelled'] as const)(
+			'POST refuses to receive a %s donation — no ledger, no audit',
+			async (status) => {
+				mockCouch({ ...baseDonation, status } as PublicDonationDoc);
+
+				const response = await POST(postEvent({ status: 'received' }));
+				const body = await response.json();
+
+				expect(response.status).toBe(400);
+				expect(body.error_code).toBe('DONATION_CLOSED');
+				expect(appendedDocs()).toHaveLength(0);
+			}
+		);
+
+		// The scan station is a data-entry shortcut, not a review shortcut: a booking
+		// nobody has decided on yet is still receivable at the counter (the owner's
+		// call — staff verify by counting, not by an intermediate doc status).
+		it('POST still receives a booking that has not been decided yet', async () => {
+			mockCouch({
+				...withItems([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]),
+				status: 'pending_review'
+			} as PublicDonationDoc);
+
+			const response = await POST(postEvent({ status: 'received' }));
+
+			expect(response.status).toBe(200);
+			expect(appendedDocs().filter((d) => d.type === 'stock_ledger').length).toBeGreaterThan(0);
+		});
+
 		it('POST returns 409 on CouchDB conflict', async () => {
 			mockCouch(baseDonation, { putStatus: 409 });
 

@@ -21,6 +21,7 @@ import {
 	buildCampaignNotes,
 	parseCampaignNotes,
 	suggestNeedDefaults,
+	publicItemAggregate,
 	reopenNeed,
 	isDonationOutstanding,
 	deriveNeedAvailability,
@@ -44,6 +45,7 @@ import {
 	type LedgerReason,
 	type ReceiveSource
 } from './operations';
+import type { DonationCampaign } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
@@ -1362,8 +1364,9 @@ describe('donation statuses that still owe the shelter goods (CR-052)', () => {
 		expect(canTransitionDonation('verifying', 'rejected')).toBe(true);
 		expect(canTransitionDonation('verifying', 'redirected')).toBe(true);
 
-		// It arrived, so it can no longer lapse on its reservation TTL.
-		expect(canTransitionDonation('verifying', 'expired')).toBe(false);
+		// Approving does not stop the clock: a donor who never turns up still lapses,
+		// and the worker's expiry job writes exactly this transition (quota/expiry.py).
+		expect(canTransitionDonation('verifying', 'expired')).toBe(true);
 
 		// No skipping the review step, and nothing comes back out of a terminal status.
 		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
@@ -1554,5 +1557,51 @@ describe('suggestNeedDefaults (needs board form pre-fill)', () => {
 		expect(suggestNeedDefaults('')).toEqual({});
 		expect(suggestNeedDefaults('   ')).toEqual({});
 		expect(suggestNeedDefaults('เต็นท์สนาม')).toEqual({});
+	});
+});
+
+// The donor board is keyed per ITEM, not per campaign (schema.md §2.4 / T-60), so a
+// second campaign for the same thing does not appear as a second card — it raises the
+// number on the existing one. Staff filed a campaign, could not find it on `/donate`,
+// and reported it missing; the board row now says how many campaigns are being merged.
+describe('publicItemAggregate (what the donor board really shows)', () => {
+	const campaign = (id: string, qty: number, over: Partial<DonationCampaign> = {}) => ({
+		...createCampaign(
+			{ title: `ประกาศ ${id}`, needs: [{ item_id: 'item:water', qty_target: qty, unit: 'ขวด' }] },
+			ctx
+		),
+		_id: `donation_campaign:${id}`,
+		...over
+	});
+
+	it('sums every open campaign asking for the item', () => {
+		const result = publicItemAggregate([campaign('a', 100), campaign('b', 999)], 'item:water');
+		expect(result).toEqual({ campaignCount: 2, totalTarget: '1099' });
+	});
+
+	it('counts nothing for an item no campaign asks for', () => {
+		expect(publicItemAggregate([campaign('a', 100)], 'item:rice')).toEqual({
+			campaignCount: 0,
+			totalTarget: '0'
+		});
+	});
+
+	it('leaves out what the public projection leaves out', () => {
+		const closedCampaign = campaign('closed', 50, { status: 'closed' });
+		const hidden = campaign('hidden', 50, { visible_on_home: false });
+		const closedNeed = createCampaign(
+			{
+				title: 'need ปิดเอง',
+				needs: [{ item_id: 'item:water', qty_target: 50, unit: 'ขวด' }]
+			},
+			ctx
+		);
+		const withClosedNeed = forceCutOffNeed(closedNeed, 'item:water', 'คลังเต็ม');
+
+		const result = publicItemAggregate(
+			[campaign('open', 100), closedCampaign, hidden, withClosedNeed],
+			'item:water'
+		);
+		expect(result).toEqual({ campaignCount: 1, totalTarget: '100' });
 	});
 });

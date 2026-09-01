@@ -5,7 +5,7 @@
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import type { NeedItem } from '$lib/features/operations';
+	import { publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
 
 	let {
@@ -43,7 +43,13 @@
 		isCutOff: boolean;
 		isManualClosed: boolean;
 		originalItem: NeedItem;
+		/** How many open campaigns share this item on the donor-facing board. */
+		sharedCampaigns: number;
+		/** The single number donors actually see for it. */
+		publicTotal: string;
 	};
+
+	const campaignDocs = $derived(items.map((i) => i.campaignDoc));
 
 	const flatRows = $derived.by(() => {
 		const rows: FlatNeedRow[] = [];
@@ -63,10 +69,15 @@
 					showOnHome: item.showOnHome,
 					isCutOff: item.isCutOff,
 					isManualClosed: item.isManualClosed,
-					originalItem: item
+					originalItem: item,
+					sharedCampaigns: 0,
+					publicTotal: '0'
 				});
 			} else {
 				for (const need of item.needs) {
+					// The public board is keyed per ITEM, so several campaigns asking for the
+					// same thing show up there as one card with one total (schema.md §2.4).
+					const aggregate = publicItemAggregate(campaignDocs, need.itemId);
 					const totalAcquired = addQty(need.reserved, need.onHand);
 					const progress = qtyIsZero(need.target)
 						? 0
@@ -88,7 +99,9 @@
 						showOnHome: item.showOnHome,
 						isCutOff: need.isCutOff,
 						isManualClosed: need.isManualClosed,
-						originalItem: item
+						originalItem: item,
+						sharedCampaigns: aggregate.campaignCount,
+						publicTotal: aggregate.totalTarget
 					});
 				}
 			}
@@ -252,6 +265,17 @@
 										{row.title}
 									</div>
 									<div class="mt-1 text-2xs text-muted-foreground">{row.location}</div>
+									{#if row.sharedCampaigns > 1}
+										<div
+											class="mt-1.5 inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-3xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+											title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
+										>
+											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
+												row.publicTotal
+											)}
+											{row.unit}
+										</div>
+									{/if}
 								</Table.Cell>
 
 								<!-- Reserved Pledged -->

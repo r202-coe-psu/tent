@@ -107,24 +107,50 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const { donation, dbName } = found;
 
 		/**
-		 * `received` is the only status this route refuses, and that is deliberate: it
-		 * does NOT gate on `canTransitionDonation`, so a `pending_review` booking can be
-		 * received straight from the counter.
+		 * What may still be received.
 		 *
-		 * Scanning the QR is a DATA-ENTRY shortcut, not a shortcut past review — staff
+		 * This route deliberately does NOT gate on `canTransitionDonation`: a
+		 * `pending_review` booking can be received straight from the counter, because
+		 * scanning the QR is a DATA-ENTRY shortcut, not a shortcut past review — staff
 		 * still work the drop-off screen line by line (count, storage zone, "ผ่านการ
-		 * ตรวจสอบแล้ว" per item) before this request is sent; the scan only saves them
-		 * re-keying what the donor already declared, the way the walk-in form makes them
-		 * type it. The verification is the counting, not an intermediate doc status.
+		 * ตรวจสอบแล้ว" per item) before this request is sent. The verification is the
+		 * counting, not an intermediate doc status. Do not "tighten" this into
+		 * `canTransitionDonation(status, 'received')`: §2.3 has no
+		 * `pending_review → received` edge and the whole scan flow would answer 422.
 		 *
-		 * So do not "tighten" this into `canTransitionDonation(status, 'received')`:
-		 * §2.3 has no `pending_review → received` edge and the whole scan flow would
-		 * start answering 422. Adding that edge to the transition table is a schema.md
-		 * change and needs a CR of its own.
+		 * But every TERMINAL status has to be refused, and only `received` was. A
+		 * donation that was rejected, redirected, expired or cancelled could still be
+		 * received into stock:
+		 *
+		 * · `redirected` — the destination shelter is holding the same goods on its own
+		 *   ticket, so counting them here books one delivery into two shelters;
+		 * · `rejected` — the refusal, reason and audit entry say the goods were turned
+		 *   away, while the ledger says they are on the shelf;
+		 * · `expired` — the nightly TTL job (`quota/expiry.py`) flips any booking still
+		 *   awaiting drop-off, `verifying` included, so a delivery being counted at
+		 *   midnight can lapse mid-count. Its quota has already been handed back to
+		 *   other donors; receiving it anyway spends a target twice.
+		 *
+		 * Recovery for a lapsed delivery that IS physically on the counter is the
+		 * walk-in form — it mints a fresh donation and receives it in one step.
 		 */
-		if (donation.status === 'received') {
+		const TERMINAL_STATUSES = new Set([
+			'received',
+			'rejected',
+			'redirected',
+			'expired',
+			'cancelled'
+		]);
+		if (TERMINAL_STATUSES.has(donation.status)) {
 			return json(
-				{ success: false, error: 'Donation is already received (LOCKED)' },
+				{
+					success: false,
+					error_code: donation.status === 'received' ? 'ALREADY_RECEIVED' : 'DONATION_CLOSED',
+					error:
+						donation.status === 'received'
+							? 'Donation is already received (LOCKED)'
+							: `Cannot receive a donation with status "${donation.status}" — คีย์เป็น Walk-in ใหม่ถ้าของอยู่ที่เคาน์เตอร์จริง`
+				},
 				{ status: 400 }
 			);
 		}

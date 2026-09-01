@@ -8,6 +8,7 @@
 	import { toast } from 'svelte-sonner';
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
 	import { persistQty, qtyGt, roundQty } from '$lib/utils/qty';
+	import PublicDisplayHint from './public-display-hint.svelte';
 
 	interface Props {
 		item: NeedItem;
@@ -226,6 +227,8 @@
 				</p>
 			</div>
 		</div>
+
+		<PublicDisplayHint {itemId} typedUnit={finalUnit} />
 
 		<!-- Row 3: Urgency Level -->
 		<div>

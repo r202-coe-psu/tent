@@ -44,10 +44,19 @@ async def project_needs_for_shelter(
     if not await couch.database_exists(database):
         return []
 
+    # `visible_on_home` is the back-office "กำลังโชว์บนหน้าเว็บ / ซ่อนจากหน้าเว็บ" toggle
+    # (schema.md §2.4, CR-034: "ควบคุมการโปรโมตแคมเปญบนหน้าแรก"). This projection is the
+    # only public surface that reads campaign needs, so hiding a campaign has to happen
+    # here — until it did, the toggle wrote a field nobody read and staff could not take
+    # a campaign off the donor-facing board at all.
+    #
+    # Absent field = visible (CR-034 explicitly needs no backfill).
     campaigns = [
         doc
         for doc in await _fetch_docs_by_prefix(couch, database, "donation_campaign:")
-        if doc.get("type") == "donation_campaign" and doc.get("status") == "open"
+        if doc.get("type") == "donation_campaign"
+        and doc.get("status") == "open"
+        and doc.get("visible_on_home", True) is not False
     ]
     donations = [
         doc

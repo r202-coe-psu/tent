@@ -6,7 +6,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
-	import { suggestNeedDefaults } from '$lib/features/operations';
+	import { mapNeedItemHeuristic, suggestNeedDefaults } from '$lib/features/operations';
+	import PublicDisplayHint from './public-display-hint.svelte';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
 
 	interface Props {
@@ -54,6 +55,9 @@
 	let description = $state('');
 
 	const suggested = $derived(suggestNeedDefaults(itemTitle));
+	// The catalog id this name will bind to — the same mapping the save path uses, so
+	// the hint below shows what donors will really see, not a guess of its own.
+	const mappedItemId = $derived(itemTitle.trim() ? mapNeedItemHeuristic(itemTitle) : '');
 	const category = $derived(categoryChoice ?? suggested.category ?? 'อาหารและเครื่องดื่ม');
 	const selectedUnitOption = $derived(unitChoice ?? suggested.unit ?? 'ชิ้น');
 	const finalUnit = $derived(
@@ -206,6 +210,10 @@
 					</div>
 				</div>
 			</div>
+
+			{#if mappedItemId}
+				<PublicDisplayHint itemId={mappedItemId} typedUnit={finalUnit} />
+			{/if}
 
 			<!-- Urgency Level and Image URL (2 columns) -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">

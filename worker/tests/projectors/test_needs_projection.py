@@ -1,0 +1,128 @@
+"""`public_needs` projection — what the donor-facing board is actually allowed to see.
+
+The board is an aggregate per ITEM (schema.md §2.4 / T-60): two campaigns asking for
+`item:water` produce one card whose quantity is their sum, named from the catalog. The
+campaign's own title and notes never cross to the public plane.
+
+`visible_on_home` is the back-office toggle (CR-034) and this projection is the only
+public surface reading campaign needs — so hiding a campaign has to take effect here.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+
+from worker.projectors.needs import project_needs_for_shelter
+
+SHELTER = "SH001"
+
+CATALOG = [
+    {
+        "_id": "item:water",
+        "type": "supply_item",
+        "name": "น้ำดื่ม",
+        "category": "water",
+        "unit": "bottle",
+    }
+]
+
+
+def _couch(campaigns: list[dict], donations: list[dict] | None = None) -> AsyncMock:
+    shelter_docs = [*campaigns, *(donations or [])]
+
+    async def iter_all_docs(database: str):
+        for doc in CATALOG if database == "catalog" else shelter_docs:
+            yield doc
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.iter_all_docs = iter_all_docs
+    return couch
+
+
+def _campaign(campaign_id: str, qty_target: str, **over) -> dict:
+    return {
+        "_id": f"donation_campaign:{campaign_id}",
+        "type": "donation_campaign",
+        "status": "open",
+        "title": f"ประกาศ {campaign_id}",
+        "needs": [{"item_id": "item:water", "qty_target": qty_target, "unit": "ขวด"}],
+        **over,
+    }
+
+
+def _upserts(actions: list[tuple[str, dict | None]]) -> list[dict]:
+    return [doc for action, doc in actions if action == "upsert" and doc]
+
+
+def _deletes(actions: list[tuple[str, dict | None]]) -> list[dict]:
+    return [doc for action, doc in actions if action == "delete" and doc]
+
+
+@pytest.mark.asyncio
+async def test_two_campaigns_for_one_item_become_one_summed_card():
+    actions = await project_needs_for_shelter(
+        _couch([_campaign("a", "100"), _campaign("b", "999")]), SHELTER
+    )
+
+    docs = _upserts(actions)
+    assert len(docs) == 1
+    assert docs[0]["_id"] == f"{SHELTER}:item:water"
+    assert docs[0]["qty_needed"] == 1099.0
+
+
+@pytest.mark.asyncio
+async def test_card_is_named_from_the_catalog_not_the_campaign():
+    actions = await project_needs_for_shelter(
+        _couch([_campaign("a", "100", title="น้ำ")]), SHELTER
+    )
+
+    doc = _upserts(actions)[0]
+    assert doc["item_name"] == "น้ำดื่ม"
+    assert doc["unit"] == "bottle"
+    assert doc["category"] == "water"
+    # The campaign's own title/notes are back-office copy and stay there.
+    assert "title" not in doc
+
+
+@pytest.mark.asyncio
+async def test_hidden_campaign_is_kept_off_the_public_board():
+    actions = await project_needs_for_shelter(
+        _couch([_campaign("a", "100", visible_on_home=False)]), SHELTER
+    )
+
+    assert _upserts(actions) == []
+    assert [d["_id"] for d in _deletes(actions)] == []
+
+
+@pytest.mark.asyncio
+async def test_hiding_one_campaign_leaves_the_other_visible_with_its_own_total():
+    actions = await project_needs_for_shelter(
+        _couch([_campaign("a", "100"), _campaign("b", "999", visible_on_home=False)]),
+        SHELTER,
+    )
+
+    docs = _upserts(actions)
+    assert len(docs) == 1
+    assert docs[0]["qty_needed"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_missing_flag_means_visible_so_old_campaigns_need_no_backfill():
+    campaign = _campaign("a", "100")
+    assert "visible_on_home" not in campaign
+
+    actions = await project_needs_for_shelter(_couch([campaign]), SHELTER)
+
+    assert len(_upserts(actions)) == 1
+
+
+@pytest.mark.asyncio
+async def test_closed_campaign_stays_off_the_board():
+    actions = await project_needs_for_shelter(
+        _couch([_campaign("a", "100", status="closed")]), SHELTER
+    )
+
+    assert _upserts(actions) == []
