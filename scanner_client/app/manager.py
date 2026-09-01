@@ -204,7 +204,8 @@ class ScannerClientManager:
 
     async def run(self):
         """Launch Playwright browser context and start card reader loop"""
-        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Portrait: {self.window_width}x{self.window_height})...")
+        mode_str = f"Windowed ({self.window_width}x{self.window_height})" if self.is_debug else "Fullscreen Kiosk"
+        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Mode: {mode_str})...")
         args = self._build_browser_args()
 
         async with async_playwright() as p:

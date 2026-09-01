@@ -35,6 +35,10 @@ fi
 # 5. กำหนดค่าเริ่มต้นเป็น Fullscreen Kiosk Mode เมื่อรันผ่าน Startup Script
 # (สามารถ override ชั่วคราวได้ด้วย: DEBUG=true ./start_kiosk.sh)
 export DEBUG="${DEBUG:-false}"
+EXTRA_ARGS=""
+if [ "$DEBUG" = "false" ] || [ -z "$DEBUG" ]; then
+    EXTRA_ARGS="--kiosk"
+fi
 
 # 6. เลือก Python จาก Virtual Environment หากมี
 if [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
@@ -46,9 +50,9 @@ else
 fi
 
 # 7. Supervisor Loop: รัน main.py หากหลุดหรือปิดตัว ให้เปิดใหม่เสมอเพื่อความต่อเนื่องของ Kiosk
-echo "=== Starting SmartShelter Kiosk at $(date) (PID: $$, Python: $PYTHON_BIN) ===" >> "$LOG_FILE"
+echo "=== Starting SmartShelter Kiosk at $(date) (PID: $$, Python: $PYTHON_BIN, Flags: $EXTRA_ARGS) ===" >> "$LOG_FILE"
 while true; do
-    "$PYTHON_BIN" main.py "$@" >> "$LOG_FILE" 2>&1
+    "$PYTHON_BIN" main.py $EXTRA_ARGS "$@" >> "$LOG_FILE" 2>&1
     EXIT_CODE=$?
     echo "=== SmartShelter Kiosk process exited (code $EXIT_CODE) at $(date). Restarting in 3s... ===" >> "$LOG_FILE"
     sleep 3
