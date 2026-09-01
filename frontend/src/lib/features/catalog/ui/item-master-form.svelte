@@ -459,7 +459,7 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
 								>
 									<option value="" disabled selected>-- เลือกหน่วยฐาน --</option>
-									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร'] as unit (unit)}
+									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'อัน', 'ชุด', 'ผืน', 'ตัว', 'คู่', 'แผ่น', 'หลอด', 'ม้วน', 'ก้อน', 'ห่อ', 'ฟอง', 'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร', 'เมตร'] as unit (unit)}
 										<option value={unit}>{unit}</option>
 									{/each}
 								</select>
