@@ -1,8 +1,9 @@
 ---
 id: CR-100
 title: Announcements CRUD (renumbered from CR-062 and CR-097)
-status: proposed
+status: done
 date: 2026-07-29
+updated: 2026-09-01
 requested_by: ชิโน ทนุธรรม
 decided_by: 
 layer: volatile

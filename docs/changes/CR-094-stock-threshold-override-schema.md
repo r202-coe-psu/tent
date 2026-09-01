@@ -1,8 +1,9 @@
 ---
 id: CR-094
 title: Add stock_threshold_override document type and schema (renumbered from CR-057)
-status: proposed
+status: done
 date: 2026-07-28
+updated: 2026-09-01
 requested_by: ทีมพัฒนา (ทีม C - T-14)
 decided_by: project owner
 layer: volatile

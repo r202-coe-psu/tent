@@ -1,8 +1,9 @@
 ---
 id: CR-093
 title: Multi-shelter Compound Scoped Roles — รองรับ 1 ผู้ใช้งานปฏิบัติงานหลายศูนย์พักพิงและหลากบทบาท ป้องกัน Privilege Bleed
-status: proposed
+status: approved
 date: 2026-08-27
+updated: 2026-09-01
 requested_by: stakeholder requirement (vertical shelter / host houses cluster)
 decided_by: project owner
 layer: volatile

@@ -1,8 +1,9 @@
 ---
 id: CR-051
 title: ตัด Household Shelter ID/QR (FR-22 / T-05) — household check-in/out ใช้ Person ID/QR ของหัวหน้าครัวเรือนแทน
-status: proposed
+status: done
 date: 2026-07-24
+updated: 2026-09-01
 requested_by: developer team-B
 decided_by: project owner
 layer: volatile

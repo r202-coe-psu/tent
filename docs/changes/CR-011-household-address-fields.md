@@ -1,8 +1,9 @@
 ---
 id: CR-011
 title: "Household Schema — เพิ่มฟิลด์ที่อยู่ครอบครัวหลัก (Primary Household Address) + municipality_zone + community"
-status: proposed
+status: done
 date: 2026-06-25
+updated: 2026-09-01
 requested_by: development team B
 decided_by: project owner
 layer: volatile

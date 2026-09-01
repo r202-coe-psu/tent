@@ -1,8 +1,9 @@
 ---
 id: CR-099
 title: Public family search — คืนสถานะจริงตาม backoffice (เลิก 3 bucket) + ค้นชื่อไทยแบบขึ้นต้นได้ (renumbered from CR-080)
-status: proposed
+status: done
 date: 2026-08-22
+updated: 2026-09-01
 requested_by: เจ้าของโครงการ (พบจากการทดลองใช้หน้า /search)
 decided_by: เจ้าของโครงการ
 layer: volatile

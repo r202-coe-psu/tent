@@ -2,7 +2,7 @@
 title: Smart Shelter — Change Management Policy
 status: active
 created: 2026-06-16
-updated: 2026-06-16
+updated: 2026-09-01
 note: หลักการกำกับการเปลี่ยนแปลงเอกสาร (spec/docs) ของทั้งโครงการ — บังคับกับ docs/ ทั้งหมด
 ---
 
@@ -45,16 +45,28 @@ Stable core สอดคล้องกับข้อห้ามใน [`CLAUD
 
 ---
 
-## 3. Change Record — รูปแบบ
+## 3. Change Record — รูปแบบและวงจรชีวิต (Lifecycle)
 
-เก็บใน `docs/changes/` หนึ่งไฟล์ต่อ CR (`CR-NNN-slug.md`) และลงดัชนีใน
-[`docs/changes/_index.md`](changes/_index.md). โครงตามนี้:
+เพื่อป้องกันปัญหา **หมายเลข CR ซ้ำซ้อน (Number Collision)** จากการเปิด draft หลาย branch พร้อมกัน
+และการเกิดเลขขาดตอน (Gap) หากร่างไม่ผ่านการอนุมัติ ระบบจะแบ่งชื่อและสถานะไฟล์เป็น 2 ขั้น:
+
+1. **ช่วงร่าง (Proposed / Draft):**
+   - เก็บเป็น `docs/changes/draft-<slug>.md`
+   - `id: draft` (หรือ `draft-<slug>`) และ `status: proposed`
+   - **ห้ามรันเลข `CR-NNN` เด็ดขาด** ในขั้นตอนนี้ และยังไม่ต้องลงใน `_index.md`
+   - การอ้างอิงระหว่างทบทวน: ให้อ้างอิงด้วย slug เช่น `draft-<slug>`
+2. **เมื่ออนุมัติ (Approved) และรันเลข:**
+   - ตรวจสอบลำดับเลขล่าสุดจาก `docs/changes/_index.md` (บน branch หลัก `develop` / `main`)
+   - รันหมายเลขถัดไปและเปลี่ยนชื่อไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - อัปเดต frontmatter: `id: CR-NNN`, `status: approved` และบันทึกแถวลงใน `_index.md`
+
+โครงสร้าง Frontmatter ของ Change Record:
 
 ```yaml
-id: CR-001
+id: draft               # draft (ตอน proposed) -> CR-NNN (เมื่อ approved)
 title: เพิ่ม field X ใน evacuee
 status: proposed        # proposed | approved | done | rejected | superseded
-date: 2026-06-16
+date: 2026-09-01
 requested_by: <ผู้ใหญ่ / field study / ทีม>
 decided_by: <เจ้าของโครงการ>
 layer: volatile         # stable | volatile
@@ -66,7 +78,7 @@ why: <เหตุผลสั้นๆ — ทำไมต้องเปลี
 migration: <ถ้า bump schema_v: ทำกับ doc เดิมยังไง>
 ```
 
-CR ที่ approve แล้วและลงมือทำเสร็จ → set `status: done` + อัปเดต `updated:` ใน doc ที่ถูกแก้
+CR ที่ approve แล้วและลงมือทำเสร็จ → set `status: done` + อัปเดต `updated:` ใน doc ที่ถูกแก้ และอัปเดตสถานะใน `_index.md`
 
 ---
 
@@ -86,13 +98,17 @@ CR ที่ approve แล้วและลงมือทำเสร็จ �
 
 ## 5. Workflow ต่อการเปลี่ยนหนึ่งครั้ง
 
-1. มีคำขอเปลี่ยน (ผู้ใหญ่ / field / ทีม)
+1. **มีคำขอเปลี่ยน** (ผู้ใหญ่ / field / ทีม)
 2. **ถามเจ้าของโครงการก่อนว่าจะ track ยังไง** (CR ไฟล์? Notion? decision sync note? — §6)
-3. เปิด Change Record (`status: proposed`) ลง impact + layer
-4. เจ้าของเคาะ → `approved`; ถ้า stable core ต้องผ่าน review ก่อน
-5. แก้ doc + bump version/`schema_v` ถ้าเข้าข่าย + อัปเดต `updated:`
-6. แก้ code/test ที่กระทบ (test ที่ domain/data layer จะ fail บอกจุดกระทบ)
-7. ปิด CR (`status: done`)
+3. **เปิด Draft Change Record** — สร้างไฟล์ `docs/changes/draft-<slug>.md` (`id: draft`, `status: proposed`) ระบุ impact + layer (ยังไม่ให้เลข CR-NNN)
+4. **เจ้าของเคาะ (Approval)**:
+   - ตรวจสอบ `docs/changes/_index.md` บน branch หลักเพื่อกำหนดเลข `CR-NNN` ถัดไป
+   - Rename ไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - อัปเดต frontmatter `id: CR-NNN`, `status: approved` (ถ้า stable core ต้องผ่าน review ก่อน)
+   - เพิ่มแถวใน `docs/changes/_index.md`
+5. **แก้ doc** + bump version/`schema_v` ถ้าเข้าข่าย + อัปเดต `updated:`
+6. **แก้ code/test ที่กระทบ** (test ที่ domain/data layer จะ fail บอกจุดกระทบ)
+7. **ปิด CR** (`status: done` ใน CR และ `_index.md`)
 
 CR ที่มาใหม่ระหว่าง phase → เข้า backlog, **ไม่แทรก scope ของ phase ปัจจุบัน** เว้นแต่เจ้าของสั่ง.
 อ้างอิง gate: Foundation Gate (17 ก.ค.), Operations Gate (22 ส.ค.) ใน [`docs/prd/roadmap.md`](prd/roadmap.md)

@@ -1,8 +1,9 @@
 ---
 id: CR-058
 title: Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul
-status: proposed
+status: done
 date: 2026-07-25
+updated: 2026-09-01
 requested_by: Field Kitchen Operations & Nutrition Management
 decided_by: Project Owner
 layer: volatile
