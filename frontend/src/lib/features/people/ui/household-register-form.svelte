@@ -20,6 +20,9 @@
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
 	import Cpu from '@lucide/svelte/icons/cpu';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import Home from '@lucide/svelte/icons/home';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { toast } from 'svelte-sonner';
 
 	import SearchSelect from '$lib/components/search-select.svelte';
@@ -35,6 +38,8 @@
 		initialAddress = null,
 		onsubmit,
 		onselect,
+		oncontinue,
+		onback,
 		pending = false,
 		showNewHouseholdForm = $bindable(false)
 	}: {
@@ -43,11 +48,16 @@
 		initialAddress?: Partial<HouseholdInput> | null;
 		onsubmit?: (input: Partial<HouseholdInput>) => void;
 		onselect?: (household: Household) => void;
+		oncontinue?: () => void;
+		onback?: () => void;
 		pending?: boolean;
 		showNewHouseholdForm?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(HOUSEHOLD_REGISTER_I18N, languageStore.current));
+
+	type HouseholdPhase = 'guide' | 'search' | 'create';
+	let phase = $state<HouseholdPhase>('guide');
 
 	let searchMode: 'exact' | 'fuzzy' = $state('fuzzy');
 	let searchQuery = $state('');
@@ -177,8 +187,44 @@
 			if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
 			if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
 			showNewHouseholdForm = true;
+			phase = 'create';
 		}
 	});
+
+	const canContinue = $derived(selectedHouseholdId !== null && phase !== 'create');
+
+	$effect(() => {
+		if (showNewHouseholdForm && phase === 'guide') {
+			phase = 'create';
+		}
+	});
+
+	function startSearch() {
+		phase = 'search';
+		showNewHouseholdForm = false;
+		selectedHouseholdId = null;
+		searchState = 'idle';
+		foundResults = [];
+	}
+
+	function startCreate() {
+		phase = 'create';
+		showNewHouseholdForm = true;
+		selectedHouseholdId = null;
+		searchState = 'idle';
+	}
+
+	function backFromPhase() {
+		if (phase === 'guide') {
+			onback?.();
+		} else {
+			phase = 'guide';
+			showNewHouseholdForm = false;
+			selectedHouseholdId = null;
+			searchState = 'idle';
+			foundResults = [];
+		}
+	}
 
 	$effect(() => {
 		if (formData.subdistrict && !formData.postal_code && subdistrictsQuery.data?.length) {
@@ -329,6 +375,57 @@
 </script>
 
 <div class="space-y-6">
+	{#if phase === 'guide'}
+		<div class="form-section-muted space-y-4">
+			<h3 class="text-lg font-bold text-foreground">{t.guide.title}</h3>
+			<p class="text-sm leading-relaxed text-muted-foreground">{t.guide.desc}</p>
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+				<button
+					type="button"
+					class="touch-target flex flex-col items-start gap-2 rounded-xl border-2 border-primary bg-primary-muted p-4 text-left transition-colors hover:bg-primary-muted/80"
+					onclick={startSearch}
+				>
+					<div class="flex items-center gap-2 font-bold text-foreground">
+						<SearchIcon class="size-5 text-primary" />
+						{t.guide.btnSearch}
+					</div>
+					<p class="text-xs text-muted-foreground">{t.guide.btnSearchHint}</p>
+				</button>
+				<button
+					type="button"
+					class="touch-target flex flex-col items-start gap-2 rounded-xl border-2 border-border bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
+					onclick={startCreate}
+				>
+					<div class="flex items-center gap-2 font-bold text-foreground">
+						<Home class="size-5 text-primary" />
+						{t.guide.btnCreate}
+					</div>
+					<p class="text-xs text-muted-foreground">{t.guide.btnCreateHint}</p>
+				</button>
+			</div>
+		</div>
+		<Button
+			type="button"
+			variant="ghost"
+			class="touch-target h-auto w-full gap-2 py-3 sm:w-auto"
+			onclick={() => onback?.()}
+		>
+			<ArrowLeft class="size-4" />
+			{t.actions.back}
+		</Button>
+	{:else}
+		<Button
+			type="button"
+			variant="ghost"
+			class="touch-target -ml-2 h-auto gap-2 px-2 py-2 text-sm text-muted-foreground"
+			onclick={backFromPhase}
+		>
+			<ArrowLeft class="size-4" />
+			{t.guide.backToGuide}
+		</Button>
+	{/if}
+
+	{#if phase === 'search'}
 	<!-- Search Section -->
 	<form
 		class="space-y-4"
@@ -404,11 +501,8 @@
 					<Button
 						type="button"
 						variant="secondary"
-						class="h-12 sm:h-11"
-						onclick={() => {
-							showNewHouseholdForm = true;
-							selectedHouseholdId = null;
-						}}
+						class="touch-target h-auto px-6 py-3"
+						onclick={startCreate}
 					>
 						<Plus class="mr-2 h-4 w-4" />
 						{t.personSearch.btnNew}
@@ -476,15 +570,15 @@
 					{@const isSelected = selectedHouseholdId === result.household._id}
 					<div
 						class="rounded-xl border {isSelected
-							? 'border-green-300 bg-[#f0fdf4]'
-							: 'border-border bg-white'} flex flex-col gap-4 p-4 shadow-sm transition-all"
+							? 'border-2 border-success-border bg-success-muted/30'
+							: 'border-border bg-card'} flex flex-col gap-4 p-4 shadow-xs transition-all"
 					>
 						<div
 							class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center"
 						>
 							<div class="flex-1 space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
-									<User class="h-5 w-5 text-[#003B71]" />
+									<User class="size-5 text-primary" />
 									<span class="text-sm font-bold"
 										>{t.results.headLabel}
 										{result.evacuee
@@ -513,10 +607,8 @@
 								</div>
 							</div>
 							<Button
-								variant="outline"
-								class="h-10 shrink-0 rounded-xl px-4 font-medium {isSelected
-									? 'border-transparent bg-[#00a86b] text-white hover:bg-[#00905a]'
-									: 'border-border bg-gray-50 text-foreground hover:bg-gray-100'}"
+								variant={isSelected ? 'default' : 'outline'}
+								class="touch-target h-auto shrink-0 rounded-xl px-4 py-3 font-medium"
 								onclick={() => {
 									selectedHouseholdId = result.household._id;
 									onselect?.(result.household);
@@ -537,7 +629,7 @@
 
 						{#if result.expanded}
 							<div class="mt-1 border-t pt-4">
-								<h4 class="mb-3 text-sm font-bold text-[#003B71]">{t.results.membersTitle}</h4>
+								<h4 class="mb-3 text-sm font-bold text-primary">{t.results.membersTitle}</h4>
 
 								{#if result.members.filter((m) => m._id !== result.household.head_evacuee_id).length > 0}
 									<ul class="space-y-2 pl-1 text-sm text-muted-foreground">
@@ -570,11 +662,8 @@
 
 			<button
 				type="button"
-				class="mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-[#003B71] hover:underline"
-				onclick={() => {
-					showNewHouseholdForm = true;
-					selectedHouseholdId = null;
-				}}
+				class="touch-target mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+				onclick={startCreate}
 			>
 				<Plus class="h-4 w-4" />
 				{t.results.btnSeparateNew}
@@ -583,10 +672,10 @@
 
 		<!-- Selected Alert -->
 		{#if selectedResult}
-			<div class="mt-6 rounded-xl border border-green-200 bg-[#ecfdf5] p-4 md:p-5">
+			<div class="mt-6 rounded-xl border-2 border-success-border bg-success-muted/40 p-4 md:p-5">
 				<div class="flex items-start gap-3">
-					<CheckSquare class="mt-0.5 h-6 w-6 shrink-0 text-[#00a86b]" />
-					<div class="space-y-1.5 text-green-900">
+					<CheckSquare class="mt-0.5 size-6 shrink-0 text-success" />
+					<div class="space-y-1.5 text-foreground">
 						<div class="text-base font-bold">{t.results.selectedTitle}</div>
 						<div class="text-sm">
 							{t.results.headLabel}
@@ -607,34 +696,36 @@
 	{/if}
 
 	<!-- Not Found Alert -->
-	{#if searchState === 'not_found' && !showNewHouseholdForm}
+	{#if searchState === 'not_found' && phase === 'search'}
 		<div
 			class="flex flex-col items-center justify-center gap-4 px-2 py-6 text-center"
 			role="status"
 		>
-			<div class="flex items-center gap-2 text-base font-bold text-red-600">
-				<X class="h-6 w-6 stroke-[3]" />
+			<div class="flex items-center gap-2 text-base font-bold text-destructive">
+				<X class="size-6 stroke-[3]" />
 				{t.notFound.title}
 			</div>
 			<Button
 				type="button"
 				variant="default"
-				class="h-12 w-full rounded-xl px-6 sm:h-10 sm:w-auto"
-				onclick={() => (showNewHouseholdForm = true)}
+				class="touch-target h-auto w-full px-6 py-3 sm:w-auto"
+				onclick={startCreate}
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				{t.notFound.btnNew}
 			</Button>
 		</div>
 	{/if}
+	{/if}
 
 	<!-- New Household Form -->
-	{#if showNewHouseholdForm}
+	{#if phase === 'create'}
 		<form class="space-y-6 border-t border-border pt-6" onsubmit={handleNewHouseholdSubmit}>
 			<div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
 				<div>
 					<h3 class="flex items-center gap-2 text-lg font-bold">
-						🏡 {t.newForm.title}
+						<Home class="size-5 text-primary" />
+						{t.newForm.title}
 					</h3>
 					<p class="mt-1 text-xs text-muted-foreground">
 						{t.notFound.desc}
@@ -663,7 +754,7 @@
 					<Input
 						bind:value={formData.address_no}
 						placeholder={t.newForm.addressNoPlaceholder}
-						class="h-9 bg-background"
+						class="form-control-touch bg-background"
 						required
 					/>
 				</div>
@@ -672,7 +763,7 @@
 					<Input
 						bind:value={formData.village_no}
 						placeholder={t.newForm.villageNoPlaceholder}
-						class="h-9 bg-background"
+						class="form-control-touch bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -685,7 +776,7 @@
 						searchPlaceholder={t.newForm.provinceSearch}
 						emptyText={t.newForm.provinceEmpty}
 						disabled={pending || provincesQuery.isLoading}
-						class="h-9 rounded-md border-border bg-background"
+						class="form-control-touch rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -702,7 +793,7 @@
 						searchPlaceholder={t.newForm.districtSearch}
 						emptyText={t.newForm.districtEmpty}
 						disabled={pending || !formData.province || districtsQuery.isLoading}
-						class="h-9 rounded-md border-border bg-background"
+						class="form-control-touch rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -719,7 +810,7 @@
 						searchPlaceholder={t.newForm.subdistrictSearch}
 						emptyText={t.newForm.subdistrictEmpty}
 						disabled={pending || !formData.district || subdistrictsQuery.isLoading}
-						class="h-9 rounded-md border-border bg-background"
+						class="form-control-touch rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -730,7 +821,7 @@
 						placeholder={!formData.subdistrict
 							? t.newForm.subdistrictSelect
 							: t.newForm.postalCodePlaceholder}
-						class="h-9 rounded-md border-border bg-background"
+						class="form-control-touch rounded-md border-border bg-background"
 						required
 					/>
 				</div>
@@ -741,19 +832,38 @@
 					type="submit"
 					variant="default"
 					disabled={pending}
-					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
+					class="touch-target h-auto w-full px-6 py-3 sm:w-auto"
 				>
 					{t.newForm.btnSave}
 				</Button>
 				<Button
 					type="button"
 					variant="outline"
-					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
-					onclick={() => (showNewHouseholdForm = false)}
+					class="touch-target h-auto w-full px-6 py-3 sm:w-auto"
+					onclick={() => {
+						phase = 'guide';
+						showNewHouseholdForm = false;
+					}}
 				>
 					{t.newForm.btnCancel}
 				</Button>
 			</div>
 		</form>
+	{/if}
+
+	{#if canContinue}
+		<div
+			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+		>
+			<Button
+				type="button"
+				variant="default"
+				class="touch-target h-auto w-full py-3 sm:w-auto sm:px-8"
+				disabled={pending}
+				onclick={() => oncontinue?.()}
+			>
+				{t.actions.continue}
+			</Button>
+		</div>
 	{/if}
 </div>
