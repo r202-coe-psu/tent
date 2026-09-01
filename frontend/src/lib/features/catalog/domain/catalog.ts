@@ -54,7 +54,7 @@ export interface ItemMaster extends CatalogDoc {
 	conversions: UomConversion[];
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
-	distribution_type: DistributionType;
+	distribution_type?: DistributionType;
 	type_class: TypeClass;
 	deactivated?: boolean;
 	shelter_code?: string;
@@ -237,7 +237,8 @@ export function createItemMaster(
 			})),
 			default_inventory_uom: d.default_inventory_uom,
 			default_issue_uom: d.default_issue_uom,
-			distribution_type: d.distribution_type || 'recurring',
+			distribution_type:
+				d.distribution_type || (d.type_class === 'EQUIPMENT' ? undefined : 'recurring'),
 			type_class: d.type_class,
 			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),

@@ -488,7 +488,6 @@
 
 					<div class="space-y-3">
 						{#if $formData.conversions && $formData.conversions.length > 0}
-							{@const conv = $formData.conversions[0]}
 							<div
 								class="grid grid-cols-1 items-end gap-6 rounded-2xl border border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950/20"
 							>
@@ -498,7 +497,7 @@
 									</span>
 									<Input
 										type="text"
-										bind:value={conv.uom_name}
+										bind:value={$formData.conversions[0].uom_name}
 										placeholder="เช่น กล่อง, ลัง, แผง"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
@@ -511,10 +510,10 @@
 										type="number"
 										step="any"
 										min={0}
-										value={conv.multiplier}
+										value={$formData.conversions[0].multiplier}
 										oninput={(e) => {
 											const val = e.currentTarget.value;
-											conv.multiplier = val === '' ? '1' : val;
+											$formData.conversions[0].multiplier = val === '' ? '1' : val;
 										}}
 										placeholder="1"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
@@ -526,7 +525,7 @@
 									</span>
 									<Input
 										type="text"
-										bind:value={conv.barcode}
+										bind:value={$formData.conversions[0].barcode}
 										placeholder="สแกนหรือพิมพ์"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
