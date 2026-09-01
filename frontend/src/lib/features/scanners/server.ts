@@ -82,12 +82,22 @@ export class ScannerServerRepository {
 
 		// Find if citizen ID already exists in this shelter
 		const cleanCitizenId = cardData.citizen_id.replace(/\D/g, '');
+		const idSelector =
+			cardData.citizen_id !== cleanCitizenId
+				? {
+						$or: [
+							{ 'person_id.number': cardData.citizen_id },
+							{ 'person_id.number': cleanCitizenId }
+						]
+					}
+				: { 'person_id.number': cleanCitizenId };
+
 		const findRes = await adminFetch<{ docs: Evacuee[] }>(`/${dbName}/_find`, {
 			method: 'POST',
 			body: JSON.stringify({
 				selector: {
 					type: 'evacuee',
-					$or: [{ 'person_id.number': cardData.citizen_id }, { 'person_id.number': cleanCitizenId }]
+					...idSelector
 				}
 			})
 		}).catch(() => ({ docs: [] }));

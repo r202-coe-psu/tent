@@ -302,4 +302,47 @@ describe('ScannerServerRepository.processCardScan', () => {
 		expect(putUrl).toContain('evacuee%3ACANCEL01');
 		expect(JSON.parse(putBody)._id).toBe('evacuee:CANCEL01');
 	});
+
+	it('optimizes Mango index selector when citizen_id contains only digits', async () => {
+		let findPayload: { selector: Record<string, unknown> } | null = null;
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url, options) => {
+			if (url.includes('_find')) {
+				findPayload = JSON.parse(options?.body as string);
+				return { docs: [] };
+			}
+			return { ok: true };
+		});
+
+		await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', {
+			...mockCard,
+			citizen_id: '1234567890123'
+		});
+
+		expect(findPayload?.selector).toEqual({
+			type: 'evacuee',
+			'person_id.number': '1234567890123'
+		});
+		expect(findPayload?.selector.$or).toBeUndefined();
+	});
+
+	it('uses $or in Mango selector when citizen_id contains formatted characters', async () => {
+		let findPayload: { selector: Record<string, unknown> } | null = null;
+		vi.mocked(couchAdmin.adminFetch).mockImplementation(async (url, options) => {
+			if (url.includes('_find')) {
+				findPayload = JSON.parse(options?.body as string);
+				return { docs: [] };
+			}
+			return { ok: true };
+		});
+
+		await repo.processCardScan('SH001', 'DEV-01', 'โต๊ะ 1', {
+			...mockCard,
+			citizen_id: '1-2345-67890-12-3'
+		});
+
+		expect(findPayload?.selector).toEqual({
+			type: 'evacuee',
+			$or: [{ 'person_id.number': '1-2345-67890-12-3' }, { 'person_id.number': '1234567890123' }]
+		});
+	});
 });
