@@ -170,7 +170,7 @@
 				province: card.province || null,
 				postal_code: card.postal_code || null
 			};
-			isCreatingNewHousehold = true;
+			isCreatingNewHousehold = false;
 		}
 
 		// 3. Start at Step 2 (EWAR Symptoms)

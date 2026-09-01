@@ -55,6 +55,8 @@ export {
 	createKioskEvacueeFromCard,
 	createMedical,
 	createHousehold,
+	normalizeAddressPart,
+	matchHouseholdAddress,
 	createMovement,
 	createScreening,
 	assertMovementAllowed,

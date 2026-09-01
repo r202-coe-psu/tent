@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
+	import {
+		matchHouseholdAddress,
+		type Household,
+		type Evacuee,
+		type HouseholdInput
+	} from '../domain/people';
 	import {
 		type LocationRow,
 		useProvinces,
@@ -168,15 +173,49 @@
 		formData.postal_code = match ? String(match.zipcode) : '';
 	}
 
+	let suggestedFromCard = $state(false);
+	let lastEvaluatedKey = $state('');
+
 	$effect(() => {
-		if (initialAddress && (initialAddress.province || initialAddress.address_no)) {
-			if (initialAddress.address_no) formData.address_no = initialAddress.address_no;
-			if (initialAddress.village_no) formData.village_no = initialAddress.village_no;
-			if (initialAddress.province) formData.province = initialAddress.province;
-			if (initialAddress.district) formData.district = initialAddress.district;
-			if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
-			if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
+		if (!initialAddress || (!initialAddress.province && !initialAddress.address_no)) {
+			return;
+		}
+
+		const addressKey = `${initialAddress.address_no || ''}|${initialAddress.village_no || ''}|${initialAddress.subdistrict || ''}|${initialAddress.district || ''}|${initialAddress.province || ''}|${households.length}`;
+
+		if (lastEvaluatedKey === addressKey) {
+			return;
+		}
+		lastEvaluatedKey = addressKey;
+
+		if (initialAddress.address_no) formData.address_no = initialAddress.address_no;
+		if (initialAddress.village_no) formData.village_no = initialAddress.village_no;
+		if (initialAddress.province) formData.province = initialAddress.province;
+		if (initialAddress.district) formData.district = initialAddress.district;
+		if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
+		if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
+
+		// Check matching households in shelter
+		const matched = households.filter((h) => matchHouseholdAddress(h, initialAddress));
+		if (matched.length > 0) {
+			foundResults = matched.map((hh) => {
+				const members = allEvacuees.filter((e) => e.household_id === hh._id);
+				return {
+					household: hh,
+					evacuee: allEvacuees.find((e) => e._id === hh.head_evacuee_id) || null,
+					count: members.length,
+					members,
+					expanded: true
+				};
+			});
+			searchState = 'found';
+			showNewHouseholdForm = false;
+			suggestedFromCard = true;
+		} else {
+			foundResults = [];
+			searchState = 'idle';
 			showNewHouseholdForm = true;
+			suggestedFromCard = false;
 		}
 	});
 
@@ -353,6 +392,7 @@
 					selectedLocation = null;
 					searchState = 'idle';
 					showNewHouseholdForm = false;
+					suggestedFromCard = false;
 				}}
 			>
 				<span class="mr-2 {searchMode === 'exact' ? 'text-primary' : 'text-muted-foreground'}"
@@ -374,6 +414,7 @@
 					selectedLocation = null;
 					searchState = 'idle';
 					showNewHouseholdForm = false;
+					suggestedFromCard = false;
 				}}
 			>
 				<span class="mr-2 {searchMode === 'fuzzy' ? 'text-primary' : 'text-muted-foreground'}"
@@ -463,6 +504,37 @@
 			</div>
 		{/if}
 	</form>
+
+	<!-- Suggested Match from Smart Card Alert -->
+	{#if suggestedFromCard && searchState === 'found' && foundResults.length > 0}
+		<div
+			class="rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm dark:border-amber-700 dark:bg-amber-950/40"
+		>
+			<div class="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-100">
+				<Cpu class="size-5 text-amber-700 dark:text-amber-400" />
+				<span>{t.cardSuggested.title}</span>
+			</div>
+			<p class="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+				{t.cardSuggested.desc}
+			</p>
+			<div class="mt-3">
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					class="border-amber-300 bg-white text-xs font-semibold text-amber-950 shadow-2xs hover:bg-amber-100 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-100"
+					onclick={() => {
+						showNewHouseholdForm = true;
+						suggestedFromCard = false;
+						selectedHouseholdId = null;
+					}}
+				>
+					<Plus class="mr-1.5 size-3.5" />
+					{t.cardSuggested.btnSeparate}
+				</Button>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Found Alert -->
 	{#if searchState === 'found' && foundResults.length > 0}

@@ -16,6 +16,8 @@ import {
 	isEvacuee,
 	createHousehold,
 	isHousehold,
+	normalizeAddressPart,
+	matchHouseholdAddress,
 	migrateHouseholdV3ToV4,
 	checkEvacueeHouseholdConflict,
 	assertEvacueeHouseholdAssignment,
@@ -693,5 +695,83 @@ describe('assertCheckoutDestination', () => {
 		expect(() =>
 			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
 		).not.toThrow();
+	});
+});
+
+describe('normalizeAddressPart & matchHouseholdAddress', () => {
+	it('normalizes prefixes and whitespace correctly', () => {
+		expect(normalizeAddressPart(' หมู่ 4 ')).toBe('4');
+		expect(normalizeAddressPart('ม.4')).toBe('4');
+		expect(normalizeAddressPart('จ.ปัตตานี')).toBe('ปัตตานี');
+		expect(normalizeAddressPart('จังหวัดปัตตานี')).toBe('ปัตตานี');
+		expect(normalizeAddressPart('อ.เมือง')).toBe('เมือง');
+		expect(normalizeAddressPart('ตำบลรูสะมิแล')).toBe('รูสะมิแล');
+	});
+
+	it('returns false if target address_no is missing or does not match', () => {
+		const hh = {
+			address_no: '123/45',
+			village_no: '4',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี'
+		};
+		expect(matchHouseholdAddress(hh, { address_no: '' })).toBe(false);
+		expect(matchHouseholdAddress(hh, { address_no: null })).toBe(false);
+		expect(matchHouseholdAddress(hh, { address_no: '999/99' })).toBe(false);
+	});
+
+	it('matches exact address with normalized prefixes', () => {
+		const hh = {
+			address_no: '123/45',
+			village_no: 'หมู่ 4',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี'
+		};
+		const target = {
+			address_no: '123/45',
+			village_no: '4',
+			subdistrict: 'ต.รูสะมิแล',
+			district: 'อ.เมืองปัตตานี',
+			province: 'จ.ปัตตานี'
+		};
+		expect(matchHouseholdAddress(hh, target)).toBe(true);
+	});
+
+	it('rejects if village_no differs when both are provided', () => {
+		const hh = {
+			address_no: '123/45',
+			village_no: '4',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี'
+		};
+		const target = {
+			address_no: '123/45',
+			village_no: '5',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี'
+		};
+		expect(matchHouseholdAddress(hh, target)).toBe(false);
+	});
+
+	it('rejects if province differs', () => {
+		const hh = {
+			address_no: '123/45',
+			village_no: '4',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองปัตตานี',
+			province: 'ปัตตานี'
+		};
+		const target = {
+			address_no: '123/45',
+			village_no: '4',
+			subdistrict: 'รูสะมิแล',
+			district: 'เมืองยะลา',
+			province: 'ยะลา'
+		};
+		expect(matchHouseholdAddress(hh, target)).toBe(false);
 	});
 });

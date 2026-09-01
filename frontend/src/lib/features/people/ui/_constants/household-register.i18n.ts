@@ -65,6 +65,11 @@ export const HOUSEHOLD_REGISTER_I18N = {
 			title: 'ไม่พบข้อมูลครอบครัวในระบบ',
 			desc: 'ไม่พบครอบครัวที่ตรงกับเงื่อนไขการค้นหา คุณสามารถลงทะเบียนเป็นครอบครัวใหม่ได้',
 			btnNew: 'ลงทะเบียนเป็นครอบครัวใหม่'
+		},
+		cardSuggested: {
+			title: 'พบครัวเรือนเดิมที่มีที่อยู่ตรงกับบัตรประชาชน (Smart Card)',
+			desc: 'โปรดสอบถามยืนยันกับผู้ประสบภัยว่าอาศัยอยู่ร่วมกับครัวเรือนนี้หรือไม่ หากใช่ให้กดปุ่ม "เลือกร่วมครอบครัวนี้" หรือหากเป็นคนละครอบครัว/แยกบ้าน ให้กดปุ่มด้านล่าง',
+			btnSeparate: 'ไม่ใช่ / ลงทะเบียนแยกเป็นครอบครัวใหม่'
 		}
 	},
 	en: {
@@ -132,6 +137,11 @@ export const HOUSEHOLD_REGISTER_I18N = {
 			title: 'No Household Found',
 			desc: 'No matching household found with the given criteria. You can register as a new household.',
 			btnNew: 'Register as New Household'
+		},
+		cardSuggested: {
+			title: 'Found existing household matching Smart Card address',
+			desc: 'Please confirm with the evacuee if they reside with this household. If yes, click "Join this Household", or click the button below to register a separate new household.',
+			btnSeparate: 'No / Register as New Household'
 		}
 	}
 } as const;

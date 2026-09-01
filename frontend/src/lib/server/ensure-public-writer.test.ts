@@ -9,9 +9,7 @@ import {
 
 describe('publicWriterUserPath', () => {
 	it('builds the CouchDB _users doc id path', () => {
-		expect(publicWriterUserPath('public_writer')).toBe(
-			'/_users/org.couchdb.user:public_writer'
-		);
+		expect(publicWriterUserPath('public_writer')).toBe('/_users/org.couchdb.user:public_writer');
 	});
 });
 
@@ -78,7 +76,10 @@ describe('ensurePublicWriter', () => {
 	});
 
 	it('dry-run GET reports already_exists when present', async () => {
-		const couchReq = vi.fn(async () => ({ status: 200, data: { name: 'public_writer' } })) as CouchReq;
+		const couchReq = vi.fn(async () => ({
+			status: 200,
+			data: { name: 'public_writer' }
+		})) as CouchReq;
 		await expect(ensurePublicWriter(couchReq, writerUrl, { dryRun: true })).resolves.toEqual({
 			outcome: 'already_exists',
 			username: 'public_writer'

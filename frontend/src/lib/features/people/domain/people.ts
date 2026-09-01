@@ -900,6 +900,51 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	);
 }
 
+export function normalizeAddressPart(str: string | null | undefined): string {
+	return (str || '')
+		.trim()
+		.toLowerCase()
+		.replace(/^(จ\.|จังหวัด|อ\.|อำเภอ|ต\.|ตำบล|ม\.|หมู่)\s*/, '')
+		.replace(/\s+/g, '');
+}
+
+export function matchHouseholdAddress(
+	household: Pick<Household, 'address_no' | 'village_no' | 'subdistrict' | 'district' | 'province'>,
+	target: Partial<HouseholdInput>
+): boolean {
+	const targetAddrNo = normalizeAddressPart(target.address_no);
+	if (!targetAddrNo) return false;
+
+	const hAddrNo = normalizeAddressPart(household.address_no);
+	if (hAddrNo !== targetAddrNo) return false;
+
+	if (target.village_no && household.village_no) {
+		const hV = normalizeAddressPart(household.village_no);
+		const tV = normalizeAddressPart(target.village_no);
+		if (hV && tV && hV !== tV) return false;
+	}
+
+	if (target.subdistrict && household.subdistrict) {
+		const hSub = normalizeAddressPart(household.subdistrict);
+		const tSub = normalizeAddressPart(target.subdistrict);
+		if (hSub && tSub && !hSub.includes(tSub) && !tSub.includes(hSub)) return false;
+	}
+
+	if (target.district && household.district) {
+		const hDist = normalizeAddressPart(household.district);
+		const tDist = normalizeAddressPart(target.district);
+		if (hDist && tDist && !hDist.includes(tDist) && !tDist.includes(hDist)) return false;
+	}
+
+	if (target.province && household.province) {
+		const hProv = normalizeAddressPart(household.province);
+		const tProv = normalizeAddressPart(target.province);
+		if (hProv && tProv && !hProv.includes(tProv) && !tProv.includes(hProv)) return false;
+	}
+
+	return true;
+}
+
 export function migrateHouseholdV3ToV4(doc: unknown): Household {
 	const candidate = doc as Household | LegacyHouseholdDoc;
 	if (
