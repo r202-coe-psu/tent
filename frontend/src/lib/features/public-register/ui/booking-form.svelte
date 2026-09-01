@@ -17,9 +17,16 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import type { PublicShelterCardModel } from '$lib/features/public-portal';
-	import { useCreateBooking, usePetTypes } from '../application/queries';
+	import {
+		useBookingDistricts,
+		useBookingProvinces,
+		useBookingSubdistricts,
+		useCreateBooking,
+		usePetTypes
+	} from '../application/queries';
 	import { isCaptchaKeyConfigured, publicBookingInputSchema } from '../domain/booking';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -99,6 +106,14 @@
 	// rather than in an $effect to avoid a read-then-write loop on $formData.
 	$formData.shelter_code = untrack(() => lockedShelterCode);
 	$formData.members = [blankMember()];
+	$formData.address = {
+		address_no: '',
+		village_no: '',
+		subdistrict: '',
+		district: '',
+		province: '',
+		postal_code: ''
+	};
 	$formData.pets = [];
 	$formData.vehicles = [];
 
@@ -137,12 +152,19 @@
 	 * FastAPI sends the literal sentinel `"none"` when a shelter has no groups to
 	 * offer (see `public-shelter-card.svelte`, which filters the same sentinel) —
 	 * without dropping it here it would render as a tag literally labeled "none".
+	 *
+	 * A code with no label is dropped rather than shown as its own raw id: the
+	 * shelter payload (Mongo, via the sync worker) and the label lookup
+	 * (`master_data`, CouchDB) are two different stores that can be out of step —
+	 * right after a seed the projection carries codes whose master-data labels
+	 * have not synced yet — and a checkbox reading `item_01M…` is worse than no
+	 * checkbox at all.
 	 */
 	const availableTags = $derived.by(() => {
 		const codes = (selected?.vulnerable_groups ?? []).filter((code) => code && code !== 'none');
 		if (codes.length === 0) return [];
 		const byCode = new Map(vulnerableGroups.map((g) => [g.code, g.label]));
-		return codes.map((code) => byCode.get(code) ?? code).filter(Boolean);
+		return codes.map((code) => byCode.get(code)?.trim() ?? '').filter((label) => label.length > 0);
 	});
 
 	/**
@@ -175,6 +197,51 @@
 	const defaultPetSpecies = $derived(
 		petTypes.find((p) => p.is_default)?.code ?? petTypes[0]?.code ?? ''
 	);
+
+	/**
+	 * Domicile address cascade (CR-105) — จังหวัด → อำเภอ → ตำบล, each level
+	 * fetched only once the one above is chosen, exactly like the staff
+	 * pre-registration address step. Picking a level clears everything below it,
+	 * so a half-changed address (new province, old ตำบล) can never be submitted;
+	 * the postal code is filled from the chosen subdistrict rather than typed.
+	 */
+	const provincesQuery = useBookingProvinces();
+	const districtsQuery = useBookingDistricts(() => $formData.address?.province ?? '');
+	const subdistrictsQuery = useBookingSubdistricts(
+		() => $formData.address?.province ?? '',
+		() => $formData.address?.district ?? ''
+	);
+
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+
+	function selectProvince(province: string) {
+		$formData.address = {
+			...$formData.address,
+			province,
+			district: '',
+			subdistrict: '',
+			postal_code: ''
+		};
+	}
+
+	function selectDistrict(district: string) {
+		$formData.address = { ...$formData.address, district, subdistrict: '', postal_code: '' };
+	}
+
+	function selectSubdistrict(subdistrict: string) {
+		const zipcode = (subdistrictsQuery.data ?? []).find(
+			(s) => s.subdistrict === subdistrict
+		)?.zipcode;
+		$formData.address = {
+			...$formData.address,
+			subdistrict,
+			postal_code: zipcode ? String(zipcode) : ''
+		};
+	}
 
 	/** "ว่าง/ทั้งหมด" when vacancy is known, else just the total capacity. */
 	function capacityLabel(shelter: { capacity: number; available: number | null }): string {
@@ -377,6 +444,134 @@
 			<Form.Description>{t.idCardDesc}</Form.Description>
 			<Form.FieldErrors />
 		</Form.Field>
+
+		<!--
+			Domicile address of the household head (CR-105) — the place the household
+			evacuated *from*, not the shelter. Required because the back office finds
+			and groups households by ตำบล/อำเภอ/จังหวัด; those three are pickers over
+			the national dataset rather than free text, so a web booking is searchable
+			next to a counter registration with no normalisation step.
+		-->
+		<fieldset class="space-y-3 rounded-xl border border-border p-4">
+			<legend class="px-1 text-sm font-bold text-foreground">
+				{t.addressLegend} <span class="text-destructive">*</span>
+			</legend>
+			<p class="text-xs text-muted-foreground">{t.addressDesc}</p>
+
+			<div class="grid gap-3 sm:grid-cols-2">
+				<Form.Field {form} name="address.address_no" class="space-y-1.5">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>{t.addressNoLabel} <span class="text-destructive">*</span></Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.address.address_no}
+								class="!h-11"
+								maxlength={100}
+								placeholder={t.addressNoPlaceholder}
+								autocomplete="address-line1"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="address.village_no" class="space-y-1.5">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>{t.villageNoLabel}</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.address.village_no}
+								class="!h-11"
+								maxlength={100}
+								placeholder={t.villageNoPlaceholder}
+								autocomplete="address-line2"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			<div class="grid gap-3 sm:grid-cols-3">
+				<Form.Field {form} name="address.province" class="space-y-1.5">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>{t.provinceLabel} <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name="address.province"
+								controlProps={props}
+								options={provinceItems}
+								bind:value={() => $formData.address.province, (v) => selectProvince(v)}
+								placeholder={t.provincePlaceholder}
+								searchPlaceholder={t.provinceSearch}
+								emptyText={t.locationEmpty}
+								loadingText={t.locationLoading}
+								loading={provincesQuery.isPending}
+								class="!h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="address.district" class="space-y-1.5">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>{t.districtLabel} <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name="address.district"
+								controlProps={props}
+								options={districtItems}
+								bind:value={() => $formData.address.district, (v) => selectDistrict(v)}
+								placeholder={$formData.address.province
+									? t.districtPlaceholder
+									: t.districtNeedsProvince}
+								searchPlaceholder={t.districtSearch}
+								emptyText={t.locationEmpty}
+								loadingText={t.locationLoading}
+								loading={Boolean($formData.address.province) && districtsQuery.isPending}
+								disabled={!$formData.address.province}
+								class="!h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="address.subdistrict" class="space-y-1.5">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>{t.subdistrictLabel} <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name="address.subdistrict"
+								controlProps={props}
+								options={subdistrictItems}
+								bind:value={() => $formData.address.subdistrict, (v) => selectSubdistrict(v)}
+								placeholder={$formData.address.district
+									? t.subdistrictPlaceholder
+									: t.subdistrictNeedsDistrict}
+								searchPlaceholder={t.subdistrictSearch}
+								emptyText={t.locationEmpty}
+								loadingText={t.locationLoading}
+								loading={Boolean($formData.address.district) && subdistrictsQuery.isPending}
+								disabled={!$formData.address.district}
+								class="!h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			{#if $formData.address.postal_code}
+				<p class="text-xs text-muted-foreground">
+					{t.postalCodeLabel}:
+					<span class="font-semibold text-foreground">{$formData.address.postal_code}</span>
+				</p>
+			{/if}
+		</fieldset>
 	</section>
 
 	<!-- ── 2. สมาชิกครอบครัว ────────────────────────────────────────────── -->

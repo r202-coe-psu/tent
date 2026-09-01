@@ -66,3 +66,44 @@ export async function fetchPetTypes(shelterCode: string): Promise<PetTypeOption[
 	const body = (await res.json().catch(() => null)) as { petTypes?: PetTypeOption[] } | null;
 	return body?.petTypes ?? [];
 }
+
+export interface PublicSubdistrict {
+	subdistrict: string;
+	zipcode: number;
+}
+
+const LOCATIONS = '/api/public/v1/config/locations';
+
+/**
+ * Thailand address cascade for the booking form's domicile address (CR-105),
+ * served by the public BFF (`/api/public/v1/config/locations`) — never
+ * `serviceFetch`, which is the staff service plane. Each level degrades to an
+ * empty list: a failed lookup narrows the choices, it must not break the form.
+ */
+export async function fetchProvinces(): Promise<string[]> {
+	const res = await fetch(LOCATIONS);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as { provinces?: string[] } | null;
+	return body?.provinces ?? [];
+}
+
+export async function fetchDistricts(province: string): Promise<string[]> {
+	const res = await fetch(`${LOCATIONS}?province=${encodeURIComponent(province)}`);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as { districts?: string[] } | null;
+	return body?.districts ?? [];
+}
+
+export async function fetchSubdistricts(
+	province: string,
+	district: string
+): Promise<PublicSubdistrict[]> {
+	const res = await fetch(
+		`${LOCATIONS}?province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}`
+	);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as {
+		subdistricts?: PublicSubdistrict[];
+	} | null;
+	return body?.subdistricts ?? [];
+}

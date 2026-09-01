@@ -21,7 +21,10 @@ export {
 } from './application/booking-store.svelte';
 export {
 	publicRegisterKeys,
+	useBookingDistricts,
 	useBookingLookup,
+	useBookingProvinces,
+	useBookingSubdistricts,
 	useCreateBooking,
 	usePetTypes
 } from './application/queries';
@@ -29,10 +32,14 @@ export {
 // data
 export {
 	createBooking,
+	fetchDistricts,
 	fetchPetTypes,
+	fetchProvinces,
+	fetchSubdistricts,
 	lookupBooking,
 	type BookingTicketResponse,
-	type PetTypeOption
+	type PetTypeOption,
+	type PublicSubdistrict
 } from './data/public-register.api';
 
 // domain
@@ -45,6 +52,7 @@ export {
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
+	publicBookingAddressSchema,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
@@ -58,6 +66,7 @@ export {
 } from './domain/booking';
 
 export type {
+	PublicBookingAddress,
 	PublicBookingErrorCode,
 	PublicBookingInput,
 	PublicBookingLookupInput,
