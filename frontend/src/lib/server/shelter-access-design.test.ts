@@ -208,7 +208,12 @@ describe('buildValidateDocUpdate', () => {
 		expectForbidden(
 			() =>
 				compile()(
-					{ ...dailySop, controls: dailySop.controls.map((control, index) => index === 0 ? { ...control, answered: false, status: 'Pending' } : control) },
+					{
+						...dailySop,
+						controls: dailySop.controls.map((control, index) =>
+							index === 0 ? { ...control, answered: false, status: 'Pending' } : control
+						)
+					},
 					null,
 					REGISTRATION
 				),
