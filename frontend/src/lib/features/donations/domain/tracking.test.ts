@@ -30,7 +30,14 @@ describe('toDonationTrackView', () => {
 		expect(view.items[0]?.item_name).toBe('ข้าวสาร');
 		expect(formatTrackSchedule(view.logistics)).toBe('2026-08-06 (10:00 - 12:00)');
 		expect(donationStatusLabel(view.status)).toContain('จองคิว');
+		expect(donationStatusLabel(view.status, 'en')).toBe('Donation Reserved');
 		expect(canEditCourierTracking(view.status, view.logistics)).toBe(false);
+	});
+
+	it('formats labels in English and Thai properly', () => {
+		expect(donationStatusLabel('received', 'th')).toBe('รับเข้าคลังเรียบร้อย');
+		expect(donationStatusLabel('received', 'en')).toBe('Received into Warehouse');
+		expect(donationStatusLabel('pending_review', 'en')).toBe('Pending Review');
 	});
 
 	it('allows courier edit only for open parcel donations', () => {

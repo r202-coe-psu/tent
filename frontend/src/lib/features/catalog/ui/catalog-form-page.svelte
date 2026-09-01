@@ -10,11 +10,13 @@
 	let {
 		entity,
 		mode,
-		id = ''
+		id = '',
+		basePath = '/back-office/catalog'
 	}: {
 		entity: 'item-categories' | 'item-masters' | 'recipe' | 'recipes';
 		mode: 'create' | 'edit';
 		id?: string;
+		basePath?: string;
 	} = $props();
 
 	const title = $derived(
@@ -28,7 +30,7 @@
 	);
 
 	function handleBack() {
-		goto(resolve('/back-office/catalog'));
+		goto(resolve(basePath as '/back-office/catalog'));
 	}
 </script>
 
@@ -44,11 +46,11 @@
 	</div>
 	<div class="rounded-2xl border border-border bg-card p-6 shadow-xs">
 		{#if entity === 'item-categories'}
-			<ItemCategoryForm {id} isEdit={mode === 'edit'} onsuccess={handleBack} />
+			<ItemCategoryForm {id} isEdit={mode === 'edit'} {basePath} onsuccess={handleBack} />
 		{:else if entity === 'item-masters'}
-			<ItemMasterForm {id} isEdit={mode === 'edit'} onsuccess={handleBack} />
+			<ItemMasterForm {id} isEdit={mode === 'edit'} {basePath} onsuccess={handleBack} />
 		{:else if entity === 'recipes' || entity === 'recipe'}
-			<RecipeForm {id} isEdit={mode === 'edit'} onsuccess={handleBack} />
+			<RecipeForm {id} isEdit={mode === 'edit'} {basePath} onsuccess={handleBack} />
 		{/if}
 	</div>
 </div>

@@ -34,7 +34,8 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/.svelte-kit ./.svelte-kit
 COPY --from=builder /app/package.json /app/tsconfig.json /app/svelte.config.js ./
 
-RUN chown -R node:node /app
+# corepack (pnpm) writes cache under $HOME when `docker compose run … pnpm db:sync`
+RUN mkdir -p /home/node/.cache && chown -R node:node /app /home/node
 
 ENV NODE_ENV=production
 # Cluster worker count for server/cluster.mjs (clamped to container CPUs)

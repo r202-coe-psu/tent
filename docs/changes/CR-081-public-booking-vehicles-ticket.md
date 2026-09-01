@@ -1,8 +1,9 @@
 ---
 id: CR-081
 title: Public booking — เก็บยานพาหนะ + ทะเบียนรถ, ใบจองดาวน์โหลดตรง และแสดงชื่อ-นามสกุลแทนรหัสจอง
-status: proposed
+status: approved
 date: 2026-08-22
+updated: 2026-08-31
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile

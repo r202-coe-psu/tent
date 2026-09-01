@@ -2,6 +2,7 @@
 	import { useLedger, useLedgerByItem } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import Clock from '@lucide/svelte/icons/clock';
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
@@ -12,7 +13,7 @@
 
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const allLedgerQuery = useLedger(() => !filterItemId);
 	const filteredLedgerQuery = useLedgerByItem(() => filterItemId);
 	const ledgerQuery = $derived(filterItemId ? filteredLedgerQuery : allLedgerQuery);

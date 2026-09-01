@@ -11,7 +11,7 @@ import {
 import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
-import { operationsRepository } from '../data/operations.remote';
+import { operationsRepository, OperationsRemoteRepository } from '../data/operations.remote';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -21,6 +21,8 @@ import type {
 	Purchase,
 	PurchaseInput,
 	CountedItem,
+	TransferInput,
+	TransferFilter,
 	WalkInDonationInput
 } from '../domain/operations';
 
@@ -32,7 +34,9 @@ export const operationsKeys = {
 	purchases: () => [...operationsKeys.all, 'purchases'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
-	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const
+	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
+	transfers: () => [...operationsKeys.all, 'transfers'] as const,
+	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
 };
 
 export const useCampaigns = () =>
@@ -104,6 +108,56 @@ export const useStockBalance = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.balance(),
 		queryFn: () => operationsRepository().getBalance()
+	}));
+
+export const useCrossShelterStockBalances = (
+	shelterCodes: () => string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: ['operations', 'cross-shelter-balances', ...shelterCodes()] as const,
+		queryFn: async () => {
+			const codes = shelterCodes();
+			const results = await Promise.all(
+				codes.map(async (code) => {
+					const dbName = `shelter_${code.toLowerCase()}`;
+					const repo = new OperationsRemoteRepository(dbName);
+					try {
+						const balance = await repo.getBalance();
+						return { shelterCode: code, balance };
+					} catch {
+						return { shelterCode: code, balance: new Map<string, string>() };
+					}
+				})
+			);
+			return results;
+		},
+		enabled: enabled() && shelterCodes().length > 0
+	}));
+
+export const useCrossShelterLedger = (
+	shelterCodes: () => string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: ['operations', 'cross-shelter-ledger', ...shelterCodes()] as const,
+		queryFn: async () => {
+			const codes = shelterCodes();
+			const results = await Promise.all(
+				codes.map(async (code) => {
+					const dbName = `shelter_${code.toLowerCase()}`;
+					const repo = new OperationsRemoteRepository(dbName);
+					try {
+						const ledger = await repo.listLedger();
+						return ledger;
+					} catch {
+						return [];
+					}
+				})
+			);
+			return results.flat();
+		},
+		enabled: enabled() && shelterCodes().length > 0
 	}));
 
 /**
@@ -224,6 +278,82 @@ export const useReceivePurchase = () => {
 		}) => operationsRepository().receivePurchase(purchase, counted, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Query hook to list transfers (source or destination) for the active shelter (CR-059 Flow 1 / T-13).
+ */
+export const useTransfers = (filter?: TransferFilter) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transfers(),
+		queryFn: () => operationsRepository().listTransfers(filter)
+	}));
+
+export const useTransfer = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transfer(id()),
+		queryFn: () => operationsRepository().getTransfer(id()),
+		enabled: enabled() && !!id()
+	}));
+
+/**
+ * Mutation hook to create an inter-shelter transfer request. `stock_transfer` lives in
+ * `central_ops`, not the shelter's own DB, so there is no live-query entry for it in
+ * `startOperationsLiveQuery` below — cache sync is this hook's `invalidateQueries` only
+ * (refetch-on-interaction, same as `referral` today; see CR-059 Decision Log 2026-08-22).
+ */
+export const useCreateTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: TransferInput; ctx: AuthorContext }) =>
+			operationsRepository().createTransfer(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+		}
+	}));
+};
+
+/** Mutation hook to dispatch a transfer (source shelter, `requested` → `shipped`). */
+export const useDispatchTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => operationsRepository().dispatchTransfer(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/** Mutation hook to receive a transfer (destination shelter, `shipped` → `received`). */
+export const useReceiveTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			id,
+			receivedItems,
+			notes
+		}: {
+			id: string;
+			receivedItems: { item_id: string; qty: string | number }[];
+			notes?: string;
+		}) => operationsRepository().receiveTransfer(id, receivedItems, notes),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/** Mutation hook to cancel a transfer before dispatch (source shelter, `requested` → `cancelled`). */
+export const useCancelTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => operationsRepository().cancelTransfer(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 		}
 	}));
 };

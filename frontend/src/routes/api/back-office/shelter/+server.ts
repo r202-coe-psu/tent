@@ -23,6 +23,7 @@ import {
 	nowIso,
 	deployShelterViews,
 	deployReferralMangoIndexes,
+	deployTransferLedgerMangoIndexes,
 	deployRegistryDesign
 } from '$lib/server/shelters.admin';
 import { buildValidateDocUpdate, shelterDbName } from '$lib/server/shelter-access-design';
@@ -117,6 +118,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 3.6. Referral Mango indexes (CR-045 / T-34 list/find)
 		await deployReferralMangoIndexes(db);
 		steps.push({ step: 'referral-mango', status: 200 });
+
+		// 3.7. Transfer ledger Mango indexes (CR-059 T-13 balance/idempotency `_find` checks)
+		await deployTransferLedgerMangoIndexes(db);
+		steps.push({ step: 'transfer-ledger-mango', status: 200 });
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
 		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

@@ -4,6 +4,7 @@ import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
 	createEvacuee as buildEvacuee,
+	evacueeInputSchema,
 	createMovement,
 	assertMovementAllowed,
 	applyMovementToStay,
@@ -93,17 +94,56 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
-	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
-		if (input.household_id) {
-			const targetHousehold = await this.repo.get<Household>(input.household_id);
+	async createEvacuee(
+		input: EvacueeInput & { draft_id?: string },
+		ctx: AuthorContext
+	): Promise<Evacuee> {
+		const parsedInput = evacueeInputSchema.parse(input);
+		if (parsedInput.household_id) {
+			const targetHousehold = await this.repo.get<Household>(parsedInput.household_id);
 			if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 			if (!isActiveHouseholdStatus(migrateHouseholdV3ToV4(targetHousehold).status)) {
 				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
 			}
 		}
 
-		const evacuee = buildEvacuee(input, ctx);
-		const saved = await this.repo.put(evacuee);
+		let saved: Evacuee;
+		if (input.draft_id) {
+			const existing = await this.repo.get<Evacuee>(input.draft_id);
+			if (existing && isEvacuee(existing)) {
+				const next: Evacuee = {
+					...existing,
+					first_name: parsedInput.first_name,
+					last_name: parsedInput.last_name,
+					gender: parsedInput.gender,
+					phone: parsedInput.phone,
+					...(parsedInput.nickname ? { nickname: parsedInput.nickname } : {}),
+					...(parsedInput.birth_year !== undefined ? { birth_year: parsedInput.birth_year } : {}),
+					...(parsedInput.age !== undefined ? { age: parsedInput.age } : {}),
+					...(parsedInput.person_id ? { person_id: parsedInput.person_id } : {}),
+					...(parsedInput.religion ? { religion: parsedInput.religion } : {}),
+					country: parsedInput.country,
+					special_needs: parsedInput.special_needs,
+					...(parsedInput.emergency_contact
+						? { emergency_contact: parsedInput.emergency_contact }
+						: {}),
+					...(parsedInput.photo ? { photo: parsedInput.photo } : {}),
+					household_id: parsedInput.household_id,
+					current_stay: {
+						status: existing.current_stay.status || 'pre_registered',
+						zone: existing.current_stay.zone ?? null,
+						since: now()
+					}
+				};
+				saved = await this.repo.put(touch(next));
+			} else {
+				const evacuee = buildEvacuee(parsedInput, ctx);
+				saved = await this.repo.put(evacuee);
+			}
+		} else {
+			const evacuee = buildEvacuee(parsedInput, ctx);
+			saved = await this.repo.put(evacuee);
+		}
 
 		const needsMedical =
 			(input.medical_conditions && input.medical_conditions.length > 0) ||
@@ -113,7 +153,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		if (needsMedical) {
 			const medicalInput = {
-				evacuee_id: evacuee._id,
+				evacuee_id: saved._id,
 				conditions: input.medical_conditions || [],
 				allergies: input.medical_allergies || [],
 				medications: input.medical_medications || [],
@@ -121,6 +161,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				track: input.track || ('normal' as const)
 			};
 			const medicalDoc = buildMedical(medicalInput, ctx);
+
 			try {
 				await this.repo.put(medicalDoc);
 			} catch (err) {
@@ -604,8 +645,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 let singleton: PeopleRepository | null = null;
 let singletonDbName: string | null = null;
 
-export function peopleRepository(): PeopleRepository {
-	const currentDb = getShelterDb();
+export function peopleRepository(shelterCode?: string): PeopleRepository {
+	const currentDb = getShelterDb(shelterCode);
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new PeopleRemoteRepository(currentDb);
 		singletonDbName = currentDb;

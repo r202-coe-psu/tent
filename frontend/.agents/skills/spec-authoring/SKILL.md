@@ -78,13 +78,17 @@ description: Act as project owner/PM turning the owner's intent into specs a dev
 2. **เข้าข่ายต้องมี CR ไหม?** (§2): เพิ่ม/ลบ/เปลี่ยนชนิด/req↔opt ของ field; เปลี่ยน rule/enum/invariant/
    workflow; เปลี่ยน scope/ลำดับ/deadline/gate; เปลี่ยน role/permission; bump `schema_v`.
    ถ้าเป็นแค่ typo/format/link/คำอธิบายที่ไม่เปลี่ยนความหมาย → แก้ได้เลย ไม่ต้อง CR
-3. **ร่าง CR** จาก [`docs/changes/_template.md`](../../../../docs/changes/_template.md) → ตั้ง
-   `CR-NNN-slug.md` (NNN ถัดจากใน `_index.md`), `status: proposed`, เติม `Why / Change (before→after) /
-   Impact / Migration` และ `affects:` ให้ครบ (ชี้ทั้ง doc §, `schema_v a→b`, path code/test ที่กระทบ —
-   ดู CR เดิมเป็นมาตรฐานความละเอียด)
+3. **ร่าง Draft CR** จาก [`docs/changes/_template.md`](../../../../docs/changes/_template.md) → ตั้งชื่อไฟล์
+   `docs/changes/draft-<slug>.md`, `id: draft`, `status: proposed` (**ห้ามรันเลข `CR-NNN` เองเด็ดขาด** ในขั้นนี้
+   เพื่อป้องกันปัญหาเลขชนกัน), เติม `Why / Change (before→after) / Impact / Migration` และ `affects:` ให้ครบ (ชี้ทั้ง doc §,
+   `schema_v a→b`, path code/test ที่กระทบ — ดู CR เดิมเป็นมาตรฐานความละเอียด)
 4. **เสนอวิธี track + เหตุผล** → **STOP ถามเจ้าของโครงการ** (CR ไฟล์ / Notion / decision sync note)
-5. หลังเจ้าของเคาะ: ตั้ง `approved` (stable core ต้องผ่าน review ก่อน) → แก้ doc + bump เวอร์ชัน +
-   อัปเดต `updated:` → แก้ code/test ที่กระทบ → ปิด CR `done` → ลงแถวใน `_index.md`
+5. **หลังเจ้าของเคาะ approve:**
+   - อ่าน `docs/changes/_index.md` บน branch หลัก (`develop`/`main`) เพื่อรันเลขถัดไป `CR-NNN`
+   - Rename ไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - ตั้ง `id: CR-NNN`, `status: approved` (stable core ต้องผ่าน review ก่อน)
+   - เพิ่มแถวบันทึกลงใน `docs/changes/_index.md`
+   - แก้ doc + bump เวอร์ชัน + อัปเดต `updated:` → แก้ code/test ที่กระทบ → ปิด CR `status: done` (อัปเดตทั้งในไฟล์ CR และ `_index.md`)
 
 ## 5. Versioning & frontmatter
 - ทุก doc มี `status` + `created` + `updated`. แก้เนื้อหา = อัปเดต `updated:` เป็นวันจริง `YYYY-MM-DD`
