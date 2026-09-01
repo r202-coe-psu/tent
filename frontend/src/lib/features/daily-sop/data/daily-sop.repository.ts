@@ -1,6 +1,8 @@
 import type { AuthorContext } from '$lib/db/model';
 import type { DailySopAssessment, DailySopDraft } from '../domain/daily-sop';
 
+export type DailySopAuthorContext = AuthorContext & { assessorName?: string };
+
 export interface DailySopRepository {
 	list(shelterCode: string): Promise<DailySopAssessment[]>;
 	read(id: string): Promise<DailySopAssessment | null>;
@@ -8,7 +10,7 @@ export interface DailySopRepository {
 	createCompleted(
 		draft: DailySopDraft,
 		date: string,
-		ctx: AuthorContext
+		ctx: DailySopAuthorContext
 	): Promise<
 		| { kind: 'created'; assessment: DailySopAssessment }
 		| { kind: 'duplicate'; assessment: DailySopAssessment }
@@ -16,6 +18,6 @@ export interface DailySopRepository {
 	updateCompleted(
 		existing: DailySopAssessment,
 		draft: DailySopDraft,
-		ctx: AuthorContext
+		ctx: DailySopAuthorContext
 	): Promise<DailySopAssessment>;
 }

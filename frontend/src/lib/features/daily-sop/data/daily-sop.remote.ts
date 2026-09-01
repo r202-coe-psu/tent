@@ -1,7 +1,7 @@
 import { ConflictError } from '$lib/utils/errors';
 import { getDoc, allDocsByType, putDocStrict } from '$lib/db/couch-db';
 import { getShelterDb } from '$lib/db/shelter';
-import { makeDoc, type AuthorContext } from '$lib/db/model';
+import { makeDoc } from '$lib/db/model';
 import {
 	DAILY_SOP_DOCUMENT_TYPE,
 	DAILY_SOP_QUESTIONS,
@@ -15,7 +15,7 @@ import {
 	type DailySopAssessment,
 	type DailySopDraft
 } from '../domain/daily-sop';
-import type { DailySopRepository } from './daily-sop.repository';
+import type { DailySopAuthorContext, DailySopRepository } from './daily-sop.repository';
 
 export const DAILY_SOP_ID_PREFIX = `${DAILY_SOP_DOCUMENT_TYPE}:`;
 
@@ -50,7 +50,7 @@ export class DailySopRemoteRepository implements DailySopRepository {
 	async createCompleted(
 		draft: DailySopDraft,
 		date: string,
-		ctx: AuthorContext
+		ctx: DailySopAuthorContext
 	): Promise<
 		| { kind: 'created'; assessment: DailySopAssessment }
 		| { kind: 'duplicate'; assessment: DailySopAssessment }
@@ -65,7 +65,7 @@ export class DailySopRemoteRepository implements DailySopRepository {
 		const body = {
 			assessment_date: date,
 			assessed_at: assessedAt,
-			assessor_name: ctx.createdBy,
+			assessor_name: ctx.assessorName ?? ctx.createdBy,
 			status: assessmentStatusFor(draft),
 			progress_percent: summary.progressPercent,
 			pass_percent: summary.passPercent,
@@ -106,7 +106,7 @@ export class DailySopRemoteRepository implements DailySopRepository {
 	async updateCompleted(
 		existing: DailySopAssessment,
 		draft: DailySopDraft,
-		ctx: AuthorContext
+		ctx: DailySopAuthorContext
 	): Promise<DailySopAssessment> {
 		if (ctx.shelterCode !== existing.shelter_code) {
 			throw new Error('Daily SOP cannot be edited outside its shelter scope.');

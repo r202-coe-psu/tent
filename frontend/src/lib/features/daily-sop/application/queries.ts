@@ -1,6 +1,6 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-import type { AuthorContext } from '$lib/db/model';
 import { dailySopRepository } from '../data/daily-sop.remote';
+import type { DailySopAuthorContext } from '../data/daily-sop.repository';
 import type { DailySopAssessment, DailySopDraft } from '../domain/daily-sop';
 
 export const dailySopKeys = {
@@ -35,7 +35,7 @@ export const useCreateDailySop = () => {
 		}: {
 			draft: DailySopDraft;
 			date: string;
-			ctx: AuthorContext;
+			ctx: DailySopAuthorContext;
 		}) => dailySopRepository().createCompleted(draft, date, ctx),
 		onSuccess: (result, variables) => {
 			mergeIntoHistory(queryClient, variables.ctx.shelterCode, result.assessment);
@@ -53,7 +53,7 @@ export const useUpdateDailySop = () => {
 		}: {
 			existing: DailySopAssessment;
 			draft: DailySopDraft;
-			ctx: AuthorContext;
+			ctx: DailySopAuthorContext;
 		}) => dailySopRepository().updateCompleted(existing, draft, ctx),
 		onSuccess: (assessment) => {
 			mergeIntoHistory(queryClient, assessment.shelter_code, assessment);
