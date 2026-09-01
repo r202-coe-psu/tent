@@ -99,19 +99,20 @@ describe('item_id survives the round trip', () => {
 });
 
 /**
- * The tracking page decides whether to show the donor's check-in QR from this rule
- * (owner's call, 2026-09-01: from `pending_review`, not only after approval — the
- * wizard already handed them one at booking). Asking one predicate means a new
- * terminal status cannot forget to take the pass away.
+ * "Is this booking finished with?" — one predicate for the whole tracking surface, so a
+ * new terminal status cannot be forgotten by a screen that lists them by hand.
+ *
+ * The QR itself is NOT gated on this: CR-052 §1.4 issues the donor's check-in pass only
+ * after staff approve, so the tracking page asks for `verifying` specifically.
  */
-describe('isTerminalDonationStatus (drives the tracking QR)', () => {
-	it('is false while a drop-off is still ahead — the QR stays on screen', () => {
+describe('isTerminalDonationStatus', () => {
+	it('is false while the booking still owes the shelter goods', () => {
 		for (const status of ['declared', 'pending_review', 'verifying']) {
 			expect(isTerminalDonationStatus(status)).toBe(false);
 		}
 	});
 
-	it('is true once nothing more will arrive — the QR goes away', () => {
+	it('is true once nothing more will arrive', () => {
 		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
 			expect(isTerminalDonationStatus(status)).toBe(true);
 		}

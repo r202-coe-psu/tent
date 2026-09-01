@@ -27,7 +27,6 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
-		isTerminalDonationStatus,
 		CancelDonationDialog,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
@@ -57,23 +56,21 @@
 	const status = $derived(donation?.status ?? '');
 
 	/**
-	 * The QR is the donor's check-in pass, so it is on screen for exactly as long as
-	 * there is a drop-off left to make — `declared`, `pending_review`, `verifying` —
-	 * and gone the moment the booking reaches a terminal status.
+	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
+	 * อัตโนมัติทุกกรณี": a booking gets no check-in pass until staff have reviewed it.
+	 * So the QR appears at `verifying` (approved, goods still to come) and nowhere
+	 * earlier — which is exactly what the back-office button "อนุมัติรับ (Generate QR)"
+	 * promises, and what the wizard's ticket says while it waits.
 	 *
-	 * Two things this fixes:
+	 * It is NOT shown at `received` either: the caption asks the donor to bring the
+	 * goods, which read as an outstanding instruction under a line saying staff had
+	 * already shelved them.
 	 *
-	 * · It used to include `received`, so the caption "show this to staff when you bring
-	 *   the goods" sat directly under the line saying staff had already shelved them.
-	 * · CR-052 §2.6 gated it on approval, but the wizard's success ticket hands the
-	 *   donor a QR the moment they book (`pending_review`) — so coming back to this page
-	 *   made the pass they already had disappear. Owner's call, 2026-09-01: the tracking
-	 *   page shows it from `pending_review` too.
-	 *
-	 * Asked through `isTerminalDonationStatus` rather than listing statuses again, so a
-	 * new terminal status cannot forget to take the pass away.
+	 * (Briefly shown from `pending_review` on 2026-09-01 — reverted the same day: it
+	 * contradicts §1.4, and the wizard ticket only appeared to do the same because of a
+	 * client-side heuristic that was itself the violation.)
 	 */
-	const showQr = $derived(!!status && !isTerminalDonationStatus(status));
+	const showQr = $derived(status === 'verifying');
 	const isReceived = $derived(status === 'received');
 	let qrCodeUrl = $state('');
 

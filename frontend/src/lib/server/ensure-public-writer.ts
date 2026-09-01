@@ -16,11 +16,7 @@ export type CouchReq = (
 	body?: unknown
 ) => Promise<{ status: number; data: unknown }>;
 
-export type EnsurePublicWriterOutcome =
-	| 'skipped'
-	| 'created'
-	| 'already_exists'
-	| 'would_create';
+export type EnsurePublicWriterOutcome = 'skipped' | 'created' | 'already_exists' | 'would_create';
 
 export interface EnsurePublicWriterResult {
 	outcome: EnsurePublicWriterOutcome;
@@ -70,7 +66,11 @@ export async function ensurePublicWriter(
 		};
 	}
 
-	const { status } = await couchReq('PUT', path, buildPublicWriterUserBody(creds.user, creds.password));
+	const { status } = await couchReq(
+		'PUT',
+		path,
+		buildPublicWriterUserBody(creds.user, creds.password)
+	);
 	if (status !== 201 && status !== 409) {
 		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
 	}
