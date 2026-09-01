@@ -14,6 +14,7 @@ affects:
   - docs/data/schema.md §2.21 — `daily_sop_assessment` schema_v 1
   - docs/features/daily-sop-assessment-flow.md
   - frontend/src/lib/features/daily-sop/
+  - frontend/src/routes/api/v1/me/+server.ts — protected current-user display profile
   - frontend/src/routes/(protected)/back-office/dailysop/
   - frontend/src/routes/(protected)/back-office/+layout.svelte — route-scoped connection status
   - frontend/src/lib/components/backoffice-navbar/static.ts
@@ -45,8 +46,9 @@ enum, invariant และ CouchDB write validation ซึ่งไม่ใช�
 - **Schema version:** CR ยังเป็น `proposed` และไม่มี schema ที่ release แล้ว จึงกำหนด shape สุดท้าย
   (`answered`, Lifeline `null`, `InProgress`, metadata รายข้อ) เป็น `schema_v: 1` ตั้งแต่ต้น; ไม่ต้อง
   migrate. หากเปลี่ยน persisted shape หลัง approval/release ต้อง bump ตาม Policy §4.
-- **Stable-core boundary:** CR นี้ไม่เปลี่ยน common envelope, auth/session, sync topology หรือ `_id`
-  pattern; ถ้าต้องแตะส่วนใดส่วนหนึ่งภายหลัง ต้องเปิด review/CR เพิ่มก่อนตาม Policy §1.
+- **Auth profile boundary:** เพิ่มเฉพาะ protected read endpoint `/api/v1/me` สำหรับคืน
+  `name` และ `display_name` ของ session ปัจจุบัน ไม่เปิดรายชื่อผู้ใช้หรือข้อมูลบัญชีอื่น.
+  ไม่มีการเปลี่ยน common envelope, สิทธิ์ session, sync topology หรือ `_id` pattern.
 
 ## สรุป (TL;DR)
 
@@ -90,14 +92,15 @@ Design ต้องการให้เจ้าหน้าที่ศูน�
 | **7. Seed/operations**            | เพิ่ม seed 3 รายการตาม Design และคำสั่งลบเฉพาะ deterministic seed IDs                            | ห้ามใช้ query ลบ `daily_sop_assessment` ทั้ง type เพราะอาจลบข้อมูลจริงของผู้ใช้                                                                                                              |
 | **8. Test/CI**                    | เพิ่ม domain/repository/validator และ E2E workflow tests                                         | E2E แยกจาก Resource Dashboard smoke test เพื่อแยก regression; ต้องทดสอบด้วย seed ที่ตกลงกัน                                                                                                  |
 | **9. Connection presentation**    | Daily SOP header อ่าน connected/connecting/disconnected จาก `endpointStore`                      | เปลี่ยนเฉพาะ route นี้; ไม่เพิ่ม local queue, replication หรือเปลี่ยน sync protocol                                                                                                          |
-| **10. Documentation/governance**  | เพิ่ม schema, feature flow และ CR นี้                                                            | CR คงสถานะ `proposed`; ไม่เพิ่มรายการใน `_index.md` ตามคำขอของเจ้าของงาน                                                                                                                     |
+| **10. Current-user profile read** | เพิ่ม `/api/v1/me` เพื่อคืนชื่อแสดงผลของ session ปัจจุบัน                                      | คืนเฉพาะ `name`/`display_name`; ใช้ session cookie และไม่อนุญาตอ่านบัญชีผู้อื่น                                                                                                                |
+| **11. Documentation/governance**  | เพิ่ม schema, feature flow และ CR นี้                                                            | CR คงสถานะ `proposed`; ไม่เพิ่มรายการใน `_index.md` ตามคำขอของเจ้าของงาน                                                                                                                     |
 
 ## สิ่งที่ไม่กระทบ (explicit non-impact)
 
 - ไม่เปลี่ยน component, domain, repository, route หรือ data flow ของ Resource Dashboard
 - ไม่เปลี่ยน T-31/T-32, resource ratio, calculation engine, daily calculation หรือ stock ledger
 - ไม่เปลี่ยน common envelope, authentication/session core, sync protocol หรือ database topology
-- ไม่เพิ่ม public endpoint, external API, scheduler, notification หรือ approval workflow
+- ไม่เพิ่ม public endpoint, external API, scheduler, notification หรือ approval workflow; `/api/v1/me` เป็น protected service endpoint สำหรับ session ของตนเองเท่านั้น
 - ไม่เพิ่ม N/A, Skip, reason, evidence, note, attachment หรือ metric dashboard; `InProgress` เป็นสถานะเอกสาร ไม่ใช่สถานะคำตอบเพิ่ม
 - ไม่ลบ assessment ผ่านผู้ใช้; การแก้ไขทำได้ผ่าน `จัดการ` เท่านั้นและต้องคง ID/ศูนย์/วัน/metadata การสร้าง
 - การลบ seed เป็น operation เฉพาะของ seed script เท่านั้น และไม่แตะรายการที่ผู้ใช้สร้างเอง
@@ -164,7 +167,8 @@ Lifelines ทั้ง 4 รายการได้ด้วยตัวเล�
 เพราะเป็นการแก้ผลเดิม ไม่ใช่การสร้าง Completed รอบใหม่
 
 ทุก control เก็บ `checked_by` และ `checked_at` รายข้อ เมื่อผู้ใช้เลือกสถานะใหม่ให้ประทับ username
-จาก CouchDB session และเวลาปัจจุบันเฉพาะข้อนั้น ข้อที่ไม่ได้เปลี่ยนต้องรักษา metadata เดิม เอกสาร
+จาก CouchDB session และเวลาปัจจุบันเฉพาะข้อนั้น ข้อที่ไม่ได้เปลี่ยนต้องรักษา metadata เดิม ส่วนคอลัมน์
+ผู้ประเมินใช้ `display_name` ของ account เมื่อมีค่า และ fallback เป็น username; audit ยังคงใช้ username เสมอ เอกสาร
 development เก่าที่ยังไม่มีสอง field นี้ใช้ `assessor_name`/`assessed_at` เป็น read fallback และจะได้
 metadata ครบเมื่อถูกบันทึกแก้ไขผ่าน UI รุ่นนี้
 
