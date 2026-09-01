@@ -903,7 +903,7 @@ Stock snapshot ชุดเดียวกันถูกใช้ทั้ง C
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(7 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` |
+| `master_type` | enum(9 types) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` \| `shelter_type` \| `volunteer_skills` |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?}] | req | ≥1 item; `code` = ULID (`item_{ulid}`) สำหรับ item ที่สร้างใหม่ — immutable; item เดิม (seed) ที่เป็น slug/semantic code (เช่น `municipality_zone` เดิม `zone_1`) ยังใช้ได้ต่อ ไม่ rewrite; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
 
