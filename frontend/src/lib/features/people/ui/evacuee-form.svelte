@@ -118,11 +118,29 @@
 	const checkInMutation = useCheckInEvacuee();
 
 	let activeDraftEvacuee = $state<Evacuee | null>(null);
+	let formRoot: HTMLDivElement | undefined;
+
+	function scrollFormToTop() {
+		let el: HTMLElement | null = formRoot ?? null;
+		while (el) {
+			const style = getComputedStyle(el);
+			if (
+				(style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+				el.scrollHeight > el.clientHeight
+			) {
+				el.scrollTo({ top: 0, behavior: 'instant' });
+				return;
+			}
+			el = el.parentElement;
+		}
+		window.scrollTo({ top: 0, behavior: 'instant' });
+	}
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
 		if (next === 3) registrationDraftActive = true;
 		step = next;
+		scrollFormToTop();
 	}
 
 	function handleSelectDraft(draft: Evacuee) {
@@ -422,192 +440,194 @@
 	}
 </script>
 
-<!-- ── Step progress ──────────────────────────────────────────────────────────── -->
-<div class="mb-6 space-y-3">
-	<div class="sm:hidden">
-		<p class="text-xs font-medium text-muted-foreground">{t.stepOf(step, 6)}</p>
-		<h2 class="text-lg font-semibold">{currentStep.title}</h2>
-		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
-		<div
-			class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
-			role="progressbar"
-			aria-valuenow={step}
-			aria-valuemin={1}
-			aria-valuemax={6}
-			aria-label={t.progressAria}
-		>
-			<div
-				class="h-full rounded-full bg-primary transition-all"
-				style:width={`${(step / 6) * 100}%`}
-			></div>
-		</div>
-	</div>
-
-	<div class="hidden sm:block">
-		<div class="mb-4 flex items-start">
-			{#each STEPS as meta, i (meta.short)}
-				{@const s = i + 1}
-				<div class="flex flex-1 flex-col items-center gap-2">
-					<div class="flex w-full items-center">
-						<div
-							class="h-0.5 flex-1 transition-colors {s === 1
-								? 'invisible'
-								: step >= s
-									? 'bg-green-500'
-									: 'bg-border'}"
-						></div>
-						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
-							s
-								? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
-								: step > s
-									? 'bg-green-600 text-white'
-									: 'bg-muted text-muted-foreground'}"
-							aria-current={step === s ? 'step' : undefined}
-						>
-							{step > s ? '✓' : s}
-						</div>
-						<div
-							class="h-0.5 flex-1 transition-colors {s === 6
-								? 'invisible'
-								: step > s
-									? 'bg-green-500'
-									: 'bg-border'}"
-						></div>
-					</div>
-					<span
-						class="text-center text-xs leading-tight font-medium {step === s
-							? 'text-foreground'
-							: step > s
-								? 'text-green-700'
-								: 'text-muted-foreground'}"
-					>
-						{meta.short}
-					</span>
-				</div>
-			{/each}
-		</div>
-		<div>
-			<h2 class="text-xl font-semibold">{currentStep.title}</h2>
+<div bind:this={formRoot}>
+	<!-- ── Step progress ──────────────────────────────────────────────────────────── -->
+	<div class="mb-6 space-y-3">
+		<div class="sm:hidden">
+			<p class="text-xs font-medium text-muted-foreground">{t.stepOf(step, 6)}</p>
+			<h2 class="text-lg font-semibold">{currentStep.title}</h2>
 			<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+			<div
+				class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+				role="progressbar"
+				aria-valuenow={step}
+				aria-valuemin={1}
+				aria-valuemax={6}
+				aria-label={t.progressAria}
+			>
+				<div
+					class="h-full rounded-full bg-primary transition-all"
+					style:width={`${(step / 6) * 100}%`}
+				></div>
+			</div>
+		</div>
+
+		<div class="hidden sm:block">
+			<div class="mb-4 flex items-start">
+				{#each STEPS as meta, i (meta.short)}
+					{@const s = i + 1}
+					<div class="flex flex-1 flex-col items-center gap-2">
+						<div class="flex w-full items-center">
+							<div
+								class="h-0.5 flex-1 transition-colors {s === 1
+									? 'invisible'
+									: step >= s
+										? 'bg-green-500'
+										: 'bg-border'}"
+							></div>
+							<div
+								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
+								s
+									? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
+									: step > s
+										? 'bg-green-600 text-white'
+										: 'bg-muted text-muted-foreground'}"
+								aria-current={step === s ? 'step' : undefined}
+							>
+								{step > s ? '✓' : s}
+							</div>
+							<div
+								class="h-0.5 flex-1 transition-colors {s === 6
+									? 'invisible'
+									: step > s
+										? 'bg-green-500'
+										: 'bg-border'}"
+							></div>
+						</div>
+						<span
+							class="text-center text-xs leading-tight font-medium {step === s
+								? 'text-foreground'
+								: step > s
+									? 'text-green-700'
+									: 'text-muted-foreground'}"
+						>
+							{meta.short}
+						</span>
+					</div>
+				{/each}
+			</div>
+			<div>
+				<h2 class="text-xl font-semibold">{currentStep.title}</h2>
+				<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+			</div>
 		</div>
 	</div>
-</div>
 
-{#if zoneError}
-	<Alert.Root variant="destructive" class="mb-4 border-destructive/40 bg-destructive/5">
-		<CircleAlert class="size-4" />
-		<Alert.Title class="font-semibold">{t.zoneErrorTitle}</Alert.Title>
-		<Alert.Description class="space-y-3">
-			<p>{zoneError}</p>
-			<Button type="button" variant="outline" size="sm" onclick={() => (zoneError = null)}>
-				{t.closeAlert}
-			</Button>
-		</Alert.Description>
-	</Alert.Root>
-{/if}
-
-{#if registrationDraftActive}
-	<div class:hidden={step !== 3}>
-		<RegistrationSection
-			onsubmit={handleRegistrationSubmit}
-			pending={isSubmittingEvacuee || pending}
-			onBack={() => goToStep(2)}
-			hasSymptomsSelected={selectedSymptoms.size > 0}
-			initialInput={registrationDraft}
-			ondraftchange={(input) => (registrationDraft = structuredClone(input))}
-			bind:facePhotoUrl={registrationFacePhotoUrl}
-		/>
-	</div>
-{/if}
-
-{#if step === 1}
-	<SearchSection onNext={() => goToStep(2)} onSelectDraft={handleSelectDraft} />
-{:else if step === 2}
-	<EwarSymptomSection
-		bind:isHealthy
-		{selectedSymptoms}
-		onBack={() => goToStep(1)}
-		onNext={() => goToStep(3)}
-	/>
-{:else if step === 4}
-	<div class="space-y-6">
-		<Alert.Root class="border-primary/30 bg-primary/5">
+	{#if zoneError}
+		<Alert.Root variant="destructive" class="mb-4 border-destructive/40 bg-destructive/5">
 			<CircleAlert class="size-4" />
-			<Alert.Title class="font-semibold">{t.householdAlertTitle}</Alert.Title>
-			<Alert.Description>
-				{t.householdAlertDesc}
+			<Alert.Title class="font-semibold">{t.zoneErrorTitle}</Alert.Title>
+			<Alert.Description class="space-y-3">
+				<p>{zoneError}</p>
+				<Button type="button" variant="outline" size="sm" onclick={() => (zoneError = null)}>
+					{t.closeAlert}
+				</Button>
 			</Alert.Description>
 		</Alert.Root>
+	{/if}
 
-		{#if householdDataLoading}
-			<div class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-				<Loader2 class="size-4 animate-spin" />
-				{t.householdLoading}
-			</div>
-		{:else}
-			{#if householdDataError}
-				<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
-					<CircleAlert class="size-4" />
-					<Alert.Title class="font-semibold">{t.householdLoadErrorTitle}</Alert.Title>
-					<Alert.Description class="space-y-3">
-						<p>{t.householdLoadErrorDesc}</p>
-						<Button type="button" variant="outline" size="sm" onclick={retryHouseholdData}>
-							{t.retry}
-						</Button>
-					</Alert.Description>
-				</Alert.Root>
+	{#if registrationDraftActive}
+		<div class:hidden={step !== 3}>
+			<RegistrationSection
+				onsubmit={handleRegistrationSubmit}
+				pending={isSubmittingEvacuee || pending}
+				onBack={() => goToStep(2)}
+				hasSymptomsSelected={selectedSymptoms.size > 0}
+				initialInput={registrationDraft}
+				ondraftchange={(input) => (registrationDraft = structuredClone(input))}
+				bind:facePhotoUrl={registrationFacePhotoUrl}
+			/>
+		</div>
+	{/if}
+
+	{#if step === 1}
+		<SearchSection onNext={() => goToStep(2)} onSelectDraft={handleSelectDraft} />
+	{:else if step === 2}
+		<EwarSymptomSection
+			bind:isHealthy
+			{selectedSymptoms}
+			onBack={() => goToStep(1)}
+			onNext={() => goToStep(3)}
+		/>
+	{:else if step === 4}
+		<div class="space-y-6">
+			<Alert.Root class="border-primary/30 bg-primary/5">
+				<CircleAlert class="size-4" />
+				<Alert.Title class="font-semibold">{t.householdAlertTitle}</Alert.Title>
+				<Alert.Description>
+					{t.householdAlertDesc}
+				</Alert.Description>
+			</Alert.Root>
+
+			{#if householdDataLoading}
+				<div class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+					<Loader2 class="size-4 animate-spin" />
+					{t.householdLoading}
+				</div>
+			{:else}
+				{#if householdDataError}
+					<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
+						<CircleAlert class="size-4" />
+						<Alert.Title class="font-semibold">{t.householdLoadErrorTitle}</Alert.Title>
+						<Alert.Description class="space-y-3">
+							<p>{t.householdLoadErrorDesc}</p>
+							<Button type="button" variant="outline" size="sm" onclick={retryHouseholdData}>
+								{t.retry}
+							</Button>
+						</Alert.Description>
+					</Alert.Root>
+				{/if}
+
+				<HouseholdRegisterForm
+					allEvacuees={combinedEvacuees}
+					households={householdsQuery.data ?? []}
+					initialAddress={newHouseholdAddress}
+					onsubmit={handleHouseholdRegisterSubmit}
+					onselect={handleHouseholdSelect}
+					pending={isSubmittingHousehold}
+					bind:showNewHouseholdForm={isCreatingNewHousehold}
+				/>
 			{/if}
 
-			<HouseholdRegisterForm
-				allEvacuees={combinedEvacuees}
-				households={householdsQuery.data ?? []}
-				initialAddress={newHouseholdAddress}
-				onsubmit={handleHouseholdRegisterSubmit}
-				onselect={handleHouseholdSelect}
-				pending={isSubmittingHousehold}
-				bind:showNewHouseholdForm={isCreatingNewHousehold}
-			/>
-		{/if}
-
-		<div
-			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
-		>
-			{#if !isCreatingNewHousehold}
+			<div
+				class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+			>
+				{#if !isCreatingNewHousehold}
+					<Button
+						type="button"
+						variant="default"
+						class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
+						disabled={isSubmittingHousehold || !selectedHousehold}
+						onclick={() => goToStep(5)}
+					>
+						{t.nextAssetsPets}
+					</Button>
+				{/if}
 				<Button
 					type="button"
-					variant="default"
+					variant="ghost"
+					onclick={() => goToStep(3)}
 					class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
-					disabled={isSubmittingHousehold || !selectedHousehold}
-					onclick={() => goToStep(5)}
 				>
-					{t.nextAssetsPets}
+					{t.back}
 				</Button>
-			{/if}
-			<Button
-				type="button"
-				variant="ghost"
-				onclick={() => goToStep(3)}
-				class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
-			>
-				{t.back}
-			</Button>
+			</div>
 		</div>
-	</div>
-{:else if step === 5}
-	<EvacueePetAssetVehicle
-		household={selectedHousehold}
-		pending={isSubmittingHousehold}
-		onBack={() => goToStep(4)}
-		onNext={handleFinalSubmit}
-	/>
-{:else if step === 6}
-	<EvacueeSelectZone
-		evacuee={newlyRegisteredEvacuee}
-		pending={checkInMutation.isPending}
-		onBack={() => {
-			goToStep(5);
-		}}
-		onSubmit={handleZoneSubmit}
-	/>
-{/if}
+	{:else if step === 5}
+		<EvacueePetAssetVehicle
+			household={selectedHousehold}
+			pending={isSubmittingHousehold}
+			onBack={() => goToStep(4)}
+			onNext={handleFinalSubmit}
+		/>
+	{:else if step === 6}
+		<EvacueeSelectZone
+			evacuee={newlyRegisteredEvacuee}
+			pending={checkInMutation.isPending}
+			onBack={() => {
+				goToStep(5);
+			}}
+			onSubmit={handleZoneSubmit}
+		/>
+	{/if}
+</div>
