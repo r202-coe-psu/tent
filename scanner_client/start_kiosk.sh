@@ -1,4 +1,5 @@
 #!/bin/bash
+trap "exit" INT TERM
 # ==============================================================================
 # SmartShelter Kiosk Startup Script (Optimized for Raspberry Pi OS / Labwc / Wayland)
 # ==============================================================================
