@@ -184,14 +184,15 @@ class ScannerClientManager:
             "--disable-pinch",
             "--overscroll-history-navigation=0",
             "--check-for-update-interval=31536000",
-            "--ozone-platform-hint=auto",  # Essential for Wayland (Labwc / Wayfire) on Raspberry Pi OS
+            "--ozone-platform-hint=auto",   # Essential for Wayland (Labwc / Wayfire) on Raspberry Pi OS
+            "--disable-dev-shm-usage",     # Prevent shared memory crashes on Raspberry Pi ARM64
+            "--no-sandbox",                # Prevent sandbox privilege crashes in kiosk environments
         ]
         if not self.is_debug:
-            # Fullscreen Kiosk Mode (do not constrain window size, let it fit native screen)
+            # Fullscreen Kiosk Mode (match ghosa: kiosk + start-maximized without conflicting start-fullscreen)
             args = base_args + [
                 "--kiosk",
                 "--start-maximized",
-                "--start-fullscreen",
             ]
         else:
             # Windowed Debug Mode (e.g. for desktop development)
@@ -223,6 +224,12 @@ class ScannerClientManager:
 
             self.context = context
             self.page = context.pages[0] if context.pages else await context.new_page()
+
+            # Attach event listeners to catch crashes or closures
+            context.on("close", lambda: logger.warning("Browser context closed."))
+            self.page.on("crash", lambda p: logger.error("💥 Browser page crashed!"))
+            self.page.on("pageerror", lambda err: logger.error(f"💥 Browser runtime error: {err}"))
+            self.page.on("close", lambda p: logger.info("Browser page was closed."))
 
             try:
                 await self.card_reading_loop()
