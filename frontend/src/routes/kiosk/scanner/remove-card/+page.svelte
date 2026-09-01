@@ -46,13 +46,13 @@
 		<div class="relative flex items-start justify-between">
 			<!-- Connecting Background Track Lines -->
 			<div
-				class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 {isWarning
+				class="absolute top-5 right-14 left-14 h-1 -translate-y-1/2 {isWarning
 					? 'bg-amber-400'
-					: 'bg-emerald-500'} sm:top-6"
+					: 'bg-emerald-500'} sm:top-6 sm:right-16 sm:left-16"
 			></div>
 
 			<!-- Step 1: Completed -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-full {isWarning
 						? 'bg-amber-500 ring-amber-100'
@@ -73,7 +73,7 @@
 			</div>
 
 			<!-- Step 2: Completed -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-full {isWarning
 						? 'bg-amber-500 ring-amber-100'
@@ -94,7 +94,7 @@
 			</div>
 
 			<!-- Step 3: Active / Remove Card -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="relative flex h-10 w-10 items-center justify-center rounded-full {isWarning
 						? 'bg-amber-500 shadow-amber-500/30 ring-amber-200'

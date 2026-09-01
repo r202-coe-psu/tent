@@ -20,14 +20,12 @@
 	<div class="mx-auto w-full max-w-3xl px-2 sm:px-4">
 		<div class="relative flex items-start justify-between">
 			<!-- Connecting Background Track Lines -->
-			<div class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 bg-slate-300 sm:top-6"></div>
-			<!-- Active Progress Line (from Step 1 to half) -->
 			<div
-				class="absolute top-5 left-10 h-1 w-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-slate-300 sm:top-6"
+				class="absolute top-5 right-14 left-14 h-1 -translate-y-1/2 bg-slate-300 sm:top-6 sm:right-16 sm:left-16"
 			></div>
 
 			<!-- Step 1: Current / Active -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-mono text-sm font-black text-white shadow-lg ring-4 shadow-blue-500/30 ring-blue-100 sm:h-12 sm:w-12 sm:text-base"
 				>
@@ -40,7 +38,7 @@
 			</div>
 
 			<!-- Step 2: Pending -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-300 bg-white font-mono text-sm font-bold text-slate-500 shadow-sm sm:h-12 sm:w-12 sm:text-base"
 				>
@@ -58,7 +56,7 @@
 			</div>
 
 			<!-- Step 3: Pending -->
-			<div class="relative z-10 flex flex-col items-center">
+			<div class="relative z-10 flex w-28 flex-col items-center sm:w-32">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-300 bg-white font-mono text-sm font-bold text-slate-500 shadow-sm sm:h-12 sm:w-12 sm:text-base"
 				>
