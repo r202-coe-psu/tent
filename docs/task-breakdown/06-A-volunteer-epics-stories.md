@@ -13,26 +13,25 @@ inputDocuments:
   - docs/prd/phase-r2-foundation.md
   - docs/prd/phase-r4-integration-handover.md
   - docs/changes/CR-041-module-a-volunteer-job-board.md
+  - docs/changes/CR-104-volunteer-backoffice-and-user-management-v10.md
   - docs/features/volunteer-job-board-flow.md
   - docs/task-breakdown/06-A-volunteer.md
   - docs/data/schema.md
-  - docs/changes/CR-002-registration-staff-affiliation-tags.md
-  - docs/changes/CR-005-public-portal-landing-public-metrics.md
   - frontend/CONTRIBUTING.md
   - frontend/CONVENTIONS.md
 status: stories-draft-complete
 module: A
-source_cr: CR-041
+source_cr: CR-104
 created: 2026-07-22
-updated: 2026-08-21
+updated: 2026-09-01 # Aligned with CR-104
 ---
 
-# Module A (CR-041) — Epic Breakdown
+# Module A (CR-104) — Epic Breakdown
 
 ## Overview
 
-Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR-041](../changes/CR-041-module-a-volunteer-job-board.md) (`approved`) ที่ขยาย FR-42/43 จาก PRD R3  
-แมปกับบอร์ดโปรเจกต์: **T-28 / T-29 (+ task ย่อย)** · Team A · Phase R3
+Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR-104 — Volunteer Backoffice & User Management V10](../changes/CR-104-volunteer-backoffice-and-user-management-v10.md) (`proposed`) ที่รวมและยกระดับ CR-041, CR-092, CR-096, CR-101, CR-102, CR-103  
+แมปกับบอร์ดโปรเจกต์: **T-28 / T-29** · Team A · Phase R3
 
 มติผลิตภัณฑ์และ follow-ups ปิดครบแล้ว — Epic 1–4 มี stories + AC ครบ · ส่วนท้ายเป็น handoff ให้ dev
 

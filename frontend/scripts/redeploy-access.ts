@@ -14,8 +14,9 @@
  *
  * Needs: COUCHDB_ADMIN_URL in frontend/.env
  *   Format: http://admin:<password>@<host>:<port>
- * Optional: COUCHDB_PUBLIC_WRITER_URL — when set, its username is added to each
- *   shelter's `_security.members.names` (skipped with a warning when unset).
+ * Optional: COUCHDB_PUBLIC_WRITER_URL — when set, ensures the `_users` doc exists
+ *   (idempotent; skipped when unset) and adds its username to each shelter's
+ *   `_security.members.names`.
  *
  * Runs under plain `tsx` (not the SvelteKit runtime), so this script must NOT
  * import `$lib/server/couch-admin` / `shelters.admin` — those pull `$env` and
@@ -28,6 +29,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { couchUserFromUrl } from '$lib/server/couch-credentials';
+import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import {
 	buildValidateDocUpdate,
@@ -286,19 +288,42 @@ async function deployReferralMangoIndexes(
 
 // ─── main ───────────────────────────────────────────────────────────────────
 
+function logPublicWriterEnsure(
+	result: Awaited<ReturnType<typeof ensurePublicWriter>>
+): void {
+	switch (result.outcome) {
+		case 'skipped':
+			console.log('   public writer: ⚠️  COUCHDB_PUBLIC_WRITER_URL unset — skipping user + grant');
+			return;
+		case 'created':
+			console.log(`   public writer: ✓ _users "${result.username}" created`);
+			return;
+		case 'already_exists':
+			console.log(`   public writer: ✓ _users "${result.username}" already exists`);
+			return;
+		case 'would_create':
+			console.log(`   public writer: would create _users "${result.username}"`);
+			return;
+	}
+}
+
 async function main() {
 	console.log('🔄 Redeploy _design/access + referral Mango indexes + public writer grant');
 	console.log(`   mode: ${DRY_RUN ? 'DRY-RUN (pass --write --confirm to apply)' : 'WRITE'}`);
+
+	const writerUrl = process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL;
+	const writerEnsure = await ensurePublicWriter(couchReq, writerUrl, { dryRun: DRY_RUN });
+	logPublicWriterEnsure(writerEnsure);
 	if (PUBLIC_WRITER_NAME) {
-		console.log(`   public writer: ${PUBLIC_WRITER_NAME}`);
-	} else {
-		console.log('   public writer: ⚠️  COUCHDB_PUBLIC_WRITER_URL unset — skipping member grant');
+		console.log(`   public writer grant: ${PUBLIC_WRITER_NAME}`);
+	} else if (writerEnsure.outcome !== 'skipped') {
+		console.log('   public writer grant: ⚠️  username could not be parsed from URL');
 	}
 	console.log('');
 
 	const masters = await listShelterMasters();
 	if (masters.length === 0) {
-		console.log('⚠️  No shelter masters in registry — nothing to redeploy');
+		console.log('⚠️  No shelter masters in registry — skipping shelter redeploy');
 		return;
 	}
 

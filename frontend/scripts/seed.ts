@@ -109,6 +109,7 @@ import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/mod
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
+import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
@@ -588,43 +589,17 @@ async function seedUsers(): Promise<void> {
 	await seedPublicWriter();
 }
 
-/**
- * Create the limited-permission public writer used by `putAsPublicWriter`
- * (public booking POST — CR-070/T-71 — and the donation courier PATCH).
- *
- * Roleless on purpose: it is granted per-shelter access as a plain
- * `_security.members.names` entry, so every write still passes through
- * `_design/access` validate_doc_update. Only seeded when
- * `COUCHDB_PUBLIC_WRITER_URL` is configured; local dev without it falls back to
- * admin credentials inside `putAsPublicWriter`.
- */
 async function seedPublicWriter(): Promise<void> {
-	const creds = parseCouchCredentialUrl(
+	const result = await ensurePublicWriter(
+		couchReq,
 		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
 	);
-	if (!creds) {
+	if (result.outcome === 'skipped') {
 		console.log('  – _users: COUCHDB_PUBLIC_WRITER_URL unset — public writer not seeded');
 		return;
 	}
-
-	const { status } = await couchReq(
-		'PUT',
-		`/_users/${USER_PREFIX}${encodeURIComponent(creds.user)}`,
-		{
-			name: creds.user,
-			password: creds.password,
-			display_name: 'Public Writer (BFF)',
-			roles: [],
-			type: 'user',
-			shelter_id: null,
-			affiliation_tags: []
-		}
-	);
-	if (status !== 201 && status !== 409) {
-		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
-	}
 	console.log(
-		`  ✓ _users: public writer "${creds.user}" (${status === 201 ? 'created' : 'already exists'})`
+		`  ✓ _users: public writer "${result.username}" (${result.outcome === 'created' ? 'created' : 'already exists'})`
 	);
 }
 

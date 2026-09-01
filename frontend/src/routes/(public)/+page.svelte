@@ -46,7 +46,13 @@
 	{/if}
 
 	<!-- 2. Hero Section -->
-	<PublicHeroMetrics />
+	<PublicHeroMetrics
+		expectMetrics
+		summary={data.summary}
+		flags={data.flags}
+		lastUpdated={data.lastUpdated}
+		isStale={data.isStale}
+	/>
 
 	<!-- 3. Service Menu and Eligibility Checking -->
 	<section>
