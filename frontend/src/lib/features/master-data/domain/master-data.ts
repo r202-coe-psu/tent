@@ -27,7 +27,8 @@ export const MASTER_DATA_TYPES = [
 	'house_damage',
 	'municipality_zone',
 	'community',
-	'shelter_type'
+	'shelter_type',
+	'volunteer_skills'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -70,6 +71,11 @@ export const HOUSEHOLD_MASTER_TYPES = [
 /** Types shown on the Shelter Config page. */
 export const SHELTER_MASTER_TYPES = ['shelter_type'] as const satisfies readonly MasterDataType[];
 
+/** Types shown on the Volunteer Skills Config page. */
+export const VOLUNTEER_MASTER_TYPES = [
+	'volunteer_skills'
+] as const satisfies readonly MasterDataType[];
+
 /** Thai + English labels for the master_type enum — used in the type list cards. */
 export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
@@ -79,7 +85,8 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)',
 	municipality_zone: 'เขตเทศบาล (Municipality Zone)',
 	community: 'ชุมชน (Community)',
-	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
+	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)',
+	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)'
 };
 
 /** Stable id: global docs use `master_data:{type}`, local docs append the shelter code. */
@@ -104,7 +111,9 @@ export const masterDataItemSchema = z.object({
 	label: z.string().trim().min(1),
 	is_default: z.boolean(),
 	status: z.enum(['active', 'inactive']).default('active'),
-	parent_code: z.string().trim().min(1).optional()
+	parent_code: z.string().trim().min(1).optional(),
+	category: z.enum(['GENERAL', 'CONTROLLED', 'operational', 'controlled']).optional(),
+	description: z.string().trim().optional()
 });
 export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
@@ -421,19 +430,42 @@ export function touchMasterData(doc: MasterData): MasterData {
 
 /** Pure operations on the items array — no I/O, easy to test. */
 export type ItemOp =
-	| { kind: 'add'; label: string; is_default?: boolean }
-	| { kind: 'edit'; code: string; label?: string; is_default?: boolean }
+	| {
+			kind: 'add';
+			label: string;
+			code?: string;
+			is_default?: boolean;
+			category?: 'operational' | 'controlled' | 'GENERAL' | 'CONTROLLED';
+			description?: string;
+	  }
+	| {
+			kind: 'edit';
+			code: string;
+			label?: string;
+			is_default?: boolean;
+			category?: 'operational' | 'controlled' | 'GENERAL' | 'CONTROLLED';
+			description?: string;
+	  }
+	| { kind: 'delete'; code: string }
 	| { kind: 'setDefault'; code: string }
 	| { kind: 'setStatus'; code: string; status: 'active' | 'inactive' };
 
 export function applyItemOp(items: readonly MasterDataItem[], op: ItemOp): MasterDataItem[] {
 	switch (op.kind) {
 		case 'add': {
+			const rawCode = op.code
+				?.trim()
+				.toLowerCase()
+				.replace(/[\s-]+/g, '_');
+			const code =
+				rawCode && /^[a-z0-9_]+$/.test(rawCode) ? rawCode : `item_${ulid().toLowerCase()}`;
 			const newItem: MasterDataItem = {
-				code: `item_${ulid().toLowerCase()}`,
+				code,
 				label: op.label.trim(),
 				is_default: op.is_default ?? false,
-				status: 'active'
+				status: 'active',
+				...(op.category ? { category: op.category } : {}),
+				...(op.description !== undefined ? { description: op.description.trim() } : {})
 			};
 			return enforceOneDefault([...items, newItem], op.is_default ? newItem.code : undefined);
 		}
@@ -449,6 +481,8 @@ export function applyItemOp(items: readonly MasterDataItem[], op: ItemOp): Maste
 			);
 			return enforceOneDefault(updated, op.is_default === true ? op.code : undefined);
 		}
+		case 'delete':
+			return enforceOneDefault(items.filter((i) => i.code !== op.code));
 		case 'setDefault':
 			return enforceOneDefault(items, op.code);
 		case 'setStatus':

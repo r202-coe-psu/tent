@@ -45,6 +45,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import { useMasterData } from '$lib/features/master-data';
 	import { SKILL_MASTER } from '../domain/skill-master';
 	import {
 		walkInVolunteerFormSchema,
@@ -59,6 +60,22 @@
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
+
+	const masterQuery = useMasterData(() => 'volunteer_skills');
+	const skillsList = $derived.by(() => {
+		if (masterQuery.data?.items && masterQuery.data.items.length > 0) {
+			return masterQuery.data.items
+				.filter((i) => i.status !== 'inactive')
+				.map((i) => ({
+					key: i.label,
+					label: i.label,
+					controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
+					description: i.description ?? '',
+					icon: i.category === 'controlled' ? '🩺' : '✨'
+				}));
+		}
+		return SKILL_MASTER;
+	});
 
 	function emptyValues(): WalkInVolunteerFormValues {
 		return { first_name: '', last_name: '', phone: '', email: '', national_id: '' };
@@ -261,7 +278,7 @@
 					<span class="text-xs text-muted-foreground">เลือกแล้ว {selectedSkills.length} ทักษะ</span>
 				</div>
 				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-					{#each SKILL_MASTER.filter((s) => !s.controlled) as skill (skill.key)}
+					{#each skillsList.filter((s) => !s.controlled) as skill (skill.key)}
 						{@const checked = selectedSkills.includes(skill.key)}
 						<button
 							type="button"
@@ -277,7 +294,7 @@
 					{/each}
 				</div>
 
-				{#each SKILL_MASTER.filter((s) => s.controlled) as skill (skill.key)}
+				{#each skillsList.filter((s) => s.controlled) as skill (skill.key)}
 					{@const checked = selectedSkills.includes(skill.key)}
 					<label
 						class="flex cursor-pointer items-start gap-2 rounded-xl border p-3 {checked

@@ -45,6 +45,7 @@
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
 	import { SKILL_MASTER } from '../domain/skill-master';
+	import { useMasterData } from '$lib/features/master-data';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
 	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import {
@@ -74,6 +75,22 @@
 	const queryClient = useQueryClient();
 	const createMutation = useCreateJob(queryClient);
 	const updateMutation = useUpdateJob(queryClient);
+
+	const masterQuery = useMasterData(() => 'volunteer_skills');
+	const skillsList = $derived.by(() => {
+		if (masterQuery.data?.items && masterQuery.data.items.length > 0) {
+			return masterQuery.data.items
+				.filter((i) => i.status !== 'inactive')
+				.map((i) => ({
+					key: i.label,
+					label: i.label,
+					controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
+					description: i.description ?? '',
+					icon: i.category === 'controlled' ? '🩺' : '✨'
+				}));
+		}
+		return SKILL_MASTER;
+	});
 
 	const isEdit = $derived(job !== null);
 
@@ -555,7 +572,7 @@
 					(ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
 				</p>
 				<div class="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-2">
-					{#each SKILL_MASTER as skill (skill.key)}
+					{#each skillsList as skill (skill.key)}
 						{@const checked = $formData.skills_required.includes(skill.key)}
 						<label
 							class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked

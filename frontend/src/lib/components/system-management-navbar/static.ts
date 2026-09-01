@@ -110,7 +110,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						icon: Megaphone,
 						requiresAdmin: true
 					},
-					{ label: '7. อาสาสมัคร', href: null, icon: Users },
+					{
+						label: '7. อาสาสมัคร',
+						href: resolve(`${base}/volunteer-config`),
+						icon: Users,
+						requiresAdmin: true
+					},
 					{ label: '8. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}

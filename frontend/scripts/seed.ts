@@ -810,6 +810,8 @@ type SeedItemDef = {
 	is_default?: boolean;
 	/** `key` of the owning item in `parent_type` (community → municipality zone). */
 	parent_key?: string;
+	category?: 'operational' | 'controlled' | 'GENERAL' | 'CONTROLLED';
+	description?: string;
 };
 
 type MasterTypeDef = {
@@ -916,6 +918,66 @@ const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			{ key: 'na_mueang', label: 'ชุมชนหน้าเมือง', parent_key: 'zone_2' },
 			{ key: 'suan_luang', label: 'ชุมชนสวนหลวง', parent_key: 'zone_3' }
 		]
+	},
+	{
+		type: 'volunteer_skills',
+		items: [
+			{
+				key: 'cooking',
+				label: 'ประกอบอาหาร / ครัวสนาม',
+				category: 'operational',
+				description: 'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง',
+				is_default: true
+			},
+			{
+				key: 'logistics',
+				label: 'ขนย้ายสิ่งของ / พลาธิการ',
+				category: 'operational',
+				description: 'ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก'
+			},
+			{
+				key: 'screening',
+				label: 'คัดกรองและสแกนประวัติ',
+				category: 'operational',
+				description: 'ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น'
+			},
+			{
+				key: 'medical',
+				label: 'การแพทย์ / ปฐมพยาบาล',
+				category: 'controlled',
+				description: 'ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ)'
+			},
+			{
+				key: 'reception',
+				label: 'ประสานงาน / ต้อนรับ',
+				category: 'operational',
+				description: 'ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ'
+			},
+			{
+				key: 'distribution',
+				label: 'แจกจ่ายของยังชีพ',
+				category: 'operational',
+				description: 'แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค'
+			},
+			{
+				key: 'sanitation',
+				label: 'ทำความสะอาด / สุขอนามัย',
+				category: 'operational',
+				description: 'ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์'
+			},
+			{
+				key: 'childcare',
+				label: 'สันทนาการ / ดูแลเด็ก',
+				category: 'operational',
+				description: 'กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ'
+			},
+			{
+				key: 'transport',
+				label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+				category: 'operational',
+				description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ'
+			}
+		]
 	}
 ];
 
@@ -942,7 +1004,11 @@ async function seedMasterData(): Promise<MasterLookup> {
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',
-				...(d.parent_key ? { parent_code: masterCode(master, def.parent_type!, d.parent_key) } : {})
+				...(d.parent_key
+					? { parent_code: masterCode(master, def.parent_type!, d.parent_key) }
+					: {}),
+				...(d.category ? { category: d.category } : {}),
+				...(d.description ? { description: d.description } : {})
 			};
 			resolved[d.key] = item;
 			return item;
@@ -2650,7 +2716,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย แต่งกายสุภาพ สวมรองเท้าหุ้มส้น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['ครัว'],
+				skills_required: ['ประกอบอาหาร / ครัวสนาม'],
 				quota: 8,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2672,7 +2738,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ขนย้ายและจัดเรียงสิ่งของบริจาคเข้าคลัง ต้องยกของหนักได้',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: [],
+				skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
 				quota: 6,
 				// Zero, like every other fixture. A non-zero count here would not show up on
 				// the board: the public plane reads head count from the atomic VolunteerJobSlot
@@ -2699,7 +2765,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ดูแลจุดปฐมพยาบาล คัดกรองอาการเบื้องต้น ต้องมีใบประกอบวิชาชีพ',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['พยาบาล'],
+				skills_required: ['การแพทย์ / ปฐมพยาบาล'],
 				quota: 4,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2724,7 +2790,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน ได้สิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะที่เช็คอินแล้ว',
 				tier: 'staff-capable',
 				required_roles: ['registration_staff'],
-				skills_required: ['คีย์ข้อมูล'],
+				skills_required: ['คัดกรองและสแกนประวัติ'],
 				quota: 3,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2748,7 +2814,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'จัดกิจกรรมให้เด็กในศูนย์พักพิงช่วงเย็น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['สันทนาการ'],
+				skills_required: ['สันทนาการ / ดูแลเด็ก'],
 				quota: 5,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
