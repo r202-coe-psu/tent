@@ -187,6 +187,7 @@ class ScannerClientManager:
             "--ozone-platform-hint=auto",   # Essential for Wayland (Labwc / Wayfire) on Raspberry Pi OS
             "--disable-dev-shm-usage",     # Prevent shared memory crashes on Raspberry Pi ARM64
             "--no-sandbox",                # Prevent sandbox privilege crashes in kiosk environments
+            "--touch-events=enabled",      # Enable touch screen event support
         ]
         if not self.is_debug:
             # Fullscreen Kiosk Mode (match ghosa: kiosk + start-maximized without conflicting start-fullscreen)
