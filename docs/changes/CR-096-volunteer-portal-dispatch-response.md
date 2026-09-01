@@ -1,24 +1,22 @@
 ---
 id: CR-096
-title: Volunteer Access Portal — ตารางงาน, Digital Pass read-only, และตอบรับภารกิจด้วยเบอร์โทร + รหัสที่อ่านทางโทรศัพท์
-status: approved
+title: Volunteer Access Portal — ตารางงาน, Digital Pass read-only, และตอบรับภารกิจด้วยเบอร์โทร + รหัสที่อ่านทางโทรศัพท์ (superseded โดย CR-104)
+status: superseded
+superseded_by: CR-104
+superseded_date: 2026-09-01
+note: รวมเนื้อหาและยกเลิกระบบ Direct Dispatch/Voice 2FA เข้าสู่ CR-104-volunteer-backoffice-and-user-management-v10.md ฉบับสมบูรณ์แล้ว
 date: 2026-08-29
 updated: 2026-09-01
 requested_by: เจ้าของโครงการ (ปิดช่องว่างที่พบระหว่าง implement CR-092)
-decided_by: เจ้าของโครงการ
+decided_by: เจ้าของโครงการ (superseded โดย CR-104)
 layer: volatile
 affects:
-  - docs/data/schema.md §2.9 shift_assignment
-  - schema_v shift_assignment 2 → 3
-  - docs/sitemap.md §3 Public plane — 4 endpoint + 1 route
-  - docs/changes/CR-092 — เติมช่องว่างของ FR-VOL-06 (ไม่ supersede)
-  - packages/tent-model/src/tent_model/{public_shift_assignment,shift_response_buffer}.py
-  - worker/src/worker/{projectors/shift_assignment.py,inbound/shift_responses.py}
-  - backend/apiapp/modules/volunteers/, backend/apiapp/utils/{response_code,view_token}.py
-  - frontend/src/lib/features/volunteers/, frontend/src/routes/api/public/v1/volunteer/
+  - docs/changes/CR-104-volunteer-backoffice-and-user-management-v10.md
 ---
 
-# CR-096 — Volunteer Access Portal: ตารางงาน + ตอบรับภารกิจ
+# CR-096 — Volunteer Access Portal: ตารางงาน + ตอบรับภารกิจ (superseded โดย CR-104)
+
+> ⚠️ **สถานะเอกสาร:** `superseded` — เนื้อหาในเอกสารฉบับนี้ถูกรวบรวมและยกระดับเข้าสู่ [CR-104 — Volunteer Backoffice & User Management V10](CR-104-volunteer-backoffice-and-user-management-v10.md) ฉบับสมบูรณ์แล้ว โดยระบบยกเลิกกระบวนการเสนองานตรง (Direct Dispatch) และรหัสตอบรับ 2 ปัจจัยทางโทรศัพท์ เพื่อความเรียบง่ายและเป็นไปตาม Job Board Model
 
 ## สรุป (TL;DR)
 
