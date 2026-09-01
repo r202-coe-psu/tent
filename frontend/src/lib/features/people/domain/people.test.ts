@@ -701,6 +701,7 @@ describe('assertCheckoutDestination', () => {
 describe('normalizeAddressPart & matchHouseholdAddress', () => {
 	it('normalizes prefixes and whitespace correctly', () => {
 		expect(normalizeAddressPart(' หมู่ 4 ')).toBe('4');
+		expect(normalizeAddressPart('หมู่ที่ 4')).toBe('4');
 		expect(normalizeAddressPart('ม.4')).toBe('4');
 		expect(normalizeAddressPart('จ.ปัตตานี')).toBe('ปัตตานี');
 		expect(normalizeAddressPart('จังหวัดปัตตานี')).toBe('ปัตตานี');

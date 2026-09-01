@@ -904,7 +904,7 @@ export function normalizeAddressPart(str: string | null | undefined): string {
 	return (str || '')
 		.trim()
 		.toLowerCase()
-		.replace(/^(จ\.|จังหวัด|อ\.|อำเภอ|ต\.|ตำบล|ม\.|หมู่)\s*/, '')
+		.replace(/^(จ\.|จังหวัด|อ\.|อำเภอ|ต\.|ตำบล|หมู่ที่|หมู่|ม\.)\s*/, '')
 		.replace(/\s+/g, '');
 }
 
