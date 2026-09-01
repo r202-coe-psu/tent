@@ -25,7 +25,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
 import type { Job, JobInput } from '../domain/job.schema';
-import type { JobApplicationStatus } from '../domain/job-application.schema';
+import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
 import type {
@@ -72,6 +72,8 @@ export const volunteerKeys = {
 	jobApplicationsAll: () => [...volunteerKeys.all, 'jobApplications', getShelterCode()] as const,
 	jobApplicationsList: (filter?: JobApplicationFilter) =>
 		[...volunteerKeys.jobApplicationsAll(), 'list', filter] as const,
+	jobApplicationByToken: (token: string) =>
+		[...volunteerKeys.jobApplicationsAll(), 'token', token] as const,
 
 	shiftAssignmentsAll: () => [...volunteerKeys.all, 'shiftAssignments', getShelterCode()] as const,
 	shiftAssignmentsList: (filter?: ShiftAssignmentFilter) =>
@@ -140,6 +142,16 @@ export const useJobApplications = (filter?: JobApplicationFilter) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.jobApplicationsList(filter),
 		queryFn: () => jobApplicationRepository().list(filter)
+	}));
+
+export const useJobApplicationByToken = (
+	token: () => string,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.jobApplicationByToken(token()),
+		queryFn: () => jobApplicationRepository().getByTrackingToken(token()),
+		enabled: enabled() && !!token()
 	}));
 
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
@@ -239,6 +251,21 @@ export const useAssignVolunteers = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * Submits a volunteer job application (CR-041 D-APP / Story 3.3).
+ * Defaults to `pending_review` and increments pending approvals.
+ */
+export const useCreateJobApplication = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (input: JobApplicationInput) =>
+			jobApplicationRepository().create(input, authorContext()),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
  * SM reviews a `pending_review` application. `confirmed` consumes one job
  * slot (`job.slots_remaining -> slots_confirmed`); either decision moves the
  * application out of `pending_review`, changing the hub metrics
@@ -256,6 +283,20 @@ export const useReviewApplication = (queryClient: QueryClient) =>
 			decision: Extract<JobApplicationStatus, 'confirmed' | 'rejected'>;
 			notes?: string | null;
 		}) => jobApplicationRepository().review(id, decision, authStore.user?.name ?? 'unknown', notes),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
+ * Cancels a pending volunteer job application.
+ */
+export const useCancelApplication = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (id: string) =>
+			jobApplicationRepository().cancel(id, authStore.user?.name ?? 'unknown'),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });

@@ -16,9 +16,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Shield from '@lucide/svelte/icons/shield';
 	import X from '@lucide/svelte/icons/x';
-	import { Html5Qrcode } from 'html5-qrcode';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
+	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -216,68 +216,11 @@
 		isPassModalOpen = false;
 	}
 	let isCameraModalOpen = $state(false);
-	let cameraError = $state('');
 
-	function closeCamera() {
-		isCameraModalOpen = false;
-		cameraError = '';
-	}
-
-	/**
-	 * Read a volunteer QR and sign in with what it contains.
-	 *
-	 * The pass encodes its own URL, so the payload is either a bare token or a link
-	 * ending in one — both reduce to the last path segment. Anything else is left for
-	 * `handleTokenLogin` to reject, rather than guessed at here.
-	 */
-	function tokenFromScan(decoded: string): string {
-		const trimmed = decoded.trim();
-		const withoutQuery = trimmed.split(/[?#]/)[0];
-		const lastSegment = withoutQuery.split('/').filter(Boolean).pop() ?? '';
-		return (lastSegment || trimmed).toUpperCase();
-	}
-
-	function cameraAttachment(node: HTMLDivElement) {
-		const reader = new Html5Qrcode(node.id);
-		let handled = false;
-
-		reader
-			.start(
-				{ facingMode: 'environment' },
-				{
-					fps: 10,
-					qrbox: (width, height) => {
-						const size = Math.floor(Math.min(width, height) * 0.7);
-						return { width: size, height: size };
-					}
-				},
-				(decodedText) => {
-					// One scan per opening. The camera keeps firing while the modal tears
-					// down, and a second hit would navigate twice.
-					if (handled) return;
-					const token = tokenFromScan(decodedText);
-					if (!token) return;
-					handled = true;
-					if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
-					isCameraModalOpen = false;
-					inputToken = token;
-					submitToken(token);
-				},
-				() => {
-					// Fires on every frame that does not contain a code — not an error.
-				}
-			)
-			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
-			});
-
-		return () => {
-			if (reader.isScanning) {
-				reader.stop().catch(() => {
-					// The view is unmounting; nothing actionable to surface.
-				});
-			}
-		};
+	function handleScanToken(token: string) {
+		const upperToken = token.trim().toUpperCase();
+		inputToken = upperToken;
+		submitToken(upperToken);
 	}
 	let qrDataUrl = $state<string>('');
 
@@ -1374,47 +1317,11 @@
 />
 
 <!-- ── MODAL: CAMERA QR SCANNER ────────────────────────────────────────────── -->
-{#if isCameraModalOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-		<div class="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
-			<div class="flex items-center justify-between">
-				<h3 class="text-sm font-bold text-foreground">สแกน QR Code ตั๋วจิตอาสา</h3>
-				<button
-					type="button"
-					onclick={closeCamera}
-					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
-				>
-					<X class="size-4" />
-				</button>
-			</div>
-
-			<!--
-				`{@attach}` rather than an $effect: the camera has to start when this node
-				enters the DOM and stop when it leaves, and the attachment's teardown is
-				what guarantees the stream is released if the modal is closed mid-scan.
-			-->
-			<div class="my-5 overflow-hidden rounded-2xl border-2 border-dashed border-primary/50">
-				<div id="volunteer-qr-reader" {@attach cameraAttachment}></div>
-			</div>
-
-			{#if cameraError}
-				<p class="mb-3 text-xs text-destructive" role="alert">{cameraError}</p>
-			{:else}
-				<p class="mb-3 text-center text-2xs text-muted-foreground">
-					หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงาน
-				</p>
-			{/if}
-
-			<button
-				type="button"
-				onclick={closeCamera}
-				class="w-full rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-muted"
-			>
-				ปิดหน้าต่าง
-			</button>
-		</div>
-	</div>
-{/if}
+<VolunteerQrScannerModal
+	bind:isOpen={isCameraModalOpen}
+	onScan={handleScanToken}
+	title="สแกน QR Code ตั๋วจิตอาสา"
+/>
 
 <!-- ── MODAL: DIGITAL PASS VIEW ───────────────────────────────────────────── -->
 {#if isPassModalOpen && currentVolunteer}

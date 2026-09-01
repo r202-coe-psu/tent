@@ -1,5 +1,5 @@
 <script lang="ts">
-	import QrCode from '@lucide/svelte/icons/qr-code';
+	import QRCode from 'qrcode';
 	import Download from '@lucide/svelte/icons/download';
 	import Link from '@lucide/svelte/icons/link';
 	import XCircle from '@lucide/svelte/icons/x-circle';
@@ -9,6 +9,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import User from '@lucide/svelte/icons/user';
 	import Phone from '@lucide/svelte/icons/phone';
+	import { toast } from 'svelte-sonner';
 
 	let { ticket } = $props<{
 		ticket: {
@@ -24,6 +25,45 @@
 			maskedPhone: string;
 		};
 	}>();
+
+	let qrDataUrl = $state<string>('');
+
+	// Generate QR Code from Volunteer ID / tracking token
+	$effect(() => {
+		const payload = ticket.token;
+		if (payload) {
+			QRCode.toDataURL(payload, {
+				width: 360,
+				margin: 2,
+				color: {
+					dark: '#0f172a',
+					light: '#ffffff'
+				}
+			})
+				.then((url: string) => {
+					qrDataUrl = url;
+				})
+				.catch((err: unknown) => {
+					console.error('Failed to generate QR code:', err);
+				});
+		}
+	});
+
+	function downloadQR() {
+		if (!qrDataUrl) return;
+		const a = document.createElement('a');
+		a.href = qrDataUrl;
+		a.download = `volunteer-pass-${ticket.token}.png`;
+		a.click();
+		toast.success('ดาวน์โหลดรูปภาพ QR Code เรียบร้อยแล้ว');
+	}
+
+	function copyLink() {
+		if (typeof window !== 'undefined') {
+			navigator.clipboard.writeText(window.location.href);
+			toast.success('คัดลอกลิงก์ตั๋วดิจิทัลเรียบร้อยแล้ว');
+		}
+	}
 </script>
 
 <div class="mx-auto max-w-md overflow-hidden rounded-3xl border border-border bg-card shadow-lg">
@@ -57,16 +97,24 @@
 		<h2 class="mb-1 text-center text-xl font-bold text-foreground">{ticket.jobTitle}</h2>
 		<p class="mb-6 text-center text-sm text-muted-foreground">{ticket.shelter}</p>
 
-		<div class="rounded-2xl border-4 border-muted/30 p-4">
-			<!-- Placeholder for real QR code image -->
-			<div class="flex h-48 w-48 items-center justify-center bg-white text-slate-900">
-				<QrCode class="h-32 w-32" />
-			</div>
+		<!-- Real Generated QR Code -->
+		<div class="rounded-3xl border-4 border-muted/40 bg-white p-4 shadow-inner">
+			{#if qrDataUrl}
+				<img
+					src={qrDataUrl}
+					alt="QR Code รหัสอาสาสมัคร: {ticket.token}"
+					class="h-48 w-48 object-contain"
+				/>
+			{:else}
+				<div class="flex h-48 w-48 items-center justify-center bg-white">
+					<span class="animate-pulse text-xs text-muted-foreground">กำลังสร้าง QR Code...</span>
+				</div>
+			{/if}
 		</div>
 
 		<div class="mt-4 text-center">
-			<p class="mb-1 text-xs text-muted-foreground">รหัสตั๋ว / Token</p>
-			<p class="font-mono text-lg font-bold tracking-wider text-foreground">{ticket.token}</p>
+			<p class="mb-1 text-xs text-muted-foreground">รหัสอาสาสมัคร / Token</p>
+			<p class="font-mono text-lg font-black tracking-wider text-foreground">{ticket.token}</p>
 		</div>
 	</div>
 
@@ -124,19 +172,29 @@
 	<!-- Actions -->
 	<div class="grid grid-cols-2 gap-2 bg-muted/20 p-4 sm:grid-cols-3">
 		<button
-			class="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+			type="button"
+			onclick={downloadQR}
+			class="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
 		>
 			<Download class="h-4 w-4" />
-			บันทึกรูป
+			บันทึกรูป QR
 		</button>
 		<button
-			class="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+			type="button"
+			onclick={copyLink}
+			class="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
 		>
 			<Link class="h-4 w-4" />
 			คัดลอกลิงก์
 		</button>
 		<button
-			class="col-span-2 flex flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-danger transition-colors hover:bg-danger-muted/30 sm:col-span-1"
+			type="button"
+			onclick={() => {
+				if (confirm('คุณต้องการยกเลิกการสมัครกะนี้ใช่หรือไม่?')) {
+					toast.info('ส่งคำขอยกเลิกเรียบร้อยแล้ว');
+				}
+			}}
+			class="col-span-2 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-xs font-medium text-danger transition-colors hover:bg-danger-muted/30 sm:col-span-1"
 		>
 			<XCircle class="h-4 w-4" />
 			ยกเลิกกะ

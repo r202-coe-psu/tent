@@ -1,17 +1,28 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
 	import QrCode from '@lucide/svelte/icons/qr-code';
+	import Camera from '@lucide/svelte/icons/camera';
+	import VolunteerQrScannerModal from './VolunteerQrScannerModal.svelte';
 
 	let { onSearch } = $props<{
 		onSearch: (query: string) => void;
 	}>();
 
 	let searchQuery = $state('');
+	let isScannerOpen = $state(false);
 
 	function handleSearch(e: Event) {
 		e.preventDefault();
 		if (searchQuery.trim()) {
 			onSearch(searchQuery.trim());
+		}
+	}
+
+	function handleScan(scannedToken: string) {
+		const trimmed = scannedToken.trim();
+		if (trimmed) {
+			searchQuery = trimmed;
+			onSearch(trimmed);
 		}
 	}
 </script>
@@ -26,23 +37,41 @@
 	</p>
 
 	<!-- Search Bar -->
-	<form onsubmit={handleSearch} class="mt-6 flex gap-3">
+	<form onsubmit={handleSearch} class="mt-6 flex flex-col gap-3 sm:flex-row">
 		<div class="relative flex-1">
 			<input
 				type="text"
 				bind:value={searchQuery}
-				placeholder="เบอร์โทรศัพท์ 10 หลัก หรือ รหัส V-XXXX"
+				placeholder="เบอร์โทรศัพท์ 10 หลัก หรือ รหัส app_XXXX"
 				class="w-full rounded-xl border border-border bg-muted/20 px-4 py-3 pl-11 text-sm text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 			/>
 			<Search class="absolute top-3.5 left-4 h-4.5 w-4.5 text-muted-foreground" />
 		</div>
-		<button
-			type="submit"
-			class="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
-		>
-			ค้นหาตั๋ว
-		</button>
+		<div class="flex gap-2">
+			<button
+				type="button"
+				onclick={() => (isScannerOpen = true)}
+				class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/20 active:scale-95"
+				title="เปิดกล้องสแกน QR Code ตั๋ว"
+			>
+				<Camera class="h-4 w-4" />
+				<span class="hidden sm:inline">สแกน QR</span>
+			</button>
+			<button
+				type="submit"
+				class="flex-1 cursor-pointer rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark active:scale-95 sm:flex-initial"
+			>
+				ค้นหาตั๋ว
+			</button>
+		</div>
 	</form>
+
+	<!-- Scanner Modal Component -->
+	<VolunteerQrScannerModal
+		bind:isOpen={isScannerOpen}
+		onScan={handleScan}
+		title="สแกน QR Code ค้นหาตั๋วอาสาสมัคร"
+	/>
 
 	<!-- Search Placeholder Card -->
 	<div class="mt-8 rounded-2xl border border-dashed border-border bg-muted/5 p-10 text-center">

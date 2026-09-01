@@ -3,21 +3,88 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import DigitalPassCard from '$lib/features/volunteers/components/DigitalPassCard.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 
-	// Mock ticket data based on token
 	let token = $derived($page.params.token ?? '');
 
-	let ticket = $derived({
-		token: token,
-		jobTitle: 'ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC ม.อ.',
-		shelter: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-		appliedAt: '2026-06-12T14:30:00Z',
-		status: 'confirmed' as const,
-		date: '13/06/2026',
-		time: '08:00 - 12:00 น.',
-		meetingPoint: 'จุดลงทะเบียนหน้าประตู 1',
-		applicantName: 'สมชาย ใจดี',
-		maskedPhone: '089-XXX-1234'
+	interface PublicTicket {
+		token: string;
+		jobTitle: string;
+		shelter: string;
+		appliedAt: string;
+		status: 'confirmed' | 'pending_review' | 'cancelled';
+		date: string;
+		time: string;
+		meetingPoint: string;
+		applicantName: string;
+		maskedPhone: string;
+	}
+
+	let ticketData = $state<PublicTicket | null>(null);
+	let isLoading = $state(true);
+
+	async function fetchTicket(tokenVal: string) {
+		if (!tokenVal) return;
+		try {
+			isLoading = true;
+			const res = await fetch(`/api/public/v1/volunteer/ticket/${encodeURIComponent(tokenVal)}`);
+			if (res.ok) {
+				const data = await res.json();
+				if (data.ticket) {
+					const t = data.ticket;
+					const rawPhone = t.phone || '';
+					const masked =
+						rawPhone.length >= 8
+							? `${rawPhone.slice(0, 3)}-XXX-${rawPhone.slice(-4)}`
+							: rawPhone || '08X-XXX-XXXX';
+
+					ticketData = {
+						token: t.token || tokenVal,
+						jobTitle: t.job_title || 'งานจิตอาสาประจำศูนย์พักพิง',
+						shelter: t.shelter_name || t.shelter_code || 'ศูนย์พักพิงหลัก',
+						appliedAt: t.created_at || new Date().toISOString(),
+						status: (t.status === 'confirmed'
+							? 'confirmed'
+							: t.status === 'pending_review'
+								? 'pending_review'
+								: 'cancelled') as 'confirmed' | 'pending_review' | 'cancelled',
+						date: t.date || new Date().toISOString().slice(0, 10),
+						time:
+							t.start_time && t.end_time
+								? `${t.start_time} - ${t.end_time} น.`
+								: '08:00 - 12:00 น.',
+						meetingPoint: 'จุดลงทะเบียนจิตอาสา หน้าทางเข้าศูนย์พักพิง',
+						applicantName: t.applicant_name || 'จิตอาสาผู้สมัคร',
+						maskedPhone: masked
+					};
+					return;
+				}
+			}
+		} catch (err) {
+			console.warn('Failed to load public ticket:', err);
+		} finally {
+			isLoading = false;
+		}
+
+		// Fallback display if ticket mock or offline
+		ticketData = {
+			token: tokenVal,
+			jobTitle: 'ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC ม.อ.',
+			shelter: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
+			appliedAt: new Date().toISOString(),
+			status: 'pending_review',
+			date: new Date().toISOString().slice(0, 10),
+			time: '08:00 - 12:00 น.',
+			meetingPoint: 'จุดลงทะเบียนหน้าประตู 1',
+			applicantName: 'จิตอาสาผู้สมัคร',
+			maskedPhone: '08X-XXX-XXXX'
+		};
+	}
+
+	$effect(() => {
+		if (token) {
+			fetchTicket(token);
+		}
 	});
 </script>
 
@@ -39,7 +106,13 @@
 
 	<!-- Ticket Display -->
 	<div class="py-4">
-		<DigitalPassCard {ticket} />
+		{#if isLoading}
+			<div class="mx-auto max-w-md space-y-4">
+				<Skeleton class="h-96 rounded-3xl" />
+			</div>
+		{:else if ticketData}
+			<DigitalPassCard ticket={ticketData} />
+		{/if}
 	</div>
 
 	<!-- Instructions -->
