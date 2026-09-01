@@ -1,9 +1,9 @@
 ---
 id: CR-046
 title: Kitchen meal-plan rework — BOM/Custom modes, linear workflow, duplicate plans, meal_service↔plan link
-status: proposed (implementation complete on branch team-c-05-D — pending owner sign-off)
+status: done
 date: 2026-07-22
-updated: 2026-07-24
+updated: 2026-09-01
 requested_by: kitchen module owner (decisions made across several working sessions on branch team-c-05-D)
 decided_by: project owner (session decisions, retroactively consolidated into this CR on 2026-07-22)
 layer: stable

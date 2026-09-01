@@ -194,7 +194,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
-### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
+### 5.1 External plane `/external/v1` (CR-062, CR-098 M2 Integration)
 
 สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน:
 

@@ -2,8 +2,9 @@
 ---
 id: CR-034
 title: เพิ่ม needs[].status ใน donation_campaign สำหรับระบบ Force Cut-off และขยับ schema_v เป็น 2
-status: proposed
+status: done
 date: 2026-07-06
+updated: 2026-09-01
 requested_by: ทีมพัฒนา (Team A)
 decided_by: เจ้าของโครงการ
 layer: volatile

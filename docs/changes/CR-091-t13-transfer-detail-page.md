@@ -1,8 +1,9 @@
 ---
 id: CR-091
 title: T-13 โอนย้ายข้ามศูนย์ — หน้ารายละเอียด Ticket (Banner + Timeline)
-status: proposed
+status: approved
 date: 2026-08-25
+updated: 2026-09-01
 requested_by: CR-059 follow-up (§4.5 UI Safety Standards, Task #13) — spun out จาก CR-089 (2026-08-25, ไม่แตะ schema_v)
 decided_by: Project Owner
 layer: volatile
