@@ -1,8 +1,9 @@
 ---
 id: CR-096
 title: Volunteer Access Portal — ตารางงาน, Digital Pass read-only, และตอบรับภารกิจด้วยเบอร์โทร + รหัสที่อ่านทางโทรศัพท์
-status: proposed
+status: approved
 date: 2026-08-29
+updated: 2026-09-01
 requested_by: เจ้าของโครงการ (ปิดช่องว่างที่พบระหว่าง implement CR-092)
 decided_by: เจ้าของโครงการ
 layer: volatile

@@ -96,9 +96,7 @@ when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
 
 - **Scope:** only runs when `frontend/` files are staged. Pure docs/config commits at the repo
   root skip the gate.
-- **Manual run:** `pnpm exec lefthook run pre-commit` from the repo root.
-- **Bypass (emergency only):** `LEFTHOOK=0 git commit` or `git commit --no-verify`. Don't make
-  this the default — fix the failure instead.
+- **Strict Rule — No Bypass:** **Never** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` (ห้าม commit/push แบบ no-verify โดยเด็ดขาด). All quality gates must pass cleanly. Always fix the errors rather than bypassing.
 
 Treat a green pre-commit the same as the §2 definition-of-done checklist for items 1–3. Item 4
 (`svelte-autofixer`) is still manual before you push.

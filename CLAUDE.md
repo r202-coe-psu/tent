@@ -199,8 +199,9 @@ plugins. `pnpm lint` checks Prettier + ESLint; `pnpm format` rewrites.
 
 ## Commits & PRs
 
-Conventional Commits (`<type>(<scope>): <imperative summary>`, ≤72 chars, lowercase after colon).
-Branch off `main` — don't commit straight to it. One PR = one feature/concern; respect layer
-boundaries (domain + UI in the same feature is fine; reaching across feature barrels to make
-something work is not). PR description says what changed and how it was verified. See
-`frontend/CONVENTIONS.md` §1 and `frontend/CONTRIBUTING.md` §8.
+- **No Bypass Rule:** **Never commit or push with `--no-verify` or `LEFTHOOK=0`** (ห้าม commit/push แบบ no-verify โดยเด็ดขาด). All pre-commit and pre-push quality gates must run and pass cleanly. If checks fail, fix the root cause.
+- Conventional Commits (`<type>(<scope>): <imperative summary>`, ≤72 chars, lowercase after colon).
+- Branch off `main` — don't commit straight to it. One PR = one feature/concern; respect layer
+  boundaries (domain + UI in the same feature is fine; reaching across feature barrels to make
+  something work is not). PR description says what changed and how it was verified. See
+  `frontend/CONVENTIONS.md` §1 and `frontend/CONTRIBUTING.md` §8.
