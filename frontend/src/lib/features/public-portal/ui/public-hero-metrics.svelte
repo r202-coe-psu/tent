@@ -53,12 +53,15 @@
 	let displayDescription = $derived(description ?? t.defaultDesc);
 	let displayBadgeText = $derived(badgeText ?? t.defaultBadge);
 
-	const canShowMetrics = $derived(
-		summary != null && flags != null && lastUpdated !== undefined && isStale !== undefined
-	);
+	const metricsPanel = $derived.by(() => {
+		if (summary == null || flags == null || lastUpdated === undefined || isStale === undefined) {
+			return null;
+		}
+		return { summary, flags, lastUpdated, isStale };
+	});
 
 	$effect(() => {
-		if (!expectMetrics || canShowMetrics) return;
+		if (!expectMetrics || metricsPanel != null) return;
 
 		const missing: string[] = [];
 		if (summary == null) missing.push('summary');
@@ -139,11 +142,11 @@
 		</div>
 
 		<!-- Metrics Panel -->
-		{#if canShowMetrics}
+		{#if metricsPanel}
 			<div class="flex w-full shrink-0 flex-col justify-center md:w-auto md:max-w-sm">
 				<div class="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
 					<!-- Stale Warning -->
-					{#if isStale}
+					{#if metricsPanel.isStale}
 						<div
 							class="absolute -top-3 right-6 flex items-center gap-1 rounded-full border-2 border-white bg-warning px-3 py-1 text-2xs font-bold text-white shadow-sm"
 						>
@@ -157,7 +160,7 @@
 							{t.currentStatus}
 						</h3>
 						<span class="text-2xs text-muted-foreground"
-							>{t.lastUpdated}: {new Date(lastUpdated).toLocaleTimeString(
+							>{t.lastUpdated}: {new Date(metricsPanel.lastUpdated).toLocaleTimeString(
 								langState.current === 'th' ? 'th-TH' : 'en-US'
 							)}</span
 						>
@@ -172,16 +175,16 @@
 							>
 							<div class="flex items-baseline gap-1">
 								<span class="text-3xl font-bold text-card-foreground"
-									>{summary?.shelters_open ?? '-'}</span
+									>{metricsPanel.summary.shelters_open}</span
 								>
 								<span class="text-sm font-medium text-muted-foreground"
-									>/{summary?.shelters_total ?? '-'} {t.sheltersUnit}</span
+									>/{metricsPanel.summary.shelters_total} {t.sheltersUnit}</span
 								>
 							</div>
 						</div>
 
 						<!-- Metric 2 (Occupancy) -->
-						{#if flags.public_metrics_occupancy}
+						{#if metricsPanel.flags.public_metrics_occupancy}
 							<div
 								class="flex flex-col justify-center rounded-xl border border-border/50 bg-muted/30 p-4"
 							>
@@ -189,7 +192,7 @@
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
-										>{summary?.occupancy_total ?? '-'}</span
+										>{metricsPanel.summary.occupancy_total ?? '-'}</span
 									>
 									<span class="text-sm font-medium text-muted-foreground">{t.victimsUnit}</span>
 								</div>
