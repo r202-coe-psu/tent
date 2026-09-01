@@ -92,10 +92,21 @@ class ScannerClientManager:
             return
 
         logger.info(f"Navigating Kiosk display to: {self.waiting_url}")
-        try:
-            await self.page.goto(self.waiting_url)
-        except Exception as e:
-            logger.warning(f"Initial navigation warning: {e}")
+        # Startup connection retry loop in case network or server is still booting up
+        connected = False
+        retry_count = 0
+        while not connected and self.running:
+            if self.page.is_closed():
+                logger.info("Browser window closed during initial navigation.")
+                return
+            try:
+                await self.page.goto(self.waiting_url, timeout=10000)
+                connected = True
+                logger.info(f"Successfully loaded Kiosk display: {self.waiting_url}")
+            except Exception as e:
+                retry_count += 1
+                logger.warning(f"Waiting for Tent server at {self.waiting_url} (attempt {retry_count}): {e}. Retrying in 3s...")
+                await asyncio.sleep(3.0)
 
         await self.init_reader()
 
@@ -163,15 +174,31 @@ class ScannerClientManager:
                 await asyncio.sleep(1.0)
 
     def _build_browser_args(self) -> list:
-        args = [
+        # Standard kiosk arguments optimized for Linux / Raspberry Pi OS (Labwc, Wayfire, X11)
+        base_args = [
             "--disable-infobars",
             "--disable-session-crashed-bubble",
-            "--disable-features=Translate",
+            "--disable-features=Translate,OverscrollHistoryNavigation",
             "--no-first-run",
-            f"--window-size={self.window_width},{self.window_height}",
+            "--noerrdialogs",
+            "--disable-pinch",
+            "--overscroll-history-navigation=0",
+            "--check-for-update-interval=31536000",
+            "--ozone-platform-hint=auto",  # Essential for Wayland (Labwc / Wayfire) on Raspberry Pi OS
         ]
         if not self.is_debug:
-            args.extend(["--kiosk", "--start-fullscreen"])
+            # Fullscreen Kiosk Mode (do not constrain window size, let it fit native screen)
+            args = base_args + [
+                "--kiosk",
+                "--start-maximized",
+                "--start-fullscreen",
+            ]
+        else:
+            # Windowed Debug Mode (e.g. for desktop development)
+            args = base_args + [
+                f"--window-size={self.window_width},{self.window_height}",
+                "--start-maximized",
+            ]
         return args
 
     async def run(self):

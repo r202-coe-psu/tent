@@ -272,59 +272,101 @@ python main.py
 
 ## 🔄 การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง (Autostart on Boot)
 
-เพื่อให้ Raspberry Pi ทำงานเป็น Kiosk Standalone เปิดเครื่องแล้วเข้าโปรแกรมสแกนบัตรทันที:
+เพื่อให้ Raspberry Pi ทำงานเป็น Kiosk Standalone เปิดเครื่องแล้วเข้าโปรแกรมสแกนบัตรทันที โดยแสดงผล**เต็มหน้าจอ (Fullscreen Kiosk)** และเริ่มบริการอ่านบัตรโดยอัตโนมัติ
 
-### Step 1: ให้สิทธิ์รันสคริปต์ `start_kiosk.sh`
-ในโฟลเดอร์ `scanner_client` มีสคริปต์ `start_kiosk.sh` ที่ช่วยจัดการ Environment Variables, Display และ Log ไว้ให้แล้ว:
-```bash
-cd ~/tent/scanner_client
-chmod +x start_kiosk.sh
-```
+---
 
-### Step 2: เลือกวิธีตั้งค่า Autostart (แนะนำวิธีที่ 1 หรือ 2)
+### วิธีที่ 1 (แนะนำที่สุด): ติดตั้งด้วยคำสั่งเดียวผ่าน `setup_autostart.sh`
 
-#### วิธีที่ 1: ผ่าน Desktop Autostart (`.desktop`)
+โปรเจกต์มีสคริปต์ `setup_autostart.sh` ที่ช่วยตรวจจับตำแหน่งไดเรกทอรีอัตโนมัติ (ไม่ต้องแก้ไข path ผู้ใช้เอง) และกำหนดค่า Autostart ให้รองรับทั้ง **Labwc** (Raspberry Pi OS Bookworm รุ่นล่าสุด), **Wayfire** และ **XDG Desktop Autostart (`.desktop`)** พร้อมทั้งเปิดใช้งาน service `pcscd`:
+
+1. ย้ายเข้าสู่โฟลเดอร์ `scanner_client`:
+   ```bash
+   cd ~/tent/scanner_client
+   ```
+
+2. รันสคริปต์ติดตั้ง Autostart:
+   ```bash
+   ./setup_autostart.sh
+   ```
+   *สคริปต์จะทำการ:*
+   - ตรวจจับโฟลเดอร์ปัจจุบันและตั้งสิทธิ์ executable ให้กับ `start_kiosk.sh`
+   - สร้างไฟล์ `~/.config/autostart/smart-shelter-kiosk.desktop`
+   - เพิ่มคำสั่งรันเข้าไปใน `~/.config/labwc/autostart` (สำหรับระบบที่ใช้ Labwc)
+   - สั่งเปิด `pcscd.socket` เพื่อเตรียมพร้อมให้อ่าน Smart Card ทันทีเมื่อเปิดเครื่อง
+
+3. ตรวจสอบสถานะการติดตั้งได้ตลอดเวลาด้วย:
+   ```bash
+   ./setup_autostart.sh --status
+   ```
+
+4. หากต้องการปิด Autostart ชั่วคราว (เช่น ต้องการใช้หน้าจอ Desktop ทั่วไปเพื่อบำรุงรักษา):
+   ```bash
+   ./setup_autostart.sh --disable
+   ```
+
+---
+
+### วิธีที่ 2 (แบบ Manual): ตั้งค่าด้วยตนเอง
+
+#### 2.1 ผ่าน Desktop Autostart (`.desktop`)
 1. สร้างโฟลเดอร์ autostart ใน Home directory ของคุณ:
    ```bash
    mkdir -p ~/.config/autostart
    ```
-2. สร้างไฟล์ `.desktop`:
+2. คัดลอก template หรือสร้างไฟล์ `.desktop`:
    ```bash
-   nano ~/.config/autostart/scanner-kiosk.desktop
+   nano ~/.config/autostart/smart-shelter-kiosk.desktop
    ```
-3. ใส่ข้อความคอนฟิกต่อไปนี้ *(แทนที่ `/home/kiosk` ด้วย path บัญชีผู้ใช้ของคุณ)*:
+3. กำหนดค่าต่อไปนี้ *(แทนที่ `/path/to/tent/scanner_client` ด้วย path จริงในเครื่องของคุณ)*:
    ```ini
    [Desktop Entry]
    Type=Application
    Name=SmartShelter Kiosk
-   Comment=Start SmartShelter Card Scanner Kiosk
-   Exec=/home/kiosk/tent/scanner_client/start_kiosk.sh
+   Comment=Start SmartShelter Card Scanner Kiosk in Fullscreen
+   Exec=sh -c 'cd /path/to/tent/scanner_client && exec ./start_kiosk.sh'
    Terminal=false
+   Hidden=false
    X-GNOME-Autostart-enabled=true
+   X-GNOME-Autostart-Delay=5
+   Categories=Utility;
    ```
-4. บันทึกไฟล์ (`Ctrl+O` $\rightarrow$ `Enter` $\rightarrow$ `Ctrl+X`)
+
+#### 2.2 สำหรับ Raspberry Pi OS Bookworm (Labwc / Wayland)
+หากใช้ Raspberry Pi OS Bookworm ตัวล่าสุดที่ใช้ Labwc เป็น Window Manager:
+1. สร้างหรือแก้ไขไฟล์ `~/.config/labwc/autostart`:
+   ```bash
+   mkdir -p ~/.config/labwc
+   nano ~/.config/labwc/autostart
+   ```
+2. เพิ่มคำสั่งรัน Kiosk ต่อท้าย:
+   ```bash
+   sh -c 'cd /path/to/tent/scanner_client && exec ./start_kiosk.sh' &
+   ```
+3. กำหนดสิทธิ์ให้รันได้: `chmod +x ~/.config/labwc/autostart`
 
 ---
 
-#### วิธีที่ 2: สำหรับ Raspberry Pi OS Bookworm (Wayland / Wayfire)
-หากใช้ระบบปฏิบัติการ Bookworm เวอร์ชันล่าสุดที่เป็น Wayland สามารถเพิ่มคำสั่งในตัวจัดการหน้าต่างโดยตรง:
-1. เปิดไฟล์ตั้งค่า Wayfire:
-   ```bash
-   nano ~/.config/wayfire.ini
-   ```
-2. เลื่อนลงไปที่หมวด `[autostart]` (หากไม่มีให้พิมพ์เพิ่มล่างสุด):
-   ```ini
-   [autostart]
-   kiosk = /home/kiosk/tent/scanner_client/start_kiosk.sh
-   ```
-*(กรณีเป็น Labwc รุ่นล่าสุด ให้ใส่ `/home/kiosk/tent/scanner_client/start_kiosk.sh &` ใน `~/.config/labwc/autostart`)*
+### 🖥️ คุณสมบัติการแสดงผลแบบเต็มจอ (Fullscreen Kiosk Mode)
+
+- **Chromium Wayland Native:** ระบบส่ง Flag `--ozone-platform-hint=auto` เพื่อให้ Chromium รันแบบ Wayland แท้บน Labwc / Wayfire ไม่ติดปัญหา Window Border หรือ Taskbar บัง
+- **Kiosk Enforced:** เมื่อโปรแกรมรันผ่าน `start_kiosk.sh` ระบบจะบังคับ `DEBUG=false` ให้เป็น Kiosk เต็มจออัตโนมัติ โดยไม่ถูกจำกัดขนาด Window Size
+- **Auto Reconnect / Retry:** หากเปิดเครื่องแล้วระบบเครือข่าย (Wi-Fi หรือ LAN) ยังเชื่อมต่อไม่เสร็จ ตัวไคลเอนต์จะมี Retry loop คอยตรวจสอบและโหลดหน้าจอ `/kiosk/scanner/waiting` ทุก 3 วินาที ไม่ปล่อยให้ค้างที่หน้าจอ Error ของ Chromium
+- **สลับโหมดทดสอบ (Windowed Debug):** หากต้องการเปิดเป็นหน้าต่างเพื่อ Debug สามารถสั่งผ่าน Terminal:
+  ```bash
+  DEBUG=true ./start_kiosk.sh
+  ```
 
 ---
 
 ### 🔍 วิธีตรวจสอบ Log เมื่อ Autostart ไม่ทำงาน
-หากบูตเครื่องใหม่แล้วโปรแกรมไม่เปิดขึ้นมา ให้เปิดดู Log ความผิดพลาดได้ที่:
+หากบูตเครื่องใหม่แล้วโปรแกรมไม่เปิดขึ้นมา หรือค้างหน้าจอ สามารถตรวจสอบบันทึกการทำงานได้ที่:
 ```bash
 cat /tmp/kiosk_autostart.log
+```
+หรือดูบันทึกแบบ Real-time:
+```bash
+tail -f /tmp/kiosk_autostart.log
 ```
 
 ---
