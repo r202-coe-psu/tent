@@ -16,6 +16,7 @@
 		showLivePing = true,
 		bgClass = 'bg-primary',
 		showSearch = true,
+		expectMetrics = false,
 		summary,
 		flags,
 		lastUpdated,
@@ -28,6 +29,8 @@
 		showLivePing?: boolean;
 		bgClass?: string;
 		showSearch?: boolean;
+		/** When true, log to console if metrics props are incomplete (hero still renders). */
+		expectMetrics?: boolean;
 
 		summary?: {
 			shelters_open: number;
@@ -49,6 +52,22 @@
 	let displayTitle = $derived(title ?? t.defaultTitle);
 	let displayDescription = $derived(description ?? t.defaultDesc);
 	let displayBadgeText = $derived(badgeText ?? t.defaultBadge);
+
+	const canShowMetrics = $derived(
+		summary != null && flags != null && lastUpdated !== undefined && isStale !== undefined
+	);
+
+	$effect(() => {
+		if (!expectMetrics || canShowMetrics) return;
+
+		const missing: string[] = [];
+		if (summary == null) missing.push('summary');
+		if (flags == null) missing.push('flags');
+		if (lastUpdated === undefined) missing.push('lastUpdated');
+		if (isStale === undefined) missing.push('isStale');
+
+		console.error(`[PublicHeroMetrics] metrics panel hidden — missing: ${missing.join(', ')}`);
+	});
 
 	function handleSearch() {
 		if (searchQuery.trim()) {
@@ -120,7 +139,7 @@
 		</div>
 
 		<!-- Metrics Panel -->
-		{#if summary && flags && lastUpdated !== undefined && isStale !== undefined}
+		{#if canShowMetrics}
 			<div class="flex w-full shrink-0 flex-col justify-center md:w-auto md:max-w-sm">
 				<div class="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
 					<!-- Stale Warning -->
