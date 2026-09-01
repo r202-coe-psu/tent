@@ -161,17 +161,47 @@
 		}
 
 		// 2. Populate Address for Step 4 (Household)
-		if (card) {
-			newHouseholdAddress = {
-				address_no: card.address_no || null,
-				village_no: card.village_no ? `หมู่ ${card.village_no}` : null,
-				subdistrict: card.subdistrict || null,
-				district: card.district || null,
-				province: card.province || null,
-				postal_code: card.postal_code || null
-			};
-			isCreatingNewHousehold = false;
+		const preRegHh = draft.household_id
+			? (householdsQuery.data?.find((h) => h._id === draft.household_id) ?? null)
+			: null;
+
+		const cardAddr = card
+			? {
+					address_no: card.address_no || null,
+					village_no: card.village_no ? `หมู่ ${card.village_no}` : null,
+					subdistrict: card.subdistrict || null,
+					district: card.district || null,
+					province: card.province || null,
+					postal_code: card.postal_code || null
+				}
+			: null;
+
+		const hhAddr = preRegHh
+			? {
+					address_no: preRegHh.address_no || null,
+					village_no: preRegHh.village_no || null,
+					subdistrict: preRegHh.subdistrict || null,
+					district: preRegHh.district || null,
+					province: preRegHh.province || null,
+					postal_code: preRegHh.postal_code || null
+				}
+			: null;
+
+		// "ส่วนครัวเรือนจะยึดตามที่กรอกมาก่อน หากไม่มีค่อยใส่จากบัตร"
+		const hasHhAddress = !!(
+			hhAddr &&
+			(hhAddr.address_no ||
+				hhAddr.village_no ||
+				hhAddr.subdistrict ||
+				hhAddr.district ||
+				hhAddr.province)
+		);
+
+		newHouseholdAddress = hasHhAddress ? hhAddr : cardAddr || null;
+		if (preRegHh) {
+			selectedHousehold = preRegHh;
 		}
+		isCreatingNewHousehold = false;
 
 		// 3. Start at Step 2 (EWAR Symptoms)
 		goToStep(2);
@@ -563,6 +593,7 @@
 				allEvacuees={combinedEvacuees}
 				households={householdsQuery.data ?? []}
 				initialAddress={newHouseholdAddress}
+				initialHouseholdId={selectedHousehold?._id ?? activeDraftEvacuee?.household_id ?? null}
 				onsubmit={handleHouseholdRegisterSubmit}
 				onselect={handleHouseholdSelect}
 				pending={isSubmittingHousehold}

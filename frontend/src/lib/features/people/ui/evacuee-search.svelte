@@ -51,7 +51,66 @@
 		() => !!debouncedQuery
 	);
 
-	const searchResults = $derived(searchQuery.data ?? []);
+	const searchResults = $derived.by(() => {
+		const raw = searchQuery.data ?? [];
+		if (raw.length <= 1) return raw;
+
+		// Deduplicate: If multiple pre_registered docs exist for the same citizen ID,
+		// adhere to user directive: "ยึด doc จากตัว pre_registered" (prefer web/staff pre_registered over kiosk scan draft)
+		// and merge card_snapshot/photo if available from the kiosk scan.
+		const byCitizenId: Record<string, Evacuee[]> = {};
+		const otherResults: Evacuee[] = [];
+
+		for (const evacuee of raw) {
+			const cid = evacuee.person_id?.number?.replace(/\D/g, '');
+			if (cid && evacuee.current_stay.status === 'pre_registered') {
+				const list = byCitizenId[cid] ?? [];
+				list.push(evacuee);
+				byCitizenId[cid] = list;
+			} else {
+				otherResults.push(evacuee);
+			}
+		}
+
+		const deduplicated: Evacuee[] = [];
+		for (const list of Object.values(byCitizenId)) {
+			if (list.length === 1) {
+				deduplicated.push(list[0]);
+			} else {
+				// Multiple pre-registered docs for the same citizen ID:
+				// Pick the one that is pre-registered via web, backoffice, or staff (has household_id or registered_via !== 'kiosk')
+				const preRegDoc =
+					list.find((e) => e.registered_via !== 'kiosk' || !!e.household_id) ?? list[0];
+				const kioskDoc = list.find((e) => e.registered_via === 'kiosk' || !!e.card_snapshot);
+				const card = kioskDoc?.card_snapshot ?? preRegDoc.card_snapshot ?? null;
+
+				const birthYearBE = card?.birth_year_ce ? card.birth_year_ce + 543 : undefined;
+				const currentYearBE = new Date().getFullYear() + 543;
+				const cardAge =
+					card?.age !== undefined
+						? card.age
+						: birthYearBE !== undefined
+							? Math.max(0, currentYearBE - birthYearBE)
+							: undefined;
+
+				// Overwrite personal data with authoritative card data, preserve household from previous registration
+				const merged: Evacuee = {
+					...preRegDoc,
+					first_name: card?.first_name_th || kioskDoc?.first_name || preRegDoc.first_name,
+					last_name: card?.last_name_th || kioskDoc?.last_name || preRegDoc.last_name,
+					gender: card?.gender || kioskDoc?.gender || preRegDoc.gender,
+					birth_year: birthYearBE ?? kioskDoc?.birth_year ?? preRegDoc.birth_year,
+					age: cardAge ?? kioskDoc?.age ?? preRegDoc.age,
+					card_snapshot: card,
+					photo: card?.photo_base64 || kioskDoc?.photo || preRegDoc.photo || null,
+					household_id: preRegDoc.household_id ?? kioskDoc?.household_id ?? null
+				};
+				deduplicated.push(merged);
+			}
+		}
+
+		return [...deduplicated, ...otherResults];
+	});
 	const isSearching = $derived(searchQuery.isFetching && !!debouncedQuery);
 	const hasSearched = $derived(
 		!!debouncedQuery && !searchQuery.isFetching && searchQuery.data !== undefined
@@ -128,24 +187,24 @@
 							<div
 								class={`flex flex-col gap-3 rounded-xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
 									isKiosk
-										? 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/30'
+										? 'border-sky-300 bg-sky-50/80 dark:border-sky-700 dark:bg-sky-950/30'
 										: isWeb
 											? 'border-purple-300 bg-purple-50/70 dark:border-purple-800 dark:bg-purple-950/30'
 											: isBackoffice
 												? 'border-indigo-300 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/30'
-												: 'border-blue-300 bg-blue-50/70 dark:border-blue-800 dark:bg-blue-950/30'
+												: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/30'
 								}`}
 							>
 								<div class="flex items-start gap-3">
 									<div
 										class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ${
 											isKiosk
-												? 'bg-amber-500 text-slate-950'
+												? 'bg-blue-600 text-white'
 												: isWeb
 													? 'bg-purple-600 text-white'
 													: isBackoffice
 														? 'bg-indigo-600 text-white'
-														: 'bg-blue-600 text-white'
+														: 'bg-amber-500 text-slate-950'
 										}`}
 									>
 										{#if isKiosk}
@@ -161,12 +220,12 @@
 											<p
 												class={`font-bold ${
 													isKiosk
-														? 'text-amber-950 dark:text-amber-100'
+														? 'text-blue-950 dark:text-blue-100'
 														: isWeb
 															? 'text-purple-950 dark:text-purple-100'
 															: isBackoffice
 																? 'text-indigo-950 dark:text-indigo-100'
-																: 'text-blue-950 dark:text-blue-100'
+																: 'text-amber-950 dark:text-amber-100'
 												}`}
 											>
 												{evacuee.first_name}
@@ -175,12 +234,12 @@
 											<span
 												class={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
 													isKiosk
-														? 'bg-amber-200/90 font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200'
+														? 'bg-blue-100 font-bold text-blue-900 dark:bg-blue-900/60 dark:text-blue-200'
 														: isWeb
 															? 'bg-purple-200/80 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300'
 															: isBackoffice
 																? 'bg-indigo-200/80 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300'
-																: 'bg-blue-200/80 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300'
+																: 'bg-amber-200/90 font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200'
 												}`}
 											>
 												{#if isKiosk}
@@ -202,12 +261,12 @@
 										<p
 											class={`mt-0.5 text-xs ${
 												isKiosk
-													? 'font-mono text-amber-900/80 dark:text-amber-300/80'
+													? 'font-mono text-blue-900/80 dark:text-blue-300/80'
 													: isWeb
 														? 'text-purple-800/80 dark:text-purple-300/80'
 														: isBackoffice
 															? 'text-indigo-800/80 dark:text-indigo-300/80'
-															: 'text-blue-800/80 dark:text-blue-300/80'
+															: 'text-amber-800/80 dark:text-amber-300/80'
 											}`}
 										>
 											{#if evacuee.person_id?.number}
@@ -226,12 +285,12 @@
 									type="button"
 									class={`h-11 w-full shrink-0 gap-1.5 font-semibold text-white shadow sm:h-9 sm:w-auto ${
 										isKiosk
-											? 'bg-amber-600 hover:bg-amber-700'
+											? 'bg-blue-600 hover:bg-blue-700'
 											: isWeb
 												? 'bg-purple-700 hover:bg-purple-800'
 												: isBackoffice
 													? 'bg-indigo-700 hover:bg-indigo-800'
-													: 'bg-blue-700 hover:bg-blue-800'
+													: 'bg-amber-600 hover:bg-amber-700'
 									}`}
 									onclick={() => (onSelectDraft ? onSelectDraft(evacuee) : onNext())}
 								>

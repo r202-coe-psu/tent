@@ -38,6 +38,7 @@
 		allEvacuees = [],
 		households = [],
 		initialAddress = null,
+		initialHouseholdId = null,
 		onsubmit,
 		onselect,
 		pending = false,
@@ -46,6 +47,7 @@
 		allEvacuees?: Evacuee[];
 		households?: Household[];
 		initialAddress?: Partial<HouseholdInput> | null;
+		initialHouseholdId?: string | null;
 		onsubmit?: (input: Partial<HouseholdInput>) => void;
 		onselect?: (household: Household) => void;
 		pending?: boolean;
@@ -177,6 +179,36 @@
 	let lastEvaluatedKey = $state('');
 
 	$effect(() => {
+		if (initialHouseholdId) {
+			const targetHh = households.find((h) => h._id === initialHouseholdId);
+			if (targetHh) {
+				const members = allEvacuees.filter((e) => e.household_id === targetHh._id);
+				foundResults = [
+					{
+						household: targetHh,
+						evacuee: allEvacuees.find((e) => e._id === targetHh.head_evacuee_id) || null,
+						count: members.length,
+						members,
+						expanded: true
+					}
+				];
+				searchState = 'found';
+				showNewHouseholdForm = false;
+				selectedHouseholdId = targetHh._id;
+				onselect?.(targetHh);
+
+				if (initialAddress) {
+					if (initialAddress.address_no) formData.address_no = initialAddress.address_no;
+					if (initialAddress.village_no) formData.village_no = initialAddress.village_no;
+					if (initialAddress.province) formData.province = initialAddress.province;
+					if (initialAddress.district) formData.district = initialAddress.district;
+					if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
+					if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
+				}
+				return;
+			}
+		}
+
 		if (!initialAddress || (!initialAddress.province && !initialAddress.address_no)) {
 			return;
 		}
@@ -508,13 +540,13 @@
 	<!-- Suggested Match from Smart Card Alert -->
 	{#if suggestedFromCard && searchState === 'found' && foundResults.length > 0}
 		<div
-			class="rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm dark:border-amber-700 dark:bg-amber-950/40"
+			class="rounded-xl border border-sky-300 bg-sky-50/90 p-4 shadow-sm dark:border-sky-700 dark:bg-sky-950/40"
 		>
-			<div class="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-100">
-				<Cpu class="size-5 text-amber-700 dark:text-amber-400" />
+			<div class="flex items-center gap-2 font-bold text-sky-950 dark:text-sky-100">
+				<Cpu class="size-5 text-blue-600 dark:text-blue-400" />
 				<span>{t.cardSuggested.title}</span>
 			</div>
-			<p class="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+			<p class="mt-1 text-xs leading-relaxed text-sky-800 dark:text-sky-200">
 				{t.cardSuggested.desc}
 			</p>
 			<div class="mt-3">
@@ -522,7 +554,7 @@
 					type="button"
 					variant="outline"
 					size="sm"
-					class="border-amber-300 bg-white text-xs font-semibold text-amber-950 shadow-2xs hover:bg-amber-100 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-100"
+					class="border-sky-300 bg-white text-xs font-semibold text-sky-950 shadow-2xs hover:bg-sky-100 dark:border-sky-700 dark:bg-slate-900 dark:text-sky-100"
 					onclick={() => {
 						showNewHouseholdForm = true;
 						suggestedFromCard = false;
@@ -640,17 +672,19 @@
 				{/each}
 			</div>
 
-			<button
-				type="button"
-				class="mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-[#003B71] hover:underline"
-				onclick={() => {
-					showNewHouseholdForm = true;
-					selectedHouseholdId = null;
-				}}
-			>
-				<Plus class="h-4 w-4" />
-				{t.results.btnSeparateNew}
-			</button>
+			{#if !suggestedFromCard}
+				<button
+					type="button"
+					class="mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-[#003B71] hover:underline"
+					onclick={() => {
+						showNewHouseholdForm = true;
+						selectedHouseholdId = null;
+					}}
+				>
+					<Plus class="h-4 w-4" />
+					{t.results.btnSeparateNew}
+				</button>
+			{/if}
 		</div>
 
 		<!-- Selected Alert -->

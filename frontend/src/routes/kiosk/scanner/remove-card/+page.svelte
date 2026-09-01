@@ -9,6 +9,7 @@
 	import UserCheck from '@lucide/svelte/icons/user-check';
 
 	const type = $derived(page.url.searchParams.get('type') || '');
+	const status = $derived(page.url.searchParams.get('status') || '');
 	const message = $derived(
 		page.url.searchParams.get('message') ||
 			(type === 'warning'
@@ -16,15 +17,25 @@
 				: 'อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล')
 	);
 
-	const isWarning = $derived(
-		type === 'warning' ||
+	// Case where card was scanned again or already in system -> show Emerald Green success, not Amber warning!
+	const isSuccessRepeat = $derived(
+		status === 'already_pre_registered' ||
+			status === 'duplicate_draft' ||
+			status === 'updated_pre_registered' ||
 			message.includes('เคยเสียบบัตร') ||
 			message.includes('สแกนบัตรนี้รออยู่แล้ว') ||
 			message.includes('มีข้อมูลในระบบแล้ว') ||
-			message.includes('เช็คอิน') ||
-			message.includes('ออกชั่วคราว') ||
-			message.includes('ประวัติ') ||
-			page.url.searchParams.get('status') === 'duplicate_draft'
+			message.includes('พบข้อมูลในระบบ') ||
+			message.includes('พบข้อมูลของท่าน')
+	);
+
+	const isWarning = $derived(
+		!isSuccessRepeat &&
+			(type === 'warning' ||
+				message.includes('เสียชีวิต') ||
+				message.includes('เช็คอิน') ||
+				message.includes('ออกชั่วคราว') ||
+				message.includes('ประวัติ'))
 	);
 </script>
 

@@ -81,12 +81,13 @@ export class ScannerServerRepository {
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
 		// Find if citizen ID already exists in this shelter
+		const cleanCitizenId = cardData.citizen_id.replace(/\D/g, '');
 		const findRes = await adminFetch<{ docs: Evacuee[] }>(`/${dbName}/_find`, {
 			method: 'POST',
 			body: JSON.stringify({
 				selector: {
 					type: 'evacuee',
-					'person_id.number': cardData.citizen_id
+					$or: [{ 'person_id.number': cardData.citizen_id }, { 'person_id.number': cleanCitizenId }]
 				}
 			})
 		}).catch(() => ({ docs: [] }));
@@ -156,11 +157,43 @@ export class ScannerServerRepository {
 				};
 			}
 
-			// 3. If pre_registered already exists -> notice without overwriting
+			// 3. If pre_registered already exists -> overwrite personal data from card, preserve household
 			if (stayStatus === 'pre_registered') {
+				let updatedEvacuee = existing;
+				try {
+					const enriched: Evacuee = {
+						...existing,
+						first_name: cardSnapshot.first_name_th || existing.first_name,
+						last_name: cardSnapshot.last_name_th || existing.last_name,
+						gender: cardSnapshot.gender || existing.gender,
+						birth_year: birthYearBE ?? existing.birth_year,
+						age: calculatedAge ?? existing.age,
+						card_snapshot: cardSnapshot,
+						photo: cardSnapshot.photo_base64 || existing.photo || null,
+						// Preserve household from previous registration
+						household_id: existing.household_id,
+						updated_at: now()
+					};
+					const putRes = await adminFetch<{ ok: boolean; rev: string }>(
+						`/${dbName}/${encodeURIComponent(existing._id)}`,
+						{
+							method: 'PUT',
+							body: JSON.stringify(enriched)
+						}
+					);
+					if (putRes.ok) {
+						updatedEvacuee = { ...enriched, _rev: putRes.rev };
+					}
+				} catch (enrichErr) {
+					console.warn(
+						'[Scanner Server] Could not overwrite pre_registered evacuee with card data:',
+						enrichErr
+					);
+				}
+
 				return {
 					status: 'already_pre_registered',
-					evacuee: existing,
+					evacuee: updatedEvacuee,
 					error: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่',
 					message: 'ท่านมีข้อมูลในระบบแล้ว กรุณาไปพบเจ้าหน้าที่'
 				};
