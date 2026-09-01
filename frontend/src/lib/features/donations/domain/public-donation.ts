@@ -160,3 +160,28 @@ export type DonationUnitSource = {
 export function donationPayloadUnit(item: DonationUnitSource, fallback: string): string {
 	return item.unit_code?.trim() || item.unit?.trim() || fallback;
 }
+
+/** One counted line, as far as the perishable rule cares. */
+export type ExpiryCheckLine = {
+	item_id?: string;
+	name?: string;
+	perishable?: boolean;
+	expiry?: string;
+};
+
+/**
+ * Lines that name a perishable catalog item but carry no expiry date.
+ *
+ * `assertCountedAgainstCatalog` refuses these server-side (schema.md §2.1 — a
+ * perishable lot without an expiry cannot be rotated or discarded on time), and the
+ * ledger is append-only, so a row written without one can never be corrected.
+ *
+ * Mirrored on the client so staff are told which line to fix in Thai, at the point of
+ * entry, instead of meeting `Perishable item item:egg requires lot.expiry to be set`
+ * after filling the whole form.
+ */
+export function linesMissingExpiry(lines: ExpiryCheckLine[]): string[] {
+	return lines
+		.filter((line) => !!line.item_id && line.perishable && !line.expiry?.trim())
+		.map((line) => line.name?.trim() || (line.item_id as string));
+}

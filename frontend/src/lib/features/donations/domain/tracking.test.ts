@@ -4,6 +4,7 @@ import {
 	canEditCourierTracking,
 	donationStatusLabel,
 	formatTrackSchedule,
+	isTerminalDonationStatus,
 	toDonationTrackView
 } from './tracking';
 
@@ -94,5 +95,25 @@ describe('item_id survives the round trip', () => {
 			items: [{ free_text: 'ของใช้เบ็ดเตล็ด', qty: '2', unit: 'ชิ้น' }]
 		});
 		expect(view.items[0]?.item_id).toBeNull();
+	});
+});
+
+/**
+ * The tracking page decides whether to show the donor's check-in QR from this rule
+ * (owner's call, 2026-09-01: from `pending_review`, not only after approval — the
+ * wizard already handed them one at booking). Asking one predicate means a new
+ * terminal status cannot forget to take the pass away.
+ */
+describe('isTerminalDonationStatus (drives the tracking QR)', () => {
+	it('is false while a drop-off is still ahead — the QR stays on screen', () => {
+		for (const status of ['declared', 'pending_review', 'verifying']) {
+			expect(isTerminalDonationStatus(status)).toBe(false);
+		}
+	});
+
+	it('is true once nothing more will arrive — the QR goes away', () => {
+		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
+			expect(isTerminalDonationStatus(status)).toBe(true);
+		}
 	});
 });

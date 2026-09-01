@@ -126,3 +126,55 @@ async def test_closed_campaign_stays_off_the_board():
     )
 
     assert _upserts(actions) == []
+
+
+# The donor board draws its progress bar from these three terms. They used to be
+# invented in the component (`target = qty × 2`, `received = target − qty`,
+# `reserved = 0`), so every card showed the same 50% and "จองไว้ 0".
+@pytest.mark.asyncio
+async def test_projection_publishes_the_terms_behind_the_shortage():
+    donation = {
+        "_id": "donation:booked",
+        "type": "donation",
+        "status": "pending_review",
+        "campaign_id": "donation_campaign:a",
+        "items": [{"item_id": "item:water", "qty": "30", "unit": "bottle"}]
+    }
+    ledger = {
+        "_id": "stock_ledger:on-shelf",
+        "type": "stock_ledger",
+        "item_id": "item:water",
+        "qty": "20",
+        "reason": "purchase"
+    }
+    couch = _couch([_campaign("a", "100")], [donation, ledger])
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["qty_target"] == 100.0
+    assert doc["on_hand"] == 20.0
+    assert doc["reserved"] == 30.0
+    # The published shortage is exactly what the terms say it is.
+    assert doc["qty_needed"] == doc["qty_target"] - doc["on_hand"] - doc["reserved"]
+
+
+@pytest.mark.asyncio
+async def test_terms_sum_across_campaigns_asking_for_the_same_item():
+    couch = _couch([_campaign("a", "100"), _campaign("b", "50")])
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["qty_target"] == 150.0
+    assert doc["reserved"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_a_hand_closed_need_announces_no_target():
+    campaign = _campaign("a", "100")
+    campaign["needs"][0]["status"] = "closed"
+    # A second, open campaign keeps the item on the board at all.
+    couch = _couch([campaign, _campaign("b", "40")])
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["qty_target"] == 40.0

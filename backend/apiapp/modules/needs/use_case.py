@@ -25,7 +25,11 @@ class NeedsUseCase:
                     item_id=need.id.split(":", 1)[-1],
                     name=need.item_name,
                     qty_needed=str(need.qty_needed),
+                    qty_target=str(need.qty_target),
+                    on_hand=str(need.on_hand),
+                    reserved=str(need.reserved),
                     unit=need.unit,
+                    category=need.category,
                     status="open" if need.qty_needed > 0 else "closed",
                 )
             )

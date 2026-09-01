@@ -212,7 +212,7 @@
 			"post": {
 				"tags": ["Donations"],
 				"summary": "Track Search Donation",
-				"description": "Resolve booking_ref (DN-\u2026) + phone \u2192 tracking_token (CR-052 \u00a72.6).",
+				"description": "Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6).",
 				"operationId": "track_search_donation_public_v1_donations_track_search_post",
 				"requestBody": {
 					"content": {
@@ -420,7 +420,7 @@
 						}
 					},
 					"422": {
-						"description": "Unprocessable Content",
+						"description": "Unprocessable Entity",
 						"content": {
 							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
@@ -432,8 +432,8 @@
 		"/external/v1/shelters": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (get-list-shelter)",
-				"description": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e23\u0e30\u0e1a\u0e1a\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01 (M2).",
+				"summary": "ดึงรายการศูนย์พักพิง (get-list-shelter)",
+				"description": "ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).",
 				"operationId": "list_shelters_external_v1_shelters_get",
 				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
 				"parameters": [
@@ -443,10 +443,10 @@
 						"required": false,
 						"schema": {
 							"anyOf": [{ "type": "string" }, { "type": "null" }],
-							"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open",
+							"description": "กรองสถานะ เช่น open",
 							"title": "Status"
 						},
-						"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open"
+						"description": "กรองสถานะ เช่น open"
 					}
 				],
 				"responses": {
@@ -494,8 +494,8 @@
 		"/external/v1/persons/shelter-residency": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01 (get-person-shelter-residency)",
-				"description": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e02\u0e2d\u0e07\u0e1c\u0e39\u0e49\u0e1b\u0e23\u0e30\u0e2a\u0e1a\u0e20\u0e31\u0e22\u0e08\u0e32\u0e01\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 (CID).",
+				"summary": "ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)",
+				"description": "ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).",
 				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
 				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
 				"parameters": [
@@ -505,10 +505,10 @@
 						"required": true,
 						"schema": {
 							"type": "string",
-							"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01",
+							"description": "เลขประจำตัวประชาชน 13 หลัก",
 							"title": "Cid"
 						},
-						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+						"description": "เลขประจำตัวประชาชน 13 หลัก"
 					}
 				],
 				"responses": {
@@ -542,7 +542,7 @@
 						"content": {
 							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
 						},
-						"description": "Unprocessable Content"
+						"description": "Unprocessable Entity"
 					},
 					"500": {
 						"content": {
@@ -628,7 +628,7 @@
 						}
 					},
 					"422": {
-						"description": "Unprocessable Content",
+						"description": "Unprocessable Entity",
 						"content": {
 							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
@@ -883,6 +883,25 @@
 					}
 				}
 			}
+		},
+		"/public/v1/transparency/summary": {
+			"get": {
+				"tags": ["Transparency"],
+				"summary": "Get Transparency Summary",
+				"description": "System-wide public metrics from public_shelters + public_persons.",
+				"operationId": "get_transparency_summary_public_v1_transparency_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/TransparencySummaryResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
 		}
 	},
 	"components": {
@@ -949,7 +968,7 @@
 					"api_key"
 				],
 				"title": "ApiKeyCreateResponse",
-				"description": "Create response \u2014 plaintext ``api_key`` is returned once."
+				"description": "Create response — plaintext ``api_key`` is returned once."
 			},
 			"ApiKeyListResponse": {
 				"properties": {
@@ -1146,7 +1165,7 @@
 				"type": "object",
 				"required": ["booking_ref", "phone"],
 				"title": "DonationTrackSearchRequest",
-				"description": "CR-052 \u00a72.6 \u2014 human booking_ref + phone exact match (not token alone)."
+				"description": "CR-052 §2.6 — human booking_ref + phone exact match (not token alone)."
 			},
 			"DonationTrackSearchResponse": {
 				"properties": {
@@ -1193,6 +1212,14 @@
 					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
 					"question": { "type": "string", "title": "Question" },
 					"answer": { "type": "string", "title": "Answer" },
+					"question_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Question En"
+					},
+					"answer_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Answer En"
+					},
 					"is_published": { "type": "boolean", "title": "Is Published", "default": true },
 					"order": { "type": "integer", "title": "Order", "default": 0 }
 				},
@@ -1255,23 +1282,23 @@
 					"shelter_id": {
 						"type": "string",
 						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "รหัสศูนย์พักพิง"
 					},
 					"shelter_name": {
 						"type": "string",
 						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "ชื่อศูนย์พักพิง"
 					},
 					"checkin_datetime": {
 						"type": "string",
 						"title": "Checkin Datetime",
-						"description": "\u0e27\u0e31\u0e19\u0e40\u0e27\u0e25\u0e32\u0e17\u0e35\u0e48\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (ISO 8601 \u0e1e\u0e23\u0e49\u0e2d\u0e21 timezone \u0e40\u0e0a\u0e48\u0e19 2026-08-20T14:30:00+07:00)"
+						"description": "วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
 					},
 					"status": {
 						"type": "string",
 						"enum": ["CHECKED_IN", "CHECKED_OUT"],
 						"title": "Status",
-						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01"
+						"description": "สถานะการเข้าพัก"
 					}
 				},
 				"type": "object",
@@ -1283,29 +1310,29 @@
 					"shelter_id": {
 						"type": "string",
 						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 \u0e40\u0e0a\u0e48\u0e19 SH001"
+						"description": "รหัสศูนย์พักพิง เช่น SH001"
 					},
 					"shelter_name": {
 						"type": "string",
 						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "ชื่อศูนย์พักพิง"
 					},
 					"site_kind": {
 						"type": "string",
 						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
-						"description": "\u0e0a\u0e19\u0e34\u0e14\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48",
+						"description": "ชนิดสถานที่",
 						"default": "evacuation_center"
 					},
 					"lat": {
 						"anyOf": [{ "type": "number" }, { "type": "null" }],
 						"title": "Lat",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e30\u0e15\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+						"description": "พิกัดละติจูด (WGS 84)"
 					},
 					"long": {
 						"anyOf": [{ "type": "number" }, { "type": "null" }],
 						"title": "Long",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e2d\u0e07\u0e08\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+						"description": "พิกัดลองจิจูด (WGS 84)"
 					}
 				},
 				"type": "object",
@@ -1317,8 +1344,12 @@
 					"item_id": { "type": "string", "title": "Item Id" },
 					"name": { "type": "string", "title": "Name" },
 					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
 					"unit": { "type": "string", "title": "Unit" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
@@ -1362,6 +1393,11 @@
 					},
 					"title": { "type": "string", "title": "Title" },
 					"description": { "type": "string", "title": "Description" },
+					"title_en": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Title En" },
+					"description_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description En"
+					},
 					"severity": {
 						"type": "string",
 						"enum": ["info", "warning", "emergency"],
@@ -1646,6 +1682,45 @@
 				"type": "object",
 				"required": ["type"],
 				"title": "ShelterZoneDetail"
+			},
+			"TransparencySummary": {
+				"properties": {
+					"shelters_total": { "type": "integer", "minimum": 0.0, "title": "Shelters Total" },
+					"shelters_open": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Shelters Open",
+						"description": "status in {open, full}"
+					},
+					"occupancy_total": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Occupancy Total",
+						"description": "active + pre_registered across projected shelters (CR-070)"
+					},
+					"vulnerable_count": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Vulnerable Count",
+						"description": "Not projected in public_persons yet — always null until schema adds age"
+					}
+				},
+				"type": "object",
+				"required": ["shelters_total", "shelters_open"],
+				"title": "TransparencySummary"
+			},
+			"TransparencySummaryResponse": {
+				"properties": {
+					"summary": { "$ref": "#/components/schemas/TransparencySummary" },
+					"last_updated": { "type": "string", "format": "date-time", "title": "Last Updated" },
+					"is_stale": { "type": "boolean", "title": "Is Stale", "default": false },
+					"flags": {
+						"additionalProperties": { "type": "boolean" },
+						"type": "object",
+						"title": "Flags"
+					}
+				},
+				"type": "object",
+				"required": ["summary", "last_updated"],
+				"title": "TransparencySummaryResponse"
 			},
 			"ValidationError": {
 				"properties": {

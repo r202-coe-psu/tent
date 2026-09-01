@@ -31,6 +31,7 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		linesMissingExpiry,
 		type ScanDonationView,
 		type PendingDonationRow
 	} from '$lib/features/donations';
@@ -90,6 +91,11 @@
 			}));
 		return [...supplyItems, ...itemMasters];
 	});
+
+	/** Is this catalog id a perishable item? Drives the expiry requirement below. */
+	function isPerishable(itemId: string): boolean {
+		return catalogItems.find((c) => c._id === itemId)?.perishable === true;
+	}
 
 	// Quick create item master dialog state
 	let isQuickCreateOpen = $state(false);
@@ -246,10 +252,27 @@
 		return 'ไม่ได้ระบุนัดหมาย';
 	});
 
+	/**
+	 * Lines whose item is perishable but whose expiry is still blank. The intake route
+	 * refuses these (`assertCountedAgainstCatalog`), so they have to block the button
+	 * rather than surface as a raw English error after the whole form is filled.
+	 */
+	const scannedMissingExpiry = $derived(
+		linesMissingExpiry(
+			scannedItems.map((it) => ({
+				item_id: it.item_id,
+				name: it.name,
+				perishable: it.item_id ? isPerishable(it.item_id) : false,
+				expiry: it.expiry
+			}))
+		)
+	);
+
 	// Validation check for receiving into stock
 	const canReceive = $derived(
 		scannedItems.length > 0 &&
-			scannedItems.every((it) => it.verified && it.item_id && it.storage_zone && it.qty)
+			scannedItems.every((it) => it.verified && it.item_id && it.storage_zone && it.qty) &&
+			scannedMissingExpiry.length === 0
 	);
 
 	// Walk-in form state
@@ -595,6 +618,21 @@
 			return;
 		}
 
+		// Same rule the intake route enforces (schema.md §2.1): a perishable lot with no
+		// expiry cannot be rotated or discarded on time, and the ledger is append-only.
+		const missingExpiry = linesMissingExpiry(
+			validItems.map((it) => ({
+				item_id: it.itemId,
+				name: it.name,
+				perishable: isPerishable(it.itemId),
+				expiry: it.expiry
+			}))
+		);
+		if (missingExpiry.length > 0) {
+			toast.error(`ของเน่าเสียง่ายต้องระบุวันหมดอายุ: ${missingExpiry.join(', ')}`);
+			return;
+		}
+
 		walkinSaving = true;
 		try {
 			// The counter does NOT write CouchDB directly: the server route mints the
@@ -605,6 +643,11 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
+					// The shelter this station is working in. A shelter-scoped caller has the
+					// server ignore it (their own scope wins), but a system admin has no
+					// shelter of their own — without it the route can only answer
+					// SHELTER_REQUIRED, which is what the counter form used to hit.
+					shelter_code: getShelterCode(),
 					donor: {
 						name: walkinDonorName.trim(),
 						...(walkinDonorPhone.trim() ? { phone: walkinDonorPhone.trim() } : {}),
@@ -884,13 +927,27 @@
 													for="item-expiry-{idx}"
 													class="text-sm font-semibold text-foreground"
 												>
-													วันหมดอายุ (ถ้ามี)
+													วันหมดอายุ
+													{#if item.item_id && isPerishable(item.item_id)}
+														<span class="text-rose-500">*</span>
+														<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
+															(ของเน่าเสียง่าย)
+														</span>
+													{:else}
+														<span class="ml-1 text-xs font-normal text-muted-foreground">
+															(ถ้ามี)
+														</span>
+													{/if}
 												</Label>
 												<Input
 													id="item-expiry-{idx}"
 													type="date"
 													bind:value={item.expiry}
-													class="h-10 rounded-xl text-sm"
+													class="h-10 rounded-xl text-sm {item.item_id &&
+													isPerishable(item.item_id) &&
+													!item.expiry
+														? 'border-rose-300 dark:border-rose-900'
+														: ''}"
 												/>
 											</div>
 
@@ -1017,6 +1074,9 @@
 								{/if}
 								{#if scannedItems.some((it) => !it.verified)}
 									<li>ยังไม่ได้ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบทุกรายการ</li>
+								{/if}
+								{#if scannedMissingExpiry.length > 0}
+									<li>ของเน่าเสียง่ายยังไม่ได้ระบุวันหมดอายุ: {scannedMissingExpiry.join(', ')}</li>
 								{/if}
 							</ul>
 						</div>
@@ -1549,6 +1609,54 @@
 											type="text"
 											bind:value={item.unit}
 											class="h-10 rounded-xl text-center text-sm"
+										/>
+									</div>
+								</div>
+
+								<!-- Lot details. Both reach `stock_ledger.lot` (CR-088); the expiry
+								     is REQUIRED for a perishable item and the intake route refuses
+								     the line without it — this row is where staff can actually
+								     supply it. -->
+								<div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">
+									<div class="space-y-1.5 md:col-span-6">
+										<Label
+											for="walkin-expiry-{item.id}"
+											class="text-sm font-semibold text-foreground"
+										>
+											วันหมดอายุ
+											{#if isPerishable(item.itemId)}
+												<span class="text-rose-500">*</span>
+												<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
+													(ของเน่าเสียง่าย — ต้องระบุ)
+												</span>
+											{:else}
+												<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
+											{/if}
+										</Label>
+										<Input
+											id="walkin-expiry-{item.id}"
+											type="date"
+											bind:value={item.expiry}
+											class="h-10 rounded-xl text-sm {isPerishable(item.itemId) && !item.expiry
+												? 'border-rose-300 dark:border-rose-900'
+												: ''}"
+										/>
+									</div>
+
+									<div class="space-y-1.5 md:col-span-6">
+										<Label
+											for="walkin-zone-{item.id}"
+											class="text-sm font-semibold text-foreground"
+										>
+											โซนจัดเก็บ
+											<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
+										</Label>
+										<Input
+											id="walkin-zone-{item.id}"
+											type="text"
+											placeholder="เช่น A-01, ตู้แช่ 2"
+											bind:value={item.storageZone}
+											class="h-10 rounded-xl text-sm"
 										/>
 									</div>
 								</div>

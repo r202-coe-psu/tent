@@ -221,15 +221,22 @@
 						<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
 							>รายการพัสดุ / ประกาศพิเศษ</Table.Head
 						>
-						<Table.Head class="px-6 py-4 text-center text-xs font-bold text-foreground/80"
+						<Table.Head class="px-3 py-4 text-center text-xs font-bold text-foreground/80"
 							>ยอดจองบริจาคแล้ว</Table.Head
 						>
-						<Table.Head class="px-6 py-4 text-center text-xs font-bold text-foreground/80"
+						<Table.Head class="px-3 py-4 text-center text-xs font-bold text-foreground/80"
+							>ยอดในคลัง</Table.Head
+						>
+						<Table.Head class="px-3 py-4 text-center text-xs font-bold text-foreground/80"
 							>ยอดจองเป้าหมาย</Table.Head
 						>
-						<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
-							>ความคืบหน้า (PROGRESS)</Table.Head
-						>
+						<Table.Head class="min-w-[220px] px-6 py-4 text-xs font-bold text-foreground/80">
+							<span
+								title="ความคืบหน้าคิดจาก (ยอดจอง + ยอดในคลัง) ÷ เป้าหมาย — เกณฑ์เดียวกับที่ระบบใช้ปิดรับอัตโนมัติ (T-22)"
+							>
+								ความคืบหน้า
+							</span>
+						</Table.Head>
 						<Table.Head class="px-6 py-4 text-center text-xs font-bold text-foreground/80"
 							>สถานะโปรโมตหน้าแรก</Table.Head
 						>
@@ -241,7 +248,7 @@
 				<Table.Body class="divide-y divide-border/60 text-xs">
 					{#if flatRows.length === 0}
 						<Table.Row>
-							<Table.Cell colspan={6} class="px-6 py-12 text-center text-muted-foreground">
+							<Table.Cell colspan={7} class="px-6 py-12 text-center text-muted-foreground">
 								ไม่พบรายการความต้องการที่ค้นหา
 							</Table.Cell>
 						</Table.Row>
@@ -279,22 +286,32 @@
 								</Table.Cell>
 
 								<!-- Reserved Pledged -->
-								<Table.Cell class="px-6 py-4 text-center font-bold text-foreground">
+								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<span class="inline-block rounded-md bg-muted/60 px-2.5 py-1 text-xs">
 										{roundQty(row.reserved || '0')}
 									</span>
 								</Table.Cell>
 
+								<!-- On-hand. Shown because the progress bar and the automatic
+								     cut-off both count it: a need can close with almost no
+								     bookings if the warehouse already holds the goods, and staff
+								     had no way to see that from this table. -->
+								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
+									<span class="inline-block rounded-md bg-muted/60 px-2.5 py-1 text-xs">
+										{roundQty(row.onHand || '0')}
+									</span>
+								</Table.Cell>
+
 								<!-- Target -->
-								<Table.Cell class="px-6 py-4 text-center font-bold text-foreground">
+								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									{roundQty(row.target || '0')}
 									<span class="ml-1 text-2xs font-medium text-muted-foreground">{row.unit}</span>
 								</Table.Cell>
 
 								<!-- Progress -->
-								<Table.Cell class="min-w-[180px] px-6 py-4">
+								<Table.Cell class="min-w-[220px] px-6 py-4">
 									<div class="flex items-center gap-3">
-										<div class="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+										<div class="relative h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
 											<div
 												class="h-full rounded-full transition-all duration-300 {row.isCutOff
 													? 'bg-rose-500'
@@ -302,7 +319,7 @@
 												style="width: {row.progressPercent}%"
 											></div>
 										</div>
-										<span class="w-9 text-right text-2xs font-semibold text-muted-foreground">
+										<span class="w-10 text-right text-2xs font-bold text-foreground/80">
 											{row.progressPercent}%
 										</span>
 									</div>

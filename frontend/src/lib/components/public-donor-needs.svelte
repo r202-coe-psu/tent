@@ -12,6 +12,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { donorCategoryFromCatalog } from '$lib/features/donations';
 
 	const donationStore = getDonationStore();
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
@@ -25,9 +26,10 @@
 		status: 'open' | 'closed';
 		category?: string;
 		urgency?: 'critical' | 'high' | 'normal';
-		target?: number;
-		received?: number;
-		pending?: number;
+		/** The terms behind `qty_needed`, published by the projection. */
+		qty_target?: number;
+		on_hand?: number;
+		reserved?: number;
 		image?: string;
 	}
 
@@ -63,26 +65,35 @@
 		return Array.from(set).slice(0, 5);
 	});
 
-	onMount(async () => {
+	/**
+	 * Load the board. Pulled out of `onMount` so it can be re-run: the figures move as
+	 * other donors book, cancel or edit, and this page used to fetch exactly once per
+	 * page load — a donor who edited their booking in another tab kept seeing the old
+	 * "ยังขาด" number with no way to refresh short of reloading the whole app.
+	 */
+	async function loadNeeds() {
 		try {
 			const res = await fetch('/api/public/v1/needs');
 			if (res.ok) {
 				const data = await res.json();
+				loadError = '';
 				// Enrich needs if some stats are raw
+				// Every quantity here comes from the projection — `qty_needed` and the
+				// three terms it is made of (`remaining = target − on_hand − reserved`,
+				// schema.md §2.4 / T-60). They used to be invented in this component
+				// (`target = qty × 2`, `received = target − qty`, `reserved = 0`), which
+				// made every card claim the same "50%, จองไว้ 0".
 				shelters = (data || []).map((s: ShelterNeeds) => ({
 					...s,
 					needs: (s.needs || []).map((n) => {
 						const qty = Number(n.qty_needed) || 0;
-						const target = n.target || (qty > 0 ? qty * 2 : 100);
-						const received = n.received ?? Math.max(0, target - qty);
-						const pending = n.pending ?? 0;
 						return {
 							...n,
 							raw_name: n.name || n.item_id,
 							qty_needed: qty,
-							target,
-							received,
-							pending,
+							qty_target: Number(n.qty_target) || 0,
+							on_hand: Number(n.on_hand) || 0,
+							reserved: Number(n.reserved) || 0,
 							urgency: n.urgency || (qty >= 50 ? 'critical' : qty > 0 ? 'high' : 'normal')
 						};
 					})
@@ -95,6 +106,34 @@
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	/**
+	 * Returning to step 1 means the donor just came back from booking or editing, so the
+	 * board they land on has to be the current one — their own booking has changed the
+	 * "ยังขาด" figure they are about to read.
+	 *
+	 * A fetch on a transition, not derived state: `lastTab` is a plain local (never
+	 * rendered, never reactive) so the effect has one job — fire the reload once, on the
+	 * way in.
+	 */
+	let lastTab = donationStore.activeTab;
+	$effect(() => {
+		const tab = donationStore.activeTab;
+		if (tab === 'needs' && lastTab !== 'needs') void loadNeeds();
+		lastTab = tab;
+	});
+
+	onMount(() => {
+		void loadNeeds();
+
+		// Coming back to the tab is the donor's own "refresh": they booked or edited
+		// elsewhere and expect the board to say so.
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') void loadNeeds();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
 	});
 
 	// Currently selected shelter for detailed view
@@ -251,7 +290,11 @@
 			{
 				id: crypto.randomUUID(),
 				item_id: need.item_id,
-				category: need.category || 'food',
+				// The card's category comes from the CATALOG (`food`/`water`/`bedding`/…),
+				// which is a finer split than the five buckets the donor form shows — so it
+				// is folded, not copied. It used to fall back to `'food'`, which filed
+				// blankets and soap as food on the donation doc itself.
+				category: donorCategoryFromCatalog(need.category),
 				name: formatItemName(need.raw_name || need.name || need.item_id),
 				amount: need.qty_needed > 0 ? need.qty_needed : 1,
 				unit: formatUnit(need.unit),
@@ -380,12 +423,6 @@
 						{:else}
 							{@const isCritical = need.urgency === 'critical' || need.qty_needed >= 50}
 							{@const isHigh = need.urgency === 'high' || (!isCritical && need.qty_needed > 0)}
-							{@const target = need.target || (need.qty_needed > 0 ? need.qty_needed * 2 : 100)}
-							{@const received = need.received ?? Math.max(0, target - need.qty_needed)}
-							{@const pending = need.pending ?? 0}
-							{@const receivedPct = target > 0 ? Math.min(100, (received / target) * 100) : 0}
-							{@const pendingPct =
-								target > 0 ? Math.min(100 - receivedPct, (pending / target) * 100) : 0}
 
 							<!-- Active Need Card -->
 							<div
@@ -449,43 +486,63 @@
 													? t.needShortage
 															.replace('{qty}', String(need.qty_needed))
 															.replace('{unit}', formatUnit(need.unit))
-															.replace('{pending}', String(pending))
 													: t.openIndefinitely}
 											</span>
 										</div>
 
-										<!-- Progress Bars -->
-										<div class="mt-2 flex w-full flex-col gap-1.5">
-											<div
-												class="flex flex-col gap-0.5 text-2xs leading-tight font-semibold text-slate-500"
-											>
-												<div class="flex items-center justify-between">
-													<span class="text-emerald-700"
-														>{t.receivedActual}
-														{received}
-														{formatUnit(need.unit)}</span
-													>
+										<!-- Progress, from the projection's own terms:
+										     `qty_needed = qty_target − on_hand − reserved`. Green is
+										     what the shelf already holds, amber what other donors have
+										     promised but not delivered. Drawn only when a target was
+										     published — a bar with no target is where the invented
+										     "50% for everything" came from. -->
+										{#if (need.qty_target ?? 0) > 0}
+											{@const target = need.qty_target ?? 0}
+											{@const onHand = Math.min(need.on_hand ?? 0, target)}
+											{@const reserved = Math.min(need.reserved ?? 0, target - onHand)}
+											{@const onHandPct = (onHand / target) * 100}
+											{@const reservedPct = (reserved / target) * 100}
+											<div class="mt-2 flex w-full flex-col gap-1.5">
+												<div
+													class="flex flex-col gap-0.5 text-2xs leading-tight font-semibold text-slate-500"
+												>
+													<div class="flex items-center justify-between">
+														<span class="text-emerald-700">
+															{t.receivedActual}
+															{onHand}
+															{formatUnit(need.unit)}
+														</span>
+														<span class="font-normal text-slate-400">
+															{t.needTargetLabel}
+															{target}
+															{formatUnit(need.unit)}
+														</span>
+													</div>
+													<div class="flex items-center justify-between">
+														<span class="text-amber-600">
+															{t.pendingReserved}
+															{reserved}
+															{formatUnit(need.unit)}
+														</span>
+														<span>{Math.round(onHandPct + reservedPct)}%</span>
+													</div>
 												</div>
-												<div class="flex items-center justify-between">
-													<span class="text-amber-600"
-														>{t.pendingReserved}
-														{pending}
-														{formatUnit(need.unit)}</span
-													>
-													<span>{Math.round(receivedPct + pendingPct)}%</span>
+												<div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+													<div
+														class="h-full bg-emerald-500 transition-all"
+														style:width="{onHandPct}%"
+													></div>
+													<div
+														class="h-full bg-amber-400 transition-all"
+														style:width="{reservedPct}%"
+													></div>
 												</div>
 											</div>
-											<div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-												<div
-													class="h-full bg-emerald-500 transition-all"
-													style:width="{receivedPct}%"
-												></div>
-												<div
-													class="h-full bg-amber-400 transition-all"
-													style:width="{pendingPct}%"
-												></div>
-											</div>
-										</div>
+										{:else}
+											<p class="mt-2 text-2xs leading-tight text-slate-500">
+												{t.needRemainingHint}
+											</p>
+										{/if}
 									</div>
 								</div>
 
@@ -644,9 +701,16 @@
 					{@const hasCritical = displayedNeeds.some(
 						(n) => n.urgency === 'critical' || n.qty_needed >= 50
 					)}
-					{@const totalTarget = displayedNeeds.reduce((sum, n) => sum + (n.target || 100), 0) || 1}
-					{@const totalReceived = displayedNeeds.reduce((sum, n) => sum + (n.received || 0), 0)}
-					{@const overallPct = Math.min(100, Math.round((totalReceived / totalTarget) * 100))}
+					<!-- Shelter-level progress from the projection's own terms, summed over the
+					     items it publishes. Only items that announced a target take part, so a
+					     board with no targets shows no percentage rather than a made-up one. -->
+					{@const totalTarget = displayedNeeds.reduce((sum, n) => sum + (n.qty_target ?? 0), 0)}
+					{@const totalOnHand = displayedNeeds.reduce((sum, n) => sum + (n.on_hand ?? 0), 0)}
+					{@const totalReserved = displayedNeeds.reduce((sum, n) => sum + (n.reserved ?? 0), 0)}
+					{@const overallPct =
+						totalTarget > 0
+							? Math.min(100, Math.round(((totalOnHand + totalReserved) / totalTarget) * 100))
+							: null}
 
 					<!-- Shelter Card -->
 					<div
@@ -681,9 +745,11 @@
 							</h3>
 							<p class="mb-4 text-xs font-semibold text-[#86868b]">
 								{#if displayedNeeds.length > 0}
-									{t.needsCount
-										.replace('{count}', String(displayedNeeds.length))
-										.replace('{pct}', String(overallPct))}
+									{overallPct === null
+										? t.needsCount.replace('{count}', String(displayedNeeds.length))
+										: t.needsCountWithProgress
+												.replace('{count}', String(displayedNeeds.length))
+												.replace('{pct}', String(overallPct))}
 								{:else}
 									{t.shelterSufficient}
 								{/if}
@@ -700,12 +766,6 @@
 								{#each displayedNeeds.slice(0, 3) as need, i (need.item_id || i)}
 									{@const isCrit = need.urgency === 'critical' || need.qty_needed >= 50}
 									{@const isHig = need.urgency === 'high' || (!isCrit && need.qty_needed > 0)}
-									{@const target = need.target || (need.qty_needed > 0 ? need.qty_needed * 2 : 100)}
-									{@const received = need.received ?? Math.max(0, target - need.qty_needed)}
-									{@const pending = need.pending ?? 0}
-									{@const receivedPct = target > 0 ? Math.min(100, (received / target) * 100) : 0}
-									{@const pendingPct =
-										target > 0 ? Math.min(100 - receivedPct, (pending / target) * 100) : 0}
 									{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
 
 									<div class="flex flex-col gap-1.5 py-1">
@@ -742,18 +802,38 @@
 													: t.openFor}
 											</span>
 										</div>
-										<div class="w-full pl-3">
-											<div class="flex h-[6px] w-full overflow-hidden rounded-full bg-slate-100">
+
+										{#if (need.qty_target ?? 0) > 0}
+											{@const target = need.qty_target ?? 0}
+											{@const onHand = Math.min(need.on_hand ?? 0, target)}
+											{@const reserved = Math.min(need.reserved ?? 0, target - onHand)}
+											<div class="w-full pl-3">
+												<div class="flex h-[6px] w-full overflow-hidden rounded-full bg-slate-100">
+													<div
+														class="h-full bg-emerald-500 transition-all"
+														style:width="{(onHand / target) * 100}%"
+													></div>
+													<div
+														class="h-full bg-amber-400 transition-all"
+														style:width="{(reserved / target) * 100}%"
+													></div>
+												</div>
 												<div
-													class="h-full bg-emerald-500 transition-all"
-													style:width="{receivedPct}%"
-												></div>
-												<div
-													class="h-full bg-amber-400 transition-all"
-													style:width="{pendingPct}%"
-												></div>
+													class="mt-1 flex items-center justify-between text-2xs leading-tight text-slate-400"
+												>
+													<div class="flex items-center gap-1.5 font-medium">
+														<span class="text-emerald-700">{onHand} {formatUnit(need.unit)}</span>
+														{#if reserved > 0}
+															<span class="font-semibold text-amber-600">
+																+{reserved}
+																{t.pendingShort}
+															</span>
+														{/if}
+													</div>
+													<span>{t.needTargetLabel} {target}</span>
+												</div>
 											</div>
-										</div>
+										{/if}
 									</div>
 								{/each}
 

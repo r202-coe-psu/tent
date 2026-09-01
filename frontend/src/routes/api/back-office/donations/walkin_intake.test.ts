@@ -202,6 +202,40 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(docsOfType('donation')[0].shelter_code).toBe('SH001');
 	});
 
+	// The counter form runs under whatever shelter the station is switched to, and a
+	// system admin has no shelter of their own — so the code it sends is the only thing
+	// that can place the donation. It must be honoured, and validated.
+	it('writes to the shelter a system admin named', async () => {
+		mockCouch();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+
+		const data = await (await POST(event({ ...validBody, shelter_code: 'SH001' }))).json();
+
+		expect(data.success).toBe(true);
+		expect(docsOfType('donation')[0].shelter_code).toBe('SH001');
+	});
+
+	it('refuses a shelter code that is not in the registry', async () => {
+		mockCouch();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+
+		const response = await POST(event({ ...validBody, shelter_code: 'SH999' }));
+
+		expect(response.status).toBe(404);
+		expect((await response.json()).error_code).toBe('SHELTER_NOT_FOUND');
+		expect(written).toBeNull();
+	});
+
 	it('makes a system admin name the destination shelter', async () => {
 		mockCouch();
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({

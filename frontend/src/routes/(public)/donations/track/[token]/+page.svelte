@@ -6,6 +6,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Package from '@lucide/svelte/icons/package';
+	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Truck from '@lucide/svelte/icons/truck';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -26,6 +27,7 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		isTerminalDonationStatus,
 		CancelDonationDialog,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
@@ -54,8 +56,25 @@
 
 	const status = $derived(donation?.status ?? '');
 
-	// CR-052 §2.6: once the donation is approved the donor needs a scannable QR at drop-off.
-	const showQr = $derived(status === 'verifying' || status === 'received');
+	/**
+	 * The QR is the donor's check-in pass, so it is on screen for exactly as long as
+	 * there is a drop-off left to make — `declared`, `pending_review`, `verifying` —
+	 * and gone the moment the booking reaches a terminal status.
+	 *
+	 * Two things this fixes:
+	 *
+	 * · It used to include `received`, so the caption "show this to staff when you bring
+	 *   the goods" sat directly under the line saying staff had already shelved them.
+	 * · CR-052 §2.6 gated it on approval, but the wizard's success ticket hands the
+	 *   donor a QR the moment they book (`pending_review`) — so coming back to this page
+	 *   made the pass they already had disappear. Owner's call, 2026-09-01: the tracking
+	 *   page shows it from `pending_review` too.
+	 *
+	 * Asked through `isTerminalDonationStatus` rather than listing statuses again, so a
+	 * new terminal status cannot forget to take the pass away.
+	 */
+	const showQr = $derived(!!status && !isTerminalDonationStatus(status));
+	const isReceived = $derived(status === 'received');
 	let qrCodeUrl = $state('');
 
 	$effect(() => {
@@ -182,6 +201,20 @@
 			</div>
 
 			<div class="space-y-8 p-6 md:p-8">
+				{#if isReceived}
+					<div
+						class="flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-50/60 p-6 text-center dark:bg-emerald-950/20"
+					>
+						<PackageCheck class="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+						<h4 class="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+							{t.receivedTitle}
+						</h4>
+						<p class="max-w-xs text-2xs text-emerald-800/80 dark:text-emerald-200/80">
+							{t.receivedBody}
+						</p>
+					</div>
+				{/if}
+
 				{#if showQr && qrCodeUrl}
 					<div
 						class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-muted/30 p-6 text-center"
@@ -459,6 +492,7 @@
 			<EditDonationItemsDialog
 				bind:open={editOpen}
 				{token}
+				shelterCode={donation.shelter_code}
 				items={donation.items}
 				onSaved={() => trackingQuery.refetch()}
 			/>

@@ -123,3 +123,54 @@ def compute_needs(
         {item_id: str(qty) for item_id, qty in remaining.items()},
         item_campaign,
     )
+
+
+def need_breakdown(
+    campaigns: list[dict[str, Any]],
+    donations: list[dict[str, Any]],
+    stock_ledgers: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, float]]:
+    """The three terms behind ``remaining``, per item, for the public board to show.
+
+    ``compute_needs`` publishes one number — the shortage — which is all the booking
+    guard needs. The donor board also wants to say WHY it is short: how much the shelf
+    already holds and how much other donors have promised. Those are the same terms this
+    module already computes, so they are returned here rather than re-derived in the UI,
+    where they had been faked (``target = qty × 2``, ``reserved = 0``).
+
+    Deliberately a sibling of ``compute_needs`` and not a change to it: the shortage rule
+    is pinned across three implementations by ``packages/needs-fixtures``, and widening
+    its return type would drag the parity harness along for a display concern.
+
+    Item-level aggregate, matching how the board is keyed (``{shelter}:{item_id}``):
+    ``qty_target`` sums every open need asking for the item, ``reserved`` sums what is
+    still owed across campaigns, and ``on_hand`` is the shelf balance — counted ONCE per
+    item even when several campaigns ask for it, the same simplification ``compute_needs``
+    makes when it credits the full balance to each campaign.
+    """
+    ledgers = stock_ledgers or []
+    on_hand = on_hand_by_item(ledgers)
+
+    breakdown: dict[str, dict[str, float]] = {}
+
+    def bucket(item_id: str) -> dict[str, float]:
+        return breakdown.setdefault(
+            item_id,
+            {"qty_target": 0.0, "on_hand": on_hand.get(item_id, 0.0), "reserved": 0.0},
+        )
+
+    for campaign in campaigns:
+        campaign_id = str(campaign.get("_id", ""))
+        reserved = _reserved_by_item(donations, ledgers, campaign_id)
+
+        for need in campaign.get("needs") or []:
+            item_id = need.get("item_id")
+            # A need staff closed by hand takes no more, so it announces no target —
+            # same treatment `compute_needs` gives it.
+            if not item_id or need.get("status") == "closed":
+                continue
+            entry = bucket(str(item_id))
+            entry["qty_target"] += _to_float(need.get("qty_target"))
+            entry["reserved"] += reserved.get(item_id, 0.0)
+
+    return breakdown

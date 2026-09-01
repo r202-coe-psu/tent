@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { donationPayloadUnit, isDonorEditable } from './public-donation';
+import { donationPayloadUnit, isDonorEditable, linesMissingExpiry } from './public-donation';
 
 /**
  * D-1 — CR-052 §1.4 opens every public booking in `pending_review` instead of
@@ -46,5 +46,46 @@ describe('donationPayloadUnit (R-15.4)', () => {
 		expect(donationPayloadUnit({}, 'ชิ้น')).toBe('ชิ้น');
 		expect(donationPayloadUnit({ unit: '   ' }, 'ชิ้น')).toBe('ชิ้น');
 		expect(donationPayloadUnit({ unit_code: '  ', unit: 'ลัง' }, 'ชิ้น')).toBe('ลัง');
+	});
+});
+
+/**
+ * The counter form had no expiry field at all, so a perishable line could only ever
+ * come back `Perishable item item:egg requires lot.expiry to be set` from the server —
+ * unfixable from that screen. The rule is mirrored here so the form can name the line
+ * in Thai before anything is sent.
+ */
+describe('linesMissingExpiry (perishable lot rule, schema.md §2.1)', () => {
+	it('names the perishable lines with no expiry', () => {
+		expect(
+			linesMissingExpiry([
+				{ item_id: 'item:egg', name: 'ไข่ไก่', perishable: true },
+				{ item_id: 'item:rice', name: 'ข้าวสาร', perishable: false }
+			])
+		).toEqual(['ไข่ไก่']);
+	});
+
+	it('accepts a perishable line once the date is filled in', () => {
+		expect(
+			linesMissingExpiry([
+				{ item_id: 'item:egg', name: 'ไข่ไก่', perishable: true, expiry: '2026-09-30' }
+			])
+		).toEqual([]);
+	});
+
+	it('treats a blank or whitespace date as missing', () => {
+		for (const expiry of ['', '   ']) {
+			expect(linesMissingExpiry([{ item_id: 'item:egg', perishable: true, expiry }])).toEqual([
+				'item:egg'
+			]);
+		}
+	});
+
+	it('leaves free-text lines alone — they never reach the ledger', () => {
+		expect(linesMissingExpiry([{ name: 'ของเบ็ดเตล็ด', perishable: true }])).toEqual([]);
+	});
+
+	it('falls back to the item id when the line has no display name', () => {
+		expect(linesMissingExpiry([{ item_id: 'item:egg', perishable: true }])).toEqual(['item:egg']);
 	});
 });

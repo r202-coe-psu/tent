@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
-from worker.projectors.compute_needs import compute_needs
+from worker.projectors.compute_needs import compute_needs, need_breakdown
 
 ProjectionAction = Literal["upsert", "delete"]
 
@@ -73,6 +73,9 @@ async def project_needs_for_shelter(
     catalog = await _load_catalog_map(couch)
 
     remaining, _ = compute_needs(campaigns, donations, stock_ledgers)
+    # The terms behind the shortage, so the donor board can show what it is made of
+    # instead of inventing a target and a received figure of its own.
+    breakdown = need_breakdown(campaigns, donations, stock_ledgers)
     now = datetime.now(UTC)
     actions: list[tuple[ProjectionAction, dict[str, Any] | None]] = []
 
@@ -86,6 +89,7 @@ async def project_needs_for_shelter(
             actions.append(("delete", {"_id": doc_id}))
             continue
         details = catalog.get(item_id, {})
+        terms = breakdown.get(item_id, {})
         actions.append(
             (
                 "upsert",
@@ -95,6 +99,9 @@ async def project_needs_for_shelter(
                     "item_name": details.get("name", item_id),
                     "category": details.get("category", "other"),
                     "qty_needed": qty_needed,
+                    "qty_target": terms.get("qty_target", 0.0),
+                    "on_hand": terms.get("on_hand", 0.0),
+                    "reserved": terms.get("reserved", 0.0),
                     "unit": details.get("unit", "unit"),
                     "updated_at": now,
                 },

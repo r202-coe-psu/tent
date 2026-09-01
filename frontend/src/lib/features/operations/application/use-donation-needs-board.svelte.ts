@@ -2,7 +2,9 @@ import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { supplyRepository } from '$lib/features/supply';
+import { useQueryClient } from '@tanstack/svelte-query';
 import {
+	operationsKeys,
 	useCampaigns,
 	useStockLedgers,
 	useDonations,
@@ -49,6 +51,36 @@ export function useDonationNeedsBoard(options?: {
 	const campaignsQuery = useCampaigns();
 	const stockLedgersQuery = useStockLedgers();
 	const donationsQuery = useDonations();
+	const queryClient = useQueryClient();
+
+	/**
+	 * The board's three inputs all move without this page doing anything: a donor books
+	 * or edits from the public plane, another shelter's staff receive stock. With the
+	 * app's 60s `staleTime` and no focus event to trigger a refetch, staff watching the
+	 * board saw figures frozen at page load and reported the edit "not updating".
+	 *
+	 * Revalidate when the tab comes back and on a slow tick — the numbers are what the
+	 * cut-off decision is read from, so being a minute behind is a wrong answer, not a
+	 * stale detail.
+	 */
+	function refreshBoard() {
+		void queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		void queryClient.invalidateQueries({ queryKey: operationsKeys.donations() });
+		void queryClient.invalidateQueries({ queryKey: operationsKeys.stockLedgers() });
+	}
+
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') refreshBoard();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		const tick = setInterval(refreshBoard, 60_000);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisible);
+			clearInterval(tick);
+		};
+	});
 	const createCampaignMutation = useCreateCampaign();
 	const updateCampaignMutation = useUpdateCampaign();
 
