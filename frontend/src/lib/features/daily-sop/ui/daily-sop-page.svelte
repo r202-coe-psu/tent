@@ -81,7 +81,8 @@
 	let saveDialogDescription = $state('');
 
 	const shelterName = $derived(shelterQuery.data?.name ?? `ศูนย์พักพิง ${shelterCode}`);
-	const currentUserName = $derived(authStore.user?.name ?? 'ไม่ทราบผู้ใช้');
+	const currentUserId = $derived(authStore.user?.name ?? 'ไม่ทราบผู้ใช้');
+	const currentAssessorName = $derived(authStore.user?.display_name?.trim() || currentUserId);
 	const history = $derived(historyQuery.data ?? []);
 	const snapshot = $derived(snapshotQuery.data ?? null);
 	const isReadOnly = $derived(view === 'snapshot-menu' || view === 'snapshot-section');
@@ -158,7 +159,7 @@
 			return;
 		}
 		draft = createEmptyDraft();
-		assessorName = currentUserName;
+		assessorName = currentAssessorName;
 		activeSection = 'registration';
 		hydratedEditId = null;
 		navigate('menu');
@@ -175,7 +176,7 @@
 
 	function selectControl(id: string, status: SopUiStatus): void {
 		if (isReadOnly) return;
-		draft = answerControl(draft, id, status, currentUserName, new Date().toISOString());
+		draft = answerControl(draft, id, status, currentUserId, new Date().toISOString());
 	}
 
 	function selectLifeline(id: LifelineId, status: LifelineStatus): void {
@@ -295,7 +296,7 @@
 			const result = await createMutation.mutateAsync({
 				draft,
 				date: bangkokDate(new Date()),
-				ctx: { shelterCode, createdBy: currentUserName }
+				ctx: { shelterCode, createdBy: currentUserId, assessorName: currentAssessorName }
 			});
 			if (result.kind === 'duplicate') {
 				void historyQuery.refetch();
@@ -322,7 +323,7 @@
 			await updateMutation.mutateAsync({
 				existing: snapshot,
 				draft,
-				ctx: { shelterCode, createdBy: currentUserName }
+				ctx: { shelterCode, createdBy: currentUserId, assessorName: currentAssessorName }
 			});
 			draft = createEmptyDraft();
 			assessorName = '';

@@ -9,7 +9,7 @@ import {
 } from '../domain/daily-sop';
 import { buildDailySopId, DailySopRemoteRepository } from './daily-sop.remote';
 
-const ctx = { shelterCode: 'SH001', createdBy: 'พนักงานประจำศูนย์ หาดใหญ่' };
+const ctx = { shelterCode: 'SH001', createdBy: 'sa01' };
 
 vi.mock('$lib/db/couch-db', () => ({
 	allDocsByType: vi.fn(),
@@ -42,11 +42,13 @@ describe('Daily SOP repository contract', () => {
 		const result = await new DailySopRemoteRepository('shelter_sh001').createCompleted(
 			draft,
 			'2026-06-11',
-			ctx
+			{ ...ctx, assessorName: 'นายสมชาย ใจดี' }
 		);
 		if (result.kind === 'created') {
 			expect(result.assessment.schema_v).toBe(1);
 			expect(result.assessment.status).toBe('InProgress');
+			expect(result.assessment.assessor_name).toBe('นายสมชาย ใจดี');
+			expect(result.assessment.created_by).toBe('sa01');
 			expect(result.assessment.controls[0]).toMatchObject({ status: 'Pending', answered: true });
 			expect(result.assessment.controls[1].answered).toBe(false);
 			expect(result.assessment.lifelines.electricity).toBeNull();
