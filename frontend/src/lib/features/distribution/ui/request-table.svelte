@@ -3,13 +3,16 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import type { DistributionRequest, DistributionRequestStatus } from '../domain/distribution';
-	import { distributionRequestStatusLabels } from './request-ui';
+	import { approvalCoverageLabels, distributionRequestStatusLabels } from './request-ui';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Eye from '@lucide/svelte/icons/eye';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 
+	import type { CoverageKind } from './approval-coverage';
+
 	interface Props {
 		requests: DistributionRequest[];
+		coverageMap?: ReadonlyMap<string, CoverageKind | 'unknown'>;
 		canApprove?: boolean;
 		canReject?: boolean;
 		onView?: (request: DistributionRequest) => void;
@@ -19,6 +22,7 @@
 
 	let {
 		requests,
+		coverageMap,
 		canApprove = false,
 		canReject = false,
 		onView,
@@ -78,9 +82,28 @@
 					{formatRequestedAt(request.requested_at)}
 				</Table.Cell>
 				<Table.Cell>
-					<Badge variant="outline" class={badgeClasses[request.status]}>
-						{distributionRequestStatusLabels[request.status]}
-					</Badge>
+					<div class="flex flex-wrap items-center gap-1.5">
+						<Badge variant="outline" class={badgeClasses[request.status]}>
+							{distributionRequestStatusLabels[request.status]}
+						</Badge>
+						{#if request.status === 'approved'}
+							{@const cov = coverageMap?.get(request._id)}
+							{#if cov === 'partial'}
+								<Badge
+									variant="outline"
+									class="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+								>
+									{approvalCoverageLabels.partial}
+								</Badge>
+							{:else if cov === 'full'}
+								<span class="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+									{approvalCoverageLabels.full}
+								</span>
+							{:else}
+								<span class="text-[11px] text-muted-foreground">ไม่ทราบผลการจัดสรร</span>
+							{/if}
+						{/if}
+					</div>
 				</Table.Cell>
 				<Table.Cell class="text-right">
 					<div class="flex items-center justify-end gap-1.5">

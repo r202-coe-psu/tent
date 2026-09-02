@@ -62,6 +62,7 @@ export interface DistributionRepository {
 		ctx: AuthorContext
 	): Promise<DistributionRequest>;
 	getBatch(id: string, ctx: AuthorContext): Promise<DistributionBatch | null>;
+	getBatches(batchIds: readonly string[], ctx: AuthorContext): Promise<DistributionBatch[]>;
 	listBatches(
 		status: DistributionBatchStatus | undefined,
 		ctx: AuthorContext

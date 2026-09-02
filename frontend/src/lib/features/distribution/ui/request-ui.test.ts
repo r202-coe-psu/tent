@@ -4,6 +4,7 @@ import {
 	distributionBatchStatusLabels,
 	distributionRequestStatusLabels,
 	filterDistributionRequests,
+	approvalCoverageLabels,
 	getRequestItemPresentationKey,
 	summarizeDistributionRequests
 } from './request-ui';
@@ -34,17 +35,53 @@ describe('Distribution request UI helpers', () => {
 		});
 	});
 
-	it('filters only by real request fields and statuses', () => {
+	it('filters only by real request fields, statuses, and derived coverage', () => {
+		const fullReq = requests[2];
+		const partialReq = {
+			...requests[2],
+			_id: 'distribution_request:partial'
+		};
+		const unknownReq = {
+			...requests[2],
+			_id: 'distribution_request:unknown'
+		};
+		const allRequests = [...requests, partialReq, unknownReq];
+		const coverageMap = new Map<string, 'full' | 'partial' | 'none' | 'unknown'>([
+			[fullReq._id, 'full'],
+			[partialReq._id, 'partial'],
+			[unknownReq._id, 'unknown']
+		]);
+
 		expect(filterDistributionRequests(requests, 'registration_a', 'all')).toEqual([requests[0]]);
 		expect(filterDistributionRequests(requests, 'ผ้า', 'approving')).toEqual([requests[1]]);
 		expect(filterDistributionRequests(requests, 'ไม่พบ', 'all')).toEqual([]);
+		expect(filterDistributionRequests(allRequests, '', 'approved', 'partial', coverageMap)).toEqual(
+			[partialReq]
+		);
+		expect(filterDistributionRequests(allRequests, '', 'approved', 'full', coverageMap)).toEqual([
+			fullReq
+		]);
+		// Unknown coverage requests are excluded from both full and partial filters
+		expect(filterDistributionRequests([unknownReq], '', 'approved', 'full', coverageMap)).toEqual(
+			[]
+		);
+		expect(
+			filterDistributionRequests([unknownReq], '', 'approved', 'partial', coverageMap)
+		).toEqual([]);
+	});
+
+	it('provides labels for approval coverage', () => {
+		expect(approvalCoverageLabels).toEqual({
+			full: 'จัดสรรครบจำนวน',
+			partial: 'จัดสรรบางส่วน'
+		});
 	});
 
 	it('provides display labels for every persisted request status', () => {
 		expect(distributionRequestStatusLabels).toEqual({
 			pending: 'รอดำเนินการ',
-			approving: 'กำลังดำเนินการอนุมัติ',
-			approved: 'อนุมัติแล้ว',
+			approving: 'กำลังยืนยันการจัดสรร',
+			approved: 'อนุมัติการจัดสรรแล้ว',
 			rejected: 'ปฏิเสธ',
 			cancelled: 'ยกเลิก'
 		});

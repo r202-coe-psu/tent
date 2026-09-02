@@ -40,6 +40,23 @@ export const useDistributionRequests = (
 		enabled: !!shelterCode() && !!authStore.user?.name
 	}));
 
+export const useDistributionBatches = (
+	batchIds: () => readonly string[],
+	shelterCode: () => string = getShelterCode
+) =>
+	createQuery(() => {
+		const ids = batchIds().slice().sort();
+		return {
+			queryKey: [...distributionKeys.batches(shelterCode()), ...ids] as const,
+			queryFn: () => {
+				const code = shelterCode();
+				if (!ids.length) return [];
+				return distributionRepository().getBatches(ids, currentDistributionContext(code));
+			},
+			enabled: !!shelterCode() && !!authStore.user?.name && ids.length > 0
+		};
+	});
+
 export const useDistributionRequest = (
 	requestId: () => string | undefined,
 	shelterCode: () => string = getShelterCode

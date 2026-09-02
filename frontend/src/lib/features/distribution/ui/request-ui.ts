@@ -4,13 +4,15 @@ import type {
 	DistributionRequestItem,
 	DistributionRequestStatus
 } from '../domain/distribution';
+import type { CoverageKind } from './approval-coverage';
 
 export type RequestStatusFilter = 'all' | DistributionRequestStatus;
+export type RequestCoverageFilter = 'all' | 'full' | 'partial';
 
 export const distributionRequestStatusLabels: Record<DistributionRequestStatus, string> = {
 	pending: 'รอดำเนินการ',
-	approving: 'กำลังดำเนินการอนุมัติ',
-	approved: 'อนุมัติแล้ว',
+	approving: 'กำลังยืนยันการจัดสรร',
+	approved: 'อนุมัติการจัดสรรแล้ว',
 	rejected: 'ปฏิเสธ',
 	cancelled: 'ยกเลิก'
 };
@@ -21,6 +23,20 @@ export const distributionBatchStatusLabels: Record<DistributionBatchStatus, stri
 	closing: 'กำลังปิด / กระทบยอด',
 	closed: 'ปิดแล้ว (Closed)'
 };
+
+export const approvalCoverageLabels: Record<'full' | 'partial', string> = {
+	full: 'จัดสรรครบจำนวน',
+	partial: 'จัดสรรบางส่วน'
+};
+
+export const approvalCoverageOptions: Array<{
+	value: RequestCoverageFilter;
+	label: string;
+}> = [
+	{ value: 'all', label: 'ทุกผลการจัดสรร' },
+	{ value: 'full', label: approvalCoverageLabels.full },
+	{ value: 'partial', label: approvalCoverageLabels.partial }
+];
 
 export const distributionRequestStatusOptions: Array<{
 	value: RequestStatusFilter;
@@ -47,11 +63,17 @@ export function summarizeDistributionRequests(requests: readonly DistributionReq
 export function filterDistributionRequests(
 	requests: readonly DistributionRequest[],
 	search: string,
-	status: RequestStatusFilter
+	status: RequestStatusFilter,
+	coverage: RequestCoverageFilter = 'all',
+	coverageByRequestId?: ReadonlyMap<string, CoverageKind | 'unknown'>
 ): DistributionRequest[] {
 	const normalizedSearch = search.trim().toLocaleLowerCase();
 	return requests.filter((request) => {
 		if (status !== 'all' && request.status !== status) return false;
+		if (coverage !== 'all') {
+			const reqCoverage = coverageByRequestId?.get(request._id);
+			if (reqCoverage !== coverage) return false;
+		}
 		if (!normalizedSearch) return true;
 		return [request._id, request.purpose, request.requested_by]
 			.join(' ')

@@ -15,7 +15,11 @@
 	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type { DistributionRequest } from '../domain/distribution';
-	import { useCancelDistributionRequest, useDistributionRequests } from '../application/queries';
+	import {
+		useCancelDistributionRequest,
+		useDistributionBatches,
+		useDistributionRequests
+	} from '../application/queries';
 	import RequestFilters from './request-filters.svelte';
 	import RequestStatsHeader from './request-stats-header.svelte';
 	import RequestTable from './request-table.svelte';
@@ -23,7 +27,13 @@
 	import ApprovalDialog from './approval-dialog.svelte';
 	import RequestDetailDialog from './request-detail-dialog.svelte';
 	import RejectRequestDialog from './reject-request-dialog.svelte';
-	import { filterDistributionRequests, type RequestStatusFilter } from './request-ui';
+	import { deriveApprovalCoverage, type CoverageKind } from './approval-coverage';
+	import {
+		filterDistributionRequests,
+		type RequestCoverageFilter,
+		type RequestStatusFilter
+	} from './request-ui';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	const userRoles = $derived(authStore.user?.roles ?? []);
 	const canCreateRequest = $derived(
@@ -51,17 +61,52 @@
 
 	const cancelMutation = useCancelDistributionRequest();
 
+	let search = $state('');
+	let status = $state<RequestStatusFilter>('all');
+	let coverage = $state<RequestCoverageFilter>('all');
 	const requestQuery = useDistributionRequests(
-		() => undefined,
+		() => (status === 'all' ? undefined : status),
 		() => getShelterCode()
 	);
 	const requests = $derived(requestQuery.data ?? []);
-	let search = $state('');
-	let status = $state<RequestStatusFilter>('all');
 
-	const filteredRequests = $derived(filterDistributionRequests(requests, search, status));
+	// Bulk-fetch all batches for approved requests in one query without N+1
+	const approvedBatchIds = $derived(
+		requests
+			.filter((r) => r.status === 'approved' && typeof r.batch_id === 'string')
+			.map((r) => r.batch_id!)
+	);
+	const batchesQuery = useDistributionBatches(
+		() => approvedBatchIds,
+		() => getShelterCode()
+	);
+	const batchesMap = $derived(new SvelteMap((batchesQuery.data ?? []).map((b) => [b._id, b])));
 
-	const hasFilters = $derived(status !== 'all' || search.trim().length > 0);
+	const coverageMap = $derived.by<ReadonlyMap<string, CoverageKind | 'unknown'>>(() => {
+		const map = new SvelteMap<string, CoverageKind | 'unknown'>();
+		for (const req of requests) {
+			if (req.status !== 'approved') {
+				map.set(req._id, 'none');
+			} else if (!req.batch_id) {
+				map.set(req._id, 'unknown');
+			} else {
+				const batch = batchesMap.get(req.batch_id);
+				if (!batch) {
+					map.set(req._id, 'unknown');
+				} else {
+					const cov = deriveApprovalCoverage(req, batch);
+					map.set(req._id, cov.kind);
+				}
+			}
+		}
+		return map;
+	});
+
+	const filteredRequests = $derived(
+		filterDistributionRequests(requests, search, status, coverage, coverageMap)
+	);
+
+	const hasFilters = $derived(status !== 'all' || coverage !== 'all' || search.trim().length > 0);
 
 	function handleOpenDetail(req: DistributionRequest) {
 		selectedDetailRequest = req;
@@ -225,7 +270,7 @@
 				<Card.Description>ค้นหาและกรองสถานะจากข้อมูลคำร้องจริงของศูนย์พักพิง</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-4">
-				<RequestFilters bind:search bind:status />
+				<RequestFilters bind:search bind:status bind:coverage />
 				{#if requests.length === 0}
 					<div
 						class="flex min-h-56 flex-col items-center justify-center gap-3 text-center text-muted-foreground"
@@ -249,6 +294,7 @@
 				{:else}
 					<RequestTable
 						requests={filteredRequests}
+						{coverageMap}
 						{canApprove}
 						{canReject}
 						onView={handleOpenDetail}

@@ -12,11 +12,16 @@
 		DialogFooter
 	} from '$lib/components/ui/dialog';
 	import type { DistributionRequest, DistributionRequestStatus } from '../domain/distribution';
-	import { distributionRequestStatusLabels, getRequestItemPresentationKey } from './request-ui';
-	import { useDistributionRequest } from '../application/queries';
+	import {
+		approvalCoverageLabels,
+		distributionRequestStatusLabels,
+		getRequestItemPresentationKey
+	} from './request-ui';
+	import { useDistributionBatch, useDistributionRequest } from '../application/queries';
 	import { useItemMasters, type ItemMaster } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import ActiveBatchSummary from './active-batch-summary.svelte';
+	import { deriveApprovalCoverage } from './approval-coverage';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Ban from '@lucide/svelte/icons/ban';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -68,6 +73,12 @@
 			!requestQuery.isError &&
 			(!requestQuery.isSuccess || requestQuery.data?._id !== selectedRequestId)
 	);
+
+	const batchQuery = useDistributionBatch(
+		() => (authoritativeRequest?.status === 'approved' ? authoritativeRequest.batch_id : undefined),
+		() => getShelterCode()
+	);
+	const coverage = $derived(deriveApprovalCoverage(authoritativeRequest, batchQuery.data));
 
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const itemMastersMap = $derived.by(() => {
@@ -127,6 +138,25 @@
 						<Badge variant="outline" class={badgeClasses[authoritativeRequest.status]}>
 							{distributionRequestStatusLabels[authoritativeRequest.status]}
 						</Badge>
+						{#if authoritativeRequest.status === 'approved'}
+							{#if coverage.kind === 'full'}
+								<Badge
+									variant="outline"
+									class="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+								>
+									{approvalCoverageLabels.full}
+								</Badge>
+							{:else if coverage.kind === 'partial'}
+								<Badge
+									variant="outline"
+									class="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+								>
+									{approvalCoverageLabels.partial}
+								</Badge>
+							{:else}
+								<Badge variant="outline" class="text-muted-foreground">ไม่ทราบผลการจัดสรร</Badge>
+							{/if}
+						{/if}
 					{/if}
 				</div>
 				<DialogDescription class="font-mono text-xs break-all text-muted-foreground">
@@ -275,9 +305,13 @@
 					>
 						<Loader2 class="size-5 shrink-0 animate-spin text-blue-600" />
 						<div>
-							<div class="font-bold">อยู่ระหว่างการดำเนินการอนุมัติ (Approving)</div>
+							<div class="font-bold">อยู่ระหว่างการยืนยันการจัดสรร (Approving)</div>
 							<p class="mt-0.5 text-[11px] text-blue-700 dark:text-blue-300">
-								ระบบกำลังประสานงานตัดสต็อกและจัดสรร Physical Lot กรุณารอสักครู่หรือรีเฟรชสถานะ
+								ระบบกำลังยืนยัน Physical Lot และบันทึกการจัดสรรสต็อก กรุณารอสักครู่
+								ไม่จำเป็นต้องกดอนุมัติซ้ำ
+							</p>
+							<p class="mt-0.5 text-[10px] text-blue-600/80 dark:text-blue-300/80">
+								สถานะจะอัปเดตเป็นผลการอนุมัติเมื่อการบันทึกเสร็จสมบูรณ์
 							</p>
 						</div>
 					</div>
@@ -301,6 +335,7 @@
 						<ActiveBatchSummary
 							batchId={authoritativeRequest.batch_id}
 							requestId={authoritativeRequest._id}
+							request={authoritativeRequest}
 						/>
 					</div>
 				{:else if authoritativeRequest.status === 'rejected'}

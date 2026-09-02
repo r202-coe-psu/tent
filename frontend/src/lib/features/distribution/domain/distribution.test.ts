@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	bufferPercentSchema,
+	calculateApprovalCoverage,
 	calculateNfiTarget,
 	canEditDistributionRequest,
 	canTransitionDistributionBatch,
@@ -45,6 +46,52 @@ describe('distribution request contract', () => {
 		expect(request.items[0].requested_qty).toBe('10');
 	});
 
+	it('allows duplicate request item rows when metadata is compatible', () => {
+		const result = distributionRequestInputSchema.safeParse({
+			purpose: 'แจกข้าวสารแบ่งรอบ',
+			active_headcount_snapshot: 100,
+			items: [
+				{ ...requestItem, item_id: 'item:rice', requested_qty: 30, unit: 'kg' },
+				{ ...requestItem, item_id: 'item:rice', requested_qty: 20, unit: 'kg' }
+			]
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects duplicate request item rows with conflicting unit', () => {
+		const result = distributionRequestInputSchema.safeParse({
+			purpose: 'แจกข้าวสารหน่วยต่างกัน',
+			active_headcount_snapshot: 100,
+			items: [
+				{ ...requestItem, item_id: 'item:rice', requested_qty: 30, unit: 'kg' },
+				{ ...requestItem, item_id: 'item:rice', requested_qty: 20, unit: 'ถุง' }
+			]
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it('rejects duplicate request item rows with conflicting distribution type', () => {
+		const result = distributionRequestInputSchema.safeParse({
+			purpose: 'แจกข้าวสารประเภทต่างกัน',
+			active_headcount_snapshot: 100,
+			items: [
+				{
+					...requestItem,
+					item_id: 'item:rice',
+					requested_qty: 30,
+					distribution_type_snapshot: 'consumable'
+				},
+				{
+					...requestItem,
+					item_id: 'item:rice',
+					requested_qty: 20,
+					distribution_type_snapshot: 'one_time'
+				}
+			]
+		});
+		expect(result.success).toBe(false);
+	});
+
 	it('allows only approved request transitions', () => {
 		expect(canTransitionDistributionRequest('pending', 'approving')).toBe(true);
 		expect(canTransitionDistributionRequest('pending', 'rejected')).toBe(true);
@@ -71,6 +118,52 @@ describe('distribution request contract', () => {
 				items: []
 			}).success
 		).toBe(false);
+	});
+});
+
+describe('approval coverage contract', () => {
+	const item = (item_id: string, requested_qty: string) => ({
+		item_id,
+		requested_qty,
+		unit: 'kg',
+		distribution_type_snapshot: 'consumable' as const,
+		target_qty_snapshot: requested_qty
+	});
+
+	it.each([
+		['full allocation', [item('item:rice', '50')], [{ item_id: 'item:rice', qty: '50' }], 'full'],
+		[
+			'partial allocation',
+			[item('item:rice', '50')],
+			[{ item_id: 'item:rice', qty: '5' }],
+			'partial'
+		],
+		[
+			'multiple items with one incomplete',
+			[item('item:rice', '50'), item('item:water', '20')],
+			[
+				{ item_id: 'item:rice', qty: '50' },
+				{ item_id: 'item:water', qty: '5' }
+			],
+			'partial'
+		],
+		[
+			'multiple lots with decimal quantities',
+			[item('item:medicine', '0.3')],
+			[
+				{ item_id: 'item:medicine', qty: '0.1' },
+				{ item_id: 'item:medicine', qty: '0.2' }
+			],
+			'full'
+		],
+		[
+			'duplicate request rows aggregated by item identity',
+			[item('item:rice', '30'), item('item:rice', '20')],
+			[{ item_id: 'item:rice', qty: '50' }],
+			'full'
+		]
+	] as const)('calculates %s', (_name, items, allocations, expected) => {
+		expect(calculateApprovalCoverage(items, allocations)).toBe(expected);
 	});
 });
 

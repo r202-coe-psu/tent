@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc, now } from '$lib/db/model';
 import {
+	addQty,
 	parseQty,
 	persistQty,
+	qtyGt,
+	qtyIsZero,
+	subQty,
 	qtyStrCoerceNonNegativeSchema,
 	qtyStrCoercePositiveSchema
 } from '$lib/utils/qty';
@@ -47,6 +51,13 @@ export const distributionRequestStatusSchema = z.enum([
 ]);
 export type DistributionRequestStatus = z.infer<typeof distributionRequestStatusSchema>;
 
+/**
+ * Pure derived allocation outcome for presentation and summary.
+ * It is NOT persisted on DistributionRequest.
+ */
+export const approvalCoverageSchema = z.enum(['full', 'partial']);
+export type ApprovalCoverage = z.infer<typeof approvalCoverageSchema>;
+
 export const distributionRequestItemSchema = z.object({
 	item_id: z.string().min(1),
 	requested_qty: qtyStrCoercePositiveSchema,
@@ -56,36 +67,92 @@ export const distributionRequestItemSchema = z.object({
 });
 export type DistributionRequestItem = z.infer<typeof distributionRequestItemSchema>;
 
-export const distributionRequestInputSchema = z.object({
-	purpose: z.string().trim().min(1),
-	note: z.string().trim().min(1).optional(),
-	requested_at: z.string().datetime().optional(),
-	active_headcount_snapshot: activeHeadcountSchema,
-	buffer_percent: bufferPercentSchema,
-	items: z.array(distributionRequestItemSchema).min(1)
-});
+/**
+ * Enforces that duplicate request item rows sharing the same item_id have identical
+ * unit and distribution_type_snapshot metadata, guaranteeing safe aggregation and
+ * preserving Phase 3B item-level authority.
+ */
+export function validateRequestItemsDuplicateCompatibility(
+	items: readonly Pick<DistributionRequestItem, 'item_id' | 'unit' | 'distribution_type_snapshot'>[]
+): { isValid: boolean; error?: string } {
+	const metaMap = new Map<string, { unit: string; type: string }>();
+	for (const item of items) {
+		const existing = metaMap.get(item.item_id);
+		if (!existing) {
+			metaMap.set(item.item_id, {
+				unit: item.unit,
+				type: item.distribution_type_snapshot
+			});
+		} else {
+			if (existing.unit !== item.unit) {
+				return {
+					isValid: false,
+					error: `Duplicate request item ${item.item_id} has conflicting units: "${existing.unit}" vs "${item.unit}"`
+				};
+			}
+			if (existing.type !== item.distribution_type_snapshot) {
+				return {
+					isValid: false,
+					error: `Duplicate request item ${item.item_id} has conflicting distribution types: "${existing.type}" vs "${item.distribution_type_snapshot}"`
+				};
+			}
+		}
+	}
+	return { isValid: true };
+}
+
+export const distributionRequestInputSchema = z
+	.object({
+		purpose: z.string().trim().min(1),
+		note: z.string().trim().min(1).optional(),
+		requested_at: z.string().datetime().optional(),
+		active_headcount_snapshot: activeHeadcountSchema,
+		buffer_percent: bufferPercentSchema,
+		items: z.array(distributionRequestItemSchema).min(1)
+	})
+	.superRefine((data, ctx) => {
+		const validation = validateRequestItemsDuplicateCompatibility(data.items);
+		if (!validation.isValid) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['items'],
+				message: validation.error
+			});
+		}
+	});
 export type DistributionRequestInput = z.input<typeof distributionRequestInputSchema>;
 
-export const distributionRequestDocSchema = z.object({
-	_id: distributionRequestIdSchema,
-	type: z.literal('distribution_request'),
-	...baseDocShape,
-	status: distributionRequestStatusSchema,
-	requested_by: z.string().min(1),
-	requested_at: z.string().datetime(),
-	purpose: z.string().trim().min(1),
-	note: z.string().trim().min(1).optional(),
-	active_headcount_snapshot: activeHeadcountSchema,
-	buffer_percent: bufferPercentSchema,
-	items: z.array(distributionRequestItemSchema).min(1),
-	approval_operation_id: z.string().min(1).optional(),
-	approved_by: z.string().min(1).optional(),
-	approved_at: z.string().datetime().optional(),
-	rejected_by: z.string().min(1).optional(),
-	rejected_at: z.string().datetime().optional(),
-	rejection_reason: z.string().trim().min(1).optional(),
-	batch_id: distributionBatchIdSchema.optional()
-});
+export const distributionRequestDocSchema = z
+	.object({
+		_id: distributionRequestIdSchema,
+		type: z.literal('distribution_request'),
+		...baseDocShape,
+		status: distributionRequestStatusSchema,
+		requested_by: z.string().min(1),
+		requested_at: z.string().datetime(),
+		purpose: z.string().trim().min(1),
+		note: z.string().trim().min(1).optional(),
+		active_headcount_snapshot: activeHeadcountSchema,
+		buffer_percent: bufferPercentSchema,
+		items: z.array(distributionRequestItemSchema).min(1),
+		approval_operation_id: z.string().min(1).optional(),
+		approved_by: z.string().min(1).optional(),
+		approved_at: z.string().datetime().optional(),
+		rejected_by: z.string().min(1).optional(),
+		rejected_at: z.string().datetime().optional(),
+		rejection_reason: z.string().trim().min(1).optional(),
+		batch_id: distributionBatchIdSchema.optional()
+	})
+	.superRefine((data, ctx) => {
+		const validation = validateRequestItemsDuplicateCompatibility(data.items);
+		if (!validation.isValid) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['items'],
+				message: validation.error
+			});
+		}
+	});
 export type DistributionRequest = BaseDoc & z.infer<typeof distributionRequestDocSchema>;
 
 const REQUEST_TRANSITIONS: Record<DistributionRequestStatus, DistributionRequestStatus[]> = {
@@ -159,6 +226,57 @@ export const distributionAllocationSchema = z.object({
 	allocation_ledger_id: stockLedgerIdSchema
 });
 export type DistributionAllocation = z.infer<typeof distributionAllocationSchema>;
+
+/**
+ * Calculates the terminal coverage outcome from request quantities and the
+ * canonical allocation plan. Request rows may repeat an item_id; allocations
+ * are canonically identified by item_id + lot_ref, so quantities are summed by
+ * item_id without discarding any request row.
+ */
+export function calculateApprovalCoverage(
+	requestItems: readonly Pick<DistributionRequestItem, 'item_id' | 'requested_qty'>[],
+	allocations: readonly { item_id: string; qty: string | number }[]
+): ApprovalCoverage {
+	const requestedByItem = new Map<string, string>();
+	for (const item of requestItems) {
+		requestedByItem.set(
+			item.item_id,
+			addQty(requestedByItem.get(item.item_id) ?? '0', item.requested_qty)
+		);
+	}
+
+	const allocatedByItem = new Map<string, string>();
+	let hasPositiveAllocation = false;
+	for (const allocation of allocations) {
+		if (!requestedByItem.has(allocation.item_id)) {
+			throw new Error(`Allocation item ${allocation.item_id} is not requested`);
+		}
+		if (!qtyGt(allocation.qty, 0)) {
+			throw new Error('Approval coverage requires a positive allocation');
+		}
+		hasPositiveAllocation = true;
+		allocatedByItem.set(
+			allocation.item_id,
+			addQty(allocatedByItem.get(allocation.item_id) ?? '0', allocation.qty)
+		);
+	}
+
+	if (!hasPositiveAllocation) {
+		throw new Error('Approval coverage requires at least one positive allocation');
+	}
+
+	for (const [itemId, requestedQty] of requestedByItem) {
+		const allocatedQty = allocatedByItem.get(itemId) ?? '0';
+		if (qtyGt(allocatedQty, requestedQty)) {
+			throw new Error(`Allocation for ${itemId} exceeds requested quantity`);
+		}
+		if (!qtyIsZero(subQty(requestedQty, allocatedQty))) {
+			return 'partial';
+		}
+	}
+
+	return 'full';
+}
 
 export const distributionBatchInputSchema = z.object({
 	request_id: distributionRequestIdSchema,

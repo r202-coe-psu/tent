@@ -851,17 +851,20 @@ describe('buildValidateDocUpdate', () => {
 				status,
 				...(status === 'approving' ? { approval_operation_id: '01JOP' } : {})
 			});
+			const cancelled = reqDoc({
+				...current,
+				status: 'cancelled'
+			});
 			expectForbidden(
-				() => compile()(reqDoc({ ...current, status: 'cancelled' }), current, REGISTRATION),
+				() => compile()(cancelled, current, REGISTRATION),
 				/Invalid distribution_request transition|Terminal distribution_request/
 			);
 		});
 
 		it('rejects mutations of a cancelled distribution_request', () => {
-			const cancelled = reqDoc({ status: 'cancelled', purpose: 'Original' });
+			const cancelled = reqDoc({ status: 'cancelled' });
 			expectForbidden(
-				() =>
-					compile()(reqDoc({ status: 'cancelled', purpose: 'Tampered' }), cancelled, REGISTRATION),
+				() => compile()(cancelled, cancelled, REGISTRATION),
 				/Terminal distribution_request/
 			);
 		});
@@ -902,6 +905,90 @@ describe('buildValidateDocUpdate', () => {
 			expectForbidden(
 				() => compile()(approvedNoBatch, approving, WAREHOUSE),
 				/Approved distribution_request must include valid batch_id/
+			);
+		});
+
+		it('allows duplicate request item rows when unit and distribution type are identical', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expect(() => compile()(req, null, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects duplicate request item rows with conflicting units', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'bottle',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(req, null, REGISTRATION),
+				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
+			);
+		});
+
+		it('rejects duplicate request item rows with conflicting distribution types', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'one_time',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(req, null, REGISTRATION),
+				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
+			);
+		});
+
+		it('rejects mutating approved request after approval', () => {
+			const approved = reqDoc({
+				status: 'approved',
+				approval_operation_id: '01JOP',
+				batch_id: 'distribution_batch:01J'
+			});
+			expectForbidden(
+				() => compile()({ ...approved, purpose: 'New purpose' }, approved, WAREHOUSE),
+				/Terminal distribution_request cannot be modified/
 			);
 		});
 

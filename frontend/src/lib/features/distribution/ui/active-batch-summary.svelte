@@ -4,8 +4,9 @@
 	import { useDistributionBatch } from '../application/queries';
 	import { useItemMasters, type ItemMaster } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
-	import type { DistributionBatchStatus } from '../domain/distribution';
-	import { distributionBatchStatusLabels } from './request-ui';
+	import type { DistributionBatchStatus, DistributionRequest } from '../domain/distribution';
+	import { approvalCoverageLabels, distributionBatchStatusLabels } from './request-ui';
+	import { deriveApprovalCoverage } from './approval-coverage';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import Boxes from '@lucide/svelte/icons/boxes';
@@ -18,9 +19,10 @@
 	interface Props {
 		batchId?: string;
 		requestId?: string;
+		request?: DistributionRequest | null;
 	}
 
-	let { batchId, requestId }: Props = $props();
+	let { batchId, requestId, request }: Props = $props();
 	const shelterCode = $derived(getShelterCode());
 
 	const batchQuery = useDistributionBatch(
@@ -28,6 +30,7 @@
 		() => shelterCode
 	);
 	const batch = $derived(batchQuery.data);
+	const coverage = $derived(deriveApprovalCoverage(request, batch));
 
 	const itemMastersQuery = useItemMasters(() => shelterCode);
 	const itemMastersMap = $derived.by(() => {
@@ -121,9 +124,26 @@
 							</Card.Description>
 						</div>
 					</div>
-					<Badge variant="outline" class={batchStatusBadges[batch.status]}>
-						{distributionBatchStatusLabels[batch.status]}
-					</Badge>
+					<div class="flex flex-wrap items-center justify-end gap-1.5">
+						{#if coverage.kind === 'full'}
+							<Badge
+								class="border-emerald-300 bg-emerald-100 font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+							>
+								{approvalCoverageLabels.full}
+							</Badge>
+						{:else if coverage.kind === 'partial'}
+							<Badge
+								class="border-amber-300 bg-amber-100 font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+							>
+								{approvalCoverageLabels.partial}
+							</Badge>
+						{:else if request?.status === 'approved'}
+							<Badge variant="outline" class="text-muted-foreground">ไม่ทราบผลการจัดสรร</Badge>
+						{/if}
+						<Badge variant="outline" class={batchStatusBadges[batch.status]}>
+							{distributionBatchStatusLabels[batch.status]}
+						</Badge>
+					</div>
 				</div>
 			</Card.Header>
 
@@ -145,6 +165,55 @@
 						>
 					</div>
 				</div>
+
+				<!-- Request Coverage Summary -->
+				{#if request && coverage.items.length > 0}
+					<div
+						class="space-y-2 rounded-lg border border-border/70 bg-white/70 p-3 dark:bg-slate-900/50"
+					>
+						<div class="flex items-center justify-between">
+							<span class="font-bold text-foreground">สรุปผลการจัดสรรตามคำร้อง</span>
+							<span class="text-[11px] text-muted-foreground">
+								จัดสรรจากคลัง: <strong class="text-foreground">{coverage.totalAllocatedQty}</strong>
+								/ {coverage.totalRequestedQty}
+							</span>
+						</div>
+						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+							{#each coverage.items as itemCover (itemCover.itemId + '-' + itemCover.itemIndex)}
+								{@const master = itemMastersMap.get(itemCover.itemId)}
+								<div
+									class="flex items-center justify-between rounded border border-border/60 bg-background/80 px-2.5 py-1.5 text-[11px]"
+								>
+									<span class="truncate font-medium text-foreground"
+										>{master?.name ?? itemCover.itemId}</span
+									>
+									<div class="flex shrink-0 items-center gap-1.5 tabular-nums">
+										<span class="text-muted-foreground">
+											{itemCover.allocatedQty} / {itemCover.requestedQty}
+											{itemCover.unit}
+										</span>
+										{#if itemCover.coverage === 'full'}
+											<Badge
+												class="h-4 border-emerald-300 bg-emerald-100 px-1 py-0 text-[9px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+												>ครบ</Badge
+											>
+										{:else if itemCover.coverage === 'partial'}
+											<Badge
+												class="h-4 border-amber-300 bg-amber-100 px-1 py-0 text-[9px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+												>บางส่วน (ขาด {itemCover.unallocatedQty})</Badge
+											>
+										{:else}
+											<Badge
+												variant="outline"
+												class="h-4 px-1 py-0 text-[9px] text-muted-foreground">ไม่ได้จัดสรร</Badge
+											>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
 
 				<!-- Allocations and Physical Lots -->
 				<div class="space-y-2">

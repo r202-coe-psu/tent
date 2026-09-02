@@ -449,6 +449,22 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 4. distribution_request lifecycle and role rules
   if (newDoc.type === 'distribution_request') {
+    if (Array.isArray(newDoc.items)) {
+      var itemMetaMap = {};
+      for (var i = 0; i < newDoc.items.length; i++) {
+        var it = newDoc.items[i];
+        if (it && it.item_id) {
+          if (!itemMetaMap[it.item_id]) {
+            itemMetaMap[it.item_id] = { unit: it.unit, type: it.distribution_type_snapshot };
+          } else {
+            if (itemMetaMap[it.item_id].unit !== it.unit ||
+                itemMetaMap[it.item_id].type !== it.distribution_type_snapshot) {
+              throw { forbidden: 'Duplicate request item rows must have identical unit and distribution_type_snapshot' };
+            }
+          }
+        }
+      }
+    }
     var isWarehouseOrAdminReq =
       userCtx.roles.indexOf('warehouse_staff') !== -1 ||
       userCtx.roles.indexOf('system_admin') !== -1;

@@ -1,4 +1,4 @@
-import { allDocsByType, getDoc, putDoc, putDocStrict } from '$lib/db/couch-db';
+import { allDocsByIds, allDocsByType, getDoc, putDoc, putDocStrict } from '$lib/db/couch-db';
 import { getShelterDb } from '$lib/db/shelter';
 import { now, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
@@ -98,6 +98,14 @@ function isDistributionBatch(d: unknown): d is DistributionBatch {
 type CanonicalPlan = {
 	allocations: DistributionAllocation[];
 	items: DistributionBatchItem[];
+};
+
+/**
+ * Operation-scoped stock projection. It is never retained beyond one approval
+ * execution and is only reused after all outbound stock-ledger writes complete.
+ */
+type PhysicalLotSnapshot = {
+	lots: readonly StockLotBalance[];
 };
 
 export class DistributionRemoteRepository implements DistributionRepository {
@@ -204,12 +212,17 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		return projectStockLotBalances(ledgers);
 	}
 
+	private async loadPhysicalLotSnapshot(): Promise<PhysicalLotSnapshot> {
+		return { lots: await this.loadPhysicalLots() };
+	}
+
 	private async assertPhysicalLot(
 		lotRef: string,
 		itemId: string,
 		unit: string,
 		ctx: AuthorContext,
-		lots?: readonly StockLotBalance[]
+		lots?: readonly StockLotBalance[],
+		sourceCache?: Map<string, StockLedger>
 	): Promise<StockLotBalance> {
 		const balances = lots ?? (await this.loadPhysicalLots());
 		const physicalLot = balances.find((lot) => lot.lot_ref === lotRef);
@@ -223,7 +236,13 @@ export class DistributionRemoteRepository implements DistributionRepository {
 
 		// A physical lot is created by the inbound ledger identified by lot_ref.
 		// This direct read preserves legacy self-ID lots while never using lot_no as identity.
-		const source = await getDoc<StockLedger>(this.dbName, lotRef);
+		let source: StockLedger | null | undefined = sourceCache?.get(lotRef);
+		if (!source) {
+			source = await getDoc<StockLedger>(this.dbName, lotRef);
+			if (source && isStockLedger(source)) {
+				sourceCache?.set(lotRef, source);
+			}
+		}
 		if (!source || !isStockLedger(source)) {
 			throw new IntegrityError(`Physical lot source ${lotRef} is missing or malformed`);
 		}
@@ -249,7 +268,10 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		for (const allocation of allocations) {
 			totals.set(allocation.item_id, addQty(totals.get(allocation.item_id) ?? '0', allocation.qty));
 		}
+		const emittedItems = new Set<string>();
 		return req.items.flatMap((item) => {
+			if (emittedItems.has(item.item_id)) return [];
+			emittedItems.add(item.item_id);
 			const qty = totals.get(item.item_id);
 			if (!qty || !qtyGt(qty, 0)) return [];
 			return [
@@ -263,11 +285,20 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		});
 	}
 
+	private requestedQtyByItem(req: DistributionRequest): Map<string, string> {
+		const totals = new Map<string, string>();
+		for (const item of req.items) {
+			totals.set(item.item_id, addQty(totals.get(item.item_id) ?? '0', item.requested_qty));
+		}
+		return totals;
+	}
+
 	private async canonicalizeAllocations(
 		rawAllocations: DistributionAllocationInput[],
 		req: DistributionRequest,
 		approvalOperationId: string,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		sourceCache: Map<string, StockLedger>
 	): Promise<CanonicalPlan> {
 		if (!rawAllocations.length) {
 			throw new ValidationError('Approval must contain at least one positive allocation');
@@ -293,18 +324,26 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				throw new ValidationError(`Duplicate allocation line for item and lot: ${key}`);
 			}
 			seenLotKeys.add(key);
-			await this.assertPhysicalLot(allocation.lot_ref, allocation.item_id, reqItem.unit, ctx, lots);
+			await this.assertPhysicalLot(
+				allocation.lot_ref,
+				allocation.item_id,
+				reqItem.unit,
+				ctx,
+				lots,
+				sourceCache
+			);
 			itemTotals.set(
 				allocation.item_id,
 				addQty(itemTotals.get(allocation.item_id) ?? '0', allocation.qty)
 			);
 		}
 
+		const requestedQtyByItem = this.requestedQtyByItem(req);
 		for (const [itemId, qty] of itemTotals) {
-			const reqItem = req.items.find((item) => item.item_id === itemId)!;
-			if (qtyGt(qty, reqItem.requested_qty)) {
+			const requestedQty = requestedQtyByItem.get(itemId)!;
+			if (qtyGt(qty, requestedQty)) {
 				throw new ValidationError(
-					`Total allocated quantity ${qty} exceeds requested quantity ${reqItem.requested_qty} for item ${itemId}`
+					`Total allocated quantity ${qty} exceeds requested quantity ${requestedQty} for item ${itemId}`
 				);
 			}
 		}
@@ -325,7 +364,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		batch: unknown,
 		req: DistributionRequest,
 		approvalOperationId: string,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		sourceCache: Map<string, StockLedger>,
+		physicalLotSnapshot?: PhysicalLotSnapshot
 	): Promise<DistributionBatch> {
 		const parsed = distributionBatchDocSchema.safeParse(batch);
 		if (!parsed.success) throw new IntegrityError('Persisted distribution batch is malformed');
@@ -347,7 +388,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (JSON.stringify(ordered) !== JSON.stringify(persisted.allocations)) {
 			throw new IntegrityError(`Persisted batch ${persisted._id} allocations are not canonical`);
 		}
-		const lots = await this.loadPhysicalLots();
+		const lots = physicalLotSnapshot?.lots ?? (await this.loadPhysicalLots());
 		const totals = new Map<string, string>();
 		for (let index = 0; index < persisted.allocations.length; index++) {
 			const allocation = persisted.allocations[index];
@@ -364,13 +405,15 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				allocation.item_id,
 				requestItem.unit,
 				ctx,
-				lots
+				lots,
+				sourceCache
 			);
 			totals.set(allocation.item_id, addQty(totals.get(allocation.item_id) ?? '0', allocation.qty));
 		}
+		const requestedQtyByItem = this.requestedQtyByItem(req);
 		for (const [itemId, qty] of totals) {
-			const requestItem = req.items.find((item) => item.item_id === itemId)!;
-			if (qtyGt(qty, requestItem.requested_qty)) {
+			const requestedQty = requestedQtyByItem.get(itemId)!;
+			if (qtyGt(qty, requestedQty)) {
 				throw new IntegrityError(`Batch allocation for ${itemId} exceeds requested quantity`);
 			}
 		}
@@ -521,6 +564,26 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		return parsed.data.shelter_code === ctx.shelterCode ? parsed.data : null;
 	}
 
+	async getBatches(batchIds: readonly string[], ctx: AuthorContext): Promise<DistributionBatch[]> {
+		this.assertAuthorizedDistributionView(ctx);
+		if (!batchIds.length) return [];
+		const uniqueIds = Array.from(
+			new Set(
+				batchIds.filter((id) => typeof id === 'string' && id.startsWith('distribution_batch:'))
+			)
+		);
+		if (!uniqueIds.length) return [];
+		const all = await allDocsByIds<DistributionBatch>(this.dbName, uniqueIds, isDistributionBatch);
+		const batches = all.map((batch) => {
+			const parsed = distributionBatchDocSchema.safeParse(batch);
+			if (!parsed.success) {
+				throw new IntegrityError(`Distribution batch ${batch._id} is malformed`);
+			}
+			return parsed.data;
+		});
+		return batches.filter((batch) => batch.shelter_code === ctx.shelterCode);
+	}
+
 	async listBatches(
 		status: DistributionBatchStatus | undefined,
 		ctx: AuthorContext
@@ -583,6 +646,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		let req: DistributionRequest = initialReq;
 		const requestUlid = req._id.slice('distribution_request:'.length);
 		const batchId = `distribution_batch:${requestUlid}`;
+		// Stock ledgers are append-only. Reuse validated inbound source documents
+		// only for this approval invocation; never retain them across operations.
+		const sourceCache = new Map<string, StockLedger>();
 
 		// 1. Terminal / idempotent check (Checkpoint J recovery)
 		if (req.status === 'approved') {
@@ -596,7 +662,8 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				existingBatchRaw,
 				req,
 				req.approval_operation_id,
-				ctx
+				ctx,
+				sourceCache
 			);
 			if (existingBatch.status !== 'active') {
 				throw new IntegrityError(
@@ -614,7 +681,6 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			}
 
 			const approvalOpId = req.approval_operation_id;
-
 			await this.assertBatchLedgers(existingBatch, req, approvalOpId, ctx);
 
 			// Safely remove any remaining claim for that operation via CAS with retry
@@ -653,7 +719,13 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		let canonicalAllocations: DistributionAllocation[];
 
 		if (existingBatch) {
-			batchDoc = await this.assertPersistedBatch(existingBatch, req, approvalOperationId, ctx);
+			batchDoc = await this.assertPersistedBatch(
+				existingBatch,
+				req,
+				approvalOperationId,
+				ctx,
+				sourceCache
+			);
 			canonicalAllocations = batchDoc.allocations;
 			if (!rawAllocations?.length) {
 				throw new ApprovalConflictError(
@@ -664,13 +736,20 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				rawAllocations,
 				req,
 				approvalOperationId,
-				ctx
+				ctx,
+				sourceCache
 			);
 			this.assertPlansMatch(callerPlan.allocations, canonicalAllocations);
 		} else {
 			let plan: CanonicalPlan;
 			try {
-				plan = await this.canonicalizeAllocations(rawAllocations, req, approvalOperationId, ctx);
+				plan = await this.canonicalizeAllocations(
+					rawAllocations,
+					req,
+					approvalOperationId,
+					ctx,
+					sourceCache
+				);
 			} catch (err) {
 				await this.rollbackBeforeForwardBoundary(req);
 				throw err;
@@ -876,6 +955,10 @@ export class DistributionRemoteRepository implements DistributionRepository {
 
 		// 8. Post-write verification before activation and again immediately before approval.
 		await this.assertBatchLedgers(batchDoc, req, approvalOperationId, ctx);
+		// The reservation claim checks intentionally read a fresh projection per lot.
+		// Once this approval's outbound ledgers are written, later batch status writes
+		// cannot mutate stock truth, so the post-write identity snapshot is reusable.
+		const postWriteSnapshot = await this.loadPhysicalLotSnapshot();
 
 		// 9. CAS transition batch: activating -> active
 		if (batchDoc.status === 'activating') {
@@ -885,7 +968,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				currentBatch,
 				req,
 				approvalOperationId,
-				ctx
+				ctx,
+				sourceCache,
+				postWriteSnapshot
 			);
 			if (verifiedCurrentBatch.status === 'activating') {
 				await putDocStrict<DistributionBatch>(this.dbName, {
@@ -898,14 +983,18 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			}
 			const activated = await getDoc<DistributionBatch>(this.dbName, batchDoc._id);
 			if (!activated) throw new IntegrityError(`Activated batch ${batchDoc._id} is missing`);
-			batchDoc = await this.assertPersistedBatch(activated, req, approvalOperationId, ctx);
+			batchDoc = await this.assertPersistedBatch(
+				activated,
+				req,
+				approvalOperationId,
+				ctx,
+				sourceCache,
+				postWriteSnapshot
+			);
 		}
 		if (batchDoc.status !== 'active') {
 			throw new IntegrityError(`Batch ${batchDoc._id} is not active after ledger verification`);
 		}
-		await this.assertPersistedBatch(batchDoc, req, approvalOperationId, ctx);
-		await this.assertBatchLedgers(batchDoc, req, approvalOperationId, ctx);
-
 		// 10. CAS transition request: approving -> approved
 		const currentReq = await getDoc<DistributionRequest>(this.dbName, req._id);
 		if (!currentReq) throw new IntegrityError(`Approving request ${req._id} is missing`);

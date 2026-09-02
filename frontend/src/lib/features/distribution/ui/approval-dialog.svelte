@@ -16,6 +16,7 @@
 		type StockLotBalance
 	} from '$lib/features/operations';
 	import { useItemMasters, type ItemMaster } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isWarehouseStaff, isSystemAdmin } from '$lib/auth/roles';
 
@@ -91,6 +92,8 @@
 	const availableLots = $derived(lotProjectionResult.lots);
 	const integrityError = $derived(lotProjectionResult.integrityError);
 
+	import { deriveApprovalCoverage } from './approval-coverage';
+
 	// 5. Allocation plans and full validation (enforcing both per-item and global lot capacity)
 	const plans = $derived.by<ItemAllocationPlan[]>(() => {
 		if (!request) return [];
@@ -98,9 +101,11 @@
 	});
 
 	const validation = $derived.by(() => validateApprovalPlan(plans, availableLots));
+	const coverage = $derived(deriveApprovalCoverage(request, plans));
 
 	// 6. Mutation hook
 	const approveMutation = useApproveDistributionRequest();
+	const isApprovalPending = $derived(isSubmitting || approveMutation.isPending);
 
 	function handleLotQtyChange(inputKey: string, value: string) {
 		lotInputMap = {
@@ -110,19 +115,29 @@
 	}
 
 	function handleRefreshStock() {
+		if (isApprovalPending) {
+			toast.info('กำลังอนุมัติคำร้องอยู่ กรุณารอให้กระบวนการเสร็จสิ้น');
+			return;
+		}
 		ledgerQuery.refetch();
 		toast.info('กำลังตรวจสอบยอดคงเหลือล่าสุด...');
 	}
 
 	function handleClose() {
-		if (isSubmitting) return;
+		if (isApprovalPending) {
+			toast.info('กำลังอนุมัติคำร้องอยู่ กรุณารอให้กระบวนการเสร็จสิ้น');
+			return;
+		}
 		open = false;
 		lotInputMap = {};
 		onClose?.();
 	}
 
 	async function handleApprove() {
-		if (isSubmitting) return;
+		if (isApprovalPending) {
+			toast.info('กำลังอนุมัติคำร้องอยู่ กรุณารอให้กระบวนการเสร็จสิ้น');
+			return;
+		}
 
 		if (!request) {
 			toast.error('ไม่พบข้อมูลคำร้องที่ต้องการอนุมัติ');
@@ -162,9 +177,14 @@
 			toast.error('ไม่พบข้อมูลผู้ใช้งานที่เข้าสู่ระบบ');
 			return;
 		}
+		const shelterCode = getShelterCode();
+		if (request.shelter_code !== shelterCode) {
+			toast.error('ไม่สามารถอนุมัติคำร้องของศูนย์พักพิงอื่นได้');
+			return;
+		}
 
 		const ctx = {
-			shelterCode: request.shelter_code,
+			shelterCode,
 			createdBy: userName,
 			roles: userRoles
 		};
@@ -177,11 +197,7 @@
 				ctx
 			});
 
-			toast.success(
-				validation.isPartial
-					? 'อนุมัติคำร้อง (บางส่วน) และสร้างชุดเบิกจ่ายเรียบร้อยแล้ว'
-					: 'อนุมัติคำร้องครบถ้วน และสร้างชุดเบิกจ่ายเรียบร้อยแล้ว'
-			);
+			toast.success(coverage.toastMessage);
 
 			open = false;
 			lotInputMap = {};
@@ -303,7 +319,7 @@
 					variant="outline"
 					size="sm"
 					onclick={handleRefreshStock}
-					disabled={ledgerQuery.isLoading || isSubmitting}
+					disabled={ledgerQuery.isLoading || isApprovalPending}
 					class="h-7 gap-1 text-xs"
 				>
 					<RefreshCw class="size-3 {ledgerQuery.isLoading ? 'animate-spin' : ''}" />
@@ -343,26 +359,30 @@
 							<div>
 								{#if plan.status === 'full'}
 									<Badge
-										class="gap-1 border-emerald-300 bg-emerald-100 text-[11px] font-bold text-emerald-800"
+										class="gap-1 border-emerald-300 bg-emerald-100 text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
 									>
-										<CheckCircle2 class="size-3 text-emerald-600" />
-										จัดสรรครบถ้วน: {plan.allocated_qty} / {plan.requested_qty}
+										<CheckCircle2 class="size-3 text-emerald-600 dark:text-emerald-400" />
+										จัดสรรครบจำนวน: {plan.allocated_qty} / {plan.requested_qty}
 										{plan.unit}
 									</Badge>
 								{:else if plan.status === 'partial'}
-									<Badge class="border-blue-300 bg-blue-100 text-[11px] font-bold text-blue-800">
+									<Badge
+										class="border-amber-300 bg-amber-100 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+									>
 										จัดสรรบางส่วน: {plan.allocated_qty} / {plan.requested_qty}
-										{plan.unit} (ขาด {plan.remaining_qty})
+										{plan.unit} (ไม่ได้จัดสรร {plan.remaining_qty})
 									</Badge>
 								{:else if plan.status === 'over'}
-									<Badge class="gap-1 border-red-300 bg-red-100 text-[11px] font-bold text-red-800">
-										<AlertTriangle class="size-3 text-red-600" />
+									<Badge
+										class="gap-1 border-red-300 bg-red-100 text-[11px] font-bold text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
+									>
+										<AlertTriangle class="size-3 text-red-600 dark:text-red-400" />
 										เกินคำร้อง: {plan.allocated_qty} / {plan.requested_qty}
 										{plan.unit}
 									</Badge>
 								{:else}
-									<Badge variant="outline" class="text-[11px] text-slate-500">
-										ยังไม่ได้จัดสรร (0 / {plan.requested_qty}
+									<Badge variant="outline" class="text-[11px] text-muted-foreground">
+										ไม่ได้จัดสรร (0 / {plan.requested_qty}
 										{plan.unit})
 									</Badge>
 								{/if}
@@ -373,49 +393,106 @@
 						<PhysicalLotSelector
 							{plan}
 							{lotInputMap}
-							disabled={isSubmitting || ledgerQuery.isLoading}
+							disabled={isApprovalPending || ledgerQuery.isLoading}
 							onLotQtyChange={handleLotQtyChange}
 						/>
 
 						{#if plan.errorMessage}
 							<div
-								class="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-2 text-[11px] font-bold text-red-700"
+								class="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-2 text-[11px] font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
 							>
-								<AlertTriangle class="size-3.5 shrink-0 text-red-600" />
+								<AlertTriangle class="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
 								<span>{plan.errorMessage}</span>
 							</div>
 						{/if}
 					</div>
 				{/each}
+
+				<!-- Live Allocation Coverage Summary & Warnings -->
+				{#if validation.isValid}
+					{#if coverage.isPartial}
+						<div
+							class="space-y-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+						>
+							<div class="flex items-start gap-2.5">
+								<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+								<div class="flex-1 space-y-1.5">
+									<p class="text-xs font-bold">
+										คำร้องนี้จะได้รับการอนุมัติแบบบางส่วน (Partial Approval)
+									</p>
+									<p class="text-[11px] text-amber-800 dark:text-amber-300">
+										จำนวนที่ไม่ได้จัดสรรจะไม่ถูกเก็บเป็นยอดค้างโดยอัตโนมัติ (ไม่มีระบบ Backorder)
+									</p>
+								</div>
+							</div>
+
+							<div
+								class="grid grid-cols-3 gap-2 rounded-lg border border-amber-200 bg-white/80 p-2.5 text-center text-xs dark:border-amber-900/60 dark:bg-slate-900"
+							>
+								<div>
+									<span class="block text-[10px] text-muted-foreground">จำนวนที่ร้องขอ</span>
+									<strong class="font-bold text-foreground">{coverage.totalRequestedQty}</strong>
+								</div>
+								<div>
+									<span class="block text-[10px] text-emerald-700 dark:text-emerald-400"
+										>จำนวนที่จัดสรร</span
+									>
+									<strong class="font-bold text-emerald-700 dark:text-emerald-400"
+										>{coverage.totalAllocatedQty}</strong
+									>
+								</div>
+								<div>
+									<span class="block text-[10px] text-amber-700 dark:text-amber-400"
+										>จำนวนที่ไม่ได้จัดสรร</span
+									>
+									<strong class="font-bold text-amber-700 dark:text-amber-400"
+										>{coverage.totalUnallocatedQty}</strong
+									>
+								</div>
+							</div>
+						</div>
+					{:else if coverage.isFull}
+						<div
+							class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+						>
+							<CheckCircle2 class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+							<span class="text-xs font-medium">
+								จัดสรรครบตามจำนวนที่ร้องขอ ({coverage.totalAllocatedQty} / {coverage.totalRequestedQty})
+							</span>
+						</div>
+					{/if}
+				{/if}
 			</div>
 		</div>
 
 		<!-- Footer -->
 		<DialogFooter
-			class="flex shrink-0 flex-col items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row"
+			class="flex shrink-0 flex-col items-center justify-between gap-3 border-t border-border/80 bg-slate-50 p-4 sm:flex-row dark:bg-slate-950"
 		>
 			<!-- Overall Summary -->
-			<div class="w-full space-y-0.5 text-left text-xs text-slate-600 sm:w-auto">
+			<div class="w-full space-y-0.5 text-left text-xs text-muted-foreground sm:w-auto">
 				<div class="flex items-center gap-2">
 					<span>ยอดจัดสรรรวม:</span>
-					<strong class="text-sm font-extrabold text-slate-900"
+					<strong class="text-sm font-extrabold text-foreground"
 						>{validation.totalAllocatedQty} หน่วย</strong
 					>
-					<span class="text-slate-400">({validation.positiveAllocationsCount} รายการจัดสรร)</span>
+					<span class="text-muted-foreground"
+						>({validation.positiveAllocationsCount} รายการจัดสรร)</span
+					>
 				</div>
 				<div>
 					{#if validation.isValid}
-						{#if validation.isPartial}
-							<span class="font-bold text-blue-700"
+						{#if coverage.isPartial}
+							<span class="font-bold text-amber-700 dark:text-amber-400"
 								>ℹ ผลลัพธ์: อนุมัติจัดสรรบางส่วน (Partial Allocation)</span
 							>
 						{:else}
-							<span class="font-bold text-emerald-700"
+							<span class="font-bold text-emerald-700 dark:text-emerald-400"
 								>✓ ผลลัพธ์: อนุมัติจัดสรรครบถ้วนตามคำร้อง (Full Allocation)</span
 							>
 						{/if}
 					{:else}
-						<span class="font-bold text-amber-700"
+						<span class="font-bold text-destructive"
 							>{validation.errors[0] ?? 'กรุณากรอกจำนวนที่ต้องการจัดสรร'}</span
 						>
 					{/if}
@@ -427,7 +504,7 @@
 				<Button
 					variant="outline"
 					onclick={handleClose}
-					disabled={isSubmitting}
+					disabled={isApprovalPending}
 					class="px-4 text-xs font-semibold"
 				>
 					ยกเลิก
@@ -435,7 +512,7 @@
 
 				<Button
 					onclick={handleApprove}
-					disabled={isSubmitting ||
+					disabled={isApprovalPending ||
 						!validation.isValid ||
 						ledgerQuery.isLoading ||
 						!!integrityError ||
@@ -443,12 +520,12 @@
 						request?.status !== 'pending'}
 					class="gap-1.5 px-5 text-xs font-bold"
 				>
-					{#if isSubmitting}
+					{#if isApprovalPending}
 						<RefreshCw class="size-3.5 animate-spin" />
 						กำลังอนุมัติ...
 					{:else}
 						<CheckCircle2 class="size-3.5" />
-						ยืนยันการอนุมัติ
+						{coverage.ctaLabel}
 					{/if}
 				</Button>
 			</div>

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 	listRequests: vi.fn(),
 	getRequest: vi.fn(),
 	getBatch: vi.fn(),
+	getBatches: vi.fn(),
 	createRequest: vi.fn(),
 	cancelRequest: vi.fn(),
 	approveRequest: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock('../data/distribution.remote', () => ({
 		listRequests = mocks.listRequests;
 		getRequest = mocks.getRequest;
 		getBatch = mocks.getBatch;
+		getBatches = mocks.getBatches;
 		createRequest = mocks.createRequest;
 		cancelRequest = mocks.cancelRequest;
 		approveRequest = mocks.approveRequest;
@@ -71,6 +73,7 @@ import {
 	useCancelDistributionRequest,
 	useCreateDistributionRequest,
 	useDistributionBatch,
+	useDistributionBatches,
 	useDistributionRequest,
 	useDistributionRequests,
 	useRejectDistributionRequest
@@ -99,6 +102,32 @@ describe('Distribution Phase 4A queries', () => {
 			createdBy: 'registration_user',
 			roles: ['registration_staff']
 		});
+	});
+
+	it('bulk-fetches batches with a stable sorted cache key', async () => {
+		const batchIds = ['distribution_batch:01JB', 'distribution_batch:01JA'];
+		useDistributionBatches(
+			() => batchIds,
+			() => 'SH001'
+		);
+		mocks.getBatches.mockResolvedValue([]);
+		const definition = mocks.query;
+		expect(definition).not.toBeNull();
+		expect(definition?.queryKey).toEqual([
+			...distributionKeys.batches('SH001'),
+			'distribution_batch:01JA',
+			'distribution_batch:01JB'
+		]);
+		expect(definition?.enabled).toBe(true);
+		await definition?.queryFn();
+		expect(mocks.getBatches).toHaveBeenCalledWith(
+			['distribution_batch:01JA', 'distribution_batch:01JB'],
+			{
+				shelterCode: 'SH001',
+				createdBy: 'registration_user',
+				roles: ['registration_staff']
+			}
+		);
 	});
 
 	it('calls cancelRequest and invalidates only related request caches after success', async () => {

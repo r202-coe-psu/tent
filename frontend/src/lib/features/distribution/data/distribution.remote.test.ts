@@ -12,6 +12,9 @@ interface InMemoryDoc {
 let store: Map<string, InMemoryDoc>;
 let revCounters: Map<string, number>;
 let beforeStrictWrite: ((doc: InMemoryDoc) => Promise<void> | void) | undefined;
+let stockLedgerProjectionReads: number;
+let getDocCalls: string[];
+let couchCallCount: number;
 
 function nextRev(id: string): string {
 	const count = (revCounters.get(id) ?? 0) + 1;
@@ -33,6 +36,8 @@ vi.mock('$lib/db/couch-db', () => ({
 		}
 	},
 	getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
+		couchCallCount += 1;
+		getDocCalls.push(id);
 		const doc = store.get(id);
 		if (!doc) return null;
 		return JSON.parse(JSON.stringify(doc)) as T;
@@ -43,6 +48,7 @@ vi.mock('$lib/db/couch-db', () => ({
 		_init?: unknown,
 		options?: { onConflict?: 'throw' | 'return-existing' }
 	): Promise<T> => {
+		couchCallCount += 1;
 		const existing = store.get(doc._id);
 		const onConflict = options?.onConflict ?? 'throw';
 
@@ -70,6 +76,7 @@ vi.mock('$lib/db/couch-db', () => ({
 		_dbName: string,
 		doc: T
 	): Promise<T> => {
+		couchCallCount += 1;
 		await beforeStrictWrite?.(doc as InMemoryDoc);
 		const existing = store.get(doc._id);
 		if (existing) {
@@ -90,9 +97,26 @@ vi.mock('$lib/db/couch-db', () => ({
 		type: string,
 		guard: (d: unknown) => d is T
 	): Promise<T[]> => {
+		couchCallCount += 1;
+		if (type === 'stock_ledger') stockLedgerProjectionReads += 1;
 		const results: T[] = [];
 		for (const doc of store.values()) {
 			if (doc.type === type && guard(doc)) {
+				results.push(JSON.parse(JSON.stringify(doc)) as T);
+			}
+		}
+		return results;
+	},
+	allDocsByIds: async <T>(
+		_dbName: string,
+		ids: readonly string[],
+		guard: (d: unknown) => d is T
+	): Promise<T[]> => {
+		couchCallCount += 1;
+		const results: T[] = [];
+		for (const id of ids) {
+			const doc = store.get(id);
+			if (doc && guard(doc)) {
 				results.push(JSON.parse(JSON.stringify(doc)) as T);
 			}
 		}
@@ -169,6 +193,9 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 		store = new Map();
 		revCounters = new Map();
 		beforeStrictWrite = undefined;
+		stockLedgerProjectionReads = 0;
+		getDocCalls = [];
+		couchCallCount = 0;
 		repo = new Phase3TestRepository('shelter_sh001');
 	});
 
@@ -336,6 +363,108 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			const reqAfter = await repo.getRequest(request._id);
 			expect(reqAfter?.status).toBe('approved');
 			expect(reqAfter?.approved_by).toBe('admin_alice');
+		});
+
+		it('completes partial approval workflow and transitions request to approved', async () => {
+			const inbound = await seedInboundLot('item:rice', 100);
+			const request = await repo.createRequest(
+				{
+					purpose: 'Partial approval',
+					active_headcount_snapshot: '50',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '50',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '50'
+						}
+					]
+				},
+				adminCtx
+			);
+
+			await repo.approveRequest(
+				request._id,
+				[{ item_id: 'item:rice', lot_ref: inbound._id, qty: '5' }],
+				adminCtx
+			);
+
+			const persisted = await repo.getRequest(request._id);
+			expect(persisted).toMatchObject({ status: 'approved' });
+		});
+
+		it('aggregates duplicate request rows by item identity before activating batch', async () => {
+			const inbound = await seedInboundLot('item:rice', 50);
+			const request = await repo.createRequest(
+				{
+					purpose: 'Duplicate rice rows',
+					active_headcount_snapshot: '50',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '30',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '30'
+						},
+						{
+							item_id: 'item:rice',
+							requested_qty: '20',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '20'
+						}
+					]
+				},
+				adminCtx
+			);
+
+			const batch = await repo.approveRequest(
+				request._id,
+				[{ item_id: 'item:rice', lot_ref: inbound._id, qty: '50' }],
+				adminCtx
+			);
+
+			expect(batch.items).toHaveLength(1);
+			expect((await repo.getRequest(request._id))?.status).toBe('approved');
+		});
+
+		it('keeps batch active on an already-approved retry', async () => {
+			const inbound = await seedInboundLot('item:rice', 50);
+			const request = await repo.createRequest(
+				{
+					purpose: 'Coverage retry',
+					active_headcount_snapshot: '50',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '50',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '50'
+						}
+					]
+				},
+				adminCtx
+			);
+			const allocations = [{ item_id: 'item:rice', lot_ref: inbound._id, qty: '5' }];
+
+			await repo.approveRequest(request._id, allocations, adminCtx);
+			const ledgerCountBeforeRetry = Array.from(store.values()).filter(
+				(doc) => doc.type === 'stock_ledger' && doc.reason === 'distribute'
+			).length;
+			await repo.approveRequest(request._id, allocations, adminCtx);
+
+			expect((await repo.getRequest(request._id))?.status).toBe('approved');
+			expect(
+				Array.from(store.values()).filter(
+					(doc) => doc.type === 'stock_ledger' && doc.reason === 'distribute'
+				)
+			).toHaveLength(ledgerCountBeforeRetry);
 		});
 	});
 
@@ -1726,6 +1855,9 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			);
 
 			expect(request.status).toBe('pending');
+			couchCallCount = 0;
+			stockLedgerProjectionReads = 0;
+			getDocCalls = [];
 
 			const batch = await repo.approveRequest(
 				request._id,
@@ -1738,6 +1870,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 				],
 				warehouseCtx
 			);
+			const approvalCouchCallCount = couchCallCount;
 
 			expect(batch.status).toBe('active');
 			expect(batch.request_id).toBe(request._id);
@@ -1771,6 +1904,15 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			const resId = await makeLotReservationDocId(inbound._id);
 			const resDoc = store.get(resId) as StockLotReservation | undefined;
 			expect(resDoc?.pending_claims).toEqual([]);
+
+			// Fresh approval keeps the capacity read at claim time, then takes one
+			// post-write physical-lot snapshot for both activating/active verification.
+			expect(stockLedgerProjectionReads).toBe(3);
+			expect(approvalCouchCallCount).toBe(20);
+			expect(getDocCalls.filter((id) => id === inbound._id)).toHaveLength(1);
+			expect(
+				getDocCalls.filter((id) => id === batch.allocations[0].allocation_ledger_id)
+			).toHaveLength(1);
 		});
 	});
 
@@ -2720,6 +2862,72 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 	])('allows %s to list same-shelter distribution requests', async (_role, ctx) => {
 		const request = await createPendingRequest();
 		await expect(repo.listRequests(undefined, ctx)).resolves.toEqual([request]);
+	});
+
+	it('filters requests by lifecycle status', async () => {
+		const pending = await createPendingRequest();
+		const approved = await createPendingRequest();
+		store.set(approved._id, {
+			...approved,
+			_id: `${approved._id}:approved`,
+			status: 'approved',
+			batch_id: 'distribution_batch:BATCH1',
+			_rev: nextRev(`${approved._id}:approved`)
+		});
+
+		const pendingOnly = await repo.listRequests('pending', adminCtx);
+		const approvedOnly = await repo.listRequests('approved', adminCtx);
+
+		expect(pendingOnly.map((r) => r._id)).toContain(pending._id);
+		expect(pendingOnly.map((r) => r._id)).not.toContain(`${approved._id}:approved`);
+		expect(approvedOnly.map((r) => r._id)).toContain(`${approved._id}:approved`);
+	});
+
+	it('bulk-fetches batches by IDs in a single operation with shelter isolation', async () => {
+		const ulid1 = '01JABCDEFGHJKMNPQRSTVWXYZ1';
+		const ulid2 = '01JABCDEFGHJKMNPQRSTVWXYZ2';
+		const batch1 = createDistributionBatch(
+			{
+				request_id: `distribution_request:${ulid1}`,
+				items: [
+					{
+						item_id: 'item:rice',
+						allocated_qty: '50',
+						unit: 'kg',
+						distribution_type_snapshot: 'one_time'
+					}
+				],
+				allocations: [
+					{
+						item_id: 'item:rice',
+						lot_ref: 'stock_ledger:01JABCDEFGHJKMNPQRSTVWXYZ3',
+						lot: { lot_no: 'L1' },
+						qty: '50',
+						allocation_ledger_id: 'stock_ledger:01JABCDEFGHJKMNPQRSTVWXYZ4'
+					}
+				]
+			},
+			adminCtx
+		);
+		const batchOtherShelter = {
+			...batch1,
+			_id: `distribution_batch:${ulid2}`,
+			request_id: `distribution_request:${ulid2}`,
+			shelter_code: 'SH002'
+		};
+		store.set(batch1._id, batch1 as unknown as InMemoryDoc);
+		store.set(batchOtherShelter._id, batchOtherShelter as unknown as InMemoryDoc);
+
+		const batches = await repo.getBatches(
+			[batch1._id, batchOtherShelter._id, 'distribution_batch:01JNONEXISTENT0000000000000'],
+			adminCtx
+		);
+
+		expect(batches).toHaveLength(1);
+		expect(batches[0]._id).toBe(batch1._id);
+
+		const empty = await repo.getBatches([], adminCtx);
+		expect(empty).toEqual([]);
 	});
 
 	it('denies kitchen_staff and missing-role callers before returning distribution requests', async () => {
