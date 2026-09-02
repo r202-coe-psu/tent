@@ -34,6 +34,8 @@
 	import Target from '@lucide/svelte/icons/target';
 	import Timer from '@lucide/svelte/icons/timer';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import UserRoundPlus from '@lucide/svelte/icons/user-round-plus';
 	import Send from '@lucide/svelte/icons/send';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -195,6 +197,14 @@
 			eligibility: eligibilityFilter
 		})
 	);
+	/**
+	 * Two visually separate groups (owner feedback 2026-09-02): volunteers who
+	 * already hold a seat on THIS sub-shift vs everyone still unassigned.
+	 * Grouping only — `assign-roster.ts` decided each row's state; the
+	 * on-shift group is read-only because those rows are never `assignable`.
+	 */
+	const onShift = $derived(visible.filter((c) => c.state.kind === 'accepted'));
+	const unassigned = $derived(visible.filter((c) => c.state.kind !== 'accepted'));
 	const assignableCount = $derived(countAssignable(visible));
 	const selectedCount = $derived(
 		visible.filter((c) => c.assignable && selectedIds.includes(c.volunteer._id)).length
@@ -497,13 +507,9 @@
 				</p>
 			</div>
 
-			{#if roster.error}
-				<p class="py-8 text-center text-sm text-destructive">{roster.error}</p>
-			{:else if visible.length === 0}
-				<p class="py-8 text-center text-sm text-muted-foreground">ไม่พบอาสาสมัครที่ตรงกับตัวกรอง</p>
-			{:else}
-				<ul class="space-y-2 pt-3">
-					{#each visible as candidate (candidate.volunteer._id)}
+			{#snippet rosterRows(rows: typeof visible)}
+				<ul class="space-y-2">
+					{#each rows as candidate (candidate.volunteer._id)}
 						<AssignRosterRow
 							{candidate}
 							shelterLabel={candidate.volunteer.current_shelter_code &&
@@ -515,6 +521,60 @@
 						/>
 					{/each}
 				</ul>
+			{/snippet}
+
+			{#if roster.error}
+				<p class="py-8 text-center text-sm text-destructive">{roster.error}</p>
+			{:else if visible.length === 0}
+				<p class="py-8 text-center text-sm text-muted-foreground">ไม่พบอาสาสมัครที่ตรงกับตัวกรอง</p>
+			{:else}
+				<div class="space-y-5 pt-3">
+					{#if onShift.length > 0}
+						<section>
+							<div
+								class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-200"
+							>
+								<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+									<CircleCheck class="h-4 w-4 shrink-0" />
+									อยู่ในกะนี้แล้ว
+									<span
+										class="rounded-full bg-white px-2 py-0.5 tabular-nums ring-1 ring-emerald-200"
+									>
+										{onShift.length} คน
+									</span>
+								</h4>
+								<p class="text-[11px] text-emerald-800/80">
+									มอบหมายซ้ำไม่ได้ — ถอดออกได้ที่แท็บ “กะและตารางกะ”
+								</p>
+							</div>
+							{@render rosterRows(onShift)}
+						</section>
+					{/if}
+
+					<section>
+						<div
+							class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2"
+						>
+							<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-foreground">
+								<UserRoundPlus class="h-4 w-4 shrink-0 text-primary" />
+								ยังไม่ได้มอบหมายในกะนี้
+								<span class="rounded-full bg-card px-2 py-0.5 tabular-nums ring-1 ring-border">
+									{unassigned.length} คน
+								</span>
+							</h4>
+							<p class="text-[11px] text-muted-foreground">
+								มอบหมายได้ {assignableCount} คน · เวลาชนกะอื่น {unassigned.length - assignableCount} คน
+							</p>
+						</div>
+						{#if unassigned.length === 0}
+							<p class="py-6 text-center text-sm text-muted-foreground">
+								อาสาที่ผ่านตัวกรองทั้งหมดอยู่ในกะนี้แล้ว
+							</p>
+						{:else}
+							{@render rosterRows(unassigned)}
+						{/if}
+					</section>
+				</div>
 			{/if}
 		</div>
 

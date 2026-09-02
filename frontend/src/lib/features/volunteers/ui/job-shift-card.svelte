@@ -3,10 +3,13 @@
 	 * One sub-shift row of the job detail "กะและตารางกะ" tab (approved mockup
 	 * 2026-08-27).
 	 *
-	 * The 3-colour split shown here comes from
+	 * The split shown here comes from
 	 * `domain/capacity.ts#jobShiftQuotaSplits` (computed once for the whole job
 	 * by the parent and passed in) — this component performs no capacity maths
-	 * of its own. Note the documented approximation in that function: per-shift
+	 * of its own. Like the job-board quota bar it counts APPROVED volunteers
+	 * only: 🟢 ยืนยันแล้ว (`confirmed`) vs ⚪ ยังขาดอีก (`dispatched +
+	 * remaining`) — an offer nobody has accepted yet is not staffing, so it
+	 * reads as a gap here, exactly like an untouched slot. Note the documented approximation in that function: per-shift
 	 * TOTALS reconcile with the job doc, but which shift holds a given seat is a
 	 * best guess until `shift_assignment` carries a `job_shift_id`.
 	 */
@@ -50,6 +53,8 @@
 	} = $props();
 
 	const total = $derived(split.target > 0 ? split.target : 1);
+	/** Everything not yet approved — dispatched-but-unanswered seats included. */
+	const missing = $derived(split.dispatched + split.remaining);
 	const crossesMidnight = $derived(shift.end_date !== shift.date);
 </script>
 
@@ -117,26 +122,19 @@
 	<div>
 		<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
 			<div class="h-full bg-emerald-500" style:width="{(split.confirmed / total) * 100}%"></div>
-			<div class="h-full bg-amber-400" style:width="{(split.dispatched / total) * 100}%"></div>
 		</div>
 		<div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
 			<span
 				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
 			>
 				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-				ตอบรับแล้ว: <span class="font-bold text-foreground tabular-nums">{split.confirmed}</span>
-			</span>
-			<span
-				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
-			>
-				<span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-				เสนอแล้ว: <span class="font-bold text-foreground tabular-nums">{split.dispatched}</span>
+				ยืนยันแล้ว: <span class="font-bold text-foreground tabular-nums">{split.confirmed}</span>
 			</span>
 			<span
 				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
 			>
 				<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/40"></span>
-				ยังขาดอีก: <span class="font-bold text-foreground tabular-nums">{split.remaining}</span>
+				ยังขาดอีก: <span class="font-bold text-foreground tabular-nums">{missing}</span>
 			</span>
 			<span class="ml-auto text-muted-foreground">(เป้า {split.target} คน)</span>
 		</div>
