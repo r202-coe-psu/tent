@@ -17,7 +17,12 @@
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { previewElementAsPdf } from '$lib/utils/pdf';
-	import { maskNationalId, EWAR_SYMPTOM_GROUPS, type Evacuee } from '$lib/features/people';
+	import {
+		formatPersonName,
+		maskNationalId,
+		EWAR_SYMPTOM_GROUPS,
+		type Evacuee
+	} from '$lib/features/people';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_HANDOVER_SLIP_I18N } from './_constants/evacuee-handover-slip.i18n';
@@ -160,8 +165,7 @@
 								</span>
 							</div>
 							<h3 class="mt-2 text-lg font-extrabold text-foreground">
-								{evacuee.first_name}
-								{evacuee.last_name}
+								{formatPersonName(evacuee)}
 								{#if evacuee.nickname}
 									<span class="text-sm font-normal text-muted-foreground">({evacuee.nickname})</span
 									>

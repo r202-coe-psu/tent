@@ -1,7 +1,7 @@
 <script lang="ts">
 	import User from '@lucide/svelte/icons/user';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import { maskNationalId, type Evacuee } from '$lib/features/people';
+	import { formatPersonName, maskNationalId, type Evacuee } from '$lib/features/people';
 	import { COUNTRIES } from '$lib/utils/country';
 
 	let {
@@ -44,8 +44,7 @@
 		<div class="col-span-2 border-b border-border/50 pb-3">
 			<span class="block text-xs font-medium text-muted-foreground">ชื่อ - นามสกุล</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{evacuee.first_name}
-				{evacuee.last_name}
+				{formatPersonName(evacuee)}
 			</span>
 		</div>
 		<div>

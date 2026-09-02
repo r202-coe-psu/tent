@@ -312,7 +312,7 @@ export function assertEvacueeHouseholdAssignment(
 	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);
 	if (conflict.conflicted) {
 		throw new Error(
-			`${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+			`${formatPersonName(evacuee)} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 		);
 	}
 }
@@ -401,7 +401,8 @@ export function minBirthYearBE(): number {
 
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
-	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+	last_name: z.string().trim().default(''),
 	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
@@ -599,7 +600,8 @@ const digitsOnly = (value: string) => value.replace(/\D/g, '');
 export const evacueePersonalEditFormSchema = z
 	.object({
 		firstName: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
-		lastName: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+		// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+		lastName: z.string().trim().default(''),
 		nickname: z.string().trim(),
 		birthYear: z.string().trim(),
 		age: z.string().trim(),
@@ -1121,6 +1123,17 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 
 // ---------------------------------------------------------------- display helpers
 
+/** Display name; empty/whitespace last_name (mononym) is omitted — no trailing space. */
+export function formatPersonName(person: {
+	first_name: string;
+	last_name?: string | null;
+}): string {
+	return [person.first_name, person.last_name ?? '']
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.join(' ');
+}
+
 export function maskNationalId(id: string | null | undefined): string {
 	if (!id || id.length < 6) return '—';
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
@@ -1134,7 +1147,7 @@ export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
 	if (
 		evacuee.first_name.toLowerCase().includes(q) ||
 		evacuee.last_name.toLowerCase().includes(q) ||
-		`${evacuee.first_name} ${evacuee.last_name}`.toLowerCase().includes(q) ||
+		formatPersonName(evacuee).toLowerCase().includes(q) ||
 		(evacuee.nickname?.toLowerCase().includes(q) ?? false)
 	) {
 		return true;

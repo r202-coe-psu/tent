@@ -6,7 +6,7 @@ layer: stable + volatile
 created: 2026-09-02
 updated: 2026-09-03
 affects:
-  - docs/data/schema.md §1.1 (evacuee schema_v 9), §1.4 (movement zone_change), §1.5 (screening triage_level), §3.1 (shelter feature_flags)
+  - docs/data/schema.md §1.1 (evacuee schema_v 9 — รวม `last_name` ว่างได้), §1.4 (movement zone_change), §1.5 (screening triage_level), §3.1 (shelter feature_flags)
   - docs/prd/role-permission-matrix.md
   - docs/changes/CR-072-triage-green-yellow-red.md (ratifies triage_level)
   - docs/adr/0001-decoupled-registration-and-medical-screening-flow.md
@@ -23,7 +23,8 @@ affects:
 > Flag `enable_medical_screening` สลับเฉพาะการแสดง Station 2 + Handover Slip หลังลงทะเบียน — **ห้ามจัดโซน/เช็คอินที่ Station 1 ทุกกรณี**.  
 > Station 1 = คิวตารางเดียว + wizard `/new` (personal+special_needs → household → pets/assets; `createEvacuee` เท่านั้น, status `arriving`, zone null, ออก Person QR เสมอ).  
 > Station 3 = `/onsite/zoning` + movement `zone_change` สำหรับย้ายโซนหลังเข้าพัก.  
-> ขยาย `arriving`, `triage_level`, และ shared form sub-components ตามเดิม.
+> ขยาย `arriving`, `triage_level`, และ shared form sub-components ตามเดิม.  
+> `last_name` ว่างได้ (mononym / ชาวต่างชาติ) + UX hint + `formatPersonName` (FR-18..20).
 
 ---
 
@@ -94,12 +95,18 @@ affects:
 ### 2.7 Shared Form Sub-components
 - **FR-09:** ตามเดิมภายใต้ `$lib/features/people/ui/forms/` (`personal-info`, `emergency-contact`, `special-needs`, `ewar-symptoms`, `household-address`, `pet-asset-vehicle`, `health-medical`, `zone-selection`) — EWAR/health ใช้ที่ Station 2 / profile ไม่ใช่ Station 1 wizard
 
+### 2.8 Optional last name (mononym / foreign nationals)
+- **FR-18 (last_name ว่างได้):** `first_name` ยัง required; `last_name` ตัดช่องว่างแล้ว **ว่างได้** (persist เป็น `""`) — ไม่บังคับใส่ `-` / `.` เมื่อไม่มีนามสกุล (เช่น พม่า / mononym)
+- **FR-19 (UX hint):** ฟอร์ม personal-info แสดงคำแนะนำเมื่อ `country ≠ THAILAND` หรือบัตรไม่ใช่ `national_id`: ใส่ชื่อเต็มในช่องชื่อและเว้นนามสกุลได้; ช่องนามสกุลไม่มีเครื่องหมายบังคับ
+- **FR-20 (display):** แสดงชื่อด้วย `formatPersonName` — รวมชื่อ+สกุลแล้ว trim / ข้ามสกุลว่าง
+
 ---
 
 ## 3. Data Schema & Migration Impact
 
 ### 3.1 `evacuee` — schema_v 9 (Additive)
 - ขยาย enum `current_stay.status` เพิ่ม `'arriving'`
+- `last_name`: field คง required บนเอกสาร แต่ **อนุญาตค่าว่าง** (เดิมห้าม empty ใน Zod/UI) — ไม่ bump schema_v เพิ่ม; ไม่ต้อง backfill
 - Migration: read-time compatibility; ไม่ต้อง backfill
 
 ### 3.2 `screening` — schema_v 2 (Additive)
@@ -125,6 +132,7 @@ affects:
   3. Station 1 = คิวตาราง + `/new` wizard ไร้ EWAR/screening/zone; `createEvacuee` only; Person QR เสมอ
   4. Station 3 = `/onsite/zoning` + `canAccessZoning` + `zone_change`
   5. S2 save → ปุ่มไปจัดโซน / กลับคิวแพทย์
+- 2026-09-03 — **Optional last_name (FR-18..20):** mononym / ชาวต่างชาติ — `last_name` ว่างได้; UX hint; `formatPersonName`
 
 ---
 
@@ -137,3 +145,4 @@ affects:
 - [ ] Station 2 save มีปุ่มไป `/onsite/zoning/[id]` และกลับคิว
 - [ ] Station 3 pending/assigned queues ตาม FR-11; first assign = check_in; rezone = zone_change
 - [ ] schema.md §1.4 ระบุ `zone_change`; tests domain/utils ผ่าน
+- [ ] `last_name` ว่างผ่าน validation; แสดงชื่อไม่เหลือช่องว่างท้าย; hint ต่างชาติ/บัตรต่างด้าว (FR-18..20)

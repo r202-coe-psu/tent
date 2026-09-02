@@ -58,7 +58,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `first_name` | str | req | ตัดช่องว่างหัวท้าย; ห้าม empty |
-| `last_name` | str | req | — |
+| `last_name` | str | req | ตัดช่องว่างหัวท้าย; **ว่างได้** เมื่อไม่มีนามสกุล (mononym / ชาวต่างชาติ เช่น พม่า) — field คงมีเสมอ เป็น `""` ได้ (CR-106) |
 | `gender` | enum(`male`,`female`,`other`) | req | — |
 | `phone` | str\|null | req | UI บังคับกรอก — กด/พิมพ์ "ไม่มี" → เก็บ `null`; เก็บ normalize แล้ว (ตัวเลขล้วน เช่น `"0812345678"`) |
 | `nickname` | str | opt | — |

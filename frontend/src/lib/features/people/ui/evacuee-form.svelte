@@ -26,6 +26,7 @@
 		useUpdateEvacuee,
 		peopleRepository,
 		buildSaveFailureReport,
+		formatPersonName,
 		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -359,7 +360,7 @@
 				});
 			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
-				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
+				const householdLabel = `ครอบครัว${formatPersonName(registeredEvacuee)}`;
 
 				const householdInput: HouseholdInput = {
 					label: householdLabel,

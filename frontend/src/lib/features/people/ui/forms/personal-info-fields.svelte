@@ -40,6 +40,9 @@
 		errors?: Record<string, string | undefined>;
 	} = $props();
 
+	const errClass =
+		'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20';
+
 	const cardTypeOptions: { value: CardType; label: string }[] = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน' },
 		{ value: 'passport', label: 'หนังสือเดินทาง' },
@@ -101,6 +104,10 @@
 		const target = e.currentTarget as HTMLInputElement;
 		phone = digits(target.value).slice(0, 10);
 	}
+
+	const showMononymHint = $derived(
+		country !== 'THAILAND' || (person_id.cardType != null && person_id.cardType !== 'national_id')
+	);
 </script>
 
 <div class="space-y-4">
@@ -115,8 +122,9 @@
 				bind:value={first_name}
 				{disabled}
 				autocomplete="given-name"
-				placeholder="ชื่อจริง"
-				class="h-9"
+				placeholder={showMononymHint ? 'ชื่อเต็มตามเอกสาร' : 'ชื่อจริง'}
+				aria-invalid={!!(errors?.first_name || errors?.firstName)}
+				class="h-9 {errors?.first_name || errors?.firstName ? errClass : ''}"
 			/>
 			{#if errors?.first_name || errors?.firstName}
 				<p class="text-2xs text-destructive">{errors?.first_name ?? errors?.firstName}</p>
@@ -124,22 +132,26 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for="last-name" class="text-xs font-semibold text-foreground">
-				นามสกุล <span class="text-destructive">*</span>
-			</Label>
+			<Label for="last-name" class="text-xs font-semibold text-foreground">นามสกุล</Label>
 			<Input
 				id="last-name"
 				bind:value={last_name}
 				{disabled}
 				autocomplete="family-name"
-				placeholder="นามสกุล"
-				class="h-9"
+				placeholder={showMononymHint ? 'เว้นว่างได้ถ้าไม่มีนามสกุล' : 'นามสกุล'}
+				aria-invalid={!!(errors?.last_name || errors?.lastName)}
+				class="h-9 {errors?.last_name || errors?.lastName ? errClass : ''}"
 			/>
 			{#if errors?.last_name || errors?.lastName}
 				<p class="text-2xs text-destructive">{errors?.last_name ?? errors?.lastName}</p>
 			{/if}
 		</div>
 	</div>
+	{#if showMononymHint}
+		<p class="text-2xs text-muted-foreground">
+			ถ้าไม่มีนามสกุล ใส่ชื่อเต็มในช่องชื่อ และเว้นนามสกุลได้
+		</p>
+	{/if}
 
 	<!-- Nickname -->
 	<div class="space-y-1.5">
@@ -149,7 +161,8 @@
 			bind:value={nickname}
 			{disabled}
 			placeholder="ชื่อเล่น (ถ้ามี)"
-			class="h-9"
+			aria-invalid={!!errors?.nickname}
+			class="h-9 {errors?.nickname ? errClass : ''}"
 		/>
 		{#if errors?.nickname}
 			<p class="text-2xs text-destructive">{errors.nickname}</p>
@@ -198,7 +211,8 @@
 				{disabled}
 				inputmode={person_id.cardType === 'national_id' ? 'numeric' : 'text'}
 				placeholder={person_id.cardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
-				class="h-9"
+				aria-invalid={!!(errors?.cardNumber || errors?.number)}
+				class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
 			/>
 			{#if errors?.cardNumber || errors?.number}
 				<p class="text-2xs text-destructive">{errors.cardNumber ?? errors.number}</p>
@@ -217,7 +231,8 @@
 				{disabled}
 				inputmode="numeric"
 				placeholder="เช่น 2535"
-				class="h-9"
+				aria-invalid={!!(errors?.birthYear || errors?.birth_year)}
+				class="h-9 {errors?.birthYear || errors?.birth_year ? errClass : ''}"
 			/>
 			{#if errors?.birthYear || errors?.birth_year}
 				<p class="text-2xs text-destructive">{errors.birthYear ?? errors.birth_year}</p>
@@ -233,7 +248,8 @@
 				{disabled}
 				inputmode="numeric"
 				placeholder="เช่น 35"
-				class="h-9"
+				aria-invalid={!!errors?.age}
+				class="h-9 {errors?.age ? errClass : ''}"
 			/>
 			{#if errors?.age}
 				<p class="text-2xs text-destructive">{errors.age}</p>
@@ -254,7 +270,10 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
+				<Select.Trigger
+					aria-invalid={!!errors?.gender}
+					class="!h-9 w-full rounded-md text-xs {errors?.gender ? errClass : ''}"
+				>
 					{genderOptions.find((o) => o.value === gender)?.label ?? 'เลือกเพศ'}
 				</Select.Trigger>
 				<Select.Content>
@@ -263,6 +282,9 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			{#if errors?.gender}
+				<p class="text-2xs text-destructive">{errors.gender}</p>
+			{/if}
 		</div>
 	</div>
 
@@ -280,8 +302,8 @@
 				searchPlaceholder="ค้นหาสัญชาติ..."
 				emptyText="ไม่พบสัญชาติ"
 				{disabled}
-				class="!h-9 rounded-md text-xs"
-				controlProps={{ id: 'country' }}
+				class="!h-9 rounded-md text-xs {errors?.country ? errClass : ''}"
+				controlProps={{ id: 'country', 'aria-invalid': !!errors?.country }}
 			/>
 			{#if errors?.country}
 				<p class="text-2xs text-destructive">{errors.country}</p>
@@ -333,7 +355,8 @@
 				maxlength={10}
 				autocomplete="tel"
 				placeholder="เบอร์โทรศัพท์ 10 หลัก"
-				class="h-9"
+				aria-invalid={!!errors?.phone}
+				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if errors?.phone}
 				<p class="text-2xs text-destructive">{errors.phone}</p>

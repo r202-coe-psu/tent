@@ -381,10 +381,12 @@
 						<Form.Field {form} name="last_name">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label
-										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
-									>
-									<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
+									<Form.Label>นามสกุล (Last Name)</Form.Label>
+									<Input
+										{...props}
+										placeholder="เว้นว่างได้ถ้าไม่มีนามสกุล"
+										bind:value={$formData.last_name}
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />

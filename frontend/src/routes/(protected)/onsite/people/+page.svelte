@@ -24,6 +24,7 @@
 		useHouseholds,
 		useScreenings,
 		usePatchEvacuee,
+		formatPersonName,
 		maskNationalId,
 		matchesEvacueeSearch,
 		nextQueueLabel,
@@ -125,7 +126,7 @@
 		if (!trimmed) return;
 		const found = allEvacuees.find((e) => e._id === trimmed || e.person_id?.number === trimmed);
 		if (found) {
-			toast.success(`พบ: ${found.first_name} ${found.last_name}`);
+			toast.success(`พบ: ${formatPersonName(found)}`);
 			barcodeInput = '';
 			showCameraModal = false;
 			openRow(found);
@@ -311,7 +312,7 @@
 							})}
 							{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 							<Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
-								<Table.Cell class="pl-4 font-medium">{row.first_name} {row.last_name}</Table.Cell>
+								<Table.Cell class="pl-4 font-medium">{formatPersonName(row)}</Table.Cell>
 								<Table.Cell class="text-xs"
 									>{STATUS_LABELS[row.current_stay.status] ?? row.current_stay.status}</Table.Cell
 								>
@@ -343,7 +344,7 @@
 				hasScreening: screenedIds.has(selected._id)
 			})}
 			<Sheet.Header>
-				<Sheet.Title>{selected.first_name} {selected.last_name}</Sheet.Title>
+				<Sheet.Title>{formatPersonName(selected)}</Sheet.Title>
 				<Sheet.Description>
 					{STATUS_LABELS[selected.current_stay.status]} · คิวถัดไป {next} · บัตร
 					{maskNationalId(selected.person_id?.number)}

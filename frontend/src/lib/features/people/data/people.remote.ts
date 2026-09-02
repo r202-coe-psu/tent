@@ -24,6 +24,7 @@ import {
 	isScreening,
 	migrateHouseholdV3ToV4,
 	matchesEvacueeSearch,
+	formatPersonName,
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
@@ -316,9 +317,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const q = search?.trim();
 		if (q) {
 			const evacuees = await this.repo.allByType('evacuee', isEvacuee);
-			const headNames = new Map(
-				evacuees.map((e) => [e._id, `${e.first_name} ${e.last_name}`.toLowerCase()])
-			);
+			const headNames = new Map(evacuees.map((e) => [e._id, formatPersonName(e).toLowerCase()]));
 			all = all.filter((h) =>
 				matchesHouseholdSearch(h, q, headNames.get(h.head_evacuee_id ?? '') ?? '', labels)
 			);

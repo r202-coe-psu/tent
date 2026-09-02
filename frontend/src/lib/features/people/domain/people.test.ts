@@ -31,6 +31,7 @@ import {
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
 	evacueeHealthEditFormSchema,
+	formatPersonName,
 	stayStatusSchema,
 	STATUS_LABELS
 } from './people';
@@ -168,6 +169,15 @@ describe('createEvacuee', () => {
 		expect(() =>
 			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
 		).toThrow();
+	});
+
+	it('allows an empty last name for mononyms (CR-106 FR-18)', () => {
+		const e = createEvacuee(
+			{ first_name: 'Aung San', last_name: '  ', gender: 'male', phone: null, country: 'MYANMAR' },
+			ctx
+		);
+		expect(e.first_name).toBe('Aung San');
+		expect(e.last_name).toBe('');
 	});
 
 	it('defaults photo to absent, and carries it through when set (CR-054)', () => {
@@ -312,6 +322,39 @@ describe('evacueePersonalEditFormSchema age', () => {
 		});
 
 		expect(result.success).toBe(true);
+	});
+
+	it('allows an empty lastName (CR-106 FR-18)', () => {
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'Suu Kyi',
+			lastName: '',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'female',
+			phone: '',
+			noPhone: true,
+			cardType: 'passport',
+			cardNumber: 'AB1234567',
+			country: 'MYANMAR',
+			religion: 'buddhist'
+		});
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.lastName).toBe('');
+		}
+	});
+});
+
+describe('formatPersonName', () => {
+	it('joins first and last name', () => {
+		expect(formatPersonName({ first_name: 'สมชาย', last_name: 'ใจดี' })).toBe('สมชาย ใจดี');
+	});
+
+	it('omits empty last name without trailing space', () => {
+		expect(formatPersonName({ first_name: 'Aung San', last_name: '' })).toBe('Aung San');
+		expect(formatPersonName({ first_name: 'Aung San', last_name: '   ' })).toBe('Aung San');
 	});
 });
 

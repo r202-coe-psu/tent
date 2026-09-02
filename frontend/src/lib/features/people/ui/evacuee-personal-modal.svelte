@@ -207,10 +207,6 @@
 			return;
 		}
 
-		if (!firstName.trim() || !lastName.trim()) {
-			toast.error('กรุณากรอกชื่อและนามสกุล');
-			return;
-		}
 		if (!noPhone && digits(phone).length !== 10) {
 			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือกไม่มีเบอร์โทร');
 			return;

@@ -78,6 +78,7 @@ export {
 	assertCheckoutDestination,
 	applyMovementToStay,
 	maskNationalId,
+	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
 	evacueeAgeYears,
