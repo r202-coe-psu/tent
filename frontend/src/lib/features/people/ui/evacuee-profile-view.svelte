@@ -18,7 +18,8 @@
 		useDeleteMedical,
 		useCreateScreening,
 		usePatchEvacuee,
-		usePatchHousehold
+		usePatchHousehold,
+		useChangeEvacueeZone
 	} from '$lib/features/people';
 	import {
 		hasStaffCapability,
@@ -139,6 +140,7 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const movementsQuery = useMovements();
 	const patchEvacueeMutation = usePatchEvacuee();
+	const changeZoneMutation = useChangeEvacueeZone();
 	const patchHouseholdMutation = usePatchHousehold();
 	const createMedicalMutation = useCreateMedical();
 	const patchMedicalMutation = usePatchMedical();
@@ -214,6 +216,10 @@
 		mark_deceased: {
 			dotClass: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
 			label: 'เสียชีวิต (Deceased)'
+		},
+		zone_change: {
+			dotClass: 'fill-amber-600 text-amber-600',
+			label: 'ย้ายโซน (Zone change)'
 		}
 	};
 
@@ -258,10 +264,18 @@
 	async function updateZone(zoneCode: string) {
 		if (!evacuee) return;
 		try {
-			await patchEvacueeMutation.mutateAsync({
-				id: evacuee._id,
-				patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
-			});
+			if (evacuee.current_stay.status === 'active') {
+				await changeZoneMutation.mutateAsync({
+					evacuee,
+					ctx: getAuthorContext(),
+					zone: zoneCode
+				});
+			} else {
+				await patchEvacueeMutation.mutateAsync({
+					id: evacuee._id,
+					patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
+				});
+			}
 			toast.success(`ย้ายโซนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`);
 			showZoneModal = false;
 		} catch (err: unknown) {

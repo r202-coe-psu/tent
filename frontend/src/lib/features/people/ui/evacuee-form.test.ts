@@ -17,8 +17,8 @@ vi.mock('@tanstack/svelte-query', () => ({
 import EvacueeForm from './evacuee-form.svelte';
 import EvacueeRegistration from './evacuee-registration.svelte';
 
-describe('EvacueeForm Wizard Modular Intake with Screening Toggle (Issue #206)', () => {
-	it('renders 6 steps when enableMedicalScreening is false (small shelter unified flow)', () => {
+describe('EvacueeForm Station 1 wizard (CR-106)', () => {
+	it('renders 3 steps without zoning or EWAR', () => {
 		const result = render(EvacueeForm, {
 			props: {
 				onsubmit: vi.fn(),
@@ -26,11 +26,12 @@ describe('EvacueeForm Wizard Modular Intake with Screening Toggle (Issue #206)',
 			}
 		});
 
-		expect(result.body).toContain('ขั้น 1 จาก 6');
-		expect(result.body).toContain('จัดสรรพื้นที่');
+		expect(result.body).toContain('ขั้น 1 จาก 3');
+		expect(result.body).not.toContain('จัดสรรพื้นที่');
+		expect(result.body).not.toContain('คัดกรองสุขภาพ');
 	});
 
-	it('renders 5 steps when enableMedicalScreening is true (modular 3-station pipeline)', () => {
+	it('still 3 steps when medical screening flag is on (zoning never at S1)', () => {
 		const result = render(EvacueeForm, {
 			props: {
 				onsubmit: vi.fn(),
@@ -38,29 +39,25 @@ describe('EvacueeForm Wizard Modular Intake with Screening Toggle (Issue #206)',
 			}
 		});
 
-		expect(result.body).toContain('ขั้น 1 จาก 5');
-		// Step 6 (จัดสรรพื้นที่) should not be in the steps list
-		expect(result.body).not.toContain('ขั้น 1 จาก 6');
+		expect(result.body).toContain('ขั้น 1 จาก 3');
 	});
 
-	it('renders Step 3 registration with SpecialNeedsFields and PersonalInfoFields', () => {
+	it('step 1 registration includes special needs', () => {
 		const result = render(EvacueeForm, {
 			props: {
 				onsubmit: vi.fn(),
-				step: 3,
+				step: 1,
 				enableMedicalScreening: true
 			}
 		});
 
-		expect(result.body).toContain('ข้อมูลประจำตัว');
 		expect(result.body).toContain('กลุ่มเปราะบางและความต้องการพิเศษ');
 	});
 
-	it('includes SpecialNeedsFields in Registration Step 3 allowing special needs selection', () => {
+	it('includes SpecialNeedsFields in Registration allowing special needs selection', () => {
 		const result = render(EvacueeRegistration, {
 			props: {
 				onsubmit: vi.fn(),
-				onBack: vi.fn(),
 				initialInput: {
 					first_name: 'สมศรี',
 					last_name: 'มีสุข',
@@ -69,7 +66,6 @@ describe('EvacueeForm Wizard Modular Intake with Screening Toggle (Issue #206)',
 			}
 		});
 
-		// Special needs section and badges from SpecialNeedsFields
 		expect(result.body).toContain('กลุ่มเปราะบางและความต้องการพิเศษ');
 		expect(result.body).toContain('ใช้วีลแชร์');
 		expect(result.body).toContain('ผู้ป่วยติดเตียง');

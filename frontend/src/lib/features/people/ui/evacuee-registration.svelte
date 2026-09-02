@@ -37,7 +37,7 @@
 	}: {
 		onsubmit: (input: EvacueeInput) => void;
 		pending?: boolean;
-		onBack: () => void;
+		onBack?: (() => void) | undefined;
 		initialInput?: Partial<EvacueeInput> | null;
 		ondraftchange?: (input: Partial<EvacueeInput>) => void;
 		facePhotoUrl?: string | null;
@@ -183,7 +183,7 @@
 
 	function handleBack() {
 		ondraftchange?.($formData);
-		onBack();
+		onBack?.();
 	}
 
 	async function handlePhotoCapture(file: File | null) {
@@ -360,14 +360,16 @@
 			>
 				{t.actions.next}
 			</Form.Button>
-			<Button
-				type="button"
-				variant="outline"
-				onclick={handleBack}
-				class="touch-target h-auto w-full px-6 py-3 text-base font-medium sm:w-auto sm:text-sm"
-			>
-				{t.actions.back}
-			</Button>
+			{#if onBack}
+				<Button
+					type="button"
+					variant="outline"
+					onclick={handleBack}
+					class="touch-target h-auto w-full px-6 py-3 text-base font-medium sm:w-auto sm:text-sm"
+				>
+					{t.actions.back}
+				</Button>
+			{/if}
 		</div>
 	</Field.FieldGroup>
 </form>

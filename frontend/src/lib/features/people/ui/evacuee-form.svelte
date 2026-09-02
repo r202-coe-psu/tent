@@ -9,12 +9,9 @@
 		Household,
 		PetGroup
 	} from '../domain/people';
-	import SearchSection from './evacuee-search.svelte';
-	import EwarSymptomSection, { type ScreeningDraft } from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
 	import HouseholdRegisterForm from './household-register-form.svelte';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
-	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -27,7 +24,6 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
-		useCheckInEvacuee,
 		peopleRepository,
 		buildSaveFailureReport,
 		type SaveFailureReport
@@ -39,6 +35,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_FORM_I18N } from './_constants/evacuee-form.i18n';
+	import type { ScreeningDraft } from './evacuee-ewar-symptom.svelte';
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -64,9 +61,11 @@
 		onsaveerror,
 		enableMedicalScreening: enableMedicalScreeningProp
 	}: {
+		/** Persist personal data only — no screening doc. Symptoms arg kept for API compat (always []). */
 		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<Evacuee> | Evacuee;
 		pending?: boolean;
-		step?: 1 | 2 | 3 | 4 | 5 | 6;
+		/** Station 1 wizard steps: 1 personal+special_needs, 2 household, 3 pets/assets */
+		step?: 1 | 2 | 3;
 		onComplete?: (evacuee: Evacuee) => void;
 		onHandover?: (evacuee: Evacuee, symptoms: string[]) => void;
 		onsaveerror?: (report: SaveFailureReport) => void;
@@ -80,9 +79,18 @@
 	);
 
 	const t = $derived(getTranslation(EVACUEE_FORM_I18N, languageStore.current));
-	const totalSteps = $derived(isMedicalScreeningEnabled ? 5 : 6);
-	const STEPS = $derived(t.steps);
-	const effectiveSteps = $derived(isMedicalScreeningEnabled ? STEPS.slice(0, 5) : STEPS);
+	const totalSteps = 3;
+	const STEPS = $derived([
+		{
+			title: 'ข้อมูลผู้ประสบภัยและความต้องการพิเศษ',
+			short: 'ข้อมูลผู้ประสบภัย',
+			description: 'กรอกข้อมูลยืนยันตัวตน ผู้ติดต่อฉุกเฉิน และกลุ่มเปราะบาง'
+		},
+		t.steps[3],
+		t.steps[4]
+	]);
+	const effectiveSteps = $derived(STEPS);
+	const currentStep = $derived(effectiveSteps[step - 1] ?? effectiveSteps[0]);
 
 	function reportSaveFailure(
 		err: unknown,
@@ -98,7 +106,6 @@
 	}
 
 	const selectedSymptoms = new SvelteSet<string>();
-	let isHealthy = $state(false);
 	let screeningDraft = $state<ScreeningDraft>({
 		medical_conditions: [],
 		medical_medications: [],
@@ -115,13 +122,11 @@
 	let handoverEvacuee = $state<Evacuee | null>(null);
 	let handoverSymptoms = $state<string[]>([]);
 
-	const currentStep = $derived(effectiveSteps[step - 1] ?? effectiveSteps[0]);
-
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
 	let registrationDraft = $state.raw<Partial<EvacueeInput> | null>(null);
 	let registrationFacePhotoUrl = $state<string | null>(null);
-	let registrationDraftActive = $state(step === 3);
+	let registrationDraftActive = $state(step === 1);
 
 	let selectedHousehold = $state<Household | null>(null);
 	let isCreatingNewHousehold = $state(false);
@@ -175,13 +180,6 @@
 		mutateAsync: async (args: unknown) => args,
 		isPending: false
 	} as unknown as ReturnType<typeof useUpdateEvacuee>);
-	const checkInMutation = safeQuery(() => useCheckInEvacuee(), {
-		mutateAsync: async ({ evacuee, zone }: { evacuee: Evacuee; zone: string | null }) => ({
-			...evacuee,
-			current_stay: { status: 'active' as const, zone }
-		}),
-		isPending: false
-	} as unknown as ReturnType<typeof useCheckInEvacuee>);
 
 	let activeDraftEvacuee = $state<Evacuee | null>(null);
 	let topAnchorRef = $state<HTMLElement | null>(null);
@@ -215,78 +213,11 @@
 		if (step >= 1) scrollToTop();
 	});
 
-	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
+	function goToStep(next: 1 | 2 | 3) {
 		zoneError = null;
-		if (next === 3) registrationDraftActive = true;
+		if (next === 1) registrationDraftActive = true;
 		step = next;
 		scrollToTop();
-	}
-
-	async function handleSelectDraft(draft: Evacuee) {
-		activeDraftEvacuee = draft;
-		const card = draft.card_snapshot;
-
-		const cardBirthYearBE = card?.birth_year_ce ? card.birth_year_ce + 543 : undefined;
-		const currentYearBE = new Date().getFullYear() + 543;
-		const cardAge =
-			card?.age !== undefined
-				? card.age
-				: cardBirthYearBE !== undefined
-					? Math.max(0, currentYearBE - cardBirthYearBE)
-					: undefined;
-
-		const medicals = await peopleRepository().listMedicals();
-		const medical = medicals.find((record) => record.evacuee_id === draft._id) ?? null;
-
-		// 1. Populate personal info for Step 3 (prefer authoritative card data)
-		screeningDraft = {
-			medical_conditions: medical?.conditions ?? [],
-			medical_medications: medical?.medications ?? [],
-			medical_allergies: medical?.allergies ?? [],
-			special_needs: draft.special_needs ?? [],
-			medical_note: medical?.notes ?? ''
-		};
-		registrationDraft = {
-			first_name: card?.first_name_th || draft.first_name || '',
-			last_name: card?.last_name_th || draft.last_name || '',
-			gender: card?.gender || draft.gender || 'other',
-			phone: draft.phone ?? null,
-			birth_year: cardBirthYearBE ?? draft.birth_year,
-			age: cardAge ?? draft.age,
-			person_id: card?.citizen_id
-				? { cardType: 'national_id', number: card.citizen_id }
-				: (draft.person_id ?? { cardType: 'national_id', number: '' }),
-			country: draft.country || 'THAILAND',
-			religion: draft.religion || 'buddhist',
-			photo: card?.photo_base64 || draft.photo || null,
-			card_snapshot: card || null,
-			emergency_contact: draft.emergency_contact
-		};
-
-		if (card?.photo_base64 || draft.photo) {
-			registrationFacePhotoUrl = card?.photo_base64 || draft.photo || null;
-		}
-
-		// 2. Populate Address for Step 4 (Household)
-		if (card) {
-			newHouseholdAddress = {
-				address_no: card.address_no || null,
-				village_no: card.village_no ? `หมู่ ${card.village_no}` : null,
-				subdistrict: card.subdistrict || null,
-				district: card.district || null,
-				province: card.province || null,
-				postal_code: card.postal_code || null
-			};
-			isCreatingNewHousehold = true;
-		}
-
-		// 3. Start at Step 2 (EWAR Symptoms)
-		goToStep(2);
-		toast.info(
-			card
-				? `โหลดข้อมูลจากบัตร "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
-				: `โหลดข้อมูล "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
-		);
 	}
 
 	function clearRegistrationDraft() {
@@ -302,7 +233,6 @@
 			medical_note: ''
 		};
 		selectedSymptoms.clear();
-		isHealthy = false;
 	}
 
 	onDestroy(() => {
@@ -320,7 +250,6 @@
 		);
 		const merged: EvacueeInput = {
 			...input,
-			...screeningDraft,
 			special_needs: combinedSpecialNeeds
 		};
 		screeningDraft.special_needs = combinedSpecialNeeds;
@@ -333,10 +262,8 @@
 		} else {
 			pendingEvacueeInput = merged;
 		}
-		pendingSymptoms = Array.from(selectedSymptoms);
-		selectedSymptoms.clear();
-		isHealthy = false;
-		goToStep(4);
+		pendingSymptoms = [];
+		goToStep(2);
 	}
 
 	function handleHouseholdSelect(household: Household) {
@@ -349,7 +276,7 @@
 		newHouseholdAddress = addressInput;
 		isCreatingNewHousehold = true;
 		selectedHousehold = null;
-		goToStep(5);
+		goToStep(3);
 	}
 
 	async function handleFinalSubmit(petAssetVehicleData: {
@@ -360,7 +287,7 @@
 		if (isSubmittingHousehold) return;
 		if (!selectedHousehold && (!isCreatingNewHousehold || !newHouseholdAddress)) {
 			toast.error(t.toastSelectHouseholdFirst);
-			goToStep(4);
+			goToStep(2);
 			return;
 		}
 		isSubmittingHousehold = true;
@@ -377,15 +304,13 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
-			// 1. Register evacuee (+ screening via parent onsubmit unit)
+			// 1. Register evacuee (Station 1 — arriving, no screening/zone)
 			if (pendingEvacueeInput) {
 				const evacueeInputWithStatus: EvacueeInput = {
 					...pendingEvacueeInput,
-					status: isMedicalScreeningEnabled
-						? 'arriving'
-						: (pendingEvacueeInput.status ?? 'pre_registered')
+					status: 'arriving'
 				};
-				registeredEvacuee = await onsubmit(evacueeInputWithStatus, pendingSymptoms);
+				registeredEvacuee = await onsubmit(evacueeInputWithStatus, []);
 				registrationSucceeded = true;
 				newlyRegisteredEvacuee = registeredEvacuee;
 				pendingEvacueeInput = null;
@@ -426,11 +351,11 @@
 				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
-					// Step 5 edits the household-level collections in place.
+					// Step 3 edits the household-level collections in place.
 					pets,
 					assets: assets || latestHousehold.assets || null,
 					vehicles,
-					...(isMedicalScreeningEnabled ? { status: 'arriving' } : {})
+					status: 'arriving'
 				});
 			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
@@ -467,27 +392,23 @@
 			const updated = await updateEvacueeMutation.mutateAsync({
 				...registeredEvacuee,
 				household_id: householdId,
-				...(isMedicalScreeningEnabled
-					? {
-							current_stay: {
-								...registeredEvacuee.current_stay,
-								status: 'arriving',
-								zone: null
-							}
-						}
-					: {})
+				current_stay: {
+					...registeredEvacuee.current_stay,
+					status: 'arriving',
+					zone: null
+				}
 			});
 			newlyRegisteredEvacuee = updated;
 			toast.success(t.toastSuccessRegistration);
 
+			// Station 1 never zones — handover slip when medical flag on, then Person QR via onComplete
 			if (isMedicalScreeningEnabled) {
 				handoverEvacuee = updated;
-				handoverSymptoms = savedPendingSymptoms;
+				handoverSymptoms = [];
 				showHandoverSlip = true;
-				onHandover?.(updated, savedPendingSymptoms);
+				onHandover?.(updated, []);
 			} else {
-				// Go to step 6 (Zoning)
-				goToStep(6);
+				handleRegistrationDone(updated);
 			}
 		} catch (err) {
 			const repo = peopleRepository();
@@ -520,11 +441,7 @@
 		}
 	}
 
-	function handleHandoverDone() {
-		const finished = handoverEvacuee ?? newlyRegisteredEvacuee;
-		showHandoverSlip = false;
-		handoverEvacuee = null;
-		handoverSymptoms = [];
+	function handleRegistrationDone(finished: Evacuee) {
 		goToStep(1);
 		clearRegistrationDraft();
 		registrationDraftActive = false;
@@ -532,58 +449,16 @@
 		selectedHousehold = null;
 		isCreatingNewHousehold = false;
 		newHouseholdAddress = null;
-		if (finished) {
-			onComplete?.(finished);
-		}
+		onComplete?.(finished);
 	}
 
-	async function handleZoneSubmit(zone: string) {
-		zoneError = null;
-
-		if (!newlyRegisteredEvacuee) {
-			zoneError = t.zoneErrorMissingEvacuee;
-			toast.error(t.toastZoneFailed);
-			return;
-		}
-
-		try {
-			// Fetch the latest evacuee document to avoid CouchDB MVCC revision conflicts
-			const latestEvacuee = await peopleRepository().getEvacuee(newlyRegisteredEvacuee._id);
-			if (!latestEvacuee) {
-				zoneError = t.zoneErrorNotFound;
-				toast.error(t.toastZoneFailed);
-				return;
-			}
-
-			// Check-in writes an append-only movement first, then applies current_stay —
-			// occupancy views and movement history depend on the movement stream
-			// (current_stay is only a snapshot, schema.md §1.1).
-			const ctx = {
-				shelterCode: getShelterCode(),
-				createdBy: authStore.user?.name ?? 'unknown'
-			};
-			const finishedEvacuee = await checkInMutation.mutateAsync({
-				evacuee: latestEvacuee,
-				ctx,
-				zone
-			});
-			toast.success(t.toastSuccessZoning);
-
-			// Reset internal state
-			goToStep(1);
-			clearRegistrationDraft();
-			registrationDraftActive = false;
-			newlyRegisteredEvacuee = null;
-			selectedHousehold = null;
-			isCreatingNewHousehold = false;
-			newHouseholdAddress = null;
-
-			// Notify parent to show the success/wristband screen
-			onComplete?.(finishedEvacuee);
-		} catch (err) {
-			console.error('[EvacueeForm] Zone assignment check-in error:', err);
-			zoneError = t.zoneErrorRetry;
-			toast.error(t.toastZoneFailed);
+	function handleHandoverDone() {
+		const finished = handoverEvacuee ?? newlyRegisteredEvacuee;
+		showHandoverSlip = false;
+		handoverEvacuee = null;
+		handoverSymptoms = [];
+		if (finished) {
+			handleRegistrationDone(finished);
 		}
 	}
 </script>
@@ -675,12 +550,11 @@
 	</Alert.Root>
 {/if}
 
-{#if registrationDraftActive || step === 3}
-	<div class:hidden={step !== 3}>
+{#if registrationDraftActive || step === 1}
+	<div class:hidden={step !== 1}>
 		<RegistrationSection
 			onsubmit={handleRegistrationSubmit}
 			pending={isSubmittingEvacuee || pending}
-			onBack={() => goToStep(2)}
 			initialInput={{
 				...registrationDraft,
 				special_needs: registrationDraft?.special_needs?.length
@@ -693,17 +567,7 @@
 	</div>
 {/if}
 
-{#if step === 1}
-	<SearchSection onNext={() => goToStep(2)} onSelectDraft={handleSelectDraft} />
-{:else if step === 2}
-	<EwarSymptomSection
-		bind:isHealthy
-		bind:screeningDraft
-		{selectedSymptoms}
-		onBack={() => goToStep(1)}
-		onNext={() => goToStep(3)}
-	/>
-{:else if step === 4}
+{#if step === 2}
 	<div class="space-y-6">
 		<Alert.Root class="border-primary/30 bg-primary/5">
 			<CircleAlert class="size-4" />
@@ -738,28 +602,19 @@
 				initialAddress={newHouseholdAddress}
 				onsubmit={handleHouseholdRegisterSubmit}
 				onselect={handleHouseholdSelect}
-				oncontinue={() => goToStep(5)}
-				onback={() => goToStep(3)}
+				oncontinue={() => goToStep(3)}
+				onback={() => goToStep(1)}
 				pending={isSubmittingHousehold}
 				bind:showNewHouseholdForm={isCreatingNewHousehold}
 			/>
 		{/if}
 	</div>
-{:else if step === 5}
+{:else if step === 3}
 	<EvacueePetAssetVehicle
 		household={selectedHousehold}
 		pending={isSubmittingHousehold}
-		onBack={() => goToStep(4)}
+		onBack={() => goToStep(2)}
 		onNext={handleFinalSubmit}
-	/>
-{:else if step === 6}
-	<EvacueeSelectZone
-		evacuee={newlyRegisteredEvacuee}
-		pending={checkInMutation.isPending}
-		onBack={() => {
-			goToStep(5);
-		}}
-		onSubmit={handleZoneSubmit}
 	/>
 {/if}
 

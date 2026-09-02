@@ -9,6 +9,7 @@ import {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canChangeEvacueeZone,
 	canCancelEvacueePreRegistration,
 	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
@@ -481,6 +482,39 @@ describe('movement → current_stay', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckOutEvacuee(e)).toBe(false);
 		expect(() => assertMovementAllowed(e, 'check_out')).toThrow(/เช็คเอาท์/);
+	});
+
+	it('zone_change keeps status active and updates zone', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canChangeEvacueeZone(active)).toBe(true);
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'zone_change',
+				zone: 'Z2',
+				occurred_at: '2026-09-03T04:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(active, m);
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z2');
+		expect(updated.current_stay.since).toBe('2026-09-03T04:00:00.000Z');
+	});
+
+	it('rejects zone_change without destination or from non-active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canChangeEvacueeZone(e)).toBe(false);
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		const m = createMovement({ evacuee_id: e._id, action: 'zone_change', zone: null }, ctx);
+		expect(() => applyMovementToStay(active, m)).toThrow(/โซนปลายทาง/);
 	});
 
 	it('allows check_in from eligible stay statuses only', () => {

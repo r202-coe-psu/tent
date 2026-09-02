@@ -557,6 +557,22 @@ describe('check-in / check-out', () => {
 		expect(fetched?.current_stay.status).toBe('pre_registered');
 	});
 
+	describe('changeEvacueeZone', () => {
+		it('records zone_change and keeps status active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const updated = await repo.changeEvacueeZone(checkedIn, ctx, 'zone-b');
+			expect(updated.current_stay.status).toBe('active');
+			expect(updated.current_stay.zone).toBe('zone-b');
+			const movements = await repo.listMovements();
+			expect(movements.at(-1)).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'zone_change',
+				zone: 'zone-b'
+			});
+		});
+	});
+
 	describe('cancelPreRegistration', () => {
 		it('cancels the household, cascades member stays to cancelled, and records the actor', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);

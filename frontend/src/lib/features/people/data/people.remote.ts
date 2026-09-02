@@ -130,7 +130,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					...(parsedInput.photo ? { photo: parsedInput.photo } : {}),
 					household_id: parsedInput.household_id,
 					current_stay: {
-						status: existing.current_stay.status || 'pre_registered',
+						status: parsedInput.status || existing.current_stay.status || 'pre_registered',
 						zone: existing.current_stay.zone ?? null,
 						since: now()
 					}
@@ -567,6 +567,24 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertMovementAllowed(evacuee, 'check_out');
 		const movement = createMovement(
 			{ evacuee_id: evacuee._id, action: 'check_out', zone: null },
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
+
+	/** Rezone an active evacuee via append-only `zone_change` (CR-106). */
+	async changeEvacueeZone(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
+		const nextZone = zone.trim();
+		if (!nextZone) {
+			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
+		}
+		assertMovementAllowed(evacuee, 'zone_change');
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action: 'zone_change', zone: nextZone },
 			ctx
 		);
 		await this.repo.put(movement);

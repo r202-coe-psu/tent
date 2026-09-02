@@ -211,6 +211,19 @@ export const useCheckOutEvacuee = () => {
 	}));
 };
 
+export const useChangeEvacueeZone = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
+			peopleRepository().changeEvacueeZone(evacuee, ctx, zone),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
 /** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
 export async function lookupEvacueeByScanCode(
 	queryClient: QueryClient,

@@ -113,6 +113,19 @@ export function canAccessMedicalScreening(roles: readonly string[]): boolean {
 	);
 }
 
+/**
+ * True when the actor may access Station 3 zoning:
+ * system_admin, shelter_manager, registration_staff, or facility_staff.
+ */
+export function canAccessZoning(roles: readonly string[]): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles) ||
+		hasStaffCapability(roles, 'registration_staff') ||
+		hasStaffCapability(roles, FACILITY_STAFF)
+	);
+}
+
 /** True when the role list includes `warehouse_staff` or `supply_coordinator`. */
 export function isWarehouseStaff(roles: readonly string[]): boolean {
 	return roles.includes(WAREHOUSE_STAFF) || roles.includes(SUPPLY_COORDINATOR);

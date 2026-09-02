@@ -7,25 +7,31 @@
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import type { Evacuee } from '$lib/features/people';
+	import type { Evacuee, TriageLevel } from '$lib/features/people';
+	import { recommendZoneKind } from '$lib/features/people';
 
 	export interface ZoneItem {
 		code: string;
 		name?: string;
 		type?: string;
 		status?: string;
+		capacity?: number | null;
 	}
 
 	let {
 		selected_zone = $bindable(''),
 		shelter_zones,
 		evacuee = null,
+		triage_level = null,
+		occupant_counts,
 		onSelectZone,
 		disabled = false
 	}: {
 		selected_zone?: string;
 		shelter_zones?: ZoneItem[];
 		evacuee?: Evacuee | null;
+		triage_level?: TriageLevel | null;
+		occupant_counts?: Map<string, number> | Record<string, number>;
 		onSelectZone?: (zoneCode: string) => void;
 		disabled?: boolean;
 	} = $props();
@@ -50,12 +56,9 @@
 		return raw.filter((z: ZoneItem) => z.status !== 'closed');
 	});
 
-	const recommendedZoneType = $derived.by(() => {
-		if (evacuee?.special_needs && evacuee.special_needs.length > 0) {
-			return 'vulnerable';
-		}
-		return 'general';
-	});
+	const recommendedZoneType = $derived(
+		recommendZoneKind(evacuee ?? { special_needs: [] }, triage_level)
+	);
 
 	const recommendedZone = $derived.by(() => {
 		const matches = activeZones.filter(
@@ -64,6 +67,18 @@
 		if (matches.length > 0) return matches[0];
 		return activeZones[0] || null;
 	});
+
+	function occupantCount(code: string): number {
+		if (!occupant_counts) return 0;
+		if (occupant_counts instanceof Map) return occupant_counts.get(code) ?? 0;
+		return occupant_counts[code] ?? 0;
+	}
+
+	function recommendLabel(kind: string): string {
+		if (kind === 'quarantine') return 'แนะนำสำหรับ triage เหลือง/แดง (กักตัว)';
+		if (kind === 'vulnerable') return 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง';
+		return 'โซนที่พักทั่วไป';
+	}
 
 	function handleSelect(code: string) {
 		selected_zone = code;
@@ -94,9 +109,7 @@
 							>
 						</div>
 						<p class="mt-0.5 text-2xs text-muted-foreground">
-							{recommendedZone.type === 'vulnerable'
-								? 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง'
-								: 'โซนที่พักทั่วไป'}
+							{recommendLabel(recommendedZoneType)}
 						</p>
 					</div>
 				</div>
@@ -193,6 +206,8 @@
 								<span class="text-2xs text-muted-foreground">
 									รหัส: {zone.code.toUpperCase()}
 									{zone.type ? `| ${zone.type}` : ''}
+									· พักอยู่ {occupantCount(zone.code)}
+									{zone.capacity != null ? `/ ${zone.capacity}` : ''} คน
 								</span>
 							</div>
 						</div>

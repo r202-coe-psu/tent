@@ -51,9 +51,10 @@
 
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
+	let savedEvacueeId = $state<string | null>(null);
 
 	beforeNavigate((nav) => {
-		if (isNavigatingAfterSave) return;
+		if (isNavigatingAfterSave || savedEvacueeId) return;
 		if (
 			shouldConfirmLeave({ isDirty }) &&
 			!confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')
@@ -63,13 +64,18 @@
 	});
 
 	function goToQueue() {
+		isNavigatingAfterSave = true;
 		goto(resolve('/onsite/medical-screening'));
 	}
 
-	function handleSuccess() {
-		isDirty = false;
+	function goToZoning(id: string) {
 		isNavigatingAfterSave = true;
-		goToQueue();
+		goto(resolve(`/onsite/zoning/${id}` as `/onsite/zoning/${string}`));
+	}
+
+	function handleSuccess(id: string) {
+		isDirty = false;
+		savedEvacueeId = id;
 	}
 </script>
 
@@ -142,6 +148,19 @@
 					กลับไปที่คิวคัดกรองแล้วลองค้นหาอีกครั้ง
 				</p>
 				<Button variant="default" class="mt-4 w-full" onclick={goToQueue}>กลับไปคิวคัดกรอง</Button>
+			</Card.Root>
+		</div>
+	{:else if savedEvacueeId}
+		<div class="flex flex-1 items-center justify-center p-6">
+			<Card.Root class="w-full max-w-md border-border bg-card p-6 text-center shadow-sm">
+				<h2 class="text-base font-bold text-foreground">บันทึกผลการคัดกรองแล้ว</h2>
+				<p class="mt-1.5 text-xs text-muted-foreground">
+					ส่งต่อไปโต๊ะจัดสรรที่พัก (Station 3) หรือกลับคิวแพทย์
+				</p>
+				<div class="mt-5 flex flex-col gap-2">
+					<Button class="w-full" onclick={() => goToZoning(savedEvacueeId!)}>ไปจัดโซนเลย</Button>
+					<Button variant="outline" class="w-full" onclick={goToQueue}>กลับคิวแพทย์</Button>
+				</div>
 			</Card.Root>
 		</div>
 	{:else}

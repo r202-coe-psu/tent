@@ -7,7 +7,8 @@ import {
 	isShelterManager,
 	isWarehouseStaff,
 	isSystemAdmin,
-	canAccessMedicalScreening
+	canAccessMedicalScreening,
+	canAccessZoning
 } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
@@ -120,6 +121,18 @@ export async function requireMedicalScreening(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessMedicalScreening(roles)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Zoning guard — requires system_admin, shelter_manager,
+ * registration_staff, or facility_staff. Used for Station 3 zoning.
+ */
+export async function requireZoning(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessZoning(roles)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

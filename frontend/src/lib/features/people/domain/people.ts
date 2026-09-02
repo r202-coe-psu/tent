@@ -117,7 +117,8 @@ export const movementActionSchema = z.enum([
 	'transfer_in',
 	'leave_temporary',
 	'return_from_leave',
-	'mark_deceased'
+	'mark_deceased',
+	'zone_change'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -1020,6 +1021,9 @@ export const CHECK_IN_ELIGIBLE_STATUSES = [
 /** Stay statuses that may receive a scan/check-out (`check_out`) action. */
 export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
 
+/** Stay statuses that may receive a `zone_change` (rezone while staying active). */
+export const ZONE_CHANGE_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
 export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
@@ -1028,6 +1032,12 @@ export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 
 export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canChangeEvacueeZone(evacuee: Evacuee): boolean {
+	return (ZONE_CHANGE_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
 	);
 }
@@ -1052,6 +1062,9 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
 	}
+	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
+		throw new Error(`ไม่สามารถเปลี่ยนโซนจากสถานะ ${status} ได้`);
+	}
 }
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
@@ -1071,7 +1084,22 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
 	assertMovementAllowed(evacuee, movement.action);
-	const statusByAction: Record<MovementAction, StayStatus> = {
+	if (movement.action === 'zone_change') {
+		const nextZone = movement.zone?.trim() || null;
+		if (!nextZone) {
+			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
+		}
+		return {
+			...evacuee,
+			updated_at: now(),
+			current_stay: {
+				status: evacuee.current_stay.status,
+				zone: nextZone,
+				since: movement.occurred_at
+			}
+		};
+	}
+	const statusByAction: Record<Exclude<MovementAction, 'zone_change'>, StayStatus> = {
 		check_in: 'active',
 		check_out: 'checked_out',
 		transfer_out: 'transferred',

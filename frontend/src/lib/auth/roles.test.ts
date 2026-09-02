@@ -3,6 +3,7 @@ import {
 	formatRoleList,
 	canCancelHold,
 	canAccessMedicalScreening,
+	canAccessZoning,
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
 	isShelterManager,
@@ -67,6 +68,17 @@ describe('roles kernel', () => {
 		expect(canAccessMedicalScreening(['shelter:SH001', 'kitchen_staff'])).toBe(false);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'warehouse_staff'])).toBe(false);
 		expect(canAccessMedicalScreening([])).toBe(false);
+	});
+
+	it('canAccessZoning allows registration_staff, facility_staff, shelter_manager, system_admin only', () => {
+		expect(canAccessZoning(['system_admin'])).toBe(true);
+		expect(canAccessZoning(['_admin'])).toBe(true);
+		expect(canAccessZoning(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canAccessZoning(['shelter:SH001', 'registration_staff'])).toBe(true);
+		expect(canAccessZoning(['shelter:SH001', 'facility_staff'])).toBe(true);
+		expect(canAccessZoning(['shelter:SH001', 'medical_staff'])).toBe(false);
+		expect(canAccessZoning(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canAccessZoning([])).toBe(false);
 	});
 
 	it('isStaffOnly accepts staff capabilities but rejects manager/system_admin', () => {

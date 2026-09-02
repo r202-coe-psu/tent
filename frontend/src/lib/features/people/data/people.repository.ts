@@ -200,6 +200,11 @@ export interface PeopleRepository {
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
 	/**
+	 * Record a `zone_change` movement while staying `active` (CR-106 Station 3 rezone).
+	 * Requires a non-empty destination zone.
+	 */
+	changeEvacueeZone(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee>;
+	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade
 	 * member stays that are still `pre_registered` → `cancelled` (CR-070).
 	 * Persists an actor-attributed audit entry.

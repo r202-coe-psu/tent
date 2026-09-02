@@ -62,10 +62,12 @@ export {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canChangeEvacueeZone,
 	canCancelEvacueePreRegistration,
 	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
 	HOUSEHOLD_STATUS_TRANSITIONS,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
@@ -92,6 +94,18 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
+export {
+	nextQueueLabel,
+	classifyZoningQueueTab,
+	recommendZoneKind,
+	countOccupantsByZone,
+	parseZoningQrCode,
+	buildZoningPath,
+	type NextQueueLabel,
+	type ZoningQueueTab,
+	type ZoningRecommendKind
+} from './domain/intake-pipeline';
+
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
@@ -108,6 +122,7 @@ export {
 	useUpdateEvacuee,
 	useCheckInEvacuee,
 	useCheckOutEvacuee,
+	useChangeEvacueeZone,
 	lookupEvacueeByScanCode,
 	useHouseholds,
 	useHousehold,

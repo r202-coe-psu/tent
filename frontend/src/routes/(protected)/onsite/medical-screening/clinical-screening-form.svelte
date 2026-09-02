@@ -42,7 +42,8 @@
 		evacuee: Evacuee;
 		priorScreening?: PriorScreeningContext | null;
 		onDirtyChange?: (dirty: boolean) => void;
-		onSuccess?: () => void;
+		/** Called after a successful save; parent shows Station 3 / queue CTAs. */
+		onSuccess?: (evacueeId: string) => void;
 	} = $props();
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
@@ -252,8 +253,8 @@
 			});
 
 			baselineSnapshot = currentSnapshot();
-			toast.success('บันทึกผลการคัดกรองแล้ว — ส่งต่อไปโต๊ะจัดโซน (Station 3) ในภายหลัง');
-			onSuccess?.();
+			toast.success('บันทึกผลการคัดกรองแล้ว');
+			onSuccess?.(evacuee._id);
 		} catch (err: unknown) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
 		} finally {
