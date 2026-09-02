@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { toast } from 'svelte-sonner';
@@ -74,7 +74,7 @@
 	$effect(() => {
 		if (!show) return;
 		qrUrl = null;
-		QRCode.toDataURL(evacuee._id, {
+		generateQrDataUrl(evacuee._id, {
 			// Generate a larger source image so the QR remains crisp at every responsive size.
 			width: 384,
 			margin: 1,

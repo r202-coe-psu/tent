@@ -1,7 +1,7 @@
 <script lang="ts">
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
@@ -32,7 +32,7 @@
 	// payload the staff card encodes, so the gate scanner resolves it unchanged.
 	// Derived rather than an $effect so the image simply follows the ticket.
 	const qrPromise = $derived(
-		QRCode.toDataURL(`evacuee:${ticket.code}`, {
+		generateQrDataUrl(`evacuee:${ticket.code}`, {
 			width: 384,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }

@@ -13,7 +13,7 @@
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import {
@@ -310,7 +310,7 @@
 	$effect(() => {
 		if (currentVolunteer) {
 			const payload = `SMARTSHELTER:VOLUNTEER:${currentVolunteer.token}:${currentVolunteer.phone}`;
-			QRCode.toDataURL(payload, {
+			generateQrDataUrl(payload, {
 				width: 320,
 				margin: 1,
 				color: { dark: '#0A2647', light: '#ffffff' }

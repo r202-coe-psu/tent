@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+
 interface RateLimitEntry {
 	timestamps: number[];
 }
@@ -18,6 +20,12 @@ export class RateLimiter {
 	 */
 	check(key: string): boolean {
 		if (!key) return true;
+		if (
+			dev &&
+			(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')
+		) {
+			return true;
+		}
 
 		const now = Date.now();
 		const entry = this.store.get(key) || { timestamps: [] };

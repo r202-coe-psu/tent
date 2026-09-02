@@ -6,8 +6,8 @@
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import X from '@lucide/svelte/icons/x';
-	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -29,13 +29,6 @@
 	/**
 	 * The QR carries the pass URL and nothing else — no name, no phone, no ID number.
 	 * The check-in station resolves the token server-side, so anything more on the code
-	 * would be PII sitting on a screen held up at a shelter gate.
-	 *
-	 * Derived rather than an `$effect` so the image simply follows the ticket.
-	 */
-	/**
-	 * The QR carries the pass URL and nothing else — no name, no phone, no ID number.
-	 * The check-in station resolves the token server-side, so anything more on the code
 	 * would be PII held up at a shelter gate.
 	 *
 	 * Built inside `$derived.by` with its own try/catch: a synchronous throw in a derived
@@ -46,7 +39,9 @@
 	const qrPromise = $derived.by(() => {
 		if (!ticket) return null;
 		try {
-			return QRCode.toDataURL(new URL(ticket.qr_payload, window.location.origin).toString(), {
+			const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+			const fullUrl = new URL(ticket.qr_payload, baseUrl).toString();
+			return generateQrDataUrl(fullUrl, {
 				width: 512,
 				margin: 1,
 				color: { dark: '#0f172a', light: '#ffffff' }
