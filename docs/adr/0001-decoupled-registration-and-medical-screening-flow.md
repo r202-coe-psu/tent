@@ -1,25 +1,54 @@
 # 0001. Decoupled Registration, Medical Screening, and Zoning Flow
 
+- Status: accepted
+- Date: 2026-09-02
+- Updated: 2026-09-03
+- Supersedes: monolithic registration+EWAR+zone at a single desk
+
 ## Context & Decision
 
-At shelter intake, having administrative staff perform both personal registration and clinical health evaluations created severe bottlenecks and posed zone allocation risks (e.g. allocating general bedding before discovering contagious conditions).
+At shelter intake, combining personal registration, clinical evaluation, and zone assignment at one desk created bottlenecks and unsafe early zone allocation.
 
-We decided to decouple intake into a 3-station modular pipeline (Registration Desk → Medical Screening Desk → Zoning & Wristband Desk) with per-shelter configurability (`shelter.feature_flags.enable_medical_screening`). Station 1 assigns `evacuee.current_stay.status = 'arriving'` and issues a Handover QR Slip (path-only deep link `/onsite/medical-screening/{evacuee_id}`). Station 2 (Medical Staff) records clinical screening and sets Triage Level (Green/Yellow/Red). Station 3 performs final zoning/check-in for high-volume centers.
+**Decision:** Decouple intake into a modular 3-station pipeline with per-shelter toggle `shelter.feature_flags.enable_medical_screening`:
 
-**Station 2 UX (confirmed):** queue page at `/onsite/medical-screening` is search + QR/camera + table only (tabs: รอตรวจ / ตรวจแล้ว แก้ไขได้) with no side detail panel; the clinical form is a full-screen route `/onsite/medical-screening/[evacuee_id]` with sticky save footer, dirty-leave confirm, and re-edit prefill + banner. After save, always return to the queue with a toast that zoning handoff comes later — **no zone selection or check-in from Station 2 in this round** (deferred until Station 3 exists). Legacy `?evacuee_id=` query redirect on the queue page is not supported.
+| Flag | Pipeline |
+| --- | --- |
+| ON | Station 1 (Registration) → Station 2 (Medical Screening) → Station 3 (Zoning) |
+| OFF | Station 1 → Station 3 (skip medical) |
+
+The flag **only** toggles Station 2 visibility and whether a Handover Slip is issued after registration. **Zoning / check-in never happens at Station 1.**
+
+### Station 1 — Registration Desk (`/onsite/people`)
+- Primary UI: single table (all stay statuses) + search + filter chips + Person QR scan; column 「คิวถัดไป」 (`รอแพทย์` / `รอโซน` / `พักแล้ว`)
+- New registration: `/onsite/people/new` — personal + special_needs → household → pets/assets/vehicles → done
+- Persist via `createEvacuee` only (`status: arriving`, `zone: null`); **no** EWAR step, **no** screening doc, **no** zone step
+- End of `/new`: always Person QR; if flag on also Handover Slip (`/onsite/medical-screening/{id}`)
+- `pre_registered` check-in interview promotes to `arriving` then CTAs to S2 or S3
+
+### Station 2 — Medical Screening (`/onsite/medical-screening`)
+- Queue (tabs รอตรวจ / ตรวจแล้ว) + full-page form `/[evacuee_id]`
+- After save: clear buttons 「ไปจัดโซนเลย」→ `/onsite/zoning/[id]` and 「กลับคิวแพทย์」 — no zone selection on this station
+
+### Station 3 — Zoning (`/onsite/zoning`)
+- Roles: registration_staff, facility_staff, shelter_manager, system_admin (`canAccessZoning` / `requireZoning`)
+- Pending: flag on = arriving + has screening + zone null; flag off = arriving + zone null
+- First assign: atomic `check_in` → toast + back to queue (no Person QR ceremony)
+- Rezone: movement action `zone_change` (keeps status, updates zone); migrate profile/household zone moves onto this path
+- Household: person-primary; optional pending-queue household members; isolation default when quarantine recommended; never sever `household_id`
 
 ## Considered Options
 
-- **Single monolithic intake with medical screening (Status Quo)**: Rejected because non-clinical volunteers cannot accurately triage, and long interviews create registration queues.
-- **Mandatory 3 stations for all shelters**: Rejected because small shelters lacking healthcare personnel must be able to register and zone directly at a single desk.
-- **Zoning before Medical Screening**: Rejected because assigning residential zones prior to infection or mobility screening leads to frequent emergency re-zoning.
-- **Derived status instead of `arriving`**: Evaluated, but explicitly adding `arriving` to `evacuee.current_stay.status` (bumping schema_v to 9) ensures consistency with `household.status` and prevents occupancy counts from treating unassigned evacuees as active bed occupants.
-- **Master-detail Station 2 (queue + inline form)**: Rejected for tablet/mobile density; replaced by queue → full-page form navigation.
-- **Inline zoning/check-in from Station 2 this round**: Deferred; keep API optional `zone`/`checkIn` for later, but UI saves screening only and returns to queue.
+- **Single monolithic intake:** Rejected — long interviews; non-clinical staff cannot triage safely.
+- **Mandatory 3 stations always:** Rejected — small shelters lack medical staff.
+- **Zoning before medical:** Rejected — unsafe early bedding assignment.
+- **Zoning at Station 1 when flag off (unified desk):** Rejected (2026-09-03) — still couples registration with placement; Station 3 remains the only zoning desk.
+- **Derived status instead of `arriving`:** Rejected — explicit status keeps occupancy and queues consistent.
+- **Inline zoning from Station 2:** Deferred / rejected for UI — Station 3 owns placement.
 
 ## Consequences
 
-- Evacuee schema version bumps from 8 to 9 to include `'arriving'` in `current_stay.status`.
-- Core form sub-components under `$lib/features/people/ui/forms/` are consolidated and shared between registration, edit profile modals, and the medical screening form page.
-- Role-based route guard restricts `/onsite/medical-screening` (and `/[evacuee_id]`) to `medical_staff`, `triage_staff`, `shelter_manager`, and `system_admin`.
-- Station 2 queues are reactively derived: **รอตรวจ** (`status: 'arriving'|'pre_registered'`, no screening doc) and **ตรวจแล้ว** (has screening doc; re-editable). Pending Zoning for Station 3 remains a later concern (`status: 'arriving'`, has screening, `zone: null`).
+- `evacuee` schema_v 9 adds `arriving`; `screening` schema_v 2 adds `triage_level`; shelter flags add `enable_medical_screening`
+- `movement.action` gains additive `zone_change` (no movement schema_v bump)
+- Shared form cores under `$lib/features/people/ui/forms/`
+- Route guards: Station 2 medical roles; Station 3 REG+FAC+SM+SA
+- Station 1 no longer calls `createEvacueeWithScreening` for the happy path (keeps S2 pending queue meaningful)

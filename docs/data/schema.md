@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-30
+updated: 2026-09-03
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -155,8 +155,8 @@ implement — ไม่กระทบ migration นี้
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | — |
-| `action` | enum(`check_in`,`check_out`,`transfer_out`,`transfer_in`,`leave_temporary`,`return_from_leave`,`mark_deceased`) | req | ผลต่อ `current_stay.status`: `check_in`/`transfer_in`→`active` · `check_out`→`checked_out` · `transfer_out`→`transferred` · `leave_temporary`→`temporary_leave` · `return_from_leave`→`active` · `mark_deceased`→`deceased` (terminal, ไม่มี action ย้อนกลับ) |
-| `zone` | str\|null | opt | โซนที่เข้า (check_in) |
+| `action` | enum(`check_in`,`check_out`,`transfer_out`,`transfer_in`,`leave_temporary`,`return_from_leave`,`mark_deceased`,`zone_change`) | req | ผลต่อ `current_stay.status`: `check_in`/`transfer_in`→`active` · `check_out`→`checked_out` · `transfer_out`→`transferred` · `leave_temporary`→`temporary_leave` · `return_from_leave`→`active` · `mark_deceased`→`deceased` (terminal, ไม่มี action ย้อนกลับ) · `zone_change`→**คง status** (ปกติ `active`) อัปเดตเฉพาะโซน (CR-106 Station 3 rezone) |
+| `zone` | str\|null | opt | โซนที่เข้า (`check_in`) หรือโซนปลายทาง (`zone_change`; บังคับมีค่าเมื่อ action เป็น `zone_change`) |
 | `destination` | {`kind`:enum(`home`,`shelter`,`hospital`,`other`), `shelter_code`:str?, `detail`:str?} | opt | ใช้กับ check_out / transfer_out |
 | `reason` | str | opt | — |
 | `occurred_at` | ts | req | เวลาเหตุการณ์จริง (ไม่ใช่เวลา sync) |
