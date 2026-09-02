@@ -6,7 +6,8 @@ import {
 	hasStaffCapability,
 	isShelterManager,
 	isWarehouseStaff,
-	isSystemAdmin
+	isSystemAdmin,
+	canAccessMedicalScreening
 } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
@@ -107,6 +108,18 @@ export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 		!isShelterManager(roles) &&
 		!hasStaffCapability(roles, 'registration_staff')
 	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Medical screening guard — requires system_admin, shelter_manager,
+ * medical_staff, or triage_staff. Used for Station 2 medical screening.
+ */
+export async function requireMedicalScreening(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessMedicalScreening(roles)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

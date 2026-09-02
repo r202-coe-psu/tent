@@ -23,6 +23,7 @@ export type {
 	HouseholdStatus,
 	MovementAction,
 	CareTrack,
+	TriageLevel,
 	BloodGroup,
 	CardType,
 	CardSnapshot
@@ -37,6 +38,7 @@ export {
 	householdStatusSchema,
 	movementActionSchema,
 	careTrackSchema,
+	triageLevelSchema,
 	bloodGroupSchema,
 	cardSnapshotSchema,
 	evacueeInputSchema,
@@ -99,6 +101,7 @@ export {
 	peopleKeys,
 	useEvacuees,
 	useEvacuee,
+	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
 	useSearchEvacuees,
 	useCreateEvacuee,
@@ -118,6 +121,7 @@ export {
 	useCancelEvacueePreRegistration,
 	useCreateMedical,
 	useCreateScreening,
+	useRecordMedicalScreening,
 	useCreateEvacueeWithScreening,
 	useUpdateMedical,
 	usePatchMedical,
@@ -137,6 +141,10 @@ export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
+export {
+	default as EvacueeHandoverSlipModal,
+	buildScreeningDeepLink
+} from './ui/evacuee-handover-slip-modal.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
 export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
@@ -151,3 +159,18 @@ export {
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';
+
+// UI — shared sub-form components (Issue #205)
+export {
+	PersonalInfoFields,
+	SpecialNeedsFields,
+	SPECIAL_NEEDS_COMMON_TAGS,
+	EmergencyContactFields,
+	EwarSymptomsFields,
+	HouseholdAddressFields,
+	PetAssetVehicleFields,
+	HealthMedicalFields,
+	ZoneSelectionFields,
+	type SpecialNeedTag,
+	type ZoneItem
+} from './ui/forms/index.js';

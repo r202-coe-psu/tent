@@ -36,6 +36,7 @@
 	const statusAccent: Record<StayStatus, string> = {
 		active: '#22c55e',
 		pre_registered: '#3b82f6',
+		arriving: '#f59e0b',
 		temporary_leave: '#f59e0b',
 		transferred: '#a855f7',
 		checked_out: '#ef4444',

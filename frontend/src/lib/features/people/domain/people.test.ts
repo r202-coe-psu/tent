@@ -23,15 +23,29 @@ import {
 	assertCheckoutDestination,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
+	triageLevelSchema,
+	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
-	evacueeHealthEditFormSchema
+	evacueeHealthEditFormSchema,
+	stayStatusSchema,
+	STATUS_LABELS
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
+
+describe('stayStatusSchema and STATUS_LABELS', () => {
+	it('accepts arriving', () => {
+		expect(stayStatusSchema.parse('arriving')).toBe('arriving');
+	});
+
+	it('contains arriving in STATUS_LABELS with Thai label', () => {
+		expect(STATUS_LABELS.arriving).toBe('อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)');
+	});
+});
 
 describe('createEvacuee', () => {
 	it('stamps the envelope and applies spec defaults', () => {
@@ -41,7 +55,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(8);
+		expect(e.schema_v).toBe(9);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -52,6 +66,21 @@ describe('createEvacuee', () => {
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('staff');
 		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('stamps schema_v: 9 and supports status arriving', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'วิภา',
+				last_name: 'สุขใจ',
+				gender: 'female',
+				phone: '0899999999',
+				status: 'arriving'
+			},
+			ctx
+		);
+		expect(e.schema_v).toBe(9);
+		expect(e.current_stay.status).toBe('arriving');
 	});
 
 	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
@@ -348,9 +377,33 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
 	});
 
+	it('allows check_in transition from arriving to active via applyMovementToStay', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const arriving = {
+			...e,
+			current_stay: { status: 'arriving' as const, zone: null, since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(arriving)).toBe(true);
+
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'check_in',
+				zone: 'Z1',
+				occurred_at: '2026-06-11T03:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(arriving, m);
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z1');
+		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
+	});
+
 	it('allows check_in from eligible stay statuses only', () => {
 		const statuses = [
 			'pre_registered',
+			'arriving',
 			'temporary_leave',
 			'checked_out',
 			'transferred',
@@ -371,7 +424,13 @@ describe('movement → current_stay', () => {
 			})
 		);
 
-		expect(allowed).toEqual(['pre_registered', 'temporary_leave', 'checked_out', 'transferred']);
+		expect(allowed).toEqual([
+			'pre_registered',
+			'arriving',
+			'temporary_leave',
+			'checked_out',
+			'transferred'
+		]);
 	});
 
 	it('rejects check_in from deceased (terminal status)', () => {
@@ -439,13 +498,75 @@ describe('movement → current_stay', () => {
 	});
 });
 
+describe('triageLevelSchema and screeningInputSchema', () => {
+	it('validates triageLevelSchema enum green, yellow, red', () => {
+		expect(triageLevelSchema.parse('green')).toBe('green');
+		expect(triageLevelSchema.parse('yellow')).toBe('yellow');
+		expect(triageLevelSchema.parse('red')).toBe('red');
+		expect(() => triageLevelSchema.parse('blue')).toThrow();
+	});
+
+	it('screeningInputSchema accepts triage_level and vital signs', () => {
+		const parsed = screeningInputSchema.parse({
+			evacuee_id: 'evacuee:01J',
+			track: 'normal',
+			triage_level: 'yellow',
+			blood_pressure_sys: 120,
+			blood_pressure_dia: 80,
+			heart_rate: 75,
+			spo2_percent: 98
+		});
+		expect(parsed.triage_level).toBe('yellow');
+		expect(parsed.blood_pressure_sys).toBe(120);
+		expect(parsed.blood_pressure_dia).toBe(80);
+		expect(parsed.heart_rate).toBe(75);
+		expect(parsed.spo2_percent).toBe(98);
+	});
+
+	it('screeningInputSchema allows null or omitted triage_level and vitals', () => {
+		const parsed = screeningInputSchema.parse({
+			evacuee_id: 'evacuee:01J',
+			track: 'normal',
+			triage_level: null
+		});
+		expect(parsed.triage_level).toBeNull();
+		expect(parsed.blood_pressure_sys).toBeUndefined();
+	});
+});
+
 describe('createScreening', () => {
-	it('defaults the screening time to now when omitted', () => {
+	it('defaults the screening time to now when omitted, stamps schema_v: 2 and triage_level: null', () => {
 		const s = createScreening({ evacuee_id: 'evacuee:x', track: 'fast_track' }, ctx);
 		expect(s.type).toBe('screening');
+		expect(s.schema_v).toBe(2);
+		expect(s.triage_level).toBeNull();
+		expect(s.vital_signs).toBeUndefined();
 		expect(s.needs_referral).toBe(false);
 		expect(s.symptoms).toEqual([]);
 		expect(typeof s.screened_at).toBe('string');
+	});
+
+	it('stamps schema_v: 2, triage_level, and vital signs when provided', () => {
+		const s = createScreening(
+			{
+				evacuee_id: 'evacuee:x',
+				track: 'fast_track',
+				triage_level: 'red',
+				blood_pressure_sys: 140,
+				blood_pressure_dia: 90,
+				heart_rate: 105,
+				spo2_percent: 92
+			},
+			ctx
+		);
+		expect(s.schema_v).toBe(2);
+		expect(s.triage_level).toBe('red');
+		expect(s.vital_signs).toEqual({
+			blood_pressure_sys: 140,
+			blood_pressure_dia: 90,
+			heart_rate: 105,
+			spo2_percent: 92
+		});
 	});
 });
 

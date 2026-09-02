@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import type { Evacuee } from '$lib/features/people';
+	import ZoneSelectionFields from './forms/zone-selection-fields.svelte';
 
 	interface Zone {
 		code: string;
@@ -22,6 +23,19 @@
 		onClose: () => void;
 		onUpdateZone: (zoneCode: string) => Promise<void>;
 	} = $props();
+
+	let selectedZone = $state(untrack(() => evacuee.current_stay.zone ?? ''));
+
+	$effect(() => {
+		if (show) {
+			selectedZone = evacuee.current_stay.zone ?? '';
+		}
+	});
+
+	async function handleSelectZone(zoneCode: string) {
+		selectedZone = zoneCode;
+		await onUpdateZone(zoneCode);
+	}
 </script>
 
 {#if show}
@@ -43,31 +57,13 @@
 				</button>
 			</div>
 
-			<div class="max-h-[300px] space-y-2 overflow-y-auto pr-1">
-				{#if shelterZones.length === 0}
-					<p class="py-4 text-center text-sm text-muted-foreground">ไม่พบรายการโซนในระบบ</p>
-				{:else}
-					{#each shelterZones as zone (zone.code)}
-						<button
-							onclick={() => onUpdateZone(zone.code)}
-							class="group flex w-full cursor-pointer items-center justify-between rounded-xl border border-border p-3.5 font-semibold transition-all hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900 {evacuee
-								.current_stay.zone === zone.code
-								? 'border-primary bg-primary/5 text-primary'
-								: 'bg-background'}"
-						>
-							<div class="flex flex-col">
-								<span class="text-sm">{zone.name || zone.code}</span>
-								<span class="mt-0.5 text-2xs font-normal text-muted-foreground">
-									Code: {zone.code.toUpperCase()}
-									{zone.type ? `| Type: ${zone.type}` : ''}
-								</span>
-							</div>
-							{#if evacuee.current_stay.zone === zone.code}
-								<CheckCircle class="size-5 shrink-0 text-primary" />
-							{/if}
-						</button>
-					{/each}
-				{/if}
+			<div class="max-h-[360px] overflow-y-auto pr-1">
+				<ZoneSelectionFields
+					bind:selected_zone={selectedZone}
+					shelter_zones={shelterZones}
+					{evacuee}
+					onSelectZone={handleSelectZone}
+				/>
 			</div>
 
 			<div class="flex justify-end gap-2 border-t border-border pt-3">

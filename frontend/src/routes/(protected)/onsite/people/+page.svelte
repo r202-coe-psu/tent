@@ -142,7 +142,9 @@
 				}}
 				onComplete={(ev) => {
 					saveError = null;
-					completedEvacuee = ev;
+					if (ev.current_stay?.status === 'active') {
+						completedEvacuee = ev;
+					}
 				}}
 			/>
 		</div>

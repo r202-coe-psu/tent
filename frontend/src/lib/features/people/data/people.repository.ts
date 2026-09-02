@@ -148,6 +148,19 @@ export interface PeopleRepository {
 		ctx: AuthorContext
 	): Promise<{ evacuee: Evacuee; screening: Screening }>;
 	/**
+	 * Record a medical screening evaluation and optionally check in the evacuee to a zone.
+	 * When checkIn is true and zone is provided, triggers check-in movement (arriving -> active).
+	 */
+	recordMedicalScreening(
+		input: {
+			screening: ScreeningInput;
+			zone?: string | null;
+			checkIn?: boolean;
+			medical?: MedicalInput;
+		},
+		ctx: AuthorContext
+	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }>;
+	/**
 	 * Compensate a failed registration unit: remove medicals for the evacuee,
 	 * then the evacuee. Screening/movement are append-only and are not deleted.
 	 */
@@ -171,6 +184,8 @@ export interface PeopleRepository {
 	listMovements(): Promise<Movement[]>;
 	/** Every screening record in this shelter database. */
 	listScreenings(): Promise<Screening[]>;
+	/** Evacuees awaiting medical screening in the shelter (arriving or pre_registered without screening doc). */
+	getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]>;
 
 	/**
 	 * Record a check-in movement and apply it to the evacuee's `current_stay`.

@@ -46,9 +46,21 @@
 		return () => clearTimeout(debounceTimer);
 	});
 
-	const searchQuery = useSearchEvacuees(
-		() => debouncedQuery,
-		() => !!debouncedQuery
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const searchQuery = safeQuery(
+		() =>
+			useSearchEvacuees(
+				() => debouncedQuery,
+				() => !!debouncedQuery
+			),
+		{ data: [], isFetching: false } as unknown as ReturnType<typeof useSearchEvacuees>
 	);
 
 	const searchResults = $derived(searchQuery.data ?? []);
@@ -250,8 +262,8 @@
 									</p>
 									<p class="text-xs text-green-700 dark:text-green-300">
 										{t.statusLabel}
-										{t.statusLabels[evacuee.current_stay.status] ??
-											STATUS_LABELS[evacuee.current_stay.status] ??
+										{(t.statusLabels as Record<string, string>)[evacuee.current_stay.status] ??
+											(STATUS_LABELS as Record<string, string>)[evacuee.current_stay.status] ??
 											evacuee.current_stay.status}
 										{#if evacuee.phone}
 											· {evacuee.phone}

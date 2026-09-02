@@ -38,6 +38,7 @@ export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
 	'pre_registered',
+	'arriving',
 	'active',
 	'temporary_leave',
 	'transferred',
@@ -49,6 +50,7 @@ export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
+	arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
 	active: 'เช็คอินเข้าพักแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
 	transferred: 'ย้ายศูนย์พักพิงแล้ว',
@@ -121,6 +123,9 @@ export type MovementAction = z.infer<typeof movementActionSchema>;
 
 export const careTrackSchema = z.enum(['normal', 'fast_track']);
 export type CareTrack = z.infer<typeof careTrackSchema>;
+
+export const triageLevelSchema = z.enum(['green', 'yellow', 'red']);
+export type TriageLevel = z.infer<typeof triageLevelSchema>;
 
 export const bloodGroupSchema = z.enum(['A', 'B', 'AB', 'O', 'unknown']);
 export type BloodGroup = z.infer<typeof bloodGroupSchema>;
@@ -368,6 +373,13 @@ export interface Screening extends BaseDoc {
 	needs_referral: boolean;
 	notes?: string;
 	screened_at: Timestamp;
+	triage_level?: TriageLevel | null;
+	vital_signs?: {
+		blood_pressure_sys?: number | null;
+		blood_pressure_dia?: number | null;
+		heart_rate?: number | null;
+		spo2_percent?: number | null;
+	};
 }
 
 export type PeopleDoc = Evacuee | Medical | Household | Movement | Screening;
@@ -431,6 +443,7 @@ export const evacueeInputSchema = z.object({
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
+	status: stayStatusSchema.optional().default('pre_registered'),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -768,6 +781,13 @@ export const movementInputSchema = z.object({
 });
 export type MovementInput = z.input<typeof movementInputSchema>;
 
+export const vitalSignsInputSchema = z.object({
+	blood_pressure_sys: z.coerce.number().nullable().optional(),
+	blood_pressure_dia: z.coerce.number().nullable().optional(),
+	heart_rate: z.coerce.number().nullable().optional(),
+	spo2_percent: z.coerce.number().nullable().optional()
+});
+
 export const screeningInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	symptoms: z.array(z.string().trim().min(1)).default([]),
@@ -775,7 +795,13 @@ export const screeningInputSchema = z.object({
 	track: careTrackSchema,
 	needs_referral: z.boolean().default(false),
 	notes: z.string().trim().optional(),
-	screened_at: z.string().optional()
+	screened_at: z.string().optional(),
+	triage_level: triageLevelSchema.nullable().optional(),
+	blood_pressure_sys: z.coerce.number().nullable().optional(),
+	blood_pressure_dia: z.coerce.number().nullable().optional(),
+	heart_rate: z.coerce.number().nullable().optional(),
+	spo2_percent: z.coerce.number().nullable().optional(),
+	vital_signs: vitalSignsInputSchema.optional()
 });
 export type ScreeningInput = z.input<typeof screeningInputSchema>;
 
@@ -785,7 +811,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		8, // schema_v 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		9, // schema_v 9: adds arriving stay status (CR-106); 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -802,7 +828,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(d.photo ? { photo: d.photo } : {}),
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
-			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			current_stay: { status: d.status, zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -947,9 +973,24 @@ export function createMovement(input: MovementInput, ctx: AuthorContext): Moveme
 
 export function createScreening(input: ScreeningInput, ctx: AuthorContext): Screening {
 	const d = screeningInputSchema.parse(input);
+	const hasVitals =
+		d.blood_pressure_sys !== undefined ||
+		d.blood_pressure_dia !== undefined ||
+		d.heart_rate !== undefined ||
+		d.spo2_percent !== undefined ||
+		d.vital_signs !== undefined;
+	const vital_signs = hasVitals
+		? {
+				blood_pressure_sys: d.blood_pressure_sys ?? d.vital_signs?.blood_pressure_sys ?? null,
+				blood_pressure_dia: d.blood_pressure_dia ?? d.vital_signs?.blood_pressure_dia ?? null,
+				heart_rate: d.heart_rate ?? d.vital_signs?.heart_rate ?? null,
+				spo2_percent: d.spo2_percent ?? d.vital_signs?.spo2_percent ?? null
+			}
+		: undefined;
+
 	return makeDoc(
 		'screening',
-		1,
+		2,
 		{
 			evacuee_id: d.evacuee_id,
 			symptoms: d.symptoms,
@@ -957,7 +998,9 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 			track: d.track,
 			needs_referral: d.needs_referral,
 			...(d.notes ? { notes: d.notes } : {}),
-			screened_at: d.screened_at ?? now()
+			screened_at: d.screened_at ?? now(),
+			triage_level: d.triage_level ?? null,
+			...(vital_signs ? { vital_signs } : {})
 		},
 		ctx
 	);
@@ -968,6 +1011,7 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 /** Stay statuses that may receive a scan/check-in (`check_in`) action. */
 export const CHECK_IN_ELIGIBLE_STATUSES = [
 	'pre_registered',
+	'arriving',
 	'temporary_leave',
 	'checked_out',
 	'transferred'

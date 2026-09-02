@@ -2,8 +2,13 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Expand from '@lucide/svelte/icons/expand';
 	import Search from '@lucide/svelte/icons/search';
+	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { resolve } from '$app/paths';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessMedicalScreening } from '$lib/auth/roles';
+
+	const canAccessMedical = $derived(canAccessMedicalScreening(authStore.user?.roles ?? []));
 </script>
 
 <svelte:head>
@@ -43,6 +48,25 @@
 				</p>
 			</div>
 		</a>
+
+		{#if canAccessMedical}
+			<a
+				href={resolve('/onsite/medical-screening')}
+				class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
+			>
+				<div
+					class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+				>
+					<Stethoscope class="size-6" />
+				</div>
+				<div>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">คัดกรองการแพทย์</h2>
+					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+						Medical Screening (Station 2)
+					</p>
+				</div>
+			</a>
+		{/if}
 
 		<div
 			class="flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 opacity-60"

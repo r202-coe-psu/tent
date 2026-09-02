@@ -53,9 +53,7 @@ export function shelterScopeRole(code: string): string {
 
 /** Extract all shelter codes from a role list (`["shelter:SH001", "shelter:SH002"]` → `["SH001", "SH002"]`). */
 export function shelterCodesFromRoles(roles: readonly string[]): string[] {
-	return roles
-		.filter((r) => r.startsWith('shelter:'))
-		.map((r) => r.slice('shelter:'.length));
+	return roles.filter((r) => r.startsWith('shelter:')).map((r) => r.slice('shelter:'.length));
 }
 
 /** Extract the single shelter code from a role list (`shelter:SH001` → `SH001`), or null. */
@@ -99,6 +97,19 @@ export function canCancelHold(roles: readonly string[]): boolean {
 		isSystemAdmin(roles) ||
 		isShelterManager(roles) ||
 		hasStaffCapability(roles, 'registration_staff')
+	);
+}
+
+/**
+ * True when the actor may access the Station 2 medical screening route / queue:
+ * system_admin, shelter_manager, medical_staff, or triage_staff.
+ */
+export function canAccessMedicalScreening(roles: readonly string[]): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles) ||
+		hasStaffCapability(roles, MEDICAL_STAFF) ||
+		hasStaffCapability(roles, TRIAGE_STAFF)
 	);
 }
 

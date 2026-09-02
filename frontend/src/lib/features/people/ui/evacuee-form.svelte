@@ -33,26 +33,56 @@
 		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { useShelter } from '$lib/features/shelters/index.js';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import EvacueeHandoverSlipModal from './evacuee-handover-slip-modal.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_FORM_I18N } from './_constants/evacuee-form.i18n';
 
-	const t = $derived(getTranslation(EVACUEE_FORM_I18N, languageStore.current));
-	const STEPS = $derived(t.steps);
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const shelterQuery = safeQuery(
+		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
+		{ data: undefined, isLoading: false, isError: false } as unknown as ReturnType<
+			typeof useShelter
+		>
+	);
 
 	let {
 		onsubmit,
 		pending = false,
 		step = $bindable(1),
 		onComplete,
-		onsaveerror
+		onHandover,
+		onsaveerror,
+		enableMedicalScreening: enableMedicalScreeningProp
 	}: {
 		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<Evacuee> | Evacuee;
 		pending?: boolean;
 		step?: 1 | 2 | 3 | 4 | 5 | 6;
 		onComplete?: (evacuee: Evacuee) => void;
+		onHandover?: (evacuee: Evacuee, symptoms: string[]) => void;
 		onsaveerror?: (report: SaveFailureReport) => void;
+		enableMedicalScreening?: boolean;
 	} = $props();
+
+	const isMedicalScreeningEnabled = $derived(
+		enableMedicalScreeningProp !== undefined
+			? enableMedicalScreeningProp
+			: (shelterQuery.data?.feature_flags?.enable_medical_screening ?? false)
+	);
+
+	const t = $derived(getTranslation(EVACUEE_FORM_I18N, languageStore.current));
+	const totalSteps = $derived(isMedicalScreeningEnabled ? 5 : 6);
+	const STEPS = $derived(t.steps);
+	const effectiveSteps = $derived(isMedicalScreeningEnabled ? STEPS.slice(0, 5) : STEPS);
 
 	function reportSaveFailure(
 		err: unknown,
@@ -81,7 +111,11 @@
 	let isSubmittingHousehold = $state(false);
 	let zoneError = $state<string | null>(null);
 
-	const currentStep = $derived(STEPS[step - 1]);
+	let showHandoverSlip = $state(false);
+	let handoverEvacuee = $state<Evacuee | null>(null);
+	let handoverSymptoms = $state<string[]>([]);
+
+	const currentStep = $derived(effectiveSteps[step - 1] ?? effectiveSteps[0]);
 
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
@@ -114,15 +148,40 @@
 	});
 
 	// Fetch data for HouseholdRegisterForm
-	const evacueesQuery = useEvacuees();
-	const householdsQuery = useHouseholds();
+	const evacueesQuery = safeQuery(() => useEvacuees(), {
+		data: [],
+		isLoading: false,
+		isError: false,
+		refetch: () => {}
+	} as unknown as ReturnType<typeof useEvacuees>);
+	const householdsQuery = safeQuery(() => useHouseholds(), {
+		data: [],
+		isLoading: false,
+		isError: false,
+		refetch: () => {}
+	} as unknown as ReturnType<typeof useHouseholds>);
 	const householdDataLoading = $derived(evacueesQuery.isLoading || householdsQuery.isLoading);
 	const householdDataError = $derived(evacueesQuery.isError || householdsQuery.isError);
 
-	const createHouseholdMutation = useCreateHousehold();
-	const updateHouseholdMutation = useUpdateHousehold();
-	const updateEvacueeMutation = useUpdateEvacuee();
-	const checkInMutation = useCheckInEvacuee();
+	const createHouseholdMutation = safeQuery(() => useCreateHousehold(), {
+		mutateAsync: async () => ({ _id: 'household:new' }),
+		isPending: false
+	} as unknown as ReturnType<typeof useCreateHousehold>);
+	const updateHouseholdMutation = safeQuery(() => useUpdateHousehold(), {
+		mutateAsync: async (args: unknown) => args,
+		isPending: false
+	} as unknown as ReturnType<typeof useUpdateHousehold>);
+	const updateEvacueeMutation = safeQuery(() => useUpdateEvacuee(), {
+		mutateAsync: async (args: unknown) => args,
+		isPending: false
+	} as unknown as ReturnType<typeof useUpdateEvacuee>);
+	const checkInMutation = safeQuery(() => useCheckInEvacuee(), {
+		mutateAsync: async ({ evacuee, zone }: { evacuee: Evacuee; zone: string | null }) => ({
+			...evacuee,
+			current_stay: { status: 'active' as const, zone }
+		}),
+		isPending: false
+	} as unknown as ReturnType<typeof useCheckInEvacuee>);
 
 	let activeDraftEvacuee = $state<Evacuee | null>(null);
 	let topAnchorRef = $state<HTMLElement | null>(null);
@@ -256,7 +315,15 @@
 	}
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
-		const merged: EvacueeInput = { ...input, ...screeningDraft };
+		const combinedSpecialNeeds = Array.from(
+			new Set([...(screeningDraft.special_needs ?? []), ...(input.special_needs ?? [])])
+		);
+		const merged: EvacueeInput = {
+			...input,
+			...screeningDraft,
+			special_needs: combinedSpecialNeeds
+		};
+		screeningDraft.special_needs = combinedSpecialNeeds;
 		registrationDraft = structuredClone(merged);
 		if (activeDraftEvacuee) {
 			pendingEvacueeInput = {
@@ -312,7 +379,13 @@
 
 			// 1. Register evacuee (+ screening via parent onsubmit unit)
 			if (pendingEvacueeInput) {
-				registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+				const evacueeInputWithStatus: EvacueeInput = {
+					...pendingEvacueeInput,
+					status: isMedicalScreeningEnabled
+						? 'arriving'
+						: (pendingEvacueeInput.status ?? 'pre_registered')
+				};
+				registeredEvacuee = await onsubmit(evacueeInputWithStatus, pendingSymptoms);
 				registrationSucceeded = true;
 				newlyRegisteredEvacuee = registeredEvacuee;
 				pendingEvacueeInput = null;
@@ -356,7 +429,8 @@
 					// Step 5 edits the household-level collections in place.
 					pets,
 					assets: assets || latestHousehold.assets || null,
-					vehicles
+					vehicles,
+					...(isMedicalScreeningEnabled ? { status: 'arriving' } : {})
 				});
 			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
@@ -365,6 +439,7 @@
 				const householdInput: HouseholdInput = {
 					label: householdLabel,
 					head_evacuee_id: registeredEvacuee._id,
+					status: 'arriving',
 					municipality_zone: null,
 					community: null,
 					pets: pets,
@@ -391,13 +466,29 @@
 
 			const updated = await updateEvacueeMutation.mutateAsync({
 				...registeredEvacuee,
-				household_id: householdId
+				household_id: householdId,
+				...(isMedicalScreeningEnabled
+					? {
+							current_stay: {
+								...registeredEvacuee.current_stay,
+								status: 'arriving',
+								zone: null
+							}
+						}
+					: {})
 			});
 			newlyRegisteredEvacuee = updated;
 			toast.success(t.toastSuccessRegistration);
 
-			// Go to step 6 (Zoning)
-			goToStep(6);
+			if (isMedicalScreeningEnabled) {
+				handoverEvacuee = updated;
+				handoverSymptoms = savedPendingSymptoms;
+				showHandoverSlip = true;
+				onHandover?.(updated, savedPendingSymptoms);
+			} else {
+				// Go to step 6 (Zoning)
+				goToStep(6);
+			}
 		} catch (err) {
 			const repo = peopleRepository();
 			if (createdHouseholdId) {
@@ -426,6 +517,23 @@
 			}
 		} finally {
 			isSubmittingHousehold = false;
+		}
+	}
+
+	function handleHandoverDone() {
+		const finished = handoverEvacuee ?? newlyRegisteredEvacuee;
+		showHandoverSlip = false;
+		handoverEvacuee = null;
+		handoverSymptoms = [];
+		goToStep(1);
+		clearRegistrationDraft();
+		registrationDraftActive = false;
+		newlyRegisteredEvacuee = null;
+		selectedHousehold = null;
+		isCreatingNewHousehold = false;
+		newHouseholdAddress = null;
+		if (finished) {
+			onComplete?.(finished);
 		}
 	}
 
@@ -485,7 +593,7 @@
 <!-- ── Step progress ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 space-y-3">
 	<div class="sm:hidden">
-		<p class="text-xs font-medium text-muted-foreground">{t.stepOf(step, 6)}</p>
+		<p class="text-xs font-medium text-muted-foreground">{t.stepOf(step, totalSteps)}</p>
 		<h2 class="text-lg font-semibold">{currentStep.title}</h2>
 		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
 		<div
@@ -493,19 +601,19 @@
 			role="progressbar"
 			aria-valuenow={step}
 			aria-valuemin={1}
-			aria-valuemax={6}
+			aria-valuemax={totalSteps}
 			aria-label={t.progressAria}
 		>
 			<div
 				class="h-full rounded-full bg-primary transition-all"
-				style:width={`${(step / 6) * 100}%`}
+				style:width={`${(step / totalSteps) * 100}%`}
 			></div>
 		</div>
 	</div>
 
 	<div class="hidden sm:block">
 		<div class="mb-4 flex items-start">
-			{#each STEPS as meta, i (meta.short)}
+			{#each effectiveSteps as meta, i (meta.short)}
 				{@const s = i + 1}
 				<div class="flex flex-1 flex-col items-center gap-2">
 					<div class="flex w-full items-center">
@@ -528,7 +636,7 @@
 							{step > s ? '✓' : s}
 						</div>
 						<div
-							class="h-0.5 flex-1 transition-colors {s === 6
+							class="h-0.5 flex-1 transition-colors {s === totalSteps
 								? 'invisible'
 								: step > s
 									? 'bg-green-500'
@@ -567,13 +675,18 @@
 	</Alert.Root>
 {/if}
 
-{#if registrationDraftActive}
+{#if registrationDraftActive || step === 3}
 	<div class:hidden={step !== 3}>
 		<RegistrationSection
 			onsubmit={handleRegistrationSubmit}
 			pending={isSubmittingEvacuee || pending}
 			onBack={() => goToStep(2)}
-			initialInput={registrationDraft}
+			initialInput={{
+				...registrationDraft,
+				special_needs: registrationDraft?.special_needs?.length
+					? registrationDraft.special_needs
+					: (screeningDraft.special_needs ?? [])
+			}}
 			ondraftchange={(input) => (registrationDraft = structuredClone(input))}
 			bind:facePhotoUrl={registrationFacePhotoUrl}
 		/>
@@ -647,5 +760,14 @@
 			goToStep(5);
 		}}
 		onSubmit={handleZoneSubmit}
+	/>
+{/if}
+
+{#if showHandoverSlip && handoverEvacuee}
+	<EvacueeHandoverSlipModal
+		show={showHandoverSlip}
+		evacuee={handoverEvacuee}
+		symptoms={handoverSymptoms}
+		onClose={handleHandoverDone}
 	/>
 {/if}

@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 9** — เพิ่มสถานะ `arriving` ใน `current_stay.status` (CR-106) — ผู้ประสบภัยที่รายงานตัวหน้างานแล้ว อยู่ระหว่างรอตรวจคัดกรองการแพทย์ หรือรอจัดสรรที่พัก (ไม่นับเตียงที่ถูกใช้จริงใน occupancy dashboard จนกว่าจะ check-in เป็น `active`).
 > **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
 > ผ่าน public portal (T-71). `api` (inbound, CR-071) ยังไม่เพิ่มในรอบนี้.
@@ -71,7 +72,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` ก่อนจัดเข้าครัวเรือน) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`arriving`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -100,6 +101,8 @@ implement — ไม่กระทบ migration นี้
 ยังใช้ `app` เหมือนเดิม. `api` (CR-071 inbound) ยังไม่เพิ่ม — รอ D-INBOUND-PLANE
 
 **Migration (schema_v 7 → 8, CR-097):** purely additive — เพิ่ม `card_snapshot`, เพิ่ม `registered_via: 'kiosk'`, `person_id.number` index; doc เดิมไม่ต้อง backfill
+
+**Migration (schema_v 8 → 9, CR-106):** purely additive enum — เพิ่ม `arriving` ใน `current_stay.status`; doc เดิม schema_v 8 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 9
 
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
@@ -160,7 +163,7 @@ implement — ไม่กระทบ migration นี้
 
 **Index:** `(evacuee_id, occurred_at)` · view `occupancy`
 
-### 1.5 `screening` — `screening:{ulid}` · **append-only**
+### 1.5 `screening` — `screening:{ulid}` · **append-only** · **schema_v 2** (CR-106)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -171,8 +174,12 @@ implement — ไม่กระทบ migration นี้
 | `needs_referral` | bool | req | default `false` |
 | `notes` | str | opt | — |
 | `screened_at` | ts | req | — |
+| `triage_level` | enum(`green`,`yellow`,`red`)\|null | opt | ผลคัดแยก triage 3 สี (schema_v 2, CR-072/CR-106) |
+| `vital_signs` | {`blood_pressure_sys`:num?, `blood_pressure_dia`:num?, `heart_rate`:num?, `spo2_percent`:num?} | opt | สัญญาณชีพ (schema_v 2) |
 
 **Index:** `(evacuee_id, screened_at)` · view `latest_screening`
+
+**Migration (schema_v 1 → 2, CR-106):** purely additive — เพิ่ม `triage_level` (เขียว/เหลือง/แดง) และ `vital_signs` (ความดัน, ชีพจร, SpO2); doc เดิม schema_v 1 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 2
 
 ### 1.6 `image` — `image:{ulid}` · **schema_v 1** (CR-049)
 Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำหรับเก็บรูปเป็น **CouchDB attachment** — ตัวเอกสารเก็บแค่
@@ -817,7 +824,7 @@ Stock snapshot ชุดเดียวกันถูกใช้ทั้ง C
 | `admission_policy` | {`supported_vulnerable_groups`:[str], `pet_policy`:{`policy`:enum(`no_pets`,`conditional`)\|null, `categories`:[{`category`:enum(`small_general`,`large_dog`,`livestock`), `conditions`:[str]?, `max_capacity`:int≥0?, `location`:str?, `other`:str?}]}} | opt | section นโยบายการรับผู้อพยพ/สัตว์ |
 | `luggage_policy` | {`limitation`:enum(`no_limit`,`limited`)\|null, `max_per_family`:int≥0\|null, `rules`:[enum(`valuables_self_responsibility`,`no_hazardous_items`,`no_large_appliances`,`has_temp_storage_service`)], `rules_other`:str\|null} | opt | section นโยบายทรัพย์สิน/สัมภาระ |
 | `parking_policy` | {`availability`:enum(`none`,`available`)\|null, `supported_vehicles`:[{`type`:enum(`motorcycle`,`car`,`truck`,`boat`), `max_capacity`:int≥0\|null}], `rules`:[enum(`no_liability`,`first_come_first_served`,`key_deposit_required`,`no_blocking_emergency_lane`,`ev_emergency_charging`)], `rules_other`:str\|null} | opt | section นโยบายยานพาหนะ |
-| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool, `public_donations_enabled`:bool} | opt | default `allow_* = false`, `public_donations_enabled = true` (CR-048); ควบคุมฟีเจอร์ลงทะเบียน และการแสดงผลบน Public Needs Board |
+| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool, `public_donations_enabled`:bool, `enable_medical_screening`:bool} | opt | default `allow_* = false`, `public_donations_enabled = true` (CR-048), `enable_medical_screening = false` (CR-106); ควบคุมฟีเจอร์ลงทะเบียน การคัดกรองการแพทย์ และการแสดงผลบน Public Needs Board |
 | `edge_url` | str\|null | sys | base URL ของ LAN Edge fallback ศูนย์นั้น — ใช้เมื่อ WAN/central เข้าไม่ได้; ไม่ใช่ normal client remote |
 | `opened_at` / `closed_at` | ts / ts\|null | sys | — |
 

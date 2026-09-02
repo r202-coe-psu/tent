@@ -94,6 +94,12 @@
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
 			dotClass: 'bg-blue-500'
 		},
+		arriving: {
+			label: 'อยู่ระหว่างรอเข้าพัก (Arriving / Waiting)',
+			colorClass:
+				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+			dotClass: 'bg-amber-500'
+		},
 		temporary_leave: {
 			label: 'ออกชั่วคราว (Temporary Leave)',
 			colorClass:

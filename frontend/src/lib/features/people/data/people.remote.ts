@@ -385,6 +385,47 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.put(buildScreening(input, ctx));
 	}
 
+	async recordMedicalScreening(
+		input: {
+			screening: ScreeningInput;
+			zone?: string | null;
+			checkIn?: boolean;
+			medical?: MedicalInput;
+		},
+		ctx: AuthorContext
+	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }> {
+		const screening = await this.createScreening(input.screening, ctx);
+		let evacuee: Evacuee | undefined;
+		if (input.checkIn && input.zone) {
+			const targetEvacuee = await this.getEvacuee(input.screening.evacuee_id);
+			if (!targetEvacuee) {
+				throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+			}
+			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone);
+		}
+		let medical: Medical | undefined;
+		if (input.medical) {
+			const existingMedicals = await this.repo.find<Medical>({
+				selector: { type: 'medical', evacuee_id: input.screening.evacuee_id },
+				limit: 1
+			});
+			const existing = existingMedicals.find(isMedical);
+			if (existing) {
+				medical = await this.updateMedical({
+					...existing,
+					...input.medical,
+					evacuee_id: input.screening.evacuee_id
+				});
+			} else {
+				medical = await this.createMedical(
+					{ ...input.medical, evacuee_id: input.screening.evacuee_id },
+					ctx
+				);
+			}
+		}
+		return { screening, ...(evacuee ? { evacuee } : {}), ...(medical ? { medical } : {}) };
+	}
+
 	async createEvacueeWithScreening(
 		input: EvacueeInput,
 		screening: Omit<ScreeningInput, 'evacuee_id'> & { evacuee_id?: string },
@@ -471,6 +512,26 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	listScreenings(): Promise<Screening[]> {
 		return this.repo.allByType('screening', isScreening);
+	}
+
+	async getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]> {
+		const [allEvacuees, screenings] = await Promise.all([
+			this.repo.allByType('evacuee', isEvacuee),
+			this.repo.allByType('screening', isScreening)
+		]);
+		const screenedIds = new Set(screenings.map((s) => s.evacuee_id));
+		return allEvacuees.filter((e) => {
+			if (
+				shelterCode &&
+				e.shelter_code &&
+				e.shelter_code.toUpperCase() !== shelterCode.toUpperCase()
+			) {
+				return false;
+			}
+			const status = e.current_stay?.status;
+			const isPendingStatus = status === 'arriving' || status === 'pre_registered';
+			return isPendingStatus && !screenedIds.has(e._id);
+		});
 	}
 
 	async checkInEvacuee(

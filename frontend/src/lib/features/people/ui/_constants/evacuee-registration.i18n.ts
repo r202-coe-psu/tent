@@ -7,8 +7,16 @@ export const EVACUEE_REGISTRATION_I18N = {
 			special: 'กลุ่มเปราะบาง'
 		},
 		photo: {
+			header: 'ภาพถ่ายใบหน้า (Face Recognition)',
 			label: 'ภาพถ่ายใบหน้า (Face Recognition)',
 			add: 'เพิ่มรูปภาพ',
+			desc: 'ใช้สำหรับระบบจดจำใบหน้าและค้นหาตัวตน',
+			btnTake: 'ถ่ายภาพ',
+			btnChange: 'เปลี่ยนรูปภาพ',
+			btnDelete: 'ลบรูปภาพ',
+			previewAlt: 'ภาพถ่ายใบหน้า',
+			toastSuccess: 'อัปโหลดรูปภาพสำเร็จ',
+			toastFailed: 'อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป',
 			uploadFailed: 'อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป'
 		},
 		cardType: {
@@ -35,6 +43,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
+			header: 'ข้อมูลประจำตัว (Identity)',
 			firstName: {
 				label: 'ชื่อ',
 				placeholder: 'ชื่อ'
@@ -151,8 +160,16 @@ export const EVACUEE_REGISTRATION_I18N = {
 			special: 'Vulnerable Groups'
 		},
 		photo: {
+			header: 'Face Photo (Face Recognition)',
 			label: 'Face Photo (Face Recognition)',
 			add: 'Add Photo',
+			desc: 'Used for face recognition and identity search',
+			btnTake: 'Take Photo',
+			btnChange: 'Change Photo',
+			btnDelete: 'Delete Photo',
+			previewAlt: 'Face photo',
+			toastSuccess: 'Photo uploaded successfully',
+			toastFailed: 'Photo upload failed. You can proceed without a photo.',
 			uploadFailed: 'Photo upload failed. You can proceed without a photo.'
 		},
 		cardType: {
@@ -179,6 +196,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
+			header: 'Personal Information (Identity)',
 			firstName: {
 				label: 'First Name',
 				placeholder: 'First Name'

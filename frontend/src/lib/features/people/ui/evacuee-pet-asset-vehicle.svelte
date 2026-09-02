@@ -65,7 +65,9 @@
 	const initialPets = untrack(() => household?.pets ?? []);
 	let hasPets = $state(initialPets.length > 0);
 	let petDetails = $state<PetDetail[]>(
-		untrack(() => initialPets.flatMap((p) => Array.from({ length: p.count }, () => petDetailFromGroup(p))))
+		untrack(() =>
+			initialPets.flatMap((p) => Array.from({ length: p.count }, () => petDetailFromGroup(p)))
+		)
 	);
 
 	const speciesCounts = $derived(
@@ -138,7 +140,20 @@
 		hasVehicles = vehicleRows.length > 0;
 	}
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const shelterQuery = safeQuery(
+		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
+		{ data: undefined, isLoading: false, isError: false } as unknown as ReturnType<
+			typeof useShelter
+		>
+	);
 	const shelter = $derived(shelterQuery.data);
 
 	const disclaimerGroups = $derived(
@@ -445,7 +460,9 @@
 					onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
 					class="mt-0.5 size-5 shrink-0"
 				/>
-				<span class="text-sm leading-relaxed font-semibold select-none">{t.disclaimer.acknowledge}</span>
+				<span class="text-sm leading-relaxed font-semibold select-none"
+					>{t.disclaimer.acknowledge}</span
+				>
 			</label>
 		</section>
 	{/if}

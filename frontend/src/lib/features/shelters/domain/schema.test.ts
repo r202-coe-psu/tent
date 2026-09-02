@@ -43,6 +43,18 @@ describe('shelterSchema', () => {
 		expect(s.zones).toEqual([]);
 	});
 
+	it('supports feature_flags with enable_medical_screening defaulting to false', () => {
+		const s = shelterSchema.parse(validShelterInput);
+		expect(s.feature_flags).toBeDefined();
+		expect(s.feature_flags?.enable_medical_screening).toBe(false);
+
+		const withScreening = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { enable_medical_screening: true }
+		});
+		expect(withScreening.feature_flags?.enable_medical_screening).toBe(true);
+	});
+
 	it('requires site_kind for new shelter input', () => {
 		const result = shelterSchema.safeParse({ ...validShelterInput, site_kind: undefined });
 		expect(result.success).toBe(false);

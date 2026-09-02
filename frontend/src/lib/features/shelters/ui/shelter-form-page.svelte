@@ -22,7 +22,8 @@
 		ParkingPolicySection,
 		EMPTY_ADMISSION_POLICY,
 		EMPTY_LUGGAGE_POLICY,
-		EMPTY_PARKING_POLICY
+		EMPTY_PARKING_POLICY,
+		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
 	import { UserManagementPage } from '$lib/features/users';
 	import {
@@ -175,7 +176,8 @@
 				zones: d.zones ?? [],
 				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY }
+				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+				feature_flags: d.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
 			};
 		}
 	});
