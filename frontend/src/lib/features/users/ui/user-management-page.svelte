@@ -130,7 +130,8 @@
 	async function handleUpdate(input: EditUserInput) {
 		if (!selectedUser) return;
 		const wasSa = isAppSystemAdmin(selectedUser.roles);
-		const willBeSa = input.capabilities?.includes(SYSTEM_ADMIN) || input.capability === SYSTEM_ADMIN;
+		const willBeSa =
+			input.capabilities?.includes(SYSTEM_ADMIN) || input.capability === SYSTEM_ADMIN;
 		if (wasSa && !willBeSa) {
 			pendingDemote = input;
 			demoteDialogOpen = true;
@@ -247,23 +248,23 @@
 					</Button>
 				{/snippet}
 			</Dialog.Trigger>
-			<Dialog.Content class="overflow-y-auto rounded-2xl p-0 sm:max-w-[700px] max-h-[90vh]">
-				<Dialog.Header class="p-6 pb-2 border-b border-slate-100">
+			<Dialog.Content
+				class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[700px]"
+			>
+				<Dialog.Header class="shrink-0 border-b border-slate-100 p-6 pb-2">
 					<Dialog.Title class="text-xl font-bold text-slate-900">เพิ่มผู้ใช้ใหม่</Dialog.Title>
 					<Dialog.Description class="text-xs text-slate-500">
 						กำหนดบัญชีผู้ใช้งาน สังกัดองค์กร และบทบาทหน้าที่ในศูนย์พักพิง
 					</Dialog.Description>
 				</Dialog.Header>
-				<div class="p-6">
-					<UserForm
-						onsubmit={handleCreate}
-						oncancel={() => (dialogOpen = false)}
-						{isSA}
-						{allowSystemAdminRole}
-						lockedShelterCode={effectiveLock ?? null}
-						pending={createMutation.isPending}
-					/>
-				</div>
+				<UserForm
+					onsubmit={handleCreate}
+					oncancel={() => (dialogOpen = false)}
+					{isSA}
+					{allowSystemAdminRole}
+					lockedShelterCode={effectiveLock ?? null}
+					pending={createMutation.isPending}
+				/>
 			</Dialog.Content>
 		</Dialog.Root>
 	</div>
@@ -274,7 +275,7 @@
 			bind:value={searchQuery}
 			type="text"
 			placeholder="ค้นหาชื่อ, เบอร์โทร, สังกัดองค์กร หรือบทบาท..."
-			class="h-12 rounded-xl pl-11 text-base bg-white"
+			class="h-12 rounded-xl bg-white pl-11 text-base"
 		/>
 	</div>
 
@@ -300,26 +301,26 @@
 
 <!-- Edit Dialog -->
 <Dialog.Root bind:open={editDialogOpen}>
-	<Dialog.Content class="overflow-y-auto rounded-2xl p-0 sm:max-w-[700px] max-h-[90vh]">
-		<Dialog.Header class="p-6 pb-2 border-b border-slate-100">
+	<Dialog.Content
+		class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[700px]"
+	>
+		<Dialog.Header class="shrink-0 border-b border-slate-100 p-6 pb-2">
 			<Dialog.Title class="text-xl font-bold text-slate-900">แก้ไขข้อมูลผู้ใช้งาน</Dialog.Title>
 		</Dialog.Header>
-		<div class="p-6">
-			{#if selectedUser}
-				<UserForm
-					user={selectedUser}
-					onsubmit={handleUpdate}
-					oncancel={() => {
-						editDialogOpen = false;
-						selectedUser = null;
-					}}
-					{isSA}
-					{allowSystemAdminRole}
-					lockedShelterCode={effectiveLock ?? null}
-					pending={updateMutation.isPending}
-				/>
-			{/if}
-		</div>
+		{#if selectedUser}
+			<UserForm
+				user={selectedUser}
+				onsubmit={handleUpdate}
+				oncancel={() => {
+					editDialogOpen = false;
+					selectedUser = null;
+				}}
+				{isSA}
+				{allowSystemAdminRole}
+				lockedShelterCode={effectiveLock ?? null}
+				pending={updateMutation.isPending}
+			/>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -330,7 +331,7 @@
 			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-amber-700">
 				<KeyRound class="size-5" /> ยืนยันการรีเซ็ตรหัสผ่านชั่วคราว
 			</Dialog.Title>
-			<Dialog.Description class="pt-2 text-sm text-slate-600 leading-relaxed">
+			<Dialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
 				ระบบจะสร้างรหัสผ่านชั่วคราวแบบจำง่าย (Memorable Passphrase) ให้กับผู้ใช้งาน
 				<strong class="text-slate-900">{selectedUser?.display_name ?? selectedUser?.name}</strong>
 				และจะบังคับให้ผู้ใช้ต้องตั้งรหัสผ่านใหม่ทันทีเมื่อเข้าสู่ระบบ
@@ -348,7 +349,7 @@
 				ยกเลิก
 			</Button>
 			<Button
-				class="bg-amber-600 hover:bg-amber-700 text-white"
+				class="bg-amber-600 text-white hover:bg-amber-700"
 				disabled={resetting}
 				onclick={handleConfirmReset}
 			>
@@ -362,7 +363,7 @@
 <Dialog.Root bind:open={resetResultDialogOpen}>
 	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[460px]">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-bold text-emerald-700 flex items-center gap-2">
+			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-emerald-700">
 				✓ รหัสผ่านชั่วคราวถูกสร้างเรียบร้อยแล้ว
 			</Dialog.Title>
 			<Dialog.Description class="pt-2 text-sm text-slate-600">
@@ -370,25 +371,24 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="my-4 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/70 p-4 text-center">
-			<span class="text-xs uppercase font-bold tracking-wider text-amber-800">รหัสผ่านชั่วคราว (One-Time Passphrase)</span>
-			<div class="mt-2 text-2xl font-mono font-extrabold text-slate-900 select-all tracking-wide">
+		<div
+			class="my-4 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/70 p-4 text-center"
+		>
+			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
+				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
+			>
+			<div class="mt-2 font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
 				{temporaryPassword}
 			</div>
 		</div>
 
-		<div class="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 flex items-start gap-2">
-			<ShieldAlert class="size-4 shrink-0 text-amber-600 mt-0.5" />
+		<div class="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+			<ShieldAlert class="mt-0.5 size-4 shrink-0 text-amber-600" />
 			<span>ผู้ใช้งานจะต้องตั้งรหัสผ่านใหม่ของตนเองทันทีในการเข้าสู่ระบบครั้งถัดไป</span>
 		</div>
 
 		<div class="mt-5 flex justify-end gap-3">
-			<Button
-				type="button"
-				variant="outline"
-				class="gap-1.5"
-				onclick={copyPassword}
-			>
+			<Button type="button" variant="outline" class="gap-1.5" onclick={copyPassword}>
 				{#if copied}
 					<Check class="size-4 text-emerald-600" />
 					<span class="text-emerald-700">คัดลอกแล้ว</span>
@@ -398,7 +398,7 @@
 				{/if}
 			</Button>
 			<Button
-				class="bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white"
+				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
 				onclick={() => {
 					resetResultDialogOpen = false;
 					temporaryPassword = null;
