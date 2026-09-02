@@ -132,3 +132,8 @@ export { default as VolunteerSkillEditDialog } from './ui/volunteer-skill-edit-d
 export { default as VolunteerSkillDeleteDialog } from './ui/volunteer-skill-delete-dialog.svelte';
 export { default as VolunteerSkillToggleDialog } from './ui/volunteer-skill-toggle-dialog.svelte';
 export { default as VolunteerQrScannerModal } from './components/VolunteerQrScannerModal.svelte';
+export { default as DigitalPassCard } from './components/DigitalPassCard.svelte';
+export { default as VolunteerPublicJobBoard } from './components/JobBoard.svelte';
+export { default as VolunteerPublicJobCard } from './components/JobCard.svelte';
+export { default as VolunteerQuickApplyModal } from './components/QuickApplyModal.svelte';
+export { default as VolunteerTicketSearch } from './components/TicketSearch.svelte';
