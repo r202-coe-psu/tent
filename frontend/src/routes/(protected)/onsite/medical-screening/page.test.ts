@@ -25,7 +25,16 @@ vi.mock('$lib/guards/auth', () => ({
 	})
 }));
 
+/**
+ * `load` is typed against SvelteKit's full `LoadEvent`, but the guard only needs
+ * enough of an event object for `requireMedicalScreening` to run in unit tests.
+ */
 type LoadArg = Parameters<typeof load>[0];
+const loadArg = (): LoadArg =>
+	({
+		fetch: vi.fn(),
+		url: new URL('http://localhost/onsite/medical-screening')
+	}) as unknown as LoadArg;
 
 describe('medical-screening +page.ts route guard', () => {
 	beforeEach(() => {
@@ -36,52 +45,27 @@ describe('medical-screening +page.ts route guard', () => {
 
 	it('allows access for medical_staff', async () => {
 		mockUserRoles = ['shelter:SH001', 'medical_staff'];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).resolves.not.toThrow();
+		await expect(load(loadArg())).resolves.not.toThrow();
 	});
 
 	it('allows access for triage_staff', async () => {
 		mockUserRoles = ['shelter:SH001', 'triage_staff'];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).resolves.not.toThrow();
+		await expect(load(loadArg())).resolves.not.toThrow();
 	});
 
 	it('allows access for shelter_manager', async () => {
 		mockUserRoles = ['shelter:SH001', 'shelter_manager'];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).resolves.not.toThrow();
+		await expect(load(loadArg())).resolves.not.toThrow();
 	});
 
 	it('allows access for system_admin', async () => {
 		mockUserRoles = ['system_admin'];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).resolves.not.toThrow();
+		await expect(load(loadArg())).resolves.not.toThrow();
 	});
 
 	it('blocks access for registration_staff (redirects to /portal)', async () => {
 		mockUserRoles = ['shelter:SH001', 'registration_staff'];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).rejects.toMatchObject({
+		await expect(load(loadArg())).rejects.toMatchObject({
 			status: 302,
 			location: '/portal'
 		});
@@ -90,12 +74,7 @@ describe('medical-screening +page.ts route guard', () => {
 	it('blocks access for unauthenticated users', async () => {
 		mockIsAuthenticated = false;
 		mockUserRoles = [];
-		await expect(
-			load({
-				fetch: vi.fn(),
-				url: new URL('http://localhost/onsite/medical-screening')
-			} as LoadArg)
-		).rejects.toMatchObject({
+		await expect(load(loadArg())).rejects.toMatchObject({
 			status: 302,
 			location: '/portal'
 		});
