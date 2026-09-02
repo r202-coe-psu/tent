@@ -99,7 +99,7 @@
 </script>
 
 <Dialog {open} onOpenChange={handleOpenChange}>
-	<DialogContent class="max-w-md">
+	<DialogContent class="sm:max-w-lg">
 		<DialogHeader>
 			<div class="flex items-center gap-2 text-destructive">
 				<XCircle class="size-5" />
@@ -113,20 +113,25 @@
 		<div class="space-y-4 py-2">
 			{#if request}
 				<div class="space-y-1 rounded-lg border border-border/80 bg-muted/40 p-3 text-xs">
-					<div class="flex justify-between font-medium">
-						<span class="text-muted-foreground">รหัสคำร้อง:</span>
-						<span class="font-mono text-foreground">{request._id}</span>
+					<div class="flex items-center justify-between gap-2 font-medium">
+						<span class="shrink-0 text-muted-foreground">รหัสคำร้อง:</span>
+						<span class="font-mono break-all text-foreground">{request._id}</span>
 					</div>
-					<div class="flex justify-between">
-						<span class="text-muted-foreground">วัตถุประสงค์:</span>
-						<span class="max-w-56 truncate font-medium text-foreground">{request.purpose}</span>
+					<div class="flex items-center justify-between gap-2">
+						<span class="shrink-0 text-muted-foreground">วัตถุประสงค์:</span>
+						<span
+							class="max-w-48 truncate font-medium text-foreground sm:max-w-64"
+							title={request.purpose}>{request.purpose}</span
+						>
 					</div>
-					<div class="flex justify-between">
-						<span class="text-muted-foreground">ผู้ขอ:</span>
-						<span class="text-foreground">{request.requested_by}</span>
+					<div class="flex items-center justify-between gap-2">
+						<span class="shrink-0 text-muted-foreground">ผู้ขอ:</span>
+						<span class="truncate text-foreground" title={request.requested_by}
+							>{request.requested_by}</span
+						>
 					</div>
-					<div class="flex justify-between">
-						<span class="text-muted-foreground">จำนวนรายการ:</span>
+					<div class="flex items-center justify-between gap-2">
+						<span class="shrink-0 text-muted-foreground">จำนวนรายการ:</span>
 						<span class="font-semibold text-foreground">{request.items.length} รายการ</span>
 					</div>
 				</div>

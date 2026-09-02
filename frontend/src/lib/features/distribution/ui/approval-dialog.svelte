@@ -203,24 +203,21 @@
 </script>
 
 <Dialog bind:open onOpenChange={(v) => !v && handleClose()}>
-	<DialogContent class="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden p-0">
+	<DialogContent class="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-3xl">
 		<!-- Header -->
-		<DialogHeader class="bg-brand-700 shrink-0 p-5 text-white">
+		<DialogHeader class="shrink-0 bg-primary p-5 text-primary-foreground">
 			<div class="flex items-center justify-between">
 				<div class="space-y-1">
-					<div class="flex items-center gap-2">
-						<Badge
-							variant="outline"
-							class="bg-brand-800/80 text-brand-100 border-brand-500/50 text-[10px]"
-						>
+					<div class="flex flex-wrap items-center gap-2">
+						<Badge variant="outline" class="border-white/20 bg-white/10 text-[10px] text-white">
 							{request?.shelter_code ?? 'Shelter'}
 						</Badge>
-						<span class="text-brand-200 font-mono text-[11px]">
+						<span class="font-mono text-[11px] break-all text-white/80">
 							{request?._id ?? ''}
 						</span>
 					</div>
 					<DialogTitle class="flex items-center gap-2 text-base font-bold text-white">
-						<PackageCheck class="text-brand-200 size-5" />
+						<PackageCheck class="size-5 text-white/80" />
 						คัดเลือก Physical Lot เพื่ออนุมัติเบิกจ่าย
 					</DialogTitle>
 				</div>
@@ -317,7 +314,7 @@
 			<!-- Requested Items and Lot Selectors -->
 			<div class="space-y-3">
 				<h3 class="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-					<Sparkles class="text-brand-600 size-3.5" />
+					<Sparkles class="size-3.5 text-primary" />
 					รายการสิ่งของที่ร้องขอ ({plans.length} รายการ)
 				</h3>
 
@@ -444,7 +441,7 @@
 						!!integrityError ||
 						!canApprove ||
 						request?.status !== 'pending'}
-					class="bg-brand-600 hover:bg-brand-700 gap-1.5 px-5 text-xs font-bold text-white"
+					class="gap-1.5 px-5 text-xs font-bold"
 				>
 					{#if isSubmitting}
 						<RefreshCw class="size-3.5 animate-spin" />

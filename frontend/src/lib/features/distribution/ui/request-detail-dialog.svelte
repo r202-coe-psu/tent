@@ -116,22 +116,22 @@
 </script>
 
 <Dialog {open} onOpenChange={handleOpenChange}>
-	<DialogContent class="max-h-[90vh] max-w-3xl overflow-y-auto">
+	<DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
 		<DialogHeader>
-			<div class="flex flex-wrap items-center justify-between gap-2">
-				<div class="space-y-0.5">
-					<div class="flex items-center gap-2">
-						<DialogTitle class="text-lg font-bold">รายละเอียดคำร้องเบิกจ่าย</DialogTitle>
-						{#if authoritativeRequest}
-							<Badge variant="outline" class={badgeClasses[authoritativeRequest.status]}>
-								{distributionRequestStatusLabels[authoritativeRequest.status]}
-							</Badge>
-						{/if}
-					</div>
-					<DialogDescription class="font-mono text-xs">
-						{selectedRequestId ?? '-'}
-					</DialogDescription>
+			<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+				<div class="flex flex-wrap items-center gap-2">
+					<DialogTitle class="text-lg font-bold text-foreground"
+						>รายละเอียดคำร้องเบิกจ่าย</DialogTitle
+					>
+					{#if authoritativeRequest}
+						<Badge variant="outline" class={badgeClasses[authoritativeRequest.status]}>
+							{distributionRequestStatusLabels[authoritativeRequest.status]}
+						</Badge>
+					{/if}
 				</div>
+				<DialogDescription class="font-mono text-xs break-all text-muted-foreground">
+					{selectedRequestId ?? '-'}
+				</DialogDescription>
 			</div>
 		</DialogHeader>
 
@@ -382,7 +382,7 @@
 					{#if canApprove && onApprove}
 						<Button
 							size="sm"
-							class="bg-brand-600 hover:bg-brand-700 gap-1 text-xs font-bold text-white"
+							class="gap-1.5 text-xs font-bold"
 							onclick={() => onApprove(authoritativeRequest)}
 						>
 							<CheckCircle2 class="size-3.5" />

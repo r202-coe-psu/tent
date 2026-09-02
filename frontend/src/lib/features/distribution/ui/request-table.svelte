@@ -88,7 +88,7 @@
 							<Button
 								variant="ghost"
 								size="sm"
-								class="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+								class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
 								onclick={() => onView(request)}
 								title="ดูรายละเอียด"
 							>
@@ -102,7 +102,7 @@
 								<Button
 									variant="outline"
 									size="sm"
-									class="h-7 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10"
+									class="h-8 gap-1.5 border-destructive/30 px-2.5 text-xs text-destructive hover:bg-destructive/10"
 									onclick={() => onReject(request)}
 									title="ปฏิเสธคำร้อง"
 								>
@@ -114,7 +114,7 @@
 							{#if canApprove && onApprove}
 								<Button
 									size="sm"
-									class="bg-brand-600 hover:bg-brand-700 h-7 gap-1 px-2.5 text-xs font-bold text-white"
+									class="h-8 gap-1.5 px-3 text-xs font-bold"
 									onclick={() => onApprove(request)}
 									title="อนุมัติเบิกจ่าย"
 								>

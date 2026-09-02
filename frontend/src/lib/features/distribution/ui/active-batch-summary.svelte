@@ -162,13 +162,13 @@
 							{@const itemMaster = itemMastersMap.get(allocation.item_id)}
 							{@const requestItem = batch.items.find((it) => it.item_id === allocation.item_id)}
 							<div class="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-								<div class="space-y-0.5">
+								<div class="space-y-1">
 									<div class="flex items-center gap-1.5 font-medium text-foreground">
 										<Package class="size-3.5 text-muted-foreground" />
 										<span>{itemMaster?.name ?? allocation.item_id}</span>
 									</div>
 									<div
-										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground"
+										class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:flex sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-0.5"
 									>
 										<span
 											>Lot Ref: <code class="font-mono text-[10px] text-foreground"
@@ -177,19 +177,22 @@
 										>
 										{#if allocation.lot.lot_no}
 											<span
-												>• Lot No: <strong class="text-foreground">{allocation.lot.lot_no}</strong
-												></span
+												><span class="hidden sm:inline">• </span>Lot No:
+												<strong class="text-foreground">{allocation.lot.lot_no}</strong></span
 											>
 										{/if}
 										{#if allocation.lot.storage_zone}
 											<span
-												>• โซน: <strong class="text-foreground"
-													>{allocation.lot.storage_zone}</strong
-												></span
+												><span class="hidden sm:inline">• </span>โซน:
+												<strong class="text-foreground">{allocation.lot.storage_zone}</strong></span
 											>
 										{/if}
 										{#if allocation.lot.expiry}
-											<span>• หมดอายุ: {formatDate(allocation.lot.expiry)}</span>
+											<span
+												><span class="hidden sm:inline">• </span>หมดอายุ: {formatDate(
+													allocation.lot.expiry
+												)}</span
+											>
 										{/if}
 									</div>
 								</div>
