@@ -44,8 +44,7 @@
 	import { ulid } from '$lib/db/ulid';
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
-	import { SKILL_MASTER } from '../domain/skill-master';
-	import { useMasterData } from '$lib/features/master-data';
+	import { toSkillCode, toSkillCodes } from '../domain/skill-catalog';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
 	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import {
@@ -59,7 +58,7 @@
 		isDuplicateShift,
 		type Weekday
 	} from '../domain/shift-batch';
-	import { useCreateJob, useUpdateJob } from '../application/queries';
+	import { useCreateJob, useSkillOptions, useUpdateJob } from '../application/queries';
 
 	/** Superforms holds the schema's OUTPUT shape — defaults already materialised. */
 	type JobFormValues = z.output<typeof jobInputSchema>;
@@ -76,21 +75,14 @@
 	const createMutation = useCreateJob(queryClient);
 	const updateMutation = useUpdateJob(queryClient);
 
-	const masterQuery = useMasterData(() => 'volunteer_skills');
-	const skillsList = $derived.by(() => {
-		if (masterQuery.data?.items && masterQuery.data.items.length > 0) {
-			return masterQuery.data.items
-				.filter((i) => i.status !== 'inactive')
-				.map((i) => ({
-					key: i.label,
-					label: i.label,
-					controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
-					description: i.description ?? '',
-					icon: i.category === 'controlled' ? '🩺' : '✨'
-				}));
-		}
-		return SKILL_MASTER;
-	});
+	/**
+	 * Master Data `volunteer_skills`, effective for this shelter (CR-100) —
+	 * global list merged with the shelter's own additions and minus the ones it
+	 * disabled. The ticked value stored on the job is the master **code**;
+	 * `skill-catalog.ts` resolves it back to a label everywhere it is shown.
+	 */
+	const skillCatalog = useSkillOptions();
+	const skillsList = $derived(skillCatalog.options);
 
 	const isEdit = $derived(job !== null);
 
@@ -159,7 +151,9 @@
 			description: source.description,
 			tier: source.tier,
 			required_roles: [...source.required_roles],
-			skills_required: [...(source.skills_required ?? [])],
+			// A job written before CR-100 stored labels — canonicalise to codes so
+			// the right cards tick, and so saving migrates the value quietly.
+			skills_required: toSkillCodes(source.skills_required ?? [], skillCatalog.options),
 			shifts: source.shifts.map((s) => ({ ...s })),
 			auto_accept: source.auto_accept,
 			is_urgent: source.is_urgent,
@@ -230,7 +224,9 @@
 						description: data.description,
 						tier: data.tier,
 						required_roles: data.required_roles,
-						skills_required: data.skills_required,
+						// Persist master codes even if the form was hydrated with legacy
+						// labels before Master Data answered (CR-100).
+						skills_required: toSkillCodes(data.skills_required, skillsList),
 						quota,
 						slots_remaining: quota - claimed,
 						shifts: data.shifts,
@@ -294,11 +290,17 @@
 		lastOpenedKey = key;
 	});
 
-	function toggleSkill(key: string) {
+	/**
+	 * Tick/untick one master skill. Comparison goes through the catalog, not
+	 * string equality: the form may already hold a pre-CR-100 label (either
+	 * from a legacy job or from a hydration that ran before Master Data
+	 * answered), and that label must still tick — and untick — its card.
+	 */
+	function toggleSkill(code: string) {
 		const current = $formData.skills_required;
-		$formData.skills_required = current.includes(key)
-			? current.filter((s) => s !== key)
-			: [...current, key];
+		const held = current.filter((v) => toSkillCode(v, skillsList) === code);
+		$formData.skills_required =
+			held.length > 0 ? current.filter((v) => !held.includes(v)) : [...current, code];
 	}
 
 	function mergeShifts(incoming: JobShift[]) {
@@ -572,14 +574,16 @@
 					(ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
 				</p>
 				<div class="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-2">
-					{#each skillsList as skill (skill.key)}
-						{@const checked = $formData.skills_required.includes(skill.key)}
+					{#each skillsList as skill (skill.code)}
+						{@const checked = $formData.skills_required.some(
+							(v) => toSkillCode(v, skillsList) === skill.code
+						)}
 						<label
 							class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
 								? 'border-primary bg-primary/5'
 								: 'border-border hover:bg-muted/40'}"
 						>
-							<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.key)} />
+							<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.code)} />
 							<span class="min-w-0 text-xs">
 								<span class="flex items-center gap-1.5 font-medium">
 									<span aria-hidden="true">{skill.icon}</span>

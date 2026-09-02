@@ -112,9 +112,7 @@ async def test_list_jobs_reports_live_remaining_not_the_snapshot(
 ) -> None:
     await _make_job(quota=3)
     # A confirmed application moves the counter; the projected job doc still says 0.
-    await client.post(
-        f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers
-    )
+    await client.post(f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers)
 
     response = await client.get("/public/v1/jobs", headers=auth_headers)
     assert response.status_code == 200
@@ -164,6 +162,96 @@ async def test_controlled_skill_goes_to_review(
     response = await client.post(
         f"/public/v1/jobs/{JOB_ID}/apply",
         json=_apply_body(skills=["พยาบาล"]),
+        headers=auth_headers,
+    )
+    assert response.json()["status"] == "pending_review"
+
+
+async def _project_volunteer_skills(
+    *,
+    controlled_codes: list[str],
+    controlled_labels: list[str] | None = None,
+    shelter_code: str | None = None,
+) -> None:
+    """Stand in for the worker: write the ``config:volunteer_skills`` doc it projects."""
+    collection = PublicJob.get_motor_collection().database["public_config"]
+    doc_id = (
+        f"config:volunteer_skills:{shelter_code.upper()}"
+        if shelter_code
+        else "config:volunteer_skills"
+    )
+    await collection.replace_one(
+        {"_id": doc_id},
+        {
+            "_id": doc_id,
+            "shelter_code": shelter_code.upper() if shelter_code else None,
+            "controlled_codes": controlled_codes,
+            "controlled_labels": controlled_labels or [],
+        },
+        upsert=True,
+    )
+
+
+async def test_master_data_controlled_code_goes_to_review(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-100 — a skill marked controlled in Master Data gates by its master code."""
+    await _make_job()
+    await _project_volunteer_skills(
+        controlled_codes=["medical"], controlled_labels=["การแพทย์ / ปฐมพยาบาล"]
+    )
+
+    response = await client.post(
+        f"/public/v1/jobs/{JOB_ID}/apply",
+        json=_apply_body(skills=["medical"]),
+        headers=auth_headers,
+    )
+    assert response.json()["status"] == "pending_review"
+
+
+async def test_master_data_controlled_label_still_gates(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Applications written before CR-100 carry labels — those must gate too."""
+    await _make_job()
+    await _project_volunteer_skills(
+        controlled_codes=["medical"], controlled_labels=["การแพทย์ / ปฐมพยาบาล"]
+    )
+
+    response = await client.post(
+        f"/public/v1/jobs/{JOB_ID}/apply",
+        json=_apply_body(skills=["การแพทย์ / ปฐมพยาบาล"]),
+        headers=auth_headers,
+    )
+    assert response.json()["status"] == "pending_review"
+
+
+async def test_master_data_overrides_the_default_floor(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Master Data is authoritative: a skill it does not mark controlled auto-accepts."""
+    await _make_job()
+    await _project_volunteer_skills(controlled_codes=["rescue_boat"])
+
+    response = await client.post(
+        f"/public/v1/jobs/{JOB_ID}/apply",
+        json=_apply_body(skills=["พยาบาล"]),
+        headers=auth_headers,
+    )
+    assert response.json()["status"] == "confirmed"
+
+
+async def test_a_shelters_own_controlled_skill_gates_that_shelters_job(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A centre may add a controlled skill without waiting for the global list."""
+    await _make_job()
+    await _project_volunteer_skills(controlled_codes=["kitchen_lead"])
+    await _project_volunteer_skills(controlled_codes=["forklift"], shelter_code="SH001")
+
+    response = await client.post(
+        f"/public/v1/jobs/{JOB_ID}/apply",
+        json=_apply_body(skills=["forklift"]),
         headers=auth_headers,
     )
     assert response.json()["status"] == "pending_review"
@@ -242,9 +330,7 @@ async def test_ticket_never_returns_the_national_id_and_masks_the_phone(
     assert ticket["qr_payload"] == f"/volunteer/ticket/{token}"
 
 
-async def test_unknown_ticket_is_404(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
+async def test_unknown_ticket_is_404(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     response = await client.get("/public/v1/volunteer/ticket/TKT-VOL-NOPE", headers=auth_headers)
     assert response.status_code == 404
 
@@ -451,9 +537,7 @@ async def test_view_token_opens_the_pass_read_only(
     await _make_job()
     _, view_token = await _apply_and_lookup(client, auth_headers)
 
-    response = await client.get(
-        f"/public/v1/volunteer/ticket/{view_token}", headers=auth_headers
-    )
+    response = await client.get(f"/public/v1/volunteer/ticket/{view_token}", headers=auth_headers)
     assert response.status_code == 200
     ticket = response.json()["ticket"]
     assert ticket["can_cancel"] is False
@@ -766,9 +850,7 @@ async def test_a_wrong_code_is_indistinguishable_from_an_unknown_shift(
     await _offer()
 
     wrong_code = await _respond(client, auth_headers, code="ZZZ-ZZZ")
-    unknown_shift = await _respond(
-        client, auth_headers, assignment_id="shift_assignment:01NOPE"
-    )
+    unknown_shift = await _respond(client, auth_headers, assignment_id="shift_assignment:01NOPE")
     assert wrong_code.status_code == unknown_shift.status_code == 404
     assert wrong_code.json() == unknown_shift.json()
 
@@ -944,9 +1026,7 @@ async def test_a_lookup_needs_exactly_one_credential(
 ) -> None:
     """Neither is unanswerable; both at once is ambiguous — and a request that sent both
     would silently follow whichever the server happened to check first."""
-    neither = await client.post(
-        "/public/v1/volunteer/schedule", json={}, headers=auth_headers
-    )
+    neither = await client.post("/public/v1/volunteer/schedule", json={}, headers=auth_headers)
     both = await client.post(
         "/public/v1/volunteer/schedule",
         json={"phone": "0812345678", "token": "TKT-VOL-X"},

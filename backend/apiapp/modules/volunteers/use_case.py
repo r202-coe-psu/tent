@@ -66,9 +66,11 @@ _BOARD_STATUSES = frozenset({"open", "almost_full", "full"})
 _APPLICABLE_STATUSES = frozenset({"open", "almost_full"})
 
 #: Skills that need a manager to check a licence before the ticket is worth anything
-#: (FR-VOL-02.4). Deliberately a floor, not the whole policy: the per-platform master
-#: list lives in ``/admin/volunteers/settings``, which is not built yet, and the safe
-#: default while it is missing is to review these rather than auto-accept them.
+#: (FR-VOL-02.4). Deliberately a floor, not the whole policy: Master Data
+#: ``volunteer_skills`` is authoritative (CR-100) and reaches this service as the
+#: projected ``config:volunteer_skills`` documents; this list is what the gate falls
+#: back to while nothing has been projected yet — reviewing these beats auto-accepting
+#: them.
 DEFAULT_CONTROLLED_SKILLS = frozenset(
     {
         "แพทย์",
@@ -83,30 +85,68 @@ DEFAULT_CONTROLLED_SKILLS = frozenset(
 
 _PUBLIC_CONFIG_COLLECTION = "public_config"
 _APP_CONFIG_ID = "config:app"
+#: Master Data ``volunteer_skills`` as the worker projects it (CR-100): the global list
+#: under this id, a shelter's own under ``…:{SHELTER}``.
+_VOLUNTEER_SKILLS_CONFIG_ID = "config:volunteer_skills"
 
 #: Statuses a ticket can still be cancelled from. A cancelled ticket stays cancelled;
 #: re-cancelling must not release a second slot.
 _CANCELLABLE_STATUSES = frozenset({"confirmed", "pending_review"})
 
 
-async def controlled_skills() -> frozenset[str]:
-    """Controlled-skill list from the projected app config, else the default floor.
+def _config_values(doc: dict | None, *fields: str) -> list[str]:
+    """Non-empty strings across ``fields`` of one projected config document."""
+    if not doc:
+        return []
+    out: list[str] = []
+    for field in fields:
+        value = doc.get(field)
+        if isinstance(value, list):
+            out.extend(str(v).strip() for v in value if str(v).strip())
+    return out
 
-    Same bridge the donation TTL uses: the value is staff-authored in CouchDB, which
-    this service cannot read, so the worker projects ``config:app`` into Mongo.
+
+async def controlled_skills(shelter_code: str | None = None) -> frozenset[str]:
+    """Controlled-skill values for a shelter: Master Data first, then the floor.
+
+    Same bridge the donation TTL uses: the list is staff-authored in CouchDB, which this
+    service cannot read, so the worker projects it into ``public_config`` (CR-100).
+
+    Resolution order, first hit wins:
+
+    1. ``config:volunteer_skills`` ∪ ``config:volunteer_skills:{SHELTER}`` — Master Data
+       is authoritative, and a skill controlled at either level counts, so a centre can
+       add a controlled skill of its own without waiting for the global list.
+    2. ``config:app.volunteer_controlled_skills`` — the pre-CR-100 hand-maintained list.
+    3. :data:`DEFAULT_CONTROLLED_SKILLS`.
+
+    Both codes and labels come back: documents store master codes from CR-100 on, while
+    ``volunteer.skills`` (and every application written before it) still holds labels.
     """
     try:
         collection = PublicJob.get_motor_collection().database[_PUBLIC_CONFIG_COLLECTION]
-        doc = await collection.find_one({"_id": _APP_CONFIG_ID})
+        ids = [_VOLUNTEER_SKILLS_CONFIG_ID]
+        if shelter_code:
+            ids.append(f"{_VOLUNTEER_SKILLS_CONFIG_ID}:{shelter_code.upper()}")
+        skill_docs = await collection.find({"_id": {"$in": ids}}).to_list(length=len(ids))
+        app_doc = await collection.find_one({"_id": _APP_CONFIG_ID})
     except Exception:
-        logger.warning("Could not read %s — using default controlled skills", _APP_CONFIG_ID)
+        logger.warning(
+            "Could not read %s — using default controlled skills",
+            _PUBLIC_CONFIG_COLLECTION,
+        )
         return DEFAULT_CONTROLLED_SKILLS
-    if not doc:
-        return DEFAULT_CONTROLLED_SKILLS
-    configured = doc.get("volunteer_controlled_skills")
-    if not isinstance(configured, list) or not configured:
-        return DEFAULT_CONTROLLED_SKILLS
-    return frozenset(str(s).strip() for s in configured if str(s).strip())
+
+    from_master: list[str] = []
+    for doc in skill_docs or []:
+        from_master.extend(_config_values(doc, "controlled_codes", "controlled_labels"))
+    if from_master:
+        return frozenset(from_master)
+
+    configured = _config_values(app_doc, "volunteer_controlled_skills")
+    if configured:
+        return frozenset(configured)
+    return DEFAULT_CONTROLLED_SKILLS
 
 
 def _needs_review(job: PublicJob, skills: list[str], controlled: frozenset[str]) -> bool:
@@ -215,7 +255,7 @@ class VolunteersUseCase:
                 detail={"success": False, "error": "JOB_CLOSED"},
             )
 
-        controlled = await controlled_skills()
+        controlled = await controlled_skills(job.shelter_code)
         needs_review = _needs_review(job, payload.skills, controlled)
 
         now = datetime.now(UTC)

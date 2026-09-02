@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-30
+updated: 2026-09-02
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -495,7 +495,7 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `phone_hash` | str\|null | opt | SHA-256 hash ของเบอร์โทรเพื่อ anti-abuse/deduplication |
 | `email` | str\|null | opt | — |
 | `national_id` | str\|null | opt | เลข 13 หลัก (SSOT ผูกตัวตน 3 สถานะ) — schema_v 2 |
-| `skills` | [str] | opt | เช่น "พยาบาล", "ขับรถ", "ครัว", "ช่างไฟ", "ล่าม" |
+| `skills` | [str] | opt | **label** ของทักษะ เช่น "พยาบาล", "ขับรถ", "ครัว" — CR-100 ตั้งใจไม่เปลี่ยนเป็น code (ฟอร์ม walk-in และ portal profile เขียน label); การจับคู่กับ `job.skills_required` (code) ทำผ่าน resolver กลาง |
 | `organization` | str\|null | opt | สังกัด/หน่วยงาน |
 | `tracking_token` | str\|null | opt | CSPRNG token (สำหรับเปิด Digital Ticket / ดูสถานะแบบ No-Auth) |
 | `checked_in` | bool | req | default `false` — schema_v 2 |
@@ -693,7 +693,7 @@ open → escalated
 | `description` | str | req | รายละเอียดหน้าที่งาน สถานที่ และคำแนะนำการแต่งกาย/เตรียมตัว |
 | `tier` | enum(`operational`,`staff-capable`) | req | `operational` = งานทั่วไปไม่ต้องมี login; `staff-capable` = งานที่ต้องใช้สิทธิ์ระบบ (D-TIER) |
 | `required_roles` | [str] | req | RoleKey ที่จำเป็นเมื่อเป็น `staff-capable` เช่น `["registration_staff"]` หรือ `["kitchen_staff"]` |
-| `skills_required` | [str] | opt | ทักษะที่ต้องการ เช่น `["ครัว"]`, `["ปฐมพยาบาล"]`, `["คีย์ข้อมูล"]` |
+| `skills_required` | [str] | opt | **`code` ของ `master_data:volunteer_skills`** (§3.3) เช่น `["kitchen"]`, `["medical"]` — CR-100; เอกสารก่อน CR-100 เก็บ label ไว้ ตัว resolve อ่านได้ทั้งสองแบบ (code ก่อน แล้ว fallback label) และจะเขียนเป็น code เมื่อแก้ไข job ครั้งถัดไป |
 | `quota` | int>0 | req | จำนวนอาสาสมัครที่ต้องการทั้งหมด — schema_v 3: **derive จาก `shifts[]` ห้ามตั้งเอง** |
 | `slots_confirmed` | int≥0 | req | จำนวนผู้สมัครที่ได้รับการตอบรับ/ยืนยันแล้ว (default `0`) — 🟢 ตอบรับแล้ว |
 | `slots_dispatched` | int≥0 | req | จำนวนที่เสนอแล้วรอตอบรับ (default `0`) — 🟡 เสนอแล้ว — schema_v 2 |
@@ -728,7 +728,7 @@ open → escalated
 | --- | --- | --- | --- |
 | `job_id` | str | req | → `job:{ulid}` (§2.17) |
 | `volunteer_id` | str\|null | req | → `volunteer:{ulid}` (§2.8) — ลิงก์โปรไฟล์อาสา (สร้างอัตโนมัติเมื่อสมัครสำเร็จ) |
-| `applicant` | {`first_name`:str, `last_name`:str, `phone`:str, `phone_hash`:str, `email`:str\|null, `skills`:[str], `national_id`:str\|null} | req | ข้อมูลผู้สมัคร (ป้องกันการสูญหายแม้โปรไฟล์มีการเปลี่ยนแปลง) — `national_id` เพิ่ม schema_v 2 |
+| `applicant` | {`first_name`:str, `last_name`:str, `phone`:str, `phone_hash`:str, `email`:str\|null, `skills`:[str], `national_id`:str\|null} | req | ข้อมูลผู้สมัคร (ป้องกันการสูญหายแม้โปรไฟล์มีการเปลี่ยนแปลง) — `national_id` เพิ่ม schema_v 2; `skills` = `code` ของ `master_data:volunteer_skills` ตั้งแต่ CR-100 (ฟอร์มสมัครติ๊กจากค่าใน `job.skills_required`) |
 | `selected_shift` | {`date`:str, `start_time`:str, `end_time`:str} | req | วันและกะเวลาที่ผู้สมัครเลือก |
 | `tracking_token` | str | req | CSPRNG unique token สำหรับเปิด Digital Ticket ตรวจสถานะ (No-Auth) |
 | `status` | enum(`pending_review`,`confirmed`,`rejected`,`cancelled`) | req | สถานะการสมัคร: default `pending_review` (หรือ `confirmed` ทันทีถ้า job นั้นเปิด `auto_accept=true`) — schema_v 2 |

@@ -22,8 +22,15 @@ import {
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
 import { authStore } from '$lib/stores/auth.svelte';
+import { useMasterData } from '$lib/features/master-data';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
+import {
+	FALLBACK_SKILL_OPTIONS,
+	controlledSkillValues,
+	skillOptionsFromMaster,
+	type SkillOption
+} from '../domain/skill-catalog';
 import type { Job, JobInput } from '../domain/job.schema';
 import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
@@ -259,13 +266,49 @@ export const useAssignVolunteers = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * Effective `volunteer_skills` master data for the current shelter, mapped to
+ * selectable options (CR-100).
+ *
+ * ONE place resolves the list, so the job form, the walk-in form and every
+ * screen that renders a stored skill agree on labels and on which skills are
+ * controlled. `useMasterData` already resolves `scope: 'effective'` for
+ * `getShelterCode()` — global items merged with the shelter's own, with the
+ * ones this shelter disabled coming back `inactive` — and TanStack dedupes the
+ * shared query key, so calling this from several components costs one request.
+ *
+ * Falls back to the pre-CR-100 hardcoded list while the query is in flight or
+ * when the registry document is still empty, so a form is never skill-less.
+ */
+export function useSkillOptions() {
+	const masterQuery = useMasterData(() => 'volunteer_skills');
+	return {
+		get isPending() {
+			return masterQuery.isPending;
+		},
+		get options(): readonly SkillOption[] {
+			const items = masterQuery.data?.items ?? [];
+			if (items.length === 0) return FALLBACK_SKILL_OPTIONS;
+			const mapped = skillOptionsFromMaster(items);
+			return mapped.length > 0 ? mapped : FALLBACK_SKILL_OPTIONS;
+		},
+		/** Values that force `pending_review` — pass straight to `initialStatusForSkills`. */
+		get controlledValues(): string[] {
+			return controlledSkillValues(this.options);
+		}
+	};
+}
+
+/**
  * Submits a volunteer job application (CR-041 D-APP / Story 3.3).
  * Defaults to `pending_review` and increments pending approvals.
  */
 export const useCreateJobApplication = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: (input: JobApplicationInput) =>
-			jobApplicationRepository().create(input, authorContext()),
+		mutationFn: ({
+			controlledSkills,
+			...input
+		}: JobApplicationInput & { controlledSkills?: readonly string[] }) =>
+			jobApplicationRepository().create(input, authorContext(), { controlledSkills }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });

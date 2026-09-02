@@ -42,6 +42,7 @@ export * from './domain/duty-window';
 export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';
+export * from './domain/skill-catalog';
 export * from './domain/applicant-queue';
 export * from './domain/shift-roster';
 export * from './domain/volunteer-code';

@@ -23,6 +23,7 @@ import type { DutyWindow, ShiftAssignment, ShiftKind } from './shift-assignment.
 import type { Job, JobShift } from './job.schema';
 import type { Volunteer } from './volunteer.schema';
 import { isControlledSkill } from './skills';
+import { hasAnyRequiredSkill, type SkillOption } from './skill-catalog';
 
 // ---------------------------------------------------------------------------
 // Row state
@@ -94,6 +95,14 @@ export interface AssignRosterInput {
 	jobsById: ReadonlyMap<string, Pick<Job, 'title' | 'shifts'>>;
 	/** Skill keys that require certificate review; defaults to `skills.ts`'s list. */
 	controlledSkills?: readonly string[];
+	/**
+	 * Master Data skill options (CR-100). Supplied, the skill match resolves
+	 * both sides through the catalog first — a job stores master **codes**
+	 * while `volunteer.skills` still stores labels, so without it the two
+	 * never meet. Omitted, matching falls back to exact string equality
+	 * (pre-CR-100 behaviour).
+	 */
+	skillOptions?: readonly SkillOption[];
 }
 
 /**
@@ -105,7 +114,7 @@ export interface AssignRosterInput {
  * fail-open that `collision.ts` guards against.
  */
 export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
-	const { job, shift, volunteers, assignments, jobsById, controlledSkills } = input;
+	const { job, shift, volunteers, assignments, jobsById, controlledSkills, skillOptions } = input;
 	const targetWindow = shiftDutyWindow(shift);
 
 	// Index once — this runs on every keystroke in the search box.
@@ -157,7 +166,9 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 		return {
 			volunteer,
 			state,
-			skillMatch: required.length === 0 || required.some((s) => volunteer.skills.includes(s)),
+			skillMatch: skillOptions
+				? hasAnyRequiredSkill(volunteer.skills, required, skillOptions)
+				: required.length === 0 || required.some((s) => volunteer.skills.includes(s)),
 			professional: volunteer.skills.some((s) => isControlledSkill(s, controlledSkills)),
 			assignable: state.kind === 'available'
 		};

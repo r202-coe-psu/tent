@@ -1956,7 +1956,7 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
  * function performs no "already seeded" guard — re-running `pnpm seed` adds
  * another batch, matching the documented convention at the top of this file.
  */
-async function seedVolunteers(): Promise<void> {
+async function seedVolunteers(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
 	// "Today" — Asia/Bangkok calendar date, matching
@@ -1981,7 +1981,8 @@ async function seedVolunteers(): Promise<void> {
 				'พร้อมประสานงานส่งต่อคำร้องไปยังฝ่ายที่เกี่ยวข้อง แต่งกายสุภาพ พูดจาดี ไม่จำเป็นต้องมีประสบการณ์',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts
+			// CR-100 — jobs store the master_data `volunteer_skills` code, not the label.
+			skills_required: masterCodes(master, 'volunteer_skills', 'reception'),
 			// schema_v 3 — capacity lives in the sub-shifts; quota = 3 + 3 = 6.
 			shifts: [
 				{
@@ -2011,7 +2012,7 @@ async function seedVolunteers(): Promise<void> {
 				'(staff-capable) และผ่านการอบรมการใช้งานระบบลงทะเบียนก่อนเริ่มปฏิบัติงาน',
 			tier: 'staff-capable',
 			required_roles: ['registration_staff'],
-			skills_required: ['คัดกรองและสแกนประวัติ'], // matches domain/skill-master.ts
+			skills_required: masterCodes(master, 'volunteer_skills', 'screening'),
 			shifts: [
 				{
 					id: `js-${today}-c`,
@@ -2032,7 +2033,7 @@ async function seedVolunteers(): Promise<void> {
 				'สามารถยกของหนักได้ต่อเนื่อง ปิดรับสมัครชั่วคราวจนกว่าจะเปิดรับรอบถัดไป',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+			skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 			shifts: [
 				{
 					id: `js-${today}-d`,
@@ -2052,7 +2053,7 @@ async function seedVolunteers(): Promise<void> {
 				'ช่วยประกอบอาหาร บรรจุกล่อง และจัดเตรียมเสบียงอาหารปรุงสุกสำหรับแจกจ่ายผู้ประสบภัยในศูนย์พักพิง',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ประกอบอาหาร / ครัวสนาม'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'cooking'),
 			shifts: [
 				{
 					id: `js-${today}-e1`,
@@ -2080,7 +2081,7 @@ async function seedVolunteers(): Promise<void> {
 				'ดูแลผู้ป่วยเบื้องต้น ตรวจวัดสัญญาณชีพ และจ่ายยาสามัญประจำบ้านสำหรับผู้ประสบภัยในศูนย์',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['การแพทย์ / ปฐมพยาบาล'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'medical'),
 			shifts: [
 				{
 					id: `js-${today}-f`,
@@ -2100,7 +2101,7 @@ async function seedVolunteers(): Promise<void> {
 				'จัดเรียงสิ่งของบริจาค ตรวจนับสต็อก และแพ็คถุงยังชีพเพื่อส่งมอบให้ผู้ประสบภัยตามโซนต่างๆ',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 			shifts: [
 				{
 					id: `js-${today}-g`,
@@ -2152,7 +2153,9 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'อรุณ',
 		phone: '0821111111',
 		email: null,
-		skills: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts — same key as job1.skills_required
+		// `volunteer.skills` keeps storing LABELS (CR-100 leaves this field alone) —
+		// same master item as job1's `skills_required` code above.
+		skills: masterLabels(master, 'volunteer_skills', 'reception'),
 		organization: null,
 		national_id: null,
 		source: 'public_apply'
@@ -2162,7 +2165,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ยิ้มแย้ม',
 		phone: '0822222222',
 		email: null,
-		skills: ['ประกอบอาหาร / ครัวสนาม', 'ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'walk_in'
@@ -2172,7 +2175,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'คงมั่น',
 		phone: '0823333333',
 		email: null,
-		skills: ['ขับขี่ยานพาหนะ / ขนส่ง'], // matches domain/skill-master.ts (no radio-comms entry there)
+		skills: masterLabels(master, 'volunteer_skills', 'transport'),
 		organization: 'มูลนิธิกู้ภัยหาดใหญ่',
 		national_id: null,
 		source: 'staff_entry'
@@ -2182,7 +2185,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ศรีสุข',
 		phone: '0824444444',
 		email: null,
-		skills: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+		skills: masterLabels(master, 'volunteer_skills', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'transfer'
@@ -2193,7 +2196,9 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'หมอนิด',
 		phone: '0825555555',
 		email: null,
-		skills: ['การแพทย์ / ปฐมพยาบาล'], // matches domain/skill-master.ts — the master's own controlled key
+		// The master's own controlled item — this is what makes `initialStatusForSkills`
+		// hold the seeded application at `pending_review`.
+		skills: masterLabels(master, 'volunteer_skills', 'medical'),
 		organization: 'รพ.สต. บ้านพรุ',
 		national_id: null,
 		source: 'public_apply'
@@ -2778,7 +2783,7 @@ async function deleteDashboardData(): Promise<void> {
  * applicant holds, and seeding one would either invent a token nobody has or leave a
  * ticket that cannot be opened. Apply through the UI to create them.
  */
-async function seedVolunteerJobs(): Promise<void> {
+async function seedVolunteerJobs(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 	await ensureDb(SHELTER_DB_2);
 
@@ -2792,7 +2797,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย แต่งกายสุภาพ สวมรองเท้าหุ้มส้น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['ประกอบอาหาร / ครัวสนาม'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'cooking'),
 				quota: 8,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2814,7 +2819,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ขนย้ายและจัดเรียงสิ่งของบริจาคเข้าคลัง ต้องยกของหนักได้',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 				quota: 6,
 				// Zero, like every other fixture. A non-zero count here would not show up on
 				// the board: the public plane reads head count from the atomic VolunteerJobSlot
@@ -2841,7 +2846,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ดูแลจุดปฐมพยาบาล คัดกรองอาการเบื้องต้น ต้องมีใบประกอบวิชาชีพ',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['การแพทย์ / ปฐมพยาบาล'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'medical'),
 				quota: 4,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2866,7 +2871,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน ได้สิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะที่เช็คอินแล้ว',
 				tier: 'staff-capable',
 				required_roles: ['registration_staff'],
-				skills_required: ['คัดกรองและสแกนประวัติ'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'screening'),
 				quota: 3,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2890,7 +2895,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'จัดกิจกรรมให้เด็กในศูนย์พักพิงช่วงเย็น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['สันทนาการ / ดูแลเด็ก'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'childcare'),
 				quota: 5,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2929,7 +2934,7 @@ async function seedVolunteerJobs(): Promise<void> {
  * projecting an assignment — that hash is the only route from a phone number to a
  * schedule, so an assignment whose volunteer is missing projects unreachable.
  */
-async function seedVolunteerSchedule(): Promise<void> {
+async function seedVolunteerSchedule(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
 	const phone = '0891112222';
@@ -2942,7 +2947,9 @@ async function seedVolunteerSchedule(): Promise<void> {
 		phone,
 		phone_hash: await sha256Hex(phone),
 		email: null,
-		skills: ['ครัว', 'ยกของ'],
+		// `volunteer.skills` stores labels (CR-100) — read from the seeded master items
+		// so a renamed skill stays in sync instead of drifting into free text.
+		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		tracking_token: null,
 		status: 'active',
@@ -3046,13 +3053,13 @@ async function main() {
 		await seedCatalogFoodSphereParameters();
 		await seedShelter(master);
 		await seedShelter2(master);
-		await seedVolunteers();
+		await seedVolunteers(master);
 		await seedDashboardData(master);
 		// Before seedDailyCalc: that step refuses to run against a database that already
 		// holds its deterministic snapshots, and it must not take the job board down with
 		// it on a re-seed. This one is idempotent — fixed ids, existing docs left alone.
-		await seedVolunteerJobs();
-		await seedVolunteerSchedule();
+		await seedVolunteerJobs(master);
+		await seedVolunteerSchedule(master);
 		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {

@@ -42,16 +42,29 @@
 	import {
 		PORTAL_TOKEN_HANDOFF_KEY,
 		volunteerApplySchema,
-		type PublicJob
+		type PublicJob,
+		type VolunteerSkillOption
 	} from '../domain/volunteer';
+	import { skillLabels } from '../domain/skill-label';
 
 	let {
 		job,
-		open = $bindable(false)
+		open = $bindable(false),
+		/** Master Data skill list, so CR-100 codes render as their Thai label. */
+		skillOptions = []
 	}: {
 		job: PublicJob | null;
 		open?: boolean;
+		skillOptions?: readonly VolunteerSkillOption[];
 	} = $props();
+
+	/**
+	 * The chips show labels but `skills` keeps the job's own stored values
+	 * (master codes from CR-100) — that is what the application must carry, so
+	 * the back office and the controlled-skill gate see the same value the job
+	 * asked for.
+	 */
+	const requiredSkills = $derived(skillLabels(job?.skills_required ?? [], skillOptions));
 
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
@@ -329,13 +342,13 @@
 								<span class="text-xs text-muted-foreground">เลือกแล้ว {skills.length} ทักษะ</span>
 							</div>
 
-							{#if job.skills_required.length > 0}
+							{#if requiredSkills.length > 0}
 								<div class="flex flex-wrap gap-2.5">
-									{#each job.skills_required as skill (skill)}
-										{@const selected = skills.includes(skill)}
+									{#each requiredSkills as skill (skill.value)}
+										{@const selected = skills.includes(skill.value)}
 										<button
 											type="button"
-											onclick={() => toggleSkill(skill)}
+											onclick={() => toggleSkill(skill.value)}
 											class="flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition-all {selected
 												? 'border-primary bg-primary text-primary-foreground shadow-sm'
 												: 'border-border bg-card text-foreground hover:bg-muted'}"
@@ -343,7 +356,7 @@
 											{#if selected}
 												<CheckCircle2 class="h-3.5 w-3.5" />
 											{/if}
-											{skill}
+											{skill.label}
 										</button>
 									{/each}
 								</div>

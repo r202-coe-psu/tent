@@ -45,14 +45,16 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
-	import { SKILL_MASTER } from '../domain/skill-master';
 	import {
 		walkInVolunteerFormSchema,
 		type WalkInVolunteerFormValues
 	} from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
-	import { useCreateWalkInVolunteer, useSetVolunteerCheckedIn } from '../application/queries';
+	import {
+		useCreateWalkInVolunteer,
+		useSetVolunteerCheckedIn,
+		useSkillOptions
+	} from '../application/queries';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -61,21 +63,15 @@
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
 
-	const masterQuery = useMasterData(() => 'volunteer_skills');
-	const skillsList = $derived.by(() => {
-		if (masterQuery.data?.items && masterQuery.data.items.length > 0) {
-			return masterQuery.data.items
-				.filter((i) => i.status !== 'inactive')
-				.map((i) => ({
-					key: i.label,
-					label: i.label,
-					controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
-					description: i.description ?? '',
-					icon: i.category === 'controlled' ? '🩺' : '✨'
-				}));
-		}
-		return SKILL_MASTER;
-	});
+	/**
+	 * Master Data `volunteer_skills`, effective for this shelter (CR-100).
+	 *
+	 * `volunteer.skills[]` deliberately keeps storing the LABEL (CR-100 leaves
+	 * that field alone — the portal profile form writes labels too), so the
+	 * ticked value here is `option.label`, not its code.
+	 */
+	const skillCatalog = useSkillOptions();
+	const skillsList = $derived(skillCatalog.options);
 
 	function emptyValues(): WalkInVolunteerFormValues {
 		return { first_name: '', last_name: '', phone: '', email: '', national_id: '' };
@@ -278,11 +274,11 @@
 					<span class="text-xs text-muted-foreground">เลือกแล้ว {selectedSkills.length} ทักษะ</span>
 				</div>
 				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-					{#each skillsList.filter((s) => !s.controlled) as skill (skill.key)}
-						{@const checked = selectedSkills.includes(skill.key)}
+					{#each skillsList.filter((s) => !s.controlled) as skill (skill.code)}
+						{@const checked = selectedSkills.includes(skill.label)}
 						<button
 							type="button"
-							onclick={() => toggleSkill(skill.key)}
+							onclick={() => toggleSkill(skill.label)}
 							aria-pressed={checked}
 							class="flex flex-col items-center gap-1 rounded-xl border p-3 text-center text-xs font-medium transition-colors {checked
 								? 'border-primary bg-primary/5 text-primary'
@@ -294,14 +290,14 @@
 					{/each}
 				</div>
 
-				{#each skillsList.filter((s) => s.controlled) as skill (skill.key)}
-					{@const checked = selectedSkills.includes(skill.key)}
+				{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
+					{@const checked = selectedSkills.includes(skill.label)}
 					<label
 						class="flex cursor-pointer items-start gap-2 rounded-xl border p-3 {checked
 							? 'border-amber-300 bg-amber-50'
 							: 'border-border'}"
 					>
-						<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.key)} class="mt-0.5" />
+						<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.label)} class="mt-0.5" />
 						<span class="min-w-0 flex-1 text-xs">
 							<span class="flex flex-wrap items-center gap-1.5 font-medium">
 								<span aria-hidden="true">{skill.icon}</span>
