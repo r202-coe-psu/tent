@@ -4,6 +4,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
+	import Tag from '@lucide/svelte/icons/tag';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import JobCard from './JobCard.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './QuickApplyModal.svelte';
@@ -275,6 +276,7 @@
 	let searchQuery = $state('');
 	let selectedFilter = $state<'all' | 'open' | 'near_full' | 'controlled'>('all');
 	let selectedShelter = $state('all');
+	let selectedSkill = $state('all');
 
 	// Unique list of shelter names for filter dropdown
 	const availableShelterNames = $derived.by<string[]>(() =>
@@ -282,6 +284,22 @@
 			.map((j) => j.shelter)
 			.filter((val, idx, arr) => Boolean(val) && arr.indexOf(val) === idx)
 	);
+
+	// Unique list of skills extracted from displayed jobs
+	const availableSkills = $derived.by<string[]>(() => {
+		const skills: string[] = [];
+		for (const j of displayedJobs) {
+			if (j.skills_required && Array.isArray(j.skills_required)) {
+				for (const s of j.skills_required) {
+					const trimmed = s.trim();
+					if (trimmed && !skills.includes(trimmed)) {
+						skills.push(trimmed);
+					}
+				}
+			}
+		}
+		return skills;
+	});
 
 	let filteredJobs = $derived(
 		displayedJobs.filter((j) => {
@@ -296,6 +314,14 @@
 
 			if (selectedShelter !== 'all' && j.shelter !== selectedShelter) {
 				return false;
+			}
+
+			if (selectedSkill !== 'all') {
+				const targetSkill = selectedSkill.toLowerCase().trim();
+				const hasSkill =
+					j.skills_required?.some((s) => s.toLowerCase().trim() === targetSkill) ||
+					j.tags.some((t) => t.label.toLowerCase().trim() === targetSkill);
+				if (!hasSkill) return false;
 			}
 
 			if (selectedFilter === 'open') {
@@ -418,20 +444,84 @@
 				</button>
 			</div>
 
-			<!-- Shelter Selector Dropdown -->
-			<div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-				<span class="w-auto text-sm font-bold text-muted-foreground sm:w-[70px]">ศูนย์:</span>
-				<div class="relative w-full sm:w-[340px]">
-					<select
-						bind:value={selectedShelter}
-						class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold text-foreground outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+			<!-- Skill Filter Chips -->
+			{#if availableSkills.length > 0}
+				<div class="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+					<div class="mr-1 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+						<Tag class="h-3.5 w-3.5 text-primary" />
+						<span>ทักษะ:</span>
+					</div>
+
+					<button
+						type="button"
+						onclick={() => (selectedSkill = 'all')}
+						class="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all {selectedSkill ===
+						'all'
+							? 'bg-primary text-white shadow-xs'
+							: 'border border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/50'}"
 					>
-						<option value="all">📍 ทุกศูนย์พักพิง ({availableShelterNames.length})</option>
-						{#each availableShelterNames as name (name)}
-							<option value={name}>{name}</option>
-						{/each}
-					</select>
-					<MapPin class="absolute top-2.5 left-3.5 h-4 w-4 text-danger" />
+						ทั้งหมด
+					</button>
+
+					{#each availableSkills as skill (skill)}
+						{@const isSelected = selectedSkill === skill}
+						<button
+							type="button"
+							onclick={() => (selectedSkill = isSelected ? 'all' : skill)}
+							class="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all {isSelected
+								? 'border border-primary bg-primary/10 font-bold text-primary shadow-xs'
+								: 'border border-border/70 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
+						>
+							🏷️ {skill}
+						</button>
+					{/each}
+
+					{#if selectedSkill !== 'all'}
+						<button
+							type="button"
+							onclick={() => (selectedSkill = 'all')}
+							class="ml-1 cursor-pointer text-xs font-semibold text-danger hover:underline"
+						>
+							✕ ล้างตัวกรอง
+						</button>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Dropdown Selectors (Shelter & Skill) -->
+			<div class="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
+				<!-- Shelter Dropdown -->
+				<div class="flex items-center gap-3">
+					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ศูนย์:</span>
+					<div class="relative w-full">
+						<select
+							bind:value={selectedShelter}
+							class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold text-foreground outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+						>
+							<option value="all">📍 ทุกศูนย์พักพิง ({availableShelterNames.length})</option>
+							{#each availableShelterNames as name (name)}
+								<option value={name}>{name}</option>
+							{/each}
+						</select>
+						<MapPin class="absolute top-2.5 left-3.5 h-4 w-4 text-danger" />
+					</div>
+				</div>
+
+				<!-- Skill Dropdown -->
+				<div class="flex items-center gap-3">
+					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ทักษะ:</span>
+					<div class="relative w-full">
+						<select
+							bind:value={selectedSkill}
+							class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold text-foreground outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+						>
+							<option value="all">🏷️ ทุกทักษะ ({availableSkills.length})</option>
+							{#each availableSkills as skill (skill)}
+								<option value={skill}>{skill}</option>
+							{/each}
+						</select>
+						<Tag class="absolute top-2.5 left-3.5 h-4 w-4 text-primary" />
+					</div>
 				</div>
 			</div>
 		</div>
