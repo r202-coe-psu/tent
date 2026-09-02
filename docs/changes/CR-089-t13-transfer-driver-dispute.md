@@ -9,7 +9,7 @@ decided_by: Project Owner
 layer: volatile
 affects:
   - docs/data/schema.md §5.5 (stock_transfer, schema_v 2 → 3)
-  - docs/task-breakdown/05-D-kitchen.md T-13
+  - docs/task-breakdown/03-C-supply.md T-13 (แก้จาก 05-D-kitchen.md — T-13 อยู่ไฟล์ C ไม่ใช่ D)
   - frontend/src/lib/features/operations/domain/operations.ts
   - frontend/src/lib/features/operations/domain/transfer.authorization.ts
   - frontend/src/lib/features/operations/data/transfer.server-repository.ts
@@ -209,6 +209,9 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
   unique `item_id` มาตั้งแต่ต้น
 - 2026-08-31 — **project owner เคาะ `approved`** — tier ของกลุ่ม B (Dispute) ตามข้อเสนอ 2026-08-25
   ทั้งหมด ไม่มีการแก้ scope
+- 2026-09-02 — แก้ path ใน `affects:` — T-13 อยู่ที่ `docs/task-breakdown/03-C-supply.md`
+  (ไฟล์ Module C Supply) ไม่ใช่ `05-D-kitchen.md` ที่ระบุไว้เดิม · `grep "T-13"` ใน `05-D-kitchen.md`
+  คืนค่าว่าง · แก้ path อย่างเดียว ไม่เปลี่ยน scope
 - 2026-09-02 — **amend: แก้ที่อยู่ของ UI ที่กรอก driver/plate + เพิ่ม FR-09/FR-10** (tracking =
   amend + Decision log ตามที่ project owner เคาะ) — ฉบับก่อนหน้าระบุใน §Impact ว่าเพิ่มช่อง driver/plate
   ที่ `transfer-form.svelte` "ที่ dispatch confirm เท่านั้น" ซึ่ง **ทำตามไม่ได้** เมื่อเทียบกับโค้ดจริงบน

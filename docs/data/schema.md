@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-30
+updated: 2026-09-02
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -1277,18 +1277,51 @@ closed   → (terminal)
 > `docs/changes/CR-059-inventory-requisition-inter-shelter-transfer.md` หัวข้อ "🏗️ การตัดสินใจทาง
 > สถาปัตยกรรม"
 >
-> **`schema_v` ไม่ bump** (คงที่ 2 เดิม) — ย้าย location เท่านั้น ไม่ได้เปลี่ยนรูปร่าง doc (นิยามตาม
-> `docs/change-management.md` §4) พร้อม precedent จาก `referral` ที่ย้าย DB แบบเดียวกันแล้วไม่ bump
-> เช่นกัน (§2.11/§5.4) — ดูรายละเอียดเต็มใน CR-059 Decision Log entry 2026-08-22 ("T-13 write-path
-> implementation detail")
+> **`schema_v` ไม่ bump ที่ CR-059** (คงที่ 2 ตอนนั้น) — ย้าย location เท่านั้น ไม่ได้เปลี่ยนรูปร่าง doc
+> (นิยามตาม `docs/change-management.md` §4) พร้อม precedent จาก `referral` ที่ย้าย DB แบบเดียวกันแล้ว
+> ไม่ bump เช่นกัน (§2.11/§5.4) — ดูรายละเอียดเต็มใน CR-059 Decision Log entry 2026-08-22 ("T-13
+> write-path implementation detail")
+
+> **schema_v 3** — เพิ่ม `driver_name` / `vehicle_plate` (บังคับตอน dispatch) และ `cancel_reason` /
+> `dispute_reason` พร้อมค่า enum ใหม่ `disputed` ใน `status` (CR-089) — บังคับความรับผิดชอบของการขนส่ง
+> และเปิดให้ต้นทางระงับคำร้องไว้ก่อนโดยไม่ต้องยกเลิกทิ้ง
+> schema_v 2 — ย้ายที่จัดเก็บจาก `shelter_{shelter_code}` มา `central_ops` (CR-059) — ไม่เปลี่ยนรูปร่าง doc
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `from_shelter` / `to_shelter` | str | req | shelter_code (เช่น `SH001`) — canonical doc เดียวใน `central_ops`, ไม่ replicate ผ่าน central แบบเดิมอีกต่อไป |
 | `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ |
-| `status` | enum(`requested`,`shipped`,`received`,`cancelled`) | req | forward-only: received > shipped > requested; cancelled ได้ก่อน shipped เท่านั้น |
-| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?} | req/sys | เติมตาม transition |
+| `status` | enum(`requested`,`shipped`,`received`,`cancelled`,`disputed`) | req | ดูตาราง transition ด้านล่าง · `disputed` = CR-089 |
+| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?} | req/sys | เติมเฉพาะ 3 ขั้นความคืบหน้า — `cancelled`/`disputed` **ไม่เขียน** timeline entry (precedent เดิมของ `cancelled`) |
+| `driver_name` | str | opt/req | **req ตอน transition เป็น `shipped`** (ไม่ว่าง) หลังจากนั้น read-only · doc ที่ยังไม่ถึง `shipped` ไม่มี field นี้ (CR-089 FR-01/FR-02) |
+| `vehicle_plate` | str | opt/req | เงื่อนไขเดียวกับ `driver_name` (CR-089 FR-01/FR-02) |
+| `cancel_reason` | str | opt/req | **req ตอน transition เป็น `cancelled`** (CR-089 FR-03) |
+| `dispute_reason` | str | opt/req | **req ตอน transition เป็น `disputed`** · เก็บเฉพาะค่าล่าสุด — คัดค้านรอบใหม่ทับของเดิม ไม่มี dispute history (CR-089 FR-04/FR-05) |
 | `notes` | str | opt | — |
+
+**Transition ที่อนุญาต (CR-059 + CR-089):**
+
+| จาก | ไป | ใครทำได้ | field บังคับ |
+| --- | --- | --- | --- |
+| `requested` | `shipped` | ต้นทาง (`from_shelter`) | `driver_name`, `vehicle_plate` |
+| `requested` | `cancelled` | ต้นทาง | `cancel_reason` |
+| `requested` | `disputed` | ต้นทาง | `dispute_reason` |
+| `disputed` | `requested` | ต้นทาง | — (resume) |
+| `shipped` | `received` | ปลายทาง (`to_shelter`) | — |
+
+- **`disputed` เข้าได้จาก `requested` เท่านั้น และออกได้กลับไป `requested` เท่านั้น** — ห้ามไป `shipped` /
+  `received` / `cancelled` ตรงจาก `disputed` (CR-089 FR-07)
+- คู่ `disputed` ↔ `requested` เป็น**คู่เดียวที่ย้อนกลับได้** ใน state machine นี้ — ที่เหลือยัง
+  forward-only ตามเดิม
+- ตอนสถานะเป็น `disputed` ปลายทางทำได้แค่อ่าน (CR-089 FR-06)
+- ข้อบังคับเหล่านี้บังคับที่ **โค้ดฝั่ง server** เท่านั้น (`transition()` + `transfer.authorization.ts`) —
+  `central_ops` ไม่มี `validate_doc_update` และ write path ทั้งหมดวิ่งผ่าน `adminRaw` ซึ่ง bypass
+  อยู่แล้ว ⇒ **ห้ามเคลมว่าเป็น DB-level guard** (ถ้อยคำเดียวกับ §2.1)
+
+**Migration (schema_v 2 → 3, CR-089):** purely additive — `driver_name` / `vehicle_plate` /
+`cancel_reason` / `dispute_reason` เป็น field ใหม่ที่มีค่าเมื่อ transition ที่เกี่ยวข้องเกิดขึ้นเท่านั้น
+และ `disputed` เป็นค่า enum ใหม่ที่ไม่กระทบค่าเดิม · doc เดิม (schema_v 2) อ่านได้ปกติ — ไม่มี field ใหม่
+= แสดงว่าง ไม่ throw · pre-prod ไม่มี production data จริง ไม่ต้อง backfill
 
 แต่ละ transition เขียน `stock_ledger` คู่ที่ `shelter_{shelter_code}` ของแต่ละฝั่งตามปกติ (เฉพาะ doc
 `stock_transfer` เองเท่านั้นที่ย้ายมา `central_ops` — `stock_ledger` ไม่ย้าย): shipped → `transfer_out`
@@ -1303,9 +1336,12 @@ closed   → (terminal)
 > (deterministic ledger id, critical/best-effort write tier) ยังเป็น proposed (ยังไม่ confirm กับ project
 > owner อย่างเป็นทางการ) ดู CR-059 Decision Log entry 2026-08-22 ("T-13 write-path implementation detail")
 >
-> **ยังไม่ approve ในรอบนี้ (CR-059):** field ละเอียดเพิ่มเติม — บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนอนุมัติ
-> ส่งมอบ, การจัดสรรเบิกข้ามล็อต ("+ แบ่งจากอีกล็อต/โซน"), Destination Lot ID ใหม่ปลายทาง, สิทธิ์
-> คัดค้าน/ระงับคำสั่ง — รอ approve schema_v รอบใหม่แยกต่างหากก่อนเพิ่มเข้า field table นี้
+> **ปิดแล้วโดย CR-089 (schema_v 2 → 3):** บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนอนุมัติส่งมอบ และสิทธิ์
+> คัดค้าน/ระงับคำสั่ง — อยู่ใน field table ด้านบนแล้ว
+>
+> **ยังไม่ approve (กลุ่ม Lot):** การจัดสรรเบิกข้ามล็อต ("+ แบ่งจากอีกล็อต/โซน"), Destination Lot ID
+> ใหม่ปลายทาง, การอ้างอิงล็อตต้นทางแบบ read-only — อยู่ใน CR-106 ซึ่งยังเป็น `proposed` · ห้ามเพิ่มเข้า
+> field table นี้ก่อน CR-106 approve
 
 ---
 
