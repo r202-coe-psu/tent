@@ -44,6 +44,8 @@
 		job: QuickApplyJob | null;
 		isOpen: boolean;
 		onSubmit?: (data: {
+			firstName?: string;
+			lastName?: string;
 			fullName: string;
 			phone: string;
 			email: string;
@@ -132,7 +134,8 @@
 	});
 
 	let formData = $state({
-		fullName: '',
+		firstName: '',
+		lastName: '',
 		nickname: '',
 		phone: '',
 		lineId: '',
@@ -167,9 +170,9 @@
 		isSubmitting = true;
 
 		try {
-			const parts = formData.fullName.trim().split(/\s+/);
-			const firstName = parts[0] || 'จิตอาสา';
-			const lastName = parts.slice(1).join(' ') || '-';
+			const firstName = formData.firstName.trim();
+			const lastName = formData.lastName.trim();
+			const fullName = `${firstName} ${lastName}`.trim();
 
 			// Parse times from activeShift
 			let startTime = activeShift.start_time ?? '08:00';
@@ -231,7 +234,9 @@
 			toast.success('ส่งใบสมัครสำเร็จ! คุณจะได้รับตั๋วดิจิทัล (QR Code) ทันที');
 
 			onSubmit?.({
-				fullName: formData.fullName,
+				firstName,
+				lastName,
+				fullName,
 				phone: formData.phone,
 				email: formData.email,
 				skills: formData.skills,
@@ -243,7 +248,8 @@
 			// Reset form
 			const tokenToOpen = data.tracking_token;
 			formData = {
-				fullName: '',
+				firstName: '',
+				lastName: '',
 				nickname: '',
 				phone: '',
 				lineId: '',
@@ -335,21 +341,36 @@
 							<div class="space-y-4">
 								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div>
-										<label for="fullName" class="mb-1.5 block text-xs font-bold text-foreground">
-											ชื่อ - นามสกุล <span class="text-danger">*</span>
+										<label for="firstName" class="mb-1.5 block text-xs font-bold text-foreground">
+											ชื่อ <span class="text-danger">*</span>
 										</label>
 										<input
-											id="fullName"
+											id="firstName"
 											type="text"
 											required
-											bind:value={formData.fullName}
-											placeholder="เช่น นายเก่งกล้า งานอาสา"
+											bind:value={formData.firstName}
+											placeholder="เช่น เก่งกล้า"
 											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 										/>
 									</div>
 									<div>
+										<label for="lastName" class="mb-1.5 block text-xs font-bold text-foreground">
+											นามสกุล <span class="text-danger">*</span>
+										</label>
+										<input
+											id="lastName"
+											type="text"
+											required
+											bind:value={formData.lastName}
+											placeholder="เช่น งานอาสา"
+											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+										/>
+									</div>
+								</div>
+								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+									<div>
 										<label for="nickname" class="mb-1.5 block text-xs font-bold text-foreground">
-											ชื่อเล่น
+											ชื่อเล่น <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 										</label>
 										<input
 											id="nickname"
@@ -359,8 +380,6 @@
 											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 										/>
 									</div>
-								</div>
-								<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
 									<div>
 										<label for="phone" class="mb-1.5 block text-xs font-bold text-foreground">
 											เบอร์โทรศัพท์มือถือ <span class="text-danger">*</span>
@@ -380,6 +399,8 @@
 											1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้
 										</p>
 									</div>
+								</div>
+								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div>
 										<label for="lineId" class="mb-1.5 block text-xs font-bold text-foreground">
 											Line ID <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
