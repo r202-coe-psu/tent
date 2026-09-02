@@ -8,6 +8,7 @@ import type { CoverageKind } from './approval-coverage';
 
 export type RequestStatusFilter = 'all' | DistributionRequestStatus;
 export type RequestCoverageFilter = 'all' | 'full' | 'partial';
+export type RequestSortOrder = 'newest' | 'oldest';
 
 export const distributionRequestStatusLabels: Record<DistributionRequestStatus, string> = {
 	pending: 'รอดำเนินการ',
@@ -38,6 +39,14 @@ export const approvalCoverageOptions: Array<{
 	{ value: 'partial', label: approvalCoverageLabels.partial }
 ];
 
+export const requestSortOptions: Array<{
+	value: RequestSortOrder;
+	label: string;
+}> = [
+	{ value: 'newest', label: 'เวลา: ใหม่ไปเก่า' },
+	{ value: 'oldest', label: 'เวลา: เก่าไปใหม่' }
+];
+
 export const distributionRequestStatusOptions: Array<{
 	value: RequestStatusFilter;
 	label: string;
@@ -65,10 +74,11 @@ export function filterDistributionRequests(
 	search: string,
 	status: RequestStatusFilter,
 	coverage: RequestCoverageFilter = 'all',
-	coverageByRequestId?: ReadonlyMap<string, CoverageKind | 'unknown'>
+	coverageByRequestId?: ReadonlyMap<string, CoverageKind | 'unknown'>,
+	sort: RequestSortOrder = 'newest'
 ): DistributionRequest[] {
 	const normalizedSearch = search.trim().toLocaleLowerCase();
-	return requests.filter((request) => {
+	const filtered = requests.filter((request) => {
 		if (status !== 'all' && request.status !== status) return false;
 		if (coverage !== 'all') {
 			const reqCoverage = coverageByRequestId?.get(request._id);
@@ -79,6 +89,22 @@ export function filterDistributionRequests(
 			.join(' ')
 			.toLocaleLowerCase()
 			.includes(normalizedSearch);
+	});
+
+	return filtered.slice().sort((a, b) => {
+		const timeA = a.requested_at
+			? new Date(a.requested_at).getTime()
+			: a.created_at
+				? new Date(a.created_at).getTime()
+				: 0;
+		const timeB = b.requested_at
+			? new Date(b.requested_at).getTime()
+			: b.created_at
+				? new Date(b.created_at).getTime()
+				: 0;
+
+		if (timeA === timeB) return 0;
+		return sort === 'newest' ? timeB - timeA : timeA - timeB;
 	});
 }
 

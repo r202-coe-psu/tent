@@ -6,6 +6,7 @@ import {
 	filterDistributionRequests,
 	approvalCoverageLabels,
 	getRequestItemPresentationKey,
+	requestSortOptions,
 	summarizeDistributionRequests
 } from './request-ui';
 
@@ -102,5 +103,34 @@ describe('Distribution request UI helpers', () => {
 
 		expect(keys).toEqual(['item:water:0', 'item:water:1']);
 		expect(new Set(keys)).toHaveLength(2);
+	});
+
+	it('provides options for sorting by time', () => {
+		expect(requestSortOptions).toEqual([
+			{ value: 'newest', label: 'เวลา: ใหม่ไปเก่า' },
+			{ value: 'oldest', label: 'เวลา: เก่าไปใหม่' }
+		]);
+	});
+
+	it('sorts requests by requested_at/created_at timestamp', () => {
+		const r1 = {
+			...request('pending', 'คำร้อง 1'),
+			requested_at: '2026-09-01T08:00:00.000Z'
+		};
+		const r2 = {
+			...request('pending', 'คำร้อง 2'),
+			requested_at: '2026-09-02T12:00:00.000Z'
+		};
+		const r3 = {
+			...request('pending', 'คำร้อง 3'),
+			requested_at: '2026-08-30T10:00:00.000Z'
+		};
+		const list = [r1, r2, r3];
+
+		const sortedNewest = filterDistributionRequests(list, '', 'all', 'all', undefined, 'newest');
+		expect(sortedNewest.map((r) => r.purpose)).toEqual(['คำร้อง 2', 'คำร้อง 1', 'คำร้อง 3']);
+
+		const sortedOldest = filterDistributionRequests(list, '', 'all', 'all', undefined, 'oldest');
+		expect(sortedOldest.map((r) => r.purpose)).toEqual(['คำร้อง 3', 'คำร้อง 1', 'คำร้อง 2']);
 	});
 });

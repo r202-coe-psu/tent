@@ -15,11 +15,11 @@
 
 	import { useItemMasters } from '$lib/features/catalog';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
+	import { useStockBalance } from '$lib/features/operations';
 
 	import { calculateNfiTarget } from '../domain/distribution';
 	import { useCreateDistributionRequest } from '../application/queries';
 	import {
-		ALLOWED_BUFFER_PERCENTS,
 		createInitialFormState,
 		validateCreateRequestForm,
 		type CreateRequestFormState
@@ -46,6 +46,10 @@
 	// Catalog items query (from Catalog public barrel)
 	const itemMastersQuery = useItemMasters();
 	const itemMasters = $derived(itemMastersQuery.data ?? []);
+
+	// Stock balances query (from Operations public barrel)
+	const stockBalanceQuery = useStockBalance();
+	const stockBalances = $derived(stockBalanceQuery.data ?? new Map<string, string>());
 
 	// Form State
 	let formState = $state<CreateRequestFormState>(createInitialFormState());
@@ -253,7 +257,7 @@
 					</div>
 
 					<div class="flex items-center gap-1.5">
-						{#each ALLOWED_BUFFER_PERCENTS as buf (buf)}
+						{#each [5, 10] as buf (buf)}
 							<button
 								type="button"
 								class="h-7 min-w-8 rounded-md border text-xs font-medium transition-colors {formState.bufferPercent ===
@@ -329,6 +333,7 @@
 					<RequestItemEditor
 						bind:items={formState.items}
 						{itemMasters}
+						{stockBalances}
 						targetQty={nfiTarget}
 						disabled={isSubmitting}
 						errors={formErrors}

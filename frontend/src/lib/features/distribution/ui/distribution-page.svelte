@@ -31,6 +31,7 @@
 	import {
 		filterDistributionRequests,
 		type RequestCoverageFilter,
+		type RequestSortOrder,
 		type RequestStatusFilter
 	} from './request-ui';
 	import { SvelteMap } from 'svelte/reactivity';
@@ -64,6 +65,7 @@
 	let search = $state('');
 	let status = $state<RequestStatusFilter>('all');
 	let coverage = $state<RequestCoverageFilter>('all');
+	let sort = $state<RequestSortOrder>('newest');
 	const requestQuery = useDistributionRequests(
 		() => (status === 'all' ? undefined : status),
 		() => getShelterCode()
@@ -103,10 +105,12 @@
 	});
 
 	const filteredRequests = $derived(
-		filterDistributionRequests(requests, search, status, coverage, coverageMap)
+		filterDistributionRequests(requests, search, status, coverage, coverageMap, sort)
 	);
 
-	const hasFilters = $derived(status !== 'all' || coverage !== 'all' || search.trim().length > 0);
+	const hasFilters = $derived(
+		status !== 'all' || coverage !== 'all' || search.trim().length > 0 || sort !== 'newest'
+	);
 
 	function handleOpenDetail(req: DistributionRequest) {
 		selectedDetailRequest = req;
@@ -270,7 +274,7 @@
 				<Card.Description>ค้นหาและกรองสถานะจากข้อมูลคำร้องจริงของศูนย์พักพิง</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-4">
-				<RequestFilters bind:search bind:status bind:coverage />
+				<RequestFilters bind:search bind:status bind:coverage bind:sort />
 				{#if requests.length === 0}
 					<div
 						class="flex min-h-56 flex-col items-center justify-center gap-3 text-center text-muted-foreground"

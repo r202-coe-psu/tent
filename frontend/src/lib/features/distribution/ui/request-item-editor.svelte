@@ -13,6 +13,7 @@
 		targetQty?: string;
 		disabled?: boolean;
 		errors?: Record<string, string>;
+		stockBalances?: Map<string, string>;
 		onItemsChange?: (items: CreateRequestFormItem[]) => void;
 	}
 
@@ -22,6 +23,7 @@
 		targetQty = '0',
 		disabled = false,
 		errors = {},
+		stockBalances = new Map<string, string>(),
 		onItemsChange
 	}: Props = $props();
 
@@ -113,14 +115,30 @@
 						>
 							<option value="" disabled>-- เลือกสิ่งของจาก Catalog --</option>
 							{#each activeItemMasters as master (master._id)}
+								{@const stock = stockBalances.get(master._id) ?? '0'}
+								{@const masterUnit = itemMasterUnit(master)}
 								<option value={master._id}>
-									{master.name} ({itemMasterUnit(master)})
+									{master.name} ({masterUnit}) — คงเหลือ: {stock}
+									{masterUnit}
 								</option>
 							{/each}
 						</select>
 					</div>
 					{#if itemError}
 						<p class="text-xs font-medium text-destructive">{itemError}</p>
+					{:else if currentMaster}
+						{@const currentStock = stockBalances.get(currentMaster._id) ?? '0'}
+						<div class="flex items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground">
+							<span
+								class="inline-block size-1.5 rounded-full {Number(currentStock) > 0
+									? 'bg-emerald-500'
+									: 'bg-amber-400'}"
+							></span>
+							<span>
+								คงเหลือในคลัง: <strong class="font-medium text-foreground">{currentStock}</strong>
+								{unit}
+							</span>
+						</div>
 					{/if}
 				</div>
 

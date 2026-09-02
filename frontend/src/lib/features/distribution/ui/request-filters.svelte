@@ -4,22 +4,28 @@
 	import {
 		approvalCoverageOptions,
 		distributionRequestStatusOptions,
+		requestSortOptions,
 		type RequestCoverageFilter,
+		type RequestSortOrder,
 		type RequestStatusFilter
 	} from './request-ui';
 
 	let {
 		search = $bindable(''),
 		status = $bindable<RequestStatusFilter>('all'),
-		coverage = $bindable<RequestCoverageFilter>('all')
+		coverage = $bindable<RequestCoverageFilter>('all'),
+		sort = $bindable<RequestSortOrder>('newest')
 	}: {
 		search?: string;
 		status?: RequestStatusFilter;
 		coverage?: RequestCoverageFilter;
+		sort?: RequestSortOrder;
 	} = $props();
 </script>
 
-<div class="grid gap-3 border-b border-border/70 pb-4 sm:grid-cols-[minmax(0,1fr)_13rem_13rem]">
+<div
+	class="grid gap-3 border-b border-border/70 pb-4 sm:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem]"
+>
 	<div class="relative">
 		<Search class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
 		<Input
@@ -50,6 +56,18 @@
 			aria-label="กรองตามผลการจัดสรร"
 		>
 			{#each approvalCoverageOptions as option (option.value)}
+				<option value={option.value}>{option.label}</option>
+			{/each}
+		</select>
+	</label>
+	<label class="grid gap-1 text-sm font-medium text-muted-foreground">
+		<span class="sr-only">เรียงลำดับเวลา</span>
+		<select
+			bind:value={sort}
+			class="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+			aria-label="เรียงลำดับตามเวลา"
+		>
+			{#each requestSortOptions as option (option.value)}
 				<option value={option.value}>{option.label}</option>
 			{/each}
 		</select>
