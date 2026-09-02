@@ -20,6 +20,14 @@ interface CreateUserBody {
 	password?: unknown;
 	display_name?: unknown;
 	roles?: unknown;
+	personnel_type?: unknown;
+	organization?: unknown;
+	position?: unknown;
+	phone?: unknown;
+	email?: unknown;
+	notes?: unknown;
+	volunteer_id?: unknown;
+	duty_window?: unknown;
 	affiliation_tags?: unknown;
 }
 
@@ -28,10 +36,20 @@ interface UpdateUserBody {
 	password?: unknown;
 	display_name?: unknown;
 	roles?: unknown;
+	personnel_type?: unknown;
+	organization?: unknown;
+	position?: unknown;
+	phone?: unknown;
+	email?: unknown;
+	notes?: unknown;
+	volunteer_id?: unknown;
+	duty_window?: unknown;
+	active?: unknown;
+	must_change_password?: unknown;
 	affiliation_tags?: unknown;
 }
 
-/** POST { name, password, display_name, roles[], affiliation_tags? } — create a user (SA: any non-_admin; SM: own-shelter staff). */
+/** POST — create a user (SA: any non-_admin; SM: own-shelter staff). */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const caller = await authorizeUserWrite(request.headers.get('cookie'));
@@ -43,6 +61,36 @@ export const POST: RequestHandler = async ({ request }) => {
 		const roles = Array.isArray(body.roles)
 			? body.roles.filter((r): r is string => typeof r === 'string')
 			: [];
+		const personnel_type =
+			body.personnel_type === 'volunteer' ? ('volunteer' as const) : ('staff' as const);
+		const organization =
+			typeof body.organization === 'string' && body.organization.trim().length > 0
+				? body.organization.trim()
+				: null;
+		const position =
+			typeof body.position === 'string' && body.position.trim().length > 0
+				? body.position.trim()
+				: null;
+		const phone =
+			typeof body.phone === 'string' && body.phone.trim().length > 0
+				? body.phone.trim()
+				: name;
+		const email =
+			typeof body.email === 'string' && body.email.trim().length > 0
+				? body.email.trim()
+				: null;
+		const notes =
+			typeof body.notes === 'string' && body.notes.trim().length > 0
+				? body.notes.trim()
+				: null;
+		const volunteer_id =
+			typeof body.volunteer_id === 'string' && body.volunteer_id.trim().length > 0
+				? body.volunteer_id.trim()
+				: null;
+		const duty_window =
+			typeof body.duty_window === 'object' && body.duty_window !== null
+				? (body.duty_window as { start_ts: string; end_ts: string })
+				: null;
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: [];
@@ -51,9 +99,26 @@ export const POST: RequestHandler = async ({ request }) => {
 		const validPassword = validatePassword(password);
 		if (display_name.length < 1)
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
+		if (personnel_type === 'staff' && !organization) {
+			throw new ServiceError('VALIDATION', 'organization is required for staff');
+		}
 
 		assertCanGrant(caller, roles);
-		await createUser({ name, password: validPassword, display_name, roles, affiliation_tags });
+		await createUser({
+			name,
+			password: validPassword,
+			display_name,
+			roles,
+			personnel_type,
+			organization,
+			position,
+			phone,
+			email,
+			notes,
+			volunteer_id,
+			duty_window,
+			affiliation_tags
+		});
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);
@@ -72,6 +137,27 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const roles = Array.isArray(body.roles)
 			? body.roles.filter((r): r is string => typeof r === 'string')
 			: undefined;
+		const personnel_type =
+			body.personnel_type === 'volunteer'
+				? ('volunteer' as const)
+				: body.personnel_type === 'staff'
+					? ('staff' as const)
+					: undefined;
+		const organization =
+			typeof body.organization === 'string' ? body.organization.trim() : undefined;
+		const position = typeof body.position === 'string' ? body.position.trim() : undefined;
+		const phone = typeof body.phone === 'string' ? body.phone.trim() : undefined;
+		const email = typeof body.email === 'string' ? body.email.trim() : undefined;
+		const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
+		const volunteer_id =
+			typeof body.volunteer_id === 'string' ? body.volunteer_id.trim() : undefined;
+		const duty_window =
+			typeof body.duty_window === 'object' && body.duty_window !== null
+				? (body.duty_window as { start_ts: string; end_ts: string })
+				: undefined;
+		const active = typeof body.active === 'boolean' ? body.active : undefined;
+		const must_change_password =
+			typeof body.must_change_password === 'boolean' ? body.must_change_password : undefined;
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: undefined;
@@ -82,7 +168,26 @@ export const PUT: RequestHandler = async ({ request }) => {
 				? body.display_name.trim()
 				: undefined;
 
-		await updateUser(name, { password, display_name, roles, affiliation_tags }, caller);
+		await updateUser(
+			name,
+			{
+				password,
+				display_name,
+				roles,
+				personnel_type,
+				organization,
+				position,
+				phone,
+				email,
+				notes,
+				volunteer_id,
+				duty_window,
+				active,
+				must_change_password,
+				affiliation_tags
+			},
+			caller
+		);
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);

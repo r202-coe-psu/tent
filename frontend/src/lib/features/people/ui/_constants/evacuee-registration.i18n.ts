@@ -1,5 +1,11 @@
 export const EVACUEE_REGISTRATION_I18N = {
 	th: {
+		sections: {
+			ewar: 'ประเมินอาการ (EWAR)',
+			identity: 'ข้อมูลประจำตัว',
+			medical: 'สุขภาพ',
+			special: 'กลุ่มเปราะบาง'
+		},
 		photo: {
 			label: 'ภาพถ่ายใบหน้า (Face Recognition)',
 			add: 'เพิ่มรูปภาพ',
@@ -82,21 +88,23 @@ export const EVACUEE_REGISTRATION_I18N = {
 		},
 		medical: {
 			header: 'โรคประจำตัว & ข้อมูลสุขภาพ',
+			fieldNoneLabel: 'ไม่มี',
 			conditions: {
 				label: 'โรคประจำตัว',
-				placeholder: 'เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)'
+				placeholder: 'เช่น เบาหวาน, ความดัน'
 			},
 			medications: {
 				label: 'ยาที่ใช้ประจำ',
-				placeholder: 'เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)'
+				placeholder: 'เช่น ยาลดความดัน, ยาเบาหวาน'
 			},
 			allergies: {
 				label: 'ประวัติการแพ้ (ยา/อาหาร)',
-				placeholder: 'เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)'
+				placeholder: 'เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว'
 			}
 		},
 		specialNeeds: {
 			label: 'แท็กกลุ่มเปราะบางและความต้องการพิเศษ',
+			notVulnerableLabel: 'ไม่เป็นกลุ่มเปราะบาง',
 			note: {
 				label: 'ความต้องการพิเศษ (ถ้ามี)',
 				placeholder: 'เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ'
@@ -136,6 +144,12 @@ export const EVACUEE_REGISTRATION_I18N = {
 		}
 	},
 	en: {
+		sections: {
+			ewar: 'Symptom Assessment (EWAR)',
+			identity: 'Identity',
+			medical: 'Health',
+			special: 'Vulnerable Groups'
+		},
 		photo: {
 			label: 'Face Photo (Face Recognition)',
 			add: 'Add Photo',
@@ -218,21 +232,23 @@ export const EVACUEE_REGISTRATION_I18N = {
 		},
 		medical: {
 			header: 'Medical Conditions & Health Information',
+			fieldNoneLabel: 'None',
 			conditions: {
 				label: 'Medical Conditions',
-				placeholder: 'e.g. Diabetes, Hypertension (leave blank if none)'
+				placeholder: 'e.g. Diabetes, Hypertension'
 			},
 			medications: {
 				label: 'Current Medications',
-				placeholder: 'e.g. Blood pressure medicine (leave blank if none)'
+				placeholder: 'e.g. Blood pressure medicine'
 			},
 			allergies: {
 				label: 'Allergies (Medications / Food)',
-				placeholder: 'e.g. Penicillin, Seafood, Nuts (leave blank if none)'
+				placeholder: 'e.g. Penicillin, Seafood, Nuts'
 			}
 		},
 		specialNeeds: {
 			label: 'Vulnerable Groups & Special Needs',
+			notVulnerableLabel: 'Not a vulnerable group',
 			note: {
 				label: 'Special Needs Note (if any)',
 				placeholder: 'e.g. Patients requiring specific medication or special care'

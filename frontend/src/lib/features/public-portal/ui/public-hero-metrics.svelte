@@ -2,7 +2,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import type { Component } from 'svelte';
+	import type { Component, Snippet } from 'svelte';
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_HERO_I18N } from '$lib/constants/i18n';
@@ -16,6 +16,7 @@
 		showLivePing = true,
 		bgClass = 'bg-primary',
 		showSearch = true,
+		actions,
 		expectMetrics = false,
 		summary,
 		flags,
@@ -29,6 +30,7 @@
 		showLivePing?: boolean;
 		bgClass?: string;
 		showSearch?: boolean;
+		actions?: Snippet;
 		/** When true, log to console if metrics props are incomplete (hero still renders). */
 		expectMetrics?: boolean;
 
@@ -113,11 +115,13 @@
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html displayTitle}
 			</h1>
-			<p class="max-w-2xl text-base text-white/80 md:text-lg {showSearch ? 'mb-8' : ''}">
+			<p class="max-w-2xl text-base text-white/80 md:text-lg {showSearch || actions ? 'mb-6' : ''}">
 				{displayDescription}
 			</p>
 
-			{#if showSearch}
+			{#if actions}
+				{@render actions()}
+			{:else if showSearch}
 				<div
 					class="mt-2 flex w-full max-w-xl flex-col justify-between gap-2 rounded-xl bg-white p-2 sm:flex-row sm:items-center md:max-w-4xl"
 				>

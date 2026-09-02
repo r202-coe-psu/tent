@@ -8,8 +8,8 @@
 	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
 	--testing-banner-height: 1.625rem;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
-	--radius: 0.625rem;
-	--background: oklch(1 0 0);
+	--radius: 0.5rem;
+	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.147 0.004 49.25);
@@ -202,6 +202,14 @@
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
 
+	/* Micro-shadow overrides for crisp, non-floating cards */
+	--shadow-2xs: 0 1px 2px 0 rgb(15 23 42 / 0.03);
+	--shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+	--shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.05), 0 1px 2px -1px rgb(15 23 42 / 0.05);
+	--shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.05), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+	--shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.05), 0 4px 6px -4px rgb(15 23 42 / 0.05);
+	--shadow-xl: 0 20px 25px -5px rgb(15 23 42 / 0.05), 0 8px 10px -6px rgb(15 23 42 / 0.05);
+
 	/* Brand colors (SOP / SmartShelter) */
 	--color-brand: #013365;
 	--color-brand-hover: #002244;
@@ -252,47 +260,131 @@
 	html {
 		font-size: 18px;
 		scrollbar-gutter: stable;
+		font-family: 'IBM Plex Sans Thai', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 	* {
 		@apply border-border outline-ring/50;
 	}
 	body {
-		@apply bg-background text-base text-foreground;
+		@apply bg-background text-base text-foreground antialiased;
+		font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+	}
+
+	/* Browser Autofill Styling - maintain theme tones across light & dark modes */
+	input:-webkit-autofill,
+	input:-webkit-autofill:hover,
+	input:-webkit-autofill:focus,
+	input:-webkit-autofill:active,
+	textarea:-webkit-autofill,
+	textarea:-webkit-autofill:hover,
+	textarea:-webkit-autofill:focus,
+	textarea:-webkit-autofill:active,
+	select:-webkit-autofill,
+	select:-webkit-autofill:hover,
+	select:-webkit-autofill:focus,
+	select:-webkit-autofill:active {
+		-webkit-text-fill-color: var(--foreground) !important;
+		-webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
+		box-shadow: 0 0 0 1000px var(--card) inset !important;
+		caret-color: var(--foreground) !important;
+		font-family: inherit !important;
+		transition: background-color 5000s ease-in-out 0s;
+	}
+
+	input:autofill,
+	textarea:autofill,
+	select:autofill {
+		-webkit-text-fill-color: var(--foreground) !important;
+		-webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
+		box-shadow: 0 0 0 1000px var(--card) inset !important;
+		caret-color: var(--foreground) !important;
+		font-family: inherit !important;
+	}
+
+	.bg-background input:-webkit-autofill,
+	.bg-background textarea:-webkit-autofill,
+	input.bg-background:-webkit-autofill,
+	textarea.bg-background:-webkit-autofill {
+		-webkit-box-shadow: 0 0 0 1000px var(--background) inset !important;
+		box-shadow: 0 0 0 1000px var(--background) inset !important;
+	}
+
+	.bg-muted input:-webkit-autofill,
+	.bg-muted textarea:-webkit-autofill,
+	input.bg-muted:-webkit-autofill,
+	textarea.bg-muted:-webkit-autofill {
+		-webkit-box-shadow: 0 0 0 1000px var(--muted) inset !important;
+		box-shadow: 0 0 0 1000px var(--muted) inset !important;
 	}
 }
 
 @layer utilities {
-	/* Semantic Status Badge Styles (Food Sphere / DoC / Inventory Alerts) */
+	/* Full 360-degree Status Card Framing (Civic Light Standard) */
+	.card-status-operational {
+		@apply border-2 border-emerald-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/20 transition-all;
+	}
+	.card-status-warning {
+		@apply border-2 border-amber-200 bg-white hover:border-amber-300 hover:bg-amber-50/20 transition-all;
+	}
+	.card-status-critical {
+		@apply border-2 border-red-200 bg-white hover:border-red-300 hover:bg-red-50/20 transition-all;
+	}
+	.card-status-supply {
+		@apply border-2 border-sky-200 bg-white hover:border-sky-300 hover:bg-sky-50/20 transition-all;
+	}
+
+	/* High-Contrast Civic Status Badges */
 	.badge-status-critical {
-		@apply border-danger-border bg-danger-muted text-danger;
+		@apply border border-red-300 bg-red-100 font-bold text-red-900;
 	}
 	.badge-status-warning {
-		@apply border-warning-border bg-warning-muted text-warning-dark;
+		@apply border border-amber-300 bg-amber-100 font-bold text-amber-950;
 	}
 	.badge-status-adequate {
-		@apply border-success-border bg-success-muted text-success-dark;
+		@apply border border-emerald-300 bg-emerald-100 font-bold text-emerald-950;
 	}
 	.badge-status-overstock {
-		@apply border-shelter-blue-text/20 bg-shelter-blue-bg text-shelter-blue-text;
+		@apply border border-sky-300 bg-sky-100 font-bold text-sky-950;
 	}
 	.badge-status-unconfigured {
-		@apply border-border bg-muted text-muted-foreground;
+		@apply border border-slate-300 bg-slate-100 font-medium text-slate-700;
 	}
 
 	/* Status Badge Indicator Dots */
 	.badge-dot-critical {
-		@apply animate-pulse bg-danger;
+		@apply animate-pulse bg-red-600;
 	}
 	.badge-dot-warning {
-		@apply bg-warning;
+		@apply bg-amber-500;
 	}
 	.badge-dot-adequate {
-		@apply bg-success;
+		@apply bg-emerald-600;
 	}
 	.badge-dot-overstock {
-		@apply bg-shelter-blue-text;
+		@apply bg-sky-600;
 	}
 	.badge-dot-unconfigured {
-		@apply bg-muted-foreground/40;
+		@apply bg-slate-400;
+	}
+
+	/* Touch-friendly form controls (mobile/tablet ≥ 48px, desktop 40px) */
+	.touch-target {
+		@apply min-h-12 touch-manipulation sm:min-h-10;
+	}
+	.form-control-touch {
+		@apply h-12 text-base sm:h-10 sm:text-sm;
+	}
+	.form-section-card {
+		@apply rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5;
+	}
+	.form-section-muted {
+		@apply rounded-xl border border-border bg-muted/30 p-4 sm:p-5;
+	}
+	.sticky-section-nav {
+		@apply sticky top-0 z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-1 py-2 backdrop-blur-sm;
+		scrollbar-width: none;
+	}
+	.sticky-section-nav::-webkit-scrollbar {
+		display: none;
 	}
 }

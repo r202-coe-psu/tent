@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type {
 		EvacueeInput,
@@ -10,7 +10,7 @@
 		PetGroup
 	} from '../domain/people';
 	import SearchSection from './evacuee-search.svelte';
-	import EwarSymptomSection from './evacuee-ewar-symptom.svelte';
+	import EwarSymptomSection, { type ScreeningDraft } from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
 	import HouseholdRegisterForm from './household-register-form.svelte';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
@@ -69,6 +69,13 @@
 
 	const selectedSymptoms = new SvelteSet<string>();
 	let isHealthy = $state(false);
+	let screeningDraft = $state<ScreeningDraft>({
+		medical_conditions: [],
+		medical_medications: [],
+		medical_allergies: [],
+		special_needs: [],
+		medical_note: ''
+	});
 	let newlyRegisteredEvacuee = $state<Evacuee | null>(null);
 	let isSubmittingEvacuee = $state(false);
 	let isSubmittingHousehold = $state(false);
@@ -118,11 +125,43 @@
 	const checkInMutation = useCheckInEvacuee();
 
 	let activeDraftEvacuee = $state<Evacuee | null>(null);
+	let topAnchorRef = $state<HTMLElement | null>(null);
+
+	async function scrollToTop() {
+		if (typeof window === 'undefined') return;
+		await tick();
+		requestAnimationFrame(() => {
+			if (topAnchorRef) {
+				topAnchorRef.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+			document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+			document.body.scrollTo({ top: 0, behavior: 'smooth' });
+
+			const scrollContainers = document.querySelectorAll(
+				'.overflow-y-auto, .overflow-auto, [class*="overflow-y-auto"], main'
+			);
+			scrollContainers.forEach((el) => {
+				el.scrollTo({ top: 0, behavior: 'smooth' });
+			});
+		});
+	}
+
+	let mounted = false;
+	$effect(() => {
+		const _currentStep = step;
+		if (!mounted) {
+			mounted = true;
+			return;
+		}
+		scrollToTop();
+	});
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
 		if (next === 3) registrationDraftActive = true;
 		step = next;
+		scrollToTop();
 	}
 
 	function handleSelectDraft(draft: Evacuee) {
@@ -138,7 +177,14 @@
 					? Math.max(0, currentYearBE - cardBirthYearBE)
 					: undefined;
 
-		// 1. Populate Personal Info for Step 3 (prefer authoritative card data)
+		// 1. Populate personal info for Step 3 (prefer authoritative card data)
+		screeningDraft = {
+			medical_conditions: draft.medical_conditions ?? [],
+			medical_medications: draft.medical_medications ?? [],
+			medical_allergies: draft.medical_allergies ?? [],
+			special_needs: draft.special_needs ?? [],
+			medical_note: draft.medical_note ?? ''
+		};
 		registrationDraft = {
 			first_name: card?.first_name_th || draft.first_name || '',
 			last_name: card?.last_name_th || draft.last_name || '',
@@ -151,9 +197,9 @@
 				: (draft.person_id ?? { cardType: 'national_id', number: '' }),
 			country: draft.country || 'THAILAND',
 			religion: draft.religion || 'buddhist',
-			special_needs: draft.special_needs || [],
 			photo: card?.photo_base64 || draft.photo || null,
-			card_snapshot: card || null
+			card_snapshot: card || null,
+			emergency_contact: draft.emergency_contact
 		};
 
 		if (card?.photo_base64 || draft.photo) {
@@ -187,6 +233,15 @@
 		registrationDraft = null;
 		registrationFacePhotoUrl = null;
 		activeDraftEvacuee = null;
+		screeningDraft = {
+			medical_conditions: [],
+			medical_medications: [],
+			medical_allergies: [],
+			special_needs: [],
+			medical_note: ''
+		};
+		selectedSymptoms.clear();
+		isHealthy = false;
 	}
 
 	onDestroy(() => {
@@ -199,14 +254,15 @@
 	}
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
-		registrationDraft = structuredClone(input);
+		const merged: EvacueeInput = { ...input, ...screeningDraft };
+		registrationDraft = structuredClone(merged);
 		if (activeDraftEvacuee) {
 			pendingEvacueeInput = {
-				...input,
+				...merged,
 				...(activeDraftEvacuee ? { draft_id: activeDraftEvacuee._id } : {})
 			} as EvacueeInput;
 		} else {
-			pendingEvacueeInput = input;
+			pendingEvacueeInput = merged;
 		}
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
@@ -422,6 +478,8 @@
 	}
 </script>
 
+<div bind:this={topAnchorRef} class="scroll-mt-6"></div>
+
 <!-- ── Step progress ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 space-y-3">
 	<div class="sm:hidden">
@@ -513,7 +571,6 @@
 			onsubmit={handleRegistrationSubmit}
 			pending={isSubmittingEvacuee || pending}
 			onBack={() => goToStep(2)}
-			hasSymptomsSelected={selectedSymptoms.size > 0}
 			initialInput={registrationDraft}
 			ondraftchange={(input) => (registrationDraft = structuredClone(input))}
 			bind:facePhotoUrl={registrationFacePhotoUrl}
@@ -526,6 +583,7 @@
 {:else if step === 2}
 	<EwarSymptomSection
 		bind:isHealthy
+		bind:screeningDraft
 		{selectedSymptoms}
 		onBack={() => goToStep(1)}
 		onNext={() => goToStep(3)}
@@ -565,34 +623,12 @@
 				initialAddress={newHouseholdAddress}
 				onsubmit={handleHouseholdRegisterSubmit}
 				onselect={handleHouseholdSelect}
+				oncontinue={() => goToStep(5)}
+				onback={() => goToStep(3)}
 				pending={isSubmittingHousehold}
 				bind:showNewHouseholdForm={isCreatingNewHousehold}
 			/>
 		{/if}
-
-		<div
-			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
-		>
-			{#if !isCreatingNewHousehold}
-				<Button
-					type="button"
-					variant="default"
-					class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
-					disabled={isSubmittingHousehold || !selectedHousehold}
-					onclick={() => goToStep(5)}
-				>
-					{t.nextAssetsPets}
-				</Button>
-			{/if}
-			<Button
-				type="button"
-				variant="ghost"
-				onclick={() => goToStep(3)}
-				class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
-			>
-				{t.back}
-			</Button>
-		</div>
 	</div>
 {:else if step === 5}
 	<EvacueePetAssetVehicle
