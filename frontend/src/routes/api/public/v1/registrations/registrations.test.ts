@@ -192,8 +192,9 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(7);
+			expect(e.schema_v).toBe(8);
 			expect(e.shelter_code).toBe('SH001');
+
 			expect(e.created_by).toBe('public');
 			expect(e.registered_via).toBe('web');
 			expect(e.current_stay).toMatchObject({ status: 'pre_registered', zone: null });

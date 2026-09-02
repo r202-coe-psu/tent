@@ -7,20 +7,21 @@ export const EVACUEE_FORM_I18N = {
 				description: 'ค้นหาด้วยเลขบัตรประชาชน, เบอร์โทรศัพท์ หรือชื่อ-นามสกุล ก่อนลงทะเบียนใหม่'
 			},
 			{
-				title: 'ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง (EWAR Symptoms)',
-				short: 'ประเมินอาการ',
-				description: 'โปรดสังเกตอาการหรือสอบถามผู้ประสบภัยก่อนเริ่มลงทะเบียน หากพบอาการให้แจ้งเตือน'
+				title: 'คัดกรองสุขภาพและกลุ่มเปราะบาง (EWAR & Triage)',
+				short: 'คัดกรอง',
+				description:
+					'ประเมินอาการเฉียบพลัน บันทึกโรคประจำตัว และระบุกลุ่มเปราะบางก่อนลงทะเบียนข้อมูลส่วนตัว'
 			},
 			{
 				title: 'ข้อมูลผู้ประสบภัย (Registration)',
 				short: 'ข้อมูลผู้ประสบภัย',
-				description: 'กรอกข้อมูลพื้นฐานและประเมินสถานะ'
+				description: 'กรอกข้อมูลยืนยันตัวตนและติดต่อฉุกเฉิน'
 			},
 			{
 				title: 'หน้าค้นหาครัวเรือน (Head of Household)',
 				short: 'ข้อมูลครัวเรือน',
 				description:
-					'เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ (ผู้ที่มาเพียงคนเดียวให้สร้างครัวเรือน 1 คน)'
+					'ถ้าไม่แน่ใจว่ามีครัวเรือนเดิม ให้ค้นหาก่อน — เลือกเข้าร่วมครัวเรือนที่มีอยู่ หรือสร้างครัวเรือนใหม่'
 			},
 			{
 				title: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)',
@@ -43,7 +44,7 @@ export const EVACUEE_FORM_I18N = {
 		toastZoneFailed: 'จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน',
 		householdAlertTitle: 'ผู้ประสบภัยทุกคนต้องมีครัวเรือน',
 		householdAlertDesc:
-			'เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ หากมาเพียงคนเดียวให้สร้างครัวเรือน 1 คน โดยผู้ลงทะเบียนจะเป็นหัวหน้าครัวเรือน',
+			'ถ้ามีญาติมาก่อนหรือไม่แน่ใจ ให้ค้นหาครัวเรือนในระบบก่อน — หากมาคนเดียวหรือแน่ใจว่ายังไม่มีใครลงทะเบียน ให้สร้างครัวเรือนใหม่',
 		householdLoading: 'กำลังโหลดข้อมูลครัวเรือน...',
 		householdLoadErrorTitle: 'โหลดข้อมูลครัวเรือนไม่สำเร็จ',
 		householdLoadErrorDesc: 'ยังค้นหาครัวเรือนที่มีอยู่ไม่ได้ แต่ยังสามารถสร้างครัวเรือนใหม่ได้',
@@ -69,15 +70,15 @@ export const EVACUEE_FORM_I18N = {
 				description: 'Search by ID number, phone, or full name before creating a new registration'
 			},
 			{
-				title: 'Illness & Surveillance Symptoms Assessment (EWAR)',
-				short: 'Symptoms',
+				title: 'Health Screening & Vulnerable Groups (EWAR & Triage)',
+				short: 'Screening',
 				description:
-					'Observe or ask evacuees about symptoms before registration. Alert if symptoms are present.'
+					'Assess acute symptoms, chronic conditions, and vulnerable-group tags before identity registration'
 			},
 			{
 				title: 'Evacuee Information (Registration)',
 				short: 'Evacuee Info',
-				description: 'Fill in basic information and assess status'
+				description: 'Enter identity verification and emergency contact details'
 			},
 			{
 				title: 'Household Selection (Head of Household)',

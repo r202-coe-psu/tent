@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -8,6 +7,9 @@
 	import type { Evacuee } from '../domain/people';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Check from '@lucide/svelte/icons/check';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_SELECT_ZONE_I18N } from './_constants/evacuee-select-zone.i18n';
@@ -27,11 +29,10 @@
 	const t = $derived(getTranslation(EVACUEE_SELECT_ZONE_I18N, languageStore.current));
 
 	let selectedZone = $state('');
+	let showOtherZones = $state(false);
 
-	// Query current shelter data to get zones
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 
-	// Filter only active zones
 	let activeZones = $derived(
 		(shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed')
 	);
@@ -49,12 +50,19 @@
 		return activeZones[0] || null;
 	});
 
-	// Automatically select the recommended zone initially
 	$effect(() => {
 		if (recommendedZone && !selectedZone) {
 			selectedZone = recommendedZone.code;
 		}
 	});
+
+	function zoneTypeLabel(type: string | undefined) {
+		return type === 'vulnerable' ? t.typeVulnerable : t.typeGeneral;
+	}
+
+	function selectZone(code: string) {
+		selectedZone = code;
+	}
 </script>
 
 <div class="space-y-6">
@@ -69,65 +77,113 @@
 				</Button>
 			</Alert.Description>
 		</Alert.Root>
+	{:else if shelterQuery.isLoading}
+		<p class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+			<Loader2 class="size-5 animate-spin" />
+			{t.loading}
+		</p>
+	{:else if activeZones.length === 0}
+		<p class="py-8 text-center text-base font-medium text-muted-foreground" role="status">
+			{t.noZones}
+		</p>
 	{:else}
-		<div class="space-y-3 text-center">
-			<p class="text-base font-medium text-foreground">{t.recommendedHeader}</p>
-			{#if shelterQuery.isLoading}
-				<p class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-					<Loader2 class="size-4 animate-spin" />
-					{t.loading}
-				</p>
-			{:else if recommendedZone}
-				<p class="text-2xl font-bold">
-					<span class="mr-1">{recommendedZone.type === 'vulnerable' ? '🟣' : '🟢'}</span>
-					{recommendedZone.name}
-				</p>
-				<p class="text-xs text-muted-foreground">
-					{t.recommendedNote(
-						recommendedZone.type === 'vulnerable' ? t.typeVulnerable : t.typeGeneral
-					)}
-				</p>
-			{:else}
-				<p class="text-base font-semibold text-muted-foreground" role="status">
-					{t.noZones}
-				</p>
+		<div class="space-y-4">
+			<p class="text-center text-sm font-medium text-muted-foreground">{t.recommendedHeader}</p>
+
+			{#if recommendedZone}
+				{@const isRecommendedSelected = selectedZone === recommendedZone.code}
+				<div
+					class="form-section-card space-y-3 {isRecommendedSelected && !showOtherZones
+						? 'border-2 border-success-border ring-2 ring-success-muted'
+						: ''}"
+				>
+					<div class="flex items-start justify-between gap-3">
+						<div class="space-y-1">
+							<div class="flex items-center gap-2">
+								<MapPin class="size-5 shrink-0 text-primary" />
+								<h3 class="text-xl font-bold text-foreground">{recommendedZone.name}</h3>
+							</div>
+							<p class="text-sm text-muted-foreground">
+								{t.recommendedNote(zoneTypeLabel(recommendedZone.type))}
+							</p>
+						</div>
+						{#if isRecommendedSelected && !showOtherZones}
+							<span
+								class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-muted px-2.5 py-1 text-xs font-bold text-success-dark"
+							>
+								<Check class="size-3.5" />
+								เลือกแล้ว
+							</span>
+						{/if}
+					</div>
+
+					{#if !showOtherZones}
+						<Button
+							type="button"
+							disabled={pending}
+							class="touch-target h-auto w-full py-3 text-base font-semibold"
+							onclick={() => onSubmit(recommendedZone.code)}
+						>
+							{pending ? t.btnSaving : t.btnConfirmRecommended}
+						</Button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if activeZones.length > 1}
+				<Button
+					type="button"
+					variant="outline"
+					class="touch-target h-auto w-full gap-2 py-3"
+					onclick={() => {
+						showOtherZones = !showOtherZones;
+						if (!showOtherZones && recommendedZone) {
+							selectedZone = recommendedZone.code;
+						}
+					}}
+				>
+					<ChevronDown class="size-4 transition-transform {showOtherZones ? 'rotate-180' : ''}" />
+					{showOtherZones ? t.btnHideOtherZones : t.btnOtherZones}
+				</Button>
+			{/if}
+
+			{#if showOtherZones}
+				<div class="space-y-2">
+					<p class="text-sm font-semibold text-foreground">{t.otherZonesTitle}</p>
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						{#each activeZones as zone (zone.code)}
+							{@const selected = selectedZone === zone.code}
+							<button
+								type="button"
+								class="touch-target flex items-center justify-between gap-2 rounded-xl border-2 px-4 py-3 text-left transition-colors {selected
+									? 'border-primary bg-primary-muted text-foreground'
+									: 'border-border bg-card hover:border-primary/40 hover:bg-muted/40'}"
+								onclick={() => selectZone(zone.code)}
+							>
+								<span class="font-medium">{zone.name}</span>
+								<span class="text-xs text-muted-foreground">{zoneTypeLabel(zone.type)}</span>
+							</button>
+						{/each}
+					</div>
+
+					<Button
+						type="button"
+						disabled={!selectedZone || pending}
+						class="touch-target h-auto w-full py-3 text-base font-semibold"
+						onclick={() => onSubmit(selectedZone)}
+					>
+						{pending ? t.btnSaving : t.btnConfirm}
+					</Button>
+				</div>
 			{/if}
 		</div>
-
-		{#if activeZones.length > 0}
-			<div class="mx-auto w-full max-w-sm">
-				<Select.Root type="single" bind:value={selectedZone}>
-					<Select.Trigger class="h-12 w-full rounded-xl border-border bg-background">
-						{@const currentZone = activeZones.find((z: Zone) => z.code === selectedZone)}
-						<span class="flex items-center gap-2 text-base font-medium">
-							{currentZone ? `📍 ${currentZone.name}` : t.selectPlaceholder}
-						</span>
-					</Select.Trigger>
-					<Select.Content class="rounded-xl">
-						{#each activeZones as zone (zone.code)}
-							<Select.Item value={zone.code} class="text-base font-medium">
-								📍 {zone.name}
-							</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			</div>
-		{/if}
 	{/if}
 
 	<div class="flex flex-col gap-3 border-t border-border pt-6">
 		<Button
 			type="button"
-			disabled={!selectedZone || shelterQuery.isLoading || shelterQuery.isError || pending}
-			class="h-12 w-full rounded-xl bg-[#003B71] text-sm font-medium hover:bg-[#002a50] md:text-base"
-			onclick={() => onSubmit(selectedZone)}
-		>
-			{pending ? t.btnSaving : t.btnConfirm}
-		</Button>
-		<Button
-			type="button"
 			variant="outline"
-			class="h-12 w-full rounded-xl text-sm font-medium md:text-base"
+			class="touch-target h-auto w-full py-3"
 			onclick={onBack}
 			disabled={pending}
 		>

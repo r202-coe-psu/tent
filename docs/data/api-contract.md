@@ -181,7 +181,7 @@ Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `item
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
-### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
+### 5.1 External plane `/external/v1` (CR-062, CR-098 M2 Integration)
 
 สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน:
 

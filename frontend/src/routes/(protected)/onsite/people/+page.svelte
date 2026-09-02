@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
@@ -65,13 +66,32 @@
 	}
 
 	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(1);
+	let pageTopRef = $state<HTMLElement | null>(null);
+
+	let prevStep = $state(1);
+	$effect(() => {
+		if (step !== prevStep) {
+			prevStep = step;
+			tick().then(() => {
+				requestAnimationFrame(() => {
+					pageTopRef?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+					window.scrollTo({ top: 0, behavior: 'smooth' });
+					document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+					document.body.scrollTo({ top: 0, behavior: 'smooth' });
+					document.querySelectorAll('.overflow-y-auto, .overflow-auto, main').forEach((el) => {
+						el.scrollTo({ top: 0, behavior: 'smooth' });
+					});
+				});
+			});
+		}
+	});
 </script>
 
 <svelte:head>
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
+<div bind:this={pageTopRef} class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
 	{#if completedEvacuee}
 		<EvacueeWristbandSuccess
 			evacuee={completedEvacuee}
@@ -112,17 +132,19 @@
 			</div>
 		{/if}
 
-		<EvacueeForm
-			onsubmit={handleRegister}
-			pending={createMutation.isPending}
-			bind:step
-			onsaveerror={(report) => {
-				saveError = report;
-			}}
-			onComplete={(ev) => {
-				saveError = null;
-				completedEvacuee = ev;
-			}}
-		/>
+		<div class="rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-8 md:p-10">
+			<EvacueeForm
+				onsubmit={handleRegister}
+				pending={createMutation.isPending}
+				bind:step
+				onsaveerror={(report) => {
+					saveError = report;
+				}}
+				onComplete={(ev) => {
+					saveError = null;
+					completedEvacuee = ev;
+				}}
+			/>
+		</div>
 	{/if}
 </div>

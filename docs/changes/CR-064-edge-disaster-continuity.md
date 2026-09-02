@@ -1,8 +1,9 @@
 ---
 id: CR-064
 title: Edge disaster continuity — network-only LAN cutover + ops status UI (CR-033 follow-up)
-status: proposed
+status: approved
 date: 2026-08-12
+updated: 2026-09-01
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (OD lock; CR approve รอ)
 layer: stable

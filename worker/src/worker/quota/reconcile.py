@@ -120,7 +120,9 @@ def sum_reserved_by_key(
     return totals
 
 
-async def _collect_truth_set(couch: CouchClient, shelter_code: str) -> list[dict[str, Any]]:
+async def _collect_truth_set(
+    couch: CouchClient, shelter_code: str
+) -> list[dict[str, Any]]:
     donations: dict[str, dict[str, Any]] = {}
 
     database = shelter_db_name(shelter_code)
@@ -137,7 +139,7 @@ async def _collect_truth_set(couch: CouchClient, shelter_code: str) -> list[dict
 
     unsynced = await DonationBuffer.find(
         DonationBuffer.shelter_code == shelter_code,
-        DonationBuffer.synced_to_couch == False,  # noqa: E712
+        DonationBuffer.synced_to_couch == False,
     ).to_list()
     for buffer in unsynced:
         key = _normalize_donation_id(buffer.id)
@@ -171,7 +173,9 @@ async def reconcile_shelter(
 
     # Read raw so the exact Decimal128 can be handed back as the optimistic filter.
     collection = DonationNeedCounter.get_motor_collection()
-    counters = await collection.find({"shelter_code": shelter_code}).to_list(length=None)
+    counters = await collection.find({"shelter_code": shelter_code}).to_list(
+        length=None
+    )
 
     seen_keys: set[QuotaKey] = set()
     for counter in counters:

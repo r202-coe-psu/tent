@@ -80,9 +80,13 @@ async def expire_declared_donations(couch: CouchClient, *, now: datetime) -> int
 
         for doc in stale:
             try:
-                await couch.put_doc(database, {**doc, "status": "expired", "updated_at": _iso(now)})
+                await couch.put_doc(
+                    database, {**doc, "status": "expired", "updated_at": _iso(now)}
+                )
             except Exception:
-                logger.exception("Failed to expire donation %s in %s", doc.get("_id"), database)
+                logger.exception(
+                    "Failed to expire donation %s in %s", doc.get("_id"), database
+                )
                 continue
             total += 1
 

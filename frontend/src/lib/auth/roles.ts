@@ -1,10 +1,10 @@
 /**
  * Role kernel — the canonical CouchDB role vocabulary (docs/prd/role-permission-matrix.md §1.1,
- * docs/data/data-model.md §6). Pure + isomorphic: shared by the server BFF (authorization) and the
+ * docs/data/data-model.md §6, CR-104). Pure + isomorphic: shared by the server BFF (authorization) and the
  * client (forms, nav). No I/O, no Svelte.
  *
  * `_users.roles` is either `["system_admin"]` (global) or `["shelter:{code}", <capability>...]`
- * (one shelter scope + capability roles). `shelter_manager` subsumes the staff capabilities.
+ * (one or more shelter scopes + capability roles). `shelter_manager` subsumes the staff capabilities.
  */
 
 /** App-level system administrator (global; no `shelter:` scope). */
@@ -14,9 +14,25 @@ export const SYSTEM_ADMIN = 'system_admin';
 export const SHELTER_MANAGER = 'shelter_manager';
 
 export const WAREHOUSE_STAFF = 'warehouse_staff';
+export const SUPPLY_COORDINATOR = 'supply_coordinator';
+export const TRIAGE_STAFF = 'triage_staff';
+export const MEDICAL_STAFF = 'medical_staff';
+export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
+export const SECURITY_OFFICER = 'security_officer';
+export const FACILITY_STAFF = 'facility_staff';
 
-/** Capability roles a shelter_manager is allowed to grant (per spec §1.1). */
-export const STAFF_CAPABILITIES = ['registration_staff', 'kitchen_staff', WAREHOUSE_STAFF] as const;
+/** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
+export const STAFF_CAPABILITIES = [
+	'registration_staff',
+	TRIAGE_STAFF,
+	MEDICAL_STAFF,
+	'kitchen_staff',
+	SUPPLY_COORDINATOR,
+	WAREHOUSE_STAFF,
+	VOLUNTEER_COORDINATOR,
+	SECURITY_OFFICER,
+	FACILITY_STAFF
+] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
 /** Every capability an SA may grant alongside the shelter scope. */
@@ -35,10 +51,15 @@ export function shelterScopeRole(code: string): string {
 	return `shelter:${code}`;
 }
 
+/** Extract all shelter codes from a role list (`["shelter:SH001", "shelter:SH002"]` → `["SH001", "SH002"]`). */
+export function shelterCodesFromRoles(roles: readonly string[]): string[] {
+	return roles.filter((r) => r.startsWith('shelter:')).map((r) => r.slice('shelter:'.length));
+}
+
 /** Extract the single shelter code from a role list (`shelter:SH001` → `SH001`), or null. */
 export function shelterCodeFromRoles(roles: readonly string[]): string | null {
-	const scope = roles.find((r) => r.startsWith('shelter:'));
-	return scope ? scope.slice('shelter:'.length) : null;
+	const codes = shelterCodesFromRoles(roles);
+	return codes.length > 0 ? codes[0] : null;
 }
 
 /** True when the role list denotes an SA or the CouchDB server admin (SA-equivalent). */
@@ -79,9 +100,9 @@ export function canCancelHold(roles: readonly string[]): boolean {
 	);
 }
 
-/** True when the role list includes `warehouse_staff`. */
+/** True when the role list includes `warehouse_staff` or `supply_coordinator`. */
 export function isWarehouseStaff(roles: readonly string[]): boolean {
-	return roles.includes(WAREHOUSE_STAFF);
+	return roles.includes(WAREHOUSE_STAFF) || roles.includes(SUPPLY_COORDINATOR);
 }
 
 /** True when the roles hold a given staff capability (e.g. `kitchen_staff`). */
@@ -107,8 +128,14 @@ export function isStaffOnly(roles: readonly string[]): boolean {
  */
 const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	registration_staff: 'เจ้าหน้าที่ลงทะเบียน',
+	triage_staff: 'เจ้าหน้าที่คัดกรอง',
+	medical_staff: 'เจ้าหน้าที่การแพทย์และพยาบาล',
 	kitchen_staff: 'เจ้าหน้าที่ครัว',
-	warehouse_staff: 'เจ้าหน้าที่คลัง'
+	supply_coordinator: 'ผู้ประสานงานพัสดุและคลัง',
+	warehouse_staff: 'เจ้าหน้าที่คลัง',
+	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
+	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
+	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่'
 };
 
 /**
