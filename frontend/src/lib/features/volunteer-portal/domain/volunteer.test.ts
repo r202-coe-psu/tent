@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
 	dispatchRespondSchema,
+	isJobApplicable,
 	isUpcomingShift,
+	normalizeTicketToken,
+	ticketTokenFromScan,
 	isValidThaiNationalId,
 	needsDispatchResponse,
 	responseCodeSchema,
 	shiftStatusLabel,
 	ticketStatusLabel,
 	volunteerApplySchema,
+	volunteerProfileUpdateSchema,
+	type PublicJob,
 	type ScheduleShift
 } from './volunteer';
 
@@ -178,5 +183,111 @@ describe('dispatchRespondSchema', () => {
 		const base = { assignment_id: 'shift_assignment:01A', code: '4K7-2M9' };
 		expect(dispatchRespondSchema.safeParse({ ...base, action: 'declined' }).success).toBe(true);
 		expect(dispatchRespondSchema.safeParse({ ...base, action: 'maybe' }).success).toBe(false);
+	});
+});
+
+describe('isJobApplicable', () => {
+	const job = (overrides: Partial<PublicJob> = {}): PublicJob => ({
+		job_id: 'job:01A',
+		shelter_code: 'SH001',
+		shelter_name: 'ศูนย์ทดสอบ',
+		title: 'ครัวกลาง',
+		description: '',
+		tier: 'operational',
+		skills_required: [],
+		shift_template: { shift_name: 'กะเช้า', start_time: '08:00', end_time: '16:00', days: [] },
+		quota: 10,
+		slots_confirmed: 4,
+		slots_remaining: 6,
+		status: 'open',
+		requires_review: false,
+		...overrides
+	});
+
+	it('accepts a job that still has a seat', () => {
+		expect(isJobApplicable(job())).toBe(true);
+		expect(isJobApplicable(job({ status: 'almost_full', slots_remaining: 1 }))).toBe(true);
+	});
+
+	it('refuses a job with no seat left, whatever its status still says', () => {
+		// The projection can lag behind the counter — the seat count is what decides, so a
+		// job still flagged `open` cannot be applied to once it is actually full.
+		expect(isJobApplicable(job({ slots_remaining: 0 }))).toBe(false);
+	});
+
+	it('refuses a closed or cancelled job even while seats remain', () => {
+		expect(isJobApplicable(job({ status: 'closed' }))).toBe(false);
+		expect(isJobApplicable(job({ status: 'cancelled' }))).toBe(false);
+	});
+});
+
+describe('normalizeTicketToken', () => {
+	it('uppercases a tracking token, which is hex and case-insensitive in practice', () => {
+		expect(normalizeTicketToken('  tkt-vol-abc123  ')).toBe('TKT-VOL-ABC123');
+	});
+
+	it('leaves a view reference exactly as it was — it is base64url and case matters', () => {
+		// Upper-casing one destroys the HMAC signature, which is how the old sign-in
+		// silently rejected every reference minted by a phone lookup.
+		const view = 'VIEW-am9iOjE.aBcD_eF-';
+		expect(normalizeTicketToken(` ${view} `)).toBe(view);
+		expect(normalizeTicketToken('view-am9iOjE.aBcD_eF-')).toBe('VIEW-am9iOjE.aBcD_eF-');
+	});
+
+	it('refuses anything that is not one of the two shapes', () => {
+		// The placeholder on the login form used to advertise this one; it never worked.
+		expect(normalizeTicketToken('V-1001')).toBeNull();
+		expect(normalizeTicketToken('0812345678')).toBeNull();
+		expect(normalizeTicketToken('   ')).toBeNull();
+	});
+});
+
+describe('ticketTokenFromScan', () => {
+	it('pulls the token out of the pass URL a QR actually encodes', () => {
+		expect(ticketTokenFromScan('https://shelter.example/volunteer/ticket/TKT-VOL-AB12')).toBe(
+			'TKT-VOL-AB12'
+		);
+	});
+
+	it('ignores a query string or fragment the link picked up', () => {
+		expect(ticketTokenFromScan('/volunteer/ticket/TKT-VOL-AB12?from=qr#top')).toBe('TKT-VOL-AB12');
+	});
+
+	it('accepts a bare token, since some codes carry only that', () => {
+		expect(ticketTokenFromScan('TKT-VOL-AB12')).toBe('TKT-VOL-AB12');
+	});
+
+	it('returns null for a QR that is not a pass at all', () => {
+		expect(ticketTokenFromScan('https://example.com/menu')).toBeNull();
+	});
+});
+
+describe('volunteerProfileUpdateSchema', () => {
+	it('accepts the skills a volunteer picked', () => {
+		const parsed = volunteerProfileUpdateSchema.safeParse({ skills: ['ครัว', 'ขับรถ'] });
+		expect(parsed.success && parsed.data.skills).toEqual(['ครัว', 'ขับรถ']);
+	});
+
+	it('defaults to clearing every skill rather than failing on an absent list', () => {
+		// "I have no skills to declare" is a real edit, and the form sends nothing for it.
+		const parsed = volunteerProfileUpdateSchema.safeParse({});
+		expect(parsed.success && parsed.data.skills).toEqual([]);
+	});
+
+	it('refuses a list longer than the API stores', () => {
+		const tooMany = Array.from({ length: 31 }, (_, i) => `skill-${i}`);
+		expect(volunteerProfileUpdateSchema.safeParse({ skills: tooMany }).success).toBe(false);
+	});
+
+	it('cannot express a staff-only change, whatever the caller sends', () => {
+		// The extra keys are stripped, not stored — this is what makes the write path safe
+		// even though the credential reaching it (a phone number) is guessable.
+		const parsed = volunteerProfileUpdateSchema.safeParse({
+			skills: ['ครัว'],
+			identity_verified: true,
+			volunteer_code: 'V-999',
+			status: 'inactive'
+		});
+		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
 	});
 });

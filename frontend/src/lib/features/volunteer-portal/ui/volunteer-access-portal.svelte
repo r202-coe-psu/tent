@@ -1,5 +1,4 @@
 <script lang="ts">
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
@@ -13,22 +12,28 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
-	import Search from '@lucide/svelte/icons/search';
-	import Shield from '@lucide/svelte/icons/shield';
 	import X from '@lucide/svelte/icons/x';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import {
 		useRespondToDispatchMutation,
+		useVolunteerJobs,
+		useVolunteerProfile,
 		useVolunteerSchedule,
 		useVolunteerTickets
 	} from '../application/queries';
+	import JobBoard from './job-board.svelte';
+	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
+		isJobApplicable,
+		normalizeTicketToken,
+		PORTAL_TOKEN_HANDOFF_KEY,
+		ticketStatusLabel,
 		responseCodeSchema,
 		ticketFindSchema,
+		ticketTokenFromScan,
+		type PortalCredential,
 		type ScheduleShift,
 		type TicketSummary
 	} from '../domain/volunteer';
@@ -54,6 +59,16 @@
 		dispatchStatus?: string | null;
 	}
 
+	/** One booking the volunteer holds — a `job_application`, not a rostered shift. */
+	interface PortalBooking {
+		id: string;
+		title: string;
+		location: string;
+		dateText: string;
+		statusLabel: string;
+		confirmed: boolean;
+	}
+
 	interface PortalVolunteer {
 		id: string;
 		token: string;
@@ -68,8 +83,8 @@
 		roleType: string;
 		readiness: boolean;
 		scheduleCount: number;
-		openingsCount: number;
 		shifts: PortalShift[];
+		bookings: PortalBooking[];
 	}
 
 	// ── STATE ──────────────────────────────────────────────────────────────────
@@ -78,12 +93,47 @@
 	let inputToken = $state('');
 	let loginError = $state('');
 
-	/** The phone this session signed in with. Empty = signed out. */
-	let livePhone = $state('');
+	/**
+	 * What this session signed in with — a phone number or a ticket token. `null` =
+	 * signed out. Both doors resolve to the same volunteer server-side, so everything
+	 * below is written against the credential, never against "the phone".
+	 */
+	let session = $state<PortalCredential | null>(null);
 
-	const scheduleQuery = useVolunteerSchedule(() => livePhone);
-	const ticketsQuery = useVolunteerTickets(() => livePhone);
-	const respond = useRespondToDispatchMutation(() => livePhone);
+	/**
+	 * Pick up the token a just-completed booking left behind, so the volunteer lands on
+	 * their own ตารางทำงาน already signed in instead of being asked for the number they
+	 * typed thirty seconds ago. Cleared immediately: a shared tablet must not sign the
+	 * next person in as this one.
+	 */
+	$effect(() => {
+		if (session) return;
+		let handed: string | null = null;
+		try {
+			handed = sessionStorage.getItem(PORTAL_TOKEN_HANDOFF_KEY);
+			if (handed) sessionStorage.removeItem(PORTAL_TOKEN_HANDOFF_KEY);
+		} catch {
+			// Storage unavailable (private mode). The login form is still there.
+		}
+		const token = handed ? normalizeTicketToken(handed) : null;
+		if (token) session = { token };
+	});
+
+	const scheduleQuery = useVolunteerSchedule(() => session);
+	const ticketsQuery = useVolunteerTickets(() => session);
+	/**
+	 * Only for the count on the "ภารกิจที่เปิดรับ" tab button. The board itself fetches
+	 * with the same key, so this costs no extra request — and the badge counts jobs that
+	 * can actually be applied to, not, as it once did, the volunteer's own tickets.
+	 */
+	const openingsQuery = useVolunteerJobs(
+		() => ({}),
+		() => session !== null
+	);
+	const openingsCount = $derived((openingsQuery.data ?? []).filter(isJobApplicable).length);
+	const profileQuery = useVolunteerProfile(() => session);
+	let profileDialogOpen = $state(false);
+	const respond = useRespondToDispatchMutation(() => session);
 
 	/** Per-offer code entry, keyed by assignment so two offers keep their own box. */
 	let dispatchCodes = $state<Record<string, string>>({});
@@ -142,20 +192,24 @@
 	}
 
 	function toPortalVolunteer(
-		phone: string,
+		credential: PortalCredential,
+		phoneMasked: string,
 		shifts: ScheduleShift[],
 		tickets: TicketSummary[]
 	): PortalVolunteer {
 		const named = tickets.find((t) => t.applicant_name)?.applicant_name ?? '';
 		const first = shifts[0];
+		// A token session never holds the raw number — the API returns it masked, which
+		// is also what may be shown on a screen held up at a gate (AC-VOL-03).
+		const shownPhone = phoneMasked || credential.phone || '';
 		return {
-			id: phone,
-			// The portal signs in by phone, so this is what the QR encodes for the
-			// check-in station — there is no per-volunteer token on this screen.
-			token: `VOL-${phone}`,
+			id: credential.token ?? credential.phone ?? '',
+			// A real ticket token is what the check-in station can actually resolve; a
+			// phone session has none, so it falls back to the number it signed in with.
+			token: credential.token ?? `VOL-${credential.phone}`,
 			name: named || 'จิตอาสา',
 			avatar: (named || 'อา').slice(0, 2),
-			phone,
+			phone: shownPhone,
 			shelterName: first?.shelter_name ?? '',
 			shelterCode: first?.shelter_code ?? '',
 			verified: true,
@@ -168,25 +222,36 @@
 			roleType: '⚡ Operational (จิตอาสาทั่วไป)',
 			readiness: shifts.length > 0,
 			scheduleCount: shifts.length,
-			openingsCount: tickets.length,
-			shifts: shifts.map(toPortalShift)
+			shifts: shifts.map(toPortalShift),
+			bookings: tickets.map((ticket) => ({
+				id: ticket.view_token,
+				title: ticket.job_title || 'ภารกิจอาสาสมัคร',
+				location: ticket.shelter_code,
+				dateText: ticket.shift_date || 'ยังไม่ระบุวัน',
+				statusLabel: ticketStatusLabel(ticket.status),
+				confirmed: ticket.status === 'confirmed'
+			}))
 		};
 	}
 
 	const liveVolunteer = $derived.by(() => {
-		if (!livePhone) return null;
+		const credential = session;
+		if (!credential) return null;
 		// Held back until the schedule has answered, so the dashboard does not flash an
 		// empty roster at someone who does have shifts.
 		if (scheduleQuery.isPending) return null;
-		return toPortalVolunteer(livePhone, scheduleQuery.data ?? [], ticketsQuery.data ?? []);
+		return toPortalVolunteer(
+			credential,
+			ticketsQuery.data?.phoneMasked ?? '',
+			scheduleQuery.data ?? [],
+			ticketsQuery.data?.tickets ?? []
+		);
 	});
 
 	/** The open session, or null when signed out. The markup below reads only this. */
 	const currentVolunteer = $derived(liveVolunteer);
 
 	let dashboardTab = $state<'schedule' | 'openings'>('schedule');
-	let searchJobQuery = $state('');
-	let selectedShelterFilter = $state('all');
 	let isPassModalOpen = $state(false);
 	let passModalEl = $state<HTMLElement | null>(null);
 	let isPassFullscreen = $state(false);
@@ -217,10 +282,27 @@
 	}
 	let isCameraModalOpen = $state(false);
 
-	function handleScanToken(token: string) {
-		const upperToken = token.trim().toUpperCase();
-		inputToken = upperToken;
-		submitToken(upperToken);
+	/**
+	 * Read a volunteer QR and sign in with what it contains.
+	 *
+	 * The scanning itself lives in `VolunteerQrScannerModal`, which the ticket screens
+	 * share; this only decides what a decoded payload means. The pass encodes its own
+	 * URL, so what comes back is either a bare token or a link ending in one — both
+	 * reduce to the same token, and anything else is left for `submitToken` to reject
+	 * rather than guessed at here.
+	 *
+	 * Normalised through `ticketTokenFromScan`, never `toUpperCase()`: a `VIEW-`
+	 * reference is base64url and upper-casing it destroys the signature.
+	 */
+	function handleScanToken(scanned: string) {
+		const token = ticketTokenFromScan(scanned);
+		if (!token) {
+			loginError = 'ไม่พบรหัสตั๋วใน QR Code นี้ กรุณาลองใหม่อีกครั้ง';
+			return;
+		}
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
+		inputToken = token;
+		submitToken(token);
 	}
 	let qrDataUrl = $state<string>('');
 
@@ -262,27 +344,33 @@
 		// The normalised form, so the query key matches however it was typed. What comes
 		// back is whatever the server holds — a number with no shifts opens an empty
 		// dashboard rather than a session invented on the spot.
-		livePhone = parsed.data.phone;
+		session = { phone: parsed.data.phone };
 	}
 
 	/**
 	 * Sign in with a ticket code, from the form or from a QR scan.
 	 *
-	 * A real code opens its own pass: that page resolves the token itself and is where
-	 * the QR for on-site check-in lives, so there is nothing to look up here.
+	 * This is a sign-in, not a shortcut to the pass: the token opens the same ตารางทำงาน
+	 * the phone would, because the API resolves both to one volunteer. It used to
+	 * navigate away to the ticket page, which left the QR on someone's pass unable to do
+	 * the one thing the login screen offers it for.
+	 *
+	 * Whether the token is real is the server's answer, not ours — a wrong one opens an
+	 * empty dashboard, the same as an unknown phone number, so this screen cannot be
+	 * used to probe which tokens exist.
 	 */
 	function submitToken(value: string) {
 		loginError = '';
-		const trimmed = value.trim().toUpperCase();
-		if (!trimmed) {
+		if (!value.trim()) {
 			loginError = 'กรุณากรอกรหัส Token หรือรหัสตั๋วจิตอาสา';
 			return;
 		}
-		if (trimmed.startsWith('TKT-VOL-') || trimmed.startsWith('VIEW-')) {
-			void goto(resolve(`/volunteer/ticket/${encodeURIComponent(trimmed)}`));
+		const token = normalizeTicketToken(value);
+		if (!token) {
+			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL- หรือ VIEW-';
 			return;
 		}
-		loginError = 'ไม่พบรหัสตั๋วหรือ Token ในระบบ กรุณาตรวจสอบอีกครั้ง';
+		session = { token };
 	}
 
 	function handleTokenLogin(e: SubmitEvent) {
@@ -323,7 +411,7 @@
 	}
 
 	function handleLogout() {
-		livePhone = '';
+		session = null;
 		readinessOverride = null;
 		dispatchCodes = {};
 		dispatchErrors = {};
@@ -351,17 +439,6 @@
 		if (isReady === value) return;
 		readinessOverride = value;
 		toast.success(value ? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢' : 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪');
-	}
-
-	function handleBookJob(jobTitle: string) {
-		toast.success(`จองภารกิจ "${jobTitle}" สำเร็จ! ได้รับตั๋วดิจิทัลแล้ว`);
-		if (currentVolunteer) {
-			currentVolunteer.scheduleCount += 1;
-		}
-	}
-
-	function handleRequestReview(jobTitle: string) {
-		toast.info(`ยื่นขอปฏิบัติงาน "${jobTitle}" แล้ว รอเจ้าหน้าที่ตรวจสอบคุณสมบัติ`);
 	}
 </script>
 
@@ -601,7 +678,7 @@
 
 				<button
 					type="button"
-					onclick={() => toast.info('ระบบแก้ไขโปรไฟล์จะเปิดให้บริการในอัปเดตถัดไป')}
+					onclick={() => (profileDialogOpen = true)}
 					class="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
 				>
 					แก้ไขโปรไฟล์
@@ -651,7 +728,7 @@
 					<span
 						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
 					>
-						{currentVolunteer.openingsCount}
+						{openingsCount}
 					</span>
 				</button>
 			</div>
@@ -662,9 +739,56 @@
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 				<!-- Left 2 Cols: Shift Tasks List -->
 				<div class="space-y-4 lg:col-span-2">
-					<div class="flex items-center justify-between">
-						<h3 class="text-sm font-bold text-foreground md:text-base">รายการภารกิจปฏิบัติการ</h3>
-						<span class="text-2xs text-muted-foreground">แสดงเฉพาะงานทั้งหมดที่ลงทะเบียนแล้ว</span>
+					<!--
+						Two lists, because they are two different things and conflating them is how
+						a volunteer concludes their booking vanished: a BOOKING is the
+						`job_application` they just made, a SHIFT is the `shift_assignment` a
+						manager rosters them onto afterwards. Nothing turns the first into the
+						second automatically.
+					-->
+					{#if currentVolunteer.bookings.length > 0}
+						<div class="flex items-center justify-between">
+							<h3 class="text-sm font-bold text-foreground md:text-base">ภารกิจที่คุณจองไว้</h3>
+							<span class="text-2xs text-muted-foreground">รอเจ้าหน้าที่จัดกะให้</span>
+						</div>
+
+						<div class="space-y-3">
+							{#each currentVolunteer.bookings as booking (booking.id)}
+								<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
+									<div class="flex flex-wrap items-start justify-between gap-3">
+										<div class="min-w-0 space-y-1">
+											<p class="text-sm font-bold text-foreground">{booking.title}</p>
+											<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
+												<MapPin class="size-3.5 shrink-0" />
+												{booking.location}
+												<span class="text-muted-foreground/60">·</span>
+												{booking.dateText}
+											</p>
+										</div>
+										<div class="flex shrink-0 items-center gap-2">
+											<span
+												class="rounded-lg px-2.5 py-1 text-3xs font-bold {booking.confirmed
+													? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+													: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
+											>
+												{booking.statusLabel}
+											</span>
+											<a
+												href="/volunteer/ticket/{booking.id}"
+												class="rounded-lg border border-border px-2.5 py-1 text-3xs font-bold text-foreground hover:bg-muted"
+											>
+												เปิดตั๋ว
+											</a>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<div class="flex items-center justify-between pt-2">
+						<h3 class="text-sm font-bold text-foreground md:text-base">ตารางกะที่ได้รับมอบหมาย</h3>
+						<span class="text-2xs text-muted-foreground">กะที่เจ้าหน้าที่จัดให้แล้ว</span>
 					</div>
 
 					{#if currentVolunteer.shifts.length === 0}
@@ -672,15 +796,23 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<ClipboardList class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ยังไม่มีรายการภารกิจที่ลงทะเบียน</p>
-							<p class="mt-1 text-xs">คุณสามารถเลือกดูงานที่เปิดรับได้ที่แท็บ "ตลาดงานจิตอาสา"</p>
-							<button
-								type="button"
-								onclick={() => (dashboardTab = 'openings')}
-								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
-							>
-								ดูตลาดงานจิตอาสา
-							</button>
+							{#if currentVolunteer.bookings.length > 0}
+								<p class="text-sm font-bold text-foreground">ยังไม่มีกะที่ได้รับมอบหมาย</p>
+								<p class="mt-1 text-xs">
+									การจองของคุณเข้าระบบแล้ว — เจ้าหน้าที่ศูนย์จะจัดกะและแจ้งให้ทราบ
+									กะที่จัดแล้วจะขึ้นที่นี่
+								</p>
+							{:else}
+								<p class="text-sm font-bold text-foreground">ยังไม่มีรายการภารกิจที่ลงทะเบียน</p>
+								<p class="mt-1 text-xs">คุณสามารถเลือกดูงานที่เปิดรับได้ที่แท็บ "ตลาดงานจิตอาสา"</p>
+								<button
+									type="button"
+									onclick={() => (dashboardTab = 'openings')}
+									class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
+								>
+									ดูตลาดงานจิตอาสา
+								</button>
+							{/if}
 						</div>
 					{:else}
 						{#each currentVolunteer.shifts as shift (shift.id)}
@@ -893,420 +1025,13 @@
 			</div>
 		{:else}
 			<!-- ── TAB 2: JOB OPENINGS (ตลาดงานจิตอาสา) ─────────────────────── -->
-			<div class="space-y-6">
-				<!-- Search & Filter Bar -->
-				<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-					<div class="relative flex-1">
-						<Search
-							class="pointer-events-none absolute top-3 left-3.5 size-4 text-muted-foreground"
-						/>
-						<input
-							type="text"
-							bind:value={searchJobQuery}
-							placeholder="ค้นหาภารกิจที่เหมาะสมกับทักษะ..."
-							class="w-full rounded-xl border border-border bg-card py-2.5 pr-4 pl-10 text-xs font-medium text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary md:text-sm"
-						/>
-					</div>
-
-					<select
-						bind:value={selectedShelterFilter}
-						class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground outline-hidden focus:ring-1 focus:ring-primary sm:w-64"
-					>
-						<option value="all">ทุกศูนย์พักพิง</option>
-						<option value="psu">มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)</option>
-						<option value="hatyai">ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)</option>
-						<option value="klonghae">ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)</option>
-					</select>
-				</div>
-
-				<!-- Job Cards 2-Column Grid -->
-				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-					<!-- JOB CARD 1: EOC COORDINATOR (Controlled Skill) -->
-					<div
-						class="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-sm"
-					>
-						<div class="space-y-3">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<span class="text-2xs font-semibold text-muted-foreground">
-									มหาวิทยาลัยสงขลานครินทร์ (ศูนย์...
-								</span>
-								<div class="flex items-center gap-1.5">
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										🟢 เปิดรับสมัคร
-									</span>
-									<span
-										class="rounded-md bg-rose-50 px-2 py-0.5 text-3xs font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
-									>
-										ระดับหัวหน้า/ผู้คุมสายงาน
-									</span>
-								</div>
-							</div>
-
-							<h4 class="text-base font-bold text-foreground">
-								ทีมอำนวยการและต้อนรับประสานงาน EOC ม.อ.
-							</h4>
-							<p class="text-xs leading-relaxed text-muted-foreground">
-								ช่วยงานอำนวยการ ต้อนรับผู้ประสานงานจากศูนย์ EOC ม.อ.
-								คัดกรองและประสานงานผู้ประสบภัยที่เดินทางมาถึง
-							</p>
-
-							<!-- Staff-Capable Notice Box -->
-							<div
-								class="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-3.5 dark:border-sky-800 dark:bg-sky-950/40"
-							>
-								<div class="flex items-start gap-2">
-									<Shield class="mt-0.5 size-4 shrink-0 text-sky-700 dark:text-sky-400" />
-									<p class="text-2xs leading-relaxed text-sky-900 dark:text-sky-200">
-										<strong>ภารกิจระดับเจ้าหน้าที่ (Staff-Capable) / ทักษะพิเศษ:</strong>
-										จิตอาสาทั่วไปสามารถกด "ยื่นขอปฏิบัติงานนี้ (รอพิจารณา)" เพื่อให้เจ้าหน้าที่ตรวจสอบคุณสมบัติและตรวจบัตรประชาชนตัวจริงหน้างานได้
-									</p>
-								</div>
-							</div>
-
-							<div class="flex flex-wrap gap-1.5">
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ สื่อสารและประสานงานทั่วไป
-								</span>
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ Communications
-								</span>
-							</div>
-						</div>
-
-						<!-- Shift Slot -->
-						<div class="mt-5 rounded-2xl border border-border/80 bg-muted/10 p-4">
-							<div class="flex items-center justify-between text-xs font-bold">
-								<span class="flex items-center gap-1.5 text-foreground">
-									📅 2026-06-13
-									<span class="py-0.2 rounded bg-sky-100 px-1.5 text-3xs text-sky-800">กะเช้า</span>
-								</span>
-								<span class="text-2xs text-muted-foreground">🕒 08:00 - 12:00 น.</span>
-							</div>
-
-							<!-- 3-Color Quota Bar -->
-							<div class="mt-2.5 space-y-1">
-								<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-									<div class="bg-emerald-500" style="width: 0%"></div>
-									<div class="bg-amber-400" style="width: 0%"></div>
-									<div class="bg-border" style="width: 100%"></div>
-								</div>
-								<div class="flex justify-between text-3xs text-muted-foreground">
-									<span class="text-emerald-700">🟢 ตอบรับแล้ว: 0</span>
-									<span class="text-amber-700">🟡 เสนอแล้ว: 0</span>
-									<span>⚪ ยังขาดอีก: 39 <span class="text-2xs">(เป้า 18 คน)</span></span>
-								</div>
-							</div>
-
-							<button
-								type="button"
-								onclick={() => handleRequestReview('ทีมอำนวยการและต้อนรับประสานงาน EOC ม.อ.')}
-								class="mt-3.5 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-card py-2.5 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
-							>
-								<span>📝 ยื่นขอปฏิบัติงานนี้ (รอพิจารณา)</span>
-							</button>
-						</div>
-					</div>
-
-					<!-- JOB CARD 2: HEAVY LIFTING SANDBAGS (Operational) -->
-					<div
-						class="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-sm"
-					>
-						<div class="space-y-3">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<span class="text-2xs font-semibold text-muted-foreground">
-									ศูนย์พักพิง เทศบาลนครหาดใหญ่ (...
-								</span>
-								<div class="flex items-center gap-1.5">
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										🟢 เปิดรับสมัคร
-									</span>
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										ระดับปฏิบัติการ (Operational)
-									</span>
-								</div>
-							</div>
-
-							<h4 class="text-base font-bold text-foreground">
-								ทีมพลบริการช่วยยกของ ย้ายกระสอบทรายติดตั้งริมหาด
-							</h4>
-							<p class="text-xs leading-relaxed text-muted-foreground">
-								ต้องการทีมพลบริการช่วยขนย้ายกระสอบทรายลงเครื่องริมหาดเร่งด่วนเพื่อป้องกันน้ำท่วมเข้าพื้นที่ศูนย์
-							</p>
-
-							<div class="flex flex-wrap gap-1.5">
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ งานกำลังกาย / แบกหาม
-								</span>
-							</div>
-						</div>
-
-						<!-- Shift Slot -->
-						<div class="mt-5 rounded-2xl border border-border/80 bg-muted/10 p-4">
-							<div class="flex items-center justify-between text-xs font-bold">
-								<span class="flex items-center gap-1.5 text-foreground">
-									📅 2026-06-13
-									<span class="py-0.2 rounded bg-sky-100 px-1.5 text-3xs text-sky-800">กะเช้า</span>
-								</span>
-								<span class="text-2xs text-muted-foreground">🕒 08:00 - 12:00 น.</span>
-							</div>
-
-							<!-- 3-Color Quota Bar -->
-							<div class="mt-2.5 space-y-1">
-								<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-									<div class="bg-emerald-500" style="width: 0%"></div>
-									<div class="bg-amber-400" style="width: 0%"></div>
-									<div class="bg-border" style="width: 100%"></div>
-								</div>
-								<div class="flex justify-between text-3xs text-muted-foreground">
-									<span class="text-emerald-700">🟢 ตอบรับแล้ว: 0</span>
-									<span class="text-amber-700">🟡 เสนอแล้ว: 0</span>
-									<span>⚪ ยังขาดอีก: 15 <span class="text-2xs">(เป้า 15 คน)</span></span>
-								</div>
-							</div>
-
-							<button
-								type="button"
-								onclick={() => handleBookJob('ทีมพลบริการช่วยยกของ ย้ายกระสอบทรายติดตั้งริมหาด')}
-								class="mt-3.5 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground shadow-md transition-all hover:opacity-95"
-							>
-								<Rocket class="size-3.5" />
-								<span>จองภารกิจนี้</span>
-							</button>
-						</div>
-					</div>
-
-					<!-- JOB CARD 3: KITCHEN (Registered Already) -->
-					<div
-						class="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-sm"
-					>
-						<div class="space-y-3">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<span class="text-2xs font-semibold text-muted-foreground">
-									ศูนย์พักพิง เทศบาลเมืองคลองแห (...
-								</span>
-								<div class="flex items-center gap-1.5">
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										🟢 เปิดรับสมัคร
-									</span>
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										ระดับปฏิบัติการ (Operational)
-									</span>
-								</div>
-							</div>
-
-							<h4 class="text-base font-bold text-foreground">
-								ทีมจัดเตรียมและปรุงอาหารร้อน ครัวกลางหาดทอง
-							</h4>
-							<p class="text-xs leading-relaxed text-muted-foreground">
-								ช่วยหั่นผัก เตรียมวัตถุดิบ
-								บรรจุอาหารกล่องแจกจ่ายให้แก่ผู้ประสบภัยในพื้นที่ศูนย์พักพิงคลองแห
-							</p>
-
-							<div class="flex flex-wrap gap-1.5">
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ ประกอบอาหาร / ครัวกลาง
-								</span>
-							</div>
-						</div>
-
-						<!-- Shift Slot -->
-						<div class="mt-5 rounded-2xl border border-border/80 bg-muted/10 p-4">
-							<div class="flex items-center justify-between text-xs font-bold">
-								<span class="flex items-center gap-1.5 text-foreground">
-									📅 2026-06-12
-									<span class="py-0.2 rounded bg-sky-100 px-1.5 text-3xs text-sky-800">กะบ่าย</span>
-								</span>
-								<span class="text-2xs text-muted-foreground">🕒 12:00 - 18:00 น.</span>
-							</div>
-
-							<!-- 3-Color Quota Bar -->
-							<div class="mt-2.5 space-y-1">
-								<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-									<div class="bg-emerald-500" style="width: 37.5%"></div>
-									<div class="bg-amber-400" style="width: 0%"></div>
-									<div class="bg-border" style="width: 62.5%"></div>
-								</div>
-								<div class="flex justify-between text-3xs text-muted-foreground">
-									<span class="text-emerald-700">🟢 ตอบรับแล้ว: 3</span>
-									<span class="text-amber-700">🟡 เสนอแล้ว: 0</span>
-									<span>⚪ ยังขาดอีก: 7 <span class="text-2xs">(เป้า 8 คน)</span></span>
-								</div>
-							</div>
-
-							<button
-								type="button"
-								disabled
-								class="mt-3.5 flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl bg-emerald-100 py-2.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-							>
-								<Check class="size-3.5" />
-								<span>ลงทะเบียนแล้ว</span>
-							</button>
-						</div>
-					</div>
-
-					<!-- JOB CARD 4: REGISTRATION & SCREENING (Time Collision Demo) -->
-					<div
-						class="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-sm"
-					>
-						<div class="space-y-3">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<span class="text-2xs font-semibold text-muted-foreground">
-									มหาวิทยาลัยสงขลานครินทร์ (ศูนย์...
-								</span>
-								<div class="flex items-center gap-1.5">
-									<span
-										class="rounded-md bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-									>
-										🟢 เปิดรับสมัคร
-									</span>
-									<span
-										class="rounded-md bg-rose-50 px-2 py-0.5 text-3xs font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
-									>
-										ระดับหัวหน้า/ผู้คุมสายงาน
-									</span>
-								</div>
-							</div>
-
-							<h4 class="text-base font-bold text-foreground">
-								เจ้าหน้าที่คัดกรองผู้ประสบภัย (Registration & Screening)
-							</h4>
-							<p class="text-xs leading-relaxed text-muted-foreground">
-								ต้อนรับผู้ประสบภัย สอบถามข้อมูลเบื้องต้นและลงทะเบียนเข้าระบบของศูนย์พักพิง
-								พร้อมคัดกรองเบื้องต้น
-							</p>
-
-							<!-- Staff-Capable Notice Box -->
-							<div
-								class="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-3.5 dark:border-sky-800 dark:bg-sky-950/40"
-							>
-								<div class="flex items-start gap-2">
-									<Shield class="mt-0.5 size-4 shrink-0 text-sky-700 dark:text-sky-400" />
-									<p class="text-2xs leading-relaxed text-sky-900 dark:text-sky-200">
-										<strong>ภารกิจระดับเจ้าหน้าที่ (Staff-Capable) / ทักษะพิเศษ:</strong>
-										จิตอาสาทั่วไปสามารถกด "ยื่นขอปฏิบัติงานนี้ (รอพิจารณา)" เพื่อให้เจ้าหน้าที่ตรวจสอบคุณสมบัติและตรวจบัตรประชาชนตัวจริงหน้างานได้
-									</p>
-								</div>
-							</div>
-
-							<div class="flex flex-wrap gap-1.5">
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ สื่อสารและประสานงานทั่วไป
-								</span>
-								<span
-									class="rounded-md bg-muted px-2 py-0.5 text-3xs font-medium text-muted-foreground"
-								>
-									🏷️ Communication
-								</span>
-							</div>
-						</div>
-
-						<!-- Two Shift Slots with Collision Warning -->
-						<div class="mt-5 space-y-3">
-							<!-- Slot 1 -->
-							<div
-								class="rounded-2xl border border-amber-300/80 bg-amber-50/30 p-4 dark:border-amber-700 dark:bg-amber-950/20"
-							>
-								<div class="flex items-center justify-between text-xs font-bold">
-									<span class="flex items-center gap-1.5 text-foreground">
-										📅 2026-07-17
-										<span class="py-0.2 rounded bg-sky-100 px-1.5 text-3xs text-sky-800"
-											>กะเช้า</span
-										>
-									</span>
-									<span class="text-2xs text-muted-foreground">🕒 08:00 - 12:00 น.</span>
-								</div>
-
-								<div class="mt-2.5 space-y-1">
-									<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-										<div class="bg-emerald-500" style="width: 25%"></div>
-										<div class="bg-amber-400" style="width: 0%"></div>
-										<div class="bg-border" style="width: 75%"></div>
-									</div>
-									<div class="flex justify-between text-3xs text-muted-foreground">
-										<span class="text-emerald-700">🟢 ตอบรับแล้ว: 1</span>
-										<span class="text-amber-700">🟡 เสนอแล้ว: 0</span>
-										<span>⚪ ยังขาดอีก: 3 <span class="text-2xs">(เป้า 4 คน)</span></span>
-									</div>
-								</div>
-
-								<button
-									type="button"
-									disabled
-									class="mt-3 flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100/70 py-2.5 text-xs font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-300"
-								>
-									<AlertTriangle class="size-3.5" />
-									<span>เวลาชนกับกะที่จองไว้</span>
-								</button>
-								<p class="mt-1.5 text-center text-3xs text-amber-800 dark:text-amber-300">
-									⚠️ ชนกับภารกิจ "ทีมพลบริการช่วยยกของ (Heavy Lifting)" ในช่วงเวลา 09:00 - 15:00 น.
-									แล้ว
-								</p>
-							</div>
-
-							<!-- Slot 2 -->
-							<div
-								class="rounded-2xl border border-amber-300/80 bg-amber-50/30 p-4 dark:border-amber-700 dark:bg-amber-950/20"
-							>
-								<div class="flex items-center justify-between text-xs font-bold">
-									<span class="flex items-center gap-1.5 text-foreground">
-										📅 2026-07-17
-										<span class="py-0.2 rounded bg-sky-100 px-1.5 text-3xs text-sky-800"
-											>กะบ่าย</span
-										>
-									</span>
-									<span class="text-2xs text-muted-foreground">🕒 12:00 - 18:00 น.</span>
-								</div>
-
-								<div class="mt-2.5 space-y-1">
-									<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-										<div class="bg-emerald-500" style="width: 0%"></div>
-										<div class="bg-amber-400" style="width: 0%"></div>
-										<div class="bg-border" style="width: 100%"></div>
-									</div>
-									<div class="flex justify-between text-3xs text-muted-foreground">
-										<span class="text-emerald-700">🟢 ตอบรับแล้ว: 0</span>
-										<span class="text-amber-700">🟡 เสนอแล้ว: 0</span>
-										<span>⚪ ยังขาดอีก: 4 <span class="text-2xs">(เป้า 4 คน)</span></span>
-									</div>
-								</div>
-
-								<button
-									type="button"
-									disabled
-									class="mt-3 flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100/70 py-2.5 text-xs font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-300"
-								>
-									<AlertTriangle class="size-3.5" />
-									<span>เวลาชนกับกะที่จองไว้</span>
-								</button>
-								<p class="mt-1.5 text-center text-3xs text-amber-800 dark:text-amber-300">
-									⚠️ ชนกับภารกิจ "ทีมพลบริการช่วยยกของ (Heavy Lifting)" ในช่วงเวลา 09:00 - 15:00 น.
-									แล้ว
-								</p>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
+			<!--
+				The same public board `/volunteers/jobs` renders, mounted here so a signed-in
+				volunteer can pick up another shift without leaving the portal. It carries its
+				own search, filters and no-auth application form, and TanStack dedupes the
+				fetch with the `openingsQuery` above rather than asking twice.
+			-->
+			<JobBoard />
 		{/if}
 	{/if}
 </div>
@@ -1391,3 +1116,9 @@
 		</div>
 	</div>
 {/if}
+
+<ProfileEditDialog
+	bind:open={profileDialogOpen}
+	profile={profileQuery.data ?? null}
+	credential={session}
+/>

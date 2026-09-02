@@ -49,7 +49,7 @@ import type {
  * wall-clock convention `domain/duty-window.ts` uses to build `duty_window`.
  * Deriving it from UTC instead would query yesterday's roster between 00:00
  * and 07:00 local, i.e. for the whole of the `night` shift. */
-function todayDateString(): string {
+export function todayDateString(): string {
 	return bangkokDateString();
 }
 
@@ -160,11 +160,19 @@ export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 		queryFn: () => shiftAssignmentRepository().list(filter)
 	}));
 
-/** Today's roster & attendance tab — always "today" in Asia/Bangkok. */
-export const useTodayAttendance = () =>
+/**
+ * Roster & attendance for one calendar date — defaults to "today" in
+ * Asia/Bangkok (the convention `todayDateString()` documents).
+ *
+ * `date` is a getter, not a value, so the roster tab's date picker re-keys and
+ * refetches when the operator moves off today (CR-094 FR-VOL-11.3 / plan step
+ * 02.1 "ตัวกรอง: วันที่ (default วันนี้)") instead of showing a stale day.
+ * Callers that only ever mean today (`people-tab.svelte`) omit it.
+ */
+export const useTodayAttendance = (date: () => string = todayDateString) =>
 	createQuery(() => ({
-		queryKey: volunteerKeys.todayAttendance(todayDateString()),
-		queryFn: () => shiftAssignmentRepository().list({ date: todayDateString() })
+		queryKey: volunteerKeys.todayAttendance(date()),
+		queryFn: () => shiftAssignmentRepository().list({ date: date() })
 	}));
 
 /**

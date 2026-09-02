@@ -12,9 +12,11 @@
 export {
 	dispatchRespondSchema,
 	isValidThaiNationalId,
+	portalCredentialSchema,
 	responseCodeSchema,
 	ticketFindSchema,
 	ticketStatusLabel,
-	volunteerApplySchema
+	volunteerApplySchema,
+	volunteerProfileUpdateSchema
 } from './domain/volunteer';
-export type { TicketFindInput, VolunteerApplyInput } from './domain/volunteer';
+export type { PortalCredential, TicketFindInput, VolunteerApplyInput } from './domain/volunteer';

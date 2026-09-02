@@ -152,13 +152,149 @@ export const volunteerApplySchema = z.object({
 	email: z.union([z.literal(''), z.email('อีเมลไม่ถูกต้อง')]).optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_date: z.string().trim().optional(),
-	station: z.string().trim().optional()
+	station: z.string().trim().optional(),
+	/**
+	 * reCAPTCHA v3 token (FR-VOL-13.4). Optional in the schema because the BFF decides
+	 * whether a token is required — a developer with no Google keys must still be able to
+	 * run the flow, while production fails closed. Never forwarded upstream.
+	 */
+	captchaToken: z.string().optional()
 });
 
 export type VolunteerApplyInput = z.infer<typeof volunteerApplySchema>;
 
+/**
+ * What the public board may narrow by on the server. Kept to what FastAPI's
+ * `GET /public/v1/jobs` actually accepts — everything else the board offers (free-text
+ * search, "ใกล้เต็ม", controlled-skill) is decided client-side from the projected quota,
+ * because there is no server-side index for it.
+ */
+export type PublicJobFilter = {
+	shelter_code?: string;
+	skill?: string;
+};
+
+/** A card can be applied to only while the projection still shows a free seat. */
+export function isJobApplicable(job: PublicJob): boolean {
+	return job.slots_remaining > 0 && job.status !== 'closed' && job.status !== 'cancelled';
+}
+
 export const ticketFindSchema = z.object({ phone: phoneField });
 export type TicketFindInput = z.infer<typeof ticketFindSchema>;
+
+/**
+ * How the portal identifies the signed-in volunteer on every request.
+ *
+ * Exactly one of the two, mirroring the API. Both are sign-in routes for someone with
+ * no account (CR-092 หน้าจอ 6): the phone they applied with, or the ticket token behind
+ * the QR on their pass — which is why scanning that QR signs in rather than merely
+ * re-opening the pass.
+ */
+export type PortalCredential =
+	{ phone: string; token?: undefined } | { token: string; phone?: undefined };
+
+/**
+ * Validates whichever credential a portal request carries — the BFF's gate before
+ * anything reaches FastAPI, which refuses "neither" and "both" the same way.
+ *
+ * The phone goes through the same normalisation the apply form uses, so a number typed
+ * with dashes here hashes to the one stored at sign-up.
+ */
+export const portalCredentialSchema = z.union([
+	z.object({ phone: phoneField }),
+	z.object({ token: z.string().trim().min(6).max(200) })
+]);
+
+/**
+ * One selectable skill, as Master Data defines it (`volunteer_skills`).
+ *
+ * The public form reads the same list the back office edits, so a skill added on the
+ * settings screen appears here without a deploy — which is the point of FR-VOL-08.5
+ * moving this off the hard-coded constant it used to live in.
+ */
+export type VolunteerSkillOption = {
+	code: string;
+	label: string;
+	category: string;
+	description: string;
+	is_default: boolean;
+};
+
+/**
+ * The volunteer's own profile, merged across every shelter they hold one at.
+ *
+ * `volunteer` is a per-shelter document, so someone who has helped at two centres has
+ * two of them; the API merges them into this one shape. Everything except `skills` is
+ * read-only here — the rest is either identity the shelter recorded or a decision only
+ * staff may make (`identity_verified`, `volunteer_code`, `personnel_type`).
+ */
+export type VolunteerProfile = {
+	first_name: string;
+	last_name: string;
+	nickname: string | null;
+	phone_masked: string;
+	email: string | null;
+	volunteer_code: string;
+	skills: string[];
+	organization: string | null;
+	identity_verified: boolean;
+	personnel_type: string;
+	shelter_codes: string[];
+};
+
+/**
+ * What a volunteer may change about themselves — skills only, for now.
+ *
+ * Deliberately a separate schema from the profile it edits: a request body that cannot
+ * express `identity_verified` or `status` cannot be forged into changing them, whatever
+ * the caller sends. Capped at the same 30 the API caps at so an oversized list is
+ * refused before it costs a round trip.
+ */
+export const volunteerProfileUpdateSchema = z.object({
+	skills: z.array(z.string().trim().min(1)).max(30, 'เลือกทักษะได้สูงสุด 30 รายการ').default([])
+});
+export type VolunteerProfileUpdateInput = z.infer<typeof volunteerProfileUpdateSchema>;
+
+/**
+ * Where a just-made booking leaves its tracking token for the portal to pick up.
+ *
+ * `sessionStorage`, not the URL: the token is a bearer credential for that person's
+ * PII, and a query string would put it in history, in any referrer, and in whatever the
+ * browser syncs. Read once and cleared — it is a one-hop handoff between two screens of
+ * the same tab, not a stored session.
+ */
+export const PORTAL_TOKEN_HANDOFF_KEY = 'volunteer-portal-handoff-token';
+
+const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
+const VIEW_TOKEN_PREFIX = 'VIEW-';
+
+/**
+ * Clean up a code that was typed, pasted or scanned, or `null` if it is neither shape.
+ *
+ * Case matters for only one of the two: a tracking token is uppercase hex and people
+ * type it off a printed pass in whatever case they like, while a `VIEW-` reference is
+ * base64url and upper-casing it destroys the signature. So the prefix is matched
+ * case-insensitively and only the tracking token's body is normalised.
+ */
+export function normalizeTicketToken(raw: string): string | null {
+	const trimmed = raw.trim();
+	if (!trimmed) return null;
+	if (trimmed.toUpperCase().startsWith(TRACKING_TOKEN_PREFIX)) {
+		return trimmed.toUpperCase();
+	}
+	if (trimmed.toUpperCase().startsWith(VIEW_TOKEN_PREFIX)) {
+		return VIEW_TOKEN_PREFIX + trimmed.slice(VIEW_TOKEN_PREFIX.length);
+	}
+	return null;
+}
+
+/** A QR on a pass encodes its URL, so a scan hands us a link, not a bare token. */
+export function ticketTokenFromScan(scanned: string): string | null {
+	const direct = normalizeTicketToken(scanned);
+	if (direct) return direct;
+	const fromUrl = scanned.trim().split(/[?#]/)[0]?.split('/').filter(Boolean).pop();
+	return fromUrl ? normalizeTicketToken(fromUrl) : null;
+}
 
 export function ticketStatusLabel(status: string): string {
 	switch (status) {

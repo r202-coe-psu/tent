@@ -13,6 +13,7 @@ from tent_model.public_job import PublicJob
 from tent_model.public_job_application import PublicJobApplication
 from tent_model.public_shelter import PublicShelter
 from tent_model.public_shift_assignment import PublicShiftAssignment
+from tent_model.public_volunteer import PublicVolunteer
 from tent_model.shift_response_buffer import ShiftResponseBuffer
 from tent_model.volunteer_application_buffer import (
     ApplicantBuffer,
@@ -26,6 +27,10 @@ from tent_model.volunteer_job_slot import (
     decline_dispatched_slot,
     release_job_slot,
     reserve_job_slot,
+)
+from tent_model.volunteer_profile_update_buffer import (
+    ProfileUpdateTarget,
+    VolunteerProfileUpdateBuffer,
 )
 
 from ...utils.masking import mask_phone, national_id_hash, normalize_phone, sha256_hex
@@ -44,6 +49,9 @@ from .schemas import (
     VolunteerApplyRequest,
     VolunteerApplyResponse,
     VolunteerCancelResponse,
+    VolunteerProfile,
+    VolunteerProfileResponse,
+    VolunteerProfileUpdateResponse,
     VolunteerScheduleResponse,
     VolunteerTicket,
     VolunteerTicketResponse,
@@ -127,6 +135,20 @@ async def _shelter_names(codes: set[str]) -> dict[str, str]:
 
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat().replace("+00:00", "Z") if value else None
+
+
+def _clean_skills(skills: list[str]) -> list[str]:
+    """Trim, drop blanks, and keep the first occurrence of each.
+
+    Order is the volunteer's own — the master list renders them in its own order anyway,
+    and preserving what was sent keeps a re-read identical to what was just saved.
+    """
+    cleaned: list[str] = []
+    for skill in skills:
+        value = skill.strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return cleaned
 
 
 def _ticket_url(token: str) -> str:
@@ -281,6 +303,53 @@ class VolunteersUseCase:
             job_id=job_id,
         )
 
+    async def _phone_hash_for(self, *, phone: str | None, token: str | None) -> str | None:
+        """The one key every portal read is answered by.
+
+        A phone is hashed directly. A token is resolved to the application it opens and
+        the hash is taken from there, so a token sign-in reaches exactly the same rows a
+        phone sign-in would — the portal must not show a different roster depending on
+        which door the volunteer came through (CR-092 หน้าจอ 6).
+
+        ``None`` means "no such volunteer", which every caller answers as an empty
+        result rather than a 404: a hit and a miss have to be indistinguishable, or this
+        becomes a probe for whether a number is registered. Sending neither credential —
+        or both, which would silently follow whichever was checked first — is the
+        caller's own bug and is refused outright.
+        """
+        if bool(phone) == bool(token):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"success": False, "error": "INVALID_CREDENTIAL"},
+            )
+        if phone:
+            return sha256_hex(normalize_phone(phone))
+        if not token:
+            return None
+
+        if is_view_token(token):
+            application_id = resolve_view_token(token)
+            if not application_id:
+                return None
+            projected = await PublicJobApplication.get(application_id)
+            # The projection keeps the hash at the root (it is the indexed lookup key);
+            # only the buffer carries it inside the applicant snapshot.
+            if projected is not None and projected.phone_hash:
+                return projected.phone_hash
+            buffer = await VolunteerApplicationBuffer.get(application_id)
+            return buffer.applicant.phone_hash if buffer else None
+
+        token_hash = sha256_hex(token)
+        projected = await PublicJobApplication.find_one(
+            PublicJobApplication.tracking_token_hash == token_hash
+        )
+        if projected is not None and projected.phone_hash:
+            return projected.phone_hash
+        buffer = await VolunteerApplicationBuffer.find_one(
+            VolunteerApplicationBuffer.tracking_token_hash == token_hash
+        )
+        return buffer.applicant.phone_hash if buffer else None
+
     async def get_ticket(self, token: str) -> VolunteerTicketResponse:
         """Open one pass, by the applicant's tracking token or a phone-lookup reference.
 
@@ -302,9 +371,7 @@ class VolunteersUseCase:
             application_id = resolve_view_token(token)
             # Forged, malformed and expired all land here and all answer 404 below, so a
             # probe cannot learn which of the three it hit.
-            projected = (
-                await PublicJobApplication.get(application_id) if application_id else None
-            )
+            projected = await PublicJobApplication.get(application_id) if application_id else None
             buffer = (
                 await VolunteerApplicationBuffer.get(application_id) if application_id else None
             )
@@ -357,8 +424,10 @@ class VolunteersUseCase:
             )
         )
 
-    async def find_tickets(self, phone: str) -> TicketFindResponse:
-        """Resolve a phone number to that person's tickets.
+    async def find_tickets(
+        self, *, phone: str | None = None, token: str | None = None
+    ) -> TicketFindResponse:
+        """Resolve a phone number — or a token already in hand — to that person's tickets.
 
         This is how a volunteer gets back into the Access Portal (CR-092 §2.1.1 — a
         volunteer signs in with the phone number they applied with, or a ticket code;
@@ -380,16 +449,16 @@ class VolunteersUseCase:
         Returns an empty list rather than a 404 on a miss, and the response shape is
         identical either way, so this cannot be used to probe whether a number is known.
         """
-        hashed = sha256_hex(normalize_phone(phone))
+        hashed = await self._phone_hash_for(phone=phone, token=token)
+        if hashed is None:
+            return TicketFindResponse()
         projected = await PublicJobApplication.find(
             PublicJobApplication.phone_hash == hashed
         ).to_list()
         # Every row, not just the unsynced ones. Filtering on ``synced_to_couch: False``
         # meant the token vanished about three seconds after applying — exactly when the
         # applicant comes back to look for it.
-        buffers = await VolunteerApplicationBuffer.find(
-            {"applicant.phone_hash": hashed}
-        ).to_list()
+        buffers = await VolunteerApplicationBuffer.find({"applicant.phone_hash": hashed}).to_list()
 
         # Keyed by application id so a row present in both — the window between the
         # CouchDB write and the buffer flag flipping — is one ticket, not two.
@@ -419,9 +488,7 @@ class VolunteersUseCase:
         job_ids = {a.job_id for a in projected} | {b.job_id for b in buffers}
         jobs = await PublicJob.find({"_id": {"$in": sorted(job_ids)}}).to_list()
         titles = {job.id: job.title for job in jobs}
-        job_by_application = {a.id: a.job_id for a in projected} | {
-            b.id: b.job_id for b in buffers
-        }
+        job_by_application = {a.id: a.job_id for a in projected} | {b.id: b.job_id for b in buffers}
         for application_id, item in merged.items():
             item.job_title = titles.get(job_by_application.get(application_id, ""), "")
 
@@ -430,9 +497,18 @@ class VolunteersUseCase:
         tickets = sorted(
             merged.values(), key=lambda t: (t.shift_date == "", t.shift_date, t.shelter_code)
         )
-        return TicketFindResponse(tickets=tickets)
+        # Masked, never raw: this is echoed to a browser that may have signed in with a
+        # token and therefore does not hold the number (FR-VOL-03.4 / AC-VOL-03).
+        phone_masked = ""
+        if projected:
+            phone_masked = projected[0].applicant.phone_masked
+        elif buffers:
+            phone_masked = mask_phone(buffers[0].applicant.phone)
+        return TicketFindResponse(tickets=tickets, phone_masked=phone_masked)
 
-    async def schedule(self, phone: str) -> VolunteerScheduleResponse:
+    async def schedule(
+        self, *, phone: str | None = None, token: str | None = None
+    ) -> VolunteerScheduleResponse:
         """The volunteer's roster — every shift they hold, soonest first.
 
         Reads ``shift_assignment``, not ``job_application``: an application is a request
@@ -443,7 +519,9 @@ class VolunteersUseCase:
         Keyed on the phone hash, like the ticket lookup, and equally unable to say
         whether a number is known — a miss is an empty list.
         """
-        hashed = sha256_hex(normalize_phone(phone))
+        hashed = await self._phone_hash_for(phone=phone, token=token)
+        if hashed is None:
+            return VolunteerScheduleResponse()
         assignments = await PublicShiftAssignment.find(
             PublicShiftAssignment.phone_hash == hashed
         ).to_list()
@@ -481,8 +559,109 @@ class VolunteersUseCase:
         shifts.sort(key=lambda s: (s.start_ts is None and s.date == "", s.start_ts or s.date))
         return VolunteerScheduleResponse(shifts=shifts)
 
+    async def profile(
+        self, *, phone: str | None = None, token: str | None = None
+    ) -> VolunteerProfileResponse:
+        """The volunteer's own profile, merged across the shelters they hold one at.
+
+        Answers ``profile: null`` for a credential that resolves to nobody — the same
+        shape a known volunteer gets, so this cannot be used to probe who is registered.
+        """
+        hashed = await self._phone_hash_for(phone=phone, token=token)
+        if hashed is None:
+            return VolunteerProfileResponse()
+        profile = await self._merged_profile(hashed)
+        return VolunteerProfileResponse(profile=profile)
+
+    async def update_profile(
+        self, *, skills: list[str], phone: str | None = None, token: str | None = None
+    ) -> VolunteerProfileUpdateResponse:
+        """Queue a profile edit for every ``volunteer`` document this person holds.
+
+        The write itself belongs to the worker — CouchDB is the system of record and the
+        public plane cannot reach it — so this records the request and reflects it in the
+        read model straight away, because the volunteer is looking at the screen now. If
+        the worker later loses a revision race, the next pass re-reads and re-applies.
+
+        A credential that resolves to nobody is refused rather than answered emptily:
+        unlike a read, there is nothing here that a stranger could mistake for their own
+        data, and a silent success would tell the volunteer their edit was saved.
+        """
+        hashed = await self._phone_hash_for(phone=phone, token=token)
+        rows = (
+            await PublicVolunteer.find(PublicVolunteer.phone_hash == hashed).to_list()
+            if hashed
+            else []
+        )
+        if not rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "PROFILE_NOT_FOUND"},
+            )
+
+        cleaned = _clean_skills(skills)
+        now = datetime.now(UTC)
+        await VolunteerProfileUpdateBuffer(
+            id=f"volunteer_profile_update:{new_ulid()}",
+            phone_hash=str(hashed),
+            targets=[
+                ProfileUpdateTarget(shelter_code=row.shelter_code, volunteer_id=row.id)
+                for row in rows
+            ],
+            skills=cleaned,
+            requested_at=now,
+            synced_to_couch=False,
+        ).insert()
+
+        for row in rows:
+            row.skills = cleaned
+            row.updated_at = now
+            await row.save()
+
+        return VolunteerProfileUpdateResponse(
+            updated=len(rows), profile=await self._merged_profile(str(hashed))
+        )
+
+    async def _merged_profile(self, phone_hash_value: str) -> VolunteerProfile | None:
+        rows = await PublicVolunteer.find(PublicVolunteer.phone_hash == phone_hash_value).to_list()
+        if not rows:
+            return None
+        # Newest first: the most recently touched document is the one whose name and
+        # contact details the shelters have seen most recently.
+        rows.sort(key=lambda r: r.updated_at, reverse=True)
+        newest = rows[0]
+        # Skills are a union rather than the newest row's: they describe the person, and
+        # a profile created by a second shelter's walk-in desk starts empty — taking only
+        # the newest would silently drop what the first shelter recorded.
+        skills: list[str] = []
+        for row in rows:
+            for skill in row.skills:
+                if skill not in skills:
+                    skills.append(skill)
+        return VolunteerProfile(
+            first_name=newest.first_name,
+            last_name=newest.last_name,
+            nickname=newest.nickname,
+            phone_masked=newest.phone_masked,
+            email=newest.email,
+            volunteer_code=newest.volunteer_code,
+            skills=skills,
+            organization=newest.organization,
+            # True if ANY shelter has verified them — verification is about the person,
+            # and a second shelter's fresh profile has not repeated the check.
+            identity_verified=any(row.identity_verified for row in rows),
+            personnel_type=newest.personnel_type,
+            shelter_codes=[row.shelter_code for row in rows],
+        )
+
     async def respond_to_dispatch(
-        self, *, assignment_id: str, phone: str, code: str, action: str
+        self,
+        *,
+        assignment_id: str,
+        code: str,
+        action: str,
+        phone: str | None = None,
+        token: str | None = None,
     ) -> DispatchRespondResponse:
         """Accept or decline an offered shift (CR-092 FR-VOL-06).
 
@@ -509,9 +688,8 @@ class VolunteersUseCase:
         if assignment is None or assignment.dispatch_status != "dispatched":
             # Already answered, never offered, or withdrawn — all the same answer.
             raise not_found
-        if not assignment.phone_hash or assignment.phone_hash != sha256_hex(
-            normalize_phone(phone)
-        ):
+        caller_hash = await self._phone_hash_for(phone=phone, token=token)
+        if not assignment.phone_hash or assignment.phone_hash != caller_hash:
             raise not_found
         if not assignment.response_code_hash or not hmac.compare_digest(
             assignment.response_code_hash, sha256_hex(normalize_response_code(code))

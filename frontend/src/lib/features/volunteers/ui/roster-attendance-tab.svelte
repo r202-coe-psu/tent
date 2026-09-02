@@ -10,6 +10,9 @@
 	 * is the ONLY function allowed to produce these counters (CR-094 FR-VOL-08.2
 	 * / AC-094-09); this tab must not recompute them from `useTodayAttendance()`
 	 * itself even though it also fetches that list for the row-level detail.
+	 * Those 3 tiles therefore ALWAYS describe today; the roster list below them
+	 * can be moved to another date with the date filter, so a non-today view
+	 * says so explicitly instead of letting the tiles read as that day's totals.
 	 *
 	 * Deliberately out of scope for this pass (owner instruction 2026-08-29 —
 	 * mock up only, no real hardware/kiosk build yet):
@@ -41,6 +44,7 @@
 	import RosterAuditTrailDialog from './roster-audit-trail-dialog.svelte';
 	import {
 		useHubMetrics,
+		todayDateString,
 		useTodayAttendance,
 		useShiftAssignments,
 		useVolunteers,
@@ -52,8 +56,11 @@
 		ShiftKind
 	} from '../domain/shift-assignment.schema';
 
+	let dateFilter = $state(todayDateString());
+	const isToday = $derived(dateFilter === todayDateString());
+
 	const hubMetrics = useHubMetrics();
-	const attendanceQuery = useTodayAttendance();
+	const attendanceQuery = useTodayAttendance(() => dateFilter);
 	const allAssignmentsQuery = useShiftAssignments();
 	const volunteersQuery = useVolunteers();
 	const jobsQuery = useJobs();
@@ -174,7 +181,24 @@
 		isPending={hubMetrics.isPending}
 	/>
 
-	<RosterScanBar bind:search bind:shift={shiftFilter} bind:status={statusFilter} />
+	<RosterScanBar
+		bind:search
+		bind:shift={shiftFilter}
+		bind:status={statusFilter}
+		bind:date={dateFilter}
+	/>
+
+	{#if !isToday}
+		<div
+			class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-amber-900"
+		>
+			<CalendarDays class="mt-0.5 h-4 w-4 shrink-0" />
+			<p class="text-xs">
+				กำลังดูตารางกะของวันที่ <span class="font-bold">{dateFilter}</span> (ไม่ใช่วันนี้) — ตัวเลขสรุป
+				3 ช่องด้านบนยังนับเฉพาะวันนี้เสมอ
+			</p>
+		</div>
+	{/if}
 
 	<div
 		class="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sky-900"
@@ -197,7 +221,7 @@
 		<p
 			class="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
 		>
-			โหลดตารางกะวันนี้ไม่สำเร็จ: {attendanceQuery.error instanceof Error
+			โหลดตารางกะไม่สำเร็จ: {attendanceQuery.error instanceof Error
 				? attendanceQuery.error.message
 				: 'เกิดข้อผิดพลาด'}
 		</p>
@@ -208,7 +232,9 @@
 			<Inbox class="h-8 w-8" />
 			<p class="text-sm font-medium">
 				{(attendanceQuery.data ?? []).length === 0
-					? 'ยังไม่มีตารางกะของวันนี้'
+					? isToday
+						? 'ยังไม่มีตารางกะของวันนี้'
+						: `ไม่มีตารางกะของวันที่ ${dateFilter}`
 					: 'ไม่มีรายการที่ตรงกับตัวกรองที่เลือก'}
 			</p>
 		</div>

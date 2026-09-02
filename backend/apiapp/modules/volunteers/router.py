@@ -20,6 +20,9 @@ from .schemas import (
     VolunteerApplyRequest,
     VolunteerApplyResponse,
     VolunteerCancelResponse,
+    VolunteerProfileResponse,
+    VolunteerProfileUpdateRequest,
+    VolunteerProfileUpdateResponse,
     VolunteerScheduleResponse,
     VolunteerTicketResponse,
 )
@@ -118,7 +121,7 @@ async def find_tickets(
 ) -> TicketFindResponse:
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.find_tickets(payload.phone)
+    return await use_case.find_tickets(phone=payload.phone, token=payload.token)
 
 
 @router.post(
@@ -153,7 +156,7 @@ async def volunteer_schedule(
     # Check-in state changes during a shift; a cached schedule shows someone as not yet
     # arrived after they have scanned in.
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.schedule(payload.phone)
+    return await use_case.schedule(phone=payload.phone, token=payload.token)
 
 
 @router.post(
@@ -173,6 +176,45 @@ async def respond_to_dispatch(
     return await use_case.respond_to_dispatch(
         assignment_id=payload.assignment_id,
         phone=payload.phone,
+        token=payload.token,
         code=payload.code,
         action=payload.action,
+    )
+
+
+@router.post(
+    "/volunteer/profile",
+    response_model=VolunteerProfileResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def volunteer_profile(
+    request: Request,
+    response: Response,
+    payload: ScheduleLookupRequest,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> VolunteerProfileResponse:
+    """The volunteer's own profile, for the Access Portal's edit screen."""
+    _enforce_rate_limit(request)
+    # Staff edit the same profile from the back office; a cached copy would show the
+    # volunteer a name or a badge the shelter has already changed.
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.profile(phone=payload.phone, token=payload.token)
+
+
+@router.post(
+    "/volunteer/profile/update",
+    response_model=VolunteerProfileUpdateResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def update_volunteer_profile(
+    request: Request,
+    response: Response,
+    payload: VolunteerProfileUpdateRequest,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> VolunteerProfileUpdateResponse:
+    """Change the parts of the profile the volunteer owns (skills, for now)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.update_profile(
+        skills=payload.skills, phone=payload.phone, token=payload.token
     )

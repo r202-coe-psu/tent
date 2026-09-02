@@ -23,6 +23,7 @@ from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import GeoJsonPoint, GeoPoint, PublicShelter
 from tent_model.public_shift_assignment import DutyWindow, PublicShiftAssignment
+from tent_model.public_volunteer import PublicVolunteer
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
 from tent_model.shift_response_buffer import ShiftResponseBuffer
@@ -31,6 +32,10 @@ from tent_model.volunteer_application_buffer import (
 	ApplicantBuffer,
 	SelectedShiftBuffer,
 	VolunteerApplicationBuffer,
+)
+from tent_model.volunteer_profile_update_buffer import (
+	ProfileUpdateTarget,
+	VolunteerProfileUpdateBuffer,
 )
 from tent_model.volunteer_job_slot import (
 	SlotResult,
@@ -62,6 +67,8 @@ __all__ = [
 	"PublicPerson",
 	"PublicShelter",
 	"PublicShiftAssignment",
+	"PublicVolunteer",
+	"ProfileUpdateTarget",
 	"ReserveResult",
 	"RetentionAudit",
 	"SearchAudit",
@@ -73,6 +80,7 @@ __all__ = [
 	"SyncCheckpoint",
 	"VolunteerApplicationBuffer",
 	"VolunteerJobSlot",
+	"VolunteerProfileUpdateBuffer",
 	"accept_dispatched_slot",
 	"close_db",
 	"counter_id",

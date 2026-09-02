@@ -16,13 +16,15 @@ from tent_model.public_job_application import (
 )
 from tent_model.public_shelter import PublicShelter
 from tent_model.public_shift_assignment import DutyWindow, PublicShiftAssignment
+from tent_model.public_volunteer import PublicVolunteer
 from tent_model.shift_response_buffer import ShiftResponseBuffer
 from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
 from tent_model.volunteer_job_slot import VolunteerJobSlot, seed_job_slot
+from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuffer
 
 from apiapp.core.config import Settings
 from apiapp.modules.volunteers import router as volunteer_router
-from apiapp.utils.masking import sha256_hex
+from apiapp.utils.masking import normalize_phone, sha256_hex
 from apiapp.utils.response_code import normalize_response_code
 from apiapp.utils.view_token import VIEW_TOKEN_TTL_SECONDS, mint_view_token
 
@@ -685,6 +687,8 @@ async def _respond(client: AsyncClient, headers: dict[str, str], **overrides: ob
         "action": "accepted",
     }
     body.update(overrides)
+    # Exactly one credential reaches the API, so a caller overriding one drops the other.
+    body = {k: v for k, v in body.items() if v is not None}
     return await client.post("/public/v1/volunteer/schedule/respond", json=body, headers=headers)
 
 
@@ -853,3 +857,334 @@ async def test_the_schedule_stops_asking_once_answered(
     shift = schedule.json()["shifts"][0]
     assert shift["dispatch_status"] == "accepted"
     assert shift["status"] == "standby"
+
+
+# ---------------------------------------------------------------------------
+# Signing in with a ticket token instead of a phone number (CR-092 หน้าจอ 6)
+# ---------------------------------------------------------------------------
+
+
+async def test_schedule_by_tracking_token_matches_the_phone_sign_in(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The QR on the pass is a sign-in route, not a second way to view the pass.
+
+    A volunteer who scans their own ticket must land on the same roster the phone would
+    open — a different answer per door would mean the portal shows people half their
+    shifts depending on how they got in.
+    """
+    await _make_job()
+    token, _ = await _apply_and_lookup(client, auth_headers)
+    await _assign(assignment_id="shift_assignment:01A", dispatch_status="dispatched")
+
+    by_phone = await client.post(
+        "/public/v1/volunteer/schedule", json={"phone": "0812345678"}, headers=auth_headers
+    )
+    by_token = await client.post(
+        "/public/v1/volunteer/schedule", json={"token": token}, headers=auth_headers
+    )
+    assert by_token.status_code == 200
+    assert by_token.json()["shifts"] == by_phone.json()["shifts"]
+    assert len(by_token.json()["shifts"]) == 1
+
+
+async def test_schedule_by_view_token_works_too(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A `VIEW-` reference is no weaker a key here: whoever holds one already reached it
+    with the phone number, which opens the same roster."""
+    await _make_job()
+    _, view_token = await _apply_and_lookup(client, auth_headers)
+    await _assign(assignment_id="shift_assignment:01A")
+
+    response = await client.post(
+        "/public/v1/volunteer/schedule", json={"token": view_token}, headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert len(response.json()["shifts"]) == 1
+
+
+async def test_schedule_of_an_unknown_token_is_an_empty_list_not_a_404(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Same rule the phone lookup follows — a hit and a miss must look identical, or a
+    token becomes something to probe for."""
+    await _make_job()
+    await _assign(assignment_id="shift_assignment:01A")
+
+    response = await client.post(
+        "/public/v1/volunteer/schedule",
+        json={"token": "TKT-VOL-DEADBEEF"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["shifts"] == []
+
+
+async def test_ticket_find_by_token_returns_the_same_tickets_and_a_masked_phone(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _make_job()
+    token, _ = await _apply_and_lookup(client, auth_headers)
+
+    response = await client.post(
+        "/public/v1/volunteer/ticket/find", json={"token": token}, headers=auth_headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["tickets"]) == 1
+    # The portal has no other way to say who is signed in on a token sign-in, and what it
+    # shows must still be masked (AC-VOL-03).
+    assert body["phone_masked"].endswith("5678")
+    assert "0812345678" not in response.text
+
+
+async def test_a_lookup_needs_exactly_one_credential(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Neither is unanswerable; both at once is ambiguous — and a request that sent both
+    would silently follow whichever the server happened to check first."""
+    neither = await client.post(
+        "/public/v1/volunteer/schedule", json={}, headers=auth_headers
+    )
+    both = await client.post(
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0812345678", "token": "TKT-VOL-X"},
+        headers=auth_headers,
+    )
+    assert neither.status_code == 422
+    assert both.status_code == 422
+
+
+async def test_answering_an_offer_works_with_a_token_sign_in(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _make_job(quota=5)
+    token, _ = await _apply_and_lookup(client, auth_headers)
+    await _offer()
+
+    response = await _respond(client, auth_headers, phone=None, token=token)
+    assert response.status_code == 200
+    assert response.json()["dispatch_status"] == "accepted"
+
+
+async def test_someone_elses_token_cannot_answer_your_offer(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The code is only safe because the caller must also be the right volunteer — a
+    token swaps in for the phone, it does not replace that check."""
+    await _make_job(quota=5)
+    stranger_token, _ = await _apply_and_lookup(client, auth_headers, phone="0899990000")
+    await _offer()
+
+    response = await _respond(client, auth_headers, phone=None, token=stranger_token)
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"] == "OFFER_NOT_FOUND"
+
+
+async def test_token_sign_in_still_resolves_once_the_projection_exists(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The two stores keep the lookup hash in different places.
+
+    The projection indexes it at the document root; only the buffer carries it inside the
+    applicant snapshot. Reading it from the wrong one is invisible in a fresh database —
+    the buffer answers first — and starts failing exactly when the worker catches up.
+    """
+    await _make_job()
+    token = (
+        await client.post(
+            f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers
+        )
+    ).json()["tracking_token"]
+    buffer = await VolunteerApplicationBuffer.find_one(
+        VolunteerApplicationBuffer.tracking_token_hash == sha256_hex(token)
+    )
+    assert buffer is not None
+    await PublicJobApplication(
+        id=buffer.id,
+        shelter_code="SH001",
+        job_id=JOB_ID,
+        tracking_token_hash=buffer.tracking_token_hash,
+        phone_hash=buffer.applicant.phone_hash,
+        applicant=ApplicantSnapshot(
+            first_name="สมชาย", last_name="ใจดี", phone_masked="xxx-xxx-5678", skills=["ครัว"]
+        ),
+        selected_shift=SelectedShift(date="2026-09-01", start_time="08:00", end_time="12:00"),
+        status="confirmed",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    await _assign(assignment_id="shift_assignment:01A")
+
+    response = await client.post(
+        "/public/v1/volunteer/schedule", json={"token": token}, headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert len(response.json()["shifts"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# The volunteer's own profile (Access Portal edit screen)
+# ---------------------------------------------------------------------------
+
+
+async def _profile_row(
+    *,
+    volunteer_id: str = "volunteer:01VOL0000000000000000001",
+    shelter_code: str = "SH001",
+    phone: str = "0812345678",
+    skills: list[str] | None = None,
+    identity_verified: bool = False,
+    updated_at: datetime | None = None,
+) -> PublicVolunteer:
+    row = PublicVolunteer(
+        id=volunteer_id,
+        shelter_code=shelter_code,
+        phone_hash=sha256_hex(normalize_phone(phone)),
+        first_name="สมชาย",
+        last_name="ใจดี",
+        phone_masked="xxx-xxx-5678",
+        volunteer_code="V-001",
+        skills=skills if skills is not None else ["ครัว"],
+        identity_verified=identity_verified,
+        updated_at=updated_at or datetime.now(UTC),
+    )
+    await row.insert()
+    return row
+
+
+async def _get_profile(client: AsyncClient, headers: dict[str, str], **body: object):
+    return await client.post("/public/v1/volunteer/profile", json=body, headers=headers)
+
+
+async def _update_profile(client: AsyncClient, headers: dict[str, str], **body: object):
+    return await client.post("/public/v1/volunteer/profile/update", json=body, headers=headers)
+
+
+async def test_profile_of_an_unknown_number_is_null_not_a_404(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Same rule as every other read here — a hit and a miss must be indistinguishable."""
+    response = await _get_profile(client, auth_headers, phone="0899999999")
+    assert response.status_code == 200
+    assert response.json()["profile"] is None
+
+
+async def test_profile_never_carries_the_id_number_or_a_raw_phone(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row()
+    response = await _get_profile(client, auth_headers, phone="0812345678")
+    assert response.status_code == 200
+    assert "0812345678" not in response.text
+    assert "national_id" not in response.text
+    assert response.json()["profile"]["phone_masked"] == "xxx-xxx-5678"
+
+
+async def test_profile_merges_every_shelter_the_person_helps_at(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """`volunteer` is per-shelter, the person is not.
+
+    Taking only the newest row would drop the skills the first shelter recorded, and
+    would drop a verification a second shelter has not repeated.
+    """
+    await _profile_row(
+        volunteer_id="volunteer:01OLD",
+        shelter_code="SH001",
+        skills=["ครัว"],
+        identity_verified=True,
+        updated_at=datetime(2026, 8, 1, tzinfo=UTC),
+    )
+    await _profile_row(
+        volunteer_id="volunteer:01NEW",
+        shelter_code="SH002",
+        skills=["ขับรถ"],
+        identity_verified=False,
+        updated_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+
+    profile = (await _get_profile(client, auth_headers, phone="0812345678")).json()["profile"]
+    assert profile["skills"] == ["ขับรถ", "ครัว"]
+    assert profile["identity_verified"] is True
+    assert sorted(profile["shelter_codes"]) == ["SH001", "SH002"]
+
+
+async def test_updating_skills_queues_one_write_per_profile_and_shows_it_at_once(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row(volunteer_id="volunteer:01A", shelter_code="SH001")
+    await _profile_row(volunteer_id="volunteer:01B", shelter_code="SH002")
+
+    response = await _update_profile(
+        client, auth_headers, phone="0812345678", skills=["ครัว", "ขับรถ"]
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["updated"] == 2
+    # Echoed back immediately: CouchDB is the system of record and the worker will get
+    # there in seconds, but the volunteer is looking at the screen now.
+    assert body["profile"]["skills"] == ["ครัว", "ขับรถ"]
+
+    queued = await VolunteerProfileUpdateBuffer.find_all().to_list()
+    assert len(queued) == 1
+    assert queued[0].synced_to_couch is False
+    assert sorted(t.volunteer_id for t in queued[0].targets) == ["volunteer:01A", "volunteer:01B"]
+
+
+async def test_updating_normalises_the_skills_it_stores(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row()
+    body = (
+        await _update_profile(
+            client, auth_headers, phone="0812345678", skills=[" ครัว ", "ครัว", "", "ขับรถ"]
+        )
+    ).json()
+    assert body["profile"]["skills"] == ["ครัว", "ขับรถ"]
+
+
+async def test_updating_a_profile_that_does_not_exist_is_refused_not_silently_accepted(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A read may answer emptily; a write may not.
+
+    Telling someone their edit was saved when there was nothing to save is worse than a
+    404 — there is no other screen where they would find out.
+    """
+    response = await _update_profile(client, auth_headers, phone="0899999999", skills=["ครัว"])
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"] == "PROFILE_NOT_FOUND"
+
+
+async def test_a_profile_edit_cannot_express_a_staff_only_change(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """`identity_verified` and friends are not on the request model at all, so a forged
+    body carrying them changes nothing."""
+    await _profile_row(identity_verified=False)
+    await _update_profile(
+        client,
+        auth_headers,
+        phone="0812345678",
+        skills=["ครัว"],
+        identity_verified=True,
+        volunteer_code="V-999",
+        status="inactive",
+    )
+    profile = (await _get_profile(client, auth_headers, phone="0812345678")).json()["profile"]
+    assert profile["identity_verified"] is False
+    assert profile["volunteer_code"] == "V-001"
+
+
+async def test_a_token_sign_in_can_read_and_edit_the_same_profile(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _make_job()
+    token, _ = await _apply_and_lookup(client, auth_headers)
+    await _profile_row()
+
+    assert (await _get_profile(client, auth_headers, token=token)).json()["profile"] is not None
+    updated = await _update_profile(client, auth_headers, token=token, skills=["ขับรถ"])
+    assert updated.status_code == 200
+    assert updated.json()["profile"]["skills"] == ["ขับรถ"]

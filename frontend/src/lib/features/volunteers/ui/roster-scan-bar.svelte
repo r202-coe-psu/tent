@@ -3,9 +3,11 @@
 	 * "แถบสแกนและค้นหาด่วน (Fast Scan & Live Roster)" — Roster tab (Tab 2),
 	 * owner-approved mockup 2026-08-29.
 	 *
-	 * `search`/`shift`/`status` filter the already-fetched TODAY roster
-	 * client-side (mirrors `volunteer-filter-bar.svelte`'s split — there is no
-	 * server-side index for either). "สแกนรับเข้างาน" (camera QR/barcode scan)
+	 * `date` is the ONE server-side filter here: it re-keys
+	 * `useTodayAttendance()` so a different day is fetched (default = today in
+	 * Asia/Bangkok). `search`/`shift`/`status` filter that already-fetched
+	 * roster client-side (mirrors `volunteer-filter-bar.svelte`'s split — there
+	 * is no server-side index for those three). "สแกนรับเข้างาน" (camera QR/barcode scan)
 	 * has no browser camera integration in this pass — owner instruction
 	 * 2026-08-29 scopes the on-site scan/kiosk hardware flow out for now, so it
 	 * stays a UI-only stub (`toast.info`, same convention as
@@ -15,21 +17,27 @@
 	import { toast } from 'svelte-sonner';
 	import Search from '@lucide/svelte/icons/search';
 	import Camera from '@lucide/svelte/icons/camera';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { shiftKindSchema, shiftAssignmentStatusSchema } from '../domain/shift-assignment.schema';
 	import type { ShiftAssignmentStatus, ShiftKind } from '../domain/shift-assignment.schema';
+	import { todayDateString } from '../application/queries';
 
 	let {
 		search = $bindable(''),
 		shift = $bindable<ShiftKind | ''>(''),
-		status = $bindable<ShiftAssignmentStatus | ''>('')
+		status = $bindable<ShiftAssignmentStatus | ''>(''),
+		date = $bindable(todayDateString())
 	}: {
 		search?: string;
 		shift?: ShiftKind | '';
 		status?: ShiftAssignmentStatus | '';
+		date?: string;
 	} = $props();
+
+	const isToday = $derived(date === todayDateString());
 
 	const SHIFT_LABELS: Record<ShiftKind, string> = {
 		morning: 'กะเช้า',
@@ -57,6 +65,12 @@
 	];
 
 	const selectTriggerClass = 'h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
+
+	/** An empty date input (the operator cleared it) falls back to today rather
+	 * than querying `date: ''`, which would match no assignment at all. */
+	function onDateInput(event: Event & { currentTarget: HTMLInputElement }) {
+		date = event.currentTarget.value || todayDateString();
+	}
 
 	function mockScan() {
 		toast.info('สแกนรับเข้างานด้วยกล้อง — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา (mock up)');
@@ -109,6 +123,29 @@
 				{/each}
 			</Select.Content>
 		</Select.Root>
+
+		<div class="relative shrink-0">
+			<CalendarDays
+				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+			/>
+			<Input
+				type="date"
+				value={date}
+				oninput={onDateInput}
+				aria-label="วันที่ของตารางกะ"
+				class="h-11 rounded-xl bg-background pl-9 shadow-xs lg:w-44"
+			/>
+		</div>
+
+		{#if !isToday}
+			<Button
+				variant="ghost"
+				class="h-11 shrink-0 rounded-xl"
+				onclick={() => (date = todayDateString())}
+			>
+				กลับไปวันนี้
+			</Button>
+		{/if}
 
 		<Button variant="outline" class="h-11 shrink-0 gap-1.5 rounded-xl" onclick={mockScan}>
 			<Camera class="h-4 w-4" />

@@ -3,20 +3,16 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Ticket from '@lucide/svelte/icons/ticket';
 	import Lock from '@lucide/svelte/icons/lock';
+	import { resolve } from '$app/paths';
 	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
-	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
-	import TicketSearch from '$lib/features/volunteers/components/TicketSearch.svelte';
+	import { JobBoard, TicketFinder } from '$lib/features/volunteer-portal';
 
-	import { goto } from '$app/navigation';
-
-	let activeTab = $state('jobs'); // 'jobs' | 'ticket'
-
-	function handleSearchTicket(query: string) {
-		const token = query.trim();
-		if (token) {
-			goto(`/volunteers/ticket/${encodeURIComponent(token)}`);
-		}
-	}
+	/**
+	 * The 2 tabs AC-VOL-08 (`D-VOL-PUBLIC-2TABS`) collapsed this page down to. Both halves
+	 * read the live public plane — the board through `GET /api/public/v1/volunteer/jobs`,
+	 * the finder through the phone lookup.
+	 */
+	let activeTab = $state<'jobs' | 'ticket'>('jobs');
 </script>
 
 <svelte:head>
@@ -58,11 +54,12 @@
 				<Ticket class="h-4.5 w-4.5" /> ค้นหาตั๋วของฉัน (Find My Ticket)
 			</button>
 		</div>
-		<button
+		<a
+			href={resolve('/volunteer/portal')}
 			class="hover:bg-opacity-90 flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-primary px-7 py-4 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] md:w-auto"
 		>
 			<Lock class="h-4 w-4 text-warning" /> เข้าสู่ระบบจิตอาสา / ตารางงานของฉัน &rarr;
-		</button>
+		</a>
 	</div>
 
 	<!-- TAB 1: Job Board -->
@@ -72,6 +69,6 @@
 
 	<!-- TAB 2: Ticket Search -->
 	{#if activeTab === 'ticket'}
-		<TicketSearch onSearch={handleSearchTicket} />
+		<TicketFinder />
 	{/if}
 </PublicPageShell>

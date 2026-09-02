@@ -13,7 +13,7 @@
 	let searched = $state(false);
 
 	const find = useFindTicketsMutation();
-	const tickets = $derived(find.data ?? []);
+	const tickets = $derived(find.data?.tickets ?? []);
 
 	async function search(event: SubmitEvent) {
 		event.preventDefault();

@@ -16,7 +16,10 @@ async def apply_document(model: type[T], action: str, payload: dict[str, Any] | 
             if existing:
                 await existing.delete()
         return
-    if payload is None:
+    # "ignore" carries an empty payload, not None — reading `_id` off it raised KeyError
+    # and took the whole bootstrap scan down with it, leaving Mongo half-filled on a
+    # fresh deploy. Anything that is not an upsert has nothing to write.
+    if action != "upsert" or not payload:
         return
     doc_id = payload["_id"]
     existing = await model.get(doc_id)

@@ -1157,6 +1157,76 @@
 				},
 				"security": [{ "HTTPBearer": [] }]
 			}
+		},
+		"/public/v1/volunteer/profile": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Profile",
+				"description": "The volunteer's own profile, for the Access Portal's edit screen.",
+				"operationId": "volunteer_profile_public_v1_volunteer_profile_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ScheduleLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerProfileResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/profile/update": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Update Volunteer Profile",
+				"description": "Change the parts of the profile the volunteer owns (skills, for now).",
+				"operationId": "update_volunteer_profile_public_v1_volunteer_profile_update_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/VolunteerProfileUpdateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerProfileUpdateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
 		}
 	},
 	"components": {
@@ -1296,20 +1366,27 @@
 			},
 			"DispatchRespondRequest": {
 				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
 					"assignment_id": {
 						"type": "string",
 						"maxLength": 120,
 						"minLength": 1,
 						"title": "Assignment Id"
 					},
-					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" },
 					"code": { "type": "string", "maxLength": 20, "minLength": 4, "title": "Code" },
 					"action": { "type": "string", "enum": ["accepted", "declined"], "title": "Action" }
 				},
 				"type": "object",
-				"required": ["assignment_id", "phone", "code", "action"],
+				"required": ["assignment_id", "code", "action"],
 				"title": "DispatchRespondRequest",
-				"description": "Answering an offered shift — two factors, neither enough alone.\n\n``phone`` is what the portal signed in with and must match the assignment;\n``code`` is the short code a manager read out. A six-character code is only safe\nbecause the caller has to know whose shift it is as well."
+				"description": "Answering an offered shift — two factors, neither enough alone.\n\nThe credential is whatever the portal signed in with and must resolve to the\nassignment's own volunteer; ``code`` is the short code a manager read out. A\nsix-character code is only safe because the caller has to know whose shift it is\nas well."
 			},
 			"DispatchRespondResponse": {
 				"properties": {
@@ -1748,12 +1825,18 @@
 			},
 			"ScheduleLookupRequest": {
 				"properties": {
-					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" }
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					}
 				},
 				"type": "object",
-				"required": ["phone"],
 				"title": "ScheduleLookupRequest",
-				"description": "Same key as the ticket lookup — the portal signs in by phone."
+				"description": "Same key as the ticket lookup — the portal signs in by phone or by token."
 			},
 			"ScheduleShift": {
 				"properties": {
@@ -2073,12 +2156,18 @@
 			},
 			"TicketFindRequest": {
 				"properties": {
-					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" }
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					}
 				},
 				"type": "object",
-				"required": ["phone"],
 				"title": "TicketFindRequest",
-				"description": "Tab 2 — \"ค้นหาตั๋วของฉัน\" by the phone the application was made with."
+				"description": "Tab 2 — \"ค้นหาตั๋วของฉัน\", by phone or by a token already in hand."
 			},
 			"TicketFindResponse": {
 				"properties": {
@@ -2087,7 +2176,8 @@
 						"items": { "$ref": "#/components/schemas/TicketFindItem" },
 						"type": "array",
 						"title": "Tickets"
-					}
+					},
+					"phone_masked": { "type": "string", "title": "Phone Masked", "default": "" }
 				},
 				"type": "object",
 				"title": "TicketFindResponse"
@@ -2210,6 +2300,77 @@
 				},
 				"type": "object",
 				"title": "VolunteerCancelResponse"
+			},
+			"VolunteerProfile": {
+				"properties": {
+					"first_name": { "type": "string", "title": "First Name", "default": "" },
+					"last_name": { "type": "string", "title": "Last Name", "default": "" },
+					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
+					"phone_masked": { "type": "string", "title": "Phone Masked", "default": "" },
+					"email": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Email" },
+					"volunteer_code": { "type": "string", "title": "Volunteer Code", "default": "" },
+					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"organization": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Organization"
+					},
+					"identity_verified": {
+						"type": "boolean",
+						"title": "Identity Verified",
+						"default": false
+					},
+					"personnel_type": { "type": "string", "title": "Personnel Type", "default": "volunteer" },
+					"shelter_codes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Shelter Codes"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfile",
+				"description": "The volunteer's own profile, merged across every shelter they hold one at.\n\n``volunteer`` is a per-shelter document, so someone who has helped at two centres has\ntwo of them. The portal shows one person, so the newest document supplies the\nidentity and the shelters are listed alongside — and an edit made here is applied to\nall of them (see ``VolunteerProfileUpdateBuffer``).\n\nNo ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4)."
+			},
+			"VolunteerProfileResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"profile": {
+						"anyOf": [{ "$ref": "#/components/schemas/VolunteerProfile" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileResponse"
+			},
+			"VolunteerProfileUpdateRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"skills": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Skills"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateRequest",
+				"description": "What a volunteer may change about themselves.\n\nSkills only, for now. They are self-declared and carry no authority on their own: a\ncontrolled job still routes to review, and ``identity_verified`` stays a staff badge\n— so this cannot be used to unlock work the shelter has not approved."
+			},
+			"VolunteerProfileUpdateResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"updated": { "type": "integer", "title": "Updated", "default": 0 },
+					"profile": {
+						"anyOf": [{ "$ref": "#/components/schemas/VolunteerProfile" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateResponse"
 			},
 			"VolunteerScheduleResponse": {
 				"properties": {

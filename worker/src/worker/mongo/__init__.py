@@ -2,7 +2,12 @@ from worker.mongo.announcement import apply_announcement
 from worker.mongo.config import apply_config
 from worker.mongo.donation import apply_donation
 from worker.mongo.donation_need_counter import apply_need_counters
-from worker.mongo.job import apply_job, apply_job_application, apply_shift_assignment
+from worker.mongo.job import (
+    apply_job,
+    apply_job_application,
+    apply_shift_assignment,
+    apply_volunteer,
+)
 from worker.mongo.need import apply_need, delete_needs_for_shelter
 from worker.mongo.on_hand import refresh_on_hand
 from worker.mongo.person import apply_person, delete_persons_for_shelter
@@ -16,6 +21,7 @@ __all__ = [
     "apply_job",
     "apply_job_application",
     "apply_shift_assignment",
+    "apply_volunteer",
     "apply_need",
     "apply_need_counters",
     "apply_person",

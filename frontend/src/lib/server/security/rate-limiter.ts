@@ -116,4 +116,11 @@ export const volunteerTicketLimiter = new RateLimiter(60000, 30);
  * volunteer. Ten a minute leaves room for mistyping a code read over a bad phone line,
  * and nothing like enough for a search.
  */
+/**
+ * Editing your own profile from the portal. Tighter than the reads because it is a
+ * write reached with a guessable credential, loose enough that someone correcting a
+ * typo and re-picking their skills does not get locked out mid-edit.
+ */
+export const volunteerProfileUpdateLimiter = new RateLimiter(60000, 10);
+
 export const volunteerDispatchRespondLimiter = new RateLimiter(60000, 10);

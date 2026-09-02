@@ -269,11 +269,18 @@ describe('list/detail query hooks', () => {
 		expect(shiftAssignmentRepo.list).toHaveBeenCalledWith(filter);
 	});
 
-	it("useTodayAttendance always queries with today's date", () => {
+	it("useTodayAttendance defaults to today's date", () => {
 		(useTodayAttendance() as unknown as { queryFn: () => unknown }).queryFn();
 		expect(shiftAssignmentRepo.list).toHaveBeenCalledWith({
 			date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
 		});
+	});
+
+	it('useTodayAttendance queries (and keys by) the date the caller picks', () => {
+		const hook = useTodayAttendance(() => '2026-08-01');
+		expect((hook as unknown as { queryKey: readonly unknown[] }).queryKey).toContain('2026-08-01');
+		(hook as unknown as { queryFn: () => unknown }).queryFn();
+		expect(shiftAssignmentRepo.list).toHaveBeenCalledWith({ date: '2026-08-01' });
 	});
 
 	it('useVolunteers filters through to the repository', () => {

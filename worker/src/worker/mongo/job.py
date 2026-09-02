@@ -8,6 +8,7 @@ from typing import Any, Literal
 from tent_model.public_job import PublicJob
 from tent_model.public_job_application import PublicJobApplication
 from tent_model.public_shift_assignment import PublicShiftAssignment
+from tent_model.public_volunteer import PublicVolunteer
 from tent_model.volunteer_job_slot import seed_job_slot
 
 from worker.mongo.upsert import apply_document
@@ -37,3 +38,9 @@ async def apply_shift_assignment(
     action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
 ) -> None:
     await apply_document(PublicShiftAssignment, action, payload)
+
+
+async def apply_volunteer(
+    action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
+) -> None:
+    await apply_document(PublicVolunteer, action, payload)

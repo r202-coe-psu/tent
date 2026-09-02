@@ -108,10 +108,31 @@ class VolunteerTicketResponse(BaseModel):
     ticket: VolunteerTicket
 
 
-class TicketFindRequest(BaseModel):
-    """Tab 2 — "ค้นหาตั๋วของฉัน" by the phone the application was made with."""
+class PortalCredential(BaseModel):
+    """How a caller identifies the volunteer whose data it is asking for.
 
-    phone: str = Field(min_length=6, max_length=30)
+    Exactly one of the two, and they are equally powerful because both resolve to the
+    same ``phone_hash``: the phone the application was made with, or a ticket token —
+    the applicant's own ``TKT-VOL-…`` or a read-only ``VIEW-…`` minted by a phone
+    lookup. CR-092 หน้าจอ 6 lists both as sign-in routes for a volunteer who has no
+    account, so refusing one of them here would leave the QR on their pass unusable.
+
+    Neither is a secret a stranger cannot reach — a phone number is guessable and a
+    ``VIEW-`` token is handed out to anyone who knows one — which is why every route
+    that takes this is rate limited and why answering a dispatched shift still needs
+    the separate code a manager reads out.
+
+    "Exactly one" is enforced in the use case rather than by a validator here, so the
+    refusal comes back in this module's own ``{"success": false, "error": …}`` envelope
+    like every other refusal, instead of FastAPI's field-error shape.
+    """
+
+    phone: str | None = Field(default=None, min_length=6, max_length=30)
+    token: str | None = Field(default=None, min_length=6, max_length=200)
+
+
+class TicketFindRequest(PortalCredential):
+    """Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand."""
 
 
 class TicketFindItem(BaseModel):
@@ -132,6 +153,10 @@ class TicketFindItem(BaseModel):
 class TicketFindResponse(BaseModel):
     success: bool = True
     tickets: list[TicketFindItem] = Field(default_factory=list)
+    #: The number the tickets belong to, masked (FR-VOL-03.4). The portal shows it as
+    #: "signed in as", which it cannot do on a token sign-in without being told — and
+    #: masked is what may be shown on a screen the volunteer holds up in public.
+    phone_masked: str = ""
 
 
 class VolunteerCancelResponse(BaseModel):
@@ -169,22 +194,20 @@ class VolunteerScheduleResponse(BaseModel):
     shifts: list[ScheduleShift] = Field(default_factory=list)
 
 
-class ScheduleLookupRequest(BaseModel):
-    """Same key as the ticket lookup — the portal signs in by phone."""
-
-    phone: str = Field(min_length=6, max_length=30)
+class ScheduleLookupRequest(PortalCredential):
+    """Same key as the ticket lookup — the portal signs in by phone or by token."""
 
 
-class DispatchRespondRequest(BaseModel):
+class DispatchRespondRequest(PortalCredential):
     """Answering an offered shift — two factors, neither enough alone.
 
-    ``phone`` is what the portal signed in with and must match the assignment;
-    ``code`` is the short code a manager read out. A six-character code is only safe
-    because the caller has to know whose shift it is as well.
+    The credential is whatever the portal signed in with and must resolve to the
+    assignment's own volunteer; ``code`` is the short code a manager read out. A
+    six-character code is only safe because the caller has to know whose shift it is
+    as well.
     """
 
     assignment_id: str = Field(min_length=1, max_length=120)
-    phone: str = Field(min_length=6, max_length=30)
     code: str = Field(min_length=4, max_length=20)
     action: Literal["accepted", "declined"]
 
@@ -193,3 +216,54 @@ class DispatchRespondResponse(BaseModel):
     success: bool = True
     assignment_id: str
     dispatch_status: str
+
+
+class VolunteerProfile(BaseModel):
+    """The volunteer's own profile, merged across every shelter they hold one at.
+
+    ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
+    two of them. The portal shows one person, so the newest document supplies the
+    identity and the shelters are listed alongside — and an edit made here is applied to
+    all of them (see ``VolunteerProfileUpdateBuffer``).
+
+    No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
+    """
+
+    first_name: str = ""
+    last_name: str = ""
+    nickname: str | None = None
+    phone_masked: str = ""
+    email: str | None = None
+    volunteer_code: str = ""
+    skills: list[str] = Field(default_factory=list)
+    organization: str | None = None
+    #: Staff decision — the portal renders it read-only.
+    identity_verified: bool = False
+    personnel_type: str = "volunteer"
+    #: Every shelter the person holds a profile at, newest first.
+    shelter_codes: list[str] = Field(default_factory=list)
+
+
+class VolunteerProfileResponse(BaseModel):
+    success: bool = True
+    #: ``None`` when the credential resolves to nobody — the same answer an unknown phone
+    #: number gets everywhere else on this router, so this cannot be used as a probe.
+    profile: VolunteerProfile | None = None
+
+
+class VolunteerProfileUpdateRequest(PortalCredential):
+    """What a volunteer may change about themselves.
+
+    Skills only, for now. They are self-declared and carry no authority on their own: a
+    controlled job still routes to review, and ``identity_verified`` stays a staff badge
+    — so this cannot be used to unlock work the shelter has not approved.
+    """
+
+    skills: list[str] = Field(default_factory=list, max_length=30)
+
+
+class VolunteerProfileUpdateResponse(BaseModel):
+    success: bool = True
+    #: How many `volunteer` documents the edit was queued against.
+    updated: int = 0
+    profile: VolunteerProfile | None = None

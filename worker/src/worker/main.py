@@ -15,6 +15,7 @@ from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
+from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.listeners.registry import ListenerManager
 from worker.retention.job import run_retention_loop
@@ -47,6 +48,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     retention_task: asyncio.Task[None] | None = None
     volunteer_task: asyncio.Task[None] | None = None
     shift_response_task: asyncio.Task[None] | None = None
+    profile_update_task: asyncio.Task[None] | None = None
 
     try:
         if force_bootstrap or bootstrap_only or await needs_bootstrap():
@@ -72,6 +74,10 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_shift_response_inbound_loop(couch, stop_event=stop),
             name="inbound-shift-responses",
         )
+        profile_update_task = asyncio.create_task(
+            run_volunteer_profile_inbound_loop(couch, stop_event=stop),
+            name="inbound-volunteer-profile-updates",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -83,6 +89,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             retention_task,
             volunteer_task,
             shift_response_task,
+            profile_update_task,
         ):
             if task:
                 task.cancel()

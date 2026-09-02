@@ -17,6 +17,7 @@ from worker.mongo import (
     apply_person,
     apply_shelter,
     apply_shift_assignment,
+    apply_volunteer,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
 )
@@ -28,6 +29,7 @@ from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import is_shelter_open, project_shelter
 from worker.projectors.shift_assignment import project_shift_assignment
+from worker.projectors.volunteer import project_volunteer
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,12 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                 doc, shelter_code=shelter_code, volunteer=volunteer
             )
             await apply_shift_assignment(action, payload)
+        elif doc_type == "volunteer":
+            # The portal reads a profile the same way it reads a schedule — by phone
+            # hash — so a volunteer registered before this worker first ran must be
+            # projected here too, or their own profile screen comes back empty.
+            action, payload = project_volunteer(doc, shelter_code=shelter_code)
+            await apply_volunteer(action, payload)
 
     # Same reason the counters are seeded above: the ledger entries already on disk
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the

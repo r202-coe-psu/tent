@@ -553,6 +553,46 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/volunteer/profile': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Profile
+		 * @description The volunteer's own profile, for the Access Portal's edit screen.
+		 */
+		post: operations['volunteer_profile_public_v1_volunteer_profile_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/profile/update': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Update Volunteer Profile
+		 * @description Change the parts of the profile the volunteer owns (skills, for now).
+		 */
+		post: operations['update_volunteer_profile_public_v1_volunteer_profile_update_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -681,15 +721,18 @@ export interface components {
 		 * DispatchRespondRequest
 		 * @description Answering an offered shift — two factors, neither enough alone.
 		 *
-		 *     ``phone`` is what the portal signed in with and must match the assignment;
-		 *     ``code`` is the short code a manager read out. A six-character code is only safe
-		 *     because the caller has to know whose shift it is as well.
+		 *     The credential is whatever the portal signed in with and must resolve to the
+		 *     assignment's own volunteer; ``code`` is the short code a manager read out. A
+		 *     six-character code is only safe because the caller has to know whose shift it is
+		 *     as well.
 		 */
 		DispatchRespondRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
 			/** Assignment Id */
 			assignment_id: string;
-			/** Phone */
-			phone: string;
 			/** Code */
 			code: string;
 			/**
@@ -1127,11 +1170,13 @@ export interface components {
 		};
 		/**
 		 * ScheduleLookupRequest
-		 * @description Same key as the ticket lookup — the portal signs in by phone.
+		 * @description Same key as the ticket lookup — the portal signs in by phone or by token.
 		 */
 		ScheduleLookupRequest: {
 			/** Phone */
-			phone: string;
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
 		};
 		/**
 		 * ScheduleShift
@@ -1426,11 +1471,13 @@ export interface components {
 		};
 		/**
 		 * TicketFindRequest
-		 * @description Tab 2 — "ค้นหาตั๋วของฉัน" by the phone the application was made with.
+		 * @description Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand.
 		 */
 		TicketFindRequest: {
 			/** Phone */
-			phone: string;
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
 		};
 		/** TicketFindResponse */
 		TicketFindResponse: {
@@ -1441,6 +1488,11 @@ export interface components {
 			success: boolean;
 			/** Tickets */
 			tickets?: components['schemas']['TicketFindItem'][];
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
 		};
 		/** TicketShift */
 		TicketShift: {
@@ -1573,6 +1625,98 @@ export interface components {
 			 * @default Application cancelled
 			 */
 			message: string;
+		};
+		/**
+		 * VolunteerProfile
+		 * @description The volunteer's own profile, merged across every shelter they hold one at.
+		 *
+		 *     ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
+		 *     two of them. The portal shows one person, so the newest document supplies the
+		 *     identity and the shelters are listed alongside — and an edit made here is applied to
+		 *     all of them (see ``VolunteerProfileUpdateBuffer``).
+		 *
+		 *     No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
+		 */
+		VolunteerProfile: {
+			/**
+			 * First Name
+			 * @default
+			 */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/** Nickname */
+			nickname?: string | null;
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+			/** Email */
+			email?: string | null;
+			/**
+			 * Volunteer Code
+			 * @default
+			 */
+			volunteer_code: string;
+			/** Skills */
+			skills?: string[];
+			/** Organization */
+			organization?: string | null;
+			/**
+			 * Identity Verified
+			 * @default false
+			 */
+			identity_verified: boolean;
+			/**
+			 * Personnel Type
+			 * @default volunteer
+			 */
+			personnel_type: string;
+			/** Shelter Codes */
+			shelter_codes?: string[];
+		};
+		/** VolunteerProfileResponse */
+		VolunteerProfileResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/**
+		 * VolunteerProfileUpdateRequest
+		 * @description What a volunteer may change about themselves.
+		 *
+		 *     Skills only, for now. They are self-declared and carry no authority on their own: a
+		 *     controlled job still routes to review, and ``identity_verified`` stays a staff badge
+		 *     — so this cannot be used to unlock work the shelter has not approved.
+		 */
+		VolunteerProfileUpdateRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerProfileUpdateResponse */
+		VolunteerProfileUpdateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Updated
+			 * @default 0
+			 */
+			updated: number;
+			profile?: components['schemas']['VolunteerProfile'] | null;
 		};
 		/** VolunteerScheduleResponse */
 		VolunteerScheduleResponse: {
@@ -2664,6 +2808,72 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['DispatchRespondResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_profile_public_v1_volunteer_profile_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_volunteer_profile_public_v1_volunteer_profile_update_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerProfileUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileUpdateResponse'];
 				};
 			};
 			/** @description Validation Error */

@@ -17,6 +17,7 @@ from worker.mongo import (
     apply_person,
     apply_shelter,
     apply_shift_assignment,
+    apply_volunteer,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
     resolve_shelter_code_for_registry_delete,
@@ -31,6 +32,7 @@ from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
 from worker.projectors.shift_assignment import project_shift_assignment
+from worker.projectors.volunteer import project_volunteer
 from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
 
 logger = logging.getLogger(__name__)
@@ -174,6 +176,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc, shelter_code=shelter_code, volunteer=volunteer
                 )
                 await apply_shift_assignment(action, payload)
+            elif doc_type == "volunteer":
+                action, payload = project_volunteer(doc, shelter_code=shelter_code)
+                await apply_volunteer(action, payload)
             elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
 

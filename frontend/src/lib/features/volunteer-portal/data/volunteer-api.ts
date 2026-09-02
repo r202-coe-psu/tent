@@ -5,9 +5,27 @@
  * EXTERNAL_API_SECRET, which the BFF injects; the SPA must never reach it directly
  * (CR-063).
  */
-import type { ScheduleShift, TicketSummary, VolunteerTicket } from '../domain/volunteer';
+import type {
+	PortalCredential,
+	PublicJob,
+	PublicJobFilter,
+	ScheduleShift,
+	TicketSummary,
+	VolunteerApplyInput,
+	VolunteerProfile,
+	VolunteerSkillOption,
+	VolunteerTicket
+} from '../domain/volunteer';
 
 const ERROR_COPY: Record<string, string> = {
+	JOB_NOT_FOUND: 'ไม่พบภารกิจนี้ อาจถูกปิดรับสมัครไปแล้ว',
+	JOB_NOT_OPEN: 'ภารกิจนี้ปิดรับสมัครแล้ว',
+	JOB_FULL: 'ภารกิจนี้เต็มแล้ว กรุณาเลือกกะหรือภารกิจอื่น',
+	ALREADY_APPLIED: 'เบอร์นี้สมัครภารกิจนี้ไว้แล้ว — เปิดดูตั๋วเดิมได้จาก "ค้นหาตั๋วของฉัน"',
+	PROFILE_NOT_FOUND: 'ไม่พบโปรไฟล์ของคุณในระบบ — ลองจองภารกิจสักงานก่อน',
+	PROFILE_UPDATE_FAILED: 'บันทึกโปรไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+	CAPTCHA_REQUIRED: 'ไม่สามารถยืนยันว่าไม่ใช่บอทได้ กรุณารีเฟรชหน้าแล้วลองใหม่',
+	CAPTCHA_FAILED: 'ไม่ผ่านการตรวจสอบ reCAPTCHA กรุณาลองใหม่อีกครั้ง',
 	OFFER_NOT_FOUND: 'ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง กรุณาตรวจสอบกับเจ้าหน้าที่',
 	OFFER_ALREADY_ANSWERED: 'ภารกิจนี้ถูกตอบไปแล้ว',
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
@@ -39,17 +57,27 @@ export async function getTicket(token: string): Promise<VolunteerTicket> {
 	return (data as { ticket: VolunteerTicket }).ticket;
 }
 
-export async function findTickets(phone: string): Promise<TicketSummary[]> {
+export type TicketFindResult = {
+	tickets: TicketSummary[];
+	/**
+	 * Already masked by the API. It is the only thing that tells the portal who is signed
+	 * in when the credential was a token — the raw number never leaves the server.
+	 */
+	phoneMasked: string;
+};
+
+export async function findTickets(credential: PortalCredential): Promise<TicketFindResult> {
 	const response = await fetch('/api/public/v1/volunteer/ticket/find', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ phone })
+		body: JSON.stringify(credential)
 	});
 	const data = await readJson(response);
 	if (!response.ok || !data) {
 		throw apiError(data, response.status, 'ค้นหาตั๋วไม่สำเร็จ');
 	}
-	return (data as { tickets?: TicketSummary[] }).tickets ?? [];
+	const body = data as { tickets?: TicketSummary[]; phone_masked?: string };
+	return { tickets: body.tickets ?? [], phoneMasked: body.phone_masked ?? '' };
 }
 
 export async function cancelTicket(token: string): Promise<void> {
@@ -62,11 +90,11 @@ export async function cancelTicket(token: string): Promise<void> {
 	}
 }
 
-export async function fetchSchedule(phone: string): Promise<ScheduleShift[]> {
+export async function fetchSchedule(credential: PortalCredential): Promise<ScheduleShift[]> {
 	const response = await fetch('/api/public/v1/volunteer/schedule', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ phone })
+		body: JSON.stringify(credential)
 	});
 	const data = await readJson(response);
 	if (!response.ok || !data) {
@@ -75,12 +103,13 @@ export async function fetchSchedule(phone: string): Promise<ScheduleShift[]> {
 	return (data as { shifts?: ScheduleShift[] }).shifts ?? [];
 }
 
-export async function respondToDispatch(vars: {
-	assignment_id: string;
-	phone: string;
-	code: string;
-	action: 'accepted' | 'declined';
-}): Promise<void> {
+export async function respondToDispatch(
+	vars: {
+		assignment_id: string;
+		code: string;
+		action: 'accepted' | 'declined';
+	} & PortalCredential
+): Promise<void> {
 	const response = await fetch('/api/public/v1/volunteer/schedule/respond', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -89,4 +118,89 @@ export async function respondToDispatch(vars: {
 	if (!response.ok) {
 		throw apiError(await readJson(response), response.status, 'ตอบรับภารกิจไม่สำเร็จ');
 	}
+}
+
+export async function fetchJobs(filter: PublicJobFilter = {}): Promise<PublicJob[]> {
+	const query = new URLSearchParams();
+	if (filter.shelter_code) query.set('shelter_code', filter.shelter_code);
+	if (filter.skill) query.set('skill', filter.skill);
+	const suffix = query.size > 0 ? `?${query}` : '';
+
+	const response = await fetch(`/api/public/v1/volunteer/jobs${suffix}`);
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถโหลดกระดานงานอาสาได้');
+	}
+	return (data as { jobs?: PublicJob[] }).jobs ?? [];
+}
+
+export type ApplyResult = {
+	tracking_token: string;
+	status: string;
+	job_id: string;
+};
+
+/**
+ * Apply to one job (FR-VOL-02 / AC-VOL-02) — no account, no SMS OTP.
+ *
+ * The ticket comes back in the response rather than by SMS, so the caller must route
+ * the applicant to it immediately: this token is the only way back to the pass, and a
+ * lookup by phone hands out a read-only view token instead.
+ */
+export async function applyToJob(jobId: string, input: VolunteerApplyInput): Promise<ApplyResult> {
+	const response = await fetch(`/api/public/v1/volunteer/jobs/${encodeURIComponent(jobId)}/apply`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ส่งใบสมัครไม่สำเร็จ');
+	}
+	return data as ApplyResult;
+}
+
+export async function fetchProfile(credential: PortalCredential): Promise<VolunteerProfile | null> {
+	const response = await fetch('/api/public/v1/volunteer/profile', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(credential)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถโหลดโปรไฟล์ได้');
+	}
+	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
+}
+
+export async function updateProfileSkills(
+	vars: { skills: string[] } & PortalCredential
+): Promise<VolunteerProfile | null> {
+	const response = await fetch('/api/public/v1/volunteer/profile/update', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(vars)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'บันทึกโปรไฟล์ไม่สำเร็จ');
+	}
+	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
+}
+
+/**
+ * The selectable skills, from Master Data.
+ *
+ * Answers an empty list rather than throwing when the lookup fails upstream — a form
+ * that cannot offer the master list must still let someone keep the skills they already
+ * have, and the caller decides what to show.
+ */
+export async function fetchVolunteerSkills(shelterCode?: string): Promise<VolunteerSkillOption[]> {
+	const suffix = shelterCode ? `?shelter=${encodeURIComponent(shelterCode)}` : '';
+	const response = await fetch(`/api/public/v1/config/volunteer-skills${suffix}`);
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถโหลดรายการทักษะได้');
+	}
+	return (data as { volunteerSkills?: VolunteerSkillOption[] }).volunteerSkills ?? [];
 }

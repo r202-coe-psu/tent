@@ -1,17 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { dispatchRespondSchema, ticketFindSchema } from '$lib/features/volunteer-portal/server';
+import {
+	dispatchRespondSchema,
+	portalCredentialSchema
+} from '$lib/features/volunteer-portal/server';
 import { volunteerDispatchRespondLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 /**
  * Accept or decline an offered shift (CR-092 FR-VOL-06).
  *
- * Two factors, both checked upstream against the same assignment: the phone the portal
- * signed in with, and the short code a manager read out over the phone. A six-character
- * code is only safe alongside the phone number and this limiter — it is the one
- * volunteer surface where guessing gets you a write, and a declined shift cannot be
- * un-declined by the volunteer, so it is held far tighter than the read routes.
+ * Two factors, both checked upstream against the same assignment: whichever credential
+ * the portal signed in with (phone or ticket token), and the short code a manager read
+ * out over the phone. A six-character code is only safe alongside that credential and
+ * this limiter — it is the one volunteer surface where guessing gets you a write, and a
+ * declined shift cannot be un-declined by the volunteer, so it is held far tighter than
+ * the read routes.
  */
 export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
 	if (!volunteerDispatchRespondLimiter.check(getClientAddress())) {
@@ -20,15 +24,15 @@ export const POST: RequestHandler = async ({ request, fetch, getClientAddress })
 	try {
 		const payload = await request.json();
 		const parsed = dispatchRespondSchema.safeParse(payload);
-		const phone = ticketFindSchema.safeParse({ phone: (payload as { phone?: unknown }).phone });
-		if (!parsed.success || !phone.success) {
+		const credential = portalCredentialSchema.safeParse(payload);
+		if (!parsed.success || !credential.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}
 
 		const res = await fetch(`${fastapiBaseUrl()}/public/v1/volunteer/schedule/respond`, {
 			method: 'POST',
 			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-			body: JSON.stringify({ ...parsed.data, phone: phone.data.phone })
+			body: JSON.stringify({ ...parsed.data, ...credential.data })
 		});
 
 		const body = (await res.json().catch(() => ({}))) as { errors?: Array<{ error?: string }> };

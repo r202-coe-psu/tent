@@ -2,7 +2,7 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-13
+updated: 2026-09-02
 note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B)
 ---
 
@@ -52,6 +52,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 | --- | --- | --- | --- |
 | **Outbound** | CouchDB central → Mongo | tail `_changes` (CDC) → project → upsert | person index, shelters, needs, donation status |
 | **Inbound** | Mongo → CouchDB central | poll Mongo `donations` ใหม่ → `db.put(donation:{ulid})` | บันทึก donation ที่ public ประกาศเข้าระบบจริง |
+| **Inbound (volunteer)** | Mongo → CouchDB central | poll `volunteer_applications` / `volunteer_shift_responses` / `volunteer_profile_updates` | ใบจองภารกิจ, การตอบรับกะ, และการแก้ไขโปรไฟล์ที่จิตอาสาทำเองจากพอร์ทัล |
 
 ทั้งสอง plane **idempotent** และมี **checkpoint** — restart worker ได้ปลอดภัย ไม่ซ้ำ ไม่หาย.
 
@@ -101,6 +102,15 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
   items_declared: [...], received_summary: {...} | null, updated_at }
 // projector: sync สถานะ donation กลับมาให้ public ดูผ่าน GET /public/v1/donations/{token}
 // create path เขียน stub ทันทีก่อน outbound CDC เพื่อให้ GET tracking ใช้ได้ทันที
+
+// public_volunteers — โปรไฟล์จิตอาสาสำหรับหน้า "แก้ไขโปรไฟล์" ใน Access Portal
+// lookup ด้วย phone_hash เท่านั้น (คีย์เดียวกับ schedule / ticket find)
+{ _id: "volunteer:01H...", shelter_code, phone_hash, first_name, last_name, nickname,
+  phone_masked, email, volunteer_code, skills: [...], organization,
+  identity_verified, personnel_type, status: "active", updated_at }
+// projector: status != active → ลบ doc (ไม่ project เป็น inactive)
+// ไม่มี: national_id, เบอร์ดิบ, user_name, tracking_token — ไม่ project เด็ดขาด
+// 1 doc / ศูนย์ที่มีโปรไฟล์ — คนเดียวช่วยหลายศูนย์ = หลายแถว, API merge ให้ตอนอ่าน
 
 // public_transparency — ตัดออก (CR-017 Decision B); ใช้ public_shelters แทนสำหรับ shelter list
 ```
@@ -190,6 +200,7 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 | donation lifecycle | CouchDB | → Mongo | หลัง persist แล้ว CouchDB คุม status; Mongo mirror |
 | stock_ledger | CouchDB | — (ไม่ขึ้น Mongo) | ไม่ project — stock เป็นข้อมูลภายในศูนย์ |
 | needs / transparency | CouchDB (view) | → Mongo | Mongo อ่านอย่างเดียว |
+| volunteer profile | CouchDB | ↔ | อ่าน: project ลง `public_volunteers` · เขียน: จิตอาสาแก้ได้เฉพาะ `skills` ผ่าน `volunteer_profile_updates` แล้ว worker patch กลับ — `identity_verified` / `status` / `volunteer_code` / `personnel_type` เป็นของเจ้าหน้าที่ ไม่มีช่องทางแก้จาก public plane |
 
 - **ไม่มี conflict ข้าม store**: donation มี boundary ชัด (Mongo เป็นเจ้าของก่อน persist, CouchDB หลัง persist)
   — ULID เดียวกันตลอด ใช้เป็น idempotency key ทั้งสองฝั่ง

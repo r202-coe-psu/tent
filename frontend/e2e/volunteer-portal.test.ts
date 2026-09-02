@@ -122,7 +122,57 @@ async function mockPortalApi(page: Page) {
 	await page.route('**/api/public/v1/volunteer/ticket/find', (route) =>
 		route.fulfill(json(TICKETS))
 	);
+	// The portal counts open jobs for its second tab, and the board it mounts there reads
+	// the same endpoint. Empty is fine — no test here asserts on the board itself.
+	await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+		route.fulfill(json({ success: true, jobs: [] }))
+	);
+	await page.route('**/api/public/v1/volunteer/profile', (route) =>
+		route.fulfill(json({ success: true, profile: PROFILE }))
+	);
+	// The profile form offers whatever Master Data holds, so the fixture stands in for it.
+	await page.route('**/api/public/v1/config/volunteer-skills*', (route) =>
+		route.fulfill(json({ volunteerSkills: SKILLS }))
+	);
 }
+
+const SKILLS = [
+	{
+		code: 'cooking',
+		label: 'ประกอบอาหาร / ครัวสนาม',
+		category: 'operational',
+		description: '',
+		is_default: true
+	},
+	{
+		code: 'driver',
+		label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+		category: 'operational',
+		description: '',
+		is_default: false
+	},
+	{
+		code: 'medical',
+		label: 'การแพทย์ / ปฐมพยาบาล',
+		category: 'controlled',
+		description: '',
+		is_default: false
+	}
+];
+
+const PROFILE = {
+	first_name: 'สมชาย',
+	last_name: 'ใจดี',
+	nickname: null,
+	phone_masked: 'xxx-xxx-2222',
+	email: null,
+	volunteer_code: 'V-001',
+	skills: ['ประกอบอาหาร / ครัวสนาม'],
+	organization: null,
+	identity_verified: true,
+	personnel_type: 'volunteer',
+	shelter_codes: ['SH001']
+};
 
 /** Open the portal tab — it is the second tab, not the landing one. */
 async function openPortalTab(page: Page) {
@@ -155,7 +205,8 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await signIn(page, PHONE);
 
 		await expect(signOutButton(page)).toBeVisible();
-		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toBeVisible();
+		// Rendered twice by design: once as the booking, once as the shift rostered from it.
+		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร').first()).toBeVisible();
 		await expect(page.getByText('จุดปฏิบัติงาน: ครัวกลาง')).toBeVisible();
 		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย')).toBeVisible();
 	});
@@ -203,15 +254,32 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await expect(signOutButton(page)).toHaveCount(0);
 	});
 
-	test('a ticket code goes straight to the pass without a lookup', async ({ page }) => {
+	test('a ticket code signs in and opens the same roster a phone does', async ({ page }) => {
+		// The QR on a pass is a sign-in route (CR-092 หน้าจอ 6) — it must not navigate away
+		// to the pass the volunteer already has in their hand.
+		let asked: unknown = null;
 		await mockPortalApi(page);
-		await page.route(`**/api/public/v1/volunteer/ticket/${TRACKING_TOKEN}`, (route) =>
-			route.fulfill(json(ticket()))
-		);
+		await page.route('**/api/public/v1/volunteer/schedule', async (route) => {
+			asked = route.request().postDataJSON();
+			await route.fulfill(json(SCHEDULE));
+		});
 		await openPortalTab(page);
 		await signInWithToken(page, TRACKING_TOKEN);
 
-		await expect(page).toHaveURL(new RegExp(`/volunteer/ticket/${TRACKING_TOKEN}$`));
+		await expect(signOutButton(page)).toBeVisible();
+		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร').first()).toBeVisible();
+		await expect(page).toHaveURL(/\/volunteers\/portal/);
+		// The token goes to the server as the credential; the phone is never invented here.
+		expect(asked).toEqual({ token: TRACKING_TOKEN });
+	});
+
+	test('refuses a code that is neither a ticket token nor a view reference', async ({ page }) => {
+		await mockPortalApi(page);
+		await openPortalTab(page);
+		await signInWithToken(page, 'V-1001');
+
+		await expect(page.getByText(/ต้องขึ้นต้นด้วย TKT-VOL-/)).toBeVisible();
+		await expect(signOutButton(page)).toHaveCount(0);
 	});
 
 	test('signing out clears the session rather than leaving it on a shared tablet', async ({
@@ -229,6 +297,142 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await page.reload();
 		await expect(signOutButton(page)).toHaveCount(0);
 		await expect(page.locator('#volunteer-phone-input')).toHaveValue('');
+	});
+});
+
+test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
+	test('a booking lands the volunteer on their own schedule, already signed in', async ({
+		page
+	}) => {
+		// The board calls it จอง, and what a volunteer wants next is their roster — not the
+		// pass they can reach from it. The token comes back in the booking response, so the
+		// portal opens signed in rather than asking for the number just typed.
+		let scheduleAskedWith: unknown = null;
+		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/schedule', async (route) => {
+			scheduleAskedWith = route.request().postDataJSON();
+			await route.fulfill(json({ success: true, shifts: [] }));
+		});
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01BOARD',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'ผู้ช่วยครัวจัดเตรียมอาหาร',
+							description: 'ช่วยเตรียมอาหารกลางวัน',
+							tier: 'operational',
+							skills_required: [],
+							shift_template: {
+								shift_name: 'เช้า',
+								start_time: '08:00',
+								end_time: '12:00',
+								days: []
+							},
+							quota: 10,
+							slots_confirmed: 2,
+							slots_remaining: 8,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+		await page.route('**/api/public/v1/volunteer/jobs/*/apply', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					tracking_token: TRACKING_TOKEN,
+					status: 'confirmed',
+					job_id: 'job:01BOARD'
+				})
+			)
+		);
+
+		await page.goto('/volunteers/jobs');
+		// The BFF verifies whatever token it receives; this only stands in for Google's
+		// script, which cannot run in the harness (same hook the booking form uses).
+		await page.evaluate(() => {
+			(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
+		});
+		await page.getByRole('button', { name: 'จองภารกิจนี้' }).click();
+
+		await page.getByLabel('ชื่อ', { exact: false }).first().fill('เก่งกล้า');
+		await page.locator('#apply-last-name').fill('งานอาสา');
+		await page.locator('#apply-phone').fill('0891112222');
+		await page.getByRole('checkbox').check();
+		await page.getByRole('button', { name: /ยืนยันการจอง/ }).click();
+
+		await expect(page).toHaveURL(/\/volunteers\/portal\?tab=portal/);
+		await expect(signOutButton(page)).toBeVisible();
+		// Signed in with the booking's own token, never with a phone the page kept around.
+		expect(scheduleAskedWith).toEqual({ token: TRACKING_TOKEN });
+	});
+});
+
+test.describe('Editing your own profile', () => {
+	async function openProfile(page: Page) {
+		await mockPortalApi(page);
+		await openPortalTab(page);
+		await signIn(page, PHONE);
+		await page.getByRole('button', { name: 'แก้ไขโปรไฟล์' }).click();
+		// Scoped, because the dashboard behind the dialog shows the same badge and the
+		// same skill names — an unscoped locator matches both.
+		return page.getByRole('dialog');
+	}
+
+	test('shows what staff own as read-only and offers only the skills', async ({ page }) => {
+		const dialog = await openProfile(page);
+
+		await expect(dialog.getByText('V-001 · xxx-xxx-2222')).toBeVisible();
+		await expect(dialog.getByText('ยืนยันตัวตนแล้ว')).toBeVisible();
+		// The number this portal signs in by is never an input here.
+		await expect(dialog.getByRole('textbox')).toHaveCount(0);
+		// The skill already on the profile comes back selected, not blank.
+		await expect(dialog.getByRole('button', { name: /ประกอบอาหาร/, pressed: true })).toBeVisible();
+	});
+
+	test('sends only the skills, and only what changed', async ({ page }) => {
+		let sent: unknown = null;
+		const dialog = await openProfile(page);
+		await page.route('**/api/public/v1/volunteer/profile/update', async (route) => {
+			sent = route.request().postDataJSON();
+			await route.fulfill(
+				json({
+					success: true,
+					updated: 1,
+					profile: { ...PROFILE, skills: ['ขับขี่ยานพาหนะ / ขนส่ง'] }
+				})
+			);
+		});
+
+		// Untouched, the save button has nothing to do.
+		await expect(dialog.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' })).toBeDisabled();
+
+		await dialog.getByRole('button', { name: /ประกอบอาหาร/ }).click();
+		await dialog.getByRole('button', { name: /ขับขี่ยานพาหนะ/ }).click();
+		await dialog.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' }).click();
+
+		await expect(dialog).toHaveCount(0);
+		expect(sent).toEqual({ phone: PHONE, skills: ['ขับขี่ยานพาหนะ / ขนส่ง'] });
+	});
+
+	test('says what went wrong instead of closing on a refusal', async ({ page }) => {
+		const dialog = await openProfile(page);
+		await page.route('**/api/public/v1/volunteer/profile/update', (route) =>
+			route.fulfill(json({ success: false, error: 'PROFILE_NOT_FOUND' }, 404))
+		);
+
+		await dialog.getByRole('button', { name: /ขับขี่ยานพาหนะ/ }).click();
+		await dialog.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' }).click();
+
+		// Still open, with the reason on screen — a closed dialog would read as success.
+		await expect(dialog.getByRole('alert')).toContainText('ไม่พบโปรไฟล์');
+		await expect(dialog).toBeVisible();
 	});
 });
 
