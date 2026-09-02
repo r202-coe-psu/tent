@@ -9,7 +9,8 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import {
 		getSecurityQuestionChallenge,
-		verifySecurityQuestionAndReset
+		verifySecurityQuestionAndReset,
+		type ForgotPasswordVerifyInput
 	} from '$lib/features/users';
 	import { KeyRound, ArrowLeft, ShieldQuestion, ShieldAlert } from '@lucide/svelte';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -82,7 +83,7 @@
 		try {
 			await verifySecurityQuestionAndReset({
 				phone: phone.trim(),
-				question_id: questionId,
+				question_id: questionId as ForgotPasswordVerifyInput['question_id'],
 				answer: answer.trim(),
 				new_password: newPassword
 			});
@@ -126,10 +127,11 @@
 			{#if step === 1}
 				<form onsubmit={handleCheckPhone} class="space-y-4">
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-phone" class="mb-1.5 block text-sm font-bold text-slate-800">
 							เบอร์โทรศัพท์ / Username <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-phone"
 							bind:value={phone}
 							type="text"
 							placeholder="เช่น 0812345678"
@@ -187,10 +189,11 @@
 
 					<!-- Answer -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-answer" class="mb-1.5 block text-sm font-bold text-slate-800">
 							คำตอบความปลอดภัย <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-answer"
 							bind:value={answer}
 							type="text"
 							placeholder="พิมพ์คำตอบที่คุณเคยบันทึกไว้"
@@ -202,11 +205,12 @@
 
 					<!-- New Password -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-new-password" class="mb-1.5 block text-sm font-bold text-slate-800">
 							รหัสผ่านใหม่ <span class="text-red-500">*</span>
 						</label>
 						<div class="relative">
 							<Input
+								id="forgot-new-password"
 								type={showPassword ? 'text' : 'password'}
 								bind:value={newPassword}
 								placeholder="อย่างน้อย 10 ตัวอักษร (A-Z, a-z, 0-9, !@#)"
@@ -232,10 +236,14 @@
 
 					<!-- Confirm Password -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label
+							for="forgot-confirm-password"
+							class="mb-1.5 block text-sm font-bold text-slate-800"
+						>
 							ยืนยันรหัสผ่านใหม่ <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-confirm-password"
 							type={showPassword ? 'text' : 'password'}
 							bind:value={confirmPassword}
 							placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"

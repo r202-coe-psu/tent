@@ -10,7 +10,7 @@ import {
 import { hashSecurityAnswer } from './security-questions';
 
 interface FakeUserDoc {
-	_id: string;
+	_id?: string;
 	_rev?: string;
 	name?: string;
 	password?: string;

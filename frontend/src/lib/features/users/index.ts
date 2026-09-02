@@ -2,6 +2,7 @@ export {
 	createUserSchema,
 	editUserSchema,
 	capabilitySchema,
+	forceSetupSchema,
 	type CreateUserInput,
 	type EditUserInput,
 	type UserFormInput,
@@ -14,13 +15,11 @@ export {
 	createUser,
 	deleteUser,
 	updateUser,
-	adminResetPassword,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
-	submitForceSetup,
 	fetchAuthStatus,
-	type UserSummary,
-	type AuthStatus
+	submitForceSetup,
+	type UserSummary
 } from './data/users.api';
 export { useUsers, useCreateUser, useDeleteUser, useUpdateUser } from './application/queries';
 export { default as UserForm } from './ui/user-form.svelte';

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
@@ -33,6 +32,7 @@
 		Briefcase,
 		FileText
 	} from '@lucide/svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -270,8 +270,8 @@
 
 <form method="POST" use:form.enhance class="space-y-6">
 	<!-- 1. ประเภทบุคลากร (Personnel Type) -->
-	<div>
-		<label class="mb-2 block text-sm font-bold text-slate-800">ประเภทผู้ปฏิบัติงาน</label>
+	<fieldset>
+		<legend class="mb-2 block text-sm font-bold text-slate-800">ประเภทผู้ปฏิบัติงาน</legend>
 		<div class="grid grid-cols-2 gap-3">
 			<button
 				type="button"
@@ -296,7 +296,7 @@
 				<span>อาสาสมัครช่วยงานระบบ</span>
 			</button>
 		</div>
-	</div>
+	</fieldset>
 
 	<!-- 2. ข้อมูลติดต่อและโปรไฟล์ -->
 	<div class="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
@@ -519,7 +519,7 @@
 			</Form.Field>
 		{:else}
 			<div>
-				<label class="mb-1 block text-sm font-bold text-slate-800">ศูนย์พักพิงที่สังกัด</label>
+				<p class="mb-1 block text-sm font-bold text-slate-800">ศูนย์พักพิงที่สังกัด</p>
 				<div class="flex items-center gap-3 rounded-md border border-input bg-slate-50 p-3">
 					<Building2 class="size-5 shrink-0 text-muted-foreground" />
 					<div class="min-w-0 flex-1">
@@ -539,9 +539,9 @@
 	<!-- 4. การเลือกบทบาทแบบ Multiple Roles (Categorized Cards) -->
 	<div class="space-y-4">
 		<div class="flex items-center justify-between">
-			<label class="text-sm font-bold text-slate-800">
+			<p class="text-sm font-bold text-slate-800">
 				บทบาทและสิทธิ์การเข้าถึง (Multiple Roles) <span class="text-red-500">*</span>
-			</label>
+			</p>
 			<span class="text-xs text-slate-500">เลือกได้มากกว่า 1 บทบาท</span>
 		</div>
 

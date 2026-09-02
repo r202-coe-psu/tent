@@ -149,12 +149,11 @@
 
 	let mounted = false;
 	$effect(() => {
-		void step;
 		if (!mounted) {
 			mounted = true;
 			return;
 		}
-		scrollToTop();
+		if (step >= 1) scrollToTop();
 	});
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
@@ -164,7 +163,7 @@
 		scrollToTop();
 	}
 
-	function handleSelectDraft(draft: Evacuee) {
+	async function handleSelectDraft(draft: Evacuee) {
 		activeDraftEvacuee = draft;
 		const card = draft.card_snapshot;
 
@@ -177,13 +176,16 @@
 					? Math.max(0, currentYearBE - cardBirthYearBE)
 					: undefined;
 
+		const medicals = await peopleRepository().listMedicals();
+		const medical = medicals.find((record) => record.evacuee_id === draft._id) ?? null;
+
 		// 1. Populate personal info for Step 3 (prefer authoritative card data)
 		screeningDraft = {
-			medical_conditions: [],
-			medical_medications: [],
-			medical_allergies: [],
+			medical_conditions: medical?.conditions ?? [],
+			medical_medications: medical?.medications ?? [],
+			medical_allergies: medical?.allergies ?? [],
 			special_needs: draft.special_needs ?? [],
-			medical_note: ''
+			medical_note: medical?.notes ?? ''
 		};
 		registrationDraft = {
 			first_name: card?.first_name_th || draft.first_name || '',

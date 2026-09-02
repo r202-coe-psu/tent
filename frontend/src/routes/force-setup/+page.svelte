@@ -9,7 +9,7 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
-	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
+	import { fetchAuthStatus, submitForceSetup, type ForceSetupInput } from '$lib/features/users';
 	import { ShieldCheck, Lock, ShieldQuestion } from '@lucide/svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
@@ -18,7 +18,7 @@
 	let mustChangePassword = $state(false);
 	let newPassword = $state('');
 	let confirmPassword = $state('');
-	let questionId = $state<(typeof SECURITY_QUESTIONS)[number]['id']>(SECURITY_QUESTIONS[0].id);
+	let questionId = $state(SECURITY_QUESTIONS[0].id);
 	let answer = $state('');
 	let showPassword = $state(false);
 	let loading = $state(false);
@@ -57,7 +57,7 @@
 			await submitForceSetup({
 				new_password: newPassword ? newPassword : undefined,
 				security_question: {
-					question_id: questionId,
+					question_id: questionId as ForceSetupInput['security_question']['question_id'],
 					answer: answer.trim()
 				}
 			});
