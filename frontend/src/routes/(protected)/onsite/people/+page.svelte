@@ -56,12 +56,31 @@
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
-	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
+	const screenings = $derived(screeningsQuery.data ?? []);
+	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
+	const screeningByEvacuee = $derived(new Map(screenings.map((s) => [s.evacuee_id, s])));
+
+	const GENDER_LABELS: Record<string, string> = {
+		male: 'ชาย',
+		female: 'หญิง',
+		other: 'อื่นๆ'
+	};
+	const CARD_TYPE_LABELS: Record<string, string> = {
+		national_id: 'บัตรประชาชน',
+		passport: 'หนังสือเดินทาง',
+		pink_card: 'บัตรชมพู',
+		other: 'เอกสารอื่นๆ'
+	};
+	const TRIAGE_LABELS: Record<string, string> = {
+		green: 'เขียว',
+		yellow: 'เหลือง',
+		red: 'แดง'
+	};
 
 	type StatusChip = 'all' | StayStatus | 'รอแพทย์' | 'รอโซน';
 
 	let searchQuery = $state('');
-	let statusChip = $state<StatusChip>('all');
+	let statusChip = $state<StatusChip>('pre_registered');
 	let barcodeInput = $state('');
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
@@ -106,6 +125,22 @@
 			.join(', ');
 	}
 
+	function specialNeedsLabels(needs: string[]): { code: string; label: string }[] {
+		if (!needs?.length) return [];
+		return needs.map((n) => ({
+			code: n,
+			label: vulnerableGroupQuery.data?.items.find((i) => i.code === n)?.label ?? n
+		}));
+	}
+
+	function ageLabel(e: Evacuee): string {
+		if (e.birth_year) {
+			return `${new Date().getFullYear() + 543 - e.birth_year} ปี`;
+		}
+		if (e.age !== undefined) return `${e.age} ปี`;
+		return 'ไม่ระบุ';
+	}
+
 	function formatUpdated(iso?: string | null): string {
 		if (!iso) return '—';
 		try {
@@ -119,6 +154,15 @@
 		} catch {
 			return iso;
 		}
+	}
+
+	function nextQueueBadgeVariant(
+		next: string
+	): 'default' | 'secondary' | 'destructive' | 'outline' {
+		if (next === 'รอแพทย์') return 'destructive';
+		if (next === 'รอโซน') return 'default';
+		if (next === 'พักแล้ว') return 'secondary';
+		return 'outline';
 	}
 
 	function handleCodeInput(raw: string) {
@@ -337,20 +381,157 @@
 </div>
 
 <Sheet.Root bind:open={sheetOpen}>
-	<Sheet.Content side="right" class="w-full sm:max-w-md">
+	<Sheet.Content side="right" class="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
 		{#if selected}
 			{@const next = nextQueueLabel(selected, {
 				enableMedicalScreening: enableMedical,
 				hasScreening: screenedIds.has(selected._id)
 			})}
-			<Sheet.Header>
-				<Sheet.Title>{formatPersonName(selected)}</Sheet.Title>
-				<Sheet.Description>
-					{STATUS_LABELS[selected.current_stay.status]} · คิวถัดไป {next} · บัตร
-					{maskNationalId(selected.person_id?.number)}
-				</Sheet.Description>
+			{@const hh = selected.household_id ? householdMap.get(selected.household_id) : null}
+			{@const screening = screeningByEvacuee.get(selected._id)}
+			{@const needs = specialNeedsLabels(selected.special_needs)}
+			{@const stayStatus = selected.current_stay.status}
+			{@const cardType = selected.person_id?.cardType ?? 'national_id'}
+
+			<Sheet.Header class="border-b border-border pb-4">
+				<Sheet.Title class="text-xl">
+					{formatPersonName(selected)}
+					{#if selected.nickname}
+						<span class="text-base font-normal text-muted-foreground">({selected.nickname})</span>
+					{/if}
+				</Sheet.Title>
+				<Sheet.Description class="sr-only">รายละเอียดผู้ประสบภัยและสถานะคิว</Sheet.Description>
+				<div class="mt-2 flex flex-wrap gap-1.5">
+					<Badge variant="outline">
+						{STATUS_LABELS[stayStatus] ?? stayStatus}
+					</Badge>
+					<Badge variant={nextQueueBadgeVariant(next)}>คิวถัดไป: {next}</Badge>
+					{#if enableMedical}
+						{#if screening}
+							<Badge variant="secondary">
+								คัดกรองแล้ว{#if screening.triage_level}
+									· triage {TRIAGE_LABELS[screening.triage_level] ?? screening.triage_level}{/if}
+							</Badge>
+						{:else if stayStatus === 'arriving'}
+							<Badge variant="destructive">ยังไม่คัดกรอง</Badge>
+						{:else}
+							<Badge variant="outline">ยังไม่คัดกรอง</Badge>
+						{/if}
+					{/if}
+					{#if selected.current_stay.zone}
+						<Badge variant="secondary">โซน {selected.current_stay.zone}</Badge>
+					{:else if stayStatus === 'arriving' || stayStatus === 'active'}
+						<Badge variant="outline">ยังไม่มีโซน</Badge>
+					{/if}
+				</div>
 			</Sheet.Header>
-			<div class="mt-6 flex flex-col gap-2">
+
+			<div class="flex flex-1 flex-col gap-5 px-4 py-5">
+				<section class="space-y-3">
+					<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						สถานะที่พัก
+					</h3>
+					<div class="grid grid-cols-2 gap-3 text-sm">
+						<div>
+							<p class="text-xs text-muted-foreground">สถานะ</p>
+							<p class="font-medium">{STATUS_LABELS[stayStatus] ?? stayStatus}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">โซน</p>
+							<p class="font-medium">{selected.current_stay.zone ?? '—'}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">สถานะตั้งแต่</p>
+							<p class="font-medium">{formatUpdated(selected.current_stay.since)}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">อัปเดตล่าสุด</p>
+							<p class="font-medium">{formatUpdated(selected.updated_at)}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">คิวถัดไป</p>
+							<p class="font-medium">{next}</p>
+						</div>
+						{#if enableMedical}
+							<div>
+								<p class="text-xs text-muted-foreground">คัดกรองแพทย์</p>
+								<p class="font-medium">
+									{#if screening}
+										แล้วเสร็จ{#if screening.triage_level}
+											({TRIAGE_LABELS[screening.triage_level] ?? screening.triage_level}){/if}
+									{:else}
+										ยังไม่ทำ
+									{/if}
+								</p>
+							</div>
+						{/if}
+					</div>
+				</section>
+
+				<section class="space-y-3 border-t border-border pt-5">
+					<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						ข้อมูลส่วนบุคคล
+					</h3>
+					<div class="grid grid-cols-2 gap-3 text-sm">
+						<div>
+							<p class="text-xs text-muted-foreground">เพศ</p>
+							<p class="font-medium">{GENDER_LABELS[selected.gender] ?? selected.gender}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">อายุ</p>
+							<p class="font-medium">{ageLabel(selected)}</p>
+						</div>
+						<div class="col-span-2">
+							<p class="text-xs text-muted-foreground">เบอร์โทร</p>
+							<p class="font-medium">{selected.phone || '—'}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">เอกสาร</p>
+							<p class="font-medium">{CARD_TYPE_LABELS[cardType] ?? cardType}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">เลขที่เอกสาร</p>
+							<p class="font-mono text-sm font-medium">
+								{maskNationalId(selected.person_id?.number)}
+							</p>
+						</div>
+						<div class="col-span-2">
+							<p class="text-xs text-muted-foreground">ครัวเรือน</p>
+							<p class="font-medium">{hh?.label ?? '—'}</p>
+						</div>
+						<div class="col-span-2">
+							<p class="text-xs text-muted-foreground">ความต้องการพิเศษ</p>
+							{#if needs.length}
+								<div class="mt-1 flex flex-wrap gap-1">
+									{#each needs as need (need.code)}
+										<Badge variant="outline" class="font-normal">{need.label}</Badge>
+									{/each}
+								</div>
+							{:else}
+								<p class="font-medium">—</p>
+							{/if}
+						</div>
+						{#if selected.emergency_contact}
+							<div class="col-span-2 rounded-md border border-border bg-muted/30 p-3">
+								<p class="text-xs text-muted-foreground">ผู้ติดต่อฉุกเฉิน</p>
+								<p class="mt-0.5 font-medium">
+									{selected.emergency_contact.name}
+									{#if selected.emergency_contact.relation}
+										<span class="font-normal text-muted-foreground"
+											>({selected.emergency_contact.relation})</span
+										>
+									{/if}
+								</p>
+								<p class="text-sm text-muted-foreground">
+									{selected.emergency_contact.phone || 'ไม่มีเบอร์'}
+								</p>
+							</div>
+						{/if}
+					</div>
+				</section>
+			</div>
+
+			<Sheet.Footer class="border-t border-border sm:flex-col">
 				{#if selected.current_stay.status === 'pre_registered'}
 					<Button onclick={() => reportIn(selected!)}>รายงานตัว → arriving</Button>
 				{/if}
@@ -387,7 +568,7 @@
 				>
 					เปิดโปรไฟล์
 				</Button>
-			</div>
+			</Sheet.Footer>
 		{/if}
 	</Sheet.Content>
 </Sheet.Root>
