@@ -743,7 +743,10 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			json: async () => ({ ...requestedTransfer, status: 'shipped' })
 		});
 
-		const doc = await repo.dispatchTransfer(requestedTransfer._id);
+		const doc = await repo.dispatchTransfer(requestedTransfer._id, {
+			driver_name: 'สมชาย ใจดี',
+			vehicle_plate: 'กท 1234'
+		});
 		expect(doc.status).toBe('shipped');
 
 		const [url, init] = fetchMock.mock.calls[0];
@@ -751,7 +754,12 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			`/api/back-office/transfer/${encodeURIComponent(requestedTransfer._id)}/transition?`
 		);
 		expect(init).toMatchObject({ method: 'PATCH', credentials: 'include' });
-		expect(JSON.parse(init.body)).toMatchObject({ to: 'shipped' });
+		// CR-089 FR-01 — driver/plate must reach the server, which is what enforces the rule.
+		expect(JSON.parse(init.body)).toMatchObject({
+			to: 'shipped',
+			driver_name: 'สมชาย ใจดี',
+			vehicle_plate: 'กท 1234'
+		});
 	});
 
 	it('receives with receivedItems and notes forwarded in the request body', async () => {
@@ -782,8 +790,57 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			json: async () => ({ ...requestedTransfer, status: 'cancelled' })
 		});
 
-		const doc = await repo.cancelTransfer(requestedTransfer._id);
+		const doc = await repo.cancelTransfer(requestedTransfer._id, {
+			cancel_reason: 'ปลายทางแจ้งว่าไม่ต้องการแล้ว'
+		});
 		expect(doc.status).toBe('cancelled');
+
+		// CR-089 FR-03 — cancelling must carry a reason.
+		const [, init] = fetchMock.mock.calls[0];
+		expect(JSON.parse(init.body)).toMatchObject({
+			to: 'cancelled',
+			cancel_reason: 'ปลายทางแจ้งว่าไม่ต้องการแล้ว'
+		});
+	});
+
+	it('disputes via PATCH to the transition endpoint with the reason in the body', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ ...requestedTransfer, status: 'disputed' })
+		});
+
+		const doc = await repo.disputeTransfer(requestedTransfer._id, {
+			dispute_reason: 'สต็อกต้นทางไม่พอตามที่ขอ'
+		});
+		expect(doc.status).toBe('disputed');
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toContain(
+			`/api/back-office/transfer/${encodeURIComponent(requestedTransfer._id)}/transition?`
+		);
+		expect(init).toMatchObject({ method: 'PATCH', credentials: 'include' });
+		expect(JSON.parse(init.body)).toMatchObject({
+			to: 'disputed',
+			dispute_reason: 'สต็อกต้นทางไม่พอตามที่ขอ'
+		});
+	});
+
+	it('resumes a disputed transfer back to requested with no extra field', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ ...requestedTransfer, status: 'requested' })
+		});
+
+		const doc = await repo.resumeTransfer(requestedTransfer._id);
+		expect(doc.status).toBe('requested');
+
+		// CR-089 FR-05 — resume carries no reason of its own; the last dispute_reason stands.
+		const [, init] = fetchMock.mock.calls[0];
+		const body = JSON.parse(init.body);
+		expect(body).toMatchObject({ to: 'requested' });
+		expect(body).not.toHaveProperty('dispute_reason');
 	});
 
 	it('throws with the server error message on a failed create', async () => {
