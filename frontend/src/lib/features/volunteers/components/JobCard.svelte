@@ -119,13 +119,19 @@
 				{@const remaining = Math.max(0, shift.quota - shift.confirmed)}
 				{@const isFull = remaining <= 0}
 				<div
-					class="w-[280px] shrink-0 snap-start rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/30"
+					class="w-[280px] shrink-0 snap-start rounded-xl border p-4 shadow-xs transition-colors {isFull
+						? 'border-border/60 bg-muted/10 opacity-90'
+						: 'border-border bg-card hover:border-primary/30'}"
 				>
 					<div class="mb-4">
 						<div class="mb-1.5 flex items-center justify-between">
-							<span class="text-base font-bold">{shift.date}</span>
+							<span
+								class="text-base font-bold {isFull ? 'text-muted-foreground' : 'text-foreground'}"
+								>{shift.date}</span
+							>
 							{#if isFull}
-								<span class="rounded-md bg-danger/15 px-2 py-0.5 text-xs font-bold text-danger"
+								<span
+									class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
 									>เต็มแล้ว</span
 								>
 							{:else}
@@ -134,7 +140,11 @@
 								>
 							{/if}
 						</div>
-						<div class="flex items-center gap-1.5 text-sm font-medium text-primary">
+						<div
+							class="flex items-center gap-1.5 text-sm font-medium {isFull
+								? 'text-muted-foreground'
+								: 'text-primary'}"
+						>
 							<Clock class="h-4 w-4" />
 							{shift.time}
 						</div>
@@ -143,17 +153,19 @@
 					<!-- Quota Bar -->
 					<div class="mb-5">
 						<div class="mb-2 flex justify-between text-xs">
-							<span class="font-medium">รับ {shift.quota} คน (ยืนยันแล้ว {shift.confirmed})</span>
-							<span class="font-bold {isFull ? 'text-danger' : 'text-success'}"
-								>ว่าง {remaining} ที่</span
+							<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
+								>รับ {shift.quota} คน (ยืนยันแล้ว {shift.confirmed})</span
+							>
+							<span class="font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
+								>{isFull ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${remaining} ที่`}</span
 							>
 						</div>
 						<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 							<div
 								class="h-full {isFull
-									? 'bg-danger'
+									? 'bg-muted-foreground/35'
 									: 'bg-success'} transition-all duration-500 ease-out"
-								style="width: {(shift.confirmed / shift.quota) * 100}%"
+								style="width: {isFull ? 100 : (shift.confirmed / shift.quota) * 100}%"
 							></div>
 						</div>
 					</div>
@@ -161,9 +173,11 @@
 					<button
 						onclick={() => onApply(job.id, shift.id)}
 						disabled={isFull}
-						class="hover:bg-opacity-90 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-xs transition-all {isFull
+							? 'cursor-not-allowed border border-border/80 bg-muted text-muted-foreground opacity-70 select-none'
+							: 'hover:bg-opacity-90 cursor-pointer bg-primary text-white active:scale-[0.98]'}"
 					>
-						🚀 {isFull ? 'กะเต็มแล้ว' : 'สมัครกะนี้'}
+						{isFull ? '🔒 กะเต็มแล้ว' : '🚀 สมัครกะนี้'}
 					</button>
 				</div>
 			{/each}

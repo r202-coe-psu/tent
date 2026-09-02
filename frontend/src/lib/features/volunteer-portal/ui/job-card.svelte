@@ -110,15 +110,19 @@
 
 		<div class="mb-5">
 			<div class="mb-2 flex justify-between text-xs">
-				<span class="font-medium">รับ {job.quota} คน (จองแล้ว {job.slots_confirmed})</span>
-				<span class="font-bold {applicable ? 'text-success' : 'text-danger'}">
-					ว่าง {job.slots_remaining} ที่
+				<span class="font-medium {!applicable ? 'text-muted-foreground/80' : ''}"
+					>รับ {job.quota} คน (จองแล้ว {job.slots_confirmed})</span
+				>
+				<span class="font-bold {applicable ? 'text-success' : 'text-muted-foreground'}">
+					{!applicable ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${job.slots_remaining} ที่`}
 				</span>
 			</div>
 			<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 				<div
-					class="h-full {applicable ? 'bg-success' : 'bg-danger'} transition-all duration-500"
-					style="width: {filledPercent}%"
+					class="h-full {applicable
+						? 'bg-success'
+						: 'bg-muted-foreground/35'} transition-all duration-500"
+					style="width: {!applicable ? 100 : filledPercent}%"
 				></div>
 			</div>
 		</div>
@@ -127,9 +131,11 @@
 			type="button"
 			onclick={() => onapply(job)}
 			disabled={!applicable}
-			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+			class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-xs transition-all {!applicable
+				? 'cursor-not-allowed border border-border/80 bg-muted text-muted-foreground opacity-70 select-none'
+				: 'cursor-pointer bg-primary text-white hover:bg-primary-dark active:scale-[0.98]'}"
 		>
-			🚀 {!applicable ? 'เต็มแล้ว' : controlled ? 'ยื่นขอจองภารกิจนี้' : 'จองภารกิจนี้'}
+			{!applicable ? '🔒 กะเต็มแล้ว' : controlled ? '🚀 ยื่นขอจองภารกิจนี้' : '🚀 จองภารกิจนี้'}
 		</button>
 
 		{#if applicable && controlled}
