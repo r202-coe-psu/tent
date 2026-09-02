@@ -9,9 +9,10 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import {
 		getSecurityQuestionChallenge,
-		verifySecurityQuestionAndReset
-	} from '$lib/features/users/data/users.api';
-	import { KeyRound, ArrowLeft, ShieldQuestion, CheckCircle2, ShieldAlert } from '@lucide/svelte';
+		verifySecurityQuestionAndReset,
+		type ForgotPasswordVerifyInput
+	} from '$lib/features/users';
+	import { KeyRound, ArrowLeft, ShieldQuestion, ShieldAlert } from '@lucide/svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -73,11 +74,16 @@
 			return;
 		}
 
+		if (!questionId) {
+			toast.error('ไม่พบคำถามความปลอดภัย');
+			return;
+		}
+
 		loading = true;
 		try {
 			await verifySecurityQuestionAndReset({
 				phone: phone.trim(),
-				question_id: questionId as any,
+				question_id: questionId as ForgotPasswordVerifyInput['question_id'],
 				answer: answer.trim(),
 				new_password: newPassword
 			});
@@ -100,14 +106,20 @@
 </script>
 
 <div class="flex min-h-[var(--app-shell-height)] w-full items-center justify-center px-4 py-8">
-	<Card.Root class="w-full max-w-md border-slate-200 shadow-xl rounded-2xl bg-white">
-		<Card.Header class="space-y-2 text-center pb-4 border-b border-slate-100">
-			<div class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+	<Card.Root class="w-full max-w-md rounded-2xl border-slate-200 bg-white shadow-xl">
+		<Card.Header class="space-y-2 border-b border-slate-100 pb-4 text-center">
+			<div
+				class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-700"
+			>
 				<KeyRound class="size-6" />
 			</div>
-			<Card.Title class="text-xl font-bold text-slate-900">กู้คืนรหัสผ่าน (Forgot Password)</Card.Title>
+			<Card.Title class="text-xl font-bold text-slate-900"
+				>กู้คืนรหัสผ่าน (Forgot Password)</Card.Title
+			>
 			<Card.Description class="text-xs text-slate-500">
-				{step === 1 ? 'กรอกเบอร์โทรศัพท์เพื่อตอบคำถามความปลอดภัย' : 'ตอบคำถามความปลอดภัยและตั้งรหัสผ่านใหม่'}
+				{step === 1
+					? 'กรอกเบอร์โทรศัพท์เพื่อตอบคำถามความปลอดภัย'
+					: 'ตอบคำถามความปลอดภัยและตั้งรหัสผ่านใหม่'}
 			</Card.Description>
 		</Card.Header>
 
@@ -115,10 +127,11 @@
 			{#if step === 1}
 				<form onsubmit={handleCheckPhone} class="space-y-4">
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-phone" class="mb-1.5 block text-sm font-bold text-slate-800">
 							เบอร์โทรศัพท์ / Username <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-phone"
 							bind:value={phone}
 							type="text"
 							placeholder="เช่น 0812345678"
@@ -130,13 +143,16 @@
 					</div>
 
 					{#if hasNoSecurityQuestion}
-						<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2 text-xs text-amber-900">
+						<div
+							class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900"
+						>
 							<div class="flex items-center gap-2 font-bold text-amber-800">
 								<ShieldAlert class="size-4" />
 								<span>ยังไม่ได้ตั้งคำถามความปลอดภัย</span>
 							</div>
 							<p class="leading-relaxed">
-								บัญชีนี้ยังไม่ได้ตั้งค่าคำถามความปลอดภัยไว้ในระบบ กรุณาติดต่อผู้จัดการศูนย์พักพิง หรือผู้ดูแลระบบ เพื่อขอรับ <strong>รหัสผ่านชั่วคราว (Temporary Passphrase)</strong>
+								บัญชีนี้ยังไม่ได้ตั้งค่าคำถามความปลอดภัยไว้ในระบบ กรุณาติดต่อผู้จัดการศูนย์พักพิง
+								หรือผู้ดูแลระบบ เพื่อขอรับ <strong>รหัสผ่านชั่วคราว (Temporary Passphrase)</strong>
 							</p>
 						</div>
 					{/if}
@@ -144,7 +160,7 @@
 					<Button
 						type="submit"
 						disabled={loading || !phone.trim()}
-						class="h-11 w-full bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white font-bold"
+						class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
 					>
 						{#if loading}กำลังตรวจสอบ...{:else}ตรวจสอบคำถามความปลอดภัย{/if}
 					</Button>
@@ -161,7 +177,7 @@
 			{:else}
 				<form onsubmit={handleResetSubmit} class="space-y-4">
 					<!-- Question card -->
-					<div class="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-1.5">
+					<div class="space-y-1.5 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
 						<div class="flex items-center gap-1.5 text-xs font-bold text-blue-800">
 							<ShieldQuestion class="size-4" />
 							<span>คำถามความปลอดภัยของคุณ</span>
@@ -173,10 +189,11 @@
 
 					<!-- Answer -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-answer" class="mb-1.5 block text-sm font-bold text-slate-800">
 							คำตอบความปลอดภัย <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-answer"
 							bind:value={answer}
 							type="text"
 							placeholder="พิมพ์คำตอบที่คุณเคยบันทึกไว้"
@@ -188,11 +205,12 @@
 
 					<!-- New Password -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label for="forgot-new-password" class="mb-1.5 block text-sm font-bold text-slate-800">
 							รหัสผ่านใหม่ <span class="text-red-500">*</span>
 						</label>
 						<div class="relative">
 							<Input
+								id="forgot-new-password"
 								type={showPassword ? 'text' : 'password'}
 								bind:value={newPassword}
 								placeholder="อย่างน้อย 10 ตัวอักษร (A-Z, a-z, 0-9, !@#)"
@@ -218,10 +236,14 @@
 
 					<!-- Confirm Password -->
 					<div>
-						<label class="mb-1.5 block text-sm font-bold text-slate-800">
+						<label
+							for="forgot-confirm-password"
+							class="mb-1.5 block text-sm font-bold text-slate-800"
+						>
 							ยืนยันรหัสผ่านใหม่ <span class="text-red-500">*</span>
 						</label>
 						<Input
+							id="forgot-confirm-password"
 							type={showPassword ? 'text' : 'password'}
 							bind:value={confirmPassword}
 							placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
@@ -234,12 +256,12 @@
 					<Button
 						type="submit"
 						disabled={loading || !answer.trim() || !newPassword}
-						class="h-11 w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold"
+						class="h-11 w-full bg-emerald-700 font-bold text-white hover:bg-emerald-800"
 					>
 						{#if loading}กำลังบันทึก...{:else}รีเซ็ตรหัสผ่านและเข้าสู่ระบบ{/if}
 					</Button>
 
-					<div class="pt-1 flex items-center justify-between text-xs">
+					<div class="flex items-center justify-between pt-1 text-xs">
 						<button
 							type="button"
 							class="text-slate-500 hover:text-slate-800"

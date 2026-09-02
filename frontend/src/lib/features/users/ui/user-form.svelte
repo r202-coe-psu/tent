@@ -2,19 +2,14 @@
 	import { untrack } from 'svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { defaults, setError, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
-		STAFF_CAPABILITIES,
-		SHELTER_CAPABILITIES,
 		SA_GRANTABLE_CAPABILITIES,
 		type SaGrantableCapability,
 		isAppSystemAdmin,
-		roleDisplayLabel,
 		SYSTEM_ADMIN,
 		SHELTER_MANAGER
 	} from '$lib/auth/roles';
@@ -27,7 +22,17 @@
 	import type { UserSummary } from '../data/users.api';
 	import { useShelters } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Save, UserCheck, Shield, Clock, Users, Building, Phone, Mail, Briefcase, FileText } from '@lucide/svelte';
+	import {
+		Save,
+		UserCheck,
+		Users,
+		Building,
+		Phone,
+		Mail,
+		Briefcase,
+		FileText
+	} from '@lucide/svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -69,7 +74,8 @@
 	function initialCapabilities(target: UserSummary): string[] {
 		if (isAppSystemAdmin(target.roles)) return [SYSTEM_ADMIN];
 		const grantable = target.roles.filter(
-			(r) => !r.startsWith('shelter:') && (SA_GRANTABLE_CAPABILITIES as readonly string[]).includes(r)
+			(r) =>
+				!r.startsWith('shelter:') && (SA_GRANTABLE_CAPABILITIES as readonly string[]).includes(r)
 		);
 		return grantable.length > 0 ? grantable : ['registration_staff'];
 	}
@@ -173,37 +179,69 @@
 		{
 			title: '📋 ทะเบียนและคัดกรองหน้าด่าน',
 			roles: [
-				{ id: 'registration_staff', name: 'เจ้าหน้าที่รับลงทะเบียน', desc: 'ลงทะเบียนผู้อพยพ ครัวเรือน และเช็คอินหน้าศูนย์' },
-				{ id: 'triage_staff', name: 'เจ้าหน้าที่คัดกรอง', desc: 'คัดกรองกลุ่มเปราะบางและส่งต่อไปยังพื้นที่เหมาะสม' }
+				{
+					id: 'registration_staff',
+					name: 'เจ้าหน้าที่รับลงทะเบียน',
+					desc: 'ลงทะเบียนผู้อพยพ ครัวเรือน และเช็คอินหน้าศูนย์'
+				},
+				{
+					id: 'triage_staff',
+					name: 'เจ้าหน้าที่คัดกรอง',
+					desc: 'คัดกรองกลุ่มเปราะบางและส่งต่อไปยังพื้นที่เหมาะสม'
+				}
 			]
 		},
 		{
 			title: '🩺 การแพทย์และพยาบาล',
 			roles: [
-				{ id: 'medical_staff', name: 'เจ้าหน้าที่การแพทย์และพยาบาล', desc: 'บันทึกข้อมูลสุขภาพ ประวัติการรักษา และการจ่ายยา' }
+				{
+					id: 'medical_staff',
+					name: 'เจ้าหน้าที่การแพทย์และพยาบาล',
+					desc: 'บันทึกข้อมูลสุขภาพ ประวัติการรักษา และการจ่ายยา'
+				}
 			]
 		},
 		{
 			title: '📦 คลังและครัวกลาง',
 			roles: [
-				{ id: 'kitchen_staff', name: 'เจ้าหน้าที่ครัวกลาง', desc: 'วางแผนเมนูอาหาร เบิกจ่ายวัตถุดิบ และบันทึกแจกอาหาร' },
-				{ id: 'supply_coordinator', name: 'ผู้ประสานงานพัสดุและคลัง', desc: 'รับบริจาค ตัดจ่ายสิ่งของ และควบคุมสต็อก' },
-				{ id: 'facility_staff', name: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่', desc: 'จัดโซนที่พัก ดูแลเต็นท์ และสุขาภิบาล' }
+				{
+					id: 'kitchen_staff',
+					name: 'เจ้าหน้าที่ครัวกลาง',
+					desc: 'วางแผนเมนูอาหาร เบิกจ่ายวัตถุดิบ และบันทึกแจกอาหาร'
+				},
+				{
+					id: 'supply_coordinator',
+					name: 'ผู้ประสานงานพัสดุและคลัง',
+					desc: 'รับบริจาค ตัดจ่ายสิ่งของ และควบคุมสต็อก'
+				},
+				{
+					id: 'facility_staff',
+					name: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
+					desc: 'จัดโซนที่พัก ดูแลเต็นท์ และสุขาภิบาล'
+				}
 			]
 		},
 		{
 			title: '🤝 ประสานงานและความปลอดภัย',
 			roles: [
-				{ id: 'volunteer_coordinator', name: 'ผู้ประสานงานจิตอาสา', desc: 'ดูแลกระดานงาน จัดสรรกะ และออกสิทธิ์ให้อาสา' },
-				{ id: 'security_officer', name: 'เจ้าหน้าที่รักษาความปลอดภัย', desc: 'ดูแลความสงบเรียบร้อยและบันทึกเหตุการณ์ฉุกเฉิน' }
+				{
+					id: 'volunteer_coordinator',
+					name: 'ผู้ประสานงานจิตอาสา',
+					desc: 'ดูแลกระดานงาน จัดสรรกะ และออกสิทธิ์ให้อาสา'
+				},
+				{
+					id: 'security_officer',
+					name: 'เจ้าหน้าที่รักษาความปลอดภัย',
+					desc: 'ดูแลความสงบเรียบร้อยและบันทึกเหตุการณ์ฉุกเฉิน'
+				}
 			]
 		}
 	];
 
 	function toggleRole(roleId: string, checked: boolean) {
 		const cap = roleId as SaGrantableCapability;
-		const current = new Set<SaGrantableCapability>(
-			(($formData.capabilities ?? []) as SaGrantableCapability[])
+		const current = new SvelteSet<SaGrantableCapability>(
+			($formData.capabilities ?? []) as SaGrantableCapability[]
 		);
 		if (cap === SYSTEM_ADMIN) {
 			if (checked) {
@@ -232,12 +270,15 @@
 
 <form method="POST" use:form.enhance class="space-y-6">
 	<!-- 1. ประเภทบุคลากร (Personnel Type) -->
-	<div>
-		<label class="mb-2 block text-sm font-bold text-slate-800">ประเภทผู้ปฏิบัติงาน</label>
+	<fieldset>
+		<legend class="mb-2 block text-sm font-bold text-slate-800">ประเภทผู้ปฏิบัติงาน</legend>
 		<div class="grid grid-cols-2 gap-3">
 			<button
 				type="button"
-				class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type === 'staff' ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
+				class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type ===
+				'staff'
+					? 'border-blue-600 bg-blue-50 text-blue-800'
+					: 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
 				onclick={() => ($formData.personnel_type = 'staff')}
 			>
 				<Building class="size-4" />
@@ -245,29 +286,33 @@
 			</button>
 			<button
 				type="button"
-				class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type === 'volunteer' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
+				class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type ===
+				'volunteer'
+					? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+					: 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
 				onclick={() => ($formData.personnel_type = 'volunteer')}
 			>
 				<Users class="size-4" />
 				<span>อาสาสมัครช่วยงานระบบ</span>
 			</button>
 		</div>
-	</div>
+	</fieldset>
 
 	<!-- 2. ข้อมูลติดต่อและโปรไฟล์ -->
-	<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+	<div class="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
 		<h4 class="flex items-center gap-2 text-sm font-bold text-slate-700">
 			<UserCheck class="size-4 text-blue-600" />
 			ข้อมูลบัญชีและประวัติผู้ปฏิบัติงาน
 		</h4>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<!-- Phone (Username) -->
 			<Form.Field {form} name="phone">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold flex items-center gap-1">
-							<Phone class="size-3.5" /> เบอร์โทรศัพท์ (ใช้เป็น Username) <span class="text-red-500">*</span>
+						<Form.Label class="flex items-center gap-1 font-bold">
+							<Phone class="size-3.5" /> เบอร์โทรศัพท์ (ใช้เป็น Username)
+							<span class="text-red-500">*</span>
 						</Form.Label>
 						<Input
 							{...props}
@@ -286,7 +331,9 @@
 			<Form.Field {form} name="display_name">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold">ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label>
+						<Form.Label class="font-bold"
+							>ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label
+						>
 						<Input
 							{...props}
 							bind:value={$formData.display_name}
@@ -299,7 +346,7 @@
 			</Form.Field>
 		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<!-- Organization -->
 			<Form.Field {form} name="organization">
 				<Form.Control>
@@ -327,7 +374,7 @@
 			<Form.Field {form} name="position">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold flex items-center gap-1">
+						<Form.Label class="flex items-center gap-1 font-bold">
 							<Briefcase class="size-3.5" /> ตำแหน่ง / วิชาชีพ
 						</Form.Label>
 						<Input
@@ -342,12 +389,12 @@
 			</Form.Field>
 		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<!-- Email -->
 			<Form.Field {form} name="email">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold flex items-center gap-1">
+						<Form.Label class="flex items-center gap-1 font-bold">
 							<Mail class="size-3.5" /> อีเมลติดต่อ (Optional)
 						</Form.Label>
 						<Input
@@ -366,7 +413,7 @@
 			<Form.Field {form} name="password">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold flex items-center justify-between">
+						<Form.Label class="flex items-center justify-between font-bold">
 							<span>
 								{editing ? 'รหัสผ่านใหม่ (หากต้องการเปลี่ยน)' : 'รหัสผ่าน (Password)'}
 								{#if !editing}
@@ -407,7 +454,7 @@
 		<Form.Field {form} name="notes">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="font-bold flex items-center gap-1">
+					<Form.Label class="flex items-center gap-1 font-bold">
 						<FileText class="size-3.5" /> หมายเหตุเพิ่มเติม
 					</Form.Label>
 					<Input
@@ -425,7 +472,9 @@
 	<!-- 3. ศูนย์พักพิง (Shelter) -->
 	<div>
 		{#if isSaRoleSelected}
-			<div class="flex items-start gap-3 rounded-lg border border-dashed border-input bg-slate-50 p-4">
+			<div
+				class="flex items-start gap-3 rounded-lg border border-dashed border-input bg-slate-50 p-4"
+			>
 				<ShieldCheck class="mt-0.5 size-5 shrink-0 text-blue-600" />
 				<div>
 					<p class="text-sm font-bold text-slate-800">สิทธิ์ส่วนกลางทุกศูนย์ (System Admin)</p>
@@ -438,13 +487,17 @@
 			<Form.Field {form} name="shelter_id">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold">ศูนย์พักพิงที่สังกัด <span class="text-red-500">*</span></Form.Label>
+						<Form.Label class="font-bold"
+							>ศูนย์พักพิงที่สังกัด <span class="text-red-500">*</span></Form.Label
+						>
 						<Combobox
 							items={shelterItems}
 							bind:value={
 								() => $formData.shelter_id ?? '', (v) => ($formData.shelter_id = v || undefined)
 							}
-							placeholder={sheltersQuery.isLoading ? 'กำลังโหลดรายชื่อศูนย์...' : 'เลือกศูนย์พักพิง'}
+							placeholder={sheltersQuery.isLoading
+								? 'กำลังโหลดรายชื่อศูนย์...'
+								: 'เลือกศูนย์พักพิง'}
 							searchPlaceholder="ค้นหาจากชื่อหรือรหัสศูนย์..."
 							emptyText="ไม่พบศูนย์พักพิง"
 							disabled={sheltersQuery.isLoading}
@@ -466,7 +519,7 @@
 			</Form.Field>
 		{:else}
 			<div>
-				<label class="mb-1 block text-sm font-bold text-slate-800">ศูนย์พักพิงที่สังกัด</label>
+				<p class="mb-1 block text-sm font-bold text-slate-800">ศูนย์พักพิงที่สังกัด</p>
 				<div class="flex items-center gap-3 rounded-md border border-input bg-slate-50 p-3">
 					<Building2 class="size-5 shrink-0 text-muted-foreground" />
 					<div class="min-w-0 flex-1">
@@ -486,15 +539,19 @@
 	<!-- 4. การเลือกบทบาทแบบ Multiple Roles (Categorized Cards) -->
 	<div class="space-y-4">
 		<div class="flex items-center justify-between">
-			<label class="text-sm font-bold text-slate-800">
+			<p class="text-sm font-bold text-slate-800">
 				บทบาทและสิทธิ์การเข้าถึง (Multiple Roles) <span class="text-red-500">*</span>
-			</label>
+			</p>
 			<span class="text-xs text-slate-500">เลือกได้มากกว่า 1 บทบาท</span>
 		</div>
 
 		{#if isSA && allowSystemAdminRole}
-			<div class="rounded-lg border-2 p-3 transition-all {isSaRoleSelected ? 'border-amber-500 bg-amber-50/50' : 'border-slate-200 bg-white'}">
-				<label class="flex items-start gap-3 cursor-pointer">
+			<div
+				class="rounded-lg border-2 p-3 transition-all {isSaRoleSelected
+					? 'border-amber-500 bg-amber-50/50'
+					: 'border-slate-200 bg-white'}"
+			>
+				<label class="flex cursor-pointer items-start gap-3">
 					<input
 						type="checkbox"
 						class="mt-1 size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -503,7 +560,9 @@
 					/>
 					<div>
 						<span class="text-sm font-bold text-slate-900">ผู้ดูแลระบบส่วนกลาง (System Admin)</span>
-						<p class="text-xs text-slate-500">มีสิทธิ์สูงสุดระดับสากล เข้าถึงและจัดการได้ทุกศูนย์พักพิงในระบบ</p>
+						<p class="text-xs text-slate-500">
+							มีสิทธิ์สูงสุดระดับสากล เข้าถึงและจัดการได้ทุกศูนย์พักพิงในระบบ
+						</p>
 					</div>
 				</label>
 			</div>
@@ -511,8 +570,8 @@
 
 		{#if !isSaRoleSelected}
 			{#if isSA}
-				<div class="rounded-lg border-2 p-3 border-blue-200 bg-blue-50/30">
-					<label class="flex items-start gap-3 cursor-pointer">
+				<div class="rounded-lg border-2 border-blue-200 bg-blue-50/30 p-3">
+					<label class="flex cursor-pointer items-start gap-3">
 						<input
 							type="checkbox"
 							class="mt-1 size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -520,22 +579,28 @@
 							onchange={(e) => toggleRole(SHELTER_MANAGER, e.currentTarget.checked)}
 						/>
 						<div>
-							<span class="text-sm font-bold text-slate-900">ผู้จัดการศูนย์พักพิง (Shelter Manager)</span>
-							<p class="text-xs text-slate-500">อำนาจสูงสุดในการบริหารจัดการทุกบทบาทและภารกิจภายในศูนย์ของตนเอง</p>
+							<span class="text-sm font-bold text-slate-900"
+								>ผู้จัดการศูนย์พักพิง (Shelter Manager)</span
+							>
+							<p class="text-xs text-slate-500">
+								อำนาจสูงสุดในการบริหารจัดการทุกบทบาทและภารกิจภายในศูนย์ของตนเอง
+							</p>
 						</div>
 					</label>
 				</div>
 			{/if}
 
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-				{#each ROLE_CATEGORIES as category}
-					<div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
-						<h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+				{#each ROLE_CATEGORIES as category (category.title)}
+					<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+						<h5 class="text-xs font-bold tracking-wider text-slate-500 uppercase">
 							{category.title}
 						</h5>
 						<div class="space-y-2.5">
-							{#each category.roles as role}
-								<label class="flex items-start gap-2.5 cursor-pointer rounded-lg p-2 hover:bg-slate-50 transition-colors">
+							{#each category.roles as role (role.id)}
+								<label
+									class="flex cursor-pointer items-start gap-2.5 rounded-lg p-2 transition-colors hover:bg-slate-50"
+								>
 									<input
 										type="checkbox"
 										class="mt-0.5 size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -544,7 +609,7 @@
 									/>
 									<div class="min-w-0 flex-1">
 										<p class="text-sm font-semibold text-slate-800">{role.name}</p>
-										<p class="text-xs text-slate-500 leading-relaxed">{role.desc}</p>
+										<p class="text-xs leading-relaxed text-slate-500">{role.desc}</p>
 									</div>
 								</label>
 							{/each}
@@ -579,7 +644,10 @@
 				ยกเลิก
 			</Button>
 		{/if}
-		<Form.Button disabled={$submitting || pending} class="h-11 flex-1 bg-blue-700 hover:bg-blue-800">
+		<Form.Button
+			disabled={$submitting || pending}
+			class="h-11 flex-1 bg-blue-700 hover:bg-blue-800"
+		>
 			<Save class="mr-2 h-4 w-4" />
 			บันทึกข้อมูล
 		</Form.Button>
