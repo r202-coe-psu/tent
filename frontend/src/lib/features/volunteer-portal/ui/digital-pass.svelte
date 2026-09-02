@@ -153,13 +153,13 @@
 						<!-- Masked upstream; the full number never reaches this page (FR-VOL-03.4). -->
 						<span class="text-right font-medium">{ticket.phone_masked}</span>
 					</div>
-					{#if ticket.selected_shift.date}
+					{#if ticket.selected_shift?.date}
 						<div class="flex justify-between gap-4">
 							<span class="text-muted-foreground">วันที่</span>
 							<span class="text-right font-medium">{ticket.selected_shift.date}</span>
 						</div>
 					{/if}
-					{#if ticket.selected_shift.start_time}
+					{#if ticket.selected_shift?.start_time}
 						<div class="flex justify-between gap-4">
 							<span class="flex items-center gap-1 text-muted-foreground">
 								<Clock class="size-3.5" aria-hidden="true" />
@@ -170,7 +170,7 @@
 							</span>
 						</div>
 					{/if}
-					{#if ticket.selected_shift.station}
+					{#if ticket.selected_shift?.station}
 						<div class="flex justify-between gap-4">
 							<span class="text-muted-foreground">จุดนัดพบ</span>
 							<span class="text-right font-medium">{ticket.selected_shift.station}</span>
