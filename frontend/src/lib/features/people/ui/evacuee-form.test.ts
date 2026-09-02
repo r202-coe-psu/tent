@@ -70,4 +70,25 @@ describe('EvacueeForm Station 1 wizard (CR-106)', () => {
 		expect(result.body).toContain('ใช้วีลแชร์');
 		expect(result.body).toContain('ผู้ป่วยติดเตียง');
 	});
+
+	it('always renders emergency contact fields even when draft has no contact', () => {
+		const result = render(EvacueeRegistration, {
+			props: {
+				onsubmit: vi.fn(),
+				initialInput: {
+					first_name: 'สมศรี',
+					last_name: 'มีสุข',
+					emergency_contact: undefined
+				}
+			}
+		});
+
+		expect(result.body).toContain('ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)');
+		expect(result.body).toContain('ชื่อผู้ติดต่อ');
+		expect(result.body).toContain('เบอร์โทรศัพท์');
+		expect(result.body).toContain('ความสัมพันธ์');
+		expect(result.body).toContain('id="emergency-name"');
+		expect(result.body).toContain('id="emergency-phone"');
+		expect(result.body).toContain('id="emergency-relation"');
+	});
 });

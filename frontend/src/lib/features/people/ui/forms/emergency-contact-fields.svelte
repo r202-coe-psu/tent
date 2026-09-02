@@ -22,6 +22,9 @@
 		};
 	} = $props();
 
+	const errClass =
+		'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20';
+
 	function onPhoneInput(e: Event) {
 		const target = e.currentTarget as HTMLInputElement;
 		phone = target.value.replace(/\D/g, '').slice(0, 10);
@@ -39,7 +42,8 @@
 			{disabled}
 			autocomplete="name"
 			placeholder="ระบุชื่อ-นามสกุล ผู้ติดต่อฉุกเฉิน"
-			class="h-9"
+			aria-invalid={!!errors?.name}
+			class="h-9 {errors?.name ? errClass : ''}"
 		/>
 		{#if errors?.name}
 			<p class="text-2xs text-destructive">{errors.name}</p>
@@ -60,7 +64,8 @@
 				maxlength={10}
 				autocomplete="tel"
 				placeholder="เบอร์โทรศัพท์ 10 หลัก"
-				class="h-9"
+				aria-invalid={!!errors?.phone}
+				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if errors?.phone}
 				<p class="text-2xs text-destructive">{errors.phone}</p>
@@ -76,7 +81,8 @@
 				bind:value={relation}
 				{disabled}
 				placeholder="เช่น บิดา มารดา คู่สมรส ญาติ"
-				class="h-9"
+				aria-invalid={!!errors?.relation}
+				class="h-9 {errors?.relation ? errClass : ''}"
 			/>
 			{#if errors?.relation}
 				<p class="text-2xs text-destructive">{errors.relation}</p>
