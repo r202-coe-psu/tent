@@ -14,12 +14,20 @@ export const prerender = false;
 const transitionBodySchema = z.object({
 	to: transferStatusSchema,
 	receivedItems: z.array(receivedItemSchema).optional(),
-	notes: z.string().trim().max(2000).optional()
+	notes: z.string().trim().max(2000).optional(),
+	// CR-089 — accepted here, required by the domain schema of the matching transition. Kept
+	// optional at the edge so one body shape serves every transition; the domain rejects a
+	// transition that arrives without the field it needs.
+	driver_name: z.string().trim().max(200).optional(),
+	vehicle_plate: z.string().trim().max(50).optional(),
+	cancel_reason: z.string().trim().max(2000).optional(),
+	dispute_reason: z.string().trim().max(2000).optional()
 });
 
 /**
  * PATCH /api/back-office/transfer/[id]/transition
- * Transition the transfer state (`shipped`/`received`/`cancelled`) with conflict (409) retry.
+ * Transition the transfer state (`shipped`/`received`/`cancelled`/`disputed`, and `requested`
+ * for a CR-089 resume) with conflict (409) retry.
  * Same 3-attempt, fixed-50ms-delay retry loop as `referral/[id]/transition/+server.ts`.
  */
 export const PATCH: RequestHandler = async ({ request, params, url }) => {
@@ -38,7 +46,8 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 422 });
 		}
 
-		const { to, receivedItems, notes } = parsed.data;
+		const { to, receivedItems, notes, driver_name, vehicle_plate, cancel_reason, dispute_reason } =
+			parsed.data;
 
 		const repo = new TransferServerRepository('central_ops', shelterCode);
 
@@ -49,7 +58,11 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			try {
 				const updated = await repo.transition(id, to, caller.name, shelterCode, {
 					receivedItems,
-					notes
+					notes,
+					driver_name,
+					vehicle_plate,
+					cancel_reason,
+					dispute_reason
 				});
 				return json(updated);
 			} catch (e: unknown) {

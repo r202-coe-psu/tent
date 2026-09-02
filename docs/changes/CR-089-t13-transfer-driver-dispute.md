@@ -61,6 +61,15 @@ affects:
 - **FR-05** — transition `disputed → requested` (resume) — source-only, ไม่ต้องมี field เพิ่ม (ล้าง
   block กลับสู่สถานะปกติ); ไม่เก็บ dispute history หลายรอบ — เก็บแค่ `dispute_reason` ล่าสุด (ของรอบ
   ก่อนหน้าถูกทับ)
+- **FR-11** (amend 2026-09-02) — transition `requested → disputed` ต้องเขียน `timeline.disputed`
+  (`{at, by}` แบบเดียวกับ `requested`/`shipped`/`received`) เพื่อให้หน้ารายละเอียดของ
+  [CR-091](CR-091-t13-transfer-detail-page.md) แสดงได้ว่าคัดค้านเมื่อไรและโดยใคร
+  | เรื่อง | ข้อกำหนด |
+  | --- | --- |
+  | เขียนเมื่อ | transition `requested → disputed` เท่านั้น |
+  | คัดค้านซ้ำ | **ทับค่าเดิม** — เก็บครั้งล่าสุดครั้งเดียว สอดคล้องกับ `dispute_reason` (FR-05) |
+  | resume | **ไม่ลบ** `timeline.disputed` และ **ไม่ลบ** `dispute_reason` — ทั้งคู่คงค่าครั้งล่าสุดไว้ |
+  | `cancelled` | ยังไม่มี timeline entry ตาม precedent เดิม — CR นี้ไม่เปลี่ยน |
 - **FR-06** — ปลายทาง (`to_shelter`) ทำได้แค่อ่านตอนสถานะเป็น `disputed` — dispatch/receive/cancel/
   resume ทำไม่ได้ฝั่งปลายทาง (`assertActorMayTransition` เดิมครอบคลุมกฎนี้อยู่แล้วโดยไม่ต้องเพิ่ม logic
   ใหม่ เพราะ resume เป็น source-only เหมือน dispatch/cancel)
@@ -101,6 +110,8 @@ affects:
 - [ ] กด "อนุมัติส่งมอบ" แล้วเปิด dispatch confirm dialog · กดยกเลิกใน dialog แล้วสถานะคำร้องไม่เปลี่ยน
       และไม่มี ledger ถูกเขียน (FR-09)
 - [ ] `git diff` ของ PR ไม่มีการเพิ่มช่อง driver/plate ใน `transfer-form.svelte` (FR-10)
+- [ ] คัดค้าน → `timeline.disputed` มี `at`/`by` ถูกต้อง · resume แล้วค่ายังอยู่ · คัดค้านรอบสองทับ
+      ค่าเดิม (ไม่สะสมเป็น array) (FR-11)
 
 ---
 
@@ -209,6 +220,12 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
   unique `item_id` มาตั้งแต่ต้น
 - 2026-08-31 — **project owner เคาะ `approved`** — tier ของกลุ่ม B (Dispute) ตามข้อเสนอ 2026-08-25
   ทั้งหมด ไม่มีการแก้ scope
+- 2026-09-02 — **amend: เพิ่ม FR-11 (`timeline.disputed`)** ตามที่ project owner เคาะ — CR ฉบับก่อน
+  หน้าไม่ได้กล่าวถึง `timeline` เลย ทำให้ต้องอนุมานจาก precedent ของ `cancelled` (ซึ่งไม่เขียน timeline
+  entry) · ผลของการไม่เขียนคือหน้ารายละเอียดของ CR-091 จะเห็นแค่ `dispute_reason` เป็นข้อความ ไม่รู้ว่า
+  คัดค้านเมื่อไร/โดยใคร ⇒ project owner เลือกให้เขียน `timeline.disputed` · `cancelled` ยังไม่มี
+  timeline entry ตามเดิม (นอก scope CR นี้) · ยังอยู่ใน schema_v 3 เดิม — additive ภายในรอบเดียวกัน
+  ไม่ต้อง bump ซ้ำเพราะยังไม่มีโค้ดหรือ doc ไหนเขียน schema_v 3 ลง production
 - 2026-09-02 — แก้ path ใน `affects:` — T-13 อยู่ที่ `docs/task-breakdown/03-C-supply.md`
   (ไฟล์ Module C Supply) ไม่ใช่ `05-D-kitchen.md` ที่ระบุไว้เดิม · `grep "T-13"` ใน `05-D-kitchen.md`
   คืนค่าว่าง · แก้ path อย่างเดียว ไม่เปลี่ยน scope

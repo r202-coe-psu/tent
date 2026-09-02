@@ -1282,9 +1282,9 @@ closed   → (terminal)
 > ไม่ bump เช่นกัน (§2.11/§5.4) — ดูรายละเอียดเต็มใน CR-059 Decision Log entry 2026-08-22 ("T-13
 > write-path implementation detail")
 
-> **schema_v 3** — เพิ่ม `driver_name` / `vehicle_plate` (บังคับตอน dispatch) และ `cancel_reason` /
-> `dispute_reason` พร้อมค่า enum ใหม่ `disputed` ใน `status` (CR-089) — บังคับความรับผิดชอบของการขนส่ง
-> และเปิดให้ต้นทางระงับคำร้องไว้ก่อนโดยไม่ต้องยกเลิกทิ้ง
+> **schema_v 3** — เพิ่ม `driver_name` / `vehicle_plate` (บังคับตอน dispatch), `cancel_reason` /
+> `dispute_reason`, `timeline.disputed` และค่า enum ใหม่ `disputed` ใน `status` (CR-089) — บังคับความ
+> รับผิดชอบของการขนส่ง และเปิดให้ต้นทางระงับคำร้องไว้ก่อนโดยไม่ต้องยกเลิกทิ้ง
 > schema_v 2 — ย้ายที่จัดเก็บจาก `shelter_{shelter_code}` มา `central_ops` (CR-059) — ไม่เปลี่ยนรูปร่าง doc
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -1292,7 +1292,7 @@ closed   → (terminal)
 | `from_shelter` / `to_shelter` | str | req | shelter_code (เช่น `SH001`) — canonical doc เดียวใน `central_ops`, ไม่ replicate ผ่าน central แบบเดิมอีกต่อไป |
 | `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ |
 | `status` | enum(`requested`,`shipped`,`received`,`cancelled`,`disputed`) | req | ดูตาราง transition ด้านล่าง · `disputed` = CR-089 |
-| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?} | req/sys | เติมเฉพาะ 3 ขั้นความคืบหน้า — `cancelled`/`disputed` **ไม่เขียน** timeline entry (precedent เดิมของ `cancelled`) |
+| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?, `disputed`:{at,by}?} | req/sys | `disputed` เขียนตอน `requested → disputed` · คัดค้านซ้ำ = ทับค่าเดิม (เก็บครั้งล่าสุดครั้งเดียว) · resume **ไม่ลบ** · `cancelled` ยังไม่มี entry (CR-089 FR-11) |
 | `driver_name` | str | opt/req | **req ตอน transition เป็น `shipped`** (ไม่ว่าง) หลังจากนั้น read-only · doc ที่ยังไม่ถึง `shipped` ไม่มี field นี้ (CR-089 FR-01/FR-02) |
 | `vehicle_plate` | str | opt/req | เงื่อนไขเดียวกับ `driver_name` (CR-089 FR-01/FR-02) |
 | `cancel_reason` | str | opt/req | **req ตอน transition เป็น `cancelled`** (CR-089 FR-03) |
@@ -1305,7 +1305,7 @@ closed   → (terminal)
 | --- | --- | --- | --- |
 | `requested` | `shipped` | ต้นทาง (`from_shelter`) | `driver_name`, `vehicle_plate` |
 | `requested` | `cancelled` | ต้นทาง | `cancel_reason` |
-| `requested` | `disputed` | ต้นทาง | `dispute_reason` |
+| `requested` | `disputed` | ต้นทาง | `dispute_reason` (+ เขียน `timeline.disputed`) |
 | `disputed` | `requested` | ต้นทาง | — (resume) |
 | `shipped` | `received` | ปลายทาง (`to_shelter`) | — |
 
@@ -1319,7 +1319,8 @@ closed   → (terminal)
   อยู่แล้ว ⇒ **ห้ามเคลมว่าเป็น DB-level guard** (ถ้อยคำเดียวกับ §2.1)
 
 **Migration (schema_v 2 → 3, CR-089):** purely additive — `driver_name` / `vehicle_plate` /
-`cancel_reason` / `dispute_reason` เป็น field ใหม่ที่มีค่าเมื่อ transition ที่เกี่ยวข้องเกิดขึ้นเท่านั้น
+`cancel_reason` / `dispute_reason` / `timeline.disputed` เป็นของใหม่ที่มีค่าเมื่อ transition ที่เกี่ยวข้อง
+เกิดขึ้นเท่านั้น
 และ `disputed` เป็นค่า enum ใหม่ที่ไม่กระทบค่าเดิม · doc เดิม (schema_v 2) อ่านได้ปกติ — ไม่มี field ใหม่
 = แสดงว่าง ไม่ throw · pre-prod ไม่มี production data จริง ไม่ต้อง backfill
 

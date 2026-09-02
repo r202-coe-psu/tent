@@ -25,7 +25,8 @@
 		requested: 'รอส่งมอบ',
 		shipped: 'ระหว่างขนส่ง',
 		received: 'ส่งมอบสำเร็จ',
-		cancelled: 'ยกเลิกแล้ว'
+		cancelled: 'ยกเลิกแล้ว',
+		disputed: 'ระงับไว้'
 	};
 
 	function isOutgoing(t: StockTransfer): boolean {
