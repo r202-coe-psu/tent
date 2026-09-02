@@ -5,11 +5,8 @@
 	 * each other with a shared header — mirrors `users/ui/user-list.svelte`).
 	 * Rendered inside `people-tab.svelte`'s `<Table.Body>`.
 	 *
-	 * Of the 4 action buttons (จัดการข้อมูล/ตรวจสอบ & อนุมัติ / ออกสิทธิ์ใช้งานระบบ /
+	 * Of the 4 action buttons (จัดการข้อมูล/ ออกสิทธิ์ใช้งานระบบ /
 	 * ขอโอนย้ายศูนย์ / ลบ):
-	 *   - Not yet `identity_verified` → "ตรวจสอบ & อนุมัติ" opens
-	 *     `volunteer-qualifications-audit-dialog.svelte` (approve/reject the
-	 *     pending application — see its header comment for what it persists).
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
 	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte` (see its
@@ -35,7 +32,6 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
-	import VolunteerQualificationsAuditDialog from './volunteer-qualifications-audit-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import { findSkill } from '../domain/skill-master';
@@ -82,7 +78,6 @@
 	}
 
 	let manageDialogOpen = $state(false);
-	let qualificationsDialogOpen = $state(false);
 	let accessDialogOpen = $state(false);
 	let transferDialogOpen = $state(false);
 </script>
@@ -204,26 +199,10 @@
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[21%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			{#if !volunteer.identity_verified}
-				<Button
-					size="sm"
-					class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
-					onclick={() => (qualificationsDialogOpen = true)}
-				>
-					<Pencil class="h-3.5 w-3.5" />
-					ตรวจสอบ & อนุมัติ
-				</Button>
-			{:else}
-				<Button
-					size="sm"
-					variant="outline"
-					class="gap-1.5"
-					onclick={() => (manageDialogOpen = true)}
-				>
-					<Pencil class="h-3.5 w-3.5" />
-					จัดการข้อมูล
-				</Button>
-			{/if}
+			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
+				<Pencil class="h-3.5 w-3.5" />
+				จัดการข้อมูล
+			</Button>
 
 			<div class="flex items-center gap-1.5">
 				<Button
@@ -264,11 +243,6 @@
 	{volunteer}
 	{shelterLine}
 	todayShift={todayAssignment?.shift}
-/>
-<VolunteerQualificationsAuditDialog
-	bind:open={qualificationsDialogOpen}
-	{volunteer}
-	{shelterLine}
 />
 <VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 <VolunteerTransferDialog bind:open={transferDialogOpen} presetVolunteerId={volunteer._id} />

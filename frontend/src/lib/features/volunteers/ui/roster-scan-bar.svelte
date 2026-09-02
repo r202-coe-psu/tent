@@ -92,7 +92,7 @@
 			/>
 			<Input
 				type="search"
-				placeholder="สแกน QR / Barcode หรือพิมพ์ชื่อ, ID, เบอร์โทร 4 ตัวท้าย (เช่น 5678)..."
+				placeholder="สแกน QR / Barcode หรือพิมพ์ชื่อ, ID, เบอร์โทร"
 				bind:value={search}
 				class="h-11 rounded-xl bg-background pl-9 shadow-xs"
 			/>

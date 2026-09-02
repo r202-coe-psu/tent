@@ -14,11 +14,13 @@
 	 * can be moved to another date with the date filter, so a non-today view
 	 * says so explicitly instead of letting the tiles read as that day's totals.
 	 *
+	 * "เปิดหน้าจอเช็คอินหน้างาน" links out to the on-site check-in screen
+	 * (`/onsite/volunteer-check-in`, `volunteer-check-in.svelte`) — its own
+	 * route/feature with its own camera QR scan + search fallback, not
+	 * reimplemented here.
+	 *
 	 * Deliberately out of scope for this pass (owner instruction 2026-08-29 —
-	 * mock up only, no real hardware/kiosk build yet):
-	 *   - "เปิดหน้าจอเช็คอินหน้างาน (On-Site Kiosk)" — stays a `toast.info` stub.
-	 *     The separate on-site kiosk screen (`/onsite/volunteer-check-in`) is
-	 *     its own route/feature, not wired from here.
+	 * mock up only, no real hardware build yet):
 	 *   - "สแกนรับเข้างาน" camera scan — see `roster-scan-bar.svelte`.
 	 * Everything else (the roster list's 1-click check-in/out, manual override,
 	 * and the audit trail) is wired to real `shift_assignment` data/mutations —
@@ -29,16 +31,18 @@
 	 * artifact excluded by CR-094 FR-VOL-08.7 (this app enforces RBAC for real,
 	 * server-side — there is no "temporarily unlock everything" mode to render).
 	 */
-	import { toast } from 'svelte-sonner';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Monitor from '@lucide/svelte/icons/monitor';
 	import History from '@lucide/svelte/icons/history';
 	import Info from '@lucide/svelte/icons/info';
 	import Inbox from '@lucide/svelte/icons/inbox';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import RosterLiveAttendanceBar from './roster-live-attendance-bar.svelte';
+	import RosterLiveAttendanceBar, {
+		type AttendanceTileFilter
+	} from './roster-live-attendance-bar.svelte';
 	import RosterScanBar from './roster-scan-bar.svelte';
 	import RosterRow from './roster-row.svelte';
 	import RosterAuditTrailDialog from './roster-audit-trail-dialog.svelte';
@@ -50,11 +54,24 @@
 		useVolunteers,
 		useJobs
 	} from '../application/queries';
+	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
 	import type {
 		ShiftAssignment,
 		ShiftAssignmentStatus,
 		ShiftKind
 	} from '../domain/shift-assignment.schema';
+
+	/** Groups the attendance-bar tile keys map to — mirrors `computeHubMetrics`'s
+	 *  own grouping so the click-to-filter tiles never drift from the counters
+	 *  they're drawn from (CR-094 FR-VOL-08.2). */
+	const TILE_STATUS_GROUPS: Record<
+		Exclude<AttendanceTileFilter, ''>,
+		ReadonlySet<ShiftAssignmentStatus>
+	> = {
+		active: new Set(['checked_in']),
+		expected: ASSIGNED_STATUSES,
+		completed: new Set(['completed'])
+	};
 
 	let dateFilter = $state(todayDateString());
 	const isToday = $derived(dateFilter === todayDateString());
@@ -77,6 +94,7 @@
 	let search = $state('');
 	let shiftFilter = $state<ShiftKind | ''>('');
 	let statusFilter = $state<ShiftAssignmentStatus | ''>('');
+	let tileFilter = $state<AttendanceTileFilter>('');
 
 	function matchesSearch(assignment: ShiftAssignment, term: string): boolean {
 		if (!term) return true;
@@ -104,6 +122,10 @@
 
 	const rows = $derived.by(() => {
 		let list = (attendanceQuery.data ?? []).filter((a) => volunteersById.has(a.volunteer_id));
+		if (tileFilter) {
+			const statuses = TILE_STATUS_GROUPS[tileFilter];
+			list = list.filter((a) => statuses.has(a.status));
+		}
 		if (shiftFilter) list = list.filter((a) => a.shift === shiftFilter);
 		if (statusFilter) list = list.filter((a) => a.status === statusFilter);
 		if (search) list = list.filter((a) => matchesSearch(a, search));
@@ -111,12 +133,6 @@
 	});
 
 	const isLoading = $derived(attendanceQuery.isPending || volunteersQuery.isPending);
-
-	function openKiosk() {
-		toast.info(
-			'เปิดหน้าจอเช็คอินหน้างาน (On-Site Kiosk) — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา (mock up)'
-		);
-	}
 
 	let auditDialogOpen = $state(false);
 	let auditPresetVolunteerId = $state<string | null>(null);
@@ -161,11 +177,11 @@
 
 		<div class="flex shrink-0 flex-wrap items-center gap-2">
 			<Button
+				href={resolve('/onsite/volunteer-check-in')}
 				class="gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-				onclick={openKiosk}
 			>
 				<Monitor class="h-4 w-4" />
-				เปิดหน้าจอเช็คอินหน้างาน (On-Site Kiosk)
+				เปิดหน้าจอเช็คอินหน้างาน
 			</Button>
 			<Button variant="outline" class="gap-1.5" onclick={() => openAudit(null)}>
 				<History class="h-4 w-4" />
@@ -179,6 +195,7 @@
 		expectedToday={hubMetrics.data?.assigned ?? 0}
 		completed={hubMetrics.data?.completed ?? 0}
 		isPending={hubMetrics.isPending}
+		bind:selected={tileFilter}
 	/>
 
 	<RosterScanBar

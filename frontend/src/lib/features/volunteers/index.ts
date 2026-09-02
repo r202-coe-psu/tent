@@ -111,6 +111,14 @@ export { default as RosterRow } from './ui/roster-row.svelte';
 export { default as RosterManualCheckinDialog } from './ui/roster-manual-checkin-dialog.svelte';
 export { default as RosterAuditTrailDialog } from './ui/roster-audit-trail-dialog.svelte';
 
+// ui — On-Site (จุดเช็คอินอาสาสมัครหน้างาน, /onsite/volunteer-check-in)
+export { default as VolunteerCheckIn } from './ui/volunteer-check-in.svelte';
+export { default as VolunteerScannerCard } from './ui/volunteer-scanner-card.svelte';
+export { default as VolunteerSearchFallback } from './ui/volunteer-search-fallback.svelte';
+export { default as VolunteerResultCard } from './ui/volunteer-result-card.svelte';
+export { default as VolunteerRecentFeed } from './ui/volunteer-recent-feed.svelte';
+export type { FeedEvent } from './ui/volunteer-recent-feed.svelte';
+
 // ui — Tab 3 (People / รายชื่อและการอนุมัติ)
 export { default as PeopleTab } from './ui/people-tab.svelte';
 export { default as VolunteerStatPills } from './ui/volunteer-stat-pills.svelte';
@@ -120,7 +128,6 @@ export { default as VolunteerApprovalChips } from './ui/volunteer-approval-chips
 export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
 export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
-export { default as VolunteerQualificationsAuditDialog } from './ui/volunteer-qualifications-audit-dialog.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as VolunteerTransferDialog } from './ui/volunteer-transfer-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
