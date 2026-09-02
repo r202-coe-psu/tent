@@ -51,6 +51,29 @@ describe('transfer.authorization', () => {
 		);
 	});
 
+	it('allows only the source shelter to dispute (CR-089 FR-04)', () => {
+		const doc = requestedTransfer();
+		expect(() => assertActorMayTransition(doc, 'disputed', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(doc, 'disputed', 'SH002')).toThrow(
+			TransferAuthorizationError
+		);
+	});
+
+	it('allows only the source shelter to resume, leaving the destination read-only while disputed (CR-089 FR-06)', () => {
+		const disputed = requestedTransfer({
+			status: 'disputed',
+			dispute_reason: 'รอตรวจสอบยอดก่อน',
+			timeline: {
+				requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
+				disputed: { at: '2026-08-22T06:00:00.000Z', by: 'Staff A' }
+			}
+		});
+		expect(() => assertActorMayTransition(disputed, 'requested', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(disputed, 'requested', 'SH002')).toThrow(
+			TransferAuthorizationError
+		);
+	});
+
 	it('is a case-insensitive, whitespace-tolerant shelter comparison', () => {
 		const doc = requestedTransfer();
 		expect(() => assertActorMayTransition(doc, 'shipped', ' sh001 ')).not.toThrow();
