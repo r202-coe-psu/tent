@@ -31,6 +31,7 @@ const {
 	listDistricts,
 	listSubdistricts,
 	listAllLocations,
+	lookupZipcode,
 	createProvince,
 	createDistrict,
 	createSubdistrict,
@@ -181,5 +182,39 @@ describe('deleteLocation', () => {
 		await deleteLocation('location_subdistrict:A-Province:A-District-1:A-Sub-1');
 		expect(adminRaw.mock.calls[0][1]).toBe('GET');
 		expect(adminRaw.mock.calls[1][1]).toBe('DELETE');
+	});
+});
+
+describe('lookupZipcode', () => {
+	it('matches exact province, district, and subdistrict', () => {
+		expect(lookupZipcode('สงขลา', 'หาดใหญ่', 'คอหงส์')).toBe('90110');
+		expect(lookupZipcode('กรุงเทพมหานคร', 'บางนา', 'บางนา')).toBe('10260');
+	});
+
+	it('strips Thai administrative prefixes (จ., จังหวัด, อ., อำเภอ, เขต, ต., ตำบล, แขวง)', () => {
+		expect(lookupZipcode('จังหวัดสงขลา', 'อำเภอหาดใหญ่', 'ตำบลคอหงส์')).toBe('90110');
+		expect(lookupZipcode('กรุงเทพมหานคร', 'เขตบางนา', 'แขวงบางนา')).toBe('10260');
+	});
+
+	it('handles partial / substring district matches within province', () => {
+		expect(lookupZipcode('สงขลา', 'เมือง', 'บ่อยาง')).toBe('90000');
+		expect(lookupZipcode('สงขลา', 'เมืองสงขลา', 'บ่อยาง')).toBe('90000');
+	});
+
+	it('returns null when subdistrict or province is missing', () => {
+		expect(lookupZipcode(null, 'หาดใหญ่', 'คอหงส์')).toBeNull();
+		expect(lookupZipcode('สงขลา', 'หาดใหญ่', null)).toBeNull();
+	});
+
+	it('returns null on ambiguous subdistrict names across multiple districts with different zipcodes when district is omitted or mismatched', () => {
+		// แขวงบางจาก in Bangkok exists in เขตพระโขนง (10260) and เขตภาษีเจริญ (10160)
+		// When district is unknown or invalid, returning an arbitrary zipcode is dangerous and must return null
+		expect(lookupZipcode('กรุงเทพมหานคร', 'เขตไม่ถูกต้อง', 'บางจาก')).toBeNull();
+		expect(lookupZipcode('กรุงเทพมหานคร', null, 'บางจาก')).toBeNull();
+	});
+
+	it('returns correct zipcode when district is explicitly specified for ambiguous subdistricts', () => {
+		expect(lookupZipcode('กรุงเทพมหานคร', 'พระโขนง', 'บางจาก')).toBe('10260');
+		expect(lookupZipcode('กรุงเทพมหานคร', 'ภาษีเจริญ', 'บางจาก')).toBe('10160');
 	});
 });

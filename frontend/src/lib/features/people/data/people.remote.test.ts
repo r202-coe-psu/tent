@@ -101,6 +101,28 @@ describe('PeopleRemoteRepository', () => {
 			const saved = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
 			expect(saved.household_id).toBe(household._id);
 		});
+
+		it('updates pre_registered evacuee details when registered with draft_id', async () => {
+			const preRegEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
+				ctx
+			);
+
+			const registered = await repo.createEvacuee(
+				{
+					...evInput({ first_name: 'สมชาย', last_name: 'สแกน', registered_via: 'kiosk' }),
+					draft_id: preRegEvacuee._id
+				},
+				ctx
+			);
+
+			expect(registered._id).toBe(preRegEvacuee._id);
+			expect(registered.first_name).toBe('สมชาย');
+			expect(registered.current_stay.status).toBe('pre_registered');
+
+			const fetched = await repo.getEvacuee(preRegEvacuee._id);
+			expect(fetched?.current_stay.status).toBe('pre_registered');
+		});
 	});
 
 	describe('updateMedical', () => {
@@ -442,6 +464,22 @@ describe('check-in / check-out', () => {
 			const promoted = await repo.getHousehold(household._id);
 			expect(promoted?.status).toBe('checked_in');
 			expect(promoted?.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
+		});
+
+		it('successfully checks in a pre-registered evacuee from kiosk and sets zone', async () => {
+			const kioskEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
+				ctx
+			);
+
+			const checkedIn = await repo.checkInEvacuee(kioskEvacuee, ctx, 'zone-b');
+			expect(checkedIn.current_stay.status).toBe('active');
+			expect(checkedIn.current_stay.zone).toBe('zone-b');
+
+			const movements = await repo.listMovements();
+			expect(movements.some((m) => m.evacuee_id === kioskEvacuee._id && m.zone === 'zone-b')).toBe(
+				true
+			);
 		});
 	});
 

@@ -1,6 +1,6 @@
 """Tests for the reservation TTL sweep (T-21 DoD — "TTL หมดอายุ")."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from worker.quota.expiry import expire_declared_donations, should_expire
@@ -57,7 +57,9 @@ def test_skips_missing_or_unparseable_expires_at():
 
 
 def _couch(docs_by_db, *, registry=None, put=None):
-    registry = registry if registry is not None else [{"type": "shelter", "code": "SH001"}]
+    registry = (
+        registry if registry is not None else [{"type": "shelter", "code": "SH001"}]
+    )
 
     async def iter_all_docs(database):
         rows = registry if database == "registry" else docs_by_db.get(database, [])
@@ -88,7 +90,11 @@ async def test_flips_only_the_stale_reservations():
                 _donation("donation:1", "declared", PAST),
                 _donation("donation:2", "declared", FUTURE),
                 _donation("donation:3", "received", PAST),
-                {"_id": "donation_campaign:c1", "type": "donation_campaign", "status": "open"},
+                {
+                    "_id": "donation_campaign:c1",
+                    "type": "donation_campaign",
+                    "status": "open",
+                },
             ]
         }
     )
@@ -167,7 +173,12 @@ async def test_reads_all_documents_before_writing_any():
 
     await expire_declared_donations(couch, now=NOW)
 
-    assert order == ["read:donation:1", "read:donation:2", "write:donation:1", "write:donation:2"]
+    assert order == [
+        "read:donation:1",
+        "read:donation:2",
+        "write:donation:1",
+        "write:donation:2",
+    ]
 
 
 async def test_skips_a_shelter_whose_database_is_missing():

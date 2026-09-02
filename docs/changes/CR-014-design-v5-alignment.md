@@ -1,9 +1,9 @@
 ---
 id: CR-014
 title: Design v5 Alignment (Missing Schema & Tasks)
-status: proposed
+status: done
 date: 2026-06-26
-updated: 2026-08-13
+updated: 2026-09-01
 requested_by: development team B
 decided_by: project owner
 layer: volatile

@@ -12,6 +12,7 @@
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LANDING_ROUTE } from '$lib/guards/auth';
+	import { fetchAuthStatus } from '$lib/features/users/data/users.api';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -33,7 +34,7 @@
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) {
-				toast.error('Form not valid. Please check the fields.');
+				toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
 				return;
 			}
 
@@ -46,13 +47,22 @@
 					reset();
 					onSuccess?.();
 					if (navigateOnSuccess) {
+						try {
+							const status = await fetchAuthStatus();
+							if (status.must_change_password || !status.has_security_question) {
+								await goto(resolve('/force-setup'));
+								return;
+							}
+						} catch {
+							// Fallback if status fetch fails
+						}
 						await goto(resolve(LANDING_ROUTE));
 					}
 				})(),
 				{
-					loading: 'Logging in...',
-					success: 'Login successful!',
-					error: (err) => (err instanceof Error ? err.message : 'Login failed')
+					loading: 'กำลังเข้าสู่ระบบ...',
+					success: 'เข้าสู่ระบบสำเร็จ!',
+					error: (err) => (err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ')
 				}
 			);
 		}
@@ -62,12 +72,18 @@
 
 {#snippet fields()}
 	<form method="POST" use:form.enhance>
-		<Field.FieldGroup>
+		<Field.FieldGroup class="space-y-4">
 			<Form.Field {form} name="username">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>Username</Form.Label>
-						<Input {...props} bind:value={$formData.username} autocomplete="username" />
+						<Form.Label class="font-bold">ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label>
+						<Input
+							{...props}
+							bind:value={$formData.username}
+							placeholder="เช่น 0812345678"
+							autocomplete="username"
+							class="h-11"
+						/>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -75,22 +91,30 @@
 			<Form.Field {form} name="password">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>Password</Form.Label>
+						<div class="flex items-center justify-between">
+							<Form.Label class="font-bold">รหัสผ่าน (Password)</Form.Label>
+							<a
+								href="/forgot-password"
+								class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+							>
+								ลืมรหัสผ่าน?
+							</a>
+						</div>
 						<div class="relative">
 							<Input
 								{...props}
 								type={showPassword ? 'text' : 'password'}
 								bind:value={$formData.password}
-								placeholder="Enter your password"
+								placeholder="กรอกรหัสผ่านของคุณ"
 								autocomplete="current-password"
-								class="pr-10"
+								class="h-11 pr-10"
 							/>
 							<Button
 								type="button"
 								variant="ghost"
 								size="icon"
 								class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
-								aria-label={showPassword ? 'Hide password' : 'Show password'}
+								aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
 								onclick={() => (showPassword = !showPassword)}
 							>
 								{#if showPassword}
@@ -104,16 +128,18 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
-			<Form.Button disabled={$submitting}>Login</Form.Button>
+			<Form.Button disabled={$submitting} class="h-11 w-full bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white font-bold">
+				เข้าสู่ระบบ (Login)
+			</Form.Button>
 		</Field.FieldGroup>
 	</form>
 {/snippet}
 
 {#if showCard}
-	<Card.Root class="mx-auto w-full max-w-sm">
-		<Card.Header>
-			<Card.Title class="text-2xl">Login</Card.Title>
-			<Card.Description>Enter your credentials to access your account</Card.Description>
+	<Card.Root class="mx-auto w-full max-w-md border-slate-200 shadow-lg rounded-2xl">
+		<Card.Header class="space-y-1 text-center">
+			<Card.Title class="text-2xl font-bold text-slate-900">เข้าสู่ระบบ Smart Shelter</Card.Title>
+			<Card.Description>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			{@render fields()}

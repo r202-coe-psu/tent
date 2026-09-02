@@ -1,9 +1,9 @@
 ---
 id: CR-095
 title: Food Sphere Standard, Requirement Group และ Replenishment Policy Canonical Schemas (โภชนาการและการเติมสต็อกเสบียง)
-status: proposed
+status: done
 date: 2026-08-27
-updated: 2026-08-30
+updated: 2026-09-01
 requested_by: ทีมพัฒนาคลังสินค้าและโภชนาการ (Module D Kitchen & Module C Supply) / Sphere Standard Plan
 decided_by: เจ้าของโครงการ
 layer: volatile

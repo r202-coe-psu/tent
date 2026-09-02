@@ -1,8 +1,9 @@
 ---
-id: CR-057
-title: Add stock_threshold_override document type and schema
-status: proposed
+id: CR-094
+title: Add stock_threshold_override document type and schema (renumbered from CR-057)
+status: done
 date: 2026-07-28
+updated: 2026-09-01
 requested_by: ทีมพัฒนา (ทีม C - T-14)
 decided_by: project owner
 layer: volatile
@@ -16,7 +17,7 @@ affects:
   - frontend/src/lib/features/sop-ratios/ui/alert-threshold-editor.svelte
 ---
 
-# CR-057 — Add stock_threshold_override document type and schema
+# CR-094 — Add stock_threshold_override document type and schema
 
 **สรุป (TL;DR):**  
 เพิ่มเอกสารชนิด `stock_threshold_override` สำหรับการกำหนดเกณฑ์เตือนภัยสินค้าขั้นต่ำแบบเฉพาะรายศูนย์พักพิง (Per-Shelter Reorder Threshold) เพื่อรองรับฟีเจอร์คำนวณและแจ้งเตือนสินค้าขาดแคลนบน Dashboard (งาน T-14) · ส่งออกข้อมูลให้ระบบรับบริจาค (T-21/22/23) และ Engine คำนวณความต้องการทรัพยากร (T-31) ใช้ร่วมกัน
@@ -57,4 +58,5 @@ affects:
 - การพัฒนาและทดสอบในเครื่อง สามารถเซฟข้อมูลใหม่ได้ทันที และแนะนำให้ใช้ข้อมูลสินค้าและรหัสศูนย์จาก Script seed ที่จัดเตรียมไว้
 
 ## Decision log
-- 2026-07-28 — proposed โดยทีม C (T-14)
+- 2026-07-28 — proposed โดยทีม C (T-14; ร่างเดิมใช้รหัส CR-057)
+- 2026-08-31 — renumbered เป็น CR-094 เพื่อหลีกเลี่ยงการชนกับ CR-057 evacuee schema age

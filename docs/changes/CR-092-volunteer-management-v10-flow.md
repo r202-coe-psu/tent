@@ -1,10 +1,11 @@
 ---
 id: CR-092
 title: ระบบบริหารจัดการจิตอาสาฉบับสมบูรณ์ V10 — Unified Identity, No-SMS OTP, Digital Pass QR, Time-Bound RBAC และ 6 หน้าจอหลัก
-status: proposed
+status: superseded
 date: 2026-08-24
+updated: 2026-09-01
 requested_by: ศูนย์ปฏิบัติการฉุกเฉิน (EOC) / field study
-decided_by: เจ้าของโครงการ
+decided_by: เจ้าของโครงการ (superseded โดย CR-104)
 layer: volatile
 affects:
   - docs/prd/phase-r3-operations.md FR-42 / FR-43
@@ -538,6 +539,7 @@ sequenceDiagram
   2. ปรับปรุงกลไก Password Provisioning ให้มี Mandatory First-Time Password Reset ตาม [Password Policy](../data/password-policy.md) แทนการใช้เบอร์โทรศัพท์เป็น default password
   3. ระบุ Enforcement Layer สำหรับ Time-Bound Shift Access Control ให้ชัดเจนว่าบังคับใช้ที่ระดับ Server BFF Middleware / Endpoints (`+server.ts`)
   4. เพิ่มมาตรการคุ้มครองข้อมูลส่วนบุคคล (PII Protection) สำหรับหน้าตั๋วดิจิทัล `/volunteer/ticket/:token` (ห้ามส่ง `national_id`, Mask เบอร์โทรศัพท์) ตามมาตรฐาน PDPA
+- **2026-09-01 — Superseded:** เจ้าของโครงการสั่ง supersede CR-092 โดยยุบรวมงานสถาปัตยกรรมและ flow เข้าสู่ [CR-104](CR-104-volunteer-backoffice-and-user-management-v10.md) (Volunteer Backoffice & User Management V10)
 
 ---
 

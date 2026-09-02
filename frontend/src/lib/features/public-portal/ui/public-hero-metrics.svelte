@@ -2,7 +2,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import type { Component } from 'svelte';
+	import type { Component, Snippet } from 'svelte';
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_HERO_I18N } from '$lib/constants/i18n';
@@ -16,6 +16,8 @@
 		showLivePing = true,
 		bgClass = 'bg-primary',
 		showSearch = true,
+		actions,
+		expectMetrics = false,
 		summary,
 		flags,
 		lastUpdated,
@@ -28,6 +30,9 @@
 		showLivePing?: boolean;
 		bgClass?: string;
 		showSearch?: boolean;
+		actions?: Snippet;
+		/** When true, log to console if metrics props are incomplete (hero still renders). */
+		expectMetrics?: boolean;
 
 		summary?: {
 			shelters_open: number;
@@ -49,6 +54,25 @@
 	let displayTitle = $derived(title ?? t.defaultTitle);
 	let displayDescription = $derived(description ?? t.defaultDesc);
 	let displayBadgeText = $derived(badgeText ?? t.defaultBadge);
+
+	const metricsPanel = $derived.by(() => {
+		if (summary == null || flags == null || lastUpdated === undefined || isStale === undefined) {
+			return null;
+		}
+		return { summary, flags, lastUpdated, isStale };
+	});
+
+	$effect(() => {
+		if (!expectMetrics || metricsPanel != null) return;
+
+		const missing: string[] = [];
+		if (summary == null) missing.push('summary');
+		if (flags == null) missing.push('flags');
+		if (lastUpdated === undefined) missing.push('lastUpdated');
+		if (isStale === undefined) missing.push('isStale');
+
+		console.error(`[PublicHeroMetrics] metrics panel hidden — missing: ${missing.join(', ')}`);
+	});
 
 	function handleSearch() {
 		if (searchQuery.trim()) {
@@ -91,11 +115,13 @@
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html displayTitle}
 			</h1>
-			<p class="max-w-2xl text-base text-white/80 md:text-lg {showSearch ? 'mb-8' : ''}">
+			<p class="max-w-2xl text-base text-white/80 md:text-lg {showSearch || actions ? 'mb-6' : ''}">
 				{displayDescription}
 			</p>
 
-			{#if showSearch}
+			{#if actions}
+				{@render actions()}
+			{:else if showSearch}
 				<div
 					class="mt-2 flex w-full max-w-xl flex-col justify-between gap-2 rounded-xl bg-white p-2 sm:flex-row sm:items-center md:max-w-4xl"
 				>
@@ -120,11 +146,11 @@
 		</div>
 
 		<!-- Metrics Panel -->
-		{#if summary && flags && lastUpdated !== undefined && isStale !== undefined}
+		{#if metricsPanel}
 			<div class="flex w-full shrink-0 flex-col justify-center md:w-auto md:max-w-sm">
 				<div class="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
 					<!-- Stale Warning -->
-					{#if isStale}
+					{#if metricsPanel.isStale}
 						<div
 							class="absolute -top-3 right-6 flex items-center gap-1 rounded-full border-2 border-white bg-warning px-3 py-1 text-2xs font-bold text-white shadow-sm"
 						>
@@ -138,7 +164,7 @@
 							{t.currentStatus}
 						</h3>
 						<span class="text-2xs text-muted-foreground"
-							>{t.lastUpdated}: {new Date(lastUpdated).toLocaleTimeString(
+							>{t.lastUpdated}: {new Date(metricsPanel.lastUpdated).toLocaleTimeString(
 								langState.current === 'th' ? 'th-TH' : 'en-US'
 							)}</span
 						>
@@ -153,16 +179,16 @@
 							>
 							<div class="flex items-baseline gap-1">
 								<span class="text-3xl font-bold text-card-foreground"
-									>{summary?.shelters_open ?? '-'}</span
+									>{metricsPanel.summary.shelters_open}</span
 								>
 								<span class="text-sm font-medium text-muted-foreground"
-									>/{summary?.shelters_total ?? '-'} {t.sheltersUnit}</span
+									>/{metricsPanel.summary.shelters_total} {t.sheltersUnit}</span
 								>
 							</div>
 						</div>
 
 						<!-- Metric 2 (Occupancy) -->
-						{#if flags.public_metrics_occupancy}
+						{#if metricsPanel.flags.public_metrics_occupancy}
 							<div
 								class="flex flex-col justify-center rounded-xl border border-border/50 bg-muted/30 p-4"
 							>
@@ -170,7 +196,7 @@
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
-										>{summary?.occupancy_total ?? '-'}</span
+										>{metricsPanel.summary.occupancy_total ?? '-'}</span
 									>
 									<span class="text-sm font-medium text-muted-foreground">{t.victimsUnit}</span>
 								</div>
