@@ -3,7 +3,7 @@ id: CR-106
 title: T-13 โอนย้ายข้ามศูนย์ — Lot ต้นทาง/ปลายทาง + Split Allocation (advisory per-lot, schema_v 3 → 4)
 status: proposed
 date: 2026-09-02
-requested_by: CR-059 Flow 1 follow-up — 5 ข้อของกลุ่ม Lot (§4.1/§4.2) ที่ CR-089 ตัดออกทั้งหมด 2026-08-25 และยังไม่มี CR ไหน cover
+requested_by: Team-C
 decided_by: Project Owner
 layer: volatile
 affects:
@@ -25,7 +25,7 @@ affects:
 # CR-106 — T-13 โอนย้ายข้ามศูนย์: Lot ต้นทาง/ปลายทาง + Split Allocation
 
 ## สรุป (TL;DR)
-
+CR-059 Flow 1 follow-up — 5 ข้อของกลุ่ม Lot (§4.1/§4.2) ที่ CR-089 ตัดออกทั้งหมด 2026-08-25 และยังไม่มี CR ไหน cover
 ปิด 5 ข้อสุดท้ายของ CR-059 Flow 1 ที่ยังไม่มี CR cover: เลือก Lot จริงตอนเบิกออก, แบ่งเบิกข้ามล็อต,
 ปลายทางสร้าง Lot ID ใหม่, อ้างอิง Lot ต้นทางแบบ read-only, แก้วันหมดอายุตอนตรวจรับ ·
 `stock_transfer` schema_v 3 → 4 (เพิ่ม `line_id`, `source_lot`, `dest_lots[]`) · **ไม่แตะ `stock_ledger`** ·
