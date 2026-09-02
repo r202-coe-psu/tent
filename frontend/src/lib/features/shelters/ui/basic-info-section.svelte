@@ -3,12 +3,14 @@
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import {
+		DEFAULT_SHELTER_FEATURE_FLAGS,
 		SITE_KIND_LABELS,
 		type Shelter,
 		type ProjectLevel,
 		type SiteKind
 	} from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
@@ -141,6 +143,21 @@
 		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
 		$formData.postal_code = match ? String(match.zipcode) : null;
 	}
+
+	function ensureFeatureFlags() {
+		if (!$formData.feature_flags) {
+			$formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
+		}
+	}
+
+	function setEnableMedicalScreening(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = {
+			...DEFAULT_SHELTER_FEATURE_FLAGS,
+			...$formData.feature_flags,
+			enable_medical_screening: checked
+		};
+	}
 </script>
 
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
@@ -261,6 +278,32 @@
 		</Form.Control>
 		<Form.FieldErrors />
 	</Form.Field>
+
+	<!-- Operational feature flags (CR-106 Station 2 toggle) -->
+	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+		คุณสมบัติการปฏิบัติการ (Feature Flags)
+	</h3>
+
+	<div
+		class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+	>
+		<div class="min-w-0 flex-1 space-y-1">
+			<label for="enable-medical-screening" class="text-sm font-medium text-card-foreground">
+				เปิดคัดกรองการแพทย์ (Station 2)
+			</label>
+			<p class="text-xs text-muted-foreground">
+				เปิด: ท่อลงทะเบียน S1→S2→S3 — แสดง Station 2 และ Handover Slip หลังลงทะเบียน · ปิด: S1→S3
+				(ข้ามแพทย์) โดยยังแยกโต๊ะจัดโซนจากทะเบียน
+			</p>
+		</div>
+		<Switch
+			id="enable-medical-screening"
+			checked={$formData.feature_flags?.enable_medical_screening ?? false}
+			onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
+			{disabled}
+			aria-label="เปิดคัดกรองการแพทย์ Station 2"
+		/>
+	</div>
 
 	<Form.Field {form} name="location.address">
 		<Form.Control>

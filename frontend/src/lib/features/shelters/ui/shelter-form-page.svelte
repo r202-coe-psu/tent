@@ -140,6 +140,7 @@
 	if (!$formData.admission_policy) $formData.admission_policy = { ...EMPTY_ADMISSION_POLICY };
 	if (!$formData.luggage_policy) $formData.luggage_policy = { ...EMPTY_LUGGAGE_POLICY };
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
+	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
 
 	$effect(() => {
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
@@ -177,7 +178,10 @@
 				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
-				feature_flags: d.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
+				feature_flags: {
+					...DEFAULT_SHELTER_FEATURE_FLAGS,
+					...(d.feature_flags ?? {})
+				}
 			};
 		}
 	});
