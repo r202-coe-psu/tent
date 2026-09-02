@@ -24,8 +24,8 @@
 	let {
 		special_needs = $bindable<string[]>([]),
 		disabled = false,
-		label = 'กลุ่มเปราะบางและความต้องการพิเศษ',
-		description = 'เลือกความต้องการพิเศษเพื่อการจัดสรรที่พักและการดูแลอย่างเหมาะสม'
+		label = 'ความต้องการเพิ่มเติม',
+		description = 'เลือกความต้องการเพิ่มเติมเพื่อการจัดสรรที่พักและการดูแลอย่างเหมาะสม'
 	}: {
 		special_needs?: string[];
 		disabled?: boolean;
@@ -109,7 +109,6 @@
 	<!-- Custom tags already added -->
 	{#if customTagsInUse.length > 0}
 		<div class="space-y-1.5 pt-1">
-			<span class="text-2xs font-medium text-muted-foreground">ความต้องการพิเศษเพิ่มเติม:</span>
 			<div class="flex flex-wrap gap-1.5">
 				{#each customTagsInUse as tag (tag)}
 					<span
@@ -137,7 +136,7 @@
 		<div class="flex gap-2 pt-1">
 			<Input
 				bind:value={customTag}
-				placeholder="ระบุความต้องการพิเศษอื่นๆ (ถ้ามี)"
+				placeholder="ระบุความต้องการอื่นๆ (ถ้ามี)"
 				onkeydown={handleKeydown}
 				class="h-9 text-xs"
 			/>
