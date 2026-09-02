@@ -60,14 +60,22 @@ export const GET: RequestHandler = async ({ url }) => {
 		if (regRes.status === 200 && Array.isArray(regData?.rows)) {
 			for (const r of regData.rows) {
 				const doc = r.doc;
-				if (doc && doc.type === 'shelter' && doc.code && doc.db) {
+				if (doc && doc.type === 'shelter' && doc.code) {
 					shelters.push({
 						code: doc.code,
 						name: doc.name || doc.code,
-						db: doc.db
+						db: doc.db || `shelter_${doc.code.toLowerCase()}`
 					});
 				}
 			}
+		}
+
+		if (shelters.length === 0) {
+			shelters.push({
+				code: 'SH001',
+				name: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
+				db: 'shelter_sh001'
+			});
 		}
 
 		// Query jobs from relevant shelter databases

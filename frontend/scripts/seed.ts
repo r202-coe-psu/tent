@@ -2045,9 +2045,77 @@ async function seedVolunteers(): Promise<void> {
 			],
 			auto_accept: false,
 			is_urgent: false
+		},
+		{
+			title: 'ทีมครัวกลางและจัดเตรียมอาหารกล่องพระราชทาน',
+			description:
+				'ช่วยประกอบอาหาร บรรจุกล่อง และจัดเตรียมเสบียงอาหารปรุงสุกสำหรับแจกจ่ายผู้ประสบภัยในศูนย์พักพิง',
+			tier: 'operational',
+			required_roles: [],
+			skills_required: ['ประกอบอาหาร / ครัวสนาม'],
+			shifts: [
+				{
+					id: `js-${today}-e1`,
+					date: today,
+					end_date: today,
+					start_time: '08:00',
+					end_time: '12:00',
+					quota: 10
+				},
+				{
+					id: `js-${today}-e2`,
+					date: today,
+					end_date: today,
+					start_time: '12:00',
+					end_time: '18:00',
+					quota: 15
+				}
+			],
+			auto_accept: true,
+			is_urgent: true
+		},
+		{
+			title: 'ทีมแพทย์และพยาบาลประจำจุดปฐมพยาบาล',
+			description:
+				'ดูแลผู้ป่วยเบื้องต้น ตรวจวัดสัญญาณชีพ และจ่ายยาสามัญประจำบ้านสำหรับผู้ประสบภัยในศูนย์',
+			tier: 'operational',
+			required_roles: [],
+			skills_required: ['การแพทย์ / ปฐมพยาบาล'],
+			shifts: [
+				{
+					id: `js-${today}-f`,
+					date: today,
+					end_date: today,
+					start_time: '08:00',
+					end_time: '16:00',
+					quota: 4
+				}
+			],
+			auto_accept: false,
+			is_urgent: true
+		},
+		{
+			title: 'ทีมคลังพัสดุและขนย้ายถุงยังชีพฉุกเฉิน',
+			description:
+				'จัดเรียงสิ่งของบริจาค ตรวจนับสต็อก และแพ็คถุงยังชีพเพื่อส่งมอบให้ผู้ประสบภัยตามโซนต่างๆ',
+			tier: 'operational',
+			required_roles: [],
+			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
+			shifts: [
+				{
+					id: `js-${today}-g`,
+					date: today,
+					end_date: today,
+					start_time: '13:00',
+					end_time: '17:00',
+					quota: 8
+				}
+			],
+			auto_accept: false,
+			is_urgent: false
 		}
 	];
-	const [job1, job2, job3] = jobInputs.map((j) => makeJob(j, ctx));
+	const [job1, job2, job3, job4, job5, job6] = jobInputs.map((j) => makeJob(j, ctx));
 
 	// job1: `open` + urgent, quota reconciled against the 4 shift_assignments
 	// below (see the docblock invariant walkthrough above).
@@ -2055,10 +2123,15 @@ async function seedVolunteers(): Promise<void> {
 	job1.slots_confirmed = 3;
 	job1.slots_dispatched = 1;
 	job1.slots_remaining = 2;
-	// job2 stays `draft` (makeJob's default) with its full quota unclaimed.
+	// job2: `open` staff-capable
+	job2.status = 'open';
 	// job3: `paused` — temporarily not accepting, quota still fully unclaimed.
 	job3.status = 'paused';
-	for (const j of [job1, job2, job3]) jobSchema.parse(j);
+	// job4, job5, job6: `open`
+	job4.status = 'open';
+	job5.status = 'open';
+	job6.status = 'open';
+	for (const j of [job1, job2, job3, job4, job5, job6]) jobSchema.parse(j);
 
 	// — volunteers ————————————————————————————————————————————————————————————
 	// `source` covers all 4 enum values across the 5 profiles (public_apply
@@ -2271,6 +2344,9 @@ async function seedVolunteers(): Promise<void> {
 		job1,
 		job2,
 		job3,
+		job4,
+		job5,
+		job6,
 		v1,
 		v2,
 		v3,
@@ -2287,7 +2363,7 @@ async function seedVolunteers(): Promise<void> {
 	await bulkDocs(SHELTER_DB, allDocs);
 
 	console.log(
-		`  ✓ ${SHELTER_DB}: 3 job, 5 volunteer, 4 shift_assignment, 2 job_application, 1 volunteer_transfer (today=${today})`
+		`  ✓ ${SHELTER_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications, 1 volunteer_transfer (today=${today})`
 	);
 }
 
