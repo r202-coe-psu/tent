@@ -5,14 +5,26 @@
 	import type { DistributionRequest, DistributionRequestStatus } from '../domain/distribution';
 	import { distributionRequestStatusLabels } from './request-ui';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import Eye from '@lucide/svelte/icons/eye';
+	import XCircle from '@lucide/svelte/icons/x-circle';
 
 	interface Props {
 		requests: DistributionRequest[];
 		canApprove?: boolean;
+		canReject?: boolean;
+		onView?: (request: DistributionRequest) => void;
 		onApprove?: (request: DistributionRequest) => void;
+		onReject?: (request: DistributionRequest) => void;
 	}
 
-	let { requests, canApprove = false, onApprove }: Props = $props();
+	let {
+		requests,
+		canApprove = false,
+		canReject = false,
+		onView,
+		onApprove,
+		onReject
+	}: Props = $props();
 
 	const badgeClasses: Record<DistributionRequestStatus, string> = {
 		pending:
@@ -48,14 +60,12 @@
 			<Table.Head class="text-center">รายการ</Table.Head>
 			<Table.Head>วันที่ขอ</Table.Head>
 			<Table.Head>สถานะ</Table.Head>
-			{#if canApprove}
-				<Table.Head class="text-right">การดำเนินการ</Table.Head>
-			{/if}
+			<Table.Head class="text-right">การดำเนินการ</Table.Head>
 		</Table.Row>
 	</Table.Header>
 	<Table.Body>
 		{#each requests as request (request._id)}
-			<Table.Row>
+			<Table.Row class="hover:bg-muted/40">
 				<Table.Cell class="font-mono text-xs font-semibold text-primary">
 					{shortRequestId(request._id)}
 				</Table.Cell>
@@ -72,24 +82,51 @@
 						{distributionRequestStatusLabels[request.status]}
 					</Badge>
 				</Table.Cell>
-				{#if canApprove}
-					<Table.Cell class="text-right">
-						{#if request.status === 'pending'}
+				<Table.Cell class="text-right">
+					<div class="flex items-center justify-end gap-1.5">
+						{#if onView}
 							<Button
+								variant="ghost"
 								size="sm"
-								class="bg-brand-600 hover:bg-brand-700 h-7 gap-1 text-xs font-bold text-white"
-								onclick={() => onApprove?.(request)}
+								class="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+								onclick={() => onView(request)}
+								title="ดูรายละเอียด"
 							>
-								<CheckCircle2 class="size-3.5" />
-								อนุมัติ
+								<Eye class="size-3.5" />
+								<span class="hidden sm:inline">รายละเอียด</span>
 							</Button>
+						{/if}
+
+						{#if request.status === 'pending'}
+							{#if canReject && onReject}
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10"
+									onclick={() => onReject(request)}
+									title="ปฏิเสธคำร้อง"
+								>
+									<XCircle class="size-3.5" />
+									<span class="hidden md:inline">ปฏิเสธ</span>
+								</Button>
+							{/if}
+
+							{#if canApprove && onApprove}
+								<Button
+									size="sm"
+									class="bg-brand-600 hover:bg-brand-700 h-7 gap-1 px-2.5 text-xs font-bold text-white"
+									onclick={() => onApprove(request)}
+									title="อนุมัติเบิกจ่าย"
+								>
+									<CheckCircle2 class="size-3.5" />
+									อนุมัติ
+								</Button>
+							{/if}
 						{:else if request.status === 'approving'}
 							<span class="text-[11px] font-medium text-blue-700">กำลังดำเนินการ</span>
-						{:else}
-							<span class="text-xs text-muted-foreground">-</span>
 						{/if}
-					</Table.Cell>
-				{/if}
+					</div>
+				</Table.Cell>
 			</Table.Row>
 		{/each}
 	</Table.Body>

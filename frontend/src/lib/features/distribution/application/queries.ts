@@ -40,6 +40,34 @@ export const useDistributionRequests = (
 		enabled: !!shelterCode() && !!authStore.user?.name
 	}));
 
+export const useDistributionRequest = (
+	requestId: () => string | undefined,
+	shelterCode: () => string = getShelterCode
+) =>
+	createQuery(() => ({
+		queryKey: distributionKeys.request(shelterCode(), requestId() ?? ''),
+		queryFn: () => {
+			const id = requestId();
+			if (!id) return null;
+			return distributionRepository().getRequest(id, currentDistributionContext(shelterCode()));
+		},
+		enabled: !!shelterCode() && !!requestId() && !!authStore.user?.name
+	}));
+
+export const useDistributionBatch = (
+	batchId: () => string | undefined,
+	shelterCode: () => string = getShelterCode
+) =>
+	createQuery(() => ({
+		queryKey: distributionKeys.batch(shelterCode(), batchId() ?? ''),
+		queryFn: () => {
+			const id = batchId();
+			if (!id) return null;
+			return distributionRepository().getBatch(id, currentDistributionContext(shelterCode()));
+		},
+		enabled: !!shelterCode() && !!batchId() && !!authStore.user?.name
+	}));
+
 export const useCreateDistributionRequest = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -82,6 +110,34 @@ export const useApproveDistributionRequest = () => {
 			queryClient.invalidateQueries({ queryKey: distributionKeys.batches(ctx.shelterCode) });
 			queryClient.invalidateQueries({ queryKey: operationsKeys.ledger() });
 			queryClient.invalidateQueries({ queryKey: operationsKeys.stockLedgers() });
+		}
+	}));
+};
+
+export const useRejectDistributionRequest = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			requestId,
+			reason,
+			ctx
+		}: {
+			requestId: string;
+			reason: string;
+			ctx: AuthorContext;
+		}) => distributionRepository().rejectRequest(requestId, reason, ctx),
+		onSuccess: (_request, { requestId, ctx }) => {
+			queryClient.invalidateQueries({ queryKey: distributionKeys.requests(ctx.shelterCode) });
+			queryClient.invalidateQueries({
+				queryKey: distributionKeys.request(ctx.shelterCode, requestId)
+			});
+		},
+		onError: (_err, { requestId, ctx }) => {
+			// On rejection failure, reread authoritative request state in case of concurrent status transition
+			queryClient.invalidateQueries({ queryKey: distributionKeys.requests(ctx.shelterCode) });
+			queryClient.invalidateQueries({
+				queryKey: distributionKeys.request(ctx.shelterCode, requestId)
+			});
 		}
 	}));
 };

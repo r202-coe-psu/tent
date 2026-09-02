@@ -99,8 +99,11 @@ export { DistributionRemoteRepository } from './data/distribution.remote';
 export {
 	distributionKeys,
 	useDistributionRequests,
+	useDistributionRequest,
+	useDistributionBatch,
 	useCreateDistributionRequest,
 	useApproveDistributionRequest,
+	useRejectDistributionRequest,
 	useCancelDistributionRequest
 } from './application/queries';
 
@@ -110,6 +113,9 @@ export { default as RequestItemEditor } from './ui/request-item-editor.svelte';
 export { default as NfiTemplatePicker } from './ui/nfi-template-picker.svelte';
 export { default as ApprovalDialog } from './ui/approval-dialog.svelte';
 export { default as PhysicalLotSelector } from './ui/physical-lot-selector.svelte';
+export { default as RequestDetailDialog } from './ui/request-detail-dialog.svelte';
+export { default as RejectRequestDialog } from './ui/reject-request-dialog.svelte';
+export { default as ActiveBatchSummary } from './ui/active-batch-summary.svelte';
 export {
 	getLotInputKey,
 	filterLotsForItem,

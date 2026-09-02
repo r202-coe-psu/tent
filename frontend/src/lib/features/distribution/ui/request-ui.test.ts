@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { DistributionRequest } from '../domain/distribution';
 import {
+	distributionBatchStatusLabels,
 	distributionRequestStatusLabels,
 	filterDistributionRequests,
+	getRequestItemPresentationKey,
 	summarizeDistributionRequests
 } from './request-ui';
 
@@ -46,5 +48,22 @@ describe('Distribution request UI helpers', () => {
 			rejected: 'ปฏิเสธ',
 			cancelled: 'ยกเลิก'
 		});
+	});
+
+	it('provides display labels for every persisted batch status', () => {
+		expect(distributionBatchStatusLabels).toEqual({
+			activating: 'กำลังประมวลผล',
+			active: 'เปิดการแจกจ่าย (Active)',
+			closing: 'กำลังปิด / กระทบยอด',
+			closed: 'ปิดแล้ว (Closed)'
+		});
+	});
+
+	it('gives duplicate item snapshots independent presentation identities', () => {
+		const rows = [{ item_id: 'item:water' }, { item_id: 'item:water' }];
+		const keys = rows.map(getRequestItemPresentationKey);
+
+		expect(keys).toEqual(['item:water:0', 'item:water:1']);
+		expect(new Set(keys)).toHaveLength(2);
 	});
 });

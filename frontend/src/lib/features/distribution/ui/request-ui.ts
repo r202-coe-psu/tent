@@ -1,4 +1,9 @@
-import type { DistributionRequest, DistributionRequestStatus } from '../domain/distribution';
+import type {
+	DistributionBatchStatus,
+	DistributionRequest,
+	DistributionRequestItem,
+	DistributionRequestStatus
+} from '../domain/distribution';
 
 export type RequestStatusFilter = 'all' | DistributionRequestStatus;
 
@@ -8,6 +13,13 @@ export const distributionRequestStatusLabels: Record<DistributionRequestStatus, 
 	approved: 'อนุมัติแล้ว',
 	rejected: 'ปฏิเสธ',
 	cancelled: 'ยกเลิก'
+};
+
+export const distributionBatchStatusLabels: Record<DistributionBatchStatus, string> = {
+	activating: 'กำลังประมวลผล',
+	active: 'เปิดการแจกจ่าย (Active)',
+	closing: 'กำลังปิด / กระทบยอด',
+	closed: 'ปิดแล้ว (Closed)'
 };
 
 export const distributionRequestStatusOptions: Array<{
@@ -46,4 +58,16 @@ export function filterDistributionRequests(
 			.toLocaleLowerCase()
 			.includes(normalizedSearch);
 	});
+}
+
+/**
+ * Request item snapshots permit repeated item IDs. The position is part of the
+ * persisted snapshot's presentation identity, so each historical row remains
+ * independently renderable.
+ */
+export function getRequestItemPresentationKey(
+	item: Pick<DistributionRequestItem, 'item_id'>,
+	index: number
+): string {
+	return `${item.item_id}:${index}`;
 }

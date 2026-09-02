@@ -5,6 +5,7 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Plus from '@lucide/svelte/icons/plus';
 	import SearchX from '@lucide/svelte/icons/search-x';
+	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		hasStaffCapability,
@@ -14,12 +15,14 @@
 	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type { DistributionRequest } from '../domain/distribution';
-	import { useDistributionRequests } from '../application/queries';
+	import { useCancelDistributionRequest, useDistributionRequests } from '../application/queries';
 	import RequestFilters from './request-filters.svelte';
 	import RequestStatsHeader from './request-stats-header.svelte';
 	import RequestTable from './request-table.svelte';
 	import CreateRequestDialog from './create-request-dialog.svelte';
 	import ApprovalDialog from './approval-dialog.svelte';
+	import RequestDetailDialog from './request-detail-dialog.svelte';
+	import RejectRequestDialog from './reject-request-dialog.svelte';
 	import { filterDistributionRequests, type RequestStatusFilter } from './request-ui';
 
 	const userRoles = $derived(authStore.user?.roles ?? []);
@@ -29,10 +32,24 @@
 			hasStaffCapability(userRoles, 'registration_staff')
 	);
 	const canApprove = $derived(isSystemAdmin(userRoles) || isWarehouseStaff(userRoles));
+	const canReject = $derived(isSystemAdmin(userRoles) || isWarehouseStaff(userRoles));
+	const canCancel = $derived(
+		isSystemAdmin(userRoles) ||
+			isShelterManager(userRoles) ||
+			hasStaffCapability(userRoles, 'registration_staff')
+	);
 
 	let isCreateOpen = $state(false);
 	let isApprovalOpen = $state(false);
 	let approvingRequest = $state<DistributionRequest | null>(null);
+
+	let isDetailOpen = $state(false);
+	let selectedDetailRequest = $state<DistributionRequest | null>(null);
+
+	let isRejectOpen = $state(false);
+	let selectedRejectRequest = $state<DistributionRequest | null>(null);
+
+	const cancelMutation = useCancelDistributionRequest();
 
 	const requestQuery = useDistributionRequests(
 		() => undefined,
@@ -46,6 +63,11 @@
 
 	const hasFilters = $derived(status !== 'all' || search.trim().length > 0);
 
+	function handleOpenDetail(req: DistributionRequest) {
+		selectedDetailRequest = req;
+		isDetailOpen = true;
+	}
+
 	function handleOpenApproval(req: DistributionRequest) {
 		approvingRequest = req;
 		isApprovalOpen = true;
@@ -54,6 +76,59 @@
 	function handleApprovalSuccess() {
 		isApprovalOpen = false;
 		approvingRequest = null;
+	}
+
+	function handleOpenReject(req: DistributionRequest) {
+		selectedRejectRequest = req;
+		isRejectOpen = true;
+	}
+
+	function handleRejectSuccess() {
+		isRejectOpen = false;
+		selectedRejectRequest = null;
+	}
+
+	async function handleCancelRequest(req: DistributionRequest) {
+		if (cancelMutation.isPending) {
+			toast.error('กำลังยกเลิกคำร้อง โปรดรอให้การดำเนินการปัจจุบันเสร็จสิ้น');
+			return;
+		}
+		if (!canCancel) {
+			toast.error('คุณไม่มีสิทธิ์ในการยกเลิกคำร้องนี้');
+			return;
+		}
+		if (req.status !== 'pending') {
+			toast.error('สามารถยกเลิกได้เฉพาะคำร้องที่อยู่ในสถานะรอดำเนินการเท่านั้น');
+			return;
+		}
+
+		const user = authStore.user;
+		if (!user?.name) {
+			toast.error('ไม่พบข้อมูลผู้ใช้งานที่เข้าสู่ระบบ');
+			return;
+		}
+		const shelterCode = getShelterCode();
+		if (req.shelter_code !== shelterCode) {
+			toast.error('ไม่สามารถยกเลิกคำร้องของศูนย์พักพิงอื่นได้');
+			return;
+		}
+
+		try {
+			await cancelMutation.mutateAsync({
+				requestId: req._id,
+				ctx: {
+					shelterCode,
+					createdBy: user.name,
+					roles: user.roles
+				}
+			});
+			toast.success('ยกเลิกคำร้องเบิกจ่ายเรียบร้อยแล้ว');
+			isDetailOpen = false;
+			selectedDetailRequest = null;
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยกเลิกคำร้อง';
+			toast.error(message);
+		}
 	}
 </script>
 
@@ -80,6 +155,39 @@
 
 	{#if canCreateRequest}
 		<CreateRequestDialog bind:open={isCreateOpen} />
+	{/if}
+
+	<!-- Request Detail Modal -->
+	<RequestDetailDialog
+		bind:open={isDetailOpen}
+		request={selectedDetailRequest}
+		{canApprove}
+		{canReject}
+		{canCancel}
+		isCancelling={cancelMutation.isPending}
+		onApprove={(req) => {
+			isDetailOpen = false;
+			handleOpenApproval(req);
+		}}
+		onReject={(req) => {
+			isDetailOpen = false;
+			handleOpenReject(req);
+		}}
+		onCancel={handleCancelRequest}
+		onClose={() => {
+			selectedDetailRequest = null;
+		}}
+	/>
+
+	{#if canReject}
+		<RejectRequestDialog
+			bind:open={isRejectOpen}
+			request={selectedRejectRequest}
+			onSuccess={handleRejectSuccess}
+			onClose={() => {
+				selectedRejectRequest = null;
+			}}
+		/>
 	{/if}
 
 	{#if canApprove}
@@ -139,7 +247,14 @@
 						</div>
 					</div>
 				{:else}
-					<RequestTable requests={filteredRequests} {canApprove} onApprove={handleOpenApproval} />
+					<RequestTable
+						requests={filteredRequests}
+						{canApprove}
+						{canReject}
+						onView={handleOpenDetail}
+						onApprove={handleOpenApproval}
+						onReject={handleOpenReject}
+					/>
 				{/if}
 			</Card.Content>
 		</Card.Root>

@@ -15,9 +15,12 @@ type MutationDefinition = {
 
 const mocks = vi.hoisted(() => ({
 	listRequests: vi.fn(),
+	getRequest: vi.fn(),
+	getBatch: vi.fn(),
 	createRequest: vi.fn(),
 	cancelRequest: vi.fn(),
 	approveRequest: vi.fn(),
+	rejectRequest: vi.fn(),
 	invalidateQueries: vi.fn(),
 	query: null as QueryDefinition | null,
 	mutation: null as MutationDefinition | null
@@ -41,9 +44,12 @@ vi.mock('$lib/features/operations', () => ({
 vi.mock('../data/distribution.remote', () => ({
 	DistributionRemoteRepository: class {
 		listRequests = mocks.listRequests;
+		getRequest = mocks.getRequest;
+		getBatch = mocks.getBatch;
 		createRequest = mocks.createRequest;
 		cancelRequest = mocks.cancelRequest;
 		approveRequest = mocks.approveRequest;
+		rejectRequest = mocks.rejectRequest;
 	}
 }));
 
@@ -64,7 +70,10 @@ import {
 	useApproveDistributionRequest,
 	useCancelDistributionRequest,
 	useCreateDistributionRequest,
-	useDistributionRequests
+	useDistributionBatch,
+	useDistributionRequest,
+	useDistributionRequests,
+	useRejectDistributionRequest
 } from './queries';
 
 beforeEach(() => {
@@ -328,6 +337,165 @@ describe('Distribution Phase 4C approve mutation', () => {
 		});
 		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
 			queryKey: ['operations', 'stockLedgers']
+		});
+	});
+});
+
+describe('Distribution Phase 4D queries and reject mutation', () => {
+	it('useDistributionRequest uses stable request key and calls getRequest', async () => {
+		const query = useDistributionRequest(
+			() => 'distribution_request:01JDETAIL',
+			() => 'SH001'
+		);
+		mocks.getRequest.mockResolvedValue({
+			_id: 'distribution_request:01JDETAIL',
+			status: 'pending'
+		});
+		const definition = mocks.query;
+		expect(definition).not.toBeNull();
+		expect(query).toBe(definition);
+		expect(definition?.queryKey).toEqual(
+			distributionKeys.request('SH001', 'distribution_request:01JDETAIL')
+		);
+		expect(definition?.enabled).toBe(true);
+
+		await definition?.queryFn();
+		expect(mocks.getRequest).toHaveBeenCalledWith('distribution_request:01JDETAIL', {
+			shelterCode: 'SH001',
+			createdBy: 'registration_user',
+			roles: ['registration_staff']
+		});
+	});
+
+	it('useDistributionRequest is disabled when requestId is undefined', () => {
+		useDistributionRequest(
+			() => undefined,
+			() => 'SH001'
+		);
+		const definition = mocks.query;
+		expect(definition?.enabled).toBe(false);
+	});
+
+	it('preserves a null direct-request result without falling back to other data', async () => {
+		useDistributionRequest(
+			() => 'distribution_request:01JNOTFOUND',
+			() => 'SH001'
+		);
+		mocks.getRequest.mockResolvedValue(null);
+
+		await expect(mocks.query?.queryFn()).resolves.toBeNull();
+	});
+
+	it('propagates direct-request read failures', async () => {
+		useDistributionRequest(
+			() => 'distribution_request:01JREADFAIL',
+			() => 'SH001'
+		);
+		mocks.getRequest.mockRejectedValue(new Error('CouchDB read failed'));
+
+		await expect(mocks.query?.queryFn()).rejects.toThrow('CouchDB read failed');
+	});
+
+	it('useDistributionBatch uses stable batch key and calls getBatch', async () => {
+		const query = useDistributionBatch(
+			() => 'distribution_batch:01JBATCH',
+			() => 'SH001'
+		);
+		mocks.getBatch.mockResolvedValue({ _id: 'distribution_batch:01JBATCH', status: 'active' });
+		const definition = mocks.query;
+		expect(definition).not.toBeNull();
+		expect(query).toBe(definition);
+		expect(definition?.queryKey).toEqual(
+			distributionKeys.batch('SH001', 'distribution_batch:01JBATCH')
+		);
+		expect(definition?.enabled).toBe(true);
+
+		await definition?.queryFn();
+		expect(mocks.getBatch).toHaveBeenCalledWith('distribution_batch:01JBATCH', {
+			shelterCode: 'SH001',
+			createdBy: 'registration_user',
+			roles: ['registration_staff']
+		});
+	});
+
+	it('useDistributionBatch is disabled when batchId is undefined', () => {
+		useDistributionBatch(
+			() => undefined,
+			() => 'SH001'
+		);
+		const definition = mocks.query;
+		expect(definition?.enabled).toBe(false);
+	});
+
+	it('useRejectDistributionRequest calls rejectRequest and invalidates request caches on success', async () => {
+		useRejectDistributionRequest();
+		const mutation = mocks.mutation;
+		expect(mutation).not.toBeNull();
+
+		const variables = {
+			requestId: 'distribution_request:01JREJECT',
+			reason: 'Out of stock in warehouse',
+			ctx: {
+				shelterCode: 'SH001',
+				createdBy: 'warehouse_user',
+				roles: ['warehouse_staff']
+			}
+		};
+
+		const rejectedRequest = {
+			_id: variables.requestId,
+			status: 'rejected',
+			rejection_reason: variables.reason,
+			rejected_by: 'warehouse_user',
+			rejected_at: '2026-09-02T00:00:00.000Z'
+		};
+		mocks.rejectRequest.mockResolvedValue(rejectedRequest);
+
+		const result = await mutation!.mutationFn(variables);
+		mutation!.onSuccess?.(result, variables);
+
+		expect(mocks.rejectRequest).toHaveBeenCalledWith(
+			variables.requestId,
+			variables.reason,
+			variables.ctx
+		);
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.requests('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.request('SH001', variables.requestId)
+		});
+	});
+
+	it('useRejectDistributionRequest propagates failure and rereads authoritative request on error', async () => {
+		useRejectDistributionRequest();
+		const mutation = mocks.mutation;
+		expect(mutation).not.toBeNull();
+
+		const variables = {
+			requestId: 'distribution_request:01JREJECT',
+			reason: 'Out of stock in warehouse',
+			ctx: {
+				shelterCode: 'SH001',
+				createdBy: 'warehouse_user',
+				roles: ['warehouse_staff']
+			}
+		};
+
+		const err = new Error('Cannot reject request in status approved');
+		mocks.rejectRequest.mockRejectedValue(err);
+
+		await expect(mutation!.mutationFn(variables)).rejects.toThrow(
+			'Cannot reject request in status approved'
+		);
+
+		mutation!.onError?.(err, variables);
+
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.requests('SH001')
+		});
+		expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+			queryKey: distributionKeys.request('SH001', variables.requestId)
 		});
 	});
 });
