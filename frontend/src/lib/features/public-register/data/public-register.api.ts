@@ -75,7 +75,7 @@ export interface PublicSubdistrict {
 const LOCATIONS = '/api/public/v1/config/locations';
 
 /**
- * Thailand address cascade for the booking form's domicile address (CR-105),
+ * Thailand address cascade for the booking form's domicile address (CR-107),
  * served by the public BFF (`/api/public/v1/config/locations`) — never
  * `serviceFetch`, which is the staff service plane. Each level degrades to an
  * empty list: a failed lookup narrows the choices, it must not break the form.

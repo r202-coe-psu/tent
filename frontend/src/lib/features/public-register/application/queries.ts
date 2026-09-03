@@ -52,7 +52,7 @@ export function usePetTypes(shelterCode: () => string) {
 }
 
 /**
- * Domicile-address cascade for the booking form (CR-105). Reference data that
+ * Domicile-address cascade for the booking form (CR-107). Reference data that
  * never changes within a session, so each level is cached forever and only the
  * level below the citizen's current choice is fetched — the same shape the staff
  * address step uses, but over the public BFF.

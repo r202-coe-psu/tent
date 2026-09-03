@@ -6,7 +6,7 @@ export const prerender = false;
 
 /**
  * GET /api/public/v1/config/locations — Thailand province → district → subdistrict
- * lookup for the public booking form's domicile address (CR-105).
+ * lookup for the public booking form's domicile address (CR-107).
  *
  * The staff plane already serves this from `/api/v1/thailand-location/*`, but the
  * public SPA must not call the service plane (`serviceFetch` sends the staff

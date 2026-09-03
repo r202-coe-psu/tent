@@ -121,7 +121,7 @@ export const publicBookingVehicleSchema = z.object({
 
 /**
  * The household head's home address — the domicile they evacuated *from*, not
- * the shelter (CR-105).
+ * the shelter (CR-107).
  *
  * Mirrors the `household` address columns (`address_no`, `village_no`,
  * `subdistrict`, `district`, `province`, `postal_code`, people domain) rather
@@ -265,7 +265,7 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 			type: vehicle.type,
 			license_plate: vehicle.license_plate?.trim() || null
 		})),
-		// Domicile address (CR-105). The household schema stores every address
+		// Domicile address (CR-107). The household schema stores every address
 		// column nullable, and an empty string is not "not given" — normalize the
 		// blanks the form produces (optional หมู่/ถนน, a subdistrict row with no
 		// zipcode) back to `null` so back-office search never matches on ''.

@@ -1,9 +1,9 @@
 ---
-id: draft
+id: CR-107
 title: Public booking — เก็บที่อยู่ภูมิลำเนาของหัวหน้าครัวเรือน (บังคับ) และไม่แสดง vulnerable group ที่ยังไม่มี label
-status: proposed
+status: approved
 date: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-03
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -51,14 +51,14 @@ booking ผ่านเว็บ (CR-070 / T-71, ต่อด้วย CR-081) �
 
 - เพิ่ม `publicBookingAddressSchema` และ `publicBookingInputSchema.address` (**required object**)
 
-  | field | บังคับ | หมายเหตุ |
-  | --- | --- | --- |
-  | `address_no` | ✅ | บ้านเลขที่, ≤100 ตัวอักษร |
-  | `village_no` | — | หมู่ที่ / ตรอก / ซอย / ถนน, default `''` |
-  | `province` | ✅ | เลือกจาก dataset ประเทศไทย |
-  | `district` | ✅ | เลือกจาก dataset (ขึ้นกับจังหวัด) |
-  | `subdistrict` | ✅ | เลือกจาก dataset (ขึ้นกับอำเภอ) |
-  | `postal_code` | — | เติมจาก zipcode ของตำบลที่เลือก; ถ้ามีค่าต้องเป็นเลข 5 หลัก |
+  | field         | บังคับ | หมายเหตุ                                                    |
+  | ------------- | ------ | ----------------------------------------------------------- |
+  | `address_no`  | ✅     | บ้านเลขที่, ≤100 ตัวอักษร                                   |
+  | `village_no`  | —      | หมู่ที่ / ตรอก / ซอย / ถนน, default `''`                    |
+  | `province`    | ✅     | เลือกจาก dataset ประเทศไทย                                  |
+  | `district`    | ✅     | เลือกจาก dataset (ขึ้นกับจังหวัด)                           |
+  | `subdistrict` | ✅     | เลือกจาก dataset (ขึ้นกับอำเภอ)                             |
+  | `postal_code` | —      | เติมจาก zipcode ของตำบลที่เลือก; ถ้ามีค่าต้องเป็นเลข 5 หลัก |
 
 - **จังหวัด/อำเภอ/ตำบลเป็น picker ไม่ใช่ free text** — หลังบ้าน search/group ด้วยค่าที่ตรงกับ
   ที่ staff เลือก, ที่อยู่พิมพ์เองจะ match ไม่ได้
@@ -86,13 +86,13 @@ booking ผ่านเว็บ (CR-070 / T-71, ต่อด้วย CR-081) �
 
 ## Impact
 
-| ชั้น | ผลกระทบ |
-| --- | --- |
-| schema.md | ไม่มี field ใหม่ฝั่ง persist — ใช้คอลัมน์ address ของ `household` ที่มีอยู่ (ไม่ bump `schema_v`) |
-| wire | `POST /api/public/v1/registrations` body **breaking**: `address` เป็น required — payload เดิมถูกปฏิเสธ 422 |
-| code | `public-register/` domain+data+application+ui, barrel `index.ts`/`server.ts`, i18n `public-booking-form.ts`, route `config/locations/` |
-| test | `booking.test.ts` (+4 เคส), `registrations.test.ts` (fixture), `config/locations/server.test.ts` (ใหม่), e2e `public-register.test.ts` (fill address + เคส label ไม่ sync) |
-| ประชาชน | ฟอร์มจองมีช่องบังคับเพิ่ม 4 ช่อง — ใช้เวลากรอกนานขึ้นเล็กน้อย แลกกับที่อยู่ที่หลังบ้านค้นได้ |
+| ชั้น      | ผลกระทบ                                                                                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| schema.md | ไม่มี field ใหม่ฝั่ง persist — ใช้คอลัมน์ address ของ `household` ที่มีอยู่ (ไม่ bump `schema_v`)                                                                          |
+| wire      | `POST /api/public/v1/registrations` body **breaking**: `address` เป็น required — payload เดิมถูกปฏิเสธ 422                                                                 |
+| code      | `public-register/` domain+data+application+ui, barrel `index.ts`/`server.ts`, i18n `public-booking-form.ts`, route `config/locations/`                                     |
+| test      | `booking.test.ts` (+4 เคส), `registrations.test.ts` (fixture), `config/locations/server.test.ts` (ใหม่), e2e `public-register.test.ts` (fill address + เคส label ไม่ sync) |
+| ประชาชน   | ฟอร์มจองมีช่องบังคับเพิ่ม 4 ช่อง — ใช้เวลากรอกนานขึ้นเล็กน้อย แลกกับที่อยู่ที่หลังบ้านค้นได้                                                                               |
 
 ## Migration
 
@@ -116,3 +116,4 @@ booking ผ่านเว็บ (CR-070 / T-71, ต่อด้วย CR-081) �
 - 2026-09-01 — proposed (เจ้าของโครงการสั่ง: เพิ่มที่อยู่ในฟิลด์หัวหน้าครัวเรือนเพราะหลังบ้านต้อง
   search ผ่านที่อยู่ + ห้ามโชว์ id ดิบเมื่อยังไม่มี label; เลือกรูปแบบ cascading select และบังคับกรอก
   ต./อ./จ. + บ้านเลขที่; ให้ track ด้วยไฟล์ CR)
+- 2026-09-03 — approved (อนุมัติเป็น CR-107, ปรับแก้ Prettier linter และรวมเข้า develop)

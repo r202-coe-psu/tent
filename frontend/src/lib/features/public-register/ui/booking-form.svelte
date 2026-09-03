@@ -199,7 +199,7 @@
 	);
 
 	/**
-	 * Domicile address cascade (CR-105) — จังหวัด → อำเภอ → ตำบล, each level
+	 * Domicile address cascade (CR-107) — จังหวัด → อำเภอ → ตำบล, each level
 	 * fetched only once the one above is chosen, exactly like the staff
 	 * pre-registration address step. Picking a level clears everything below it,
 	 * so a half-changed address (new province, old ตำบล) can never be submitted;
@@ -446,7 +446,7 @@
 		</Form.Field>
 
 		<!--
-			Domicile address of the household head (CR-105) — the place the household
+			Domicile address of the household head (CR-107) — the place the household
 			evacuated *from*, not the shelter. Required because the back office finds
 			and groups households by ตำบล/อำเภอ/จังหวัด; those three are pickers over
 			the national dataset rather than free text, so a web booking is searchable

@@ -68,7 +68,7 @@ const TICKET = {
 	booked_at: '2026-08-21T03:00:00.000Z'
 };
 
-// Thailand address cascade for the household head's domicile (CR-105). The BFF
+// Thailand address cascade for the household head's domicile (CR-107). The BFF
 // answers with a different key per cascade level, keyed on how much of the query
 // string is filled in — mocked the same way here.
 const LOCATIONS = {
@@ -107,7 +107,7 @@ async function mockReferenceData(page: Page) {
 }
 
 /**
- * Fill the required domicile address (CR-105). จังหวัด → อำเภอ → ตำบล are
+ * Fill the required domicile address (CR-107). จังหวัด → อำเภอ → ตำบล are
  * `SearchSelect` popovers, not native selects: the trigger carries the superforms
  * field name, and each option is a plain button labelled with its value.
  */

@@ -54,7 +54,7 @@ describe('publicBookingInputSchema', () => {
 		);
 	});
 
-	// CR-105: the back office searches households by ตำบล/อำเภอ/จังหวัด, so those
+	// CR-107: the back office searches households by ตำบล/อำเภอ/จังหวัด, so those
 	// three plus the house number are mandatory on a web booking too.
 	it('requires house number, subdistrict, district and province', () => {
 		const parsed = publicBookingInputSchema.parse(VALID);
@@ -278,7 +278,7 @@ describe('toHouseholdInput → createHousehold', () => {
 	// The address columns are what the back office searches on, so they must land
 	// on the household doc itself — and a blank must arrive as `null`, not `''`,
 	// or a search for "no หมู่" matches every web booking.
-	it('carries the domicile address onto the household doc (CR-105)', () => {
+	it('carries the domicile address onto the household doc (CR-107)', () => {
 		const input = publicBookingInputSchema.parse(VALID);
 		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
 			shelterCode: 'SH001',
