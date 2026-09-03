@@ -65,8 +65,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		items: [
 			{
 				label: 'การประเมินประจำวัน (Daily SOP)',
-				href: resolve('/back-office/resource-dashboard'),
+				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
+			},
+			{
+				label: 'คำนวณความต้องการทรัพยากร',
+				href: resolve('/back-office/resource-dashboard'),
+				icon: Calculator,
+				requiresManager: true
 			},
 			{
 				label: 'จำลองสถานการณ์ SOP',

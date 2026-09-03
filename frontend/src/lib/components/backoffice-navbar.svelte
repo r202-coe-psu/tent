@@ -13,6 +13,7 @@
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
@@ -25,7 +26,7 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const isManager = $derived(isSA || isShelterManager(roles));
+	const isManager = $derived(isSA || isShelterManager(roles, shelterStore.selectedShelterCode));
 
 	async function logout() {
 		mobileMenuOpen = false;

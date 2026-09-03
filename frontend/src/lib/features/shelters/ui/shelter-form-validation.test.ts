@@ -33,6 +33,13 @@ describe('shelter-form-validation', () => {
 		expect(stepHasFieldErrors(4, sampleErrors)).toBe(false);
 	});
 
+	it('maps feature_flags errors to step 0 (basic info)', () => {
+		expect(
+			findInvalidStepIndexes({ feature_flags: { enable_medical_screening: ['invalid'] } })
+		).toEqual([0]);
+		expect(SHELTER_STEP_FIELDS[0]).toContain('feature_flags');
+	});
+
 	it('flattens nested error messages uniquely', () => {
 		expect(collectErrorMessages(sampleErrors)).toEqual([
 			'ชื่อศูนย์พักพิงต้องไม่ว่าง',

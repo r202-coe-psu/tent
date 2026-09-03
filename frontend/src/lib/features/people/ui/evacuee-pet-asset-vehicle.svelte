@@ -25,19 +25,38 @@
 		household = null,
 		pending = false,
 		onBack,
-		onNext
+		onNext,
+		hideActions = false,
+		readonly = false,
+		allowPets = true,
+		allowAssets = true,
+		allowVehicles = true,
+		onDataChange
 	}: {
 		household?: Household | null;
 		pending?: boolean;
-		onBack: () => void;
-		onNext: (data: {
+		onBack?: () => void;
+		onNext?: (data: {
 			pets: PetGroup[];
 			assetDescription: string;
 			vehicles: HouseholdVehicle[];
 		}) => void;
+		/** Station 1 shell: sticky save collects data via `getSnapshot` / onDataChange. */
+		hideActions?: boolean;
+		readonly?: boolean;
+		allowPets?: boolean;
+		allowAssets?: boolean;
+		allowVehicles?: boolean;
+		onDataChange?: (data: {
+			pets: PetGroup[];
+			assetDescription: string;
+			vehicles: HouseholdVehicle[];
+			disclaimerOk: boolean;
+		}) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(EVACUEE_PET_ASSET_VEHICLE_I18N, languageStore.current));
+	const fieldsDisabled = $derived(pending || readonly);
 
 	type PetSpecies = 'dog' | 'cat' | 'bird' | 'other';
 	type PetDetail = {
@@ -140,7 +159,20 @@
 		hasVehicles = vehicleRows.length > 0;
 	}
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const shelterQuery = safeQuery(
+		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
+		{ data: undefined, isLoading: false, isError: false } as unknown as ReturnType<
+			typeof useShelter
+		>
+	);
 	const shelter = $derived(shelterQuery.data);
 
 	const disclaimerGroups = $derived(
@@ -170,257 +202,298 @@
 			};
 		});
 	}
+
+	function snapshot() {
+		return {
+			pets: allowPets ? buildPetGroups() : [],
+			assetDescription: allowAssets && hasAssets ? assetDescription : '',
+			vehicles: allowVehicles
+				? hasVehicles
+					? vehicleRows.map((v) => ({
+							type: v.type,
+							license_plate: v.license_plate.trim() || null
+						}))
+					: []
+				: [],
+			disclaimerOk: !disclaimerRequired || disclaimerAcknowledged
+		};
+	}
+
+	$effect(() => {
+		void hasPets;
+		void petDetails;
+		void hasAssets;
+		void assetDescription;
+		void hasVehicles;
+		void vehicleRows;
+		void disclaimerAcknowledged;
+		onDataChange?.(snapshot());
+	});
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6" class:pointer-events-none={readonly} class:opacity-80={readonly}>
+	{#if readonly}
+		<p class="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+			ข้อมูลสัตว์เลี้ยง/ทรัพย์สิน/ยานพาหนะ (อ่านอย่างเดียว — flag ของศูนย์ปิดอยู่)
+		</p>
+	{/if}
 	<!-- Pets -->
-	<section class="form-section-card space-y-4">
-		<div class="flex items-center gap-2">
-			<PawPrint class="size-5 text-primary" />
-			<h3 class="text-base font-bold text-foreground">{t.pets.title}</h3>
-		</div>
+	{#if allowPets || (household?.pets?.length ?? 0) > 0}
+		<section class="form-section-card space-y-4">
+			<div class="flex items-center gap-2">
+				<PawPrint class="size-5 text-primary" />
+				<h3 class="text-base font-bold text-foreground">{t.pets.title}</h3>
+			</div>
 
-		<div class="grid grid-cols-2 gap-3">
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasPets
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => {
-					hasPets = false;
-					petDetails = [];
-				}}
-			>
-				{t.pets.hasPetsNo}
-			</button>
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasPets
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => {
-					hasPets = true;
-					if (petDetails.length === 0) {
-						adjustSpeciesCount('dog', 1);
-					}
-				}}
-			>
-				{t.pets.hasPets}
-			</button>
-		</div>
+			<div class="grid grid-cols-2 gap-3">
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasPets
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => {
+						hasPets = false;
+						petDetails = [];
+					}}
+				>
+					{t.pets.hasPetsNo}
+				</button>
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasPets
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => {
+						hasPets = true;
+						if (petDetails.length === 0) {
+							adjustSpeciesCount('dog', 1);
+						}
+					}}
+				>
+					{t.pets.hasPets}
+				</button>
+			</div>
 
-		{#if hasPets}
-			<div class="space-y-3 border-t border-border pt-4">
-				<p class="text-sm font-medium text-muted-foreground">{t.pets.countLabel}</p>
-				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-					{#each petSpeciesOptions as opt (opt.value)}
-						{@const count = speciesCounts[opt.value]}
-						<div
-							class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2"
-						>
-							<span class="text-sm font-medium">{opt.label}</span>
-							<div class="flex items-center gap-2">
+			{#if hasPets}
+				<div class="space-y-3 border-t border-border pt-4">
+					<p class="text-sm font-medium text-muted-foreground">{t.pets.countLabel}</p>
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						{#each petSpeciesOptions as opt (opt.value)}
+							{@const count = speciesCounts[opt.value]}
+							<div
+								class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2"
+							>
+								<span class="text-sm font-medium">{opt.label}</span>
+								<div class="flex items-center gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										class="touch-target size-10 shrink-0"
+										disabled={count === 0}
+										onclick={() => adjustSpeciesCount(opt.value, -1)}
+									>
+										<Minus class="size-4" />
+									</Button>
+									<span class="min-w-6 text-center font-mono text-lg font-bold">{count}</span>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										class="touch-target size-10 shrink-0"
+										onclick={() => adjustSpeciesCount(opt.value, 1)}
+									>
+										<Plus class="size-4" />
+									</Button>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					{#if petDetails.length > 0}
+						<p class="pt-2 text-sm font-semibold text-foreground">{t.pets.detailsTitle}</p>
+						<div class="space-y-3">
+							{#each petDetails as pet, i (pet.id)}
+								{@const speciesLabel = petSpeciesOptions.find(
+									(o) => o.value === pet.species
+								)?.label}
+								<div class="space-y-3 rounded-xl border border-border bg-background p-3">
+									<div class="flex items-center justify-between gap-2">
+										<span class="text-sm font-bold text-foreground">
+											{speciesLabel} — {t.pets.petNumber(i + 1)}
+										</span>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											class="touch-target size-10 shrink-0"
+											onclick={() => removePet(pet.id)}
+										>
+											<X class="size-4 text-muted-foreground" />
+										</Button>
+									</div>
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+										<div class="space-y-1.5">
+											<Label class="text-sm">{t.pets.nameLabel}</Label>
+											<Input
+												class="form-control-touch bg-background"
+												bind:value={pet.name}
+												placeholder={t.pets.namePlaceholder}
+											/>
+										</div>
+										<div class="space-y-1.5">
+											<Label class="text-sm">{t.pets.conditionLabel}</Label>
+											<Input
+												class="form-control-touch bg-background"
+												bind:value={pet.condition}
+												placeholder={t.pets.conditionPlaceholder}
+											/>
+										</div>
+									</div>
+									<label
+										class="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-muted/20 px-3"
+									>
+										<Checkbox
+											checked={pet.has_cage}
+											onCheckedChange={(v) => (pet.has_cage = !!v)}
+											class="size-5"
+										/>
+										<span class="text-sm">{t.pets.cageLabel}</span>
+									</label>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	<!-- Assets -->
+	{#if allowAssets || household?.assets}
+		<section class="form-section-card space-y-4">
+			<div class="flex items-center gap-2">
+				<Package class="size-5 text-primary" />
+				<h3 class="text-base font-bold text-foreground">{t.assets.title}</h3>
+			</div>
+			<div class="grid grid-cols-2 gap-3">
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasAssets
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => {
+						hasAssets = false;
+						assetDescription = '';
+					}}
+				>
+					{t.assets.hasAssetsNo}
+				</button>
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasAssets
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => (hasAssets = true)}
+				>
+					{t.assets.hasAssets}
+				</button>
+			</div>
+			{#if hasAssets}
+				<div class="space-y-1.5">
+					<Label class="text-sm">{t.assets.label}</Label>
+					<Input
+						bind:value={assetDescription}
+						placeholder={t.assets.placeholder}
+						class="form-control-touch bg-background"
+						disabled={fieldsDisabled}
+					/>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	<!-- Vehicles -->
+	{#if allowVehicles || (household?.vehicles?.length ?? 0) > 0}
+		<section class="form-section-card space-y-4">
+			<div class="flex items-center gap-2">
+				<Car class="size-5 text-primary" />
+				<h3 class="text-base font-bold text-foreground">{t.vehicles.title}</h3>
+			</div>
+			<div class="grid grid-cols-2 gap-3">
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasVehicles
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => {
+						hasVehicles = false;
+						vehicleRows = [];
+					}}
+				>
+					{t.vehicles.hasVehiclesNo}
+				</button>
+				<button
+					type="button"
+					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasVehicles
+						? 'border-primary bg-primary-muted text-foreground'
+						: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
+					onclick={() => {
+						hasVehicles = true;
+						if (vehicleRows.length === 0) addVehicle();
+					}}
+				>
+					{t.vehicles.hasVehicles}
+				</button>
+			</div>
+			{#if hasVehicles}
+				<div class="space-y-2">
+					{#each vehicleRows as vehicle (vehicle.id)}
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+							<Select.Root type="single" bind:value={vehicle.type}>
+								<Select.Trigger class="{selectTriggerClass} sm:w-36 sm:shrink-0">
+									{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ??
+										t.vehicles.typeLabel}
+								</Select.Trigger>
+								<Select.Content>
+									{#each vehicleTypeOptions as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<div class="flex flex-1 items-center gap-2">
+								<Input
+									bind:value={vehicle.license_plate}
+									placeholder={t.vehicles.platePlaceholder}
+									class="form-control-touch flex-1 bg-background"
+								/>
 								<Button
 									type="button"
 									variant="outline"
 									size="icon"
-									class="touch-target size-10 shrink-0"
-									disabled={count === 0}
-									onclick={() => adjustSpeciesCount(opt.value, -1)}
+									class="touch-target size-12 shrink-0 sm:size-10"
+									onclick={() => removeVehicle(vehicle.id)}
 								>
-									<Minus class="size-4" />
-								</Button>
-								<span class="min-w-6 text-center font-mono text-lg font-bold">{count}</span>
-								<Button
-									type="button"
-									variant="outline"
-									size="icon"
-									class="touch-target size-10 shrink-0"
-									onclick={() => adjustSpeciesCount(opt.value, 1)}
-								>
-									<Plus class="size-4" />
+									<X class="size-4 text-muted-foreground" />
 								</Button>
 							</div>
 						</div>
 					{/each}
+					<Button
+						type="button"
+						variant="outline"
+						class="touch-target h-auto w-full gap-2 py-3"
+						onclick={addVehicle}
+					>
+						<Plus class="size-4" />
+						{t.vehicles.btnAdd}
+					</Button>
 				</div>
+			{/if}
+		</section>
+	{/if}
 
-				{#if petDetails.length > 0}
-					<p class="pt-2 text-sm font-semibold text-foreground">{t.pets.detailsTitle}</p>
-					<div class="space-y-3">
-						{#each petDetails as pet, i (pet.id)}
-							{@const speciesLabel = petSpeciesOptions.find((o) => o.value === pet.species)?.label}
-							<div class="space-y-3 rounded-xl border border-border bg-background p-3">
-								<div class="flex items-center justify-between gap-2">
-									<span class="text-sm font-bold text-foreground">
-										{speciesLabel} — {t.pets.petNumber(i + 1)}
-									</span>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										class="touch-target size-10 shrink-0"
-										onclick={() => removePet(pet.id)}
-									>
-										<X class="size-4 text-muted-foreground" />
-									</Button>
-								</div>
-								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-									<div class="space-y-1.5">
-										<Label class="text-sm">{t.pets.nameLabel}</Label>
-										<Input
-											class="form-control-touch bg-background"
-											bind:value={pet.name}
-											placeholder={t.pets.namePlaceholder}
-										/>
-									</div>
-									<div class="space-y-1.5">
-										<Label class="text-sm">{t.pets.conditionLabel}</Label>
-										<Input
-											class="form-control-touch bg-background"
-											bind:value={pet.condition}
-											placeholder={t.pets.conditionPlaceholder}
-										/>
-									</div>
-								</div>
-								<label
-									class="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-muted/20 px-3"
-								>
-									<Checkbox
-										checked={pet.has_cage}
-										onCheckedChange={(v) => (pet.has_cage = !!v)}
-										class="size-5"
-									/>
-									<span class="text-sm">{t.pets.cageLabel}</span>
-								</label>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{/if}
-	</section>
-
-	<!-- Assets -->
-	<section class="form-section-card space-y-4">
-		<div class="flex items-center gap-2">
-			<Package class="size-5 text-primary" />
-			<h3 class="text-base font-bold text-foreground">{t.assets.title}</h3>
-		</div>
-		<div class="grid grid-cols-2 gap-3">
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasAssets
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => {
-					hasAssets = false;
-					assetDescription = '';
-				}}
-			>
-				{t.assets.hasAssetsNo}
-			</button>
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasAssets
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => (hasAssets = true)}
-			>
-				{t.assets.hasAssets}
-			</button>
-		</div>
-		{#if hasAssets}
-			<div class="space-y-1.5">
-				<Label class="text-sm">{t.assets.label}</Label>
-				<Input
-					bind:value={assetDescription}
-					placeholder={t.assets.placeholder}
-					class="form-control-touch bg-background"
-				/>
-			</div>
-		{/if}
-	</section>
-
-	<!-- Vehicles -->
-	<section class="form-section-card space-y-4">
-		<div class="flex items-center gap-2">
-			<Car class="size-5 text-primary" />
-			<h3 class="text-base font-bold text-foreground">{t.vehicles.title}</h3>
-		</div>
-		<div class="grid grid-cols-2 gap-3">
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasVehicles
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => {
-					hasVehicles = false;
-					vehicleRows = [];
-				}}
-			>
-				{t.vehicles.hasVehiclesNo}
-			</button>
-			<button
-				type="button"
-				class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {hasVehicles
-					? 'border-primary bg-primary-muted text-foreground'
-					: 'border-border bg-card text-muted-foreground hover:border-primary/40'}"
-				onclick={() => {
-					hasVehicles = true;
-					if (vehicleRows.length === 0) addVehicle();
-				}}
-			>
-				{t.vehicles.hasVehicles}
-			</button>
-		</div>
-		{#if hasVehicles}
-			<div class="space-y-2">
-				{#each vehicleRows as vehicle (vehicle.id)}
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<Select.Root type="single" bind:value={vehicle.type}>
-							<Select.Trigger class="{selectTriggerClass} sm:w-36 sm:shrink-0">
-								{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ??
-									t.vehicles.typeLabel}
-							</Select.Trigger>
-							<Select.Content>
-								{#each vehicleTypeOptions as opt (opt.value)}
-									<Select.Item value={opt.value} label={opt.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-						<div class="flex flex-1 items-center gap-2">
-							<Input
-								bind:value={vehicle.license_plate}
-								placeholder={t.vehicles.platePlaceholder}
-								class="form-control-touch flex-1 bg-background"
-							/>
-							<Button
-								type="button"
-								variant="outline"
-								size="icon"
-								class="touch-target size-12 shrink-0 sm:size-10"
-								onclick={() => removeVehicle(vehicle.id)}
-							>
-								<X class="size-4 text-muted-foreground" />
-							</Button>
-						</div>
-					</div>
-				{/each}
-				<Button
-					type="button"
-					variant="outline"
-					class="touch-target h-auto w-full gap-2 py-3"
-					onclick={addVehicle}
-				>
-					<Plus class="size-4" />
-					{t.vehicles.btnAdd}
-				</Button>
-			</div>
-		{/if}
-	</section>
-
-	{#if disclaimerRequired}
+	{#if disclaimerRequired && !readonly}
 		<section class="space-y-3 rounded-xl border-2 border-warning-border bg-warning-subtle/30 p-4">
 			<div class="flex items-center gap-2">
 				<ShieldAlert class="size-5 text-warning-dark" />
@@ -454,34 +527,38 @@
 		</section>
 	{/if}
 
-	<div
-		class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
-	>
-		<Button
-			type="button"
-			disabled={pending || (disclaimerRequired && !disclaimerAcknowledged)}
-			class="touch-target h-auto w-full py-3 text-base font-semibold sm:w-auto sm:px-8"
-			onclick={() =>
-				onNext({
-					pets: buildPetGroups(),
-					assetDescription: hasAssets ? assetDescription : '',
-					vehicles: hasVehicles
-						? vehicleRows.map((v) => ({
-								type: v.type,
-								license_plate: v.license_plate.trim() || null
-							}))
-						: []
-				})}
+	{#if !hideActions}
+		<div
+			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
 		>
-			{t.actions.next}
-		</Button>
-		<Button
-			type="button"
-			variant="outline"
-			class="touch-target h-auto w-full py-3 sm:w-auto sm:px-8"
-			onclick={onBack}
-		>
-			{t.actions.back}
-		</Button>
-	</div>
+			<Button
+				type="button"
+				disabled={fieldsDisabled || (disclaimerRequired && !disclaimerAcknowledged)}
+				class="touch-target h-auto w-full py-3 text-base font-semibold sm:w-auto sm:px-8"
+				onclick={() =>
+					onNext?.({
+						pets: buildPetGroups(),
+						assetDescription: hasAssets ? assetDescription : '',
+						vehicles: hasVehicles
+							? vehicleRows.map((v) => ({
+									type: v.type,
+									license_plate: v.license_plate.trim() || null
+								}))
+							: []
+					})}
+			>
+				{t.actions.next}
+			</Button>
+			{#if onBack}
+				<Button
+					type="button"
+					variant="outline"
+					class="touch-target h-auto w-full py-3 sm:w-auto sm:px-8"
+					onclick={onBack}
+				>
+					{t.actions.back}
+				</Button>
+			{/if}
+		</div>
+	{/if}
 </div>

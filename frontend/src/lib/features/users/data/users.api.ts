@@ -54,7 +54,7 @@ export function createUser(input: {
 		end_ts: string;
 	} | null;
 	affiliation_tags?: string[];
-}): Promise<{ ok: true }> {
+}): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }
 

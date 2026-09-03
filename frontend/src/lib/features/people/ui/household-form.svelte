@@ -5,7 +5,7 @@
 	import { toast } from 'svelte-sonner';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { householdInputSchema } from '../domain/people';
+	import { householdInputSchema, formatPersonName } from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
 	import type {
 		Household,
@@ -262,7 +262,7 @@
 					);
 					if (otherMembers.length > 0) {
 						toast.error(
-							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 						);
 						headComboValue = prevHeadId ?? '';
 						$formData.head_evacuee_id = prevHeadId;
@@ -284,7 +284,7 @@
 				if (headEvac) {
 					const isInitialHead = initialData && initialData.head_evacuee_id === newHead;
 					if (!initialData || !isInitialHead) {
-						$formData.label = `ครอบครัว${headEvac.first_name} ${headEvac.last_name}`.trim();
+						$formData.label = `ครอบครัว${formatPersonName(headEvac)}`.trim();
 					}
 				}
 			} else {
@@ -310,7 +310,7 @@
 						);
 						if (otherMembers.length > 0) {
 							toast.error(
-								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 							);
 							memberSearchValue = '';
 							return;
@@ -328,7 +328,7 @@
 			.filter((e) => !e.privacy?.search_excluded)
 			.map((e) => ({
 				value: e._id,
-				label: `${e.first_name} ${e.last_name}`,
+				label: formatPersonName(e),
 				evacuee: e,
 				hasOther: !!(e.household_id && initialData && e.household_id !== initialData._id),
 				otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'
@@ -340,7 +340,7 @@
 			.filter((e) => !e.privacy?.search_excluded)
 			.map((e) => ({
 				value: e._id,
-				label: `${e.first_name} ${e.last_name}`,
+				label: formatPersonName(e),
 				evacuee: e as Evacuee | null
 			}))
 	]);

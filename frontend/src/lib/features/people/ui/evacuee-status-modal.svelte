@@ -1,7 +1,7 @@
 <script lang="ts">
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
-	import type { Evacuee, StayStatus } from '$lib/features/people';
+	import { resolveStatusChangeAction, type Evacuee, type StayStatus } from '$lib/features/people';
 
 	interface StatusConfig {
 		label: string;
@@ -22,6 +22,17 @@
 		onClose: () => void;
 		onUpdateStatus: (status: StayStatus) => Promise<void>;
 	} = $props();
+
+	// Same gating pattern as the back-office evacuee list (canCheckInEvacuee, …):
+	// only offer statuses actually reachable from the current stay status, so an
+	// invalid movement can never be picked in the first place.
+	const selectableOptions = $derived(
+		Object.entries(statusConfig).filter(
+			([statusKey]) =>
+				statusKey === evacuee.current_stay.status ||
+				resolveStatusChangeAction(evacuee.current_stay.status, statusKey as StayStatus) !== null
+		)
+	);
 </script>
 
 {#if show}
@@ -44,7 +55,7 @@
 			</div>
 
 			<div class="space-y-2">
-				{#each Object.entries(statusConfig).filter(([statusKey]) => statusKey !== 'cancelled') as [statusKey, cfg] (statusKey)}
+				{#each selectableOptions as [statusKey, cfg] (statusKey)}
 					<button
 						onclick={() => onUpdateStatus(statusKey as StayStatus)}
 						class="flex w-full cursor-pointer items-center justify-between rounded-xl border border-border p-3.5 font-semibold transition-all hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900 {evacuee

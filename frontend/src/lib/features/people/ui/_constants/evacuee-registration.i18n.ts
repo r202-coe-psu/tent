@@ -4,11 +4,19 @@ export const EVACUEE_REGISTRATION_I18N = {
 			ewar: 'ประเมินอาการ (EWAR)',
 			identity: 'ข้อมูลประจำตัว',
 			medical: 'สุขภาพ',
-			special: 'กลุ่มเปราะบาง'
+			special: 'ความต้องการพิเศษ'
 		},
 		photo: {
-			label: 'ภาพถ่ายใบหน้า (Face Recognition)',
+			header: 'ภาพถ่ายใบหน้า (Face Photo)',
+			label: 'ภาพถ่ายใบหน้า (Face Photo)',
 			add: 'เพิ่มรูปภาพ',
+			desc: 'ใช้สำหรับระบบจดจำใบหน้าและค้นหาตัวตน',
+			btnTake: 'ถ่ายภาพ',
+			btnChange: 'เปลี่ยนรูปภาพ',
+			btnDelete: 'ลบรูปภาพ',
+			previewAlt: 'ภาพถ่ายใบหน้า',
+			toastSuccess: 'อัปโหลดรูปภาพสำเร็จ',
+			toastFailed: 'อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป',
 			uploadFailed: 'อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป'
 		},
 		cardType: {
@@ -35,6 +43,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
+			header: 'ข้อมูลประจำตัว (Personal Identity)',
 			firstName: {
 				label: 'ชื่อ',
 				placeholder: 'ชื่อ'
@@ -103,8 +112,9 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		specialNeeds: {
-			label: 'แท็กกลุ่มเปราะบางและความต้องการพิเศษ',
-			notVulnerableLabel: 'ไม่เป็นกลุ่มเปราะบาง',
+			header: 'ความต้องการพิเศษ (Special Needs)',
+			label: 'ความต้องการพิเศษ',
+			notVulnerableLabel: 'ไม่มีความต้องการพิเศษ',
 			note: {
 				label: 'ความต้องการพิเศษ (ถ้ามี)',
 				placeholder: 'เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ'
@@ -136,6 +146,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			phoneRequired: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"',
 			emergencyPhoneLength: 'เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก',
 			formIncomplete: 'กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน',
+			summaryTitle: 'ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข',
 			birthYearNumeric: 'กรุณากรอกปีเกิดเป็นตัวเลข',
 			birthYearFuture: 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต',
 			birthYearMin: (minYear: number) => `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minYear}`,
@@ -148,11 +159,19 @@ export const EVACUEE_REGISTRATION_I18N = {
 			ewar: 'Symptom Assessment (EWAR)',
 			identity: 'Identity',
 			medical: 'Health',
-			special: 'Vulnerable Groups'
+			special: 'Special Needs'
 		},
 		photo: {
-			label: 'Face Photo (Face Recognition)',
+			header: 'Face Photo',
+			label: 'Face Photo',
 			add: 'Add Photo',
+			desc: 'Used for face recognition and identity search',
+			btnTake: 'Take Photo',
+			btnChange: 'Change Photo',
+			btnDelete: 'Delete Photo',
+			previewAlt: 'Face photo',
+			toastSuccess: 'Photo uploaded successfully',
+			toastFailed: 'Photo upload failed. You can proceed without a photo.',
 			uploadFailed: 'Photo upload failed. You can proceed without a photo.'
 		},
 		cardType: {
@@ -179,6 +198,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
+			header: 'Personal Identity',
 			firstName: {
 				label: 'First Name',
 				placeholder: 'First Name'
@@ -247,8 +267,9 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		specialNeeds: {
-			label: 'Vulnerable Groups & Special Needs',
-			notVulnerableLabel: 'Not a vulnerable group',
+			header: 'Special Needs',
+			label: 'Special Needs',
+			notVulnerableLabel: 'No special needs',
 			note: {
 				label: 'Special Needs Note (if any)',
 				placeholder: 'e.g. Patients requiring specific medication or special care'
@@ -280,6 +301,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			phoneRequired: 'Please enter a 10-digit phone number or check "No phone number"',
 			emergencyPhoneLength: 'Emergency contact phone must be 10 digits',
 			formIncomplete: 'Please fill in all required fields accurately',
+			summaryTitle: 'Some fields need to be completed or corrected',
 			birthYearNumeric: 'Birth year must be a numeric value',
 			birthYearFuture: 'Birth year (B.E.) cannot be in the future',
 			birthYearMin: (minYear: number) => `Birth year (B.E.) must be greater than ${minYear}`,

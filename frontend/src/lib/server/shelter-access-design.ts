@@ -128,6 +128,12 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
+  function isRole(cap) {
+    return userCtx.roles.indexOf('system_admin') !== -1 ||
+      userCtx.roles.indexOf('${code}:' + cap) !== -1 ||
+      userCtx.roles.indexOf(cap) !== -1;
+  }
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
@@ -138,9 +144,7 @@ export function buildValidateDocUpdate(code: string): string {
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (oldDoc && oldDoc.type === 'simulation') {
-      var canDeleteSimulation =
-        userCtx.roles.indexOf('shelter_manager') !== -1 ||
-        userCtx.roles.indexOf('system_admin') !== -1;
+      var canDeleteSimulation = isRole('shelter_manager');
       if (!canDeleteSimulation) {
         throw { forbidden: 'Only shelter managers or system admins can delete simulations' };
       }
@@ -195,7 +199,8 @@ export function buildValidateDocUpdate(code: string): string {
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
-    'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard'
+    'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard',
+    'daily_sop_assessment'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -206,9 +211,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // T-42: saved simulations are immutable snapshots and manager-owned planning evidence.
   if (newDoc.type === 'simulation') {
-    var canSimulate =
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+    var canSimulate = isRole('shelter_manager');
     if (!canSimulate) {
       throw { forbidden: 'Only shelter managers or system admins can save simulations' };
     }
@@ -417,6 +420,99 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'simulation document is too large' };
     }
   }
+  // CR-100: preserve the shelter/day identity; CouchDB _rev handles concurrent edits.
+  if (newDoc.type === 'daily_sop_assessment') {
+    if (oldDoc && (
+        newDoc._id !== oldDoc._id ||
+        newDoc.type !== oldDoc.type ||
+        newDoc.shelter_code !== oldDoc.shelter_code ||
+        newDoc.assessment_date !== oldDoc.assessment_date ||
+        newDoc.assessed_at !== oldDoc.assessed_at ||
+        newDoc.assessor_name !== oldDoc.assessor_name ||
+        newDoc.created_at !== oldDoc.created_at ||
+        newDoc.created_by !== oldDoc.created_by)) {
+      throw { forbidden: 'Daily SOP identity and creation metadata cannot change' };
+    }
+    if (newDoc.schema_v !== 1 || ['InProgress', 'Completed'].indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Daily SOP assessment schema/status is invalid' };
+    }
+    if (!/^daily_sop_assessment:[^:]+:\\d{4}-\\d{2}-\\d{2}$/.test(newDoc._id) ||
+        newDoc._id !== 'daily_sop_assessment:' + newDoc.shelter_code + ':' + newDoc.assessment_date) {
+      throw { forbidden: 'Daily SOP assessment id must be shelter/date deterministic' };
+    }
+    if (!Array.isArray(newDoc.controls) || newDoc.controls.length !== 19) {
+      throw { forbidden: 'Daily SOP assessment requires 19 controls' };
+    }
+    var sopStatuses = ['Yes', 'No', 'Pending'];
+    var sopSectionById = {
+      'sop-reg-1': 'registration', 'sop-reg-2': 'registration', 'sop-reg-3': 'registration',
+      'sop-vul-1': 'vulnerable', 'sop-vul-2': 'vulnerable',
+      'sop-vol-1': 'volunteer', 'sop-vol-2': 'volunteer', 'sop-vol-3': 'volunteer', 'sop-vol-4': 'volunteer',
+      'sop-ut-1': 'utilities', 'sop-ut-2': 'utilities', 'sop-ut-3': 'utilities', 'sop-ut-4': 'utilities', 'sop-ut-5': 'utilities', 'sop-ut-6': 'utilities',
+      'sop-com-1': 'communications', 'sop-com-2': 'communications',
+      'sop-db-1': 'database', 'sop-db-2': 'database'
+    };
+    var seenSopIds = {};
+    var answeredControlCount = 0;
+    var passedControlCount = 0;
+    for (var controlIndex = 0; controlIndex < newDoc.controls.length; controlIndex++) {
+      var control = newDoc.controls[controlIndex];
+      if (!control || typeof control.id !== 'string' || typeof control.section_id !== 'string' ||
+          typeof control.question !== 'string' || sopStatuses.indexOf(control.status) === -1 ||
+          typeof control.answered !== 'boolean' ||
+          typeof control.checked_by !== 'string' || !control.checked_by ||
+          typeof control.checked_at !== 'string' || !control.checked_at ||
+          !sopSectionById[control.id] || sopSectionById[control.id] !== control.section_id ||
+          seenSopIds[control.id] || (!control.answered && control.status !== 'Pending')) {
+        throw { forbidden: 'Daily SOP control shape/status is invalid' };
+      }
+      seenSopIds[control.id] = true;
+      var isAnsweredControl = control.answered;
+      if (isAnsweredControl) answeredControlCount++;
+      if (isAnsweredControl && control.status === 'Yes') passedControlCount++;
+      var oldControl = oldDoc && Array.isArray(oldDoc.controls) ? oldDoc.controls[controlIndex] : null;
+      var oldHasAudit = oldControl && typeof oldControl.checked_by === 'string' &&
+        typeof oldControl.checked_at === 'string';
+      var statusChanged = oldControl && oldControl.status !== control.status;
+      var oldAnswered = oldControl && oldControl.answered;
+      var answeredChanged = oldControl && oldAnswered !== isAnsweredControl;
+      var auditChanged = oldHasAudit &&
+        (oldControl.checked_by !== control.checked_by || oldControl.checked_at !== control.checked_at);
+      if ((!oldDoc || statusChanged || answeredChanged || auditChanged) && control.checked_by !== userCtx.name) {
+        throw { forbidden: 'Daily SOP checked_by must match the authenticated user' };
+      }
+    }
+    if (!newDoc.lifelines ||
+        Object.keys(newDoc.lifelines).length !== 4 ||
+        newDoc.lifelines.electricity === undefined ||
+        newDoc.lifelines.water === undefined ||
+        newDoc.lifelines.gas === undefined ||
+        newDoc.lifelines.telecom === undefined) {
+      throw { forbidden: 'Daily SOP assessment requires four lifelines' };
+    }
+    var lifelineStatuses = ['Operational', 'Interrupted', 'Critical'];
+    var lifelineKeys = ['electricity', 'water', 'gas', 'telecom'];
+    var reportedLifelineCount = 0;
+    var allOperational = true;
+    for (var lifelineIndex = 0; lifelineIndex < lifelineKeys.length; lifelineIndex++) {
+      var lifelineStatus = newDoc.lifelines[lifelineKeys[lifelineIndex]];
+      if (lifelineStatus !== null && lifelineStatuses.indexOf(lifelineStatus) === -1) {
+        throw { forbidden: 'Daily SOP lifeline status is invalid' };
+      }
+      if (lifelineStatus !== null) reportedLifelineCount++;
+      if (lifelineStatus !== 'Operational') allOperational = false;
+    }
+    var isCompleteDailySop = answeredControlCount === 19 && reportedLifelineCount === 4;
+    if ((newDoc.status === 'Completed') !== isCompleteDailySop) {
+      throw { forbidden: 'Daily SOP status must match answer completion' };
+    }
+    var expectedProgress = Math.round(((answeredControlCount + reportedLifelineCount) / 23) * 100);
+    var expectedPass = answeredControlCount === 0 ? 0 : Math.round((passedControlCount / answeredControlCount) * 100);
+    var expectedRisk = isCompleteDailySop && passedControlCount === 19 && allOperational ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง';
+    if (newDoc.progress_percent !== expectedProgress || newDoc.pass_percent !== expectedPass || newDoc.risk_label !== expectedRisk) {
+      throw { forbidden: 'Daily SOP summary is inconsistent with answers' };
+    }
+  }
   // 2. donation status is forward-only — no going back to declared
   if (newDoc.type === 'donation' && oldDoc) {
     if (oldDoc.status === 'received' && newDoc.status === 'declared') {
@@ -425,15 +521,19 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 3. only warehouse staff / managers may write stock
   if (newDoc.type === 'stock_ledger') {
-    var isWarehouseOrAdmin =
-      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
-    var isStaff = isWarehouseOrAdmin || userCtx.roles.indexOf('shelter_manager') !== -1;
+    var isWarehouseOrAdmin = isRole('warehouse_staff');
+    var isStaff =
+      isWarehouseOrAdmin ||
+      isRole('supply_coordinator') ||
+      isRole('shelter_manager');
     if (!isStaff) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
     }
     if (newDoc.reason === 'distribute' && !isWarehouseOrAdmin) {
       throw { forbidden: 'Only warehouse staff or system admin can write distribute stock ledger' };
+    }
+    if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
+      throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
     }
     if (newDoc.reason === 'distribute') {
       if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
@@ -465,13 +565,10 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
     }
-    var isWarehouseOrAdminReq =
-      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+    var isWarehouseOrAdminReq = isRole('warehouse_staff');
     var isRequestEditor =
-      userCtx.roles.indexOf('registration_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('registration_staff') ||
+      isRole('shelter_manager');
     if (!oldDoc) {
       if (newDoc.status !== 'pending') {
         throw { forbidden: 'New distribution_request must start pending' };
@@ -581,9 +678,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 5. distribution_batch lifecycle and role rules
   if (newDoc.type === 'distribution_batch') {
-    var isWarehouseOrAdminBatch =
-      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+    var isWarehouseOrAdminBatch = isRole('warehouse_staff');
     if (!isWarehouseOrAdminBatch) {
       throw { forbidden: 'Only warehouse staff or system admin can manage distribution batches' };
     }
@@ -613,9 +708,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 6. stock_lot_reservation role rules
   if (newDoc.type === 'stock_lot_reservation') {
-    var isWarehouseOrAdminRes =
-      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+    var isWarehouseOrAdminRes = isRole('warehouse_staff');
     if (!isWarehouseOrAdminRes) {
       throw { forbidden: 'Only warehouse staff or system admin can manage stock lot reservations' };
     }
@@ -649,9 +742,8 @@ export function buildValidateDocUpdate(code: string): string {
   // 7. distribution_issue role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue') {
     var isIssueStaff =
-      userCtx.roles.indexOf('registration_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('registration_staff') ||
+      isRole('shelter_manager');
     if (!isIssueStaff) {
       throw { forbidden: 'Only registration staff, shelter manager, or system admin can write distribution issues' };
     }
@@ -714,9 +806,8 @@ export function buildValidateDocUpdate(code: string): string {
   // 8. distribution_issue_idempotency role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue_idempotency') {
     var isIssueStaffIdem =
-      userCtx.roles.indexOf('registration_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('registration_staff') ||
+      isRole('shelter_manager');
     if (!isIssueStaffIdem) {
       throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue idempotency' };
     }
@@ -748,9 +839,8 @@ export function buildValidateDocUpdate(code: string): string {
   // 9. distribution_issue_capacity role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue_capacity') {
     var isIssueStaffCap =
-      userCtx.roles.indexOf('registration_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('registration_staff') ||
+      isRole('shelter_manager');
     if (!isIssueStaffCap) {
       throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue capacity' };
     }
@@ -793,9 +883,8 @@ export function buildValidateDocUpdate(code: string): string {
   // 10. distribution_one_time_guard role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_one_time_guard') {
     var isIssueStaffGuard =
-      userCtx.roles.indexOf('registration_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('registration_staff') ||
+      isRole('shelter_manager');
     if (!isIssueStaffGuard) {
       throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage one-time guard' };
     }
