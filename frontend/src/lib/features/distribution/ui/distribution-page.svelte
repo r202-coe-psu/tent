@@ -23,6 +23,7 @@
 	import RequestFilters from './request-filters.svelte';
 	import RequestStatsHeader from './request-stats-header.svelte';
 	import RequestTable from './request-table.svelte';
+	import DistributionContextHelp from './distribution-context-help.svelte';
 	import CreateRequestDialog from './create-request-dialog.svelte';
 	import ApprovalDialog from './approval-dialog.svelte';
 	import RequestDetailDialog from './request-detail-dialog.svelte';
@@ -186,7 +187,10 @@
 		class="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between"
 	>
 		<div class="space-y-1">
-			<h1 class="text-3xl font-extrabold tracking-tight">จัดการคำร้องเบิกจ่าย</h1>
+			<div class="flex items-center gap-2">
+				<h1 class="text-3xl font-extrabold tracking-tight">จัดการคำร้องเบิกจ่าย</h1>
+				<DistributionContextHelp />
+			</div>
 			<p class="text-sm text-muted-foreground">ติดตามสถานะคำร้องเบิกจ่ายสิ่งของภายในศูนย์พักพิง</p>
 		</div>
 
