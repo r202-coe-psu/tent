@@ -10,6 +10,8 @@
 export { default as BookingForm } from './ui/booking-form.svelte';
 export { default as BookingModal } from './ui/booking-modal.svelte';
 export { default as BookingTicket } from './ui/booking-ticket.svelte';
+export { default as BookingTicketView } from './ui/booking-ticket.svelte';
+export { default as TicketHistory } from './ui/ticket-history.svelte';
 
 // application
 export {
@@ -21,7 +23,10 @@ export {
 } from './application/booking-store.svelte';
 export {
 	publicRegisterKeys,
+	useBookingDistricts,
 	useBookingLookup,
+	useBookingProvinces,
+	useBookingSubdistricts,
 	useCreateBooking,
 	usePetTypes
 } from './application/queries';
@@ -29,11 +34,22 @@ export {
 // data
 export {
 	createBooking,
+	fetchDistricts,
 	fetchPetTypes,
+	fetchProvinces,
+	fetchSubdistricts,
 	lookupBooking,
 	type BookingTicketResponse,
-	type PetTypeOption
+	type PetTypeOption,
+	type PublicSubdistrict
 } from './data/public-register.api';
+export {
+	getStoredTickets,
+	getLatestStoredTicket,
+	saveTicketToStorage,
+	removeStoredTicket,
+	clearStoredTickets
+} from './data/ticket-storage';
 
 // domain
 export {
@@ -45,6 +61,7 @@ export {
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
+	publicBookingAddressSchema,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
@@ -58,6 +75,7 @@ export {
 } from './domain/booking';
 
 export type {
+	PublicBookingAddress,
 	PublicBookingErrorCode,
 	PublicBookingInput,
 	PublicBookingLookupInput,

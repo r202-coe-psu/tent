@@ -48,8 +48,14 @@ describe('listProvinces', () => {
 		const result = await listProvinces();
 		expect(result).toHaveLength(77);
 		expect(result).toContain('สงขลา');
-		expect(result).toEqual([...result].sort((a, b) => a.localeCompare(b, 'th')));
+		// สงขลา is pinned to the top; the remainder stays in Thai alphabetical order.
+		const rest = result.slice(1);
+		expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b, 'th')));
 		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('pins สงขลา as the first choice', async () => {
+		expect((await listProvinces())[0]).toBe('สงขลา');
 	});
 });
 
@@ -58,6 +64,15 @@ describe('listDistricts', () => {
 		const result = await listDistricts('สงขลา');
 		expect(result).toContain('หาดใหญ่');
 		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('pins หาดใหญ่ as the first choice within สงขลา', async () => {
+		expect((await listDistricts('สงขลา'))[0]).toBe('หาดใหญ่');
+	});
+
+	it('leaves other provinces in plain alphabetical order', async () => {
+		const result = await listDistricts('ปัตตานี');
+		expect(result).toEqual([...result].sort((a, b) => a.localeCompare(b, 'th')));
 	});
 
 	it('returns an empty array for an unknown province', async () => {
@@ -78,6 +93,12 @@ describe('listSubdistricts', () => {
 });
 
 describe('listAllLocations', () => {
+	it('lists สงขลา/หาดใหญ่ rows first', async () => {
+		const all = await listAllLocations();
+		expect(all[0].province).toBe('สงขลา');
+		expect(all[0].district).toBe('หาดใหญ่');
+	});
+
 	it('returns all 7,426 locations from the bundled JSON', async () => {
 		const all = await listAllLocations();
 		expect(all).toHaveLength(7426);

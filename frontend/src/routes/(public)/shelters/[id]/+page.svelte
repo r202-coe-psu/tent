@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { resolve } from '$app/paths';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import { BookingModal } from '$lib/features/public-register';
 
 	import ShelterHero from '$lib/components/shelter-hero.svelte';
 	import ShelterAdmission from '$lib/components/shelter-admission.svelte';
@@ -23,7 +23,6 @@
 	// CR-070 / T-71 — a closed shelter cannot be booked; everything else can
 	// (a full one warns inside the wizard rather than blocking, per FR-72).
 	let canBook = $derived(Boolean(shelter?.code) && shelter?.status !== 'CLOSED');
-	let bookingOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -42,14 +41,13 @@
 				{t.backToShelters}
 			</a>
 			{#if canBook && shelter}
-				<button
-					type="button"
-					onclick={() => (bookingOpen = true)}
+				<a
+					href={`${resolve('/pre-register')}?shelter=${encodeURIComponent(shelter.code)}`}
 					class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
 				>
 					<ClipboardCheck class="h-4 w-4" />
 					{t.bookThisShelter}
-				</button>
+				</a>
 			{:else}
 				<div
 					class="hidden text-2xs font-bold tracking-widest text-muted-foreground/80 uppercase md:block"
@@ -96,7 +94,3 @@
 		</div>
 	{/if}
 </div>
-
-{#if shelter}
-	<BookingModal bind:open={bookingOpen} shelterCode={shelter.code} />
-{/if}

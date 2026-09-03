@@ -66,12 +66,11 @@ export const publicBookingMemberSchema = z.object({
 		.trim()
 		.min(1, 'กรุณากรอกชื่อ')
 		.max(100, 'ชื่อยาวเกินไป'),
-	last_name: z
-		.string({ error: 'กรุณากรอกนามสกุล' })
-		.trim()
-		.min(1, 'กรุณากรอกนามสกุล')
-		.max(100, 'นามสกุลยาวเกินไป'),
+	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+	last_name: z.string().trim().max(100, 'นามสกุลยาวเกินไป').default(''),
 	gender: bookingGenderSchema,
+	birth_year: z.number().int().optional(),
+	age: z.number().int().min(0).max(150).optional(),
 	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([])
 });
 
@@ -95,6 +94,8 @@ export const publicBookingPetSpeciesSchema = z
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016). */
 export const publicBookingPetSchema = z.object({
 	species: publicBookingPetSpeciesSchema,
+	name: z.string().trim().max(100, 'ชื่อสัตว์เลี้ยงยาวเกินไป').optional().default(''),
+	condition: z.string().trim().max(200, 'อาการสัตว์เลี้ยงยาวเกินไป').optional().default(''),
 	notes: z.string().trim().max(200, 'รายละเอียดยาวเกินไป').optional(),
 	has_cage: z.boolean().default(false)
 });
@@ -119,10 +120,58 @@ export const publicBookingVehicleSchema = z.object({
 	license_plate: z.string().trim().max(20, 'ทะเบียนรถยาวเกินไป').optional()
 });
 
+/**
+ * The household head's home address — the domicile they evacuated *from*, not
+ * the shelter (CR-107).
+ *
+ * Mirrors the `household` address columns (`address_no`, `village_no`,
+ * `subdistrict`, `district`, `province`, `postal_code`, people domain) rather
+ * than a free-text line, because the back office searches and groups households
+ * by ตำบล/อำเภอ/จังหวัด — a typed-in "หาดใหญ่, สงขลา" does not match a picker
+ * value. The three administrative levels come from the same Thailand location
+ * dataset the staff form uses, so a web booking is searchable next to a counter
+ * registration with no normalisation step.
+ *
+ * `postal_code` is derived from the chosen subdistrict rather than typed, so it
+ * is accepted blank (an older dataset row may carry no zipcode) but must be five
+ * digits when present.
+ */
+export const publicBookingAddressSchema = z.object({
+	address_no: z
+		.string({ error: 'กรุณากรอกบ้านเลขที่' })
+		.trim()
+		.min(1, 'กรุณากรอกบ้านเลขที่')
+		.max(100, 'บ้านเลขที่ยาวเกินไป'),
+	village_no: z.string().trim().max(100, 'ข้อมูลยาวเกินไป').default(''),
+	subdistrict: z
+		.string({ error: 'กรุณาเลือกตำบล/แขวง' })
+		.trim()
+		.min(1, 'กรุณาเลือกตำบล/แขวง')
+		.max(100, 'ชื่อตำบลยาวเกินไป'),
+	district: z
+		.string({ error: 'กรุณาเลือกอำเภอ/เขต' })
+		.trim()
+		.min(1, 'กรุณาเลือกอำเภอ/เขต')
+		.max(100, 'ชื่ออำเภอยาวเกินไป'),
+	province: z
+		.string({ error: 'กรุณาเลือกจังหวัด' })
+		.trim()
+		.min(1, 'กรุณาเลือกจังหวัด')
+		.max(100, 'ชื่อจังหวัดยาวเกินไป'),
+	postal_code: z
+		.string()
+		.trim()
+		.refine((v) => v === '' || /^\d{5}$/.test(v), 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก')
+		.default('')
+});
+
+export type PublicBookingAddress = z.infer<typeof publicBookingAddressSchema>;
+
 export const publicBookingInputSchema = z.object({
 	shelter_code: bookingShelterCodeSchema,
 	phone: bookingPhoneSchema,
 	national_id: bookingNationalIdSchema.optional(),
+	address: publicBookingAddressSchema,
 	members: z
 		.array(publicBookingMemberSchema)
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
@@ -131,6 +180,7 @@ export const publicBookingInputSchema = z.object({
 		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
 	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
+	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
 	captchaToken: z.string().trim().optional()
 });
 
@@ -164,6 +214,8 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 			...(isContact && input.national_id
 				? { person_id: { cardType: 'national_id' as const, number: input.national_id } }
 				: {}),
+			...(member.birth_year !== undefined ? { birth_year: member.birth_year } : {}),
+			...(member.age !== undefined ? { age: member.age } : {}),
 			special_needs: member.special_needs,
 			household_id: householdId,
 			registered_via: 'web' as const
@@ -201,9 +253,13 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 		pets: input.pets.map((pet) => {
 			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
 			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'bird' | 'other';
+			const rawNotes = [pet.name, pet.condition, pet.notes]
+				.map((s) => s?.trim())
+				.filter(Boolean)
+				.join(' | ');
 			const notes = isKnownSpecies
-				? pet.notes
-				: [pet.notes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ');
+				? rawNotes || undefined
+				: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
 			return {
 				species,
 				count: 1,
@@ -211,12 +267,25 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 				has_cage: pet.has_cage
 			};
 		}),
+		assets: input.asset_description?.trim()
+			? { description: input.asset_description.trim(), image_url: null }
+			: null,
 		// `license_plate` is nullable in the household schema, and an empty string is
 		// not "no plate" — normalize the blank the form produces back to `null`.
 		vehicles: input.vehicles.map((vehicle) => ({
 			type: vehicle.type,
 			license_plate: vehicle.license_plate?.trim() || null
-		}))
+		})),
+		// Domicile address (CR-107). The household schema stores every address
+		// column nullable, and an empty string is not "not given" — normalize the
+		// blanks the form produces (optional หมู่/ถนน, a subdistrict row with no
+		// zipcode) back to `null` so back-office search never matches on ''.
+		address_no: input.address.address_no,
+		village_no: input.address.village_no || null,
+		subdistrict: input.address.subdistrict,
+		district: input.address.district,
+		province: input.address.province,
+		postal_code: input.address.postal_code || null
 	};
 }
 
