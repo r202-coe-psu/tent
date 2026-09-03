@@ -9,6 +9,12 @@
 		type ProjectLevel,
 		type SiteKind
 	} from '../domain/schema';
+	import {
+		applyAllowAssets,
+		applyAllowPets,
+		applyAllowVehicles,
+		patchFeatureFlags
+	} from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -152,11 +158,28 @@
 
 	function setEnableMedicalScreening(checked: boolean) {
 		ensureFeatureFlags();
-		$formData.feature_flags = {
-			...DEFAULT_SHELTER_FEATURE_FLAGS,
-			...$formData.feature_flags,
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
 			enable_medical_screening: checked
-		};
+		});
+	}
+
+	/** Registration toggles — also mirror the related policy sections (pets / luggage / parking). */
+	function setAllowPets(checked: boolean) {
+		const next = applyAllowPets($formData, checked);
+		$formData.feature_flags = next.feature_flags;
+		$formData.admission_policy = next.admission_policy;
+	}
+
+	function setAllowAssets(checked: boolean) {
+		const next = applyAllowAssets($formData, checked);
+		$formData.feature_flags = next.feature_flags;
+		$formData.luggage_policy = next.luggage_policy;
+	}
+
+	function setAllowVehicles(checked: boolean) {
+		const next = applyAllowVehicles($formData, checked);
+		$formData.feature_flags = next.feature_flags;
+		$formData.parking_policy = next.parking_policy;
 	}
 </script>
 
@@ -279,30 +302,95 @@
 		<Form.FieldErrors />
 	</Form.Field>
 
-	<!-- Operational feature flags (CR-106 Station 2 toggle) -->
+	<!-- Operational feature flags (CR-016 registration steps + CR-106 Station 2) -->
 	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 		คุณสมบัติการปฏิบัติการ (Feature Flags)
 	</h3>
 
-	<div
-		class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
-	>
-		<div class="min-w-0 flex-1 space-y-1">
-			<label for="enable-medical-screening" class="text-sm font-medium text-card-foreground">
-				เปิดคัดกรองการแพทย์ (Station 2)
-			</label>
-			<p class="text-xs text-muted-foreground">
-				เปิด: ท่อลงทะเบียน S1→S2→S3 — แสดง Station 2 และ Handover Slip หลังลงทะเบียน · ปิด: S1→S3
-				(ข้ามแพทย์) โดยยังแยกโต๊ะจัดโซนจากทะเบียน
-			</p>
+	<div class="space-y-3">
+		<div
+			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="enable-medical-screening" class="text-sm font-medium text-card-foreground">
+					เปิดคัดกรองการแพทย์ (Station 2)
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: ท่อลงทะเบียน S1→S2→S3 — แสดง Station 2 และ Handover Slip หลังลงทะเบียน · ปิด: S1→S3
+					(ข้ามแพทย์) โดยยังแยกโต๊ะจัดโซนจากทะเบียน
+				</p>
+			</div>
+			<Switch
+				id="enable-medical-screening"
+				checked={$formData.feature_flags?.enable_medical_screening ?? false}
+				onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
+				{disabled}
+				aria-label="เปิดคัดกรองการแพทย์ Station 2"
+			/>
 		</div>
-		<Switch
-			id="enable-medical-screening"
-			checked={$formData.feature_flags?.enable_medical_screening ?? false}
-			onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
-			{disabled}
-			aria-label="เปิดคัดกรองการแพทย์ Station 2"
-		/>
+
+		<div
+			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="allow-pets" class="text-sm font-medium text-card-foreground">
+					บันทึกสัตว์เลี้ยงตอนลงทะเบียน
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: แสดงส่วนสัตว์เลี้ยงในฟอร์มลงทะเบียน และตั้งนโยบายรับสัตว์เป็น “อนุญาตภายใต้เงื่อนไข”
+					· ปิด: ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่อนุญาตสัตว์เลี้ยง”
+				</p>
+			</div>
+			<Switch
+				id="allow-pets"
+				checked={$formData.feature_flags?.allow_pets ?? false}
+				onCheckedChange={(v) => setAllowPets(v === true)}
+				{disabled}
+				aria-label="บันทึกสัตว์เลี้ยงตอนลงทะเบียน"
+			/>
+		</div>
+
+		<div
+			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="allow-assets" class="text-sm font-medium text-card-foreground">
+					บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: แสดงส่วนทรัพย์สินในฟอร์มลงทะเบียน และเปิดนโยบายสัมภาระ · ปิด: ซ่อนส่วนลงทะเบียน
+					และล้างนโยบายสัมภาระ
+				</p>
+			</div>
+			<Switch
+				id="allow-assets"
+				checked={$formData.feature_flags?.allow_assets ?? false}
+				onCheckedChange={(v) => setAllowAssets(v === true)}
+				{disabled}
+				aria-label="บันทึกทรัพย์สินสัมภาระตอนลงทะเบียน"
+			/>
+		</div>
+
+		<div
+			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="allow-vehicles" class="text-sm font-medium text-card-foreground">
+					บันทึกยานพาหนะตอนลงทะเบียน
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: แสดงส่วนยานพาหนะในฟอร์มลงทะเบียน และตั้งนโยบายจอดรถเป็น “มีพื้นที่จอด” · ปิด:
+					ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่มีที่จอด”
+				</p>
+			</div>
+			<Switch
+				id="allow-vehicles"
+				checked={$formData.feature_flags?.allow_vehicles ?? false}
+				onCheckedChange={(v) => setAllowVehicles(v === true)}
+				{disabled}
+				aria-label="บันทึกยานพาหนะตอนลงทะเบียน"
+			/>
+		</div>
 	</div>
 
 	<Form.Field {form} name="location.address">

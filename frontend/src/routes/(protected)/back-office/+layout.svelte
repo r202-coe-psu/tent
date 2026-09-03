@@ -4,9 +4,9 @@
 	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
@@ -49,10 +49,10 @@
 	const pageTitle = $derived(currentPageNode?.label ?? 'ระบบส่วนหลัง (Back-Office)');
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 
-	// Get user roles and scoped shelter
+	// Get user roles and scoped shelters (multi-shelter compound roles)
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const userShelterCode = $derived(shelterCodeFromRoles(roles));
+	const userShelterCodes = $derived(shelterCodesFromRoles(roles));
 
 	// Filter available shelters based on roles
 	const availableShelters = $derived.by(() => {
@@ -60,24 +60,25 @@
 		if (isSA) {
 			return allShelters;
 		}
-		if (userShelterCode) {
-			return allShelters.filter((s) => s.code === userShelterCode);
+		if (userShelterCodes.length > 0) {
+			return allShelters.filter((s) => userShelterCodes.includes(s.code));
 		}
 		return [];
 	});
 
-	// Default to the user's own shelter when nothing valid is selected yet;
-	// fall back to the first available shelter for roles with no home shelter
-	// (system_admin). Bound directly to shelterStore — the store
-	// getShelterCode()/getShelterDb() actually read — so switching here
-	// re-scopes back-office data instead of being a disconnected value.
+	// Prefer persisted selection when still allowed; else first assigned shelter.
 	$effect(() => {
 		const shelters = availableShelters;
 		if (shelters.length === 0) return;
 		const current = shelterStore.selectedShelterCode;
-		if (current && shelters.some((s) => s.code === current)) return;
-		const ownShelter = shelters.find((s) => s.code === userShelterCode);
-		shelterStore.selectedShelterCode = ownShelter?.code ?? shelters[0].code;
+		if (current && shelters.some((s) => s.code === current)) {
+			persistSelectedShelter(current);
+			return;
+		}
+		const preferred =
+			shelters.find((s) => userShelterCodes.includes(s.code))?.code ?? shelters[0].code;
+		shelterStore.selectedShelterCode = preferred;
+		persistSelectedShelter(preferred);
 	});
 
 	const selectedShelter = $derived(

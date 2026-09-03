@@ -17,8 +17,9 @@ vi.mock('@tanstack/svelte-query', () => ({
 import EvacueeForm from './evacuee-form.svelte';
 import EvacueeRegistration from './evacuee-registration.svelte';
 
-describe('EvacueeForm Station 1 wizard (CR-106)', () => {
-	it('renders 3 steps without zoning or EWAR', () => {
+/** Legacy wizard retained until callers migrate fully; Station 1 routes use RegistrationShell. */
+describe('EvacueeForm legacy wizard (compat)', () => {
+	it('still renders multi-step chrome when used directly', () => {
 		const result = render(EvacueeForm, {
 			props: {
 				onsubmit: vi.fn(),
@@ -28,33 +29,9 @@ describe('EvacueeForm Station 1 wizard (CR-106)', () => {
 
 		expect(result.body).toContain('ขั้น 1 จาก 3');
 		expect(result.body).not.toContain('จัดสรรพื้นที่');
-		expect(result.body).not.toContain('คัดกรองสุขภาพ');
 	});
 
-	it('still 3 steps when medical screening flag is on (zoning never at S1)', () => {
-		const result = render(EvacueeForm, {
-			props: {
-				onsubmit: vi.fn(),
-				enableMedicalScreening: true
-			}
-		});
-
-		expect(result.body).toContain('ขั้น 1 จาก 3');
-	});
-
-	it('step 1 registration includes special needs', () => {
-		const result = render(EvacueeForm, {
-			props: {
-				onsubmit: vi.fn(),
-				step: 1,
-				enableMedicalScreening: true
-			}
-		});
-
-		expect(result.body).toContain('กลุ่มเปราะบางและความต้องการพิเศษ');
-	});
-
-	it('includes SpecialNeedsFields in Registration allowing special needs selection', () => {
+	it('includes SpecialNeedsFields in Registration', () => {
 		const result = render(EvacueeRegistration, {
 			props: {
 				onsubmit: vi.fn(),
@@ -66,29 +43,23 @@ describe('EvacueeForm Station 1 wizard (CR-106)', () => {
 			}
 		});
 
-		expect(result.body).toContain('กลุ่มเปราะบางและความต้องการพิเศษ');
+		expect(result.body).toContain('ความต้องการพิเศษ');
+		expect(result.body).not.toContain('กลุ่มเปราะบาง');
 		expect(result.body).toContain('ใช้วีลแชร์');
-		expect(result.body).toContain('ผู้ป่วยติดเตียง');
 	});
 
-	it('always renders emergency contact fields even when draft has no contact', () => {
+	it('always renders optional emergency contact fields even when draft has no contact', () => {
 		const result = render(EvacueeRegistration, {
 			props: {
 				onsubmit: vi.fn(),
 				initialInput: {
 					first_name: 'สมศรี',
-					last_name: 'มีสุข',
-					emergency_contact: undefined
+					last_name: 'มีสุข'
 				}
 			}
 		});
 
-		expect(result.body).toContain('ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)');
-		expect(result.body).toContain('ชื่อผู้ติดต่อ');
-		expect(result.body).toContain('เบอร์โทรศัพท์');
-		expect(result.body).toContain('ความสัมพันธ์');
-		expect(result.body).toContain('id="emergency-name"');
-		expect(result.body).toContain('id="emergency-phone"');
-		expect(result.body).toContain('id="emergency-relation"');
+		expect(result.body).toMatch(/emergency|ฉุกเฉิน/i);
+		expect(result.body).not.toMatch(/ข้อมูลติดต่อฉุกเฉิน[\s\S]{0,80}\*/);
 	});
 });

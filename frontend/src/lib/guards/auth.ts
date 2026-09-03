@@ -1,4 +1,5 @@
 import { authStore } from '$lib/stores/auth.svelte';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
@@ -8,7 +9,8 @@ import {
 	isWarehouseStaff,
 	isSystemAdmin,
 	canAccessMedicalScreening,
-	canAccessZoning
+	canAccessZoning,
+	shelterCodeFromRoles
 } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
@@ -19,6 +21,10 @@ export const LOGIN_ROUTE = '/login';
 
 /** Where users land after logout. */
 export const LOGOUT_ROUTE = '/';
+
+function activeShelterCode(roles: readonly string[]): string | null {
+	return shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles);
+}
 
 /**
  * Auth guard for protected routes. Resolves the CouchDB `_session` cookie and
@@ -60,7 +66,8 @@ export async function requireAdmin(fetchFn?: typeof fetch) {
 export async function requireManager(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	if (!isSystemAdmin(roles) && !isShelterManager(roles)) {
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !isShelterManager(roles, shelter)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -72,7 +79,12 @@ export async function requireManager(fetchFn?: typeof fetch) {
 export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	if (!isSystemAdmin(roles) && !isShelterManager(roles) && !isWarehouseStaff(roles)) {
+	const shelter = activeShelterCode(roles);
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles, shelter) &&
+		!isWarehouseStaff(roles, shelter)
+	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -85,10 +97,11 @@ export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 export async function requireKitchen(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
 	if (
 		!isSystemAdmin(roles) &&
-		!isShelterManager(roles) &&
-		!hasStaffCapability(roles, 'kitchen_staff')
+		!isShelterManager(roles, shelter) &&
+		!hasStaffCapability(roles, 'kitchen_staff', shelter)
 	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
@@ -104,10 +117,11 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
 	if (
 		!isSystemAdmin(roles) &&
-		!isShelterManager(roles) &&
-		!hasStaffCapability(roles, 'registration_staff')
+		!isShelterManager(roles, shelter) &&
+		!hasStaffCapability(roles, 'registration_staff', shelter)
 	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
@@ -120,7 +134,7 @@ export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 export async function requireMedicalScreening(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	if (!canAccessMedicalScreening(roles)) {
+	if (!canAccessMedicalScreening(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -132,7 +146,7 @@ export async function requireMedicalScreening(fetchFn?: typeof fetch) {
 export async function requireZoning(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	if (!canAccessZoning(roles)) {
+	if (!canAccessZoning(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

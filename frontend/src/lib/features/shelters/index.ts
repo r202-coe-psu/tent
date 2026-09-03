@@ -96,6 +96,17 @@ export {
 } from './domain/policy-labels';
 
 export {
+	patchFeatureFlags,
+	applyAllowPets,
+	applyAllowAssets,
+	applyAllowVehicles,
+	applyPetPolicy,
+	applyLuggageLimitation,
+	applyParkingAvailability,
+	type PolicySyncSlice
+} from './domain/feature-flag-policy-sync';
+
+export {
 	sumZoneCapacities,
 	capacityAlignment,
 	canSyncCapacityFromZones,

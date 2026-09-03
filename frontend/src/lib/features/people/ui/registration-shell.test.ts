@@ -107,7 +107,7 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		expect(result.body).not.toContain('คนเดียว');
 	});
 
-	it('shows emergency contact required asterisk on the section, not the nav chip', () => {
+	it('shows emergency contact section without required asterisk', () => {
 		const result = render(RegistrationShell, {
 			props: {
 				mode: 'walk-in',
@@ -118,7 +118,7 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 
 		expect(result.body).toContain('> ข้อมูลติดต่อฉุกเฉิน</button>');
 		expect(result.body).toContain('id="reg-section-emergency"');
-		expect(result.body).toMatch(
+		expect(result.body).not.toMatch(
 			/id="reg-section-emergency"[\s\S]*?ข้อมูลติดต่อฉุกเฉิน[\s\S]*?<span class="text-destructive">\*<\/span>/
 		);
 	});

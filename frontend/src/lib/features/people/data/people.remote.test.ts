@@ -178,7 +178,7 @@ describe('PeopleRemoteRepository', () => {
 	});
 
 	describe('household membership invariant', () => {
-		it('rejects moving a member away from an active household with other members', async () => {
+		it('rejects moving the head away from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const oldHousehold = await repo.createHousehold(
@@ -198,7 +198,32 @@ describe('PeopleRemoteRepository', () => {
 			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
 		});
 
-		it('rejects removing a member from an active household with other members', async () => {
+		it('allows a non-head to leave after head transfer (CR-106)', async () => {
+			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
+			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
+			const oldHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				ctx
+			);
+			const targetHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนใหม่', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			await repo.updateEvacuee({ ...first, household_id: oldHousehold._id });
+			const linkedSecond = await repo.updateEvacuee({
+				...second,
+				household_id: oldHousehold._id
+			});
+
+			const moved = await repo.updateEvacuee({
+				...linkedSecond,
+				household_id: targetHousehold._id
+			});
+			expect(moved.household_id).toBe(targetHousehold._id);
+			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
+		});
+
+		it('rejects removing the head from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const household = await repo.createHousehold(
@@ -1047,6 +1072,50 @@ describe('check-in / check-out', () => {
 			expect(fetchedRoommate?.household_id).toBe(household._id);
 			expect(fetchedRoommate?.current_stay.status).toBe('arriving');
 			expect(fetchedRoommate?.current_stay.zone).toBeNull();
+		});
+	});
+
+	describe('promoteReportIn', () => {
+		it('promotes pre_registered to arriving with zone null and creates no screening', async () => {
+			const evacuee = await repo.createEvacuee(evInput({ first_name: 'Report' }), ctx);
+			expect(evacuee.current_stay.status).toBe('pre_registered');
+
+			const promoted = await repo.promoteReportIn(evacuee._id);
+
+			expect(promoted.current_stay.status).toBe('arriving');
+			expect(promoted.current_stay.zone).toBeNull();
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('arriving');
+			expect(fetched?.current_stay.zone).toBeNull();
+			expect(await repo.listScreenings()).toHaveLength(0);
+		});
+
+		it('rejects Report-in when stay status is not pre_registered', async () => {
+			const arriving = await repo.createEvacuee(
+				evInput({ first_name: 'Already', status: 'arriving' }),
+				ctx
+			);
+			await expect(repo.promoteReportIn(arriving._id)).rejects.toThrow(/pre_registered/);
+			expect((await repo.getEvacuee(arriving._id))?.current_stay.status).toBe('arriving');
+		});
+
+		it('promotes linked pre_registered household to arriving', async () => {
+			const head = await repo.createEvacuee(evInput({ first_name: 'Head' }), ctx);
+			const household = await repo.createHousehold(
+				{
+					label: 'HH Report-in',
+					head_evacuee_id: head._id,
+					status: 'pre_registered'
+				},
+				ctx
+			);
+			await repo.updateEvacuee({ ...head, household_id: household._id });
+
+			await repo.promoteReportIn(head._id);
+
+			const hh = await repo.getHousehold(household._id);
+			expect(hh?.status).toBe('arriving');
 		});
 	});
 });

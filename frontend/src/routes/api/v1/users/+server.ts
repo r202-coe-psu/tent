@@ -6,7 +6,7 @@ import {
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
-import { createUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
+import { createOrMergeUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 import { validatePassword } from '$lib/server/password-policy';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
@@ -72,17 +72,11 @@ export const POST: RequestHandler = async ({ request }) => {
 				? body.position.trim()
 				: null;
 		const phone =
-			typeof body.phone === 'string' && body.phone.trim().length > 0
-				? body.phone.trim()
-				: name;
+			typeof body.phone === 'string' && body.phone.trim().length > 0 ? body.phone.trim() : name;
 		const email =
-			typeof body.email === 'string' && body.email.trim().length > 0
-				? body.email.trim()
-				: null;
+			typeof body.email === 'string' && body.email.trim().length > 0 ? body.email.trim() : null;
 		const notes =
-			typeof body.notes === 'string' && body.notes.trim().length > 0
-				? body.notes.trim()
-				: null;
+			typeof body.notes === 'string' && body.notes.trim().length > 0 ? body.notes.trim() : null;
 		const volunteer_id =
 			typeof body.volunteer_id === 'string' && body.volunteer_id.trim().length > 0
 				? body.volunteer_id.trim()
@@ -104,22 +98,25 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		assertCanGrant(caller, roles);
-		await createUser({
-			name,
-			password: validPassword,
-			display_name,
-			roles,
-			personnel_type,
-			organization,
-			position,
-			phone,
-			email,
-			notes,
-			volunteer_id,
-			duty_window,
-			affiliation_tags
-		});
-		return json({ ok: true });
+		const result = await createOrMergeUser(
+			{
+				name,
+				password: validPassword,
+				display_name,
+				roles,
+				personnel_type,
+				organization,
+				position,
+				phone,
+				email,
+				notes,
+				volunteer_id,
+				duty_window,
+				affiliation_tags
+			},
+			caller
+		);
+		return json({ ok: true, merged: result.merged });
 	} catch (e) {
 		return serviceError(e);
 	}

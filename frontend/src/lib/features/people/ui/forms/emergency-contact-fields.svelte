@@ -8,6 +8,7 @@
 		relation = $bindable(''),
 		disabled = false,
 		required = false,
+		formId,
 		errors
 	}: {
 		name?: string;
@@ -15,6 +16,8 @@
 		relation?: string;
 		disabled?: boolean;
 		required?: boolean;
+		/** Associate inputs with an outer form when this block sits outside `<form>`. */
+		formId?: string;
 		errors?: {
 			name?: string;
 			phone?: string;
@@ -40,9 +43,11 @@
 			id="emergency-name"
 			bind:value={name}
 			{disabled}
+			form={formId}
 			autocomplete="name"
 			placeholder="ระบุชื่อ-นามสกุล ผู้ติดต่อฉุกเฉิน"
 			aria-invalid={!!errors?.name}
+			aria-required={required || undefined}
 			class="h-9 {errors?.name ? errClass : ''}"
 		/>
 		{#if errors?.name}
@@ -60,11 +65,13 @@
 				value={phone}
 				oninput={onPhoneInput}
 				{disabled}
+				form={formId}
 				inputmode="numeric"
 				maxlength={10}
 				autocomplete="tel"
 				placeholder="เบอร์โทรศัพท์ 10 หลัก"
 				aria-invalid={!!errors?.phone}
+				aria-required={required || undefined}
 				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if errors?.phone}
@@ -80,8 +87,10 @@
 				id="emergency-relation"
 				bind:value={relation}
 				{disabled}
+				form={formId}
 				placeholder="เช่น บิดา มารดา คู่สมรส ญาติ"
 				aria-invalid={!!errors?.relation}
+				aria-required={required || undefined}
 				class="h-9 {errors?.relation ? errClass : ''}"
 			/>
 			{#if errors?.relation}

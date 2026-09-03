@@ -3,6 +3,7 @@
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, LuggageRule } from '../domain/schema';
 	import { luggageRuleLabels } from '../domain/policy-labels';
+	import { applyLuggageLimitation } from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -30,10 +31,9 @@
 	}
 
 	function setLimitation(value: 'no_limit' | 'limited') {
-		ensurePolicy();
-		$formData.luggage_policy!.limitation = value;
-		// FR-23-26 — clear the count when no longer limited.
-		if (value !== 'limited') $formData.luggage_policy!.max_per_family = null;
+		const next = applyLuggageLimitation($formData, value);
+		$formData.feature_flags = next.feature_flags;
+		$formData.luggage_policy = next.luggage_policy;
 	}
 
 	function toggleRule(rule: LuggageRule, checked: boolean) {

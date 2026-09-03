@@ -107,6 +107,19 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('ความสัมพันธ์');
 			expect(result.body).toContain('สมหมาย มีสุข');
 		});
+
+		it('shows required asterisks when required is true', () => {
+			const result = render(EmergencyContactFields, {
+				props: {
+					name: '',
+					phone: '',
+					relation: '',
+					required: true
+				}
+			});
+			expect(result.body).toContain('aria-required="true"');
+			expect(result.body).toContain('<span class="text-destructive">*</span>');
+		});
 	});
 
 	describe('EWAR Symptoms Fields (ewar-symptoms-fields.svelte)', () => {

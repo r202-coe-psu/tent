@@ -718,6 +718,40 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(householdAudit);
 	}
+
+	/**
+	 * Station 1 Report-in: promote `pre_registered` → `arriving`, zone null.
+	 * Does not create screening or assign a zone (CR-106 FR-03d).
+	 */
+	async promoteReportIn(evacueeId: string): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (!latest || !isEvacuee(latest)) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		}
+		if (latest.current_stay.status !== 'pre_registered') {
+			throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
+		}
+		const saved = await this.repo.put(
+			touch({
+				...latest,
+				current_stay: {
+					status: 'arriving' as const,
+					zone: null,
+					since: now()
+				}
+			})
+		);
+
+		if (saved.household_id) {
+			const hh = await this.repo.get<Household>(saved.household_id);
+			if (hh && isHousehold(hh) && hh.status === 'pre_registered') {
+				assertHouseholdStatusTransition(hh.status, 'arriving');
+				await this.repo.put(touch({ ...hh, status: 'arriving' as const }));
+			}
+		}
+
+		return saved;
+	}
 }
 
 let singleton: PeopleRepository | null = null;

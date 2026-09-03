@@ -338,13 +338,14 @@ export function checkEvacueeHouseholdConflict(
 	const hasOtherMembers = evacuees.some(
 		(member) => member.household_id === currentHousehold._id && member._id !== evacuee._id
 	);
-	return hasOtherMembers
-		? {
-				conflicted: true,
-				householdId: currentHousehold._id,
-				label: currentHousehold.label
-			}
-		: { conflicted: false };
+	// CR-106: non-head may leave while others remain; head must transfer first (resolveHouseholdLeave).
+	if (!hasOtherMembers) return { conflicted: false };
+	if (currentHousehold.head_evacuee_id !== evacuee._id) return { conflicted: false };
+	return {
+		conflicted: true,
+		householdId: currentHousehold._id,
+		label: currentHousehold.label
+	};
 }
 
 export function assertEvacueeHouseholdAssignment(
@@ -453,6 +454,45 @@ export function minBirthYearBE(): number {
 	return currentBEYear() - MAX_AGE_YEARS;
 }
 
+/** Required emergency contact — household pre-register (and when any field is filled). */
+export const emergencyContactRequiredSchema = z.object(
+	{
+		name: z
+			.string({ error: 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน' })
+			.trim()
+			.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
+		phone: z
+			.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
+			.trim()
+			.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+		relation: z
+			.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
+			.trim()
+			.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
+			.default('contact')
+	},
+	{ error: 'กรุณากรอกข้อมูลผู้ติดต่อฉุกเฉิน' }
+);
+
+/** True when contact is absent or all fields are blank (UI shell / omit on save). */
+export function isBlankEmergencyContact(value: unknown): boolean {
+	if (value == null || typeof value !== 'object') return true;
+	const c = value as { name?: unknown; phone?: unknown; relation?: unknown };
+	const name = typeof c.name === 'string' ? c.name.trim() : '';
+	const phone = typeof c.phone === 'string' ? c.phone.trim() : '';
+	const relation = typeof c.relation === 'string' ? c.relation.trim() : '';
+	return !name && !phone && !relation;
+}
+
+/**
+ * Optional emergency contact: blank/missing → undefined; partial fill still validates
+ * field-by-field via {@link emergencyContactRequiredSchema}.
+ */
+export const emergencyContactOptionalSchema = z.preprocess(
+	(val) => (isBlankEmergencyContact(val) ? undefined : val),
+	emergencyContactRequiredSchema.optional()
+);
+
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
@@ -482,20 +522,8 @@ export const evacueeInputSchema = z.object({
 	medical_note: z.string().trim().optional(),
 	track: careTrackSchema.optional(),
 	special_needs: z.array(z.string().trim().min(1)).default([]),
-	emergency_contact: z
-		.object({
-			name: z.string().trim().min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
-			relation: z
-				.string()
-				.trim()
-				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
-				.default('contact')
-		})
-		.optional(),
+	// Optional on Station 1 / kiosk / import — blank UI shell strips to undefined.
+	emergency_contact: emergencyContactOptionalSchema,
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
@@ -503,6 +531,10 @@ export const evacueeInputSchema = z.object({
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
+
+/** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
+export const station1EvacueeInputSchema = evacueeInputSchema;
+export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 
 /** Required identity/contact fields used by the household pre-registration wizard. */
 export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
@@ -527,24 +559,7 @@ export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
 			error: 'กรุณาเลือกศาสนา'
 		})
 		.default('buddhist'),
-	emergency_contact: z.object(
-		{
-			name: z
-				.string({ error: 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน' })
-				.trim()
-				.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
-			phone: z
-				.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
-				.trim()
-				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
-			relation: z
-				.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
-				.trim()
-				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
-				.default('contact')
-		},
-		{ error: 'กรุณากรอกข้อมูลผู้ติดต่อฉุกเฉิน' }
-	)
+	emergency_contact: emergencyContactRequiredSchema
 });
 
 export const medicalInputSchema = z.object({

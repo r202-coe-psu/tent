@@ -128,6 +128,12 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
+  function isRole(cap) {
+    return userCtx.roles.indexOf('system_admin') !== -1 ||
+      userCtx.roles.indexOf('${code}:' + cap) !== -1 ||
+      userCtx.roles.indexOf(cap) !== -1;
+  }
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit
   var appendOnly = [
@@ -137,9 +143,7 @@ export function buildValidateDocUpdate(code: string): string {
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (oldDoc && oldDoc.type === 'simulation') {
-      var canDeleteSimulation =
-        userCtx.roles.indexOf('shelter_manager') !== -1 ||
-        userCtx.roles.indexOf('system_admin') !== -1;
+      var canDeleteSimulation = isRole('shelter_manager');
       if (!canDeleteSimulation) {
         throw { forbidden: 'Only shelter managers or system admins can delete simulations' };
       }
@@ -192,9 +196,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // T-42: saved simulations are immutable snapshots and manager-owned planning evidence.
   if (newDoc.type === 'simulation') {
-    var canSimulate =
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+    var canSimulate = isRole('shelter_manager');
     if (!canSimulate) {
       throw { forbidden: 'Only shelter managers or system admins can save simulations' };
     }
@@ -412,9 +414,9 @@ export function buildValidateDocUpdate(code: string): string {
   // 3. only warehouse staff / managers may write stock
   if (newDoc.type === 'stock_ledger') {
     var isStaff =
-      userCtx.roles.indexOf('warehouse_staff') !== -1 ||
-      userCtx.roles.indexOf('shelter_manager') !== -1 ||
-      userCtx.roles.indexOf('system_admin') !== -1;
+      isRole('warehouse_staff') ||
+      isRole('supply_coordinator') ||
+      isRole('shelter_manager');
     if (!isStaff) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
     }

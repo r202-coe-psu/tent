@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { superForm, defaults } from 'sveltekit-superforms';
@@ -80,7 +81,7 @@
 	let step = $state(0);
 	let showValidationSummary = $state(false);
 	/** View switch (not a wizard step): users for this shelter. */
-	let usersViewActive = $state(false);
+	let usersViewActive = $state(page.url.searchParams.get('view') === 'users');
 	const isLastStep = $derived(!usersViewActive && step === steps.length - 1);
 
 	function selectStep(i: number) {

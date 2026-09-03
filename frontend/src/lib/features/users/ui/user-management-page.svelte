@@ -1,19 +1,25 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		isAppSystemAdmin,
 		isSystemAdmin,
 		roleDisplayLabel,
+		rolesFromAssignments,
 		shelterCodeFromRoles,
-		shelterScopeRole,
-		SYSTEM_ADMIN
+		shelterCodesFromRoles,
+		SYSTEM_ADMIN,
+		assignmentsFromRoles,
+		type ShelterAssignment
 	} from '$lib/auth/roles';
 	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
-	import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../application/queries';
+	import { useUsers, useCreateUser, useDeleteUser } from '../application/queries';
 	import { adminResetPassword, type UserSummary } from '../data/users.api';
-	import type { CreateUserInput, EditUserInput } from '../domain/schema';
+	import type { CreateUserInput, ShelterAssignmentInput } from '../domain/schema';
+	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
 	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -41,41 +47,46 @@
 
 	const usersQuery = useUsers();
 	const createMutation = useCreateUser();
-	const updateMutation = useUpdateUser();
 	const deleteMutation = useDeleteUser();
 
 	let dialogOpen = $state(false);
-	let editDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
-	let demoteDialogOpen = $state(false);
 	let resetDialogOpen = $state(false);
 	let resetResultDialogOpen = $state(false);
 
 	let searchQuery = $state('');
 	let selectedUser = $state<UserSummary | null>(null);
 	let userToDelete = $state<string | null>(null);
-	let pendingDemote = $state<EditUserInput | null>(null);
 	let temporaryPassword = $state<string | null>(null);
 	let copied = $state(false);
 	let resetting = $state(false);
 
 	function rolesFromInput(input: {
+		is_system_admin?: boolean;
+		assignments?: ShelterAssignmentInput[];
 		capabilities?: string[];
 		capability?: string;
 		shelter_id?: string;
 	}): string[] | null {
-		const caps = input.capabilities ?? (input.capability ? [input.capability] : []);
-		if (caps.includes(SYSTEM_ADMIN)) return [SYSTEM_ADMIN];
+		if (input.is_system_admin || input.capabilities?.includes(SYSTEM_ADMIN)) {
+			return [SYSTEM_ADMIN];
+		}
+		if (input.assignments && input.assignments.length > 0) {
+			return rolesFromAssignments(input.assignments as ShelterAssignment[]);
+		}
+		const caps = (input.capabilities ?? (input.capability ? [input.capability] : [])).filter(
+			(c) => c !== SYSTEM_ADMIN
+		) as ShelterAssignment['capabilities'];
 		const code = effectiveLock ?? input.shelter_id;
-		if (!code) return null;
-		return [shelterScopeRole(code), ...caps];
+		if (!code || caps.length === 0) return null;
+		return rolesFromAssignments([{ shelter_code: code, capabilities: caps }]);
 	}
 
 	/** Rejects on failure — UserForm turns the reason into a Superforms error. */
 	async function handleCreate(input: CreateUserInput) {
 		const userRoles = rolesFromInput(input);
 		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
-		await createMutation.mutateAsync({
+		const result = await createMutation.mutateAsync({
 			name: input.username,
 			password: input.password,
 			display_name: input.display_name,
@@ -90,61 +101,22 @@
 			duty_window: input.duty_window,
 			affiliation_tags: input.affiliation_tags
 		});
-		toast.success(`สร้างผู้ใช้งาน "${input.username}" สำเร็จ`);
+		toast.success(
+			result.merged
+				? `เพิ่มสิทธิ์ในศูนย์นี้ให้ "${input.username}" แล้ว (บัญชีมีอยู่เดิม)`
+				: `สร้างผู้ใช้งาน "${input.username}" สำเร็จ`
+		);
 		dialogOpen = false;
 	}
 
-	function handleEdit(user: UserSummary) {
-		selectedUser = user;
-		editDialogOpen = true;
-	}
-
-	/** Rejects on failure — the caller decides whether that becomes a form error or a toast. */
-	async function applyUpdate(input: EditUserInput) {
-		const target = selectedUser;
-		if (!target) return;
-		const userRoles = rolesFromInput(input);
-		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
-		await updateMutation.mutateAsync({
-			name: target.name,
-			password: input.password || undefined,
-			display_name: input.display_name,
-			roles: userRoles,
-			personnel_type: input.personnel_type,
-			organization: input.organization,
-			position: input.position,
-			phone: input.phone,
-			email: input.email,
-			notes: input.notes,
-			volunteer_id: input.volunteer_id,
-			duty_window: input.duty_window,
-			affiliation_tags: input.affiliation_tags
-		});
-		toast.success(`อัปเดตข้อมูลผู้ใช้งาน "${target.name}" สำเร็จ`);
-		editDialogOpen = false;
-		demoteDialogOpen = false;
-		selectedUser = null;
-		pendingDemote = null;
-	}
-
-	async function handleUpdate(input: EditUserInput) {
-		if (!selectedUser) return;
-		const wasSa = isAppSystemAdmin(selectedUser.roles);
-		const willBeSa =
-			input.capabilities?.includes(SYSTEM_ADMIN) || input.capability === SYSTEM_ADMIN;
-		if (wasSa && !willBeSa) {
-			pendingDemote = input;
-			demoteDialogOpen = true;
-			return;
-		}
-		await applyUpdate(input);
-	}
-
-	function confirmDemote() {
-		if (!pendingDemote) return;
-		applyUpdate(pendingDemote).catch((err: unknown) =>
-			toast.error(err instanceof Error ? err.message : 'ไม่สามารถลดสิทธิ์ผู้ดูแลระบบได้')
-		);
+	function editHref(user: UserSummary): string {
+		const listBase = usersListBaseFromPathname(page.url.pathname);
+		const from = withUsersView(page.url.pathname, page.url.search);
+		const path =
+			listBase === '/portal/system-management/users'
+				? resolve(`/portal/system-management/users/${encodeURIComponent(user.name)}`)
+				: resolve(`/back-office/users/${encodeURIComponent(user.name)}`);
+		return `${path}?from=${encodeURIComponent(from)}`;
 	}
 
 	function confirmDelete(name: string) {
@@ -202,7 +174,7 @@
 
 	const filteredUsers = $derived(
 		usersQuery.data?.filter((u: UserSummary) => {
-			if (effectiveLock && u.shelter_id !== effectiveLock) return false;
+			if (effectiveLock && !shelterCodesFromRoles(u.roles).includes(effectiveLock)) return false;
 			if (!searchQuery) return true;
 			const q = searchQuery.toLowerCase();
 			return (
@@ -212,7 +184,8 @@
 				u.roles.some(
 					(r: string) =>
 						r.toLowerCase().includes(q) || roleDisplayLabel(r).toLowerCase().includes(q)
-				)
+				) ||
+				assignmentsFromRoles(u.roles).some((a) => a.shelter_code.toLowerCase().includes(q))
 			);
 		}) ?? []
 	);
@@ -290,7 +263,7 @@
 			<UserList
 				users={filteredUsers}
 				{isSA}
-				onedit={handleEdit}
+				{editHref}
 				ondelete={confirmDelete}
 				onresetpassword={handleOpenReset}
 				pending={deleteMutation.isPending}
@@ -298,31 +271,6 @@
 		{/if}
 	</div>
 </div>
-
-<!-- Edit Dialog -->
-<Dialog.Root bind:open={editDialogOpen}>
-	<Dialog.Content
-		class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[700px]"
-	>
-		<Dialog.Header class="shrink-0 border-b border-slate-100 p-6 pb-2">
-			<Dialog.Title class="text-xl font-bold text-slate-900">แก้ไขข้อมูลผู้ใช้งาน</Dialog.Title>
-		</Dialog.Header>
-		{#if selectedUser}
-			<UserForm
-				user={selectedUser}
-				onsubmit={handleUpdate}
-				oncancel={() => {
-					editDialogOpen = false;
-					selectedUser = null;
-				}}
-				{isSA}
-				{allowSystemAdminRole}
-				lockedShelterCode={effectiveLock ?? null}
-				pending={updateMutation.isPending}
-			/>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
 
 <!-- Reset Password Confirmation Dialog -->
 <Dialog.Root bind:open={resetDialogOpen}>
@@ -444,38 +392,6 @@
 				class="bg-red-600 text-white hover:bg-red-700"
 			>
 				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
-			</Button>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- Demote Dialog -->
-<Dialog.Root bind:open={demoteDialogOpen}>
-	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
-		<Dialog.Header>
-			<Dialog.Title class="text-lg font-bold">ยืนยันการลดสิทธิ์ผู้ดูแลระบบ</Dialog.Title>
-			<Dialog.Description class="pt-2 text-sm text-slate-500">
-				จะลดสิทธิ์ <strong class="text-slate-900">{selectedUser?.name}</strong>
-				จากผู้ดูแลระบบเป็นบทบาทของศูนย์ ทำได้เฉพาะเมื่อยังมี SA คนอื่นในระบบ
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="mt-2 flex justify-end gap-4 pt-4">
-			<Button
-				type="button"
-				variant="outline"
-				onclick={() => {
-					demoteDialogOpen = false;
-					pendingDemote = null;
-				}}
-			>
-				ยกเลิก
-			</Button>
-			<Button
-				disabled={updateMutation.isPending || !pendingDemote}
-				onclick={confirmDemote}
-				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
-			>
-				{#if updateMutation.isPending}กำลังบันทึก...{:else}ยืนยัน{/if}
 			</Button>
 		</div>
 	</Dialog.Content>

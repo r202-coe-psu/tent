@@ -24,6 +24,7 @@ import {
 	assertCheckoutDestination,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
+	station1EvacueeInputSchema,
 	triageLevelSchema,
 	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
@@ -318,6 +319,51 @@ describe('household wizard schemas', () => {
 
 		expect(result.success).toBe(true);
 		if (result.success) expect(result.data.notes).toBe('');
+	});
+});
+
+describe('station1EvacueeInputSchema emergency contact', () => {
+	const base = { first_name: 'ก', last_name: 'ข', gender: 'male' as const, phone: null };
+
+	it('keeps emergency contact optional on evacueeInputSchema for kiosk and import', () => {
+		expect(evacueeInputSchema.safeParse(base).success).toBe(true);
+	});
+
+	it('accepts a missing or blank emergency contact on Station 1', () => {
+		expect(station1EvacueeInputSchema.safeParse(base).success).toBe(true);
+
+		const blank = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: '', phone: '', relation: '' }
+		});
+		expect(blank.success).toBe(true);
+		if (blank.success) {
+			expect(blank.data.emergency_contact).toBeUndefined();
+		}
+	});
+
+	it('rejects a partial emergency contact on Station 1', () => {
+		const partial = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '', relation: '' }
+		});
+		expect(partial.success).toBe(false);
+		if (!partial.success) {
+			expect(partial.error.issues.map((issue) => issue.message)).toEqual(
+				expect.arrayContaining([
+					'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก',
+					'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน'
+				])
+			);
+		}
+	});
+
+	it('accepts a complete emergency contact on Station 1', () => {
+		const result = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '0812345678', relation: 'มารดา' }
+		});
+		expect(result.success).toBe(true);
 	});
 });
 
@@ -876,18 +922,38 @@ describe('household membership invariant', () => {
 		_id: id
 	});
 
-	it('blocks moving a member away from an active household that has other members', () => {
-		const household = makeHousehold('household:old');
+	it('blocks moving the head away from an active household that has other members', () => {
+		const household = {
+			...makeHousehold('household:old'),
+			head_evacuee_id: 'evacuee:1'
+		};
 		const target = makeHousehold('household:new');
-		const member = makeEvacuee('evacuee:1', household._id);
+		const head = makeEvacuee('evacuee:1', household._id);
 		const sibling = makeEvacuee('evacuee:2', household._id);
 
 		expect(
-			checkEvacueeHouseholdConflict(member, target._id, [household, target], [member, sibling])
+			checkEvacueeHouseholdConflict(head, target._id, [household, target], [head, sibling])
 		).toMatchObject({ conflicted: true, householdId: household._id });
 		expect(() =>
-			assertEvacueeHouseholdAssignment(member, target._id, [household, target], [member, sibling])
+			assertEvacueeHouseholdAssignment(head, target._id, [household, target], [head, sibling])
 		).toThrow(/ยังมีสมาชิกอื่นอยู่/);
+	});
+
+	it('allows a non-head to leave an active household that has other members (CR-106)', () => {
+		const household = {
+			...makeHousehold('household:old'),
+			head_evacuee_id: 'evacuee:1'
+		};
+		const target = makeHousehold('household:new');
+		const head = makeEvacuee('evacuee:1', household._id);
+		const member = makeEvacuee('evacuee:2', household._id);
+
+		expect(
+			checkEvacueeHouseholdConflict(member, target._id, [household, target], [head, member])
+		).toEqual({ conflicted: false });
+		expect(() =>
+			assertEvacueeHouseholdAssignment(member, target._id, [household, target], [head, member])
+		).not.toThrow();
 	});
 
 	it('allows moving a solo member or a member from an inactive household', () => {

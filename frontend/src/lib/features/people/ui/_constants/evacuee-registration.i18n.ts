@@ -4,11 +4,11 @@ export const EVACUEE_REGISTRATION_I18N = {
 			ewar: 'ประเมินอาการ (EWAR)',
 			identity: 'ข้อมูลประจำตัว',
 			medical: 'สุขภาพ',
-			special: 'กลุ่มเปราะบาง'
+			special: 'ความต้องการพิเศษ'
 		},
 		photo: {
-			header: 'ภาพถ่ายใบหน้า (Face Recognition)',
-			label: 'ภาพถ่ายใบหน้า (Face Recognition)',
+			header: 'ภาพถ่ายใบหน้า (Face Photo)',
+			label: 'ภาพถ่ายใบหน้า (Face Photo)',
 			add: 'เพิ่มรูปภาพ',
 			desc: 'ใช้สำหรับระบบจดจำใบหน้าและค้นหาตัวตน',
 			btnTake: 'ถ่ายภาพ',
@@ -43,7 +43,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
-			header: 'ข้อมูลประจำตัว (Identity)',
+			header: 'ข้อมูลประจำตัว (Personal Identity)',
 			firstName: {
 				label: 'ชื่อ',
 				placeholder: 'ชื่อ'
@@ -112,8 +112,9 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		specialNeeds: {
-			label: 'แท็กกลุ่มเปราะบางและความต้องการพิเศษ',
-			notVulnerableLabel: 'ไม่เป็นกลุ่มเปราะบาง',
+			header: 'ความต้องการพิเศษ (Special Needs)',
+			label: 'ความต้องการพิเศษ',
+			notVulnerableLabel: 'ไม่มีความต้องการพิเศษ',
 			note: {
 				label: 'ความต้องการพิเศษ (ถ้ามี)',
 				placeholder: 'เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ'
@@ -158,11 +159,11 @@ export const EVACUEE_REGISTRATION_I18N = {
 			ewar: 'Symptom Assessment (EWAR)',
 			identity: 'Identity',
 			medical: 'Health',
-			special: 'Vulnerable Groups'
+			special: 'Special Needs'
 		},
 		photo: {
-			header: 'Face Photo (Face Recognition)',
-			label: 'Face Photo (Face Recognition)',
+			header: 'Face Photo',
+			label: 'Face Photo',
 			add: 'Add Photo',
 			desc: 'Used for face recognition and identity search',
 			btnTake: 'Take Photo',
@@ -197,7 +198,7 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		personal: {
-			header: 'Personal Information (Identity)',
+			header: 'Personal Identity',
 			firstName: {
 				label: 'First Name',
 				placeholder: 'First Name'
@@ -266,8 +267,9 @@ export const EVACUEE_REGISTRATION_I18N = {
 			}
 		},
 		specialNeeds: {
-			label: 'Vulnerable Groups & Special Needs',
-			notVulnerableLabel: 'Not a vulnerable group',
+			header: 'Special Needs',
+			label: 'Special Needs',
+			notVulnerableLabel: 'No special needs',
 			note: {
 				label: 'Special Needs Note (if any)',
 				placeholder: 'e.g. Patients requiring specific medication or special care'

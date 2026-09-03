@@ -216,4 +216,9 @@ export interface PeopleRepository {
 	 * with stay `pre_registered`, cancel the household too.
 	 */
 	cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void>;
+	/**
+	 * Station 1 Report-in: promote `pre_registered` → `arriving` with zone null.
+	 * Does not create a screening document and does not assign a zone.
+	 */
+	promoteReportIn(evacueeId: string): Promise<Evacuee>;
 }

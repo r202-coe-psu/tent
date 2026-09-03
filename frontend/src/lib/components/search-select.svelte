@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Popover from '$lib/components/ui/popover';
 	import { Input } from '$lib/components/ui/input';
-	import { cn } from '$lib/utils/shadcn.js';
+	import { cn, listOptionActiveClass, listOptionHoverClass } from '$lib/utils/shadcn.js';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronsUpDown from '@lucide/svelte/icons/chevrons-up-down';
 	import Loader from '@lucide/svelte/icons/loader';
@@ -94,7 +94,11 @@
 					{#each filteredOptions as opt (opt.value)}
 						<button
 							type="button"
-							class="relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+							class={cn(
+								'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+								listOptionHoverClass,
+								listOptionActiveClass
+							)}
 							onclick={() => handleSelect(opt.value)}
 						>
 							{#if value === opt.value}

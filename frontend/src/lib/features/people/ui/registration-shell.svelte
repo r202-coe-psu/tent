@@ -49,11 +49,14 @@
 		hasMinimumResidence,
 		defaultHouseholdChoice,
 		isLeavingLinkedHousehold,
-		suggestHouseholdsByResidence,
 		filterJoinCandidatesByEvacueeQuery,
 		type HouseholdChoice,
 		type ResidenceFields
 	} from '../domain/registration-shell';
+	import {
+		readResidenceSuggestDeps,
+		residenceSuggestTick
+	} from './residence-suggest-reactivity.svelte';
 	import { buildSaveFailureReport, type SaveFailureReport } from '$lib/utils/errors';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -123,6 +126,10 @@
 	let joinSearchQuery = $state('');
 	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
 	let residenceSuggestions = $state<Household[]>([]);
+	/** True while debounce is waiting or households list is still loading for a complete Residence. */
+	let residenceSuggestPending = $state(false);
+	/** True after a completed suggest pass with zero matches (create mode only). */
+	let residenceSuggestCheckedEmpty = $state(false);
 
 	type ResidenceFormState = {
 		address_no: string;
@@ -274,15 +281,39 @@
 	});
 
 	$effect(() => {
-		const choice = householdChoice;
-		const form = residenceForm;
+		const households = householdsQuery.data ?? [];
+		const deps = readResidenceSuggestDeps(
+			householdChoice,
+			residenceForm,
+			households,
+			Boolean(householdsQuery.isLoading) && households.length === 0
+		);
+		const tick = residenceSuggestTick(deps);
+
 		if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
-		if (choice !== 'create' && choice !== 'change_residence') {
+
+		if (tick.kind === 'clear') {
 			residenceSuggestions = [];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = false;
 			return;
 		}
+
+		if (tick.kind === 'pending') {
+			residenceSuggestions = [];
+			residenceSuggestPending = true;
+			residenceSuggestCheckedEmpty = false;
+			return;
+		}
+
+		residenceSuggestPending = true;
+		residenceSuggestCheckedEmpty = false;
+		const matches = tick.matches;
+		const choice = deps.choice;
 		residenceSuggestTimer = setTimeout(() => {
-			residenceSuggestions = suggestHouseholdsByResidence(form, householdsQuery.data ?? []);
+			residenceSuggestions = matches as Household[];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = choice === 'create' && matches.length === 0;
 		}, 350);
 		return () => {
 			if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
@@ -992,8 +1023,8 @@
 							{#if !hasPriorHousehold}
 								<Button
 									type="button"
-									variant="ghost"
 									size="sm"
+									variant="outline"
 									onclick={() => {
 										showJoinPanel = false;
 										setHouseholdChoice('create');
@@ -1029,7 +1060,16 @@
 								required={true}
 							/>
 
-							{#if residenceSuggestions.length > 0 && householdChoice === 'create'}
+							{#if householdChoice === 'create' && residenceSuggestPending}
+								<div
+									class="flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+									role="status"
+									aria-live="polite"
+								>
+									<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+									กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+								</div>
+							{:else if residenceSuggestions.length > 0 && householdChoice === 'create'}
 								<div class="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
 									<p class="text-xs font-semibold text-foreground">
 										พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
@@ -1054,15 +1094,14 @@
 											</li>
 										{/each}
 									</ul>
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										onclick={continueCreateDespiteSuggest}
-									>
+									<Button type="button" size="sm" onclick={continueCreateDespiteSuggest}>
 										สร้างครอบครัวใหม่ที่อยู่นี้
 									</Button>
 								</div>
+							{:else if householdChoice === 'create' && residenceSuggestCheckedEmpty}
+								<p class="text-xs text-muted-foreground">
+									ไม่พบครอบครัวที่อยู่ตรงกันในศูนย์นี้ — จะสร้างครอบครัวใหม่
+								</p>
 							{/if}
 						</div>
 					{/if}

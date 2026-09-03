@@ -132,6 +132,19 @@ export const useCreateEvacuee = () => {
 	}));
 };
 
+/** Station 1 Report-in: promote `pre_registered` → `arriving` (no screening / zone). */
+export const usePromoteReportIn = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (evacueeId: string) => peopleRepository().promoteReportIn(evacueeId),
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
 export const useCreateEvacueeWithScreening = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({

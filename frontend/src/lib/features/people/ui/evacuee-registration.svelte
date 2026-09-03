@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { tick, untrack, type Snippet } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -8,7 +8,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
-		evacueeInputSchema,
+		station1EvacueeInputSchema,
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
@@ -39,7 +39,11 @@
 		ondraftchange,
 		facePhotoUrl = $bindable(null),
 		lang,
-		onvalidationerror
+		onvalidationerror,
+		hideActions = false,
+		formId = 'evacuee-registration-form',
+		nextLabel,
+		afterPersonal
 	}: {
 		onsubmit: (input: EvacueeInput) => void;
 		pending?: boolean;
@@ -49,6 +53,12 @@
 		facePhotoUrl?: string | null;
 		lang?: LanguageCode;
 		onvalidationerror?: () => void;
+		/** Station 1 shell: hide local Next — sticky save submits this form via `formId`. */
+		hideActions?: boolean;
+		formId?: string;
+		nextLabel?: string;
+		/** Shell injects household here so it sits between identity and emergency (no nested forms). */
+		afterPersonal?: Snippet;
 	} = $props();
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
@@ -88,23 +98,10 @@
 	let validationMessages = $state<string[]>([]);
 	let formTopRef = $state<HTMLElement | null>(null);
 
-	function isBlankEmergencyContact(
-		contact: { name?: string; phone?: string; relation?: string } | null | undefined
-	) {
-		return !contact?.name?.trim() && !contact?.phone?.trim() && !contact?.relation?.trim();
-	}
-
 	function ensureEmergencyContactShell() {
 		if (!$formData.emergency_contact) {
 			$formData.emergency_contact = { ...EMPTY_EMERGENCY_CONTACT };
 		}
-	}
-
-	function stripBlankEmergencyContact<T extends Partial<EvacueeInput>>(data: T): T {
-		if (isBlankEmergencyContact(data.emergency_contact)) {
-			return { ...data, emergency_contact: undefined };
-		}
-		return data;
 	}
 
 	async function revealValidationIssues(formErrors: unknown, extraMessages: string[] = []) {
@@ -118,9 +115,7 @@
 		await tick();
 		requestAnimationFrame(() => {
 			formTopRef?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			const firstInvalid = formTopRef
-				?.closest('form')
-				?.querySelector<HTMLElement>('[aria-invalid="true"]');
+			const firstInvalid = formTopRef?.querySelector<HTMLElement>('[aria-invalid="true"]');
 			firstInvalid?.focus({ preventScroll: true });
 		});
 
@@ -164,56 +159,58 @@
 		emergency_contact: initial?.emergency_contact ?? { ...EMPTY_EMERGENCY_CONTACT }
 	};
 
-	const form = superForm(defaults(initialFormData as EvacueeInput, zod4(evacueeInputSchema)), {
-		SPA: true,
-		dataType: 'json',
-		validators: zod4(evacueeInputSchema),
-		resetForm: false,
-		onSubmit: ({ cancel }) => {
-			const extra: string[] = [];
-			if (birthYearError) extra.push(birthYearError);
-			if (ageError) extra.push(ageError);
+	const form = superForm(
+		defaults(initialFormData as EvacueeInput, zod4(station1EvacueeInputSchema)),
+		{
+			SPA: true,
+			dataType: 'json',
+			validators: zod4(station1EvacueeInputSchema),
+			resetForm: false,
+			onSubmit: ({ cancel }) => {
+				const extra: string[] = [];
+				if (birthYearError) extra.push(birthYearError);
+				if (ageError) extra.push(ageError);
 
-			if (extra.length > 0) {
-				cancel();
-				void revealValidationIssues($errors, extra);
-				return;
-			}
-
-			if ($formData.person_id?.cardType === 'national_id' && $formData.person_id?.number) {
-				const cleanId = $formData.person_id.number.replace(/\D/g, '');
-				if (cleanId.length !== 13) {
-					$errors.person_id = {
-						...($errors.person_id || {}),
-						number: [t.validation.nationalIdLength]
-					};
+				if (extra.length > 0) {
 					cancel();
-					void revealValidationIssues($errors, [t.validation.nationalIdLength]);
+					void revealValidationIssues($errors, extra);
 					return;
 				}
-			}
 
-			if (noPhone) {
-				$formData.phone = null;
-			}
+				if ($formData.person_id?.cardType === 'national_id' && $formData.person_id?.number) {
+					const cleanId = $formData.person_id.number.replace(/\D/g, '');
+					if (cleanId.length !== 13) {
+						$errors.person_id = {
+							...($errors.person_id || {}),
+							number: [t.validation.nationalIdLength]
+						};
+						cancel();
+						void revealValidationIssues($errors, [t.validation.nationalIdLength]);
+						return;
+					}
+				}
 
-			// Keep the emergency_contact UI shell in $formData. Blank → undefined is handled by
-			// evacueeInputSchema preprocess so fields never disappear on validation error.
-			ensureEmergencyContactShell();
-		},
-		onUpdate: ({ form: f }) => {
-			ensureEmergencyContactShell();
-			if (f.valid) {
-				const data = stripBlankEmergencyContact(structuredClone(f.data));
-				showValidationSummary = false;
-				validationMessages = [];
-				ondraftchange?.(data);
-				onsubmit(data);
-			} else {
-				void revealValidationIssues(f.errors);
+				if (noPhone) {
+					$formData.phone = null;
+				}
+
+				// Keep the emergency_contact UI shell so fields never unmount on error.
+				ensureEmergencyContactShell();
+			},
+			onUpdate: ({ form: f }) => {
+				ensureEmergencyContactShell();
+				if (f.valid) {
+					const data = structuredClone(f.data);
+					showValidationSummary = false;
+					validationMessages = [];
+					ondraftchange?.(data);
+					onsubmit(data);
+				} else {
+					void revealValidationIssues(f.errors);
+				}
 			}
 		}
-	});
+	);
 
 	const { form: formData, errors, enhance, submitting } = form;
 
@@ -246,7 +243,7 @@
 
 	function handleBack() {
 		ensureEmergencyContactShell();
-		ondraftchange?.(stripBlankEmergencyContact(structuredClone($formData)));
+		ondraftchange?.(structuredClone($formData));
 		onBack?.();
 	}
 
@@ -284,142 +281,128 @@
 	}
 </script>
 
-<form method="POST" use:enhance class="space-y-6">
-	<div bind:this={formTopRef} class="scroll-mt-6"></div>
+<div class="space-y-6" bind:this={formTopRef}>
+	<form id={formId} method="POST" use:enhance class="space-y-6">
+		{#if showValidationSummary && validationMessages.length > 0}
+			<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
+				<CircleAlert class="size-4" />
+				<Alert.Title class="font-semibold">{t.validation.summaryTitle}</Alert.Title>
+				<Alert.Description>
+					<ul class="mt-2 list-disc space-y-1 pl-5">
+						{#each validationMessages as msg (msg)}
+							<li>{msg}</li>
+						{/each}
+					</ul>
+				</Alert.Description>
+			</Alert.Root>
+		{/if}
 
-	{#if showValidationSummary && validationMessages.length > 0}
-		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
-			<CircleAlert class="size-4" />
-			<Alert.Title class="font-semibold">{t.validation.summaryTitle}</Alert.Title>
-			<Alert.Description>
-				<ul class="mt-2 list-disc space-y-1 pl-5">
-					{#each validationMessages as msg (msg)}
-						<li>{msg}</li>
-					{/each}
-				</ul>
-			</Alert.Description>
-		</Alert.Root>
-	{/if}
-
-	<Field.FieldGroup class="space-y-6">
-		<!-- Photo Upload Section -->
-		<section class="form-section-card space-y-4">
-			<div class="flex items-center gap-2 border-b border-border pb-3">
-				<Camera class="size-5 text-primary" />
-				<h3 class="text-base font-bold text-foreground">{t.photo.header}</h3>
-			</div>
-
-			<div class="flex flex-col items-center gap-4 sm:flex-row">
-				<div
-					class="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/30"
-				>
-					{#if uploadingPhoto}
-						<Loader2 class="size-8 animate-spin text-primary" />
-					{:else if facePhotoUrl}
-						<img src={facePhotoUrl} alt={t.photo.previewAlt} class="size-full object-cover" />
-					{:else}
-						<User class="size-12 text-muted-foreground/40" />
-					{/if}
+		<Field.FieldGroup class="space-y-6">
+			<section id="reg-section-photo" class="form-section-card scroll-mt-24 space-y-4">
+				<div class="flex items-center gap-2 border-b border-border pb-3">
+					<Camera class="size-5 text-primary" />
+					<h3 class="text-base font-bold text-foreground">{t.photo.header}</h3>
 				</div>
 
-				<div class="space-y-2 text-center sm:text-left">
-					<p class="text-xs text-muted-foreground">{t.photo.desc}</p>
-					<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-						<label
-							class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
-						>
-							<Camera class="size-4 text-primary" />
-							<span>{facePhotoUrl ? t.photo.btnChange : t.photo.btnTake}</span>
-							<input
-								type="file"
-								accept="image/*"
-								capture="user"
-								class="sr-only"
-								disabled={uploadingPhoto || pending}
-								onchange={(e) => handlePhotoCapture(e.currentTarget.files?.[0] ?? null)}
-							/>
-						</label>
-
-						{#if facePhotoUrl}
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								class="min-h-11 text-destructive hover:bg-destructive/10"
-								onclick={handleDeletePhoto}
-								disabled={uploadingPhoto || pending}
-							>
-								{t.photo.btnDelete}
-							</Button>
+				<div class="flex flex-col items-center gap-4 sm:flex-row">
+					<div
+						class="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/30"
+					>
+						{#if uploadingPhoto}
+							<Loader2 class="size-8 animate-spin text-primary" />
+						{:else if facePhotoUrl}
+							<img src={facePhotoUrl} alt={t.photo.previewAlt} class="size-full object-cover" />
+						{:else}
+							<User class="size-12 text-muted-foreground/40" />
 						{/if}
 					</div>
+
+					<div class="space-y-2 text-center sm:text-left">
+						<p class="text-xs text-muted-foreground">{t.photo.desc}</p>
+						<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+							<label
+								class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
+							>
+								<Camera class="size-4 text-primary" />
+								<span>{facePhotoUrl ? t.photo.btnChange : t.photo.btnTake}</span>
+								<input
+									type="file"
+									accept="image/*"
+									capture="user"
+									class="sr-only"
+									disabled={uploadingPhoto || pending}
+									onchange={(e) => handlePhotoCapture(e.currentTarget.files?.[0] ?? null)}
+								/>
+							</label>
+
+							{#if facePhotoUrl}
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									class="min-h-11 text-destructive hover:bg-destructive/10"
+									onclick={handleDeletePhoto}
+									disabled={uploadingPhoto || pending}
+								>
+									{t.photo.btnDelete}
+								</Button>
+							{/if}
+						</div>
+					</div>
 				</div>
-			</div>
-		</section>
+			</section>
 
-		<!-- Personal Info Shared Sub-component (Issue #205, #206) -->
-		<section class="form-section-card space-y-4">
-			<div class="flex items-center gap-2 border-b border-border pb-3">
-				<User class="size-5 text-primary" />
-				<h3 class="text-base font-bold text-foreground">{t.personal.header}</h3>
-			</div>
+			<section id="reg-section-personal" class="form-section-card scroll-mt-24 space-y-4">
+				<div class="flex items-center gap-2 border-b border-border pb-3">
+					<User class="size-5 text-primary" />
+					<h3 class="text-base font-bold text-foreground">{t.personal.header}</h3>
+				</div>
 
-			<PersonalInfoFields
-				bind:first_name={$formData.first_name}
-				bind:last_name={$formData.last_name}
-				bind:nickname={
-					() => $formData.nickname ?? '',
-					(v) => {
-						$formData.nickname = v;
+				<PersonalInfoFields
+					bind:first_name={$formData.first_name}
+					bind:last_name={$formData.last_name}
+					bind:nickname={
+						() => $formData.nickname ?? '',
+						(v) => {
+							$formData.nickname = v;
+						}
 					}
-				}
-				bind:person_id={$formData.person_id}
-				bind:phone={$formData.phone}
-				bind:no_phone={noPhone}
-				bind:birth_year={birthYearBE}
-				bind:age
-				bind:gender={$formData.gender}
-				bind:religion={$formData.religion}
-				bind:country={$formData.country}
-				disabled={$submitting || pending}
-				errors={{
-					first_name: $errors.first_name?.[0],
-					last_name: $errors.last_name?.[0],
-					nickname: $errors.nickname?.[0],
-					cardNumber: ($errors.person_id as { number?: string[] } | undefined)?.number?.[0],
-					birth_year: ($errors.birth_year as string[] | undefined)?.[0] || birthYearError,
-					age: ($errors.age as string[] | undefined)?.[0] || ageError,
-					gender: $errors.gender?.[0],
-					country: $errors.country?.[0],
-					phone: $errors.phone?.[0]
-				}}
-			/>
-		</section>
+					bind:person_id={$formData.person_id}
+					bind:phone={$formData.phone}
+					bind:no_phone={noPhone}
+					bind:birth_year={birthYearBE}
+					bind:age
+					bind:gender={$formData.gender}
+					bind:religion={$formData.religion}
+					bind:country={$formData.country}
+					disabled={$submitting || pending}
+					errors={{
+						first_name: $errors.first_name?.[0],
+						last_name: $errors.last_name?.[0],
+						nickname: $errors.nickname?.[0],
+						cardNumber: ($errors.person_id as { number?: string[] } | undefined)?.number?.[0],
+						birth_year: ($errors.birth_year as string[] | undefined)?.[0] || birthYearError,
+						age: ($errors.age as string[] | undefined)?.[0] || ageError,
+						gender: $errors.gender?.[0],
+						country: $errors.country?.[0],
+						phone: $errors.phone?.[0]
+					}}
+				/>
+			</section>
+		</Field.FieldGroup>
+	</form>
 
-		<!-- Special Needs Shared Sub-component (Issue #206 Station 1) -->
-		<section class="form-section-card space-y-4">
+	{@render afterPersonal?.()}
+
+	<Field.FieldGroup class="space-y-6">
+		<section id="reg-section-emergency" class="form-section-card scroll-mt-24 space-y-4">
 			<div class="flex items-center gap-2 border-b border-border pb-3">
-				<HeartPulse class="size-5 text-amber-600" />
+				<Phone class="size-5 text-primary" />
 				<h3 class="text-base font-bold text-foreground">
-					กลุ่มเปราะบางและความต้องการพิเศษ (Special Needs)
+					{t.emergencyContact.header}
 				</h3>
 			</div>
 
-			<SpecialNeedsFields
-				bind:special_needs={$formData.special_needs}
-				disabled={$submitting || pending}
-				label=""
-			/>
-		</section>
-
-		<!-- Emergency Contact Shared Sub-component -->
-		<section class="form-section-card space-y-4">
-			<div class="flex items-center gap-2 border-b border-border pb-3">
-				<Phone class="size-5 text-primary" />
-				<h3 class="text-base font-bold text-foreground">{t.emergencyContact.header}</h3>
-			</div>
-
-			<!-- Always render: blank optional contact must not unmount inputs on error/back. -->
 			<EmergencyContactFields
 				bind:name={
 					() => $formData.emergency_contact?.name ?? '',
@@ -442,6 +425,7 @@
 						$formData.emergency_contact!.relation = v;
 					}
 				}
+				{formId}
 				disabled={$submitting || pending}
 				errors={{
 					name: $errors.emergency_contact?.name?.[0],
@@ -451,26 +435,41 @@
 			/>
 		</section>
 
-		<!-- Back + Submit actions -->
-		<div
-			class="flex w-full flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
-		>
-			<Form.Button
+		<section id="reg-section-special" class="form-section-card scroll-mt-24 space-y-4">
+			<div class="flex items-center gap-2 border-b border-border pb-3">
+				<HeartPulse class="size-5 text-primary" />
+				<h3 class="text-base font-bold text-foreground">{t.specialNeeds.header}</h3>
+			</div>
+
+			<SpecialNeedsFields
+				bind:special_needs={$formData.special_needs}
 				disabled={$submitting || pending}
-				class="touch-target h-auto w-full px-6 py-3 text-base font-semibold sm:w-auto sm:text-sm"
+				label=""
+			/>
+		</section>
+
+		{#if !hideActions}
+			<div
+				class="flex w-full flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
 			>
-				{t.actions.next}
-			</Form.Button>
-			{#if onBack}
-				<Button
-					type="button"
-					variant="outline"
-					onclick={handleBack}
-					class="touch-target h-auto w-full px-6 py-3 text-base font-medium sm:w-auto sm:text-sm"
+				<Form.Button
+					form={formId}
+					disabled={$submitting || pending}
+					class="touch-target h-auto w-full px-6 py-3 text-base font-semibold sm:w-auto sm:text-sm"
 				>
-					{t.actions.back}
-				</Button>
-			{/if}
-		</div>
+					{nextLabel ?? t.actions.next}
+				</Form.Button>
+				{#if onBack}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={handleBack}
+						class="touch-target h-auto w-full px-6 py-3 text-base font-medium sm:w-auto sm:text-sm"
+					>
+						{t.actions.back}
+					</Button>
+				{/if}
+			</div>
+		{/if}
 	</Field.FieldGroup>
-</form>
+</div>
