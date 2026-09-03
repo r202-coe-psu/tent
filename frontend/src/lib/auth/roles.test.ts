@@ -69,7 +69,7 @@ describe('roleDisplayLabel', () => {
 		// Labels follow CR-096 §2.1 — the wording the ops team uses on site.
 		expect(roleDisplayLabel('system_admin')).toBe('ผู้ดูแลระบบสูงสุด');
 		expect(roleDisplayLabel('shelter_manager')).toBe('ผู้จัดการศูนย์พักพิง');
-		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียนหน้าด่าน');
+		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียน');
 		expect(roleDisplayLabel('kitchen_staff')).toBe('เจ้าหน้าที่ครัว / จัดเตรียมอาหาร');
 		expect(roleDisplayLabel('warehouse_staff')).toBe('ผู้จัดการคลังเสบียง / ส่งต่อสิ่งของ');
 		expect(roleDisplayLabel('team_coordinator')).toBe('ผู้ประสานงานทีม');
