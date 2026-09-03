@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Evacuee } from './people';
 import {
 	buildZoningPath,
+	classifyScreeningQueueTab,
 	classifyZoningQueueTab,
 	countOccupantsByZone,
 	nextQueueLabel,
@@ -113,6 +114,36 @@ describe('classifyZoningQueueTab', () => {
 				hasScreening: true
 			})
 		).toBe('assigned');
+	});
+
+	it('clears checked-in evacuees from pending (Cleared for Zoning) queue', () => {
+		expect(
+			classifyZoningQueueTab(ev({ status: 'active', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).not.toBe('pending');
+	});
+});
+
+describe('classifyScreeningQueueTab', () => {
+	it('pending for arriving without screening', () => {
+		expect(classifyScreeningQueueTab(ev({ status: 'arriving' }), new Set())).toBe('pending');
+	});
+
+	it('screened for arriving with screening', () => {
+		expect(
+			classifyScreeningQueueTab(ev({ status: 'arriving', id: 'evacuee:1' }), new Set(['evacuee:1']))
+		).toBe('screened');
+	});
+
+	it('clears active (checked-in) from medical queues even when screened', () => {
+		expect(
+			classifyScreeningQueueTab(
+				ev({ status: 'active', zone: 'Z1', id: 'evacuee:1' }),
+				new Set(['evacuee:1'])
+			)
+		).toBeNull();
 	});
 });
 

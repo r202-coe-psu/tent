@@ -1,7 +1,12 @@
 import type { Evacuee, Household } from '$lib/features/people';
-import { matchesEvacueeSearch } from '$lib/features/people';
+import {
+	classifyScreeningQueueTab,
+	matchesEvacueeSearch,
+	type ScreeningQueueTab
+} from '$lib/features/people';
 
-export type ScreeningQueueTab = 'pending' | 'screened';
+export type { ScreeningQueueTab };
+export { classifyScreeningQueueTab };
 
 /** Path-only deep link for Station 2 clinical form. */
 export function buildMedicalScreeningPath(evacueeId: string): string {
@@ -46,26 +51,6 @@ export function parseMedicalScreeningQrCode(input: string): string | null {
 	}
 
 	return trimmed;
-}
-
-/**
- * Queue tab for Station 2:
- * - pending (รอตรวจ): arriving/pre_registered with no screening yet
- * - screened (ตรวจแล้ว): has at least one screening record (re-editable)
- * - null: not shown in either tab
- */
-export function classifyScreeningQueueTab(
-	evacuee: Evacuee,
-	screenedEvacueeIds: Set<string>
-): ScreeningQueueTab | null {
-	if (screenedEvacueeIds.has(evacuee._id)) {
-		return 'screened';
-	}
-	const status = evacuee.current_stay?.status;
-	if (status === 'arriving' || status === 'pre_registered') {
-		return 'pending';
-	}
-	return null;
 }
 
 /** Dirty-leave confirm: only when there are unsaved edits and save is not in flight. */

@@ -102,12 +102,14 @@ export {
 export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
+	classifyScreeningQueueTab,
 	recommendZoneKind,
 	countOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
 	type NextQueueLabel,
 	type ZoningQueueTab,
+	type ScreeningQueueTab,
 	type ZoningRecommendKind
 } from './domain/intake-pipeline';
 

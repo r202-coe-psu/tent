@@ -8,6 +8,8 @@ export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'พ�
 
 export type ZoningQueueTab = 'pending' | 'assigned';
 
+export type ScreeningQueueTab = 'pending' | 'screened';
+
 export type ZoningRecommendKind = 'quarantine' | 'vulnerable' | 'general';
 
 /**
@@ -41,8 +43,28 @@ export function nextQueueLabel(
 }
 
 /**
- * Station 3 queue tab classification.
- * - pending (รอจัด): arriving, zone null; when flag on also requires a screening doc
+ * Station 2 queue tab classification.
+ * - pending (รอตรวจ): arriving/pre_registered with no screening yet
+ * - screened (ตรวจแล้ว): has screening and still in the intake pipeline (arriving/pre_registered)
+ * - null: checked-in / left pipeline — cleared from medical waiting queues
+ */
+export function classifyScreeningQueueTab(
+	evacuee: Evacuee,
+	screenedEvacueeIds: Set<string>
+): ScreeningQueueTab | null {
+	const status = evacuee.current_stay?.status;
+	if (status !== 'arriving' && status !== 'pre_registered') {
+		return null;
+	}
+	if (screenedEvacueeIds.has(evacuee._id)) {
+		return 'screened';
+	}
+	return 'pending';
+}
+
+/**
+ * Station 3 queue tab classification ("Cleared for Zoning" = pending).
+ * - pending (รอจัด / พร้อมจัดโซน): arriving, zone null; when flag on also requires a screening doc
  * - assigned (จัดแล้ว): has a zone (typically active after check-in)
  */
 export function classifyZoningQueueTab(

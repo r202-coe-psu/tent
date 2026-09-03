@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -27,12 +28,15 @@
 		useScreenings,
 		maskNationalId,
 		matchesEvacueeSearch,
+		formatPersonName,
 		classifyZoningQueueTab,
 		parseZoningQrCode,
 		buildZoningPath,
-		type ZoningQueueTab
+		type ZoningQueueTab,
+		type TriageLevel
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { useMasterData } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 
@@ -40,13 +44,58 @@
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
-	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
-	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
+	const householdMap = $derived(new SvelteMap((householdsQuery.data ?? []).map((h) => [h._id, h])));
+	const screenings = $derived(screeningsQuery.data ?? []);
+	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
+	const triageByEvacuee = $derived.by(() => {
+		const map = new SvelteMap<string, TriageLevel>();
+		const sorted = [...screenings].sort((a, b) =>
+			(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
+		);
+		for (const s of sorted) {
+			if (s.triage_level && !map.has(s.evacuee_id)) {
+				map.set(s.evacuee_id, s.triage_level);
+			}
+		}
+		return map;
+	});
+
+	const TRIAGE_LABELS: Record<TriageLevel, string> = {
+		green: 'เขียว',
+		yellow: 'เหลือง',
+		red: 'แดง'
+	};
+	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
+		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
+		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
+		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
+	};
+
+	const SPECIAL_NEED_LABELS: Record<string, string> = {
+		wheelchair: 'ใช้วีลแชร์',
+		bedridden: 'ผู้ป่วยติดเตียง',
+		oxygen: 'ใช้ออกซิเจน',
+		pregnant: 'หญิงตั้งครรภ์',
+		infant: 'ทารก/เด็กเล็ก',
+		visual_impaired: 'ผู้พิการทางการมองเห็น',
+		hearing_impaired: 'ผู้พิการทางการได้ยิน',
+		high_dependency: 'มีภาวะพึ่งพิงสูง',
+		elderly: 'ผู้สูงอายุ',
+		chronic_illness: 'โรคเรื้อรัง',
+		disabled: 'ผู้พิการ'
+	};
+
+	function getSpecialNeedLabel(need: string): string {
+		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
+		if (fromMaster) return fromMaster;
+		return SPECIAL_NEED_LABELS[need] ?? need;
+	}
 
 	let searchQuery = $state('');
 	let barcodeInput = $state('');
@@ -106,7 +155,7 @@
 
 		const found = allEvacuees.find((e) => e._id === parsedId || e.person_id?.number === parsedId);
 		if (found) {
-			toast.success(`พบผู้ประสบภัย: ${found.first_name} ${found.last_name}`);
+			toast.success(`พบผู้ประสบภัย: ${formatPersonName(found)}`);
 			barcodeInput = '';
 			showCameraModal = false;
 			openDetail(found._id);
@@ -169,8 +218,8 @@
 
 	const emptyPendingMessage = $derived(
 		enableMedical
-			? 'ยังไม่มีผู้รอจัดโซน — ผู้ที่ลงทะเบียนแล้วต้องผ่านคัดกรองแพทย์ก่อน'
-			: 'ยังไม่มีผู้รอจัดโซน — เมื่อลงทะเบียนเสร็จจะปรากฏที่นี่'
+			? 'ยังไม่มีผู้พร้อมจัดโซน — ผู้ที่ลงทะเบียนแล้วต้องผ่านคัดกรองแพทย์ก่อน'
+			: 'ยังไม่มีผู้พร้อมจัดโซน — เมื่อลงทะเบียนเสร็จจะปรากฏที่นี่'
 	);
 </script>
 
@@ -204,7 +253,8 @@
 					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					คิวรอจัดโซนและรายการที่จัดแล้ว — เลือกแถวหรือสแกน QR เพื่อเปิดหน้าจัดสรร
+					คิวพร้อมจัดโซน (Cleared for Zoning) และรายการที่จัดแล้ว — ค้นหาหรือสแกน Handover / Person
+					QR
 				</p>
 			</div>
 		</div>
@@ -212,7 +262,7 @@
 		<div class="flex flex-wrap items-center gap-2">
 			<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
 				<Clock class="size-3.5 text-amber-600" />
-				<span>รอจัด:</span>
+				<span>พร้อมจัด:</span>
 				<span class="font-bold text-amber-700 dark:text-amber-300">{pendingEvacuees.length} คน</span
 				>
 			</Badge>
@@ -295,7 +345,7 @@
 		}}
 	>
 		<Tabs.List class="mb-3">
-			<Tabs.Trigger value="pending">รอจัด ({pendingEvacuees.length})</Tabs.Trigger>
+			<Tabs.Trigger value="pending">พร้อมจัดโซน ({pendingEvacuees.length})</Tabs.Trigger>
 			<Tabs.Trigger value="assigned">จัดแล้ว ({assignedEvacuees.length})</Tabs.Trigger>
 		</Tabs.List>
 
@@ -305,7 +355,9 @@
 					<div class="flex items-center gap-2">
 						<Users class="size-4 text-amber-600" />
 						<Card.Title class="text-base font-semibold">
-							{activeTab === 'pending' ? 'คิวรอจัดสรรที่พัก' : 'รายการที่จัดโซนแล้ว (ย้ายโซนได้)'}
+							{activeTab === 'pending'
+								? 'Cleared for Zoning — คิวพร้อมจัดสรรที่พัก'
+								: 'รายการที่จัดโซนแล้ว (ย้ายโซนได้)'}
 						</Card.Title>
 						<Badge variant="secondary" class="text-xs">{filteredQueue.length} ราย</Badge>
 					</div>
@@ -332,7 +384,9 @@
 									<Table.Row class="bg-muted/30 hover:bg-muted/30">
 										<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
 										<Table.Head>บัตร</Table.Head>
-										<Table.Head>ครัวเรือน</Table.Head>
+										<Table.Head>Triage</Table.Head>
+										<Table.Head>ความต้องการพิเศษ</Table.Head>
+										<Table.Head>ครอบครัว</Table.Head>
 										<Table.Head>{activeTab === 'pending' ? 'อัปเดต' : 'โซน'}</Table.Head>
 										<Table.Head class="pr-5 text-right">ดำเนินการ</Table.Head>
 									</Table.Row>
@@ -340,13 +394,38 @@
 								<Table.Body>
 									{#each filteredQueue as row (row._id)}
 										{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
+										{@const triage = triageByEvacuee.get(row._id)}
 										<Table.Row class="cursor-pointer" onclick={() => openDetail(row._id)}>
 											<Table.Cell class="pl-5 font-medium">
-												{row.first_name}
-												{row.last_name}
+												{formatPersonName(row)}
 											</Table.Cell>
 											<Table.Cell class="font-mono text-xs">
 												{maskNationalId(row.person_id?.number)}
+											</Table.Cell>
+											<Table.Cell>
+												{#if triage}
+													<Badge variant="outline" class={TRIAGE_BADGE_CLASS[triage]}>
+														{TRIAGE_LABELS[triage]}
+													</Badge>
+												{:else}
+													<span class="text-xs text-muted-foreground">—</span>
+												{/if}
+											</Table.Cell>
+											<Table.Cell>
+												{#if row.special_needs && row.special_needs.length > 0}
+													<div class="flex max-w-[14rem] flex-wrap gap-1">
+														{#each row.special_needs as need (need)}
+															<Badge
+																variant="outline"
+																class="border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[11px] text-amber-800 dark:text-amber-200"
+															>
+																{getSpecialNeedLabel(need)}
+															</Badge>
+														{/each}
+													</div>
+												{:else}
+													<span class="text-xs text-muted-foreground">—</span>
+												{/if}
 											</Table.Cell>
 											<Table.Cell class="text-sm text-muted-foreground">
 												{hh?.label ?? '—'}

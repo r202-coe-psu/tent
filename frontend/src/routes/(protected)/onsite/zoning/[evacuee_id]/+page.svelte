@@ -20,12 +20,15 @@
 		useChangeEvacueeZone,
 		ZoneSelectionFields,
 		maskNationalId,
+		formatPersonName,
 		classifyZoningQueueTab,
 		countOccupantsByZone,
 		recommendZoneKind,
-		type Evacuee
+		type Evacuee,
+		type TriageLevel
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { useMasterData } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -38,6 +41,7 @@
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
 
@@ -47,13 +51,43 @@
 	const evacuee = $derived(evacueeQuery.data ?? null);
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
-	const latestTriage = $derived.by(() => {
+	const latestTriage = $derived.by((): TriageLevel | null => {
 		if (!evacuee) return null;
 		const list = (screeningsQuery.data ?? [])
 			.filter((s) => s.evacuee_id === evacuee._id)
 			.sort((a, b) => (b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at));
 		return list[0]?.triage_level ?? null;
 	});
+
+	const TRIAGE_LABELS: Record<TriageLevel, string> = {
+		green: 'เขียว',
+		yellow: 'เหลือง',
+		red: 'แดง'
+	};
+	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
+		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
+		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
+		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
+	};
+	const SPECIAL_NEED_LABELS: Record<string, string> = {
+		wheelchair: 'ใช้วีลแชร์',
+		bedridden: 'ผู้ป่วยติดเตียง',
+		oxygen: 'ใช้ออกซิเจน',
+		pregnant: 'หญิงตั้งครรภ์',
+		infant: 'ทารก/เด็กเล็ก',
+		visual_impaired: 'ผู้พิการทางการมองเห็น',
+		hearing_impaired: 'ผู้พิการทางการได้ยิน',
+		high_dependency: 'มีภาวะพึ่งพิงสูง',
+		elderly: 'ผู้สูงอายุ',
+		chronic_illness: 'โรคเรื้อรัง',
+		disabled: 'ผู้พิการ'
+	};
+
+	function getSpecialNeedLabel(need: string): string {
+		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
+		if (fromMaster) return fromMaster;
+		return SPECIAL_NEED_LABELS[need] ?? need;
+	}
 
 	const isRezone = $derived(
 		evacuee?.current_stay.status === 'active' && !!evacuee.current_stay.zone
@@ -85,23 +119,25 @@
 
 	const companionCandidates = $derived(isRezone ? activeHouseholdMembers : pendingHouseholdMembers);
 
-	let selectedZone = $state('');
-	let selectedCompanionIds = $state<string[]>([]);
+	// User edits tracked per-evacuee so query refetches don't wipe selection
+	let zoneDraft = $state<string | null>(null);
+	let zoneDraftEvacueeId = $state<string | null>(null);
+	let companionDraft = $state<string[]>([]);
+	let companionDraftEvacueeId = $state<string | null>(null);
 	let submitting = $state(false);
+
+	const selectedZone = $derived(
+		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
+			? zoneDraft
+			: (evacuee?.current_stay.zone ?? '')
+	);
+	// Isolation default: companions start empty (never auto-select household)
+	const selectedCompanionIds = $derived(
+		companionDraftEvacueeId === evacueeId ? companionDraft : []
+	);
 
 	const recommendKind = $derived(recommendZoneKind(evacuee ?? { special_needs: [] }, latestTriage));
 	const isolationDefault = $derived(recommendKind === 'quarantine');
-
-	$effect(() => {
-		if (!evacuee) return;
-		if (evacuee.current_stay.zone && !selectedZone) {
-			selectedZone = evacuee.current_stay.zone;
-		}
-		// Isolation default: when quarantine recommended, do not auto-select household
-		if (isolationDefault) {
-			selectedCompanionIds = [];
-		}
-	});
 
 	const occupantCounts = $derived(countOccupantsByZone(allEvacuees));
 	const householdLabel = $derived(
@@ -110,12 +146,15 @@
 			: '—'
 	);
 
+	function setSelectedZone(zone: string) {
+		zoneDraftEvacueeId = evacueeId;
+		zoneDraft = zone;
+	}
+
 	function toggleCompanion(id: string, checked: boolean) {
-		if (checked) {
-			selectedCompanionIds = [...new Set([...selectedCompanionIds, id])];
-		} else {
-			selectedCompanionIds = selectedCompanionIds.filter((x) => x !== id);
-		}
+		const base = companionDraftEvacueeId === evacueeId ? companionDraft : [];
+		companionDraftEvacueeId = evacueeId;
+		companionDraft = checked ? [...new Set([...base, id])] : base.filter((x) => x !== id);
 	}
 
 	function authorCtx() {
@@ -190,25 +229,41 @@
 		</Card.Root>
 	{:else}
 		<Card.Root class="border-border p-5 shadow-sm">
-			<div class="mb-4 space-y-1">
-				<p class="text-lg font-bold">{evacuee.first_name} {evacuee.last_name}</p>
+			<div class="mb-4 space-y-2">
+				<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
 				<p class="text-xs text-muted-foreground">
-					บัตร {maskNationalId(evacuee.person_id?.number)} · สถานะ {evacuee.current_stay.status} · ครัวเรือน
+					บัตร {maskNationalId(evacuee.person_id?.number)} · สถานะ {evacuee.current_stay.status} · ครอบครัว
 					{householdLabel}
 				</p>
-				{#if latestTriage}
-					<p class="text-xs">
-						Triage:
-						<Badge variant="secondary">{latestTriage}</Badge>
+				<div class="flex flex-wrap items-center gap-2">
+					{#if latestTriage}
+						<span class="text-xs text-muted-foreground">Triage</span>
+						<Badge variant="outline" class={TRIAGE_BADGE_CLASS[latestTriage]}>
+							{TRIAGE_LABELS[latestTriage]}
+						</Badge>
 						{#if isolationDefault}
-							<span class="text-amber-700"> — แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span>
+							<span class="text-xs text-amber-700 dark:text-amber-300"
+								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
+							>
 						{/if}
-					</p>
+					{/if}
+				</div>
+				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
+					<div class="flex flex-wrap gap-1.5 pt-1">
+						{#each evacuee.special_needs as need (need)}
+							<Badge
+								variant="outline"
+								class="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+							>
+								{getSpecialNeedLabel(need)}
+							</Badge>
+						{/each}
+					</div>
 				{/if}
 			</div>
 
 			<ZoneSelectionFields
-				bind:selected_zone={selectedZone}
+				bind:selected_zone={() => selectedZone, setSelectedZone}
 				{evacuee}
 				triage_level={latestTriage}
 				occupant_counts={occupantCounts}
@@ -231,7 +286,7 @@
 								onCheckedChange={(v) => toggleCompanion(member._id, v === true)}
 							/>
 							<div class="min-w-0 flex-1">
-								<p class="text-sm font-medium">{member.first_name} {member.last_name}</p>
+								<p class="text-sm font-medium">{formatPersonName(member)}</p>
 								<p class="text-2xs text-muted-foreground">
 									{member.current_stay.status}
 									{#if member.current_stay.zone}

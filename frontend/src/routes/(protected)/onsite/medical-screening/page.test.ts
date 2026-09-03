@@ -174,6 +174,18 @@ describe('classifyScreeningQueueTab', () => {
 			)
 		).toBeNull();
 	});
+
+	it('clears checked-in (active) evacuees from medical queues even when screened', () => {
+		expect(
+			classifyScreeningQueueTab(
+				{
+					...base,
+					current_stay: { ...base.current_stay, status: 'active', zone: 'A' }
+				},
+				new Set(['evacuee:01J7'])
+			)
+		).toBeNull();
+	});
 });
 
 describe('shouldConfirmLeave', () => {
