@@ -102,25 +102,20 @@ cd frontend
 pnpm dev          # http://localhost:5173
 ```
 
-## การตรวจคุณภาพโค้ด (pre-commit)
+## การตรวจคุณภาพโค้ด (Quality Gate: pre-commit & pre-push)
 
-repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit
-— ตรวจ code smell เบื้องต้นของ frontend ตามลำดับเดียวกับ Jenkins CI:
+repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit และ push:
+- **pre-commit:** ตรวจ format และ lint (frontend, backend, worker)
+- **pre-push:** ตรวจ type-check และ unit tests (frontend, backend, worker)
 
-1. `pnpm lint` — Prettier + ESLint
-2. `pnpm check` — `svelte-check` (type-check)
-3. `pnpm test` — Vitest unit tests
-
-Hook รันเฉพาะเมื่อมีไฟล์ใน `frontend/` ถูก stage; commit ที่แตะแค่ docs/config ที่ root จะข้าม
-การตรวจนี้
+> ⚠️ **ข้อตกลงสำคัญ (Strict Rule):**
+> **ห้าม commit หรือ push โดยใช้ `--no-verify` (หรือ `LEFTHOOK=0`) โดยเด็ดขาด**
+> ทุกการ commit และ push ต้องผ่านการตรวจสอบคุณภาพโค้ดให้เรียบร้อยเสมอ หากพบข้อผิดพลาดให้แก้ไขโค้ดให้ถูกต้องแทนการข้ามการตรวจสอบ
 
 ```bash
-# ทดสอบ hook โดยไม่ commit
+# ทดสอบ hook ด้วยตนเอง
 pnpm exec lefthook run pre-commit
-
-# ข้าม hook ชั่วคราว (กรณีจำเป็น)
-LEFTHOOK=0 git commit -m "..."
-# หรือ git commit --no-verify
+pnpm exec lefthook run pre-push
 ```
 
 ตั้งค่าอยู่ใน [`lefthook.yml`](lefthook.yml) ที่ repo root — ต้อง `pnpm install` ที่ root

@@ -14,6 +14,8 @@
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import JobQuotaBar from './job-quota-bar.svelte';
+	import { resolveSkillLabel } from '../domain/skill-catalog';
+	import { useSkillOptions } from '../application/queries';
 	import type { Job, JobStatus } from '../domain/job.schema';
 
 	let {
@@ -35,6 +37,19 @@
 		closed: { label: 'ปิดงาน', variant: 'outline' },
 		cancelled: { label: 'ยกเลิก', variant: 'destructive' }
 	};
+
+	/**
+	 * `skills_required` stores master-data codes (CR-100) — resolve each to its
+	 * label here rather than printing the raw value. A code Master Data no
+	 * longer carries falls back to itself, so nothing silently disappears.
+	 */
+	const skillCatalog = useSkillOptions();
+	const skillLabels = $derived(
+		(job.skills_required ?? []).map((value) => ({
+			value,
+			label: resolveSkillLabel(value, skillCatalog.options)
+		}))
+	);
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
 	/**
@@ -89,10 +104,10 @@
 		<p class="mt-0.5 line-clamp-2 text-xs break-words text-muted-foreground">{job.description}</p>
 	</div>
 
-	{#if job.skills_required && job.skills_required.length > 0}
+	{#if skillLabels.length > 0}
 		<div class="flex flex-wrap gap-1">
-			{#each job.skills_required as skill (skill)}
-				<Badge variant="outline" class="max-w-full text-[11px] break-words">{skill}</Badge>
+			{#each skillLabels as skill (skill.value)}
+				<Badge variant="outline" class="max-w-full text-[11px] break-words">{skill.label}</Badge>
 			{/each}
 		</div>
 	{/if}

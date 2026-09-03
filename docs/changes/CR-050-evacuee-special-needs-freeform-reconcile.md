@@ -1,8 +1,9 @@
 ---
 id: CR-050
 title: "evacuee.special_needs enum → free-form string[]"
-status: proposed        # proposed | approved | done | rejected | superseded
+status: done
 date: 2026-07-24
+updated: 2026-09-01
 requested_by: developer team B (2026-07-24) — code review finding (undocumented change already in code)
 decided_by: project owner (2026-07-24) — tracking method + retroactive-keep decided; CR itself pending approval
 layer: volatile         # field type change on existing doc type (evacuee) — volatile spec

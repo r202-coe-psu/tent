@@ -546,20 +546,15 @@ describe('buildValidateDocUpdate', () => {
 
 	// Volunteers (CR-092/CR-094/CR-095) shipped without an entry here — every
 	// session-staff write (walk-in registration, job create/dispatch,
-	// check-in/out, transfer, identity approval) 403'd with "doc type not
+	// check-in/out, identity approval) 403'd with "doc type not
 	// allowed yet", even though the UI let staff into the flow. Dev testing
 	// never caught it because it ran under an _admin session (bug found + fixed
 	// as CR-096, same class as the kitchen gap above).
-	describe('volunteer doc types (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18/§2.20)', () => {
+	// `volunteer_transfer` (schema.md §2.20) was cut by CR-104 AC-104-10.
+	describe('volunteer doc types (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18)', () => {
 		it('includes every volunteer-feature doc type in the allowed whitelist', () => {
 			const validateFn = buildValidateDocUpdate('SH001');
-			for (const type of [
-				'volunteer',
-				'job',
-				'job_application',
-				'shift_assignment',
-				'volunteer_transfer'
-			] as const) {
+			for (const type of ['volunteer', 'job', 'job_application', 'shift_assignment'] as const) {
 				expect(validateFn).toContain(`'${type}'`);
 			}
 		});

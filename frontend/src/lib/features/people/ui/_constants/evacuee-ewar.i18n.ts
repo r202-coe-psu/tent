@@ -7,7 +7,11 @@ export const EVACUEE_EWAR_I18N = {
 		healthyLabel: 'ไม่มีอาการป่วย (Healthy / No Symptoms)',
 		next: 'ถัดไป →',
 		back: 'ย้อนกลับ',
-		toastSelectRequired: 'กรุณาเลือกอาการที่พบ หรือระบุว่า "ไม่มีอาการ" ก่อนดำเนินการต่อ'
+		toastSelectRequired: 'กรุณาเลือกอาการที่พบ หรือระบุว่า "ไม่มีอาการ" ก่อนดำเนินการต่อ',
+		toastMedicalRequired:
+			'กรุณาระบุข้อมูลสุขภาพแต่ละช่อง หรือกดปุ่ม "ไม่มี" ในแต่ละช่องก่อนดำเนินการต่อ',
+		toastSpecialRequired:
+			'กรุณาเลือกกลุ่มเปราะบาง หรือกดปุ่ม "ไม่เป็นกลุ่มเปราะบาง" ก่อนดำเนินการต่อ'
 	},
 	en: {
 		isolationTitle: 'Warning! Immediate Isolation Required',
@@ -17,7 +21,12 @@ export const EVACUEE_EWAR_I18N = {
 		healthyLabel: 'Healthy / No Symptoms',
 		next: 'Next →',
 		back: 'Back',
-		toastSelectRequired: 'Please select symptoms or check "Healthy / No Symptoms" before proceeding'
+		toastSelectRequired:
+			'Please select symptoms or check "Healthy / No Symptoms" before proceeding',
+		toastMedicalRequired:
+			'Please complete each health field or tap "None" on each field before proceeding',
+		toastSpecialRequired:
+			'Please select vulnerable-group tags or tap "Not a vulnerable group" before proceeding'
 	}
 } as const;
 

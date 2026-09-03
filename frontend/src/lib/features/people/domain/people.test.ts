@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createEvacuee,
+	createDraftEvacueeFromCard,
 	createMovement,
 	createScreening,
 	applyMovementToStay,
@@ -12,6 +13,8 @@ import {
 	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	resolveStatusChangeAction,
+	matchesEvacueeSearch,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -40,7 +43,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(7);
+		expect(e.schema_v).toBe(8);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -49,8 +52,50 @@ describe('createEvacuee', () => {
 		expect(e.current_stay.status).toBe('pre_registered');
 		expect(e.country).toBe('THAILAND');
 		expect(e.special_needs).toEqual([]);
-		expect(e.registered_via).toBe('app');
+		expect(e.registered_via).toBe('staff');
 		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			title_th: 'นาย',
+			first_name_th: 'สมศักดิ์',
+			last_name_th: 'รักชาติ',
+			gender: 'male' as const,
+			birth_year_ce: 1990,
+			age: 36,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01',
+			station_name: 'จุดสแกน Kiosk 1'
+		};
+		const kioskEv = createDraftEvacueeFromCard(card, ctx);
+		expect(kioskEv._id.startsWith('evacuee:')).toBe(true);
+		expect(kioskEv.type).toBe('evacuee');
+		expect(kioskEv.schema_v).toBe(8);
+		expect(kioskEv.first_name).toBe('สมศักดิ์');
+		expect(kioskEv.last_name).toBe('รักชาติ');
+		expect(kioskEv.birth_year).toBe(2533);
+		expect(kioskEv.age).toBe(36);
+		expect(kioskEv.current_stay.status).toBe('pre_registered');
+		expect(kioskEv.household_id).toBeNull();
+		expect(kioskEv.registered_via).toBe('kiosk');
+		expect(kioskEv.person_id?.number).toBe('1234567890123');
+		expect(kioskEv.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
+	});
+
+	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			first_name_th: 'วิชัย',
+			last_name_th: 'ใจดี',
+			birth_year_ce: 1996,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01'
+		};
+		const draft = createDraftEvacueeFromCard(card, ctx);
+		expect(draft.birth_year).toBe(2539);
+		expect(draft.age).toBe(new Date().getFullYear() + 543 - 2539);
 	});
 
 	it('accepts "no phone" as null', () => {
@@ -305,6 +350,32 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
 	});
 
+	it('allows check_in from eligible stay statuses only', () => {
+		const statuses = [
+			'pre_registered',
+			'temporary_leave',
+			'checked_out',
+			'transferred',
+			'active',
+			'deceased',
+			'cancelled'
+		] as const;
+
+		const base = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx
+		);
+
+		const allowed = statuses.filter((status) =>
+			canCheckInEvacuee({
+				...base,
+				current_stay: { status, zone: null, since: base.current_stay.since }
+			})
+		);
+
+		expect(allowed).toEqual(['pre_registered', 'temporary_leave', 'checked_out', 'transferred']);
+	});
+
 	it('rejects check_in from deceased (terminal status)', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		const deceased = {
@@ -367,6 +438,48 @@ describe('movement → current_stay', () => {
 		};
 		expect(canCheckInEvacuee(active)).toBe(false);
 		expect(canCheckOutEvacuee(active)).toBe(true);
+	});
+
+	it('rejects transfer_out / leave_temporary unless status is active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(() => assertMovementAllowed(e, 'transfer_out')).toThrow(/ย้ายออก/);
+		expect(() => assertMovementAllowed(e, 'leave_temporary')).toThrow(/ลาชั่วคราว/);
+
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(() => assertMovementAllowed(active, 'transfer_out')).not.toThrow();
+		expect(() => assertMovementAllowed(active, 'leave_temporary')).not.toThrow();
+	});
+});
+
+describe('resolveStatusChangeAction', () => {
+	it('returns null when the status is unchanged', () => {
+		expect(resolveStatusChangeAction('active', 'active')).toBeNull();
+	});
+
+	it('returns null for pre_registered → checked_out (must check in first)', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'checked_out')).toBeNull();
+	});
+
+	it('returns null for checked_out → temporary_leave / transferred (must check in first)', () => {
+		expect(resolveStatusChangeAction('checked_out', 'temporary_leave')).toBeNull();
+		expect(resolveStatusChangeAction('checked_out', 'transferred')).toBeNull();
+	});
+
+	it('returns null from terminal statuses (deceased, cancelled)', () => {
+		expect(resolveStatusChangeAction('deceased', 'active')).toBeNull();
+		expect(resolveStatusChangeAction('cancelled', 'active')).toBeNull();
+	});
+
+	it('resolves valid transitions to their movement action', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'active')).toBe('check_in');
+		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('return_from_leave');
+		expect(resolveStatusChangeAction('active', 'checked_out')).toBe('check_out');
+		expect(resolveStatusChangeAction('active', 'transferred')).toBe('transfer_out');
+		expect(resolveStatusChangeAction('active', 'temporary_leave')).toBe('leave_temporary');
+		expect(resolveStatusChangeAction('active', 'deceased')).toBe('mark_deceased');
 	});
 });
 
@@ -624,5 +737,44 @@ describe('assertCheckoutDestination', () => {
 		expect(() =>
 			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
 		).not.toThrow();
+	});
+});
+
+describe('matchesEvacueeSearch', () => {
+	const evacuee = createEvacuee(
+		{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
+		ctx
+	);
+
+	it('returns true for an empty/blank query', () => {
+		expect(matchesEvacueeSearch(evacuee, '')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '   ')).toBe(true);
+	});
+
+	it('matches by first name, last name, full name, and phone digits', () => {
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '0812345678')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ไม่มีตัวตน')).toBe(false);
+	});
+
+	it('defaults to including search_excluded evacuees (internal staff search)', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: false })).toBe(true);
+	});
+
+	it('excludes search_excluded evacuees only when isPublicSearch is true', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: true })).toBe(false);
+
+		const included = { ...evacuee, privacy: { search_excluded: false } };
+		expect(matchesEvacueeSearch(included, 'สมชาย', { isPublicSearch: true })).toBe(true);
+	});
+
+	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
 	});
 });

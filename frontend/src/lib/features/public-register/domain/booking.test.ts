@@ -186,8 +186,9 @@ describe('toEvacueeInputs → createEvacuee', () => {
 
 		expect(evacuees).toHaveLength(3);
 		for (const e of evacuees) {
-			expect(e.schema_v).toBe(7);
+			expect(e.schema_v).toBe(8);
 			expect(e.registered_via).toBe('web');
+
 			expect(e.current_stay.status).toBe('pre_registered');
 			expect(e.household_id).toBe('household:H1');
 			expect(e.created_by).toBe('public');

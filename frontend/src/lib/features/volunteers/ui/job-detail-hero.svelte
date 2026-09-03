@@ -4,11 +4,17 @@
 	 *
 	 * Dark `primary-dark` slab in the same visual language as
 	 * `volunteer-hub-header.svelte`, per the approved mockup 2026-08-27:
-	 * status/urgent badges, title + description, then the job-level 3-colour
-	 * quota bar ("สรุปสถิติกำลังพลรวมทุกกะ / Multi-State Quota").
+	 * status/urgent badges, title + description, then the job-level personnel
+	 * summary.
 	 *
-	 * The split is read from `domain/quota.ts#computeQuota` — this component
-	 * never derives a counter itself.
+	 * The former 3-colour "Multi-State Quota" block is gone (owner decision
+	 * 2026-09-02): the bar counts APPROVED volunteers only — 🟢 ยืนยันแล้ว
+	 * (`slots_confirmed`) against ⚪ ยังขาดอีก — matching the job board card and
+	 * the sub-shift cards, so an offer nobody has accepted yet is not read as
+	 * staffing anywhere in the UI.
+	 *
+	 * The split is still read from `domain/quota.ts#computeQuota`, so the job's
+	 * quota invariant is validated here and no counter is derived locally.
 	 */
 	import Flame from '@lucide/svelte/icons/flame';
 	import ChartColumn from '@lucide/svelte/icons/chart-column';
@@ -44,7 +50,8 @@
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
 	const quota = $derived(computeQuota(job));
-	const claimed = $derived(quota.confirmed + quota.dispatched);
+	/** Everything not yet approved — dispatched-but-unanswered seats included. */
+	const missing = $derived(quota.dispatched + quota.remaining);
 	/** Guard the divide-by-zero: a stored job always has `quota > 0`, but a bar must never render NaN%. */
 	const total = $derived(job.quota > 0 ? job.quota : 1);
 </script>
@@ -98,17 +105,14 @@
 
 		<div class="mt-5 border-t border-white/10 pt-4">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
-				<h2 class="text-xs font-bold text-amber-300 sm:text-sm">
-					สรุปสถิติกำลังพลรวมทุกกะ (Multi-State Quota)
-				</h2>
+				<h2 class="text-xs font-bold text-amber-300 sm:text-sm">สรุปกำลังพลรวมทุกกะ</h2>
 				<p class="text-sm font-bold tabular-nums">
-					{claimed} / {job.quota} <span class="font-medium text-white/60">คน</span>
+					{quota.confirmed} / {job.quota} <span class="font-medium text-white/60">คน</span>
 				</p>
 			</div>
 
 			<div class="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-white/12">
 				<div class="h-full bg-emerald-400" style:width="{(quota.confirmed / total) * 100}%"></div>
-				<div class="h-full bg-amber-400" style:width="{(quota.dispatched / total) * 100}%"></div>
 			</div>
 
 			<div class="mt-3 flex flex-wrap items-center gap-2">
@@ -116,19 +120,13 @@
 					class="inline-flex items-center gap-1.5 rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/10"
 				>
 					<span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-					ตอบรับแล้ว: <span class="font-bold tabular-nums">{quota.confirmed}</span>
-				</span>
-				<span
-					class="inline-flex items-center gap-1.5 rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/10"
-				>
-					<span class="h-2 w-2 rounded-full bg-amber-400"></span>
-					เสนอแล้ว: <span class="font-bold tabular-nums">{quota.dispatched}</span>
+					ยืนยันแล้ว: <span class="font-bold tabular-nums">{quota.confirmed}</span>
 				</span>
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/10"
 				>
 					<span class="h-2 w-2 rounded-full bg-white/40"></span>
-					ยังขาดอีก: <span class="font-bold tabular-nums">{quota.remaining}</span>
+					ยังขาดอีก: <span class="font-bold tabular-nums">{missing}</span>
 				</span>
 				<span class="ml-auto text-[11px] text-white/45">(เป้า {job.quota} คน)</span>
 			</div>

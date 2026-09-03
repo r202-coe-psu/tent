@@ -1,3 +1,7 @@
+<script module lang="ts">
+	export type AttendanceTileFilter = 'active' | 'expected' | 'completed' | '';
+</script>
+
 <script lang="ts">
 	/**
 	 * "สรุปยอดปฏิบัติงานสดประจำวันนี้ (Today's Live Attendance Bar)" — Roster tab
@@ -8,6 +12,10 @@
 	 * `assigned` / `completed` fields via the tab's single `useHubMetrics()` call
 	 * — this component must never recompute them itself (CR-094 FR-VOL-08.2 /
 	 * AC-094-09, same rule `volunteer-hub-header.svelte` follows).
+	 *
+	 * Tiles double as a click-to-filter toggle (`selected`, mirrors
+	 * `volunteer-stat-pills.svelte`'s pattern): clicking one narrows the roster
+	 * list below to that status group, clicking the active tile again clears it.
 	 */
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import UserCheck from '@lucide/svelte/icons/user-check';
@@ -18,17 +26,36 @@
 		activeOnSite,
 		expectedToday,
 		completed,
-		isPending
+		isPending,
+		selected = $bindable<AttendanceTileFilter>('')
 	}: {
 		activeOnSite: number;
 		expectedToday: number;
 		completed: number;
 		isPending: boolean;
+		selected?: AttendanceTileFilter;
 	} = $props();
+
+	type TileKey = Exclude<AttendanceTileFilter, ''>;
+
+	function toggleTile(key: TileKey) {
+		selected = selected === key ? '' : key;
+	}
 
 	const total = $derived(activeOnSite + expectedToday + completed);
 
-	const tiles = $derived([
+	interface Tile {
+		key: TileKey;
+		label: string;
+		sub: string;
+		value: number;
+		icon: typeof UserCheck;
+		cardClass: string;
+		iconClass: string;
+		valueClass: string;
+	}
+
+	const tiles: Tile[] = $derived([
 		{
 			key: 'active',
 			label: 'ปฏิบัติหน้าที่อยู่ขณะนี้',
@@ -87,7 +114,16 @@
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 		{#each tiles as tile (tile.key)}
 			{@const Icon = tile.icon}
-			<div class="rounded-xl border p-4 {tile.cardClass}">
+			{@const isSelected = selected === tile.key}
+			<button
+				type="button"
+				aria-pressed={isSelected}
+				disabled={isPending}
+				onclick={() => toggleTile(tile.key)}
+				class="w-full rounded-xl border p-4 text-left transition-shadow {tile.cardClass} {isSelected
+					? 'ring-2 ring-primary-dark ring-offset-1'
+					: 'hover:shadow-sm'} disabled:cursor-not-allowed disabled:opacity-60"
+			>
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="text-xs font-bold text-foreground">{tile.label}</p>
@@ -105,7 +141,7 @@
 						<span class="text-xs text-muted-foreground">คน</span>
 					</p>
 				{/if}
-			</div>
+			</button>
 		{/each}
 	</div>
 </div>

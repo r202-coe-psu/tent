@@ -60,6 +60,17 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         if database == REGISTRY_DB:
             if doc_id.startswith("announcement:"):
                 await apply_announcement("delete", {"_id": doc_id})
+            elif doc_id.startswith("master_data:volunteer_skills"):
+                # `master_data:volunteer_skills[:SHELTER]` → its projected config id.
+                # Without this the public gate would keep enforcing a list that staff
+                # deleted (CR-100).
+                from worker.mongo.config import apply_config
+                from worker.projectors.master_data import volunteer_skills_config_id
+
+                suffix = doc_id.split("master_data:volunteer_skills", 1)[1].lstrip(":")
+                await apply_config(
+                    "delete", {"_id": volunteer_skills_config_id(suffix or None)}
+                )
             else:
                 deleted_doc = change.get("doc")
                 shelter_code = await resolve_shelter_code_for_registry_delete(
@@ -115,6 +126,14 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
 
             action, payload = project_config(doc)
             await apply_config(action, payload)
+        elif doc_type == "master_data":
+            # Only the controlled-skill list crosses over (CR-100) — see the
+            # projector's own doc for why it is an allow-list, not a copy.
+            from worker.mongo.config import apply_config
+            from worker.projectors.master_data import project_master_data
+
+            action, payload = project_master_data(doc)
+            await apply_config(action, payload)
     else:
         shelter_code = shelter_code_from_db_name(database)
         if shelter_code:
@@ -139,14 +158,18 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # …and one that arrived without ever reserving — a walk-in staff keyed
                 # in — has to start holding it, or the counter hands the same goods out
                 # to a public donor as well.
-                await reserve_walk_in_quota(couch, doc, shelter_code=shelter_code, now=now)
+                await reserve_walk_in_quota(
+                    couch, doc, shelter_code=shelter_code, now=now
+                )
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "donation_campaign":
                 # CR-060: seed the atomic quota ceiling FastAPI reserves against. The
                 # campaign doc is already in hand from the change row — no re-fetch,
                 # unlike the full re-scan _reproject_needs does.
-                await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+                await apply_need_counters(
+                    plan_need_counters(doc, shelter_code=shelter_code)
+                )
                 # A counter seeded now starts at on_hand_qty 0 even when the shelf is
                 # already full, so give it the current balance before it takes bookings.
                 await refresh_on_hand(couch, shelter_code)
@@ -163,7 +186,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 action, payload = project_job(doc, shelter_code=shelter_code)
                 await apply_job(action, payload)
             elif doc_type == "job_application":
-                action, payload = project_job_application(doc, shelter_code=shelter_code)
+                action, payload = project_job_application(
+                    doc, shelter_code=shelter_code
+                )
                 await apply_job_application(action, payload)
             elif doc_type == "shift_assignment":
                 # The assignee's profile is the only source of the phone hash the

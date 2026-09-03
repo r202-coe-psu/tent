@@ -68,17 +68,6 @@ vi.mock('../data/volunteer.remote', () => ({
 	}
 }));
 
-const volunteerTransferRepo = {
-	list: vi.fn(),
-	get: vi.fn(),
-	request: vi.fn(),
-	decide: vi.fn(),
-	cancel: vi.fn()
-};
-vi.mock('../data/volunteer-transfer.remote', () => ({
-	volunteerTransferRepository: () => volunteerTransferRepo
-}));
-
 const computeHubMetrics = vi.fn<(input: unknown) => Record<string, number>>(() => ({
 	ready: 0,
 	assigned: 0,
@@ -129,7 +118,6 @@ import {
 	useTodayAttendance,
 	useVolunteers,
 	useVolunteer,
-	useTransfers,
 	useCreateJob,
 	useUpdateJob,
 	useDispatchVolunteers,
@@ -138,8 +126,6 @@ import {
 	useCheckOut,
 	useCreateWalkInVolunteer,
 	useSetVolunteerAccountLink,
-	useRequestTransfer,
-	useDecideTransfer,
 	startVolunteersLiveQuery
 } from './queries';
 
@@ -154,7 +140,6 @@ beforeEach(() => {
 	jobApplicationRepo.list.mockResolvedValue([]);
 	shiftAssignmentRepo.list.mockResolvedValue([]);
 	volunteerRepo.list.mockResolvedValue([]);
-	volunteerTransferRepo.list.mockResolvedValue([]);
 });
 
 describe('volunteerKeys', () => {
@@ -302,12 +287,6 @@ describe('list/detail query hooks', () => {
 		(result as unknown as { queryFn: () => unknown }).queryFn();
 		expect(volunteerRepo.get).toHaveBeenCalledWith('volunteer:1');
 	});
-
-	it('useTransfers filters through to the repository', () => {
-		const filter = { status: 'pending' as const };
-		(useTransfers(filter) as unknown as { queryFn: () => unknown }).queryFn();
-		expect(volunteerTransferRepo.list).toHaveBeenCalledWith(filter);
-	});
 });
 
 describe('mutation author context', () => {
@@ -325,15 +304,6 @@ describe('mutation author context', () => {
 		await useCreateWalkInVolunteer(fakeQueryClient()).mutate({ first_name: 'a' } as never);
 		expect(volunteerRepo.create).toHaveBeenCalledWith(
 			{ first_name: 'a' },
-			{ shelterCode: 'SH001', createdBy: 'sm_user' }
-		);
-	});
-
-	it('useRequestTransfer passes shelterCode/createdBy from getShelterCode()/authStore', async () => {
-		volunteerTransferRepo.request.mockResolvedValue({});
-		await useRequestTransfer(fakeQueryClient()).mutate({ volunteer_id: 'volunteer:1' } as never);
-		expect(volunteerTransferRepo.request).toHaveBeenCalledWith(
-			{ volunteer_id: 'volunteer:1' },
 			{ shelterCode: 'SH001', createdBy: 'sm_user' }
 		);
 	});
@@ -412,22 +382,6 @@ describe('mutation invalidation map', () => {
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
 	});
-
-	it('useRequestTransfer invalidates only transfers (not part of hub metrics)', async () => {
-		volunteerTransferRepo.request.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useRequestTransfer(qc).mutate({} as never);
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.transfersAll() });
-	});
-
-	it('useDecideTransfer invalidates only transfers (decide does not touch volunteer/current_shelter_code yet)', async () => {
-		volunteerTransferRepo.decide.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useDecideTransfer(qc).mutate({ id: 'volunteer_transfer:1', decision: 'accepted' });
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.transfersAll() });
-	});
 });
 
 describe('startVolunteersLiveQuery', () => {
@@ -450,7 +404,6 @@ describe('startVolunteersLiveQuery', () => {
 			volunteerKeys.volunteersAll(),
 			volunteerKeys.hubMetrics()
 		]);
-		expect(keysForType('volunteer_transfer')).toEqual([volunteerKeys.transfersAll()]);
 		expect(keysForType('evacuee')).toEqual([]);
 	});
 });

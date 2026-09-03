@@ -14,9 +14,21 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Tag from '@lucide/svelte/icons/tag';
-	import { isJobApplicable, type PublicJob } from '../domain/volunteer';
+	import { isJobApplicable, type PublicJob, type VolunteerSkillOption } from '../domain/volunteer';
+	import { skillLabels } from '../domain/skill-label';
 
-	let { job, onapply }: { job: PublicJob; onapply: (job: PublicJob) => void } = $props();
+	let {
+		job,
+		onapply,
+		/** Master Data skill list, so CR-100 codes render as their Thai label. */
+		skillOptions = []
+	}: {
+		job: PublicJob;
+		onapply: (job: PublicJob) => void;
+		skillOptions?: readonly VolunteerSkillOption[];
+	} = $props();
+
+	const skills = $derived(skillLabels(job.skills_required, skillOptions));
 
 	const applicable = $derived(isJobApplicable(job));
 	const controlled = $derived(job.tier === 'controlled' || job.requires_review);
@@ -68,12 +80,12 @@
 			</span>
 		{/if}
 
-		{#each job.skills_required as skill (skill)}
+		{#each skills as skill (skill.value)}
 			<span
 				class="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground"
 			>
 				<Tag class="h-3 w-3" />
-				{skill}
+				{skill.label}
 			</span>
 		{/each}
 	</div>

@@ -17,7 +17,7 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
- * | seedVolunteers — jobs/volunteers/shifts/applications/transfer | makeJob, makeVolunteer, makeJobApplication, makeShiftAssignment, makeVolunteerTransfer | volunteers domain (00-foundation.md §00.5) |
+ * | seedVolunteers — jobs/volunteers/shifts/applications | makeJob, makeVolunteer, makeJobApplication, makeShiftAssignment | volunteers domain (00-foundation.md §00.5) |
  * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; CR-042 have map) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
@@ -40,9 +40,11 @@
  * never reported as freshly seeded; wipe the local seed data before regenerating that window.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hashSecurityAnswer } from '$lib/server/security-questions';
 
 import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
 import {
@@ -122,11 +124,6 @@ import {
 	type ShiftAssignmentInput,
 	type ShiftKind
 } from '$lib/features/volunteers/domain/shift-assignment.schema';
-import {
-	makeVolunteerTransfer,
-	volunteerTransferSchema,
-	type VolunteerTransferInput
-} from '$lib/features/volunteers/domain/volunteer-transfer.schema';
 import { bangkokDateString, resolveDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
 import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
@@ -135,6 +132,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
+import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
@@ -559,98 +557,171 @@ const ITEM = {
 
 const USER_PREFIX = 'org.couchdb.user:';
 const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
-const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
 
-/** Create sa01 + staff01–staff03 test logins in CouchDB `_users` (idempotent). */
-async function seedUsers(): Promise<void> {
-	const staffNames = ['staff01', 'staff02', 'staff03'] as const;
-	let created = 0;
-	let skipped = 0;
+interface SeedUserConfig {
+	name: string;
+	display_name: string;
+	roles: string[];
+	personnel_type: 'staff' | 'volunteer';
+	organization: string | null;
+	position: string | null;
+	phone: string;
+	email: string | null;
+	shelter_id: string | null;
+	question_id:
+		| 'high_school'
+		| 'birth_province'
+		| 'first_pet'
+		| 'primary_school'
+		| 'favorite_teacher'
+		| 'first_workplace';
+	raw_answer: string;
+}
 
-	const { status: saStatus } = await couchReq(
-		'PUT',
-		`/_users/${USER_PREFIX}${encodeURIComponent('sa01')}`,
-		{
-			name: 'sa01',
-			password: SEED_STAFF_PASSWORD,
-			display_name: 'System Admin',
-			roles: ['system_admin'],
-			type: 'user',
-			shelter_id: null,
-			affiliation_tags: []
-		}
-	);
-	if (saStatus === 201) {
-		created += 1;
-	} else if (saStatus === 409) {
-		skipped += 1;
-	} else {
-		throw new Error(`PUT _users/sa01 failed (HTTP ${saStatus})`);
+const SEED_USERS: SeedUserConfig[] = [
+	{
+		name: 'sa01',
+		display_name: 'ผู้ดูแลระบบสูงสุด (System Admin)',
+		roles: ['system_admin'],
+		personnel_type: 'staff',
+		organization: 'ศูนย์ปฏิบัติการส่วนกลาง (EOC)',
+		position: 'System Administrator',
+		phone: '0800000001',
+		email: 'sa01@smart-shelter.org',
+		shelter_id: null,
+		question_id: 'birth_province',
+		raw_answer: 'กรุงเทพมหานคร'
+	},
+	{
+		name: 'staff01',
+		display_name: 'สมชาย ประจำการ (Staff 01)',
+		roles: ['shelter:SH001', 'registration_staff', 'triage_staff'],
+		personnel_type: 'staff',
+		organization: 'กรมป้องกันและบรรเทาสาธารณภัย',
+		position: 'เจ้าหน้าที่รับลงทะเบียนและคัดกรอง',
+		phone: '0812345601',
+		email: 'staff01@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'high_school',
+		raw_answer: 'กรุงเทพคริสเตียน'
+	},
+	{
+		name: 'staff02',
+		display_name: 'พว. สมหญิง การุณ (Staff 02)',
+		roles: ['shelter:SH001', 'medical_staff'],
+		personnel_type: 'staff',
+		organization: 'โรงพยาบาลศูนย์หาดใหญ่',
+		position: 'พยาบาลวิชาชีพ',
+		phone: '0812345602',
+		email: 'staff02@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'first_pet',
+		raw_answer: 'เจ้าด่าง'
+	},
+	{
+		name: 'staff03',
+		display_name: 'วิชัย มั่นคง (Staff 03)',
+		roles: ['shelter:SH001', 'volunteer_coordinator', 'supply_coordinator', 'kitchen_staff'],
+		personnel_type: 'staff',
+		organization: 'มูลนิธิกระจกเงา',
+		position: 'ผู้ประสานงานจิตอาสาและคลัง',
+		phone: '0812345603',
+		email: 'staff03@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'favorite_teacher',
+		raw_answer: 'ครูสมศรี'
+	},
+	{
+		name: '0891234567',
+		display_name: 'กิตติ จิตอาสา (Volunteer Staff)',
+		roles: ['shelter:SH001', 'registration_staff'],
+		personnel_type: 'volunteer',
+		organization: 'กลุ่มอาสาใจถึงใจ',
+		position: 'อาสาช่วยงานลงทะเบียน',
+		phone: '0891234567',
+		email: 'volunteer01@example.com',
+		shelter_id: SH001_CODE,
+		question_id: 'primary_school',
+		raw_answer: 'อนุบาลวัดป่า'
 	}
+];
 
-	for (const name of staffNames) {
-		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
-			name,
-			password: SEED_STAFF_PASSWORD,
-			display_name: name,
-			roles: [...SEED_STAFF_ROLES],
+/** Create sa01 + staff01–staff03 + volunteer test logins in CouchDB `_users` (idempotent / upsert). */
+async function seedUsers(): Promise<void> {
+	let created = 0;
+	let updated = 0;
+
+	for (const u of SEED_USERS) {
+		const docId = `${USER_PREFIX}${encodeURIComponent(u.name)}`;
+		const existing = await couchReq('GET', `/_users/${docId}`);
+		const existingDoc = existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
+
+		const { answer_hash, salt } = hashSecurityAnswer(u.raw_answer);
+		const security_question = {
+			question_id: u.question_id,
+			answer_hash,
+			salt,
+			set_at: new Date().toISOString()
+		};
+
+		const userDoc: Record<string, unknown> = {
+			...(existingDoc ?? {}),
+			name: u.name,
+			display_name: u.display_name,
+			roles: u.roles,
 			type: 'user',
-			shelter_id: SH001_CODE,
-			affiliation_tags: []
-		});
+			personnel_type: u.personnel_type,
+			organization: u.organization,
+			position: u.position,
+			phone: u.phone,
+			email: u.email,
+			shelter_id: u.shelter_id,
+			active: true,
+			must_change_password: false,
+			security_question,
+			affiliation_tags: (existingDoc?.affiliation_tags as string[]) ?? []
+		};
+
+		if (!existingDoc) {
+			userDoc.password = SEED_STAFF_PASSWORD;
+		}
+
+		const { status } = await couchReq('PUT', `/_users/${docId}`, userDoc);
 		if (status === 201) {
-			created += 1;
+			if (existingDoc) updated += 1;
+			else created += 1;
 		} else if (status === 409) {
-			skipped += 1;
+			// retry with latest rev if conflict
+			const latest = await couchReq('GET', `/_users/${docId}`);
+			if (latest.status === 200) {
+				const latestDoc = latest.data as Record<string, unknown>;
+				userDoc._rev = latestDoc._rev;
+				await couchReq('PUT', `/_users/${docId}`, userDoc);
+				updated += 1;
+			}
 		} else {
-			throw new Error(`PUT _users/${name} failed (HTTP ${status})`);
+			throw new Error(`PUT _users/${u.name} failed (HTTP ${status})`);
 		}
 	}
 
 	console.log(
-		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+		`  ✓ _users: sa01, staff01–03, 0891234567 (${created} created, ${updated} updated with metadata)`
 	);
 
 	await seedPublicWriter();
 }
 
-/**
- * Create the limited-permission public writer used by `putAsPublicWriter`
- * (public booking POST — CR-070/T-71 — and the donation courier PATCH).
- *
- * Roleless on purpose: it is granted per-shelter access as a plain
- * `_security.members.names` entry, so every write still passes through
- * `_design/access` validate_doc_update. Only seeded when
- * `COUCHDB_PUBLIC_WRITER_URL` is configured; local dev without it falls back to
- * admin credentials inside `putAsPublicWriter`.
- */
 async function seedPublicWriter(): Promise<void> {
-	const creds = parseCouchCredentialUrl(
+	const result = await ensurePublicWriter(
+		couchReq,
 		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
 	);
-	if (!creds) {
+	if (result.outcome === 'skipped') {
 		console.log('  – _users: COUCHDB_PUBLIC_WRITER_URL unset — public writer not seeded');
 		return;
 	}
-
-	const { status } = await couchReq(
-		'PUT',
-		`/_users/${USER_PREFIX}${encodeURIComponent(creds.user)}`,
-		{
-			name: creds.user,
-			password: creds.password,
-			display_name: 'Public Writer (BFF)',
-			roles: [],
-			type: 'user',
-			shelter_id: null,
-			affiliation_tags: []
-		}
-	);
-	if (status !== 201 && status !== 409) {
-		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
-	}
 	console.log(
-		`  ✓ _users: public writer "${creds.user}" (${status === 201 ? 'created' : 'already exists'})`
+		`  ✓ _users: public writer "${result.username}" (${result.outcome === 'created' ? 'created' : 'already exists'})`
 	);
 }
 
@@ -776,6 +847,28 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);
 		}
 	}
+
+	// Seed test scanner device (kiosk-test / kisok-test-secret) in registry
+	const testScannerSecret = 'kisok-test-secret';
+	const testScannerDoc = {
+		_id: 'scanner_device:kiosk-test',
+		type: 'scanner_device',
+		schema_v: 1,
+		device_id: 'kiosk-test',
+		name: 'Kiosk Test Scanner',
+		shelter_code: SH001_CODE,
+		station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
+		secret: testScannerSecret,
+		secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
+		secret_prefix: testScannerSecret.slice(0, 16) + '...',
+		status: 'active',
+		last_seen_at: null,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	};
+	await putDoc('registry', testScannerDoc);
+	console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
 }
 
 // ─── seedMasterData ───────────────────────────────────────────────────────────
@@ -1928,10 +2021,10 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
 /**
  * `docs/plans/volunteer-backoffice/00-foundation.md` §00.5 — seed the
  * `volunteers` feature slice (jobs, volunteers, shift_assignments,
- * job_applications, volunteer_transfer) into `SHELTER_DB` (SH001), built
- * exclusively through the feature's own domain factories (`makeJob`,
- * `makeVolunteer`, `makeJobApplication`, `makeShiftAssignment`,
- * `makeVolunteerTransfer`) — never a hand-rolled envelope.
+ * job_applications) into `SHELTER_DB` (SH001), built exclusively through the
+ * feature's own domain factories (`makeJob`, `makeVolunteer`,
+ * `makeJobApplication`, `makeShiftAssignment`) — never a hand-rolled envelope.
+ * (`volunteer_transfer` was cut entirely by CR-104 AC-104-10.)
  *
  * `resolveDutyWindow(date, shift)` (Bangkok wall-clock → UTC, `duty-window.ts`)
  * is the ONLY source of `duty_window` values here — no hand-written ISO
@@ -1956,7 +2049,7 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
  * function performs no "already seeded" guard — re-running `pnpm seed` adds
  * another batch, matching the documented convention at the top of this file.
  */
-async function seedVolunteers(): Promise<void> {
+async function seedVolunteers(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
 	// "Today" — Asia/Bangkok calendar date, matching
@@ -1981,7 +2074,8 @@ async function seedVolunteers(): Promise<void> {
 				'พร้อมประสานงานส่งต่อคำร้องไปยังฝ่ายที่เกี่ยวข้อง แต่งกายสุภาพ พูดจาดี ไม่จำเป็นต้องมีประสบการณ์',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts
+			// CR-100 — jobs store the master_data `volunteer_skills` code, not the label.
+			skills_required: masterCodes(master, 'volunteer_skills', 'reception'),
 			// schema_v 3 — capacity lives in the sub-shifts; quota = 3 + 3 = 6.
 			shifts: [
 				{
@@ -2011,7 +2105,7 @@ async function seedVolunteers(): Promise<void> {
 				'(staff-capable) และผ่านการอบรมการใช้งานระบบลงทะเบียนก่อนเริ่มปฏิบัติงาน',
 			tier: 'staff-capable',
 			required_roles: ['registration_staff'],
-			skills_required: ['คัดกรองและสแกนประวัติ'], // matches domain/skill-master.ts
+			skills_required: masterCodes(master, 'volunteer_skills', 'screening'),
 			shifts: [
 				{
 					id: `js-${today}-c`,
@@ -2032,7 +2126,7 @@ async function seedVolunteers(): Promise<void> {
 				'สามารถยกของหนักได้ต่อเนื่อง ปิดรับสมัครชั่วคราวจนกว่าจะเปิดรับรอบถัดไป',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+			skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 			shifts: [
 				{
 					id: `js-${today}-d`,
@@ -2052,7 +2146,7 @@ async function seedVolunteers(): Promise<void> {
 				'ช่วยประกอบอาหาร บรรจุกล่อง และจัดเตรียมเสบียงอาหารปรุงสุกสำหรับแจกจ่ายผู้ประสบภัยในศูนย์พักพิง',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ประกอบอาหาร / ครัวสนาม'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'cooking'),
 			shifts: [
 				{
 					id: `js-${today}-e1`,
@@ -2080,7 +2174,7 @@ async function seedVolunteers(): Promise<void> {
 				'ดูแลผู้ป่วยเบื้องต้น ตรวจวัดสัญญาณชีพ และจ่ายยาสามัญประจำบ้านสำหรับผู้ประสบภัยในศูนย์',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['การแพทย์ / ปฐมพยาบาล'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'medical'),
 			shifts: [
 				{
 					id: `js-${today}-f`,
@@ -2100,7 +2194,7 @@ async function seedVolunteers(): Promise<void> {
 				'จัดเรียงสิ่งของบริจาค ตรวจนับสต็อก และแพ็คถุงยังชีพเพื่อส่งมอบให้ผู้ประสบภัยตามโซนต่างๆ',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
+			skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 			shifts: [
 				{
 					id: `js-${today}-g`,
@@ -2152,7 +2246,9 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'อรุณ',
 		phone: '0821111111',
 		email: null,
-		skills: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts — same key as job1.skills_required
+		// `volunteer.skills` keeps storing LABELS (CR-100 leaves this field alone) —
+		// same master item as job1's `skills_required` code above.
+		skills: masterLabels(master, 'volunteer_skills', 'reception'),
 		organization: null,
 		national_id: null,
 		source: 'public_apply'
@@ -2162,7 +2258,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ยิ้มแย้ม',
 		phone: '0822222222',
 		email: null,
-		skills: ['ประกอบอาหาร / ครัวสนาม', 'ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'walk_in'
@@ -2172,7 +2268,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'คงมั่น',
 		phone: '0823333333',
 		email: null,
-		skills: ['ขับขี่ยานพาหนะ / ขนส่ง'], // matches domain/skill-master.ts (no radio-comms entry there)
+		skills: masterLabels(master, 'volunteer_skills', 'transport'),
 		organization: 'มูลนิธิกู้ภัยหาดใหญ่',
 		national_id: null,
 		source: 'staff_entry'
@@ -2182,7 +2278,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ศรีสุข',
 		phone: '0824444444',
 		email: null,
-		skills: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
+		skills: masterLabels(master, 'volunteer_skills', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'transfer'
@@ -2193,7 +2289,9 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'หมอนิด',
 		phone: '0825555555',
 		email: null,
-		skills: ['การแพทย์ / ปฐมพยาบาล'], // matches domain/skill-master.ts — the master's own controlled key
+		// The master's own controlled item — this is what makes `initialStatusForSkills`
+		// hold the seeded application at `pending_review`.
+		skills: masterLabels(master, 'volunteer_skills', 'medical'),
 		organization: 'รพ.สต. บ้านพรุ',
 		national_id: null,
 		source: 'public_apply'
@@ -2326,20 +2424,6 @@ async function seedVolunteers(): Promise<void> {
 
 	for (const app of [confirmedApplication, pendingApplication]) jobApplicationSchema.parse(app);
 
-	// — volunteer_transfer ——————————————————————————————————————————————————
-	// v2 requests a move to SH002 — written into the *origin* shelter DB
-	// (SH001), matching `VolunteerTransferRemoteRepository` (bound to the
-	// active shelter DB only; see TODO(D-VOL-TRANSFER-APPROVE) there — this
-	// seed never reads/writes SH002's DB, so it does not touch that open gap).
-	const transferInput: VolunteerTransferInput = {
-		volunteer_id: v2._id,
-		from_shelter_code: SH001_CODE,
-		to_shelter_code: SHELTER_CODE_2,
-		reason: 'ต้องการช่วยเสริมกำลังอาสาสมัครที่ศูนย์ปลายทางซึ่งขาดแคลนกำลังคน'
-	};
-	const transfer = makeVolunteerTransfer(transferInput, ctx);
-	volunteerTransferSchema.parse(transfer);
-
 	const allDocs = [
 		job1,
 		job2,
@@ -2357,13 +2441,12 @@ async function seedVolunteers(): Promise<void> {
 		a3,
 		a4,
 		confirmedApplication,
-		pendingApplication,
-		transfer
+		pendingApplication
 	];
 	await bulkDocs(SHELTER_DB, allDocs);
 
 	console.log(
-		`  ✓ ${SHELTER_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications, 1 volunteer_transfer (today=${today})`
+		`  ✓ ${SHELTER_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications (today=${today})`
 	);
 }
 
@@ -2778,7 +2861,7 @@ async function deleteDashboardData(): Promise<void> {
  * applicant holds, and seeding one would either invent a token nobody has or leave a
  * ticket that cannot be opened. Apply through the UI to create them.
  */
-async function seedVolunteerJobs(): Promise<void> {
+async function seedVolunteerJobs(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 	await ensureDb(SHELTER_DB_2);
 
@@ -2792,7 +2875,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย แต่งกายสุภาพ สวมรองเท้าหุ้มส้น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['ประกอบอาหาร / ครัวสนาม'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'cooking'),
 				quota: 8,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2814,7 +2897,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ขนย้ายและจัดเรียงสิ่งของบริจาคเข้าคลัง ต้องยกของหนักได้',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
 				quota: 6,
 				// Zero, like every other fixture. A non-zero count here would not show up on
 				// the board: the public plane reads head count from the atomic VolunteerJobSlot
@@ -2841,7 +2924,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'ดูแลจุดปฐมพยาบาล คัดกรองอาการเบื้องต้น ต้องมีใบประกอบวิชาชีพ',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['การแพทย์ / ปฐมพยาบาล'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'medical'),
 				quota: 4,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2866,7 +2949,7 @@ async function seedVolunteerJobs(): Promise<void> {
 					'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน ได้สิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะที่เช็คอินแล้ว',
 				tier: 'staff-capable',
 				required_roles: ['registration_staff'],
-				skills_required: ['คัดกรองและสแกนประวัติ'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'screening'),
 				quota: 3,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2890,7 +2973,7 @@ async function seedVolunteerJobs(): Promise<void> {
 				description: 'จัดกิจกรรมให้เด็กในศูนย์พักพิงช่วงเย็น',
 				tier: 'operational',
 				required_roles: [],
-				skills_required: ['สันทนาการ / ดูแลเด็ก'],
+				skills_required: masterCodes(master, 'volunteer_skills', 'childcare'),
 				quota: 5,
 				slots_confirmed: 0,
 				slots_dispatched: 0,
@@ -2929,7 +3012,7 @@ async function seedVolunteerJobs(): Promise<void> {
  * projecting an assignment — that hash is the only route from a phone number to a
  * schedule, so an assignment whose volunteer is missing projects unreachable.
  */
-async function seedVolunteerSchedule(): Promise<void> {
+async function seedVolunteerSchedule(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
 	const phone = '0891112222';
@@ -2942,7 +3025,9 @@ async function seedVolunteerSchedule(): Promise<void> {
 		phone,
 		phone_hash: await sha256Hex(phone),
 		email: null,
-		skills: ['ครัว', 'ยกของ'],
+		// `volunteer.skills` stores labels (CR-100) — read from the seeded master items
+		// so a renamed skill stays in sync instead of drifting into free text.
+		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		tracking_token: null,
 		status: 'active',
@@ -3046,13 +3131,13 @@ async function main() {
 		await seedCatalogFoodSphereParameters();
 		await seedShelter(master);
 		await seedShelter2(master);
-		await seedVolunteers();
+		await seedVolunteers(master);
 		await seedDashboardData(master);
 		// Before seedDailyCalc: that step refuses to run against a database that already
 		// holds its deterministic snapshots, and it must not take the job board down with
 		// it on a re-seed. This one is idempotent — fixed ids, existing docs left alone.
-		await seedVolunteerJobs();
-		await seedVolunteerSchedule();
+		await seedVolunteerJobs(master);
+		await seedVolunteerSchedule(master);
 		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {

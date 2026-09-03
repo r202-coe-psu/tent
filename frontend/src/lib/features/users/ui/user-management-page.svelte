@@ -4,33 +4,19 @@
 	import {
 		isAppSystemAdmin,
 		isSystemAdmin,
+		roleDisplayLabel,
 		shelterCodeFromRoles,
 		shelterScopeRole,
 		SYSTEM_ADMIN
 	} from '$lib/auth/roles';
-	import UserFormDialog from './user-form-dialog.svelte';
+	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
 	import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../application/queries';
-	import {
-		affiliationTagsFor,
-		isVolunteerAccount,
-		PLATFORM_WIDE,
-		toDutyWindow,
-		type CreateUserInput,
-		type EditUserInput
-	} from '../domain/schema';
-	import type { UserSummary } from '../data/users.api';
-	import { useQueryClient } from '@tanstack/svelte-query';
-	import { useSetVolunteerAccountLink } from '$lib/features/volunteers';
-	import { UserPlus, Search } from '@lucide/svelte';
-	import Gem from '@lucide/svelte/icons/gem';
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
-	import Info from '@lucide/svelte/icons/info';
-	import { useShelters } from '$lib/features/shelters';
-	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { adminResetPassword, type UserSummary } from '../data/users.api';
+	import type { CreateUserInput, EditUserInput } from '../domain/schema';
+	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	let {
@@ -58,114 +44,53 @@
 	const updateMutation = useUpdateUser();
 	const deleteMutation = useDeleteUser();
 
-	// CR-096 §2.3 — the link is two-way: `_users.volunteer_id` points at the profile, and the
-	// profile's `user_name` points back, which is what the roster reads to show "มีบัญชีหลังบ้าน".
-	const queryClient = useQueryClient();
-	const linkVolunteerMutation = useSetVolunteerAccountLink(queryClient);
-
-	/** The registry to read/write for an affiliation — platform-wide accounts have none. */
-	function registryShelter(code: string | null | undefined): string | undefined {
-		return code && code !== PLATFORM_WIDE ? code : undefined;
-	}
-
-	/**
-	 * Write one end of the link. Runs after the `_users` write succeeds, so a failure here leaves a
-	 * valid account with a half-made link — reported as a warning toast rather than a save failure,
-	 * since the account itself is fine (CR-096 open question #7).
-	 */
-	async function writeVolunteerLink(args: {
-		volunteerId: string;
-		userName: string | null;
-		shelterCode?: string;
-		expectUserName?: string;
-	}) {
-		try {
-			await linkVolunteerMutation.mutateAsync(args);
-		} catch (err) {
-			const reason = err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ';
-			toast.warning(
-				args.userName === null
-					? `บันทึกบัญชีสำเร็จ แต่ปลดการผูกโปรไฟล์อาสาเดิมไม่สำเร็จ: ${reason}`
-					: `บันทึกบัญชีสำเร็จ แต่ผูกกับโปรไฟล์อาสาไม่สำเร็จ: ${reason}`
-			);
-		}
-	}
-
-	/**
-	 * Keep the registry in step with the account: claim the profile it now points at, and release
-	 * the one it stopped pointing at — unlinking, re-linking, switching back to staff and deleting
-	 * all go through here, so a profile can never keep advertising a login that no longer names it.
-	 * The old profile is looked up in the account's *previous* shelter, which an SA may have just
-	 * changed. `expectUserName` keeps the release from clobbering a link made meanwhile.
-	 */
-	async function syncVolunteerLinks(opts: {
-		username: string;
-		nextVolunteerId?: string | null;
-		nextShelterCode?: string;
-		previousVolunteerId?: string | null;
-		previousShelterCode?: string;
-	}) {
-		const next = opts.nextVolunteerId ?? null;
-		const previous = opts.previousVolunteerId ?? null;
-		if (previous && previous !== next) {
-			await writeVolunteerLink({
-				volunteerId: previous,
-				userName: null,
-				shelterCode: opts.previousShelterCode,
-				expectUserName: opts.username
-			});
-		}
-		if (next) {
-			await writeVolunteerLink({
-				volunteerId: next,
-				userName: opts.username,
-				shelterCode: opts.nextShelterCode
-			});
-		}
-	}
-
 	let dialogOpen = $state(false);
 	let editDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
 	let demoteDialogOpen = $state(false);
+	let resetDialogOpen = $state(false);
+	let resetResultDialogOpen = $state(false);
+
 	let searchQuery = $state('');
-	/** Segmented filter over `affiliation_tags` (R-AFFIL-4), not over RoleKeys. */
-	let personnelFilter = $state<'all' | 'staff' | 'volunteer'>('all');
-	/** Shelter filter — '' means every shelter the caller can see. */
-	let shelterFilter = $state('');
 	let selectedUser = $state<UserSummary | null>(null);
 	let userToDelete = $state<string | null>(null);
 	let pendingDemote = $state<EditUserInput | null>(null);
+	let temporaryPassword = $state<string | null>(null);
+	let copied = $state(false);
+	let resetting = $state(false);
 
-	function rolesFromInput(input: { capability: string; shelter_id?: string }): string[] | null {
-		if (input.capability === SYSTEM_ADMIN) return [SYSTEM_ADMIN];
-		// `PLATFORM_WIDE` is a form sentinel, never a shelter code — the schema already rejects it
-		// for any capability but `system_admin`, so reaching here with it means no valid scope.
+	function rolesFromInput(input: {
+		capabilities?: string[];
+		capability?: string;
+		shelter_id?: string;
+	}): string[] | null {
+		const caps = input.capabilities ?? (input.capability ? [input.capability] : []);
+		if (caps.includes(SYSTEM_ADMIN)) return [SYSTEM_ADMIN];
 		const code = effectiveLock ?? input.shelter_id;
-		if (!code || code === PLATFORM_WIDE) return null;
-		return [shelterScopeRole(code), input.capability];
+		if (!code) return null;
+		return [shelterScopeRole(code), ...caps];
 	}
 
-	/** Rejects on failure — UserFormDialog turns the reason into a Superforms error. */
+	/** Rejects on failure — UserForm turns the reason into a Superforms error. */
 	async function handleCreate(input: CreateUserInput) {
 		const userRoles = rolesFromInput(input);
-		if (!userRoles) throw new Error('A shelter code is required');
+		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
 		await createMutation.mutateAsync({
 			name: input.username,
 			password: input.password,
 			display_name: input.display_name,
 			roles: userRoles,
-			affiliation_tags: affiliationTagsFor(input.personnel_type),
-			volunteer_id: input.volunteer_id ?? null,
-			duty_window: toDutyWindow(input.duty_start, input.duty_end),
-			active: input.active
+			personnel_type: input.personnel_type,
+			organization: input.organization,
+			position: input.position,
+			phone: input.phone,
+			email: input.email,
+			notes: input.notes,
+			volunteer_id: input.volunteer_id,
+			duty_window: input.duty_window,
+			affiliation_tags: input.affiliation_tags
 		});
-		await syncVolunteerLinks({
-			username: input.username,
-			nextVolunteerId: input.volunteer_id,
-			nextShelterCode: registryShelter(effectiveLock ?? input.shelter_id)
-		});
-		toast.success(`User "${input.username}" created`);
+		toast.success(`สร้างผู้ใช้งาน "${input.username}" สำเร็จ`);
 		dialogOpen = false;
 	}
 
@@ -179,26 +104,23 @@
 		const target = selectedUser;
 		if (!target) return;
 		const userRoles = rolesFromInput(input);
-		if (!userRoles) throw new Error('A shelter code is required');
+		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
 		await updateMutation.mutateAsync({
 			name: target.name,
 			password: input.password || undefined,
 			display_name: input.display_name,
 			roles: userRoles,
-			// Tags the form does not own (e.g. `governance`) survive the edit.
-			affiliation_tags: affiliationTagsFor(input.personnel_type, target.affiliation_tags),
-			volunteer_id: input.volunteer_id ?? null,
-			duty_window: toDutyWindow(input.duty_start, input.duty_end),
-			active: input.active
+			personnel_type: input.personnel_type,
+			organization: input.organization,
+			position: input.position,
+			phone: input.phone,
+			email: input.email,
+			notes: input.notes,
+			volunteer_id: input.volunteer_id,
+			duty_window: input.duty_window,
+			affiliation_tags: input.affiliation_tags
 		});
-		await syncVolunteerLinks({
-			username: target.name,
-			nextVolunteerId: input.volunteer_id,
-			nextShelterCode: registryShelter(effectiveLock ?? input.shelter_id),
-			previousVolunteerId: target.volunteer_id,
-			previousShelterCode: registryShelter(target.shelter_id)
-		});
-		toast.success(`User "${target.name}" updated`);
+		toast.success(`อัปเดตข้อมูลผู้ใช้งาน "${target.name}" สำเร็จ`);
 		editDialogOpen = false;
 		demoteDialogOpen = false;
 		selectedUser = null;
@@ -208,7 +130,8 @@
 	async function handleUpdate(input: EditUserInput) {
 		if (!selectedUser) return;
 		const wasSa = isAppSystemAdmin(selectedUser.roles);
-		const willBeSa = input.capability === SYSTEM_ADMIN;
+		const willBeSa =
+			input.capabilities?.includes(SYSTEM_ADMIN) || input.capability === SYSTEM_ADMIN;
 		if (wasSa && !willBeSa) {
 			pendingDemote = input;
 			demoteDialogOpen = true;
@@ -217,7 +140,6 @@
 		await applyUpdate(input);
 	}
 
-	/** The demote path runs from its own dialog, with no form listening — so it toasts. */
 	function confirmDemote() {
 		if (!pendingDemote) return;
 		applyUpdate(pendingDemote).catch((err: unknown) =>
@@ -230,26 +152,45 @@
 		deleteDialogOpen = true;
 	}
 
-	async function handleDelete() {
-		const name = userToDelete;
-		if (!name) return;
-		// Read the account before it is gone — deleting it is also what releases its volunteer
-		// profile, which would otherwise keep pointing at a login that no longer exists.
-		const target = usersQuery.data?.find((u) => u.name === name) ?? null;
-		try {
-			await deleteMutation.mutateAsync(name);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ไม่สามารถลบผู้ใช้งานได้');
-			return;
-		}
-		await syncVolunteerLinks({
-			username: name,
-			previousVolunteerId: target?.volunteer_id,
-			previousShelterCode: registryShelter(target?.shelter_id)
+	function handleDelete() {
+		if (!userToDelete) return;
+		deleteMutation.mutate(userToDelete, {
+			onSuccess: () => {
+				toast.success(`ลบผู้ใช้งาน "${userToDelete}" สำเร็จ`);
+				deleteDialogOpen = false;
+				userToDelete = null;
+			},
+			onError: (err: Error) => toast.error(err.message)
 		});
-		toast.success(`User "${name}" deleted`);
-		deleteDialogOpen = false;
-		userToDelete = null;
+	}
+
+	function handleOpenReset(user: UserSummary) {
+		selectedUser = user;
+		resetDialogOpen = true;
+	}
+
+	async function handleConfirmReset() {
+		if (!selectedUser) return;
+		resetting = true;
+		try {
+			const res = await adminResetPassword(selectedUser.name);
+			temporaryPassword = res.temporary_password;
+			resetDialogOpen = false;
+			resetResultDialogOpen = true;
+			toast.success(`รีเซ็ตรหัสผ่านของ "${selectedUser.name}" เรียบร้อยแล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถรีเซ็ตรหัสผ่านได้');
+		} finally {
+			resetting = false;
+		}
+	}
+
+	async function copyPassword() {
+		if (!temporaryPassword) return;
+		await navigator.clipboard.writeText(temporaryPassword);
+		copied = true;
+		toast.success('คัดลอกรหัสผ่านชั่วคราวแล้ว');
+		setTimeout(() => (copied = false), 2500);
 	}
 
 	const deletingIsSa = $derived(
@@ -259,50 +200,21 @@
 		)
 	);
 
-	const sheltersQuery = useShelters();
-	const shelterNames = $derived(new Map((sheltersQuery.data ?? []).map((s) => [s.code, s.name])));
-	function shelterName(code: string): string {
-		return shelterNames.get(code) ?? code;
-	}
-
-	const shelterFilterItems = $derived([
-		{ value: '', label: 'ทุกศูนย์พักพิง (ทุกมุมมอง)' },
-		...(sheltersQuery.data ?? [])
-			.map((s) => ({ value: s.code, label: s.name }))
-			.sort((a, b) => a.label.localeCompare(b.label, 'th'))
-	]);
-
-	/** Everything the caller may see, before the search box and the two filters narrow it. */
-	const scopedUsers = $derived(
-		usersQuery.data?.filter((u: UserSummary) => !effectiveLock || u.shelter_id === effectiveLock) ??
-			[]
-	);
-
-	const personnelCounts = $derived({
-		all: scopedUsers.length,
-		staff: scopedUsers.filter((u) => !isVolunteerAccount(u.affiliation_tags)).length,
-		volunteer: scopedUsers.filter((u) => isVolunteerAccount(u.affiliation_tags)).length
-	});
-
-	const personnelTabs = $derived([
-		{ key: 'all' as const, label: `ทั้งหมด (${personnelCounts.all})` },
-		{ key: 'staff' as const, label: `เจ้าหน้าที่ประจำ (${personnelCounts.staff})` },
-		{ key: 'volunteer' as const, label: `อาสาสมัคร (${personnelCounts.volunteer})` }
-	]);
-
 	const filteredUsers = $derived(
-		scopedUsers.filter((u: UserSummary) => {
-			if (shelterFilter && u.shelter_id !== shelterFilter) return false;
-			if (personnelFilter !== 'all') {
-				const volunteer = isVolunteerAccount(u.affiliation_tags);
-				if (personnelFilter === 'volunteer' ? !volunteer : volunteer) return false;
-			}
-			if (!searchQuery.trim()) return true;
-			// Identity only — name, surname, username. Shelter and personnel type have their own
-			// controls beside the box, so folding them in here just made results unpredictable.
-			const q = searchQuery.trim().toLowerCase();
-			return u.name.toLowerCase().includes(q) || (u.display_name ?? '').toLowerCase().includes(q);
-		})
+		usersQuery.data?.filter((u: UserSummary) => {
+			if (effectiveLock && u.shelter_id !== effectiveLock) return false;
+			if (!searchQuery) return true;
+			const q = searchQuery.toLowerCase();
+			return (
+				u.name.toLowerCase().includes(q) ||
+				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
+				(u.organization && u.organization.toLowerCase().includes(q)) ||
+				u.roles.some(
+					(r: string) =>
+						r.toLowerCase().includes(q) || roleDisplayLabel(r).toLowerCase().includes(q)
+				)
+			);
+		}) ?? []
 	);
 </script>
 
@@ -313,156 +225,193 @@
 			compact ? 'mb-4' : 'mb-8'
 		]}
 	>
-		<div class="flex items-center gap-3">
-			<div class="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-				<UserPlus class={compact ? 'h-5 w-5' : 'h-5.5 w-5.5'} />
+		<div class="flex items-center gap-4">
+			<div class="text-blue-900/80">
+				<UserPlus class={compact ? 'h-6 w-6' : 'h-8 w-8'} />
 			</div>
-			<div class="min-w-0">
-				<h2 class={['font-bold tracking-tight text-foreground', compact ? 'text-lg' : 'text-2xl']}>
+			<div>
+				<h2 class={compact ? 'text-lg font-bold' : 'text-2xl font-bold text-slate-900'}>
 					จัดการผู้ใช้งาน (User Management)
 				</h2>
-				<p class="mt-0.5 text-xs text-muted-foreground">ค้นหาและจัดการสิทธิ์ส่วนบุคคลในระบบ</p>
+				<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
 			</div>
 		</div>
 
-		<Button
-			onclick={() => (dialogOpen = true)}
-			class="h-11 rounded-xl bg-[#0f2d5c] px-5 font-semibold text-white shadow-xs transition-colors hover:bg-[#0a1e3f]"
-		>
-			<UserPlus class="mr-1.5 size-4" /> เพิ่มผู้ใช้
-		</Button>
+		<Dialog.Root bind:open={dialogOpen}>
+			<Dialog.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						class="rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f]"
+					>
+						<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+					</Button>
+				{/snippet}
+			</Dialog.Trigger>
+			<Dialog.Content class="max-h-[90vh] overflow-y-auto rounded-2xl p-0 sm:max-w-[700px]">
+				<Dialog.Header class="border-b border-slate-100 p-6 pb-2">
+					<Dialog.Title class="text-xl font-bold text-slate-900">เพิ่มผู้ใช้ใหม่</Dialog.Title>
+					<Dialog.Description class="text-xs text-slate-500">
+						กำหนดบัญชีผู้ใช้งาน สังกัดองค์กร และบทบาทหน้าที่ในศูนย์พักพิง
+					</Dialog.Description>
+				</Dialog.Header>
+				<div class="p-6">
+					<UserForm
+						onsubmit={handleCreate}
+						oncancel={() => (dialogOpen = false)}
+						{isSA}
+						{allowSystemAdminRole}
+						lockedShelterCode={effectiveLock ?? null}
+						pending={createMutation.isPending}
+					/>
+				</div>
+			</Dialog.Content>
+		</Dialog.Root>
 	</div>
 
-	<!-- These are the real, persisted accounts — distinct from the RBAC preview switcher in the
-	     sidebar, which only swaps the viewing lens. Operators confuse the two, so say it here. -->
-	<div
-		class={[
-			'flex items-start gap-3 rounded-2xl border border-primary/15 bg-primary/5 p-4',
-			compact ? 'mb-4' : 'mb-6'
-		]}
-	>
-		<Info class="mt-0.5 size-4.5 shrink-0 text-primary" />
-		<div class="min-w-0">
-			<p class="flex flex-wrap items-center gap-2 text-sm font-bold text-foreground">
-				ฐานข้อมูลบัญชีผู้ใช้ถาวรของระบบ (Permanent System Accounts)
-				<Badge
-					variant="secondary"
-					class="rounded-md bg-primary/10 text-2xs font-semibold tracking-wide text-primary uppercase"
-				>
-					Admin Level
-				</Badge>
-			</p>
-			<p class="mt-1 text-xs leading-relaxed text-muted-foreground">
-				หน้านี้ใช้สำหรับบันทึกและจัดการบัญชีผู้ใช้งานจริงในระบบ (บันทึกลงฐานข้อมูลถาวร)
-				กำหนดสังกัดศูนย์พักพิงและบทบาทสิทธิ์ (Role) ตามโครงสร้างความปลอดภัย — แยกต่างหากจากเมนู
-				"จำลองสิทธิ์ผู้ใช้งาน (RBAC)" บน Sidebar
-				ซึ่งเป็นเพียงเครื่องมือสลับมุมมองทดสอบการแสดงผลชั่วคราว
-			</p>
-		</div>
+	<div class={['relative max-w-full', compact ? 'mb-4' : 'mb-6']}>
+		<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+		<Input
+			bind:value={searchQuery}
+			type="text"
+			placeholder="ค้นหาชื่อ, เบอร์โทร, สังกัดองค์กร หรือบทบาท..."
+			class="h-12 rounded-xl bg-white pl-11 text-base"
+		/>
 	</div>
 
-	<div class={['flex flex-col gap-3 lg:flex-row lg:items-center', compact ? 'mb-4' : 'mb-6']}>
-		<div class="relative min-w-0 flex-1">
-			<Search
-				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-			/>
-			<Input
-				type="search"
-				bind:value={searchQuery}
-				placeholder="ค้นหาด้วยชื่อ, นามสกุล หรือ Username..."
-				class="h-11 rounded-xl bg-background pl-9 shadow-xs"
-			/>
-		</div>
-
-		<!-- Only the portal reads every shelter; the back-office page is locked to one, so a picker
-		     there would be a control with a single possible value. -->
-		{#if !effectiveLock}
-			<Combobox
-				items={shelterFilterItems}
-				bind:value={shelterFilter}
-				placeholder="ทุกศูนย์พักพิง (ทุกมุมมอง)"
-				searchPlaceholder="ค้นหาศูนย์พักพิง..."
-				emptyText="ไม่พบศูนย์พักพิง"
-				class="h-11 w-full rounded-xl bg-background shadow-xs lg:w-72"
-			/>
-		{/if}
-
-		<!-- R-AFFIL-4: filter by personnel type within the caller's shelter scope. -->
-		<div class="flex shrink-0 gap-1 rounded-xl bg-muted p-1">
-			{#each personnelTabs as tab (tab.key)}
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					aria-pressed={personnelFilter === tab.key}
-					onclick={() => (personnelFilter = tab.key)}
-					class={[
-						'h-9 rounded-lg px-3 text-xs font-semibold transition-colors',
-						personnelFilter === tab.key
-							? 'bg-background text-foreground shadow-xs hover:bg-background'
-							: 'text-muted-foreground hover:bg-background/60'
-					]}
-				>
-					{#if tab.key === 'staff'}<Gem class="mr-1 size-3.5" />{/if}
-					{#if tab.key === 'volunteer'}<HeartHandshake class="mr-1 size-3.5" />{/if}
-					{tab.label}
-				</Button>
-			{/each}
-		</div>
-	</div>
-
-	<div class="overflow-hidden rounded-2xl border border-border bg-background shadow-xs">
+	<div class="overflow-hidden rounded-2xl border bg-white shadow-xs">
 		{#if usersQuery.isLoading}
-			<div class="p-10 text-center text-xs text-muted-foreground">กำลังโหลดรายชื่อผู้ใช้งาน...</div>
+			<div class="p-8 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลผู้ใช้งาน...</div>
 		{:else if usersQuery.isError}
-			<div class="p-10 text-center text-xs text-destructive">
-				โหลดข้อมูลไม่สำเร็จ: {usersQuery.error?.message}
+			<div class="p-8 text-center text-sm text-destructive">
+				Error: {usersQuery.error?.message}
 			</div>
 		{:else}
 			<UserList
 				users={filteredUsers}
 				{isSA}
-				{shelterName}
 				onedit={handleEdit}
 				ondelete={confirmDelete}
+				onresetpassword={handleOpenReset}
 				pending={deleteMutation.isPending}
 			/>
 		{/if}
 	</div>
 </div>
 
-<!-- `{#key}`: the form seeds itself once per mount (untrack), so a new target needs a new instance. -->
-{#if dialogOpen}
-	<UserFormDialog
-		bind:open={dialogOpen}
-		onsubmit={handleCreate}
-		{isSA}
-		{allowSystemAdminRole}
-		lockedShelterCode={effectiveLock ?? null}
-		pending={createMutation.isPending}
-	/>
-{/if}
+<!-- Edit Dialog -->
+<Dialog.Root bind:open={editDialogOpen}>
+	<Dialog.Content class="max-h-[90vh] overflow-y-auto rounded-2xl p-0 sm:max-w-[700px]">
+		<Dialog.Header class="border-b border-slate-100 p-6 pb-2">
+			<Dialog.Title class="text-xl font-bold text-slate-900">แก้ไขข้อมูลผู้ใช้งาน</Dialog.Title>
+		</Dialog.Header>
+		<div class="p-6">
+			{#if selectedUser}
+				<UserForm
+					user={selectedUser}
+					onsubmit={handleUpdate}
+					oncancel={() => {
+						editDialogOpen = false;
+						selectedUser = null;
+					}}
+					{isSA}
+					{allowSystemAdminRole}
+					lockedShelterCode={effectiveLock ?? null}
+					pending={updateMutation.isPending}
+				/>
+			{/if}
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
-{#if editDialogOpen && selectedUser}
-	{#key selectedUser.name}
-		<UserFormDialog
-			bind:open={
-				() => editDialogOpen,
-				(v) => {
-					editDialogOpen = v;
-					if (!v) selectedUser = null;
-				}
-			}
-			user={selectedUser}
-			onsubmit={handleUpdate}
-			{isSA}
-			{allowSystemAdminRole}
-			lockedShelterCode={effectiveLock ?? null}
-			pending={updateMutation.isPending}
-		/>
-	{/key}
-{/if}
+<!-- Reset Password Confirmation Dialog -->
+<Dialog.Root bind:open={resetDialogOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[440px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-amber-700">
+				<KeyRound class="size-5" /> ยืนยันการรีเซ็ตรหัสผ่านชั่วคราว
+			</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
+				ระบบจะสร้างรหัสผ่านชั่วคราวแบบจำง่าย (Memorable Passphrase) ให้กับผู้ใช้งาน
+				<strong class="text-slate-900">{selectedUser?.display_name ?? selectedUser?.name}</strong>
+				และจะบังคับให้ผู้ใช้ต้องตั้งรหัสผ่านใหม่ทันทีเมื่อเข้าสู่ระบบ
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-4 flex justify-end gap-3">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					resetDialogOpen = false;
+					selectedUser = null;
+				}}
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				class="bg-amber-600 text-white hover:bg-amber-700"
+				disabled={resetting}
+				onclick={handleConfirmReset}
+			>
+				{#if resetting}กำลังรีเซ็ต...{:else}ยืนยันรีเซ็ตรหัสผ่าน{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
+<!-- Reset Result Dialog -->
+<Dialog.Root bind:open={resetResultDialogOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[460px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-emerald-700">
+				✓ รหัสผ่านชั่วคราวถูกสร้างเรียบร้อยแล้ว
+			</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm text-slate-600">
+				กรุณาคัดลอกหรือแจ้งรหัสผ่านชั่วคราวนี้ให้แก่ผู้ใช้งานเพื่อนำไปเข้าสู่ระบบ
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div
+			class="my-4 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/70 p-4 text-center"
+		>
+			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
+				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
+			>
+			<div class="mt-2 font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
+				{temporaryPassword}
+			</div>
+		</div>
+
+		<div class="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+			<ShieldAlert class="mt-0.5 size-4 shrink-0 text-amber-600" />
+			<span>ผู้ใช้งานจะต้องตั้งรหัสผ่านใหม่ของตนเองทันทีในการเข้าสู่ระบบครั้งถัดไป</span>
+		</div>
+
+		<div class="mt-5 flex justify-end gap-3">
+			<Button type="button" variant="outline" class="gap-1.5" onclick={copyPassword}>
+				{#if copied}
+					<Check class="size-4 text-emerald-600" />
+					<span class="text-emerald-700">คัดลอกแล้ว</span>
+				{:else}
+					<Copy class="size-4" />
+					<span>คัดลอกรหัสผ่าน</span>
+				{/if}
+			</Button>
+			<Button
+				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
+				onclick={() => {
+					resetResultDialogOpen = false;
+					temporaryPassword = null;
+					selectedUser = null;
+				}}
+			>
+				เสร็จสิ้น
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Delete Dialog -->
 <Dialog.Root bind:open={deleteDialogOpen}>
 	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
 		<Dialog.Header>
@@ -471,7 +420,7 @@
 				คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งาน <strong class="text-slate-900">{userToDelete}</strong>?
 				การดำเนินการนี้ไม่สามารถย้อนกลับได้
 				{#if deletingIsSa}
-					<span class="mt-2 block"
+					<span class="mt-2 block font-medium text-amber-700"
 						>บัญชีนี้เป็นผู้ดูแลระบบ — ลบได้เฉพาะเมื่อยังมี SA คนอื่นในระบบ</span
 					>
 				{/if}
@@ -485,7 +434,6 @@
 					deleteDialogOpen = false;
 					userToDelete = null;
 				}}
-				class="rounded-lg"
 			>
 				ยกเลิก
 			</Button>
@@ -493,7 +441,7 @@
 				variant="destructive"
 				disabled={deleteMutation.isPending}
 				onclick={handleDelete}
-				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
+				class="bg-red-600 text-white hover:bg-red-700"
 			>
 				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
 			</Button>
@@ -501,6 +449,7 @@
 	</Dialog.Content>
 </Dialog.Root>
 
+<!-- Demote Dialog -->
 <Dialog.Root bind:open={demoteDialogOpen}>
 	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
 		<Dialog.Header>
@@ -518,14 +467,13 @@
 					demoteDialogOpen = false;
 					pendingDemote = null;
 				}}
-				class="rounded-lg"
 			>
 				ยกเลิก
 			</Button>
 			<Button
 				disabled={updateMutation.isPending || !pendingDemote}
 				onclick={confirmDemote}
-				class="rounded-lg bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
+				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
 			>
 				{#if updateMutation.isPending}กำลังบันทึก...{:else}ยืนยัน{/if}
 			</Button>

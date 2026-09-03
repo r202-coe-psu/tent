@@ -24,7 +24,8 @@ export type {
 	MovementAction,
 	CareTrack,
 	BloodGroup,
-	CardType
+	CardType,
+	CardSnapshot
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -37,6 +38,7 @@ export {
 	movementActionSchema,
 	careTrackSchema,
 	bloodGroupSchema,
+	cardSnapshotSchema,
 	evacueeInputSchema,
 	medicalInputSchema,
 	householdInputSchema,
@@ -49,6 +51,8 @@ export {
 	movementInputSchema,
 	screeningInputSchema,
 	createEvacuee,
+	createDraftEvacueeFromCard,
+	createKioskEvacueeFromCard,
 	createMedical,
 	createHousehold,
 	createMovement,
@@ -69,6 +73,7 @@ export {
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	applyMovementToStay,
+	resolveStatusChangeAction,
 	maskNationalId,
 	matchesEvacueeSearch,
 	zoneLabel,
@@ -101,6 +106,7 @@ export {
 	useUpdateEvacuee,
 	useCheckInEvacuee,
 	useCheckOutEvacuee,
+	useRecordMovement,
 	lookupEvacueeByScanCode,
 	useHouseholds,
 	useHousehold,
@@ -134,6 +140,8 @@ export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
+export { default as EvacueeSearchEditPage } from './ui/evacuee-search-edit-page.svelte';
+export { default as EvacueeSearchResultsPage } from './ui/evacuee-search-results-page.svelte';
 export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
 export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';

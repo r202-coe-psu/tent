@@ -1,25 +1,26 @@
 ---
-title: "Feature Flow — Volunteer Job Board, Registration & Shifts"
+title: "Feature Flow — Volunteer Job Board, Registration, Shifts & Self Check-in (V10)"
 status: active
 created: 2026-07-14
-updated: 2026-08-21
+updated: 2026-09-01 # อัปเดตสอดคล้อง CR-104 (Job Board Model, Self Check-in, 10-Role Taxonomy, Compound Scoped Roles)
 module: A
 audience: team + developer implementation
 note: >
-  ผูก CR-041 (status: approved) ครบถ้วนตามมติ 2026-07-22 และ 2026-08-21.
-  อิง FR-42/43, T-28/T-29, role-permission-matrix, schema job/job_application/volunteer/shift_assignment.
+  ผูก CR-041 และยกระดับตามแม่บท CR-104 (status: proposed) ครบถ้วนตามมติ 2026-09-01.
+  อิง 10 Role Taxonomy, Compound Scoped Roles, schema v3 (volunteer/job/shift_assignment), และ schema v2 (job_application).
 ---
 
-# Volunteer Job Board — Feature Flow & User Journeys
+# Volunteer Job Board — Feature Flow & User Journeys (V10 SSOT)
 
 ## สรุป (TL;DR)
 
-- เพิ่ม flow **Job Board** ต่อศูนย์: ประกาศงาน → อาสาสมัครสมัครผ่าน Public (No-Auth) → รับ Digital Ticket / QR Code → สแกน Check-in หน้างาน → จัดกะ → ปรับงานได้ตลอดโดย **Shelter Manager**
-- ขยาย Module A (FR-42/43, T-28/T-29) จาก "ลงทะเบียน + มอบหมายกะ" เป็น **"ตลาดงาน + กะตั้งค่าได้ + Digital Ticket/QR Check-in + ปรับงานได้เสมอ"**
-- **เจ้าของ Job Board = SM เท่านั้น** · SA ไม่ทำ job ops · ไม่มีหัวหน้างานแยกใน R3
-- อาสามี **2 ชั้น:** *operational* (ไม่ต้องมี account) / *staff-capable* (มี account `_users` + **Time-bound Shift Access** สิทธิ์เขียนเปิดเฉพาะในกะ)
+- เพิ่ม flow **Job Board Model** ต่อศูนย์: ประกาศงาน → อาสาสมัครสมัครผ่าน Public (No-Auth) 30 วินาที → รับ Digital Ticket / QR Code → รายงานตัวเข้างาน (Tablet POS 40/60 หรือ Self Check-in) → จัดการกะงานโดย **Shelter Manager** หรือ **Volunteer Coordinator**
+- **สถาปัตยกรรมตลาดงานเท่านั้น (Job Board Only):** ยกเลิกระบบเสนองานตรง (Direct Dispatch) และรหัสเสียง 2 ปัจจัยทั้งหมด อาสาเป็นฝ่ายเลือกดูงานและสมัครเป็นกะๆ ไป
+- **โควตา 2 สีเรียบง่าย:** แสดงยอดเป้าหมายแบบ `[ 🟢 รับแล้ว (Confirmed) | ⚪ ว่าง/ยังขาด (Remaining) ]` และคำนวณจากกะย่อยรายวัน (`job.shifts[]`)
+- **Self Check-in & Tablet POS Station:** รองรับทั้งการที่เจ้าหน้าที่กดเช็คอินให้บนแท็บเล็ต (`/back-office/volunteers/checkin`) และอาสาสแกนป้ายคิวอาร์โค้ดประจำศูนย์ด้วยมือถือของตนเอง (Poster Wall QR Code) หรือสแกนผ่านตู้ Kiosk
+- **อาสามี 2 ชั้น:** *Operational* (ไม่ต้องมีบัญชีผู้ใช้ในระบบ ใช้เพียง QR Ticket) / *Staff-Capable* (มีบัญชี `_users` + **Time-Bound Shift Access** สิทธิ์เขียนเปิดเฉพาะในกะงานจริง $\pm 5$ นาที)
 - **Anti-Spam & Zero SMS Cost:** ใช้ Digital Ticket URL/QR Code เป็นหลัก และใช้ reCAPTCHA v3 + Rate Limiting ป้องกันสแปม โดยไม่มีต้นทุน SMS OTP
-- **Track ตัวตนบน login:** แยกว่า user เป็น **อาสา (volunteer)** หรือ **staff ประจำ** ได้ชัดเจนผ่าน `_users.affiliation_tags` (CR-002) — **ไม่**ใช้ RoleKey เป็นตัวบอก (เคาะ **D-AFFIL**)
+- **ยกเลิกการโอนย้ายข้ามศูนย์ (`volunteer_transfer`):** อาสาสามารถเลือกสมัครงานข้ามศูนย์ได้โดยตรงผ่านตลาดงาน ไม่ต้องมีขั้นตอนโอนย้าย
 
 ---
 

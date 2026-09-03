@@ -62,6 +62,7 @@
 		useJob,
 		useJobs,
 		useShiftAssignments,
+		useSkillOptions,
 		useVolunteers
 	} from '../application/queries';
 
@@ -84,6 +85,7 @@
 	 * below, against the live selection.
 	 */
 	const jobQuery = useJob(() => jobId);
+	const skillCatalog = useSkillOptions();
 	const volunteersQuery = useVolunteers();
 	const assignmentsQuery = useShiftAssignments();
 	const jobsQuery = useJobs();
@@ -176,7 +178,11 @@
 						shift,
 						volunteers: volunteersQuery.data ?? [],
 						assignments: relevantAssignments,
-						jobsById
+						jobsById,
+						// CR-100 — the job stores master skill codes, `volunteer.skills`
+						// stores labels; the catalog is what lets the two match.
+						skillOptions: skillCatalog.options,
+						controlledSkills: skillCatalog.controlledValues
 					}),
 					error: null
 				};

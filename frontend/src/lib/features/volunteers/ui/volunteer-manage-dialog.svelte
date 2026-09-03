@@ -33,8 +33,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { useUpdateVolunteer } from '../application/queries';
-	import { SKILL_MASTER } from '../domain/skill-master';
+	import { useUpdateVolunteer, useSkillOptions } from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
 	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
@@ -53,6 +52,12 @@
 
 	const queryClient = useQueryClient();
 	const updateMutation = useUpdateVolunteer(queryClient);
+
+	// Master Data `volunteer_skills`, effective for this shelter (CR-100) —
+	// same source `job-form-dialog.svelte` uses, instead of the old static
+	// `SKILL_MASTER` list.
+	const skillCatalog = useSkillOptions();
+	const skillsList = $derived(skillCatalog.options);
 
 	function stub(label: string) {
 		toast.info(`${label} — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา`);
@@ -95,7 +100,9 @@
 			: [...selectedSkills, key];
 	}
 
-	const generalSelectedCount = $derived(selectedSkills.filter((s) => !isControlledSkill(s)).length);
+	const generalSelectedCount = $derived(
+		selectedSkills.filter((s) => !isControlledSkill(s, skillCatalog.controlledValues)).length
+	);
 
 	async function submit() {
 		const name = fullName.trim();
@@ -291,14 +298,14 @@
 						ทักษะทั่วไป (General Skills) — คลิก/ปลดคลิกเพื่อแก้ไขได้อิสระ
 					</p>
 					<div class="grid gap-2 sm:grid-cols-2">
-						{#each SKILL_MASTER.filter((s) => !s.controlled) as skill (skill.key)}
-							{@const checked = selectedSkills.includes(skill.key)}
+						{#each skillsList.filter((s) => !s.controlled) as skill (skill.code)}
+							{@const checked = selectedSkills.includes(skill.label)}
 							<label
 								class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
 									? 'border-primary bg-primary/5'
 									: 'border-border hover:bg-muted/40'}"
 							>
-								<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.key)} />
+								<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.label)} />
 								<span class="min-w-0 text-xs">
 									<span class="flex items-center gap-1.5 font-medium">
 										<span aria-hidden="true">{skill.icon}</span>
@@ -321,8 +328,8 @@
 							ต้องรับรองผ่าน EOC
 						</Badge>
 					</div>
-					{#each SKILL_MASTER.filter((s) => s.controlled) as skill (skill.key)}
-						{@const has = selectedSkills.includes(skill.key)}
+					{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
+						{@const has = selectedSkills.includes(skill.label)}
 						<div
 							class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background p-2.5"
 						>
@@ -358,18 +365,7 @@
 			</div>
 		</div>
 
-		<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-4">
-			{#if volunteer.checked_in}
-				<Badge
-					variant="outline"
-					class="gap-1.5 border-rose-300 bg-rose-50 text-[11px] text-rose-700"
-				>
-					<ShieldAlert class="h-3 w-3" />
-					เข้ากะอยู่ (ขอโอนย้ายไม่ได้)
-				</Badge>
-			{:else}
-				<span></span>
-			{/if}
+		<div class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-6 py-4">
 			<div class="flex gap-2">
 				<Button type="button" variant="ghost" onclick={() => (open = false)}>ยกเลิก</Button>
 				<Button

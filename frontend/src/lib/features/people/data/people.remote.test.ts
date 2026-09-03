@@ -101,6 +101,28 @@ describe('PeopleRemoteRepository', () => {
 			const saved = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
 			expect(saved.household_id).toBe(household._id);
 		});
+
+		it('updates pre_registered evacuee details when registered with draft_id', async () => {
+			const preRegEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
+				ctx
+			);
+
+			const registered = await repo.createEvacuee(
+				{
+					...evInput({ first_name: 'สมชาย', last_name: 'สแกน', registered_via: 'kiosk' }),
+					draft_id: preRegEvacuee._id
+				},
+				ctx
+			);
+
+			expect(registered._id).toBe(preRegEvacuee._id);
+			expect(registered.first_name).toBe('สมชาย');
+			expect(registered.current_stay.status).toBe('pre_registered');
+
+			const fetched = await repo.getEvacuee(preRegEvacuee._id);
+			expect(fetched?.current_stay.status).toBe('pre_registered');
+		});
 	});
 
 	describe('updateMedical', () => {
@@ -443,6 +465,22 @@ describe('check-in / check-out', () => {
 			expect(promoted?.status).toBe('checked_in');
 			expect(promoted?.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
 		});
+
+		it('successfully checks in a pre-registered evacuee from kiosk and sets zone', async () => {
+			const kioskEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน', registered_via: 'kiosk' }),
+				ctx
+			);
+
+			const checkedIn = await repo.checkInEvacuee(kioskEvacuee, ctx, 'zone-b');
+			expect(checkedIn.current_stay.status).toBe('active');
+			expect(checkedIn.current_stay.zone).toBe('zone-b');
+
+			const movements = await repo.listMovements();
+			expect(movements.some((m) => m.evacuee_id === kioskEvacuee._id && m.zone === 'zone-b')).toBe(
+				true
+			);
+		});
 	});
 
 	describe('checkOutEvacuee', () => {
@@ -475,6 +513,81 @@ describe('check-in / check-out', () => {
 		it('rejects check-out when the evacuee is not active', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
 			await expect(repo.checkOutEvacuee(evacuee, ctx)).rejects.toThrow(/เช็คเอาท์/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
+	describe('recordMovement', () => {
+		it('records a transfer_out movement and updates current_stay to transferred', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			const updated = await repo.recordMovement(active, 'transfer_out', ctx);
+
+			expect(updated.current_stay.status).toBe('transferred');
+			expect(updated.current_stay.zone).toBe('zone-a');
+
+			const movements = await repo.listMovements();
+			expect(movements).toHaveLength(2);
+			expect(movements[1]).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'transfer_out',
+				zone: 'zone-a'
+			});
+		});
+
+		it('records a leave_temporary movement and updates current_stay to temporary_leave', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			const updated = await repo.recordMovement(active, 'leave_temporary', ctx);
+
+			expect(updated.current_stay.status).toBe('temporary_leave');
+
+			const movements = await repo.listMovements();
+			expect(movements[1]).toMatchObject({ action: 'leave_temporary' });
+		});
+
+		it('records a return_from_leave movement and updates current_stay back to active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const onLeave = await repo.recordMovement(active, 'leave_temporary', ctx);
+
+			const updated = await repo.recordMovement(onLeave, 'return_from_leave', ctx);
+
+			expect(updated.current_stay.status).toBe('active');
+		});
+
+		it('records a mark_deceased movement and updates current_stay to deceased (terminal)', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx);
+
+			const updated = await repo.recordMovement(active, 'mark_deceased', ctx);
+
+			expect(updated.current_stay.status).toBe('deceased');
+			await expect(repo.recordMovement(updated, 'transfer_out', ctx)).rejects.toThrow(/เสียชีวิต/);
+		});
+
+		it('persists the updated status so a fresh fetch reflects it', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx);
+			await repo.recordMovement(active, 'transfer_out', ctx);
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('transferred');
+		});
+
+		it('rejects transfer_out when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.recordMovement(evacuee, 'transfer_out', ctx)).rejects.toThrow(/ย้ายออก/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+
+		it('rejects leave_temporary when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.recordMovement(evacuee, 'leave_temporary', ctx)).rejects.toThrow(
+				/ลาชั่วคราว/
+			);
 			expect(await repo.listMovements()).toHaveLength(0);
 		});
 	});

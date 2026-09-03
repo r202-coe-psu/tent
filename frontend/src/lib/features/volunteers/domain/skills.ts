@@ -6,16 +6,17 @@
  * resolve straight to `confirmed` — it must land on `pending_review` and stay
  * there until a manager reviews it.
  *
- * The authoritative controlled-skill list is master data owned by
- * `/back-office/volunteers/settings` (CR-094 FR-VOL-08.5, a data-layer concern
- * outside this domain module). `DEFAULT_CONTROLLED_SKILLS` is only a sane
- * fallback for callers that haven't wired the settings repo yet; every
- * function accepts an explicit list/set to override it.
+ * The authoritative controlled-skill list is master data
+ * (`volunteer_skills`, CR-094 FR-VOL-08.5 / CR-100): callers pass it in as
+ * `controlledSkills`, built by `skill-catalog.ts#controlledSkillValues` from
+ * the effective master doc for the shelter. `DEFAULT_CONTROLLED_SKILLS` is
+ * only the fallback floor for a caller that has no master list at hand.
  */
 
 import type { Job } from './job.schema';
 import type { JobApplicationStatus } from './job-application.schema';
 import { CONTROLLED_SKILL_KEYS } from './skill-master';
+import { normalizeSkillText } from './skill-catalog';
 
 /**
  * Fallback controlled-skill list until the settings master data is wired.
@@ -35,12 +36,11 @@ export const DEFAULT_CONTROLLED_SKILLS: readonly string[] = [
 	'ปฐมพยาบาล'
 ];
 
-function normalize(skill: string): string {
-	// `.normalize('NFC')` alongside trim/lowercase so Thai text pasted from
-	// sources that produce NFD-decomposed combining marks still matches
-	// (CR-094 FR-VOL-10.3 / schema.md §2.17 example uses ["ปฐมพยาบาล"]).
-	return skill.trim().toLowerCase().normalize('NFC');
-}
+// `normalizeSkillText` trims/lowercases and NFC-composes so Thai text pasted
+// from sources that produce NFD-decomposed combining marks still matches
+// (CR-094 FR-VOL-10.3 / schema.md §2.17 example uses ["ปฐมพยาบาล"]). Shared
+// with `skill-catalog.ts` so the gate and the catalog normalise identically.
+const normalize = normalizeSkillText;
 
 /** Is `skill` in the controlled set (case/whitespace-insensitive)? */
 export function isControlledSkill(

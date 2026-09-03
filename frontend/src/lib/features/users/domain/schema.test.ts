@@ -1,16 +1,35 @@
 import { describe, it, expect } from 'vitest';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import {
-	affiliationTagsFor,
 	createUserSchema,
 	editUserSchema,
-	isVolunteerAccount,
-	toDateTimeLocal,
-	toDutyWindow,
-	PLATFORM_WIDE,
-	VOLUNTEER_TAG
+	usernameSchema,
+	phoneSchema,
+	securityQuestionSetupSchema,
+	forgotPasswordVerifySchema
 } from './schema';
 
 const validPassword = 'SecurePass1!';
+
+describe('phoneSchema and usernameSchema', () => {
+	it('accepts valid 10-digit Thai mobile numbers', () => {
+		expect(phoneSchema.safeParse('0812345678').success).toBe(true);
+		expect(phoneSchema.safeParse('0987654321').success).toBe(true);
+		expect(phoneSchema.safeParse('0612345678').success).toBe(true);
+	});
+
+	it('rejects invalid phone numbers', () => {
+		expect(phoneSchema.safeParse('12345').success).toBe(false);
+		expect(phoneSchema.safeParse('081234567A').success).toBe(false);
+	});
+
+	it('accepts alphanumeric username (for SA) and phone numbers for username', () => {
+		expect(usernameSchema.safeParse('sa01').success).toBe(true);
+		expect(usernameSchema.safeParse('admin').success).toBe(true);
+		expect(usernameSchema.safeParse('0812345678').success).toBe(true);
+		expect(usernameSchema.safeParse('ab').success).toBe(false); // < 3 chars
+	});
+});
 
 describe('createUserSchema', () => {
 	it('accepts a system_admin grant without a shelter', () => {
@@ -18,42 +37,112 @@ describe('createUserSchema', () => {
 			username: 'sa02',
 			password: validPassword,
 			display_name: 'ผู้ดูแลระบบ',
-			capability: 'system_admin'
+			personnel_type: 'staff',
+			organization: 'กรมป้องกันและบรรเทาสาธารณภัย',
+			phone: '0812345678',
+			capabilities: ['system_admin']
 		});
-		expect(parsed.capability).toBe('system_admin');
+		expect(parsed.capabilities).toContain('system_admin');
 		expect(parsed.shelter_id).toBeUndefined();
 	});
 
-	it('accepts a shelter-scoped staff grant with a shelter code', () => {
+	it('accepts a staff with multiple capabilities in a shelter and required organization', () => {
 		const parsed = createUserSchema.parse({
-			username: 'staff99',
+			username: '0812345678',
 			password: validPassword,
-			display_name: 'เจ้าหน้าที่',
-			capability: 'registration_staff',
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'มูลนิธิกระจกเงา',
+			phone: '0812345678',
+			position: 'เจ้าหน้าที่ทะเบียน',
+			email: 'somchai@example.com',
+			capabilities: ['registration_staff', 'triage_staff'],
 			shelter_id: 'SH001'
 		});
+		expect(parsed.capabilities).toEqual(['registration_staff', 'triage_staff']);
 		expect(parsed.shelter_id).toBe('SH001');
+		expect(parsed.organization).toBe('มูลนิธิกระจกเงา');
+	});
+
+	it('requires organization for staff', () => {
+		const result = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: '',
+			phone: '0812345678',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001'
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it('allows empty/omitted organization for volunteer', () => {
+		const result = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมหญิง รักดี',
+			personnel_type: 'volunteer',
+			phone: '0812345678',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001',
+			volunteer_id: 'volunteer:01J6M78ABCDEF'
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.volunteer_id).toBe('volunteer:01J6M78ABCDEF');
+		}
+	});
+
+	it('validates duty window if present', () => {
+		const valid = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมหญิง รักดี',
+			personnel_type: 'volunteer',
+			phone: '0812345678',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001',
+			duty_window: {
+				start_ts: '2026-09-01T08:00:00.000Z',
+				end_ts: '2026-09-01T16:00:00.000Z'
+			}
+		});
+		expect(valid.success).toBe(true);
+
+		const invalid = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมหญิง รักดี',
+			personnel_type: 'volunteer',
+			phone: '0812345678',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001',
+			duty_window: {
+				start_ts: '2026-09-01T16:00:00.000Z',
+				end_ts: '2026-09-01T08:00:00.000Z'
+			}
+		});
+		expect(invalid.success).toBe(false);
 	});
 
 	it('rejects an unknown capability', () => {
 		const result = createUserSchema.safeParse({
-			username: 'staff99',
+			username: '0812345678',
 			password: validPassword,
 			display_name: 'เจ้าหน้าที่',
-			capability: '_admin'
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			capabilities: ['_admin' as unknown as 'registration_staff'],
+			shelter_id: 'SH001'
 		});
 		expect(result.success).toBe(false);
 	});
 
-	it('rejects a malformed shelter code', () => {
-		const result = createUserSchema.safeParse({
-			username: 'staff99',
-			password: validPassword,
-			display_name: 'เจ้าหน้าที่',
-			capability: 'registration_staff',
-			shelter_id: 'not-a-code'
-		});
-		expect(result.success).toBe(false);
+	it('creates zod4 adapter for superforms without SchemaError', () => {
+		expect(() => zod4(createUserSchema)).not.toThrow();
 	});
 });
 
@@ -63,124 +152,44 @@ describe('editUserSchema', () => {
 			username: 'sa02',
 			password: '',
 			display_name: 'ผู้ดูแลระบบ',
-			capability: 'system_admin'
+			personnel_type: 'staff',
+			organization: 'ส่วนกลาง',
+			phone: '0812345678',
+			capabilities: ['system_admin']
 		});
 		expect(parsed.password).toBe('');
 	});
+
+	it('creates zod4 adapter for superforms without SchemaError', () => {
+		expect(() => zod4(editUserSchema)).not.toThrow();
+	});
 });
 
-// --- CR-096 -----------------------------------------------------------------
-
-describe('CR-096 personnel type + duty window', () => {
-	const base = {
-		username: 'staff99',
-		password: validPassword,
-		display_name: 'เจ้าหน้าที่',
-		capability: 'registration_staff' as const,
-		shelter_id: 'SH001'
-	};
-
-	it('defaults an account to staff and active when the caller omits both', () => {
-		const parsed = createUserSchema.parse(base);
-		expect(parsed.personnel_type).toBe('staff');
-		expect(parsed.active).toBe(true);
-	});
-
-	it('accepts one of the CR-096 capabilities that RBAC does not enforce yet', () => {
-		const parsed = createUserSchema.parse({ ...base, capability: 'volunteer_coordinator' });
-		expect(parsed.capability).toBe('volunteer_coordinator');
-	});
-
-	it('accepts a duty window given as a complete, forward-running pair', () => {
-		const parsed = createUserSchema.parse({
-			...base,
-			duty_start: '2026-08-29T08:00',
-			duty_end: '2026-08-29T16:00'
+describe('securityQuestionSetupSchema & forgotPasswordVerifySchema', () => {
+	it('validates security question setup', () => {
+		const parsed = securityQuestionSetupSchema.parse({
+			question_id: 'high_school',
+			answer: 'สวนกุหลาบวิทยาลัย'
 		});
-		expect(parsed.duty_start).toBe('2026-08-29T08:00');
-	});
+		expect(parsed.question_id).toBe('high_school');
+		expect(parsed.answer).toBe('สวนกุหลาบวิทยาลัย');
 
-	it('rejects a half-filled duty window', () => {
-		const result = createUserSchema.safeParse({ ...base, duty_start: '2026-08-29T08:00' });
-		expect(result.success).toBe(false);
-		expect(result.error?.issues[0]?.path).toEqual(['duty_end']);
-	});
-
-	it('rejects a duty window that ends before it starts', () => {
-		const result = createUserSchema.safeParse({
-			...base,
-			duty_start: '2026-08-29T16:00',
-			duty_end: '2026-08-29T08:00'
-		});
-		expect(result.success).toBe(false);
-	});
-
-	it('rejects an unparseable instant instead of letting the ordering check pass it', () => {
-		const result = createUserSchema.safeParse({
-			...base,
-			duty_start: 'not-a-date',
-			duty_end: '2026-08-29T16:00'
-		});
-		expect(result.success).toBe(false);
-		expect(result.error?.issues[0]?.path).toEqual(['duty_start']);
-	});
-
-	it('allows platform-wide affiliation only for system_admin', () => {
 		expect(
-			createUserSchema.safeParse({
-				...base,
-				capability: 'system_admin',
-				shelter_id: PLATFORM_WIDE
+			securityQuestionSetupSchema.safeParse({
+				question_id: 'invalid_id',
+				answer: '123'
 			}).success
-		).toBe(true);
-		const scoped = createUserSchema.safeParse({ ...base, shelter_id: PLATFORM_WIDE });
-		expect(scoped.success).toBe(false);
-		expect(scoped.error?.issues[0]?.path).toEqual(['shelter_id']);
-	});
-});
-
-describe('affiliationTagsFor', () => {
-	it('tags a volunteer account and leaves a staff account untagged (R-AFFIL-1/2)', () => {
-		expect(affiliationTagsFor('volunteer')).toEqual([VOLUNTEER_TAG]);
-		expect(affiliationTagsFor('staff')).toEqual([]);
+		).toBe(false);
 	});
 
-	it('preserves tags the form does not own', () => {
-		expect(affiliationTagsFor('volunteer', ['governance'])).toEqual(['governance', VOLUNTEER_TAG]);
-		expect(affiliationTagsFor('staff', ['governance', VOLUNTEER_TAG])).toEqual(['governance']);
-	});
-
-	it('does not duplicate the tag when re-saving a volunteer', () => {
-		expect(affiliationTagsFor('volunteer', [VOLUNTEER_TAG])).toEqual([VOLUNTEER_TAG]);
-	});
-
-	it('reads the badge from the tag, never from the RoleKey (R-AFFIL-3/5)', () => {
-		expect(isVolunteerAccount([VOLUNTEER_TAG])).toBe(true);
-		expect(isVolunteerAccount(['volunteer_coordinator'])).toBe(false);
-		expect(isVolunteerAccount(undefined)).toBe(false);
-	});
-});
-
-describe('duty window conversion', () => {
-	it('round-trips a local datetime through the stored ISO instant', () => {
-		const window = toDutyWindow('2026-08-29T08:00', '2026-08-29T16:00');
-		expect(window).not.toBeNull();
-		expect(toDateTimeLocal(window?.start_ts)).toBe('2026-08-29T08:00');
-		expect(toDateTimeLocal(window?.end_ts)).toBe('2026-08-29T16:00');
-	});
-
-	it('is null when either end is blank — that means permanent access', () => {
-		expect(toDutyWindow('2026-08-29T08:00', undefined)).toBeNull();
-		expect(toDutyWindow(undefined, undefined)).toBeNull();
-	});
-
-	it('is null for an unparseable instant rather than throwing a RangeError', () => {
-		expect(toDutyWindow('not-a-date', '2026-08-29T16:00')).toBeNull();
-		expect(toDutyWindow('2026-08-29T08:00', 'not-a-date')).toBeNull();
-	});
-
-	it('renders an empty string for a missing or unparseable instant', () => {
-		expect(toDateTimeLocal(null)).toBe('');
-		expect(toDateTimeLocal('not-a-date')).toBe('');
+	it('validates forgot password verify request', () => {
+		const parsed = forgotPasswordVerifySchema.parse({
+			phone: '0812345678',
+			question_id: 'high_school',
+			answer: 'สวนกุหลาบวิทยาลัย',
+			new_password: validPassword
+		});
+		expect(parsed.phone).toBe('0812345678');
+		expect(parsed.new_password).toBe(validPassword);
 	});
 });

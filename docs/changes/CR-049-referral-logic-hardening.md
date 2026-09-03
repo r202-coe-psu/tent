@@ -1,8 +1,9 @@
 ---
 id: CR-049
 title: Referral Logic Hardening — 3 Business Rule Fixes
-status: proposed (implementation complete — pending owner sign-off)
+status: done
 date: 2026-07-24
+updated: 2026-09-01
 requested_by: PO / Dev Team
 decided_by: เจ้าของโครงการ
 layer: volatile

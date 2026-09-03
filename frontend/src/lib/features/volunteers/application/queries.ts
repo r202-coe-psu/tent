@@ -22,27 +22,28 @@ import {
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
 import { authStore } from '$lib/stores/auth.svelte';
+import { useMasterData } from '$lib/features/master-data';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
+import {
+	FALLBACK_SKILL_OPTIONS,
+	controlledSkillValues,
+	skillOptionsFromMaster,
+	type SkillOption
+} from '../domain/skill-catalog';
 import type { Job, JobInput } from '../domain/job.schema';
 import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
-import type {
-	VolunteerTransferInput,
-	VolunteerTransferStatus
-} from '../domain/volunteer-transfer.schema';
 import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
-import { volunteerTransferRepository } from '../data/volunteer-transfer.remote';
 import type {
 	JobApplicationFilter,
 	JobFilter,
 	ShiftAssignmentFilter,
-	VolunteerFilter,
-	VolunteerTransferFilter
+	VolunteerFilter
 } from '../data/volunteer.repository';
 
 /** Calendar date "today" is evaluated against, in **Asia/Bangkok** — the same
@@ -88,11 +89,7 @@ export const volunteerKeys = {
 	volunteersList: (filter?: VolunteerFilter, shelterCode?: string) =>
 		[...volunteerKeys.volunteersAll(shelterCode), 'list', filter] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
-	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const,
-
-	transfersAll: () => [...volunteerKeys.all, 'transfers', getShelterCode()] as const,
-	transfersList: (filter?: VolunteerTransferFilter) =>
-		[...volunteerKeys.transfersAll(), 'list', filter] as const
+	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -194,12 +191,6 @@ export const useVolunteer = (id: () => string, enabled: () => boolean = () => tr
 		enabled: enabled() && !!id()
 	}));
 
-export const useTransfers = (filter?: VolunteerTransferFilter) =>
-	createQuery(() => ({
-		queryKey: volunteerKeys.transfersList(filter),
-		queryFn: () => volunteerTransferRepository().list(filter)
-	}));
-
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
@@ -259,13 +250,49 @@ export const useAssignVolunteers = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * Effective `volunteer_skills` master data for the current shelter, mapped to
+ * selectable options (CR-100).
+ *
+ * ONE place resolves the list, so the job form, the walk-in form and every
+ * screen that renders a stored skill agree on labels and on which skills are
+ * controlled. `useMasterData` already resolves `scope: 'effective'` for
+ * `getShelterCode()` — global items merged with the shelter's own, with the
+ * ones this shelter disabled coming back `inactive` — and TanStack dedupes the
+ * shared query key, so calling this from several components costs one request.
+ *
+ * Falls back to the pre-CR-100 hardcoded list while the query is in flight or
+ * when the registry document is still empty, so a form is never skill-less.
+ */
+export function useSkillOptions() {
+	const masterQuery = useMasterData(() => 'volunteer_skills');
+	return {
+		get isPending() {
+			return masterQuery.isPending;
+		},
+		get options(): readonly SkillOption[] {
+			const items = masterQuery.data?.items ?? [];
+			if (items.length === 0) return FALLBACK_SKILL_OPTIONS;
+			const mapped = skillOptionsFromMaster(items);
+			return mapped.length > 0 ? mapped : FALLBACK_SKILL_OPTIONS;
+		},
+		/** Values that force `pending_review` — pass straight to `initialStatusForSkills`. */
+		get controlledValues(): string[] {
+			return controlledSkillValues(this.options);
+		}
+	};
+}
+
+/**
  * Submits a volunteer job application (CR-041 D-APP / Story 3.3).
  * Defaults to `pending_review` and increments pending approvals.
  */
 export const useCreateJobApplication = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: (input: JobApplicationInput) =>
-			jobApplicationRepository().create(input, authorContext()),
+		mutationFn: ({
+			controlledSkills,
+			...input
+		}: JobApplicationInput & { controlledSkills?: readonly string[] }) =>
+			jobApplicationRepository().create(input, authorContext(), { controlledSkills }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
@@ -459,50 +486,6 @@ export const useSetVolunteerCheckedIn = (queryClient: QueryClient) =>
 		}
 	}));
 
-/**
- * Requests a `volunteer_transfer` (`status: 'pending'`). Transfers are not
- * part of `computeHubMetrics`'s input, so this only invalidates transfers.
- */
-export const useRequestTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: (input: VolunteerTransferInput) =>
-			volunteerTransferRepository().request(input, authorContext()),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
-/**
- * Accepts/rejects a pending transfer request. Per
- * `data/volunteer.repository.ts#VolunteerTransferRepository.decide`
- * (TODO(D-VOL-TRANSFER-APPROVE), CR-094 §7 open), this does not touch
- * `volunteer.current_shelter_code` or `checked_in` — hub metrics are
- * unaffected, only transfers need invalidating.
- */
-export const useDecideTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: ({
-			id,
-			decision
-		}: {
-			id: string;
-			decision: Extract<VolunteerTransferStatus, 'accepted' | 'rejected'>;
-		}) => volunteerTransferRepository().decide(id, decision, authStore.user?.name ?? 'unknown'),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
-/** Requester cancels their own still-`pending` transfer request. */
-export const useCancelTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: (id: string) =>
-			volunteerTransferRepository().cancel(id, authStore.user?.name ?? 'unknown'),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
 // ---------------------------------------------------------------------------
 // Live updates — one shared wiring for the whole feature (mirrors
 // `referrals/application/queries.ts#startReferralsLiveQuery`).
@@ -521,9 +504,6 @@ export function startVolunteersLiveQuery(queryClient: QueryClient): SubscribeDat
 		}
 		if (type === 'volunteer') {
 			return [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()];
-		}
-		if (type === 'volunteer_transfer') {
-			return [volunteerKeys.transfersAll()];
 		}
 		return [];
 	});

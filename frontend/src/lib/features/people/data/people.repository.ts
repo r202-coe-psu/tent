@@ -11,6 +11,7 @@ import type {
 	Medical,
 	MedicalInput,
 	Movement,
+	MovementAction,
 	StayStatus
 } from '../domain/people';
 
@@ -184,6 +185,18 @@ export interface PeopleRepository {
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	/**
+	 * Record any other movement action and apply it to the evacuee's `current_stay`.
+	 * Writes the append-only `movement` doc first, then the updated evacuee — the
+	 * source of truth for `current_stay` is always the movement stream (schema.md
+	 * §1.1), never a direct patch. `check_in`/`check_out` go through their own
+	 * dedicated methods above (they carry extra household side effects).
+	 */
+	recordMovement(
+		evacuee: Evacuee,
+		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		ctx: AuthorContext
+	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade
 	 * member stays that are still `pre_registered` → `cancelled` (CR-070).

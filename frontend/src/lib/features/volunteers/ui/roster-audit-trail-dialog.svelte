@@ -74,7 +74,7 @@
 					volunteerName: name,
 					actorLine: manual
 						? `${a.check_in_by ?? 'จนท.'} (เช็คอินแทนหน้างาน)`
-						: `${name} (สแกนหน้างาน Kiosk)`,
+						: `${name} (สแกน QR ด้วยตนเอง)`,
 					noteLine: manual ? (a.check_in_reason ?? '—') : 'ตรงเวลากะทำงาน',
 					isManual: manual
 				});
@@ -86,7 +86,7 @@
 					ts: a.check_out_at,
 					volunteerId: a.volunteer_id,
 					volunteerName: name,
-					actorLine: `${name} (เช็คเอาต์หน้างาน Kiosk)`,
+					actorLine: `${name} (สแกน QR ด้วยตนเอง)`,
 					noteLine: 'ปฏิบัติงานเสร็จสิ้น / ออกจากศูนย์',
 					isManual: false
 				});
@@ -104,8 +104,8 @@
 	let sourceFilter = $state<'all' | 'self' | 'manual'>('all');
 
 	// Jump straight to one volunteer's history when opened from a roster row's
-	// history icon (`roster-row.svelte`) — same "preset on open" pattern as
-	// `volunteer-transfer-dialog.svelte#presetVolunteerId`.
+	// history icon (`roster-row.svelte`) — same "preset on open" pattern used
+	// throughout this feature (rehydrate-on-open effects keyed off a prop).
 	let lastPreset = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {

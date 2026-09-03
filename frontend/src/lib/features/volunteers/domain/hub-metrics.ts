@@ -38,7 +38,7 @@
  */
 
 import type { Volunteer } from './volunteer.schema';
-import type { ShiftAssignment } from './shift-assignment.schema';
+import type { ShiftAssignment, ShiftAssignmentStatus } from './shift-assignment.schema';
 import type { JobApplication } from './job-application.schema';
 
 export interface HubMetricsInput {
@@ -59,8 +59,15 @@ export interface HubMetrics {
 	pendingIdentity: number;
 }
 
-/** Statuses that count as "has a shift today, not checked in" (assigned or standby). */
-const ASSIGNED_STATUSES: ReadonlySet<string> = new Set(['assigned', 'standby']);
+/**
+ * Statuses that count as "has a shift today, not checked in" (assigned or
+ * standby) — exported so UI filters (e.g. the roster attendance tab's
+ * click-to-filter tiles) can match the same grouping instead of re-deriving it.
+ */
+export const ASSIGNED_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
+	'assigned',
+	'standby'
+]);
 
 /** Count of distinct `volunteer_id`s among today's assignments whose status is in `statuses`. */
 function distinctVolunteersToday(

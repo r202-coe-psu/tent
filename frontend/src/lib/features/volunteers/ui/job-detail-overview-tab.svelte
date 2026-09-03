@@ -2,7 +2,7 @@
 	/**
 	 * Job detail — Tab 1 "ภาพรวม (Overview)" (01-tab-job-board.md §01.5,
 	 * approved mockup 2026-08-27): the SOP text, the required skills read off
-	 * `domain/skill-master.ts`, and the LIFECYCLE switcher.
+	 * Master Data `volunteer_skills` (CR-100), and the LIFECYCLE switcher.
 	 *
 	 * The lifecycle write goes through `useUpdateJob` → `JobRepository#update`,
 	 * which re-reads the latest revision and re-derives `status`/`slots_*`
@@ -14,18 +14,26 @@
 	import Award from '@lucide/svelte/icons/award';
 	import Target from '@lucide/svelte/icons/target';
 	import JobLifecyclePanel from './job-lifecycle-panel.svelte';
-	import { findSkill } from '../domain/skill-master';
+	import { resolveSkillOption } from '../domain/skill-catalog';
 	import type { Job, JobStatus } from '../domain/job.schema';
-	import { useUpdateJob } from '../application/queries';
+	import { useSkillOptions, useUpdateJob } from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const queryClient = useQueryClient();
 	const updateMutation = useUpdateJob(queryClient);
 
-	/** Master-list entry per required skill; an unknown key still renders, unlabelled. */
+	/**
+	 * Master Data entry per required skill (CR-100 — `skills_required` stores
+	 * codes, with pre-CR-100 labels still resolving). A value Master Data no
+	 * longer carries still renders, unlabelled.
+	 */
+	const skillCatalog = useSkillOptions();
 	const skills = $derived(
-		(job.skills_required ?? []).map((key) => ({ key, entry: findSkill(key) }))
+		(job.skills_required ?? []).map((key) => ({
+			key,
+			entry: resolveSkillOption(key, skillCatalog.options)
+		}))
 	);
 
 	/** Thai label per stored status — the toast must not show the raw enum value. */

@@ -1,8 +1,9 @@
 ---
 id: CR-089
 title: T-13 โอนย้ายข้ามศูนย์ — Driver/Plate + Dispute (schema_v 2 → 3)
-status: proposed
+status: approved
 date: 2026-08-25
+updated: 2026-08-31
 requested_by: CR-059 follow-up — field ละเอียดของ stock_transfer ที่ CR-059 Decision Log 2026-08-22 ("T-13 write-path implementation detail") และ schema.md §5.5 ระบุไว้ว่า "ยังไม่ approve ในรอบนี้"
 decided_by: Project Owner
 layer: volatile

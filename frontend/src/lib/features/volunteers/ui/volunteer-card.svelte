@@ -5,28 +5,21 @@
 	 * each other with a shared header — mirrors `users/ui/user-list.svelte`).
 	 * Rendered inside `people-tab.svelte`'s `<Table.Body>`.
 	 *
-	 * Of the 4 action buttons (จัดการข้อมูล/ตรวจสอบ & อนุมัติ / ออกสิทธิ์ใช้งานระบบ /
-	 * ขอโอนย้ายศูนย์ / ลบ):
-	 *   - Not yet `identity_verified` → "ตรวจสอบ & อนุมัติ" opens
-	 *     `volunteer-qualifications-audit-dialog.svelte` (approve/reject the
-	 *     pending application — see its header comment for what it persists).
+	 * Of the 3 action buttons (จัดการข้อมูล/ ออกสิทธิ์ใช้งานระบบ / ลบ):
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
 	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte` (see its
 	 *     header comment — it persists `volunteer.user_name` but does NOT mint
 	 *     a real CouchDB account/password/role grant, since no such repository
 	 *     call exists).
-	 *   - "ขอโอนย้ายศูนย์" opens the existing `volunteer-transfer-dialog.svelte`
-	 *     (the same one `people-tab.svelte`'s header button uses), jumped
-	 *     straight to its new-request sub-form with this row's volunteer
-	 *     preselected via `presetVolunteerId`.
+	 * (Cross-shelter transfer was cut by CR-104 AC-104-10 — a volunteer now
+	 * applies directly to any shelter's jobs via the Job Board instead.)
 	 * "ลบ" stays a UI-only stub for this pass (explicit scope call from the
 	 * requester) — `VolunteerRepository` has no `delete()` at all, flagged for
 	 * the CR alongside the other schema gaps.
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import KeyRound from '@lucide/svelte/icons/key-round';
-	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -35,9 +28,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
-	import VolunteerQualificationsAuditDialog from './volunteer-qualifications-audit-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import { findSkill } from '../domain/skill-master';
 	import { isControlledSkill } from '../domain/skills';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
@@ -82,9 +73,7 @@
 	}
 
 	let manageDialogOpen = $state(false);
-	let qualificationsDialogOpen = $state(false);
 	let accessDialogOpen = $state(false);
-	let transferDialogOpen = $state(false);
 </script>
 
 <Table.Row>
@@ -204,26 +193,10 @@
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[21%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			{#if !volunteer.identity_verified}
-				<Button
-					size="sm"
-					class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
-					onclick={() => (qualificationsDialogOpen = true)}
-				>
-					<Pencil class="h-3.5 w-3.5" />
-					ตรวจสอบ & อนุมัติ
-				</Button>
-			{:else}
-				<Button
-					size="sm"
-					variant="outline"
-					class="gap-1.5"
-					onclick={() => (manageDialogOpen = true)}
-				>
-					<Pencil class="h-3.5 w-3.5" />
-					จัดการข้อมูล
-				</Button>
-			{/if}
+			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
+				<Pencil class="h-3.5 w-3.5" />
+				จัดการข้อมูล
+			</Button>
 
 			<div class="flex items-center gap-1.5">
 				<Button
@@ -233,16 +206,6 @@
 				>
 					<KeyRound class="h-3.5 w-3.5" />
 					ออกสิทธิ์ใช้งานระบบ
-				</Button>
-
-				<Button
-					size="icon"
-					variant="outline"
-					class="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50"
-					aria-label="ขอโอนย้ายศูนย์"
-					onclick={() => (transferDialogOpen = true)}
-				>
-					<ArrowLeftRight class="h-4 w-4" />
 				</Button>
 
 				<Button
@@ -265,10 +228,4 @@
 	{shelterLine}
 	todayShift={todayAssignment?.shift}
 />
-<VolunteerQualificationsAuditDialog
-	bind:open={qualificationsDialogOpen}
-	{volunteer}
-	{shelterLine}
-/>
 <VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
-<VolunteerTransferDialog bind:open={transferDialogOpen} presetVolunteerId={volunteer._id} />

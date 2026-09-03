@@ -16,8 +16,9 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Search from '@lucide/svelte/icons/search';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import { useVolunteerJobs } from '../application/queries';
+	import { useVolunteerJobs, useVolunteerSkills } from '../application/queries';
 	import { isJobApplicable, type PublicJob } from '../domain/volunteer';
+	import { skillLabel } from '../domain/skill-label';
 	import JobCard from './job-card.svelte';
 	import QuickApplyModal from './quick-apply-modal.svelte';
 
@@ -32,6 +33,14 @@
 		shelterCode === 'all' ? {} : { shelter_code: shelterCode }
 	);
 	const jobs = $derived(jobsQuery.data ?? []);
+
+	/**
+	 * Master Data skill list (CR-100): the board spans shelters, so it reads the
+	 * global list — a shelter-only skill still shows, because an unresolved
+	 * value falls back to itself.
+	 */
+	const skillsQuery = useVolunteerSkills();
+	const skillOptions = $derived(skillsQuery.data ?? []);
 
 	const shelters = $derived.by(() => {
 		const byCode: Record<string, string> = {};
@@ -48,7 +57,9 @@
 			job.title.toLowerCase().includes(needle) ||
 			job.description.toLowerCase().includes(needle) ||
 			(job.shelter_name || job.shelter_code).toLowerCase().includes(needle) ||
-			job.skills_required.some((skill) => skill.toLowerCase().includes(needle))
+			job.skills_required.some((skill) =>
+				skillLabel(skill, skillOptions).toLowerCase().includes(needle)
+			)
 		);
 	}
 
@@ -192,7 +203,7 @@
 	{:else}
 		<div class="flex flex-col gap-5">
 			{#each filteredJobs as job (job.job_id)}
-				<JobCard {job} onapply={openApply} />
+				<JobCard {job} onapply={openApply} {skillOptions} />
 			{:else}
 				<div
 					class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border/80 bg-card p-12 text-center text-muted-foreground"
@@ -214,4 +225,4 @@
 	{/if}
 </div>
 
-<QuickApplyModal bind:open={applyOpen} job={selectedJob} />
+<QuickApplyModal bind:open={applyOpen} job={selectedJob} {skillOptions} />

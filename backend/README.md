@@ -420,8 +420,8 @@ docker run -p 9000:9000 fastapi-app
 
 1. Fork โปรเจกต์
 2. สร้าง feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit การเปลี่ยนแปลง (`git commit -m 'Add amazing feature'`)
-4. Push ไปยัง branch (`git push origin feature/amazing-feature`)
+3. Commit การเปลี่ยนแปลง (`git commit -m 'Add amazing feature'`) — *ห้าม commit แบบ `--no-verify` (ต้องผ่าน lint & format)*
+4. Push ไปยัง branch (`git push origin feature/amazing-feature`) — *ห้าม push แบบ `--no-verify` (ต้องผ่าน tests)*
 5. เปิด Pull Request
 
 ## 📄 License
