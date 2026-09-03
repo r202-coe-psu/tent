@@ -1,11 +1,22 @@
 import { createMutation, createQuery } from '@tanstack/svelte-query';
-import { createBooking, fetchPetTypes, lookupBooking } from '../data/public-register.api';
+import {
+	createBooking,
+	fetchDistricts,
+	fetchPetTypes,
+	fetchProvinces,
+	fetchSubdistricts,
+	lookupBooking
+} from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 
 export const publicRegisterKeys = {
 	all: ['public-register'] as const,
 	booking: (code: string) => [...publicRegisterKeys.all, 'booking', code] as const,
-	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const
+	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const,
+	provinces: () => [...publicRegisterKeys.all, 'provinces'] as const,
+	districts: (province: string) => [...publicRegisterKeys.all, 'districts', province] as const,
+	subdistricts: (province: string, district: string) =>
+		[...publicRegisterKeys.all, 'subdistricts', province, district] as const
 };
 
 /** POST a new booking. Not a query — a booking must never be replayed from cache. */
@@ -37,5 +48,37 @@ export function usePetTypes(shelterCode: () => string) {
 		queryFn: () => fetchPetTypes(shelterCode()),
 		enabled: Boolean(shelterCode().trim()),
 		staleTime: 5 * 60 * 1000
+	}));
+}
+
+/**
+ * Domicile-address cascade for the booking form (CR-107). Reference data that
+ * never changes within a session, so each level is cached forever and only the
+ * level below the citizen's current choice is fetched — the same shape the staff
+ * address step uses, but over the public BFF.
+ */
+export function useBookingProvinces() {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.provinces(),
+		queryFn: fetchProvinces,
+		staleTime: Infinity
+	}));
+}
+
+export function useBookingDistricts(province: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.districts(province()),
+		queryFn: () => fetchDistricts(province()),
+		enabled: Boolean(province().trim()),
+		staleTime: Infinity
+	}));
+}
+
+export function useBookingSubdistricts(province: () => string, district: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.subdistricts(province(), district()),
+		queryFn: () => fetchSubdistricts(province(), district()),
+		enabled: Boolean(province().trim() && district().trim()),
+		staleTime: Infinity
 	}));
 }

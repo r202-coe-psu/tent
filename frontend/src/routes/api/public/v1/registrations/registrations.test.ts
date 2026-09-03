@@ -43,9 +43,20 @@ const OPEN_SHELTER = { code: 'SH001', name: 'ศูนย์ทดสอบ', op
 
 const CONTACT = { first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] };
 
+/** Domicile address of the household head — required since CR-107. */
+const ADDRESS = {
+	address_no: '123/45',
+	village_no: 'หมู่ 4',
+	subdistrict: 'คอหงส์',
+	district: 'หาดใหญ่',
+	province: 'สงขลา',
+	postal_code: '90110'
+};
+
 const VALID_BODY = {
 	shelter_code: 'SH001',
 	phone: '0812345678',
+	address: ADDRESS,
 	members: [CONTACT],
 	pets: [],
 	captchaToken: 'tok'
