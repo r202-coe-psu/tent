@@ -14,6 +14,7 @@
 
 	const STATUS_SHORT: Record<StayStatus, string> = {
 		pre_registered: 'รอเช็คอิน',
+		arriving: 'รอจัดโซน',
 		active: 'เช็คอิน',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',

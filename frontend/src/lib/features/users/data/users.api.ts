@@ -4,12 +4,7 @@
  */
 
 import { serviceFetch } from '$lib/api/service';
-import type {
-	CreateUserInput,
-	EditUserInput,
-	ForgotPasswordVerifyInput,
-	ForceSetupInput
-} from '../domain/schema';
+import type { ForgotPasswordVerifyInput, ForceSetupInput } from '../domain/schema';
 
 const USERS_ENDPOINT = '/api/v1/users';
 const RESET_PASSWORD_ENDPOINT = '/api/v1/users/reset-password';
@@ -59,7 +54,7 @@ export function createUser(input: {
 		end_ts: string;
 	} | null;
 	affiliation_tags?: string[];
-}): Promise<{ ok: true }> {
+}): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }
 
@@ -96,7 +91,9 @@ export function updateUser(
 }
 
 /** Admin triggers reset of user password to a memorable temporary passphrase */
-export function adminResetPassword(name: string): Promise<{ ok: true; temporary_password: string }> {
+export function adminResetPassword(
+	name: string
+): Promise<{ ok: true; temporary_password: string }> {
 	return serviceFetch<{ ok: true; temporary_password: string }>(RESET_PASSWORD_ENDPOINT, {
 		method: 'POST',
 		body: JSON.stringify({ name })
@@ -110,9 +107,7 @@ export function getSecurityQuestionChallenge(phone: string): Promise<{
 	question_id?: string;
 	question_label?: string;
 }> {
-	return serviceFetch(
-		`${FORGOT_PASSWORD_ENDPOINT}?phone=${encodeURIComponent(phone.trim())}`
-	);
+	return serviceFetch(`${FORGOT_PASSWORD_ENDPOINT}?phone=${encodeURIComponent(phone.trim())}`);
 }
 
 /** Submit answer to security question and reset password (Self-Service) */

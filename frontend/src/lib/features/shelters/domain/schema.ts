@@ -328,6 +328,25 @@ export const parkingPolicySchema = z.object({
 });
 export type ParkingPolicy = z.infer<typeof parkingPolicySchema>;
 
+// ===== Feature Flags (CR-016, CR-052, CR-106) =====
+
+export const shelterFeatureFlagsSchema = z.object({
+	allow_pets: z.boolean().default(false),
+	allow_vehicles: z.boolean().default(false),
+	allow_assets: z.boolean().default(false),
+	public_donations_enabled: z.boolean().default(true),
+	enable_medical_screening: z.boolean().default(false)
+});
+export type ShelterFeatureFlags = z.infer<typeof shelterFeatureFlagsSchema>;
+
+export const DEFAULT_SHELTER_FEATURE_FLAGS: ShelterFeatureFlags = {
+	allow_pets: false,
+	allow_vehicles: false,
+	allow_assets: false,
+	public_donations_enabled: true,
+	enable_medical_screening: false
+};
+
 // ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====
 
 export const shelterSchema = z.object({
@@ -368,7 +387,8 @@ export const shelterSchema = z.object({
 		.default({ limitation: null, max_per_family: null, rules: [], rules_other: null }),
 	parking_policy: parkingPolicySchema
 		.optional()
-		.default({ availability: null, supported_vehicles: [], rules: [], rules_other: null })
+		.default({ availability: null, supported_vehicles: [], rules: [], rules_other: null }),
+	feature_flags: shelterFeatureFlagsSchema.optional().default(DEFAULT_SHELTER_FEATURE_FLAGS)
 });
 export type Shelter = z.infer<typeof shelterSchema>;
 
@@ -477,6 +497,7 @@ export interface ShelterMaster {
 	admission_policy?: AdmissionPolicy;
 	luggage_policy?: LuggagePolicy;
 	parking_policy?: ParkingPolicy;
+	feature_flags?: ShelterFeatureFlags;
 	location?: { address?: string | null; lat?: number | null; lng?: number | null };
 	contact?: { name?: string | null; phone?: string | null };
 	edge_url?: string | null;
@@ -546,7 +567,8 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
 		})),
 		admission_policy: v3.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 		luggage_policy: v3.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-		parking_policy: v3.parking_policy ?? { ...EMPTY_PARKING_POLICY }
+		parking_policy: v3.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+		feature_flags: v3.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
 	};
 }
 

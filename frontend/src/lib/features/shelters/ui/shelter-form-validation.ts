@@ -20,7 +20,8 @@ export const SHELTER_STEP_FIELDS: readonly (readonly string[])[] = [
 		'district',
 		'province',
 		'postal_code',
-		'key_personnel'
+		'key_personnel',
+		'feature_flags'
 	],
 	['capacity', 'area_m2', 'area_type'],
 	['zones', 'facilities', 'common_areas'],

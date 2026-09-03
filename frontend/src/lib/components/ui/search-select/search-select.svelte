@@ -1,5 +1,5 @@
 <script lang="ts" generics="T extends { value: string; label: string }">
-	import { cn } from '$lib/utils/shadcn.js';
+	import { cn, listOptionActiveClass, listOptionHoverClass } from '$lib/utils/shadcn.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -130,7 +130,9 @@
 					<button
 						type="button"
 						class={cn(
-							'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground',
+							'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-left text-sm outline-hidden select-none',
+							listOptionHoverClass,
+							listOptionActiveClass,
 							value === item.value && 'bg-accent/50 font-medium'
 						)}
 						onpointerdown={(e) => {

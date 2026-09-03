@@ -26,6 +26,7 @@
 		"verify:resource-calc-seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/verify-t31-seed.ts",
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
+		"seed:delete-daily-sop": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-daily-sop",
 		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",

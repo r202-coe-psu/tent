@@ -1,9 +1,14 @@
 import { adminRaw, bootstrapAdminName, isProtectedBootstrapAdmin } from '$lib/server/couch-admin';
 import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/couch-admin';
 import {
+	SHELTER_MANAGER,
+	STAFF_CAPABILITIES,
+	capabilitiesForShelter,
+	hasShelterScope,
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
-	isStaffOnly,
+	managerShelterCodes,
+	mergeShelterAssignment,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { validatePassword } from '$lib/server/password-policy';
@@ -47,6 +52,13 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
+}
+
+export async function getCurrentUserProfile(
+	name: string
+): Promise<Pick<UserSummary, 'name' | 'display_name'>> {
+	const user = toSummary(await readUserDoc(name, 'read current user'));
+	return { name: user.name, display_name: user.display_name };
 }
 
 export interface CouchUserDoc {
@@ -218,18 +230,79 @@ export async function createUser(input: {
 	if (res.status >= 400) throw serviceErrorFromCouch('create user', res.status, res.data);
 }
 
-/** List users, scoped: SA sees all; a manager sees only their own shelter. */
+/**
+ * Create a user, or if the username already exists and the caller is a manager,
+ * merge the caller's shelter assignment into the existing account (add from outside).
+ */
+export async function createOrMergeUser(
+	input: Parameters<typeof createUser>[0],
+	caller: Caller
+): Promise<{ merged: boolean }> {
+	try {
+		await createUser(input);
+		return { merged: false };
+	} catch (e) {
+		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
+		const managed = managerShelterCodes(caller.roles);
+		const code = managed[0] ?? caller.shelterCode;
+		if (!code) throw e;
+		const caps = capabilitiesForShelter(input.roles, code);
+		if (caps.length === 0) throw e;
+		await updateUser(
+			input.name,
+			{
+				display_name: input.display_name,
+				roles: input.roles,
+				personnel_type: input.personnel_type,
+				organization: input.organization,
+				position: input.position,
+				phone: input.phone,
+				email: input.email,
+				notes: input.notes,
+				volunteer_id: input.volunteer_id,
+				duty_window: input.duty_window,
+				affiliation_tags: input.affiliation_tags
+			},
+			caller
+		);
+		return { merged: true };
+	}
+}
+
+/** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const bootstrap = bootstrapAdminName();
 	const all = (await fetchAllUserDocs())
 		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
 		.map(toSummary);
 	if (caller.isSA) return all;
-	const scope = `shelter:${caller.shelterCode}`;
-	return all.filter((u) => u.roles.includes(scope));
+	const managed = managerShelterCodes(caller.roles);
+	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
+	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
 }
 
-/** Delete a user. A manager may only delete users within their own shelter. */
+function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]): string {
+	if (isAppSystemAdmin(targetRoles)) {
+		throw new ServiceError('FORBIDDEN', 'A manager may not modify a system admin');
+	}
+	const managed = managerShelterCodes(caller.roles);
+	const code = managed[0] ?? caller.shelterCode;
+	if (!code) {
+		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
+	}
+	// Allow add-from-outside: target need not already be in this shelter.
+	const capsHere = capabilitiesForShelter(targetRoles, code);
+	if (capsHere.includes(SHELTER_MANAGER)) {
+		throw new ServiceError('FORBIDDEN', 'A manager may not modify another shelter manager');
+	}
+	const staff = STAFF_CAPABILITIES as readonly string[];
+	if (capsHere.some((c) => !staff.includes(c))) {
+		throw new ServiceError('FORBIDDEN', 'A manager may only manage staff users in their shelter');
+	}
+	return code;
+}
+
+/** Delete a user. A manager strips own-shelter assignment; full delete only if no shelters remain. */
 export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	const doc = await readUserDoc(name, 'read user');
 
@@ -238,12 +311,20 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	}
 
 	if (!caller.isSA) {
-		const scope = `shelter:${caller.shelterCode}`;
-		if (!doc.roles?.includes(scope)) {
+		const code = managerMayMutateTarget(caller, doc.roles ?? []);
+		if (!hasShelterScope(doc.roles ?? [], code)) {
 			throw new ServiceError('FORBIDDEN', 'A manager may only remove users in their own shelter');
 		}
-		if (!isStaffOnly(doc.roles ?? [])) {
-			throw new ServiceError('FORBIDDEN', 'A manager may only remove staff users');
+		const remaining = mergeShelterAssignment(doc.roles ?? [], code, []);
+		if (remaining.length > 0) {
+			const updatedDoc = {
+				...doc,
+				roles: remaining,
+				shelter_id: shelterCodeFromRoles(remaining)
+			};
+			const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+			if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
+			return;
 		}
 	} else {
 		await assertNotLastAppSa(doc.roles ?? []);
@@ -253,7 +334,7 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 }
 
-/** Update an existing user. A manager may only edit users in their own shelter and only staff. */
+/** Update an existing user. Managers merge roles for their shelter only. */
 export async function updateUser(
 	name: string,
 	input: {
@@ -283,18 +364,15 @@ export async function updateUser(
 		rejectBootstrapMutation(caller, name, 'update');
 	}
 
-	// Authorize changes
+	let nextRoles = input.roles;
+
 	if (!caller.isSA) {
-		const scope = `shelter:${caller.shelterCode}`;
-		if (!doc.roles?.includes(scope)) {
-			throw new ServiceError('FORBIDDEN', 'A manager may only edit users in their own shelter');
-		}
-		if (!isStaffOnly(doc.roles ?? [])) {
-			throw new ServiceError('FORBIDDEN', 'A manager may only edit staff users');
-		}
+		const code = managerMayMutateTarget(caller, doc.roles ?? []);
 		if (input.roles) {
 			const { assertCanGrant } = await import('./couch-admin');
 			assertCanGrant(caller, input.roles);
+			const caps = capabilitiesForShelter(input.roles, code);
+			nextRoles = mergeShelterAssignment(doc.roles ?? [], code, caps);
 		}
 	} else {
 		if (input.roles) {
@@ -303,13 +381,14 @@ export async function updateUser(
 			if (isAppSystemAdmin(doc.roles ?? []) && !isAppSystemAdmin(input.roles)) {
 				await assertNotLastAppSa(doc.roles ?? []);
 			}
+			nextRoles = input.roles;
 		}
 	}
 
 	const updatedDoc = {
 		...doc,
 		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
-		...(input.roles ? { roles: input.roles, shelter_id: shelterCodeFromRoles(input.roles) } : {}),
+		...(nextRoles ? { roles: nextRoles, shelter_id: shelterCodeFromRoles(nextRoles) } : {}),
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
@@ -348,12 +427,9 @@ export async function resetUserPasswordByAdmin(
 	}
 
 	if (!caller.isSA) {
-		const scope = `shelter:${caller.shelterCode}`;
-		if (!doc.roles?.includes(scope)) {
+		const code = managerMayMutateTarget(caller, doc.roles ?? []);
+		if (!hasShelterScope(doc.roles ?? [], code)) {
 			throw new ServiceError('FORBIDDEN', 'A manager may only reset users in their own shelter');
-		}
-		if (!isStaffOnly(doc.roles ?? [])) {
-			throw new ServiceError('FORBIDDEN', 'A manager may only reset staff users');
 		}
 	}
 

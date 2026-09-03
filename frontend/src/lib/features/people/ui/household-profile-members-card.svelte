@@ -55,6 +55,7 @@
 							สถานะ: {{
 								active: 'อยู่ในศูนย์',
 								pre_registered: 'ลงทะเบียนล่วงหน้า',
+								arriving: 'รอจัดโซน',
 								temporary_leave: 'ออกชั่วคราว',
 								transferred: 'ย้ายศูนย์',
 								checked_out: 'ย้ายออก',

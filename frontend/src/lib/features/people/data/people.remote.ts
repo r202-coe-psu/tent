@@ -24,6 +24,7 @@ import {
 	isScreening,
 	migrateHouseholdV3ToV4,
 	matchesEvacueeSearch,
+	formatPersonName,
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
@@ -31,7 +32,8 @@ import {
 	canCancelEvacueePreRegistration,
 	type Medical,
 	type MedicalInput,
-	type Movement
+	type Movement,
+	type MovementAction
 } from '../domain/people';
 import type {
 	EvacueeFilters,
@@ -130,7 +132,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					...(parsedInput.photo ? { photo: parsedInput.photo } : {}),
 					household_id: parsedInput.household_id,
 					current_stay: {
-						status: existing.current_stay.status || 'pre_registered',
+						status: parsedInput.status || existing.current_stay.status || 'pre_registered',
 						zone: existing.current_stay.zone ?? null,
 						since: now()
 					}
@@ -316,9 +318,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const q = search?.trim();
 		if (q) {
 			const evacuees = await this.repo.allByType('evacuee', isEvacuee);
-			const headNames = new Map(
-				evacuees.map((e) => [e._id, `${e.first_name} ${e.last_name}`.toLowerCase()])
-			);
+			const headNames = new Map(evacuees.map((e) => [e._id, formatPersonName(e).toLowerCase()]));
 			all = all.filter((h) =>
 				matchesHouseholdSearch(h, q, headNames.get(h.head_evacuee_id ?? '') ?? '', labels)
 			);
@@ -383,6 +383,47 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
+	}
+
+	async recordMedicalScreening(
+		input: {
+			screening: ScreeningInput;
+			zone?: string | null;
+			checkIn?: boolean;
+			medical?: MedicalInput;
+		},
+		ctx: AuthorContext
+	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }> {
+		const screening = await this.createScreening(input.screening, ctx);
+		let evacuee: Evacuee | undefined;
+		if (input.checkIn && input.zone) {
+			const targetEvacuee = await this.getEvacuee(input.screening.evacuee_id);
+			if (!targetEvacuee) {
+				throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+			}
+			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone);
+		}
+		let medical: Medical | undefined;
+		if (input.medical) {
+			const existingMedicals = await this.repo.find<Medical>({
+				selector: { type: 'medical', evacuee_id: input.screening.evacuee_id },
+				limit: 1
+			});
+			const existing = existingMedicals.find(isMedical);
+			if (existing) {
+				medical = await this.updateMedical({
+					...existing,
+					...input.medical,
+					evacuee_id: input.screening.evacuee_id
+				});
+			} else {
+				medical = await this.createMedical(
+					{ ...input.medical, evacuee_id: input.screening.evacuee_id },
+					ctx
+				);
+			}
+		}
+		return { screening, ...(evacuee ? { evacuee } : {}), ...(medical ? { medical } : {}) };
 	}
 
 	async createEvacueeWithScreening(
@@ -473,6 +514,26 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.allByType('screening', isScreening);
 	}
 
+	async getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]> {
+		const [allEvacuees, screenings] = await Promise.all([
+			this.repo.allByType('evacuee', isEvacuee),
+			this.repo.allByType('screening', isScreening)
+		]);
+		const screenedIds = new Set(screenings.map((s) => s.evacuee_id));
+		return allEvacuees.filter((e) => {
+			if (
+				shelterCode &&
+				e.shelter_code &&
+				e.shelter_code.toUpperCase() !== shelterCode.toUpperCase()
+			) {
+				return false;
+			}
+			const status = e.current_stay?.status;
+			const isPendingStatus = status === 'arriving' || status === 'pre_registered';
+			return isPendingStatus && !screenedIds.has(e._id);
+		});
+	}
+
 	async checkInEvacuee(
 		evacuee: Evacuee,
 		ctx: AuthorContext,
@@ -506,6 +567,43 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertMovementAllowed(evacuee, 'check_out');
 		const movement = createMovement(
 			{ evacuee_id: evacuee._id, action: 'check_out', zone: null },
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
+
+	/** Rezone an active evacuee via append-only `zone_change` (CR-106). */
+	async changeEvacueeZone(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
+		const nextZone = zone.trim();
+		if (!nextZone) {
+			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
+		}
+		assertMovementAllowed(evacuee, 'zone_change');
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action: 'zone_change', zone: nextZone },
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
+
+	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
+	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	async recordMovement(
+		evacuee: Evacuee,
+		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		ctx: AuthorContext
+	): Promise<Evacuee> {
+		assertMovementAllowed(evacuee, action);
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action, zone: evacuee.current_stay.zone },
 			ctx
 		);
 		await this.repo.put(movement);
@@ -639,6 +737,40 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			ctx
 		);
 		await this.repo.put(householdAudit);
+	}
+
+	/**
+	 * Station 1 Report-in: promote `pre_registered` → `arriving`, zone null.
+	 * Does not create screening or assign a zone (CR-106 FR-03d).
+	 */
+	async promoteReportIn(evacueeId: string): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (!latest || !isEvacuee(latest)) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		}
+		if (latest.current_stay.status !== 'pre_registered') {
+			throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
+		}
+		const saved = await this.repo.put(
+			touch({
+				...latest,
+				current_stay: {
+					status: 'arriving' as const,
+					zone: null,
+					since: now()
+				}
+			})
+		);
+
+		if (saved.household_id) {
+			const hh = await this.repo.get<Household>(saved.household_id);
+			if (hh && isHousehold(hh) && hh.status === 'pre_registered') {
+				assertHouseholdStatusTransition(hh.status, 'arriving');
+				await this.repo.put(touch({ ...hh, status: 'arriving' as const }));
+			}
+		}
+
+		return saved;
 	}
 }
 
