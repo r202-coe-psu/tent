@@ -1,11 +1,11 @@
 ---
-id: CR-100
+id: CR-106
 title: Daily SOP assessment workflow, incremental saves, and editable snapshots
-status: proposed
+status: approved
 date: 2026-08-31
-updated: 2026-09-01
+updated: 2026-09-03
 requested_by: Team-D
-decided_by: pending project owner review
+decided_by: เจ้าของโครงการ (อนุมัติ 2026-09-03)
 layer: volatile
 why: ต้องมี workflow ประเมิน Daily SOP ที่บันทึกและแก้ไขผลรายศูนย์/รายวันได้ โดยไม่กระทบ Resource Dashboard
 migration: none — feature is proposed and schema_v 1 has not been released
@@ -23,13 +23,13 @@ affects:
   - frontend/e2e/daily-sop.test.ts
 ---
 
-# CR-100 — Daily SOP assessment workflow
+# CR-106 — Daily SOP assessment workflow (renumbered from CR-100)
 
 ## สถานะและคำขอ
 
-เอกสารนี้เป็น **ข้อเสนอ (`proposed`)** สำหรับ workflow ใหม่ตาม Design ที่ให้มา ยังไม่ใช่การ
-อนุมัติให้ขยาย scope ไปยังระบบอื่น และยังไม่ควรเพิ่มรายการนี้ลง Change Record index จนกว่า
-เจ้าของโครงการจะเป็นผู้ตัดสินใจเอง
+เอกสารนี้ได้รับการ **อนุมัติ (`approved`)** โดยเจ้าของโครงการเมื่อวันที่ 2026-09-03 พร้อม renumber
+จากเลขข้อเสนอเดิม CR-100 เป็น **CR-106** เพื่อแก้ไขปัญหาหมายเลขชนกับ CR-100 announcements-crud
+ในระบบ โดยคง scope ตาม feature slice เดิมและไม่แก้ business logic ของ Resource Dashboard
 
 การเปลี่ยนนี้มีผลหลายโซนของระบบ เพราะไม่ได้เป็นเพียงหน้า UI ใหม่ แต่เพิ่ม document type,
 validation invariant, seed contract และเส้นทางการอ่านข้อมูลย้อนหลัง อย่างไรก็ตามทุกส่วนถูก
@@ -281,3 +281,5 @@ pnpm seed:delete-daily-sop
 - 2026-08-31 — เปิด CR-100 เป็น `proposed` เพื่อเสนอ workflow ใหม่ตาม Design
 - 2026-09-01 — ยืนยันว่า CR ยังเป็น `proposed` และไม่มี Daily SOP schema ที่ release แล้ว; จึงรวม
   `answered`, Lifeline `null`, `InProgress` และ metadata รายข้อไว้ใน schema_v 1 เดียว ไม่สร้าง migration ก่อนจำเป็น
+- 2026-09-03 — เจ้าของโครงการอนุมัติ (`approved`) และ renumber จาก CR-100 เป็น CR-106 เพื่อแก้ปัญหาเลขชนกับ announcements-crud
+
