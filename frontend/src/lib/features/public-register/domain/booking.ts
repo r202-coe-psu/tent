@@ -66,12 +66,11 @@ export const publicBookingMemberSchema = z.object({
 		.trim()
 		.min(1, 'กรุณากรอกชื่อ')
 		.max(100, 'ชื่อยาวเกินไป'),
-	last_name: z
-		.string({ error: 'กรุณากรอกนามสกุล' })
-		.trim()
-		.min(1, 'กรุณากรอกนามสกุล')
-		.max(100, 'นามสกุลยาวเกินไป'),
+	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+	last_name: z.string().trim().max(100, 'นามสกุลยาวเกินไป').default(''),
 	gender: bookingGenderSchema,
+	birth_year: z.number().int().optional(),
+	age: z.number().int().min(0).max(150).optional(),
 	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([])
 });
 
@@ -95,6 +94,8 @@ export const publicBookingPetSpeciesSchema = z
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016). */
 export const publicBookingPetSchema = z.object({
 	species: publicBookingPetSpeciesSchema,
+	name: z.string().trim().max(100, 'ชื่อสัตว์เลี้ยงยาวเกินไป').optional().default(''),
+	condition: z.string().trim().max(200, 'อาการสัตว์เลี้ยงยาวเกินไป').optional().default(''),
 	notes: z.string().trim().max(200, 'รายละเอียดยาวเกินไป').optional(),
 	has_cage: z.boolean().default(false)
 });
@@ -179,6 +180,7 @@ export const publicBookingInputSchema = z.object({
 		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
 	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
+	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
 	captchaToken: z.string().trim().optional()
 });
 
@@ -212,6 +214,8 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 			...(isContact && input.national_id
 				? { person_id: { cardType: 'national_id' as const, number: input.national_id } }
 				: {}),
+			...(member.birth_year !== undefined ? { birth_year: member.birth_year } : {}),
+			...(member.age !== undefined ? { age: member.age } : {}),
 			special_needs: member.special_needs,
 			household_id: householdId,
 			registered_via: 'web' as const
@@ -249,9 +253,13 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 		pets: input.pets.map((pet) => {
 			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
 			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'bird' | 'other';
+			const rawNotes = [pet.name, pet.condition, pet.notes]
+				.map((s) => s?.trim())
+				.filter(Boolean)
+				.join(' | ');
 			const notes = isKnownSpecies
-				? pet.notes
-				: [pet.notes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ');
+				? rawNotes || undefined
+				: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
 			return {
 				species,
 				count: 1,
@@ -259,6 +267,9 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 				has_cage: pet.has_cage
 			};
 		}),
+		assets: input.asset_description?.trim()
+			? { description: input.asset_description.trim(), image_url: null }
+			: null,
 		// `license_plate` is nullable in the household schema, and an empty string is
 		// not "no plate" — normalize the blank the form produces back to `null`.
 		vehicles: input.vehicles.map((vehicle) => ({

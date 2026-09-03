@@ -29,6 +29,10 @@ _Avoid_: Check-in, triage, admission.
 The Station 1 interview that confirms or edits Registration data for an evacuee whose stay status is `pre_registered`, then promotes that stay to `arriving`.
 _Avoid_: Check-in, Registration (the broader intake process that also includes walk-in create), one-click status patch.
 
+**Public Pre-registration**:
+A self-service online intake flow that captures basic household and evacuee identities before arrival, persisting them in `pre_registered` stay status with `zone = null`.
+_Avoid_: Online check-in, public registration (ambiguous with staff Station 1 walk-in), pre-admission.
+
 **Medical Screening**:
 A clinical evaluation conducted by healthcare personnel to assess surveillance symptoms (EWAR), vital signs, triage urgency, and ongoing medical conditions.
 _Avoid_: Diagnosis, general checkup, registration.

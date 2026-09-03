@@ -4,6 +4,7 @@ import {
 	fetchDistricts,
 	fetchPetTypes,
 	fetchProvinces,
+	fetchShelterPolicy,
 	fetchSubdistricts,
 	lookupBooking
 } from '../data/public-register.api';
@@ -13,6 +14,8 @@ export const publicRegisterKeys = {
 	all: ['public-register'] as const,
 	booking: (code: string) => [...publicRegisterKeys.all, 'booking', code] as const,
 	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const,
+	shelterPolicy: (shelterCode: string) =>
+		[...publicRegisterKeys.all, 'shelter-policy', shelterCode] as const,
 	provinces: () => [...publicRegisterKeys.all, 'provinces'] as const,
 	districts: (province: string) => [...publicRegisterKeys.all, 'districts', province] as const,
 	subdistricts: (province: string, district: string) =>
@@ -46,6 +49,18 @@ export function usePetTypes(shelterCode: () => string) {
 	return createQuery(() => ({
 		queryKey: publicRegisterKeys.petTypes(shelterCode()),
 		queryFn: () => fetchPetTypes(shelterCode()),
+		enabled: Boolean(shelterCode().trim()),
+		staleTime: 5 * 60 * 1000
+	}));
+}
+
+/**
+ * Feature flags and safety policies for the shelter currently selected in the booking form.
+ */
+export function useShelterPolicy(shelterCode: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.shelterPolicy(shelterCode()),
+		queryFn: () => fetchShelterPolicy(shelterCode()),
 		enabled: Boolean(shelterCode().trim()),
 		staleTime: 5 * 60 * 1000
 	}));
