@@ -31,4 +31,4 @@ export const OPENFREEMAP_POSITRON_STYLE = 'https://tiles.openfreemap.org/styles/
 
 export const DEFAULT_MAP_STYLE = OSM_RASTER_STYLE;
 export const DEFAULT_MAP_CENTER: [number, number] = [100.473531, 7.009425];
-export const DEFAULT_MAP_ZOOM = 11;
+export const DEFAULT_MAP_ZOOM = 13;

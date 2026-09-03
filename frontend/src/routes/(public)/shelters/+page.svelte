@@ -27,6 +27,8 @@
 
 	let liveUserLat = $state('');
 	let liveUserLng = $state('');
+	let selectedShelterId = $state<string | null>(null);
+	let listContainerEl: HTMLElement | null = $state(null);
 
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 
@@ -75,6 +77,42 @@
 		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
 		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
+
+	$effect(() => {
+		if (
+			selectedShelterId &&
+			!displayShelters.some((s) => s.id === selectedShelterId || s.code === selectedShelterId)
+		) {
+			selectedShelterId = null;
+		}
+	});
+
+	function handleSelectShelter(shelterId: string) {
+		selectedShelterId = shelterId;
+
+		if (typeof window !== 'undefined' && listContainerEl) {
+			const targetEl =
+				document.getElementById(`shelter-card-${shelterId}`) ||
+				(document.querySelector(`[data-shelter-id="${shelterId}"]`) as HTMLElement | null) ||
+				(document.querySelector(`[data-shelter-code="${shelterId}"]`) as HTMLElement | null);
+
+			if (targetEl) {
+				const containerRect = listContainerEl.getBoundingClientRect();
+				const targetRect = targetEl.getBoundingClientRect();
+				const relativeTop = targetRect.top - containerRect.top;
+				const currentScroll = listContainerEl.scrollTop;
+
+				listContainerEl.scrollTo({
+					top: currentScroll + relativeTop - 12,
+					behavior: 'smooth'
+				});
+
+				if (window.innerWidth < 1024) {
+					targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+				}
+			}
+		}
+	}
 
 	function openBooking(shelterCode: string) {
 		const target = shelterCode
@@ -182,6 +220,8 @@
 						? { lat: liveUserLat, lng: liveUserLng }
 						: undefined}
 					radiusKm={mapRadiusKm}
+					selectedId={selectedShelterId}
+					onSelectShelter={handleSelectShelter}
 					onLocationPick={applySearchOrigin}
 				/>
 			</div>
@@ -199,16 +239,28 @@
 			</div>
 
 			<div
+				bind:this={listContainerEl}
 				class="custom-scrollbar flex flex-col gap-4 overflow-y-auto pr-2"
 				style="max-height: 700px;"
 			>
 				{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
-					<PublicShelterCard
-						{shelter}
-						{getStatusColor}
-						{getStatusText}
-						onPreRegister={openBooking}
-					/>
+					{@const shelterKey = shelter.id || shelter.code || String(i)}
+					<div
+						id={`shelter-card-${shelterKey}`}
+						data-shelter-id={shelter.id}
+						data-shelter-code={shelter.code}
+						class="transition-all duration-200"
+					>
+						<PublicShelterCard
+							{shelter}
+							{getStatusColor}
+							{getStatusText}
+							isSelected={selectedShelterId === shelter.id ||
+								Boolean(shelter.code && selectedShelterId === shelter.code)}
+							onSelect={() => handleSelectShelter(shelter.id || shelter.code)}
+							onPreRegister={openBooking}
+						/>
+					</div>
 				{:else}
 					<div
 						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
