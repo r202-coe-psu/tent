@@ -21,7 +21,11 @@
 
 	export type ScreeningDraft = Pick<
 		EvacueeInput,
-		'medical_conditions' | 'medical_medications' | 'medical_allergies' | 'special_needs' | 'medical_note'
+		| 'medical_conditions'
+		| 'medical_medications'
+		| 'medical_allergies'
+		| 'special_needs'
+		| 'medical_note'
 	>;
 
 	let {
@@ -141,9 +145,7 @@
 		hasNoVulnerableGroup = false;
 		const current = screeningDraft.special_needs ?? [];
 		const checked = current.includes(need);
-		screeningDraft.special_needs = checked
-			? current.filter((n) => n !== need)
-			: [...current, need];
+		screeningDraft.special_needs = checked ? current.filter((n) => n !== need) : [...current, need];
 	}
 
 	function updateMedicalField(field: 'conditions' | 'medications' | 'allergies', value: string) {
@@ -182,7 +184,7 @@
 	let activeSection = $state<FormSectionId>('ewar');
 	let scrollSpyPaused = $state(false);
 
-	function findScrollParent(element: HTMLElement): Element | null {
+	function findScrollParent(element: Element): Element | null {
 		let parent = element.parentElement;
 		while (parent) {
 			const { overflowY } = getComputedStyle(parent);
@@ -376,7 +378,9 @@
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-3">
 					<Label class="text-base sm:text-sm">
-						{regT.medical.conditions.label}<span class="text-destructive" aria-hidden="true"> *</span>
+						{regT.medical.conditions.label}<span class="text-destructive" aria-hidden="true">
+							*</span
+						>
 					</Label>
 					<Button
 						type="button"
@@ -404,7 +408,9 @@
 				<div class="space-y-2">
 					<div class="flex items-center justify-between gap-3">
 						<Label class="text-base sm:text-sm">
-							{regT.medical.medications.label}<span class="text-destructive" aria-hidden="true"> *</span>
+							{regT.medical.medications.label}<span class="text-destructive" aria-hidden="true">
+								*</span
+							>
 						</Label>
 						<Button
 							type="button"
@@ -431,7 +437,9 @@
 				<div class="space-y-2">
 					<div class="flex items-center justify-between gap-3">
 						<Label class="text-base sm:text-sm">
-							{regT.medical.allergies.label}<span class="text-destructive" aria-hidden="true"> *</span>
+							{regT.medical.allergies.label}<span class="text-destructive" aria-hidden="true">
+								*</span
+							>
 						</Label>
 						<Button
 							type="button"
