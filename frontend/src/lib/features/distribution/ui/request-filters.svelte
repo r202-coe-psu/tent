@@ -24,7 +24,7 @@
 </script>
 
 <div
-	class="grid gap-3 border-b border-border/70 pb-4 sm:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem]"
+	class="grid gap-3 border-b border-border/70 pb-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem]"
 >
 	<div class="relative">
 		<Search class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
