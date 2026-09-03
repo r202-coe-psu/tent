@@ -1,6 +1,7 @@
 <!-- src/lib/features/catalog/ui/recipe-form.svelte -->
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -121,8 +122,11 @@
 	);
 	const { form: formData, submitting } = form;
 
+	let populatedId = $state<string | null>(null);
+
 	$effect(() => {
-		if (isEdit && itemRecipeQuery.data) {
+		if (isEdit && itemRecipeQuery.data && populatedId !== itemRecipeQuery.data._id) {
+			populatedId = itemRecipeQuery.data._id;
 			const item = itemRecipeQuery.data;
 			$formData.label = item.label || '';
 			$formData.ingredients = item.ingredients ? JSON.parse(JSON.stringify(item.ingredients)) : [];
@@ -322,6 +326,35 @@
 					</Form.Field>
 				</div>
 			</section>
+
+			{#if isEdit}
+				<!-- SECTION: สถานะการใช้งาน (Status) -->
+				<section
+					class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+				>
+					<div class="flex items-center justify-between">
+						<div class="space-y-0.5">
+							<label
+								for="recipe-deactivated-toggle"
+								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
+							>
+								สถานะปิดการใช้งาน (Deactivated)
+							</label>
+							<p class="text-xs text-muted-foreground">
+								หากปิดการใช้งาน สูตรอาหารนี้จะไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่
+								แต่ประวัติเก่ายังคงอยู่
+							</p>
+						</div>
+						<Checkbox
+							id="recipe-deactivated-toggle"
+							checked={$formData.deactivated}
+							onCheckedChange={(val) => {
+								$formData.deactivated = !!val;
+							}}
+						/>
+					</div>
+				</section>
+			{/if}
 
 			<div class="flex items-center gap-3 pt-2">
 				<Button

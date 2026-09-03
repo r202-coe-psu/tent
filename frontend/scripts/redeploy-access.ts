@@ -288,9 +288,7 @@ async function deployReferralMangoIndexes(
 
 // ─── main ───────────────────────────────────────────────────────────────────
 
-function logPublicWriterEnsure(
-	result: Awaited<ReturnType<typeof ensurePublicWriter>>
-): void {
+function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWriter>>): void {
 	switch (result.outcome) {
 		case 'skipped':
 			console.log('   public writer: ⚠️  COUCHDB_PUBLIC_WRITER_URL unset — skipping user + grant');

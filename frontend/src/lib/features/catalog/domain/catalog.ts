@@ -40,6 +40,7 @@ export interface UomConversion {
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
+	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
 }
@@ -107,6 +108,7 @@ export function itemMasterUnit(item: { base_unit?: string; unit?: string }): str
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),
+	deactivated: z.boolean().optional(),
 	override: z.boolean().optional()
 });
 
@@ -208,6 +210,7 @@ export function createItemCategory(
 		2,
 		{
 			name: d.name,
+			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {})
 		},

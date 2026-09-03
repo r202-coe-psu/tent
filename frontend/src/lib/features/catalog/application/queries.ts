@@ -276,6 +276,14 @@ export const useDeleteItemMaster = () => {
 	}));
 };
 
+export const useInspectCategoryUsage = () => {
+	return createMutation(() => ({
+		mutationFn: ({ id, shelterCode }: { id: string; shelterCode?: string | null }) => {
+			return catalogRepository().inspectCategoryUsage(id, shelterCode);
+		}
+	}));
+};
+
 export const useDeleteItemCategory = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({

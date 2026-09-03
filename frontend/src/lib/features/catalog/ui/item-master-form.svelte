@@ -67,7 +67,8 @@
 				dietary: [],
 				qty_per_person: undefined,
 				returnable: false,
-				asset_status: 'READY'
+				asset_status: 'READY',
+				deactivated: false
 			},
 			zod4(itemMasterInputSchema)
 		),
@@ -225,6 +226,7 @@
 			$formData.qty_per_person = item.qty_per_person;
 			$formData.returnable = item.returnable ?? false;
 			$formData.asset_status = item.asset_status || 'READY';
+			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
 
@@ -950,6 +952,32 @@
 						</Form.Control>
 						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 					</Form.Field>
+				</section>
+			{/if}
+
+			{#if isEdit}
+				<!-- SECTION: สถานะการใช้งาน (Status) -->
+				<section
+					class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+				>
+					<div class="flex items-center justify-between">
+						<div class="space-y-0.5">
+							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+								สถานะปิดการใช้งาน (Deactivated)
+							</Form.Label>
+							<p class="text-xs text-muted-foreground">
+								หากปิดการใช้งาน รายการนี้จะไม่แสดงให้เลือกในธุรกรรมคลังและการเบิกจ่ายใหม่
+								แต่ประวัติเก่ายังคงอยู่
+							</p>
+						</div>
+						<Checkbox
+							id="deactivated-toggle"
+							checked={$formData.deactivated}
+							onCheckedChange={(val) => {
+								$formData.deactivated = !!val;
+							}}
+						/>
+					</div>
 				</section>
 			{/if}
 

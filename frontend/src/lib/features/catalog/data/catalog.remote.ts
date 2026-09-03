@@ -15,6 +15,13 @@ import {
 	type RecipeInput,
 	isRecipe
 } from '../domain/catalog';
+import {
+	evaluateCategoryDeletion,
+	type CategoryUsageDetails,
+	type DeleteCategoryResult,
+	type ShelterCategoryUsage
+} from '../domain/catalog-deletion';
+import { sheltersRepository } from '$lib/features/shelters/data/shelters.remote';
 import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
@@ -211,28 +218,128 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		}
 	}
 
-	async deleteItemCategory(id: string, shelterCode?: string | null): Promise<boolean> {
+	async inspectCategoryUsage(
+		id: string,
+		shelterCode?: string | null
+	): Promise<CategoryUsageDetails> {
 		const category = await this.getItemCategory(id, shelterCode);
-		if (!category) return false;
+		if (!category) {
+			throw new Error(`ไม่พบข้อมูลหมวดหมู่ ${id}`);
+		}
 
-		if (category.override) {
+		const isOverride = !!category.override;
+		const categoryName = category.name;
+
+		if (shelterCode) {
+			const itemMasters = await this.listItemMasters(shelterCode);
+			const localItems = itemMasters
+				.filter((item) => item.category === categoryName)
+				.map((item) => item.name);
+
+			return {
+				categoryId: id,
+				categoryName,
+				isOverride,
+				shelterCode,
+				centralItemMasters: [],
+				shelterUsages: [
+					{
+						shelterCode,
+						itemMasters: localItems,
+						hasOverride: isOverride
+					}
+				],
+				totalItemCount: localItems.length,
+				totalShelterCount: localItems.length > 0 ? 1 : 0
+			};
+		}
+
+		// Central scope (System Management)
+		const centralItems = await this.repo.allByType('item_master', isItemMaster);
+		const centralMatching = centralItems
+			.filter((item) => !item.shelter_code && item.category === categoryName)
+			.map((item) => item.name);
+
+		const shelterUsages: ShelterCategoryUsage[] = [];
+		try {
+			const shelters = await sheltersRepository().listShelters();
+			for (const s of shelters) {
+				const shelterDb = `shelter_${s.code.toLowerCase()}`;
+				const localRepo = createRemoteRepository(shelterDb);
+
+				const localMasters = await localRepo.allByType('item_master', isItemMaster);
+				const matchingMasters = localMasters
+					.filter((item) => item.category === categoryName)
+					.map((item) => item.name);
+
+				const localCategories = await localRepo.allByType('item_category', isItemCategory);
+				const hasOverride = localCategories.some((c) => c._id === id && c.override);
+
+				if (matchingMasters.length > 0 || hasOverride) {
+					shelterUsages.push({
+						shelterCode: s.code,
+						shelterName: s.name,
+						itemMasters: matchingMasters,
+						hasOverride
+					});
+				}
+			}
+		} catch {
+			// Fallback to central only if shelters repository is not available
+		}
+
+		const totalItemCount =
+			centralMatching.length + shelterUsages.reduce((sum, su) => sum + su.itemMasters.length, 0);
+
+		return {
+			categoryId: id,
+			categoryName,
+			isOverride: false,
+			shelterCode: null,
+			centralItemMasters: centralMatching,
+			shelterUsages,
+			totalItemCount,
+			totalShelterCount: shelterUsages.length
+		};
+	}
+
+	async deleteItemCategory(id: string, shelterCode?: string | null): Promise<DeleteCategoryResult> {
+		const category = await this.getItemCategory(id, shelterCode);
+		if (!category) {
+			throw new Error(`ไม่พบข้อมูลหมวดหมู่ ${id}`);
+		}
+
+		const usage = await this.inspectCategoryUsage(id, shelterCode);
+		const decision = evaluateCategoryDeletion(usage, shelterCode ? 'shelter' : 'central');
+
+		if (decision.action === 'reset') {
 			const repo = this.getWriteRepo(category.shelter_code);
 			await repo.remove(category);
-			return true;
+			return {
+				wasDeleted: true,
+				actionTaken: 'reset',
+				categoryName: category.name
+			};
 		}
 
-		const itemMasters = await this.listItemMasters(shelterCode);
-		const isUsed = itemMasters.some((item) => item.category === category.name);
-
-		if (isUsed) {
-			throw new Error(
-				`Cannot delete category "${category.name}" because it is currently used by one or more items.`
-			);
+		if (decision.action === 'deactivate') {
+			category.deactivated = true;
+			await this.updateItemCategory(category);
+			return {
+				wasDeleted: false,
+				actionTaken: 'deactivate',
+				categoryName: category.name
+			};
 		}
 
+		// hard_delete
 		const repo = this.getWriteRepo(category.shelter_code);
 		await repo.remove(category);
-		return true;
+		return {
+			wasDeleted: true,
+			actionTaken: 'hard_delete',
+			categoryName: category.name
+		};
 	}
 
 	async deleteRecipe(id: string, shelterCode?: string | null): Promise<boolean> {
