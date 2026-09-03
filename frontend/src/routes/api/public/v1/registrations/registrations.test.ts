@@ -99,11 +99,18 @@ describe('POST /api/public/v1/registrations', () => {
 		mockAppEnv.dev = false;
 	});
 
-	it('422 when the contact last name is blank', async () => {
-		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, last_name: '  ' }] }));
+	it('422 when the contact first name is blank', async () => {
+		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, first_name: '  ' }] }));
 		expect(res.status).toBe(422);
 		expect((await res.json()).error).toBe('INVALID_INPUT');
 		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('accepts a blank last name for mononym evacuees (CR-106 FR-18)', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, last_name: '  ' }] }));
+		expect(res.status).toBe(201);
+		expect(bulkAsPublicWriter).toHaveBeenCalled();
 	});
 
 	it('422 when the phone is not 10 digits — it is the lookup second factor', async () => {
@@ -300,6 +307,15 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(household.pets).toEqual([
 				{ species: 'dog', count: 1, notes: 'โกโก้', has_cage: true }
 			]);
+		});
+
+		it('records assets on the household', async () => {
+			await POST(event({ ...FAMILY, asset_description: 'สมุดบัญชีธนาคาร' }));
+			const { household } = writtenDocs();
+			expect(household.assets).toEqual({
+				description: 'สมุดบัญชีธนาคาร',
+				image_url: null
+			});
 		});
 
 		// `species` is a shelter-configured `pet_types` code (master data), not a

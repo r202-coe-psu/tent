@@ -18,7 +18,6 @@
 		PublicHeroMetrics,
 		PublicPageShell
 	} from '$lib/features/public-portal';
-	import { BookingModal } from '$lib/features/public-register';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	import { getTranslation } from '$lib/utils/i18n';
@@ -27,7 +26,6 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let bookingOpen = $state(false);
 	let searchOpen = $state(false);
 
 	const t = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
@@ -109,7 +107,7 @@
 				iconClass="bg-danger-muted/30 text-danger"
 			>
 				<PublicActionBtn href="/shelters">{t.regBtn1}</PublicActionBtn>
-				<PublicActionBtn variant="outline" onclick={() => (bookingOpen = true)}>
+				<PublicActionBtn variant="outline" href="/pre-register">
 					{t.regBtn2}
 				</PublicActionBtn>
 			</PublicQuickServiceCard>
@@ -322,5 +320,4 @@
 	</div>
 </PublicPageShell>
 
-<BookingModal bind:open={bookingOpen} />
 <FamilySearchModal bind:open={searchOpen} />

@@ -107,3 +107,44 @@ export async function fetchSubdistricts(
 	} | null;
 	return body?.subdistricts ?? [];
 }
+
+export interface ShelterPolicyResponse {
+	code?: string;
+	name?: string;
+	feature_flags: {
+		allow_pets: boolean;
+		allow_assets: boolean;
+		allow_vehicles: boolean;
+	};
+	admission_policy?: {
+		pet_policy?: {
+			policy: 'no_pets' | 'conditional';
+			categories?: {
+				category: 'dog' | 'cat' | 'bird' | 'exotic' | 'other';
+				conditions?: ('leashed' | 'caged' | 'vaccinated' | 'owner_responsibility')[];
+				other?: string;
+			}[];
+		};
+	} | null;
+	luggage_policy?: {
+		limitation?: 'no_limit' | 'limited' | 'prohibited';
+		rules?: ('valuables_declaration' | 'prohibited_items_check' | 'labeling_required')[];
+		rules_other?: string;
+	} | null;
+	parking_policy?: {
+		availability?: 'available' | 'limited' | 'none';
+		rules?: ('registered_vehicles_only' | 'designated_areas_only' | 'no_overnight_stay')[];
+		rules_other?: string;
+	} | null;
+}
+
+export async function fetchShelterPolicy(
+	shelterCode: string
+): Promise<ShelterPolicyResponse | null> {
+	if (!shelterCode.trim()) return null;
+	const res = await fetch(
+		`/api/public/v1/config/shelter-policy?shelter=${encodeURIComponent(shelterCode)}`
+	);
+	if (!res.ok) return null;
+	return (await res.json().catch(() => null)) as ShelterPolicyResponse | null;
+}
