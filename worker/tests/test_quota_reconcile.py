@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import bson
 import pytest
 from tent_model import DonationBuffer, DonationNeedCounter, DonorBuffer, seed_counter
-
 from worker.quota.reconcile import (
     ShelterReconcileReport,
     reconcile_shelter,
@@ -37,7 +36,7 @@ def test_sums_only_quota_holding_statuses():
             {"item_id": "item:rice", "qty": "100"}
         ]},
     ]
-    assert sum_reserved_by_key(donations) == {RICE: Decimal("7")}
+    assert sum_reserved_by_key(donations) == {RICE: Decimal(7)}
 
 
 def test_received_donations_still_hold_quota():
@@ -47,7 +46,7 @@ def test_received_donations_still_hold_quota():
             {"item_id": "item:rice", "qty": "10"}
         ]},
     ]
-    assert sum_reserved_by_key(donations) == {RICE: Decimal("10")}
+    assert sum_reserved_by_key(donations) == {RICE: Decimal(10)}
 
 
 def test_reports_unattributable_items_instead_of_guessing():
@@ -75,7 +74,7 @@ def test_skips_unusable_qty():
             {"item_id": "item:rice", "qty": "2"},
         ]},
     ]
-    assert sum_reserved_by_key(donations) == {RICE: Decimal("2")}
+    assert sum_reserved_by_key(donations) == {RICE: Decimal(2)}
 
 
 # --- reconcile against Mongo ---
@@ -122,9 +121,9 @@ async def test_dry_run_reports_but_writes_nothing(db: None) -> None:
 
     report = await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=False)
 
-    assert report.changes == [(RICE, Decimal("0"), Decimal("12"))]
+    assert report.changes == [(RICE, Decimal(0), Decimal(12))]
     assert report.counters_changed == 0
-    assert await _reserved() == Decimal("0")
+    assert await _reserved() == Decimal(0)
 
 
 async def test_apply_writes_recomputed_reserved_qty(db: None) -> None:
@@ -142,7 +141,7 @@ async def test_apply_writes_recomputed_reserved_qty(db: None) -> None:
 
     assert report.counters_changed == 1
     assert report.counters_conflicted == 0
-    assert await _reserved() == Decimal("20")
+    assert await _reserved() == Decimal(20)
 
 
 async def test_apply_stamps_last_recalculated_at(db: None) -> None:
@@ -177,7 +176,7 @@ async def test_drift_downward_is_corrected(db: None) -> None:
 
     await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True)
 
-    assert await _reserved() == Decimal("5")
+    assert await _reserved() == Decimal(5)
 
 
 async def test_counter_with_no_outstanding_donations_resets_to_zero(db: None) -> None:
@@ -189,7 +188,7 @@ async def test_counter_with_no_outstanding_donations_resets_to_zero(db: None) ->
 
     await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True)
 
-    assert await _reserved() == Decimal("0")
+    assert await _reserved() == Decimal(0)
 
 
 async def test_counts_unsynced_buffer_not_yet_in_couch(db: None) -> None:
@@ -213,7 +212,7 @@ async def test_counts_unsynced_buffer_not_yet_in_couch(db: None) -> None:
     couch = _couch_stub([])
     await reconcile_shelter(couch, SHELTER, now=now, apply=True)
 
-    assert await _reserved() == Decimal("6")
+    assert await _reserved() == Decimal(6)
 
 
 async def test_synced_buffer_and_couch_doc_are_not_double_counted(db: None) -> None:
@@ -243,7 +242,7 @@ async def test_synced_buffer_and_couch_doc_are_not_double_counted(db: None) -> N
     )
     await reconcile_shelter(couch, SHELTER, now=now, apply=True)
 
-    assert await _reserved() == Decimal("6")
+    assert await _reserved() == Decimal(6)
 
 
 async def test_concurrent_booking_is_reported_as_conflict_not_overwritten(db: None) -> None:
@@ -284,7 +283,7 @@ async def test_concurrent_booking_is_reported_as_conflict_not_overwritten(db: No
     assert report.counters_conflicted == 1
     assert report.conflicts == [RICE]
     # The live booking survives — recalculation did not stomp it back to 5.
-    assert await _reserved() == Decimal("2")
+    assert await _reserved() == Decimal(2)
 
 
 @pytest.mark.parametrize("db_exists", [True, False])
@@ -308,7 +307,7 @@ async def test_reports_outstanding_qty_with_no_counter_yet(db: None) -> None:
 
     assert report.counters_examined == 0
     assert report.changes == []
-    assert report.missing_counters == [(RICE, Decimal("50"))]
+    assert report.missing_counters == [(RICE, Decimal(50))]
 
 
 async def test_seeded_counter_is_not_reported_as_missing(db: None) -> None:
@@ -323,3 +322,132 @@ async def test_seeded_counter_is_not_reported_as_missing(db: None) -> None:
     report = await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=False)
 
     assert report.missing_counters == []
+
+
+# --- qty_target realignment (--targets) ---
+#
+# `seed_counter` writes qty_target with `$setOnInsert` so a CDC event can never move a
+# live ceiling (CR-060 FR-2). The consequence, spelled out in CR-060's decision log, is
+# that editing a campaign target leaves the counter behind: the board and public_needs
+# recompute to the new figure while donors keep being refused NEED_FULL at the old one.
+# CR-060 §Change names this tool as the thing allowed to close that gap.
+
+
+def _campaign(qty_target: str, *, status: str = "open", item_id: str = "item:rice"):
+    return {
+        "_id": CAMPAIGN,
+        "type": "donation_campaign",
+        "status": status,
+        "needs": [{"item_id": item_id, "qty_target": qty_target}],
+    }
+
+
+async def _target(item_id: str = "item:rice") -> Decimal:
+    counter = await DonationNeedCounter.find_one(
+        DonationNeedCounter.shelter_code == SHELTER,
+        DonationNeedCounter.item_id == item_id,
+    )
+    assert counter is not None
+    return counter.qty_target
+
+
+async def test_targets_off_leaves_a_drifted_ceiling_alone(db: None) -> None:
+    """The default stays CR-060 FR-2 behaviour — opt in or nothing moves."""
+    await _seed(qty_target="12")
+    couch = _couch_stub([_campaign("9989")])
+
+    report = await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True)
+
+    assert report.target_changes == []
+    assert await _target() == Decimal(12)
+
+
+async def test_targets_dry_run_reports_but_writes_nothing(db: None) -> None:
+    await _seed(qty_target="12")
+    couch = _couch_stub([_campaign("9989")])
+
+    report = await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=False, targets=True
+    )
+
+    assert report.target_changes == [(RICE, Decimal(12), Decimal(9989))]
+    assert report.targets_changed == 0
+    assert await _target() == Decimal(12)
+
+
+async def test_targets_apply_raises_the_ceiling_to_the_campaign(db: None) -> None:
+    await _seed(qty_target="12")
+    couch = _couch_stub([_campaign("9989")])
+
+    report = await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True
+    )
+
+    assert report.targets_changed == 1
+    assert await _target() == Decimal(9989)
+
+
+async def test_targets_lowers_a_ceiling_when_nothing_is_reserved(db: None) -> None:
+    await _seed(qty_target="500")
+    couch = _couch_stub([_campaign("100")])
+
+    await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True)
+
+    assert await _target() == Decimal(100)
+
+
+async def test_targets_refuses_to_strand_quota_donors_already_hold(db: None) -> None:
+    """Bookings accepted under the old ceiling are still owed — never orphan them."""
+    await _seed(qty_target="500")
+    couch = _couch_stub(
+        [
+            _campaign("10"),
+            {"_id": "donation:1", "type": "donation", "campaign_id": CAMPAIGN,
+             "status": "declared", "items": [{"item_id": "item:rice", "qty": "80"}]},
+        ]
+    )
+
+    report = await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True
+    )
+
+    assert report.target_refused == [(RICE, Decimal(500), Decimal(10))]
+    assert report.target_changes == []
+    assert await _target() == Decimal(500)
+
+
+async def test_targets_skips_closed_campaigns(db: None) -> None:
+    """CR-060 FR-4 — a closed campaign's counter keeps the ceiling it was seeded with."""
+    await _seed(qty_target="50")
+    couch = _couch_stub([_campaign("9999", status="closed")])
+
+    report = await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True
+    )
+
+    assert report.target_changes == []
+    assert await _target() == Decimal(50)
+
+
+async def test_targets_leaves_a_counter_with_no_open_campaign_alone(db: None) -> None:
+    await _seed(qty_target="50")
+    couch = _couch_stub([])
+
+    report = await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True
+    )
+
+    assert report.target_changes == []
+    assert await _target() == Decimal(50)
+
+
+async def test_targets_is_idempotent(db: None) -> None:
+    await _seed(qty_target="12")
+    couch = _couch_stub([_campaign("9989")])
+    now = datetime.now(UTC)
+
+    await reconcile_shelter(couch, SHELTER, now=now, apply=True, targets=True)
+    second = await reconcile_shelter(couch, SHELTER, now=now, apply=True, targets=True)
+
+    assert second.target_changes == []
+    assert await _target() == Decimal(9989)

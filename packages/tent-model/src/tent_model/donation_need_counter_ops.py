@@ -146,6 +146,49 @@ async def set_reserved_qty(
 	return updated is not None
 
 
+
+async def set_qty_target(
+	*,
+	shelter_code: str,
+	campaign_id: str,
+	item_id: str,
+	expected: bson.Decimal128,
+	new_value: Decimal,
+	now: datetime,
+) -> bool:
+	"""Move the quota ceiling to match its campaign — recalculation path only.
+
+	``seed_counter`` writes ``qty_target`` with ``$setOnInsert`` so a CDC event can never
+	shift the ceiling under a booking in flight (CR-060 FR-2). The consequence is that
+	editing a campaign's ``qty_target`` leaves the counter behind: the board and
+	``public_needs`` recompute to the new figure while donors keep being refused
+	``NEED_FULL`` at the old one. CR-060 §Change names the recalculation CLI as the thing
+	allowed to close that gap — this is it.
+
+	``expected`` is the exact ``Decimal128`` read a moment ago and is part of the filter,
+	mirroring :func:`set_reserved_qty`: if anything moved in between the update matches
+	nothing and this returns ``False``, to be retried inside a maintenance window rather
+	than applied blindly (CR-047 §Cutover Lock).
+
+	The caller is responsible for refusing to lower a ceiling below the quota already
+	reserved — see ``worker.quota.reconcile``.
+	"""
+	updated = await DonationNeedCounter.get_motor_collection().find_one_and_update(
+		{
+			"_id": counter_id(shelter_code, campaign_id, item_id),
+			"qty_target": expected,
+		},
+		{
+			"$set": {
+				"qty_target": bson.Decimal128(str(new_value)),
+				"last_recalculated_at": now,
+				"updated_at": now,
+			}
+		},
+	)
+	return updated is not None
+
+
 async def release_quota(
 	*, shelter_code: str, campaign_id: str, item_id: str, qty: Decimal, now: datetime
 ) -> None:

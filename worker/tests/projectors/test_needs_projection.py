@@ -25,7 +25,23 @@ CATALOG = [
         "name": "น้ำดื่ม",
         "category": "water",
         "unit": "bottle",
-    }
+    },
+    # `item_master` replaced `supply_item` (schema.md §4.2) but the migration has not
+    # run, so the catalog carries both generations and a campaign may bind to either.
+    {
+        "_id": "item_master:canned-fish",
+        "type": "item_master",
+        "name": "ปลากระป๋อง",
+        "category": "food",
+        "base_unit": "can",
+    },
+    {
+        "_id": "item_master:retired",
+        "type": "item_master",
+        "name": "เลิกใช้",
+        "base_unit": "ชิ้น",
+        "deactivated": True,
+    },
 ]
 
 
@@ -178,3 +194,53 @@ async def test_a_hand_closed_need_announces_no_target():
     doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
 
     assert doc["qty_target"] == 40.0
+
+
+# The donor board showed "item_master:canned-fish" with unit "unit" for anything bound
+# to the newer catalog generation: the catalog map read `supply_item` only, and the
+# document id stripped/re-added a hardcoded `item:` prefix so master ids came out
+# doubled (`SH001:item:item_master:canned-fish`).
+
+
+@pytest.mark.asyncio
+async def test_item_master_need_is_named_from_the_catalog():
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [
+        {"item_id": "item_master:canned-fish", "qty_target": "50", "unit": "ลัง"}
+    ]
+
+    doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
+
+    assert doc["item_name"] == "ปลากระป๋อง"
+    assert doc["unit"] == "can"
+    assert doc["category"] == "food"
+
+
+@pytest.mark.asyncio
+async def test_item_master_id_is_not_doubled_up():
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [
+        {"item_id": "item_master:canned-fish", "qty_target": "50", "unit": "ลัง"}
+    ]
+
+    doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
+
+    assert doc["_id"] == f"{SHELTER}:item_master:canned-fish"
+
+
+@pytest.mark.asyncio
+async def test_legacy_item_id_keeps_its_existing_document_id():
+    """The id scheme must not move for `item:` rows — they already exist in Mongo."""
+    doc = _upserts(await project_needs_for_shelter(_couch([_campaign("a", "100")]), SHELTER))[0]
+
+    assert doc["_id"] == f"{SHELTER}:item:water"
+
+
+@pytest.mark.asyncio
+async def test_deactivated_item_master_falls_back_instead_of_naming_the_card():
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [{"item_id": "item_master:retired", "qty_target": "50", "unit": "ชิ้น"}]
+
+    doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
+
+    assert doc["item_name"] == "item_master:retired"

@@ -29,7 +29,12 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from tent_model import DonationBuffer, DonationNeedCounter, set_reserved_qty
+from tent_model import (
+    DonationBuffer,
+    DonationNeedCounter,
+    set_qty_target,
+    set_reserved_qty,
+)
 
 from worker.couch.client import CouchClient
 from worker.donation_status import DONATION_OUTSTANDING_STATUSES
@@ -64,6 +69,16 @@ class ShelterReconcileReport:
     computed: dict[QuotaKey, Decimal] = field(default_factory=dict)
     changes: list[tuple[QuotaKey, Decimal, Decimal]] = field(default_factory=list)
     conflicts: list[QuotaKey] = field(default_factory=list)
+    # Ceilings that drifted from their campaign (CR-060 FR-2 consequence), and the ones
+    # refused because lowering them would strand quota donors already hold.
+    targets_changed: int = 0
+    target_changes: list[tuple[QuotaKey, Decimal, Decimal]] = field(
+        default_factory=list
+    )
+    target_conflicts: list[QuotaKey] = field(default_factory=list)
+    target_refused: list[tuple[QuotaKey, Decimal, Decimal]] = field(
+        default_factory=list
+    )
     # Outstanding qty whose counter does not exist yet. On a first backfill dry run this
     # is where the whole picture lives — without it the operator sees "0 to change" and
     # cannot tell what the run will actually establish.
@@ -158,18 +173,131 @@ async def _collect_truth_set(
     return list(donations.values())
 
 
+async def _campaign_targets(
+    couch: CouchClient, shelter_code: str
+) -> dict[QuotaKey, Decimal]:
+    """``qty_target`` of every need on every OPEN campaign, straight from CouchDB.
+
+    Closed campaigns are skipped on purpose: their counters keep whatever ceiling they
+    were seeded with so outstanding reservations stay attributable (CR-060 FR-4 —
+    nothing deletes or rewrites a closed campaign's counter).
+    """
+    targets: dict[QuotaKey, Decimal] = {}
+    database = shelter_db_name(shelter_code)
+    if not await couch.database_exists(database):
+        return targets
+
+    async for doc in couch.iter_all_docs(database):
+        if doc.get("type") != "donation_campaign" or doc.get("status") != "open":
+            continue
+        campaign_id = doc.get("_id")
+        if not campaign_id:
+            continue
+        for need in doc.get("needs") or []:
+            item_id = need.get("item_id")
+            if not item_id:
+                continue
+            try:
+                qty_target = Decimal(str(need.get("qty_target")))
+            except (InvalidOperation, TypeError):
+                continue
+            if qty_target < 0:
+                continue
+            targets.setdefault((str(campaign_id), str(item_id)), qty_target)
+    return targets
+
+
+async def _realign_target(
+    counter: dict[str, Any],
+    key: QuotaKey,
+    campaign_targets: dict[QuotaKey, Decimal],
+    *,
+    shelter_code: str,
+    report: ShelterReconcileReport,
+    now: datetime,
+    apply: bool,
+) -> None:
+    """Move one counter's ceiling onto its campaign's current ``qty_target``.
+
+    Refuses to lower a ceiling below the quota donors already hold: those bookings were
+    accepted under the old ceiling and are still owed, so a lower ``qty_target`` would
+    make ``reserved_qty + qty <= qty_target`` false for reservations that already exist
+    — the need would read as over-full and could never be released cleanly. Reported for
+    the operator to settle (close the need, or cancel bookings first), never applied.
+
+    The guard reads the LARGER of the stored and the freshly recomputed reserve. Target
+    realignment runs before ``reserved_qty`` is written, so the stored figure alone can
+    be stale — trusting it would lower a ceiling under quota this very run is about to
+    record as held.
+    """
+    campaign_id, item_id = key
+    wanted = campaign_targets.get(key)
+    if wanted is None:
+        return
+
+    stored_raw = counter["qty_target"]
+    stored = stored_raw.to_decimal()
+    if stored == wanted:
+        return
+
+    reserved = max(
+        counter["reserved_qty"].to_decimal(), report.computed.get(key, Decimal(0))
+    )
+    if wanted < reserved:
+        report.target_refused.append((key, stored, wanted))
+        logger.error(
+            "refusing to lower qty_target for %s/%s/%s to %s — %s already reserved",
+            shelter_code,
+            campaign_id,
+            item_id,
+            wanted,
+            reserved,
+        )
+        return
+
+    report.target_changes.append((key, stored, wanted))
+    if not apply:
+        return
+
+    ok = await set_qty_target(
+        shelter_code=shelter_code,
+        campaign_id=campaign_id,
+        item_id=item_id,
+        expected=stored_raw,
+        new_value=wanted,
+        now=now,
+    )
+    if ok:
+        report.targets_changed += 1
+    else:
+        report.target_conflicts.append(key)
+        logger.error(
+            "qty_target for %s/%s/%s changed mid-run — re-run inside a maintenance "
+            "window (CR-047 Cutover Lock)",
+            shelter_code,
+            campaign_id,
+            item_id,
+        )
+
+
 async def reconcile_shelter(
     couch: CouchClient,
     shelter_code: str,
     *,
     now: datetime,
     apply: bool,
+    targets: bool = False,
 ) -> ShelterReconcileReport:
-    """Recompute every counter of one shelter. ``apply=False`` writes nothing."""
+    """Recompute every counter of one shelter. ``apply=False`` writes nothing.
+
+    ``targets=True`` additionally realigns ``qty_target`` with the open campaign it came
+    from — the gap CR-060 FR-2 leaves open by design and names this tool to close.
+    """
     report = ShelterReconcileReport(shelter_code=shelter_code)
 
     truth = await _collect_truth_set(couch, shelter_code)
     report.computed = sum_reserved_by_key(truth, report=report)
+    campaign_targets = await _campaign_targets(couch, shelter_code) if targets else {}
 
     # Read raw so the exact Decimal128 can be handed back as the optimistic filter.
     collection = DonationNeedCounter.get_motor_collection()
@@ -183,6 +311,18 @@ async def reconcile_shelter(
         campaign_id = str(counter.get("campaign_id", ""))
         item_id = str(counter.get("item_id", ""))
         seen_keys.add((campaign_id, item_id))
+        key = (campaign_id, item_id)
+        if targets:
+            await _realign_target(
+                counter,
+                key,
+                campaign_targets,
+                shelter_code=shelter_code,
+                report=report,
+                now=now,
+                apply=apply,
+            )
+
         stored_raw = counter["reserved_qty"]
         stored = stored_raw.to_decimal()
         expected = report.computed.get((campaign_id, item_id), Decimal(0))
@@ -190,7 +330,6 @@ async def reconcile_shelter(
         if stored == expected:
             continue
 
-        key = (campaign_id, item_id)
         report.changes.append((key, stored, expected))
         if not apply:
             continue

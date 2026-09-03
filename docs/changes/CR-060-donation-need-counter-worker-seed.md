@@ -3,7 +3,7 @@ id: CR-060
 title: "CR-060 scope amendment — worker projector seeds donation_need_counter.qty_target"
 status: approved
 date: 2026-07-28
-updated: 2026-07-29
+updated: 2026-09-04 # แก้บรรทัดวิธีปิด gap ของ FR-2 ที่ระบุ CLI ผิด + เติม --targets
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
 decided_by: เจ้าของโครงการ (PR review #130, 2026-07-29)
 layer: volatile
@@ -122,4 +122,13 @@ campaign เพื่อเติม `qty_target` ให้)
   `$setOnInsert` เท่านั้น การที่เจ้าหน้าที่แก้ `qty_target` ของแคมเปญทีหลัง (เช่น 50 → 100) จะไม่มีผลกับ
   counter — ขณะที่ `public_needs` recompute เต็มรอบทุกครั้งจึงขึ้นเป้าใหม่ ผลคือหน้ากระดานสาธารณะบอก
   "ยังขาด" แต่ผู้บริจาคกดจองแล้วเด้ง `NEED_FULL` ที่เพดานเดิม จนกว่าจะรัน Recalculation CLI
-  (`donation-quota recalculate` ตาม CR-061) ปิด gap ให้
+  ปิด gap ให้
+- 2026-09-04 — **แก้ข้อมูลที่ผิดในบรรทัดบน (ไม่ใช่การเปลี่ยน scope):** บรรทัดนั้นเขียนว่า
+  `donation-quota recalculate` ปิด gap ได้อยู่แล้ว — ตรวจโค้ดจริงแล้ว **ปิดไม่ได้**: `recalculate`
+  คำนวณเฉพาะ `reserved_qty` (ตรงตาม CR-047 §Migration & Maintenance ที่สเปกไว้แค่นั้น) ส่วน `backfill`
+  วิ่งผ่าน `seed_counter` ซึ่งเป็น `$setOnInsert` จึงเป็น no-op กับ counter ที่มีอยู่แล้ว — `$setOnInsert`
+  เป็น writer เดียวของ `qty_target` ทั้งระบบ ไม่มี path ไหนยกเพดานได้เลย.
+  เติมความสามารถที่ CR นี้อ้างถึงไว้แล้วเป็น flag `--targets` ของ `donation-quota recalculate`
+  (อ่าน `qty_target` ของ open campaign จาก CouchDB มา `$set` ลง counter ด้วย optimistic filter เดิม
+  + ปฏิเสธการลดเพดานต่ำกว่ายอดที่จองไว้แล้ว). **FR-2 ยังอยู่ครบ** — CDC path ไม่แตะเพดานเหมือนเดิม
+  เปลี่ยนเฉพาะ ops tool ที่ต้องสั่งเองและต้องล็อก write path ตาม CR-047 §Cutover Lock

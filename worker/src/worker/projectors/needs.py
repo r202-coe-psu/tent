@@ -24,15 +24,38 @@ async def _fetch_docs_by_prefix(
 
 
 async def _load_catalog_map(couch: CouchClient) -> dict[str, dict[str, str]]:
+    """Both catalog generations, keyed by exact ``_id``.
+
+    ``item_master`` replaced ``supply_item`` (schema.md §4.2) and the migration has not
+    run, so the catalog holds both — and §4.2's migration note requires clients to
+    handle either prefix meanwhile. This map read ``supply_item`` only, so a campaign
+    bound to an ``item_master:`` id fell through to the ``_id`` fallbacks below and the
+    donor board showed the raw id ("item_master:canned-fish") with unit "unit".
+
+    Keyed by exact id, never merged by name: the projection has to resolve whichever id
+    the campaign actually carries.
+    """
     item_map: dict[str, dict[str, str]] = {}
     if not await couch.database_exists("catalog"):
         return item_map
     async for doc in couch.iter_all_docs("catalog"):
-        if doc.get("type") == "supply_item" and doc.get("_id"):
-            item_map[str(doc["_id"])] = {
-                "name": str(doc.get("name") or doc["_id"]),
+        doc_id = doc.get("_id")
+        if not doc_id:
+            continue
+        doc_type = doc.get("type")
+        if doc_type == "supply_item":
+            item_map[str(doc_id)] = {
+                "name": str(doc.get("name") or doc_id),
                 "category": str(doc.get("category") or "other"),
                 "unit": str(doc.get("unit") or "unit"),
+            }
+        elif doc_type == "item_master" and not doc.get("deactivated"):
+            item_map[str(doc_id)] = {
+                "name": str(doc.get("name") or doc_id),
+                "category": str(doc.get("category") or "other"),
+                # `base_unit` is authoritative; `unit` is the CR-013 transition field
+                # kept for docs written before it existed.
+                "unit": str(doc.get("base_unit") or doc.get("unit") or "unit"),
             }
     return item_map
 
@@ -84,7 +107,12 @@ async def project_needs_for_shelter(
             qty_needed = float(qty_open)
         except (TypeError, ValueError):
             qty_needed = 0.0
-        doc_id = f"{shelter_code}:item:{item_id.removeprefix('item:')}"
+        # The item id already carries its own generation prefix (`item:` or
+        # `item_master:` — schema.md §4.2). This used to strip `item:` and re-add it,
+        # which left `item_master:` ids doubled up as `SH001:item:item_master:x`.
+        # Legacy ids are unaffected: `item:water` produced `SH001:item:water` before
+        # and still does.
+        doc_id = f"{shelter_code}:{item_id}"
         if qty_needed <= 0:
             actions.append(("delete", {"_id": doc_id}))
             continue
