@@ -11,6 +11,7 @@ export const EVACUEE_SEARCH_I18N = {
 		statusLabel: 'สถานะ:',
 		statusLabels: {
 			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
+			arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
 			active: 'เช็คอินเข้าพักแล้ว',
 			temporary_leave: 'ออกชั่วคราว',
 			transferred: 'ย้ายศูนย์พักพิงแล้ว',
@@ -34,6 +35,7 @@ export const EVACUEE_SEARCH_I18N = {
 		statusLabel: 'Status:',
 		statusLabels: {
 			pre_registered: 'Pre-registered (Not Checked In)',
+			arriving: 'Arriving / Pending Triage & Zone',
 			active: 'Checked In',
 			temporary_leave: 'Temporary Leave',
 			transferred: 'Transferred',

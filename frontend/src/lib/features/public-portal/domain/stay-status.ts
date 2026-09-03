@@ -5,6 +5,7 @@
 
 export const PUBLIC_STAY_STATUSES = [
 	'pre_registered',
+	'arriving',
 	'active',
 	'in_shelter',
 	'temporary_leave',
@@ -20,6 +21,7 @@ export type StayStatusTone = 'safe' | 'pending' | 'moved' | 'ended' | 'grave';
 export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStayStatus, string>> = {
 	th: {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
+		arriving: 'อยู่ระหว่างรอเข้าพัก',
 		active: 'เข้าพักแล้ว',
 		in_shelter: 'พักพิงอยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
@@ -30,6 +32,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 	},
 	en: {
 		pre_registered: 'Pre-registered',
+		arriving: 'Arriving',
 		active: 'Checked-in',
 		in_shelter: 'In Shelter',
 		temporary_leave: 'Temporary Leave',
@@ -44,6 +47,7 @@ const TONES: Record<PublicStayStatus, StayStatusTone> = {
 	active: 'safe',
 	in_shelter: 'safe',
 	pre_registered: 'pending',
+	arriving: 'pending',
 	temporary_leave: 'pending',
 	transferred: 'moved',
 	checked_out: 'ended',

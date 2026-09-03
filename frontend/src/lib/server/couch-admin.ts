@@ -3,10 +3,13 @@ import { error, json } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
 	SYSTEM_ADMIN,
+	hasShelterScope,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
-	shelterCodeFromRoles
+	managerShelterCodes,
+	shelterCodeFromRoles,
+	shelterCodesFromRoles
 } from '$lib/auth/roles';
 
 /**
@@ -127,7 +130,7 @@ export async function requireShelterManagerOrSA(
 ): Promise<Caller> {
 	const caller = await authorizeUserWrite(cookie);
 	if (caller.isSA) return caller;
-	if (caller.shelterCode && caller.shelterCode === code) return caller;
+	if (isShelterManager(caller.roles, code)) return caller;
 	throw error(403, `Caller is not authorised for shelter "${code}"`);
 }
 
@@ -286,7 +289,7 @@ export async function requireShelterScopeOrSA(
 	};
 	if (code === undefined) return caller;
 	if (caller.isSA) return caller;
-	if (caller.shelterCode === code) return caller;
+	if (hasShelterScope(caller.roles, code)) return caller;
 	throw error(403, `Caller is not in shelter "${code}" scope`);
 }
 
@@ -296,21 +299,17 @@ export async function requireShelterScopeOrSA(
  *  - Minting `system_admin`: caller must be SA-equivalent (`system_admin` or
  *    Couch `_admin` — CR-075). The granted list must be exactly
  *    `["system_admin"]` (no shelter scope / capability mix). CR-074 exclusive.
- *  - Other grants: SA (or Couch `_admin`) may grant any roles except `_admin`;
- *    at most one shelter scope (1 user 1 shelter).
- *  - shelter_manager: shelter scope MUST equal the caller's own (no cross-shelter),
- *    capabilities ⊆ {registration_staff, kitchen_staff, warehouse_staff}
- *    (no manager/SA). Per CR-002 / spec §1.1, `volunteer` is no longer a RoleKey.
+ *  - Other grants: SA (or Couch `_admin`) may grant any roles except `_admin`,
+ *    including multi-shelter compound roles (CR-093).
+ *  - shelter_manager: requested roles may only touch shelters they manage, and
+ *    only with staff capabilities (no manager/SA). Cross-shelter merge is done
+ *    server-side in user-service — callers should pass the own-shelter slice.
  *
  * Throws {@link ServiceError} (FORBIDDEN/VALIDATION) on violation.
  */
 export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]): void {
 	if (requestedRoles.includes(COUCH_ADMIN)) {
 		throw new ServiceError('FORBIDDEN', 'Cannot grant the CouchDB server-admin role');
-	}
-	const shelterRoles = requestedRoles.filter((r) => r.startsWith('shelter:'));
-	if (shelterRoles.length > 1) {
-		throw new ServiceError('VALIDATION', 'A user belongs to at most one shelter');
 	}
 
 	if (requestedRoles.includes(SYSTEM_ADMIN)) {
@@ -323,19 +322,24 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 		return;
 	}
 
-	if (caller.isSA) return; // SA / Couch _admin may grant non-_admin shelter roles.
+	const shelterCodes = shelterCodesFromRoles(requestedRoles);
+	if (shelterCodes.length === 0) {
+		throw new ServiceError('VALIDATION', 'Shelter-scoped users require at least one shelter');
+	}
 
-	// shelter_manager: own shelter only, staff capabilities only.
-	if (!caller.shelterCode) {
+	if (caller.isSA) return;
+
+	const managed = managerShelterCodes(caller.roles);
+	if (managed.length === 0) {
 		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
 	}
-	if (shelterRoles.length !== 1 || shelterRoles[0] !== `shelter:${caller.shelterCode}`) {
+	if (shelterCodes.some((code) => !managed.includes(code))) {
 		throw new ServiceError('FORBIDDEN', 'A manager may only add users to their own shelter');
 	}
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant registration_staff/kitchen_staff/warehouse_staff'
+			'A manager may only grant staff capabilities in their own shelter'
 		);
 	}
 }

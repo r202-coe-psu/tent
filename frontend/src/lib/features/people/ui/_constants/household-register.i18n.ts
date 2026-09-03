@@ -1,5 +1,18 @@
 export const HOUSEHOLD_REGISTER_I18N = {
 	th: {
+		guide: {
+			title: 'ครัวเรือนนี้มีในระบบแล้วหรือยัง?',
+			desc: 'ถ้าไม่แน่ใจ ให้ถามญาติที่มาด้วย หรือค้นหาด้วยเบอร์โทร / เลขบัตร / ที่อยู่ก่อน — จะได้ไม่สร้างครัวเรือนซ้ำ',
+			btnSearch: 'ค้นหาครัวเรือนในระบบ',
+			btnSearchHint: 'แนะนำ — ใช้เมื่อมีญาติมาก่อน หรือไม่แน่ใจว่ามีครัวเรือนเดิมหรือไม่',
+			btnCreate: 'สร้างครัวเรือนใหม่',
+			btnCreateHint: 'มาคนเดียว หรือแน่ใจว่ายังไม่มีใครในครอบครัวลงทะเบียน',
+			backToGuide: 'กลับไปเลือกวิธี'
+		},
+		actions: {
+			continue: 'ถัดไป (ทรัพย์สินและสัตว์เลี้ยง)',
+			back: 'ย้อนกลับ'
+		},
 		tabs: {
 			person: 'ค้นหาด้วยบุคคล',
 			address: 'ค้นหาด้วยที่อยู่'
@@ -68,6 +81,19 @@ export const HOUSEHOLD_REGISTER_I18N = {
 		}
 	},
 	en: {
+		guide: {
+			title: 'Is this household already registered?',
+			desc: 'If unsure, ask relatives who came with you or search by phone / ID / address first — to avoid duplicate households.',
+			btnSearch: 'Search existing household',
+			btnSearchHint: 'Recommended — when relatives registered first or you are unsure',
+			btnCreate: 'Create new household',
+			btnCreateHint: 'Arriving alone or sure no one in the family registered yet',
+			backToGuide: 'Back to options'
+		},
+		actions: {
+			continue: 'Next (Assets & Pets)',
+			back: 'Back'
+		},
 		tabs: {
 			person: 'Search by Person',
 			address: 'Search by Address'

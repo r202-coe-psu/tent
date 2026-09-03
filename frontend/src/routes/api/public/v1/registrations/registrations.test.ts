@@ -203,7 +203,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(8);
+			expect(e.schema_v).toBe(9);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');

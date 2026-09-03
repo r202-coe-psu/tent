@@ -178,7 +178,7 @@ describe('PeopleRemoteRepository', () => {
 	});
 
 	describe('household membership invariant', () => {
-		it('rejects moving a member away from an active household with other members', async () => {
+		it('rejects moving the head away from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const oldHousehold = await repo.createHousehold(
@@ -198,7 +198,32 @@ describe('PeopleRemoteRepository', () => {
 			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
 		});
 
-		it('rejects removing a member from an active household with other members', async () => {
+		it('allows a non-head to leave after head transfer (CR-106)', async () => {
+			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
+			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
+			const oldHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				ctx
+			);
+			const targetHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนใหม่', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			await repo.updateEvacuee({ ...first, household_id: oldHousehold._id });
+			const linkedSecond = await repo.updateEvacuee({
+				...second,
+				household_id: oldHousehold._id
+			});
+
+			const moved = await repo.updateEvacuee({
+				...linkedSecond,
+				household_id: targetHousehold._id
+			});
+			expect(moved.household_id).toBe(targetHousehold._id);
+			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
+		});
+
+		it('rejects removing the head from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const household = await repo.createHousehold(
@@ -481,6 +506,30 @@ describe('check-in / check-out', () => {
 				true
 			);
 		});
+
+		it('successfully promotes an evacuee from arriving to active and updates zone', async () => {
+			const arrivingEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'ผู้ประสบภัย', last_name: 'รอตรวจ', status: 'arriving' }),
+				ctx
+			);
+			expect(arrivingEvacuee.current_stay.status).toBe('arriving');
+
+			const checkedIn = await repo.checkInEvacuee(arrivingEvacuee, ctx, 'zone-c');
+			expect(checkedIn.current_stay.status).toBe('active');
+			expect(checkedIn.current_stay.zone).toBe('zone-c');
+
+			const fetched = await repo.getEvacuee(arrivingEvacuee._id);
+			expect(fetched?.current_stay.status).toBe('active');
+			expect(fetched?.current_stay.zone).toBe('zone-c');
+
+			const movements = await repo.listMovements();
+			expect(
+				movements.some(
+					(m) =>
+						m.evacuee_id === arrivingEvacuee._id && m.action === 'check_in' && m.zone === 'zone-c'
+				)
+			).toBe(true);
+		});
 	});
 
 	describe('checkOutEvacuee', () => {
@@ -517,6 +566,81 @@ describe('check-in / check-out', () => {
 		});
 	});
 
+	describe('recordMovement', () => {
+		it('records a transfer_out movement and updates current_stay to transferred', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			const updated = await repo.recordMovement(active, 'transfer_out', ctx);
+
+			expect(updated.current_stay.status).toBe('transferred');
+			expect(updated.current_stay.zone).toBe('zone-a');
+
+			const movements = await repo.listMovements();
+			expect(movements).toHaveLength(2);
+			expect(movements[1]).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'transfer_out',
+				zone: 'zone-a'
+			});
+		});
+
+		it('records a leave_temporary movement and updates current_stay to temporary_leave', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			const updated = await repo.recordMovement(active, 'leave_temporary', ctx);
+
+			expect(updated.current_stay.status).toBe('temporary_leave');
+
+			const movements = await repo.listMovements();
+			expect(movements[1]).toMatchObject({ action: 'leave_temporary' });
+		});
+
+		it('records a return_from_leave movement and updates current_stay back to active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const onLeave = await repo.recordMovement(active, 'leave_temporary', ctx);
+
+			const updated = await repo.recordMovement(onLeave, 'return_from_leave', ctx);
+
+			expect(updated.current_stay.status).toBe('active');
+		});
+
+		it('records a mark_deceased movement and updates current_stay to deceased (terminal)', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx);
+
+			const updated = await repo.recordMovement(active, 'mark_deceased', ctx);
+
+			expect(updated.current_stay.status).toBe('deceased');
+			await expect(repo.recordMovement(updated, 'transfer_out', ctx)).rejects.toThrow(/เสียชีวิต/);
+		});
+
+		it('persists the updated status so a fresh fetch reflects it', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx);
+			await repo.recordMovement(active, 'transfer_out', ctx);
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('transferred');
+		});
+
+		it('rejects transfer_out when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.recordMovement(evacuee, 'transfer_out', ctx)).rejects.toThrow(/ย้ายออก/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+
+		it('rejects leave_temporary when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.recordMovement(evacuee, 'leave_temporary', ctx)).rejects.toThrow(
+				/ลาชั่วคราว/
+			);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
 	it('rejects check-in when the evacuee is deceased', async () => {
 		const evacuee = await repo.createEvacuee(evInput(), ctx);
 		const deceased = {
@@ -531,6 +655,22 @@ describe('check-in / check-out', () => {
 		expect(await repo.listMovements()).toHaveLength(0);
 		const fetched = await repo.getEvacuee(evacuee._id);
 		expect(fetched?.current_stay.status).toBe('pre_registered');
+	});
+
+	describe('changeEvacueeZone', () => {
+		it('records zone_change and keeps status active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const updated = await repo.changeEvacueeZone(checkedIn, ctx, 'zone-b');
+			expect(updated.current_stay.status).toBe('active');
+			expect(updated.current_stay.zone).toBe('zone-b');
+			const movements = await repo.listMovements();
+			expect(movements.at(-1)).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'zone_change',
+				zone: 'zone-b'
+			});
+		});
 	});
 
 	describe('cancelPreRegistration', () => {
@@ -720,6 +860,337 @@ describe('check-in / check-out', () => {
 				(await repo.listEvacuees()).filter((e) => e.first_name === 'MedRollback')
 			).toHaveLength(0);
 			expect(await repo.listMedicals()).toHaveLength(0);
+		});
+	});
+
+	describe('getPendingScreeningEvacuees', () => {
+		it('returns arriving and pre_registered evacuees without screening, excluding screened and other statuses', async () => {
+			// 1. Evacuee arriving without screening -> SHOULD be included
+			const eArriving = await repo.createEvacuee(
+				evInput({ first_name: 'ArrivingNoScreen', status: 'arriving' }),
+				ctx
+			);
+
+			// 2. Evacuee pre_registered without screening -> SHOULD be included
+			const ePreReg = await repo.createEvacuee(
+				evInput({ first_name: 'PreRegNoScreen', status: 'pre_registered' }),
+				ctx
+			);
+
+			// 3. Evacuee arriving WITH screening -> SHOULD be excluded
+			const eArrivingScreened = await repo.createEvacuee(
+				evInput({ first_name: 'ArrivingScreened', status: 'arriving' }),
+				ctx
+			);
+			await repo.createScreening(
+				{
+					evacuee_id: eArrivingScreened._id,
+					symptoms: [],
+					temperature_c: 36.5,
+					track: 'normal',
+					needs_referral: false
+				},
+				ctx
+			);
+
+			// 4. Evacuee active (checked in) without screening -> SHOULD be excluded
+			const eActive = await repo.createEvacuee(
+				evInput({ first_name: 'ActiveNoScreen', status: 'active' }),
+				ctx
+			);
+
+			// 5. Evacuee cancelled without screening -> SHOULD be excluded
+			await repo.createEvacuee(
+				evInput({ first_name: 'CancelledNoScreen', status: 'cancelled' }),
+				ctx
+			);
+
+			// 6. Evacuee in different shelter -> SHOULD be excluded when filtering by SH001
+			await repo.createEvacuee(evInput({ first_name: 'OtherShelter' }), {
+				shelterCode: 'SH002',
+				createdBy: 'tester'
+			});
+
+			const pending = await repo.getPendingScreeningEvacuees('SH001');
+			const pendingIds = pending.map((e) => e._id);
+
+			expect(pendingIds).toContain(eArriving._id);
+			expect(pendingIds).toContain(ePreReg._id);
+			expect(pendingIds).not.toContain(eArrivingScreened._id);
+			expect(pendingIds).not.toContain(eActive._id);
+			expect(pending.some((e) => e.first_name === 'CancelledNoScreen')).toBe(false);
+			expect(pending.some((e) => e.first_name === 'OtherShelter')).toBe(false);
+		});
+	});
+
+	describe('recordMedicalScreening', () => {
+		it('creates screening doc without check-in when checkIn is false or omitted', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Somchai', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'green',
+						symptoms: ['headache'],
+						temperature_c: 36.8,
+						blood_pressure_sys: 118,
+						blood_pressure_dia: 78,
+						heart_rate: 72,
+						spo2_percent: 99
+					},
+					checkIn: false
+				},
+				ctx
+			);
+
+			expect(result.screening).toBeDefined();
+			expect(result.screening.schema_v).toBe(2);
+			expect(result.screening.triage_level).toBe('green');
+			expect(result.screening.vital_signs).toEqual({
+				blood_pressure_sys: 118,
+				blood_pressure_dia: 78,
+				heart_rate: 72,
+				spo2_percent: 99
+			});
+			expect(result.evacuee).toBeUndefined();
+
+			// Evacuee remains arriving
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('arriving');
+			expect(fetched?.current_stay.zone).toBeNull();
+		});
+
+		it('creates screening doc and checks in evacuee to active when checkIn is true with zone', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Wichai', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'fast_track',
+						triage_level: 'yellow',
+						symptoms: ['cough', 'fever'],
+						temperature_c: 38.2
+					},
+					checkIn: true,
+					zone: 'Zone-Yellow-1'
+				},
+				ctx
+			);
+
+			expect(result.screening).toBeDefined();
+			expect(result.screening.schema_v).toBe(2);
+			expect(result.screening.triage_level).toBe('yellow');
+
+			expect(result.evacuee).toBeDefined();
+			expect(result.evacuee?.current_stay.status).toBe('active');
+			expect(result.evacuee?.current_stay.zone).toBe('Zone-Yellow-1');
+
+			// Check persisted evacuee
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('active');
+			expect(fetched?.current_stay.zone).toBe('Zone-Yellow-1');
+
+			// Movement record exists
+			const movements = await repo.listMovements();
+			const checkInMov = movements.find(
+				(m) => m.evacuee_id === evacuee._id && m.action === 'check_in'
+			);
+			expect(checkInMov).toBeDefined();
+			expect(checkInMov?.zone).toBe('Zone-Yellow-1');
+		});
+
+		it('syncs clinical medical profile when medical payload is provided', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Mali', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'green',
+						symptoms: [],
+						temperature_c: 36.5
+					},
+					checkIn: false,
+					medical: {
+						evacuee_id: evacuee._id,
+						blood_group: 'A',
+						conditions: ['diabetes'],
+						medications: ['metformin'],
+						allergies: ['penicillin'],
+						track: 'normal',
+						notes: 'baseline from screening desk'
+					}
+				},
+				ctx
+			);
+
+			expect(result.medical).toBeDefined();
+			expect(result.medical?.blood_group).toBe('A');
+			expect(result.medical?.conditions).toEqual(['diabetes']);
+			expect(result.medical?.medications).toEqual(['metformin']);
+			expect(result.medical?.allergies).toEqual(['penicillin']);
+			expect(result.medical?.notes).toBe('baseline from screening desk');
+
+			const medicals = await repo.listMedicals();
+			const linked = medicals.find((m) => m.evacuee_id === evacuee._id);
+			expect(linked).toBeDefined();
+			expect(linked?.blood_group).toBe('A');
+			expect(linked?.conditions).toEqual(['diabetes']);
+		});
+
+		it('updates existing medical profile instead of creating a duplicate', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Dao', status: 'arriving' }),
+				ctx
+			);
+			await repo.createMedical(
+				{
+					evacuee_id: evacuee._id,
+					blood_group: 'O',
+					conditions: ['hypertension'],
+					medications: [],
+					allergies: [],
+					track: 'normal'
+				},
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'yellow',
+						symptoms: ['fever']
+					},
+					medical: {
+						evacuee_id: evacuee._id,
+						blood_group: 'B',
+						conditions: ['hypertension', 'asthma'],
+						medications: ['inhaler'],
+						allergies: ['seafood'],
+						track: 'fast_track',
+						notes: 'updated at medical screening'
+					}
+				},
+				ctx
+			);
+
+			expect(result.medical?.blood_group).toBe('B');
+			expect(result.medical?.conditions).toEqual(['hypertension', 'asthma']);
+			expect(result.medical?.track).toBe('fast_track');
+
+			const medicals = await repo.listMedicals();
+			expect(medicals.filter((m) => m.evacuee_id === evacuee._id)).toHaveLength(1);
+		});
+
+		it('assigns isolation zone on direct check-in without severing household link', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'บ้านร่วม', head_evacuee_id: null, status: 'arriving' },
+				ctx
+			);
+			const infectious = await repo.createEvacuee(
+				evInput({
+					first_name: 'Infectious',
+					status: 'arriving',
+					household_id: household._id
+				}),
+				ctx
+			);
+			const roommate = await repo.createEvacuee(
+				evInput({
+					first_name: 'Roommate',
+					status: 'arriving',
+					household_id: household._id
+				}),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: infectious._id,
+						track: 'fast_track',
+						triage_level: 'red',
+						symptoms: ['acute_watery_diarrhea'],
+						temperature_c: 39.1,
+						needs_referral: false
+					},
+					checkIn: true,
+					zone: 'ISO-Medical-1'
+				},
+				ctx
+			);
+
+			expect(result.evacuee?.current_stay.status).toBe('active');
+			expect(result.evacuee?.current_stay.zone).toBe('ISO-Medical-1');
+			expect(result.evacuee?.household_id).toBe(household._id);
+
+			const fetchedInfectious = await repo.getEvacuee(infectious._id);
+			expect(fetchedInfectious?.household_id).toBe(household._id);
+			expect(fetchedInfectious?.current_stay.zone).toBe('ISO-Medical-1');
+
+			const fetchedRoommate = await repo.getEvacuee(roommate._id);
+			expect(fetchedRoommate?.household_id).toBe(household._id);
+			expect(fetchedRoommate?.current_stay.status).toBe('arriving');
+			expect(fetchedRoommate?.current_stay.zone).toBeNull();
+		});
+	});
+
+	describe('promoteReportIn', () => {
+		it('promotes pre_registered to arriving with zone null and creates no screening', async () => {
+			const evacuee = await repo.createEvacuee(evInput({ first_name: 'Report' }), ctx);
+			expect(evacuee.current_stay.status).toBe('pre_registered');
+
+			const promoted = await repo.promoteReportIn(evacuee._id);
+
+			expect(promoted.current_stay.status).toBe('arriving');
+			expect(promoted.current_stay.zone).toBeNull();
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('arriving');
+			expect(fetched?.current_stay.zone).toBeNull();
+			expect(await repo.listScreenings()).toHaveLength(0);
+		});
+
+		it('rejects Report-in when stay status is not pre_registered', async () => {
+			const arriving = await repo.createEvacuee(
+				evInput({ first_name: 'Already', status: 'arriving' }),
+				ctx
+			);
+			await expect(repo.promoteReportIn(arriving._id)).rejects.toThrow(/pre_registered/);
+			expect((await repo.getEvacuee(arriving._id))?.current_stay.status).toBe('arriving');
+		});
+
+		it('promotes linked pre_registered household to arriving', async () => {
+			const head = await repo.createEvacuee(evInput({ first_name: 'Head' }), ctx);
+			const household = await repo.createHousehold(
+				{
+					label: 'HH Report-in',
+					head_evacuee_id: head._id,
+					status: 'pre_registered'
+				},
+				ctx
+			);
+			await repo.updateEvacuee({ ...head, household_id: household._id });
+
+			await repo.promoteReportIn(head._id);
+
+			const hh = await repo.getHousehold(household._id);
+			expect(hh?.status).toBe('arriving');
 		});
 	});
 });

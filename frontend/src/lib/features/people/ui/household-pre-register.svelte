@@ -12,6 +12,7 @@
 		EvacueeInput,
 		HouseholdAddressForm
 	} from '../domain/people';
+	import { formatPersonName } from '../domain/people';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
 	import HouseholdPreRegisterHead from './household-pre-register-head.svelte';
 	import HouseholdPreRegisterAddress from './household-pre-register-address.svelte';
@@ -72,9 +73,7 @@
 	let headData = $state<EvacueeInput | null>(null);
 	let addressData = $state<HouseholdAddressForm | null>(null);
 
-	const householdLabel = $derived(
-		headData ? `ครอบครัว${headData.first_name} ${headData.last_name}`.trim() : ''
-	);
+	const householdLabel = $derived(headData ? `ครอบครัว${formatPersonName(headData)}`.trim() : '');
 
 	// --- Form State (Pets, Vehicles, Assets) ---
 	let petsList = $state<PetGroup[]>([]);
