@@ -64,6 +64,51 @@ describe('createUserSchema', () => {
 		expect(parsed.organization).toBe('มูลนิธิกระจกเงา');
 	});
 
+	it('accepts multi-shelter compound assignments', () => {
+		const parsed = createUserSchema.parse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			assignments: [
+				{ shelter_code: 'SH001', capabilities: ['registration_staff'] },
+				{ shelter_code: 'SH002', capabilities: ['medical_staff', 'warehouse_staff'] }
+			]
+		});
+		expect(parsed.assignments).toHaveLength(2);
+	});
+
+	it('rejects duplicate shelters in assignments', () => {
+		const result = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			assignments: [
+				{ shelter_code: 'SH001', capabilities: ['registration_staff'] },
+				{ shelter_code: 'SH001', capabilities: ['medical_staff'] }
+			]
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it('accepts is_system_admin without assignments', () => {
+		const parsed = createUserSchema.parse({
+			username: 'sa02',
+			password: validPassword,
+			display_name: 'ผู้ดูแลระบบ',
+			personnel_type: 'staff',
+			organization: 'ส่วนกลาง',
+			phone: '0812345678',
+			is_system_admin: true
+		});
+		expect(parsed.is_system_admin).toBe(true);
+	});
+
 	it('requires organization for staff', () => {
 		const result = createUserSchema.safeParse({
 			username: '0812345678',

@@ -34,14 +34,29 @@ import {
 const DATA = rows as LocationRow[];
 const thCompare = (a: string, b: string) => a.localeCompare(b, 'th');
 
+/**
+ * Home turf: almost every registration is local, so สงขลา (and หาดใหญ่ within it)
+ * lead the search-selects instead of sitting in Thai alphabetical order. Everything
+ * else keeps the normal sort below the pinned entries.
+ */
+const PINNED_PROVINCE = 'สงขลา';
+const PINNED_DISTRICT = 'หาดใหญ่';
+
+/** Rank pinned values first, keep the rest in their existing relative order. */
+function pinFirst(values: string[], pinned: string): string[] {
+	const hit = values.filter((v) => v === pinned);
+	return hit.length ? [...hit, ...values.filter((v) => v !== pinned)] : values;
+}
+
 export async function listProvinces(): Promise<string[]> {
-	return [...new Set(DATA.map((row) => row.province))].sort(thCompare);
+	return pinFirst([...new Set(DATA.map((row) => row.province))].sort(thCompare), PINNED_PROVINCE);
 }
 
 export async function listDistricts(province: string): Promise<string[]> {
-	return [
+	const districts = [
 		...new Set(DATA.filter((row) => row.province === province).map((row) => row.district))
 	].sort(thCompare);
+	return province === PINNED_PROVINCE ? pinFirst(districts, PINNED_DISTRICT) : districts;
 }
 
 export interface Subdistrict {
@@ -64,7 +79,12 @@ export interface LocationRecord {
 
 /** Flat list backing the household form's combined search-select. */
 export async function listAllLocations(): Promise<LocationRecord[]> {
-	return DATA.map((row) => ({ ...row })).sort((a, b) => thCompare(a.subdistrict, b.subdistrict));
+	// Same pinning as the cascading selects: สงขลา first, หาดใหญ่ first within it.
+	const rank = (row: LocationRecord) =>
+		row.province !== PINNED_PROVINCE ? 2 : row.district === PINNED_DISTRICT ? 0 : 1;
+	return DATA.map((row) => ({ ...row })).sort(
+		(a, b) => rank(a) - rank(b) || thCompare(a.subdistrict, b.subdistrict)
+	);
 }
 
 /** Find zipcode by province, district, and subdistrict names (handles Thai prefixes). */

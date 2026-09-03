@@ -149,6 +149,19 @@ export interface PeopleRepository {
 		ctx: AuthorContext
 	): Promise<{ evacuee: Evacuee; screening: Screening }>;
 	/**
+	 * Record a medical screening evaluation and optionally check in the evacuee to a zone.
+	 * When checkIn is true and zone is provided, triggers check-in movement (arriving -> active).
+	 */
+	recordMedicalScreening(
+		input: {
+			screening: ScreeningInput;
+			zone?: string | null;
+			checkIn?: boolean;
+			medical?: MedicalInput;
+		},
+		ctx: AuthorContext
+	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }>;
+	/**
 	 * Compensate a failed registration unit: remove medicals for the evacuee,
 	 * then the evacuee. Screening/movement are append-only and are not deleted.
 	 */
@@ -172,6 +185,8 @@ export interface PeopleRepository {
 	listMovements(): Promise<Movement[]>;
 	/** Every screening record in this shelter database. */
 	listScreenings(): Promise<Screening[]>;
+	/** Evacuees awaiting medical screening in the shelter (arriving or pre_registered without screening doc). */
+	getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]>;
 
 	/**
 	 * Record a check-in movement and apply it to the evacuee's `current_stay`.
@@ -185,6 +200,11 @@ export interface PeopleRepository {
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	/**
+	 * Record a `zone_change` movement while staying `active` (CR-106 Station 3 rezone).
+	 * Requires a non-empty destination zone.
+	 */
+	changeEvacueeZone(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee>;
 	/**
 	 * Record any other movement action and apply it to the evacuee's `current_stay`.
 	 * Writes the append-only `movement` doc first, then the updated evacuee — the
@@ -209,4 +229,9 @@ export interface PeopleRepository {
 	 * with stay `pre_registered`, cancel the household too.
 	 */
 	cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void>;
+	/**
+	 * Station 1 Report-in: promote `pre_registered` → `arriving` with zone null.
+	 * Does not create a screening document and does not assign a zone.
+	 */
+	promoteReportIn(evacueeId: string): Promise<Evacuee>;
 }

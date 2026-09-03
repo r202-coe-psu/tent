@@ -31,7 +31,20 @@
 	let selectedZone = $state('');
 	let showOtherZones = $state(false);
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const shelterQuery = safeQuery(
+		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
+		{ data: undefined, isLoading: false, isError: false } as unknown as ReturnType<
+			typeof useShelter
+		>
+	);
 
 	let activeZones = $derived(
 		(shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed')
@@ -142,9 +155,7 @@
 						}
 					}}
 				>
-					<ChevronDown
-						class="size-4 transition-transform {showOtherZones ? 'rotate-180' : ''}"
-					/>
+					<ChevronDown class="size-4 transition-transform {showOtherZones ? 'rotate-180' : ''}" />
 					{showOtherZones ? t.btnHideOtherZones : t.btnOtherZones}
 				</Button>
 			{/if}

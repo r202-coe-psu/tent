@@ -25,6 +25,7 @@
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useEvacuees,
+		formatPersonName,
 		STATUS_LABELS,
 		type Evacuee,
 		type StayStatus
@@ -164,7 +165,7 @@
 				message: 'พบข้อมูลผู้ประสบภัย',
 				evacuee
 			};
-			toast.success(`พบข้อมูล ${evacuee.first_name} ${evacuee.last_name}`);
+			toast.success(`พบข้อมูล ${formatPersonName(evacuee)}`);
 			scanCode = ''; // Clear input
 		} catch (err) {
 			scanResult = {
@@ -412,8 +413,7 @@
 								</div>
 								<div class="min-w-0 flex-1 pt-0.5">
 									<h4 class="truncate text-base font-bold text-slate-900 dark:text-white">
-										{found.first_name}
-										{found.last_name}
+										{formatPersonName(found)}
 									</h4>
 									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
 										<span

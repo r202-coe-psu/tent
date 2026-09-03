@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
-import { SA_GRANTABLE_CAPABILITIES } from '$lib/auth/roles';
+import { SA_GRANTABLE_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { passwordSchema } from '$lib/auth/password-schema';
 import { SECURITY_QUESTION_IDS } from '$lib/auth/security-questions';
 
@@ -27,66 +27,99 @@ export const usernameSchema = z
 export const capabilitySchema = z.enum(SA_GRANTABLE_CAPABILITIES);
 export type Capability = z.infer<typeof capabilitySchema>;
 
+export const shelterCapabilitySchema = z.enum(SHELTER_CAPABILITIES);
+
+/** One shelter + duties (CR-093 compound assignment). */
+export const shelterAssignmentSchema = z.object({
+	shelter_code: shelterCodeSchema,
+	capabilities: z.array(shelterCapabilitySchema).min(1, 'ต้องเลือกอย่างน้อย 1 บทบาทต่อศูนย์')
+});
+export type ShelterAssignmentInput = z.infer<typeof shelterAssignmentSchema>;
+
 /** Duty window for time-bound volunteer access */
 export const dutyWindowSchema = z
 	.object({
 		start_ts: z.string().datetime({ message: 'รูปแบบเวลาเริ่มต้นไม่ถูกต้อง' }),
 		end_ts: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' })
 	})
-	.refine(
-		(val) => new Date(val.start_ts).getTime() < new Date(val.end_ts).getTime(),
-		{
-			message: 'เวลาเริ่มต้นต้องมาก่อนเวลาสิ้นสุด',
-			path: ['end_ts']
-		}
-	);
+	.refine((val) => new Date(val.start_ts).getTime() < new Date(val.end_ts).getTime(), {
+		message: 'เวลาเริ่มต้นต้องมาก่อนเวลาสิ้นสุด',
+		path: ['end_ts']
+	});
 
 export type DutyWindow = z.infer<typeof dutyWindowSchema>;
+
+const userProfileFields = {
+	username: usernameSchema,
+	password: passwordSchema,
+	display_name: z.string().trim().min(1, 'ชื่อที่แสดงต้องไม่ว่าง'),
+	personnel_type: personnelTypeSchema.default('staff'),
+	organization: z.string().trim().optional(),
+	position: z.string().trim().optional(),
+	phone: phoneSchema,
+	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
+	notes: z.string().trim().optional(),
+	/** System admin exclusive — mutually exclusive with assignments. */
+	is_system_admin: z.boolean().optional(),
+	/** Multi-shelter compound assignments (CR-093). */
+	assignments: z.array(shelterAssignmentSchema).optional(),
+	/** @deprecated single-shelter fields — still accepted for SM locked forms */
+	capabilities: z.array(capabilitySchema).min(1, 'ต้องเลือกอย่างน้อย 1 บทบาท').optional(),
+	capability: capabilitySchema.optional(),
+	shelter_id: shelterCodeSchema.optional(),
+	volunteer_id: z.string().optional(),
+	duty_window: dutyWindowSchema.optional(),
+	affiliation_tags: z.array(z.string()).optional()
+};
+
+function refineUserForm(
+	data: {
+		personnel_type?: 'staff' | 'volunteer';
+		organization?: string;
+		is_system_admin?: boolean;
+		assignments?: ShelterAssignmentInput[];
+		capabilities?: Capability[];
+		capability?: Capability;
+		shelter_id?: string;
+	},
+	ctx: z.RefinementCtx
+) {
+	if (data.personnel_type === 'staff' && (!data.organization || data.organization.length === 0)) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			message: 'กรุณาระบุหน่วยงานหรือองค์กรต้นสังกัดสำหรับเจ้าหน้าที่',
+			path: ['organization']
+		});
+	}
+
+	if (data.is_system_admin) return;
+
+	if (data.assignments && data.assignments.length > 0) {
+		const codes = data.assignments.map((a) => a.shelter_code);
+		if (new Set(codes).size !== codes.length) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'ไม่สามารถเลือกศูนย์ซ้ำได้',
+				path: ['assignments']
+			});
+		}
+		return;
+	}
+
+	const caps = data.capabilities ?? (data.capability ? [data.capability] : []);
+	if (caps.length === 0) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			message: 'ต้องเลือกอย่างน้อย 1 บทบาท',
+			path: ['capabilities']
+		});
+	}
+}
 
 /**
  * Form input for creating a user.
  */
-export const createUserSchema = z
-	.object({
-		username: usernameSchema,
-		password: passwordSchema,
-		display_name: z.string().trim().min(1, 'ชื่อที่แสดงต้องไม่ว่าง'),
-		personnel_type: personnelTypeSchema.default('staff'),
-		organization: z.string().trim().optional(),
-		position: z.string().trim().optional(),
-		phone: phoneSchema,
-		email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
-		notes: z.string().trim().optional(),
-		capabilities: z
-			.array(capabilitySchema)
-			.min(1, 'ต้องเลือกอย่างน้อย 1 บทบาท')
-			.optional(),
-		/** Backward-compatibility for single-select capability */
-		capability: capabilitySchema.optional(),
-		shelter_id: shelterCodeSchema.optional(),
-		volunteer_id: z.string().optional(),
-		duty_window: dutyWindowSchema.optional(),
-		affiliation_tags: z.array(z.string()).optional()
-	})
-	.superRefine((data, ctx) => {
-		// If capabilities not given, fallback to single capability
-		const caps = data.capabilities ?? (data.capability ? [data.capability] : []);
-		if (caps.length === 0) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'ต้องเลือกอย่างน้อย 1 บทบาท',
-				path: ['capabilities']
-			});
-		}
-		// Organization is required for staff
-		if (data.personnel_type === 'staff' && (!data.organization || data.organization.length === 0)) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'กรุณาระบุหน่วยงานหรือองค์กรต้นสังกัดสำหรับเจ้าหน้าที่',
-				path: ['organization']
-			});
-		}
-	});
+export const createUserSchema = z.object(userProfileFields).superRefine(refineUserForm);
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
@@ -95,42 +128,10 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
  */
 export const editUserSchema = z
 	.object({
-		username: z.string().trim().min(1, 'Username is required'),
-		password: passwordSchema.or(z.literal('')),
-		display_name: z.string().trim().min(1, 'Display name is required'),
-		personnel_type: personnelTypeSchema.default('staff'),
-		organization: z.string().trim().optional(),
-		position: z.string().trim().optional(),
-		phone: phoneSchema,
-		email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
-		notes: z.string().trim().optional(),
-		capabilities: z
-			.array(capabilitySchema)
-			.min(1, 'ต้องเลือกอย่างน้อย 1 บทบาท')
-			.optional(),
-		capability: capabilitySchema.optional(),
-		shelter_id: shelterCodeSchema.optional(),
-		volunteer_id: z.string().optional(),
-		duty_window: dutyWindowSchema.optional(),
-		affiliation_tags: z.array(z.string()).optional()
+		...userProfileFields,
+		password: passwordSchema.or(z.literal(''))
 	})
-	.superRefine((data, ctx) => {
-		const caps = data.capabilities ?? (data.capability ? [data.capability] : []);
-		if (caps.length === 0) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'ต้องเลือกอย่างน้อย 1 บทบาท',
-				path: ['capabilities']
-			});
-		}
-		if (data.personnel_type === 'staff' && (!data.organization || data.organization.length === 0)) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'กรุณาระบุหน่วยงานหรือองค์กรต้นสังกัดสำหรับเจ้าหน้าที่',
-				path: ['organization']
-			});
-		}
-	});
+	.superRefine(refineUserForm);
 
 export type EditUserInput = z.infer<typeof editUserSchema>;
 

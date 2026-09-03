@@ -9,7 +9,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
-	import { useSearchEvacuees, STATUS_LABELS } from '$lib/features/people';
+	import { useSearchEvacuees, STATUS_LABELS, formatPersonName } from '$lib/features/people';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_SEARCH_I18N } from './_constants/evacuee-search.i18n';
@@ -46,9 +46,21 @@
 		return () => clearTimeout(debounceTimer);
 	});
 
-	const searchQuery = useSearchEvacuees(
-		() => debouncedQuery,
-		() => !!debouncedQuery
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const searchQuery = safeQuery(
+		() =>
+			useSearchEvacuees(
+				() => debouncedQuery,
+				() => !!debouncedQuery
+			),
+		{ data: [], isFetching: false } as unknown as ReturnType<typeof useSearchEvacuees>
 	);
 
 	const searchResults = $derived(searchQuery.data ?? []);
@@ -169,8 +181,7 @@
 																: 'text-blue-950 dark:text-blue-100'
 												}`}
 											>
-												{evacuee.first_name}
-												{evacuee.last_name}
+												{formatPersonName(evacuee)}
 											</p>
 											<span
 												class={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -245,13 +256,12 @@
 							>
 								<div class="min-w-0">
 									<p class="truncate font-semibold text-green-900 dark:text-green-100">
-										{evacuee.first_name}
-										{evacuee.last_name}
+										{formatPersonName(evacuee)}
 									</p>
 									<p class="text-xs text-green-700 dark:text-green-300">
 										{t.statusLabel}
-										{t.statusLabels[evacuee.current_stay.status] ??
-											STATUS_LABELS[evacuee.current_stay.status] ??
+										{(t.statusLabels as Record<string, string>)[evacuee.current_stay.status] ??
+											(STATUS_LABELS as Record<string, string>)[evacuee.current_stay.status] ??
 											evacuee.current_stay.status}
 										{#if evacuee.phone}
 											· {evacuee.phone}

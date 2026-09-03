@@ -56,3 +56,4 @@ export {
 } from './application/queries';
 export { default as DailySopActionBar } from './ui/daily-sop-action-bar.svelte';
 export { default as DailySopPage } from './ui/daily-sop-page.svelte';
+export { shouldShowDailySopReconnect } from './ui/connection-action';
