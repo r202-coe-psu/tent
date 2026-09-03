@@ -20,9 +20,19 @@ const CONTACT = {
 	special_needs: []
 };
 
+const ADDRESS = {
+	address_no: ' 123/45 ',
+	village_no: ' หมู่ 4 ',
+	subdistrict: 'คอหงส์',
+	district: 'หาดใหญ่',
+	province: 'สงขลา',
+	postal_code: '90110'
+};
+
 const VALID = {
 	shelter_code: 'SH001',
 	phone: '0812345678',
+	address: ADDRESS,
 	members: [CONTACT],
 	pets: []
 };
@@ -42,6 +52,39 @@ describe('publicBookingInputSchema', () => {
 		expect(publicBookingInputSchema.safeParse({ ...VALID, phone: '081234567' }).success).toBe(
 			false
 		);
+	});
+
+	// CR-107: the back office searches households by ตำบล/อำเภอ/จังหวัด, so those
+	// three plus the house number are mandatory on a web booking too.
+	it('requires house number, subdistrict, district and province', () => {
+		const parsed = publicBookingInputSchema.parse(VALID);
+		expect(parsed.address.address_no).toBe('123/45'); // trimmed
+		expect(parsed.address.village_no).toBe('หมู่ 4');
+
+		expect(publicBookingInputSchema.safeParse({ ...VALID, address: undefined }).success).toBe(
+			false
+		);
+		for (const field of ['address_no', 'subdistrict', 'district', 'province'] as const) {
+			const missing = publicBookingInputSchema.safeParse({
+				...VALID,
+				address: { ...ADDRESS, [field]: '  ' }
+			});
+			expect(missing.success, field).toBe(false);
+		}
+	});
+
+	it('keeps หมู่/ถนน and the derived postal code optional, but rejects a malformed one', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			address: { ...ADDRESS, village_no: undefined, postal_code: undefined }
+		});
+		expect(parsed.address.village_no).toBe('');
+		expect(parsed.address.postal_code).toBe('');
+
+		expect(
+			publicBookingInputSchema.safeParse({ ...VALID, address: { ...ADDRESS, postal_code: '901' } })
+				.success
+		).toBe(false);
 	});
 
 	it('requires at least one member and caps a single booking at 20', () => {
@@ -186,7 +229,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 
 		expect(evacuees).toHaveLength(3);
 		for (const e of evacuees) {
-			expect(e.schema_v).toBe(8);
+			expect(e.schema_v).toBe(9);
 			expect(e.registered_via).toBe('web');
 
 			expect(e.current_stay.status).toBe('pre_registered');
@@ -230,6 +273,38 @@ describe('toHouseholdInput → createHousehold', () => {
 		expect(household.status).toBe('pre_registered');
 		expect(household.pets).toEqual([]);
 		expect(household.vehicles).toEqual([]);
+	});
+
+	// The address columns are what the back office searches on, so they must land
+	// on the household doc itself — and a blank must arrive as `null`, not `''`,
+	// or a search for "no หมู่" matches every web booking.
+	it('carries the domicile address onto the household doc (CR-107)', () => {
+		const input = publicBookingInputSchema.parse(VALID);
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.address_no).toBe('123/45');
+		expect(household.village_no).toBe('หมู่ 4');
+		expect(household.subdistrict).toBe('คอหงส์');
+		expect(household.district).toBe('หาดใหญ่');
+		expect(household.province).toBe('สงขลา');
+		expect(household.postal_code).toBe('90110');
+	});
+
+	it('normalizes an unfilled หมู่/ถนน and postal code to null', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			address: { ...ADDRESS, village_no: '', postal_code: '' }
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.village_no).toBeNull();
+		expect(household.postal_code).toBeNull();
 	});
 
 	it('maps pets onto the household pets[] shape (CR-016)', () => {

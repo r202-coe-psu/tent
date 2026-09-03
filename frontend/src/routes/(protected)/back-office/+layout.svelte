@@ -4,12 +4,16 @@
 	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { endpointStore } from '$lib/stores/endpoint.svelte';
+	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop/ui/connection-action';
+	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { ReauthDialog } from '$lib/features/login';
 
 	let { children }: LayoutProps = $props();
@@ -48,11 +52,22 @@
 
 	const pageTitle = $derived(currentPageNode?.label ?? 'ระบบส่วนหลัง (Back-Office)');
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
+	const isDailySopPage = $derived(page.url.pathname.startsWith('/back-office/dailysop'));
 
-	// Get user roles and scoped shelter
+	$effect(() => {
+		if (!backofficeState.reauthRequested) return;
+		reauthOpen = true;
+		backofficeState.clearReauthRequest();
+	});
+
+	async function retryDailySopConnection(): Promise<void> {
+		await endpointStore.forceRetry();
+	}
+
+	// Get user roles and scoped shelters (multi-shelter compound roles)
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const userShelterCode = $derived(shelterCodeFromRoles(roles));
+	const userShelterCodes = $derived(shelterCodesFromRoles(roles));
 
 	// Filter available shelters based on roles
 	const availableShelters = $derived.by(() => {
@@ -60,24 +75,25 @@
 		if (isSA) {
 			return allShelters;
 		}
-		if (userShelterCode) {
-			return allShelters.filter((s) => s.code === userShelterCode);
+		if (userShelterCodes.length > 0) {
+			return allShelters.filter((s) => userShelterCodes.includes(s.code));
 		}
 		return [];
 	});
 
-	// Default to the user's own shelter when nothing valid is selected yet;
-	// fall back to the first available shelter for roles with no home shelter
-	// (system_admin). Bound directly to shelterStore — the store
-	// getShelterCode()/getShelterDb() actually read — so switching here
-	// re-scopes back-office data instead of being a disconnected value.
+	// Prefer persisted selection when still allowed; else first assigned shelter.
 	$effect(() => {
 		const shelters = availableShelters;
 		if (shelters.length === 0) return;
 		const current = shelterStore.selectedShelterCode;
-		if (current && shelters.some((s) => s.code === current)) return;
-		const ownShelter = shelters.find((s) => s.code === userShelterCode);
-		shelterStore.selectedShelterCode = ownShelter?.code ?? shelters[0].code;
+		if (current && shelters.some((s) => s.code === current)) {
+			persistSelectedShelter(current);
+			return;
+		}
+		const preferred =
+			shelters.find((s) => userShelterCodes.includes(s.code))?.code ?? shelters[0].code;
+		shelterStore.selectedShelterCode = preferred;
+		persistSelectedShelter(preferred);
 	});
 
 	const selectedShelter = $derived(
@@ -97,9 +113,15 @@
 	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 		<!-- Static Top Header Bar (shared by all backoffice pages) -->
 		<header
-			class="flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
+			class="flex shrink-0 flex-col justify-center border-b border-sidebar-border bg-card {isDailySopPage
+				? 'min-h-16 px-4 py-3 md:px-6'
+				: 'h-16 px-4 md:px-6'}"
 		>
-			<div class="flex items-center justify-between gap-4">
+			<div
+				class={isDailySopPage
+					? 'flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between'
+					: 'flex items-center justify-between gap-4'}
+			>
 				<!-- Left: Page Title & Icon -->
 				<div class="flex items-center gap-2">
 					<PageIcon class="size-4 shrink-0 text-primary" />
@@ -107,11 +129,21 @@
 				</div>
 
 				<!-- Right: Controls -->
-				<div class="flex items-center gap-2 md:gap-3">
+				<div
+					class={isDailySopPage
+						? 'flex w-full flex-nowrap items-center justify-start gap-2 xl:w-auto xl:justify-end'
+						: 'flex items-center justify-end gap-2 md:gap-3'}
+				>
 					<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
 						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
 						<Select type="single" bind:value={shelterStore.selectedShelterCode}>
-							<SelectTrigger class="h-9 w-[200px] md:w-[280px]">
+							<SelectTrigger
+								class={`h-9 ${
+									isDailySopPage
+										? 'w-[min(45vw,200px)] md:w-[240px] 2xl:w-[280px]'
+										: 'w-[200px] md:w-[280px]'
+								}`}
+							>
 								<span class="truncate">{selectedShelterLabel}</span>
 							</SelectTrigger>
 							<SelectContent>
@@ -131,7 +163,35 @@
 						</Select>
 					</div>
 
-					{#if backofficeState.isOffline}
+					{#if isDailySopPage}
+						<span
+							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold {endpointStore.status ===
+							'connected'
+								? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
+								: endpointStore.status === 'connecting'
+									? 'border-slate-200 bg-slate-50 text-slate-600'
+									: 'border-amber-200 bg-amber-50 text-amber-700'}"
+						>
+							{#if endpointStore.status === 'connected'}
+								<span class="size-1.5 rounded-full bg-emerald-500"></span> Online
+							{:else if endpointStore.status === 'connecting'}
+								<RefreshCw class="size-3.5 animate-spin" /> กำลังเชื่อมต่อ
+							{:else}
+								<span class="size-1.5 rounded-full bg-amber-500"></span> Offline
+							{/if}
+						</span>
+						{#if shouldShowDailySopReconnect(endpointStore.status)}<button
+								type="button"
+								class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-2xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 sm:px-3 sm:text-xs"
+								onclick={retryDailySopConnection}
+								aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
+							>
+								<RotateCcw class="size-3.5" />
+								<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span><span class="sm:hidden"
+									>ลองใหม่</span
+								>
+							</button>{/if}
+					{:else if backofficeState.isOffline}
 						<button
 							type="button"
 							class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-2xs font-bold text-amber-600 hover:bg-amber-500/20"

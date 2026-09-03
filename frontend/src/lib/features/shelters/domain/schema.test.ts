@@ -43,6 +43,41 @@ describe('shelterSchema', () => {
 		expect(s.zones).toEqual([]);
 	});
 
+	it('supports feature_flags with enable_medical_screening defaulting to false', () => {
+		const s = shelterSchema.parse(validShelterInput);
+		expect(s.feature_flags).toBeDefined();
+		expect(s.feature_flags?.enable_medical_screening).toBe(false);
+
+		const withScreening = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { enable_medical_screening: true }
+		});
+		expect(withScreening.feature_flags?.enable_medical_screening).toBe(true);
+		// Partial feature_flags must not wipe sibling defaults (e.g. public_donations_enabled).
+		expect(withScreening.feature_flags?.public_donations_enabled).toBe(true);
+		expect(withScreening.feature_flags?.allow_pets).toBe(false);
+	});
+
+	it('preserves sibling feature_flags when enable_medical_screening is toggled in a full object', () => {
+		const parsed = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: {
+				allow_pets: true,
+				allow_vehicles: true,
+				allow_assets: false,
+				public_donations_enabled: false,
+				enable_medical_screening: true
+			}
+		});
+		expect(parsed.feature_flags).toEqual({
+			allow_pets: true,
+			allow_vehicles: true,
+			allow_assets: false,
+			public_donations_enabled: false,
+			enable_medical_screening: true
+		});
+	});
+
 	it('requires site_kind for new shelter input', () => {
 		const result = shelterSchema.safeParse({ ...validShelterInput, site_kind: undefined });
 		expect(result.success).toBe(false);

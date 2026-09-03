@@ -11,6 +11,7 @@ import type {
 	ParkingPolicy,
 	ProjectLevel,
 	Risk,
+	ShelterFeatureFlags,
 	SiteKind,
 	Utilities,
 	Zone
@@ -60,6 +61,7 @@ export interface ShelterSummary {
 	admission_policy: AdmissionPolicy;
 	luggage_policy: LuggagePolicy;
 	parking_policy: ParkingPolicy;
+	feature_flags: ShelterFeatureFlags;
 }
 
 export interface SheltersRepository {

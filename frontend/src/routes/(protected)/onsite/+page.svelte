@@ -1,9 +1,24 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Expand from '@lucide/svelte/icons/expand';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Search from '@lucide/svelte/icons/search';
-	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import Stethoscope from '@lucide/svelte/icons/stethoscope';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import { resolve } from '$app/paths';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+
+	const canAccessMedical = $derived(canAccessMedicalScreening(authStore.user?.roles ?? []));
+	const canZoning = $derived(canAccessZoning(authStore.user?.roles ?? []));
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const enableMedical = $derived(
+		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
+	);
+	const showMedicalTile = $derived(canAccessMedical && enableMedical);
 </script>
 
 <svelte:head>
@@ -34,22 +49,60 @@
 			<div
 				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
 			>
-				<UserPlus class="size-6" />
+				<ClipboardList class="size-6" />
 			</div>
 			<div>
-				<h2 class="mb-1 text-2xl font-bold text-foreground">ลงทะเบียนใหม่</h2>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">ทะเบียนผู้ประสบภัย</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-					New Registration
+					Registration Desk (Station 1)
 				</p>
 			</div>
 		</a>
 
-		<div
-			class="flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 opacity-60"
-			aria-disabled="true"
+		{#if showMedicalTile}
+			<a
+				href={resolve('/onsite/medical-screening')}
+				class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
+			>
+				<div
+					class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+				>
+					<Stethoscope class="size-6" />
+				</div>
+				<div>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">คัดกรองการแพทย์</h2>
+					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+						Medical Screening (Station 2)
+					</p>
+				</div>
+			</a>
+		{/if}
+
+		{#if canZoning}
+			<a
+				href={resolve('/onsite/zoning')}
+				class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
+			>
+				<div
+					class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+				>
+					<MapPin class="size-6" />
+				</div>
+				<div>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">จัดสรรที่พัก</h2>
+					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+						Zoning Desk (Station 3)
+					</p>
+				</div>
+			</a>
+		{/if}
+
+		<a
+			href={resolve('/onsite/search-edit')}
+			class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
 		>
 			<div
-				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground"
+				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
 			>
 				<Search class="size-6" />
 			</div>
@@ -59,7 +112,7 @@
 					Search &amp; Update
 				</p>
 			</div>
-		</div>
+		</a>
 
 		<a
 			href={resolve('/onsite/scan-check-in-out')}

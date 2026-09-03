@@ -119,10 +119,58 @@ export const publicBookingVehicleSchema = z.object({
 	license_plate: z.string().trim().max(20, 'ทะเบียนรถยาวเกินไป').optional()
 });
 
+/**
+ * The household head's home address — the domicile they evacuated *from*, not
+ * the shelter (CR-107).
+ *
+ * Mirrors the `household` address columns (`address_no`, `village_no`,
+ * `subdistrict`, `district`, `province`, `postal_code`, people domain) rather
+ * than a free-text line, because the back office searches and groups households
+ * by ตำบล/อำเภอ/จังหวัด — a typed-in "หาดใหญ่, สงขลา" does not match a picker
+ * value. The three administrative levels come from the same Thailand location
+ * dataset the staff form uses, so a web booking is searchable next to a counter
+ * registration with no normalisation step.
+ *
+ * `postal_code` is derived from the chosen subdistrict rather than typed, so it
+ * is accepted blank (an older dataset row may carry no zipcode) but must be five
+ * digits when present.
+ */
+export const publicBookingAddressSchema = z.object({
+	address_no: z
+		.string({ error: 'กรุณากรอกบ้านเลขที่' })
+		.trim()
+		.min(1, 'กรุณากรอกบ้านเลขที่')
+		.max(100, 'บ้านเลขที่ยาวเกินไป'),
+	village_no: z.string().trim().max(100, 'ข้อมูลยาวเกินไป').default(''),
+	subdistrict: z
+		.string({ error: 'กรุณาเลือกตำบล/แขวง' })
+		.trim()
+		.min(1, 'กรุณาเลือกตำบล/แขวง')
+		.max(100, 'ชื่อตำบลยาวเกินไป'),
+	district: z
+		.string({ error: 'กรุณาเลือกอำเภอ/เขต' })
+		.trim()
+		.min(1, 'กรุณาเลือกอำเภอ/เขต')
+		.max(100, 'ชื่ออำเภอยาวเกินไป'),
+	province: z
+		.string({ error: 'กรุณาเลือกจังหวัด' })
+		.trim()
+		.min(1, 'กรุณาเลือกจังหวัด')
+		.max(100, 'ชื่อจังหวัดยาวเกินไป'),
+	postal_code: z
+		.string()
+		.trim()
+		.refine((v) => v === '' || /^\d{5}$/.test(v), 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก')
+		.default('')
+});
+
+export type PublicBookingAddress = z.infer<typeof publicBookingAddressSchema>;
+
 export const publicBookingInputSchema = z.object({
 	shelter_code: bookingShelterCodeSchema,
 	phone: bookingPhoneSchema,
 	national_id: bookingNationalIdSchema.optional(),
+	address: publicBookingAddressSchema,
 	members: z
 		.array(publicBookingMemberSchema)
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
@@ -216,7 +264,17 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 		vehicles: input.vehicles.map((vehicle) => ({
 			type: vehicle.type,
 			license_plate: vehicle.license_plate?.trim() || null
-		}))
+		})),
+		// Domicile address (CR-107). The household schema stores every address
+		// column nullable, and an empty string is not "not given" — normalize the
+		// blanks the form produces (optional หมู่/ถนน, a subdistrict row with no
+		// zipcode) back to `null` so back-office search never matches on ''.
+		address_no: input.address.address_no,
+		village_no: input.address.village_no || null,
+		subdistrict: input.address.subdistrict,
+		district: input.address.district,
+		province: input.address.province,
+		postal_code: input.address.postal_code || null
 	};
 }
 
