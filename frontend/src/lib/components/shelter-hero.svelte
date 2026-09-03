@@ -2,6 +2,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Navigation from '@lucide/svelte/icons/navigation';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import {
 		resolveMasterLabel,
@@ -16,6 +17,8 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 	const shelterTypeLabels = useShelterTypeLabelMap();
+	let shelterCode = $derived(shelter.code || shelter.id);
+	let canBook = $derived(Boolean(shelterCode) && shelter.status !== 'CLOSED');
 
 	let adminTypeDisplay = $derived.by(() => {
 		const code = shelter.admin_type;
@@ -119,20 +122,31 @@
 				</div>
 			</div>
 
-			{#if shelter.geo?.lat && shelter.geo?.lng}
-				<Button
-					onclick={() =>
-						window.open(
-							`https://www.google.com/maps/dir/?api=1&destination=${shelter.geo?.lat},${shelter.geo?.lng}`,
-							'_blank'
-						)}
-					target="_blank"
-					class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
-				>
-					<Navigation class="h-4.5 w-4.5" />
-					{t.navigateMaps}
-				</Button>
-			{/if}
+			<div class="flex flex-wrap items-center gap-3">
+				{#if canBook && shelterCode}
+					<a
+						href={`/pre-register?shelter=${encodeURIComponent(shelterCode)}`}
+						class="flex w-fit items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
+					>
+						<ClipboardCheck class="h-4.5 w-4.5" />
+						{t.bookThisShelter}
+					</a>
+				{/if}
+				{#if shelter.geo?.lat && shelter.geo?.lng}
+					<Button
+						onclick={() =>
+							window.open(
+								`https://www.google.com/maps/dir/?api=1&destination=${shelter.geo?.lat},${shelter.geo?.lng}`,
+								'_blank'
+							)}
+						target="_blank"
+						class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
+					>
+						<Navigation class="h-4.5 w-4.5" />
+						{t.navigateMaps}
+					</Button>
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>

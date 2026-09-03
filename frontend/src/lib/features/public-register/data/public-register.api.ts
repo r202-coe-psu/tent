@@ -66,3 +66,85 @@ export async function fetchPetTypes(shelterCode: string): Promise<PetTypeOption[
 	const body = (await res.json().catch(() => null)) as { petTypes?: PetTypeOption[] } | null;
 	return body?.petTypes ?? [];
 }
+
+export interface PublicSubdistrict {
+	subdistrict: string;
+	zipcode: number;
+}
+
+const LOCATIONS = '/api/public/v1/config/locations';
+
+/**
+ * Thailand address cascade for the booking form's domicile address (CR-107),
+ * served by the public BFF (`/api/public/v1/config/locations`) — never
+ * `serviceFetch`, which is the staff service plane. Each level degrades to an
+ * empty list: a failed lookup narrows the choices, it must not break the form.
+ */
+export async function fetchProvinces(): Promise<string[]> {
+	const res = await fetch(LOCATIONS);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as { provinces?: string[] } | null;
+	return body?.provinces ?? [];
+}
+
+export async function fetchDistricts(province: string): Promise<string[]> {
+	const res = await fetch(`${LOCATIONS}?province=${encodeURIComponent(province)}`);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as { districts?: string[] } | null;
+	return body?.districts ?? [];
+}
+
+export async function fetchSubdistricts(
+	province: string,
+	district: string
+): Promise<PublicSubdistrict[]> {
+	const res = await fetch(
+		`${LOCATIONS}?province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}`
+	);
+	if (!res.ok) return [];
+	const body = (await res.json().catch(() => null)) as {
+		subdistricts?: PublicSubdistrict[];
+	} | null;
+	return body?.subdistricts ?? [];
+}
+
+export interface ShelterPolicyResponse {
+	code?: string;
+	name?: string;
+	feature_flags: {
+		allow_pets: boolean;
+		allow_assets: boolean;
+		allow_vehicles: boolean;
+	};
+	admission_policy?: {
+		pet_policy?: {
+			policy: 'no_pets' | 'conditional';
+			categories?: {
+				category: 'dog' | 'cat' | 'bird' | 'exotic' | 'other';
+				conditions?: ('leashed' | 'caged' | 'vaccinated' | 'owner_responsibility')[];
+				other?: string;
+			}[];
+		};
+	} | null;
+	luggage_policy?: {
+		limitation?: 'no_limit' | 'limited' | 'prohibited';
+		rules?: ('valuables_declaration' | 'prohibited_items_check' | 'labeling_required')[];
+		rules_other?: string;
+	} | null;
+	parking_policy?: {
+		availability?: 'available' | 'limited' | 'none';
+		rules?: ('registered_vehicles_only' | 'designated_areas_only' | 'no_overnight_stay')[];
+		rules_other?: string;
+	} | null;
+}
+
+export async function fetchShelterPolicy(
+	shelterCode: string
+): Promise<ShelterPolicyResponse | null> {
+	if (!shelterCode.trim()) return null;
+	const res = await fetch(
+		`/api/public/v1/config/shelter-policy?shelter=${encodeURIComponent(shelterCode)}`
+	);
+	if (!res.ok) return null;
+	return (await res.json().catch(() => null)) as ShelterPolicyResponse | null;
+}

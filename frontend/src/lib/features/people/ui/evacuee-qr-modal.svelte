@@ -6,7 +6,7 @@
 	import { toast } from 'svelte-sonner';
 	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee, StayStatus } from '$lib/features/people';
-	import { maskNationalId } from '$lib/features/people';
+	import { formatPersonName, maskNationalId } from '$lib/features/people';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from './_constants/evacuee-qr-modal.i18n';
@@ -36,6 +36,7 @@
 	const statusAccent: Record<StayStatus, string> = {
 		active: '#22c55e',
 		pre_registered: '#3b82f6',
+		arriving: '#f59e0b',
 		temporary_leave: '#f59e0b',
 		transferred: '#a855f7',
 		checked_out: '#ef4444',
@@ -118,8 +119,7 @@
 					{t.cardTitle}
 				</h2>
 				<p class="text-sm text-muted-foreground">
-					{evacuee.first_name}
-					{evacuee.last_name}
+					{formatPersonName(evacuee)}
 				</p>
 			</div>
 
@@ -141,7 +141,7 @@
 						{#if qrUrl}
 							<img
 								src={qrUrl}
-								alt={t.qrAlt(`${evacuee.first_name} ${evacuee.last_name}`)}
+								alt={t.qrAlt(formatPersonName(evacuee))}
 								class="card-qr-image size-36 object-contain sm:size-36 md:size-40"
 							/>
 						{:else}
@@ -162,8 +162,7 @@
 							ZONE: {zoneName}
 						</span>
 						<p class="card-name text-base leading-tight font-bold text-slate-900 sm:text-xl">
-							{evacuee.first_name}
-							{evacuee.last_name}
+							{formatPersonName(evacuee)}
 						</p>
 						<div class="mt-1 flex flex-wrap items-center gap-1.5">
 							<span

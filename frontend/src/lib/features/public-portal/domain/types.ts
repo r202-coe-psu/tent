@@ -9,6 +9,7 @@ export type PublicShelterItem = Omit<components['schemas']['ShelterItem'], 'site
 };
 export type PublicShelterDetail = Omit<components['schemas']['ShelterDetail'], 'site_kind'> & {
 	site_kind?: PublicSiteKind;
+	code?: string;
 };
 export type PublicShelterListResponse = Omit<
 	components['schemas']['ShelterListResponse'],

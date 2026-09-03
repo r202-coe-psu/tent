@@ -18,24 +18,50 @@
 		PublicHeroMetrics,
 		PublicPageShell
 	} from '$lib/features/public-portal';
-	import { BookingModal } from '$lib/features/public-register';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_HOME_I18N } from '$lib/constants/i18n';
+	import { PUBLIC_HOME_I18N, PUBLIC_HERO_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	let { data }: { data: PageData } = $props();
 
-	let bookingOpen = $state(false);
 	let searchOpen = $state(false);
 
 	const t = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
+	const heroT = $derived(getTranslation(PUBLIC_HERO_I18N, langState.current));
 </script>
 
 <svelte:head>
 	<title>{t.pageTitle}</title>
 </svelte:head>
+
+{#snippet heroActions()}
+	<div class="mt-2 flex flex-wrap items-center gap-3">
+		<a
+			href="/shelters"
+			class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-primary shadow-sm transition-all hover:bg-white/90 active:scale-[0.98]"
+		>
+			<Compass class="h-4 w-4 text-primary" />
+			{heroT.heroSheltersBtn}
+		</a>
+		<button
+			type="button"
+			onclick={() => (searchOpen = true)}
+			class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 text-sm font-bold text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-[0.98]"
+		>
+			<Search class="h-4 w-4 text-white" />
+			{heroT.heroSearchBtn}
+		</button>
+		<a
+			href="/donations"
+			class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 text-sm font-bold text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-[0.98]"
+		>
+			<Package class="h-4 w-4 text-white" />
+			{heroT.heroDonateBtn}
+		</a>
+	</div>
+{/snippet}
 
 <PublicPageShell class="space-y-8">
 	<!-- 1. Urgent Announcements and Others -->
@@ -48,6 +74,8 @@
 	<!-- 2. Hero Section -->
 	<PublicHeroMetrics
 		expectMetrics
+		showSearch={false}
+		actions={heroActions}
 		summary={data.summary}
 		flags={data.flags}
 		lastUpdated={data.lastUpdated}
@@ -69,7 +97,7 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- Victim Registration -->
+			<!-- 1. For Evacuees -->
 			<PublicQuickServiceCard
 				title={t.regTitle}
 				badge={t.regBadge}
@@ -78,10 +106,13 @@
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn onclick={() => (bookingOpen = true)}>{t.regBtn}</PublicActionBtn>
+				<PublicActionBtn href="/shelters">{t.regBtn1}</PublicActionBtn>
+				<PublicActionBtn variant="outline" href="/pre-register">
+					{t.regBtn2}
+				</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- For Donors / Donations -->
+			<!-- 2. For Donors -->
 			<PublicQuickServiceCard
 				title={t.donateTitle}
 				badge={t.donateBadge}
@@ -91,10 +122,10 @@
 				iconClass="bg-primary-muted/50 text-primary"
 			>
 				<PublicActionBtn href="/donations">{t.donateBtn1}</PublicActionBtn>
-				<PublicActionBtn variant="outline" disabled>{t.donateBtn2}</PublicActionBtn>
+				<PublicActionBtn href="/donations/track" variant="outline">{t.donateBtn2}</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- For Volunteers -->
+			<!-- 3. For Volunteers -->
 			<div>
 				<PublicQuickServiceCard
 					title={t.volTitle}
@@ -104,11 +135,11 @@
 					icon={UserPlus}
 					iconClass="bg-chart-2/15 text-chart-2"
 				>
-					<PublicActionBtn disabled>{t.volBtn}</PublicActionBtn>
+					<PublicActionBtn href="/volunteers" variant="outline">{t.volBtn}</PublicActionBtn>
 				</PublicQuickServiceCard>
 			</div>
 
-			<!-- Urgent Person Search -->
+			<!-- 4. For Families & Relatives -->
 			<PublicQuickServiceCard
 				title={t.searchTitle}
 				badge={t.searchBadge}
@@ -289,5 +320,4 @@
 	</div>
 </PublicPageShell>
 
-<BookingModal bind:open={bookingOpen} />
 <FamilySearchModal bind:open={searchOpen} />

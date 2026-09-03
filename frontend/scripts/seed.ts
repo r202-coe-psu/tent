@@ -2,7 +2,8 @@
  * Mock data seed script for the Smart Shelter dev environment.
  *
  * Usage:  pnpm seed  (from frontend/)
- *         pnpm unseed [--confirm]  — remove seed docs (see scripts/unseed.ts)
+ *         pnpm seed:delete-daily-sop  — remove only Daily SOP seed snapshots
+ *         pnpm unseed [--confirm]  — remove all development databases (see scripts/unseed.ts)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
  * ## Factory usage
@@ -43,6 +44,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hashSecurityAnswer } from '$lib/server/security-questions';
 
 import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
 import {
@@ -116,6 +118,12 @@ import {
 	shelterDbName
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
+import {
+	DAILY_SOP_DOCUMENT_TYPE,
+	DAILY_SOP_QUESTIONS,
+	DAILY_SOP_SCHEMA_VERSION,
+	LIFELINE_KEYS
+} from '$lib/features/daily-sop/domain/daily-sop';
 import { assertBulkWriteResults, prefixRangeEnd, type BulkWriteResult } from './t31-seed-support';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -280,8 +288,8 @@ const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
 const SHELTER_CODE_3 = 'SH003';
 
-// Registry-only, like SH003 — no per-shelter database. Exists so the host-house
-// site kind (CR-067) has a fixture in list/filter/public-projection screens.
+// The host-house record remains selectable in the registry and receives its own
+// provisioned shelter database so Daily SOP stays scoped consistently.
 const SHELTER_CODE_4 = 'SH004';
 
 /**
@@ -534,56 +542,155 @@ const ITEM = {
 
 const USER_PREFIX = 'org.couchdb.user:';
 const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
-const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
 
-/** Create sa01 + staff01–staff03 test logins in CouchDB `_users` (idempotent). */
-async function seedUsers(): Promise<void> {
-	const staffNames = ['staff01', 'staff02', 'staff03'] as const;
-	let created = 0;
-	let skipped = 0;
+interface SeedUserConfig {
+	name: string;
+	display_name: string;
+	roles: string[];
+	personnel_type: 'staff' | 'volunteer';
+	organization: string | null;
+	position: string | null;
+	phone: string;
+	email: string | null;
+	shelter_id: string | null;
+	question_id:
+		| 'high_school'
+		| 'birth_province'
+		| 'first_pet'
+		| 'primary_school'
+		| 'favorite_teacher'
+		| 'first_workplace';
+	raw_answer: string;
+}
 
-	const { status: saStatus } = await couchReq(
-		'PUT',
-		`/_users/${USER_PREFIX}${encodeURIComponent('sa01')}`,
-		{
-			name: 'sa01',
-			password: SEED_STAFF_PASSWORD,
-			display_name: 'System Admin',
-			roles: ['system_admin'],
-			type: 'user',
-			shelter_id: null,
-			affiliation_tags: []
-		}
-	);
-	if (saStatus === 201) {
-		created += 1;
-	} else if (saStatus === 409) {
-		skipped += 1;
-	} else {
-		throw new Error(`PUT _users/sa01 failed (HTTP ${saStatus})`);
+const SEED_USERS: SeedUserConfig[] = [
+	{
+		name: 'sa01',
+		display_name: 'ผู้ดูแลระบบสูงสุด (System Admin)',
+		roles: ['system_admin'],
+		personnel_type: 'staff',
+		organization: 'ศูนย์ปฏิบัติการส่วนกลาง (EOC)',
+		position: 'System Administrator',
+		phone: '0800000001',
+		email: 'sa01@smart-shelter.org',
+		shelter_id: null,
+		question_id: 'birth_province',
+		raw_answer: 'กรุงเทพมหานคร'
+	},
+	{
+		name: 'staff01',
+		display_name: 'สมชาย ประจำการ (Staff 01)',
+		roles: ['shelter:SH001', 'registration_staff', 'triage_staff'],
+		personnel_type: 'staff',
+		organization: 'กรมป้องกันและบรรเทาสาธารณภัย',
+		position: 'เจ้าหน้าที่รับลงทะเบียนและคัดกรอง',
+		phone: '0812345601',
+		email: 'staff01@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'high_school',
+		raw_answer: 'กรุงเทพคริสเตียน'
+	},
+	{
+		name: 'staff02',
+		display_name: 'พว. สมหญิง การุณ (Staff 02)',
+		roles: ['shelter:SH001', 'medical_staff'],
+		personnel_type: 'staff',
+		organization: 'โรงพยาบาลศูนย์หาดใหญ่',
+		position: 'พยาบาลวิชาชีพ',
+		phone: '0812345602',
+		email: 'staff02@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'first_pet',
+		raw_answer: 'เจ้าด่าง'
+	},
+	{
+		name: 'staff03',
+		display_name: 'วิชัย มั่นคง (Staff 03)',
+		roles: ['shelter:SH001', 'volunteer_coordinator', 'supply_coordinator', 'kitchen_staff'],
+		personnel_type: 'staff',
+		organization: 'มูลนิธิกระจกเงา',
+		position: 'ผู้ประสานงานจิตอาสาและคลัง',
+		phone: '0812345603',
+		email: 'staff03@smart-shelter.org',
+		shelter_id: SH001_CODE,
+		question_id: 'favorite_teacher',
+		raw_answer: 'ครูสมศรี'
+	},
+	{
+		name: '0891234567',
+		display_name: 'กิตติ จิตอาสา (Volunteer Staff)',
+		roles: ['shelter:SH001', 'registration_staff'],
+		personnel_type: 'volunteer',
+		organization: 'กลุ่มอาสาใจถึงใจ',
+		position: 'อาสาช่วยงานลงทะเบียน',
+		phone: '0891234567',
+		email: 'volunteer01@example.com',
+		shelter_id: SH001_CODE,
+		question_id: 'primary_school',
+		raw_answer: 'อนุบาลวัดป่า'
 	}
+];
 
-	for (const name of staffNames) {
-		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
-			name,
-			password: SEED_STAFF_PASSWORD,
-			display_name: name,
-			roles: [...SEED_STAFF_ROLES],
+/** Create sa01 + staff01–staff03 + volunteer test logins in CouchDB `_users` (idempotent / upsert). */
+async function seedUsers(): Promise<void> {
+	let created = 0;
+	let updated = 0;
+
+	for (const u of SEED_USERS) {
+		const docId = `${USER_PREFIX}${encodeURIComponent(u.name)}`;
+		const existing = await couchReq('GET', `/_users/${docId}`);
+		const existingDoc = existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
+
+		const { answer_hash, salt } = hashSecurityAnswer(u.raw_answer);
+		const security_question = {
+			question_id: u.question_id,
+			answer_hash,
+			salt,
+			set_at: new Date().toISOString()
+		};
+
+		const userDoc: Record<string, unknown> = {
+			...(existingDoc ?? {}),
+			name: u.name,
+			display_name: u.display_name,
+			roles: u.roles,
 			type: 'user',
-			shelter_id: SH001_CODE,
-			affiliation_tags: []
-		});
+			personnel_type: u.personnel_type,
+			organization: u.organization,
+			position: u.position,
+			phone: u.phone,
+			email: u.email,
+			shelter_id: u.shelter_id,
+			active: true,
+			must_change_password: false,
+			security_question,
+			affiliation_tags: (existingDoc?.affiliation_tags as string[]) ?? []
+		};
+
+		if (!existingDoc) {
+			userDoc.password = SEED_STAFF_PASSWORD;
+		}
+
+		const { status } = await couchReq('PUT', `/_users/${docId}`, userDoc);
 		if (status === 201) {
-			created += 1;
+			if (existingDoc) updated += 1;
+			else created += 1;
 		} else if (status === 409) {
-			skipped += 1;
+			// retry with latest rev if conflict
+			const latest = await couchReq('GET', `/_users/${docId}`);
+			if (latest.status === 200) {
+				const latestDoc = latest.data as Record<string, unknown>;
+				userDoc._rev = latestDoc._rev;
+				await couchReq('PUT', `/_users/${docId}`, userDoc);
+				updated += 1;
+			}
 		} else {
-			throw new Error(`PUT _users/${name} failed (HTTP ${status})`);
+			throw new Error(`PUT _users/${u.name} failed (HTTP ${status})`);
 		}
 	}
 
 	console.log(
-		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+		`  ✓ _users: sa01, staff01–03, 0891234567 (${created} created, ${updated} updated with metadata)`
 	);
 
 	await seedPublicWriter();
@@ -2150,6 +2257,91 @@ async function seedDailyCalc(): Promise<void> {
 	}
 }
 
+// ─── seedDailySop ─────────────────────────────────────────────────────────────
+
+type DailySopSeedTarget = {
+	code: string;
+	db: string;
+	assessor: string;
+};
+
+const DAILY_SOP_SEED_TARGETS: readonly DailySopSeedTarget[] = [
+	{ code: SH001_CODE, db: SH001_DB, assessor: 'พนักงานประจำศูนย์ หาดใหญ่' },
+	{
+		code: SHELTER_CODE_2,
+		db: shelterDbName(SHELTER_CODE_2),
+		assessor: 'เจ้าหน้าที่ศูนย์เทศบาลนครหาดใหญ่'
+	},
+	{
+		code: SHELTER_CODE_3,
+		db: shelterDbName(SHELTER_CODE_3),
+		assessor: 'พนักงานประจำศูนย์ บ้านพรุ'
+	},
+	{
+		code: SHELTER_CODE_4,
+		db: shelterDbName(SHELTER_CODE_4),
+		assessor: 'ผู้ประสานงานบ้านพี่เลี้ยง คอหงส์'
+	}
+];
+
+function dailySopSeedSnapshot(
+	target: DailySopSeedTarget,
+	date: string,
+	time: string,
+	progress: number,
+	statuses: Partial<Record<number, 'No' | 'Pending'>> = {}
+) {
+	const passPercent = Math.round(
+		(DAILY_SOP_QUESTIONS.filter((_, index) => statuses[index] === undefined).length /
+			DAILY_SOP_QUESTIONS.length) *
+			100
+	);
+	const checkedAt = `${date}T${time}+07:00`;
+	return makeDoc(
+		DAILY_SOP_DOCUMENT_TYPE,
+		DAILY_SOP_SCHEMA_VERSION,
+		{
+			assessment_date: date,
+			assessed_at: checkedAt,
+			assessor_name: target.assessor,
+			status: 'Completed',
+			progress_percent: progress,
+			pass_percent: passPercent,
+			risk_label: Object.keys(statuses).length === 0 ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง',
+			controls: DAILY_SOP_QUESTIONS.map((question, index) => ({
+				id: question.id,
+				section_id: question.sectionId,
+				question: question.prompt,
+				status: statuses[index] ?? 'Yes',
+				answered: true,
+				checked_by: target.assessor,
+				checked_at: checkedAt
+			})),
+			lifelines: Object.fromEntries(LIFELINE_KEYS.map((key) => [key, 'Operational']))
+		},
+		{ shelterCode: target.code, createdBy: 'seed' },
+		`${target.code}:${date}`
+	);
+}
+
+async function seedDailySop(): Promise<void> {
+	for (const target of DAILY_SOP_SEED_TARGETS) {
+		await ensureDb(target.db);
+		const records = [
+			dailySopSeedSnapshot(target, '2026-06-09', '16:15:00', 85, {
+				15: 'No',
+				16: 'Pending',
+				17: 'Pending',
+				18: 'Pending'
+			}),
+			dailySopSeedSnapshot(target, '2026-06-10', '15:30:00', 100, { 4: 'No', 12: 'Pending' }),
+			dailySopSeedSnapshot(target, '2026-06-11', '15:00:00', 100)
+		];
+		await bulkDocs(target.db, records, { allowConflicts: true });
+		console.log(`  ✓ ${target.db}: ${records.length} Daily SOP snapshots seeded`);
+	}
+}
+
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
 
 async function deleteDashboardData(): Promise<void> {
@@ -2219,11 +2411,35 @@ async function deleteDashboardData(): Promise<void> {
 	console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
 }
 
+async function deleteDailySopData(): Promise<void> {
+	for (const target of DAILY_SOP_SEED_TARGETS) {
+		await ensureDb(target.db);
+		const ids = ['2026-06-09', '2026-06-10', '2026-06-11'].map(
+			(date) => `${DAILY_SOP_DOCUMENT_TYPE}:${target.code}:${date}`
+		);
+		const { status, data } = await couchReq('POST', `/${target.db}/_all_docs?include_docs=true`, {
+			keys: ids
+		});
+		if (status !== 200) throw new Error(`Cannot read Daily SOP seed docs (HTTP ${status})`);
+		const rows = (data as { rows?: { doc?: { _id?: string; _rev?: string } }[] }).rows ?? [];
+		const docs = rows
+			.map((row) => row.doc)
+			.filter((doc): doc is { _id: string; _rev: string } => Boolean(doc?._id && doc._rev))
+			.map((doc) => ({ _id: doc._id, _rev: doc._rev, _deleted: true }));
+		if (docs.length > 0) await bulkDocs(target.db, docs, { allowConflicts: false });
+		console.log(`  ✓ ${target.db}: removed ${docs.length} Daily SOP seed snapshots`);
+	}
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
 	if (process.argv.includes('--delete-dashboard')) {
 		await deleteDashboardData();
+		process.exit(0);
+	}
+	if (process.argv.includes('--delete-daily-sop')) {
+		await deleteDailySopData();
 		process.exit(0);
 	}
 
@@ -2244,6 +2460,7 @@ async function main() {
 		await seedShelter2(master);
 		await seedDashboardData(master);
 		await seedDailyCalc();
+		await seedDailySop();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {
 		console.error('\nSeed failed:', e);

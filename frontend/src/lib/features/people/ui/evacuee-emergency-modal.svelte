@@ -3,11 +3,10 @@
 	import { toast } from 'svelte-sonner';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Form from '$lib/components/ui/form/index.js';
 	import { evacueeEmergencyEditFormSchema, type Evacuee } from '$lib/features/people';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import EmergencyContactFields from './forms/emergency-contact-fields.svelte';
 
 	export type EvacueeEmergencyEditData = {
 		emergencyContact:
@@ -48,7 +47,7 @@
 		validators: zod4(evacueeEmergencyEditFormSchema),
 		resetForm: false
 	});
-	const { form: formData, validateForm } = form;
+	const { form: formData, validateForm, errors } = form;
 
 	$effect(() => {
 		if (!show) {
@@ -125,51 +124,18 @@
 				</button>
 			</header>
 
-			<div class="space-y-4 p-5">
-				<Form.Field {form} name="name">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label
-								>ชื่อผู้ติดต่อ {#if hasContact}<span class="text-destructive">*</span
-									>{/if}</Form.Label
-							>
-							<Input {...props} bind:value={name} autocomplete="name" />
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-				<div class="grid gap-3 sm:grid-cols-2">
-					<Form.Field {form} name="phone">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label
-									>เบอร์โทรศัพท์ {#if hasContact}<span class="text-destructive">*</span
-										>{/if}</Form.Label
-								>
-								<Input
-									{...props}
-									bind:value={phone}
-									inputmode="numeric"
-									maxlength={10}
-									autocomplete="tel"
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-					<Form.Field {form} name="relation">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label
-									>ความสัมพันธ์ {#if hasContact}<span class="text-destructive">*</span
-										>{/if}</Form.Label
-								>
-								<Input {...props} bind:value={relation} placeholder="เช่น บิดา มารดา คู่สมรส" />
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
+			<div class="p-5">
+				<EmergencyContactFields
+					bind:name
+					bind:phone
+					bind:relation
+					required={hasContact}
+					errors={{
+						name: $errors.name?.[0],
+						phone: $errors.phone?.[0],
+						relation: $errors.relation?.[0]
+					}}
+				/>
 			</div>
 
 			<footer class="flex justify-end gap-2 border-t border-border px-5 py-4">

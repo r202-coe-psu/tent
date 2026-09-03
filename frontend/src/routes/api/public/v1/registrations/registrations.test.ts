@@ -43,9 +43,20 @@ const OPEN_SHELTER = { code: 'SH001', name: 'ศูนย์ทดสอบ', op
 
 const CONTACT = { first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] };
 
+/** Domicile address of the household head — required since CR-107. */
+const ADDRESS = {
+	address_no: '123/45',
+	village_no: 'หมู่ 4',
+	subdistrict: 'คอหงส์',
+	district: 'หาดใหญ่',
+	province: 'สงขลา',
+	postal_code: '90110'
+};
+
 const VALID_BODY = {
 	shelter_code: 'SH001',
 	phone: '0812345678',
+	address: ADDRESS,
 	members: [CONTACT],
 	pets: [],
 	captchaToken: 'tok'
@@ -88,11 +99,18 @@ describe('POST /api/public/v1/registrations', () => {
 		mockAppEnv.dev = false;
 	});
 
-	it('422 when the contact last name is blank', async () => {
-		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, last_name: '  ' }] }));
+	it('422 when the contact first name is blank', async () => {
+		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, first_name: '  ' }] }));
 		expect(res.status).toBe(422);
 		expect((await res.json()).error).toBe('INVALID_INPUT');
 		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('accepts a blank last name for mononym evacuees (CR-106 FR-18)', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, last_name: '  ' }] }));
+		expect(res.status).toBe(201);
+		expect(bulkAsPublicWriter).toHaveBeenCalled();
 	});
 
 	it('422 when the phone is not 10 digits — it is the lookup second factor', async () => {
@@ -192,7 +210,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(8);
+			expect(e.schema_v).toBe(9);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -289,6 +307,15 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(household.pets).toEqual([
 				{ species: 'dog', count: 1, notes: 'โกโก้', has_cage: true }
 			]);
+		});
+
+		it('records assets on the household', async () => {
+			await POST(event({ ...FAMILY, asset_description: 'สมุดบัญชีธนาคาร' }));
+			const { household } = writtenDocs();
+			expect(household.assets).toEqual({
+				description: 'สมุดบัญชีธนาคาร',
+				image_url: null
+			});
 		});
 
 		// `species` is a shelter-configured `pet_types` code (master data), not a

@@ -24,10 +24,64 @@ import {
 export const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other']);
 export type CardType = z.infer<typeof cardTypeSchema>;
 
-export const personIdSchema = z.object({
-	cardType: cardTypeSchema.default('national_id'),
-	number: z.string().trim().optional()
-});
+/**
+ * Max length for `person_id.number` by card type (UI `maxlength` + Zod).
+ * Matches household pre-register forms: Thai national ID 13 digits, passport 9 chars;
+ * pink_card / other have no fixed max.
+ */
+export const CARD_NUMBER_MAX_LENGTH: Readonly<Record<CardType, number | undefined>> = {
+	national_id: 13,
+	passport: 9,
+	pink_card: undefined,
+	other: undefined
+};
+
+export function cardNumberMaxLength(cardType: CardType): number | undefined {
+	return CARD_NUMBER_MAX_LENGTH[cardType];
+}
+
+/** Length used for max checks: digits-only for national_id, raw otherwise. */
+export function cardNumberEffectiveLength(cardType: CardType, number: string): number {
+	return cardType === 'national_id' ? number.replace(/\D/g, '').length : number.length;
+}
+
+/** Normalize + clamp a card number for the selected type (digits-only for national_id). */
+export function clampCardNumber(cardType: CardType, value: string): string {
+	const normalized = cardType === 'national_id' ? value.replace(/\D/g, '') : value;
+	const max = cardNumberMaxLength(cardType);
+	return max != null ? normalized.slice(0, max) : normalized;
+}
+
+function refineCardNumberMax(
+	cardType: CardType,
+	number: string | undefined,
+	ctx: z.RefinementCtx,
+	path: (string | number)[]
+) {
+	if (!number) return;
+	const max = cardNumberMaxLength(cardType);
+	if (max == null) return;
+	if (cardNumberEffectiveLength(cardType, number) <= max) return;
+	ctx.addIssue({
+		code: 'custom',
+		path,
+		message:
+			cardType === 'national_id'
+				? 'เลขประจำตัวประชาชนต้องมี 13 หลัก'
+				: cardType === 'passport'
+					? 'เลขที่พาสปอร์ตต้องไม่เกิน 9 ตัวอักษร'
+					: `เลขที่บัตรต้องไม่เกิน ${max} ตัวอักษร`
+	});
+}
+
+export const personIdSchema = z
+	.object({
+		cardType: cardTypeSchema.default('national_id'),
+		number: z.string().trim().optional()
+	})
+	.superRefine((data, ctx) => {
+		refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+	});
 export type PersonId = z.infer<typeof personIdSchema>;
 
 export const genderSchema = z.enum(['male', 'female', 'other']);
@@ -38,6 +92,7 @@ export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
 	'pre_registered',
+	'arriving',
 	'active',
 	'temporary_leave',
 	'transferred',
@@ -49,6 +104,7 @@ export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
+	arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
 	active: 'เช็คอินเข้าพักแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
 	transferred: 'ย้ายศูนย์พักพิงแล้ว',
@@ -115,12 +171,16 @@ export const movementActionSchema = z.enum([
 	'transfer_in',
 	'leave_temporary',
 	'return_from_leave',
-	'mark_deceased'
+	'mark_deceased',
+	'zone_change'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
 export const careTrackSchema = z.enum(['normal', 'fast_track']);
 export type CareTrack = z.infer<typeof careTrackSchema>;
+
+export const triageLevelSchema = z.enum(['green', 'yellow', 'red']);
+export type TriageLevel = z.infer<typeof triageLevelSchema>;
 
 export const bloodGroupSchema = z.enum(['A', 'B', 'AB', 'O', 'unknown']);
 export type BloodGroup = z.infer<typeof bloodGroupSchema>;
@@ -278,13 +338,14 @@ export function checkEvacueeHouseholdConflict(
 	const hasOtherMembers = evacuees.some(
 		(member) => member.household_id === currentHousehold._id && member._id !== evacuee._id
 	);
-	return hasOtherMembers
-		? {
-				conflicted: true,
-				householdId: currentHousehold._id,
-				label: currentHousehold.label
-			}
-		: { conflicted: false };
+	// CR-106: non-head may leave while others remain; head must transfer first (resolveHouseholdLeave).
+	if (!hasOtherMembers) return { conflicted: false };
+	if (currentHousehold.head_evacuee_id !== evacuee._id) return { conflicted: false };
+	return {
+		conflicted: true,
+		householdId: currentHousehold._id,
+		label: currentHousehold.label
+	};
 }
 
 export function assertEvacueeHouseholdAssignment(
@@ -306,7 +367,7 @@ export function assertEvacueeHouseholdAssignment(
 	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);
 	if (conflict.conflicted) {
 		throw new Error(
-			`${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+			`${formatPersonName(evacuee)} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 		);
 	}
 }
@@ -368,6 +429,13 @@ export interface Screening extends BaseDoc {
 	needs_referral: boolean;
 	notes?: string;
 	screened_at: Timestamp;
+	triage_level?: TriageLevel | null;
+	vital_signs?: {
+		blood_pressure_sys?: number | null;
+		blood_pressure_dia?: number | null;
+		heart_rate?: number | null;
+		spo2_percent?: number | null;
+	};
 }
 
 export type PeopleDoc = Evacuee | Medical | Household | Movement | Screening;
@@ -386,9 +454,70 @@ export function minBirthYearBE(): number {
 	return currentBEYear() - MAX_AGE_YEARS;
 }
 
+/** Required emergency contact — household pre-register (and when any field is filled). */
+export const emergencyContactRequiredSchema = z.object(
+	{
+		name: z
+			.string({ error: 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน' })
+			.trim()
+			.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
+		phone: z
+			.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
+			.trim()
+			.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+		relation: z
+			.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
+			.trim()
+			.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
+			.default('contact')
+	},
+	{ error: 'กรุณากรอกข้อมูลผู้ติดต่อฉุกเฉิน' }
+);
+
+/** True when contact is absent or all fields are blank (UI shell / omit on save). */
+export function isBlankEmergencyContact(value: unknown): boolean {
+	if (value == null || typeof value !== 'object') return true;
+	const c = value as { name?: unknown; phone?: unknown; relation?: unknown };
+	const name = typeof c.name === 'string' ? c.name.trim() : '';
+	const phone = typeof c.phone === 'string' ? c.phone.trim() : '';
+	const relation = typeof c.relation === 'string' ? c.relation.trim() : '';
+	return !name && !phone && !relation;
+}
+
+/**
+ * Optional emergency contact: blank/missing → undefined; partial fill still validates
+ * field-by-field via {@link emergencyContactRequiredSchema}.
+ *
+ * Prefer `.optional().transform()` over `z.preprocess` so Superforms / `z.input`
+ * keep `.name` / `.phone` / `.relation` (preprocess collapses input to `{}`).
+ */
+export const emergencyContactOptionalSchema = z
+	.object({
+		name: z.string().trim().default(''),
+		phone: z.string().trim().default(''),
+		relation: z.string().trim().default('')
+	})
+	.optional()
+	.transform((val, ctx) => {
+		if (val === undefined || isBlankEmergencyContact(val)) return undefined;
+		const parsed = emergencyContactRequiredSchema.safeParse(val);
+		if (!parsed.success) {
+			for (const issue of parsed.error.issues) {
+				ctx.addIssue({
+					code: 'custom',
+					message: issue.message,
+					path: issue.path
+				});
+			}
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
+
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
-	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+	last_name: z.string().trim().default(''),
 	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
@@ -414,26 +543,19 @@ export const evacueeInputSchema = z.object({
 	medical_note: z.string().trim().optional(),
 	track: careTrackSchema.optional(),
 	special_needs: z.array(z.string().trim().min(1)).default([]),
-	emergency_contact: z
-		.object({
-			name: z.string().trim().min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
-			relation: z
-				.string()
-				.trim()
-				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
-				.default('contact')
-		})
-		.optional(),
+	// Optional on Station 1 / kiosk / import — blank UI shell strips to undefined.
+	emergency_contact: emergencyContactOptionalSchema,
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
+	status: stayStatusSchema.optional().default('pre_registered'),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
+
+/** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
+export const station1EvacueeInputSchema = evacueeInputSchema;
+export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 
 /** Required identity/contact fields used by the household pre-registration wizard. */
 export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
@@ -449,30 +571,16 @@ export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
 				.trim()
 				.min(1, 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร')
 		})
+		.superRefine((data, ctx) => {
+			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+		})
 		.default({ cardType: 'national_id', number: '' }),
 	religion: z
 		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
 			error: 'กรุณาเลือกศาสนา'
 		})
 		.default('buddhist'),
-	emergency_contact: z.object(
-		{
-			name: z
-				.string({ error: 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน' })
-				.trim()
-				.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
-			phone: z
-				.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
-				.trim()
-				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
-			relation: z
-				.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
-				.trim()
-				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
-				.default('contact')
-		},
-		{ error: 'กรุณากรอกข้อมูลผู้ติดต่อฉุกเฉิน' }
-	)
+	emergency_contact: emergencyContactRequiredSchema
 });
 
 export const medicalInputSchema = z.object({
@@ -585,7 +693,8 @@ const digitsOnly = (value: string) => value.replace(/\D/g, '');
 export const evacueePersonalEditFormSchema = z
 	.object({
 		firstName: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
-		lastName: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+		// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+		lastName: z.string().trim().default(''),
 		nickname: z.string().trim(),
 		birthYear: z.string().trim(),
 		age: z.string().trim(),
@@ -616,6 +725,8 @@ export const evacueePersonalEditFormSchema = z
 				path: ['cardNumber'],
 				message: 'เลขประจำตัวประชาชนต้องมี 13 หลัก'
 			});
+		} else {
+			refineCardNumberMax(data.cardType, data.cardNumber, ctx, ['cardNumber']);
 		}
 
 		const parsedAge = data.age.trim() !== '' ? Number.parseInt(data.age, 10) : undefined;
@@ -768,6 +879,13 @@ export const movementInputSchema = z.object({
 });
 export type MovementInput = z.input<typeof movementInputSchema>;
 
+export const vitalSignsInputSchema = z.object({
+	blood_pressure_sys: z.coerce.number().nullable().optional(),
+	blood_pressure_dia: z.coerce.number().nullable().optional(),
+	heart_rate: z.coerce.number().nullable().optional(),
+	spo2_percent: z.coerce.number().nullable().optional()
+});
+
 export const screeningInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	symptoms: z.array(z.string().trim().min(1)).default([]),
@@ -775,7 +893,13 @@ export const screeningInputSchema = z.object({
 	track: careTrackSchema,
 	needs_referral: z.boolean().default(false),
 	notes: z.string().trim().optional(),
-	screened_at: z.string().optional()
+	screened_at: z.string().optional(),
+	triage_level: triageLevelSchema.nullable().optional(),
+	blood_pressure_sys: z.coerce.number().nullable().optional(),
+	blood_pressure_dia: z.coerce.number().nullable().optional(),
+	heart_rate: z.coerce.number().nullable().optional(),
+	spo2_percent: z.coerce.number().nullable().optional(),
+	vital_signs: vitalSignsInputSchema.optional()
 });
 export type ScreeningInput = z.input<typeof screeningInputSchema>;
 
@@ -785,7 +909,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		8, // schema_v 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		9, // schema_v 9: adds arriving stay status (CR-106); 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -802,7 +926,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(d.photo ? { photo: d.photo } : {}),
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
-			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			current_stay: { status: d.status, zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -947,9 +1071,24 @@ export function createMovement(input: MovementInput, ctx: AuthorContext): Moveme
 
 export function createScreening(input: ScreeningInput, ctx: AuthorContext): Screening {
 	const d = screeningInputSchema.parse(input);
+	const hasVitals =
+		d.blood_pressure_sys !== undefined ||
+		d.blood_pressure_dia !== undefined ||
+		d.heart_rate !== undefined ||
+		d.spo2_percent !== undefined ||
+		d.vital_signs !== undefined;
+	const vital_signs = hasVitals
+		? {
+				blood_pressure_sys: d.blood_pressure_sys ?? d.vital_signs?.blood_pressure_sys ?? null,
+				blood_pressure_dia: d.blood_pressure_dia ?? d.vital_signs?.blood_pressure_dia ?? null,
+				heart_rate: d.heart_rate ?? d.vital_signs?.heart_rate ?? null,
+				spo2_percent: d.spo2_percent ?? d.vital_signs?.spo2_percent ?? null
+			}
+		: undefined;
+
 	return makeDoc(
 		'screening',
-		1,
+		2,
 		{
 			evacuee_id: d.evacuee_id,
 			symptoms: d.symptoms,
@@ -957,7 +1096,9 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 			track: d.track,
 			needs_referral: d.needs_referral,
 			...(d.notes ? { notes: d.notes } : {}),
-			screened_at: d.screened_at ?? now()
+			screened_at: d.screened_at ?? now(),
+			triage_level: d.triage_level ?? null,
+			...(vital_signs ? { vital_signs } : {})
 		},
 		ctx
 	);
@@ -968,6 +1109,7 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 /** Stay statuses that may receive a scan/check-in (`check_in`) action. */
 export const CHECK_IN_ELIGIBLE_STATUSES = [
 	'pre_registered',
+	'arriving',
 	'temporary_leave',
 	'checked_out',
 	'transferred'
@@ -975,6 +1117,17 @@ export const CHECK_IN_ELIGIBLE_STATUSES = [
 
 /** Stay statuses that may receive a scan/check-out (`check_out`) action. */
 export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a `zone_change` (rezone while staying active). */
+export const ZONE_CHANGE_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
+export const TRANSFER_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a `leave_temporary` action — must be checked in first. */
+export const LEAVE_TEMPORARY_ELIGIBLE_STATUSES = [
+	'active'
+] as const satisfies readonly StayStatus[];
 
 export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
@@ -984,6 +1137,24 @@ export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 
 export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canChangeEvacueeZone(evacuee: Evacuee): boolean {
+	return (ZONE_CHANGE_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canTransferOutEvacuee(evacuee: Evacuee): boolean {
+	return (TRANSFER_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canLeaveTemporarily(evacuee: Evacuee): boolean {
+	return (LEAVE_TEMPORARY_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
 	);
 }
@@ -1008,6 +1179,15 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
 	}
+	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
+		throw new Error(`ไม่สามารถเปลี่ยนโซนจากสถานะ ${status} ได้`);
+	}
+	if (action === 'transfer_out' && !canTransferOutEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถย้ายออกจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
+	}
+	if (action === 'leave_temporary' && !canLeaveTemporarily(evacuee)) {
+		throw new Error(`ไม่สามารถลาชั่วคราวจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
+	}
 }
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
@@ -1027,7 +1207,22 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
 	assertMovementAllowed(evacuee, movement.action);
-	const statusByAction: Record<MovementAction, StayStatus> = {
+	if (movement.action === 'zone_change') {
+		const nextZone = movement.zone?.trim() || null;
+		if (!nextZone) {
+			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
+		}
+		return {
+			...evacuee,
+			updated_at: now(),
+			current_stay: {
+				status: evacuee.current_stay.status,
+				zone: nextZone,
+				since: movement.occurred_at
+			}
+		};
+	}
+	const statusByAction: Record<Exclude<MovementAction, 'zone_change'>, StayStatus> = {
 		check_in: 'active',
 		check_out: 'checked_out',
 		transfer_out: 'transferred',
@@ -1047,7 +1242,58 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 	};
 }
 
+/**
+ * Map a manual "set stay status to X" pick (evacuee-status-modal) to the movement
+ * action that actually produces that status — `current_stay` is a snapshot only,
+ * the movement stream is the source of truth (schema.md §1.1). Returns `null` when
+ * the status is unchanged, when `current` isn't a valid source for that target per
+ * the movement guards in `assertMovementAllowed` (e.g. `checked_out` → `temporary_leave`
+ * skips a required check-in), or when no movement action reaches it: `pre_registered`
+ * is only ever an initial state, never a manual return target.
+ */
+export function resolveStatusChangeAction(
+	current: StayStatus,
+	target: StayStatus
+): MovementAction | null {
+	if (current === target) return null;
+	if (current === 'deceased' || current === 'cancelled') return null;
+	switch (target) {
+		case 'active':
+			if (current === 'temporary_leave') return 'return_from_leave';
+			return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'check_in'
+				: null;
+		case 'checked_out':
+			return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'check_out'
+				: null;
+		case 'transferred':
+			return (TRANSFER_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'transfer_out'
+				: null;
+		case 'temporary_leave':
+			return (LEAVE_TEMPORARY_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'leave_temporary'
+				: null;
+		case 'deceased':
+			return 'mark_deceased';
+		default:
+			return null;
+	}
+}
+
 // ---------------------------------------------------------------- display helpers
+
+/** Display name; empty/whitespace last_name (mononym) is omitted — no trailing space. */
+export function formatPersonName(person: {
+	first_name: string;
+	last_name?: string | null;
+}): string {
+	return [person.first_name, person.last_name ?? '']
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.join(' ');
+}
 
 export function maskNationalId(id: string | null | undefined): string {
 	if (!id || id.length < 6) return '—';
@@ -1055,14 +1301,18 @@ export function maskNationalId(id: string | null | undefined): string {
 }
 
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
-export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
+export function matchesEvacueeSearch(
+	evacuee: Evacuee,
+	query: string,
+	options: { isPublicSearch?: boolean } = {}
+): boolean {
 	const q = query.trim().toLowerCase();
 	if (!q) return true;
-	if (evacuee.privacy?.search_excluded) return false;
+	if (options.isPublicSearch && evacuee.privacy?.search_excluded) return false;
 	if (
 		evacuee.first_name.toLowerCase().includes(q) ||
 		evacuee.last_name.toLowerCase().includes(q) ||
-		`${evacuee.first_name} ${evacuee.last_name}`.toLowerCase().includes(q) ||
+		formatPersonName(evacuee).toLowerCase().includes(q) ||
 		(evacuee.nickname?.toLowerCase().includes(q) ?? false)
 	) {
 		return true;

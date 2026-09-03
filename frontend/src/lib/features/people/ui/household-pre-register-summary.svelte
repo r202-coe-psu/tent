@@ -8,12 +8,14 @@
 	import { useSaveImage } from '$lib/features/images';
 	import {
 		maskNationalId,
+		formatPersonName,
 		type Evacuee,
 		type Household,
 		evacueeInputSchema,
 		currentBEYear,
 		minBirthYearBE,
-		MAX_AGE_YEARS
+		MAX_AGE_YEARS,
+		cardNumberMaxLength
 	} from '../domain/people';
 	import { z } from 'zod';
 
@@ -181,7 +183,7 @@
 					});
 				}
 
-				toast.success(`ลงทะเบียนสมาชิก "${f.data.first_name} ${f.data.last_name}" เรียบร้อยแล้ว`);
+				toast.success(`ลงทะเบียนสมาชิก "${formatPersonName(f.data)}" เรียบร้อยแล้ว`);
 
 				// Reset member form
 				memberForm.reset();
@@ -322,7 +324,7 @@
 				<div>
 					<span class="text-xs text-muted-foreground">หัวหน้าครัวเรือน</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
-						{createdHead ? `${createdHead.first_name} ${createdHead.last_name}` : '—'}
+						{createdHead ? formatPersonName(createdHead) : '—'}
 					</p>
 				</div>
 				<div class="col-span-2">
@@ -369,8 +371,7 @@
 							{@const isHead = m._id === createdHousehold.head_evacuee_id}
 							<tr class="border-b transition-colors last:border-0 hover:bg-muted/10">
 								<td class="p-3 font-bold text-slate-900 dark:text-slate-100">
-									{m.first_name}
-									{m.last_name}
+									{formatPersonName(m)}
 									{#if m.nickname}
 										<span class="text-xs font-normal text-muted-foreground">({m.nickname})</span>
 									{/if}
@@ -543,11 +544,7 @@
 									</Form.Label>
 									<Input
 										{...props}
-										maxlength={$memberFormData.person_id.cardType === 'national_id'
-											? 13
-											: $memberFormData.person_id.cardType === 'passport'
-												? 9
-												: undefined}
+										maxlength={cardNumberMaxLength($memberFormData.person_id.cardType)}
 										placeholder={$memberFormData.person_id.cardType === 'national_id'
 											? 'X-XXXX-XXXXX-XX-X'
 											: $memberFormData.person_id.cardType === 'passport'
@@ -578,10 +575,12 @@
 						<Form.Field form={memberForm} name="last_name">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label
-										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
-									>
-									<Input {...props} placeholder="นามสกุล" bind:value={$memberFormData.last_name} />
+									<Form.Label>นามสกุล (Last Name)</Form.Label>
+									<Input
+										{...props}
+										placeholder="เว้นว่างได้ถ้าไม่มีนามสกุล"
+										bind:value={$memberFormData.last_name}
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />

@@ -51,6 +51,11 @@
 			colorClass:
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
 		},
+		arriving: {
+			label: 'รอตรวจ/จัดโซน',
+			colorClass:
+				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+		},
 		active: {
 			label: 'อยู่ในศูนย์',
 			colorClass:
@@ -494,7 +499,7 @@
 										variant="outline"
 										size="sm"
 										onclick={() =>
-											goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${e._id}`))}
+											goto(resolve(`/back-office/evacuee-management/edit/evacuee/${e._id}`))}
 									>
 										<Pencil class="h-3.5 w-3.5" />
 										แก้ไข
