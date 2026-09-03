@@ -5,12 +5,15 @@ import {
 	resetUserPasswordByAdmin,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
-	setupSecurityQuestionAndResetPassword
+	setupSecurityQuestionAndResetPassword,
+	type CouchUserDoc
 } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 
+type FakeUserDoc = CouchUserDoc & { password?: string };
+
 describe('user-service', () => {
-	let fakeUsersDb: Record<string, Record<string, unknown>>;
+	let fakeUsersDb: Record<string, FakeUserDoc>;
 
 	beforeEach(() => {
 		fakeUsersDb = {};
@@ -36,7 +39,7 @@ describe('user-service', () => {
 
 			if (method === 'PUT' && cleanPath.startsWith('/_users/org.couchdb.user:')) {
 				const id = cleanPath.slice('/_users/'.length);
-				const docBody = (body ?? {}) as Record<string, unknown>;
+				const docBody = (body ?? {}) as FakeUserDoc;
 				if (fakeUsersDb[id] && !docBody._rev) {
 					return { status: 409, data: { error: 'conflict', reason: 'Document update conflict.' } };
 				}
@@ -171,6 +174,6 @@ describe('user-service', () => {
 		expect(updated.password).toBe('PermanentPass123!');
 		expect(updated.must_change_password).toBe(false);
 		expect(updated.security_question).toBeDefined();
-		expect(updated.security_question.question_id).toBe('birth_province');
+		expect(updated.security_question?.question_id).toBe('birth_province');
 	});
 });

@@ -8,7 +8,7 @@
 	import { resolve } from '$app/paths';
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SECURITY_QUESTIONS, type SecurityQuestionId } from '$lib/auth/security-questions';
+	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
 	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
 	import { ShieldCheck, Lock, ShieldQuestion } from '@lucide/svelte';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -18,7 +18,7 @@
 	let mustChangePassword = $state(false);
 	let newPassword = $state('');
 	let confirmPassword = $state('');
-	let questionId = $state<SecurityQuestionId>(SECURITY_QUESTIONS[0].id);
+	let questionId = $state(SECURITY_QUESTIONS[0].id);
 	let answer = $state('');
 	let showPassword = $state(false);
 	let loading = $state(false);
