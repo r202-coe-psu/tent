@@ -2,7 +2,8 @@
  * Mock data seed script for the Smart Shelter dev environment.
  *
  * Usage:  pnpm seed  (from frontend/)
- *         pnpm unseed [--confirm]  — remove seed docs (see scripts/unseed.ts)
+ *         pnpm seed:delete-daily-sop  — remove only Daily SOP seed snapshots
+ *         pnpm unseed [--confirm]  — remove all development databases (see scripts/unseed.ts)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
  * ## Factory usage
@@ -117,6 +118,12 @@ import {
 	shelterDbName
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
+import {
+	DAILY_SOP_DOCUMENT_TYPE,
+	DAILY_SOP_QUESTIONS,
+	DAILY_SOP_SCHEMA_VERSION,
+	LIFELINE_KEYS
+} from '$lib/features/daily-sop/domain/daily-sop';
 import { assertBulkWriteResults, prefixRangeEnd, type BulkWriteResult } from './t31-seed-support';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -281,8 +288,8 @@ const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
 const SHELTER_CODE_3 = 'SH003';
 
-// Registry-only, like SH003 — no per-shelter database. Exists so the host-house
-// site kind (CR-067) has a fixture in list/filter/public-projection screens.
+// The host-house record remains selectable in the registry and receives its own
+// provisioned shelter database so Daily SOP stays scoped consistently.
 const SHELTER_CODE_4 = 'SH004';
 
 /**
@@ -632,8 +639,7 @@ async function seedUsers(): Promise<void> {
 	for (const u of SEED_USERS) {
 		const docId = `${USER_PREFIX}${encodeURIComponent(u.name)}`;
 		const existing = await couchReq('GET', `/_users/${docId}`);
-		const existingDoc =
-			existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
+		const existingDoc = existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
 
 		const { answer_hash, salt } = hashSecurityAnswer(u.raw_answer);
 		const security_question = {
@@ -2251,6 +2257,91 @@ async function seedDailyCalc(): Promise<void> {
 	}
 }
 
+// ─── seedDailySop ─────────────────────────────────────────────────────────────
+
+type DailySopSeedTarget = {
+	code: string;
+	db: string;
+	assessor: string;
+};
+
+const DAILY_SOP_SEED_TARGETS: readonly DailySopSeedTarget[] = [
+	{ code: SH001_CODE, db: SH001_DB, assessor: 'พนักงานประจำศูนย์ หาดใหญ่' },
+	{
+		code: SHELTER_CODE_2,
+		db: shelterDbName(SHELTER_CODE_2),
+		assessor: 'เจ้าหน้าที่ศูนย์เทศบาลนครหาดใหญ่'
+	},
+	{
+		code: SHELTER_CODE_3,
+		db: shelterDbName(SHELTER_CODE_3),
+		assessor: 'พนักงานประจำศูนย์ บ้านพรุ'
+	},
+	{
+		code: SHELTER_CODE_4,
+		db: shelterDbName(SHELTER_CODE_4),
+		assessor: 'ผู้ประสานงานบ้านพี่เลี้ยง คอหงส์'
+	}
+];
+
+function dailySopSeedSnapshot(
+	target: DailySopSeedTarget,
+	date: string,
+	time: string,
+	progress: number,
+	statuses: Partial<Record<number, 'No' | 'Pending'>> = {}
+) {
+	const passPercent = Math.round(
+		(DAILY_SOP_QUESTIONS.filter((_, index) => statuses[index] === undefined).length /
+			DAILY_SOP_QUESTIONS.length) *
+			100
+	);
+	const checkedAt = `${date}T${time}+07:00`;
+	return makeDoc(
+		DAILY_SOP_DOCUMENT_TYPE,
+		DAILY_SOP_SCHEMA_VERSION,
+		{
+			assessment_date: date,
+			assessed_at: checkedAt,
+			assessor_name: target.assessor,
+			status: 'Completed',
+			progress_percent: progress,
+			pass_percent: passPercent,
+			risk_label: Object.keys(statuses).length === 0 ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง',
+			controls: DAILY_SOP_QUESTIONS.map((question, index) => ({
+				id: question.id,
+				section_id: question.sectionId,
+				question: question.prompt,
+				status: statuses[index] ?? 'Yes',
+				answered: true,
+				checked_by: target.assessor,
+				checked_at: checkedAt
+			})),
+			lifelines: Object.fromEntries(LIFELINE_KEYS.map((key) => [key, 'Operational']))
+		},
+		{ shelterCode: target.code, createdBy: 'seed' },
+		`${target.code}:${date}`
+	);
+}
+
+async function seedDailySop(): Promise<void> {
+	for (const target of DAILY_SOP_SEED_TARGETS) {
+		await ensureDb(target.db);
+		const records = [
+			dailySopSeedSnapshot(target, '2026-06-09', '16:15:00', 85, {
+				15: 'No',
+				16: 'Pending',
+				17: 'Pending',
+				18: 'Pending'
+			}),
+			dailySopSeedSnapshot(target, '2026-06-10', '15:30:00', 100, { 4: 'No', 12: 'Pending' }),
+			dailySopSeedSnapshot(target, '2026-06-11', '15:00:00', 100)
+		];
+		await bulkDocs(target.db, records, { allowConflicts: true });
+		console.log(`  ✓ ${target.db}: ${records.length} Daily SOP snapshots seeded`);
+	}
+}
+
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
 
 async function deleteDashboardData(): Promise<void> {
@@ -2320,11 +2411,35 @@ async function deleteDashboardData(): Promise<void> {
 	console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
 }
 
+async function deleteDailySopData(): Promise<void> {
+	for (const target of DAILY_SOP_SEED_TARGETS) {
+		await ensureDb(target.db);
+		const ids = ['2026-06-09', '2026-06-10', '2026-06-11'].map(
+			(date) => `${DAILY_SOP_DOCUMENT_TYPE}:${target.code}:${date}`
+		);
+		const { status, data } = await couchReq('POST', `/${target.db}/_all_docs?include_docs=true`, {
+			keys: ids
+		});
+		if (status !== 200) throw new Error(`Cannot read Daily SOP seed docs (HTTP ${status})`);
+		const rows = (data as { rows?: { doc?: { _id?: string; _rev?: string } }[] }).rows ?? [];
+		const docs = rows
+			.map((row) => row.doc)
+			.filter((doc): doc is { _id: string; _rev: string } => Boolean(doc?._id && doc._rev))
+			.map((doc) => ({ _id: doc._id, _rev: doc._rev, _deleted: true }));
+		if (docs.length > 0) await bulkDocs(target.db, docs, { allowConflicts: false });
+		console.log(`  ✓ ${target.db}: removed ${docs.length} Daily SOP seed snapshots`);
+	}
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
 	if (process.argv.includes('--delete-dashboard')) {
 		await deleteDashboardData();
+		process.exit(0);
+	}
+	if (process.argv.includes('--delete-daily-sop')) {
+		await deleteDailySopData();
 		process.exit(0);
 	}
 
@@ -2345,6 +2460,7 @@ async function main() {
 		await seedShelter2(master);
 		await seedDashboardData(master);
 		await seedDailyCalc();
+		await seedDailySop();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {
 		console.error('\nSeed failed:', e);
