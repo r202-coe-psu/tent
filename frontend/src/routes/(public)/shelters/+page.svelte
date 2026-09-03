@@ -19,8 +19,6 @@
 		PublicPageShell,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
-	import { BookingModal } from '$lib/features/public-register';
-
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTERS_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -29,8 +27,6 @@
 
 	let liveUserLat = $state('');
 	let liveUserLng = $state('');
-	let bookingOpen = $state(false);
-	let bookingShelterCode = $state('');
 
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 
@@ -81,8 +77,10 @@
 	});
 
 	function openBooking(shelterCode: string) {
-		bookingShelterCode = shelterCode;
-		bookingOpen = true;
+		const target = shelterCode
+			? `${resolve('/pre-register')}?shelter=${encodeURIComponent(shelterCode)}`
+			: resolve('/pre-register');
+		goto(target as `/${string}`);
 	}
 
 	/** Map pin / GPS origin → sync filter panel + reload list with radius. */
@@ -224,8 +222,6 @@
 		</div>
 	</div>
 </PublicPageShell>
-
-<BookingModal bind:open={bookingOpen} shelterCode={bookingShelterCode} />
 
 <style>
 	/* Custom scrollbar for the list */

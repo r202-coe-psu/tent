@@ -18,7 +18,6 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_NAVBAR_I18N, SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { BookingModal } from '$lib/features/public-register';
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -49,8 +48,6 @@
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
-	// Booking has no route of its own — the navbar opens the dialog in place.
-	let bookingOpen = $state(false);
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
@@ -178,6 +175,18 @@
 			>
 				<Search class="h-4 w-4" />
 				{t.search}
+			</a>
+
+			<a
+				href={resolve('/pre-register')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/pre-register'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
+			>
+				<ClipboardCheck class="h-4 w-4" />
+				ลงทะเบียนล่วงหน้า
 			</a>
 
 			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
@@ -315,17 +324,18 @@
 					{t.search}
 				</a>
 
-				<button
-					type="button"
-					onclick={() => {
-						mobileMenuOpen = false;
-						bookingOpen = true;
-					}}
-					class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+				<a
+					href={resolve('/pre-register')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/pre-register'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
 				>
 					<ClipboardCheck class="h-5 w-5" />
-					จองเข้าศูนย์ล่วงหน้า
-				</button>
+					ลงทะเบียนล่วงหน้า
+				</a>
 
 				<a
 					href={resolve('/donations')}
@@ -365,5 +375,3 @@
 		</div>
 	{/if}
 </header>
-
-<BookingModal bind:open={bookingOpen} />

@@ -1,7 +1,7 @@
 ---
 id: CR-106
 title: Decoupled Registration, Medical Screening, and Zoning Flow with Shelter Toggle and Shared Form Architecture
-status: approved
+status: done
 layer: stable + volatile
 created: 2026-09-02
 updated: 2026-09-03
