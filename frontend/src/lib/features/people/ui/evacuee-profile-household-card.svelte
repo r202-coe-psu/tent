@@ -72,7 +72,7 @@
 						{#each familyMembers as m (m._id)}
 							<button
 								onclick={() =>
-									goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${m._id}`))}
+									goto(resolve(`/back-office/evacuee-management/edit/evacuee/${m._id}`))}
 								class="cursor-pointer rounded border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
 							>
 								{m.first_name}

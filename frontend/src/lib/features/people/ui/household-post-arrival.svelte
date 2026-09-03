@@ -152,9 +152,7 @@
 			}
 		}
 		goto(
-			resolve(
-				`/back-office/evacuee-management/edit/-evacuee/${id}?from=/back-office/households/new`
-			)
+			resolve(`/back-office/evacuee-management/edit/evacuee/${id}?from=/back-office/households/new`)
 		);
 	}
 
