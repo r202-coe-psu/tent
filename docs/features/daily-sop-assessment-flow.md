@@ -1,9 +1,9 @@
 ---
 title: Feature Flow — Daily SOP Assessment
-status: proposed
+status: approved
 created: 2026-08-31
-updated: 2026-09-01
-track: CR-100
+updated: 2026-09-03
+track: CR-106 (renumbered from CR-100)
 ---
 
 # Daily SOP Assessment Workflow
@@ -34,8 +34,8 @@ track: CR-100
 และ creation metadata เดิม การ seed ใช้วัน 9–11 มิถุนายน 2569 ตาม Design และลบเฉพาะ IDs
 ของ Daily SOP ที่ seed ไว้ โดยวันที่ 9–10 มีผลผสม Pass/Fail/Pending และวันที่ 11 เป็น all-pass
 
-Document ทั้งหมดใช้ `schema_v: 1` เดียวกัน เนื่องจาก CR-100 ยังเป็น `proposed` และ schema นี้ยังไม่
-release; control ทุกข้อจึงเก็บ `answered` และ metadata ผู้ประเมินรายข้อตั้งแต่การเขียนครั้งแรก.
+Document ทั้งหมดใช้ `schema_v: 1` เดียวกันตามข้อกำหนด CR-106 (อนุมัติเมื่อ 2026-09-03);
+control ทุกข้อจึงเก็บ `answered` และ metadata ผู้ประเมินรายข้อตั้งแต่การเขียนครั้งแรก.
 
 ## Explicit boundaries
 

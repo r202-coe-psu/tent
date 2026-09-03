@@ -639,8 +639,7 @@ async function seedUsers(): Promise<void> {
 	for (const u of SEED_USERS) {
 		const docId = `${USER_PREFIX}${encodeURIComponent(u.name)}`;
 		const existing = await couchReq('GET', `/_users/${docId}`);
-		const existingDoc =
-			existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
+		const existingDoc = existing.status === 200 ? (existing.data as Record<string, unknown>) : null;
 
 		const { answer_hash, salt } = hashSecurityAnswer(u.raw_answer);
 		const security_question = {
