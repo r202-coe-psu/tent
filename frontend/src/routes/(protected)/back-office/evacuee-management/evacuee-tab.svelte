@@ -499,7 +499,7 @@
 										variant="outline"
 										size="sm"
 										onclick={() =>
-											goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${e._id}`))}
+											goto(resolve(`/back-office/evacuee-management/edit/evacuee/${e._id}`))}
 									>
 										<Pencil class="h-3.5 w-3.5" />
 										แก้ไข

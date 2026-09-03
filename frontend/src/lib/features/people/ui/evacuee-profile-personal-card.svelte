@@ -1,7 +1,12 @@
 <script lang="ts">
 	import User from '@lucide/svelte/icons/user';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import { formatPersonName, maskNationalId, type Evacuee } from '$lib/features/people';
+	import {
+		evacueeAgeYears,
+		formatPersonName,
+		maskNationalId,
+		type Evacuee
+	} from '$lib/features/people';
 	import { COUNTRIES } from '$lib/utils/country';
 
 	let {
@@ -16,6 +21,8 @@
 		pink_card: 'บัตรชมพู',
 		other: 'เอกสารอื่นๆ'
 	};
+
+	const ageYears = $derived(evacueeAgeYears(evacuee));
 
 	function countryLabel(value: string): string {
 		return COUNTRIES.find((country) => country.value === value)?.label ?? value;
@@ -74,11 +81,7 @@
 		<div>
 			<span class="block text-xs font-medium text-muted-foreground">อายุ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{evacuee.birth_year
-					? `${new Date().getFullYear() + 543 - evacuee.birth_year} ปี`
-					: evacuee.age !== undefined
-						? `${evacuee.age} ปี`
-						: 'ไม่ระบุ'}
+				{ageYears !== null ? `${ageYears} ปี` : 'ไม่ระบุ'}
 			</span>
 		</div>
 		<div>

@@ -32,7 +32,8 @@ import {
 	canCancelEvacueePreRegistration,
 	type Medical,
 	type MedicalInput,
-	type Movement
+	type Movement,
+	type MovementAction
 } from '../domain/people';
 import type {
 	EvacueeFilters,
@@ -584,6 +585,25 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertMovementAllowed(evacuee, 'zone_change');
 		const movement = createMovement(
 			{ evacuee_id: evacuee._id, action: 'zone_change', zone: nextZone },
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
+
+	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
+	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	async recordMovement(
+		evacuee: Evacuee,
+		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		ctx: AuthorContext
+	): Promise<Evacuee> {
+		assertMovementAllowed(evacuee, action);
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action, zone: evacuee.current_stay.zone },
 			ctx
 		);
 		await this.repo.put(movement);

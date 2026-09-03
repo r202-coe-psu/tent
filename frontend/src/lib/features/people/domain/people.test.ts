@@ -14,6 +14,8 @@ import {
 	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	resolveStatusChangeAction,
+	matchesEvacueeSearch,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -686,6 +688,48 @@ describe('movement → current_stay', () => {
 		expect(canCheckInEvacuee(active)).toBe(false);
 		expect(canCheckOutEvacuee(active)).toBe(true);
 	});
+
+	it('rejects transfer_out / leave_temporary unless status is active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(() => assertMovementAllowed(e, 'transfer_out')).toThrow(/ย้ายออก/);
+		expect(() => assertMovementAllowed(e, 'leave_temporary')).toThrow(/ลาชั่วคราว/);
+
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(() => assertMovementAllowed(active, 'transfer_out')).not.toThrow();
+		expect(() => assertMovementAllowed(active, 'leave_temporary')).not.toThrow();
+	});
+});
+
+describe('resolveStatusChangeAction', () => {
+	it('returns null when the status is unchanged', () => {
+		expect(resolveStatusChangeAction('active', 'active')).toBeNull();
+	});
+
+	it('returns null for pre_registered → checked_out (must check in first)', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'checked_out')).toBeNull();
+	});
+
+	it('returns null for checked_out → temporary_leave / transferred (must check in first)', () => {
+		expect(resolveStatusChangeAction('checked_out', 'temporary_leave')).toBeNull();
+		expect(resolveStatusChangeAction('checked_out', 'transferred')).toBeNull();
+	});
+
+	it('returns null from terminal statuses (deceased, cancelled)', () => {
+		expect(resolveStatusChangeAction('deceased', 'active')).toBeNull();
+		expect(resolveStatusChangeAction('cancelled', 'active')).toBeNull();
+	});
+
+	it('resolves valid transitions to their movement action', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'active')).toBe('check_in');
+		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('return_from_leave');
+		expect(resolveStatusChangeAction('active', 'checked_out')).toBe('check_out');
+		expect(resolveStatusChangeAction('active', 'transferred')).toBe('transfer_out');
+		expect(resolveStatusChangeAction('active', 'temporary_leave')).toBe('leave_temporary');
+		expect(resolveStatusChangeAction('active', 'deceased')).toBe('mark_deceased');
+	});
 });
 
 describe('triageLevelSchema and screeningInputSchema', () => {
@@ -1024,5 +1068,44 @@ describe('assertCheckoutDestination', () => {
 		expect(() =>
 			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
 		).not.toThrow();
+	});
+});
+
+describe('matchesEvacueeSearch', () => {
+	const evacuee = createEvacuee(
+		{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
+		ctx
+	);
+
+	it('returns true for an empty/blank query', () => {
+		expect(matchesEvacueeSearch(evacuee, '')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '   ')).toBe(true);
+	});
+
+	it('matches by first name, last name, full name, and phone digits', () => {
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '0812345678')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ไม่มีตัวตน')).toBe(false);
+	});
+
+	it('defaults to including search_excluded evacuees (internal staff search)', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: false })).toBe(true);
+	});
+
+	it('excludes search_excluded evacuees only when isPublicSearch is true', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: true })).toBe(false);
+
+		const included = { ...evacuee, privacy: { search_excluded: false } };
+		expect(matchesEvacueeSearch(included, 'สมชาย', { isPublicSearch: true })).toBe(true);
+	});
+
+	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
 	});
 });

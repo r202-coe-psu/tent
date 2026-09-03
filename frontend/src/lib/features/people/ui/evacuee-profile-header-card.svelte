@@ -172,8 +172,7 @@
 
 			<button
 				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
-				onclick={() =>
-					goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${evacuee._id}`))}
+				onclick={() => goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
 			>
 				<ExternalLink class="size-4 opacity-75" />
 				<span>ดูข้อมูลเต็ม / แก้ไข</span>

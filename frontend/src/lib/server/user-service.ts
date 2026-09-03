@@ -54,6 +54,13 @@ export interface UserSummary {
 	affiliation_tags?: string[];
 }
 
+export async function getCurrentUserProfile(
+	name: string
+): Promise<Pick<UserSummary, 'name' | 'display_name'>> {
+	const user = toSummary(await readUserDoc(name, 'read current user'));
+	return { name: user.name, display_name: user.display_name };
+}
+
 export interface CouchUserDoc {
 	_id: string;
 	_rev?: string;

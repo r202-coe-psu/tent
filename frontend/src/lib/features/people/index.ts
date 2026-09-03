@@ -81,6 +81,7 @@ export {
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	applyMovementToStay,
+	resolveStatusChangeAction,
 	maskNationalId,
 	formatPersonName,
 	matchesEvacueeSearch,
@@ -152,6 +153,7 @@ export {
 	useCheckInEvacuee,
 	useCheckOutEvacuee,
 	useChangeEvacueeZone,
+	useRecordMovement,
 	lookupEvacueeByScanCode,
 	useHouseholds,
 	useHousehold,
@@ -191,6 +193,8 @@ export {
 	buildScreeningDeepLink
 } from './ui/evacuee-handover-slip-modal.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
+export { default as EvacueeSearchEditPage } from './ui/evacuee-search-edit-page.svelte';
+export { default as EvacueeSearchResultsPage } from './ui/evacuee-search-results-page.svelte';
 export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
 export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';

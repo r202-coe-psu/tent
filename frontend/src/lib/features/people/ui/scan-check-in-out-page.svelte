@@ -537,7 +537,12 @@
 							>
 								<button
 									type="button"
-									onclick={() => goto(resolve(`/onsite/people/evacuee-profile-view/${found._id}`))}
+									onclick={() =>
+										goto(
+											resolve(
+												`/onsite/people/evacuee-profile-view/${found._id}?from=${encodeURIComponent(resolve('/onsite/scan-check-in-out'))}`
+											)
+										)}
 									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-2xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
 								>
 									โปรไฟล์
