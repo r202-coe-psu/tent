@@ -395,11 +395,11 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			expect(persisted).toMatchObject({ status: 'approved' });
 		});
 
-		it('aggregates duplicate request rows by item identity before activating batch', async () => {
+		it('aggregates legacy duplicate request rows by item identity before activating batch', async () => {
 			const inbound = await seedInboundLot('item:rice', 50);
 			const request = await repo.createRequest(
 				{
-					purpose: 'Duplicate rice rows',
+					purpose: 'Legacy duplicate rice rows',
 					active_headcount_snapshot: '50',
 					buffer_percent: 10,
 					items: [
@@ -409,18 +409,30 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 							unit: 'kg',
 							distribution_type_snapshot: 'one_time',
 							target_qty_snapshot: '30'
-						},
-						{
-							item_id: 'item:rice',
-							requested_qty: '20',
-							unit: 'kg',
-							distribution_type_snapshot: 'one_time',
-							target_qty_snapshot: '20'
 						}
 					]
 				},
 				adminCtx
 			);
+
+			const legacyDoc = store.get(request._id);
+			if (!legacyDoc) throw new Error('Legacy request fixture was not persisted');
+			legacyDoc.items = [
+				{
+					item_id: 'item:rice',
+					requested_qty: '30',
+					unit: 'kg',
+					distribution_type_snapshot: 'one_time',
+					target_qty_snapshot: '30'
+				},
+				{
+					item_id: 'item:rice',
+					requested_qty: '20',
+					unit: 'kg',
+					distribution_type_snapshot: 'one_time',
+					target_qty_snapshot: '20'
+				}
+			];
 
 			const batch = await repo.approveRequest(
 				request._id,

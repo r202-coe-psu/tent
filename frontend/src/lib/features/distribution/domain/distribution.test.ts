@@ -11,6 +11,7 @@ import {
 	createDistributionIssue,
 	createDistributionRequest,
 	createStockLotReservation,
+	distributionRequestDocSchema,
 	distributionIssueInputSchema,
 	distributionRequestInputSchema
 } from './distribution';
@@ -46,7 +47,7 @@ describe('distribution request contract', () => {
 		expect(request.items[0].requested_qty).toBe('10');
 	});
 
-	it('allows duplicate request item rows when metadata is compatible', () => {
+	it('rejects duplicate item IDs in new input while retaining legacy document readability', () => {
 		const result = distributionRequestInputSchema.safeParse({
 			purpose: 'แจกข้าวสารแบ่งรอบ',
 			active_headcount_snapshot: 100,
@@ -55,7 +56,29 @@ describe('distribution request contract', () => {
 				{ ...requestItem, item_id: 'item:rice', requested_qty: 20, unit: 'kg' }
 			]
 		});
-		expect(result.success).toBe(true);
+		expect(result.success).toBe(false);
+
+		expect(
+			distributionRequestDocSchema.safeParse({
+				_id: 'distribution_request:LEGACY',
+				type: 'distribution_request',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-08-30T00:00:00.000Z',
+				updated_at: '2026-08-30T00:00:00.000Z',
+				created_by: 'legacy-user',
+				status: 'pending',
+				requested_by: 'legacy-user',
+				requested_at: '2026-08-30T00:00:00.000Z',
+				purpose: 'Legacy duplicate rows',
+				active_headcount_snapshot: '100',
+				buffer_percent: 10,
+				items: [
+					{ ...requestItem, item_id: 'item:rice', requested_qty: '30', unit: 'kg' },
+					{ ...requestItem, item_id: 'item:rice', requested_qty: '20', unit: 'kg' }
+				]
+			}).success
+		).toBe(true);
 	});
 
 	it('rejects duplicate request item rows with conflicting unit', () => {

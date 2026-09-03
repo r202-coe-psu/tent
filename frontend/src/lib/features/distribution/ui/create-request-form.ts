@@ -34,6 +34,19 @@ export interface CreateRequestFormState {
 	items: CreateRequestFormItem[];
 }
 
+export function isItemSelectedElsewhere(
+	items: readonly CreateRequestFormItem[],
+	currentRowIndex: number,
+	candidateItemId: string
+): boolean {
+	const currentItemId = items[currentRowIndex]?.itemId;
+	return (
+		candidateItemId !== '' &&
+		candidateItemId !== currentItemId &&
+		items.some((item, index) => index !== currentRowIndex && item.itemId === candidateItemId)
+	);
+}
+
 export interface NfiTemplatePreset {
 	id: string;
 	title: string;
@@ -156,6 +169,7 @@ export function validateCreateRequestForm(
 	);
 
 	const validatedItems: DistributionRequestInput['items'] = [];
+	const seenItemIds = new Set<string>();
 
 	state.items.forEach((item, index) => {
 		if (!item.itemId) {
@@ -167,6 +181,13 @@ export function validateCreateRequestForm(
 		if (!master) {
 			errors[`item_${index}_id`] = 'ไม่พบข้อมูลสิ่งของใน Catalog';
 			return;
+		}
+
+		const isDuplicate = seenItemIds.has(item.itemId);
+		if (isDuplicate) {
+			errors[`item_${index}_id`] = 'ไม่สามารถเลือกสิ่งของซ้ำกันในรายการเดียวกันได้';
+		} else {
+			seenItemIds.add(item.itemId);
 		}
 
 		if (!item.requestedQty || item.requestedQty.trim() === '') {
@@ -184,6 +205,8 @@ export function validateCreateRequestForm(
 			const unit = itemMasterUnit(master);
 			const distributionTypeSnapshot = catalogDistributionTypeToSnapshot(master.distribution_type);
 			const normalizedQty = persistQty(parsed);
+
+			if (isDuplicate) return;
 
 			validatedItems.push({
 				item_id: master._id,

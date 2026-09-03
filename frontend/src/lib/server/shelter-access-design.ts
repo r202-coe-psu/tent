@@ -551,9 +551,14 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'distribution_request') {
     if (Array.isArray(newDoc.items)) {
       var itemMetaMap = {};
+      var requestItemIds = {};
       for (var i = 0; i < newDoc.items.length; i++) {
         var it = newDoc.items[i];
         if (it && it.item_id) {
+          if (!oldDoc && requestItemIds[it.item_id]) {
+            throw { forbidden: 'New distribution_request cannot contain duplicate item_id values' };
+          }
+          requestItemIds[it.item_id] = true;
           if (!itemMetaMap[it.item_id]) {
             itemMetaMap[it.item_id] = { unit: it.unit, type: it.distribution_type_snapshot };
           } else {

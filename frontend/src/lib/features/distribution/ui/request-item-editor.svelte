@@ -5,7 +5,11 @@
 	import { Input } from '$lib/components/ui/input';
 	import type { ItemMaster } from '$lib/features/catalog';
 	import { itemMasterUnit } from '$lib/features/catalog';
-	import { createInitialFormItem, type CreateRequestFormItem } from './create-request-form';
+	import {
+		createInitialFormItem,
+		isItemSelectedElsewhere,
+		type CreateRequestFormItem
+	} from './create-request-form';
 
 	interface Props {
 		items: CreateRequestFormItem[];
@@ -117,9 +121,10 @@
 							{#each activeItemMasters as master (master._id)}
 								{@const stock = stockBalances.get(master._id) ?? '0'}
 								{@const masterUnit = itemMasterUnit(master)}
-								<option value={master._id}>
+								{@const selectedElsewhere = isItemSelectedElsewhere(items, index, master._id)}
+								<option value={master._id} disabled={selectedElsewhere}>
 									{master.name} ({masterUnit}) — คงเหลือ: {stock}
-									{masterUnit}
+									{masterUnit}{selectedElsewhere ? ' (เลือกแล้ว)' : ''}
 								</option>
 							{/each}
 						</select>

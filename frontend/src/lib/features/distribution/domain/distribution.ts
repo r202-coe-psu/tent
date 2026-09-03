@@ -111,6 +111,19 @@ export const distributionRequestInputSchema = z
 		items: z.array(distributionRequestItemSchema).min(1)
 	})
 	.superRefine((data, ctx) => {
+		const seenItemIds = new Set<string>();
+		for (const [index, item] of data.items.entries()) {
+			if (seenItemIds.has(item.item_id)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['items', index, 'item_id'],
+					message: 'A new distribution request cannot contain duplicate item_id values'
+				});
+			} else {
+				seenItemIds.add(item.item_id);
+			}
+		}
+
 		const validation = validateRequestItemsDuplicateCompatibility(data.items);
 		if (!validation.isValid) {
 			ctx.addIssue({

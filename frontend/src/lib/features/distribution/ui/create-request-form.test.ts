@@ -6,6 +6,7 @@ import {
 	createInitialFormItem,
 	createInitialFormState,
 	DEFAULT_BUFFER_PERCENT,
+	isItemSelectedElsewhere,
 	NFI_TEMPLATE_PRESETS,
 	validateCreateRequestForm
 } from './create-request-form';
@@ -80,6 +81,30 @@ describe('create-request-form helper (Phase 4B)', () => {
 			expect(state.items).toHaveLength(1);
 			expect(state.items[0].itemId).toBe('');
 			expect(state.items[0].requestedQty).toBe('');
+		});
+	});
+
+	describe('item selection availability', () => {
+		it('disables only selections made by other rows and derives availability from current rows', () => {
+			const initialItems = [
+				{ id: 'row-1', itemId: 'item:water_bottle', requestedQty: '1', targetQtySnapshot: '' },
+				{ id: 'row-2', itemId: 'item:emergency_kit', requestedQty: '1', targetQtySnapshot: '' }
+			];
+
+			expect(isItemSelectedElsewhere(initialItems, 0, 'item:water_bottle')).toBe(false);
+			expect(isItemSelectedElsewhere(initialItems, 1, 'item:water_bottle')).toBe(true);
+			expect(
+				isItemSelectedElsewhere(
+					[{ ...initialItems[0] }, { ...initialItems[1], itemId: 'item:water_bottle' }],
+					1,
+					'item:water_bottle'
+				)
+			).toBe(false);
+
+			const changedItems = [{ ...initialItems[0], itemId: 'item:new' }, initialItems[1]];
+			expect(isItemSelectedElsewhere(changedItems, 1, 'item:water_bottle')).toBe(false);
+			expect(isItemSelectedElsewhere(changedItems, 1, 'item:new')).toBe(true);
+			expect(isItemSelectedElsewhere([changedItems[1]], 0, 'item:new')).toBe(false);
 		});
 	});
 
@@ -249,9 +274,9 @@ describe('create-request-form helper (Phase 4B)', () => {
 			expect(result.errors.item_0_qty).toBeDefined();
 		});
 
-		it('preserves duplicate item rows in accordance with Domain behavior', () => {
+		it('rejects duplicate item IDs on the second and later rows', () => {
 			const formState = {
-				purpose: 'Duplicate rows allowed',
+				purpose: 'Duplicate rows rejected',
 				note: '',
 				bufferPercent: 10,
 				items: [
@@ -266,14 +291,77 @@ describe('create-request-form helper (Phase 4B)', () => {
 						itemId: 'item:water_bottle',
 						requestedQty: '60',
 						targetQtySnapshot: ''
+					},
+					{
+						id: 'row-3',
+						itemId: 'item:water_bottle',
+						requestedQty: '70',
+						targetQtySnapshot: ''
 					}
 				]
 			};
 			const result = validateCreateRequestForm(formState, 100, sampleItemMasters);
-			expect(result.valid).toBe(true);
-			expect(result.payload?.items).toHaveLength(2);
-			expect(result.payload?.items[0].requested_qty).toBe('50');
-			expect(result.payload?.items[1].requested_qty).toBe('60');
+			expect(result.valid).toBe(false);
+			expect(result.errors.item_0_id).toBeUndefined();
+			expect(result.errors.item_1_id).toBe('ไม่สามารถเลือกสิ่งของซ้ำกันในรายการเดียวกันได้');
+			expect(result.errors.item_2_id).toBe('ไม่สามารถเลือกสิ่งของซ้ำกันในรายการเดียวกันได้');
+		});
+
+		it('keeps missing and unknown-item errors distinct from duplicate errors', () => {
+			const emptyRows = validateCreateRequestForm(
+				{
+					purpose: 'Missing rows',
+					note: '',
+					bufferPercent: 10,
+					items: [
+						{ id: 'row-1', itemId: '', requestedQty: '1', targetQtySnapshot: '' },
+						{ id: 'row-2', itemId: '', requestedQty: '1', targetQtySnapshot: '' }
+					]
+				},
+				100,
+				sampleItemMasters
+			);
+			expect(emptyRows.errors.item_0_id).toBe('กรุณาเลือกสิ่งของ');
+			expect(emptyRows.errors.item_1_id).toBe('กรุณาเลือกสิ่งของ');
+
+			const unknownItem = validateCreateRequestForm(
+				{
+					purpose: 'Unknown item',
+					note: '',
+					bufferPercent: 10,
+					items: [
+						{ id: 'row-1', itemId: 'item:water_bottle', requestedQty: '1', targetQtySnapshot: '' },
+						{ id: 'row-2', itemId: 'item:missing', requestedQty: '1', targetQtySnapshot: '' }
+					]
+				},
+				100,
+				sampleItemMasters
+			);
+			expect(unknownItem.errors.item_1_id).toBe('ไม่พบข้อมูลสิ่งของใน Catalog');
+		});
+
+		it('rejects duplicates independently of decimal quantity parsing', () => {
+			const result = validateCreateRequestForm(
+				{
+					purpose: 'Duplicate decimal rows',
+					note: '',
+					bufferPercent: 10,
+					items: [
+						{
+							id: 'row-1',
+							itemId: 'item:water_bottle',
+							requestedQty: '0.1',
+							targetQtySnapshot: ''
+						},
+						{ id: 'row-2', itemId: 'item:water_bottle', requestedQty: '0.2', targetQtySnapshot: '' }
+					]
+				},
+				100,
+				sampleItemMasters
+			);
+
+			expect(result.valid).toBe(false);
+			expect(result.errors.item_1_id).toBe('ไม่สามารถเลือกสิ่งของซ้ำกันในรายการเดียวกันได้');
 		});
 	});
 

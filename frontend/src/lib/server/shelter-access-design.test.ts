@@ -1013,7 +1013,7 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('allows duplicate request item rows when unit and distribution type are identical', () => {
+		it('rejects new duplicate request item rows even when their metadata is compatible', () => {
 			const req = reqDoc({
 				items: [
 					{
@@ -1032,7 +1032,32 @@ describe('buildValidateDocUpdate', () => {
 					}
 				]
 			});
-			expect(() => compile()(req, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(req, null, REGISTRATION),
+				/New distribution_request cannot contain duplicate item_id values/
+			);
+		});
+
+		it('allows existing legacy duplicate rows when unit and distribution type are identical', () => {
+			const legacy = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expect(() => compile()(legacy, legacy, REGISTRATION)).not.toThrow();
 		});
 
 		it('rejects duplicate request item rows with conflicting units', () => {
@@ -1055,7 +1080,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			expectForbidden(
-				() => compile()(req, null, REGISTRATION),
+				() => compile()(req, req, REGISTRATION),
 				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
 			);
 		});
@@ -1080,7 +1105,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			expectForbidden(
-				() => compile()(req, null, REGISTRATION),
+				() => compile()(req, req, REGISTRATION),
 				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
 			);
 		});
