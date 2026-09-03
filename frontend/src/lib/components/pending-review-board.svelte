@@ -3,7 +3,10 @@
 	import Search from '@lucide/svelte/icons/search';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Info from '@lucide/svelte/icons/info';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import {
 		donationActionRef,
@@ -24,6 +27,21 @@
 	let searchQuery = $state('');
 	let sourceFilter = $state('all');
 	let sortOrder = $state<'newest' | 'oldest'>('newest');
+
+	const SOURCE_OPTIONS = [
+		{ value: 'all', label: 'ที่มา: ทั้งหมด' },
+		{ value: 'unsolicited', label: 'ที่มา: รายการไม่อยู่ในประกาศ' },
+		{ value: 'solicited', label: 'ที่มา: รายการตามประกาศ' }
+	];
+	const SORT_OPTIONS = [
+		{ value: 'newest', label: 'เรียง: ใหม่สุดก่อน' },
+		{ value: 'oldest', label: 'เรียง: เก่าสุดก่อน' }
+	] as const;
+
+	const sourceLabel = $derived(
+		SOURCE_OPTIONS.find((o) => o.value === sourceFilter)?.label ?? sourceFilter
+	);
+	const sortLabel = $derived(SORT_OPTIONS.find((o) => o.value === sortOrder)?.label ?? sortOrder);
 
 	function itemsSummary(req: PendingDonationRow): string {
 		if (req.items.length === 0) return '—';
@@ -132,22 +150,33 @@
 
 			<!-- Filter dropdowns -->
 			<div class="flex flex-wrap items-center gap-2">
-				<select
-					bind:value={sourceFilter}
-					class="h-9 rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-				>
-					<option value="all">ที่มา: ทั้งหมด</option>
-					<option value="unsolicited">ที่มา: รายการไม่อยู่ในประกาศ</option>
-					<option value="solicited">ที่มา: รายการตามประกาศ</option>
-				</select>
+				<Select.Root type="single" bind:value={sourceFilter}>
+					<Select.Trigger
+						aria-label="กรองตามที่มา"
+						class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+					>
+						{sourceLabel}
+					</Select.Trigger>
+					<Select.Content>
+						{#each SOURCE_OPTIONS as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 
-				<select
-					bind:value={sortOrder}
-					class="h-9 rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-				>
-					<option value="newest">เรียง: ใหม่สุดก่อน</option>
-					<option value="oldest">เรียง: เก่าสุดก่อน</option>
-				</select>
+				<Select.Root type="single" bind:value={sortOrder}>
+					<Select.Trigger
+						aria-label="เรียงลำดับ"
+						class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+					>
+						{sortLabel}
+					</Select.Trigger>
+					<Select.Content>
+						{#each SORT_OPTIONS as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 		</div>
 	</div>
@@ -195,11 +224,12 @@
 									{req.donor_name || 'ไม่ระบุชื่อ'}
 								</div>
 								<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
-									<span
-										class="rounded-md bg-amber-100 px-2 py-0.5 font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+									<Badge
+										variant="outline"
+										class="border-amber-300/80 bg-amber-50 text-2xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
 									>
 										รอพิจารณาอนุมัติ
-									</span>
+									</Badge>
 									<span class="font-semibold text-muted-foreground">
 										{donationRefLabel(req)}
 									</span>
@@ -227,14 +257,15 @@
 
 							<!-- Action Button -->
 							<Table.Cell class="px-6 py-4 text-right">
-								<button
+								<Button
+									variant="outline"
 									type="button"
 									onclick={() => onViewDetails(req)}
-									class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3.5 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+									class="h-9 gap-1.5 rounded-xl border-blue-200 bg-blue-50/80 px-3.5 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
 								>
 									<SlidersHorizontal class="h-3.5 w-3.5" />
 									จัดการ
-								</button>
+								</Button>
 							</Table.Cell>
 						</Table.Row>
 					{/each}

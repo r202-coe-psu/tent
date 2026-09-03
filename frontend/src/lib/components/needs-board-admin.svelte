@@ -3,7 +3,10 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
@@ -26,6 +29,23 @@
 	let searchQuery = $state('');
 	let statusFilter = $state('all');
 	let sortOrder = $state<'progress_asc' | 'progress_desc' | 'name'>('progress_asc');
+
+	const STATUS_OPTIONS = [
+		{ value: 'all', label: 'สถานะ: ทั้งหมด' },
+		{ value: 'showing', label: 'สถานะ: กำลังโชว์บนหน้าเว็บ' },
+		{ value: 'hidden', label: 'สถานะ: ซ่อนจากหน้าเว็บ' },
+		{ value: 'cutoff', label: 'สถานะ: Force Cut-off' }
+	];
+	const SORT_OPTIONS = [
+		{ value: 'progress_asc', label: 'เรียง: ความคืบหน้าน้อยไปมาก' },
+		{ value: 'progress_desc', label: 'เรียง: ความคืบหน้ามากไปน้อย' },
+		{ value: 'name', label: 'เรียง: ชื่อ ก-ฮ' }
+	] as const;
+
+	const statusLabel = $derived(
+		STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter
+	);
+	const sortLabel = $derived(SORT_OPTIONS.find((o) => o.value === sortOrder)?.label ?? sortOrder);
 
 	// Flatten rows for individual needs display
 	type FlatNeedRow = {
@@ -160,14 +180,14 @@
 				class="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end"
 			>
 				<!-- Special Request Button -->
-				<button
+				<Button
 					type="button"
 					onclick={onAddRequest}
-					class="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+					class="h-10 gap-2 rounded-xl bg-[#002D5B] px-5 text-xs font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 				>
 					<Plus class="h-4 w-4" />
 					สร้างประกาศแบบกำหนดเอง (Special Request)
-				</button>
+				</Button>
 			</div>
 		</div>
 
@@ -189,24 +209,33 @@
 
 				<!-- Filter dropdowns -->
 				<div class="flex flex-wrap items-center gap-2">
-					<select
-						bind:value={statusFilter}
-						class="h-9 rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					>
-						<option value="all">สถานะ: ทั้งหมด</option>
-						<option value="showing">สถานะ: กำลังโชว์บนหน้าเว็บ</option>
-						<option value="hidden">สถานะ: ซ่อนจากหน้าเว็บ</option>
-						<option value="cutoff">สถานะ: Force Cut-off</option>
-					</select>
+					<Select.Root type="single" bind:value={statusFilter}>
+						<Select.Trigger
+							aria-label="กรองตามสถานะ"
+							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+						>
+							{statusLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each STATUS_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 
-					<select
-						bind:value={sortOrder}
-						class="h-9 rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					>
-						<option value="progress_asc">เรียง: ความคืบหน้าน้อยไปมาก</option>
-						<option value="progress_desc">เรียง: ความคืบหน้ามากไปน้อย</option>
-						<option value="name">เรียง: ชื่อ ก-ฮ</option>
-					</select>
+					<Select.Root type="single" bind:value={sortOrder}>
+						<Select.Trigger
+							aria-label="เรียงลำดับ"
+							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+						>
+							{sortLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each SORT_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 		</div>
@@ -263,33 +292,29 @@
 								<Table.Cell class="min-w-[240px] px-6 py-4">
 									<div class="flex items-center gap-2 text-sm font-bold text-foreground">
 										{#if row.isCutOff}
-											<span
-												class="rounded-md bg-rose-100 px-1.5 py-0.5 text-3xs font-extrabold text-rose-600 dark:bg-rose-950/50 dark:text-rose-400"
-											>
-												CUT-OFF
-											</span>
+											<Badge variant="destructive" class="text-3xs font-extrabold">CUT-OFF</Badge>
 										{/if}
 										{row.title}
 									</div>
 									<div class="mt-1 text-2xs text-muted-foreground">{row.location}</div>
 									{#if row.sharedCampaigns > 1}
-										<div
-											class="mt-1.5 inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-3xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+										<Badge
+											class="mt-1.5 h-auto bg-blue-50 py-0.5 text-3xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
 											title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
 										>
 											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
 												row.publicTotal
 											)}
 											{row.unit}
-										</div>
+										</Badge>
 									{/if}
 								</Table.Cell>
 
 								<!-- Reserved Pledged -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
-									<span class="inline-block rounded-md bg-muted/60 px-2.5 py-1 text-xs">
+									<Badge variant="secondary" class="px-2.5 text-xs">
 										{roundQty(row.reserved || '0')}
-									</span>
+									</Badge>
 								</Table.Cell>
 
 								<!-- On-hand. Shown because the progress bar and the automatic
@@ -297,9 +322,9 @@
 								     bookings if the warehouse already holds the goods, and staff
 								     had no way to see that from this table. -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
-									<span class="inline-block rounded-md bg-muted/60 px-2.5 py-1 text-xs">
+									<Badge variant="secondary" class="px-2.5 text-xs">
 										{roundQty(row.onHand || '0')}
-									</span>
+									</Badge>
 								</Table.Cell>
 
 								<!-- Target -->
@@ -327,19 +352,20 @@
 
 								<!-- Show on home -->
 								<Table.Cell class="px-6 py-4 text-center">
-									<button
+									<Button
+										variant="outline"
 										type="button"
 										onclick={() => onToggleShowOnHome(row.compoundId)}
 										disabled={row.originalItem.isCutOff}
-										class="inline-flex cursor-pointer items-center justify-center rounded-xl border px-3 py-1.5 text-xs font-bold transition-all
+										class="h-8 rounded-xl px-3 text-xs font-bold
 										{row.showOnHome && !row.originalItem.isCutOff
-											? 'border-blue-200 bg-blue-50/80 text-blue-600 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400'
-											: 'cursor-not-allowed border-transparent bg-muted text-muted-foreground opacity-60'}"
+											? 'border-blue-200 bg-blue-50/80 text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400'
+											: 'border-transparent bg-muted text-muted-foreground opacity-60'}"
 									>
 										{row.showOnHome && !row.originalItem.isCutOff
 											? 'กำลังโชว์บนหน้าเว็บ'
 											: 'ซ่อนจากหน้าเว็บ'}
-									</button>
+									</Button>
 								</Table.Cell>
 
 								<!-- Actions -->
@@ -347,14 +373,15 @@
 									<div class="flex items-center justify-end gap-2">
 										<!-- Edit Button -->
 										{#if onEdit && row.itemId}
-											<button
+											<Button
+												variant="outline"
 												type="button"
 												onclick={() => onEdit(row.originalItem, row.itemId)}
-												class="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/70 px-2.5 py-1.5 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400"
+												class="h-8 gap-1 rounded-xl border-blue-200 bg-blue-50/70 px-2.5 text-xs font-bold text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400"
 											>
 												<SlidersHorizontal class="h-3 w-3" />
 												แก้ไข
-											</button>
+											</Button>
 										{/if}
 
 										<!-- Force Cut-off. A need that filled up on its own is already
@@ -362,24 +389,26 @@
 										     write a manual close plus an audit reason for nothing. -->
 										{#if row.itemId}
 											{#if row.isCutOff && !row.isManualClosed}
-												<button
+												<Button
+													variant="outline"
 													type="button"
 													disabled
-													class="inline-flex cursor-not-allowed items-center justify-center rounded-xl border border-muted bg-muted/50 px-2.5 py-1.5 text-xs font-bold text-muted-foreground opacity-70"
+													class="h-8 rounded-xl border-muted bg-muted/50 px-2.5 text-xs font-bold text-muted-foreground"
 												>
 													ปิดอัตโนมัติ (ครบเป้า)
-												</button>
+												</Button>
 											{:else}
-												<button
+												<Button
+													variant="outline"
 													type="button"
 													onclick={() => onToggleCutOff(row.compoundId, row.itemId)}
-													class="inline-flex cursor-pointer items-center justify-center rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-colors
+													class="h-8 rounded-xl px-2.5 text-xs font-bold
 													{row.isManualClosed
-														? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
-														: 'border-rose-200 bg-rose-50/80 text-rose-600 hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400'}"
+														? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
+														: 'border-rose-200 bg-rose-50/80 text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400'}"
 												>
 													{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off'}
-												</button>
+												</Button>
 											{/if}
 										{/if}
 									</div>

@@ -3,6 +3,8 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import { toast } from 'svelte-sonner';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
@@ -190,118 +192,111 @@
 	loadPending();
 </script>
 
+<svelte:head>
+	<title>กระดานรับบริจาค · SmartShelter</title>
+</svelte:head>
+
 <div class="flex w-full flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-	<div
-		class="flex scrollbar-none items-center justify-start overflow-x-auto border-b border-border"
-	>
-		<div class="-mb-px flex gap-2 whitespace-nowrap">
-			<button
-				onclick={() => switchTab('scan')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'scan'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+	<!-- Title with Accent Line — same header treatment as /back-office/supply, so the
+	     two halves of the stock domain read as one screen family. -->
+	<div class="flex items-center gap-3 border-l-4 border-primary pl-3">
+		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock &amp; Donations)</h2>
+	</div>
+
+	<Tabs.Root value={activeSubTab} onValueChange={switchTab} class="gap-4 md:gap-6">
+		<Tabs.List class="h-auto max-w-full scrollbar-none justify-start overflow-x-auto">
+			<Tabs.Trigger value="scan" class="gap-2 px-3 py-2 text-xs font-bold">
 				<Scan class="h-3.5 w-3.5" />
 				สแกนรับของเข้าคลัง
-			</button>
+			</Tabs.Trigger>
 
-			<button
-				onclick={() => switchTab('pending')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'pending'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+			<Tabs.Trigger value="pending" class="gap-2 px-3 py-2 text-xs font-bold">
 				<ClipboardList class="h-3.5 w-3.5" />
 				รอการประเมิน
 				{#if pendingRequests.length > 0}
-					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
-						>{pendingRequests.length}</span
-					>
+					<Badge class="h-4 min-w-4 bg-amber-500 px-1.5 text-2xs leading-none font-bold text-white">
+						{pendingRequests.length}
+					</Badge>
 				{/if}
-			</button>
+			</Tabs.Trigger>
 
-			<button
-				onclick={() => switchTab('needs')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'needs'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+			<Tabs.Trigger value="needs" class="gap-2 px-3 py-2 text-xs font-bold">
 				<Megaphone class="h-3.5 w-3.5" />
 				จัดการความต้องการ
-			</button>
-		</div>
-	</div>
+			</Tabs.Trigger>
+		</Tabs.List>
 
-	{#if activeSubTab === 'scan'}
-		<ScanStation />
-	{:else if activeSubTab === 'pending'}
-		{#if selectedPendingRequest}
-			<PendingReviewDetail
-				request={selectedPendingRequest}
-				saving={pendingActionSaving}
-				onBack={() => (selectedPendingRequest = null)}
-				onApprove={handleApprovePending}
-				onReject={handleRejectPending}
-				onRedirect={handleRedirectPending}
-			/>
-		{:else}
-			<PendingReviewBoard
-				requests={pendingRequests}
-				loading={pendingLoading}
-				onViewDetails={(req) => {
-					selectedPendingRequest = req;
-				}}
-			/>
-		{/if}
-	{:else if activeSubTab === 'needs'}
-		{#if viewState === 'list'}
-			<NeedsBoardAdmin
-				items={needsBoard.derivedItems}
-				onAddRequest={() => (viewState = 'create')}
-				onToggleShowOnHome={needsBoard.toggleShowOnHome}
-				onToggleCutOff={handleToggleCutOff}
-				onEdit={(item, itemId) => {
-					selectedEditingItem = item;
-					selectedEditingItemId = itemId;
-					viewState = 'edit';
-				}}
-			/>
-		{:else if viewState === 'create'}
-			<CreateCampaignForm
-				onclose={() => (viewState = 'list')}
-				onsubmit={needsBoard.handleAddRequestFromForm}
-			/>
-		{:else if viewState === 'edit' && selectedEditingItem && selectedEditingItemId}
-			<!-- Keyed on the row: the form seeds its fields once, so a different row
-			     has to mount a fresh form rather than reuse the previous seed. -->
-			{#key `${selectedEditingItem.id}:${selectedEditingItemId}`}
-				<EditCampaignForm
-					item={selectedEditingItem}
-					itemId={selectedEditingItemId}
-					onclose={() => {
-						selectedEditingItem = null;
-						selectedEditingItemId = '';
-						viewState = 'list';
-					}}
-					onsubmit={(updatedData) => {
-						if (!selectedEditingItem || !selectedEditingItemId) return;
-						needsBoard.handleEditRequest(
-							selectedEditingItem.id,
-							selectedEditingItemId,
-							updatedData
-						);
-						selectedEditingItem = null;
-						selectedEditingItemId = '';
-						viewState = 'list';
+		<Tabs.Content value="scan">
+			<ScanStation />
+		</Tabs.Content>
+
+		<Tabs.Content value="pending">
+			{#if selectedPendingRequest}
+				<PendingReviewDetail
+					request={selectedPendingRequest}
+					saving={pendingActionSaving}
+					onBack={() => (selectedPendingRequest = null)}
+					onApprove={handleApprovePending}
+					onReject={handleRejectPending}
+					onRedirect={handleRedirectPending}
+				/>
+			{:else}
+				<PendingReviewBoard
+					requests={pendingRequests}
+					loading={pendingLoading}
+					onViewDetails={(req) => {
+						selectedPendingRequest = req;
 					}}
 				/>
-			{/key}
-		{/if}
-	{/if}
+			{/if}
+		</Tabs.Content>
+
+		<Tabs.Content value="needs">
+			{#if viewState === 'list'}
+				<NeedsBoardAdmin
+					items={needsBoard.derivedItems}
+					onAddRequest={() => (viewState = 'create')}
+					onToggleShowOnHome={needsBoard.toggleShowOnHome}
+					onToggleCutOff={handleToggleCutOff}
+					onEdit={(item, itemId) => {
+						selectedEditingItem = item;
+						selectedEditingItemId = itemId;
+						viewState = 'edit';
+					}}
+				/>
+			{:else if viewState === 'create'}
+				<CreateCampaignForm
+					onclose={() => (viewState = 'list')}
+					onsubmit={needsBoard.handleAddRequestFromForm}
+				/>
+			{:else if viewState === 'edit' && selectedEditingItem && selectedEditingItemId}
+				<!-- Keyed on the row: the form seeds its fields once, so a different row
+				     has to mount a fresh form rather than reuse the previous seed. -->
+				{#key `${selectedEditingItem.id}:${selectedEditingItemId}`}
+					<EditCampaignForm
+						item={selectedEditingItem}
+						itemId={selectedEditingItemId}
+						onclose={() => {
+							selectedEditingItem = null;
+							selectedEditingItemId = '';
+							viewState = 'list';
+						}}
+						onsubmit={(updatedData) => {
+							if (!selectedEditingItem || !selectedEditingItemId) return;
+							needsBoard.handleEditRequest(
+								selectedEditingItem.id,
+								selectedEditingItemId,
+								updatedData
+							);
+							selectedEditingItem = null;
+							selectedEditingItemId = '';
+							viewState = 'list';
+						}}
+					/>
+				{/key}
+			{/if}
+		</Tabs.Content>
+	</Tabs.Root>
 </div>
 
 <SpecialRequestDialog

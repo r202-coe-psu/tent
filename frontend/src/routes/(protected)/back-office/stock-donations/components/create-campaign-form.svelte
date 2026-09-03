@@ -5,6 +5,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import { mapNeedItemHeuristic, suggestNeedDefaults } from '$lib/features/operations';
 	import PublicDisplayHint from './public-display-hint.svelte';
@@ -48,6 +51,22 @@
 		'ซอง'
 	];
 
+	const CATEGORY_OPTIONS = [
+		{ value: 'อาหารและเครื่องดื่ม', label: 'อาหารและเครื่องดื่ม (Food & Beverage)' },
+		{ value: 'ยารักษาโรคและเวชภัณฑ์', label: 'ยารักษาโรคและเวชภัณฑ์ (Medical Supplies)' },
+		{ value: 'ของใช้ทั่วไปและสุขอนามัย', label: 'ของใช้ทั่วไปและสุขอนามัย (General & Hygiene)' },
+		{ value: 'เครื่องนุ่งห่มและที่นอน', label: 'เครื่องนุ่งห่มและที่นอน (Clothing & Bedding)' },
+		{ value: 'แม่และเด็ก', label: 'แม่และเด็ก (Mother & Child)' },
+		{ value: 'อุปกรณ์และเครื่องมือช่าง', label: 'อุปกรณ์และเครื่องมือช่าง (Tools & Equipment)' },
+		{ value: 'อื่นๆ', label: 'อื่นๆ (Other)' }
+	];
+
+	const URGENCY_OPTIONS = [
+		{ value: 'critical', label: 'วิกฤต (Critical)' },
+		{ value: 'important', label: 'สำคัญ (Important)' },
+		{ value: 'normal', label: 'ปกติ (Normal)' }
+	] as const;
+
 	let unitChoice = $state<string | null>(null);
 	let customUnit = $state('');
 	let urgency = $state<'critical' | 'important' | 'normal'>('critical');
@@ -63,6 +82,13 @@
 	const finalUnit = $derived(
 		selectedUnitOption === 'custom' ? customUnit.trim() : selectedUnitOption
 	);
+	const categoryLabel = $derived(
+		CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
+	);
+	const unitLabel = $derived(
+		selectedUnitOption === 'custom' ? 'ระบุหน่วยเอง (Custom)...' : selectedUnitOption
+	);
+	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -94,14 +120,16 @@
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
 	<!-- Top Dark Navy Banner -->
 	<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
-		<button
+		<Button
+			variant="link"
+			size="sm"
 			type="button"
 			onclick={onclose}
-			class="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-200 transition-colors hover:text-white"
+			class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
 			กลับหน้าจัดการความต้องการ
-		</button>
+		</Button>
 		<div class="flex items-center gap-2.5">
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
 				<Megaphone class="h-5 w-5" />
@@ -123,9 +151,9 @@
 
 			<!-- Item Title -->
 			<div>
-				<label for="campaign-item-title" class="mb-1.5 block text-xs font-bold text-foreground">
-					ชื่อสิ่งของ (Item Name) <span class="text-rose-500">*</span>
-				</label>
+				<Label for="campaign-item-title" class="mb-1.5 text-xs font-bold text-foreground">
+					ชื่อสิ่งของ (Item Name) <span class="text-destructive">*</span>
+				</Label>
 				<div class="relative">
 					<Search
 						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -142,37 +170,30 @@
 
 			<!-- Category -->
 			<div>
-				<label for="campaign-item-category" class="mb-1.5 block text-xs font-bold text-foreground">
+				<Label for="campaign-item-category" class="mb-1.5 text-xs font-bold text-foreground">
 					หมวดหมู่สิ่งของ (Category)
-				</label>
-				<select
-					id="campaign-item-category"
-					value={category}
-					onchange={(e) => (categoryChoice = e.currentTarget.value)}
-					class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-				>
-					<option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม (Food & Beverage)</option>
-					<option value="ยารักษาโรคและเวชภัณฑ์">ยารักษาโรคและเวชภัณฑ์ (Medical Supplies)</option>
-					<option value="ของใช้ทั่วไปและสุขอนามัย"
-						>ของใช้ทั่วไปและสุขอนามัย (General & Hygiene)</option
+				</Label>
+				<Select.Root type="single" value={category} onValueChange={(v) => (categoryChoice = v)}>
+					<Select.Trigger
+						id="campaign-item-category"
+						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
 					>
-					<option value="เครื่องนุ่งห่มและที่นอน"
-						>เครื่องนุ่งห่มและที่นอน (Clothing & Bedding)</option
-					>
-					<option value="แม่และเด็ก">แม่และเด็ก (Mother & Child)</option>
-					<option value="อุปกรณ์และเครื่องมือช่าง"
-						>อุปกรณ์และเครื่องมือช่าง (Tools & Equipment)</option
-					>
-					<option value="อื่นๆ">อื่นๆ (Other)</option>
-				</select>
+						{categoryLabel}
+					</Select.Trigger>
+					<Select.Content>
+						{#each CATEGORY_OPTIONS as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 
 			<!-- Target Qty and Unit (2 columns) -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label for="campaign-target-qty" class="mb-1.5 block text-xs font-bold text-foreground">
-						จำนวนเป้าหมาย (Target Quantity) <span class="text-rose-500">*</span>
-					</label>
+					<Label for="campaign-target-qty" class="mb-1.5 text-xs font-bold text-foreground">
+						จำนวนเป้าหมาย (Target Quantity) <span class="text-destructive">*</span>
+					</Label>
 					<Input
 						id="campaign-target-qty"
 						type="text"
@@ -184,27 +205,34 @@
 				</div>
 
 				<div>
-					<label for="campaign-item-unit" class="mb-1.5 block text-xs font-bold text-foreground">
+					<Label for="campaign-item-unit" class="mb-1.5 text-xs font-bold text-foreground">
 						หน่วยนับ (Unit of Measure)
-					</label>
+					</Label>
 					<div class="space-y-2">
-						<select
-							id="campaign-item-unit"
+						<Select.Root
+							type="single"
 							value={selectedUnitOption}
-							onchange={(e) => (unitChoice = e.currentTarget.value)}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+							onValueChange={(v) => (unitChoice = v)}
 						>
-							{#each STANDARD_UNITS as option (option)}
-								<option value={option}>{option}</option>
-							{/each}
-							<option value="custom">ระบุหน่วยเอง (Custom)...</option>
-						</select>
+							<Select.Trigger
+								id="campaign-item-unit"
+								class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+							>
+								{unitLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each STANDARD_UNITS as option (option)}
+									<Select.Item value={option} label={option} />
+								{/each}
+								<Select.Item value="custom" label="ระบุหน่วยเอง (Custom)..." />
+							</Select.Content>
+						</Select.Root>
 						{#if selectedUnitOption === 'custom'}
 							<Input
 								type="text"
 								placeholder="พิมพ์ระบุหน่วยนับ..."
 								bind:value={customUnit}
-								class="h-9 rounded-xl text-xs"
+								class="h-10 rounded-xl text-xs"
 							/>
 						{/if}
 					</div>
@@ -218,24 +246,28 @@
 			<!-- Urgency Level and Image URL (2 columns) -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label for="campaign-urgency" class="mb-1.5 block text-xs font-bold text-foreground">
+					<Label for="campaign-urgency" class="mb-1.5 text-xs font-bold text-foreground">
 						ความเร่งด่วน (Urgency Level)
-					</label>
-					<select
-						id="campaign-urgency"
-						bind:value={urgency}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					>
-						<option value="critical">วิกฤต (Critical)</option>
-						<option value="important">สำคัญ (Important)</option>
-						<option value="normal">ปกติ (Normal)</option>
-					</select>
+					</Label>
+					<Select.Root type="single" bind:value={urgency}>
+						<Select.Trigger
+							id="campaign-urgency"
+							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+						>
+							{urgencyLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each URGENCY_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<div>
-					<label for="campaign-image-url" class="mb-1.5 block text-xs font-bold text-foreground">
+					<Label for="campaign-image-url" class="mb-1.5 text-xs font-bold text-foreground">
 						ภาพประกอบสิ่งของ (Image URL - Optional)
-					</label>
+					</Label>
 					<Input
 						id="campaign-image-url"
 						type="url"
@@ -248,16 +280,16 @@
 
 			<!-- Reason / Details -->
 			<div>
-				<label for="campaign-description" class="mb-1.5 block text-xs font-bold text-foreground">
-					เหตุผลหรือรายละเอียดเพิ่มเติม (Reason / Details) <span class="text-rose-500">*</span>
-				</label>
-				<textarea
+				<Label for="campaign-description" class="mb-1.5 text-xs font-bold text-foreground">
+					เหตุผลหรือรายละเอียดเพิ่มเติม (Reason / Details) <span class="text-destructive">*</span>
+				</Label>
+				<Textarea
 					id="campaign-description"
-					rows="3"
+					rows={3}
 					placeholder="ระบุวัตถุประสงค์ในการประกาศขอรับ เช่น สำหรับใช้ทำอาหารแจกจ่ายประจำวัน หรือ สำหรับผู้ประสบภัยที่บ้านเรือนพังเสียหาย..."
 					bind:value={description}
-					class="w-full rounded-xl border border-border/80 bg-card p-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-				></textarea>
+					class="rounded-xl text-xs"
+				/>
 			</div>
 		</div>
 

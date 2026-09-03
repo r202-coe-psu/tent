@@ -10,6 +10,9 @@
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import {
 		donationActionRef,
@@ -48,6 +51,15 @@
 	const shelters = $derived(sheltersQuery.data ?? []);
 	let selectedTargetShelter = $state('');
 	let redirectNote = $state('');
+
+	// Only other shelters are valid destinations — the one already holding the request
+	// is not somewhere to redirect to.
+	const redirectTargets = $derived(shelters.filter((s) => s.code !== request.shelter_code));
+	const redirectTargetLabel = $derived.by(() => {
+		const picked = redirectTargets.find((s) => s.code === selectedTargetShelter);
+		if (picked) return `${picked.name} (${picked.code})`;
+		return sheltersQuery.isPending ? 'กำลังโหลดรายชื่อศูนย์...' : '-- เลือกศูนย์พักพิงปลายทาง --';
+	});
 
 	// Reject inline form state
 	let rejectReason = $state('');
@@ -144,14 +156,16 @@
 <div class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
 	<!-- Dark Navy Header Banner -->
 	<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
-		<button
+		<Button
+			variant="link"
+			size="sm"
 			type="button"
 			onclick={onBack}
-			class="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-200 transition-colors hover:text-white"
+			class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
 			กลับหน้าตรวจรับบริจาค
-		</button>
+		</Button>
 		<div class="flex items-center gap-2.5">
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
 				<ClipboardCheck class="h-5 w-5" />
@@ -270,16 +284,16 @@
 
 		<!-- Staff Review Memo Textarea -->
 		<div class="space-y-2">
-			<label for="internal-review-memo" class="block text-xs font-bold text-foreground">
+			<Label for="internal-review-memo" class="text-xs font-bold text-foreground">
 				บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
-			</label>
-			<textarea
+			</Label>
+			<Textarea
 				id="internal-review-memo"
-				rows="3"
+				rows={3}
 				placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
 				bind:value={memo}
-				class="w-full rounded-2xl border border-border/80 bg-card p-3.5 text-xs text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
-			></textarea>
+				class="rounded-2xl p-3.5 text-xs"
+			/>
 		</div>
 	</div>
 
@@ -289,37 +303,45 @@
 	>
 		<div class="flex flex-wrap items-center gap-2.5">
 			<!-- Approve Button -->
-			<button
+			<Button
 				type="button"
 				onclick={() => actionRef && onApprove(actionRef, memo.trim())}
 				disabled={saving}
-				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+				class="h-10 gap-1.5 rounded-xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
 			>
 				<Check class="h-4 w-4" />
 				{saving ? 'กำลังดำเนินการ...' : 'อนุมัติรับ (Generate QR)'}
-			</button>
+			</Button>
 
-			<!-- Redirect Button -->
-			<button
+			<!--
+			Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand donations
+			off to another shelter yet, so offering the action would promise a workflow that
+			has no receiving end. The panel below, `handleConfirmRedirect` and the
+			`/redirect` route all stay wired up — bringing the action back is uncommenting
+			this button, not rebuilding the feature.
+
+			<Button
 				type="button"
 				onclick={() => (actionPanel = actionPanel === 'redirect' ? 'none' : 'redirect')}
 				disabled={saving}
-				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#002D5B] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-700"
+				class="h-10 gap-1.5 rounded-xl bg-[#002D5B] px-5 text-xs font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 			>
 				<MapPin class="h-3.5 w-3.5" />
 				ประสานงานส่งต่อ
-			</button>
+			</Button>
+			-->
 		</div>
 
 		<!-- Reject Button -->
-		<button
+		<Button
+			variant="outline"
 			type="button"
 			onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
 			disabled={saving}
-			class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 px-5 py-2.5 text-xs font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
+			class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
 		>
 			ปฏิเสธคำขอ
-		</button>
+		</Button>
 	</div>
 
 	<!-- Expandable Reroute / Redirect Section (Screenshot 4) -->
@@ -329,40 +351,36 @@
 		>
 			<div class="space-y-4 rounded-2xl border-2 border-blue-500 bg-card p-5 shadow-sm">
 				<div>
-					<label for="target-shelter-select" class="mb-1.5 block text-xs font-bold text-foreground">
-						เลือกศูนย์พักพิงปลายทางแห่งใหม่ (Target Shelter Reroute) <span class="text-rose-500"
-							>*</span
+					<Label for="target-shelter-select" class="mb-1.5 text-xs font-bold text-foreground">
+						เลือกศูนย์พักพิงปลายทางแห่งใหม่ (Target Shelter Reroute)
+						<span class="text-destructive">*</span>
+					</Label>
+					<Select.Root type="single" bind:value={selectedTargetShelter}>
+						<Select.Trigger
+							id="target-shelter-select"
+							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
 						>
-					</label>
-					<select
-						id="target-shelter-select"
-						bind:value={selectedTargetShelter}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					>
-						<option value="">
-							{sheltersQuery.isPending
-								? 'กำลังโหลดรายชื่อศูนย์...'
-								: '-- เลือกศูนย์พักพิงปลายทาง --'}
-						</option>
-						{#each shelters as s (s.code)}
-							{#if s.code !== request.shelter_code}
-								<option value={s.code}>{s.name} ({s.code})</option>
-							{/if}
-						{/each}
-					</select>
+							{redirectTargetLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each redirectTargets as s (s.code)}
+								<Select.Item value={s.code} label="{s.name} ({s.code})" />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<div>
-					<label for="redirect-remark-input" class="mb-1.5 block text-xs font-bold text-foreground">
+					<Label for="redirect-remark-input" class="mb-1.5 text-xs font-bold text-foreground">
 						หมายเหตุสำหรับการส่งต่อ (Remark)
-					</label>
-					<textarea
+					</Label>
+					<Textarea
 						id="redirect-remark-input"
-						rows="2"
+						rows={2}
 						placeholder="เช่น พื้นที่จัดเก็บศูนย์ต้นทางเต็ม หรือต้องการการดูแลจำเพาะจากผู้เชี่ยวชาญ..."
 						bind:value={redirectNote}
-						class="w-full rounded-xl border border-border/80 bg-muted/10 p-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					></textarea>
+						class="rounded-xl bg-muted/10 text-xs"
+					/>
 				</div>
 
 				<div class="flex items-center justify-between gap-3 pt-2">
@@ -396,16 +414,16 @@
 				class="space-y-4 rounded-2xl border-2 border-rose-300 bg-card p-5 shadow-sm dark:border-rose-900/60"
 			>
 				<div>
-					<label for="reject-reason-input" class="mb-1.5 block text-xs font-bold text-foreground">
-						ระบุเหตุผลในการปฏิเสธคำขอ (Reject Reason) <span class="text-rose-500">*</span>
-					</label>
-					<textarea
+					<Label for="reject-reason-input" class="mb-1.5 text-xs font-bold text-foreground">
+						ระบุเหตุผลในการปฏิเสธคำขอ (Reject Reason) <span class="text-destructive">*</span>
+					</Label>
+					<Textarea
 						id="reject-reason-input"
-						rows="2"
+						rows={2}
 						placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
 						bind:value={rejectReason}
-						class="w-full rounded-xl border border-border/80 bg-muted/10 p-3 text-xs text-foreground focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
-					></textarea>
+						class="rounded-xl bg-muted/10 text-xs"
+					/>
 				</div>
 
 				<div class="flex items-center justify-between gap-3 pt-2">
@@ -413,7 +431,8 @@
 						type="button"
 						onclick={handleConfirmReject}
 						disabled={saving || !rejectReason.trim()}
-						class="h-10 rounded-xl bg-rose-600 px-6 text-xs font-bold text-white hover:bg-rose-700"
+						variant="destructive"
+						class="h-10 rounded-xl bg-destructive px-6 text-xs font-bold text-white hover:bg-destructive/90"
 					>
 						{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
 					</Button>

@@ -4,7 +4,6 @@
 	import CameraOff from '@lucide/svelte/icons/camera-off';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Check from '@lucide/svelte/icons/check';
-	import X from '@lucide/svelte/icons/x';
 	import User from '@lucide/svelte/icons/user';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -22,8 +21,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { qtyGt } from '$lib/utils/qty';
@@ -92,6 +96,31 @@
 		return [...supplyItems, ...itemMasters];
 	});
 
+	const STORAGE_ZONE_OPTIONS = [
+		'Zone A (อาหารแห้งและเครื่องดื่ม)',
+		'Zone B (ยาและเวชภัณฑ์)',
+		'Zone C (ของใช้ทั่วไปและสุขอนามัย)',
+		'Zone D (เครื่องนุ่งห่มและที่นอน)',
+		'Zone E (อุปกรณ์และเครื่องมือช่าง)',
+		'Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)'
+	];
+
+	const ITEM_CATEGORY_OPTIONS = [
+		{ value: 'food', label: 'อาหารและเครื่องดื่ม' },
+		{ value: 'medicine', label: 'ยารักษาโรค/เวชภัณฑ์' },
+		{ value: 'hygiene', label: 'ของใช้ส่วนตัว/สุขอนามัย' },
+		{ value: 'clothing', label: 'เครื่องนุ่งห่ม/ที่นอน' },
+		{ value: 'baby', label: 'แม่และเด็ก' },
+		{ value: 'tools', label: 'อุปกรณ์/เครื่องมือช่าง' },
+		{ value: 'general', label: 'ของใช้ทั่วไป' }
+	];
+
+	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
+	function catalogLabel(itemId: string | undefined, placeholder: string): string {
+		const found = catalogItems.find((c) => c._id === itemId);
+		return found ? `${found.name} (${found.unit})` : placeholder;
+	}
+
 	/** Is this catalog id a perishable item? Drives the expiry requirement below. */
 	function isPerishable(itemId: string): boolean {
 		return catalogItems.find((c) => c._id === itemId)?.perishable === true;
@@ -104,6 +133,14 @@
 	let newItemCategory = $state('general');
 	let newItemUnit = $state('ชิ้น');
 	let creatingItem = $state(false);
+
+	const newItemCategoryLabel = $derived(
+		ITEM_CATEGORY_OPTIONS.find((o) => o.value === newItemCategory)?.label ?? newItemCategory
+	);
+	const redirectTargetLabel = $derived.by(() => {
+		const picked = redirectTargets.find((t) => t.code === selectedTargetShelter);
+		return picked ? `${picked.name} (${picked.code})` : '-- เลือกศูนย์พักพิงปลายทาง --';
+	});
 
 	// Scanned booking data
 	let donationDoc = $state<ScanDonationView | null>(null);
@@ -721,14 +758,16 @@
 			<div>
 				<!-- Top Dark Navy Banner -->
 				<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
-					<button
+					<Button
+						variant="link"
+						size="sm"
 						type="button"
 						onclick={handleCancel}
-						class="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-200 transition-colors hover:text-white"
+						class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
 						<ArrowLeft class="h-3.5 w-3.5" />
 						กลับหน้าตรวจรับบริจาค
-					</button>
+					</Button>
 
 					<div class="flex items-center gap-2.5">
 						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
@@ -847,30 +886,35 @@
 														for="map-master-{idx}"
 														class="text-sm font-semibold text-foreground"
 													>
-														จับคู่ฐานข้อมูลหลัก (Map to Master) <span class="text-rose-500">*</span>
+														จับคู่ฐานข้อมูลหลัก (Map to Master) <span class="text-destructive"
+															>*</span
+														>
 													</Label>
-													<button
+													<Button
+														variant="link"
+														size="sm"
 														type="button"
 														onclick={() => openQuickCreate(idx)}
-														class="cursor-pointer text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+														class="h-auto p-0 text-xs font-semibold text-blue-600 dark:text-blue-400"
 													>
 														+ สร้างรายการใหม่
-													</button>
+													</Button>
 												</div>
 
 												<div class="flex items-center gap-2">
-													<select
-														id="map-master-{idx}"
-														bind:value={item.item_id}
-														class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-													>
-														<option value="">-- เลือกรายการสินค้าหลัก --</option>
-														{#each catalogItems as c (c._id)}
-															<option value={c._id}>
-																{c.name} ({c.unit})
-															</option>
-														{/each}
-													</select>
+													<Select.Root type="single" bind:value={item.item_id}>
+														<Select.Trigger
+															id="map-master-{idx}"
+															class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
+														>
+															{catalogLabel(item.item_id, '-- เลือกรายการสินค้าหลัก --')}
+														</Select.Trigger>
+														<Select.Content>
+															{#each catalogItems as c (c._id)}
+																<Select.Item value={c._id} label="{c.name} ({c.unit})" />
+															{/each}
+														</Select.Content>
+													</Select.Root>
 
 													<Button
 														type="button"
@@ -891,31 +935,21 @@
 													for="storage-zone-{idx}"
 													class="text-sm font-semibold text-foreground"
 												>
-													โซนจัดเก็บ <span class="text-rose-500">*</span>
+													โซนจัดเก็บ <span class="text-destructive">*</span>
 												</Label>
-												<select
-													id="storage-zone-{idx}"
-													bind:value={item.storage_zone}
-													class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-												>
-													<option value="">-- เลือกโซนจัดเก็บ * --</option>
-													<option value="Zone A (อาหารแห้งและเครื่องดื่ม)"
-														>Zone A (อาหารแห้งและเครื่องดื่ม)</option
+												<Select.Root type="single" bind:value={item.storage_zone}>
+													<Select.Trigger
+														id="storage-zone-{idx}"
+														class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
 													>
-													<option value="Zone B (ยาและเวชภัณฑ์)">Zone B (ยาและเวชภัณฑ์)</option>
-													<option value="Zone C (ของใช้ทั่วไปและสุขอนามัย)"
-														>Zone C (ของใช้ทั่วไปและสุขอนามัย)</option
-													>
-													<option value="Zone D (เครื่องนุ่งห่มและที่นอน)"
-														>Zone D (เครื่องนุ่งห่มและที่นอน)</option
-													>
-													<option value="Zone E (อุปกรณ์และเครื่องมือช่าง)"
-														>Zone E (อุปกรณ์และเครื่องมือช่าง)</option
-													>
-													<option value="Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)"
-														>Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)</option
-													>
-												</select>
+														{item.storage_zone || '-- เลือกโซนจัดเก็บ * --'}
+													</Select.Trigger>
+													<Select.Content>
+														{#each STORAGE_ZONE_OPTIONS as zone (zone)}
+															<Select.Item value={zone} label={zone} />
+														{/each}
+													</Select.Content>
+												</Select.Root>
 											</div>
 										</div>
 
@@ -929,7 +963,7 @@
 												>
 													วันหมดอายุ
 													{#if item.item_id && isPerishable(item.item_id)}
-														<span class="text-rose-500">*</span>
+														<span class="text-destructive">*</span>
 														<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
 															(ของเน่าเสียง่าย)
 														</span>
@@ -939,9 +973,9 @@
 														</span>
 													{/if}
 												</Label>
-												<Input
+												<DatePicker
 													id="item-expiry-{idx}"
-													type="date"
+													ariaLabel="วันหมดอายุ"
 													bind:value={item.expiry}
 													class="h-10 rounded-xl text-sm {item.item_id &&
 													isPerishable(item.item_id) &&
@@ -955,7 +989,7 @@
 											<div class="space-y-1.5 md:col-span-4">
 												<div class="flex items-center justify-between">
 													<Label for="item-qty-{idx}" class="text-sm font-semibold text-foreground">
-														จำนวนรับจริง <span class="text-rose-500">*</span>
+														จำนวนรับจริง <span class="text-destructive">*</span>
 													</Label>
 													<span class="text-xs text-muted-foreground">
 														แจ้งไว้: {item.declaredQty}
@@ -1050,36 +1084,44 @@
 						<Label for="review-memo-input" class="text-sm font-bold text-foreground">
 							บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
 						</Label>
-						<textarea
+						<Textarea
 							id="review-memo-input"
-							rows="3"
+							rows={3}
 							placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
 							bind:value={remarks}
-							class="w-full rounded-2xl border border-border/80 bg-card p-3.5 text-sm text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
-						></textarea>
+							class="rounded-2xl p-3.5 text-sm"
+						/>
 					</div>
 
 					<!-- Bottom Validation Alert Box (Clean, above action buttons) -->
 					{#if !canReceive}
-						<div
-							class="rounded-2xl border border-rose-200 bg-rose-50/80 p-4.5 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400"
+						<Alert.Root
+							variant="destructive"
+							class="rounded-2xl border-destructive/40 bg-destructive/5"
 						>
-							<div class="font-bold">ไม่สามารถกด "ยืนยันรับเข้าคลัง" ได้เนื่องจาก:</div>
-							<ul class="mt-1.5 list-inside list-disc space-y-1 text-xs">
-								{#if scannedItems.some((it) => !it.item_id || !it.qty)}
-									<li>ยังจับคู่ข้อมูลสินค้า หรือกรอกจำนวนรับไม่ครบถ้วน</li>
-								{/if}
-								{#if scannedItems.some((it) => !it.storage_zone)}
-									<li>ยังไม่ได้เลือกโซนจัดเก็บครบทุกรายการ</li>
-								{/if}
-								{#if scannedItems.some((it) => !it.verified)}
-									<li>ยังไม่ได้ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบทุกรายการ</li>
-								{/if}
-								{#if scannedMissingExpiry.length > 0}
-									<li>ของเน่าเสียง่ายยังไม่ได้ระบุวันหมดอายุ: {scannedMissingExpiry.join(', ')}</li>
-								{/if}
-							</ul>
-						</div>
+							<AlertTriangle />
+							<Alert.Title class="font-bold">
+								ไม่สามารถกด "ยืนยันรับเข้าคลัง" ได้เนื่องจาก:
+							</Alert.Title>
+							<Alert.Description>
+								<ul class="list-inside list-disc space-y-1 text-xs">
+									{#if scannedItems.some((it) => !it.item_id || !it.qty)}
+										<li>ยังจับคู่ข้อมูลสินค้า หรือกรอกจำนวนรับไม่ครบถ้วน</li>
+									{/if}
+									{#if scannedItems.some((it) => !it.storage_zone)}
+										<li>ยังไม่ได้เลือกโซนจัดเก็บครบทุกรายการ</li>
+									{/if}
+									{#if scannedItems.some((it) => !it.verified)}
+										<li>ยังไม่ได้ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบทุกรายการ</li>
+									{/if}
+									{#if scannedMissingExpiry.length > 0}
+										<li>
+											ของเน่าเสียง่ายยังไม่ได้ระบุวันหมดอายุ: {scannedMissingExpiry.join(', ')}
+										</li>
+									{/if}
+								</ul>
+							</Alert.Description>
+						</Alert.Root>
 					{/if}
 
 					<!-- Action Buttons Row (Professional, clean layout) -->
@@ -1088,37 +1130,46 @@
 					>
 						<div class="flex flex-wrap items-center gap-2.5">
 							<!-- Receive Into Stock Button -->
-							<button
+							<Button
 								type="button"
 								onclick={handleSaveScan}
 								disabled={saving || !canReceive}
-								class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+								class="h-11 gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white shadow-xs hover:bg-emerald-700"
 							>
 								<Check class="h-4.5 w-4.5" />
 								{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
-							</button>
+							</Button>
 
-							<!-- Redirect Button -->
-							<button
+							<!--
+							Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand
+							donations off to another shelter yet, so offering the action would promise
+							a workflow that has no receiving end. The panel below,
+							`handleConfirmRedirect` and the `/redirect` route all stay wired up —
+							bringing the action back is uncommenting this button, not rebuilding the
+							feature.
+
+							<Button
 								type="button"
 								onclick={() => (actionPanel = actionPanel === 'redirect' ? 'none' : 'redirect')}
 								disabled={saving}
-								class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-5 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-700"
+								class="h-11 gap-2 rounded-xl bg-[#002D5B] px-5 text-sm font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 							>
 								<MapPin class="h-4 w-4" />
 								ประสานงานส่งต่อ
-							</button>
+							</Button>
+							-->
 						</div>
 
 						<!-- Reject Button -->
-						<button
+						<Button
+							variant="outline"
 							type="button"
 							onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
 							disabled={saving}
-							class="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 px-5 text-sm font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
+							class="h-11 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-sm font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
 						>
 							ปฏิเสธคำขอ
-						</button>
+						</Button>
 					</div>
 
 					<!-- Expandable Redirect Panel -->
@@ -1132,29 +1183,32 @@
 										class="text-rose-500">*</span
 									>
 								</Label>
-								<select
-									id="target-shelter-select"
-									bind:value={selectedTargetShelter}
-									class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-								>
-									<option value="">-- เลือกศูนย์พักพิงปลายทาง --</option>
-									{#each redirectTargets as s (s.code)}
-										<option value={s.code}>{s.name} ({s.code})</option>
-									{/each}
-								</select>
+								<Select.Root type="single" bind:value={selectedTargetShelter}>
+									<Select.Trigger
+										id="target-shelter-select"
+										class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
+									>
+										{redirectTargetLabel}
+									</Select.Trigger>
+									<Select.Content>
+										{#each redirectTargets as target (target.code)}
+											<Select.Item value={target.code} label="{target.name} ({target.code})" />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							</div>
 
 							<div class="space-y-1.5">
 								<Label for="redirect-remark-input" class="text-sm font-bold text-foreground">
 									หมายเหตุสำหรับการส่งต่อ (Remark)
 								</Label>
-								<textarea
+								<Textarea
 									id="redirect-remark-input"
-									rows="2"
+									rows={2}
 									placeholder="ระบุเหตุผลการส่งต่อ เช่น คลังเต็ม หรือต้องการการดูแลเฉพาะทาง..."
 									bind:value={redirectNote}
-									class="w-full rounded-xl border border-border/80 bg-muted/10 p-3 text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-								></textarea>
+									class="rounded-xl bg-muted/10 text-sm"
+								/>
 							</div>
 
 							<div class="flex items-center justify-between gap-3 pt-2">
@@ -1197,21 +1251,23 @@
 							</div>
 
 							<div class="flex items-center gap-3 pt-1">
-								<button
+								<Button
+									variant="destructive"
 									type="button"
 									onclick={handleConfirmReject}
 									disabled={saving || !rejectReason.trim()}
-									class="h-10 flex-1 cursor-pointer rounded-xl bg-[#E11D48] px-6 text-sm font-bold text-white shadow-xs transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+									class="h-10 flex-1 rounded-xl bg-destructive px-6 text-sm font-bold text-white shadow-xs hover:bg-destructive/90"
 								>
 									{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
-								</button>
-								<button
+								</Button>
+								<Button
+									variant="secondary"
 									type="button"
 									onclick={() => (actionPanel = 'none')}
-									class="h-10 cursor-pointer rounded-xl bg-slate-100 px-6 text-sm font-bold text-slate-700 hover:bg-slate-200 dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
+									class="h-10 rounded-xl px-6 text-sm font-bold"
 								>
 									ยกเลิก
-								</button>
+								</Button>
 							</div>
 						</div>
 					{/if}
@@ -1305,23 +1361,24 @@
 
 						<!-- Primary Action buttons -->
 						<div class="grid w-full grid-cols-2 gap-3">
-							<button
+							<Button
 								type="button"
 								onclick={openCamera}
-								class="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#002D5B] text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+								class="h-11 gap-2 rounded-xl bg-[#002D5B] text-xs font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 							>
 								<Camera class="h-4 w-4" />
 								เปิดกล้องสแกน QR
-							</button>
+							</Button>
 
-							<button
+							<Button
+								variant="outline"
 								type="button"
 								onclick={() => (activeView = 'walkin')}
-								class="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-card text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
+								class="h-11 gap-2 rounded-xl bg-card text-xs font-bold shadow-xs"
 							>
 								<User class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 								ลงทะเบียน Walk-in
-							</button>
+							</Button>
 						</div>
 
 						<!-- Manual search input fallback -->
@@ -1366,10 +1423,11 @@
 									{#each awaitingBookings as booking (donationActionRef(booking))}
 										{@const ref = donationActionRef(booking)}
 										<li>
-											<button
+											<Button
+												variant="outline"
 												type="button"
 												onclick={() => ref && performLookup(ref)}
-												class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-left transition-colors hover:bg-muted"
+												class="h-auto w-full justify-between gap-2 rounded-xl border-border/70 bg-card px-3 py-2 text-left"
 											>
 												<span class="min-w-0">
 													<span class="block truncate text-2xs font-bold text-foreground">
@@ -1379,12 +1437,10 @@
 														{booking.donor_name || 'ไม่ระบุชื่อ'} · {booking.item_count} รายการ
 													</span>
 												</span>
-												<span
-													class="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-3xs font-bold text-muted-foreground"
-												>
+												<Badge variant="secondary" class="shrink-0 text-3xs font-bold">
 													{booking.status}
-												</span>
-											</button>
+												</Badge>
+											</Button>
 										</li>
 									{/each}
 								</ul>
@@ -1439,14 +1495,16 @@
 		<div>
 			<!-- Top Dark Banner -->
 			<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
-				<button
+				<Button
+					variant="link"
+					size="sm"
 					type="button"
 					onclick={() => (activeView = 'scan')}
-					class="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-200 transition-colors hover:text-white"
+					class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
 					<ArrowLeft class="h-3.5 w-3.5" />
 					กลับหน้าสแกนรับของ
-				</button>
+				</Button>
 
 				<div class="flex items-center gap-2.5">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
@@ -1474,7 +1532,7 @@
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 						<div class="space-y-1.5">
 							<Label for="donor-name-input" class="text-sm font-semibold text-foreground">
-								ชื่อผู้บริจาค/ผู้ติดต่อ <span class="text-rose-500">*</span>
+								ชื่อผู้บริจาค/ผู้ติดต่อ <span class="text-destructive">*</span>
 							</Label>
 							<Input
 								id="donor-name-input"
@@ -1521,14 +1579,15 @@
 							<span>รายการสิ่งของบริจาค (Items List)</span>
 						</h3>
 
-						<button
+						<Button
+							variant="outline"
 							type="button"
 							onclick={addWalkinItem}
-							class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
+							class="h-9 gap-1.5 rounded-xl border-blue-200 bg-blue-50/70 px-3.5 text-xs font-bold text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
 						>
 							<PlusCircle class="h-4 w-4" />
 							เพิ่มรายการสิ่งของ
-						</button>
+						</Button>
 					</div>
 
 					<div class="space-y-4">
@@ -1541,22 +1600,26 @@
 										รายการที่ #{idx + 1}
 									</span>
 									<div class="flex items-center gap-3">
-										<button
+										<Button
+											variant="link"
+											size="sm"
 											type="button"
 											onclick={() => openQuickCreate(idx)}
-											class="cursor-pointer text-xs font-semibold text-blue-600 transition-colors hover:underline dark:text-blue-400"
+											class="h-auto p-0 text-xs font-semibold text-blue-600 dark:text-blue-400"
 										>
 											+ สร้างรายการใหม่
-										</button>
+										</Button>
 										{#if walkinItems.length > 1}
-											<button
+											<Button
+												variant="ghost"
+												size="icon-sm"
 												type="button"
 												onclick={() => removeWalkinItem(item.id)}
-												class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+												class="text-muted-foreground hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
 												title="ลบรายการนี้"
 											>
 												<Trash2 class="h-4 w-4" />
-											</button>
+											</Button>
 										{/if}
 									</div>
 								</div>
@@ -1564,28 +1627,35 @@
 								<div class="grid grid-cols-1 items-start gap-4 md:grid-cols-12">
 									<!-- Item Select -->
 									<div class="space-y-1.5 md:col-span-8">
-										<Label class="text-sm font-semibold text-foreground">
-											เลือกประเภทสิ่งของ / ค้นหาสินค้าหลัก <span class="text-rose-500">*</span>
-										</Label>
-										<select
-											value={item.itemId}
-											onchange={(e) =>
-												handleWalkinItemSelect(idx, (e.target as HTMLSelectElement).value)}
-											class="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-sm text-foreground transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+										<Label
+											for="walkin-item-{item.id}"
+											class="text-sm font-semibold text-foreground"
 										>
-											<option value="">-- ค้นหาและเลือก Item --</option>
-											{#each catalogItems as c (c._id)}
-												<option value={c._id}>
-													{c.name} ({c.unit})
-												</option>
-											{/each}
-										</select>
+											เลือกประเภทสิ่งของ / ค้นหาสินค้าหลัก <span class="text-destructive">*</span>
+										</Label>
+										<Select.Root
+											type="single"
+											value={item.itemId}
+											onValueChange={(v) => handleWalkinItemSelect(idx, v)}
+										>
+											<Select.Trigger
+												id="walkin-item-{item.id}"
+												class="h-10 w-full rounded-xl bg-card text-sm data-[size=default]:h-10"
+											>
+												{catalogLabel(item.itemId, '-- ค้นหาและเลือก Item --')}
+											</Select.Trigger>
+											<Select.Content>
+												{#each catalogItems as c (c._id)}
+													<Select.Item value={c._id} label="{c.name} ({c.unit})" />
+												{/each}
+											</Select.Content>
+										</Select.Root>
 									</div>
 
 									<!-- Qty Input -->
 									<div class="space-y-1.5 md:col-span-2">
 										<Label for="walkin-qty-{item.id}" class="text-sm font-semibold text-foreground">
-											จำนวนที่รับจริง <span class="text-rose-500">*</span>
+											จำนวนที่รับจริง <span class="text-destructive">*</span>
 										</Label>
 										<Input
 											id="walkin-qty-{item.id}"
@@ -1611,13 +1681,11 @@
 											class="h-10 rounded-xl text-center text-sm"
 										/>
 									</div>
-								</div>
 
-								<!-- Lot details. Both reach `stock_ledger.lot` (CR-088); the expiry
-								     is REQUIRED for a perishable item and the intake route refuses
-								     the line without it — this row is where staff can actually
-								     supply it. -->
-								<div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">
+									<!-- Lot details. Both reach `stock_ledger.lot` (CR-088); the expiry
+									     is REQUIRED for a perishable item and the intake route refuses
+									     the line without it — this row is where staff can actually
+									     supply it. -->
 									<div class="space-y-1.5 md:col-span-6">
 										<Label
 											for="walkin-expiry-{item.id}"
@@ -1625,7 +1693,7 @@
 										>
 											วันหมดอายุ
 											{#if isPerishable(item.itemId)}
-												<span class="text-rose-500">*</span>
+												<span class="text-destructive">*</span>
 												<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
 													(ของเน่าเสียง่าย — ต้องระบุ)
 												</span>
@@ -1633,9 +1701,9 @@
 												<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
 											{/if}
 										</Label>
-										<Input
+										<DatePicker
 											id="walkin-expiry-{item.id}"
-											type="date"
+											ariaLabel="วันหมดอายุ"
 											bind:value={item.expiry}
 											class="h-10 rounded-xl text-sm {isPerishable(item.itemId) && !item.expiry
 												? 'border-rose-300 dark:border-rose-900'
@@ -1697,99 +1765,86 @@
 </div>
 
 <!-- Quick Create Item Dialog -->
-{#if isQuickCreateOpen}
-	<div
-		class="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-xs fade-in"
-	>
-		<div
-			class="w-full max-w-md animate-in rounded-3xl border border-border bg-card p-6 shadow-2xl zoom-in-95"
-		>
-			<div class="mb-4 flex items-center justify-between border-b border-border/60 pb-3">
-				<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
-					<PackagePlus class="h-5 w-5 text-primary" />
-					สร้างรายการสินค้าใหม่ในคลัง
-				</h3>
-				<button
-					type="button"
-					onclick={() => (isQuickCreateOpen = false)}
-					class="cursor-pointer rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-				>
-					<X class="h-4 w-4" />
-				</button>
+<Dialog.Root bind:open={isQuickCreateOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-base font-bold">
+				<PackagePlus class="h-5 w-5 text-primary" />
+				สร้างรายการสินค้าใหม่ในคลัง
+			</Dialog.Title>
+		</Dialog.Header>
+
+		<div class="space-y-4">
+			<div class="space-y-1.5">
+				<Label for="new-item-name" class="text-sm font-semibold text-foreground">
+					ชื่อสิ่งของ/รายการสินค้า <span class="text-destructive">*</span>
+				</Label>
+				<Input
+					id="new-item-name"
+					type="text"
+					placeholder="เช่น ปลากระป๋องตราสามแม่ครัว"
+					bind:value={newItemName}
+					class="h-10 rounded-xl text-sm"
+				/>
 			</div>
 
-			<div class="space-y-4">
+			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1.5">
-					<Label for="new-item-name" class="text-sm font-semibold text-foreground">
-						ชื่อสิ่งของ/รายการสินค้า <span class="text-rose-500">*</span>
+					<Label for="new-item-category" class="text-sm font-semibold text-foreground">
+						หมวดหมู่
+					</Label>
+					<Select.Root type="single" bind:value={newItemCategory}>
+						<Select.Trigger
+							id="new-item-category"
+							class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
+						>
+							{newItemCategoryLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each ITEM_CATEGORY_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<div class="space-y-1.5">
+					<Label for="new-item-unit" class="text-sm font-semibold text-foreground">
+						หน่วยนับมาตรฐาน
 					</Label>
 					<Input
-						id="new-item-name"
+						id="new-item-unit"
 						type="text"
-						placeholder="เช่น ปลากระป๋องตราสามแม่ครัว"
-						bind:value={newItemName}
+						placeholder="เช่น กระป๋อง, ชิ้น"
+						bind:value={newItemUnit}
 						class="h-10 rounded-xl text-sm"
 					/>
 				</div>
-
-				<div class="grid grid-cols-2 gap-4">
-					<div class="space-y-1.5">
-						<Label for="new-item-category" class="text-sm font-semibold text-foreground">
-							หมวดหมู่
-						</Label>
-						<select
-							id="new-item-category"
-							bind:value={newItemCategory}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground focus:ring-2 focus:ring-primary/20 focus:outline-none"
-						>
-							<option value="food">อาหารและเครื่องดื่ม</option>
-							<option value="medicine">ยารักษาโรค/เวชภัณฑ์</option>
-							<option value="hygiene">ของใช้ส่วนตัว/สุขอนามัย</option>
-							<option value="clothing">เครื่องนุ่งห่ม/ที่นอน</option>
-							<option value="baby">แม่และเด็ก</option>
-							<option value="tools">อุปกรณ์/เครื่องมือช่าง</option>
-							<option value="general">ของใช้ทั่วไป</option>
-						</select>
-					</div>
-
-					<div class="space-y-1.5">
-						<Label for="new-item-unit" class="text-sm font-semibold text-foreground">
-							หน่วยนับมาตรฐาน
-						</Label>
-						<Input
-							id="new-item-unit"
-							type="text"
-							placeholder="เช่น กระป๋อง, ชิ้น"
-							bind:value={newItemUnit}
-							class="h-10 rounded-xl text-sm"
-						/>
-					</div>
-				</div>
-
-				<div class="flex items-center justify-end gap-2.5 pt-4">
-					<Button
-						variant="ghost"
-						type="button"
-						onclick={() => (isQuickCreateOpen = false)}
-						class="h-10 rounded-xl px-4 text-sm font-semibold text-muted-foreground"
-					>
-						ยกเลิก
-					</Button>
-					<Button
-						type="button"
-						onclick={handleCreateNewItemMaster}
-						disabled={creatingItem}
-						class="h-10 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground"
-					>
-						{#if creatingItem}
-							<Loader2 class="h-4 w-4 animate-spin" />
-							กำลังสร้าง…
-						{:else}
-							บันทึกรายการใหม่
-						{/if}
-					</Button>
-				</div>
 			</div>
 		</div>
-	</div>
-{/if}
+
+		<Dialog.Footer class="gap-2.5">
+			<Button
+				variant="ghost"
+				type="button"
+				onclick={() => (isQuickCreateOpen = false)}
+				class="h-10 rounded-xl px-4 text-sm font-semibold text-muted-foreground"
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				type="button"
+				onclick={handleCreateNewItemMaster}
+				disabled={creatingItem}
+				class="h-10 rounded-xl px-5 text-sm font-bold"
+			>
+				{#if creatingItem}
+					<Loader2 class="h-4 w-4 animate-spin" />
+					กำลังสร้าง…
+				{:else}
+					บันทึกรายการใหม่
+				{/if}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

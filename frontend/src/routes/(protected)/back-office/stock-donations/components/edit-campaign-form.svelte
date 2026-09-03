@@ -4,6 +4,9 @@
 	import Save from '@lucide/svelte/icons/save';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
@@ -88,9 +91,19 @@
 	// donation docs, and lowering the target below it is what Force Cut-off is for.
 	const pledged = roundQty(editedNeed?.reserved ?? '0');
 
+	const URGENCY_OPTIONS = [
+		{ value: 'normal', label: 'ปกติ (Normal)' },
+		{ value: 'important', label: 'สำคัญ (Important)' },
+		{ value: 'critical', label: 'วิกฤต (Critical)' }
+	] as const;
+
 	const finalUnit = $derived(
 		selectedUnitOption === 'custom' ? customUnit.trim() : selectedUnitOption
 	);
+	const unitLabel = $derived(
+		selectedUnitOption === 'custom' ? 'ระบุหน่วยเอง (Custom)...' : selectedUnitOption
+	);
+	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -121,14 +134,16 @@
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
 	<!-- Top Dark Navy Banner -->
 	<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
-		<button
+		<Button
+			variant="link"
+			size="sm"
 			type="button"
 			onclick={onclose}
-			class="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-200 transition-colors hover:text-white"
+			class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
 			กลับหน้าจัดการความต้องการ
-		</button>
+		</Button>
 		<div class="flex items-center gap-2.5">
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
 				<SlidersHorizontal class="h-5 w-5" />
@@ -145,9 +160,9 @@
 		<!-- Row 1: Campaign title & Category -->
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<div>
-				<label for="edit-campaign-title" class="mb-1.5 block text-xs font-bold text-foreground">
-					ชื่อประกาศ (Campaign) <span class="text-rose-500">*</span>
-				</label>
+				<Label for="edit-campaign-title" class="mb-1.5 text-xs font-bold text-foreground">
+					ชื่อประกาศ (Campaign) <span class="text-destructive">*</span>
+				</Label>
 				<Input
 					id="edit-campaign-title"
 					type="text"
@@ -157,18 +172,22 @@
 			</div>
 
 			<div>
-				<label for="edit-item-category" class="mb-1.5 block text-xs font-bold text-foreground">
+				<Label for="edit-item-category" class="mb-1.5 text-xs font-bold text-foreground">
 					หมวดหมู่ (Category)
-				</label>
-				<select
-					id="edit-item-category"
-					bind:value={category}
-					class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-				>
-					{#each CATEGORY_OPTIONS as option (option)}
-						<option value={option}>{option}</option>
-					{/each}
-				</select>
+				</Label>
+				<Select.Root type="single" bind:value={category}>
+					<Select.Trigger
+						id="edit-item-category"
+						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+					>
+						{category}
+					</Select.Trigger>
+					<Select.Content>
+						{#each CATEGORY_OPTIONS as option (option)}
+							<Select.Item value={option} label={option} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 		</div>
 
@@ -185,35 +204,39 @@
 			</div>
 
 			<div>
-				<label for="edit-item-unit" class="mb-1.5 block text-xs font-bold text-foreground">
+				<Label for="edit-item-unit" class="mb-1.5 text-xs font-bold text-foreground">
 					หน่วย (Unit)
-				</label>
+				</Label>
 				<div class="space-y-2">
-					<select
-						id="edit-item-unit"
-						bind:value={selectedUnitOption}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-					>
-						{#each STANDARD_UNITS as option (option)}
-							<option value={option}>{option}</option>
-						{/each}
-						<option value="custom">ระบุหน่วยเอง (Custom)...</option>
-					</select>
+					<Select.Root type="single" bind:value={selectedUnitOption}>
+						<Select.Trigger
+							id="edit-item-unit"
+							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+						>
+							{unitLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each STANDARD_UNITS as option (option)}
+								<Select.Item value={option} label={option} />
+							{/each}
+							<Select.Item value="custom" label="ระบุหน่วยเอง (Custom)..." />
+						</Select.Content>
+					</Select.Root>
 					{#if selectedUnitOption === 'custom'}
 						<Input
 							type="text"
 							placeholder="พิมพ์ระบุหน่วย..."
 							bind:value={customUnit}
-							class="h-9 rounded-xl text-xs"
+							class="h-10 rounded-xl text-xs"
 						/>
 					{/if}
 				</div>
 			</div>
 
 			<div>
-				<label for="edit-item-target" class="mb-1.5 block text-xs font-bold text-foreground">
-					เป้าหมายที่ต้องการ (Target) <span class="text-rose-500">*</span>
-				</label>
+				<Label for="edit-item-target" class="mb-1.5 text-xs font-bold text-foreground">
+					เป้าหมายที่ต้องการ (Target) <span class="text-destructive">*</span>
+				</Label>
 				<Input
 					id="edit-item-target"
 					type="text"
@@ -232,32 +255,36 @@
 
 		<!-- Row 3: Urgency Level -->
 		<div>
-			<label for="edit-item-urgency" class="mb-1.5 block text-xs font-bold text-foreground">
+			<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
 				ความเร่งด่วน (Urgency Level)
-			</label>
-			<select
-				id="edit-item-urgency"
-				bind:value={urgency}
-				class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-			>
-				<option value="normal">ปกติ (Normal)</option>
-				<option value="important">สำคัญ (Important)</option>
-				<option value="critical">วิกฤต (Critical)</option>
-			</select>
+			</Label>
+			<Select.Root type="single" bind:value={urgency}>
+				<Select.Trigger
+					id="edit-item-urgency"
+					class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+				>
+					{urgencyLabel}
+				</Select.Trigger>
+				<Select.Content>
+					{#each URGENCY_OPTIONS as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		</div>
 
 		<!-- Row 4: Reason / Details -->
 		<div>
-			<label for="edit-item-details" class="mb-1.5 block text-xs font-bold text-foreground">
+			<Label for="edit-item-details" class="mb-1.5 text-xs font-bold text-foreground">
 				เหตุผล/รายละเอียดเพิ่มเติม (Reason/Details)
-			</label>
-			<textarea
+			</Label>
+			<Textarea
 				id="edit-item-details"
-				rows="3"
+				rows={3}
 				placeholder="เช่น ต้องการด่วนสำหรับผู้ป่วยติดเตียง..."
 				bind:value={description}
-				class="w-full rounded-xl border border-border/80 bg-card p-3 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-			></textarea>
+				class="rounded-xl text-xs"
+			/>
 			<p class="mt-1.5 text-3xs text-muted-foreground">
 				ข้อความนี้แสดงใต้ชื่อประกาศบนกระดาน และเก็บความเร่งด่วน/หมวดหมู่ไว้ในบรรทัดเดียวกัน
 			</p>
