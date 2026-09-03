@@ -2,35 +2,49 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { toast } from 'svelte-sonner';
-	import { mapNeedItemHeuristic, suggestNeedDefaults } from '$lib/features/operations';
 	import PublicDisplayHint from './public-display-hint.svelte';
+	import { useSupplyItems } from '$lib/features/supply';
+	import { mergeCatalogGenerations, useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
 
 	interface Props {
 		onclose: () => void;
 		onsubmit: (input: {
+			itemId: string;
 			name: string;
 			target: string;
 			location: string;
 			category?: string;
 			unit?: string;
 			urgency?: 'critical' | 'important' | 'normal';
+			imageUrl?: string;
 			description?: string;
 		}) => void;
 	}
 
 	let { onclose, onsubmit }: Props = $props();
 
-	let itemTitle = $state('');
-	// `null` = "still following the suggestion". Set the moment staff pick for
-	// themselves, so a later edit to the item name cannot undo their choice.
+	/**
+	 * The item is PICKED from the catalog, never guessed from what staff typed.
+	 *
+	 * This box used to be free text run through `mapNeedItemHeuristic`, which matched
+	 * bare substrings: "มาม่าน้ำข้น" contains "น้ำ", so a noodle campaign bound itself to
+	 * `item:water` and merged into the drinking-water card on the donor board (the
+	 * public projection is keyed `{shelter}:{item_id}` and names the card from the
+	 * catalog — schema.md §2.4). Staff had no way to see the wrong binding before
+	 * saving. Picking the catalog row makes the binding the thing being chosen.
+	 */
+	let selectedItemId = $state('');
+	// `null` = "still following the catalog's value". Set the moment staff pick for
+	// themselves, so changing the item cannot undo their choice.
 	let categoryChoice = $state<string | null>(null);
 	let targetQty = $state('');
 	const STANDARD_UNITS = [
@@ -73,14 +87,60 @@
 	let imageUrl = $state('');
 	let description = $state('');
 
-	const suggested = $derived(suggestNeedDefaults(itemTitle));
-	// The catalog id this name will bind to — the same mapping the save path uses, so
-	// the hint below shows what donors will really see, not a guess of its own.
-	const mappedItemId = $derived(itemTitle.trim() ? mapNeedItemHeuristic(itemTitle) : '');
-	const category = $derived(categoryChoice ?? suggested.category ?? 'อาหารและเครื่องดื่ม');
-	const selectedUnitOption = $derived(unitChoice ?? suggested.unit ?? 'ชิ้น');
+	// Same two sources the scan station and the hint below read, so all three agree on
+	// what "the catalog" is.
+	const supplyItemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
+
+	// Both generations of the catalog, de-duplicated by name (schema.md §4.2) — the
+	// seed carries `item:rice` AND `item_master:rice`, and the picker listed both.
+	const catalogItems = $derived(
+		mergeCatalogGenerations(supplyItemsQuery.data ?? [], itemMastersQuery.data ?? [])
+	);
+	const catalogLoading = $derived(supplyItemsQuery.isPending || itemMastersQuery.isPending);
+	const catalogOptions = $derived(
+		catalogItems.map((c) => ({
+			value: c._id,
+			label: c.unit ? `${c.name} (${c.unit})` : c.name
+		}))
+	);
+	const selectedItem = $derived(catalogItems.find((c) => c._id === selectedItemId));
+
+	/**
+	 * Catalog rows carry a code (`food`, `hygiene`, …); this form's dropdown is the
+	 * Thai back-office wording. Unmapped codes fall through to the plain default —
+	 * the category lives in `notes` and is back-office-only, so a miss is cosmetic.
+	 */
+	const CATALOG_CATEGORY_TO_FORM: Record<string, string> = {
+		food: 'อาหารและเครื่องดื่ม',
+		water: 'อาหารและเครื่องดื่ม',
+		medicine: 'ยารักษาโรคและเวชภัณฑ์',
+		medical: 'ยารักษาโรคและเวชภัณฑ์',
+		hygiene: 'ของใช้ทั่วไปและสุขอนามัย',
+		general: 'ของใช้ทั่วไปและสุขอนามัย',
+		clothing: 'เครื่องนุ่งห่มและที่นอน',
+		bedding: 'เครื่องนุ่งห่มและที่นอน',
+		baby: 'แม่และเด็ก',
+		tools: 'อุปกรณ์และเครื่องมือช่าง'
+	};
+
+	const mappedItemId = $derived(selectedItemId);
+	const category = $derived(
+		categoryChoice ??
+			CATALOG_CATEGORY_TO_FORM[selectedItem?.category ?? ''] ??
+			'อาหารและเครื่องดื่ม'
+	);
+	// Default to the catalog's own unit — that is the one donors are shown, so
+	// matching it is what keeps the mismatch warning below quiet.
+	const catalogUnit = $derived(selectedItem?.unit?.trim() ?? '');
+	const selectedUnitOption = $derived(
+		unitChoice ??
+			(catalogUnit ? (STANDARD_UNITS.includes(catalogUnit) ? catalogUnit : 'custom') : 'ชิ้น')
+	);
 	const finalUnit = $derived(
-		selectedUnitOption === 'custom' ? customUnit.trim() : selectedUnitOption
+		selectedUnitOption === 'custom'
+			? customUnit.trim() || (STANDARD_UNITS.includes(catalogUnit) ? '' : catalogUnit)
+			: selectedUnitOption
 	);
 	const categoryLabel = $derived(
 		CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
@@ -92,8 +152,8 @@
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
-		if (!itemTitle.trim()) {
-			toast.error('กรุณาระบุชื่อรายการสิ่งของ');
+		if (!selectedItemId || !selectedItem) {
+			toast.error('กรุณาเลือกรายการสิ่งของจากแคตตาล็อก');
 			return;
 		}
 		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
@@ -106,12 +166,14 @@
 		}
 
 		onsubmit({
-			name: itemTitle.trim(),
+			itemId: selectedItemId,
+			name: selectedItem.name,
 			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category: category.trim() || 'ของใช้ทั่วไป',
 			unit: finalUnit || 'ชิ้น',
 			urgency,
+			...(imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
 			description: description.trim()
 		});
 	}
@@ -149,23 +211,24 @@
 				รายละเอียดสิ่งของ
 			</h3>
 
-			<!-- Item Title -->
+			<!-- Item — picked from the catalog, not typed -->
 			<div>
 				<Label for="campaign-item-title" class="mb-1.5 text-xs font-bold text-foreground">
-					ชื่อสิ่งของ (Item Name) <span class="text-destructive">*</span>
+					รายการสิ่งของ (Item) <span class="text-destructive">*</span>
 				</Label>
-				<div class="relative">
-					<Search
-						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-					/>
-					<Input
-						id="campaign-item-title"
-						type="text"
-						placeholder="พิมพ์ชื่อเพื่อค้นหาหรือระบุสิ่งของ..."
-						bind:value={itemTitle}
-						class="h-10 rounded-xl pl-9 text-xs"
-					/>
-				</div>
+				<SearchSelect
+					items={catalogOptions}
+					bind:value={selectedItemId}
+					loading={catalogLoading}
+					placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
+					emptyText="ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน"
+					class="h-10 rounded-xl text-xs"
+					controlProps={{ id: 'campaign-item-title' }}
+				/>
+				<p class="mt-1.5 text-3xs text-muted-foreground">
+					ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ถ้ายังไม่มีรายการนี้
+					ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
+				</p>
 			</div>
 
 			<!-- Category -->
@@ -228,9 +291,14 @@
 							</Select.Content>
 						</Select.Root>
 						{#if selectedUnitOption === 'custom'}
+							<!-- Left blank, the campaign takes the catalog's own unit (see `finalUnit`),
+							     which is the one donors are shown — so the placeholder states it rather
+							     than looking like an unfilled required box. -->
 							<Input
 								type="text"
-								placeholder="พิมพ์ระบุหน่วยนับ..."
+								placeholder={catalogUnit
+									? `ใช้หน่วยจากแคตตาล็อก: ${catalogUnit}`
+									: 'พิมพ์ระบุหน่วยนับ...'}
 								bind:value={customUnit}
 								class="h-10 rounded-xl text-xs"
 							/>

@@ -1,7 +1,8 @@
 import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
-import { supplyRepository } from '$lib/features/supply';
+import { supplyRepository, useSupplyItems } from '$lib/features/supply';
+import { useItemMasters } from '$lib/features/catalog';
 import { useQueryClient } from '@tanstack/svelte-query';
 import {
 	operationsKeys,
@@ -16,13 +17,16 @@ import {
 	deriveNeedAvailability,
 	editNeed,
 	forceCutOffNeed,
-	mapNeedItemHeuristic,
-	reopenNeed,
-	type SpecialRequestInput
+	reopenNeed
 } from '../domain/operations';
 import type { NeedItem } from './need-item.types';
 
-const ITEM_NAMES: Record<string, string> = {
+/**
+ * Last-resort labels for legacy ids that are no longer in the catalog. The catalog
+ * is the source of truth (see `itemDisplayName` below) — these only answer while the
+ * catalog query is still loading, or for an id that has since been deleted.
+ */
+const FALLBACK_ITEM_NAMES: Record<string, string> = {
 	'item:rice': 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
 	'item:water': 'น้ำดื่มบรรจุขวด 1.5L',
 	'item:paracetamol': 'ยาพาราเซตามอล',
@@ -31,8 +35,9 @@ const ITEM_NAMES: Record<string, string> = {
 	'item:egg': 'ไข่ไก่สด'
 };
 
-function itemDisplayName(itemId: string): string {
-	return ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId);
+/** Strip whichever catalog-generation prefix an id carries (schema.md §4.2). */
+function bareItemId(itemId: string): string {
+	return itemId.replace(/^(item_master:|item:)/, '');
 }
 
 async function warnIfItemNotInCatalog(itemId: string, displayName: string): Promise<void> {
@@ -44,14 +49,33 @@ async function warnIfItemNotInCatalog(itemId: string, displayName: string): Prom
 	}
 }
 
-export function useDonationNeedsBoard(options?: {
-	onRequestCreated?: () => void;
-	onFormCreated?: () => void;
-}) {
+export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) {
 	const campaignsQuery = useCampaigns();
+	// Row names come from the catalog, not a hardcoded table: the old map held six
+	// legacy ids and everything else fell through to the raw id — a campaign for
+	// `item:vegetable` was labelled "vegetable" and one for `item_master:canned-fish`
+	// showed the whole id. Both generations are read (schema.md §4.2), NOT merged:
+	// this is a lookup by exact id, so an id that loses the de-duplication still has
+	// to resolve to its name.
+	const supplyItemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const stockLedgersQuery = useStockLedgers();
 	const donationsQuery = useDonations();
 	const queryClient = useQueryClient();
+
+	/** Exact-id → display name, across both catalog generations. */
+	const catalogNames = $derived.by(() => {
+		const names: Record<string, string> = {};
+		for (const item of supplyItemsQuery.data ?? []) names[item._id] = item.name;
+		for (const master of itemMastersQuery.data ?? []) {
+			if (!master.deactivated) names[master._id] = master.name;
+		}
+		return names;
+	});
+
+	function itemDisplayName(itemId: string): string {
+		return catalogNames[itemId] ?? FALLBACK_ITEM_NAMES[itemId] ?? bareItemId(itemId);
+	}
 
 	/**
 	 * The board's three inputs all move without this page doing anything: a donor books
@@ -219,49 +243,24 @@ export function useDonationNeedsBoard(options?: {
 		);
 	}
 
-	function handleAddRequest(input: SpecialRequestInput) {
-		const itemId = mapNeedItemHeuristic(input.name);
-		void warnIfItemNotInCatalog(itemId, input.name);
-
-		const newCampaignInput = {
-			title: input.name,
-			needs: [
-				{
-					item_id: itemId,
-					qty_target: input.target,
-					unit: 'ชิ้น'
-				}
-			],
-			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
-		};
-
-		createCampaignMutation.mutate(
-			{
-				input: newCampaignInput,
-				ctx: ctx
-			},
-			{
-				onSuccess: () => {
-					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
-					options?.onRequestCreated?.();
-				},
-				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
-				}
-			}
-		);
-	}
-
+	/**
+	 * `itemId` comes from the form's catalog picker — this used to run the campaign
+	 * title through `mapNeedItemHeuristic`, which bound "มาม่าน้ำข้น" to `item:water`
+	 * on a bare substring match and merged it into the drinking-water card. The
+	 * binding is now chosen, not inferred.
+	 */
 	function handleAddRequestFromForm(input: {
+		itemId: string;
 		name: string;
 		target: string;
 		location: string;
 		category?: string;
 		unit?: string;
 		urgency?: 'critical' | 'important' | 'normal';
+		imageUrl?: string;
 		description?: string;
 	}) {
-		const itemId = mapNeedItemHeuristic(input.name);
+		const itemId = input.itemId;
 		void warnIfItemNotInCatalog(itemId, input.name);
 
 		const newCampaignInput = {
@@ -315,6 +314,7 @@ export function useDonationNeedsBoard(options?: {
 			unit?: string;
 			category?: string;
 			urgency?: 'critical' | 'important' | 'normal';
+			imageUrl?: string;
 			description?: string;
 		}
 	) {
@@ -337,6 +337,7 @@ export function useDonationNeedsBoard(options?: {
 		const notes = buildCampaignNotes({
 			urgency: updated.urgency,
 			category: updated.category,
+			imageUrl: updated.imageUrl,
 			description: updated.description
 		});
 
@@ -371,7 +372,6 @@ export function useDonationNeedsBoard(options?: {
 		},
 		toggleShowOnHome,
 		toggleCutOff,
-		handleAddRequest,
 		handleAddRequestFromForm,
 		handleEditRequest
 	};

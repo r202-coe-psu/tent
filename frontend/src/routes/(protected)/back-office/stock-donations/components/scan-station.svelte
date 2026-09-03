@@ -40,7 +40,11 @@
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters, useCreateItemMaster } from '$lib/features/catalog';
+	import {
+		mergeCatalogGenerations,
+		useItemMasters,
+		useCreateItemMaster
+	} from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useShelters } from '$lib/features/shelters';
@@ -76,25 +80,15 @@
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const createItemMasterMutation = useCreateItemMaster();
 
-	const catalogItems = $derived.by(() => {
-		const supplyItems = (supplyItemsQuery.data ?? []).map((i) => ({
-			_id: i._id,
-			name: i.name,
-			unit: i.unit || 'ชิ้น',
-			category: i.category || 'other',
-			perishable: i.perishable ?? false
-		}));
-		const itemMasters = (itemMastersQuery.data ?? [])
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				unit: itemMasterUnit(im) || 'ชิ้น',
-				category: im.category || 'other',
-				perishable: false
-			}));
-		return [...supplyItems, ...itemMasters];
-	});
+	// De-duplicated across both catalog generations (schema.md §4.2) — the same goods
+	// exist as `item:rice` and `item_master:rice`, and this list showed each twice.
+	const catalogItems = $derived(
+		mergeCatalogGenerations(supplyItemsQuery.data ?? [], itemMastersQuery.data ?? []).map((c) => ({
+			...c,
+			unit: c.unit || 'ชิ้น',
+			category: c.category || 'other'
+		}))
+	);
 
 	const STORAGE_ZONE_OPTIONS = [
 		'Zone A (อาหารแห้งและเครื่องดื่ม)',

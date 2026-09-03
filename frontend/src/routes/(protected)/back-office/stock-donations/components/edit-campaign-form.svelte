@@ -7,6 +7,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
@@ -24,6 +26,7 @@
 			unit: string;
 			target: string;
 			urgency: 'critical' | 'important' | 'normal';
+			imageUrl: string;
 			description: string;
 		}) => void;
 	}
@@ -84,7 +87,24 @@
 		STANDARD_UNITS.includes(editedNeed?.unit ?? '') ? '' : (editedNeed?.unit ?? 'ชิ้น')
 	);
 	let targetQty = $state(editedNeed?.target ?? '0');
+	/**
+	 * The target this need was opened with. The donor-facing quota ceiling
+	 * (`donation_need_counter.qty_target` in Mongo) is written with `$setOnInsert`
+	 * and is DELIBERATELY frozen at seed time — CR-060 FR-2 — so editing this field
+	 * moves the board and the public card but NOT the gate donors are checked
+	 * against. They then hit "รับบริจาคครบแล้ว" at the old ceiling with nothing on
+	 * screen explaining why. Saying so here is the only warning staff get.
+	 */
+	const originalTarget = untrack(() => editedNeed?.target ?? '0');
+	const targetChanged = $derived(
+		!!targetQty.trim() &&
+			qtyGt(targetQty, 0) &&
+			persistQty(targetQty) !== persistQty(originalTarget)
+	);
 	let urgency = $state<'critical' | 'important' | 'normal'>(seed.notes.urgency);
+	// Seeded like every other note-borne field: the save below rebuilds the whole
+	// notes string, so a value this form does not read back is dropped on save.
+	let imageUrl = $state(seed.notes.imageUrl ?? '');
 	let description = $state(seed.notes.description ?? '');
 
 	// What donors already pledged against this need. Read-only: it is derived from
@@ -126,6 +146,7 @@
 			unit: finalUnit,
 			target: persistQty(targetQty),
 			urgency,
+			imageUrl: imageUrl.trim(),
 			description: description.trim()
 		});
 	}
@@ -251,26 +272,61 @@
 			</div>
 		</div>
 
+		{#if targetChanged}
+			<Alert.Root
+				variant="destructive"
+				class="rounded-2xl border-amber-300/70 bg-amber-50/70 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
+			>
+				<TriangleAlert class="text-amber-600 dark:text-amber-400" />
+				<Alert.Title class="text-xs font-bold">
+					เปลี่ยนเป้าหมายแล้ว แต่โควตาฝั่งผู้บริจาคจะยังไม่ขยับ
+				</Alert.Title>
+				<Alert.Description class="text-2xs leading-relaxed">
+					เพดานโควตาที่หน้าบริจาคใช้ตรวจถูกตรึงไว้ตั้งแต่ตอนสร้างประกาศ (CR-060 FR-2) —
+					กระดานหลังบ้าน และการ์ดหน้าสาธารณะจะขึ้นเป้าใหม่ ({persistQty(targetQty)}) ทันที
+					แต่ผู้บริจาคจะยังถูกปฏิเสธด้วย "รายการนี้รับบริจาคครบแล้ว" ที่เพดานเดิม ({persistQty(
+						originalTarget
+					)}) จนกว่าผู้ดูแลระบบจะปรับ
+					<code class="font-mono">donation_need_counter</code> ให้ตรงกัน
+				</Alert.Description>
+			</Alert.Root>
+		{/if}
+
 		<PublicDisplayHint {itemId} typedUnit={finalUnit} />
 
-		<!-- Row 3: Urgency Level -->
-		<div>
-			<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
-				ความเร่งด่วน (Urgency Level)
-			</Label>
-			<Select.Root type="single" bind:value={urgency}>
-				<Select.Trigger
-					id="edit-item-urgency"
-					class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
-				>
-					{urgencyLabel}
-				</Select.Trigger>
-				<Select.Content>
-					{#each URGENCY_OPTIONS as option (option.value)}
-						<Select.Item value={option.value} label={option.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
+		<!-- Row 3: Urgency Level & Image URL -->
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+			<div>
+				<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
+					ความเร่งด่วน (Urgency Level)
+				</Label>
+				<Select.Root type="single" bind:value={urgency}>
+					<Select.Trigger
+						id="edit-item-urgency"
+						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+					>
+						{urgencyLabel}
+					</Select.Trigger>
+					<Select.Content>
+						{#each URGENCY_OPTIONS as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
+
+			<div>
+				<Label for="edit-item-image-url" class="mb-1.5 text-xs font-bold text-foreground">
+					ภาพประกอบสิ่งของ (Image URL - Optional)
+				</Label>
+				<Input
+					id="edit-item-image-url"
+					type="url"
+					placeholder="https://example.com/image.png"
+					bind:value={imageUrl}
+					class="h-10 rounded-xl text-xs"
+				/>
+			</div>
 		</div>
 
 		<!-- Row 4: Reason / Details -->

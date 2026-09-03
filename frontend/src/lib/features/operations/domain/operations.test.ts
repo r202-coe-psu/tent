@@ -20,7 +20,6 @@ import {
 	editNeed,
 	buildCampaignNotes,
 	parseCampaignNotes,
-	suggestNeedDefaults,
 	publicItemAggregate,
 	reopenNeed,
 	isDonationOutstanding,
@@ -1532,31 +1531,66 @@ describe('campaign notes encode/decode', () => {
 	it('drops the placeholder category the create form shows before an item is picked', () => {
 		expect(buildCampaignNotes({ category: 'ถูกกำหนดอัตโนมัติ', description: 'x' })).toBe('x');
 	});
-});
 
-// The needs-board create form used to apply this inside an `$effect` that reassigned
-// the category and unit selects on every keystroke — so fixing a typo in the item
-// name silently reverted a unit the user had chosen. Pure and tested here; the form
-// now treats the result as a default.
-describe('suggestNeedDefaults (needs board form pre-fill)', () => {
-	it('suggests the unit the item is normally counted in', () => {
-		expect(suggestNeedDefaults('ข้าวสารหอมมะลิ')).toEqual({
-			category: 'อาหารและเครื่องดื่ม',
-			unit: 'ถุง'
+	// The create form had an image URL box whose value was never submitted — staff
+	// typed a link and it vanished on save. It rides in `notes` like urgency and
+	// category do, so the edit form has to read it back or the next save drops it.
+	it('round-trips an image URL alongside everything else', () => {
+		const notes = buildCampaignNotes({
+			urgency: 'critical',
+			category: 'อาหาร',
+			imageUrl: 'https://example.com/rice.png',
+			description: 'ข้าวสารสำหรับครัวกลาง'
 		});
-		expect(suggestNeedDefaults('น้ำดื่มขวด')).toMatchObject({ unit: 'ขวด' });
-		expect(suggestNeedDefaults('ผ้าห่มกันหนาว')).toEqual({
-			category: 'เครื่องนุ่งห่มและที่นอน',
-			unit: 'ผืน'
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'critical',
+			category: 'อาหาร',
+			imageUrl: 'https://example.com/rice.png',
+			description: 'ข้าวสารสำหรับครัวกลาง'
 		});
-		expect(suggestNeedDefaults('สบู่ก้อน')).toMatchObject({ unit: 'ก้อน' });
-		expect(suggestNeedDefaults('ผ้าอ้อมเด็ก')).toMatchObject({ category: 'แม่และเด็ก' });
 	});
 
-	it('suggests nothing for a blank or unrecognised name, so the caller keeps its own value', () => {
-		expect(suggestNeedDefaults('')).toEqual({});
-		expect(suggestNeedDefaults('   ')).toEqual({});
-		expect(suggestNeedDefaults('เต็นท์สนาม')).toEqual({});
+	it('round-trips an image URL with no category and no description', () => {
+		const notes = buildCampaignNotes({ imageUrl: 'https://example.com/a.png' });
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'normal',
+			imageUrl: 'https://example.com/a.png'
+		});
+	});
+
+	// A campaign saved before the image part existed must still parse — its whole
+	// note is the description, not a half-read image tag.
+	it('reads a note written before the image part existed', () => {
+		expect(parseCampaignNotes('[ด่วน] หมวด: อาหาร ต้องการด่วน')).toEqual({
+			urgency: 'critical',
+			category: 'อาหาร',
+			description: 'ต้องการด่วน'
+		});
+	});
+
+	// A URL with whitespace cannot be read back as one token, so it is not written
+	// at all rather than corrupting the description on the next edit.
+	it('refuses to encode an image URL containing whitespace', () => {
+		const notes = buildCampaignNotes({
+			imageUrl: 'https://x.test/a b.png',
+			description: 'ปลากระป๋อง'
+		});
+		expect(notes).toBe('ปลากระป๋อง');
+		expect(parseCampaignNotes(notes)).toEqual({ urgency: 'normal', description: 'ปลากระป๋อง' });
+	});
+
+	// The edit form seeds from `parseCampaignNotes` and saves through
+	// `buildCampaignNotes`; a value that does not survive that loop is lost on the
+	// second save even though the first one looked fine.
+	it('survives a parse → build → parse edit cycle', () => {
+		const first = buildCampaignNotes({
+			urgency: 'important',
+			category: 'ยา',
+			imageUrl: 'https://example.com/kit.png',
+			description: 'ชุดปฐมพยาบาล'
+		});
+		const reparsed = parseCampaignNotes(first);
+		expect(buildCampaignNotes(reparsed)).toBe(first);
 	});
 });
 

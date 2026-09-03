@@ -6,7 +6,6 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
-	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
 	import ScanStation from './components/scan-station.svelte';
@@ -39,12 +38,8 @@
 	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
 	let selectedEditingItem = $state<NeedItem | null>(null);
 	let selectedEditingItemId = $state('');
-	let isModalOpen = $state(false);
 
 	const needsBoard = useDonationNeedsBoard({
-		onRequestCreated: () => {
-			isModalOpen = false;
-		},
 		onFormCreated: () => {
 			viewState = 'list';
 		}
@@ -298,12 +293,6 @@
 		</Tabs.Content>
 	</Tabs.Root>
 </div>
-
-<SpecialRequestDialog
-	open={isModalOpen}
-	onclose={() => (isModalOpen = false)}
-	onsubmit={needsBoard.handleAddRequest}
-/>
 
 <ForceCutoffDialog
 	open={cutOffTarget !== null}

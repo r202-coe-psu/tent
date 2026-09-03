@@ -3,7 +3,7 @@ id: CR-087
 title: donation — เพิ่ม field ปลายทางที่ส่งต่อ (redirect_to_shelter_code) + ticket ฝั่งศูนย์ปลายทาง สำหรับสถานะ redirected (T-16 R-16.4)
 status: done
 date: 2026-08-25
-updated: 2026-08-31
+updated: 2026-09-03 # แก้ path ไฟล์ UI ที่ affects ชี้ (redirect-donation-dialog ถูกลบ)
 requested_by: Team A (T-16 intake review implementation) / Kunanon Nusaeng
 decided_by: project owner (อนุมัติ 2026-08-25)
 layer: volatile
@@ -14,7 +14,8 @@ affects:
   - frontend/src/lib/features/operations/domain/operations.ts (Donation, DONATION_TRANSITIONS)
   - frontend/src/lib/features/donations/ (PublicDonationDoc, back-office types)
   - frontend/src/routes/api/back-office/donations/[query]/redirect/+server.ts (endpoint ใหม่)
-  - frontend/src/lib/components/redirect-donation-dialog.svelte (UI มีอยู่แล้วเป็น stub — รอ endpoint จริง)
+  - frontend/src/lib/components/pending-review-detail.svelte (redirect panel — เดิมคือ redirect-donation-dialog.svelte)
+  - frontend/src/routes/(protected)/back-office/stock-donations/components/scan-station.svelte (redirect panel ฝั่งตรวจรับ)
 ---
 
 # CR-087 — donation redirect target + destination-shelter ticket
@@ -35,6 +36,11 @@ Design V8, ดู B-3 ในบันทึกสถานะ T-16) ต้อง
 ตอนนี้ UI ฝั่ง staff (`redirect-donation-dialog.svelte`) สร้างไว้แล้วและใช้งานได้ (เลือกศูนย์ปลายทาง +
 หมายเหตุ) แต่ handler เป็น mock — กด "ยืนยัน" แล้ว toast สำเร็จเฉยๆ ไม่ได้เขียนอะไรเข้า CouchDB —
 CR นี้เป็นตัวปลดล็อกให้ต่อปุ่มที่มีอยู่แล้วเข้ากับของจริง
+
+> **สถานะไฟล์ (2026-09-03):** ย่อหน้าข้างบนบันทึกสภาพตอนเปิด CR (2026-08-25). ภายหลัง UI ส่งต่อถูก
+> ย้ายจาก modal เข้าไปเป็น panel ในหน้า `pending-review-detail.svelte` / `scan-station.svelte` และ
+> `redirect-donation-dialog.svelte` ถูกลบทิ้ง — ดูรายการไฟล์ปัจจุบันที่ `affects` ด้านบน.
+> ตัวปุ่มเปิด panel ถูกซ่อนไว้ชั่วคราว (ยังไม่เปิดใช้การส่งต่อข้ามศูนย์) แต่ endpoint + panel ยังต่อสายครบ
 
 ## Change
 

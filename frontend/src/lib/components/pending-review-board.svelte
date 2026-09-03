@@ -6,6 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import {
@@ -110,6 +111,16 @@
 
 		return list;
 	});
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	// A filter change can leave the view past the last page — fall back to the last
+	// real page rather than render an empty queue over requests that do exist.
+	const pageCount = $derived(Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE)));
+	const safePage = $derived(Math.min(currentPage, pageCount));
+	const pagedRequests = $derived(
+		filteredRequests.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+	);
 </script>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
@@ -216,7 +227,7 @@
 						</Table.Cell>
 					</Table.Row>
 				{:else}
-					{#each filteredRequests as req (donationActionRef(req) ?? req.declared_at)}
+					{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
 						<Table.Row class="transition-colors hover:bg-muted/10">
 							<!-- Donor Info & Ref -->
 							<Table.Cell class="min-w-[240px] px-6 py-4">
@@ -273,4 +284,35 @@
 			</Table.Body>
 		</Table.Root>
 	</div>
+
+	{#if filteredRequests.length > PAGE_SIZE}
+		<div
+			class="flex flex-col items-center justify-between gap-3 border-t border-border/60 p-4 sm:flex-row"
+		>
+			<p class="text-2xs text-muted-foreground">
+				แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(
+					safePage * PAGE_SIZE,
+					filteredRequests.length
+				)}
+				จาก {filteredRequests.length} คำขอ
+			</p>
+			<Pagination.Root bind:page={currentPage} count={filteredRequests.length} perPage={PAGE_SIZE}>
+				{#snippet children({ pages })}
+					<Pagination.Content>
+						<Pagination.Previous />
+						{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
+							<Pagination.Item>
+								{#if p.type === 'page'}
+									<Pagination.Link page={p} isActive={p.value === safePage} />
+								{:else}
+									<Pagination.Ellipsis />
+								{/if}
+							</Pagination.Item>
+						{/each}
+						<Pagination.Next />
+					</Pagination.Content>
+				{/snippet}
+			</Pagination.Root>
+		</div>
+	{/if}
 </div>

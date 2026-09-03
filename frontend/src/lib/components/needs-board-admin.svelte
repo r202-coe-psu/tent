@@ -6,9 +6,10 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import { publicItemAggregate, type NeedItem } from '$lib/features/operations';
+	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
 
 	let {
@@ -52,7 +53,10 @@
 		compoundId: string;
 		itemId: string;
 		title: string;
+		/** Raw `donation_campaign.notes` — kept for the search filter. */
 		location: string;
+		/** Just the blurb staff typed; the tags encoded around it are shown elsewhere. */
+		description: string;
 		name: string;
 		unit: string;
 		reserved: string;
@@ -80,6 +84,7 @@
 					itemId: '',
 					title: item.title,
 					location: item.location,
+					description: parseCampaignNotes(item.location).description ?? '',
 					name: item.title,
 					unit: 'ชิ้น',
 					reserved: '0',
@@ -110,6 +115,7 @@
 						itemId: need.itemId,
 						title: need.name || item.title,
 						location: item.location,
+						description: parseCampaignNotes(item.location).description ?? '',
 						name: need.name,
 						unit: need.unit || 'ชิ้น',
 						reserved: need.reserved,
@@ -151,6 +157,14 @@
 
 		return filtered;
 	});
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	// A filter change can leave the view past the last page — go back to the start
+	// rather than render an empty table over rows that do exist.
+	const pageCount = $derived(Math.max(1, Math.ceil(flatRows.length / PAGE_SIZE)));
+	const safePage = $derived(Math.min(currentPage, pageCount));
+	const pagedRows = $derived(flatRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 </script>
 
 <div class="space-y-4">
@@ -282,7 +296,7 @@
 							</Table.Cell>
 						</Table.Row>
 					{:else}
-						{#each flatRows as row (row.compoundId + row.itemId)}
+						{#each pagedRows as row (row.compoundId + row.itemId)}
 							<Table.Row
 								class="transition-colors hover:bg-muted/10 {row.isCutOff
 									? 'bg-muted/10 opacity-70'
@@ -296,10 +310,17 @@
 										{/if}
 										{row.title}
 									</div>
-									<div class="mt-1 text-2xs text-muted-foreground">{row.location}</div>
+									{#if row.description}
+										<p
+											class="mt-1 line-clamp-2 text-2xs break-words text-muted-foreground"
+											title={row.description}
+										>
+											{row.description}
+										</p>
+									{/if}
 									{#if row.sharedCampaigns > 1}
 										<Badge
-											class="mt-1.5 h-auto bg-blue-50 py-0.5 text-3xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+											class="mt-1.5 h-auto bg-blue-50 py-0.5 text-2xs font-bold whitespace-normal text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
 											title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
 										>
 											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
@@ -419,5 +440,33 @@
 				</Table.Body>
 			</Table.Root>
 		</div>
+
+		{#if flatRows.length > PAGE_SIZE}
+			<div
+				class="flex flex-col items-center justify-between gap-3 border-t border-border/60 p-4 sm:flex-row"
+			>
+				<p class="text-2xs text-muted-foreground">
+					แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, flatRows.length)}
+					จาก {flatRows.length} รายการ
+				</p>
+				<Pagination.Root bind:page={currentPage} count={flatRows.length} perPage={PAGE_SIZE}>
+					{#snippet children({ pages })}
+						<Pagination.Content>
+							<Pagination.Previous />
+							{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
+								<Pagination.Item>
+									{#if p.type === 'page'}
+										<Pagination.Link page={p} isActive={p.value === safePage} />
+									{:else}
+										<Pagination.Ellipsis />
+									{/if}
+								</Pagination.Item>
+							{/each}
+							<Pagination.Next />
+						</Pagination.Content>
+					{/snippet}
+				</Pagination.Root>
+			</div>
+		{/if}
 	</div>
 </div>

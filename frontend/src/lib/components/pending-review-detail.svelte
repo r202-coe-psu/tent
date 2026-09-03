@@ -4,11 +4,11 @@
 	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import User from '@lucide/svelte/icons/user';
 	import FileText from '@lucide/svelte/icons/file-text';
-	import Info from '@lucide/svelte/icons/info';
 	import Truck from '@lucide/svelte/icons/truck';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Check from '@lucide/svelte/icons/check';
+	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -17,6 +17,7 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		PUBLIC_DONATION_CATEGORIES,
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
@@ -64,21 +65,33 @@
 	// Reject inline form state
 	let rejectReason = $state('');
 
-	function formatItems(req: PendingDonationRow): string {
-		if (!req.items || req.items.length === 0) return 'ไม่มีรายการสิ่งของระบุ';
-		return req.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'สิ่งของ'} ${it.qty} ${it.unit}`)
-			.join(', ');
+	/**
+	 * The donor sends `category`, `condition` and a per-line `note` alongside each
+	 * item. This view used to join every line into one string
+	 * ("ข้าวสาร 1 ชิ้น, มาม่า 56 ชิ้น") and lump the notes into a single paragraph below,
+	 * so a two-item "บริจาคสิ่งของอื่นๆ" request lost its categories and conditions
+	 * outright and left staff unable to tell which note belonged to which item — the
+	 * exact detail an unsolicited request has to be judged on.
+	 */
+	const CONDITION_LABELS: Record<string, string> = {
+		new: 'ของใหม่ 100%',
+		used: 'ของมือสอง สภาพดี',
+		other: 'สภาพอื่นๆ'
+	};
+
+	function conditionLabel(condition?: string): string | undefined {
+		const key = condition?.trim();
+		if (!key) return undefined;
+		return CONDITION_LABELS[key] ?? key;
 	}
 
-	function formatDonorNote(req: PendingDonationRow): string {
-		if (req.donor_note) return req.donor_note;
-		const notes = (req.items ?? [])
-			.map((it) => it.note?.trim() || it.condition?.trim())
-			.filter((n): n is string => Boolean(n));
-		if (notes.length > 0) return notes.join('\n');
-		return 'อยากสนับสนุนสิ่งของอื่นๆ ที่น่าจะจำเป็นสำหรับผู้ประสบภัยที่บ้านเรือนเสียหายอย่างหนัก';
+	function categoryLabel(category?: string): string | undefined {
+		const key = category?.trim();
+		if (!key) return undefined;
+		return PUBLIC_DONATION_CATEGORIES.find((c) => c.value === key)?.label ?? key;
 	}
+
+	const declaredItems = $derived(request.items ?? []);
 
 	function formatVehicle(vehicle?: string | null, deliveryMethod?: string): string {
 		if (vehicle === 'pickup') return 'รถกระบะตอนเดียว';
@@ -228,21 +241,55 @@
 				<FileText class="h-4 w-4 text-muted-foreground" />
 				<span>รายการสิ่งของที่ผู้บริจาคแจ้ง (Donor Input)</span>
 			</div>
-			<div
-				class="rounded-2xl border border-border/80 bg-card p-4 text-xs font-medium text-foreground"
-			>
-				{formatItems(request)}
-			</div>
-		</div>
-
-		<!-- Condition & Notes Section -->
-		<div class="space-y-2">
-			<div class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-				<Info class="h-4 w-4 text-muted-foreground" />
-				<span>คำชี้แจงและกรณีศึกษาสภาพสิ่งของเพิ่มเติม</span>
-			</div>
-			<div class="rounded-2xl border border-border/80 bg-card p-4 text-xs text-foreground">
-				{formatDonorNote(request)}
+			<div class="overflow-hidden rounded-2xl border border-border/80 bg-card">
+				{#if declaredItems.length === 0}
+					<p class="p-4 text-xs text-muted-foreground">ไม่มีรายการสิ่งของระบุ</p>
+				{:else}
+					<ul class="divide-y divide-border/60">
+						{#each declaredItems as item, idx (`${item.item_id ?? item.free_text ?? 'line'}:${idx}`)}
+							{@const cat = categoryLabel(item.category)}
+							{@const cond = conditionLabel(item.condition)}
+							<li class="flex flex-wrap items-start justify-between gap-2 p-4">
+								<div class="min-w-0 space-y-1.5">
+									<p class="text-xs font-bold text-foreground">
+										{item.free_text ?? item.item_id ?? 'สิ่งของ'}
+									</p>
+									{#if cat || cond || !item.item_id}
+										<div class="flex flex-wrap items-center gap-1.5">
+											{#if cat}
+												<Badge variant="secondary" class="text-3xs font-medium">{cat}</Badge>
+											{/if}
+											{#if cond}
+												<Badge variant="outline" class="text-3xs font-medium">{cond}</Badge>
+											{/if}
+											{#if !item.item_id}
+												<!-- No catalog binding — this line cannot become stock as-is
+												     (schema.md §2.1 needs a real item_id), so staff must map it
+												     at the scan station. Saying so here is what the reviewer
+												     needs to decide on. -->
+												<Badge
+													variant="outline"
+													class="border-amber-300/80 bg-amber-50 text-3xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+												>
+													ยังไม่จับคู่แคตตาล็อก
+												</Badge>
+											{/if}
+										</div>
+									{/if}
+									{#if item.note?.trim()}
+										<p class="text-2xs leading-relaxed text-muted-foreground">
+											หมายเหตุ: {item.note.trim()}
+										</p>
+									{/if}
+								</div>
+								<span class="shrink-0 text-xs font-bold whitespace-nowrap text-foreground">
+									{item.qty}
+									{item.unit}
+								</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</div>
 		</div>
 

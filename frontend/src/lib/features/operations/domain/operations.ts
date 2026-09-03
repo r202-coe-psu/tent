@@ -1203,14 +1203,6 @@ export const isPurchase = (d: unknown): d is Purchase =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
-// ---------------------------------------------------------------- special request form schema
-export const specialRequestSchema = z.object({
-	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
-	target: qtyStrCoercePositiveSchema,
-	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
-});
-export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
-
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
@@ -1316,7 +1308,12 @@ export function editNeed(
  * `parseCampaignNotes` below — that reopening the edit form shows what was saved
  * instead of resetting urgency to "normal" and blanking the text.
  *
- * Shape: `[ด่วน] หมวด: อาหาร รายละเอียด...`
+ * Shape: `[ด่วน] หมวด: อาหาร รูป: https://… รายละเอียด...`
+ *
+ * Every tagged part is parsed off the FRONT in a fixed order, so the untagged
+ * remainder is unambiguously the description. Adding a part means adding it here and
+ * in `parseCampaignNotes` in the same position — otherwise the new tag is swallowed
+ * into the description.
  */
 export const CAMPAIGN_URGENCY_TAG: Record<'critical' | 'important', string> = {
 	critical: '[ด่วน]',
@@ -1324,10 +1321,13 @@ export const CAMPAIGN_URGENCY_TAG: Record<'critical' | 'important', string> = {
 };
 
 const CAMPAIGN_CATEGORY_PREFIX = 'หมวด:';
+const CAMPAIGN_IMAGE_PREFIX = 'รูป:';
 
 export type CampaignNotesParts = {
 	urgency: 'critical' | 'important' | 'normal';
 	category?: string;
+	/** Illustration for the donor-facing card. §2.4 has no field for it either. */
+	imageUrl?: string;
 	description?: string;
 };
 
@@ -1341,6 +1341,13 @@ export function buildCampaignNotes(
 	const category = input.category?.trim();
 	if (category && category !== 'ถูกกำหนดอัตโนมัติ') {
 		parts.push(`${CAMPAIGN_CATEGORY_PREFIX} ${category}`);
+	}
+	// A URL carries no whitespace, so it reads back as one token like the category.
+	// A value with spaces in it would be unparseable, so it is dropped rather than
+	// written into a string the edit form would then re-read as description.
+	const imageUrl = input.imageUrl?.trim();
+	if (imageUrl && !/\s/.test(imageUrl)) {
+		parts.push(`${CAMPAIGN_IMAGE_PREFIX} ${imageUrl}`);
 	}
 	const description = input.description?.trim();
 	if (description) {
@@ -1378,9 +1385,20 @@ export function parseCampaignNotes(notes?: string | null): CampaignNotesParts {
 		}
 	}
 
+	let imageUrl: string | undefined;
+	if (rest.startsWith(CAMPAIGN_IMAGE_PREFIX)) {
+		const afterPrefix = rest.slice(CAMPAIGN_IMAGE_PREFIX.length).trim();
+		const [head, ...tail] = afterPrefix.split(/\s+/);
+		if (head) {
+			imageUrl = head;
+			rest = tail.join(' ');
+		}
+	}
+
 	return {
 		urgency,
 		...(category ? { category } : {}),
+		...(imageUrl ? { imageUrl } : {}),
 		...(rest.trim() ? { description: rest.trim() } : {})
 	};
 }
@@ -1418,47 +1436,6 @@ export function publicItemAggregate(
 	}
 
 	return { campaignCount, totalTarget };
-}
-
-/**
- * Category + unit the needs-board form pre-fills from what staff typed.
- *
- * Pure and exported so the form can treat it as a DEFAULT rather than a command: it
- * used to run in an `$effect` that reassigned the two selects on every keystroke,
- * so correcting a typo in the name silently threw away a unit the user had picked
- * by hand. Same heuristic family as `mapNeedItemHeuristic`, kept beside it.
- *
- * Returns `undefined` fields when the name matches nothing — the caller keeps
- * whatever it already had.
- */
-export function suggestNeedDefaults(name: string): { category?: string; unit?: string } {
-	const lower = name.trim().toLowerCase();
-	if (!lower) return {};
-
-	const has = (...needles: string[]) => needles.some((n) => lower.includes(n));
-
-	if (has('ข้าว', 'อาหาร', 'ปลากระป๋อง', 'น้ำ')) {
-		return {
-			category: 'อาหารและเครื่องดื่ม',
-			unit: has('ข้าว') ? 'ถุง' : has('น้ำ') ? 'ขวด' : has('ปลากระป๋อง') ? 'กระป๋อง' : 'แพ็ค'
-		};
-	}
-	if (has('ยา', 'พารา', 'เวชภัณฑ์')) {
-		return { category: 'ยารักษาโรคและเวชภัณฑ์', unit: has('แผง') ? 'แผง' : 'กล่อง' };
-	}
-	if (has('ผ้าห่ม', 'เสื้อผ้า', 'ที่นอน')) {
-		return { category: 'เครื่องนุ่งห่มและที่นอน', unit: has('ผ้าห่ม') ? 'ผืน' : 'ชุด' };
-	}
-	if (has('สบู่', 'ของใช้', 'ทิชชู่', 'แปรงสีฟัน')) {
-		return {
-			category: 'ของใช้ทั่วไปและสุขอนามัย',
-			unit: has('สบู่') ? 'ก้อน' : has('ม้วน') ? 'ม้วน' : 'ชิ้น'
-		};
-	}
-	if (has('นมผง', 'ผ้าอ้อม', 'แพมเพิส')) {
-		return { category: 'แม่และเด็ก', unit: has('กระป๋อง') ? 'กระป๋อง' : 'แพ็ค' };
-	}
-	return {};
 }
 
 /**
