@@ -24,10 +24,64 @@ import {
 export const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other']);
 export type CardType = z.infer<typeof cardTypeSchema>;
 
-export const personIdSchema = z.object({
-	cardType: cardTypeSchema.default('national_id'),
-	number: z.string().trim().optional()
-});
+/**
+ * Max length for `person_id.number` by card type (UI `maxlength` + Zod).
+ * Matches household pre-register forms: Thai national ID 13 digits, passport 9 chars;
+ * pink_card / other have no fixed max.
+ */
+export const CARD_NUMBER_MAX_LENGTH: Readonly<Record<CardType, number | undefined>> = {
+	national_id: 13,
+	passport: 9,
+	pink_card: undefined,
+	other: undefined
+};
+
+export function cardNumberMaxLength(cardType: CardType): number | undefined {
+	return CARD_NUMBER_MAX_LENGTH[cardType];
+}
+
+/** Length used for max checks: digits-only for national_id, raw otherwise. */
+export function cardNumberEffectiveLength(cardType: CardType, number: string): number {
+	return cardType === 'national_id' ? number.replace(/\D/g, '').length : number.length;
+}
+
+/** Normalize + clamp a card number for the selected type (digits-only for national_id). */
+export function clampCardNumber(cardType: CardType, value: string): string {
+	const normalized = cardType === 'national_id' ? value.replace(/\D/g, '') : value;
+	const max = cardNumberMaxLength(cardType);
+	return max != null ? normalized.slice(0, max) : normalized;
+}
+
+function refineCardNumberMax(
+	cardType: CardType,
+	number: string | undefined,
+	ctx: z.RefinementCtx,
+	path: (string | number)[]
+) {
+	if (!number) return;
+	const max = cardNumberMaxLength(cardType);
+	if (max == null) return;
+	if (cardNumberEffectiveLength(cardType, number) <= max) return;
+	ctx.addIssue({
+		code: 'custom',
+		path,
+		message:
+			cardType === 'national_id'
+				? 'เลขประจำตัวประชาชนต้องมี 13 หลัก'
+				: cardType === 'passport'
+					? 'เลขที่พาสปอร์ตต้องไม่เกิน 9 ตัวอักษร'
+					: `เลขที่บัตรต้องไม่เกิน ${max} ตัวอักษร`
+	});
+}
+
+export const personIdSchema = z
+	.object({
+		cardType: cardTypeSchema.default('national_id'),
+		number: z.string().trim().optional()
+	})
+	.superRefine((data, ctx) => {
+		refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+	});
 export type PersonId = z.infer<typeof personIdSchema>;
 
 export const genderSchema = z.enum(['male', 'female', 'other']);
@@ -464,6 +518,9 @@ export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
 				.trim()
 				.min(1, 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร')
 		})
+		.superRefine((data, ctx) => {
+			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+		})
 		.default({ cardType: 'national_id', number: '' }),
 	religion: z
 		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
@@ -632,6 +689,8 @@ export const evacueePersonalEditFormSchema = z
 				path: ['cardNumber'],
 				message: 'เลขประจำตัวประชาชนต้องมี 13 หลัก'
 			});
+		} else {
+			refineCardNumberMax(data.cardType, data.cardNumber, ctx, ['cardNumber']);
 		}
 
 		const parsedAge = data.age.trim() !== '' ? Number.parseInt(data.age, 10) : undefined;

@@ -33,11 +33,78 @@ import {
 	evacueeHealthEditFormSchema,
 	formatPersonName,
 	stayStatusSchema,
-	STATUS_LABELS
+	STATUS_LABELS,
+	CARD_NUMBER_MAX_LENGTH,
+	cardNumberMaxLength,
+	cardNumberEffectiveLength,
+	clampCardNumber,
+	personIdSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
+
+describe('card number max length by card type', () => {
+	it('exposes max lengths matching household / Station 1 UI rules', () => {
+		expect(CARD_NUMBER_MAX_LENGTH).toEqual({
+			national_id: 13,
+			passport: 9,
+			pink_card: undefined,
+			other: undefined
+		});
+		expect(cardNumberMaxLength('national_id')).toBe(13);
+		expect(cardNumberMaxLength('passport')).toBe(9);
+		expect(cardNumberMaxLength('pink_card')).toBeUndefined();
+		expect(cardNumberMaxLength('other')).toBeUndefined();
+	});
+
+	it('clamps national_id to digits and passport to 9 chars', () => {
+		expect(clampCardNumber('national_id', '1-2345-67890-12-34')).toBe('1234567890123');
+		expect(clampCardNumber('passport', 'AB1234567890')).toBe('AB1234567');
+		expect(clampCardNumber('other', 'ABCDEFGHIJKLMNOP')).toBe('ABCDEFGHIJKLMNOP');
+	});
+
+	it('rejects person_id numbers longer than the type max via personIdSchema', () => {
+		expect(
+			personIdSchema.safeParse({ cardType: 'national_id', number: '12345678901234' }).success
+		).toBe(false);
+		expect(personIdSchema.safeParse({ cardType: 'passport', number: 'AB12345678' }).success).toBe(
+			false
+		);
+		expect(personIdSchema.safeParse({ cardType: 'passport', number: 'AB1234567' }).success).toBe(
+			true
+		);
+		expect(
+			personIdSchema.safeParse({ cardType: 'other', number: 'ABCDEFGHIJKLMNOP' }).success
+		).toBe(true);
+	});
+
+	it('rejects over-length passport on evacueePersonalEditFormSchema', () => {
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'Alex',
+			lastName: 'Doe',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'other',
+			phone: '',
+			noPhone: true,
+			cardType: 'passport',
+			cardNumber: 'AB12345678',
+			country: 'USA',
+			religion: 'unknown'
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.some((i) => i.path.includes('cardNumber'))).toBe(true);
+		}
+	});
+
+	it('reports effective length digits-only for national_id', () => {
+		expect(cardNumberEffectiveLength('national_id', '1-2345-67890-12-3')).toBe(13);
+		expect(cardNumberEffectiveLength('passport', 'AB1234567')).toBe(9);
+	});
+});
 
 describe('stayStatusSchema and STATUS_LABELS', () => {
 	it('accepts arriving', () => {

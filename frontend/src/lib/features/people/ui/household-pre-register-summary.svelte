@@ -14,7 +14,8 @@
 		evacueeInputSchema,
 		currentBEYear,
 		minBirthYearBE,
-		MAX_AGE_YEARS
+		MAX_AGE_YEARS,
+		cardNumberMaxLength
 	} from '../domain/people';
 	import { z } from 'zod';
 
@@ -543,11 +544,7 @@
 									</Form.Label>
 									<Input
 										{...props}
-										maxlength={$memberFormData.person_id.cardType === 'national_id'
-											? 13
-											: $memberFormData.person_id.cardType === 'passport'
-												? 9
-												: undefined}
+										maxlength={cardNumberMaxLength($memberFormData.person_id.cardType)}
 										placeholder={$memberFormData.person_id.cardType === 'national_id'
 											? 'X-XXXX-XXXXX-XX-X'
 											: $memberFormData.person_id.cardType === 'passport'

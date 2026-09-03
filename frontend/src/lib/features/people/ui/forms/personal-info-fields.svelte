@@ -5,7 +5,13 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { COUNTRIES } from '$lib/utils/country';
-	import type { CardType, Gender, Religion } from '$lib/features/people';
+	import {
+		cardNumberMaxLength,
+		clampCardNumber,
+		type CardType,
+		type Gender,
+		type Religion
+	} from '$lib/features/people';
 
 	let {
 		first_name = $bindable(''),
@@ -50,6 +56,9 @@
 		{ value: 'other', label: 'บัตรประเภทอื่น' }
 	];
 
+	const activeCardType = $derived(person_id.cardType ?? 'national_id');
+	const cardNumberMax = $derived(cardNumberMaxLength(activeCardType));
+
 	const genderOptions: { value: Gender; label: string }[] = [
 		{ value: 'male', label: 'ชาย' },
 		{ value: 'female', label: 'หญิง' },
@@ -93,11 +102,7 @@
 
 	function onCardNumberInput(e: Event) {
 		const target = e.currentTarget as HTMLInputElement;
-		if (person_id.cardType === 'national_id') {
-			person_id.number = digits(target.value).slice(0, 13);
-		} else {
-			person_id.number = target.value;
-		}
+		person_id.number = clampCardNumber(activeCardType, target.value);
 	}
 
 	function onPhoneInput(e: Event) {
@@ -175,7 +180,7 @@
 			<Label class="text-xs font-semibold text-foreground">ประเภทบัตรประจำตัว</Label>
 			<Select.Root
 				type="single"
-				value={person_id.cardType ?? 'national_id'}
+				value={activeCardType}
 				onValueChange={(val) => {
 					if (
 						val === 'national_id' ||
@@ -184,13 +189,15 @@
 						val === 'other'
 					) {
 						person_id.cardType = val;
+						if (person_id.number) {
+							person_id.number = clampCardNumber(val, person_id.number);
+						}
 					}
 				}}
 				{disabled}
 			>
 				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
-					{cardTypeOptions.find((o) => o.value === person_id.cardType)?.label ??
-						'เลขประจำตัวประชาชน'}
+					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? 'เลขประจำตัวประชาชน'}
 				</Select.Trigger>
 				<Select.Content>
 					{#each cardTypeOptions as opt (opt.value)}
@@ -209,8 +216,9 @@
 				value={person_id.number ?? ''}
 				oninput={onCardNumberInput}
 				{disabled}
-				inputmode={person_id.cardType === 'national_id' ? 'numeric' : 'text'}
-				placeholder={person_id.cardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
+				maxlength={cardNumberMax}
+				inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
+				placeholder={activeCardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
 				aria-invalid={!!(errors?.cardNumber || errors?.number)}
 				class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
 			/>

@@ -16,6 +16,7 @@
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
+		cardNumberMaxLength,
 		type EvacueeInput
 	} from '../domain/people';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -350,11 +351,7 @@
 									</Form.Label>
 									<Input
 										{...props}
-										maxlength={$formData.person_id.cardType === 'national_id'
-											? 13
-											: $formData.person_id.cardType === 'passport'
-												? 9
-												: undefined}
+										maxlength={cardNumberMaxLength($formData.person_id.cardType)}
 										placeholder={$formData.person_id.cardType === 'national_id'
 											? 'X-XXXX-XXXXX-XX-X'
 											: $formData.person_id.cardType === 'passport'

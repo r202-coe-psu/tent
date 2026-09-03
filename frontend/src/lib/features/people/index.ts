@@ -31,6 +31,10 @@ export type {
 
 // Domain — input schemas + factories + transitions + guards
 export {
+	CARD_NUMBER_MAX_LENGTH,
+	cardNumberMaxLength,
+	cardNumberEffectiveLength,
+	clampCardNumber,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,

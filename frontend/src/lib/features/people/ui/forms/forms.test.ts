@@ -48,6 +48,30 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('สมศรี');
 			expect(result.body).toContain('มีสุข');
 		});
+
+		it('sets card-number maxlength from selected card type', () => {
+			const national = render(PersonalInfoFields, {
+				props: {
+					person_id: { cardType: 'national_id', number: '' }
+				}
+			});
+			expect(national.body).toMatch(/id="card-number"[^>]*maxlength="13"/);
+
+			const passport = render(PersonalInfoFields, {
+				props: {
+					person_id: { cardType: 'passport', number: '' }
+				}
+			});
+			expect(passport.body).toMatch(/id="card-number"[^>]*maxlength="9"/);
+
+			const other = render(PersonalInfoFields, {
+				props: {
+					person_id: { cardType: 'other', number: '' }
+				}
+			});
+			expect(other.body).toMatch(/id="card-number"/);
+			expect(other.body).not.toMatch(/id="card-number"[^>]*maxlength=/);
+		});
 	});
 
 	describe('Special Needs Fields (special-needs-fields.svelte)', () => {
