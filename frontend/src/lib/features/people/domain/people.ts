@@ -487,11 +487,32 @@ export function isBlankEmergencyContact(value: unknown): boolean {
 /**
  * Optional emergency contact: blank/missing → undefined; partial fill still validates
  * field-by-field via {@link emergencyContactRequiredSchema}.
+ *
+ * Prefer `.optional().transform()` over `z.preprocess` so Superforms / `z.input`
+ * keep `.name` / `.phone` / `.relation` (preprocess collapses input to `{}`).
  */
-export const emergencyContactOptionalSchema = z.preprocess(
-	(val) => (isBlankEmergencyContact(val) ? undefined : val),
-	emergencyContactRequiredSchema.optional()
-);
+export const emergencyContactOptionalSchema = z
+	.object({
+		name: z.string().trim().default(''),
+		phone: z.string().trim().default(''),
+		relation: z.string().trim().default('')
+	})
+	.optional()
+	.transform((val, ctx) => {
+		if (val === undefined || isBlankEmergencyContact(val)) return undefined;
+		const parsed = emergencyContactRequiredSchema.safeParse(val);
+		if (!parsed.success) {
+			for (const issue of parsed.error.issues) {
+				ctx.addIssue({
+					code: 'custom',
+					message: issue.message,
+					path: issue.path
+				});
+			}
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
 
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),

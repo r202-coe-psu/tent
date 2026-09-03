@@ -22,7 +22,7 @@ import {
 } from './schema';
 
 export function patchFeatureFlags(
-	current: ShelterFeatureFlags | null | undefined,
+	current: Partial<ShelterFeatureFlags> | null | undefined,
 	patch: Partial<ShelterFeatureFlags>
 ): ShelterFeatureFlags {
 	return {

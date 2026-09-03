@@ -152,8 +152,8 @@
 			},
 			emergency_contact: initialData.emergency_contact
 				? {
-						name: initialData.emergency_contact.name,
-						phone: initialData.emergency_contact.phone,
+						name: initialData.emergency_contact.name ?? '',
+						phone: initialData.emergency_contact.phone ?? '',
 						relation: initialData.emergency_contact.relation ?? 'contact'
 					}
 				: $formData.emergency_contact

@@ -52,7 +52,7 @@ describe('applyAllowPets / applyPetPolicy', () => {
 	});
 
 	it('keeps categories when re-enabling while already conditional', () => {
-		const cats = [{ category: 'large_dog' as const, conditions: ['caged_or_leashed' as const] }];
+		const cats = [{ category: 'large_dog' as const, conditions: ['muzzle_and_leash' as const] }];
 		const r = applyAllowPets(
 			{
 				admission_policy: {
