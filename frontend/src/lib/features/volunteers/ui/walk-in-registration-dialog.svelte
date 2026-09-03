@@ -11,16 +11,26 @@
 	 * CouchDB (`getShelterDb()`), so there is nowhere else this profile could
 	 * be created into.
 	 *
-	 * The instant check-in checkbox calls `useSetVolunteerCheckedIn` (flips
-	 * `volunteer.checked_in` directly) AFTER the volunteer is created — it does
-	 * NOT create a `shift_assignment`, because that requires a `job_id`
-	 * (`shiftAssignmentInputSchema`) and a walk-in registration has no job
-	 * context here. That means this volunteer will show as checked-in without
-	 * a station/duty_window, and will not appear in `shift_assignment`-based
-	 * counters (`domain/hub-metrics.ts` `assigned`/`checkedInNow` — those read
-	 * `shift_assignment.status` only). Flagged for the CR: walk-in "ready
-	 * now" needs either an adhoc/no-job shift_assignment path or a documented
-	 * decision that it only ever sets the volunteer flag.
+	 * Section 3 lets the front-desk optionally assign the walk-in straight into
+	 * one of today's open `operational` job shifts (pulled live via `useJobs()`,
+	 * recommended-first when they carry a `skills_required` overlap with the
+	 * skills ticked in section 2 — `hasAnyRequiredSkill`). Picking one calls
+	 * `useAssignVolunteers` (outright accept, same as the roster's assign flow —
+	 * `job-assign-page.svelte`) right after the volunteer is created, then, if
+	 * the instant check-in box is ticked, `useCheckIn` against that new
+	 * `shift_assignment` (`method: 'manual_override'`) — this is the real
+	 * shift-linked path the older revision of this dialog was missing.
+	 *
+	 * The instant check-in box requires a job picked in section 3 AND "now"
+	 * falling inside that shift's duty window (±5m grace, `isWithinDutyWindow`
+	 * — the same FR-VOL-05R.3 predicate CouchDB's Time-Bound Write Access
+	 * enforces); it stays disabled otherwise — no job picked, or picked but
+	 * outside its window — since there is no `shift_assignment` to check into
+	 * yet/anymore. `effectiveInstantCheckIn` (not `instantCheckIn` itself) is
+	 * what submit actually reads, so the operator's tick survives a temporary
+	 * disable instead of needing a re-tick once a job is picked or its window
+	 * opens. Picking a job still assigns the walk-in to it either way; only the
+	 * immediate check-in is gated.
 	 *
 	 * `identity_verified` is left at the domain factory's default (`false`,
 	 * `makeVolunteer`) even though staff are presumably checking an ID card in
@@ -34,6 +44,7 @@
 	import Zap from '@lucide/svelte/icons/zap';
 	import Check from '@lucide/svelte/icons/check';
 	import Lock from '@lucide/svelte/icons/lock';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -49,11 +60,19 @@
 		walkInVolunteerFormSchema,
 		type WalkInVolunteerFormValues
 	} from '../domain/volunteer.schema';
-	import type { ShiftKind } from '../domain/shift-assignment.schema';
+	import type { Job, JobShift } from '../domain/job.schema';
+	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import { shiftKindFor } from '../domain/assign-roster';
+	import { shiftDutyWindow, isWithinDutyWindow } from '../domain/duty-window';
+	import type { DutyWindow } from '../domain/shift-assignment.schema';
+	import { hasAnyRequiredSkill, resolveSkillLabel } from '../domain/skill-catalog';
 	import {
 		useCreateWalkInVolunteer,
-		useSetVolunteerCheckedIn,
-		useSkillOptions
+		useSkillOptions,
+		useJobs,
+		useAssignVolunteers,
+		useCheckIn,
+		todayDateString
 	} from '../application/queries';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -78,15 +97,7 @@
 	}
 
 	let selectedSkills = $state<string[]>([]);
-	let shift = $state<Exclude<ShiftKind, 'custom'>>('morning');
 	let instantCheckIn = $state(true);
-
-	const SHIFT_TILES: { value: Exclude<ShiftKind, 'custom'>; label: string; time: string }[] = [
-		{ value: 'morning', label: 'กะเช้า', time: '08:00 - 16:00' },
-		{ value: 'afternoon', label: 'กะบ่าย', time: '16:00 - 00:00' },
-		{ value: 'night', label: 'กะดึก', time: '00:00 - 08:00' },
-		{ value: 'flex', label: 'ยืดหยุ่น', time: 'สแตนด์บายด่วน' }
-	];
 
 	function toggleSkill(key: string) {
 		selectedSkills = selectedSkills.includes(key)
@@ -94,8 +105,104 @@
 			: [...selectedSkills, key];
 	}
 
+	/** `shift.date`/`end_date` are plain Bangkok calendar dates (`YYYY-MM-DD`) — safe to parse as UTC midnight and format in Asia/Bangkok, which only ever rolls forward onto the same day. */
+	function formatShiftDate(date: string): string {
+		return new Date(date).toLocaleDateString('th-TH', {
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric',
+			timeZone: 'Asia/Bangkok'
+		});
+	}
+
+	/**
+	 * Today's open `operational` job shifts with an open seat — the section-3
+	 * picker. `operational` only: a `staff-capable` job's role grant needs a
+	 * `_users` account (FR-VOL-05R), which a walk-in `personnel_type: 'volunteer'`
+	 * profile never has. `key` reuses `jobShiftQuotaSplits`'s
+	 * `${job_id}#${shift.id}` so it lines up with the same per-shift split every
+	 * other roster/detail screen reads. `skillMatch` only lights up once staff
+	 * have ticked at least one skill in section 2 — otherwise every shift would
+	 * show as "recommended".
+	 */
+	interface AssignableShift {
+		key: string;
+		job: Job;
+		shift: JobShift;
+		remaining: number;
+		/** `job.skills_required` resolved to display labels (CR-100 — stored as master codes). */
+		requiredSkillLabels: string[];
+		skillMatch: boolean;
+		/** Precomputed so the submit call and the duty-window check below never recompute it differently. */
+		dutyWindow: DutyWindow;
+	}
+
+	const jobsQuery = useJobs();
+	const today = todayDateString();
+
+	const assignableShifts = $derived.by<AssignableShift[]>(() => {
+		const jobs = (jobsQuery.data ?? []).filter(
+			(j) => j.tier === 'operational' && (j.status === 'open' || j.status === 'almost_full')
+		);
+		const out: AssignableShift[] = [];
+		for (const job of jobs) {
+			const splits = jobShiftQuotaSplits(job);
+			const required = job.skills_required ?? [];
+			const requiredSkillLabels = required.map((v) => resolveSkillLabel(v, skillsList));
+			job.shifts.forEach((shift, index) => {
+				const split = splits[index];
+				if (!split || shift.date !== today || split.remaining <= 0) return;
+				try {
+					out.push({
+						key: split.key,
+						job,
+						shift,
+						remaining: split.remaining,
+						requiredSkillLabels,
+						skillMatch:
+							selectedSkills.length > 0 &&
+							hasAnyRequiredSkill(selectedSkills, required, skillsList),
+						dutyWindow: shiftDutyWindow(shift)
+					});
+				} catch {
+					// A malformed shift's window can't be computed — drop it rather
+					// than crash the picker over one bad row (same guard
+					// `assign-roster.ts` uses around this same call).
+				}
+			});
+		}
+		// Recommended (skill match) shifts float to the top; ties keep list order.
+		return out.toSorted((a, b) => Number(b.skillMatch) - Number(a.skillMatch));
+	});
+
+	let selectedShiftKey = $state<string | null>(null);
+	const selectedAssignment = $derived(
+		assignableShifts.find((a) => a.key === selectedShiftKey) ?? null
+	);
+
+	/**
+	 * Instant check-in requires BOTH a job picked above AND the selected
+	 * shift's duty window actually running right now (± the FR-VOL-05R.3
+	 * grace window) — with no job there is no `shift_assignment` to check
+	 * into, and outside the window checking someone in would misreport
+	 * attendance.
+	 */
+	const canInstantCheckIn = $derived(
+		selectedAssignment ? isWithinDutyWindow(new Date(), selectedAssignment.dutyWindow) : false
+	);
+
+	/** What actually happens on submit — the checkbox keeps the operator's raw
+	 * intent (`instantCheckIn`) even while temporarily disabled, so re-picking a
+	 * shift whose window has since opened doesn't silently need a re-tick. */
+	const effectiveInstantCheckIn = $derived(instantCheckIn && canInstantCheckIn);
+
+	function selectShift(key: string) {
+		selectedShiftKey = selectedShiftKey === key ? null : key;
+	}
+
 	const createMutation = useCreateWalkInVolunteer(queryClient);
-	const checkInMutation = useSetVolunteerCheckedIn(queryClient);
+	const assignMutation = useAssignVolunteers(queryClient);
+	const shiftCheckInMutation = useCheckIn(queryClient);
 
 	const form = superForm(defaults(emptyValues(), zod4(walkInVolunteerFormSchema)), {
 		warnings: { duplicateId: false },
@@ -119,12 +226,23 @@
 					source: 'walk_in'
 				});
 
-				if (instantCheckIn) {
-					await checkInMutation.mutateAsync({
-						id: volunteer._id,
-						checkedIn: true,
-						shelterCode
+				if (selectedAssignment) {
+					const { job, shift, dutyWindow } = selectedAssignment;
+					const assignment = await assignMutation.mutateAsync({
+						job_id: job._id,
+						volunteer_id: volunteer._id,
+						date: shift.date,
+						shift: shiftKindFor(shift),
+						station: job.title,
+						duty_window: dutyWindow
 					});
+					if (effectiveInstantCheckIn) {
+						await shiftCheckInMutation.mutateAsync({
+							id: assignment._id,
+							method: 'manual_override',
+							reason: 'ลงทะเบียน Walk-in และเช็คอินเข้ากะทันทีโดยเจ้าหน้าที่หน้างาน'
+						});
+					}
 				}
 
 				toast.success(
@@ -145,11 +263,16 @@
 	function reset() {
 		$formData = emptyValues();
 		selectedSkills = [];
-		shift = 'morning';
+		selectedShiftKey = null;
 		instantCheckIn = true;
 	}
 
-	const isPending = $derived($submitting || createMutation.isPending || checkInMutation.isPending);
+	const isPending = $derived(
+		$submitting ||
+			createMutation.isPending ||
+			assignMutation.isPending ||
+			shiftCheckInMutation.isPending
+	);
 </script>
 
 <Dialog.Root
@@ -158,7 +281,7 @@
 		if (!next) reset();
 	}}
 >
-	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+	<Dialog.Content class="max-h-[92vh] w-full gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
 			<div class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
 				<Zap class="h-4.5 w-4.5" />
@@ -316,40 +439,101 @@
 			</div>
 
 			<div class="space-y-2">
-				<p class="text-xs font-bold text-foreground">
-					3. เลือกกะงาน &amp; เริ่มปฏิบัติงาน (SHIFT &amp; READY)
-				</p>
-				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-					{#each SHIFT_TILES as tile (tile.value)}
-						<button
-							type="button"
-							onclick={() => (shift = tile.value)}
-							aria-pressed={shift === tile.value}
-							class="flex flex-col items-center gap-0.5 rounded-xl border p-3 text-center text-xs font-bold transition-colors {shift ===
-							tile.value
-								? 'border-primary-dark bg-primary-dark text-white'
-								: 'border-border text-foreground hover:bg-muted/40'}"
-						>
-							{tile.label}
-							<span class="text-[10px] font-normal opacity-70">{tile.time}</span>
-						</button>
-					{/each}
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<p class="text-xs font-bold text-foreground">
+						3. เลือกงานเพื่อมอบหมายกะวันนี้ (ASSIGN TO JOB) — ไม่บังคับ
+					</p>
+					{#if selectedSkills.length > 0}
+						<span class="flex items-center gap-1 text-[11px] text-muted-foreground">
+							<Sparkles class="h-3 w-3 text-emerald-600" />
+							แนะนำงานที่ตรงกับทักษะที่เลือกไว้ก่อน
+						</span>
+					{/if}
 				</div>
 
+				{#if jobsQuery.isPending}
+					<p
+						class="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground"
+					>
+						กำลังโหลดงานที่เปิดรับวันนี้...
+					</p>
+				{:else if assignableShifts.length === 0}
+					<p
+						class="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground"
+					>
+						ไม่มีกะงานที่เปิดรับวันนี้ — ลงทะเบียนแบบไม่ผูกงานได้ตามปกติ
+					</p>
+				{:else}
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						{#each assignableShifts as item (item.key)}
+							{@const active = selectedShiftKey === item.key}
+							<button
+								type="button"
+								onclick={() => selectShift(item.key)}
+								aria-pressed={active}
+								class="flex flex-col items-start gap-1 rounded-xl border p-3 text-left text-xs transition-colors {active
+									? 'border-primary-dark bg-primary-dark text-white'
+									: 'border-border text-foreground hover:bg-muted/40'}"
+							>
+								<span class="flex w-full items-center justify-between gap-2">
+									<span class="truncate font-bold">{item.job.title}</span>
+									{#if item.skillMatch}
+										<Badge class="shrink-0 gap-1 border-none bg-emerald-500 text-[10px] text-white">
+											<Sparkles class="h-2.5 w-2.5" />
+											แนะนำ
+										</Badge>
+									{/if}
+								</span>
+								<span class="opacity-80">
+									{formatShiftDate(item.shift.date)}
+									{#if item.shift.end_date !== item.shift.date}
+										→ {formatShiftDate(item.shift.end_date)}
+									{/if}
+									· {item.shift.start_time} - {item.shift.end_time} · ว่างอีก {item.remaining} ที่
+								</span>
+								{#if item.requiredSkillLabels.length > 0}
+									<span class="flex flex-wrap gap-1">
+										{#each item.requiredSkillLabels as label (label)}
+											<Badge
+												variant="outline"
+												class="text-[10px] {active
+													? 'border-white/40 text-white'
+													: 'text-muted-foreground'}"
+											>
+												{label}
+											</Badge>
+										{/each}
+									</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
 				<label
-					class="flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 {instantCheckIn
-						? 'border-emerald-300 bg-emerald-50'
-						: 'border-border'}"
+					class="flex items-start gap-2.5 rounded-xl border p-3 {!canInstantCheckIn
+						? 'cursor-not-allowed border-border opacity-60'
+						: effectiveInstantCheckIn
+							? 'cursor-pointer border-emerald-300 bg-emerald-50'
+							: 'cursor-pointer border-border'}"
 				>
 					<Checkbox
-						checked={instantCheckIn}
+						checked={effectiveInstantCheckIn}
+						disabled={!canInstantCheckIn}
 						onCheckedChange={(v) => (instantCheckIn = !!v)}
 						class="mt-0.5"
 					/>
 					<span class="min-w-0 text-xs">
 						<span class="font-medium text-foreground">เช็คอินเข้ากะและเริ่มปฏิบัติงานทันที</span>
 						<span class="mt-0.5 block text-[11px] text-muted-foreground">
-							บันทึกสถานะเป็น "พร้อมปฏิบัติงาน" และเช็กอินงานทันทีโดยเจ้าหน้าที่หน้างาน
+							{#if !selectedAssignment}
+								เลือกงานด้านบนก่อน จึงจะเช็คอินเข้ากะทันทีได้
+							{:else if !canInstantCheckIn}
+								อยู่นอกช่วงเวลาปฏิบัติงานของกะ "{selectedAssignment.job.title}" ที่เลือกไว้ —
+								ระบบจะมอบหมายกะให้ก่อน แล้วให้เช็คอินเมื่อถึงเวลาจริง
+							{:else}
+								จะเช็คอินเข้ากะ "{selectedAssignment.job.title}" ที่เลือกไว้ด้านบนทันที
+							{/if}
 						</span>
 					</span>
 				</label>
