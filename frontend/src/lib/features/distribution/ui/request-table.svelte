@@ -107,19 +107,6 @@
 				</Table.Cell>
 				<Table.Cell class="text-right">
 					<div class="flex items-center justify-end gap-1.5">
-						{#if onView}
-							<Button
-								variant="ghost"
-								size="sm"
-								class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-								onclick={() => onView(request)}
-								title="ดูรายละเอียด"
-							>
-								<Eye class="size-3.5" />
-								<span class="hidden sm:inline">รายละเอียด</span>
-							</Button>
-						{/if}
-
 						{#if request.status === 'pending'}
 							{#if canReject && onReject}
 								<Button
@@ -147,6 +134,19 @@
 							{/if}
 						{:else if request.status === 'approving'}
 							<span class="text-[11px] font-medium text-blue-700">กำลังดำเนินการ</span>
+						{/if}
+
+						{#if onView}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+								onclick={() => onView(request)}
+								title="ดูรายละเอียด"
+							>
+								<Eye class="size-3.5" />
+								<span class="hidden sm:inline">รายละเอียด</span>
+							</Button>
 						{/if}
 					</div>
 				</Table.Cell>
