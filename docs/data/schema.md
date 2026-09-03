@@ -124,10 +124,12 @@ implement — ไม่กระทบ migration นี้
 > **schema_v 4** — เพิ่ม `status`, `checkout_destination` รองรับวงจรชีวิตครัวเรือน (check-in/out). CR-029.
 > schema_v 3 — เพิ่ม `assets`, `vehicles[]` (หลายคัน), ขยาย `pets` (has_cage, image_url). CR-016.
 > schema_v 2 — ลบ `zone` เดิม; เพิ่ม `municipality_zone` + `community` + ที่อยู่ flat 6 ฟิลด์. CR-011.
+>
+> **Residence (CR-106):** ฟิลด์ `address_no`…`postal_code` คือ **Residence** (ที่พักอาศัยร่วมของ Household) — ไม่ใช่ที่อยู่บนบัตรประชาชน (Identity-document address อยู่ที่ Evacuee). Station 1 บังคับขั้นต่ำตอนสร้างครอบครัวใหม่ที่ชั้น UI/validation; ไม่ bump schema_v. UI ไทยใช้คำว่า「ครอบครัว」; canonical type ยังเป็น `household`.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `label` | str | req | ชื่อเรียกครัวเรือน เช่น "บ้านสมชาย" |
+| `label` | str | req | ชื่อเรียก — Station 1 สร้างอัตโนมัติ เช่น `ครอบครัวสมชาย` (CR-106) |
 | `head_evacuee_id` | str\|null | opt | หัวหน้าครัวเรือน |
 | `status` | enum(`pre-registered`,`arriving`,`checked-in`,`checked-out`,`cancelled`) | req | สถานะครัวเรือน — default `'arriving'` (ลงทะเบียนทั่วไป) หรือ `'pre-registered'` (จองล่วงหน้า) |
 | `checkout_destination` | {`type`:enum(`returned_home`,`transferred_shelter`,`referred_facility`,`other`), `destination_name`:str?, `notes`:str?} \| null | opt | ปลายทางหลังเช็คเอาต์ — บังคับเมื่อ `status = 'checked-out'` |
@@ -137,12 +139,12 @@ implement — ไม่กระทบ migration นี้
 | `assets` | {`description`:str, `image_url`:str\|null} \| null | opt | ทรัพย์สินมีค่า/สัมภาระ — แสดงเฉพาะเมื่อ `feature_flags.allow_assets = true` |
 | `vehicles` | [{`type`:enum(`car`,`motorcycle`,`other`), `license_plate`:str\|null}] | opt | default `[]` — รายการยานพาหนะ (หลายคันได้) แสดงเฉพาะเมื่อ `feature_flags.allow_vehicles = true` |
 | `notes` | str | opt | — |
-| `address_no` | str\|null | opt | บ้านเลขที่ เช่น `"123/45"` |
-| `village_no` | str\|null | opt | หมู่ที่ / ตรอก / ซอย / ถนน เช่น `"หมู่ 2"` |
-| `subdistrict` | str\|null | opt | ตำบล / แขวง เช่น `"หาดใหญ่"` |
-| `district` | str\|null | opt | อำเภอ / เขต เช่น `"หาดใหญ่"` |
-| `province` | str\|null | opt | จังหวัด เช่น `"สงขลา"` |
-| `postal_code` | str\|null | opt | รหัสไปรษณีย์ เช่น `"90110"` |
+| `address_no` | str\|null | opt | Residence — บ้านเลขที่ เช่น `"123/45"` (Station 1 บังคับตอนสร้าง) |
+| `village_no` | str\|null | opt | Residence — หมู่ที่ / ตรอก / ซอย / ถนน เช่น `"หมู่ 2"` |
+| `subdistrict` | str\|null | opt | Residence — ตำบล / แขวง (Station 1 บังคับตอนสร้าง) |
+| `district` | str\|null | opt | Residence — อำเภอ / เขต (Station 1 บังคับตอนสร้าง) |
+| `province` | str\|null | opt | Residence — จังหวัด (Station 1 บังคับตอนสร้าง) |
+| `postal_code` | str\|null | opt | Residence — รหัสไปรษณีย์ เช่น `"90110"` |
 
 สมาชิก = evacuee ที่ `household_id` ชี้มา (ทางเดียว — ไม่เก็บ list สมาชิกใน household กัน conflict)
 
@@ -1326,7 +1328,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `name` | str | req | CouchDB username — เบอร์โทรศัพท์มือถือ 10 หลัก (สำหรับเจ้าหน้าที่/อาสา) หรือ alphanumeric (สำหรับ `sa01`/System Admin) |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "registration_staff", "triage_staff"]` (ระบุรหัสศูนย์คู่กับ Capability RoleKeys) |
+| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) |
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
 | `organization` | str\|null | opt/req | หน่วยงานต้นสังกัด (**Required** สำหรับ staff, **Optional** สำหรับ volunteer) |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |

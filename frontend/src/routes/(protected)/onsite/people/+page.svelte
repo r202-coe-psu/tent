@@ -23,7 +23,6 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
-		usePatchEvacuee,
 		formatPersonName,
 		maskNationalId,
 		matchesEvacueeSearch,
@@ -37,14 +36,12 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
-	import { now } from '$lib/db/model';
 	import { useMasterData } from '$lib/features/master-data';
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const patchMutation = usePatchEvacuee();
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
 	const enableMedical = $derived(
@@ -209,25 +206,12 @@
 		};
 	}
 
-	async function reportIn(evacuee: Evacuee) {
-		try {
-			await patchMutation.mutateAsync({
-				id: evacuee._id,
-				patch: {
-					current_stay: {
-						...evacuee.current_stay,
-						status: 'arriving',
-						zone: null,
-						since: now()
-					}
-				}
-			});
-			toast.success('รายงานตัวแล้ว — สถานะเป็น arriving');
-			sheetOpen = false;
-			selected = null;
-		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'รายงานตัวไม่สำเร็จ');
-		}
+	function goReportIn(evacuee: Evacuee) {
+		sheetOpen = false;
+		selected = null;
+		goto(
+			resolve(`/onsite/people/${evacuee._id}/report-in` as `/onsite/people/${string}/report-in`)
+		);
 	}
 </script>
 
@@ -342,7 +326,7 @@
 							<Table.Head class="pl-4">ชื่อ</Table.Head>
 							<Table.Head>สถานะ</Table.Head>
 							<Table.Head>ความต้องการพิเศษ</Table.Head>
-							<Table.Head>ครัวเรือน</Table.Head>
+							<Table.Head>ครอบครัว</Table.Head>
 							<Table.Head>โซน</Table.Head>
 							<Table.Head>อัปเดต</Table.Head>
 							<Table.Head class="pr-4">คิวถัดไป</Table.Head>
@@ -496,7 +480,7 @@
 							</p>
 						</div>
 						<div class="col-span-2">
-							<p class="text-xs text-muted-foreground">ครัวเรือน</p>
+							<p class="text-xs text-muted-foreground">ครอบครัว</p>
 							<p class="font-medium">{hh?.label ?? '—'}</p>
 						</div>
 						<div class="col-span-2">
@@ -533,7 +517,7 @@
 
 			<Sheet.Footer class="border-t border-border sm:flex-col">
 				{#if selected.current_stay.status === 'pre_registered'}
-					<Button onclick={() => reportIn(selected!)}>รายงานตัว → arriving</Button>
+					<Button onclick={() => goReportIn(selected!)}>รายงานตัว</Button>
 				{/if}
 				{#if canMedical && next === 'รอแพทย์'}
 					<Button

@@ -107,6 +107,27 @@ export {
 	type ZoningRecommendKind
 } from './domain/intake-pipeline';
 
+export {
+	sectionEVisibility,
+	resolveHouseholdLeave,
+	autoHouseholdLabel,
+	hasMinimumResidence,
+	defaultHouseholdChoice,
+	isLeavingLinkedHousehold,
+	matchesResidenceAddress,
+	suggestHouseholdsByResidence,
+	filterJoinCandidatesByEvacueeQuery,
+	type SectionEFlags,
+	type SectionEExistingData,
+	type SectionEVisibility,
+	type HouseholdLeaveInput,
+	type HouseholdLeaveResult,
+	type HouseholdChoice,
+	type ResidenceFields,
+	type ResidenceMatchCandidate,
+	type JoinCandidateEvacuee
+} from './domain/registration-shell';
+
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
@@ -120,6 +141,7 @@ export {
 	useEvacueesPaginated,
 	useSearchEvacuees,
 	useCreateEvacuee,
+	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
 	useCheckOutEvacuee,
@@ -152,6 +174,7 @@ export {
 // UI — feature components
 export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';
+export { default as RegistrationShell } from './ui/registration-shell.svelte';
 export { default as EvacueeList } from './ui/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';

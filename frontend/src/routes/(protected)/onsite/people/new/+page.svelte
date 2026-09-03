@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
-		EvacueeForm,
+		RegistrationShell,
 		EvacueeWristbandSuccess,
 		RegistrationSaveErrorAlert,
 		useCreateEvacuee,
@@ -14,9 +16,6 @@
 		type SaveFailureReport
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 
@@ -26,6 +25,15 @@
 	/** After save: always show Person QR (even arriving). */
 	let completedEvacuee = $state<Evacuee | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
+	let isDirty = $state(false);
+	let isNavigatingAfterSave = $state(false);
+
+	beforeNavigate((nav) => {
+		if (isNavigatingAfterSave || completedEvacuee) return;
+		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
+			nav.cancel();
+		}
+	});
 
 	async function handleRegister(input: EvacueeInput) {
 		const shelterCode = getShelterCode();
@@ -52,23 +60,8 @@
 		}
 	}
 
-	let step = $state<1 | 2 | 3>(1);
-	let pageTopRef = $state<HTMLElement | null>(null);
-
-	let prevStep = $state(1);
-	$effect(() => {
-		if (step !== prevStep) {
-			prevStep = step;
-			tick().then(() => {
-				requestAnimationFrame(() => {
-					pageTopRef?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-					window.scrollTo({ top: 0, behavior: 'smooth' });
-				});
-			});
-		}
-	});
-
 	function backToQueue() {
+		isNavigatingAfterSave = true;
 		completedEvacuee = null;
 		goto(resolve('/onsite/people'));
 	}
@@ -78,12 +71,13 @@
 	<title>ลงทะเบียนใหม่ | SmartShelter</title>
 </svelte:head>
 
-<div bind:this={pageTopRef} class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
+<div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
 	{#if completedEvacuee}
 		<EvacueeWristbandSuccess evacuee={completedEvacuee} onBack={backToQueue} />
 	{:else}
 		<button
-			onclick={() => goto(resolve('/onsite/people'))}
+			type="button"
+			onclick={backToQueue}
 			class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />
@@ -97,15 +91,18 @@
 		{/if}
 
 		<div class="rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-8 md:p-10">
-			<EvacueeForm
+			<RegistrationShell
+				mode="walk-in"
 				onsubmit={(input) => handleRegister(input)}
 				pending={createMutation.isPending}
-				bind:step
+				onDirtyChange={(dirty) => (isDirty = dirty)}
 				onsaveerror={(report) => {
 					saveError = report;
 				}}
 				onComplete={(ev) => {
 					saveError = null;
+					isDirty = false;
+					isNavigatingAfterSave = true;
 					completedEvacuee = ev;
 				}}
 			/>
