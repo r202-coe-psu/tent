@@ -1,6 +1,6 @@
 ---
-id: CR-079
-title: M2 External API Services Integration (A_M2_API_SERVICES_SHELTER_V1.0) — Phase 1 Endpoints 1 & 3
+id: CR-098
+title: M2 External API Services Integration (A_M2_API_SERVICES_SHELTER_V1.0) — Phase 1 Endpoints 1 & 3 (renumbered from CR-079)
 status: approved
 date: 2026-08-20
 requested_by: เจ้าของโครงการ
@@ -12,7 +12,7 @@ affects:
   - backend /external/v1 (CR-062)
 ---
 
-# CR-079 — M2 External API Integration (Phase 1)
+# CR-098 — M2 External API Integration (Phase 1)
 
 ## สรุป (TL;DR)
 
@@ -65,4 +65,6 @@ affects:
 
 ## 2. Decision Log
 
-- 2026-08-20 — Approved by project owner. Phase 1 ดำเนินการ Endpoints 1 และ 3; พัก Endpoint 2 (`booking`) รอระบบหลักของอีกทีม.
+- 2026-08-20 — Approved by project owner (ร่างเดิมใช้รหัส CR-079). Phase 1 ดำเนินการ Endpoints 1 และ 3; พัก Endpoint 2 (`booking`) รอระบบหลักของอีกทีม.
+- 2026-08-31 — renumbered เป็น CR-098 เพื่อหลีกเลี่ยงการชนกับ CR-079 SOP what-if simulation
+

@@ -1,8 +1,9 @@
 ---
 id: CR-072
 title: คัดกรองผู้พัก 3 ระดับ เขียว / เหลือง / แดง — กฎการแพทย์ยังไม่เคาะ
-status: proposed
+status: open decision
 date: 2026-08-13
+updated: 2026-09-01
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -70,4 +71,5 @@ N/A จนกว่ามี field. ถ้าแทนที่ `fast_track` ต
 
 - 2026-08-13 — proposed และ **blocked**. รอ D-TRIAGE-RULES + D-TRIAGE-FIELD.
 - 2026-08-13 — Wave 1 ล็อกใน CR-066 (D-TRACK-METHOD=CR+Notion). ห้ามเดากฎ triage.
-- 2026-08-13 — เจ้าของโครงการ (IMPS) **ไม่ approve** CR นี้. D-TRIAGE-RULES / D-TRIAGE-FIELD = Wave 4 **จอดรอบ CR ถัดไป**. คง `proposed`.
+- 2026-08-13 — เจ้าของโครงการ (IMPS) **ไม่ approve** CR นี้. D-TRIAGE-RULES / D-TRIAGE-FIELD = Wave 4 **จอดรอบ CR ถัดไป**.
+- 2026-09-01 — ปรับสถานะเป็น **open decision** (รอเจ้าของโครงการเคาะกฎการแพทย์ D-TRIAGE-RULES และรูปแบบฟิลด์ D-TRIAGE-FIELD)

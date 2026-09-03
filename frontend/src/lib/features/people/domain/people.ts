@@ -139,6 +139,31 @@ export interface EmergencyContact {
 	relation: string;
 }
 
+export const cardSnapshotSchema = z.object({
+	citizen_id: z.string(),
+	title_th: z.string().optional(),
+	first_name_th: z.string().optional(),
+	last_name_th: z.string().optional(),
+	gender: z.enum(['male', 'female', 'other']).optional(),
+	birth_date: z.string().optional(),
+	birth_year_ce: z.number().optional(),
+	age: z.number().optional(),
+	address_no: z.string().optional(),
+	village_no: z.string().optional(),
+	lane: z.string().optional(),
+	road: z.string().optional(),
+	subdistrict: z.string().optional(),
+	district: z.string().optional(),
+	province: z.string().optional(),
+	postal_code: z.string().optional(),
+	photo_base64: z.string().optional(),
+	scanned_at: z.string(),
+	device_id: z.string(),
+	station_name: z.string().optional(),
+	expires_at: z.string().optional()
+});
+export type CardSnapshot = z.infer<typeof cardSnapshotSchema>;
+
 export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
@@ -154,6 +179,7 @@ export interface Evacuee extends BaseDoc {
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	photo?: string | null;
+	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -404,7 +430,8 @@ export const evacueeInputSchema = z.object({
 		.optional(),
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
-	registered_via: registeredViaSchema.default('app')
+	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
+	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
@@ -758,7 +785,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		7, // schema_v 7: registered_via `web` (CR-070 D-REG-VIA); 6 = stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
+		8, // schema_v 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -773,6 +800,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			...(d.photo ? { photo: d.photo } : {}),
+			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
@@ -781,6 +809,51 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 		ctx
 	);
 }
+
+export function createKioskEvacueeFromCard(
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Evacuee {
+	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
+	const lastName = cardSnapshot.last_name_th || '';
+	const gender = cardSnapshot.gender || 'other';
+	const birthYearBE = cardSnapshot.birth_year_ce ? cardSnapshot.birth_year_ce + 543 : undefined;
+	const age =
+		cardSnapshot.age !== undefined
+			? cardSnapshot.age
+			: birthYearBE !== undefined
+				? Math.max(0, currentBEYear() - birthYearBE)
+				: undefined;
+
+	return makeDoc(
+		'evacuee',
+		8,
+		{
+			first_name: firstName,
+			last_name: lastName,
+			gender,
+			phone: null,
+			...(birthYearBE ? { birth_year: birthYearBE } : {}),
+			...(age !== undefined ? { age } : {}),
+			person_id: {
+				cardType: 'national_id',
+				number: cardSnapshot.citizen_id
+			},
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: null,
+			card_snapshot: cardSnapshot,
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			privacy: { search_excluded: false },
+			registered_via: 'kiosk'
+		},
+		ctx,
+		id
+	);
+}
+
+export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical {
 	const d = medicalInputSchema.parse(input);
@@ -903,6 +976,14 @@ export const CHECK_IN_ELIGIBLE_STATUSES = [
 /** Stay statuses that may receive a scan/check-out (`check_out`) action. */
 export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
 
+/** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
+export const TRANSFER_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a `leave_temporary` action — must be checked in first. */
+export const LEAVE_TEMPORARY_ELIGIBLE_STATUSES = [
+	'active'
+] as const satisfies readonly StayStatus[];
+
 export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
@@ -911,6 +992,18 @@ export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 
 export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canTransferOutEvacuee(evacuee: Evacuee): boolean {
+	return (TRANSFER_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canLeaveTemporarily(evacuee: Evacuee): boolean {
+	return (LEAVE_TEMPORARY_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
 	);
 }
@@ -934,6 +1027,12 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+	}
+	if (action === 'transfer_out' && !canTransferOutEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถย้ายออกจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
+	}
+	if (action === 'leave_temporary' && !canLeaveTemporarily(evacuee)) {
+		throw new Error(`ไม่สามารถลาชั่วคราวจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
 	}
 }
 
@@ -974,6 +1073,46 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 	};
 }
 
+/**
+ * Map a manual "set stay status to X" pick (evacuee-status-modal) to the movement
+ * action that actually produces that status — `current_stay` is a snapshot only,
+ * the movement stream is the source of truth (schema.md §1.1). Returns `null` when
+ * the status is unchanged, when `current` isn't a valid source for that target per
+ * the movement guards in `assertMovementAllowed` (e.g. `checked_out` → `temporary_leave`
+ * skips a required check-in), or when no movement action reaches it: `pre_registered`
+ * is only ever an initial state, never a manual return target.
+ */
+export function resolveStatusChangeAction(
+	current: StayStatus,
+	target: StayStatus
+): MovementAction | null {
+	if (current === target) return null;
+	if (current === 'deceased' || current === 'cancelled') return null;
+	switch (target) {
+		case 'active':
+			if (current === 'temporary_leave') return 'return_from_leave';
+			return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'check_in'
+				: null;
+		case 'checked_out':
+			return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'check_out'
+				: null;
+		case 'transferred':
+			return (TRANSFER_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'transfer_out'
+				: null;
+		case 'temporary_leave':
+			return (LEAVE_TEMPORARY_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'leave_temporary'
+				: null;
+		case 'deceased':
+			return 'mark_deceased';
+		default:
+			return null;
+	}
+}
+
 // ---------------------------------------------------------------- display helpers
 
 export function maskNationalId(id: string | null | undefined): string {
@@ -982,10 +1121,14 @@ export function maskNationalId(id: string | null | undefined): string {
 }
 
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
-export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
+export function matchesEvacueeSearch(
+	evacuee: Evacuee,
+	query: string,
+	options: { isPublicSearch?: boolean } = {}
+): boolean {
 	const q = query.trim().toLowerCase();
 	if (!q) return true;
-	if (evacuee.privacy?.search_excluded) return false;
+	if (options.isPublicSearch && evacuee.privacy?.search_excluded) return false;
 	if (
 		evacuee.first_name.toLowerCase().includes(q) ||
 		evacuee.last_name.toLowerCase().includes(q) ||

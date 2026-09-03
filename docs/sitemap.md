@@ -108,14 +108,12 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | `/kitchen/requisitions` | เบิกวัตถุดิบ — ตัด stock ตรง (no approval)                                   | FR-40 | `put kitchen_requisition` + `put stock_ledger` (−qty) คู่กัน                       |
 | `/kitchen/service`      | บันทึกแจกอาหารจริงต่อมื้อ + kitchen dashboard                                | FR-41 | `put meal_service` (append-only) · view `meals_served`                             |
 
-### 2.6 Volunteer — SM
+### 2.6 Volunteer — SM, VC
 
-| Route                 | หน้าที่                                                                                   | FR    | Endpoint / Data action                                            |
-| --------------------- | ----------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------- |
-| `/volunteers`         | ทะเบียนอาสาสมัคร + skills + ค้นหา/กรอง (อาสา operational ไม่จำเป็นต้องมี login)           | FR-42 | `put volunteer:{ulid}`                                            |
-| `/volunteers/jobs`    | Job Board ประจำศูนย์: สร้าง/แก้ประกาศงาน, ตั้งกะ, ดูผู้สมัคร, toggle auto-accept (CR-041) | FR-43 | `put job:{ulid}` · Mango `job_application`                       |
-| `/volunteers/shifts`  | skill match + จัดเวร/มอบหมายงาน + ตรวจสอบเวลาทับซ้อน                                      | FR-43 | `put shift_assignment:{ulid}`                                     |
-| `/volunteers/checkin` | จุดสแกน QR Ticket รายงานตัวหน้างาน บันทึกเวลาเข้า-ออก และอัปเดต `volunteers_active`       | FR-42 | `put shift_assignment` (check_in_at) · `put volunteer` (checkin) |
+| Route                              | หน้าที่                                                                                                       | FR    | Endpoint / Data action                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------- |
+| `/back-office/volunteers`          | แดชบอร์ดจัดการจิตอาสาหลังบ้าน: ประกาศงานภารกิจ, กะย่อยรายวัน, ทะเบียนอาสา (แท็บ: กระดานงาน / กะงาน / ทะเบียน)  | FR-43 | `put job:{ulid}` · Mango `job_application` · `volunteer:{ulid}`   |
+| `/back-office/volunteers/checkin`  | จุดรับรายงานตัวแท็บเล็ตหน้าศูนย์ (POS Layout 40/60 + กล้องสแกน QR + Walk-in ด่วน 30 วินาที + Kiosk Mode)     | FR-42 | `put shift_assignment` (check_in_at) · `put volunteer` (checked_in) |
 
 ### 2.7 SOP & Resource Calculation — SM ดู / SA config
 
@@ -130,13 +128,13 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | `/reports`   | เปิด/ติดตามรายงานในศูนย์ (`shelter_report` · kind grievance\|incident)              | FR-47 | `put`/`update shelter_report:{ulid}` (state machine, forward-only) |
 | `/referrals` | ส่งต่อหน่วยงานภายนอก — SM เห็น flag medical-emergency แต่ **medical detail = null** | FR-48 | `put referral` (state `draft→sent→accepted                         | rejected→closed`) |
 
-### 2.9 Administration — SA เท่านั้น (global, ต้องมี WAN ถึง central)
+### 2.9 Administration — SA, SM (ตาม scope ศูนย์)
 
 | Route                    | หน้าที่                                                                                                                                                                                                                                                                                                             | FR           | Endpoint / Data action                                                                   |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
 | `/admin/shelters`        | เปิดศูนย์: สร้าง central db + `_security` + design docs + edge fallback replica/credentials/replication                                                                                                                                                                                                             | FR-2..3      | `POST /api/v1/shelters`                                                                  |
 | `/admin/shelters/[code]` | แก้ config ศูนย์ + **ปิดศูนย์** (เริ่มนาฬิกา retention 3 เดือน)                                                                                                                                                                                                                                                     | FR-2         | `POST /api/v1/shelters/{code}/close`                                                     |
-| `/admin/users`           | สร้าง/แก้ user + role + เปลี่ยนรหัสผ่าน (กติกา 1 user 1 shelter). พื้นผิว SPA: `/back-office/users` (ล็อกตามศูนย์ที่เลือกใน header), `/portal/system-management/users` (SA เลือกศูนย์ได้), และหมวดผู้ใช้งานบนหน้าแก้ไขศูนย์ (`/back-office/shelters/edit/{code}`, `/portal/system-management/shelters/edit/{code}`) | FR-1, FR-34  | `POST /api/v1/users` (ห่อ `_users`)                                                      |
+| `/back-office/users`     | จัดการบัญชีผู้ใช้: กำหนด 10 บทบาทแบบ Compound Scoped Roles (`{code}:{role}`) ป้องกันสิทธิ์ข้ามศูนย์, ออกสิทธิ์ให้อาสาช่วยงานระบบ (Staff-Capable), และเปลี่ยนรหัสผ่าน. พื้นผิว SPA: `/back-office/users` (ล็อกตามศูนย์), `/portal/system-management/users` (SA เลือกศูนย์ได้)                                              | FR-1, FR-34  | `POST /api/v1/users` (ห่อ `_users`)                                                      |
 | `/admin/catalog`         | master ข้ามศูนย์: supply item catalog, recipe, SOP ratio profile                                                                                                                                                                                                                                                    | FR-27, FR-44 | เขียน `catalog` db ที่ central (device pull จาก central ปกติ; edge ได้ fallback replica) |
 | `/admin/api-keys`        | issue/rotate/revoke EOC API key + scope (FD-14)                                                                                                                                                                                                                                                                     | FR-50        | central service (R4 deferred)                                                            |
 | `/admin/audit`           | ดู audit trail (override, retroactive edit, export, ลบ)                                                                                                                                                                                                                                                             | FR-16, 33    | Mango query `audit` ที่ central                                                          |
@@ -158,9 +156,9 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 - `/shelters` — Public Shelter Dashboard
 - `/search` — Family Search
 - `/donate` — Donation & Queue Booking
-- `/volunteer` — Volunteer Portal Landing (CR-041 D-PUBLIC=A)
-- `/volunteer/jobs` — Public Job Board & Application
-- `/volunteer/ticket/[token]` — Digital Volunteer Ticket & Status Check
+- `/volunteers/jobs` — Public Job Board & 30s Fast Application (CR-104)
+- `/volunteer/ticket/[token]` — Digital Volunteer Ticket QR Pass & Self Check-in Button (CR-104)
+- `/volunteer/portal` — Self-Service Schedule Lookup by Phone (CR-104)
 
 | Endpoint                                         | หน้าที่                                                                                                               | FR        | Auth                                              |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
@@ -169,10 +167,12 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | `POST /public/v1/donations`                      | donor pre-declaration + reservation                                                                                   | FR-32, 35 | reCAPTCHA v3 + Rate Limit                         |
 | `GET /public/v1/donations/{tracking_token}`      | ติดตามสถานะการบริจาคของตน                                                                                             | FR-35, 37 | `tracking_token`                                  |
 | `GET /public/v1/transparency/*`                  | รายงานความโปร่งใส (aggregate) 🔒                                                                                      | FR-38     | —                                                 |
-| `GET /public/v1/jobs`                            | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตา                                                             | FR-43     | —                                                 |
-| `POST /public/v1/jobs/{id}/apply`                | ยื่นใบสมัครงานอาสาสมัคร (No-Auth) → ออก `tracking_token` + Digital Ticket                                             | FR-42     | reCAPTCHA v3 + Rate Limit                         |
-| `GET /public/v1/volunteer/ticket/{token}`        | ตรวจสอบสถานะการสมัคร / วันเวลานัดหมาย / QR Code ประจำตัว                                                              | FR-42     | `tracking_token`                                  |
-| `POST /public/v1/volunteer/ticket/{token}/cancel`| กดยกเลิกการสมัครล่วงหน้า                                                                                              | FR-42     | `tracking_token`                                  |
+| `GET /public/v1/jobs`                            | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตากะย่อยรายวัน 2 สี `[ 🟢 รับแล้ว \| ⚪ ยังขาด ]`              | FR-43     | —                                                 |
+| `POST /public/v1/jobs/{id}/apply`                | ยื่นใบสมัครงานอาสาสมัครด่วน 30s (No-Auth, No-SMS OTP) → ออก `tracking_token` + Digital Ticket QR                      | FR-42     | reCAPTCHA v3 + Rate Limit                         |
+| `GET /public/v1/volunteer/ticket/{token}`        | ตรวจสอบสถานะการสมัคร / ตารางกะงาน / Digital Ticket QR Code / ปุ่ม Self Check-in                                       | FR-42     | `tracking_token`                                  |
+| `POST /public/v1/volunteer/ticket/{token}/cancel`| กดยกเลิกการสมัครล่วงหน้าด้วยตนเอง                                                                                     | FR-42     | `tracking_token`                                  |
+| `POST /public/v1/volunteer/ticket/{token}/checkin`| Self Check-in สแกนป้ายคิวอาร์โค้ดประจำศูนย์เพื่อยืนยันการมาถึงศูนย์หน้างาน                                            | FR-42     | `tracking_token`                                  |
+| `POST /public/v1/volunteer/portal/lookup`        | ค้นหาตารางงานทั้งหมดที่เคยลงทะเบียนไว้ด้วยเบอร์โทรศัพท์ (อ่านอย่างเดียว)                                              | FR-42     | rate-limit + reCAPTCHA                            |
 
 **EOC / Open API (R4 deferred — service แยก):** `GET` aggregate API + API key per consumer
 (FR-49, 51) — ไม่มี endpoint รายบุคคล, no-PII, audited; spec จะนิยามใน P-03

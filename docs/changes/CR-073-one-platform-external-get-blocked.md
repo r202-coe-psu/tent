@@ -1,8 +1,9 @@
 ---
 id: CR-073
 title: ONE PLATFORM + external GET payload — blocked รอ SPEC หน่วยงาน
-status: proposed
+status: approved
 date: 2026-08-13
+updated: 2026-08-31
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile

@@ -1,6 +1,5 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../data/users.api';
-import type { DutyWindow } from '../domain/schema';
 
 export const usersKeys = {
 	all: ['users'] as const,
@@ -21,10 +20,18 @@ export const useCreateUser = () => {
 			password: string;
 			display_name: string;
 			roles: string[];
-			affiliation_tags?: string[];
+			personnel_type?: 'staff' | 'volunteer';
+			organization?: string | null;
+			position?: string | null;
+			phone?: string | null;
+			email?: string | null;
+			notes?: string | null;
 			volunteer_id?: string | null;
-			duty_window?: DutyWindow | null;
-			active?: boolean;
+			duty_window?: {
+				start_ts: string;
+				end_ts: string;
+			} | null;
+			affiliation_tags?: string[];
 		}) => createUser(input),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
 	}));
@@ -38,10 +45,20 @@ export const useUpdateUser = () => {
 			password?: string;
 			display_name?: string;
 			roles?: string[];
-			affiliation_tags?: string[];
+			personnel_type?: 'staff' | 'volunteer';
+			organization?: string | null;
+			position?: string | null;
+			phone?: string | null;
+			email?: string | null;
+			notes?: string | null;
 			volunteer_id?: string | null;
-			duty_window?: DutyWindow | null;
+			duty_window?: {
+				start_ts: string;
+				end_ts: string;
+			} | null;
 			active?: boolean;
+			must_change_password?: boolean;
+			affiliation_tags?: string[];
 		}) => {
 			const { name, ...rest } = input;
 			return updateUser(name, rest);

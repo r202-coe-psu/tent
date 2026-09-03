@@ -93,6 +93,20 @@ test.describe('Evacuee Registration', () => {
 		await injectSession(page, TEST_USER, authSession); // navigates to /login internally
 	}
 
+	/** Act: complete step 2 screening with explicit "none" acknowledgements. */
+	async function completeScreeningStep(page: Page) {
+		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
+		const medicalNoneButtons = page.locator('#screen-section-medical').getByRole('button', {
+			name: 'ไม่มี',
+			exact: true
+		});
+		await medicalNoneButtons.nth(0).click();
+		await medicalNoneButtons.nth(1).click();
+		await medicalNoneButtons.nth(2).click();
+		await page.getByRole('button', { name: /ไม่เป็นกลุ่มเปราะบาง/ }).click();
+		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+	}
+
 	/** Arrange: land at Step 3 (registration form). */
 	async function goToStep3(page: Page) {
 		// Arrange
@@ -108,9 +122,8 @@ test.describe('Evacuee Registration', () => {
 			timeout: 5_000
 		});
 
-		// Act: Step 2 — select healthy → Step 3
-		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
-		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		// Act: Step 2 — complete screening → Step 3
+		await completeScreeningStep(page);
 
 		// Assert arrival at Step 3
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
@@ -156,7 +169,7 @@ test.describe('Evacuee Registration', () => {
 		// Assert — desktop short labels (exact) so the compact mobile h2
 		// "ตรวจสอบประวัติการลงทะเบียน" is not matched as a hidden first hit
 		await expect(page.getByText('ตรวจสอบประวัติ', { exact: true })).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('ประเมินอาการ', { exact: true })).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText('คัดกรอง', { exact: true })).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('ข้อมูลผู้ประสบภัย', { exact: true })).toBeVisible({
 			timeout: 5_000
 		});
@@ -223,32 +236,49 @@ test.describe('Evacuee Registration', () => {
 		});
 
 		// Assert
-		await expect(
-			page.getByRole('heading', { name: /ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง/ })
-		).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByRole('heading', { name: /คัดกรองสุขภาพและกลุ่มเปราะบาง/ })).toBeVisible({
+			timeout: 5_000
+		});
 		const step2Circle = page.locator('div.rounded-full').filter({ hasText: '2' }).first();
 		await expect(step2Circle).toHaveClass(/bg-primary/);
 		await expect(step2Circle).toHaveAttribute('aria-current', 'step');
 	});
 
-	test('should display all mandatory fields and sections on step 3', async ({ page }) => {
-		// Arrange + navigate
-		await goToStep3(page);
+	test('should display screening and identity sections on steps 2 and 3', async ({ page }) => {
+		// Arrange + navigate to step 2
+		await setupPage(page);
+		await page.goto('/onsite/people');
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible({
+			timeout: 15_000
+		});
+		await page.getByRole('button', { name: 'ลงทะเบียนใหม่' }).first().click();
+		await expect(page.getByRole('button', { name: /ไม่มีอาการป่วย/ })).toBeVisible({
+			timeout: 5_000
+		});
 
-		// Assert every section is rendered
-		// goToStep3 already waited for 'ชื่อ (First Name)' to be visible,
-		// so remaining fields should be in DOM — use short timeout for safety
-		await expect(page.getByText('ประเภทบัตร')).toBeVisible({ timeout: 5_000 });
+		// Assert screening fields on step 2
+		await expect(page.getByText('โรคประจำตัว')).toBeVisible({ timeout: 5_000 });
+		await expect(
+			page.locator('#screen-section-medical').getByRole('button', { name: 'ไม่มี', exact: true })
+		).toHaveCount(3);
+		await expect(page.getByText('แท็กกลุ่มเปราะบางและความต้องการพิเศษ')).toBeVisible({
+			timeout: 5_000
+		});
+		await expect(page.getByRole('button', { name: /ไม่เป็นกลุ่มเปราะบาง/ })).toBeVisible({
+			timeout: 5_000
+		});
+
+		// Act — proceed to step 3
+		await completeScreeningStep(page);
+
+		// Assert identity fields on step 3
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText('ประเภทบัตร')).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('นามสกุล (Last Name)')).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('เพศ')).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('เบอร์โทรศัพท์ยืนยันตัวตน')).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('ประเทศ')).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('โรคประจำตัว & ข้อมูลสุขภาพ')).toBeVisible({ timeout: 5_000 });
 		await expect(page.getByText('ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)')).toBeVisible({
-			timeout: 5_000
-		});
-		await expect(page.getByText('แท็กกลุ่มเปราะบางและความต้องการพิเศษ')).toBeVisible({
 			timeout: 5_000
 		});
 	});
@@ -310,8 +340,7 @@ test.describe('Evacuee Registration', () => {
 		});
 
 		// Act
-		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
-		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		await completeScreeningStep(page);
 
 		// Assert
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
@@ -571,6 +600,41 @@ test.describe('Evacuee Registration', () => {
 		await expect(page.getByText(/กรุณาเลือกอาการ/)).toBeVisible({ timeout: 5_000 });
 	});
 
+	test('should reject step 2 submission when medical and special sections are not acknowledged', async ({
+		page
+	}) => {
+		// Arrange
+		await setupPage(page);
+		await page.goto('/onsite/people');
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible({
+			timeout: 15_000
+		});
+		await page.getByRole('button', { name: 'ลงทะเบียนใหม่' }).first().click();
+		await expect(page.getByRole('button', { name: /ไม่มีอาการป่วย/ })).toBeVisible({
+			timeout: 5_000
+		});
+
+		// Act — EWAR only, skip medical/special acknowledgements
+		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
+		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+
+		// Assert — medical validation toast
+		await expect(page.getByText(/กรุณาระบุข้อมูลสุขภาพแต่ละช่อง/)).toBeVisible({ timeout: 5_000 });
+
+		// Act — acknowledge each medical field, still skip vulnerable-group acknowledgement
+		const medicalNoneButtons = page.locator('#screen-section-medical').getByRole('button', {
+			name: 'ไม่มี',
+			exact: true
+		});
+		await medicalNoneButtons.nth(0).click();
+		await medicalNoneButtons.nth(1).click();
+		await medicalNoneButtons.nth(2).click();
+		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+
+		// Assert — vulnerable-group validation toast
+		await expect(page.getByText(/กรุณาเลือกกลุ่มเปราะบาง/)).toBeVisible({ timeout: 5_000 });
+	});
+
 	// ══════════════════════════════════════════════════════════════════════════
 	// SECTION 6: Concurrency — 409 Conflict handling
 	// Per skill §3.3: "ensure 409 Conflict is handled properly"
@@ -618,8 +682,7 @@ test.describe('Evacuee Registration', () => {
 		await expect(page.getByRole('button', { name: /ไม่มีอาการป่วย/ })).toBeVisible({
 			timeout: 5_000
 		});
-		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
-		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		await completeScreeningStep(page);
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
 
 		// Fill Step 3 minimal valid data
@@ -768,9 +831,7 @@ test.describe('Evacuee Registration', () => {
 		await expect(preview).toHaveAttribute('src', previewUrl!);
 	});
 
-	test('should show SOS ESCALATE banner on step 3 when symptoms were selected in step 2', async ({
-		page
-	}) => {
+	test('should show SOS ESCALATE banner on step 2 when symptoms are selected', async ({ page }) => {
 		// Arrange
 		await setupPage(page);
 		await page.goto('/onsite/people');
@@ -788,11 +849,7 @@ test.describe('Evacuee Registration', () => {
 		await expect(symptomBtn).toBeVisible({ timeout: 5_000 });
 		await symptomBtn.click();
 
-		// Proceed to step 3 (healthy toggle NOT clicked — symptoms are selected)
-		await page.getByRole('button', { name: 'ถัดไป →' }).click();
-		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
-
-		// Assert — SOS banner shown when symptoms were selected
+		// Assert — SOS banner shown on screening step when symptoms are selected
 		await expect(page.getByText(/SOS ESCALATE/)).toBeVisible({ timeout: 3_000 });
 	});
 
@@ -848,8 +905,7 @@ test.describe('Evacuee Registration', () => {
 		await expect(page.getByRole('button', { name: /ไม่มีอาการป่วย/ })).toBeVisible({
 			timeout: 5_000
 		});
-		await page.getByRole('button', { name: /ไม่มีอาการป่วย/ }).click();
-		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		await completeScreeningStep(page);
 
 		// Step 3: Fill minimal valid data
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });

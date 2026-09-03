@@ -266,7 +266,7 @@
 	function handleViewEvacueeProfile(id: string) {
 		goto(
 			resolve(
-				`/back-office/evacuee-management/edit/-evacuee/${id}?from=/back-office/households/edit/${householdId}`
+				`/back-office/evacuee-management/edit/evacuee/${id}?from=/back-office/households/edit/${householdId}`
 			)
 		);
 	}

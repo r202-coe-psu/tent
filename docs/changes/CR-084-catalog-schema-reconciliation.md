@@ -1,8 +1,9 @@
 ---
 id: CR-084
 title: Catalog Schema Reconciliation — Removing is_default flags & aligning item_category, item_master, recipe fields
-status: proposed
+status: done
 date: 2026-08-22
+updated: 2026-09-01
 requested_by: Module C team / Kitchen & Warehouse operations
 decided_by: project owner
 layer: volatile

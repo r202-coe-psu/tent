@@ -1,9 +1,9 @@
 ---
 id: CR-017
 title: Public Tier API Architecture — MongoDB Read Model + Sync Worker
-status: approved
+status: done
 date: 2026-06-29
-updated: 2026-07-02
+updated: 2026-08-31
 requested_by: project owner
 decided_by: project owner
 layer: volatile

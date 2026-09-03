@@ -158,7 +158,20 @@
 				: $formData.emergency_contact
 		};
 		noPhone = !initialData.phone;
-		birthYearBE = String(initialData.birth_year ?? '');
+		if (typeof initialData.birth_year === 'number') {
+			birthYearBE = String(initialData.birth_year);
+			if (typeof initialData.age === 'number') {
+				age = String(initialData.age);
+			} else {
+				age = String(Math.max(0, currentBEYear() - initialData.birth_year));
+			}
+		} else if (typeof initialData.age === 'number') {
+			age = String(initialData.age);
+			birthYearBE = String(currentBEYear() - initialData.age);
+		} else {
+			birthYearBE = '';
+			age = '';
+		}
 		medicalConditionsStr = (initialData.medical_conditions ?? []).join(', ');
 		medicalMedicationsStr = (initialData.medical_medications ?? []).join(', ');
 		medicalAllergiesStr = (initialData.medical_allergies ?? []).join(', ');
@@ -166,15 +179,39 @@
 
 	function updateBirthYear(value: string) {
 		birthYearBE = value;
-		$formData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+		if (value && !isNaN(Number(value))) {
+			const y = Number(value);
+			$formData.birth_year = y;
+			if (y > minBirthYearBE() && y <= currentBEYear()) {
+				const calcAge = currentBEYear() - y;
+				age = calcAge.toString();
+				$formData.age = calcAge;
+			}
+		} else {
+			$formData.birth_year = undefined;
+			if (!value) {
+				age = '';
+				$formData.age = undefined;
+			}
+		}
 	}
 
 	function updateAge(value: string) {
 		age = value;
 		if (value && !isNaN(Number(value))) {
-			$formData.birth_year = currentBEYear() - Number(value);
-		} else if (!birthYearBE) {
-			$formData.birth_year = undefined;
+			const a = Number(value);
+			$formData.age = a;
+			if (a >= 0 && a <= MAX_AGE_YEARS) {
+				const calcBE = currentBEYear() - a;
+				birthYearBE = calcBE.toString();
+				$formData.birth_year = calcBE;
+			}
+		} else {
+			$formData.age = undefined;
+			if (!value) {
+				birthYearBE = '';
+				$formData.birth_year = undefined;
+			}
 		}
 	}
 

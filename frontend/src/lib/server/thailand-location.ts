@@ -67,6 +67,77 @@ export async function listAllLocations(): Promise<LocationRecord[]> {
 	return DATA.map((row) => ({ ...row })).sort((a, b) => thCompare(a.subdistrict, b.subdistrict));
 }
 
+/** Find zipcode by province, district, and subdistrict names (handles Thai prefixes). */
+export function lookupZipcode(
+	province?: string | null,
+	district?: string | null,
+	subdistrict?: string | null
+): string | null {
+	if (!subdistrict || !province) return null;
+
+	const cleanProv = province.replace(/^(จ\.|จังหวัด\s*)/, '').trim();
+	const cleanDist = district ? district.replace(/^(อ\.|อำเภอ\s*|เขต\s*)/, '').trim() : '';
+	const cleanSub = subdistrict.replace(/^(ต\.|ตำบล\s*|แขวง\s*)/, '').trim();
+
+	// 1. Exact match with cleaned names across all 3 levels (when district is provided)
+	if (cleanDist) {
+		const match = DATA.find((row) => {
+			const rowProv = row.province.trim();
+			const rowDist = row.district.trim();
+			const rowSub = row.subdistrict.trim();
+
+			const provMatches = rowProv === cleanProv || rowProv === province.trim();
+			const distMatches = rowDist === cleanDist || (district && rowDist === district.trim());
+			const subMatches = rowSub === cleanSub || rowSub === subdistrict.trim();
+
+			return provMatches && distMatches && subMatches;
+		});
+
+		if (match) return String(match.zipcode);
+	}
+
+	// 2. Partial / substring match on district name within the same province and subdistrict
+	if (cleanDist) {
+		const partialDistrictMatch = DATA.find((row) => {
+			const rowProv = row.province.trim();
+			const rowDist = row.district.trim();
+			const rowSub = row.subdistrict.trim();
+
+			const provMatches = rowProv === cleanProv || rowProv === province.trim();
+			const subMatches = rowSub === cleanSub || rowSub === subdistrict.trim();
+			const distMatches =
+				rowDist.includes(cleanDist) ||
+				cleanDist.includes(rowDist) ||
+				rowDist.replace(/^เมือง/, '') === cleanDist.replace(/^เมือง/, '');
+
+			return provMatches && subMatches && distMatches;
+		});
+
+		if (partialDistrictMatch) return String(partialDistrictMatch.zipcode);
+	}
+
+	// 3. Fallback: match province and subdistrict only IF all matching districts share the exact same zipcode
+	const candidateRows = DATA.filter((row) => {
+		const rowProv = row.province.trim();
+		const rowSub = row.subdistrict.trim();
+		return (
+			(rowProv === cleanProv || rowProv === province.trim()) &&
+			(rowSub === cleanSub || rowSub === subdistrict.trim())
+		);
+	});
+
+	if (candidateRows.length === 0) return null;
+
+	const uniqueZipcodes = [...new Set(candidateRows.map((r) => r.zipcode))];
+	// Only return if unambiguous (all candidate districts share the same postal code)
+	if (uniqueZipcodes.length === 1) {
+		return String(uniqueZipcodes[0]);
+	}
+
+	// Ambiguous matches across multiple districts with different zipcodes -> return null
+	return null;
+}
+
 // ── writes (SA-only; callers must requireAdmin first) ────────────────────────
 
 /** PUT a brand-new doc; translate CouchDB 409 into a friendly "exists" error. */

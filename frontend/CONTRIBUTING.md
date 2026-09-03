@@ -59,7 +59,7 @@ Jenkins staging CI:
 Hooks register automatically via the root `prepare` script when you `pnpm install` at the repo
 root. Commits that only touch docs, infra, or other non-`frontend/` paths skip the gate.
 
-Bypass only when necessary: `LEFTHOOK=0 git commit` or `git commit --no-verify`.
+**Strict Rule — No Verification Bypass:** Do **NOT** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` under any circumstances (ห้าม commit หรือ push แบบ no-verify โดยเด็ดขาด). All quality gates (linting, type-checking, tests) must pass before code is committed or pushed. If a check fails, fix the code.
 
 ## 2. Definition of done
 
@@ -414,6 +414,7 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
 
 ## 8. Commits & PRs
 
+- **No Bypass Rule:** Never commit or push with `--no-verify` or `LEFTHOOK=0`. Ensure all pre-commit and pre-push checks pass.
 - Branch off `main`; don't commit straight to it.
 - Keep each PR to one feature/concern; respect the layer boundaries above (a domain change and a
   UI change in the same feature are fine; reaching across feature barrels to make something work is not).
