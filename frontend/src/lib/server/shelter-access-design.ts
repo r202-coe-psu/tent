@@ -174,19 +174,22 @@ export function buildValidateDocUpdate(code: string): string {
   // kitchen_staff could never actually write a meal plan, requisition, service
   // record, or gas cylinder/ledger without an _admin session (bug found + fixed
   // alongside CR-080).
-  // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18/§2.20) was
+  // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18) was
   // missing here entirely too — same class of bug: the back-office volunteers
   // UI shipped and worked in dev only because dev testing used an _admin
   // session; any real session-staff write (walk-in registration, job
-  // create/dispatch, check-in/out, transfer, identity approval) 403'd with
+  // create/dispatch, check-in/out, identity approval) 403'd with
   // "doc type not allowed yet" (bug found + fixed as CR-096).
+  // volunteer_transfer (schema.md §2.20) was cut entirely by CR-104
+  // AC-104-10 -- cross-shelter transfer no longer exists; a volunteer applies
+  // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
-    'volunteer', 'job', 'job_application', 'shift_assignment', 'volunteer_transfer',
+    'volunteer', 'job', 'job_application', 'shift_assignment',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override'
   ];

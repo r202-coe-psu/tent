@@ -35,21 +35,15 @@ import type { Job, JobInput } from '../domain/job.schema';
 import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
-import type {
-	VolunteerTransferInput,
-	VolunteerTransferStatus
-} from '../domain/volunteer-transfer.schema';
 import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
-import { volunteerTransferRepository } from '../data/volunteer-transfer.remote';
 import type {
 	JobApplicationFilter,
 	JobFilter,
 	ShiftAssignmentFilter,
-	VolunteerFilter,
-	VolunteerTransferFilter
+	VolunteerFilter
 } from '../data/volunteer.repository';
 
 /** Calendar date "today" is evaluated against, in **Asia/Bangkok** — the same
@@ -95,11 +89,7 @@ export const volunteerKeys = {
 	volunteersList: (filter?: VolunteerFilter, shelterCode?: string) =>
 		[...volunteerKeys.volunteersAll(shelterCode), 'list', filter] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
-	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const,
-
-	transfersAll: () => [...volunteerKeys.all, 'transfers', getShelterCode()] as const,
-	transfersList: (filter?: VolunteerTransferFilter) =>
-		[...volunteerKeys.transfersAll(), 'list', filter] as const
+	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -199,12 +189,6 @@ export const useVolunteer = (id: () => string, enabled: () => boolean = () => tr
 		queryKey: volunteerKeys.volunteerDetail(id()),
 		queryFn: () => volunteerRepository().get(id()),
 		enabled: enabled() && !!id()
-	}));
-
-export const useTransfers = (filter?: VolunteerTransferFilter) =>
-	createQuery(() => ({
-		queryKey: volunteerKeys.transfersList(filter),
-		queryFn: () => volunteerTransferRepository().list(filter)
 	}));
 
 // ---------------------------------------------------------------------------
@@ -502,50 +486,6 @@ export const useSetVolunteerCheckedIn = (queryClient: QueryClient) =>
 		}
 	}));
 
-/**
- * Requests a `volunteer_transfer` (`status: 'pending'`). Transfers are not
- * part of `computeHubMetrics`'s input, so this only invalidates transfers.
- */
-export const useRequestTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: (input: VolunteerTransferInput) =>
-			volunteerTransferRepository().request(input, authorContext()),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
-/**
- * Accepts/rejects a pending transfer request. Per
- * `data/volunteer.repository.ts#VolunteerTransferRepository.decide`
- * (TODO(D-VOL-TRANSFER-APPROVE), CR-094 §7 open), this does not touch
- * `volunteer.current_shelter_code` or `checked_in` — hub metrics are
- * unaffected, only transfers need invalidating.
- */
-export const useDecideTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: ({
-			id,
-			decision
-		}: {
-			id: string;
-			decision: Extract<VolunteerTransferStatus, 'accepted' | 'rejected'>;
-		}) => volunteerTransferRepository().decide(id, decision, authStore.user?.name ?? 'unknown'),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
-/** Requester cancels their own still-`pending` transfer request. */
-export const useCancelTransfer = (queryClient: QueryClient) =>
-	createMutation(() => ({
-		mutationFn: (id: string) =>
-			volunteerTransferRepository().cancel(id, authStore.user?.name ?? 'unknown'),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
-		}
-	}));
-
 // ---------------------------------------------------------------------------
 // Live updates — one shared wiring for the whole feature (mirrors
 // `referrals/application/queries.ts#startReferralsLiveQuery`).
@@ -564,9 +504,6 @@ export function startVolunteersLiveQuery(queryClient: QueryClient): SubscribeDat
 		}
 		if (type === 'volunteer') {
 			return [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()];
-		}
-		if (type === 'volunteer_transfer') {
-			return [volunteerKeys.transfersAll()];
 		}
 		return [];
 	});

@@ -28,11 +28,6 @@ import type {
 	ShiftKind,
 	CheckInMethod
 } from '../domain/shift-assignment.schema';
-import type {
-	VolunteerTransfer,
-	VolunteerTransferInput,
-	VolunteerTransferStatus
-} from '../domain/volunteer-transfer.schema';
 
 // ---------------------------------------------------------------------------
 // Mango indexes required by schema.md §2.8 / §2.9 / §2.17 / §2.18 / §2.20 and
@@ -53,7 +48,6 @@ import type {
 // shift_assignment→ (volunteer_id, date) · (date, shift) · (job_id, status) ·
 //                   (duty_window.start_ts, duty_window.end_ts)
 // volunteer      → (phone_hash) · (tracking_token) · (status)
-// volunteer_transfer → (to_shelter_code, status) · (volunteer_id, status)
 // ---------------------------------------------------------------------------
 export const VOLUNTEER_MANGO_INDEXES = [
 	{
@@ -109,16 +103,6 @@ export const VOLUNTEER_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'status'] },
 		name: 'volunteer-type-status-idx',
-		type: 'json' as const
-	},
-	{
-		index: { fields: ['type', 'to_shelter_code', 'status'] },
-		name: 'volunteer-transfer-type-to-shelter-status-idx',
-		type: 'json' as const
-	},
-	{
-		index: { fields: ['type', 'volunteer_id', 'status'] },
-		name: 'volunteer-transfer-type-volunteer-status-idx',
 		type: 'json' as const
 	}
 ];
@@ -324,40 +308,4 @@ export interface ShiftAssignmentRepository {
 	 * over-credit the job's quota.
 	 */
 	unassign(id: string): Promise<ShiftAssignment>;
-}
-
-// ---------------------------------------------------------------------------
-// volunteer_transfer
-// ---------------------------------------------------------------------------
-
-export type VolunteerTransferFilter = {
-	toShelterCode?: string;
-	volunteerId?: string;
-	status?: VolunteerTransferStatus;
-};
-
-export interface VolunteerTransferRepository {
-	list(filter?: VolunteerTransferFilter): Promise<VolunteerTransfer[]>;
-	get(id: string): Promise<VolunteerTransfer | null>;
-	request(input: VolunteerTransferInput, ctx: AuthorContext): Promise<VolunteerTransfer>;
-	/**
-	 * Accept/reject a pending transfer request.
-	 *
-	 * TODO(D-VOL-TRANSFER-APPROVE): CR-094 §7 leaves open whether this doc
-	 * lives in the origin or destination shelter DB, and whose DB is
-	 * authoritative for the approval write. This adapter only writes the
-	 * `volunteer_transfer` doc itself in the *active* shelter DB
-	 * (`getShelterDb()`) — it deliberately does NOT update
-	 * `volunteer.current_shelter_code` (§2.8) or revoke the origin shelter's
-	 * role grant (FR-VOL-12.3), because both of those may require a
-	 * cross-shelter-DB write that this decision has not resolved. Do not add
-	 * that cross-DB logic here until CR-094 §7 is closed.
-	 */
-	decide(
-		id: string,
-		decision: Extract<VolunteerTransferStatus, 'accepted' | 'rejected'>,
-		actor: string
-	): Promise<VolunteerTransfer>;
-	/** Requester cancels their own still-`pending` request. */
-	cancel(id: string, actor: string): Promise<VolunteerTransfer>;
 }

@@ -5,8 +5,8 @@
 	 * `Table.Root`/`Table.Header`/`Table.Body` 2026-08-30 so rows sit flush
 	 * against each other under one column-label header, mirroring
 	 * `users/ui/user-list.svelte`). Composes the stat pills, search/filter bar,
-	 * the "รออนุมัติ" sub-filter chips, and the roster table; owns the transfer +
-	 * walk-in registration dialogs. `volunteer-card.svelte` (per-row
+	 * the "รออนุมัติ" sub-filter chips, and the roster table; owns the
+	 * walk-in registration dialog. `volunteer-card.svelte` (per-row
 	 * `Table.Row`) owns the per-row action dialogs.
 	 *
 	 * Every filter here runs client-side over one unfiltered `useVolunteers()`
@@ -15,11 +15,9 @@
 	 * `VolunteerFilter` per keystroke/toggle.
 	 */
 	import Inbox from '@lucide/svelte/icons/inbox';
-	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
 	import Zap from '@lucide/svelte/icons/zap';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -29,9 +27,8 @@
 	import VolunteerFilterBar from './volunteer-filter-bar.svelte';
 	import VolunteerApprovalChips, { type ApprovalChip } from './volunteer-approval-chips.svelte';
 	import VolunteerCard from './volunteer-card.svelte';
-	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
-	import { useVolunteers, useTodayAttendance, useTransfers } from '../application/queries';
+	import { useVolunteers, useTodayAttendance } from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -41,7 +38,6 @@
 
 	const volunteersQuery = useVolunteers();
 	const attendanceQuery = useTodayAttendance();
-	const incomingTransfersQuery = useTransfers({ status: 'pending' });
 
 	const volunteers = $derived(volunteersQuery.data ?? []);
 	const attendanceByVolunteer = $derived.by(() => {
@@ -53,9 +49,6 @@
 		}
 		return map;
 	});
-	const incomingTransferCount = $derived(
-		(incomingTransfersQuery.data ?? []).filter((t) => t.to_shelter_code === shelterCode).length
-	);
 
 	let statFilter = $state<PeopleStatFilter>('all');
 	let approvalChip = $state<ApprovalChip>('all');
@@ -104,7 +97,6 @@
 		return list;
 	});
 
-	let transferDialogOpen = $state(false);
 	let walkInDialogOpen = $state(false);
 
 	const cardSkeletonKeys = [0, 1, 2, 3];
@@ -128,17 +120,6 @@
 		{/if}
 
 		<div class="flex flex-wrap items-center gap-2">
-			<Button
-				variant="outline"
-				class="gap-1.5 border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-				onclick={() => (transferDialogOpen = true)}
-			>
-				<ArrowLeftRight class="h-4 w-4" />
-				ขอโอนย้ายศูนย์
-				{#if incomingTransferCount > 0}
-					<Badge class="bg-amber-400 text-[10px] text-amber-950">{incomingTransferCount}</Badge>
-				{/if}
-			</Button>
 			<Button class="gap-1.5" onclick={() => (walkInDialogOpen = true)}>
 				<Zap class="h-4 w-4" />
 				ลงทะเบียนอาสา Walk-in
@@ -227,5 +208,4 @@
 	{/if}
 </div>
 
-<VolunteerTransferDialog bind:open={transferDialogOpen} />
 <WalkInRegistrationDialog bind:open={walkInDialogOpen} />

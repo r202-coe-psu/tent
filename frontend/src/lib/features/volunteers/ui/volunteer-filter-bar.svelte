@@ -19,7 +19,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { SKILL_MASTER } from '../domain/skill-master';
+	import { useSkillOptions } from '../application/queries';
 	import { shiftAssignmentStatusSchema } from '../domain/shift-assignment.schema';
 	import {
 		volunteerSourceSchema,
@@ -43,10 +43,15 @@
 		personnelType?: PersonnelType | '';
 	} = $props();
 
-	const skillOptions = [
+	// `volunteer.skills` stores the master **label**, not the code (CR-100
+	// compat rule — see `application/queries.ts#useSkillOptions`), so the
+	// filter value must match on label too, same as the old static list did
+	// (`SKILL_MASTER`'s `key` and `label` were always identical).
+	const skillCatalog = useSkillOptions();
+	const skillOptions = $derived([
 		{ value: '', label: 'ทุกทักษะ' },
-		...SKILL_MASTER.map((s) => ({ value: s.key, label: s.label }))
-	];
+		...skillCatalog.options.map((s) => ({ value: s.label, label: s.label }))
+	]);
 
 	const SHIFT_STATUS_LABELS: Record<ShiftAssignmentStatus, string> = {
 		assigned: 'รับกะแล้ว',

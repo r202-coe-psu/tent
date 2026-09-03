@@ -17,7 +17,7 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
- * | seedVolunteers — jobs/volunteers/shifts/applications/transfer | makeJob, makeVolunteer, makeJobApplication, makeShiftAssignment, makeVolunteerTransfer | volunteers domain (00-foundation.md §00.5) |
+ * | seedVolunteers — jobs/volunteers/shifts/applications | makeJob, makeVolunteer, makeJobApplication, makeShiftAssignment | volunteers domain (00-foundation.md §00.5) |
  * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; CR-042 have map) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
@@ -124,11 +124,6 @@ import {
 	type ShiftAssignmentInput,
 	type ShiftKind
 } from '$lib/features/volunteers/domain/shift-assignment.schema';
-import {
-	makeVolunteerTransfer,
-	volunteerTransferSchema,
-	type VolunteerTransferInput
-} from '$lib/features/volunteers/domain/volunteer-transfer.schema';
 import { bangkokDateString, resolveDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
 import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
@@ -2026,10 +2021,10 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
 /**
  * `docs/plans/volunteer-backoffice/00-foundation.md` §00.5 — seed the
  * `volunteers` feature slice (jobs, volunteers, shift_assignments,
- * job_applications, volunteer_transfer) into `SHELTER_DB` (SH001), built
- * exclusively through the feature's own domain factories (`makeJob`,
- * `makeVolunteer`, `makeJobApplication`, `makeShiftAssignment`,
- * `makeVolunteerTransfer`) — never a hand-rolled envelope.
+ * job_applications) into `SHELTER_DB` (SH001), built exclusively through the
+ * feature's own domain factories (`makeJob`, `makeVolunteer`,
+ * `makeJobApplication`, `makeShiftAssignment`) — never a hand-rolled envelope.
+ * (`volunteer_transfer` was cut entirely by CR-104 AC-104-10.)
  *
  * `resolveDutyWindow(date, shift)` (Bangkok wall-clock → UTC, `duty-window.ts`)
  * is the ONLY source of `duty_window` values here — no hand-written ISO
@@ -2429,20 +2424,6 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 
 	for (const app of [confirmedApplication, pendingApplication]) jobApplicationSchema.parse(app);
 
-	// — volunteer_transfer ——————————————————————————————————————————————————
-	// v2 requests a move to SH002 — written into the *origin* shelter DB
-	// (SH001), matching `VolunteerTransferRemoteRepository` (bound to the
-	// active shelter DB only; see TODO(D-VOL-TRANSFER-APPROVE) there — this
-	// seed never reads/writes SH002's DB, so it does not touch that open gap).
-	const transferInput: VolunteerTransferInput = {
-		volunteer_id: v2._id,
-		from_shelter_code: SH001_CODE,
-		to_shelter_code: SHELTER_CODE_2,
-		reason: 'ต้องการช่วยเสริมกำลังอาสาสมัครที่ศูนย์ปลายทางซึ่งขาดแคลนกำลังคน'
-	};
-	const transfer = makeVolunteerTransfer(transferInput, ctx);
-	volunteerTransferSchema.parse(transfer);
-
 	const allDocs = [
 		job1,
 		job2,
@@ -2460,13 +2441,12 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		a3,
 		a4,
 		confirmedApplication,
-		pendingApplication,
-		transfer
+		pendingApplication
 	];
 	await bulkDocs(SHELTER_DB, allDocs);
 
 	console.log(
-		`  ✓ ${SHELTER_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications, 1 volunteer_transfer (today=${today})`
+		`  ✓ ${SHELTER_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications (today=${today})`
 	);
 }
 

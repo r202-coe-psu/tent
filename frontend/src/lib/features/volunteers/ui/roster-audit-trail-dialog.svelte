@@ -104,8 +104,8 @@
 	let sourceFilter = $state<'all' | 'self' | 'manual'>('all');
 
 	// Jump straight to one volunteer's history when opened from a roster row's
-	// history icon (`roster-row.svelte`) — same "preset on open" pattern as
-	// `volunteer-transfer-dialog.svelte#presetVolunteerId`.
+	// history icon (`roster-row.svelte`) — same "preset on open" pattern used
+	// throughout this feature (rehydrate-on-open effects keyed off a prop).
 	let lastPreset = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {

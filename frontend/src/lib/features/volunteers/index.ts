@@ -35,7 +35,6 @@ export type {
 	SelectedShift
 } from './domain/job-application.schema';
 export * from './domain/shift-assignment.schema';
-export * from './domain/volunteer-transfer.schema';
 export * from './domain/quota';
 export * from './domain/capacity';
 export * from './domain/duty-window';
@@ -73,11 +72,6 @@ export {
 	ShiftAssignmentRemoteRepository,
 	createShiftAssignmentRepositoryForTest
 } from './data/shift-assignment.remote';
-export {
-	volunteerTransferRepository,
-	VolunteerTransferRemoteRepository,
-	createVolunteerTransferRepositoryForTest
-} from './data/volunteer-transfer.remote';
 
 // application — query-key factory + every hook
 export * from './application/queries';
@@ -129,7 +123,6 @@ export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
 export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
-export { default as VolunteerTransferDialog } from './ui/volunteer-transfer-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
 export { default as JobAssignPage } from './ui/job-assign-page.svelte';
 export { default as AssignRosterRow } from './ui/assign-roster-row.svelte';
