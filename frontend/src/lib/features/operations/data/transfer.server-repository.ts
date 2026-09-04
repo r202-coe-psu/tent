@@ -1,3 +1,4 @@
+import { ZodError } from 'zod';
 import { adminRaw } from '$lib/server/couch-admin';
 import type { AuthorContext } from '$lib/db/model';
 import { shelterDbName, TRANSFER_MANGO_INDEXES } from '$lib/server/shelter-access-design';
@@ -10,6 +11,7 @@ import {
 	resumeTransfer,
 	isStockTransfer,
 	isStockLedger,
+	parseStockTransfer,
 	stockBalance,
 	transferFilterSchema,
 	type StockTransfer,
@@ -20,6 +22,8 @@ import {
 } from '../domain/operations';
 import {
 	assertActorMayTransition,
+	assertActorMayDelete,
+	assertActorMayRestore,
 	TransferAuthorizationError
 } from '../domain/transfer.authorization';
 import { qtyAbs, qtyGte } from '$lib/utils/qty';
@@ -48,8 +52,10 @@ import { qtyAbs, qtyGte } from '$lib/utils/qty';
 
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
+const HTTP_ACCEPTED = 202;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
+const HTTP_CONFLICT = 409;
 const HTTP_UNPROCESSABLE = 422;
 
 export class TransferServerRepositoryError extends Error {
@@ -119,6 +125,12 @@ export class TransferServerRepository {
 	): Promise<{ status: number; data: T }> {
 		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'PUT', body);
+		return { status: res.status, data: res.data as T };
+	}
+
+	private async couchDelete<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
+		const res = await adminRaw(`/${dbName}${path}`, 'DELETE');
 		return { status: res.status, data: res.data as T };
 	}
 
@@ -348,5 +360,123 @@ export class TransferServerRepository {
 		}
 
 		return { ...transfer, _rev: data.rev };
+	}
+
+	/**
+	 * CR-090 FR-01/FR-02/FR-03 — hard-delete a transfer request.
+	 *
+	 * This is the only hard delete in the operations feature, so the two guards below carry the
+	 * whole weight of it: the status is re-read from `central_ops` and re-checked HERE, not trusted
+	 * from the client, because a transfer that already reached `shipped` has `stock_ledger` rows
+	 * pointing at its `_id` and deleting it would orphan them (FR-03).
+	 *
+	 * Returns the deleted body along with the tombstone `rev` so the caller can offer an undo
+	 * (FR-04/FR-09). The body comes from this fresh read rather than from the client, so a restore
+	 * built on it matches what was actually deleted.
+	 */
+	async remove(
+		id: string,
+		actorShelter: string
+	): Promise<{ id: string; rev: string; doc: StockTransfer }> {
+		const latest = await this.get(id);
+		if (!latest) {
+			throw new TransferServerRepositoryError('Transfer not found', HTTP_NOT_FOUND);
+		}
+
+		try {
+			assertActorMayDelete(latest, actorShelter);
+		} catch (e: unknown) {
+			if (e instanceof TransferAuthorizationError) {
+				throw new TransferServerRepositoryError(e.message, HTTP_FORBIDDEN);
+			}
+			throw e;
+		}
+
+		if (latest.status !== 'requested') {
+			throw new TransferServerRepositoryError(
+				`Cannot delete a transfer in status "${latest.status}" — only "requested" may be deleted`,
+				HTTP_UNPROCESSABLE
+			);
+		}
+
+		if (!latest._rev) {
+			throw new TransferServerRepositoryError(
+				'Transfer is missing a revision and cannot be deleted',
+				HTTP_UNPROCESSABLE
+			);
+		}
+
+		const { status, data } = await this.couchDelete<PutResultResponse>(
+			this.dbName,
+			`/${encodeURIComponent(id)}?rev=${encodeURIComponent(latest._rev)}`
+		);
+
+		if (status !== HTTP_OK && status !== HTTP_ACCEPTED) {
+			throw new TransferServerRepositoryError('Failed to delete transfer doc', status, data);
+		}
+
+		return { id, rev: data.rev, doc: latest };
+	}
+
+	/**
+	 * CR-090 FR-05/FR-08/FR-10 — put a deleted transfer back exactly as it was.
+	 *
+	 * Two rules this method exists to hold:
+	 *
+	 * 1. The body is PUT verbatim. It must NOT go through `createTransfer()`/`makeDoc()`, which
+	 *    would mint a fresh `_id` and re-stamp `created_at`/`created_by`/`timeline.requested` with
+	 *    the time of the undo — the opposite of "identical in every field" (FR-08).
+	 * 2. No `_rev` is attached. The 2026-09-04 spike (see the CR) measured CouchDB 3.5.2: a PUT of
+	 *    the original `_id` with no `_rev` succeeds and continues the revision chain from the
+	 *    tombstone, while attaching the tombstone `_rev` returns `409` every time (FR-09).
+	 *
+	 * That same rev-less PUT is what stops this path from overwriting a live document: CouchDB
+	 * answers `409` when the `_id` still exists, so FR-10's no-overwrite rule is enforced by the
+	 * storage layer rather than by a read-then-write check that could lose a race.
+	 */
+	async restore(doc: unknown, actorShelter: string): Promise<StockTransfer> {
+		let parsed: StockTransfer;
+		try {
+			parsed = parseStockTransfer(doc);
+		} catch (e: unknown) {
+			throw new TransferServerRepositoryError(
+				'Restore body is not a valid transfer document',
+				HTTP_UNPROCESSABLE,
+				e instanceof ZodError ? e.format() : undefined
+			);
+		}
+
+		try {
+			assertActorMayRestore(parsed, actorShelter);
+		} catch (e: unknown) {
+			if (e instanceof TransferAuthorizationError) {
+				throw new TransferServerRepositoryError(e.message, HTTP_FORBIDDEN);
+			}
+			throw e;
+		}
+
+		// Strip `_rev` even if the client echoed one back — see rule 2 above.
+		const { _rev: _ignored, ...body } = parsed;
+		void _ignored;
+
+		const { status, data } = await this.couchPut<PutResultResponse>(
+			this.dbName,
+			`/${encodeURIComponent(parsed._id)}`,
+			body
+		);
+
+		if (status === HTTP_CONFLICT) {
+			throw new TransferServerRepositoryError(
+				`Transfer ${parsed._id} already exists and cannot be restored over`,
+				HTTP_CONFLICT,
+				data
+			);
+		}
+
+		if (status !== HTTP_CREATED && status !== HTTP_OK) {
+			throw new TransferServerRepositoryError('Failed to restore transfer doc', status, data);
+		}
+
+		return { ...(body as StockTransfer), _rev: data.rev };
 	}
 }

@@ -33,6 +33,8 @@ export {
 	receiveTransfer,
 	cancelTransfer,
 	isStockTransfer,
+	parseStockTransfer,
+	stockTransferDocSchema,
 	transferInputSchema,
 	transferStatusSchema,
 	transferFilterSchema,
@@ -61,5 +63,7 @@ export type {
 
 export {
 	assertActorMayTransition as assertActorMayTransitionTransfer,
+	assertActorMayDelete as assertActorMayDeleteTransfer,
+	assertActorMayRestore as assertActorMayRestoreTransfer,
 	TransferAuthorizationError
 } from './domain/transfer.authorization';

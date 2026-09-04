@@ -146,4 +146,14 @@ export interface OperationsRepository {
 	disputeTransfer(id: string, info: DisputeInfoInput): Promise<StockTransfer>;
 	/** CR-089 FR-05 — source shelter releases the hold (`disputed` → `requested`). */
 	resumeTransfer(id: string): Promise<StockTransfer>;
+	/**
+	 * CR-090 FR-01/FR-02 — hard-delete a `requested` transfer. Resolves with the deleted body so
+	 * the caller can offer an undo without having snapshotted the row itself.
+	 *
+	 * `disputed` is NOT deletable: CR-089 FR-07 gives that status one exit only, resume back to
+	 * `requested`, so a held transfer takes two steps to remove (CR-059 §4.3, decision 2026-09-04).
+	 */
+	deleteTransfer(id: string): Promise<{ id: string; rev: string; doc: StockTransfer }>;
+	/** CR-090 FR-05 — put a deleted transfer back under its original `_id`. */
+	restoreTransfer(doc: StockTransfer): Promise<StockTransfer>;
 }

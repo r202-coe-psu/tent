@@ -8,6 +8,7 @@ import {
 	createStockLedger,
 	stockLedgerInputSchema,
 	parseStockLedger,
+	parseStockTransfer,
 	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
@@ -1536,5 +1537,81 @@ describe('lot numbering (CR-088)', () => {
 		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
 		expect(entry.schema_v).toBe(4);
 		expect(parseStockLedger(entry)).toEqual(entry);
+	});
+});
+
+describe('parseStockTransfer (CR-090 FR-10)', () => {
+	function persistedTransfer(overrides: Record<string, unknown> = {}) {
+		return {
+			_id: 'stock_transfer:01TRANSFER0000000000000000',
+			_rev: '1-abc',
+			type: 'stock_transfer',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-08-22T05:00:00.000Z',
+			updated_at: '2026-08-22T05:00:00.000Z',
+			created_by: 'Staff A',
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+			status: 'requested',
+			timeline: { requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' } },
+			...overrides
+		};
+	}
+
+	it('accepts a persisted transfer unchanged', () => {
+		const doc = persistedTransfer();
+		expect(parseStockTransfer(doc)).toEqual(doc);
+	});
+
+	it('accepts both schema_v 2 and 3', () => {
+		// Requests written before CR-089 landed are still 2 and must stay restorable.
+		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 2 }))).not.toThrow();
+		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 3 }))).not.toThrow();
+		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 4 }))).toThrow();
+	});
+
+	it('keeps fields the schema does not name', () => {
+		// FR-05 requires the restored document to match the deleted one in EVERY field, so
+		// stripping unknown keys would break the requirement the moment a later CR adds one.
+		const doc = persistedTransfer({ some_future_field: { nested: true } });
+		expect(parseStockTransfer(doc)).toEqual(doc);
+	});
+
+	it('keeps the CR-089 fields', () => {
+		const doc = persistedTransfer({
+			status: 'disputed',
+			dispute_reason: 'สต็อกไม่พอ',
+			driver_name: 'สมชาย ใจดี',
+			vehicle_plate: 'กข 1234 เชียงราย',
+			timeline: {
+				requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
+				disputed: { at: '2026-08-22T06:00:00.000Z', by: 'Staff A' }
+			}
+		});
+		expect(parseStockTransfer(doc)).toEqual(doc);
+	});
+
+	it('rejects an _id that is not a stock_transfer id', () => {
+		expect(() => parseStockTransfer(persistedTransfer({ _id: 'stock_ledger:01X' }))).toThrow();
+	});
+
+	it('rejects a missing requested timeline entry', () => {
+		expect(() => parseStockTransfer(persistedTransfer({ timeline: {} }))).toThrow();
+	});
+
+	it('rejects an empty item list and a non-positive qty', () => {
+		expect(() => parseStockTransfer(persistedTransfer({ items: [] }))).toThrow();
+		expect(() =>
+			parseStockTransfer(
+				persistedTransfer({ items: [{ item_id: 'item:rice', qty: '0', unit: 'kg' }] })
+			)
+		).toThrow();
+	});
+
+	it('rejects a re-stamped envelope', () => {
+		expect(() => parseStockTransfer(persistedTransfer({ created_by: '' }))).toThrow();
+		expect(() => parseStockTransfer(persistedTransfer({ created_at: 'yesterday' }))).toThrow();
 	});
 });

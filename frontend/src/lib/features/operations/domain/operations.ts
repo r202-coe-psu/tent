@@ -8,6 +8,8 @@ import {
 	qtyGte,
 	qtyNeg,
 	qtyStrSignedNonZeroSchema,
+	qtyStrPositiveSchema,
+	qtyStrNonNegativeSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceSignedNonZeroSchema,
 	qtyStrCoerceNonNegativeSchema,
@@ -907,6 +909,71 @@ export const transferFilterSchema = z.object({
 	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
+
+const transferTimelineEventSchema = z.object({
+	at: z.string().datetime(),
+	by: z.string().min(1)
+});
+
+/**
+ * Full persisted `stock_transfer` contract — the counterpart of `stockLedgerDocSchema`.
+ *
+ * CR-090 FR-10 needs this because the restore path is the one place a client hands us a whole
+ * document, `_id` included. `isStockTransfer()` only looks at `type`, which is far too loose to
+ * gate a write into `central_ops` (a database with no `validate_doc_update`).
+ *
+ * `.passthrough()` mirrors the ledger schema and is load-bearing here: FR-05 requires the restored
+ * document to match the deleted one in EVERY field, so stripping unknown keys would quietly
+ * violate the requirement whenever a later CR adds a field this schema has not caught up with.
+ */
+export const stockTransferDocSchema = z
+	.object({
+		_id: z.string().regex(/^stock_transfer:/),
+		_rev: z.string().optional(),
+		type: z.literal('stock_transfer'),
+		// `createTransfer` mints 3 since CR-089, but documents written before it landed are still
+		// 2 and must stay restorable — failing closed on those would break delete+undo for every
+		// pre-CR-089 request.
+		schema_v: z.union([z.literal(2), z.literal(3)]),
+		shelter_code: z.string().min(1),
+		created_at: z.string().datetime(),
+		updated_at: z.string().datetime(),
+		created_by: z.string().min(1),
+		from_shelter: z.string().min(1),
+		to_shelter: z.string().min(1),
+		items: z
+			.array(
+				z
+					.object({
+						item_id: z.string().min(1),
+						qty: qtyStrPositiveSchema,
+						unit: z.string().trim().min(1),
+						received_qty: qtyStrNonNegativeSchema.optional()
+					})
+					.passthrough()
+			)
+			.min(1),
+		status: transferStatusSchema,
+		timeline: z
+			.object({
+				requested: transferTimelineEventSchema,
+				shipped: transferTimelineEventSchema.optional(),
+				received: transferTimelineEventSchema.optional(),
+				disputed: transferTimelineEventSchema.optional()
+			})
+			.passthrough(),
+		driver_name: z.string().optional(),
+		vehicle_plate: z.string().optional(),
+		cancel_reason: z.string().optional(),
+		dispute_reason: z.string().optional(),
+		notes: z.string().optional()
+	})
+	.passthrough();
+
+/** Parse a whole persisted transfer and fail closed before it is written back (CR-090 FR-10). */
+export function parseStockTransfer(input: unknown): StockTransfer {
+	return stockTransferDocSchema.parse(input) as StockTransfer;
+}
 
 export function createTransfer(input: TransferInput, ctx: AuthorContext): StockTransfer {
 	const d = transferInputSchema.parse(input);

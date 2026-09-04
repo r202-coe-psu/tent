@@ -8,6 +8,16 @@ import { transferInputSchema, transferStatusSchema } from '$lib/features/operati
 export const prerender = false;
 
 /**
+ * Shape check only — whether this POST is an undo of a delete rather than a new request.
+ * The document inside is validated by `TransferServerRepository.restore()` (CR-090 FR-10).
+ */
+function isRestoreEnvelope(body: unknown): body is { restore: { doc: unknown } } {
+	if (!body || typeof body !== 'object' || !('restore' in body)) return false;
+	const restore = (body as { restore: unknown }).restore;
+	return !!restore && typeof restore === 'object' && 'doc' in restore;
+}
+
+/**
  * GET /api/back-office/transfer
  * List transfers for a shelter (source or destination), filter by status.
  */
@@ -39,6 +49,17 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const body = await request.json().catch(() => ({}));
+
+		// CR-090 FR-05 — undo of a delete rides this route as a SEPARATE code path, keyed off a
+		// `restore` envelope. It deliberately does not widen `transferInputSchema` with an `_id`:
+		// creating a request and putting a deleted one back are different operations with
+		// different guards (FR-10), and merging them would let a normal create pick its own `_id`.
+		if (isRestoreEnvelope(body)) {
+			const repo = new TransferServerRepository('central_ops', shelterCode);
+			const restored = await repo.restore(body.restore.doc, shelterCode);
+			return json(restored, { status: 201 });
+		}
+
 		const parsed = transferInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });

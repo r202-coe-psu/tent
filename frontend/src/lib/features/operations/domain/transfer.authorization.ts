@@ -63,3 +63,34 @@ export function assertActorMayTransition(
 		}
 	}
 }
+
+/**
+ * CR-090 FR-01 — deleting a transfer request is source-only, the same rule dispatch and cancel
+ * already follow.
+ *
+ * The `status === 'requested'` half of FR-01 is NOT checked here: it is a state error, not an
+ * authorization error, and the caller maps the two to different HTTP codes (403 vs 422). The
+ * server re-check that FR-03 demands lives in `TransferServerRepository.remove()`.
+ */
+export function assertActorMayDelete(transfer: StockTransfer, actorShelter: string): void {
+	if (!sameShelter(transfer.from_shelter, actorShelter)) {
+		throw new TransferAuthorizationError('Only the source shelter can delete this transfer');
+	}
+}
+
+/**
+ * CR-090 FR-10 — the restore path accepts an `_id` from the client, so it needs a tighter guard
+ * than the transitions do: the body must belong to the acting shelter AND be a `requested`
+ * transfer, or the path becomes a way to write arbitrary documents into `central_ops`.
+ *
+ * Both checks throw the same error type on purpose — from the client's side "you may not restore
+ * this" is one answer, and spelling out which half failed only helps someone probing the endpoint.
+ */
+export function assertActorMayRestore(transfer: StockTransfer, actorShelter: string): void {
+	if (!sameShelter(transfer.from_shelter, actorShelter)) {
+		throw new TransferAuthorizationError('Only the source shelter can restore this transfer');
+	}
+	if (transfer.status !== 'requested') {
+		throw new TransferAuthorizationError('Only a `requested` transfer can be restored');
+	}
+}
