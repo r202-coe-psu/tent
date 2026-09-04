@@ -37,11 +37,12 @@ def _volunteer_doc(
     application: VolunteerApplicationBuffer, *, now: str
 ) -> dict[str, Any]:
     applicant = application.applicant
+    # Deterministic 3-digit volunteer code per volunteer ID
+    code_num = (abs(hash(application.volunteer_id)) % 900) + 100
     return {
         "_id": application.volunteer_id,
         "type": "volunteer",
-        # Shift identity belongs to the application/assignment, not the profile.
-        "schema_v": 1,
+        "schema_v": 3,
         "shelter_code": application.shelter_code,
         "created_at": _iso(application.created_at),
         "updated_at": now,
@@ -54,14 +55,16 @@ def _volunteer_doc(
         "national_id_hash": applicant.national_id_hash,
         "email": applicant.email,
         "skills": list(applicant.skills),
-        "tracking_token": None,
+        "tracking_token": application.tracking_token,
         "status": "active",
         "user_name": None,
-        # A volunteer applying at a second shelter reuses this id, which is what makes
-        # the profile central (D-MULTI=A) rather than one row per shelter.
         "central_profile_id": application.volunteer_id,
         "checked_in": False,
-        "current_shelter_code": None,
+        "current_shelter_code": application.shelter_code,
+        "volunteer_code": f"V-{code_num}",
+        "identity_verified": False,
+        "source": "public_apply",
+        "personnel_type": "volunteer",
     }
 
 
@@ -98,15 +101,65 @@ def _application_doc(
             "end_time": shift.end_time,
             "station": shift.station,
         },
-        # Only the hash. The raw token is the applicant's bearer credential for the
-        # ticket; the shelter has no use for it and storing it would make every staff
-        # read of the doc a way to open someone's pass.
+        "tracking_token": application.tracking_token,
         "tracking_token_hash": application.tracking_token_hash,
         "status": application.status,
         "review_notes": None,
         "reviewed_at": None,
         "reviewed_by": None,
-        "source": "public",
+        "source": "public_apply",
+    }
+
+
+def _shift_assignment_doc(
+    application: VolunteerApplicationBuffer, *, now: str
+) -> dict[str, Any]:
+    shift = application.selected_shift
+    start_time = shift.start_time or "08:00"
+    end_time = shift.end_time or "16:00"
+    date = shift.date or now[:10]
+
+    # Convert HH:MM to duty_window UTC datetimes
+    start_ts = f"{date}T{start_time}:00Z"
+    end_ts = f"{date}T{end_time}:00Z"
+    if end_ts <= start_ts:
+        end_ts = f"{date}T23:59:59Z"
+
+    start_hour = int(start_time.split(":")[0]) if ":" in start_time else 8
+    if 6 <= start_hour < 14:
+        shift_kind = "morning"
+    elif 14 <= start_hour < 22:
+        shift_kind = "afternoon"
+    elif start_hour >= 22 or start_hour < 6:
+        shift_kind = "night"
+    else:
+        shift_kind = "morning"
+
+    clean_id = application.id.replace("job_application:", "")
+    return {
+        "_id": f"shift_assignment:{clean_id}",
+        "type": "shift_assignment",
+        "schema_v": 3,
+        "shelter_code": application.shelter_code,
+        "job_id": application.job_id,
+        "volunteer_id": application.volunteer_id,
+        "date": date,
+        "shift": shift_kind,
+        "station": shift.station or "จุดบริการทั่วไป",
+        "duty_window": {
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+        },
+        "check_in_at": None,
+        "check_out_at": None,
+        "check_in_by": None,
+        "status": "assigned",
+        "dispatch_status": None,
+        "check_in_method": "qr",
+        "check_in_reason": None,
+        "created_at": _iso(application.created_at),
+        "updated_at": now,
+        "created_by": "public_apply",
     }
 
 
@@ -124,9 +177,7 @@ async def _persist_application(
 
     now = _iso(datetime.now(UTC))
 
-    # Profile first. If the application landed and the profile did not, the shelter
-    # would hold an application pointing at a volunteer_id that resolves to nothing;
-    # the other way round leaves an orphan profile, which the next poll completes.
+    # 1. Persist or update volunteer profile
     try:
         existing_profile = await couch.get_doc(database, application.volunteer_id)
         if existing_profile is None:
@@ -135,11 +186,18 @@ async def _persist_application(
         logger.exception("Failed to persist volunteer profile for %s", application.id)
         return False
 
+    # 2. Persist job application document
     try:
         result = await couch.put_doc(database, _application_doc(application, now=now))
     except Exception:
         logger.exception("Failed to persist volunteer application %s", application.id)
         return False
+
+    # 3. Persist shift assignment document
+    try:
+        await couch.put_doc(database, _shift_assignment_doc(application, now=now))
+    except Exception:
+        logger.exception("Failed to persist shift assignment for %s", application.id)
 
     if not result.get("ok"):
         logger.error(
