@@ -86,9 +86,9 @@
 </script>
 
 <div class="mx-auto max-w-md space-y-4 py-6">
-	<Button href="/volunteers/portal" variant="ghost" size="sm">
+	<Button href="/volunteers/jobs" variant="ghost" size="sm">
 		<ArrowLeft class="mr-2 size-4" aria-hidden="true" />
-		กลับไปยังพอร์ทัลจิตอาสา
+		กลับไปยังตลาดงานอาสาสมัคร
 	</Button>
 
 	{#if query.isPending}

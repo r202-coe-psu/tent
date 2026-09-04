@@ -71,6 +71,13 @@ interface JobTitleDoc {
 	title?: string;
 }
 
+function maskPhone(phone: string | null | undefined): string {
+	if (!phone) return 'xxx-xxx-xxxx';
+	const digits = phone.replace(/\D/g, '');
+	if (digits.length < 4) return 'xxx-xxx-xxxx';
+	return `xxx-xxx-${digits.slice(-4)}`;
+}
+
 /** Digital Pass (CR-092 screen 2). The token is the only credential. */
 export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) => {
 	if (!volunteerTicketLimiter.check(getClientAddress())) {
@@ -82,7 +89,28 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 		return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
 	}
 
-	// 1. Direct CouchDB query across shelter databases (including default shelter_sh001)
+	// 1. Try FastAPI backend first (validates HMAC view tokens & SHA-256 tracking tokens securely)
+	try {
+		const res = await fetch(
+			`${fastapiBaseUrl()}/public/v1/volunteer/ticket/${encodeURIComponent(token)}`,
+			{
+				headers: fastapiServiceHeaders()
+			}
+		);
+		if (res.status === 404) {
+			return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
+		}
+		if (res.ok) {
+			return json(await res.json(), {
+				headers: { 'Cache-Control': 'no-store' }
+			});
+		}
+	} catch {
+		// Fall through to CouchDB fallback if FastAPI is offline
+	}
+
+	// 2. Direct CouchDB fallback — STRICT: Only allow unguessable tracking tokens (TKT-VOL- or 128-bit)
+	// Never allow looking up by guessable volunteer_code (e.g. VOL-SH001-0001) or raw volunteer ID.
 	try {
 		const shelterDbs = new Map<string, { code: string; name: string }>();
 		shelterDbs.set('shelter_sh001', { code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' });
@@ -107,61 +135,47 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 
 		for (const [dbName, shelterInfo] of shelterDbs.entries()) {
 			try {
-				const docId = `job_application:${token}`;
 				let app: ApplicationDoc | null = null;
 				let volunteer: VolunteerDoc | null = null;
 
-				// 1. Try finding job_application by direct ID
-				const appRes = await adminRaw(`/${dbName}/${encodeURIComponent(docId)}`, 'GET');
-				if (appRes.status === 200 && (appRes.data as ApplicationDoc | undefined)?._id) {
-					app = appRes.data as ApplicationDoc;
+				// Search strictly by tracking_token only
+				const findRes = await adminRaw(`/${dbName}/_find`, 'POST', {
+					selector: { type: 'job_application', tracking_token: token },
+					limit: 1
+				});
+				const findData = findRes.data as CouchFindResponse<ApplicationDoc> | undefined;
+				if (findRes.status === 200 && Array.isArray(findData?.docs) && findData.docs.length > 0) {
+					app = findData.docs[0];
 				} else {
-					// 2. Search job_application by tracking_token via _find
-					const findRes = await adminRaw(`/${dbName}/_find`, 'POST', {
-						selector: { type: 'job_application', tracking_token: token },
+					const volFindRes = await adminRaw(`/${dbName}/_find`, 'POST', {
+						selector: {
+							type: 'volunteer',
+							tracking_token: token
+						},
 						limit: 1
 					});
-					const findData = findRes.data as CouchFindResponse<ApplicationDoc> | undefined;
-					if (findRes.status === 200 && Array.isArray(findData?.docs) && findData.docs.length > 0) {
-						app = findData.docs[0];
-					} else {
-						// 3. Search volunteer by tracking_token or ID
-						const volFindRes = await adminRaw(`/${dbName}/_find`, 'POST', {
+					const volFindData = volFindRes.data as CouchFindResponse<VolunteerDoc> | undefined;
+					if (
+						volFindRes.status === 200 &&
+						Array.isArray(volFindData?.docs) &&
+						volFindData.docs.length > 0
+					) {
+						volunteer = volFindData.docs[0];
+						const volAppsRes = await adminRaw(`/${dbName}/_find`, 'POST', {
 							selector: {
-								type: 'volunteer',
-								$or: [
-									{ tracking_token: token },
-									{ _id: token },
-									{ _id: `volunteer:${token}` },
-									{ volunteer_code: token }
-								]
+								type: 'job_application',
+								volunteer_id: volunteer._id
 							},
+							sort: [{ created_at: 'desc' }],
 							limit: 1
 						});
-						const volFindData = volFindRes.data as CouchFindResponse<VolunteerDoc> | undefined;
+						const volAppsData = volAppsRes.data as CouchFindResponse<ApplicationDoc> | undefined;
 						if (
-							volFindRes.status === 200 &&
-							Array.isArray(volFindData?.docs) &&
-							volFindData.docs.length > 0
+							volAppsRes.status === 200 &&
+							Array.isArray(volAppsData?.docs) &&
+							volAppsData.docs.length > 0
 						) {
-							volunteer = volFindData.docs[0];
-							// Find latest application for this volunteer
-							const volAppsRes = await adminRaw(`/${dbName}/_find`, 'POST', {
-								selector: {
-									type: 'job_application',
-									volunteer_id: volunteer._id
-								},
-								sort: [{ created_at: 'desc' }],
-								limit: 1
-							});
-							const volAppsData = volAppsRes.data as CouchFindResponse<ApplicationDoc> | undefined;
-							if (
-								volAppsRes.status === 200 &&
-								Array.isArray(volAppsData?.docs) &&
-								volAppsData.docs.length > 0
-							) {
-								app = volAppsData.docs[0];
-							}
+							app = volAppsData.docs[0];
 						}
 					}
 				}
@@ -186,7 +200,8 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 							? `${volunteer.first_name} ${volunteer.last_name || ''}`.trim()
 							: 'จิตอาสาผู้สมัคร';
 
-					const phone = app?.applicant?.phone || volunteer?.phone || '';
+					const rawPhone = app?.applicant?.phone || volunteer?.phone || '';
+					const maskedPhone = maskPhone(rawPhone);
 					const tokenOut = app?.tracking_token || volunteer?.tracking_token || token;
 
 					return json(
@@ -194,18 +209,24 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 							success: true,
 							ticket: {
 								token: tokenOut,
-								volunteer_id: volunteer?._id || app?.volunteer_id,
+								can_cancel: true,
+								status:
+									app?.status || (volunteer?.status === 'active' ? 'confirmed' : 'pending_review'),
+								job_id: app?.job_id || '',
 								job_title: jobTitle,
 								shelter_name: shelterInfo.name,
 								shelter_code: shelterInfo.code,
-								status:
-									app?.status || (volunteer?.status === 'active' ? 'confirmed' : 'pending_review'),
-								date: app?.selected_shift?.date || new Date().toISOString().slice(0, 10),
-								start_time: app?.selected_shift?.start_time || '08:00',
-								end_time: app?.selected_shift?.end_time || '12:00',
 								applicant_name: applicantName,
-								phone: phone,
-								created_at: app?.created_at || volunteer?.created_at || new Date().toISOString()
+								phone_masked: maskedPhone,
+								skills: app?.applicant?.skills || [],
+								selected_shift: {
+									date: app?.selected_shift?.date || '',
+									start_time: app?.selected_shift?.start_time || '',
+									end_time: app?.selected_shift?.end_time || '',
+									station: null
+								},
+								applied_at: app?.created_at || volunteer?.created_at || new Date().toISOString(),
+								qr_payload: `/volunteer/ticket/${tokenOut}`
 							}
 						},
 						{ headers: { 'Cache-Control': 'no-store' } }
@@ -216,27 +237,8 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 			}
 		}
 	} catch {
-		// Fallback to FastAPI
+		// Fall through
 	}
 
-	// 2. Fallback to FastAPI backend
-	try {
-		const res = await fetch(
-			`${fastapiBaseUrl()}/public/v1/volunteer/ticket/${encodeURIComponent(token)}`,
-			{
-				headers: fastapiServiceHeaders()
-			}
-		);
-		if (res.status === 404) {
-			return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
-		}
-		if (!res.ok) {
-			return json({ success: false, error: 'TICKET_FETCH_FAILED' }, { status: 502 });
-		}
-		return json(await res.json(), {
-			headers: { 'Cache-Control': 'no-store' }
-		});
-	} catch {
-		return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
-	}
+	return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
 };
