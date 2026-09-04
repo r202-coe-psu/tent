@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-25
+updated: 2026-09-05
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -123,9 +123,11 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `stock_transfer` | state machine | โอนของข้ามศูนย์: `requested→shipped→received` (เขียนฝั่งต้นทาง replicate ผ่าน central) |
 | `donation` | state machine | pre-declaration จาก public tier หรือบันทึกหน้างาน: `declared→received→expired` |
 | `donation_campaign` | mutable (LWW) | ความต้องการของศูนย์ (needs ที่ public เห็นเป็น aggregate) |
-| `meal_plan` | mutable (LWW) | แผนมื้ออาหารรายวัน — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ |
-| `kitchen_requisition` | **append-only** | เบิกวัตถุดิบ — สร้าง `stock_ledger` คู่กัน (qty ติดลบ) |
-| `meal_service` | **append-only** | บันทึกแจกอาหารจริงต่อมื้อ |
+| `meal_session` | mutable (LWW) | ภาพรวมมื้ออาหารและเป้าหมายผู้รับ 5 กลุ่ม (Draft 2-tier meal session) |
+| `meal_plan` | mutable (LWW) | แผนมื้ออาหารรายวัน / Production Batch — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ ผูก `meal_session` |
+| `kitchen_requisition` | state machine | คำขอเบิกวัตถุดิบและแก๊ส: `pending→approved|rejected` (ตัด stock/gas เมื่อ approved) |
+| `kitchen_counter` | mutable (atomic incr) | running counter สำหรับออกเลขตั๋วคำขอเบิกโรงครัว (`kitchen_counter:main`) |
+| `meal_service` | **append-only** | บันทึกแจกอาหารจริงต่อมื้อ และ actual yield |
 | `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้; มี tracking_token ออก Digital Ticket) |
 | `job` | state machine | งานประกาศรับสมัครอาสาประจำศูนย์ (`operational` \| `staff-capable`, โควตา, template กะ) — CR-041 |
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending→accepted|rejected|cancelled`, tracking_token) — CR-041 |
