@@ -11,16 +11,8 @@ import {
 	type QtyValue
 } from '$lib/utils/qty';
 
-// ---- GasLedgerEntry (schema.md §2.7.2) — append-only -------------------
-// Real per-cylinder stock for `gas_cylinder_type` (kitchen.ts) — mirrors
-// operations' `stock_ledger` (signed delta, never a stored running total)
-// but kept as its own doc type since gas is not an `item_master`/`supply_item`.
+// ---- GasLedgerEntry (append-only ledger of gas consumption, refills, and adjustments) ----
 
-// 'adjust' (CR-085 addendum) — manual write-off for a dust-sized remainder that
-// can never legitimately reach 0 through consumption: a gas draw is a hard
-// all-or-nothing block (unlike stock_ledger's partial-issue), so a cylinder
-// left with e.g. 0.001 kg stays stuck at status 'in_use' forever unless some
-// future plan needs exactly ≤ that amount. 'adjust' zeroes it out explicitly.
 export const gasLedgerReasonSchema = z.enum(['consumption', 'refill', 'adjust']);
 export type GasLedgerReason = z.infer<typeof gasLedgerReasonSchema>;
 
@@ -61,10 +53,7 @@ export const isGasLedgerEntry = (d: unknown): d is GasLedgerEntry =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'gas_ledger';
 
 /**
- * Remaining gas (kg) for one cylinder — computed from `capacity_kg` + the sum
- * of every ledger entry for that cylinder. Never a stored running total
- * (CONVENTIONS.md) — a wrong entry is corrected by writing a new offsetting
- * entry, never by editing history.
+ * Computes remaining gas (kg) for a cylinder: capacity_kg + sum of ledger deltas.
  */
 export function gasCylinderBalance(
 	entries: readonly GasLedgerEntry[],
@@ -80,7 +69,7 @@ export function gasCylinderBalance(
 
 export type GasCylinderStatus = 'unused' | 'in_use' | 'empty';
 
-/** Derived, never stored — recomputed from the balance each time (no drift). */
+/** Determines cylinder status ('unused' | 'in_use' | 'empty') based on balance. */
 export function gasCylinderStatus(remainingKg: QtyValue, capacityKg: QtyValue): GasCylinderStatus {
 	if (qtyLte(remainingKg, 0)) return 'empty';
 	if (qtyGte(remainingKg, capacityKg)) return 'unused';
@@ -88,9 +77,7 @@ export function gasCylinderStatus(remainingKg: QtyValue, capacityKg: QtyValue): 
 }
 
 /**
- * How much of a refill would actually be accepted before the tank overflows
- * past `capacity_kg`. Used to validate the "เติมแก๊ส" action — a refill amount
- * greater than this would push `remaining_kg` past what the physical tank holds.
+ * Computes maximum refill quantity (kg) before reaching tank capacity.
  */
 export function maxRefillKg(remainingKg: QtyValue, capacityKg: QtyValue): string {
 	const room = parseQty(capacityKg).minus(parseQty(remainingKg));
