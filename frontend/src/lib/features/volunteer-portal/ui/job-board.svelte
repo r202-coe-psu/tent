@@ -4,41 +4,35 @@
 	 *
 	 * Reads real projected jobs through `GET /api/public/v1/volunteer/jobs`. Only the
 	 * shelter filter goes to the server (FastAPI indexes `shelter_code` and `skill`);
-	 * the free-text search and the status chips are decided here from the projected
-	 * quota, because there is no server-side index for either and the list a shelter
-	 * holds is small enough to filter in the browser.
-	 *
-	 * The shelter dropdown is built from what came back rather than a hard-coded list,
-	 * so a new shelter appears on the board the moment the worker projects its first job.
+	 * the free-text search is decided here from the projected quota.
 	 */
 	import Briefcase from '@lucide/svelte/icons/briefcase';
-	import Filter from '@lucide/svelte/icons/filter';
-	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Building2 from '@lucide/svelte/icons/building-2';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Search from '@lucide/svelte/icons/search';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { useVolunteerJobs, useVolunteerSkills } from '../application/queries';
-	import { isJobApplicable, type PublicJob } from '../domain/volunteer';
+	import { type PublicJob, type ScheduleShift } from '../domain/volunteer';
 	import { skillLabel } from '../domain/skill-label';
 	import JobCard from './job-card.svelte';
 	import QuickApplyModal from './quick-apply-modal.svelte';
 
-	type StatusFilter = 'all' | 'open' | 'near_full' | 'controlled';
+	let {
+		bookedShifts = [],
+		volunteerSkills = []
+	}: {
+		bookedShifts?: readonly ScheduleShift[];
+		volunteerSkills?: readonly string[];
+	} = $props();
 
 	let searchQuery = $state('');
-	let statusFilter = $state<StatusFilter>('all');
 	let shelterCode = $state('all');
 
-	// The shelter pick is the one filter the server can answer, so it is part of the key.
 	const jobsQuery = useVolunteerJobs(() =>
 		shelterCode === 'all' ? {} : { shelter_code: shelterCode }
 	);
 	const jobs = $derived(jobsQuery.data ?? []);
 
-	/**
-	 * Master Data skill list (CR-100): the board spans shelters, so it reads the
-	 * global list — a shelter-only skill still shows, because an unresolved
-	 * value falls back to itself.
-	 */
 	const skillsQuery = useVolunteerSkills();
 	const skillOptions = $derived(skillsQuery.data ?? []);
 
@@ -63,20 +57,7 @@
 		);
 	}
 
-	function matchesStatus(job: PublicJob, filter: StatusFilter): boolean {
-		if (filter === 'open') return isJobApplicable(job);
-		// "ใกล้เต็ม" is the projection's own status plus the last-few-seats case, so a job
-		// the worker has not re-flagged yet still surfaces to someone hunting for one.
-		if (filter === 'near_full') {
-			return isJobApplicable(job) && (job.status === 'almost_full' || job.slots_remaining <= 2);
-		}
-		if (filter === 'controlled') return job.tier === 'controlled' || job.requires_review;
-		return true;
-	}
-
-	const filteredJobs = $derived(
-		jobs.filter((job) => matchesSearch(job, searchQuery) && matchesStatus(job, statusFilter))
-	);
+	const filteredJobs = $derived(jobs.filter((job) => matchesSearch(job, searchQuery)));
 
 	let selectedJob = $state<PublicJob | null>(null);
 	let applyOpen = $state(false);
@@ -85,110 +66,48 @@
 		selectedJob = job;
 		applyOpen = true;
 	}
-
-	const chipClass = 'cursor-pointer rounded-full px-5 py-2 text-xs font-bold transition-all border';
 </script>
 
 <div class="space-y-6">
-	<div class="rounded-3xl border border-border/80 bg-card p-6 shadow-sm md:p-8">
-		<div class="mb-8 flex flex-col justify-between gap-6 md:flex-row md:items-start">
-			<div>
-				<h2
-					class="flex items-center gap-3 text-xl font-black tracking-tight text-primary sm:text-2xl"
-				>
-					<Briefcase class="h-6 w-6 text-primary" />
-					ตลาดงานอาสาสมัครในศูนย์พักพิง
-				</h2>
-				<p class="mt-2 text-sm text-muted-foreground">
-					เลือกภารกิจและกะที่คุณสะดวก แล้วกดจองเพื่อรับบัตรตั๋วดิจิทัล (QR Code Pass) ทันที
-					ไม่ต้องรอรหัส SMS
-				</p>
-			</div>
-
-			<div class="relative w-full shrink-0 md:w-[340px]">
-				<input
-					type="search"
-					bind:value={searchQuery}
-					placeholder="ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์..."
-					aria-label="ค้นหาภารกิจ"
-					class="w-full rounded-2xl border border-border/80 bg-card px-5 py-3.5 pl-11 text-sm shadow-sm outline-hidden transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:ring-1 focus:ring-primary"
-				/>
-				<Search class="absolute top-4 left-4 h-4.5 w-4.5 text-muted-foreground" />
-			</div>
+	<!-- ── SEARCH & SHELTER FILTER ROW (Screenshot 4 Design) ───────────── -->
+	<div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+		<div class="relative flex-1">
+			<Search
+				class="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400"
+			/>
+			<input
+				type="search"
+				bind:value={searchQuery}
+				placeholder="ค้นหาภารกิจที่เหมาะสมกับทักษะ..."
+				aria-label="ค้นหาภารกิจ"
+				class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-4 pl-10 text-sm text-slate-800 shadow-xs transition-all placeholder:text-slate-400 focus:border-[#0A2647] focus:ring-1 focus:ring-[#0A2647] focus:outline-none"
+			/>
 		</div>
 
-		<div class="flex flex-col gap-5">
-			<div class="flex flex-wrap items-center gap-3">
-				<div class="mr-2 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-					<Filter class="h-4 w-4" />
-					<span>ตัวกรอง:</span>
-				</div>
-
-				<button
-					type="button"
-					onclick={() => (statusFilter = 'all')}
-					class="{chipClass} {statusFilter === 'all'
-						? 'border-primary bg-primary text-white shadow-sm'
-						: 'border-border/80 bg-card text-muted-foreground hover:bg-muted/30'}"
-				>
-					ทั้งหมด ({jobs.length})
-				</button>
-
-				<button
-					type="button"
-					onclick={() => (statusFilter = 'open')}
-					class="{chipClass} {statusFilter === 'open'
-						? 'border-success bg-success/15 text-success shadow-sm'
-						: 'border-success/30 bg-success/5 text-success hover:bg-success/10'}"
-				>
-					<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-success"></span>
-					เปิดรับจอง (Open)
-				</button>
-
-				<button
-					type="button"
-					onclick={() => (statusFilter = 'near_full')}
-					class="{chipClass} {statusFilter === 'near_full'
-						? 'border-warning bg-warning/20 text-warning-foreground shadow-sm'
-						: 'border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/20'}"
-				>
-					<span class="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-warning"></span>
-					ใกล้เต็ม (Near Full)
-				</button>
-
-				<button
-					type="button"
-					onclick={() => (statusFilter = 'controlled')}
-					class="{chipClass} {statusFilter === 'controlled'
-						? 'border-accent-purple bg-accent-purple/15 text-accent-purple shadow-sm'
-						: 'border-accent-purple/30 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/10'}"
-				>
-					🩺 ทักษะวิชาชีพ/ควบคุม
-				</button>
-			</div>
-
-			<div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-				<span class="w-auto text-sm font-bold text-muted-foreground sm:w-[70px]">ศูนย์:</span>
-				<div class="relative w-full sm:w-[340px]">
-					<select
-						bind:value={shelterCode}
-						aria-label="ศูนย์พักพิง"
-						class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-					>
-						<option value="all">📍 ทุกศูนย์พักพิง</option>
-						{#each shelters as shelter (shelter.code)}
-							<option value={shelter.code}>{shelter.name}</option>
-						{/each}
-					</select>
-					<MapPin class="absolute top-2.5 left-3.5 h-4 w-4 text-danger" />
-				</div>
-			</div>
+		<div class="relative sm:w-72">
+			<Building2
+				class="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-slate-400"
+			/>
+			<select
+				bind:value={shelterCode}
+				aria-label="ศูนย์พักพิง"
+				class="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pr-10 pl-10 text-sm font-medium text-slate-700 shadow-xs transition-all focus:border-[#0A2647] focus:ring-1 focus:ring-[#0A2647] focus:outline-none"
+			>
+				<option value="all">ทุกศูนย์พักพิง</option>
+				{#each shelters as shelter (shelter.code)}
+					<option value={shelter.code}>{shelter.name}</option>
+				{/each}
+			</select>
+			<ChevronDown
+				class="pointer-events-none absolute top-1/2 right-3.5 h-4 w-4 -translate-y-1/2 text-slate-400"
+			/>
 		</div>
 	</div>
 
+	<!-- ── JOB CARDS GRID ──────────────────────────────────────────────── -->
 	{#if jobsQuery.isPending}
-		<div class="flex flex-col gap-5">
-			{#each [0, 1, 2] as key (key)}
+		<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+			{#each [0, 1] as key (key)}
 				<Skeleton class="h-64 rounded-2xl" />
 			{/each}
 		</div>
@@ -201,23 +120,23 @@
 				: 'เกิดข้อผิดพลาด'}
 		</p>
 	{:else}
-		<div class="flex flex-col gap-5">
+		<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
 			{#each filteredJobs as job (job.job_id)}
-				<JobCard {job} onapply={openApply} {skillOptions} />
+				<JobCard {job} onapply={openApply} {skillOptions} {bookedShifts} {volunteerSkills} />
 			{:else}
 				<div
-					class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border/80 bg-card p-12 text-center text-muted-foreground"
+					class="col-span-full flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white p-12 text-center text-slate-500"
 				>
-					<Briefcase class="mb-3 h-10 w-10 text-muted-foreground/40" />
-					<h3 class="text-base font-bold text-foreground">
+					<Briefcase class="mb-3 h-10 w-10 text-slate-300" />
+					<h3 class="text-base font-bold text-slate-800">
 						{jobs.length === 0
-							? 'ยังไม่มีภารกิจเปิดรับจองในขณะนี้'
+							? 'ยังไม่มีภารกิจเปิดรับสมัครในขณะนี้'
 							: 'ไม่พบภารกิจที่ตรงกับเงื่อนไขการค้นหา'}
 					</h3>
-					<p class="mt-1 text-xs text-muted-foreground">
+					<p class="mt-1 text-xs text-slate-400">
 						{jobs.length === 0
 							? 'ศูนย์พักพิงจะประกาศภารกิจใหม่เมื่อมีความต้องการกำลังพล'
-							: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูภารกิจอื่น'}
+							: 'โปรดลองเปลี่ยนคำค้นหาหรือเลือกศูนย์พักพิงอื่น'}
 					</p>
 				</div>
 			{/each}
