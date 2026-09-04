@@ -39,26 +39,30 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		// 1. Registry query -> 404/empty
 		adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
 
-		// 2. Direct doc GET in shelter_sh001
+		// 2. Search job_application by tracking_token via _find in shelter_sh001
 		adminRawMock.mockResolvedValueOnce({
 			status: 200,
 			data: {
-				_id: 'job_application:app_01m1ceqt8vwxgzrmks1ybmk6v2',
-				type: 'job_application',
-				tracking_token: 'app_01m1ceqt8vwxgzrmks1ybmk6v2',
-				job_id: 'job:job-1',
-				status: 'pending_review',
-				applicant: {
-					first_name: 'สมชาย',
-					last_name: 'ใจดี',
-					phone: '0812345678'
-				},
-				selected_shift: {
-					date: '2026-06-13',
-					start_time: '08:00',
-					end_time: '12:00'
-				},
-				created_at: '2026-06-12T10:00:00Z'
+				docs: [
+					{
+						_id: 'job_application:app_01m1ceqt8vwxgzrmks1ybmk6v2',
+						type: 'job_application',
+						tracking_token: 'app_01m1ceqt8vwxgzrmks1ybmk6v2',
+						job_id: 'job:job-1',
+						status: 'pending_review',
+						applicant: {
+							first_name: 'สมชาย',
+							last_name: 'ใจดี',
+							phone: '0812345678'
+						},
+						selected_shift: {
+							date: '2026-06-13',
+							start_time: '08:00',
+							end_time: '12:00'
+						},
+						created_at: '2026-06-12T10:00:00Z'
+					}
+				]
 			}
 		});
 
