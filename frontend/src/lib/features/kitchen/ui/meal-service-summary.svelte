@@ -10,9 +10,10 @@
 		computeMealVariance,
 		MEAL_PERIOD_LABELS,
 		MEAL_VARIANCE_STATUS_LABELS,
-		type MealPlan,
+		toMealPlanMap,
 		type MealVarianceStatus
 	} from '$lib/features/kitchen';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	const STATUS_CLASS: Record<MealVarianceStatus, string> = {
 		on_target: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -23,16 +24,7 @@
 
 	const services = useMealServices();
 	const plans = useMealPlans();
-
-	// Index plans by _id so each service finds its exact source plan —
-	// meal_service.meal_plan_id links a record to the specific plan it reports
-	// on, so this resolves correctly even when multiple plans share a date+meal
-	// (extra batches).
-	const planById = $derived.by(() => {
-		const m: Record<string, MealPlan> = {};
-		for (const p of plans.data ?? []) m[p._id] = p;
-		return m;
-	});
+	const planById = $derived(toMealPlanMap(plans.data));
 
 	// Newest first — created_at is the audit timestamp of the record.
 	const rows = $derived.by(() =>
@@ -43,15 +35,6 @@
 				return { svc, plan, v: computeMealVariance(svc, plan) };
 			})
 	);
-
-	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleString('th-TH', {
-			day: '2-digit',
-			month: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -143,7 +126,7 @@
 								</Table.Cell>
 								<Table.Cell class="px-6">
 									<p class="text-sm">{svc.created_by}</p>
-									<p class="text-xs text-muted-foreground">{formatTime(svc.created_at)}</p>
+									<p class="text-xs text-muted-foreground">{formatThaiDateTime(svc.created_at)}</p>
 								</Table.Cell>
 							</Table.Row>
 						{/each}

@@ -6,38 +6,27 @@ import type {
 	KitchenRequisitionInput,
 	MealPlan,
 	MealPlanHeadcount,
-	MealPlanRecipe
+	MealPlanRecipe,
+	MealSession,
+	MealSessionHeadcount,
+	MealService
 } from './kitchen';
 
 // Conventional recipe_id for rice — T-26 maps this to the stock item_id.
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
-// Rice consumption per person per meal (grams). CR-021 removed rice from
-// sop_profile.ratios (SOP = shelter planning only) and moved food/ingredient
-// coefficients to the kitchen (item_master.consumption_rate / recipe, CR-013).
-// That item_master field isn't built yet, so this is the interim kitchen-owned
-// default. 150 g matches the existing calc fixtures (100 people → 15000 g).
-// TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
+// Default rice consumption per person per meal in grams.
 export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
 
-// Grams per kg — rice/vegetable recipes are calculated in grams (SOP ratio
-// precision); the stock ledger stores kg (item_master.base_unit). CR-030.
+// Conversion factor from grams to kilograms.
 const GRAMS_PER_KG = 1000;
 
-// Display label/unit for a recipe row — covers every id calculateMealIngredients
-// can produce; a recipe_id missing here just falls back to showing its raw id.
+// Display label and unit for default recipe items.
 export const RECIPE_LABELS: Record<string, { label: string; unit: string }> = {
 	[RICE_RECIPE_ID]: { label: 'ข้าวสาร', unit: 'g' }
 };
 
-// Maps a calculated recipe_id to the stock item it draws down + its ledger unit
-// + how many recipe units make one stock unit. The bridge to T-26 (kitchen
-// requisition → stock ledger). CR-022. `unit` must match item_master.base_unit
-// (schema.md §2.1); `recipe_per_stock_unit` scales planned_qty (recipe units) to
-// qty_requested (stock units) at the T-25→T-26 seam. Rice/vegetable: recipe
-// grams / 1000 = stock kg (CR-030). An ingredient whose recipe unit already
-// equals its stock unit (e.g. eggs in ฟอง) uses 1 — so a new item never
-// silently gets /1000.
+// Maps calculated recipe IDs to stock items, units, and scale ratios for requisitions.
 export const RECIPE_TO_STOCK_ITEM: Record<
 	string,
 	{ item_id: string; unit: string; recipe_per_stock_unit: number }
@@ -57,16 +46,8 @@ export interface MealCalcResult {
 }
 
 /**
- * Derives the ingredient list for one meal from headcount × SOP ratio (rice
- * only — the sole ingredient with a real per-person coefficient today). The
- * previous 3 fixed egg/vegetable menu presets were demo-only mock data with no
- * SOP ratio backing them; removed per owner request. A real multi-ingredient
- * menu now comes from a catalog Recipe (BOM) — see
- * {@link calculateMealIngredientsFromRecipe} — authored on `/back-office/catalog`.
- *
- * Throws if headcount.total is 0 — a meal plan with no occupancy is
- * meaningless and would produce a qty_required = 0 which violates the
- * MealPlanRecipe invariant (planned_qty > 0).
+ * Calculates planned meal ingredients from headcount and per-person rice ratio.
+ * Throws if headcount.total or riceGPerMeal is not positive.
  */
 export function calculateMealIngredients(
 	headcount: MealPlanHeadcount,
@@ -96,34 +77,13 @@ export function calculateMealIngredients(
 }
 
 export interface ResolvedItemMaster {
-	// The real, stock-tracked item_id to draw down (a `supply_item` `item:*`
-	// id); falls back to the item_master_id itself (unresolved — stays
-	// blocked, see toRequisitionInput/isBomSourced).
-	stockItemId: string;
+	stockItemId: string; // Stock supply item ID or unresolved item master ID
 	unit: string;
 }
 
 /**
- * Resolves each item_master to a real stock item so BOM recipes built from it
- * can be checked/withdrawn without a manual trip to `/back-office/catalog`
- * (catalog's item_master schema is out of kitchen's scope — no explicit-link
- * field there, so this only matches by name):
- *   1. same `name` (trimmed, case-insensitive) AND same base_unit as a
- *      `supply_item` — automatic, no setup needed as long as the two catalogs
- *      happen to name+measure it the same
- *   2. unresolved — recipe_id falls back to the item_master_id itself
- *
- * The unit guard is deliberate (CR-045): a name-only match whose units differ
- * (recipe `kg` vs supply `g`) would draw the wrong amount down from the ledger,
- * because this interim resolver does NO uom conversion — planned_qty stays
- * recipe-scaled and only inherits the supply unit. Requiring the units to be
- * equal keeps the drawdown honest; a mismatch stays blocked (unresolved) until
- * the catalog is fixed, rather than silently under/over-issuing stock.
- * Invariant: a resolved ingredient's recipe `uom` must equal its item_master
- * `base_unit` (which now equals the supply unit) — enforced upstream by the
- * catalog Recipe editor.
- *
- * Pure — no I/O; caller (application layer / UI) fetches both lists first.
+ * Matches item masters to stock supply items by matching name and unit.
+ * Unmatched items retain their item master ID.
  */
 export function resolveItemMasterStock(
 	itemMasters: ItemMaster[],
@@ -143,19 +103,8 @@ export function resolveItemMasterStock(
 }
 
 /**
- * Derives the ingredient list for one meal from a catalog Recipe (BOM) instead
- * of the fixed SOP-ratio menus — each recipe.ingredient scales from its
- * standard_portions to the plan's actual headcount.
- *
- * `itemInfo` (keyed by item_master_id, from {@link resolveItemMasterStock})
- * resolves each ingredient to its real stock item — that ingredient can then
- * be checked/withdrawn like any other real stock item. An ingredient whose
- * item_master has no match stays unresolved (recipe_id falls back to the
- * item_master_id itself, unit to the recipe's own uom) — toRequisitionInput/
- * isBomSourced still block เบิก for those.
- *
- * Throws if headcount.total is 0 or the recipe's standard_portions isn't a
- * positive number — same invariant as {@link calculateMealIngredients}.
+ * Calculates planned meal ingredients scaled from a catalog recipe by headcount.
+ * Throws if headcount.total or recipe standard_portions is not positive.
  */
 export function calculateMealIngredientsFromRecipe(
 	recipe: Recipe,
@@ -194,20 +143,14 @@ export function calculateMealIngredientsFromRecipe(
 }
 
 export interface CustomIngredientInput {
-	item_id: string; // a real `supply_item` `_id` (item:*) — already stock-linked
-	unit: string; // the supply_item's fixed unit, so no conversion is needed later
+	item_id: string; // Stock supply item ID
+	unit: string;
 	qty_per_person: number;
 }
 
 /**
- * Derives the ingredient list for one meal from an ad-hoc, staff-typed
- * ingredient list ("กำหนดสูตรเอง (Custom)") instead of the fixed SOP-ratio rice
- * calc or a saved catalog Recipe (BOM) — each `qty_per_person` scales by the
- * plan's headcount, same mental model as rice's `riceGPerMeal`. Ingredients
- * must reference a real `supply_item` (not a free-typed name) so the plan can
- * actually be เบิก later — unlike BOM-sourced plans, these have real stock.
- *
- * Throws if headcount.total is 0 or the item list is empty.
+ * Calculates planned meal ingredients from custom ingredients scaled by headcount.
+ * Throws if headcount.total is <= 0 or ingredient list is empty.
  */
 export function calculateMealIngredientsFromCustom(
 	items: CustomIngredientInput[],
@@ -240,17 +183,8 @@ export function calculateMealIngredientsFromCustom(
 }
 
 /**
- * Adapts a meal plan into a {@link KitchenRequisitionInput} — the handoff to
- * T-26 (FR-40). Each recipe becomes a requested stock item; `qty_issued`
- * starts at 0 because the actual issued amount (partial when stock is short)
- * is decided by T-26 at issue time. Pure: no I/O, no stock lookup.
- *
- * Throws if a recipe has no stock mapping — a plan must not silently produce a
- * requisition that skips an ingredient.
- *
- * `planned_qty` is in recipe units (rice: grams, SOP ratio precision); scales to
- * the stock unit here via `recipe_per_stock_unit` to match `item_master.base_unit`
- * before it reaches the stock ledger (CR-030).
+ * Converts a meal plan into a requisition input payload for stock drawdown.
+ * Throws if an ingredient has no stock mapping or unit.
  */
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
@@ -264,10 +198,7 @@ export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 				unit: stock.unit
 			};
 		}
-		// BOM (calculateMealIngredientsFromRecipe) or custom
-		// (calculateMealIngredientsFromCustom) recipe — no static mapping,
-		// recipe_id IS the stock item_id already and planned_qty is already in
-		// that item's stock unit, so no conversion.
+		// For BOM or custom recipes, recipe_id is already the stock item ID.
 		if (!r.unit) {
 			throw new Error(`toRequisitionInput: no stock item mapping for recipe "${r.recipe_id}"`);
 		}
@@ -300,13 +231,8 @@ export interface RequisitionLineAssessment {
 }
 
 /**
- * Compares each requested line against the derived `stock_balance` (on-hand =
- * sum of signed ledger deltas — operations feature), producing the availability
- * a requisition screen needs to show "stock not enough" and offer a partial
- * issue (schema.md §2.6: `qty_issued < requested` = เบิกบางส่วน). Pure — no I/O.
- *
- * `qty_issuable` is clamped to on-hand so a requisition never drives the ledger
- * negative; the caller may still lower it, but not raise it past stock.
+ * Evaluates requested requisition items against on-hand stock balances,
+ * calculating issuable quantities and shortfalls.
  */
 export function assessRequisition(
 	items: { item_id: string; qty_requested: string | number; unit: string }[],
@@ -333,4 +259,139 @@ export function assessRequisition(
 			status
 		};
 	});
+}
+
+// ---- Ticket Formatting & Group Progress ----
+
+/** Formats ticket number: [ShelterCode]-KITCHEN-XXXX */
+export function formatTicketNo(shelterCode: string, seq: number): string {
+	const code = (shelterCode || 'SH001').toUpperCase();
+	return `${code}-KITCHEN-${String(seq).padStart(4, '0')}`;
+}
+
+export const TARGET_GROUP_TAGS = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'] as const;
+export type TargetGroupTag = (typeof TARGET_GROUP_TAGS)[number];
+
+export const TARGET_GROUP_LABELS: Record<TargetGroupTag | 'everyone', string> = {
+	everyone: 'ทุกคน',
+	halal: 'ฮาลาล (มุสลิม)',
+	infant: 'เด็ก/ทารก',
+	soft_food: 'ผู้ป่วย/อาหารอ่อน',
+	regular: 'ทั่วไป',
+	volunteer: 'เจ้าหน้าที่/อาสาสมัคร'
+};
+
+/** Expands 'everyone' into all 5 target group tags. */
+export function expandTargetTags(tags: readonly string[]): TargetGroupTag[] {
+	if (tags.includes('everyone')) {
+		return [...TARGET_GROUP_TAGS];
+	}
+	const tagSet = new Set<TargetGroupTag>();
+	for (const tag of tags) {
+		if ((TARGET_GROUP_TAGS as readonly string[]).includes(tag)) {
+			tagSet.add(tag as TargetGroupTag);
+		}
+	}
+	return Array.from(tagSet);
+}
+
+export interface GroupProgressItem {
+	tag: TargetGroupTag;
+	label: string;
+	target: number;
+	actualYield: number;
+	isCompleted: boolean;
+}
+
+export interface SessionGroupProgress {
+	groups: Record<TargetGroupTag, GroupProgressItem>;
+	completedCount: number;
+	totalCount: number;
+	isAllCompleted: boolean;
+	summaryText: string;
+}
+
+/**
+ * Computes 5-group target completion progress for a meal session based on plan actual yields.
+ */
+export function computeSessionGroupProgress(
+	session: MealSession,
+	plans: readonly MealPlan[],
+	services: readonly MealService[]
+): SessionGroupProgress {
+	const sessionPlans = plans.filter((p) => p.meal_session_id === session._id);
+	const groupYields: Record<TargetGroupTag, number> = {
+		halal: 0,
+		infant: 0,
+		soft_food: 0,
+		regular: 0,
+		volunteer: 0
+	};
+
+	for (const plan of sessionPlans) {
+		const service = services.find((s) => s.meal_plan_id === plan._id);
+		const portions = service ? (service.actual_yield ?? service.served ?? 0) : 0;
+		if (portions > 0) {
+			const expanded = expandTargetTags(plan.target_tags ?? []);
+			for (const tag of expanded) {
+				groupYields[tag] += portions;
+			}
+		}
+	}
+
+	const groups = {} as Record<TargetGroupTag, GroupProgressItem>;
+	let completedCount = 0;
+
+	for (const tag of TARGET_GROUP_TAGS) {
+		const target = session.target_headcount[tag] ?? 0;
+		const actualYield = groupYields[tag] ?? 0;
+		const isCompleted = actualYield >= target;
+		if (isCompleted) {
+			completedCount++;
+		}
+		groups[tag] = {
+			tag,
+			label: TARGET_GROUP_LABELS[tag],
+			target,
+			actualYield,
+			isCompleted
+		};
+	}
+
+	return {
+		groups,
+		completedCount,
+		totalCount: 5,
+		isAllCompleted: completedCount === 5,
+		summaryText: `${completedCount}/5 กลุ่ม`
+	};
+}
+
+/** จัดกลุ่ม MealPlan เป็น Record ตาม `_id` */
+export function toMealPlanMap(plans?: readonly MealPlan[] | null): Record<string, MealPlan> {
+	const map: Record<string, MealPlan> = {};
+	if (!plans) return map;
+	for (const p of plans) {
+		map[p._id] = p;
+	}
+	return map;
+}
+
+/** รวมยอดคนตาม target tags (หากเลือกครบ 5 กลุ่มจะใช้ total) */
+export function sumHeadcountByTags(
+	targetHeadcount: MealSessionHeadcount | undefined | null,
+	tags: readonly TargetGroupTag[]
+): number {
+	if (!targetHeadcount || tags.length === 0) return 0;
+	if (tags.length === TARGET_GROUP_TAGS.length) {
+		return targetHeadcount.total || 0;
+	}
+	return tags.reduce((sum, tag) => sum + (targetHeadcount[tag] || 0), 0);
+}
+
+/** ดึงกลุ่มเป้าหมายที่มียอดคน > 0 (ดีฟอลต์เป็น ['regular']) */
+export function getActiveTagsFromSession(session?: MealSession | null): TargetGroupTag[] {
+	if (!session?.target_headcount) return ['regular'];
+	const active = TARGET_GROUP_TAGS.filter((tag) => (session.target_headcount[tag] || 0) > 0);
+	return active.length > 0 ? active : ['regular'];
 }

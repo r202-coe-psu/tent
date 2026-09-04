@@ -24,10 +24,69 @@ export const MEAL_PERIOD_LABELS: Record<MealPeriod, string> = {
 	snack: 'ของว่าง'
 };
 
-// ---- MealPlan (schema.md §2.5) ----------------------------------------
-// _id is a plain ulid (CR-045): multiple plans may share a date+meal (e.g. an
-// extra prep batch), each running its own เบิก→บันทึกบริการ cycle. See
-// createMealPlan below for the history behind the change.
+// ---- MealSession ------------------------------------------------------
+
+export interface MealSessionHeadcount {
+	halal: number; // เป้าหมายกลุ่มฮาลาล (มุสลิม)
+	infant: number; // เป้าหมายกลุ่มเด็ก/ทารก
+	soft_food: number; // เป้าหมายกลุ่มเปราะบาง/อาหารอ่อน
+	regular: number; // เป้าหมายกลุ่มปกติ
+	volunteer: number; // เป้าหมายกลุ่มอาสาสมัคร/เจ้าหน้าที่
+	total: number; // เป้าหมายรวมทั้งหมด
+}
+
+export const mealSessionStatusSchema = z.enum(['active', 'completed', 'cancelled']);
+export type MealSessionStatus = z.infer<typeof mealSessionStatusSchema>;
+
+export interface MealSession extends BaseDoc {
+	type: 'meal_session';
+	schema_v: 1;
+	name: string; // เช่น "มื้อเช้า 28 ส.ค. 2569"
+	date: string; // YYYY-MM-DD
+	meal: MealPeriod;
+	status: MealSessionStatus;
+	target_headcount: MealSessionHeadcount;
+	notes?: string;
+}
+
+export const mealSessionInputSchema = z.object({
+	name: z.string().trim().min(1, 'Name required'),
+	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+	meal: mealPeriodSchema,
+	status: mealSessionStatusSchema.default('active'),
+	target_headcount: z.object({
+		halal: z.number().int().min(0),
+		infant: z.number().int().min(0),
+		soft_food: z.number().int().min(0),
+		regular: z.number().int().min(0),
+		volunteer: z.number().int().min(0),
+		total: z.number().int().min(0)
+	}),
+	notes: z.string().trim().optional()
+});
+export type MealSessionInput = z.input<typeof mealSessionInputSchema>;
+
+export function createMealSession(input: MealSessionInput, ctx: AuthorContext): MealSession {
+	const d = mealSessionInputSchema.parse(input);
+	return makeDoc(
+		'meal_session',
+		1,
+		{
+			name: d.name,
+			date: d.date,
+			meal: d.meal,
+			status: d.status,
+			target_headcount: d.target_headcount,
+			...(d.notes ? { notes: d.notes } : {})
+		},
+		ctx
+	) as MealSession;
+}
+
+export const isMealSession = (d: unknown): d is MealSession =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_session';
+
+// ---- MealPlan ---------------------------------------------------------
 
 export interface MealPlanHeadcount {
 	total: number;
@@ -39,20 +98,11 @@ export interface MealPlanHeadcount {
 export interface MealPlanRecipe {
 	recipe_id: string;
 	planned_qty: number;
-	// Present when the plan was built from a catalog Recipe (BOM) or a custom
-	// ad-hoc ingredient list instead of the fixed SOP-ratio rice calc — in both
-	// cases recipe_id is used as-is for the stock_ledger item_id (no static
-	// RECIPE_TO_STOCK_ITEM mapping for it) and unit carries its real stock unit.
-	// A BOM recipe_id is a catalog `item_master:*` id (no stock link yet); a
-	// custom recipe_id is a `supply_item` `item:*` id (already stock-linked) —
-	// see meal-plan-list.svelte's isBomSourced for how these are told apart.
+	// Unit for BOM recipe items or custom ingredient stock drawdown.
 	unit?: string;
 }
 
-// One gas cylinder (kitchen.ts GasCylinderType) this plan draws from, and how
-// much it's expected to draw — CR-085. `issueRequisition` reads this array to
-// write the matching `gas_ledger` consumption entries; absence means the plan
-// doesn't use gas (not an empty draw of 0).
+// Planned gas cylinder consumption for a meal plan.
 export interface MealPlanGasUsage {
 	cylinder_id: string;
 	consumption_kg: string; // qty_str
@@ -62,8 +112,7 @@ export interface MealPlan extends BaseDoc {
 	type: 'meal_plan';
 	date: string;
 	meal: MealPeriod;
-	// Optional display name for a custom/BOM-sourced menu (e.g. "ข้าวไก่กรอบ") —
-	// the SOP rice-only path has no name, so this stays unset there.
+	// Optional display name for custom or BOM menu.
 	label?: string;
 	headcount: MealPlanHeadcount;
 	recipes: MealPlanRecipe[];
@@ -71,6 +120,9 @@ export interface MealPlan extends BaseDoc {
 	override_reason?: string | null;
 	calc_source?: MealCalcSource | null;
 	gas_usage?: MealPlanGasUsage[];
+	meal_session_id?: string | null;
+	target_tags?: string[];
+	allocated_target?: number;
 }
 
 export const mealPlanInputSchema = z.object({
@@ -85,8 +137,7 @@ export const mealPlanInputSchema = z.object({
 			infant: z.number().int().min(0)
 		})
 		.refine((h) => h.halal <= h.total && h.soft_food <= h.total && h.infant <= h.total, {
-			// Sub-counts are orthogonal dimensions (a person may be both muslim and
-			// an infant), so each is bounded by total independently — not their sum. CR-022.
+			// Each sub-count is independently bounded by total headcount.
 			message: 'Each sub-count (halal / soft_food / infant) cannot exceed total headcount'
 		}),
 	recipes: z
@@ -115,15 +166,14 @@ export const mealPlanInputSchema = z.object({
 				consumption_kg: qtyStrCoercePositiveSchema
 			})
 		)
-		.optional()
+		.optional(),
+	meal_session_id: z.string().nullable().optional(),
+	target_tags: z.array(z.string()).optional(),
+	allocated_target: z.number().int().min(0).optional()
 });
 export type MealPlanInput = z.input<typeof mealPlanInputSchema>;
 
-// _id is a plain ulid (makeDoc's default) — owner decision: multiple meal
-// plans may exist for the same date+meal (e.g. a second prep batch when the
-// first wasn't enough), each running its own independent เบิก→บันทึกบริการ
-// cycle. Previously deterministic (`meal_plan:{date}:{meal}`, one per slot);
-// changed back when that turned out to block the "extra batch" workflow.
+// Creates a new meal plan document.
 export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPlan {
 	const d = mealPlanInputSchema.parse(input);
 	return makeDoc(
@@ -145,7 +195,10 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 							consumption_kg: persistQty(g.consumption_kg)
 						}))
 					}
-				: {})
+				: {}),
+			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
+			...(d.target_tags != null ? { target_tags: d.target_tags } : {}),
+			...(d.allocated_target != null ? { allocated_target: d.allocated_target } : {})
 		},
 		ctx
 	);
@@ -154,8 +207,9 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 export const isMealPlan = (d: unknown): d is MealPlan =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_plan';
 
-// ---- KitchenRequisition (schema.md §2.6) — append-only ----------------
-// ledger_ids must be pre-populated at creation (append-only → no updates).
+// ---- KitchenRequisition (schema.md §2.6) — State Machine -------------
+
+export type KitchenRequisitionStatus = 'pending' | 'approved' | 'rejected';
 
 export interface KitchenRequisitionItem {
 	item_id: string;
@@ -164,16 +218,31 @@ export interface KitchenRequisitionItem {
 	unit: string;
 }
 
+export interface KitchenRequisitionGasDrawdown {
+	cylinder_id: string;
+	qty_kg: string; // qty_str
+}
+
 export interface KitchenRequisition extends BaseDoc {
 	type: 'kitchen_requisition';
+	ticket_no: string;
+	status: KitchenRequisitionStatus;
 	meal_plan_id: string | null;
+	meal_session_id?: string | null;
 	items: KitchenRequisitionItem[];
+	gas_drawdown?: KitchenRequisitionGasDrawdown[];
 	ledger_ids: string[];
-	issued_at: Timestamp;
+	requested_at: Timestamp;
+	issued_at?: Timestamp;
+	approved_at?: Timestamp | null;
+	approved_by?: string | null;
+	reject_reason?: string | null;
 }
 
 export const kitchenRequisitionInputSchema = z.object({
 	meal_plan_id: z.string().nullable().default(null),
+	meal_session_id: z.string().nullable().optional(),
+	ticket_no: z.string().optional(),
 	items: z
 		.array(
 			z
@@ -183,50 +252,157 @@ export const kitchenRequisitionInputSchema = z.object({
 					qty_issued: qtyStrCoerceNonNegativeSchema,
 					unit: z.string().trim().min(1)
 				})
-				// Issuing more than requested is meaningless — a requisition line can
-				// short (partial issue) but never over-issue. Enforced here so the
-				// invariant holds outside the UI clamp (assessRequisition's issuable).
+				// Disallow issuing more than requested.
 				.refine((i) => qtyGte(i.qty_requested, i.qty_issued), {
 					message: 'qty_issued cannot exceed qty_requested'
 				})
 		)
-		.min(1, 'At least one item required')
+		.min(1, 'At least one item required'),
+	gas_drawdown: z
+		.array(
+			z.object({
+				cylinder_id: z.string().min(1),
+				qty_kg: qtyStrCoercePositiveSchema
+			})
+		)
+		.optional()
 });
 export type KitchenRequisitionInput = z.input<typeof kitchenRequisitionInputSchema>;
 
 export function createKitchenRequisition(
 	input: KitchenRequisitionInput,
 	ledgerIds: string[], // pre-generated by the pouch layer before the bulkDocs write
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	ticketNo?: string
 ): KitchenRequisition {
 	const d = kitchenRequisitionInputSchema.parse(input);
+	const nowStr = new Date().toISOString();
 	return makeDoc(
 		'kitchen_requisition',
-		2,
+		3,
 		{
+			ticket_no: ticketNo ?? d.ticket_no ?? 'LEGACY',
+			status: 'approved',
 			meal_plan_id: d.meal_plan_id,
+			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
 			items: d.items.map((i) => ({
 				...i,
 				qty_requested: persistQty(i.qty_requested),
 				qty_issued: persistQty(i.qty_issued)
 			})),
+			...(d.gas_drawdown
+				? {
+						gas_drawdown: d.gas_drawdown.map((g) => ({
+							cylinder_id: g.cylinder_id,
+							qty_kg: persistQty(g.qty_kg)
+						}))
+					}
+				: {}),
 			ledger_ids: ledgerIds,
-			issued_at: new Date().toISOString()
+			requested_at: nowStr,
+			issued_at: nowStr,
+			approved_at: nowStr,
+			approved_by: ctx.createdBy
 		},
 		ctx
 	);
 }
 
-export const isKitchenRequisition = (d: unknown): d is KitchenRequisition =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'kitchen_requisition';
+export const pendingRequisitionInputSchema = z.object({
+	meal_plan_id: z.string().nullable().default(null),
+	meal_session_id: z.string().nullable().optional(),
+	ticket_no: z.string().min(1),
+	items: z
+		.array(
+			z.object({
+				item_id: z.string().min(1),
+				qty_requested: qtyStrCoercePositiveSchema,
+				qty_issued: qtyStrCoerceNonNegativeSchema.default('0'),
+				unit: z.string().trim().min(1)
+			})
+		)
+		.min(1, 'At least one item required'),
+	gas_drawdown: z
+		.array(
+			z.object({
+				cylinder_id: z.string().min(1),
+				qty_kg: qtyStrCoercePositiveSchema
+			})
+		)
+		.optional()
+});
+export type PendingRequisitionInput = z.input<typeof pendingRequisitionInputSchema>;
 
-// ---- MealService (schema.md §2.7) — ulid _id, append-only -------------
-// meal_plan_id links a service record back to the specific plan it reports
-// on (nullable — same as KitchenRequisition.meal_plan_id — for a service
-// recorded without a plan). Multiple plans can now share a date+meal, so the
-// old deterministic "meal_service:{date}:{meal}" id (one record per meal,
-// period, full stop) could no longer tell which plan a record belonged to;
-// a plan's service status is looked up by meal_plan_id, not date+meal.
+export function createPendingRequisition(
+	input: PendingRequisitionInput,
+	ctx: AuthorContext
+): KitchenRequisition {
+	const d = pendingRequisitionInputSchema.parse(input);
+	const nowStr = new Date().toISOString();
+	return makeDoc(
+		'kitchen_requisition',
+		3,
+		{
+			ticket_no: d.ticket_no,
+			status: 'pending',
+			meal_plan_id: d.meal_plan_id,
+			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
+			items: d.items.map((i) => ({
+				...i,
+				qty_requested: persistQty(i.qty_requested),
+				qty_issued: persistQty(i.qty_issued)
+			})),
+			...(d.gas_drawdown
+				? {
+						gas_drawdown: d.gas_drawdown.map((g) => ({
+							cylinder_id: g.cylinder_id,
+							qty_kg: persistQty(g.qty_kg)
+						}))
+					}
+				: {}),
+			ledger_ids: [],
+			requested_at: nowStr,
+			issued_at: undefined,
+			approved_at: null,
+			approved_by: null,
+			reject_reason: null
+		},
+		ctx
+	);
+}
+
+/** Coerces legacy kitchen_requisition documents without status/ticket_no to approved. */
+export const isKitchenRequisition = (d: unknown): d is KitchenRequisition => {
+	if (!d || typeof d !== 'object' || (d as { type?: unknown }).type !== 'kitchen_requisition') {
+		return false;
+	}
+	const doc = d as Record<string, unknown>;
+	if (doc.status === undefined) {
+		doc.status = 'approved';
+	}
+	if (!doc.ticket_no) {
+		doc.ticket_no = 'LEGACY';
+	}
+	if (!doc.requested_at) {
+		doc.requested_at = doc.issued_at ?? doc.created_at ?? new Date().toISOString();
+	}
+	if (doc.status === 'approved' && !doc.approved_at) {
+		doc.approved_at = doc.issued_at ?? doc.created_at;
+	}
+	return true;
+};
+
+// ---- KitchenCounter (schema.md §2.7.4) --------------------------------
+export interface KitchenCounter extends BaseDoc {
+	_id: 'kitchen_counter:main';
+	type: 'kitchen_counter';
+	seq: number;
+}
+
+export const isKitchenCounter = (d: unknown): d is KitchenCounter =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'kitchen_counter';
+
+// ---- MealService (append-only record of meal distribution) ------------
 
 export interface MealServiceExternal {
 	volunteers: number;
@@ -238,11 +414,10 @@ export interface MealService extends BaseDoc {
 	date: string;
 	meal: MealPeriod;
 	meal_plan_id: string | null;
-	// Portions the kitchen actually produced (ช่วง C, CR-084). Distinct from
-	// `served` (how many were handed out) — yield is the ceiling on distribution.
-	// Absent on docs written before CR-084 and whenever the kitchen skips it —
-	// absence means "not recorded", not zero.
+	meal_session_id?: string | null;
+	// Portions produced by the kitchen (distinct from served).
 	actual_yield?: number;
+	actual_gas_used_kg?: string;
 	served: number;
 	waste: number;
 	external: MealServiceExternal;
@@ -253,7 +428,9 @@ export const mealServiceInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
 	meal_plan_id: z.string().nullable().default(null),
-	actual_yield: z.number().int().min(0).optional(),
+	meal_session_id: z.string().nullable().optional(),
+	actual_yield: z.number().int().min(0).nullable().optional(),
+	actual_gas_used_kg: qtyStrCoercePositiveSchema.optional(),
 	served: z.number().int().min(0),
 	waste: z.number().int().min(0),
 	external: z.object({
@@ -273,9 +450,10 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 			date: d.date,
 			meal: d.meal,
 			meal_plan_id: d.meal_plan_id,
-			// != null (not truthy) — 0 is a legitimate recorded yield and must not
-			// be dropped the way an empty `notes` string is.
+			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
+			// Preserve 0 as a valid recorded yield.
 			...(d.actual_yield != null ? { actual_yield: d.actual_yield } : {}),
+			...(d.actual_gas_used_kg ? { actual_gas_used_kg: persistQty(d.actual_gas_used_kg) } : {}),
 			served: d.served,
 			waste: d.waste,
 			external: d.external,
@@ -288,10 +466,10 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 export const isMealService = (d: unknown): d is MealService =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service';
 
-export type KitchenDoc = MealPlan | KitchenRequisition | MealService;
+export type KitchenDoc =
+	MealSession | MealPlan | KitchenRequisition | KitchenCounter | MealService | GasCylinderType;
 
-// ---- GasCylinderType — mutable config, LWW via touch() ------------------
-// _id: "gas_cylinder_type:{ulid}" — one doc per stove/tank combo.
+// ---- GasCylinderType (configuration for gas tank/stove specs) -----------
 
 export interface GasCylinderType extends BaseDoc {
 	type: 'gas_cylinder_type';

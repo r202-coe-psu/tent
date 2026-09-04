@@ -2,11 +2,16 @@ import { describe, it, expect } from 'vitest';
 import {
 	createMealPlan,
 	createKitchenRequisition,
+	createPendingRequisition,
+	createMealSession,
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
-	isMealService
+	isMealService,
+	isMealSession
 } from './kitchen';
+import { formatTicketNo, expandTargetTags, computeSessionGroupProgress } from './meal-calc';
+import { deriveSessionHeadcountFromOccupancy } from './occupancy';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'kitchen_staff' };
@@ -314,5 +319,179 @@ describe('type guards', () => {
 		expect(isMealService(plan)).toBe(false);
 		expect(isMealPlan(null)).toBe(false);
 		expect(isMealPlan({ type: 'something_else' })).toBe(false);
+	});
+});
+
+// ---- MealSession & 2-Tier Production Flow ----
+
+describe('createMealSession', () => {
+	it('creates meal_session doc with 5 target groups and total', () => {
+		const session = createMealSession(
+			{
+				name: 'มื้อเช้า 28 ส.ค. 2569',
+				date: '2026-08-28',
+				meal: 'breakfast',
+				target_headcount: {
+					halal: 20,
+					infant: 5,
+					soft_food: 10,
+					regular: 65,
+					volunteer: 8,
+					total: 108
+				},
+				notes: 'ทดสอบมื้อเช้า'
+			},
+			ctx
+		);
+		expect(session._id).toMatch(/^meal_session:[0-9A-Z]{26}$/);
+		expect(session.type).toBe('meal_session');
+		expect(session.schema_v).toBe(1);
+		expect(session.status).toBe('active');
+		expect(session.target_headcount.total).toBe(108);
+		expect(session.target_headcount.halal).toBe(20);
+		expect(isMealSession(session)).toBe(true);
+	});
+});
+
+describe('createPendingRequisition & Migration Guard', () => {
+	it('creates pending ticket with ticket_no and gas_drawdown', () => {
+		const req = createPendingRequisition(
+			{
+				ticket_no: 'SH001-KITCHEN-0001',
+				meal_plan_id: 'meal_plan:01J',
+				meal_session_id: 'meal_session:01J',
+				items: [{ item_id: 'item:rice', qty_requested: '50', qty_issued: '0', unit: 'kg' }],
+				gas_drawdown: [{ cylinder_id: 'gas_cylinder_type:01J', qty_kg: '1.5' }]
+			},
+			ctx
+		);
+		expect(req.type).toBe('kitchen_requisition');
+		expect(req.schema_v).toBe(3);
+		expect(req.ticket_no).toBe('SH001-KITCHEN-0001');
+		expect(req.status).toBe('pending');
+		expect(req.ledger_ids).toEqual([]);
+		expect(req.gas_drawdown).toHaveLength(1);
+		expect(req.gas_drawdown?.[0].qty_kg).toBe('1.5');
+	});
+
+	it('migration guard coerces legacy requisition without status to approved (D1)', () => {
+		const legacyDoc = {
+			_id: 'kitchen_requisition:01J',
+			type: 'kitchen_requisition',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			meal_plan_id: 'meal_plan:01J',
+			items: [{ item_id: 'item:rice', qty_requested: '10', qty_issued: '10', unit: 'kg' }],
+			ledger_ids: ['stock_ledger:01J'],
+			issued_at: '2026-08-01T08:00:00.000Z',
+			created_at: '2026-08-01T08:00:00.000Z',
+			updated_at: '2026-08-01T08:00:00.000Z',
+			created_by: 'staff'
+		};
+
+		const legacy = legacyDoc as Record<string, unknown>;
+		expect(isKitchenRequisition(legacyDoc)).toBe(true);
+		expect(legacy.status).toBe('approved');
+		expect(legacy.ticket_no).toBe('LEGACY');
+		expect(legacy.requested_at).toBe('2026-08-01T08:00:00.000Z');
+		expect(legacy.approved_at).toBe('2026-08-01T08:00:00.000Z');
+	});
+});
+
+describe('Ticket formatting and 5-group progress calculation', () => {
+	it('formats ticket number using shelter code and 4-digit sequence (D2)', () => {
+		expect(formatTicketNo('CNX01', 1)).toBe('CNX01-KITCHEN-0001');
+		expect(formatTicketNo('sh001', 42)).toBe('SH001-KITCHEN-0042');
+	});
+
+	it('expands everyone tag to all 5 groups (D4)', () => {
+		expect(expandTargetTags(['everyone'])).toEqual([
+			'halal',
+			'infant',
+			'soft_food',
+			'regular',
+			'volunteer'
+		]);
+		expect(expandTargetTags(['halal', 'regular'])).toEqual(['halal', 'regular']);
+	});
+
+	it('computes reactive session progress from actual_yield (D5, D6)', () => {
+		const session = createMealSession(
+			{
+				name: 'มื้อกลางวัน',
+				date: '2026-09-02',
+				meal: 'lunch',
+				target_headcount: {
+					halal: 20,
+					infant: 5,
+					soft_food: 10,
+					regular: 50,
+					volunteer: 5,
+					total: 90
+				}
+			},
+			ctx
+		);
+
+		// Batch 1: halal & regular (50 portions produced)
+		const plan1 = createMealPlan(
+			{
+				date: '2026-09-02',
+				meal: 'lunch',
+				headcount: { total: 50, halal: 20, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'recipe:chicken', planned_qty: 100 }],
+				meal_session_id: session._id,
+				target_tags: ['halal', 'regular'],
+				allocated_target: 50
+			},
+			ctx
+		);
+
+		const service1 = createMealService(
+			{
+				date: '2026-09-02',
+				meal: 'lunch',
+				meal_plan_id: plan1._id,
+				actual_yield: 50,
+				served: 48,
+				waste: 2,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			ctx
+		);
+
+		const progress = computeSessionGroupProgress(session, [plan1], [service1]);
+		// halal target 20 -> actual 50 (completed)
+		expect(progress.groups.halal.isCompleted).toBe(true);
+		expect(progress.groups.halal.actualYield).toBe(50);
+		// regular target 50 -> actual 50 (completed)
+		expect(progress.groups.regular.isCompleted).toBe(true);
+		// infant target 5 -> actual 0 (incomplete)
+		expect(progress.groups.infant.isCompleted).toBe(false);
+		// soft_food target 10 -> actual 0 (incomplete)
+		expect(progress.groups.soft_food.isCompleted).toBe(false);
+		// volunteer target 5 -> actual 0 (incomplete)
+		expect(progress.groups.volunteer.isCompleted).toBe(false);
+
+		expect(progress.completedCount).toBe(2);
+		expect(progress.summaryText).toBe('2/5 กลุ่ม');
+		expect(progress.isAllCompleted).toBe(false);
+	});
+
+	it('derives session headcount from active occupants', () => {
+		const occupants = [
+			{ current_stay: { status: 'active' }, religion: 'muslim' },
+			{ current_stay: { status: 'active' }, special_needs: ['infant'] },
+			{ current_stay: { status: 'active' }, special_needs: ['elderly'] },
+			{ current_stay: { status: 'active' } }, // regular
+			{ current_stay: { status: 'checked_out' } } // inactive
+		];
+		const counts = deriveSessionHeadcountFromOccupancy(occupants);
+		expect(counts.total).toBe(4);
+		expect(counts.halal).toBe(1);
+		expect(counts.infant).toBe(1);
+		expect(counts.soft_food).toBe(1);
+		expect(counts.regular).toBe(1);
+		expect(counts.volunteer).toBe(0);
 	});
 });

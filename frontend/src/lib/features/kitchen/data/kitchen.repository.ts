@@ -1,4 +1,6 @@
 import type {
+	MealSession,
+	MealSessionInput,
 	MealPlan,
 	MealPlanInput,
 	KitchenRequisition,
@@ -11,7 +13,37 @@ import type {
 import type { GasLedgerEntry } from '../domain/gas-ledger';
 import type { AuthorContext } from '$lib/db/model';
 
+export interface CreatePendingRequisitionParams {
+	planInput?: MealPlanInput;
+	requisitionInput: {
+		meal_plan_id?: string | null;
+		meal_session_id?: string | null;
+		items: Array<{
+			item_id: string;
+			qty_requested: string;
+			qty_issued?: string;
+			unit: string;
+		}>;
+		gas_drawdown?: Array<{
+			cylinder_id: string;
+			qty_kg: string;
+		}>;
+	};
+}
+
+export interface ApproveRequisitionOptions {
+	partial_items?: Array<{ item_id: string; qty_issued: string }>;
+	switched_gas?: Array<{ cylinder_id: string; qty_kg: string }>;
+}
+
 export interface KitchenRepository {
+	// MealSession — 2-tier session management
+	createMealSession(input: MealSessionInput, ctx: AuthorContext): Promise<MealSession>;
+	getMealSessionById(id: string): Promise<MealSession | null>;
+	listMealSessions(): Promise<MealSession[]>;
+	updateMealSession(session: MealSession, patch: Partial<MealSessionInput>): Promise<MealSession>;
+	deleteMealSession(session: MealSession): Promise<void>;
+
 	// MealPlan — ulid _id; multiple plans may share a date+meal (extra batches)
 	createMealPlan(input: MealPlanInput, ctx: AuthorContext): Promise<MealPlan>;
 	getMealPlanById(id: string): Promise<MealPlan | null>;
@@ -25,14 +57,38 @@ export interface KitchenRepository {
 		plan: MealPlan,
 		patch: Pick<
 			MealPlan,
-			'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label' | 'gas_usage'
+			| 'headcount'
+			| 'recipes'
+			| 'calc_source'
+			| 'override_reason'
+			| 'label'
+			| 'gas_usage'
+			| 'meal_session_id'
+			| 'target_tags'
+			| 'allocated_target'
 		>
 	): Promise<MealPlan>;
 	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
 
-	// KitchenRequisition — append-only; writes stock_ledger entries atomically,
-	// plus gas_ledger consumption entries when the plan carries gas_usage
-	// (CR-085) — throws (writes nothing) if any cylinder's remaining kg is short.
+	// KitchenRequisition — State Machine (pending -> approved | rejected)
+	createPendingRequisition(
+		params: CreatePendingRequisitionParams,
+		ctx: AuthorContext
+	): Promise<{ plan?: MealPlan; requisition: KitchenRequisition }>;
+	approveRequisitionTicket(
+		requisitionId: string,
+		approver: string,
+		options?: ApproveRequisitionOptions,
+		ctx?: AuthorContext
+	): Promise<KitchenRequisition>;
+	rejectRequisitionTicket(
+		requisitionId: string,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<KitchenRequisition>;
+	getKitchenRequisitionById(id: string): Promise<KitchenRequisition | null>;
+
+	// Issues requisition and records associated stock and gas ledger entries.
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
@@ -44,7 +100,7 @@ export interface KitchenRepository {
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
 
-	// GasCylinderType — reference data (one doc = one real physical tank, CR-085)
+	// Gas cylinder type configuration.
 	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType>;
 	listGasCylinderTypes(): Promise<GasCylinderType[]>;
 	updateGasCylinderType(
@@ -53,12 +109,9 @@ export interface KitchenRepository {
 	): Promise<GasCylinderType>;
 	deleteGasCylinderType(doc: GasCylinderType): Promise<void>;
 
-	// GasLedger — append-only real stock per cylinder (CR-085). Consumption
-	// entries are written by issueRequisition; refill is its own action here.
+	// Gas ledger operations.
 	listGasLedger(): Promise<GasLedgerEntry[]>;
 	refillGasCylinder(cylinderId: string, qtyKg: string, ctx: AuthorContext): Promise<GasLedgerEntry>;
-	// Manual "write off the remainder" (CR-085 addendum, reason='adjust') — zeroes
-	// out a dust-sized balance that a hard-block consumption flow could never
-	// legitimately reach. No-op guard: throws if the cylinder is already empty.
+	// Writes off remaining gas balance to zero. Throws if cylinder is already empty.
 	writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry>;
 }

@@ -6,8 +6,10 @@ export { default as RequisitionDialog } from './ui/requisition-dialog.svelte';
 export { default as RequisitionHistory } from './ui/requisition-history.svelte';
 export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
+export { default as MealSessionList } from './ui/MealSessionList.svelte';
+export { default as KitchenRequisitionList } from './ui/KitchenRequisitionList.svelte';
 
-// Domain — meal calculation + T-26 handoff (T-25)
+// Domain — meal calculation and requisition
 export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
@@ -15,6 +17,14 @@ export {
 	resolveItemMasterStock,
 	toRequisitionInput,
 	assessRequisition,
+	formatTicketNo,
+	expandTargetTags,
+	computeSessionGroupProgress,
+	toMealPlanMap,
+	sumHeadcountByTags,
+	getActiveTagsFromSession,
+	TARGET_GROUP_TAGS,
+	TARGET_GROUP_LABELS,
 	RICE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	RECIPE_LABELS,
@@ -26,10 +36,13 @@ export type {
 	CustomIngredientInput,
 	ResolvedItemMaster,
 	StockAvailabilityStatus,
-	RequisitionLineAssessment
+	RequisitionLineAssessment,
+	TargetGroupTag,
+	GroupProgressItem,
+	SessionGroupProgress
 } from './domain/meal-calc';
 
-// Domain — plan vs actual variance (T-27)
+// Domain — plan vs actual variance
 export {
 	computeMealVariance,
 	VARIANCE_TOLERANCE_PCT,
@@ -37,15 +50,17 @@ export {
 } from './domain/meal-variance';
 export type { MealVariance, MealVarianceStatus } from './domain/meal-variance';
 
-// Domain — LPG gas consumption (CR-058 §2.2, T-25 ช่วง A)
+// Domain — gas consumption
 export {
 	calculateGasConsumptionKg,
 	cylindersNeeded,
-	cookingHoursFromConsumptionKg
+	cookingHoursFromConsumptionKg,
+	calculateMaxCookingHours,
+	calculateCookingHoursFromPortions
 } from './domain/gas-calc';
 export type { GasBurnCoefficients } from './domain/gas-calc';
 
-// Domain — gas cylinder stock ledger (CR-085)
+// Domain — gas cylinder stock ledger
 export {
 	gasLedgerReasonSchema,
 	createGasLedgerEntry,
@@ -61,18 +76,29 @@ export type {
 	GasCylinderStatus
 } from './domain/gas-ledger';
 
-// Domain — occupancy → headcount (T-06 source)
-export { deriveHeadcountFromOccupancy, SOFT_FOOD_NEEDS } from './domain/occupancy';
+// Domain — occupancy to headcount
+export {
+	deriveHeadcountFromOccupancy,
+	deriveSessionHeadcountFromOccupancy,
+	SOFT_FOOD_NEEDS
+} from './domain/occupancy';
 export type { OccupantView } from './domain/occupancy';
 
 // Domain — documents
 export type {
+	MealSession,
+	MealSessionHeadcount,
+	MealSessionStatus,
+	MealSessionInput,
+	KitchenCounter,
 	MealPlan,
 	MealPlanHeadcount,
 	MealPlanRecipe,
 	MealPlanGasUsage,
 	KitchenRequisition,
+	KitchenRequisitionStatus,
 	KitchenRequisitionItem,
+	KitchenRequisitionGasDrawdown,
 	MealService,
 	MealServiceExternal,
 	KitchenDoc,
@@ -80,6 +106,7 @@ export type {
 	MealPlanStatus,
 	MealPlanInput,
 	KitchenRequisitionInput,
+	PendingRequisitionInput,
 	MealServiceInput,
 	GasCylinderType,
 	GasCylinderTypeInput
@@ -87,35 +114,60 @@ export type {
 
 // Domain — schemas, factories, guards, labels
 export {
+	mealSessionStatusSchema,
+	mealSessionInputSchema,
+	createMealSession,
+	isMealSession,
+	isKitchenCounter,
 	mealPeriodSchema,
 	mealPlanStatusSchema,
 	mealPlanInputSchema,
 	kitchenRequisitionInputSchema,
+	pendingRequisitionInputSchema,
 	mealServiceInputSchema,
 	createMealPlan,
 	createKitchenRequisition,
+	createPendingRequisition,
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
+	gasCylinderTypeInputSchema,
+	createGasCylinderType,
+	isGasCylinderType,
 	isMealService,
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
-// Data — repository contract + remote CouchDB binding
-export type { KitchenRepository } from './data/kitchen.repository';
+// Data — repository and remote CouchDB binding
+export type {
+	KitchenRepository,
+	CreatePendingRequisitionParams,
+	ApproveRequisitionOptions
+} from './data/kitchen.repository';
 export { kitchenRepository } from './data/kitchen.remote';
 
-// Application — TanStack Query hooks + live-query wiring
+// Application — query hooks and live-query wiring
 export {
 	kitchenKeys,
+	useMealSessions,
+	useMealSession,
+	useCreateMealSession,
+	useUpdateMealSession,
+	useDeleteMealSession,
 	useMealPlans,
 	useOccupancyHeadcount,
+	useActiveEvacueeDietCounts,
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,
 	useUpdateMealPlanCalc,
 	useDeleteMealPlanDraft,
 	useRequisitions,
+	useKitchenRequisitions,
+	useKitchenRequisition,
+	useCreatePendingRequisition,
+	useApproveRequisitionTicket,
+	useRejectRequisitionTicket,
 	useIssueRequisition,
 	useMealServices,
 	useRecordMealService,

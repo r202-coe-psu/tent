@@ -743,3 +743,182 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 		);
 	});
 });
+
+// ---- 2-Tier MealSession & TKT-KITCHEN Flow 3 Tests ----
+
+describe('KitchenRemoteRepository — MealSession CRUD', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	it('creates, lists, updates, and deletes meal_session', async () => {
+		const session = await repo.createMealSession(
+			{
+				name: 'มื้อกลางวัน 2 ก.ย. 69',
+				date: '2026-09-02',
+				meal: 'lunch',
+				target_headcount: {
+					halal: 20,
+					infant: 5,
+					soft_food: 10,
+					regular: 50,
+					volunteer: 5,
+					total: 90
+				}
+			},
+			ctx
+		);
+		expect(session.type).toBe('meal_session');
+		expect(session.status).toBe('active');
+
+		const list = await repo.listMealSessions();
+		expect(list).toHaveLength(1);
+		expect(list[0]._id).toBe(session._id);
+
+		const updated = await repo.updateMealSession(session, { notes: 'เพิ่มหมายเหตุ' });
+		expect(updated.notes).toBe('เพิ่มหมายเหตุ');
+
+		await repo.deleteMealSession(updated);
+		expect(await repo.listMealSessions()).toHaveLength(0);
+	});
+});
+
+describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	it('createPendingRequisition generates sequential ticket_no and commits meal_plan + requisition', async () => {
+		const res1 = await repo.createPendingRequisition(
+			{
+				planInput: {
+					date: '2026-09-02',
+					meal: 'lunch',
+					headcount: { total: 50, halal: 20, soft_food: 0, infant: 0 },
+					recipes: [{ recipe_id: 'recipe:curry', planned_qty: 100 }]
+				},
+				requisitionInput: {
+					items: [{ item_id: 'item:chicken', qty_requested: '25', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		expect(res1.plan).toBeDefined();
+		expect(res1.requisition.ticket_no).toBe('SH001-KITCHEN-0001');
+		expect(res1.requisition.status).toBe('pending');
+		expect(res1.requisition.meal_plan_id).toBe(res1.plan?._id);
+
+		// Second requisition should increment sequence to 0002
+		const res2 = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:rice', qty_requested: '50', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+		expect(res2.requisition.ticket_no).toBe('SH001-KITCHEN-0002');
+	});
+
+	it('approveRequisitionTicket cuts stock_ledger with reason=requisition and ref_id=requisition._id', async () => {
+		await seedStock('item:pork', 100);
+
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:pork', qty_requested: '20', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		const approved = await repo.approveRequisitionTicket(
+			requisition._id,
+			'warehouse_officer',
+			undefined,
+			ctx
+		);
+
+		expect(approved.status).toBe('approved');
+		expect(approved.approved_by).toBe('warehouse_officer');
+		expect(approved.ledger_ids).toHaveLength(1);
+
+		const ledgers = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		const reqLedger = ledgers.find((l) => l.ref_id === requisition._id);
+		expect(reqLedger).toBeDefined();
+		expect(reqLedger?.qty).toBe('-20');
+		expect(reqLedger?.reason).toBe('requisition');
+	});
+
+	it('approveRequisitionTicket handles partial issue (D12) and gas cylinder switch (D15)', async () => {
+		await seedStock('item:beef', 100);
+		const cyl1 = await repo.createGasCylinderType(
+			{ name: 'ถัง 1', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+		const cyl2 = await repo.createGasCylinderType(
+			{ name: 'ถัง 2', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:beef', qty_requested: '20', unit: 'kg' }],
+					gas_drawdown: [{ cylinder_id: cyl1._id, qty_kg: '2' }]
+				}
+			},
+			ctx
+		);
+
+		// Warehouse issues 15 instead of 20, and switches to cylinder 2
+		const approved = await repo.approveRequisitionTicket(
+			requisition._id,
+			'warehouse_officer',
+			{
+				partial_items: [{ item_id: 'item:beef', qty_issued: '15' }],
+				switched_gas: [{ cylinder_id: cyl2._id, qty_kg: '2' }]
+			},
+			ctx
+		);
+
+		expect(approved.items[0].qty_issued).toBe('15');
+		expect(approved.gas_drawdown?.[0].cylinder_id).toBe(cyl2._id);
+
+		// Verify stock ledger was cut for 15, not 20
+		const ledgers = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		const beefLedger = ledgers.find((l) => l.ref_id === requisition._id);
+		expect(beefLedger?.qty).toBe('-15');
+	});
+
+	it('rejectRequisitionTicket records rejection reason and blocks subsequent approval', async () => {
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:pork', qty_requested: '30', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		const rejected = await repo.rejectRequisitionTicket(
+			requisition._id,
+			'วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้',
+			ctx
+		);
+		expect(rejected.status).toBe('rejected');
+		expect(rejected.reject_reason).toBe('วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้');
+
+		// Attempting to approve rejected ticket throws
+		await expect(
+			repo.approveRequisitionTicket(requisition._id, 'warehouse_officer', undefined, ctx)
+		).rejects.toThrow(/already rejected/);
+	});
+});

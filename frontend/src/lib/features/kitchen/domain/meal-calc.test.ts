@@ -5,11 +5,14 @@ import {
 	resolveItemMasterStock,
 	toRequisitionInput,
 	assessRequisition,
+	toMealPlanMap,
+	sumHeadcountByTags,
+	getActiveTagsFromSession,
 	RICE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	type ResolvedItemMaster
 } from './meal-calc';
-import type { MealPlan, MealPlanHeadcount } from './kitchen';
+import type { MealPlan, MealPlanHeadcount, MealSession } from './kitchen';
 import type { Recipe, ItemMaster } from '$lib/features/catalog';
 import type { SupplyItem } from '$lib/features/supply';
 
@@ -377,5 +380,72 @@ describe('toRequisitionInput → assessRequisition — kg end-to-end (CR-030)', 
 		expect(a.on_hand).toBe('200');
 		expect(a.status).toBe('ok');
 		expect(a.qty_issuable).toBe('15');
+	});
+});
+
+describe('toMealPlanMap', () => {
+	it('converts array of plans to dictionary keyed by _id', () => {
+		const p1 = { _id: 'meal_plan:01', label: 'Plan 1' } as MealPlan;
+		const p2 = { _id: 'meal_plan:02', label: 'Plan 2' } as MealPlan;
+		const map = toMealPlanMap([p1, p2]);
+		expect(map['meal_plan:01']).toBe(p1);
+		expect(map['meal_plan:02']).toBe(p2);
+	});
+
+	it('handles empty or null arrays safely', () => {
+		expect(toMealPlanMap([])).toEqual({});
+		expect(toMealPlanMap(null)).toEqual({});
+		expect(toMealPlanMap(undefined)).toEqual({});
+	});
+});
+
+describe('sumHeadcountByTags', () => {
+	const counts = {
+		total: 100,
+		halal: 20,
+		infant: 5,
+		soft_food: 10,
+		regular: 50,
+		volunteer: 15
+	};
+
+	it('returns total when all 5 tags are selected', () => {
+		expect(
+			sumHeadcountByTags(counts, ['halal', 'infant', 'soft_food', 'regular', 'volunteer'])
+		).toBe(100);
+	});
+
+	it('sums specified subset of tags correctly', () => {
+		expect(sumHeadcountByTags(counts, ['halal', 'infant'])).toBe(25);
+		expect(sumHeadcountByTags(counts, ['regular'])).toBe(50);
+	});
+
+	it('returns 0 when tags array is empty or counts is undefined', () => {
+		expect(sumHeadcountByTags(counts, [])).toBe(0);
+		expect(sumHeadcountByTags(undefined, ['regular'])).toBe(0);
+	});
+});
+
+describe('getActiveTagsFromSession', () => {
+	it('returns only tags with count > 0', () => {
+		const session = {
+			target_headcount: {
+				total: 30,
+				halal: 10,
+				infant: 0,
+				soft_food: 0,
+				regular: 20,
+				volunteer: 0
+			}
+		} as MealSession;
+		expect(getActiveTagsFromSession(session)).toEqual(['halal', 'regular']);
+	});
+
+	it('falls back to regular when no group has count > 0 or session is null', () => {
+		expect(getActiveTagsFromSession(null)).toEqual(['regular']);
+		const emptySession = {
+			target_headcount: { total: 0, halal: 0, infant: 0, soft_food: 0, regular: 0, volunteer: 0 }
+		} as MealSession;
+		expect(getActiveTagsFromSession(emptySession)).toEqual(['regular']);
 	});
 });
