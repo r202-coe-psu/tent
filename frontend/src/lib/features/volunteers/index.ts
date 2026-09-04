@@ -124,6 +124,7 @@ export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
+export { default as JobShiftPicker, type JobShiftSelection } from './ui/job-shift-picker.svelte';
 export { default as JobAssignPage } from './ui/job-assign-page.svelte';
 export { default as AssignRosterRow } from './ui/assign-roster-row.svelte';
 export { default as VolunteerSkillMasterPage } from './ui/volunteer-skill-master-page.svelte';
