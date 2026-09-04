@@ -39,6 +39,7 @@ from tent_model.volunteer_profile_update_buffer import (
 )
 from tent_model.volunteer_job_slot import (
 	SlotResult,
+	VolunteerJobShiftSlot,
 	VolunteerJobSlot,
 	accept_dispatched_slot,
 	decline_dispatched_slot,
@@ -79,6 +80,7 @@ __all__ = [
 	"SlotResult",
 	"SyncCheckpoint",
 	"VolunteerApplicationBuffer",
+	"VolunteerJobShiftSlot",
 	"VolunteerJobSlot",
 	"VolunteerProfileUpdateBuffer",
 	"accept_dispatched_slot",

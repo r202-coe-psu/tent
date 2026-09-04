@@ -76,3 +76,16 @@ def mask_phone(phone: str | None) -> str:
     if len(digits) < 4:
         return "xxx-xxx-xxxx"
     return f"xxx-xxx-{digits[-4:]}"
+
+
+def mask_email(email: str | None) -> str | None:
+    """Mask email for public responses (e.g. s***i@example.com)."""
+    if not email or "@" not in email:
+        return email
+    parts = email.split("@", 1)
+    local, domain = parts[0], parts[1]
+    if len(local) <= 2:
+        masked_local = f"{local[:1]}***"
+    else:
+        masked_local = f"{local[0]}***{local[-1]}"
+    return f"{masked_local}@{domain}"

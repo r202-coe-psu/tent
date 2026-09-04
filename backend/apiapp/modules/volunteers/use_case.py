@@ -38,7 +38,13 @@ from tent_model.volunteer_profile_update_buffer import (
     VolunteerProfileUpdateBuffer,
 )
 
-from ...utils.masking import mask_phone, national_id_hash, normalize_phone, sha256_hex
+from ...utils.masking import (
+    mask_email,
+    mask_phone,
+    national_id_hash,
+    normalize_phone,
+    sha256_hex,
+)
 from ...utils.response_code import normalize_response_code
 from ...utils.ulid import new_ulid
 from ...utils.view_token import is_view_token, mint_view_token, resolve_view_token
@@ -795,7 +801,7 @@ class VolunteersUseCase:
             last_name=newest.last_name,
             nickname=newest.nickname,
             phone_masked=newest.phone_masked,
-            email=newest.email,
+            email=mask_email(newest.email),
             volunteer_code=newest.volunteer_code,
             skills=skills,
             organization=newest.organization,
