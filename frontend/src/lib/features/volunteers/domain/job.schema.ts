@@ -18,19 +18,11 @@ export const jobTierSchema = z.enum(['operational', 'staff-capable']);
 export type JobTier = z.infer<typeof jobTierSchema>;
 
 /** CR-094 §3.3 — adds `draft` (job board WIP) and `paused` (temporarily not accepting). */
-export const jobStatusSchema = z.enum([
-	'draft',
-	'open',
-	'paused',
-	'almost_full',
-	'full',
-	'closed',
-	'cancelled'
-]);
+export const jobStatusSchema = z.enum(['draft', 'open', 'paused', 'full', 'closed', 'cancelled']);
 export type JobStatus = z.infer<typeof jobStatusSchema>;
 
 /** Statuses a public job board is allowed to show (CR-094 FR-VOL-13.2). */
-export const PUBLIC_JOB_STATUSES: readonly JobStatus[] = ['open', 'almost_full'];
+export const PUBLIC_JOB_STATUSES: readonly JobStatus[] = ['open'];
 
 export const shiftTemplateSchema = z.object({
 	shift_name: z.string().min(1),
@@ -144,6 +136,24 @@ export const jobSchema = z
 		path: ['quota']
 	});
 
+/**
+ * Statuses removed from `jobStatusSchema`, mapped to what they mean now. Jobs
+ * written before the owner decision of 2026-09-04 still carry `almost_full`;
+ * without this they fail `isJob` and disappear from every list.
+ */
+const LEGACY_JOB_STATUS_ALIASES: Readonly<Record<string, JobStatus>> = { almost_full: 'open' };
+
+/**
+ * Rewrite a legacy `status` on a doc read back from CouchDB. Returns the input
+ * untouched when there is nothing to rewrite, so the common path allocates
+ * nothing. Apply this BEFORE {@link isJob} — the guard rejects the old value.
+ */
+export function withNormalizedJobStatus<T extends object>(doc: T): T {
+	const raw = (doc as { status?: unknown }).status;
+	const alias = typeof raw === 'string' ? LEGACY_JOB_STATUS_ALIASES[raw] : undefined;
+	return alias ? { ...doc, status: alias } : doc;
+}
+
 export const isJob = (d: unknown): d is Job => jobSchema.safeParse(d).success;
 
 // ---------------------------------------------------------------------------
@@ -167,9 +177,9 @@ export const jobInputSchema = z
 		/**
 		 * Publication state chosen on the form's LIFECYCLE STATUS control.
 		 * `open` is the default (schema.md §2.17, owner decision 2026-08-26).
-		 * `almost_full` is deliberately absent — it is only ever produced by
-		 * `deriveJobStatus` from the quota fill level, and so is `full` after the
-		 * next dispatch/accept/decline, even if it is picked here.
+		 * Every value here is a real manual choice and is persisted as picked;
+		 * `full` may still be reasserted by `deriveJobStatus` on the next
+		 * dispatch/accept/decline once the quota actually runs out.
 		 */
 		status: z.enum(['draft', 'open', 'paused', 'full', 'closed']).default('open')
 	})

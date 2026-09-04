@@ -40,8 +40,7 @@ export interface ShiftRosterEntry {
 const ROSTER_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
 	'assigned',
 	'standby',
-	'checked_in',
-	'completed'
+	'checked_in'
 ]);
 
 /**
@@ -54,7 +53,9 @@ const ROSTER_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
  * no assignments that could possibly match it.
  */
 export function shiftRoster(
-	shift: Pick<JobShift, 'date' | 'end_date' | 'start_time' | 'end_time'>,
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
+		shift_id?: string;
+	},
 	jobId: string,
 	assignments: readonly ShiftAssignment[],
 	volunteersById: ReadonlyMap<
@@ -69,28 +70,31 @@ export function shiftRoster(
 		return [];
 	}
 
-	return assignments
-		.filter(
-			(a) =>
-				a.job_id === jobId && ROSTER_STATUSES.has(a.status) && sameDutyWindow(a.duty_window, window)
-		)
-		.map((a) => {
-			const volunteer = volunteersById.get(a.volunteer_id);
-			return {
-				assignmentId: a._id,
-				volunteerId: a.volunteer_id,
-				volunteerName: volunteer
-					? `${volunteer.first_name} ${volunteer.last_name}`
-					: 'ไม่พบข้อมูลอาสาสมัคร',
-				volunteerCode: volunteer?.volunteer_code ?? '—',
-				status: a.status,
-				dispatchStatus: a.dispatch_status ?? null,
-				phone: volunteer?.phone ?? null,
-				station: a.station,
-				checkInAt: a.check_in_at ?? null,
-				checkOutAt: a.check_out_at ?? null
-			};
-		});
+	const matched = assignments.filter(
+		(a) =>
+			a.job_id === jobId &&
+			ROSTER_STATUSES.has(a.status) &&
+			(a.shift_id
+				? a.shift_id === (shift.shift_id ?? shift.id)
+				: sameDutyWindow(a.duty_window, window))
+	);
+	return [...new Map(matched.map((a) => [a.volunteer_id, a])).values()].map((a) => {
+		const volunteer = volunteersById.get(a.volunteer_id);
+		return {
+			assignmentId: a._id,
+			volunteerId: a.volunteer_id,
+			volunteerName: volunteer
+				? `${volunteer.first_name} ${volunteer.last_name}`
+				: 'ไม่พบข้อมูลอาสาสมัคร',
+			volunteerCode: volunteer?.volunteer_code ?? '—',
+			status: a.status,
+			dispatchStatus: a.dispatch_status ?? null,
+			phone: volunteer?.phone ?? null,
+			station: a.station,
+			checkInAt: a.check_in_at ?? null,
+			checkOutAt: a.check_out_at ?? null
+		};
+	});
 }
 
 /** Thai label for a roster entry's `status` — used by the shift card's roster list. */

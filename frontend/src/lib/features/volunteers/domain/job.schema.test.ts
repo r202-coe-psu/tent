@@ -247,9 +247,9 @@ describe('makeJob', () => {
 		}
 	});
 
-	it('rejects a status that is only ever derived, never chosen', () => {
-		// `almost_full` comes solely from `deriveJobStatus`; `cancelled` is a
-		// transition applied to an existing job, not an initial state.
+	it('rejects a status that is never a valid initial state', () => {
+		// `cancelled` is a transition applied to an existing job, not an initial
+		// state; `almost_full` no longer exists at all (owner decision 2026-09-04).
 		for (const status of ['almost_full', 'cancelled']) {
 			expect(
 				jobInputSchema.safeParse({ ...baseInput, status }).success,

@@ -76,6 +76,7 @@ interface ExistingJobApplicationDoc {
 		skills?: string[];
 	};
 	selected_shift?: {
+		shift_id?: string;
 		date: string;
 		start_time: string;
 		end_time: string;
@@ -104,6 +105,7 @@ const applySchema = z.object({
 		skills: z.array(z.string()).default([])
 	}),
 	selected_shift: z.object({
+		shift_id: z.string().min(1).optional(),
 		date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)'),
 		start_time: z.string().min(1),
 		end_time: z.string().min(1)
@@ -255,9 +257,11 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			// Exact same job and shift time
 			if (
 				app.job_id === normalizedJobId &&
-				appShift.date === selected_shift.date &&
-				appShift.start_time === selected_shift.start_time &&
-				appShift.end_time === selected_shift.end_time
+				(selected_shift.shift_id && appShift.shift_id
+					? appShift.shift_id === selected_shift.shift_id
+					: appShift.date === selected_shift.date &&
+						appShift.start_time === selected_shift.start_time &&
+						appShift.end_time === selected_shift.end_time)
 			) {
 				return json(
 					{
@@ -389,11 +393,13 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		const applicationDoc = {
 			_id: docId,
 			type: 'job_application',
-			schema_v: 2,
+			schema_v: 3,
 			job_id: normalizedJobId,
+			shift_id: selected_shift.shift_id,
 			volunteer_id: volunteerId,
 			applicant: finalApplicantInfo,
 			selected_shift: {
+				shift_id: selected_shift.shift_id,
 				date: selected_shift.date,
 				start_time: selected_shift.start_time,
 				end_time: selected_shift.end_time

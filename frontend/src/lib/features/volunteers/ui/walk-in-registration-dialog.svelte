@@ -150,6 +150,7 @@
 					const { job, shift, dutyWindow } = jobShiftSelection;
 					const assignment = await assignMutation.mutateAsync({
 						job_id: job._id,
+						shift_id: shift.id,
 						volunteer_id: volunteer._id,
 						date: shift.date,
 						shift: shiftKindFor(shift),

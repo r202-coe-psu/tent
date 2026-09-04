@@ -30,7 +30,7 @@ note: ทำคู่ขนานกับ 01–03 ได้ ไม่ต้อ�
 ## 05.1 Worker projector (FR-VOL-13.1/13.2)
 
 - [x] `worker/` — projector `public_jobs` จาก `job` doc
-- [x] project เฉพาะ `status ∈ {open, almost_full}` — `draft`/`paused`/`full`/`closed`/`cancelled` ห้ามออก public (AC-094-04)
+- [x] project เฉพาะ `status ∈ {open, full}` (`full` ขึ้นกระดานแบบเทาแต่สมัครไม่ได้) — `draft`/`paused`/`closed`/`cancelled` ห้ามออก public (AC-094-04). `almost_full` เดิมถูก normalise เป็น `open` ที่ projector
 - [x] ฟิลด์ที่ project: title · description · skills_required · shift_template · quota + `slots_remaining` · `is_urgent` · shelter (ชื่อ/พิกัด) — **ห้ามมี PII**
 - [ ] อัปเดต [couchdb-mongodb-sync.md](../../data/couchdb-mongodb-sync.md)
 

@@ -58,7 +58,7 @@ describe('jobApplicationSchema', () => {
 		expect(jobApplicationSchema.safeParse({ ...validDoc(), _id: 'job:oops' }).success).toBe(false);
 	});
 
-	it('requires schema_v to be the literal 2', () => {
+	it('accepts legacy v2 and rejects unsupported schema versions', () => {
 		expect(jobApplicationSchema.safeParse({ ...validDoc(), schema_v: 1 }).success).toBe(false);
 	});
 
@@ -128,7 +128,7 @@ describe('makeJobApplication', () => {
 	it('mints an application with the caller-supplied initial status', () => {
 		const app = makeJobApplication(baseInput, ctx, 'pending_review');
 		expect(app._id).toMatch(/^job_application:/);
-		expect(app.schema_v).toBe(2);
+		expect(app.schema_v).toBe(3);
 		expect(app.status).toBe('pending_review');
 		expect(app.review_notes).toBeNull();
 		expect(app.reviewed_at).toBeNull();

@@ -7,7 +7,24 @@
  * met(100%).
  */
 
+import { sameDutyWindow, shiftDutyWindow } from './duty-window';
+import type { JobStatus, JobShift } from './job.schema';
+import type { ShiftAssignment } from './shift-assignment.schema';
+
 export type FillBucket = 'critical' | 'near' | 'met';
+
+/** Job lifecycle states whose shifts represent currently tracked capacity. */
+export type CapacityTrackedJobStatus = Extract<JobStatus, 'open' | 'full'>;
+
+export const CAPACITY_TRACKED_JOB_STATUSES: ReadonlySet<CapacityTrackedJobStatus> = new Set([
+	'open',
+	'full'
+]);
+
+/** Paused, draft and terminal jobs do not represent capacity currently being filled. */
+export function isCapacityTrackedJobStatus(status: JobStatus): status is CapacityTrackedJobStatus {
+	return CAPACITY_TRACKED_JOB_STATUSES.has(status as CapacityTrackedJobStatus);
+}
 
 export interface ShiftCapacity {
 	/** Opaque grouping key, e.g. `${job_id}:${date}:${shift}`. Not interpreted here. */
@@ -61,25 +78,73 @@ export function bucketCounts(
  * One capacity bucket per SUB-SHIFT of a job (CR-094 FR-VOL-09.4 counts "กะ",
  * not jobs).
  *
- * ⚠️ Approximation, deliberately explicit: `shift_assignment` does not yet
- * carry the id of the specific `job.shifts[]` row it fills, so there is no
- * per-shift confirmed count to read. The job-level `slots_confirmed` is
- * therefore allocated greedily — earliest shift filled first — which keeps the
- * NUMBER of shifts in each bucket right even though which particular shift is
- * short may be off. Replace this with a real per-shift tally once
- * `shift_assignment` gains a `job_shift_id` (follow-up, needs a CR).
+ * When assignments are supplied, this uses the exact `shift_id` roster and falls
+ * back to the duty window only for legacy rows during migration. Without assignments
+ * it retains the job-level projection fallback for callers with only a job snapshot.
  */
-export function jobShiftCapacities(job: {
-	_id: string;
-	shifts: readonly { id: string; quota: number }[];
-	slots_confirmed: number;
-}): ShiftCapacity[] {
+export function jobShiftCapacities(
+	job: {
+		_id: string;
+		shifts: readonly (Pick<JobShift, 'id' | 'quota'> &
+			Partial<Pick<JobShift, 'date' | 'end_date' | 'start_time' | 'end_time'>>)[];
+		slots_confirmed: number;
+	},
+	assignments?: readonly ShiftAssignment[]
+): ShiftCapacity[] {
+	if (assignments) {
+		return job.shifts.map((shift) => ({
+			key: `${job._id}#${shift.id}`,
+			target: shift.quota,
+			confirmed: confirmedAssignmentsForShift(job._id, shift, assignments)
+		}));
+	}
 	let left = Math.max(job.slots_confirmed, 0);
 	return job.shifts.map((shift) => {
 		const confirmed = Math.min(left, shift.quota);
 		left -= confirmed;
 		return { key: `${job._id}#${shift.id}`, target: shift.quota, confirmed };
 	});
+}
+
+/**
+ * Count the current confirmed roster for one concrete shift. New assignments use
+ * `shift_id`; the duty-window fallback is only for legacy rows during migration.
+ * A volunteer is counted once even if duplicate legacy rows exist.
+ */
+function confirmedAssignmentsForShift(
+	jobId: string,
+	shift: Pick<JobShift, 'id'> &
+		Partial<Pick<JobShift, 'date' | 'end_date' | 'start_time' | 'end_time'>>,
+	assignments: readonly ShiftAssignment[]
+): number {
+	if (!shift.date || !shift.end_date || !shift.start_time || !shift.end_time) return 0;
+	const concreteShift = {
+		...shift,
+		date: shift.date,
+		end_date: shift.end_date,
+		start_time: shift.start_time,
+		end_time: shift.end_time
+	};
+	let window: ReturnType<typeof shiftDutyWindow>;
+	try {
+		window = shiftDutyWindow(concreteShift);
+	} catch {
+		return 0;
+	}
+	const volunteerIds = new Set<string>();
+	for (const assignment of assignments) {
+		if (
+			assignment.job_id !== jobId ||
+			!['assigned', 'standby', 'checked_in'].includes(assignment.status) ||
+			assignment.dispatch_status === 'dispatched'
+		)
+			continue;
+		const matches = assignment.shift_id
+			? assignment.shift_id === shift.id
+			: sameDutyWindow(assignment.duty_window, window);
+		if (matches) volunteerIds.add(assignment.volunteer_id);
+	}
+	return volunteerIds.size;
 }
 
 /** Per-sub-shift 3-way quota split, mirroring `quota.ts#computeQuota` at job level. */
@@ -94,14 +159,8 @@ export interface ShiftQuotaSplit extends ShiftCapacity {
  * Allocate a job's `slots_confirmed` and `slots_dispatched` down to its
  * sub-shifts so the detail screen can draw one 3-colour bar per shift.
  *
- * Same deliberate approximation (and the same reason) as
- * {@link jobShiftCapacities}: `shift_assignment` carries no `job_shift_id`
- * yet, so there is no real per-shift tally to read. Confirmed is filled
- * greedily earliest-shift-first, then dispatched into what is left. The
- * per-shift TOTALS therefore always reconcile with the job document
- * (`sum(confirmed) === job.slots_confirmed`, likewise dispatched/remaining),
- * while WHICH shift holds a given seat is a best guess. This lives here, not
- * in the UI, so no screen recomputes the split itself.
+ * This remains a projection fallback for the detail card. The roster modal is the
+ * authoritative exact count because it receives assignments and filters by `shift_id`.
  */
 export function jobShiftQuotaSplits(job: {
 	_id: string;

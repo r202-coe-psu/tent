@@ -87,7 +87,7 @@
 
 	const assignableShifts = $derived.by<AssignableShift[]>(() => {
 		const jobs = (jobsQuery.data ?? []).filter(
-			(j) => j.tier === 'operational' && (j.status === 'open' || j.status === 'almost_full')
+			(j) => j.tier === 'operational' && j.status === 'open'
 		);
 		const out: AssignableShift[] = [];
 		for (const job of jobs) {

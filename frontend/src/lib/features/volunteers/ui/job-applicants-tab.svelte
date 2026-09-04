@@ -16,12 +16,7 @@
 	 * navigations) — and sharing the unfiltered cache entry with the tab badge
 	 * means the badge and this list can never disagree.
 	 */
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
-	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
@@ -93,7 +88,7 @@
 
 	/**
 	 * `job.shifts` position for an application's chosen slot — the application
-	 * stores only date + times (schema.md §2.18 has no `shift_id`), so the label
+	 * stores the concrete `shift_id` plus a date/time snapshot, so the label
 	 * is a best-effort match and is simply omitted when nothing lines up.
 	 */
 	function shiftLabelFor(application: JobApplication): string | null {
@@ -115,11 +110,6 @@
 		reviewDecision = decision;
 		reviewOpen = true;
 	}
-
-	/** Same target as the shifts tab's assign button — `job._id` contains a colon. */
-	function openAssign() {
-		goto(resolve(`/back-office/volunteers/jobs/${encodeURIComponent(job._id)}/assign`));
-	}
 </script>
 
 <div class="space-y-4">
@@ -138,21 +128,6 @@
 				<Users class="h-4 w-4 text-primary" />
 				รายชื่อและสถานะผู้สมัครงานอาสานี้
 			</h3>
-			<div class="flex flex-wrap gap-2">
-				<Button size="sm" class="gap-1.5" onclick={openAssign}>
-					<UserPlus class="h-3.5 w-3.5" />
-					มอบหมายงานให้อาสา (Assign)
-				</Button>
-				<Button
-					size="sm"
-					variant="secondary"
-					class="gap-1.5"
-					onclick={() => goto(`${resolve('/back-office/volunteers')}?tab=people`)}
-				>
-					<ClipboardList class="h-3.5 w-3.5" />
-					เปิดในศูนย์รวมการอนุมัติ
-				</Button>
-			</div>
 		</div>
 
 		{#if loading}

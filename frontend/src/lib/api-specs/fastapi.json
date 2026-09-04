@@ -1776,6 +1776,23 @@
 				"title": "PublicAnnouncement",
 				"description": "Public snapshot of a system announcement, stored in MongoDB `public_announcements`.\nSourced from `announcement` docs in CouchDB `registry`."
 			},
+			"PublicJobShift": {
+				"properties": {
+					"shift_id": { "type": "string", "title": "Shift Id" },
+					"date": { "type": "string", "title": "Date", "default": "" },
+					"end_date": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "End Date" },
+					"start_time": { "type": "string", "title": "Start Time", "default": "" },
+					"end_time": { "type": "string", "title": "End Time", "default": "" },
+					"station": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Station" },
+					"quota": { "type": "integer", "title": "Quota", "default": 0 },
+					"slots_confirmed": { "type": "integer", "title": "Slots Confirmed", "default": 0 },
+					"slots_dispatched": { "type": "integer", "title": "Slots Dispatched", "default": 0 },
+					"slots_remaining": { "type": "integer", "title": "Slots Remaining", "default": 0 }
+				},
+				"type": "object",
+				"required": ["shift_id"],
+				"title": "PublicJobShift"
+			},
 			"PublicJobItem": {
 				"properties": {
 					"job_id": { "type": "string", "title": "Job Id" },
@@ -1790,6 +1807,11 @@
 						"title": "Skills Required"
 					},
 					"shift_template": { "$ref": "#/components/schemas/JobShiftTemplate" },
+					"shifts": {
+						"items": { "$ref": "#/components/schemas/PublicJobShift" },
+						"type": "array",
+						"title": "Shifts"
+					},
 					"quota": { "type": "integer", "title": "Quota" },
 					"slots_confirmed": { "type": "integer", "title": "Slots Confirmed" },
 					"slots_remaining": { "type": "integer", "title": "Slots Remaining" },
@@ -1842,6 +1864,7 @@
 				"properties": {
 					"assignment_id": { "type": "string", "title": "Assignment Id" },
 					"job_id": { "type": "string", "title": "Job Id" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
 					"job_title": { "type": "string", "title": "Job Title", "default": "" },
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
 					"shelter_name": { "type": "string", "title": "Shelter Name", "default": "" },
@@ -2184,6 +2207,7 @@
 			},
 			"TicketShift": {
 				"properties": {
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
 					"date": { "type": "string", "title": "Date", "default": "" },
 					"start_time": { "type": "string", "title": "Start Time", "default": "" },
 					"end_time": { "type": "string", "title": "End Time", "default": "" },
@@ -2271,6 +2295,7 @@
 						"title": "Email"
 					},
 					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
 					"shift_date": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Shift Date"
@@ -2287,7 +2312,8 @@
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"tracking_token": { "type": "string", "title": "Tracking Token" },
 					"status": { "type": "string", "title": "Status" },
-					"job_id": { "type": "string", "title": "Job Id" }
+					"job_id": { "type": "string", "title": "Job Id" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" }
 				},
 				"type": "object",
 				"required": ["tracking_token", "status", "job_id"],

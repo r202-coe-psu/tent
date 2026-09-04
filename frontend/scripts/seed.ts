@@ -2035,10 +2035,10 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
  * `useTodayAttendance`) the moment the seed finishes.
  *
  * Quota reconciliation (job 1, "ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC",
- * quota 6): 3 volunteers already hold an accepted slot (v1 standby, v2
- * checked_in, v3 completed → `slots_confirmed = 3`), 1 volunteer holds an
+ * quota 6): 2 volunteers currently hold an accepted slot (v1 standby, v2
+ * checked_in; v3 completed is historical), 1 volunteer holds an
  * outstanding dispatch offer (v4, `dispatch_status: 'dispatched'` →
- * `slots_dispatched = 1`), leaving `slots_remaining = 2` — `3 + 1 + 2 = 6 =
+ * `slots_dispatched = 1`), leaving `slots_remaining = 3` — `2 + 1 + 3 = 6 =
  * quota`, satisfying `quota.ts#assertQuotaInvariant`. Jobs 2/3 seed no
  * assignments/applications, so their default `makeJob` slots
  * (`0 confirmed + 0 dispatched + quota remaining`) already satisfy the
@@ -2214,9 +2214,9 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	// job1: `open` + urgent, quota reconciled against the 4 shift_assignments
 	// below (see the docblock invariant walkthrough above).
 	job1.status = 'open';
-	job1.slots_confirmed = 3;
+	job1.slots_confirmed = 2;
 	job1.slots_dispatched = 1;
-	job1.slots_remaining = 2;
+	job1.slots_remaining = 3;
 	// job2: `open` staff-capable
 	job2.status = 'open';
 	// job3: `paused` — temporarily not accepting, quota still fully unclaimed.
@@ -2323,6 +2323,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	// attendance tab show non-zero counts immediately after seeding.
 	const a1Input: ShiftAssignmentInput = {
 		job_id: job1._id,
+		shift_id: `js-${today}-a`,
 		volunteer_id: v1._id,
 		date: today,
 		shift: 'morning',
@@ -2331,6 +2332,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	};
 	const a2Input: ShiftAssignmentInput = {
 		job_id: job1._id,
+		shift_id: `js-${today}-a`,
 		volunteer_id: v2._id,
 		date: today,
 		shift: 'morning',
@@ -2339,6 +2341,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	};
 	const a3Input: ShiftAssignmentInput = {
 		job_id: job1._id,
+		shift_id: `js-${today}-b`,
 		volunteer_id: v3._id,
 		date: today,
 		shift: 'night',
@@ -2347,6 +2350,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	};
 	const a4Input: ShiftAssignmentInput = {
 		job_id: job1._id,
+		shift_id: `js-${today}-b`,
 		volunteer_id: v4._id,
 		date: today,
 		shift: 'afternoon',
@@ -2391,7 +2395,12 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 			skills: v1.skills,
 			national_id: v1.national_id ?? null
 		},
-		selected_shift: { date: today, start_time: '08:00', end_time: '16:00' },
+		selected_shift: {
+			shift_id: `js-${today}-a`,
+			date: today,
+			start_time: '08:00',
+			end_time: '16:00'
+		},
 		tracking_token: ulid()
 	};
 	const confirmedApplication = makeJobApplication(confirmedApplicationInput, ctx, 'confirmed');
@@ -2413,7 +2422,12 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 			skills: v5.skills,
 			national_id: v5.national_id ?? null
 		},
-		selected_shift: { date: today, start_time: '08:00', end_time: '16:00' },
+		selected_shift: {
+			shift_id: `js-${today}-a`,
+			date: today,
+			start_time: '08:00',
+			end_time: '16:00'
+		},
 		tracking_token: ulid()
 	};
 	const pendingStatus = initialStatusForSkills(v5.skills, {

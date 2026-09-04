@@ -13,8 +13,19 @@ Action = Literal["upsert", "delete", "ignore"]
 
 #: Job statuses a member of the public may see on the board. ``draft`` never leaves the
 #: shelter, and closed/cancelled postings are pulled rather than shown greyed out —
-#: schema.md §2.17 plus CR-092 screen 1, which filters on เปิดรับ / ใกล้เต็ม only.
-PUBLIC_JOB_STATUSES = frozenset({"open", "almost_full", "full"})
+#: schema.md §2.17 plus CR-092 screen 1, which filters on เปิดรับ only. The legacy
+#: ``almost_full`` status was removed (owner decision 2026-09-04); ``_job_status``
+#: normalises it to ``open`` so a not-yet-rewritten CouchDB doc still reaches the board.
+PUBLIC_JOB_STATUSES = frozenset({"open", "full"})
+
+#: Statuses that no longer exist, mapped to what they mean now.
+_LEGACY_STATUS_ALIASES = {"almost_full": "open"}
+
+
+def _job_status(doc: dict[str, Any]) -> str:
+    raw = doc.get("status")
+    status = raw if isinstance(raw, str) else ""
+    return _LEGACY_STATUS_ALIASES.get(status, status)
 
 
 def _updated_at(doc: dict[str, Any]) -> datetime.datetime:
@@ -37,7 +48,32 @@ def _int(value: Any, default: int = 0) -> int:
         return default
 
 
-def project_job(doc: dict[str, Any], *, shelter_code: str) -> tuple[Action, dict[str, Any]]:
+def _project_shift(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    shift_id = raw.get("shift_id") or raw.get("id")
+    if not shift_id:
+        return None
+    quota = _int(raw.get("quota"))
+    confirmed = _int(raw.get("slots_confirmed"))
+    dispatched = _int(raw.get("slots_dispatched"))
+    return {
+        "shift_id": str(shift_id),
+        "date": str(raw.get("date") or ""),
+        "end_date": str(raw["end_date"]) if raw.get("end_date") else None,
+        "start_time": str(raw.get("start_time") or ""),
+        "end_time": str(raw.get("end_time") or ""),
+        "station": raw.get("station"),
+        "quota": quota,
+        "slots_confirmed": confirmed,
+        "slots_dispatched": dispatched,
+        "slots_remaining": max(quota - confirmed - dispatched, 0),
+    }
+
+
+def project_job(
+    doc: dict[str, Any], *, shelter_code: str
+) -> tuple[Action, dict[str, Any]]:
     """``job:{ulid}`` → ``public_jobs`` (schema.md §2.17, CR-092 FR-VOL-06)."""
     doc_id = doc.get("_id")
     if not doc_id:
@@ -47,7 +83,7 @@ def project_job(doc: dict[str, Any], *, shelter_code: str) -> tuple[Action, dict
     if doc.get("type") != "job":
         return "ignore", {}
 
-    status = str(doc.get("status") or "open")
+    status = _job_status(doc) or "open"
     # Withdrawing a posting has to remove the row, not stop updating it: an upsert-only
     # projector would leave the last open snapshot on the board forever.
     if status not in PUBLIC_JOB_STATUSES:
@@ -62,6 +98,16 @@ def project_job(doc: dict[str, Any], *, shelter_code: str) -> tuple[Action, dict
     remaining = max(quota - confirmed - dispatched, 0)
 
     template = doc.get("shift_template") or {}
+    shifts = [
+        projected
+        for raw in (doc.get("shifts") or [])
+        if (projected := _project_shift(raw))
+    ]
+    if shifts:
+        quota = sum(shift["quota"] for shift in shifts)
+        confirmed = sum(shift["slots_confirmed"] for shift in shifts)
+        dispatched = sum(shift["slots_dispatched"] for shift in shifts)
+        remaining = max(quota - confirmed - dispatched, 0)
     payload = {
         "_id": doc_id,
         "shelter_code": shelter_code,
@@ -79,6 +125,7 @@ def project_job(doc: dict[str, Any], *, shelter_code: str) -> tuple[Action, dict
             "end_time": str(template.get("end_time") or ""),
             "days": [str(d) for d in (template.get("days") or [])],
         },
+        "shifts": shifts,
         "auto_accept": bool(doc.get("auto_accept", False)),
         "status": status,
         "updated_at": _updated_at(doc),
@@ -116,6 +163,9 @@ def project_job_application(
         "_id": doc_id,
         "shelter_code": shelter_code,
         "job_id": str(doc.get("job_id") or ""),
+        "volunteer_id": doc.get("volunteer_id"),
+        "shift_id": doc.get("shift_id")
+        or (shift.get("shift_id") if isinstance(shift, dict) else None),
         "tracking_token_hash": str(token_hash),
         "phone_hash": applicant.get("phone_hash") or phone_hash(phone),
         "applicant": {
@@ -125,6 +175,8 @@ def project_job_application(
             "skills": [str(s) for s in (applicant.get("skills") or [])],
         },
         "selected_shift": {
+            "shift_id": doc.get("shift_id")
+            or (shift.get("shift_id") if isinstance(shift, dict) else None),
             "date": str(shift.get("date") or ""),
             "start_time": str(shift.get("start_time") or ""),
             "end_time": str(shift.get("end_time") or ""),

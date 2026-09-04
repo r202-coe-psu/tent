@@ -1,6 +1,5 @@
 /**
- * Shift assignment domain schema — CR-094 §3.2 (schema.md §2.9, `shift_assignment`
- * schema_v 2 → 3).
+ * Shift assignment domain schema — CR-107 (`shift_assignment` schema_v 3 → 4).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -72,9 +71,11 @@ export const SHIFT_WINDOWS: Readonly<
 
 export interface ShiftAssignment extends BaseDoc {
 	type: 'shift_assignment';
-	schema_v: 3;
+	schema_v: 3 | 4;
 	/** F12 — `job:{ulid}`, or the migration sentinel `'legacy'` (schema.md §2.9 v1 → v2 migration note). */
 	job_id: string;
+	/** Stable identity of the concrete row in job.shifts[]. Optional only on legacy v3 rows. */
+	shift_id?: string;
 	volunteer_id: string;
 	date: string;
 	shift: ShiftKind;
@@ -102,12 +103,13 @@ export const shiftAssignmentSchema = z
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
 		type: z.literal('shift_assignment'),
-		schema_v: z.literal(3),
+		schema_v: z.union([z.literal(3), z.literal(4)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
 		created_by: z.string().min(1),
 		job_id: jobIdSchema,
+		shift_id: z.string().min(1).optional(),
 		volunteer_id: z.string().startsWith('volunteer:'),
 		date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 		shift: shiftKindSchema,
@@ -140,6 +142,7 @@ export const isShiftAssignment = (d: unknown): d is ShiftAssignment =>
 
 export const shiftAssignmentInputSchema = z.object({
 	job_id: z.string().startsWith('job:', 'กรุณาเลือกงาน'),
+	shift_id: z.string().min(1, 'กรุณาเลือกกะ'),
 	volunteer_id: z.string().startsWith('volunteer:', 'กรุณาเลือกอาสาสมัคร'),
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD'),
 	shift: shiftKindSchema,
@@ -177,9 +180,10 @@ export function makeShiftAssignment(
 	const check_in_method = fields.check_in_method ?? 'qr';
 	const doc = makeDoc(
 		'shift_assignment',
-		3,
+		4,
 		{
 			job_id: d.job_id,
+			shift_id: d.shift_id,
 			volunteer_id: d.volunteer_id,
 			date: d.date,
 			shift: d.shift,

@@ -206,7 +206,7 @@ describe('isJobApplicable', () => {
 
 	it('accepts a job that still has a seat', () => {
 		expect(isJobApplicable(job())).toBe(true);
-		expect(isJobApplicable(job({ status: 'almost_full', slots_remaining: 1 }))).toBe(true);
+		expect(isJobApplicable(job({ status: 'open', slots_remaining: 1 }))).toBe(true);
 	});
 
 	it('refuses a job with no seat left, whatever its status still says', () => {

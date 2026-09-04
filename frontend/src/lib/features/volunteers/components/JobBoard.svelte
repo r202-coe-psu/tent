@@ -225,8 +225,6 @@
 
 				if (job.status === 'open') {
 					tags.push({ label: 'เปิดรับสมัคร', variant: 'success' });
-				} else if (job.status === 'almost_full') {
-					tags.push({ label: 'ใกล้เต็ม', variant: 'warning' });
 				}
 
 				if (job.skills_required) {

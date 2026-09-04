@@ -1117,6 +1117,50 @@ export interface components {
 			 */
 			updated_at: string;
 		};
+		/** PublicJobShift */
+		PublicJobShift: {
+			/** Shift Id */
+			shift_id: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/** End Date */
+			end_date?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+			/**
+			 * Quota
+			 * @default 0
+			 */
+			quota: number;
+			/**
+			 * Slots Confirmed
+			 * @default 0
+			 */
+			slots_confirmed: number;
+			/**
+			 * Slots Dispatched
+			 * @default 0
+			 */
+			slots_dispatched: number;
+			/**
+			 * Slots Remaining
+			 * @default 0
+			 */
+			slots_remaining: number;
+		};
 		/**
 		 * PublicJobItem
 		 * @description One card on the board (CR-092 screen 1).
@@ -1144,6 +1188,8 @@ export interface components {
 			/** Skills Required */
 			skills_required?: string[];
 			shift_template?: components['schemas']['JobShiftTemplate'];
+			/** Shifts */
+			shifts?: components['schemas']['PublicJobShift'][];
 			/** Quota */
 			quota: number;
 			/** Slots Confirmed */
@@ -1191,6 +1237,8 @@ export interface components {
 			assignment_id: string;
 			/** Job Id */
 			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
 			/**
 			 * Job Title
 			 * @default
@@ -1496,6 +1544,8 @@ export interface components {
 		};
 		/** TicketShift */
 		TicketShift: {
+			/** Shift Id */
+			shift_id?: string | null;
 			/**
 			 * Date
 			 * @default
@@ -1594,6 +1644,8 @@ export interface components {
 			email?: string | null;
 			/** Skills */
 			skills?: string[];
+			/** Shift Id */
+			shift_id?: string | null;
 			/** Shift Date */
 			shift_date?: string | null;
 			/** Station */
@@ -1612,6 +1664,8 @@ export interface components {
 			status: string;
 			/** Job Id */
 			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
 		};
 		/** VolunteerCancelResponse */
 		VolunteerCancelResponse: {

@@ -272,6 +272,7 @@
 			try {
 				await assignMutation.mutateAsync({
 					job_id: job._id,
+					shift_id: shift.id,
 					volunteer_id: candidate.volunteer._id,
 					date: shift.date,
 					shift: kind,

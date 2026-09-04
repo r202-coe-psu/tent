@@ -65,10 +65,10 @@
 
 	function matchesStatus(job: PublicJob, filter: StatusFilter): boolean {
 		if (filter === 'open') return isJobApplicable(job);
-		// "ใกล้เต็ม" is the projection's own status plus the last-few-seats case, so a job
-		// the worker has not re-flagged yet still surfaces to someone hunting for one.
+		// "ใกล้เต็ม" is a purely seat-derived view, not a stored status: the
+		// `almost_full` job status was removed (owner decision 2026-09-04).
 		if (filter === 'near_full') {
-			return isJobApplicable(job) && (job.status === 'almost_full' || job.slots_remaining <= 2);
+			return isJobApplicable(job) && job.slots_remaining <= 2;
 		}
 		if (filter === 'controlled') return job.tier === 'controlled' || job.requires_review;
 		return true;

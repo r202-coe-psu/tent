@@ -29,7 +29,7 @@ import type { JobApplicationFilter, JobApplicationRepository } from './volunteer
  * exposes forward transitions), so it is deliberately avoided.
  */
 /** Job statuses that still accept new applications (CR-094 FR-VOL-09.3). */
-const ACCEPTING_APPLICATION_STATUSES: ReadonlySet<string> = new Set(['open', 'almost_full']);
+const ACCEPTING_APPLICATION_STATUSES: ReadonlySet<string> = new Set(['open']);
 
 export class JobApplicationRemoteRepository implements JobApplicationRepository {
 	private readonly repo: Repository;

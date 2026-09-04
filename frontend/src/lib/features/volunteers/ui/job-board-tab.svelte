@@ -14,13 +14,14 @@
 	import JobFilterChips, { type JobBoardStatusFilter } from './job-filter-chips.svelte';
 	import JobCard from './job-card.svelte';
 	import JobFormDialog from './job-form-dialog.svelte';
-	import { useJobs, useJobApplications } from '../application/queries';
+	import { useJobs, useJobApplications, useShiftAssignments } from '../application/queries';
 	import type { FillBucket } from '../domain/capacity';
 	import { shiftFillRate, bucketFillRate, jobShiftCapacities } from '../domain/capacity';
 	import type { Job } from '../domain/job.schema';
 
 	const jobsQuery = useJobs();
 	const applicationsQuery = useJobApplications();
+	const assignmentsQuery = useShiftAssignments();
 
 	const jobs = $derived(jobsQuery.data ?? []);
 
@@ -50,7 +51,10 @@
 			// — the KPI counts shifts, so the board must not hide a job whose
 			// shortage lives in only one of its shifts.
 			list = list.filter((j) =>
-				jobShiftCapacities(j).some((c) => bucketFillRate(shiftFillRate(c)) === kpiFilter)
+				jobShiftCapacities(
+					j,
+					assignmentsQuery.isPending ? undefined : (assignmentsQuery.data ?? [])
+				).some((c) => bucketFillRate(shiftFillRate(c)) === kpiFilter)
 			);
 		}
 		return list;
@@ -80,7 +84,12 @@
 			{/each}
 		</div>
 	{:else}
-		<JobCapacitySummary {jobs} selected={kpiFilter} onselect={(b) => (kpiFilter = b)} />
+		<JobCapacitySummary
+			{jobs}
+			assignments={assignmentsQuery.isPending ? undefined : (assignmentsQuery.data ?? [])}
+			selected={kpiFilter}
+			onselect={(b) => (kpiFilter = b)}
+		/>
 	{/if}
 
 	<div class="flex flex-wrap items-center justify-between gap-3">

@@ -6,9 +6,8 @@
 	 * Same option set AND same selected colours as the "สถานะการรับสมัคร
 	 * (LIFECYCLE STATUS)" control in `job-form-dialog.svelte` — one status must
 	 * not look different depending on which screen you change it from. Both
-	 * lists are the editable subset of `jobStatus`: `almost_full` is only ever
-	 * produced by `quota.ts#deriveJobStatus` from the fill level, and
-	 * `cancelled` is terminal.
+	 * lists are the editable subset of `jobStatus`; only `cancelled` is left
+	 * out, because it is terminal.
 	 *
 	 * `selectedClass` is written out in full per option — Tailwind scans source
 	 * text, so a class name assembled at runtime would never be generated.
@@ -58,7 +57,7 @@
 		{
 			value: 'full',
 			label: 'เต็มโควตา',
-			hint: 'ปิดรับเพราะครบจำนวน — ระบบคำนวณให้อัตโนมัติจากยอดที่รับไปแล้ว',
+			hint: 'ปิดรับเพราะครบจำนวน — เลือกเองได้ และระบบจะตั้งให้เองเมื่อโควตาถูกจองครบ',
 			selectedClass: 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
 		},
 		{
@@ -71,7 +70,6 @@
 
 	/** Statuses this control cannot select — shown as the current state instead. */
 	const DERIVED_STATUS_HINT: Partial<Record<JobStatus, string>> = {
-		almost_full: 'สถานะปัจจุบัน "ใกล้เต็ม" — ระบบคำนวณให้อัตโนมัติจากยอดที่รับไปแล้ว',
 		cancelled: 'งานนี้ถูกยกเลิกแล้ว'
 	};
 
@@ -112,7 +110,7 @@
 	{/if}
 
 	<p class="mt-2 text-[11px] leading-relaxed break-words text-muted-foreground">
-		"เต็มโควตา" และ "ใกล้เต็ม" ปกติระบบคำนวณให้อัตโนมัติจากโควตาที่รับไปแล้ว —
-		ค่าที่เลือกที่นี่จะถูกคำนวณใหม่เมื่อมีการมอบหมาย/ตอบรับ/ปฏิเสธงานครั้งถัดไป
+		ค่าที่เลือกที่นี่จะถูกบันทึกตามที่เลือก — ระบบจะปรับเป็น "เต็มโควตา"
+		ให้เองก็ต่อเมื่อโควตาถูกจองครบจริง ในการมอบหมาย/ตอบรับครั้งถัดไป
 	</p>
 </div>

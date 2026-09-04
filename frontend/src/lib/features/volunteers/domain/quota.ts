@@ -172,36 +172,20 @@ export function applyDecline(job: JobQuota, count = 1): JobQuota {
 // F7 — job status derivation (CR-094 FR-VOL-13.2 / FR-VOL-09.3 "เต็มโควตา" filter)
 // ---------------------------------------------------------------------------
 
-/**
- * Share of `quota` that may still be unfilled while a job counts as "almost
- * full". Derived from `slots_remaining`, which already nets out both
- * `slots_confirmed` and `slots_dispatched` — a job with 9 of 10 slots offered
- * out and awaiting acceptance is not `open` in any useful sense.
- *
- * The `Math.max(1, …)` floor keeps `almost_full` reachable at every quota
- * size: with a pure 20% band, a `quota: 3` job jumps straight from `open` to
- * `full` and the "ใกล้ครบเป้า" filter never matches it.
- *
- * PENDING OWNER SIGN-OFF: neither CR-094 nor schema.md specifies this rule.
- * Single source of truth for both back-office and the public board.
- */
-export const ALMOST_FULL_REMAINING_RATIO = 0.2;
-
-/** Largest `slots_remaining` that still counts as `almost_full` for a quota. */
-export function almostFullCutoff(quota: number): number {
-	return Math.max(1, Math.ceil(quota * ALMOST_FULL_REMAINING_RATIO));
-}
-
 /** Statuses `deriveJobStatus` is allowed to move a job between — everything else is manual/terminal. */
-const AUTO_MANAGED_STATUSES: ReadonlySet<JobStatus> = new Set(['open', 'almost_full', 'full']);
+const AUTO_MANAGED_STATUSES: ReadonlySet<JobStatus> = new Set(['open', 'full']);
 
 /**
  * Pure `job.status` derivation from the current quota fill level (CR-094
- * FR-VOL-13.2 — nothing else ever moves a job `open -> almost_full -> full`,
- * so without this a fully-staffed job stays `open` forever and keeps
- * appearing on the public board). Never touches `draft`/`paused`/`closed`/
- * `cancelled` — those are manual/terminal states outside the automatic quota
- * flow; only `open`/`almost_full`/`full` are managed by this function.
+ * FR-VOL-13.2 — nothing else ever moves a job `open -> full`, so without this a
+ * fully-staffed job stays `open` forever and keeps appearing on the public
+ * board). Never touches `draft`/`paused`/`closed`/`cancelled` — those are
+ * manual/terminal states outside the automatic quota flow; only `open`/`full`
+ * are managed by this function.
+ *
+ * Only the quota transitions (`dispatch`/`accept`/`decline`/`release`) run this.
+ * A plain job edit keeps whatever `status` the SM chose — a manual pick must not
+ * be silently overwritten on the very same write (owner decision 2026-09-04).
  */
 export function deriveJobStatus(
 	job: Pick<JobQuota, 'quota' | 'slots_confirmed' | 'slots_dispatched' | 'slots_remaining'> & {
@@ -209,7 +193,5 @@ export function deriveJobStatus(
 	}
 ): JobStatus {
 	if (!AUTO_MANAGED_STATUSES.has(job.status)) return job.status;
-	if (job.slots_remaining <= 0) return 'full';
-	if (job.slots_remaining <= almostFullCutoff(job.quota)) return 'almost_full';
-	return 'open';
+	return job.slots_remaining <= 0 ? 'full' : 'open';
 }

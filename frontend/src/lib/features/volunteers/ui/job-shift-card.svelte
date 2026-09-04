@@ -11,7 +11,8 @@
 	 * remaining`) — an offer nobody has accepted yet is not staffing, so it
 	 * reads as a gap here, exactly like an untouched slot. Note the documented approximation in that function: per-shift
 	 * TOTALS reconcile with the job doc, but which shift holds a given seat is a
-	 * best guess until `shift_assignment` carries a `job_shift_id`.
+	 * exact roster identity comes from `shift_assignment.shift_id`; the quota split
+	 * remains a legacy job-level projection until per-shift counters are projected.
 	 */
 	import X from '@lucide/svelte/icons/x';
 	import Pencil from '@lucide/svelte/icons/pencil';

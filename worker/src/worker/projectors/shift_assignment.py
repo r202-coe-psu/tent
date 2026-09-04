@@ -79,6 +79,7 @@ def project_shift_assignment(
         "_id": doc_id,
         "shelter_code": shelter_code,
         "job_id": str(doc.get("job_id") or ""),
+        "shift_id": str(doc.get("shift_id") or ""),
         "volunteer_id": str(doc.get("volunteer_id") or ""),
         "phone_hash": hashed,
         "response_code_hash": code_hash,

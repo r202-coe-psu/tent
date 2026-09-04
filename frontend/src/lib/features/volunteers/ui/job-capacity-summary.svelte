@@ -1,17 +1,13 @@
 <script lang="ts">
 	/**
 	 * KPI summary bar (CR-094 FR-VOL-09.4): overall shift booking rate + counts by
-	 * fill bucket. Computed at SHIFT level via `domain/capacity.ts` — each `job`
-	 * carries exactly one `shift_template`/quota triple (schema.md §2.17), so one
-	 * job IS one shift-capacity bucket here (`key: job._id`); this is "shift
-	 * level", not a job-status tally, because it weighs by each job's own
-	 * quota/confirmed counts (`overallBookingRate`/`bucketCounts`) rather than
-	 * counting jobs as equal units.
+	 * fill bucket. Computed at SHIFT level via `domain/capacity.ts`; when the
+	 * assignment query is ready, each bucket uses the exact `job_id + shift_id`
+	 * roster rather than allocating the job total across shifts.
 	 *
-	 * Draft/closed/cancelled jobs are excluded from the capacity buckets — an
-	 * unpublished or terminated job has no meaningful "shortage", so counting it
-	 * would misrepresent live capacity. (Not specified by CR-094/schema.md —
-	 * documented judgment call, flagged for owner review.)
+	 * Paused, draft, closed and cancelled jobs are excluded from the capacity
+	 * buckets — jobs that are not currently being filled have no meaningful
+	 * "shortage", so counting them would misrepresent live capacity.
 	 *
 	 * Clicking a bucket card filters the job board below via `onselect`.
 	 */
@@ -22,28 +18,30 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import {
 		bucketCounts,
+		isCapacityTrackedJobStatus,
 		jobShiftCapacities,
 		overallBookingRate,
 		type FillBucket
 	} from '../domain/capacity';
 	import type { Job } from '../domain/job.schema';
+	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 
 	let {
 		jobs,
+		assignments,
 		selected = null,
 		onselect
 	}: {
 		jobs: readonly Job[];
+		assignments?: readonly ShiftAssignment[];
 		selected?: FillBucket | null;
 		onselect: (bucket: FillBucket | null) => void;
 	} = $props();
 
-	/** Only jobs actually open for capacity tracking (see file doc above). */
-	const capacityJobs = $derived(
-		jobs.filter((j) => j.status !== 'draft' && j.status !== 'closed' && j.status !== 'cancelled')
-	);
+	/** Only jobs currently accepting or reporting capacity (paused jobs are excluded). */
+	const capacityJobs = $derived(jobs.filter((j) => isCapacityTrackedJobStatus(j.status)));
 	// One bucket per sub-shift — FR-VOL-09.4 counts "กะ", not jobs.
-	const capacities = $derived(capacityJobs.flatMap((j) => jobShiftCapacities(j)));
+	const capacities = $derived(capacityJobs.flatMap((j) => jobShiftCapacities(j, assignments)));
 	const overallRate = $derived(overallBookingRate(capacities));
 	const counts = $derived(bucketCounts(capacities));
 

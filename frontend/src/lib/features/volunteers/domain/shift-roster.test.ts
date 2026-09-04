@@ -5,6 +5,7 @@ import type { ShiftAssignment, ShiftAssignmentStatus } from './shift-assignment.
 import type { Volunteer } from './volunteer.schema';
 
 const SHIFT = {
+	id: 'shift:morning',
 	date: '2026-06-13',
 	end_date: '2026-06-13',
 	start_time: '08:00',
@@ -107,8 +108,8 @@ describe('shiftRoster', () => {
 		}
 	);
 
-	it.each<ShiftAssignmentStatus>(['assigned', 'standby', 'checked_in', 'completed'])(
-		'includes %s assignments — they still hold or held a seat',
+	it.each<ShiftAssignmentStatus>(['assigned', 'standby', 'checked_in'])(
+		'includes %s assignments — they currently hold a seat',
 		(status) => {
 			const roster = shiftRoster(
 				SHIFT,
@@ -119,6 +120,42 @@ describe('shiftRoster', () => {
 			expect(roster).toHaveLength(1);
 		}
 	);
+
+	it('excludes completed assignments from the current roster', () => {
+		const roster = shiftRoster(
+			SHIFT,
+			'job:A',
+			[assignment({ _id: 'a:1', status: 'completed' })],
+			volunteersById([])
+		);
+		expect(roster).toEqual([]);
+	});
+
+	it('uses shift_id when two sub-shifts share the same duty window', () => {
+		const roster = shiftRoster(
+			{ ...SHIFT, shift_id: 'shift:morning' },
+			'job:A',
+			[
+				assignment({ _id: 'a:1', shift_id: 'shift:morning' }),
+				assignment({ _id: 'a:2', shift_id: 'shift:afternoon', volunteer_id: 'volunteer:2' })
+			],
+			volunteersById([])
+		);
+		expect(roster.map((entry) => entry.assignmentId)).toEqual(['a:1']);
+	});
+
+	it('deduplicates active assignment rows by volunteer', () => {
+		const roster = shiftRoster(
+			{ ...SHIFT, shift_id: 'shift:morning' },
+			'job:A',
+			[
+				assignment({ _id: 'a:1', shift_id: 'shift:morning' }),
+				assignment({ _id: 'a:2', shift_id: 'shift:morning' })
+			],
+			volunteersById([])
+		);
+		expect(roster).toHaveLength(1);
+	});
 
 	it('falls back to a placeholder name when the volunteer cannot be found', () => {
 		const roster = shiftRoster(SHIFT, 'job:A', [assignment({ _id: 'a:1' })], volunteersById([]));

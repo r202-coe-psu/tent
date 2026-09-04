@@ -7,7 +7,6 @@ import {
 	applyDecline,
 	applyRelease,
 	deriveJobStatus,
-	almostFullCutoff,
 	QuotaError,
 	type JobQuota
 } from './quota';
@@ -290,55 +289,15 @@ describe('deriveJobStatus (F7)', () => {
 		};
 	}
 
-	it('stays open while more than the almost_full cutoff is still unfilled', () => {
-		// quota 10 -> cutoff 2; 3 remaining is one clear of it
+	it('stays open while any slot is still unfilled — there is no near-full band', () => {
 		expect(
-			deriveJobStatus(job({ slots_confirmed: 7, slots_dispatched: 0, slots_remaining: 3 }))
+			deriveJobStatus(job({ slots_confirmed: 9, slots_dispatched: 0, slots_remaining: 1 }))
 		).toBe('open');
 	});
 
-	it('becomes almost_full exactly at the cutoff (quota 10 -> 2 remaining)', () => {
-		expect(almostFullCutoff(10)).toBe(2);
-		expect(
-			deriveJobStatus(job({ slots_confirmed: 8, slots_dispatched: 0, slots_remaining: 2 }))
-		).toBe('almost_full');
-	});
-
-	it('counts dispatched-but-unaccepted slots toward the cutoff', () => {
-		// 9 of 10 offered out and awaiting acceptance is not "open" in any useful sense
+	it('stays open with only dispatched-but-unaccepted slots left over', () => {
 		expect(
 			deriveJobStatus(job({ slots_confirmed: 0, slots_dispatched: 9, slots_remaining: 1 }))
-		).toBe('almost_full');
-	});
-
-	it.each([
-		[2, 1],
-		[3, 1],
-		[4, 1],
-		[5, 1],
-		[10, 2]
-	])('keeps almost_full reachable at quota %i (cutoff %i)', (quota, cutoff) => {
-		expect(almostFullCutoff(quota)).toBe(cutoff);
-		expect(
-			deriveJobStatus(
-				job({
-					quota,
-					slots_confirmed: quota - cutoff,
-					slots_dispatched: 0,
-					slots_remaining: cutoff
-				})
-			)
-		).toBe('almost_full');
-		// one slot earlier is still open, so the band is genuinely entered, not skipped
-		expect(
-			deriveJobStatus(
-				job({
-					quota,
-					slots_confirmed: quota - cutoff - 1,
-					slots_dispatched: 0,
-					slots_remaining: cutoff + 1
-				})
-			)
 		).toBe('open');
 	});
 
@@ -366,13 +325,7 @@ describe('deriveJobStatus (F7)', () => {
 		expect(deriveJobStatus(job({ status: 'cancelled', slots_remaining: 0 }))).toBe('cancelled');
 	});
 
-	it('can move back from almost_full to open after a decline frees up slots', () => {
-		expect(
-			deriveJobStatus(job({ status: 'almost_full', slots_confirmed: 2, slots_remaining: 8 }))
-		).toBe('open');
-	});
-
-	it('can move back from full to open/almost_full after a decline frees a remaining slot', () => {
+	it('can move back from full to open after a decline frees a remaining slot', () => {
 		expect(deriveJobStatus(job({ status: 'full', slots_confirmed: 2, slots_remaining: 8 }))).toBe(
 			'open'
 		);

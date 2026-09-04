@@ -22,10 +22,15 @@ from tent_model.volunteer_application_buffer import (
 )
 from tent_model.volunteer_job_slot import (
     SlotResult,
+    VolunteerJobShiftSlot,
     VolunteerJobSlot,
+    accept_dispatched_shift_slot,
     accept_dispatched_slot,
+    decline_dispatched_shift_slot,
     decline_dispatched_slot,
+    release_job_shift_slot,
     release_job_slot,
+    reserve_job_shift_slot,
     reserve_job_slot,
 )
 from tent_model.volunteer_profile_update_buffer import (
@@ -42,6 +47,7 @@ from .schemas import (
     JobShiftTemplate,
     PublicJobItem,
     PublicJobListResponse,
+    PublicJobShift,
     ScheduleShift,
     TicketFindItem,
     TicketFindResponse,
@@ -61,9 +67,9 @@ logger = logging.getLogger(__name__)
 
 #: Jobs a member of the public may see and apply to. Mirrors the projector's
 #: ``PUBLIC_JOB_STATUSES`` — kept as its own constant because ``full`` belongs on the
-#: board (greyed out, "ใกล้เต็ม" / "เต็ม") but must not accept an application.
-_BOARD_STATUSES = frozenset({"open", "almost_full", "full"})
-_APPLICABLE_STATUSES = frozenset({"open", "almost_full"})
+#: board (greyed out, "เต็ม") but must not accept an application.
+_BOARD_STATUSES = frozenset({"open", "full"})
+_APPLICABLE_STATUSES = frozenset({"open"})
 
 #: Skills that need a manager to check a licence before the ticket is worth anything
 #: (FR-VOL-02.4). Deliberately a floor, not the whole policy: Master Data
@@ -196,6 +202,56 @@ def _ticket_url(token: str) -> str:
     return f"/volunteer/ticket/{token}"
 
 
+def _select_concrete_shift(job: PublicJob, payload: VolunteerApplyRequest):
+    """Resolve the request to one stable shift and never infer from time twice.
+
+    The date fallback exists only for the current BFF. Once a concrete job has shifts,
+    ambiguous dates are rejected and a supplied id must be an actual child of this job.
+    """
+    if not job.shifts:
+        return None
+    if payload.shift_id:
+        for shift in job.shifts:
+            if shift.shift_id == payload.shift_id:
+                return shift
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"success": False, "error": "SHIFT_NOT_FOUND"},
+        )
+    candidates = [s for s in job.shifts if payload.shift_date and s.date == payload.shift_date]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={
+            "success": False,
+            "error": "SHIFT_ID_REQUIRED" if not candidates else "SHIFT_DATE_AMBIGUOUS",
+        },
+    )
+
+
+def _application_shift_id(
+    application: PublicJobApplication | VolunteerApplicationBuffer,
+) -> str | None:
+    return application.shift_id or application.selected_shift.shift_id
+
+
+async def _reserve_or_release(
+    *, job_id: str, shift_id: str | None, reserve: bool, now: datetime
+) -> SlotResult | bool:
+    if shift_id:
+        return (
+            await reserve_job_shift_slot(job_id=job_id, shift_id=shift_id, now=now)
+            if reserve
+            else await release_job_shift_slot(job_id=job_id, shift_id=shift_id, now=now)
+        )
+    return (
+        await reserve_job_slot(job_id=job_id, now=now)
+        if reserve
+        else await release_job_slot(job_id=job_id, now=now)
+    )
+
+
 class VolunteersUseCase:
     async def list_jobs(
         self, *, shelter_code: str | None = None, skill: str | None = None
@@ -215,6 +271,10 @@ class VolunteersUseCase:
         # keep advertising slots that public applications have already taken.
         slots = await VolunteerJobSlot.find({"_id": {"$in": [job.id for job in jobs]}}).to_list()
         by_id = {slot.id: slot for slot in slots}
+        shift_slot_rows = await VolunteerJobShiftSlot.find(
+            {"job_id": {"$in": [job.id for job in jobs]}}
+        ).to_list()
+        by_shift_id = {(slot.job_id, slot.shift_id): slot for slot in shift_slot_rows}
 
         items: list[PublicJobItem] = []
         for job in jobs:
@@ -222,6 +282,34 @@ class VolunteersUseCase:
             confirmed = slot.confirmed_qty if slot else job.slots_confirmed
             dispatched = slot.dispatched_qty if slot else job.slots_dispatched
             quota = slot.quota if slot else job.quota
+            public_shifts: list[PublicJobShift] = []
+            if job.shifts:
+                for shift in job.shifts:
+                    shift_slot = by_shift_id.get((job.id, shift.shift_id))
+                    shift_quota = shift_slot.quota if shift_slot else shift.quota
+                    shift_confirmed = (
+                        shift_slot.confirmed_qty if shift_slot else shift.slots_confirmed
+                    )
+                    shift_dispatched = (
+                        shift_slot.dispatched_qty if shift_slot else shift.slots_dispatched
+                    )
+                    public_shifts.append(
+                        PublicJobShift(
+                            **shift.model_dump(
+                                exclude={"slots_confirmed", "slots_dispatched", "slots_remaining"}
+                            ),
+                            slots_confirmed=shift_confirmed,
+                            slots_dispatched=shift_dispatched,
+                            slots_remaining=max(
+                                shift_quota - shift_confirmed - shift_dispatched, 0
+                            ),
+                            quota=shift_quota,
+                        )
+                    )
+                if public_shifts:
+                    quota = sum(s.quota for s in public_shifts)
+                    confirmed = sum(s.slots_confirmed for s in public_shifts)
+                    dispatched = sum(s.slots_dispatched for s in public_shifts)
             items.append(
                 PublicJobItem(
                     job_id=job.id,
@@ -232,6 +320,7 @@ class VolunteersUseCase:
                     tier=job.tier,
                     skills_required=job.skills_required,
                     shift_template=JobShiftTemplate(**job.shift_template.model_dump()),
+                    shifts=public_shifts,
                     quota=quota,
                     slots_confirmed=confirmed,
                     slots_remaining=max(quota - confirmed - dispatched, 0),
@@ -257,6 +346,7 @@ class VolunteersUseCase:
 
         controlled = await controlled_skills(job.shelter_code)
         needs_review = _needs_review(job, payload.skills, controlled)
+        selected = _select_concrete_shift(job, payload)
 
         now = datetime.now(UTC)
         application_id = f"job_application:{new_ulid()}"
@@ -271,11 +361,17 @@ class VolunteersUseCase:
         # queue of unreviewed applications must not lock the board.
         reserved = False
         if not needs_review:
-            result = await reserve_job_slot(job_id=job_id, now=now)
-            if result is SlotResult.JOB_FULL:
+            result = await _reserve_or_release(
+                job_id=job_id,
+                shift_id=selected.shift_id if selected else None,
+                reserve=True,
+                now=now,
+            )
+            full_result = SlotResult.SHIFT_FULL if selected else SlotResult.JOB_FULL
+            if result is full_result:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail={"success": False, "error": "JOB_FULL"},
+                    detail={"success": False, "error": "SHIFT_FULL" if selected else "JOB_FULL"},
                 )
             if result is SlotResult.NOT_SEEDED:
                 # Fail closed, unlike donations. There the counter guards a quantity and
@@ -289,11 +385,13 @@ class VolunteersUseCase:
                 )
             reserved = True
 
-        template = job.shift_template
+        template = selected or job.shift_template
+        selected_shift_id = selected.shift_id if selected else None
         buffer = VolunteerApplicationBuffer(
             id=application_id,
             shelter_code=job.shelter_code,
             job_id=job_id,
+            shift_id=selected_shift_id,
             volunteer_id=f"volunteer:{new_ulid()}",
             applicant=ApplicantBuffer(
                 first_name=payload.first_name.strip(),
@@ -308,10 +406,13 @@ class VolunteersUseCase:
                 skills=[s.strip() for s in payload.skills if s.strip()],
             ),
             selected_shift=SelectedShiftBuffer(
-                date=payload.shift_date or "",
+                shift_id=selected_shift_id,
+                date=selected.date if selected else (payload.shift_date or ""),
                 start_time=template.start_time,
                 end_time=template.end_time,
-                station=payload.station,
+                station=payload.station
+                if payload.station is not None
+                else getattr(template, "station", None),
             ),
             tracking_token=token,
             tracking_token_hash=token_hash,
@@ -327,20 +428,25 @@ class VolunteersUseCase:
             # request was retried — either way this application does not exist, so give
             # back the slot rather than leaving it held by nothing.
             if reserved:
-                await release_job_slot(job_id=job_id, now=now)
+                await _reserve_or_release(
+                    job_id=job_id, shift_id=selected_shift_id, reserve=False, now=now
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"success": False, "error": "DUPLICATE_APPLICATION"},
             ) from None
         except Exception:
             if reserved:
-                await release_job_slot(job_id=job_id, now=now)
+                await _reserve_or_release(
+                    job_id=job_id, shift_id=selected_shift_id, reserve=False, now=now
+                )
             raise
 
         return VolunteerApplyResponse(
             tracking_token=token,
             status=buffer.status,
             job_id=job_id,
+            shift_id=selected_shift_id,
         )
 
     async def _phone_hash_for(self, *, phone: str | None, token: str | None) -> str | None:
@@ -452,6 +558,9 @@ class VolunteersUseCase:
                 can_cancel=can_cancel,
                 status=ticket_status,
                 job_id=job_id,
+                shift_id=_application_shift_id(projected)
+                if projected
+                else _application_shift_id(buffer),
                 job_title=job.title if job else "",
                 shelter_code=shelter_code,
                 shelter_name=shelter.name if shelter else "",
@@ -512,6 +621,7 @@ class VolunteersUseCase:
                 job_title="",
                 shelter_code=b.shelter_code,
                 shift_date=b.selected_shift.date,
+                shift_id=_application_shift_id(b),
             )
         for a in projected:
             merged[a.id] = TicketFindItem(
@@ -523,6 +633,7 @@ class VolunteersUseCase:
                 job_title="",
                 shelter_code=a.shelter_code,
                 shift_date=a.selected_shift.date,
+                shift_id=_application_shift_id(a),
             )
 
         job_ids = {a.job_id for a in projected} | {b.job_id for b in buffers}
@@ -578,6 +689,7 @@ class VolunteersUseCase:
             ScheduleShift(
                 assignment_id=a.id,
                 job_id=a.job_id,
+                shift_id=a.shift_id or None,
                 job_title=titles.get(a.job_id, ""),
                 shelter_code=a.shelter_code,
                 shelter_name=names.get(a.shelter_code, ""),
@@ -738,9 +850,21 @@ class VolunteersUseCase:
 
         now = datetime.now(UTC)
         moved = (
-            await accept_dispatched_slot(job_id=assignment.job_id, now=now)
+            await (
+                accept_dispatched_shift_slot(
+                    job_id=assignment.job_id, shift_id=assignment.shift_id, now=now
+                )
+                if assignment.shift_id
+                else accept_dispatched_slot(job_id=assignment.job_id, now=now)
+            )
             if action == "accepted"
-            else await decline_dispatched_slot(job_id=assignment.job_id, now=now)
+            else await (
+                decline_dispatched_shift_slot(
+                    job_id=assignment.job_id, shift_id=assignment.shift_id, now=now
+                )
+                if assignment.shift_id
+                else decline_dispatched_slot(job_id=assignment.job_id, now=now)
+            )
         )
         if not moved:
             # The counter holds no dispatched head for this job, so this offer has
@@ -757,6 +881,7 @@ class VolunteersUseCase:
             id=assignment_id,
             shelter_code=assignment.shelter_code,
             job_id=assignment.job_id,
+            shift_id=assignment.shift_id or None,
             volunteer_id=assignment.volunteer_id,
             action=action,
             responded_at=now,
@@ -768,7 +893,12 @@ class VolunteersUseCase:
             # The id is the assignment id, so this is a second answer that slipped past
             # the checks above. Give the quota move back rather than leave it applied.
             if action == "accepted":
-                await release_job_slot(job_id=assignment.job_id, now=now)
+                await _reserve_or_release(
+                    job_id=assignment.job_id,
+                    shift_id=assignment.shift_id or None,
+                    reserve=False,
+                    now=now,
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"success": False, "error": "OFFER_ALREADY_ANSWERED"},
@@ -820,7 +950,12 @@ class VolunteersUseCase:
         now = datetime.now(UTC)
         job_id = projected.job_id if projected is not None else buffer.job_id  # type: ignore[union-attr]
         if current == "confirmed":
-            await release_job_slot(job_id=job_id, now=now)
+            await _reserve_or_release(
+                job_id=job_id,
+                shift_id=_application_shift_id(projected or buffer),  # type: ignore[arg-type]
+                reserve=False,
+                now=now,
+            )
 
         if buffer is not None and not buffer.synced_to_couch:
             # Still ours to change — cancelling here means inbound writes a cancelled

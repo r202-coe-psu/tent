@@ -14,6 +14,21 @@ class JobShiftTemplate(BaseModel):
     days: list[str] = Field(default_factory=list)
 
 
+class PublicJobShift(BaseModel):
+    """Concrete shift identity plus renderable snapshot fields."""
+
+    shift_id: str
+    date: str = ""
+    end_date: str | None = None
+    start_time: str = ""
+    end_time: str = ""
+    station: str | None = None
+    quota: int = 0
+    slots_confirmed: int = 0
+    slots_dispatched: int = 0
+    slots_remaining: int = 0
+
+
 class PublicJobItem(BaseModel):
     """One card on the board (CR-092 screen 1).
 
@@ -30,6 +45,7 @@ class PublicJobItem(BaseModel):
     tier: str
     skills_required: list[str] = Field(default_factory=list)
     shift_template: JobShiftTemplate = Field(default_factory=JobShiftTemplate)
+    shifts: list[PublicJobShift] = Field(default_factory=list)
     quota: int
     slots_confirmed: int
     slots_remaining: int
@@ -58,6 +74,9 @@ class VolunteerApplyRequest(BaseModel):
     national_id: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=200)
     skills: list[str] = Field(default_factory=list)
+    # Canonical concrete shift identity. Optional only during the BFF compatibility
+    # window; jobs that expose concrete shifts require it at the use-case boundary.
+    shift_id: str | None = None
     shift_date: str | None = None
     station: str | None = None
 
@@ -67,9 +86,11 @@ class VolunteerApplyResponse(BaseModel):
     tracking_token: str
     status: str
     job_id: str
+    shift_id: str | None = None
 
 
 class TicketShift(BaseModel):
+    shift_id: str | None = None
     date: str = ""
     start_time: str = ""
     end_time: str = ""
@@ -90,6 +111,7 @@ class VolunteerTicket(BaseModel):
     can_cancel: bool = True
     status: str
     job_id: str
+    shift_id: str | None = None
     job_title: str = ""
     shelter_code: str
     shelter_name: str = ""
@@ -148,6 +170,7 @@ class TicketFindItem(BaseModel):
     job_title: str = ""
     shelter_code: str
     shift_date: str = ""
+    shift_id: str | None = None
 
 
 class TicketFindResponse(BaseModel):
@@ -174,6 +197,7 @@ class ScheduleShift(BaseModel):
 
     assignment_id: str
     job_id: str
+    shift_id: str | None = None
     job_title: str = ""
     shelter_code: str
     shelter_name: str = ""

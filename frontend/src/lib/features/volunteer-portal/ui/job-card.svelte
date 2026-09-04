@@ -67,10 +67,6 @@
 			<span class="rounded-full bg-danger/15 px-3 py-1 text-xs font-bold text-danger">
 				เต็มแล้ว / ปิดรับจอง
 			</span>
-		{:else if job.status === 'almost_full'}
-			<span class="rounded-full bg-warning/15 px-3 py-1 text-xs font-bold text-warning-foreground">
-				ใกล้เต็ม
-			</span>
 		{:else}
 			<span
 				class="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success"

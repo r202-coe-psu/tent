@@ -141,20 +141,42 @@ describe('JobRemoteRepository — quota mutations', () => {
 		expect(updated._rev).not.toBe(created._rev);
 	});
 
+	it("update() persists the SM's explicit status pick instead of re-deriving it", async () => {
+		const repo = createJobRepositoryForTest('shelter_sh001');
+		const created = await repo.create(withQuota(5), ctx);
+		// Fill the job so the derived status would be `full` if `update()` still ran it.
+		await repo.dispatch(created._id, 5);
+		const full = await repo.acceptDispatch(created._id, 5);
+		expect(full.status).toBe('full');
+
+		const reopened = await repo.update({ ...full, status: 'open' });
+		expect(reopened.status).toBe('open');
+		expect(await repo.get(created._id)).toMatchObject({ status: 'open' });
+	});
+
+	it('reads a legacy almost_full job back as open', async () => {
+		const repo = createJobRepositoryForTest('shelter_sh001');
+		const created = await repo.create(baseInput, ctx);
+		// Simulate a doc written before `almost_full` was removed.
+		await memoryRepo.put({ ...created, status: 'almost_full' });
+
+		expect(await repo.get(created._id)).toMatchObject({ status: 'open' });
+		expect(await repo.list()).toEqual([expect.objectContaining({ status: 'open' })]);
+	});
+
 	it('dispatch/acceptDispatch re-derive job.status via deriveJobStatus (F7)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
-		// quota 5 -> almostFullCutoff = max(1, ceil(5 * 0.2)) = 1 remaining
 		const created = await repo.create(withQuota(5), ctx);
 		expect(created.status).toBe('open');
 
-		// dispatched slots count toward the cutoff — 4 offered out leaves 1
+		// A partly-filled job stays `open` — there is no near-full band any more
 		let job = await repo.dispatch(created._id, 4);
 		expect(job).toMatchObject({ slots_dispatched: 4, slots_remaining: 1 });
-		expect(job.status).toBe('almost_full');
+		expect(job.status).toBe('open');
 
 		job = await repo.acceptDispatch(created._id, 4);
 		expect(job).toMatchObject({ slots_confirmed: 4, slots_remaining: 1 });
-		expect(job.status).toBe('almost_full');
+		expect(job.status).toBe('open');
 
 		await repo.dispatch(created._id, 1);
 		job = await repo.acceptDispatch(created._id, 1);
@@ -225,14 +247,16 @@ describe('JobRemoteRepository — quota mutations', () => {
 		expect(await repo.get(created._id)).toMatchObject({ quota: 5, slots_dispatched: 3 });
 	});
 
-	it('update() re-derives status so a metadata edit cannot leave a full job open (D2)', async () => {
+	it('update() keeps the status the SM picked, even on a job the quota calls full (D2)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
 		const created = await repo.create(withQuota(2), ctx);
 		await repo.dispatch(created._id, 2); // remaining 0 -> full
 		const full = await repo.get(created._id);
 		expect(full?.status).toBe('full');
 
+		// Re-deriving here would overwrite the pick in the same `put`, which is
+		// exactly what made the LIFECYCLE control unusable (owner decision 2026-09-04).
 		const edited = await repo.update({ ...full!, title: 'แก้ชื่องาน', status: 'open' });
-		expect(edited.status).toBe('full');
+		expect(edited.status).toBe('open');
 	});
 });

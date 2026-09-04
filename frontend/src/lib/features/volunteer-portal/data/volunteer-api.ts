@@ -138,6 +138,7 @@ export type ApplyResult = {
 	tracking_token: string;
 	status: string;
 	job_id: string;
+	shift_id?: string | null;
 };
 
 /**

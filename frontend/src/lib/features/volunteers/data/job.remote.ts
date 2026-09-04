@@ -2,7 +2,14 @@ import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
 import { ConflictError } from '$lib/utils/errors';
-import { isJob, jobSchema, makeJob, type Job, type JobInput } from '../domain/job.schema';
+import {
+	isJob,
+	jobSchema,
+	makeJob,
+	withNormalizedJobStatus,
+	type Job,
+	type JobInput
+} from '../domain/job.schema';
 import {
 	applyAccept,
 	applyDecline,
@@ -61,7 +68,13 @@ export class JobRemoteRepository implements JobRepository {
 	}
 
 	async list(filter?: JobFilter): Promise<Job[]> {
-		let all = await this.repo.allByType('job', isJob);
+		// Normalise first: the guard runs against the raw doc, so a legacy
+		// `almost_full` job would otherwise be filtered out of every list.
+		let all = await this.repo.allByType(
+			'job',
+			(d): d is Job => typeof d === 'object' && d !== null && isJob(withNormalizedJobStatus(d))
+		);
+		all = all.map(withNormalizedJobStatus);
 		if (filter?.status) all = all.filter((j) => j.status === filter.status);
 		if (filter?.tier) all = all.filter((j) => j.tier === filter.tier);
 		if (filter?.isUrgent !== undefined) all = all.filter((j) => j.is_urgent === filter.isUrgent);
@@ -71,8 +84,9 @@ export class JobRemoteRepository implements JobRepository {
 	async get(id: string): Promise<Job | null> {
 		// Guard on read as `list()` does — a corrupt doc must not be invisible
 		// in lists yet still drive the application flow.
-		const doc = await this.repo.get<Job>(id);
-		if (doc === null) return null;
+		const raw = await this.repo.get<Job>(id);
+		if (raw === null) return null;
+		const doc = withNormalizedJobStatus(raw);
 		return isJob(doc) ? doc : null;
 	}
 
@@ -98,9 +112,11 @@ export class JobRemoteRepository implements JobRepository {
 				slots_dispatched: latest.slots_dispatched,
 				slots_remaining: job.quota - claimed
 			};
-			// `status` is re-derived here too, so a metadata edit cannot leave a
-			// full job sitting on `open` (F7 hole found in review round 2).
-			const nextJob = assertWritable(touch({ ...merged, status: deriveJobStatus(merged) }));
+			// `status` is NOT re-derived here: this path carries the SM's explicit
+			// LIFECYCLE pick, and re-deriving would overwrite it in the same `put`
+			// (owner decision 2026-09-04). Automatic `open`/`full` still comes from
+			// `mutateQuota` on the next dispatch/accept/decline.
+			const nextJob = assertWritable(touch(merged));
 
 			try {
 				return await this.repo.put(nextJob);
@@ -127,8 +143,9 @@ export class JobRemoteRepository implements JobRepository {
 	): Promise<Job> {
 		let lastError: unknown;
 		for (let attempt = 0; attempt < MAX_QUOTA_RETRIES; attempt++) {
-			const current = await this.repo.get<Job>(jobId);
-			if (!current) throw new Error(`ไม่พบงาน: ${jobId}`);
+			const stored = await this.repo.get<Job>(jobId);
+			if (!stored) throw new Error(`ไม่พบงาน: ${jobId}`);
+			const current = withNormalizedJobStatus(stored);
 
 			const nextQuota = transition(current);
 			assertQuotaInvariant(nextQuota);

@@ -1,4 +1,4 @@
-"""Atomic head-count counter for a volunteer ``job`` — 1 doc per job.
+"""Atomic head-count counters for volunteer jobs and concrete sub-shifts.
 
 Same job as ``donation_need_counter`` does for goods: two people hitting
 "สมัครกะนี้" on the last free slot must not both get a confirmed ticket, and a
@@ -22,110 +22,215 @@ from pymongo import IndexModel
 
 
 class VolunteerJobSlot(Document):
-	model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
-	#: The CouchDB ``job:{ulid}`` id.
-	id: str = Field(alias="_id")
-	shelter_code: str
-	quota: int = 0
-	#: Applications holding a confirmed ticket. Owned by FastAPI via atomic ``$inc``.
-	confirmed_qty: int = 0
-	#: Offers a manager has pushed out that the volunteer has not answered yet
-	#: (CR-092 🟡). Owned by the back-office dispatch flow; counted against the ceiling
-	#: here so a public applicant cannot take a slot that is already promised.
-	dispatched_qty: int = 0
-	created_at: datetime
-	updated_at: datetime
+    #: The CouchDB ``job:{ulid}`` id.
+    id: str = Field(alias="_id")
+    shelter_code: str
+    quota: int = 0
+    #: Applications holding a confirmed ticket. Owned by FastAPI via atomic ``$inc``.
+    confirmed_qty: int = 0
+    #: Offers a manager has pushed out that the volunteer has not answered yet
+    #: (CR-092 🟡). Owned by the back-office dispatch flow; counted against the ceiling
+    #: here so a public applicant cannot take a slot that is already promised.
+    dispatched_qty: int = 0
+    created_at: datetime
+    updated_at: datetime
 
-	class Settings:
-		name = "volunteer_job_slots"
-		indexes = [IndexModel([("shelter_code", 1)])]
+    class Settings:
+        name = "volunteer_job_slots"
+        indexes = [IndexModel([("shelter_code", 1)])]
+
+
+class VolunteerJobShiftSlot(Document):
+    """Atomic reservation counter for one ``(job_id, shift_id)`` pair.
+
+    The composite Mongo id makes retries naturally address the same reservation
+    boundary while the compound index keeps the relationship queryable.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
+    shelter_code: str
+    job_id: str
+    shift_id: str
+    quota: int = 0
+    confirmed_qty: int = 0
+    dispatched_qty: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "volunteer_job_shift_slots"
+        indexes = [
+            IndexModel([("job_id", 1), ("shift_id", 1)], unique=True),
+            IndexModel([("shelter_code", 1)]),
+        ]
 
 
 class SlotResult(str, Enum):
-	RESERVED = "reserved"
-	JOB_FULL = "job_full"
-	#: No counter yet — the worker has not projected this job. The caller decides
-	#: whether to fail open; the public apply route does not.
-	NOT_SEEDED = "not_seeded"
+    RESERVED = "reserved"
+    JOB_FULL = "job_full"
+    #: No counter yet — the worker has not projected this job. The caller decides
+    #: whether to fail open; the public apply route does not.
+    NOT_SEEDED = "not_seeded"
+    SHIFT_FULL = "shift_full"
+
+
+def shift_slot_id(job_id: str, shift_id: str) -> str:
+    return f"{job_id}|{shift_id}"
+
+
+async def seed_job_shift_slot(
+    *,
+    job_id: str,
+    shift_id: str,
+    shelter_code: str,
+    quota: int,
+    now: datetime,
+    confirmed_qty: int = 0,
+    dispatched_qty: int = 0,
+) -> None:
+    await VolunteerJobShiftSlot.get_motor_collection().update_one(
+        {"_id": shift_slot_id(job_id, shift_id)},
+        {
+            "$setOnInsert": {
+                "confirmed_qty": max(confirmed_qty, 0),
+                "dispatched_qty": max(dispatched_qty, 0),
+                "created_at": now,
+            },
+            "$set": {
+                "shelter_code": shelter_code,
+                "job_id": job_id,
+                "shift_id": shift_id,
+                "quota": max(quota, 0),
+                "updated_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+
+async def reserve_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> SlotResult:
+    collection = VolunteerJobShiftSlot.get_motor_collection()
+    if await collection.find_one({"_id": shift_slot_id(job_id, shift_id)}, {"_id": 1}) is None:
+        return SlotResult.NOT_SEEDED
+    updated = await collection.find_one_and_update(
+        {
+            "_id": shift_slot_id(job_id, shift_id),
+            "$expr": {
+                "$lte": [
+                    {"$add": ["$confirmed_qty", {"$ifNull": ["$dispatched_qty", 0]}, 1]},
+                    "$quota",
+                ]
+            },
+        },
+        {"$inc": {"confirmed_qty": 1}, "$set": {"updated_at": now}},
+    )
+    return SlotResult.RESERVED if updated is not None else SlotResult.SHIFT_FULL
+
+
+async def release_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
+    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+        {"_id": shift_slot_id(job_id, shift_id), "confirmed_qty": {"$gt": 0}},
+        {"$inc": {"confirmed_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None
+
+
+async def accept_dispatched_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
+    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+        {"_id": shift_slot_id(job_id, shift_id), "dispatched_qty": {"$gt": 0}},
+        {"$inc": {"confirmed_qty": 1, "dispatched_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None
+
+
+async def decline_dispatched_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
+    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+        {"_id": shift_slot_id(job_id, shift_id), "dispatched_qty": {"$gt": 0}},
+        {"$inc": {"dispatched_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None
 
 
 async def seed_job_slot(*, job_id: str, shelter_code: str, quota: int, now: datetime) -> None:
-	"""Create or re-ceiling the counter for one job — worker projector side."""
-	await VolunteerJobSlot.get_motor_collection().update_one(
-		{"_id": job_id},
-		{
-			"$setOnInsert": {"confirmed_qty": 0, "dispatched_qty": 0, "created_at": now},
-			"$set": {"shelter_code": shelter_code, "quota": quota, "updated_at": now},
-		},
-		upsert=True,
-	)
+    """Create or re-ceiling the counter for one job — worker projector side."""
+    await VolunteerJobSlot.get_motor_collection().update_one(
+        {"_id": job_id},
+        {
+            "$setOnInsert": {"confirmed_qty": 0, "dispatched_qty": 0, "created_at": now},
+            "$set": {"shelter_code": shelter_code, "quota": quota, "updated_at": now},
+        },
+        upsert=True,
+    )
 
 
 async def reserve_job_slot(*, job_id: str, now: datetime) -> SlotResult:
-	"""Take one slot iff confirmed + dispatched stays within ``quota``."""
-	if await VolunteerJobSlot.get(job_id) is None:
-		return SlotResult.NOT_SEEDED
+    """Take one slot iff confirmed + dispatched stays within ``quota``."""
+    if await VolunteerJobSlot.get(job_id) is None:
+        return SlotResult.NOT_SEEDED
 
-	updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
-		{
-			"_id": job_id,
-			"$expr": {
-				"$lte": [
-					{
-						"$add": [
-							"$confirmed_qty",
-							{"$ifNull": ["$dispatched_qty", 0]},
-							1,
-						]
-					},
-					"$quota",
-				]
-			},
-		},
-		{"$inc": {"confirmed_qty": 1}, "$set": {"updated_at": now}},
-	)
-	return SlotResult.RESERVED if updated is not None else SlotResult.JOB_FULL
+    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+        {
+            "_id": job_id,
+            "$expr": {
+                "$lte": [
+                    {
+                        "$add": [
+                            "$confirmed_qty",
+                            {"$ifNull": ["$dispatched_qty", 0]},
+                            1,
+                        ]
+                    },
+                    "$quota",
+                ]
+            },
+        },
+        {"$inc": {"confirmed_qty": 1}, "$set": {"updated_at": now}},
+    )
+    return SlotResult.RESERVED if updated is not None else SlotResult.JOB_FULL
 
 
 async def release_job_slot(*, job_id: str, now: datetime) -> bool:
-	"""Give a confirmed slot back — cancellation, or compensation for a failed write.
+    """Give a confirmed slot back — cancellation, or compensation for a failed write.
 
-	Floored at zero by the filter rather than by a read: a double release must leave the
-	counter alone instead of driving it negative and handing out a slot twice.
-	"""
-	updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
-		{"_id": job_id, "confirmed_qty": {"$gt": 0}},
-		{"$inc": {"confirmed_qty": -1}, "$set": {"updated_at": now}},
-	)
-	return updated is not None
+    Floored at zero by the filter rather than by a read: a double release must leave the
+    counter alone instead of driving it negative and handing out a slot twice.
+    """
+    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+        {"_id": job_id, "confirmed_qty": {"$gt": 0}},
+        {"$inc": {"confirmed_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None
 
 
 async def accept_dispatched_slot(*, job_id: str, now: datetime) -> bool:
-	"""A dispatched offer becomes a confirmed head — CR-092 FR-VOL-06.
+    """A dispatched offer becomes a confirmed head — CR-092 FR-VOL-06.
 
-	🟡 → 🟢 in one update so the two counts can never be seen apart: incrementing
-	``confirmed_qty`` and decrementing ``dispatched_qty`` in separate writes would, for
-	an instant, show the same person twice against the quota.
+    🟡 → 🟢 in one update so the two counts can never be seen apart: incrementing
+    ``confirmed_qty`` and decrementing ``dispatched_qty`` in separate writes would, for
+    an instant, show the same person twice against the quota.
 
-	``dispatched_qty > 0`` is the filter rather than a prior read, so replaying the same
-	answer cannot manufacture a confirmed head out of nothing.
-	"""
-	updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
-		{"_id": job_id, "dispatched_qty": {"$gt": 0}},
-		{"$inc": {"confirmed_qty": 1, "dispatched_qty": -1}, "$set": {"updated_at": now}},
-	)
-	return updated is not None
+    ``dispatched_qty > 0`` is the filter rather than a prior read, so replaying the same
+    answer cannot manufacture a confirmed head out of nothing.
+    """
+    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+        {"_id": job_id, "dispatched_qty": {"$gt": 0}},
+        {"$inc": {"confirmed_qty": 1, "dispatched_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None
 
 
 async def decline_dispatched_slot(*, job_id: str, now: datetime) -> bool:
-	"""A declined offer gives its slot back to the board — 🟡 → ⚪.
+    """A declined offer gives its slot back to the board — 🟡 → ⚪.
 
-	Nothing to add: ``slots_remaining`` is derived as ``quota − confirmed − dispatched``,
-	so releasing the dispatched count is what makes the seat available again.
-	"""
-	updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
-		{"_id": job_id, "dispatched_qty": {"$gt": 0}},
-		{"$inc": {"dispatched_qty": -1}, "$set": {"updated_at": now}},
-	)
-	return updated is not None
+    Nothing to add: ``slots_remaining`` is derived as ``quota − confirmed − dispatched``,
+    so releasing the dispatched count is what makes the seat available again.
+    """
+    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+        {"_id": job_id, "dispatched_qty": {"$gt": 0}},
+        {"$inc": {"dispatched_qty": -1}, "$set": {"updated_at": now}},
+    )
+    return updated is not None

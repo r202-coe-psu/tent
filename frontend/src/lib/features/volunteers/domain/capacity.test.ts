@@ -5,8 +5,22 @@ import {
 	overallBookingRate,
 	bucketCounts,
 	jobShiftCapacities,
-	jobShiftQuotaSplits
+	jobShiftQuotaSplits,
+	isCapacityTrackedJobStatus
 } from './capacity';
+
+describe('isCapacityTrackedJobStatus', () => {
+	it('tracks capacity for open and full jobs', () => {
+		expect(isCapacityTrackedJobStatus('open')).toBe(true);
+		expect(isCapacityTrackedJobStatus('full')).toBe(true);
+	});
+
+	it('excludes paused, draft and terminal jobs from capacity tracking', () => {
+		for (const status of ['paused', 'draft', 'closed', 'cancelled'] as const) {
+			expect(isCapacityTrackedJobStatus(status)).toBe(false);
+		}
+	});
+});
 
 describe('shiftFillRate', () => {
 	it('computes confirmed / target', () => {
@@ -125,6 +139,53 @@ describe('jobShiftCapacities', () => {
 
 	it('returns nothing for a job with no shifts', () => {
 		expect(jobShiftCapacities(job([], 3))).toEqual([]);
+	});
+
+	it('uses exact active assignments per shift instead of allocating the job total', () => {
+		const shifts = [
+			{
+				id: 'a',
+				date: '2026-09-01',
+				end_date: '2026-09-01',
+				start_time: '08:00',
+				end_time: '12:00',
+				quota: 2
+			},
+			{
+				id: 'b',
+				date: '2026-09-01',
+				end_date: '2026-09-01',
+				start_time: '13:00',
+				end_time: '17:00',
+				quota: 2
+			}
+		];
+		const assignment = (id: string, volunteer_id: string, status = 'assigned') => ({
+			_id: id,
+			type: 'shift_assignment' as const,
+			schema_v: 4 as const,
+			shelter_code: 'SH001',
+			created_at: '',
+			updated_at: '',
+			created_by: 'tester',
+			job_id: 'job:X',
+			shift_id: 'a',
+			volunteer_id,
+			date: '2026-09-01',
+			shift: 'morning' as const,
+			station: 'ครัว',
+			duty_window: { start_ts: '2026-09-01T01:00:00.000Z', end_ts: '2026-09-01T05:00:00.000Z' },
+			status: status as 'assigned',
+			dispatch_status: 'accepted' as const,
+			check_in_method: 'qr' as const,
+			check_in_reason: null
+		});
+		const out = jobShiftCapacities({ ...job(shifts, 2), shifts }, [
+			assignment('a1', 'volunteer:1'),
+			assignment('a2', 'volunteer:1'),
+			assignment('a3', 'volunteer:2', 'completed')
+		]);
+		expect(out.map((c) => c.confirmed)).toEqual([1, 0]);
 	});
 });
 

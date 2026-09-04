@@ -41,6 +41,8 @@ export type PublicJob = {
 	tier: string;
 	skills_required: string[];
 	shift_template: JobShiftTemplate;
+	/** Empty only for legacy projections during the compatibility rollout. */
+	shifts?: PublicJobShift[];
 	quota: number;
 	slots_confirmed: number;
 	slots_remaining: number;
@@ -48,7 +50,20 @@ export type PublicJob = {
 	requires_review: boolean;
 };
 
+export type PublicJobShift = {
+	shift_id: string;
+	date: string;
+	end_date: string | null;
+	start_time: string;
+	end_time: string;
+	station: string | null;
+	quota: number;
+	slots_confirmed: number;
+	slots_remaining: number;
+};
+
 export type TicketShift = {
+	shift_id?: string | null;
 	date: string;
 	start_time: string;
 	end_time: string;
@@ -66,6 +81,7 @@ export type VolunteerTicket = {
 	can_cancel: boolean;
 	status: TicketStatus | string;
 	job_id: string;
+	shift_id?: string | null;
 	job_title: string;
 	shelter_code: string;
 	shelter_name: string;
@@ -87,6 +103,7 @@ export type VolunteerTicket = {
 export type ScheduleShift = {
 	assignment_id: string;
 	job_id: string;
+	shift_id?: string | null;
 	job_title: string;
 	shelter_code: string;
 	shelter_name: string;
@@ -111,6 +128,7 @@ export type TicketSummary = {
 	job_title: string;
 	shelter_code: string;
 	shift_date: string;
+	shift_id?: string | null;
 };
 
 /** Thai mobile numbers, tolerant of the separators people actually type. */
@@ -151,6 +169,7 @@ export const volunteerApplySchema = z.object({
 	national_id: nationalIdField,
 	email: z.union([z.literal(''), z.email('อีเมลไม่ถูกต้อง')]).optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
+	shift_id: z.string().trim().min(1, 'กรุณาเลือกกะ').optional(),
 	shift_date: z.string().trim().optional(),
 	station: z.string().trim().optional(),
 	/**

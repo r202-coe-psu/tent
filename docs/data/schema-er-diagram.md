@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-08-26
+updated: 2026-09-04
 source: docs/data/schema.md
 ---
 
@@ -383,7 +383,7 @@ erDiagram
         int slots_remaining "quota - confirmed - dispatched v2"
         boolean is_urgent "default false v2"
         boolean auto_accept "operational tier only"
-        enum status "draft open paused almost_full full closed cancelled"
+        enum status "draft open paused full closed cancelled"
     }
 
     JOB_APPLICATION {

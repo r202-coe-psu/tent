@@ -33,11 +33,14 @@ def _iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def _volunteer_doc(application: VolunteerApplicationBuffer, *, now: str) -> dict[str, Any]:
+def _volunteer_doc(
+    application: VolunteerApplicationBuffer, *, now: str
+) -> dict[str, Any]:
     applicant = application.applicant
     return {
         "_id": application.volunteer_id,
         "type": "volunteer",
+        # Shift identity belongs to the application/assignment, not the profile.
         "schema_v": 1,
         "shelter_code": application.shelter_code,
         "created_at": _iso(application.created_at),
@@ -62,19 +65,23 @@ def _volunteer_doc(application: VolunteerApplicationBuffer, *, now: str) -> dict
     }
 
 
-def _application_doc(application: VolunteerApplicationBuffer, *, now: str) -> dict[str, Any]:
+def _application_doc(
+    application: VolunteerApplicationBuffer, *, now: str
+) -> dict[str, Any]:
     applicant = application.applicant
     shift = application.selected_shift
+    shift_id = application.shift_id or shift.shift_id
     return {
         "_id": application.id,
         "type": "job_application",
-        "schema_v": 1,
+        "schema_v": 3,
         "shelter_code": application.shelter_code,
         "created_at": _iso(application.created_at),
         "updated_at": now,
         "created_by": "public",
         "job_id": application.job_id,
         "volunteer_id": application.volunteer_id,
+        "shift_id": shift_id,
         "applicant": {
             "first_name": applicant.first_name,
             "last_name": applicant.last_name,
@@ -85,6 +92,7 @@ def _application_doc(application: VolunteerApplicationBuffer, *, now: str) -> di
             "skills": list(applicant.skills),
         },
         "selected_shift": {
+            "shift_id": shift_id,
             "date": shift.date,
             "start_time": shift.start_time,
             "end_time": shift.end_time,
@@ -150,11 +158,13 @@ async def _persist_application(
     return True
 
 
-async def run_volunteer_inbound_loop(couch: CouchClient, *, stop_event: asyncio.Event) -> None:
+async def run_volunteer_inbound_loop(
+    couch: CouchClient, *, stop_event: asyncio.Event
+) -> None:
     while not stop_event.is_set():
         try:
             pending = await VolunteerApplicationBuffer.find(
-                VolunteerApplicationBuffer.synced_to_couch == False  # noqa: E712
+                VolunteerApplicationBuffer.synced_to_couch == False
             ).to_list()
             for application in pending:
                 if stop_event.is_set():

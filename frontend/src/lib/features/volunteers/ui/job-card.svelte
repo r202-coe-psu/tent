@@ -32,7 +32,6 @@
 		draft: { label: 'ร่าง', variant: 'secondary' },
 		open: { label: 'เปิดรับ', variant: 'default' },
 		paused: { label: 'พักรับ', variant: 'outline' },
-		almost_full: { label: 'ใกล้เต็ม', variant: 'secondary' },
 		full: { label: 'เต็มโควตา', variant: 'secondary' },
 		closed: { label: 'ปิดงาน', variant: 'outline' },
 		cancelled: { label: 'ยกเลิก', variant: 'destructive' }

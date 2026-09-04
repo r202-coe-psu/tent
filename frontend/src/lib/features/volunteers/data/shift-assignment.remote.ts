@@ -42,6 +42,31 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		return this.repo.put(shiftAssignmentSchema.parse(doc) as ShiftAssignment);
 	}
 
+	/** A shift assignment must point at a real child row of its parent job. */
+	private async assertShiftReference(input: ShiftAssignmentInput): Promise<void> {
+		const job = await jobRepository().get(input.job_id);
+		if (!job) throw new Error(`ไม่พบงาน: ${input.job_id}`);
+		if (!job.shifts.some((shift) => shift.id === input.shift_id)) {
+			throw new Error(`ไม่พบกะ ${input.shift_id} ในงาน ${input.job_id}`);
+		}
+	}
+
+	/** Prevent the same volunteer from occupying the same concrete shift twice. */
+	private async assertNoDuplicate(input: ShiftAssignmentInput): Promise<void> {
+		const existing = await this.list({ jobId: input.job_id });
+		if (
+			existing.some(
+				(a) =>
+					a.shift_id === input.shift_id &&
+					a.volunteer_id === input.volunteer_id &&
+					a.status !== 'cancelled' &&
+					a.status !== 'no_show'
+			)
+		) {
+			throw new Error('อาสาสมัครคนนี้ถูกมอบหมายในกะนี้แล้ว');
+		}
+	}
+
 	async list(filter?: ShiftAssignmentFilter): Promise<ShiftAssignment[]> {
 		let all = await this.repo.allByType('shift_assignment', isShiftAssignment);
 		if (filter?.volunteerId) all = all.filter((a) => a.volunteer_id === filter.volunteerId);
@@ -65,6 +90,8 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	}
 
 	async dispatch(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
+		await this.assertShiftReference(input);
+		await this.assertNoDuplicate(input);
 		const doc = makeShiftAssignment(input, ctx, {
 			status: input.shift === 'flex' ? 'standby' : 'assigned',
 			dispatch_status: 'dispatched'
@@ -92,6 +119,8 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	 * this way and the shift's 3-colour bar shows it as filled immediately.
 	 */
 	async assign(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
+		await this.assertShiftReference(input);
+		await this.assertNoDuplicate(input);
 		const doc = makeShiftAssignment(input, ctx, {
 			status: 'standby',
 			dispatch_status: 'accepted'

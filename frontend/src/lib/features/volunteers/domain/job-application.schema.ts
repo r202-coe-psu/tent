@@ -57,6 +57,7 @@ export const applicantSchema = z.object({
 export type Applicant = z.infer<typeof applicantSchema>;
 
 export const selectedShiftSchema = z.object({
+	shift_id: z.string().min(1).optional(),
 	date: z.string().min(1),
 	start_time: z.string().min(1),
 	end_time: z.string().min(1)
@@ -69,8 +70,10 @@ export type SelectedShift = z.infer<typeof selectedShiftSchema>;
 
 export interface JobApplication extends BaseDoc {
 	type: 'job_application';
-	schema_v: 2;
+	schema_v: 2 | 3;
 	job_id: string;
+	/** Stable concrete shift identity; absent only on legacy v2 documents. */
+	shift_id?: string;
 	volunteer_id: string | null;
 	applicant: Applicant;
 	selected_shift: SelectedShift;
@@ -85,12 +88,13 @@ export const jobApplicationSchema = z.object({
 	_id: z.string().startsWith('job_application:'),
 	_rev: z.string().optional(),
 	type: z.literal('job_application'),
-	schema_v: z.literal(2),
+	schema_v: z.union([z.literal(2), z.literal(3)]),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
 	created_by: z.string().min(1),
 	job_id: z.string().startsWith('job:'),
+	shift_id: z.string().min(1).optional(),
 	volunteer_id: z.string().startsWith('volunteer:').nullable(),
 	applicant: applicantSchema,
 	selected_shift: selectedShiftSchema,
@@ -110,6 +114,7 @@ export const isJobApplication = (d: unknown): d is JobApplication =>
 
 export const jobApplicationInputSchema = z.object({
 	job_id: z.string().startsWith('job:', 'กรุณาเลือกงาน'),
+	shift_id: z.string().min(1).optional(),
 	volunteer_id: z.string().startsWith('volunteer:').nullable().default(null),
 	applicant: applicantSchema,
 	selected_shift: selectedShiftSchema,
@@ -130,9 +135,10 @@ export function makeJobApplication(
 	const d = jobApplicationInputSchema.parse(input);
 	return makeDoc(
 		'job_application',
-		2,
+		3,
 		{
 			job_id: d.job_id,
+			shift_id: d.shift_id,
 			volunteer_id: d.volunteer_id,
 			applicant: d.applicant,
 			selected_shift: d.selected_shift,

@@ -87,9 +87,9 @@
 	const isEdit = $derived(job !== null);
 
 	/**
-	 * LIFECYCLE STATUS control. `almost_full` is absent by design — only
-	 * `deriveJobStatus` produces it, and it will overwrite `full` too on the
-	 * next dispatch/accept/decline.
+	 * LIFECYCLE STATUS control. Every option is persisted exactly as picked;
+	 * `full` is the only one the quota flow may reassert on its own, and only
+	 * once the last seat is actually taken.
 	 */
 	/**
 	 * `selectedClass` is written out in full per option — Tailwind scans source
@@ -157,8 +157,8 @@
 			shifts: source.shifts.map((s) => ({ ...s })),
 			auto_accept: source.auto_accept,
 			is_urgent: source.is_urgent,
-			// `almost_full`/`cancelled` are not choosable on this control — show the
-			// nearest editable state and let `deriveJobStatus` reassert itself.
+			// `cancelled` is terminal and not choosable on this control — show the
+			// nearest editable state instead.
 			status: STATUS_OPTIONS.some((o) => o.value === source.status)
 				? (source.status as JobFormValues['status'])
 				: 'open'
@@ -554,8 +554,8 @@
 					{/each}
 				</div>
 				<p class="text-[11px] text-muted-foreground">
-					"เต็มโควตา" และ "ใกล้เต็ม" ปกติระบบคำนวณให้อัตโนมัติจากโควตาที่รับไปแล้ว —
-					ค่าที่เลือกไว้ที่นี่จะถูกคำนวณใหม่เมื่อมีการมอบหมาย/ตอบรับ/ปฏิเสธงานครั้งถัดไป
+					ค่าที่เลือกที่นี่จะถูกบันทึกตามที่เลือก — ระบบจะปรับเป็น "เต็มโควตา" ให้เองก็ต่อเมื่อ
+					โควตาถูกจองครบจริงในการมอบหมาย/ตอบรับครั้งถัดไป
 				</p>
 				<Form.Field {form} name="status">
 					<Form.FieldErrors />

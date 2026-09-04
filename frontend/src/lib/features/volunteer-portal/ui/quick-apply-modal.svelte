@@ -78,6 +78,7 @@
 	let nationalId = $state('');
 	let email = $state('');
 	let shiftDate = $state('');
+	let shiftId = $state('');
 	let skills = $state<string[]>([]);
 	let consentPdpa = $state(false);
 	let formError = $state('');
@@ -92,6 +93,7 @@
 			nationalId = '';
 			email = '';
 			shiftDate = '';
+			shiftId = '';
 			skills = [];
 			consentPdpa = false;
 			formError = '';
@@ -121,6 +123,10 @@
 		event.preventDefault();
 		if (!job) return;
 		formError = '';
+		if (job.shifts?.length && !shiftId) {
+			formError = 'กรุณาเลือกกะที่ต้องการสมัคร';
+			return;
+		}
 
 		if (!consentPdpa) {
 			formError = 'กรุณายอมรับเงื่อนไข PDPA ก่อนจองภารกิจ';
@@ -134,7 +140,8 @@
 			national_id: nationalId,
 			email,
 			skills,
-			shift_date: shiftDate
+			shift_date: shiftDate,
+			shift_id: shiftId || undefined
 		});
 		if (!parsed.success) {
 			formError = parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง';
@@ -312,7 +319,21 @@
 								2. วันที่สะดวกปฏิบัติงาน
 								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 							</h3>
-							{#if job.shift_template.days.length > 0}
+							{#if (job.shifts?.length ?? 0) > 0}
+								<select
+									bind:value={shiftId}
+									aria-label="กะที่ต้องการสมัคร"
+									class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+								>
+									<option value="">เลือกกะที่ต้องการสมัคร</option>
+									{#each job.shifts ?? [] as shift (shift.shift_id)}
+										<option value={shift.shift_id} disabled={shift.slots_remaining <= 0}>
+											{shift.date} · {shift.start_time} - {shift.end_time} น. · ว่าง {shift.slots_remaining}
+											ที่
+										</option>
+									{/each}
+								</select>
+							{:else if job.shift_template.days.length > 0}
 								<select
 									bind:value={shiftDate}
 									aria-label="วันที่สะดวกปฏิบัติงาน"

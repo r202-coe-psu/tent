@@ -53,6 +53,7 @@ const volunteerInput: VolunteerInput = {
 function assignmentInput(jobId: string, volunteerId: string): ShiftAssignmentInput {
 	return {
 		job_id: jobId,
+		shift_id: 's1',
 		volunteer_id: volunteerId,
 		date: '2026-08-27',
 		shift: 'morning',
@@ -125,6 +126,21 @@ describe('ShiftAssignmentRemoteRepository', () => {
 
 		const reloadedJob = await jobs.get(job._id);
 		expect(reloadedJob).toMatchObject({ slots_confirmed: 2, slots_remaining: 0 });
+	});
+
+	it('rejects an assignment whose shift_id is not a child of the job', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await expect(
+			assignments.assign({ ...assignmentInput(job._id, volunteer._id), shift_id: 's999' }, ctx)
+		).rejects.toThrow('ไม่พบกะ s999');
+	});
+
+	it('rejects assigning the same volunteer to the same shift twice', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+		await expect(assignments.assign(assignmentInput(job._id, volunteer._id), ctx)).rejects.toThrow(
+			'ถูกมอบหมายในกะนี้แล้ว'
+		);
 	});
 
 	it('assign() rolls the assignment back when the quota move fails', async () => {

@@ -90,7 +90,7 @@ blocked_by: CR-094 approval (แก้ schema.md + bump schema_v ต้องร
 
 **`job` default status = `open`** (ตรงกับ schema.md §2.17 เดิม) — `draft` เป็นตัวเลือกในฟอร์ม ไม่ใช่ค่าเริ่มต้น
 
-**เกณฑ์ `almost_full`** (ไม่มีระบุใน CR-094/schema.md — **รอเจ้าของโครงการเคาะ**): `full` เมื่อ `slots_remaining === 0` · `almost_full` เมื่อ `slots_remaining <= max(1, ceil(quota × 0.2))` · นอกนั้น `open` — คิดจาก `slots_remaining` จึงนับรวมคนที่ `dispatched` ไปแล้ว และ `almost_full` เข้าถึงได้ทุกขนาด quota (เกณฑ์ 80% ของ `slots_confirmed` แบบเดิม ทำให้งาน quota ≤ 4 ข้ามจาก `open` ไป `full` เลย)
+**เกณฑ์การ derive status** (owner decision 2026-09-04 — `almost_full` ถูกถอดออกจาก enum แล้ว): `full` เมื่อ `slots_remaining === 0` · นอกนั้น `open` — คิดจาก `slots_remaining` จึงนับรวมคนที่ `dispatched` ไปแล้ว. การ derive ทำเฉพาะใน quota transition (dispatch/accept/decline/release) เท่านั้น — การแก้ข้อมูลงานธรรมดา (`update()`) บันทึก `status` ตามที่เจ้าหน้าที่เลือกเสมอ
 
 **ตัวนับที่ 6 `completed`** — เพิ่มจาก 5 ตัวในตารางข้างบน เพราะแถบ attendance (FR-VOL-11.3) ต้องใช้ "เสร็จสิ้นภารกิจ/เช็คเอาต์แล้ว" และ FR-VOL-08.2 ห้ามแท็บคำนวณเอง · นิยาม: distinct อาสาที่มี `shift_assignment` ของวันนี้สถานะ `completed`
 
@@ -110,7 +110,7 @@ blocked_by: CR-094 approval (แก้ schema.md + bump schema_v ต้องร
 | `job.quota` | **derive** = `sum(shifts[].quota)` — บังคับด้วย `.refine` ทั้งใน doc schema และคำนวณใน `makeJob` |
 | `job.shift_template` | เปลี่ยนเป็น opt + mark deprecated (คงไว้อ่าน doc schema_v 2) |
 | `schema_v` | **2 → 3** |
-| `jobInputSchema.status` | ขยายเป็น `draft` / `open` / `paused` / `full` / `closed` ตามปุ่ม LIFECYCLE STATUS 5 ตัวในดีไซน์ (`almost_full` และ `cancelled` ไม่อยู่ในนี้ — `almost_full` มาจาก `deriveJobStatus` เท่านั้น) |
+| `jobInputSchema.status` | ขยายเป็น `draft` / `open` / `paused` / `full` / `closed` ตามปุ่ม LIFECYCLE STATUS 5 ตัวในดีไซน์ (`cancelled` ไม่อยู่ในนี้ เพราะเป็น terminal transition) |
 | KPI ระดับกะ (FR-VOL-09.4) | เปลี่ยนจาก 1 bucket ต่องาน → **1 bucket ต่อกะจริง** |
 
 **Domain modules ใหม่:**

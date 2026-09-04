@@ -41,7 +41,6 @@
 		draft: 'ร่าง',
 		open: 'เปิดรับ',
 		paused: 'พักรับ',
-		almost_full: 'ใกล้เต็ม',
 		full: 'เต็มโควตา',
 		closed: 'ปิดงาน',
 		cancelled: 'ยกเลิก'

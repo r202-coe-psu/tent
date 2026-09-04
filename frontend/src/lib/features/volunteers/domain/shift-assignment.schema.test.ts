@@ -41,6 +41,7 @@ function validDoc() {
 
 const baseInput: ShiftAssignmentInput = {
 	job_id: 'job:01AAAAAAAAAAAAAAAAAAAAAAAA',
+	shift_id: 'shift:01AAAAAAAAAAAAAAAAAAAAAAA',
 	volunteer_id: 'volunteer:01AAAAAAAAAAAAAAAAAAAAAAAA',
 	date: '2026-08-26',
 	shift: 'morning',
@@ -85,7 +86,7 @@ describe('shiftAssignmentSchema', () => {
 		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), _id: 'job:oops' }).success).toBe(false);
 	});
 
-	it('requires schema_v to be the literal 3', () => {
+	it('accepts legacy v3 and rejects unsupported schema versions', () => {
 		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 2 }).success).toBe(false);
 	});
 
@@ -215,7 +216,7 @@ describe('makeShiftAssignment', () => {
 	it('defaults to status assigned, check_in_method qr, all check-in fields null', () => {
 		const a = makeShiftAssignment(baseInput, ctx);
 		expect(a._id).toMatch(/^shift_assignment:/);
-		expect(a.schema_v).toBe(3);
+		expect(a.schema_v).toBe(4);
 		expect(a.status).toBe('assigned');
 		expect(a.check_in_method).toBe('qr');
 		expect(a.check_in_at).toBeNull();
