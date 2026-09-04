@@ -15,6 +15,7 @@ affects:
   - frontend/src/lib/features/operations/application/queries.ts
   - frontend/src/lib/features/operations/ui/transfer-list.svelte
   - frontend/src/routes/api/back-office/transfer/[id]/+server.ts (เพิ่ม DELETE method)
+  - frontend/e2e/transfer-delete-undo.test.ts (ใหม่ — ปิด DoD ข้อ 1/3/4 ที่ unit test เข้าไม่ถึง)
   - CR-089 (สืบเนื่องจากการแยก CR — ไม่ต้องรอ CR-089 approve ก่อน, เป็นอิสระจากกัน)
 ---
 
@@ -88,17 +89,17 @@ application + ui layer) และ 1 API route · **status `approved` (2026-09-01
 
 ## Acceptance (DoD)
 
-- [ ] ลบคำร้องที่ `status === 'requested'` สำเร็จ, คำร้องหายจากตาราง list ทันที (FR-01, FR-02)
-- [ ] พยายามลบคำร้องที่ `status !== 'requested'` (เช่น `shipped`) ต้องถูก **server** reject แม้ client
+- [x] ลบคำร้องที่ `status === 'requested'` สำเร็จ, คำร้องหายจากตาราง list ทันที (FR-01, FR-02)
+- [x] พยายามลบคำร้องที่ `status !== 'requested'` (เช่น `shipped`) ต้องถูก **server** reject แม้ client
       พยายามส่ง request ตรงมา (ไม่ใช่แค่ปุ่มถูกซ่อนที่ UI) (FR-03)
-- [ ] ลบแล้วกด Undo ภายใน 5 วิ คำร้องกลับมาเหมือนเดิมทุก field รวมทั้ง `_id` เดิม (FR-04, FR-05)
-- [ ] ลบแล้วปล่อยเกิน 5 วิโดยไม่กด Undo — ปุ่ม Undo หายไป, คำร้องกู้คืนไม่ได้อีก (FR-06)
-- [ ] ปลายทาง (`to_shelter`) กดลบคำร้องของศูนย์ตนเองไม่ได้ (source-only) (FR-01)
-- [ ] หลัง Undo — `created_at` / `created_by` / `updated_at` / `timeline.requested` ของ doc ที่กู้คืน
+- [x] ลบแล้วกด Undo ภายใน 5 วิ คำร้องกลับมาเหมือนเดิมทุก field รวมทั้ง `_id` เดิม (FR-04, FR-05)
+- [x] ลบแล้วปล่อยเกิน 5 วิโดยไม่กด Undo — ปุ่ม Undo หายไป, คำร้องกู้คืนไม่ได้อีก (FR-06)
+- [x] ปลายทาง (`to_shelter`) กดลบคำร้องของศูนย์ตนเองไม่ได้ (source-only) (FR-01)
+- [x] หลัง Undo — `created_at` / `created_by` / `updated_at` / `timeline.requested` ของ doc ที่กู้คืน
       **เท่ากับค่าก่อนลบทุกตัว** (ไม่ใช่เวลาที่กด Undo) (FR-05, FR-08)
-- [ ] เส้นทาง restore `PUT` โดย**ไม่แนบ** `_rev` (ตรงกับผลที่บันทึกไว้ใน §Spike) และมี test ยืนยันว่า
+- [x] เส้นทาง restore `PUT` โดย**ไม่แนบ** `_rev` (ตรงกับผลที่บันทึกไว้ใน §Spike) และมี test ยืนยันว่า
       body ที่ส่งไป CouchDB ไม่มี `_rev` ติดไป · restore ทับ `_id` ที่ยังมีเอกสารอยู่ → `409` (FR-09, FR-10)
-- [ ] ยิง restore ด้วย body ที่ `status !== 'requested'` หรือจากศูนย์ที่ไม่ใช่ `from_shelter`
+- [x] ยิง restore ด้วย body ที่ `status !== 'requested'` หรือจากศูนย์ที่ไม่ใช่ `from_shelter`
       → ถูก server reject (FR-10)
 
 ---
