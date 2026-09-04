@@ -161,19 +161,28 @@ describe('publicBookingInputSchema', () => {
 	// `last_name` empty for a one-word entry and crashed `createEvacuee` downstream
 	// (it requires both non-empty) — first_name/last_name are now separate,
 	// required fields so the schema itself rejects a missing surname up front.
-	it('requires both first_name and last_name on every member', () => {
+	it('requires first_name but allows empty last_name for mononym / foreign nationals (CR-106 FR-18)', () => {
 		expect(
 			publicBookingInputSchema.safeParse({
 				...VALID,
 				members: [{ ...CONTACT, last_name: '' }]
 			}).success
-		).toBe(false);
+		).toBe(true);
 		expect(
 			publicBookingInputSchema.safeParse({
 				...VALID,
 				members: [{ ...CONTACT, first_name: '' }]
 			}).success
 		).toBe(false);
+	});
+
+	it('accepts optional birth_year and age for members', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			members: [{ ...CONTACT, birth_year: 2530, age: 39 }]
+		});
+		expect(parsed.members[0].birth_year).toBe(2530);
+		expect(parsed.members[0].age).toBe(39);
 	});
 });
 
@@ -256,6 +265,24 @@ describe('toEvacueeInputs → createEvacuee', () => {
 		expect(evacuees[0].special_needs).toEqual([]);
 		expect(evacuees[1].special_needs).toEqual(['ผู้สูงอายุ']);
 		expect(evacuees[2].special_needs).toEqual(['เด็กเล็ก', 'ผู้ป่วยเรื้อรัง']);
+	});
+
+	it('carries birth_year and age when provided', () => {
+		const inputWithAges = publicBookingInputSchema.parse({
+			...VALID,
+			members: [
+				{ ...CONTACT, birth_year: 2530, age: 39 },
+				{ first_name: 'อองซาน', last_name: '', gender: 'female', age: 10 }
+			]
+		});
+		const evacuees = toEvacueeInputs(inputWithAges, 'household:H1').map((i) =>
+			createEvacuee(i, ctx)
+		);
+		expect(evacuees[0].birth_year).toBe(2530);
+		expect(evacuees[0].age).toBe(39);
+		expect(evacuees[1].first_name).toBe('อองซาน');
+		expect(evacuees[1].last_name).toBe('');
+		expect(evacuees[1].age).toBe(10);
 	});
 });
 
@@ -351,6 +378,50 @@ describe('toHouseholdInput → createHousehold', () => {
 		]);
 	});
 
+	it('maps pet name and condition into notes joined by | matching Station 1 format', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			pets: [{ species: 'dog', name: 'โกโก้', condition: 'ขาเจ็บ', has_cage: true }]
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.pets).toEqual([
+			{ species: 'dog', count: 1, notes: 'โกโก้ | ขาเจ็บ', has_cage: true }
+		]);
+	});
+
+	it('maps asset_description into household assets object', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			asset_description: 'ทองคำ 2 บาท และสมุดเงินฝาก'
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.assets).toEqual({
+			description: 'ทองคำ 2 บาท และสมุดเงินฝาก',
+			image_url: null
+		});
+	});
+
+	it('leaves household assets null when asset_description is empty or blank', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			asset_description: '   '
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.assets).toBeNull();
+	});
+
 	it('maps vehicles onto the household vehicles[] shape, blanking an unfilled plate', () => {
 		const input = publicBookingInputSchema.parse({
 			...VALID,
@@ -373,6 +444,10 @@ describe('toHouseholdInput → createHousehold', () => {
 		expect(householdLabelFrom({ first_name: '  ', last_name: '  ' })).toBe(
 			'ครอบครัวผู้จองผ่านเว็บ'
 		);
+	});
+
+	it('formats household label without trailing space when last_name is empty', () => {
+		expect(householdLabelFrom({ first_name: 'สมชาย', last_name: '' })).toBe('ครอบครัวสมชาย');
 	});
 });
 

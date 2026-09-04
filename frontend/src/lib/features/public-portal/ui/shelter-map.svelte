@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type {
 		Map as MapLibreMap,
 		Marker as MapLibreMarker,
@@ -33,6 +34,7 @@
 
 	interface Shelter {
 		id: string;
+		code?: string;
 		name: string;
 		status: string;
 		capacity: number;
@@ -43,12 +45,23 @@
 		geo?: ShelterGeo | null;
 	}
 
+	type ShelterMarkerItem = {
+		marker: MapLibreMarker;
+		popup: MapLibrePopup;
+		el: HTMLElement;
+		shelter: Shelter;
+		lng: number;
+		lat: number;
+	};
+
 	let {
 		shelters = [],
 		userLocation,
 		radiusKm,
 		center = DEFAULT_MAP_CENTER,
 		zoom = DEFAULT_MAP_ZOOM,
+		selectedId = null,
+		onSelectShelter,
 		onLocationPick
 	}: {
 		shelters?: Shelter[];
@@ -57,6 +70,10 @@
 		radiusKm?: number;
 		center?: [number, number];
 		zoom?: number;
+		/** Currently selected shelter ID to sync with list */
+		selectedId?: string | null;
+		/** Callback when user clicks a shelter pin */
+		onSelectShelter?: (shelterId: string) => void;
 		/** Called when the user places a search-origin pin on the map. */
 		onLocationPick?: (lat: number, lng: number) => void;
 	} = $props();
@@ -74,6 +91,7 @@
 	let mapElement: HTMLElement;
 	let mapInstance: MapLibreMap | null = null;
 	let markersLayer: MapLibreMarker[] = [];
+	let shelterMarkerMap = new SvelteMap<string, ShelterMarkerItem>();
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
@@ -292,6 +310,7 @@
 		// Clear old markers
 		markersLayer.forEach((marker) => marker.remove());
 		markersLayer = [];
+		shelterMarkerMap.clear();
 
 		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
@@ -341,14 +360,20 @@
 
 				const color = getStatusColorCode(shelter.status);
 				const icon = getTypeIcon(shelter.site_kind);
+				const shelterId = shelter.id || shelter.code || '';
+				const shelterCode = shelter.code || shelter.id || '';
+				const canBook = Boolean(shelterCode) && shelter.status !== 'CLOSED';
 
 				const el = document.createElement('div');
 				// Do not apply position: relative to the root element,
 				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
+				if (shelterId === selectedId || (shelter.code && shelter.code === selectedId)) {
+					el.classList.add('is-selected');
+				}
 				el.innerHTML = `
 					<div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 24px; height: 24px;">
-						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
+						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s, box-shadow 0.2s;"></div>
 						<!-- Pin pointer triangle to anchor to exact location -->
 						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
 						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 0.625rem; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -360,19 +385,46 @@
 				// Add hover effect to the inner dot, not the root element
 				const dot = el.querySelector('.marker-dot') as HTMLElement;
 				el.onmouseenter = () => {
-					if (dot) dot.style.transform = 'scale(1.3)';
+					if (dot && !el.classList.contains('is-selected')) dot.style.transform = 'scale(1.25)';
 				};
 				el.onmouseleave = () => {
-					if (dot) dot.style.transform = 'scale(1)';
+					if (dot && !el.classList.contains('is-selected')) dot.style.transform = 'scale(1)';
 				};
 
-				const popup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
-						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
-						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
-						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
-						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
+				el.addEventListener('click', (ev) => {
+					ev.stopPropagation();
+					if (shelterId) {
+						onSelectShelter?.(shelterId);
+					}
+				});
+
+				const bookingButtonHtml = canBook
+					? `<a href="/pre-register?shelter=${encodeURIComponent(shelterCode)}"
+						style="display:flex;align-items:center;justify-content:center;gap:6px;background:#2563eb;color:#ffffff;padding:6px 12px;border-radius:8px;font-weight:bold;font-size:0.75rem;text-decoration:none;margin-top:8px;box-shadow:0 1px 3px rgba(37,99,235,0.3);">
+						<span>📋</span> ${t.preRegister}
+					</a>`
+					: `<div style="margin-top:8px;text-align:center;font-size:0.7rem;color:#94a3b8;font-weight:600;padding:4px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+						${t.shelterClosed}
+					</div>`;
+
+				const detailsButtonHtml = `
+					<a href="/shelters/${shelterId}"
+						style="display:flex;align-items:center;justify-content:center;gap:6px;background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:5px 12px;border-radius:8px;font-weight:600;font-size:0.7rem;text-decoration:none;margin-top:4px;">
+						<span>👁️</span> ${t.viewDetails}
+					</a>
+				`;
+
+				const popup = new lib.Popup({ offset: 12, closeButton: true, maxWidth: '240px' }).setHTML(`
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:170px;padding:2px 0;">
+						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;">${icon} ${shelter.name}</strong>
+						<div style="margin-bottom:4px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+						<div style="line-height:1.45;color:#334155;">
+							${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
+							${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
+							${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
+						</div>
+						${bookingButtonHtml}
+						${detailsButtonHtml}
 					</div>
 				`);
 
@@ -382,6 +434,16 @@
 					.addTo(map);
 
 				markersLayer.push(marker);
+				if (shelterId) {
+					shelterMarkerMap.set(shelterId, {
+						marker,
+						popup,
+						el,
+						shelter,
+						lng,
+						lat
+					});
+				}
 			});
 		}
 
@@ -389,11 +451,37 @@
 			const markerCount = markersLayer.length;
 			if (markerCount === 1) {
 				const centerLngLat = bounds.getCenter();
-				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 13 });
+				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 15 });
 			} else {
-				map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+				map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
 			}
 		}
+	});
+
+	// React to selection change from outside or user action
+	$effect(() => {
+		if (!mapLoaded || !mapInstance) return;
+		const currentSelected = selectedId;
+
+		shelterMarkerMap.forEach((item, id) => {
+			const isMatch = Boolean(
+				currentSelected &&
+				(id === currentSelected || (item.shelter.code && item.shelter.code === currentSelected))
+			);
+			if (isMatch) {
+				item.el.classList.add('is-selected');
+				if (!item.popup.isOpen()) {
+					item.popup.addTo(mapInstance!);
+				}
+				mapInstance!.easeTo({
+					center: [item.lng, item.lat],
+					zoom: Math.max(mapInstance!.getZoom(), 15),
+					duration: 500
+				});
+			} else {
+				item.el.classList.remove('is-selected');
+			}
+		});
 	});
 </script>
 
@@ -461,5 +549,22 @@
 	:global(.show-labels .marker-label) {
 		opacity: 1;
 		visibility: visible;
+	}
+	:global(.custom-shelter-marker.is-selected) {
+		z-index: 50 !important;
+	}
+	:global(.custom-shelter-marker.is-selected .marker-dot) {
+		transform: scale(1.35) !important;
+		box-shadow:
+			0 0 0 4px rgba(37, 99, 235, 0.45),
+			0 4px 10px rgba(0, 0, 0, 0.4) !important;
+	}
+	:global(.custom-shelter-marker.is-selected .marker-label) {
+		opacity: 1 !important;
+		visibility: visible !important;
+		background: #0f172a !important;
+		color: #ffffff !important;
+		border-color: #334155 !important;
+		box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
 	}
 </style>
