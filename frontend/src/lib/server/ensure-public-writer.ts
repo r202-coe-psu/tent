@@ -17,10 +17,7 @@ export type CouchReq = (
 ) => Promise<{ status: number; data: unknown }>;
 
 export type EnsurePublicWriterOutcome =
-	| 'skipped'
-	| 'created'
-	| 'already_exists'
-	| 'would_create';
+	'skipped' | 'invalid_format' | 'created' | 'already_exists' | 'would_create';
 
 export interface EnsurePublicWriterResult {
 	outcome: EnsurePublicWriterOutcome;
@@ -46,7 +43,8 @@ export function buildPublicWriterUserBody(user: string, password: string) {
 /**
  * Ensure the roleless public writer exists in `_users`.
  *
- * - Missing/malformed `writerUrl` → `skipped` (dev may fall back to admin).
+ * - Missing `writerUrl` → `skipped` (dev may fall back to admin).
+ * - Malformed `writerUrl` (e.g. empty password) → `invalid_format`.
  * - `dryRun: true` → GET only; `would_create` or `already_exists`.
  * - Write mode → PUT; `created` (201) or `already_exists` (409).
  */
@@ -55,9 +53,12 @@ export async function ensurePublicWriter(
 	writerUrl: string | undefined | null,
 	options?: { dryRun?: boolean }
 ): Promise<EnsurePublicWriterResult> {
+	if (!writerUrl) {
+		return { outcome: 'skipped' };
+	}
 	const creds = parseCouchCredentialUrl(writerUrl);
 	if (!creds) {
-		return { outcome: 'skipped' };
+		return { outcome: 'invalid_format' };
 	}
 
 	const path = publicWriterUserPath(creds.user);
@@ -70,7 +71,11 @@ export async function ensurePublicWriter(
 		};
 	}
 
-	const { status } = await couchReq('PUT', path, buildPublicWriterUserBody(creds.user, creds.password));
+	const { status } = await couchReq(
+		'PUT',
+		path,
+		buildPublicWriterUserBody(creds.user, creds.password)
+	);
 	if (status !== 201 && status !== 409) {
 		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
 	}
