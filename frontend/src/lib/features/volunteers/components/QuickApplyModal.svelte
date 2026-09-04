@@ -15,6 +15,8 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import X from '@lucide/svelte/icons/x';
+	import { env } from '$env/dynamic/public';
+	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { SKILL_MASTER } from '../domain/skill-master';
 
 	export interface ShiftDetail {
@@ -31,6 +33,7 @@
 		id: string;
 		title: string;
 		shelter: string;
+		shelter_code?: string;
 		shifts?: ShiftDetail[];
 		selectedShift?: ShiftDetail;
 		skills_required?: string[];
@@ -146,6 +149,18 @@
 
 	let isSubmitting = $state(false);
 	let errorMessage = $state<string | null>(null);
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+
+	async function captchaToken(): Promise<string | null> {
+		if (!captchaEnabled) return '';
+		if (!window.grecaptcha) return null;
+		try {
+			return await window.grecaptcha.execute(siteKey, { action: 'volunteer_apply' });
+		} catch {
+			return null;
+		}
+	}
 
 	function toggleSkill(skillLabelOrCode: string) {
 		if (formData.skills.includes(skillLabelOrCode)) {
@@ -170,6 +185,11 @@
 		isSubmitting = true;
 
 		try {
+			const recaptchaToken = await captchaToken();
+			if (recaptchaToken === null) {
+				errorMessage = 'ไม่สามารถยืนยัน reCAPTCHA ได้ กรุณาลองใหม่อีกครั้ง';
+				return;
+			}
 			const firstName = formData.firstName.trim();
 			const lastName = formData.lastName.trim();
 			const fullName = `${firstName} ${lastName}`.trim();
@@ -211,10 +231,12 @@
 						skills: formData.skills
 					},
 					selected_shift: {
+						shift_id: activeShift.id || undefined,
 						date: shiftDate,
 						start_time: startTime,
 						end_time: endTime
-					}
+					},
+					recaptcha_token: recaptchaToken || undefined
 				})
 			});
 
@@ -273,6 +295,12 @@
 		}
 	}
 </script>
+
+<svelte:head>
+	{#if captchaEnabled}
+		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+	{/if}
+</svelte:head>
 
 {#if isOpen && job}
 	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">

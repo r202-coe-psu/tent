@@ -1,6 +1,7 @@
 /**
  * Job application domain schema — CR-094 §3.4 (schema.md §2.18, `job_application`
- * schema_v 1 → 2).
+ * schema_v 1 → 2). Public applications may persist only `tracking_token_hash`;
+ * the raw bearer token is retained only for legacy/staff-created documents.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -77,33 +78,42 @@ export interface JobApplication extends BaseDoc {
 	volunteer_id: string | null;
 	applicant: Applicant;
 	selected_shift: SelectedShift;
-	tracking_token: string;
+	/** Raw bearer token exists only on legacy/staff-created documents. */
+	tracking_token?: string;
+	/** Public applications persist this hash instead of the raw bearer token. */
+	tracking_token_hash?: string;
 	status: JobApplicationStatus;
 	review_notes?: string | null;
 	reviewed_at?: string | null;
 	reviewed_by?: string | null;
 }
 
-export const jobApplicationSchema = z.object({
-	_id: z.string().startsWith('job_application:'),
-	_rev: z.string().optional(),
-	type: z.literal('job_application'),
-	schema_v: z.union([z.literal(2), z.literal(3)]),
-	shelter_code: z.string().min(1),
-	created_at: z.string(),
-	updated_at: z.string(),
-	created_by: z.string().min(1),
-	job_id: z.string().startsWith('job:'),
-	shift_id: z.string().min(1).optional(),
-	volunteer_id: z.string().startsWith('volunteer:').nullable(),
-	applicant: applicantSchema,
-	selected_shift: selectedShiftSchema,
-	tracking_token: z.string().min(1),
-	status: jobApplicationStatusSchema,
-	review_notes: z.string().nullable().optional(),
-	reviewed_at: z.string().nullable().optional(),
-	reviewed_by: z.string().nullable().optional()
-});
+export const jobApplicationSchema = z
+	.object({
+		_id: z.string().startsWith('job_application:'),
+		_rev: z.string().optional(),
+		type: z.literal('job_application'),
+		schema_v: z.union([z.literal(2), z.literal(3)]),
+		shelter_code: z.string().min(1),
+		created_at: z.string(),
+		updated_at: z.string(),
+		created_by: z.string().min(1),
+		job_id: z.string().startsWith('job:'),
+		shift_id: z.string().min(1).optional(),
+		volunteer_id: z.string().startsWith('volunteer:').nullable(),
+		applicant: applicantSchema,
+		selected_shift: selectedShiftSchema,
+		tracking_token: z.string().min(1).optional(),
+		tracking_token_hash: z.string().min(1).optional(),
+		status: jobApplicationStatusSchema,
+		review_notes: z.string().nullable().optional(),
+		reviewed_at: z.string().nullable().optional(),
+		reviewed_by: z.string().nullable().optional()
+	})
+	.refine((doc) => Boolean(doc.tracking_token || doc.tracking_token_hash), {
+		message: 'tracking_token or tracking_token_hash is required',
+		path: ['tracking_token']
+	});
 
 export const isJobApplication = (d: unknown): d is JobApplication =>
 	jobApplicationSchema.safeParse(d).success;

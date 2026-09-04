@@ -117,19 +117,19 @@ function confirmedAssignmentsForShift(
 		Partial<Pick<JobShift, 'date' | 'end_date' | 'start_time' | 'end_time'>>,
 	assignments: readonly ShiftAssignment[]
 ): number {
-	if (!shift.date || !shift.end_date || !shift.start_time || !shift.end_time) return 0;
-	const concreteShift = {
-		...shift,
-		date: shift.date,
-		end_date: shift.end_date,
-		start_time: shift.start_time,
-		end_time: shift.end_time
-	};
-	let window: ReturnType<typeof shiftDutyWindow>;
-	try {
-		window = shiftDutyWindow(concreteShift);
-	} catch {
-		return 0;
+	let window: ReturnType<typeof shiftDutyWindow> | null = null;
+	if (shift.date && shift.end_date && shift.start_time && shift.end_time) {
+		try {
+			window = shiftDutyWindow({
+				...shift,
+				date: shift.date,
+				end_date: shift.end_date,
+				start_time: shift.start_time,
+				end_time: shift.end_time
+			});
+		} catch {
+			window = null;
+		}
 	}
 	const volunteerIds = new Set<string>();
 	for (const assignment of assignments) {
@@ -141,7 +141,9 @@ function confirmedAssignmentsForShift(
 			continue;
 		const matches = assignment.shift_id
 			? assignment.shift_id === shift.id
-			: sameDutyWindow(assignment.duty_window, window);
+			: window
+				? sameDutyWindow(assignment.duty_window, window)
+				: false;
 		if (matches) volunteerIds.add(assignment.volunteer_id);
 	}
 	return volunteerIds.size;

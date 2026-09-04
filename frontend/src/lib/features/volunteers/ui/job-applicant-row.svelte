@@ -25,14 +25,14 @@
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
-	import { isControlledSkill } from '../domain/skills';
-	import { findSkill } from '../domain/skill-master';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { JobApplication } from '../domain/job-application.schema';
 
 	let {
 		application,
 		volunteerCode = null,
 		shiftLabel = null,
+		skillOptions = [],
 		onreview
 	}: {
 		application: JobApplication;
@@ -46,6 +46,8 @@
 		 * itself, only the job's shift row).
 		 */
 		shiftLabel?: string | null;
+		/** Effective volunteer skill master data for the current shelter. */
+		skillOptions?: readonly SkillOption[];
 		onreview: (application: JobApplication, decision: 'confirmed' | 'rejected') => void;
 	} = $props();
 
@@ -55,11 +57,10 @@
 	const statusMeta = $derived(APPLICATION_STATUS_META[application.status]);
 	const isPending = $derived(application.status === 'pending_review');
 	const skills = $derived(
-		a.skills.map((key) => ({
-			key,
-			label: findSkill(key)?.label ?? key,
-			controlled: isControlledSkill(key)
-		}))
+		a.skills.flatMap((key) => {
+			const entry = resolveSkillOption(key, skillOptions);
+			return entry ? [{ key, label: entry.label, controlled: entry.controlled }] : [];
+		})
 	);
 </script>
 

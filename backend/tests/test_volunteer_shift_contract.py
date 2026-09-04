@@ -51,3 +51,16 @@ def test_date_only_apply_is_rejected_when_two_shifts_share_a_window():
             ),
         )
     assert error.value.detail["error"] == "SHIFT_DATE_AMBIGUOUS"
+
+
+def test_shift_id_is_rejected_when_job_has_no_concrete_shifts():
+    job = SimpleNamespace(shifts=[])
+    with pytest.raises(HTTPException) as error:
+        _select_concrete_shift(
+            job,
+            VolunteerApplyRequest(
+                first_name="A", last_name="B", phone="0812345678", shift_id="sft:missing"
+            ),
+        )
+    assert error.value.status_code == 422
+    assert error.value.detail["error"] == "SHIFT_NOT_FOUND"

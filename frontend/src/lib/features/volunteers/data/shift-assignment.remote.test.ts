@@ -143,6 +143,33 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		);
 	});
 
+	it('rejects a duplicate legacy assignment by duty window when shift_id is absent', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put({
+			_id: 'shift_assignment:legacy',
+			type: 'shift_assignment',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-08-27T00:00:00.000Z',
+			updated_at: '2026-08-27T00:00:00.000Z',
+			created_by: 'legacy',
+			job_id: job._id,
+			volunteer_id: volunteer._id,
+			date: '2026-08-27',
+			shift: 'morning',
+			station: 'ครัว',
+			duty_window: assignmentInput(job._id, volunteer._id).duty_window,
+			status: 'assigned',
+			dispatch_status: 'accepted',
+			check_in_method: 'qr',
+			check_in_reason: null
+		});
+
+		await expect(assignments.assign(assignmentInput(job._id, volunteer._id), ctx)).rejects.toThrow(
+			'ถูกมอบหมายในกะนี้แล้ว'
+		);
+	});
+
 	it('assign() rolls the assignment back when the quota move fails', async () => {
 		const { jobs, volunteers, assignments, job, volunteer } = await setup();
 		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);

@@ -9,6 +9,7 @@ from tent_model.public_job import PublicJob
 from tent_model.public_job_application import PublicJobApplication
 from tent_model.public_shift_assignment import PublicShiftAssignment
 from tent_model.public_volunteer import PublicVolunteer
+from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
 from tent_model.volunteer_job_slot import (
     VolunteerJobShiftSlot,
     seed_job_shift_slot,
@@ -94,6 +95,20 @@ async def sync_job_shift_slot(*, job_id: str, shift_id: str) -> None:
     applications = await PublicJobApplication.find(
         {"job_id": job_id, "shift_id": shift_id, "status": "confirmed"}
     ).to_list()
+    # The legacy FastAPI path reserves the counter and writes the buffer synchronously on
+    # apply, but the buffer only reaches CouchDB (and PublicJobApplication) after the inbound
+    # worker syncs it. Include still-unsynced confirmed buffers so a back-office assignment
+    # change in the meantime does not reconcile the counter down to zero and wipe the
+    # reservation. The direct public CouchDB-writer path is represented by the application
+    # projection above and carries its counter in the projected job document.
+    pending_buffers = await VolunteerApplicationBuffer.find(
+        {
+            "job_id": job_id,
+            "shift_id": shift_id,
+            "status": "confirmed",
+            "synced_to_couch": False,
+        }
+    ).to_list()
     confirmed_ids: set[str] = set()
     dispatched_ids: set[str] = set()
     for assignment in assignments:
@@ -109,6 +124,7 @@ async def sync_job_shift_slot(*, job_id: str, shift_id: str) -> None:
     # overwrite those reservations. Use the application id when an old projection has
     # no volunteer link; it is still one confirmed application, not zero.
     confirmed_ids.update(app.volunteer_id or app.id for app in applications)
+    confirmed_ids.update(buf.volunteer_id or buf.id for buf in pending_buffers)
     counter = await VolunteerJobShiftSlot.get(shift_slot_id(job_id, shift_id))
     if counter:
         counter.confirmed_qty = len(confirmed_ids)

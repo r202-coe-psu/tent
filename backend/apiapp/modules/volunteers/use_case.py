@@ -215,20 +215,25 @@ def _select_concrete_shift(job: PublicJob, payload: VolunteerApplyRequest):
     ambiguous dates are rejected and a supplied id must be an actual child of this job.
     """
     if not job.shifts:
+        if payload.shift_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"success": False, "error": "SHIFT_NOT_FOUND"},
+            )
         return None
     if payload.shift_id:
         for shift in job.shifts:
             if shift.shift_id == payload.shift_id:
                 return shift
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"success": False, "error": "SHIFT_NOT_FOUND"},
         )
     candidates = [s for s in job.shifts if payload.shift_date and s.date == payload.shift_date]
     if len(candidates) == 1:
         return candidates[0]
     raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail={
             "success": False,
             "error": "SHIFT_ID_REQUIRED" if not candidates else "SHIFT_DATE_AMBIGUOUS",
@@ -302,7 +307,12 @@ class VolunteersUseCase:
                     public_shifts.append(
                         PublicJobShift(
                             **shift.model_dump(
-                                exclude={"slots_confirmed", "slots_dispatched", "slots_remaining"}
+                                exclude={
+                                    "quota",
+                                    "slots_confirmed",
+                                    "slots_dispatched",
+                                    "slots_remaining",
+                                }
                             ),
                             slots_confirmed=shift_confirmed,
                             slots_dispatched=shift_dispatched,

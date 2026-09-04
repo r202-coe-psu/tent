@@ -9,7 +9,10 @@ import {
 	volunteerApplyIpLimiter,
 	volunteerApplyPhoneLimiter
 } from '$lib/server/security/rate-limiter';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import {
+	applyPublicVolunteerApplication,
+	PublicApplicationError
+} from '$lib/features/volunteers/server/public-application';
 
 export const prerender = false;
 
@@ -28,11 +31,10 @@ const noStore = { 'Cache-Control': 'no-store' };
  * forgets the secret is rejected rather than silently unguarded — same rule as
  * `/api/public/v1/registrations`.
  *
- * The quota move, the ticket mint and the auto-accept decision all live upstream
- * (`VolunteersUseCase.apply`); this route validates, throttles and forwards. The
- * captcha token is consumed here and never sent on.
+ * The quota move, ticket mint, auto-accept decision and persistence happen through
+ * the public CouchDB writer. The captcha token is consumed here and never sent on.
  */
-export const POST: RequestHandler = async ({ params, request, fetch, getClientAddress }) => {
+export const POST: RequestHandler = async ({ params, request, getClientAddress }) => {
 	const payload = await request.json().catch(() => null);
 	const parsed = volunteerApplySchema.safeParse(payload);
 	if (!parsed.success) {
@@ -44,11 +46,16 @@ export const POST: RequestHandler = async ({ params, request, fetch, getClientAd
 	const { captchaToken, ...application } = parsed.data;
 
 	const ip = getClientAddress();
-	if (!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(application.phone)) {
+	const captchaConfigured = isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
+	const skipDevGuards = dev && !captchaConfigured;
+	if (
+		!skipDevGuards &&
+		(!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(application.phone))
+	) {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 
-	if (!isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY)) {
+	if (!captchaConfigured) {
 		if (!dev) {
 			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
 			return json(
@@ -67,26 +74,22 @@ export const POST: RequestHandler = async ({ params, request, fetch, getClientAd
 	}
 
 	try {
-		const res = await fetch(
-			`${fastapiBaseUrl()}/public/v1/jobs/${encodeURIComponent(params.id)}/apply`,
+		const result = await applyPublicVolunteerApplication(params.id, application);
+		return json(
+			{ success: true, ...result },
 			{
-				method: 'POST',
-				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				body: JSON.stringify(application)
+				status: 201,
+				headers: noStore
 			}
 		);
-		const body = await res.json().catch(() => null);
-		if (!res.ok) {
-			// Upstream refusals are the applicant's business — a full job or a closed board
-			// has to reach the form as itself, not as a generic failure.
-			const detail = (body as { detail?: { error?: string } } | null)?.detail;
+	} catch (error) {
+		if (error instanceof PublicApplicationError) {
 			return json(
-				{ success: false, error: detail?.error ?? 'APPLY_FAILED' },
-				{ status: res.status >= 400 && res.status < 500 ? res.status : 502, headers: noStore }
+				{ success: false, error: error.code },
+				{ status: error.httpStatus, headers: noStore }
 			);
 		}
-		return json(body, { headers: noStore });
-	} catch {
+		console.error('[public-volunteer-apply] direct CouchDB write failed', error);
 		return json({ success: false, error: 'APPLY_FAILED' }, { status: 503, headers: noStore });
 	}
 };

@@ -33,6 +33,15 @@
 		return counts;
 	});
 
+	const pendingApplicantCounts = $derived.by(() => {
+		const counts = new SvelteMap<string, number>();
+		for (const app of applicationsQuery.data ?? []) {
+			if (app.status !== 'pending_review') continue;
+			counts.set(app.job_id, (counts.get(app.job_id) ?? 0) + 1);
+		}
+		return counts;
+	});
+
 	let statusFilter = $state<JobBoardStatusFilter>('all');
 	let excludeClosed = $state(true);
 	let urgentOnly = $state(false);
@@ -131,7 +140,12 @@
 	{:else}
 		<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 			{#each filteredJobs as job (job._id)}
-				<JobCard {job} applicantCount={applicantCounts.get(job._id) ?? 0} onedit={openEdit} />
+				<JobCard
+					{job}
+					applicantCount={applicantCounts.get(job._id) ?? 0}
+					pendingApplicantCount={pendingApplicantCounts.get(job._id) ?? 0}
+					onedit={openEdit}
+				/>
 			{/each}
 		</div>
 	{/if}

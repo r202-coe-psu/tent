@@ -171,4 +171,15 @@ describe('shiftRoster', () => {
 			[]
 		);
 	});
+
+	it('keeps identity-linked assignments when the shift time snapshot is malformed', () => {
+		const broken = { ...SHIFT, start_time: '25:00', shift_id: 'shift:morning' };
+		const roster = shiftRoster(
+			broken,
+			'job:A',
+			[assignment({ _id: 'a:1', shift_id: 'shift:morning' })],
+			volunteersById([])
+		);
+		expect(roster).toHaveLength(1);
+	});
 });

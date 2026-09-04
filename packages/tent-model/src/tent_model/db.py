@@ -24,57 +24,57 @@ from tent_model.shift_response_buffer import ShiftResponseBuffer
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
 from tent_model.volunteer_job_slot import (
-	VolunteerJobShiftSlot,
-	VolunteerJobSlot,
+    VolunteerJobShiftSlot,
+    VolunteerJobSlot,
 )
 from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuffer
 
 ALL_DOCUMENTS = [
-	SyncCheckpoint,
-	PublicShelter,
-	PublicPerson,
-	PublicDonation,
-	PublicNeed,
-	DonationBuffer,
-	DonationNeedCounter,
-	RetentionAudit,
-	SearchAudit,
-	PublicAnnouncement,
-	ApiKey,
-	PublicJob,
-	PublicJobApplication,
-	VolunteerApplicationBuffer,
-	VolunteerJobSlot,
-	VolunteerJobShiftSlot,
-	PublicShiftAssignment,
-	ShiftResponseBuffer,
-	PublicVolunteer,
-	VolunteerProfileUpdateBuffer,
+    SyncCheckpoint,
+    PublicShelter,
+    PublicPerson,
+    PublicDonation,
+    PublicNeed,
+    DonationBuffer,
+    DonationNeedCounter,
+    RetentionAudit,
+    SearchAudit,
+    PublicAnnouncement,
+    ApiKey,
+    PublicJob,
+    PublicJobApplication,
+    VolunteerApplicationBuffer,
+    VolunteerJobSlot,
+    VolunteerJobShiftSlot,
+    PublicShiftAssignment,
+    ShiftResponseBuffer,
+    PublicVolunteer,
+    VolunteerProfileUpdateBuffer,
 ]
 
 _client: AsyncIOMotorClient | None = None
 
 
 def _database_name(mongodb_uri: str) -> str:
-	path = urlparse(mongodb_uri).path.lstrip("/")
-	name = path.split("?")[0] if path else ""
-	if not name:
-		msg = "DATABASE_URI must include a database name, e.g. mongodb://localhost:27017/tentdb"
-		raise ValueError(msg)
-	return name
+    path = urlparse(mongodb_uri).path.lstrip("/")
+    name = path.split("?")[0] if path else ""
+    if not name:
+        msg = "DATABASE_URI must include a database name, e.g. mongodb://localhost:27017/tentdb"
+        raise ValueError(msg)
+    return name
 
 
 async def init_db(mongodb_uri: str) -> None:
-	global _client
-	from beanie import init_beanie
+    global _client
+    from beanie import init_beanie
 
-	_client = AsyncIOMotorClient(mongodb_uri)
-	database = _client[_database_name(mongodb_uri)]
-	await init_beanie(database=database, document_models=ALL_DOCUMENTS)
+    _client = AsyncIOMotorClient(mongodb_uri)
+    database = _client[_database_name(mongodb_uri)]
+    await init_beanie(database=database, document_models=ALL_DOCUMENTS)
 
 
 async def close_db() -> None:
-	global _client
-	if _client is not None:
-		_client.close()
-		_client = None
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None

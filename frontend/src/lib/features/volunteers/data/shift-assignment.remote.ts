@@ -1,6 +1,7 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
+import { sameDutyWindow } from '../domain/duty-window';
 import {
 	isShiftAssignment,
 	shiftAssignmentSchema,
@@ -51,16 +52,24 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		}
 	}
 
-	/** Prevent the same volunteer from occupying the same concrete shift twice. */
+	/**
+	 * Prevent the same volunteer from occupying the same concrete shift twice.
+	 * Legacy rows written before `shift_id` existed on this schema carry no
+	 * `shift_id` at all, so `a.shift_id === input.shift_id` never matches them —
+	 * fall back to comparing `duty_window` for those rows, same as
+	 * `capacity.ts`/`shift-roster.ts` do on read.
+	 */
 	private async assertNoDuplicate(input: ShiftAssignmentInput): Promise<void> {
 		const existing = await this.list({ jobId: input.job_id });
 		if (
 			existing.some(
 				(a) =>
-					a.shift_id === input.shift_id &&
 					a.volunteer_id === input.volunteer_id &&
 					a.status !== 'cancelled' &&
-					a.status !== 'no_show'
+					a.status !== 'no_show' &&
+					(a.shift_id
+						? a.shift_id === input.shift_id
+						: sameDutyWindow(a.duty_window, input.duty_window))
 			)
 		) {
 			throw new Error('อาสาสมัครคนนี้ถูกมอบหมายในกะนี้แล้ว');

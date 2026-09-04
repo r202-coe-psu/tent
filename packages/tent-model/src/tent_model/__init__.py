@@ -45,7 +45,9 @@ from tent_model.volunteer_job_slot import (
 	decline_dispatched_slot,
 	release_job_slot,
 	reserve_job_slot,
+	seed_job_shift_slot,
 	seed_job_slot,
+	shift_slot_id,
 )
 
 __all__ = [
@@ -93,7 +95,9 @@ __all__ = [
 	"reserve_job_slot",
 	"reserve_quota",
 	"seed_counter",
+	"seed_job_shift_slot",
 	"seed_job_slot",
 	"set_on_hand_qty",
 	"set_reserved_qty",
+	"shift_slot_id",
 ]

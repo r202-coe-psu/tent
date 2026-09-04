@@ -177,7 +177,11 @@
 							? 'cursor-not-allowed border border-border/80 bg-muted text-muted-foreground opacity-70 select-none'
 							: 'hover:bg-opacity-90 cursor-pointer bg-primary text-white active:scale-[0.98]'}"
 					>
-						{isFull ? '🔒 กะเต็มแล้ว' : '🚀 สมัครกะนี้'}
+						{#if isFull}
+							🔒 กะเต็มแล้ว
+						{:else}
+							🚀 สมัครกะนี้
+						{/if}
 					</button>
 				</div>
 			{/each}

@@ -163,6 +163,8 @@ export function isValidThaiNationalId(value: string): boolean {
 }
 
 export const volunteerApplySchema = z.object({
+	/** Used by the direct CouchDB writer to select the job's shelter database. */
+	shelter_code: z.string().trim().min(1).optional(),
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
 	phone: phoneField,

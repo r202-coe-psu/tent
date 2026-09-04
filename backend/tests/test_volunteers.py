@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
-from tent_model.public_job import PublicJob, ShiftTemplate
+from tent_model.public_job import JobShift, PublicJob, ShiftTemplate
 from tent_model.public_job_application import (
     ApplicantSnapshot,
     PublicJobApplication,
@@ -120,6 +120,41 @@ async def test_list_jobs_reports_live_remaining_not_the_snapshot(
     assert job["slots_confirmed"] == 1
     assert job["slots_remaining"] == 2
     assert job["shelter_name"] == "ศูนย์ทดสอบ"
+
+
+async def test_list_jobs_serializes_concrete_shift_identity_and_quota(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    job = await _make_job(quota=3)
+    job.shifts = [
+        JobShift(
+            shift_id="shift:morning",
+            date="2026-09-04",
+            start_time="08:00",
+            end_time="12:00",
+            quota=3,
+            slots_confirmed=1,
+        )
+    ]
+    await job.save()
+
+    response = await client.get("/public/v1/jobs", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["jobs"][0]["shifts"] == [
+        {
+            "shift_id": "shift:morning",
+            "date": "2026-09-04",
+            "end_date": None,
+            "start_time": "08:00",
+            "end_time": "12:00",
+            "station": None,
+            "quota": 3,
+            "slots_confirmed": 1,
+            "slots_dispatched": 0,
+            "slots_remaining": 2,
+        }
+    ]
 
 
 async def test_auto_accept_operational_job_issues_confirmed_ticket(

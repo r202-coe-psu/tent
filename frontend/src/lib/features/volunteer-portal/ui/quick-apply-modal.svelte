@@ -100,6 +100,14 @@
 		}
 	});
 
+	// A concrete shift owns the date sent to the compatibility layer. Keep the
+	// legacy date field in sync when the applicant changes the shift selection.
+	$effect(() => {
+		if (!shiftId) return;
+		const selected = job?.shifts?.find((shift) => shift.shift_id === shiftId);
+		if (selected) shiftDate = selected.date;
+	});
+
 	function toggleSkill(skill: string) {
 		skills = skills.includes(skill) ? skills.filter((s) => s !== skill) : [...skills, skill];
 	}
@@ -134,6 +142,7 @@
 		}
 
 		const parsed = volunteerApplySchema.safeParse({
+			shelter_code: job.shelter_code,
 			first_name: firstName,
 			last_name: lastName,
 			phone,

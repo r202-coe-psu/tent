@@ -41,8 +41,8 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 - staff/device **ไม่เคย**คุย Mongo; app เขียน local PouchDB ก่อน แล้ว sync กับ active remote เดียว:
   central ปกติ, edge เฉพาะ WAN/central outage, local-only ถ้าไม่เห็นทั้งคู่
 - edge เป็น LAN continuity/fallback replica ไม่ใช่ normal client hub; เมื่อ WAN กลับมา edge sync backlog กลับ central
-- **sync worker** = service เดียวที่แตะทั้งสอง store; อยู่ฝั่ง central (มี WAN ถึง central CouchDB + Mongo)
-- Mongo replica ขึ้น public edge ได้ (read replica) แต่ write ทุกอย่างวิ่งผ่าน sync worker จุดเดียว
+- **sync worker** = service หลักที่แตะทั้งสอง storeและทำ CDC; อยู่ฝั่ง central (มี WAN ถึง central CouchDB + Mongo) ขณะที่ BFF ใช้ public writer ที่จำกัดสิทธิ์สำหรับ pre-register และ public job apply เท่านั้น
+- Mongo replica ขึ้น public edge ได้ (read replica); งานที่ต้องเข้า system-of-record ผ่าน sync worker หรือ public writer ที่กำหนดขอบเขตไว้แล้วตาม flow
 
 ---
 
@@ -52,7 +52,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 | --- | --- | --- | --- |
 | **Outbound** | CouchDB central → Mongo | tail `_changes` (CDC) → project → upsert | person index, shelters, needs, donation status |
 | **Inbound** | Mongo → CouchDB central | poll Mongo `donations` ใหม่ → `db.put(donation:{ulid})` | บันทึก donation ที่ public ประกาศเข้าระบบจริง |
-| **Inbound (volunteer)** | Mongo → CouchDB central | poll `volunteer_applications` / `volunteer_shift_responses` / `volunteer_profile_updates` | ใบจองภารกิจ, การตอบรับกะ, และการแก้ไขโปรไฟล์ที่จิตอาสาทำเองจากพอร์ทัล |
+| **Inbound (volunteer, legacy/buffered)** | Mongo → CouchDB central | poll `volunteer_applications` / `volunteer_shift_responses` / `volunteer_profile_updates` | คำขอจาก compatibility/legacy flows และการแก้ไขโปรไฟล์จากพอร์ทัล; public job apply ใหม่เขียนผ่าน public CouchDB writer โดยตรง (CR-107) |
 
 ทั้งสอง plane **idempotent** และมี **checkpoint** — restart worker ได้ปลอดภัย ไม่ซ้ำ ไม่หาย.
 

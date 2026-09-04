@@ -1,6 +1,7 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
+import { sha256Hex } from '$lib/db/hash';
 import {
 	isJobApplication,
 	jobApplicationSchema,
@@ -63,7 +64,10 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 
 	async getByTrackingToken(token: string): Promise<JobApplication | null> {
 		const docs = await this.repo.find<JobApplication>({
-			selector: { type: 'job_application', tracking_token: token },
+			selector: {
+				type: 'job_application',
+				$or: [{ tracking_token_hash: await sha256Hex(token) }, { tracking_token: token }]
+			},
 			limit: 1
 		});
 		return docs.filter(isJobApplication)[0] ?? null;

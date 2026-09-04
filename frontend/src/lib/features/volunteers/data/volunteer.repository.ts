@@ -44,10 +44,10 @@ import type {
 // convention) so each index also serves plain `{selector:{type:...}}` scans.
 //
 // job            → (shelter_code, status)
-// job_application→ (job_id, status) · (tracking_token) · (volunteer_id, status)
+// job_application→ (job_id, status) · (tracking_token / tracking_token_hash) · (volunteer_id, status)
 // shift_assignment→ (volunteer_id, date) · (date, shift) · (job_id, status) ·
 //                   (duty_window.start_ts, duty_window.end_ts)
-// volunteer      → (phone_hash) · (tracking_token) · (status)
+// volunteer      → (phone_hash) · (tracking_token / tracking_token_hash) · (status)
 // ---------------------------------------------------------------------------
 export const VOLUNTEER_MANGO_INDEXES = [
 	{
@@ -63,6 +63,11 @@ export const VOLUNTEER_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'tracking_token'] },
 		name: 'job-application-type-tracking-token-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'tracking_token_hash'] },
+		name: 'job-application-type-tracking-token-hash-idx',
 		type: 'json' as const
 	},
 	{
@@ -98,6 +103,11 @@ export const VOLUNTEER_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'tracking_token'] },
 		name: 'volunteer-type-tracking-token-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'tracking_token_hash'] },
+		name: 'volunteer-type-tracking-token-hash-idx',
 		type: 'json' as const
 	},
 	{

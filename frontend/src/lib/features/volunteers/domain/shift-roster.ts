@@ -49,8 +49,9 @@ const ROSTER_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
  *
  * A shift with a malformed date/time (should not happen — `job.shifts[]` is
  * schema-validated on every write — but this is read code, not a write path)
- * returns an empty roster rather than throwing, since a broken row simply has
- * no assignments that could possibly match it.
+ * falls back to `shift_id`-only matching instead of throwing: rows with a
+ * `shift_id` still resolve correctly, and only the legacy duty-window
+ * fallback for rows without one comes up empty.
  */
 export function shiftRoster(
 	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
@@ -63,11 +64,11 @@ export function shiftRoster(
 		Pick<Volunteer, 'first_name' | 'last_name' | 'volunteer_code' | 'phone'>
 	>
 ): ShiftRosterEntry[] {
-	let window: ReturnType<typeof shiftDutyWindow>;
+	let window: ReturnType<typeof shiftDutyWindow> | null = null;
 	try {
 		window = shiftDutyWindow(shift);
 	} catch {
-		return [];
+		window = null;
 	}
 
 	const matched = assignments.filter(
@@ -76,7 +77,9 @@ export function shiftRoster(
 			ROSTER_STATUSES.has(a.status) &&
 			(a.shift_id
 				? a.shift_id === (shift.shift_id ?? shift.id)
-				: sameDutyWindow(a.duty_window, window))
+				: window
+					? sameDutyWindow(a.duty_window, window)
+					: false)
 	);
 	return [...new Map(matched.map((a) => [a.volunteer_id, a])).values()].map((a) => {
 		const volunteer = volunteersById.get(a.volunteer_id);

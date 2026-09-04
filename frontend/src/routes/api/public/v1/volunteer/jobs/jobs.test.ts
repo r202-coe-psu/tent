@@ -6,6 +6,10 @@ import {
 	volunteerApplyPhoneLimiter,
 	volunteerTicketLimiter
 } from '$lib/server/security/rate-limiter';
+import {
+	applyPublicVolunteerApplication,
+	PublicApplicationError
+} from '$lib/features/volunteers/server/public-application';
 
 type GetEvent = Parameters<typeof GET>[0];
 type PostEvent = Parameters<typeof POST>[0];
@@ -32,10 +36,24 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 
+vi.mock('$lib/features/volunteers/server/public-application', () => ({
+	applyPublicVolunteerApplication: vi.fn(),
+	PublicApplicationError: class PublicApplicationError extends Error {
+		code: string;
+		httpStatus: number;
+		constructor(code: string, httpStatus = 409) {
+			super(code);
+			this.code = code;
+			this.httpStatus = httpStatus;
+		}
+	}
+}));
+
 const upstream = (body: unknown, ok = true, status = 200) =>
 	vi.fn().mockResolvedValue({ ok, status, json: async () => body });
 
 const validApplication = {
+	shelter_code: 'SH001',
 	first_name: 'เก่งกล้า',
 	last_name: 'งานอาสา',
 	phone: '081-234-5678',
@@ -117,20 +135,30 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 		};
 	}
 
-	it('normalises the application and never forwards the captcha token', async () => {
+	it('writes through the direct CouchDB application service', async () => {
+		vi.mocked(applyPublicVolunteerApplication).mockResolvedValue({
+			tracking_token: 'TKT-VOL-1',
+			status: 'confirmed',
+			job_id: 'job:1'
+		});
 		const { response, fetch } = post(validApplication);
 		const result = await response;
 
-		expect(result.status).toBe(200);
-		expect(await result.json()).toEqual({ success: true, tracking_token: 'TKT-VOL-1' });
-
-		const [url, init] = vi.mocked(fetch).mock.calls[0]!;
-		expect(url).toBe('http://localhost:9000/public/v1/jobs/job%3A1/apply');
-		const sent = JSON.parse(String((init as RequestInit).body));
-		// The separators the applicant typed are stripped before the phone is used as a key
-		// anywhere downstream — the same normalisation the ticket lookup applies.
-		expect(sent.phone).toBe('0812345678');
-		expect(sent).not.toHaveProperty('captchaToken');
+		expect(result.status).toBe(201);
+		expect(await result.json()).toEqual({
+			success: true,
+			tracking_token: 'TKT-VOL-1',
+			status: 'confirmed',
+			job_id: 'job:1'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(applyPublicVolunteerApplication).toHaveBeenCalledWith('job:1', {
+			shelter_code: 'SH001',
+			first_name: 'เก่งกล้า',
+			last_name: 'งานอาสา',
+			phone: '0812345678',
+			skills: ['cooking']
+		});
 	});
 
 	it('rejects a malformed application before spending any budget', async () => {
@@ -147,20 +175,21 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 		expect(fetch).not.toHaveBeenCalled();
 	});
 
-	it("passes upstream's own refusal through, so a full job says so", async () => {
-		const { response } = post(
-			validApplication,
-			upstream({ detail: { success: false, error: 'JOB_FULL' } }, false, 409)
+	it("passes the writer's own refusal through, so a full job says so", async () => {
+		vi.mocked(applyPublicVolunteerApplication).mockRejectedValue(
+			new PublicApplicationError('JOB_FULL', 409)
 		);
+		const { response } = post(validApplication);
 		const result = await response;
 		expect(result.status).toBe(409);
 		expect(await result.json()).toEqual({ success: false, error: 'JOB_FULL' });
 	});
 
-	it('reports an upstream server fault as a gateway failure, not as the applicant fault', async () => {
-		const { response } = post(validApplication, upstream({ detail: 'boom' }, false, 500));
+	it('reports a writer server fault as a service failure, not as the applicant fault', async () => {
+		vi.mocked(applyPublicVolunteerApplication).mockRejectedValue(new Error('boom'));
+		const { response } = post(validApplication);
 		const result = await response;
-		expect(result.status).toBe(502);
+		expect(result.status).toBe(503);
 		expect(await result.json()).toEqual({ success: false, error: 'APPLY_FAILED' });
 	});
 });

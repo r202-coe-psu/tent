@@ -26,14 +26,16 @@
 	/**
 	 * Master Data entry per required skill (CR-100 — `skills_required` stores
 	 * codes, with pre-CR-100 labels still resolving). A value Master Data no
-	 * longer carries still renders, unlabelled.
+	 * longer carries is omitted so internal IDs never leak into the UI.
 	 */
 	const skillCatalog = useSkillOptions();
 	const skills = $derived(
-		(job.skills_required ?? []).map((key) => ({
-			key,
-			entry: resolveSkillOption(key, skillCatalog.options)
-		}))
+		(job.skills_required ?? [])
+			.map((key) => ({
+				key,
+				entry: resolveSkillOption(key, skillCatalog.options)
+			}))
+			.filter((skill) => skill.entry)
 	);
 
 	/** Thai label per stored status — the toast must not show the raw enum value. */

@@ -8,6 +8,7 @@ import {
 	jobShiftQuotaSplits,
 	isCapacityTrackedJobStatus
 } from './capacity';
+import type { ShiftAssignment } from './shift-assignment.schema';
 
 describe('isCapacityTrackedJobStatus', () => {
 	it('tracks capacity for open and full jobs', () => {
@@ -186,6 +187,24 @@ describe('jobShiftCapacities', () => {
 			assignment('a3', 'volunteer:2', 'completed')
 		]);
 		expect(out.map((c) => c.confirmed)).toEqual([1, 0]);
+	});
+
+	it('matches an exact shift_id even when shift snapshot fields are unavailable', () => {
+		const out = jobShiftCapacities(
+			{
+				...job([{ id: 'a', quota: 2 }], 0),
+				shifts: [{ id: 'a', quota: 2 }]
+			},
+			[
+				{
+					job_id: 'job:X',
+					shift_id: 'a',
+					volunteer_id: 'volunteer:1',
+					status: 'assigned'
+				} as ShiftAssignment
+			]
+		);
+		expect(out[0]?.confirmed).toBe(1);
 	});
 });
 

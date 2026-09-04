@@ -37,6 +37,7 @@ interface ApplicationDoc {
 	job_id?: string;
 	volunteer_id?: string;
 	tracking_token?: string;
+	tracking_token_hash?: string;
 	status?: string;
 	applicant?: {
 		first_name?: string;
@@ -61,6 +62,7 @@ interface VolunteerDoc {
 	phone?: string;
 	volunteer_code?: string;
 	tracking_token?: string;
+	tracking_token_hash?: string;
 	status?: string;
 	created_at?: string;
 }

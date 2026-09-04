@@ -90,10 +90,17 @@ describe('jobApplicationSchema', () => {
 		);
 	});
 
-	it('rejects a missing tracking_token', () => {
+	it('rejects a document missing both token forms', () => {
 		const doc = validDoc() as Record<string, unknown>;
 		delete doc.tracking_token;
 		expect(jobApplicationSchema.safeParse(doc).success).toBe(false);
+	});
+
+	it('accepts a public document that stores only the token hash', () => {
+		const doc = validDoc() as Record<string, unknown>;
+		delete doc.tracking_token;
+		doc.tracking_token_hash = 'hash-1';
+		expect(jobApplicationSchema.safeParse(doc).success).toBe(true);
 	});
 
 	it('rejects hostile input shapes', () => {

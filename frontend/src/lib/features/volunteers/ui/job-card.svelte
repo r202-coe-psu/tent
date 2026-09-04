@@ -9,22 +9,25 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Flame from '@lucide/svelte/icons/flame';
 	import Users from '@lucide/svelte/icons/users';
+	import Hourglass from '@lucide/svelte/icons/hourglass';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import JobQuotaBar from './job-quota-bar.svelte';
-	import { resolveSkillLabel } from '../domain/skill-catalog';
+	import { resolveSkillOption } from '../domain/skill-catalog';
 	import { useSkillOptions } from '../application/queries';
 	import type { Job, JobStatus } from '../domain/job.schema';
 
 	let {
 		job,
 		applicantCount,
+		pendingApplicantCount,
 		onedit
 	}: {
 		job: Job;
 		applicantCount: number;
+		pendingApplicantCount: number;
 		onedit: (job: Job) => void;
 	} = $props();
 
@@ -40,14 +43,16 @@
 	/**
 	 * `skills_required` stores master-data codes (CR-100) — resolve each to its
 	 * label here rather than printing the raw value. A code Master Data no
-	 * longer carries falls back to itself, so nothing silently disappears.
+	 * longer carries is omitted so internal IDs never leak into the UI.
 	 */
 	const skillCatalog = useSkillOptions();
 	const skillLabels = $derived(
-		(job.skills_required ?? []).map((value) => ({
-			value,
-			label: resolveSkillLabel(value, skillCatalog.options)
-		}))
+		(job.skills_required ?? [])
+			.map((value) => ({
+				value,
+				entry: resolveSkillOption(value, skillCatalog.options)
+			}))
+			.filter((skill) => skill.entry)
 	);
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
@@ -106,7 +111,9 @@
 	{#if skillLabels.length > 0}
 		<div class="flex flex-wrap gap-1">
 			{#each skillLabels as skill (skill.value)}
-				<Badge variant="outline" class="max-w-full text-[11px] break-words">{skill.label}</Badge>
+				<Badge variant="outline" class="max-w-full text-[11px] break-words"
+					>{skill.entry?.label}</Badge
+				>
 			{/each}
 		</div>
 	{/if}
@@ -124,6 +131,10 @@
 			<span class="inline-flex items-center gap-1">
 				<Users class="h-3.5 w-3.5" />
 				ผู้สมัคร {applicantCount}
+			</span>
+			<span class="inline-flex items-center gap-1 font-medium text-amber-700">
+				<Hourglass class="h-3.5 w-3.5" />
+				รอยืนยัน {pendingApplicantCount}
 			</span>
 		</div>
 		<Button size="sm" variant="outline" href={detailHref}>ดูรายละเอียด</Button>

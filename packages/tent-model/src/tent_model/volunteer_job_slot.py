@@ -28,7 +28,9 @@ class VolunteerJobSlot(Document):
     id: str = Field(alias="_id")
     shelter_code: str
     quota: int = 0
-    #: Applications holding a confirmed ticket. Owned by FastAPI via atomic ``$inc``.
+    #: Applications holding a confirmed ticket. Legacy FastAPI uses this atomic counter;
+    #: direct public CouchDB applications carry the source-of-truth count in ``job`` and
+    #: the worker reconciles this read-model counter from the projected roster.
     confirmed_qty: int = 0
     #: Offers a manager has pushed out that the volunteer has not answered yet
     #: (CR-092 🟡). Owned by the back-office dispatch flow; counted against the ceiling

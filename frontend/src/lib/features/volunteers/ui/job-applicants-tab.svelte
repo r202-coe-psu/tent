@@ -23,13 +23,19 @@
 	import { partitionApplicantQueue } from '../domain/applicant-queue';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
-	import { useJobApplications, useShiftAssignments, useVolunteers } from '../application/queries';
+	import {
+		useJobApplications,
+		useShiftAssignments,
+		useSkillOptions,
+		useVolunteers
+	} from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const applicationsQuery = useJobApplications();
 	const assignmentsQuery = useShiftAssignments();
 	const volunteersQuery = useVolunteers();
+	const skillCatalog = useSkillOptions();
 
 	const loading = $derived(applicationsQuery.isPending);
 	const queue = $derived(partitionApplicantQueue(applicationsQuery.data ?? [], job._id));
@@ -155,6 +161,7 @@
 							? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 							: null}
 						shiftLabel={shiftLabelFor(application)}
+						skillOptions={skillCatalog.options}
 						onreview={openReview}
 					/>
 				{/each}
@@ -176,6 +183,7 @@
 									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 									: null}
 								shiftLabel={shiftLabelFor(application)}
+								skillOptions={skillCatalog.options}
 								onreview={openReview}
 							/>
 						{/each}

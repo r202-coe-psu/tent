@@ -5,7 +5,11 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Tag from '@lucide/svelte/icons/tag';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { fetchVolunteerSkills } from '$lib/features/volunteer-portal/data/volunteer-api';
+	import { findSkillOption } from '$lib/features/volunteer-portal/domain/skill-label';
+	import type { VolunteerSkillOption } from '$lib/features/volunteer-portal/domain/volunteer';
 	import JobCard from './JobCard.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './QuickApplyModal.svelte';
 
@@ -32,11 +36,13 @@
 	}
 
 	interface RawPublicJobShift {
+		shift_id?: string;
 		id?: string;
 		date: string;
 		start_time: string;
 		end_time: string;
 		quota: number;
+		slots_confirmed?: number;
 		confirmed?: number;
 	}
 
@@ -66,7 +72,55 @@
 
 	let rawJobs = $state<RawPublicJob[]>([]);
 	let sheltersList = $state<{ code: string; name: string }[]>([]);
+	let skillOptions = $state<VolunteerSkillOption[]>([]);
 	let isLoading = $state(true);
+
+	function resolvedSkillLabel(value: string): string {
+		return findSkillOption(value, skillOptions)?.label?.trim() ?? '';
+	}
+
+	const weekdayIndexes: Record<string, number> = {
+		sun: 0,
+		sunday: 0,
+		จันทร์: 1,
+		mon: 1,
+		monday: 1,
+		tue: 2,
+		tuesday: 2,
+		พุธ: 3,
+		wed: 3,
+		wednesday: 3,
+		พฤหัสบดี: 4,
+		thu: 4,
+		thursday: 4,
+		ศุกร์: 5,
+		fri: 5,
+		friday: 5,
+		เสาร์: 6,
+		sat: 6,
+		saturday: 6
+	};
+
+	function asApplyDate(value: string, index: number): string {
+		const normalized = value.trim();
+		if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+
+		const targetDay = weekdayIndexes[normalized.toLowerCase()];
+		const today = new Date();
+		const dayOffset = targetDay === undefined ? index : (targetDay - today.getDay() + 7) % 7;
+		// Keep legacy/template records usable even if their day value is not a
+		// recognised weekday. The application API still requires an ISO date.
+		return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset))
+			.toISOString()
+			.slice(0, 10);
+	}
+
+	function isControlledSkill(value: string): boolean {
+		const option = findSkillOption(value, skillOptions);
+		if (option?.category?.toLowerCase() === 'controlled') return true;
+		const text = `${option?.label ?? ''} ${value}`.toLowerCase();
+		return text.includes('แพทย์') || text.includes('พยาบาล');
+	}
 
 	async function fetchPublicJobs() {
 		try {
@@ -84,8 +138,18 @@
 		}
 	}
 
+	async function fetchMasterSkills() {
+		try {
+			skillOptions = await fetchVolunteerSkills();
+		} catch (err) {
+			// Unresolved skill codes stay hidden rather than leaking internal IDs to users.
+			console.warn('Failed to load volunteer skill master data:', err);
+		}
+	}
+
 	onMount(() => {
 		fetchPublicJobs();
+		fetchMasterSkills();
 	});
 
 	const shelterMap = $derived.by<Record<string, string>>(() => {
@@ -96,7 +160,8 @@
 		return res;
 	});
 
-	// Map public jobs from database (with fallback)
+	// Render only jobs returned by the public API. Synthetic jobs cannot be applied to
+	// because their IDs do not exist in the backend.
 	const displayedJobs = $derived.by<DisplayJobCard[]>(() => {
 		if (rawJobs && rawJobs.length > 0) {
 			return rawJobs.map((job: RawPublicJob) => {
@@ -109,9 +174,7 @@
 					'ศูนย์พักพิงหลัก';
 				const isControlled =
 					job.tier === 'staff-capable' ||
-					job.requires_review === true ||
-					(job.skills_required?.some((s: string) => s.includes('แพทย์') || s.includes('พยาบาล')) ??
-						false);
+					(job.skills_required?.some((s: string) => isControlledSkill(s)) ?? false);
 
 				let shifts: DisplayShift[];
 				if (job.shifts && job.shifts.length > 0) {
@@ -119,13 +182,14 @@
 						const st = s.start_time || '08:00';
 						const et = s.end_time || '16:00';
 						return {
-							id: s.id || `s-${idx}`,
+							id: s.shift_id || s.id || `s-${idx}`,
 							date: s.date || new Date().toISOString().slice(0, 10),
 							time: `${st} - ${et} น.`,
 							start_time: st,
 							end_time: et,
 							quota: s.quota || 10,
 							confirmed:
+								s.slots_confirmed ??
 								s.confirmed ??
 								Math.min(
 									s.quota || 10,
@@ -141,7 +205,7 @@
 						tmpl.days && tmpl.days.length > 0 ? tmpl.days : [new Date().toISOString().slice(0, 10)];
 					shifts = days.map((day: string, idx: number) => ({
 						id: `st-${cleanJobId}-${idx}`,
-						date: day,
+						date: asApplyDate(day, idx),
 						time: `${stTime} - ${edTime} น.`,
 						start_time: stTime,
 						end_time: edTime,
@@ -182,14 +246,15 @@
 
 				if (job.skills_required) {
 					for (const sk of job.skills_required) {
-						tags.push({ label: sk, variant: 'outline' });
+						const label = resolvedSkillLabel(sk);
+						if (label) tags.push({ label, variant: 'outline' });
 					}
 				}
 
 				return {
 					id: cleanJobId,
 					title: job.title,
-					shelter: shelterName,
+					shelter: job.shelter_name || shelterName,
 					shelter_code: job.shelter_code,
 					description: job.description || 'ช่วยเหลืองานในศูนย์พักพิงตามภารกิจที่ได้รับมอบหมาย',
 					shifts,
@@ -210,21 +275,25 @@
 	let selectedShelter = $state('all');
 	let selectedSkill = $state('all');
 
-	// Unique list of shelter names for filter dropdown
-	const availableShelterNames = $derived.by<string[]>(() =>
-		displayedJobs
-			.map((j) => j.shelter)
-			.filter((val, idx, arr) => Boolean(val) && arr.indexOf(val) === idx)
-	);
+	// Unique list of shelters for the filter. Use the code for selection and the
+	// synced public name for display, with the name as a legacy fallback.
+	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
+		const shelters: Record<string, string> = {};
+		for (const job of displayedJobs) {
+			const code = job.shelter_code || job.shelter;
+			if (code && job.shelter && !shelters[code]) shelters[code] = job.shelter;
+		}
+		return Object.entries(shelters).map(([code, name]) => ({ code, name }));
+	});
 
-	// Unique list of skills extracted from displayed jobs
+	// Keep raw codes as filter values, but only expose skills that have a master label.
 	const availableSkills = $derived.by<string[]>(() => {
 		const skills: string[] = [];
 		for (const j of displayedJobs) {
 			if (j.skills_required && Array.isArray(j.skills_required)) {
 				for (const s of j.skills_required) {
 					const trimmed = s.trim();
-					if (trimmed && !skills.includes(trimmed)) {
+					if (trimmed && resolvedSkillLabel(trimmed) && !skills.includes(trimmed)) {
 						skills.push(trimmed);
 					}
 				}
@@ -244,7 +313,7 @@
 				if (!matchText) return false;
 			}
 
-			if (selectedShelter !== 'all' && j.shelter !== selectedShelter) {
+			if (selectedShelter !== 'all' && (j.shelter_code || j.shelter) !== selectedShelter) {
 				return false;
 			}
 
@@ -281,6 +350,7 @@
 				id: found.id,
 				title: found.title,
 				shelter: found.shelter,
+				shelter_code: found.shelter_code,
 				shifts: found.shifts,
 				selectedShift: shift,
 				skills_required: found.skills_required
@@ -404,7 +474,7 @@
 								? 'border border-primary bg-primary/10 font-bold text-primary shadow-xs'
 								: 'border border-border/70 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
 						>
-							🏷️ {skill}
+							🏷️ {resolvedSkillLabel(skill)}
 						</button>
 					{/each}
 
@@ -426,15 +496,30 @@
 				<div class="flex items-center gap-3">
 					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ศูนย์:</span>
 					<div class="relative w-full">
-						<select
-							bind:value={selectedShelter}
-							class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold text-foreground outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-						>
-							<option value="all">📍 ทุกศูนย์พักพิง ({availableShelterNames.length})</option>
-							{#each availableShelterNames as name (name)}
-								<option value={name}>{name}</option>
-							{/each}
-						</select>
+						<Select.Root type="single" bind:value={selectedShelter}>
+							<Select.Trigger
+								class="h-11 w-full rounded-xl border-border/80 bg-muted/20 pl-10 font-bold text-foreground"
+							>
+								{#if selectedShelter === 'all'}
+									📍 ทุกศูนย์พักพิง ({availableShelters.length})
+								{:else}
+									{availableShelters.find((s) => s.code === selectedShelter)?.name ??
+										'เลือกศูนย์พักพิง'}
+								{/if}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Group>
+									<Select.Item value="all" label={`ทุกศูนย์พักพิง (${availableShelters.length})`}>
+										📍 ทุกศูนย์พักพิง ({availableShelters.length})
+									</Select.Item>
+									{#each availableShelters as shelter (shelter.code)}
+										<Select.Item value={shelter.code} label={shelter.name}>
+											{shelter.name}
+										</Select.Item>
+									{/each}
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
 						<MapPin class="absolute top-2.5 left-3.5 h-4 w-4 text-danger" />
 					</div>
 				</div>
@@ -443,15 +528,31 @@
 				<div class="flex items-center gap-3">
 					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ทักษะ:</span>
 					<div class="relative w-full">
-						<select
-							bind:value={selectedSkill}
-							class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold text-foreground outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-						>
-							<option value="all">🏷️ ทุกทักษะ ({availableSkills.length})</option>
-							{#each availableSkills as skill (skill)}
-								<option value={skill}>{skill}</option>
-							{/each}
-						</select>
+						<Select.Root type="single" bind:value={selectedSkill}>
+							<Select.Trigger
+								class="h-11 w-full rounded-xl border-border/80 bg-muted/20 pl-10 font-bold text-foreground"
+							>
+								{#if selectedSkill === 'all'}
+									🏷️ ทุกทักษะ ({availableSkills.length})
+								{:else if resolvedSkillLabel(selectedSkill)}
+									🏷️ {resolvedSkillLabel(selectedSkill)}
+								{:else}
+									🏷️ เลือกทักษะ
+								{/if}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Group>
+									<Select.Item value="all" label={`ทุกทักษะ (${availableSkills.length})`}>
+										🏷️ ทุกทักษะ ({availableSkills.length})
+									</Select.Item>
+									{#each availableSkills as skill (skill)}
+										<Select.Item value={skill} label={resolvedSkillLabel(skill)}>
+											🏷️ {resolvedSkillLabel(skill)}
+										</Select.Item>
+									{/each}
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
 						<Tag class="absolute top-2.5 left-3.5 h-4 w-4 text-primary" />
 					</div>
 				</div>
