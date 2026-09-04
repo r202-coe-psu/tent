@@ -14,16 +14,17 @@ from worker.mongo import (
     apply_need_counters,
     apply_person,
     apply_shelter,
+    apply_shelter_deactivate,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
     resolve_shelter_code_for_registry_delete,
 )
 from worker.mongo.announcement import apply_announcement
+from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.announcement import project_announcement
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
 from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
@@ -59,7 +60,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc_id, deleted_doc=deleted_doc
                 )
                 if shelter_code:
-                    await apply_shelter("delete", {"_id": shelter_code})
+                    await apply_shelter_deactivate(shelter_code)
                     await delete_persons_for_shelter(shelter_code)
                     await delete_needs_for_shelter(shelter_code)
         else:
@@ -126,14 +127,18 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # …and one that arrived without ever reserving — a walk-in staff keyed
                 # in — has to start holding it, or the counter hands the same goods out
                 # to a public donor as well.
-                await reserve_walk_in_quota(couch, doc, shelter_code=shelter_code, now=now)
+                await reserve_walk_in_quota(
+                    couch, doc, shelter_code=shelter_code, now=now
+                )
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "donation_campaign":
                 # CR-060: seed the atomic quota ceiling FastAPI reserves against. The
                 # campaign doc is already in hand from the change row — no re-fetch,
                 # unlike the full re-scan _reproject_needs does.
-                await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+                await apply_need_counters(
+                    plan_need_counters(doc, shelter_code=shelter_code)
+                )
                 # A counter seeded now starts at on_hand_qty 0 even when the shelf is
                 # already full, so give it the current balance before it takes bookings.
                 await refresh_on_hand(couch, shelter_code)

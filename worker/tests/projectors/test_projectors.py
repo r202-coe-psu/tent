@@ -67,11 +67,14 @@ def test_project_shelter_v1_open():
     assert payload is not None
     assert payload["_id"] == "SH001"
     assert payload["status"] == "open"
+    assert payload["location_status"] == "open"
     assert payload["registry_id"] == "shelter:01TEST"
     assert payload["capacity"] == 200
     assert payload["geo"] == {"lat": 7.0, "lng": 100.5}
     assert payload["location"] == {"type": "Point", "coordinates": [100.5, 7.0]}
     assert payload["site_kind"] == "evacuation_center"
+    assert payload["is_active"] is True
+    assert payload["location_type"] == "shelter"
     assert "national_id" not in payload
 
 
@@ -96,7 +99,9 @@ def test_resolve_site_kind_defaults_unknown_values_to_evacuation_center():
     assert resolve_site_kind({"site_kind": "host"}) == "evacuation_center"
 
 
-def test_project_shelter_closed_deletes():
+def test_project_shelter_closed_soft_retains():
+    """Partner ODT ("Soft Delete" / "State Separation") — a routine close is an
+    Operational Status change only; it must never remove the row or flip `is_active`."""
     doc = {
         "type": "shelter",
         "code": "SH001",
@@ -105,8 +110,38 @@ def test_project_shelter_closed_deletes():
         "updated_at": "2026-01-01T00:00:00.000Z",
     }
     action, payload = project_shelter(doc)
-    assert action == "delete"
-    assert payload == {"_id": "SH001"}
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["status"] == "closed"
+    assert payload["location_status"] == "closed"
+    assert payload["is_active"] is True
+
+
+def test_project_shelter_malformed_doc_deletes():
+    """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
+    CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""
+    assert project_shelter({"type": "household"}) == ("delete", None)
+    assert project_shelter({"type": "shelter"}) == ("delete", None)
+
+
+def test_compose_address_prefers_structured_fields_over_legacy():
+    from worker.projectors.shelter import compose_address
+
+    assert (
+        compose_address(
+            {
+                "address_no": "99/1",
+                "subdistrict": "หาดใหญ่",
+                "district": "หาดใหญ่",
+                "province": "สงขลา",
+            }
+        )
+        == "99/1 ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา"
+    )
+    assert (
+        compose_address({"location": {"address": "legacy address"}}) == "legacy address"
+    )
+    assert compose_address({}) is None
 
 
 def test_map_public_shelter_status():
@@ -131,6 +166,8 @@ def test_project_shelter_standby_keeps_status():
     assert action == "upsert"
     assert payload is not None
     assert payload["status"] == "standby"
+    assert payload["location_status"] == "standby"
+    assert payload["is_active"] is True
 
 
 def test_is_shelter_open_variants():
@@ -284,8 +321,8 @@ def _campaign(**overrides):
 def test_plan_need_counters_one_seed_per_need():
     seeds = plan_need_counters(_campaign(), shelter_code="SH001")
     assert [(s.item_id, s.qty_target) for s in seeds] == [
-        ("item:rice", Decimal("10")),
-        ("item:water", Decimal("25")),
+        ("item:rice", Decimal(10)),
+        ("item:water", Decimal(25)),
     ]
     assert {s.shelter_code for s in seeds} == {"SH001"}
     assert {s.campaign_id for s in seeds} == {"donation_campaign:01"}
@@ -311,7 +348,7 @@ def test_plan_need_counters_skips_unusable_needs():
         ]
     )
     seeds = plan_need_counters(campaign, shelter_code="SH001")
-    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:egg", Decimal("0"))]
+    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:egg", Decimal(0))]
 
 
 def test_plan_need_counters_dedups_repeated_item():
@@ -322,19 +359,29 @@ def test_plan_need_counters_dedups_repeated_item():
         ]
     )
     seeds = plan_need_counters(campaign, shelter_code="SH001")
-    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:rice", Decimal("10"))]
+    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:rice", Decimal(10))]
 
 
 # --- needs[].status closed — must mirror the TS computeNeeds (T-22 §1.6, CR-052) ---
 
 
 def _open_campaign(campaign_id: str, needs: list[dict]) -> dict:
-    return {"_id": campaign_id, "type": "donation_campaign", "status": "open", "needs": needs}
+    return {
+        "_id": campaign_id,
+        "type": "donation_campaign",
+        "status": "open",
+        "needs": needs,
+    }
 
 
 def test_compute_needs_reports_a_closed_need_as_taking_nothing():
     remaining, _ = compute_needs(
-        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [
+            _open_campaign(
+                "c1",
+                [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}],
+            )
+        ],
         [],
     )
     assert remaining["item:rice"] == "0.0"
@@ -343,7 +390,12 @@ def test_compute_needs_reports_a_closed_need_as_taking_nothing():
 def test_compute_needs_keeps_a_closed_need_in_the_map():
     """A missing key reads as "not tracked" downstream and lets the booking through."""
     remaining, _ = compute_needs(
-        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [
+            _open_campaign(
+                "c1",
+                [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}],
+            )
+        ],
         [],
     )
     assert "item:rice" in remaining
@@ -351,7 +403,12 @@ def test_compute_needs_keeps_a_closed_need_in_the_map():
 
 def test_compute_needs_ignores_donations_against_a_closed_need():
     remaining, _ = compute_needs(
-        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [
+            _open_campaign(
+                "c1",
+                [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}],
+            )
+        ],
         [
             {
                 "campaign_id": "c1",
@@ -366,7 +423,10 @@ def test_compute_needs_ignores_donations_against_a_closed_need():
 def test_compute_needs_still_offers_an_item_another_campaign_has_open():
     remaining, item_campaign = compute_needs(
         [
-            _open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}]),
+            _open_campaign(
+                "c1",
+                [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}],
+            ),
             _open_campaign("c2", [{"item_id": "item:rice", "qty_target": "40"}]),
         ],
         [],
@@ -381,13 +441,23 @@ def test_compute_needs_still_offers_an_item_another_campaign_has_open():
 
 
 def _ledger(item_id: str, qty: str, reason: str = "donation", ref_id=None) -> dict:
-    return {"type": "stock_ledger", "item_id": item_id, "qty": qty, "reason": reason,
-            "ref_id": ref_id}
+    return {
+        "type": "stock_ledger",
+        "item_id": item_id,
+        "qty": qty,
+        "reason": reason,
+        "ref_id": ref_id,
+    }
 
 
 def _don(did: str, campaign_id, status: str, item_id: str, qty: str) -> dict:
-    return {"_id": did, "type": "donation", "campaign_id": campaign_id, "status": status,
-            "items": [{"item_id": item_id, "qty": qty}]}
+    return {
+        "_id": did,
+        "type": "donation",
+        "campaign_id": campaign_id,
+        "status": status,
+        "items": [{"item_id": item_id, "qty": qty}],
+    }
 
 
 def test_compute_needs_counts_what_the_warehouse_holds():
@@ -432,7 +502,10 @@ def test_compute_needs_reopens_when_stock_is_issued_out():
     remaining, _ = compute_needs(
         [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
         [],
-        [_ledger("item:rice", "500"), _ledger("item:rice", "-120", reason="distribute")],
+        [
+            _ledger("item:rice", "500"),
+            _ledger("item:rice", "-120", reason="distribute"),
+        ],
     )
     assert remaining["item:rice"] == "120.0"
 

@@ -19,9 +19,11 @@ from tent_model.public_shelter import GeoJsonPoint, GeoPoint, PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
 from tent_model.sync_checkpoint import SyncCheckpoint
+from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
 
 __all__ = [
 	"ALL_DOCUMENTS",
+	"THIRD_PARTY_SCOPES",
 	"ApiKey",
 	"DeclaredItem",
 	"DonationBuffer",
@@ -38,6 +40,7 @@ __all__ = [
 	"RetentionAudit",
 	"SearchAudit",
 	"SyncCheckpoint",
+	"ThirdPartyClient",
 	"close_db",
 	"counter_id",
 	"init_db",

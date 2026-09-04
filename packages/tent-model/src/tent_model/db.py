@@ -17,6 +17,7 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
 from tent_model.sync_checkpoint import SyncCheckpoint
+from tent_model.third_party_client import ThirdPartyClient
 
 ALL_DOCUMENTS = [
 	SyncCheckpoint,
@@ -30,6 +31,7 @@ ALL_DOCUMENTS = [
 	SearchAudit,
 	PublicAnnouncement,
 	ApiKey,
+	ThirdPartyClient,
 ]
 
 _client: AsyncIOMotorClient | None = None

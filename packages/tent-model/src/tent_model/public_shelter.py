@@ -25,14 +25,28 @@ class PublicShelter(Document):
 	shelter_code: str
 	registry_id: str | None = None
 	name: str
+	name_short: str | None = None
 	site_kind: str = "evacuation_center"
 	status: str = "open"
+	location_status: str = "open"
+	is_active: bool = True
+	location_type: str = "shelter"
+	location_subtype: str | None = None
 	location: GeoJsonPoint | None = None
 	geo: GeoPoint | None = None
 	capacity: int = 0
 	province: str | None = None
 	district: str | None = None
 	subdistrict: str | None = None
+	address: str | None = None
+	contact_name: str | None = None
+	contact_phone: str | None = None
+	operating_org: str | None = None
+	accepts_delivery: bool = True
+	delivery_note: str | None = None
+	opened_at: datetime | None = None
+	closed_at: datetime | None = None
+	occupancy_total: int = 0
 	raw_data: dict[str, Any] = Field(default_factory=dict)
 	updated_at: datetime
 
@@ -45,4 +59,6 @@ class PublicShelter(Document):
 			IndexModel([("province", 1), ("district", 1), ("subdistrict", 1)]),
 			IndexModel([("site_kind", 1)]),
 			IndexModel([("status", 1)]),
+			IndexModel([("location_status", 1)]),
+			IndexModel([("is_active", 1)]),
 		]
