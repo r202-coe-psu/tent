@@ -27,7 +27,7 @@
 	import JobShiftsTab from './job-shifts-tab.svelte';
 	import JobApplicantsTab from './job-applicants-tab.svelte';
 	import JobFormDialog from './job-form-dialog.svelte';
-	import { useJob, useJobApplications } from '../application/queries';
+	import { useJob, useJobApplications, useShiftAssignments } from '../application/queries';
 
 	let { jobId }: { jobId: string } = $props();
 
@@ -39,6 +39,7 @@
 	 * unfiltered list instead — the same thing `job-board-tab.svelte` does.
 	 */
 	const applicationsQuery = useJobApplications();
+	const assignmentsQuery = useShiftAssignments();
 
 	const job = $derived(jobQuery.data ?? null);
 	const jobApplications = $derived(
@@ -120,7 +121,11 @@
 			</Button>
 		</div>
 	{:else}
-		<JobDetailHero {job} {applicantCount} />
+		<JobDetailHero
+			{job}
+			{applicantCount}
+			assignments={assignmentsQuery.isPending ? undefined : (assignmentsQuery.data ?? [])}
+		/>
 
 		<Tabs.Root value={activeTab} onValueChange={(v) => (activeTab = v as DetailTab)}>
 			<Tabs.List

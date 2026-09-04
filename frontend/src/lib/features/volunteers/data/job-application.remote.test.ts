@@ -11,6 +11,7 @@ vi.mock('$lib/db/shelter', () => ({ getShelterDb: () => 'shelter_sh001' }));
 
 import { clearJobRepositoryCache, createJobRepositoryForTest } from './job.remote';
 import { createJobApplicationRepositoryForTest } from './job-application.remote';
+import { createShiftAssignmentRepositoryForTest } from './shift-assignment.remote';
 import type { JobInput } from '../domain/job.schema';
 import type { JobApplicationInput } from '../domain/job-application.schema';
 
@@ -149,6 +150,40 @@ describe('JobApplicationRemoteRepository', () => {
 			slots_dispatched: 0,
 			slots_remaining: 1
 		});
+	});
+
+	it('review(confirmed) creates the concrete shift assignment used by the roster', async () => {
+		const jobs = createJobRepositoryForTest('shelter_sh001');
+		const applications = createJobApplicationRepositoryForTest('shelter_sh001');
+		const assignments = createShiftAssignmentRepositoryForTest('shelter_sh001');
+		const job = await jobs.create(jobInput, ctx);
+		const application = await applications.create(
+			{
+				...applicationInput(job._id, ['พยาบาล']),
+				volunteer_id: 'volunteer:applicant-1',
+				selected_shift: {
+					shift_id: 's1',
+					date: '2026-08-26',
+					start_time: '08:00',
+					end_time: '12:00'
+				}
+			},
+			ctx
+		);
+
+		await applications.review(application._id, 'confirmed', 'manager-1');
+
+		expect(await assignments.list({ jobId: job._id })).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					job_id: job._id,
+					shift_id: 's1',
+					volunteer_id: 'volunteer:applicant-1',
+					status: 'standby',
+					dispatch_status: 'accepted'
+				})
+			])
+		);
 	});
 
 	it('review(rejected) never touches job slots', async () => {

@@ -1,13 +1,9 @@
 /**
  * shift-roster.ts — which volunteers hold a seat on ONE `job.shifts[]` row.
  *
- * Pure TypeScript — no I/O, no Svelte. `shift_assignment` carries no
- * `job_shift_id` (schema.md §2.9 gap — same one `domain/capacity.ts`
- * documents), but `job-assign-page.svelte` always writes `duty_window:
- * shiftDutyWindow(shift)` for the exact row being assigned. Recomputing that
- * window here and comparing it with `sameDutyWindow` is therefore an EXACT
- * match, not the best-guess allocation `capacity.ts` falls back to for
- * aggregate counts.
+ * Pure TypeScript — no I/O, no Svelte. New `shift_assignment` rows carry the
+ * stable `shift_id`; legacy rows without it are matched by the exact
+ * `duty_window` that `job-assign-page.svelte` writes for the selected row.
  */
 
 import { sameDutyWindow, shiftDutyWindow } from './duty-window';
@@ -40,12 +36,54 @@ export interface ShiftRosterEntry {
 const ROSTER_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
 	'assigned',
 	'standby',
-	'checked_in'
+	'checked_in',
+	'completed'
 ]);
 
+function matchesShift(
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
+		shift_id?: string;
+	},
+	jobId: string,
+	assignment: ShiftAssignment,
+	window: ReturnType<typeof shiftDutyWindow> | null
+): boolean {
+	return (
+		assignment.job_id === jobId &&
+		ROSTER_STATUSES.has(assignment.status) &&
+		(assignment.shift_id
+			? assignment.shift_id === (shift.shift_id ?? shift.id)
+			: window
+				? sameDutyWindow(assignment.duty_window, window)
+				: false)
+	);
+}
+
+/** Count unique volunteers holding an active or completed assignment on a shift. */
+export function assignmentCountForShift(
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
+		shift_id?: string;
+	},
+	jobId: string,
+	assignments: readonly ShiftAssignment[]
+): number {
+	let window: ReturnType<typeof shiftDutyWindow> | null = null;
+	try {
+		window = shiftDutyWindow(shift);
+	} catch {
+		// A stable shift_id can still match even when a legacy row has bad time data.
+	}
+	return new Set(
+		assignments
+			.filter((assignment) => matchesShift(shift, jobId, assignment, window))
+			.map((assignment) => assignment.volunteer_id)
+	).size;
+}
+
 /**
- * Volunteers currently on `shift` (one row of `job.shifts[]`), across every
- * `assignments` doc for `jobId`.
+ * Volunteers assigned to `shift` (one row of `job.shifts[]`), across every
+ * `assignments` doc for `jobId`. Completed rows remain visible so the detail
+ * modal is also useful for shift history; cancelled/no-show rows do not.
  *
  * A shift with a malformed date/time (should not happen — `job.shifts[]` is
  * schema-validated on every write — but this is read code, not a write path)
@@ -71,16 +109,7 @@ export function shiftRoster(
 		window = null;
 	}
 
-	const matched = assignments.filter(
-		(a) =>
-			a.job_id === jobId &&
-			ROSTER_STATUSES.has(a.status) &&
-			(a.shift_id
-				? a.shift_id === (shift.shift_id ?? shift.id)
-				: window
-					? sameDutyWindow(a.duty_window, window)
-					: false)
-	);
+	const matched = assignments.filter((a) => matchesShift(shift, jobId, a, window));
 	return [...new Map(matched.map((a) => [a.volunteer_id, a])).values()].map((a) => {
 		const volunteer = volunteersById.get(a.volunteer_id);
 		return {

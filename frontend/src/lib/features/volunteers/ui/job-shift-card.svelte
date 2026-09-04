@@ -3,16 +3,9 @@
 	 * One sub-shift row of the job detail "กะและตารางกะ" tab (approved mockup
 	 * 2026-08-27).
 	 *
-	 * The split shown here comes from
-	 * `domain/capacity.ts#jobShiftQuotaSplits` (computed once for the whole job
-	 * by the parent and passed in) — this component performs no capacity maths
-	 * of its own. Like the job-board quota bar it counts APPROVED volunteers
-	 * only: 🟢 ยืนยันแล้ว (`confirmed`) vs ⚪ ยังขาดอีก (`dispatched +
-	 * remaining`) — an offer nobody has accepted yet is not staffing, so it
-	 * reads as a gap here, exactly like an untouched slot. Note the documented approximation in that function: per-shift
-	 * TOTALS reconcile with the job doc, but which shift holds a given seat is a
-	 * exact roster identity comes from `shift_assignment.shift_id`; the quota split
-	 * remains a legacy job-level projection until per-shift counters are projected.
+	 * The target comes from the job-level quota split, while the filled segment
+	 * and count come from exact `shift_assignment` rows. This keeps public,
+	 * walk-in and direct-assignment volunteers together on the same shift card.
 	 */
 	import X from '@lucide/svelte/icons/x';
 	import Pencil from '@lucide/svelte/icons/pencil';
@@ -54,8 +47,10 @@
 	} = $props();
 
 	const total = $derived(split.target > 0 ? split.target : 1);
-	/** Everything not yet approved — dispatched-but-unanswered seats included. */
-	const missing = $derived(split.dispatched + split.remaining);
+	/** Exact roster count includes public applications and walk-in/direct assignments. */
+	const assigned = $derived(roster.length);
+	const filled = $derived(Math.min(assigned, split.target));
+	const missing = $derived(Math.max(split.target - assigned, 0));
 	const crossesMidnight = $derived(shift.end_date !== shift.date);
 </script>
 
@@ -122,14 +117,14 @@
 
 	<div>
 		<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-			<div class="h-full bg-emerald-500" style:width="{(split.confirmed / total) * 100}%"></div>
+			<div class="h-full bg-emerald-500" style:width="{(filled / total) * 100}%"></div>
 		</div>
 		<div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
 			<span
 				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
 			>
 				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-				ยืนยันแล้ว: <span class="font-bold text-foreground tabular-nums">{split.confirmed}</span>
+				อยู่ในกะแล้ว: <span class="font-bold text-foreground tabular-nums">{assigned}</span>
 			</span>
 			<span
 				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"

@@ -17,16 +17,20 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import type { AssignCandidate } from '../domain/assign-roster';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 
 	let {
 		candidate,
 		shelterLabel,
+		skillOptions = [],
 		selected,
 		onToggle
 	}: {
 		candidate: AssignCandidate;
 		/** Resolved shelter name for this volunteer's posting, or its code. */
 		shelterLabel: string;
+		/** Effective Master Data skills for rendering labels instead of stored ids. */
+		skillOptions?: readonly SkillOption[];
 		selected: boolean;
 		onToggle: (volunteerId: string, next: boolean) => void;
 	} = $props();
@@ -34,6 +38,12 @@
 	const v = $derived(candidate.volunteer);
 	const fullName = $derived(`${v.first_name} ${v.last_name}`);
 	const rowId = $derived(`assign-row-${v._id}`);
+	const skills = $derived(
+		v.skills.flatMap((value) => {
+			const option = resolveSkillOption(value, skillOptions);
+			return option ? [option] : [];
+		})
+	);
 </script>
 
 <li
@@ -98,14 +108,14 @@
 					</span>
 				</div>
 
-				{#if v.skills.length > 0}
+				{#if skills.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5">
 						<span class="text-[11px] text-muted-foreground">ทักษะ:</span>
-						{#each v.skills as skill (skill)}
+						{#each skills as skill (skill.code)}
 							<span
 								class="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
 							>
-								{skill}
+								{skill.label}
 							</span>
 						{/each}
 					</div>

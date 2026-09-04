@@ -46,6 +46,7 @@ export type PublicJob = {
 	quota: number;
 	slots_confirmed: number;
 	slots_remaining: number;
+	applicants_count?: number;
 	status: string;
 	requires_review: boolean;
 };
@@ -60,6 +61,7 @@ export type PublicJobShift = {
 	quota: number;
 	slots_confirmed: number;
 	slots_remaining: number;
+	applicants_count?: number;
 };
 
 export type TicketShift = {

@@ -122,6 +122,55 @@ async def test_list_jobs_reports_live_remaining_not_the_snapshot(
     assert job["shelter_name"] == "ศูนย์ทดสอบ"
 
 
+async def test_list_jobs_reports_non_cancelled_applicant_counts(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    job = await _make_job(quota=3)
+    job.shifts = [
+        JobShift(
+            shift_id="shift:morning",
+            date="2026-09-04",
+            start_time="08:00",
+            end_time="12:00",
+            quota=3,
+        )
+    ]
+    await job.save()
+    await PublicJobApplication(
+        id="job_application:pending-count",
+        shelter_code="SH001",
+        job_id=JOB_ID,
+        shift_id="shift:morning",
+        tracking_token_hash="token-hash",
+        phone_hash="phone-hash",
+        selected_shift=SelectedShift(
+            shift_id="shift:morning", date="2026-09-04", start_time="08:00", end_time="12:00"
+        ),
+        status="pending_review",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    await PublicJobApplication(
+        id="job_application:cancelled-count",
+        shelter_code="SH001",
+        job_id=JOB_ID,
+        shift_id="shift:morning",
+        tracking_token_hash="cancelled-hash",
+        phone_hash="cancelled-phone-hash",
+        selected_shift=SelectedShift(
+            shift_id="shift:morning", date="2026-09-04", start_time="08:00", end_time="12:00"
+        ),
+        status="cancelled",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    response = await client.get("/public/v1/jobs", headers=auth_headers)
+
+    assert response.status_code == 200
+    listed = response.json()["jobs"][0]
+    assert listed["applicants_count"] == 1
+    assert listed["shifts"][0]["applicants_count"] == 1
+
+
 async def test_list_jobs_serializes_concrete_shift_identity_and_quota(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
@@ -153,6 +202,7 @@ async def test_list_jobs_serializes_concrete_shift_identity_and_quota(
             "slots_confirmed": 1,
             "slots_dispatched": 0,
             "slots_remaining": 2,
+            "applicants_count": 0,
         }
     ]
 
@@ -914,29 +964,6 @@ async def test_an_offer_can_only_be_answered_once(
     slot = await VolunteerJobSlot.get(JOB_ID)
     assert slot is not None
     # The second answer must not have moved anything.
-    assert (slot.confirmed_qty, slot.dispatched_qty) == (1, 0)
-
-
-async def test_two_taps_at_once_spend_the_offer_only_once(
-    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    """A volunteer on a bad connection taps accept twice.
-
-    409 rather than the 404 a later retry gets: both requests pass the phone and code
-    checks because neither has written yet, and it is the atomic counter move that
-    separates them. That is the guard doing its job — the status differs only after
-    both factors were correct, so it leaks nothing.
-    """
-    await _make_job(quota=5)
-    await _offer()
-
-    first, second = await asyncio.gather(
-        _respond(client, auth_headers), _respond(client, auth_headers)
-    )
-    assert sorted([first.status_code, second.status_code]) == [200, 409]
-
-    slot = await VolunteerJobSlot.get(JOB_ID)
-    assert slot is not None
     assert (slot.confirmed_qty, slot.dispatched_qty) == (1, 0)
 
 

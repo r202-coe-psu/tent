@@ -21,6 +21,7 @@
 		end_time?: string;
 		quota: number;
 		confirmed: number;
+		applicants_count: number;
 	}
 
 	interface DisplayJobCard {
@@ -32,6 +33,7 @@
 		shifts: DisplayShift[];
 		tags: { label: string; variant: 'default' | 'success' | 'warning' | 'purple' | 'outline' }[];
 		skills_required?: string[];
+		applicants_count: number;
 		isControlled: boolean;
 	}
 
@@ -43,6 +45,7 @@
 		end_time: string;
 		quota: number;
 		slots_confirmed?: number;
+		applicants_count?: number;
 		confirmed?: number;
 	}
 
@@ -66,6 +69,7 @@
 		};
 		slots_confirmed?: number;
 		slots_remaining?: number;
+		applicants_count?: number;
 		is_urgent?: boolean;
 		requires_review?: boolean;
 	}
@@ -188,6 +192,7 @@
 							start_time: st,
 							end_time: et,
 							quota: s.quota || 10,
+							applicants_count: s.applicants_count ?? 0,
 							confirmed:
 								s.slots_confirmed ??
 								s.confirmed ??
@@ -210,6 +215,7 @@
 						start_time: stTime,
 						end_time: edTime,
 						quota: job.quota || 10,
+						applicants_count: job.applicants_count || 0,
 						confirmed: job.slots_confirmed || 0
 					}));
 				} else {
@@ -221,6 +227,7 @@
 							start_time: '08:00',
 							end_time: '16:00',
 							quota: job.quota || 10,
+							applicants_count: job.applicants_count || 0,
 							confirmed: job.slots_confirmed || 0
 						}
 					];
@@ -260,6 +267,7 @@
 					shifts,
 					tags,
 					skills_required: job.skills_required,
+					applicants_count: job.applicants_count || 0,
 					isControlled
 				};
 			});

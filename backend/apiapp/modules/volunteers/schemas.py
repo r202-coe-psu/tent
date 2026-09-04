@@ -27,6 +27,7 @@ class PublicJobShift(BaseModel):
     slots_confirmed: int = 0
     slots_dispatched: int = 0
     slots_remaining: int = 0
+    applicants_count: int = 0
 
 
 class PublicJobItem(BaseModel):
@@ -49,6 +50,7 @@ class PublicJobItem(BaseModel):
     quota: int
     slots_confirmed: int
     slots_remaining: int
+    applicants_count: int = 0
     status: str
     #: True when applying will land in ``pending_review`` rather than issue a confirmed
     #: ticket, so the form can say so before the applicant commits.

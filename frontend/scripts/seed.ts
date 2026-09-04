@@ -124,7 +124,11 @@ import {
 	type ShiftAssignmentInput,
 	type ShiftKind
 } from '$lib/features/volunteers/domain/shift-assignment.schema';
-import { bangkokDateString, resolveDutyWindow } from '$lib/features/volunteers/domain/duty-window';
+import {
+	bangkokDateString,
+	resolveDutyWindow,
+	shiftDutyWindow
+} from '$lib/features/volunteers/domain/duty-window';
 import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
 import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
@@ -254,6 +258,24 @@ async function setSecurity(db: string, security: CouchDbSecurity): Promise<void>
 async function putDoc(db: string, doc: Record<string, unknown> | { _id: string }): Promise<void> {
 	const id = (doc as { _id: string })._id;
 	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(id)}`, doc);
+	if (status !== 201 && status !== 409)
+		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
+}
+
+/** PUT a deterministic fixture, carrying the current revision when it exists. */
+async function putDocUpsert(
+	db: string,
+	doc: Record<string, unknown> & { _id: string }
+): Promise<void> {
+	const id = doc._id;
+	const path = `/${db}/${encodeURIComponent(id)}`;
+	const current = await couchReq('GET', path);
+	const currentRev =
+		current.status === 200 && current.data && typeof current.data === 'object'
+			? (current.data as { _rev?: string })._rev
+			: undefined;
+	const next = currentRev ? { ...doc, _rev: currentRev } : doc;
+	const { status } = await couchReq('PUT', path, next);
 	if (status !== 201 && status !== 409)
 		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
 }
@@ -2246,9 +2268,9 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		nickname: 'อรุณ',
 		phone: '0821111111',
 		email: null,
-		// `volunteer.skills` keeps storing LABELS (CR-100 leaves this field alone) —
-		// same master item as job1's `skills_required` code above.
-		skills: masterLabels(master, 'volunteer_skills', 'reception'),
+		// Store the Master Data codes, matching job.skills_required and the live
+		// walk-in/profile forms. Labels are resolved by the UI at render time.
+		skills: masterCodes(master, 'volunteer_skills', 'reception'),
 		organization: null,
 		national_id: null,
 		source: 'public_apply'
@@ -2258,7 +2280,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		last_name: 'ยิ้มแย้ม',
 		phone: '0822222222',
 		email: null,
-		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
+		skills: masterCodes(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'walk_in'
@@ -2268,7 +2290,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		last_name: 'คงมั่น',
 		phone: '0823333333',
 		email: null,
-		skills: masterLabels(master, 'volunteer_skills', 'transport'),
+		skills: masterCodes(master, 'volunteer_skills', 'transport'),
 		organization: 'มูลนิธิกู้ภัยหาดใหญ่',
 		national_id: null,
 		source: 'staff_entry'
@@ -2278,7 +2300,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		last_name: 'ศรีสุข',
 		phone: '0824444444',
 		email: null,
-		skills: masterLabels(master, 'volunteer_skills', 'logistics'),
+		skills: masterCodes(master, 'volunteer_skills', 'logistics'),
 		organization: null,
 		national_id: null,
 		source: 'transfer'
@@ -2291,7 +2313,7 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		email: null,
 		// The master's own controlled item — this is what makes `initialStatusForSkills`
 		// hold the seeded application at `pending_review`.
-		skills: masterLabels(master, 'volunteer_skills', 'medical'),
+		skills: masterCodes(master, 'volunteer_skills', 'medical'),
 		organization: 'รพ.สต. บ้านพรุ',
 		national_id: null,
 		source: 'public_apply'
@@ -2878,139 +2900,116 @@ async function deleteDashboardData(): Promise<void> {
 async function seedVolunteerJobs(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 	await ensureDb(SHELTER_DB_2);
+	const day = (offset: number) => bangkokDateString(new Date(Date.now() + offset * 86_400_000));
+	const nextDay = (date: string) =>
+		bangkokDateString(new Date(new Date(`${date}T00:00:00.000Z`).getTime() + 86_400_000));
+	const shift = (id: string, date: string, start: string, end: string, quota: number) => ({
+		id,
+		date,
+		end_date: end <= start ? nextDay(date) : date,
+		start_time: start,
+		end_time: end,
+		quota
+	});
 
-	const jobs: { db: string; ctx: AuthorContext; body: Record<string, unknown> }[] = [
+	const jobs = [
 		{
 			db: SHELTER_DB,
 			ctx: SH001_CTX,
-			body: {
+			id: 'seedjob001',
+			input: {
 				title: 'ผู้ช่วยครัวจัดเตรียมอาหาร',
-				description:
-					'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย แต่งกายสุภาพ สวมรองเท้าหุ้มส้น',
-				tier: 'operational',
+				description: 'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร และแจกจ่ายอาหารกลางวันให้ผู้ประสบภัย',
+				tier: 'operational' as const,
 				required_roles: [],
 				skills_required: masterCodes(master, 'volunteer_skills', 'cooking'),
-				quota: 8,
-				slots_confirmed: 0,
-				slots_dispatched: 0,
-				shift_template: {
-					shift_name: 'เช้า',
-					start_time: '08:00',
-					end_time: '12:00',
-					days: ['mon', 'tue', 'wed', 'thu', 'fri']
-				},
+				shifts: [
+					shift('seedshift001', day(1), '01:00', '05:00', 5),
+					shift('seedshift002', day(3), '02:00', '08:00', 5),
+					shift('seedshift003', day(-2), '01:00', '05:00', 5)
+				],
 				auto_accept: true,
-				status: 'open'
+				status: 'open' as const
 			}
 		},
 		{
 			db: SHELTER_DB,
 			ctx: SH001_CTX,
-			body: {
+			id: 'seedjob002',
+			input: {
 				title: 'ทีมยกของและจัดเรียงคลังสิ่งของบริจาค',
 				description: 'ขนย้ายและจัดเรียงสิ่งของบริจาคเข้าคลัง ต้องยกของหนักได้',
-				tier: 'operational',
+				tier: 'operational' as const,
 				required_roles: [],
 				skills_required: masterCodes(master, 'volunteer_skills', 'logistics'),
-				quota: 6,
-				// Zero, like every other fixture. A non-zero count here would not show up on
-				// the board: the public plane reads head count from the atomic VolunteerJobSlot
-				// counter, which starts at zero and only moves when somebody applies. Seeding
-				// `slots_confirmed: 4` looked like a filled job but rendered as an empty one.
-				// Fill this bar by applying through the UI — that exercises the real path.
-				slots_confirmed: 0,
-				slots_dispatched: 0,
-				shift_template: {
-					shift_name: 'บ่าย',
-					start_time: '13:00',
-					end_time: '17:00',
-					days: ['sat', 'sun']
-				},
+				shifts: [shift('seedjob002-shift', day(2), '13:00', '17:00', 6)],
 				auto_accept: true,
-				status: 'open'
+				status: 'open' as const
 			}
 		},
 		{
 			db: SHELTER_DB,
 			ctx: SH001_CTX,
-			body: {
+			id: 'seedjob003',
+			input: {
 				title: 'พยาบาลอาสาประจำจุดปฐมพยาบาล',
 				description: 'ดูแลจุดปฐมพยาบาล คัดกรองอาการเบื้องต้น ต้องมีใบประกอบวิชาชีพ',
-				tier: 'operational',
+				tier: 'operational' as const,
 				required_roles: [],
 				skills_required: masterCodes(master, 'volunteer_skills', 'medical'),
-				quota: 4,
-				slots_confirmed: 0,
-				slots_dispatched: 0,
-				shift_template: {
-					shift_name: 'เช้า',
-					start_time: '08:00',
-					end_time: '16:00',
-					days: ['mon', 'wed', 'fri']
-				},
-				// On, so that a review still happens purely because of the controlled
-				// skill — the licence is checked by a person, not by a flag.
+				shifts: [shift('seedjob003-shift', day(2), '08:00', '16:00', 4)],
 				auto_accept: true,
-				status: 'open'
+				status: 'open' as const
 			}
 		},
 		{
 			db: SHELTER_DB_2,
 			ctx: CTX_2,
-			body: {
+			id: 'seedjob004',
+			input: {
 				title: 'เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย',
-				description:
-					'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน ได้สิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะที่เช็คอินแล้ว',
-				tier: 'staff-capable',
+				description: 'ช่วยคีย์ข้อมูลผู้อพยพเข้าระบบที่จุดลงทะเบียน',
+				tier: 'staff-capable' as const,
 				required_roles: ['registration_staff'],
 				skills_required: masterCodes(master, 'volunteer_skills', 'screening'),
-				quota: 3,
-				slots_confirmed: 0,
-				slots_dispatched: 0,
-				shift_template: {
-					shift_name: 'เช้า',
-					start_time: '09:00',
-					end_time: '15:00',
-					days: ['mon', 'tue', 'wed', 'thu', 'fri']
-				},
-				// F-AUTO forbids auto-accept on staff-capable; the API enforces it too,
-				// but a fixture that contradicted the rule would be a misleading example.
+				shifts: [shift('seedjob004-shift', day(2), '09:00', '15:00', 3)],
 				auto_accept: false,
-				status: 'open'
+				status: 'open' as const
 			}
 		},
 		{
 			db: SHELTER_DB_2,
 			ctx: CTX_2,
-			body: {
+			id: 'seedjob005',
+			input: {
 				title: 'อาสาสมัครดูแลเด็กและกิจกรรมสันทนาการ',
 				description: 'จัดกิจกรรมให้เด็กในศูนย์พักพิงช่วงเย็น',
-				tier: 'operational',
+				tier: 'operational' as const,
 				required_roles: [],
 				skills_required: masterCodes(master, 'volunteer_skills', 'childcare'),
-				quota: 5,
-				slots_confirmed: 0,
-				slots_dispatched: 0,
-				shift_template: {
-					shift_name: 'เย็น',
-					start_time: '16:00',
-					end_time: '19:00',
-					days: ['sat', 'sun']
-				},
+				shifts: [shift('seedjob005-shift', day(3), '16:00', '19:00', 5)],
 				auto_accept: true,
-				status: 'open'
+				status: 'open' as const
 			}
 		}
-	];
+	] satisfies { db: string; ctx: AuthorContext; id: string; input: JobInput }[];
 
-	for (const [index, job] of jobs.entries()) {
-		// Fixed ids so re-running the seed updates these jobs instead of posting a
-		// second copy of every one — a ULID per run would multiply the board.
-		const id = `seedjob${String(index + 1).padStart(3, '0')}`;
-		await putDoc(job.db, makeDoc('job', 1, job.body, job.ctx, id));
+	for (const item of jobs) {
+		const job = makeJob(item.input, item.ctx);
+		job._id = `job:${item.id}`;
+		if (item.id === 'seedjob001') {
+			// seedshift001 is an outstanding offer; seedshift002 and seedshift003
+			// already hold confirmed seats. Keep the job aggregate in sync with the
+			// schema_v 4 assignments written by seedVolunteerSchedule below.
+			job.slots_confirmed = 2;
+			job.slots_dispatched = 1;
+			job.slots_remaining = job.quota - 3;
+		}
+		jobSchema.parse(job);
+		await putDocUpsert(item.db, { ...job });
 	}
 
-	console.log(`  ✓ volunteer jobs: ${jobs.length} postings across SH001 + SH002`);
+	console.log(`  ✓ volunteer jobs: ${jobs.length} schema_v 3 postings across SH001 + SH002`);
 }
 
 /**
@@ -3039,9 +3038,9 @@ async function seedVolunteerSchedule(master: MasterLookup): Promise<void> {
 		phone,
 		phone_hash: await sha256Hex(phone),
 		email: null,
-		// `volunteer.skills` stores labels (CR-100) — read from the seeded master items
-		// so a renamed skill stays in sync instead of drifting into free text.
-		skills: masterLabels(master, 'volunteer_skills', 'cooking', 'logistics'),
+		// Store codes from the seeded master items so this fixture follows the
+		// same canonical shape as jobs and new volunteer profiles.
+		skills: masterCodes(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		tracking_token: null,
 		status: 'active',
@@ -3058,8 +3057,6 @@ async function seedVolunteerSchedule(master: MasterLookup): Promise<void> {
 		d.setDate(d.getDate() + offset);
 		return d.toISOString().slice(0, 10);
 	};
-	const at = (date: string, time: string) => `${date}T${time}:00.000Z`;
-
 	const shifts = [
 		{
 			id: 'seedshift001',
@@ -3098,25 +3095,33 @@ async function seedVolunteerSchedule(master: MasterLookup): Promise<void> {
 	];
 
 	for (const shift of shifts) {
-		const body: Record<string, unknown> = {
+		const row = {
+			id: shift.id,
+			date: shift.date,
+			end_date: shift.date,
+			start_time: shift.start,
+			end_time: shift.end,
+			quota: 5
+		};
+		const assignmentInput: ShiftAssignmentInput = {
 			job_id: 'job:seedjob001',
+			shift_id: shift.id,
 			volunteer_id: `volunteer:${volunteerId}`,
 			date: shift.date,
 			shift: 'custom',
 			station: shift.station,
-			duty_window: {
-				start_ts: at(shift.date, shift.start),
-				end_ts: at(shift.date, shift.end)
-			},
-			check_in_at: shift.status === 'completed' ? at(shift.date, shift.start) : null,
-			check_out_at: shift.status === 'completed' ? at(shift.date, shift.end) : null,
-			check_in_by: shift.status === 'completed' ? 'seed' : null,
-			status: shift.status,
-			dispatch_status: shift.dispatch_status,
-			response_code: shift.response_code ?? null,
-			responded_at: null
+			duty_window: shiftDutyWindow(row)
 		};
-		await putDoc(SHELTER_DB, makeDoc('shift_assignment', 2, body, SH001_CTX, shift.id));
+		const assignment = makeShiftAssignment(assignmentInput, SH001_CTX, {
+			status: shift.status as 'assigned' | 'standby' | 'completed',
+			dispatch_status: shift.dispatch_status as 'dispatched' | 'accepted',
+			check_in_at: shift.status === 'completed' ? now() : null,
+			check_in_by: shift.status === 'completed' ? 'seed' : null
+		});
+		if (shift.response_code) {
+			(assignment as unknown as Record<string, unknown>).response_code = shift.response_code;
+		}
+		await putDocUpsert(SHELTER_DB, { ...assignment, _id: `shift_assignment:${shift.id}` });
 	}
 
 	console.log(

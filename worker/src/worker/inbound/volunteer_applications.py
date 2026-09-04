@@ -8,14 +8,17 @@ one application (CR-092 FR-VOL-01):
   profile applying twice rather than two people.
 * ``job_application:{ulid}`` — this application, carrying the tracking token hash the
   Digital Pass is reached by.
+* ``shift_assignment:{ulid}`` — only when the application is already confirmed; a
+  pending review is not a schedule until staff approves it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
 
@@ -119,11 +122,17 @@ def _shift_assignment_doc(
     end_time = shift.end_time or "16:00"
     date = shift.date or now[:10]
 
-    # Convert HH:MM to duty_window UTC datetimes
-    start_ts = f"{date}T{start_time}:00Z"
-    end_ts = f"{date}T{end_time}:00Z"
-    if end_ts <= start_ts:
-        end_ts = f"{date}T23:59:59Z"
+    # The public job board stores Bangkok wall-clock times. Persist UTC instants,
+    # otherwise a 08:00 shift becomes a 15:00 shift and the exact roster matcher
+    # cannot associate this assignment with its job shift.
+    bangkok = ZoneInfo("Asia/Bangkok")
+    start = datetime.fromisoformat(f"{date}T{start_time}").replace(tzinfo=bangkok)
+    end_date = date
+    if end_time <= start_time:
+        end_date = (datetime.fromisoformat(date) + timedelta(days=1)).date().isoformat()
+    end = datetime.fromisoformat(f"{end_date}T{end_time}").replace(tzinfo=bangkok)
+    start_ts = start.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    end_ts = end.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
     start_hour = int(start_time.split(":")[0]) if ":" in start_time else 8
     if 6 <= start_hour < 14:
@@ -139,9 +148,10 @@ def _shift_assignment_doc(
     return {
         "_id": f"shift_assignment:{clean_id}",
         "type": "shift_assignment",
-        "schema_v": 3,
+        "schema_v": 4,
         "shelter_code": application.shelter_code,
         "job_id": application.job_id,
+        "shift_id": application.shift_id or shift.shift_id,
         "volunteer_id": application.volunteer_id,
         "date": date,
         "shift": shift_kind,
@@ -193,11 +203,16 @@ async def _persist_application(
         logger.exception("Failed to persist volunteer application %s", application.id)
         return False
 
-    # 3. Persist shift assignment document
-    try:
-        await couch.put_doc(database, _shift_assignment_doc(application, now=now))
-    except Exception:
-        logger.exception("Failed to persist shift assignment for %s", application.id)
+    # 3. A confirmed public application is also a real roster booking. Pending
+    # applications intentionally stay out of the schedule until staff approval;
+    # that approval writes the assignment through the back-office repository.
+    if application.status == "confirmed":
+        try:
+            await couch.put_doc(database, _shift_assignment_doc(application, now=now))
+        except Exception:
+            logger.exception(
+                "Failed to persist shift assignment for %s", application.id
+            )
 
     if not result.get("ok"):
         logger.error(

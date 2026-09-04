@@ -18,6 +18,7 @@
 		time: string;
 		quota: number;
 		confirmed: number;
+		applicants_count?: number;
 	}
 
 	let { job, onApply } = $props<{
@@ -28,6 +29,7 @@
 			description: string;
 			shifts: JobShift[];
 			tags: JobTag[];
+			applicants_count?: number;
 		};
 		onApply: (jobId: string, shiftId: string) => void;
 	}>();
@@ -110,7 +112,8 @@
 				รอบกะเวลาและโควตาปฏิบัติงาน ({job.shifts.length} กะ)
 			</span>
 			<span class="text-xs font-bold text-muted-foreground"
-				>รวมต้องการ {totalQuota} คน (ว่าง {totalRemaining} ที่)</span
+				>รวมสมัครแล้ว {job.applicants_count ?? 0} คน · ต้องการ {totalQuota} คน (ว่าง {totalRemaining}
+				ที่)</span
 			>
 		</div>
 
@@ -154,7 +157,7 @@
 					<div class="mb-5">
 						<div class="mb-2 flex justify-between text-xs">
 							<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
-								>รับ {shift.quota} คน (ยืนยันแล้ว {shift.confirmed})</span
+								>รับ {shift.quota} คน (สมัครแล้ว {shift.applicants_count ?? 0} · ยืนยันแล้ว {shift.confirmed})</span
 							>
 							<span class="font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
 								>{isFull ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${remaining} ที่`}</span

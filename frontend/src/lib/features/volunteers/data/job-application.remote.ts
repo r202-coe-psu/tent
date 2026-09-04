@@ -12,7 +12,11 @@ import {
 	type JobApplicationStatus
 } from '../domain/job-application.schema';
 import { initialStatusForSkills } from '../domain/skills';
+import { shiftDutyWindow } from '../domain/duty-window';
+import { shiftKindFor } from '../domain/assign-roster';
 import { jobRepository } from './job.remote';
+import { shiftAssignmentRepository } from './shift-assignment.remote';
+import type { ShiftAssignment, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { JobApplicationFilter, JobApplicationRepository } from './volunteer.repository';
 
 /**
@@ -46,6 +50,56 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 	 */
 	private save(doc: JobApplication): Promise<JobApplication> {
 		return this.repo.put(jobApplicationSchema.parse(doc) as JobApplication);
+	}
+
+	/**
+	 * A confirmed application is also a roster booking.  The job application
+	 * and the shift roster are separate CouchDB documents, so keep the bridge
+	 * in one place instead of making each UI remember to create an assignment.
+	 *
+	 * Older applications may not carry `shift_id`; when their snapshot still
+	 * identifies exactly one concrete job shift, resolve it by date/time.  If a
+	 * legacy row cannot be mapped safely, return null and let the old flat-job
+	 * quota path handle it rather than guessing a shift.
+	 */
+	private async assignmentFor(application: JobApplication): Promise<ShiftAssignmentInput | null> {
+		if (!application.volunteer_id) return null;
+		const job = await jobRepository().get(application.job_id);
+		if (!job) throw new Error(`ไม่พบงาน: ${application.job_id}`);
+
+		const requestedShiftId = application.shift_id ?? application.selected_shift.shift_id;
+		const matches = requestedShiftId
+			? job.shifts.filter((shift) => shift.id === requestedShiftId)
+			: job.shifts.filter(
+					(shift) =>
+						shift.date === application.selected_shift.date &&
+						shift.start_time === application.selected_shift.start_time &&
+						shift.end_time === application.selected_shift.end_time
+				);
+		if (matches.length !== 1) return null;
+
+		const shift = matches[0];
+		return {
+			job_id: job._id,
+			shift_id: shift.id,
+			volunteer_id: application.volunteer_id,
+			date: shift.date,
+			shift: shiftKindFor(shift),
+			station: job.title,
+			duty_window: shiftDutyWindow(shift)
+		};
+	}
+
+	private async assignConfirmed(
+		application: JobApplication,
+		actor: string
+	): Promise<ShiftAssignment | null> {
+		const input = await this.assignmentFor(application);
+		if (!input) return null;
+		return shiftAssignmentRepository().assign(input, {
+			shelterCode: application.shelter_code,
+			createdBy: actor
+		});
 	}
 
 	async list(filter?: JobApplicationFilter): Promise<JobApplication[]> {
@@ -91,7 +145,8 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 
 		if (status === 'confirmed') {
 			try {
-				await jobRepository().confirmSlot(input.job_id);
+				const assignment = await this.assignConfirmed(saved, ctx.createdBy);
+				if (!assignment) await jobRepository().confirmSlot(input.job_id);
 			} catch (err) {
 				// The job had no slot to give (QuotaError) or the retry budget was
 				// exhausted (409) — the application never actually landed a slot,
@@ -118,7 +173,51 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 			throw new Error(`ใบสมัคร ${id} ถูกพิจารณาไปแล้ว (สถานะปัจจุบัน: ${latest.status})`);
 		}
 
-		const saved = await this.save(
+		if (decision === 'confirmed') {
+			/**
+			 * Concrete applications must enter the shift roster before the
+			 * application is marked confirmed.  This prevents a confirmed row from
+			 * consuming capacity while the shift detail still has no person.  The
+			 * assignment repository also performs the single quota transition.
+			 */
+			let assignment: ShiftAssignment | null = null;
+			let saved: JobApplication | null = null;
+			try {
+				assignment = await this.assignConfirmed(latest, actor);
+				saved = await this.save(
+					touch({
+						...latest,
+						status: decision,
+						reviewed_at: new Date().toISOString(),
+						reviewed_by: actor,
+						review_notes: notes ?? null
+					})
+				);
+				if (!assignment) await jobRepository().confirmSlot(saved.job_id);
+				return saved;
+			} catch (err) {
+				if (assignment)
+					await shiftAssignmentRepository()
+						.unassign(assignment._id)
+						.catch(() => undefined);
+				if (!assignment && saved) {
+					await this.repo
+						.put(
+							touch({
+								...saved,
+								status: 'pending_review' as const,
+								reviewed_at: null,
+								reviewed_by: null,
+								review_notes: null
+							})
+						)
+						.catch(() => undefined);
+				}
+				throw err;
+			}
+		}
+
+		return this.save(
 			touch({
 				...latest,
 				status: decision,
@@ -127,31 +226,6 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 				review_notes: notes ?? null
 			})
 		);
-
-		if (decision === 'confirmed') {
-			// A pending application never held a job slot (schema.md §2.17
-			// migration note) — confirming it is the moment the slot is consumed.
-			try {
-				await jobRepository().confirmSlot(saved.job_id);
-			} catch (err) {
-				await this.repo
-					.put(
-						touch({
-							...saved,
-							status: 'pending_review' as const,
-							reviewed_at: null,
-							reviewed_by: null,
-							review_notes: null
-						})
-					)
-					.catch(() => {
-						/* best-effort; original error still surfaces below */
-					});
-				throw err;
-			}
-		}
-
-		return saved;
 	}
 
 	async cancel(id: string, actor: string): Promise<JobApplication> {

@@ -28,8 +28,9 @@
 	import VolunteerApprovalChips, { type ApprovalChip } from './volunteer-approval-chips.svelte';
 	import VolunteerCard from './volunteer-card.svelte';
 	import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
-	import { useVolunteers, useTodayAttendance } from '../application/queries';
+	import { useVolunteers, useTodayAttendance, useSkillOptions } from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
+	import { skillMatches } from '../domain/skill-catalog';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 
@@ -38,6 +39,7 @@
 
 	const volunteersQuery = useVolunteers();
 	const attendanceQuery = useTodayAttendance();
+	const skillCatalog = useSkillOptions();
 
 	const volunteers = $derived(volunteersQuery.data ?? []);
 	const attendanceByVolunteer = $derived.by(() => {
@@ -87,7 +89,10 @@
 		}
 
 		if (search) list = list.filter((v) => matchesSearch(v, search));
-		if (skillFilter) list = list.filter((v) => v.skills.includes(skillFilter));
+		if (skillFilter)
+			list = list.filter((v) =>
+				v.skills.some((value) => skillMatches(value, skillFilter, skillCatalog.options))
+			);
 		if (sourceFilter) list = list.filter((v) => v.source === sourceFilter);
 		if (personnelTypeFilter) list = list.filter((v) => v.personnel_type === personnelTypeFilter);
 		if (shiftStatusFilter) {
@@ -197,6 +202,7 @@
 					{#each filteredVolunteers as volunteer (volunteer._id)}
 						<VolunteerCard
 							{volunteer}
+							skillOptions={skillCatalog.options}
 							shelterName={shelterQuery.data?.name}
 							shelterType={shelterQuery.data?.shelter_type}
 							todayAssignment={attendanceByVolunteer.get(volunteer._id)}

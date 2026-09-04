@@ -121,14 +121,14 @@ describe('shiftRoster', () => {
 		}
 	);
 
-	it('excludes completed assignments from the current roster', () => {
+	it('includes completed assignments so the shift history modal shows everyone who worked', () => {
 		const roster = shiftRoster(
 			SHIFT,
 			'job:A',
 			[assignment({ _id: 'a:1', status: 'completed' })],
 			volunteersById([])
 		);
-		expect(roster).toEqual([]);
+		expect(roster).toHaveLength(1);
 	});
 
 	it('uses shift_id when two sub-shifts share the same duty window', () => {

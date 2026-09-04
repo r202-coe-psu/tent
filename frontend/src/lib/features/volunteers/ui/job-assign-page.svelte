@@ -524,6 +524,7 @@
 								? candidate.volunteer.current_shelter_code
 								: shelterLabel}
 							selected={selectedIds.includes(candidate.volunteer._id)}
+							skillOptions={skillCatalog.options}
 							onToggle={toggleOne}
 						/>
 					{/each}

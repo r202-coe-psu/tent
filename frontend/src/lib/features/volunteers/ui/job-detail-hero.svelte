@@ -20,14 +20,18 @@
 	import ChartColumn from '@lucide/svelte/icons/chart-column';
 	import Users from '@lucide/svelte/icons/users';
 	import { computeQuota } from '../domain/quota';
+	import { assignmentCountForShift } from '../domain/shift-roster';
 	import type { Job, JobStatus } from '../domain/job.schema';
+	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 
 	let {
 		job,
-		applicantCount
+		applicantCount,
+		assignments
 	}: {
 		job: Job;
 		applicantCount: number;
+		assignments?: readonly ShiftAssignment[];
 	} = $props();
 
 	/**
@@ -49,8 +53,15 @@
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
 	const quota = $derived(computeQuota(job));
-	/** Everything not yet approved — dispatched-but-unanswered seats included. */
-	const missing = $derived(quota.dispatched + quota.remaining);
+	const rosterCount = $derived(
+		assignments
+			? job.shifts.reduce(
+					(total, shift) => total + assignmentCountForShift(shift, job._id, assignments),
+					0
+				)
+			: quota.confirmed
+	);
+	const missing = $derived(Math.max(job.quota - rosterCount, 0));
 	/** Guard the divide-by-zero: a stored job always has `quota > 0`, but a bar must never render NaN%. */
 	const total = $derived(job.quota > 0 ? job.quota : 1);
 </script>
@@ -106,12 +117,15 @@
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
 				<h2 class="text-xs font-bold text-amber-300 sm:text-sm">สรุปกำลังพลรวมทุกกะ</h2>
 				<p class="text-sm font-bold tabular-nums">
-					{quota.confirmed} / {job.quota} <span class="font-medium text-white/60">คน</span>
+					{rosterCount} / {job.quota} <span class="font-medium text-white/60">คน</span>
 				</p>
 			</div>
 
 			<div class="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-white/12">
-				<div class="h-full bg-emerald-400" style:width="{(quota.confirmed / total) * 100}%"></div>
+				<div
+					class="h-full bg-emerald-400"
+					style:width="{(Math.min(rosterCount, job.quota) / total) * 100}%"
+				></div>
 			</div>
 
 			<div class="mt-3 flex flex-wrap items-center gap-2">
@@ -119,7 +133,7 @@
 					class="inline-flex items-center gap-1.5 rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/10"
 				>
 					<span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-					ยืนยันแล้ว: <span class="font-bold tabular-nums">{quota.confirmed}</span>
+					จัดอยู่ในกะแล้ว: <span class="font-bold tabular-nums">{rosterCount}</span>
 				</span>
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/10"

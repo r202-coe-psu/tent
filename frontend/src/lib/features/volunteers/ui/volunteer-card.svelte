@@ -29,8 +29,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import { findSkill } from '../domain/skill-master';
-	import { isControlledSkill } from '../domain/skills';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -38,11 +37,13 @@
 		volunteer,
 		shelterName,
 		shelterType,
+		skillOptions = [],
 		todayAssignment
 	}: {
 		volunteer: Volunteer;
 		shelterName: string | undefined;
 		shelterType: string | null | undefined;
+		skillOptions?: readonly SkillOption[];
 		todayAssignment: Pick<ShiftAssignment, 'shift' | 'station' | 'status'> | null | undefined;
 	} = $props();
 
@@ -63,7 +64,13 @@
 
 	const initial = $derived(volunteer.first_name.trim().charAt(0) || '?');
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
-	const hasControlledSkill = $derived(volunteer.skills.some((s) => isControlledSkill(s)));
+	const skills = $derived(
+		volunteer.skills.flatMap((value) => {
+			const option = resolveSkillOption(value, skillOptions);
+			return option ? [option] : [];
+		})
+	);
+	const hasControlledSkill = $derived(skills.some((skill) => skill.controlled));
 	const shelterLine = $derived(
 		shelterName ? (shelterType ? `${shelterName} (${shelterType})` : shelterName) : '—'
 	);
@@ -128,16 +135,15 @@
 	<!-- ทักษะ (SKILLS) -->
 	<Table.Cell class="w-[16%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap content-start gap-1.5">
-			{#each volunteer.skills as skill (skill)}
-				{@const master = findSkill(skill)}
+			{#each skills as skill (skill.code)}
 				<Badge
 					variant="outline"
-					class="max-w-full gap-1 text-[11px] break-words {isControlledSkill(skill)
+					class="max-w-full gap-1 text-[11px] break-words {skill.controlled
 						? 'border-amber-300 bg-amber-50 text-amber-800'
 						: ''}"
 				>
-					{#if master}<span aria-hidden="true">{master.icon}</span>{/if}
-					{master?.label ?? skill}
+					<span aria-hidden="true">{skill.icon}</span>
+					{skill.label}
 				</Badge>
 			{:else}
 				<span class="text-xs text-muted-foreground">—</span>

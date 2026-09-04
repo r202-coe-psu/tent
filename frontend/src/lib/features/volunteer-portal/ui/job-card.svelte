@@ -119,7 +119,7 @@
 		<div class="mb-5">
 			<div class="mb-2 flex justify-between text-xs">
 				<span class="font-medium {!applicable ? 'text-muted-foreground/80' : ''}"
-					>รับ {job.quota} คน (จองแล้ว {job.slots_confirmed})</span
+					>รับ {job.quota} คน (สมัครแล้ว {job.applicants_count ?? 0} · ยืนยันแล้ว {job.slots_confirmed})</span
 				>
 				<span class="font-bold {applicable ? 'text-success' : 'text-muted-foreground'}">
 					{!applicable ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${job.slots_remaining} ที่`}

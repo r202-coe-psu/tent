@@ -287,6 +287,18 @@ class VolunteersUseCase:
         ).to_list()
         by_shift_id = {(slot.job_id, slot.shift_id): slot for slot in shift_slot_rows}
 
+        applications = await PublicJobApplication.find(
+            {"job_id": {"$in": [job.id for job in jobs]}, "status": {"$ne": "cancelled"}}
+        ).to_list()
+        applicants_by_job: dict[str, int] = {}
+        applicants_by_shift: dict[tuple[str, str], int] = {}
+        for application in applications:
+            applicants_by_job[application.job_id] = applicants_by_job.get(application.job_id, 0) + 1
+            application_shift_id = application.shift_id or application.selected_shift.shift_id
+            if application_shift_id:
+                key = (application.job_id, application_shift_id)
+                applicants_by_shift[key] = applicants_by_shift.get(key, 0) + 1
+
         items: list[PublicJobItem] = []
         for job in jobs:
             slot = by_id.get(job.id)
@@ -320,6 +332,7 @@ class VolunteersUseCase:
                                 shift_quota - shift_confirmed - shift_dispatched, 0
                             ),
                             quota=shift_quota,
+                            applicants_count=applicants_by_shift.get((job.id, shift.shift_id), 0),
                         )
                     )
                 if public_shifts:
@@ -340,6 +353,7 @@ class VolunteersUseCase:
                     quota=quota,
                     slots_confirmed=confirmed,
                     slots_remaining=max(quota - confirmed - dispatched, 0),
+                    applicants_count=applicants_by_job.get(job.id, 0),
                     status=job.status,
                     requires_review=_needs_review(job, [], controlled),
                 )

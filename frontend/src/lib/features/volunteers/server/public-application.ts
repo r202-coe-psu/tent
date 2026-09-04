@@ -12,6 +12,15 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { adminRaw } from '$lib/server/couch-admin';
 import { readEffectiveMasterDoc } from '$lib/server/master-data-server';
+import {
+	makeShiftAssignment,
+	shiftAssignmentSchema,
+	type ShiftAssignmentInput,
+	type ShiftAssignment
+} from '../domain/shift-assignment.schema';
+import { shiftDutyWindow } from '../domain/duty-window';
+import { shiftKindFor } from '../domain/assign-roster';
+import { defaultShiftEndDate } from '../domain/shift-batch';
 
 const MAX_QUOTA_RETRIES = 5;
 
@@ -152,6 +161,57 @@ function needsReview(job: CouchJob, skills: string[], controlled: Set<string>): 
 
 function shiftId(shift: CouchJobShift | null): string | undefined {
 	return shift ? shift.shift_id || shift.id : undefined;
+}
+
+/** Convert the verified CouchDB row into the domain shape used by roster writes. */
+function concreteShift(shift: CouchJobShift | null) {
+	if (
+		!shift ||
+		!shiftId(shift) ||
+		typeof shift.date !== 'string' ||
+		typeof shift.start_time !== 'string' ||
+		typeof shift.end_time !== 'string'
+	)
+		return null;
+	return {
+		id: shiftId(shift)!,
+		date: shift.date,
+		end_date: shift.end_date ?? defaultShiftEndDate(shift.date, shift.start_time, shift.end_time),
+		start_time: shift.start_time,
+		end_time: shift.end_time,
+		quota: quotaOf(shift)
+	};
+}
+
+/** Build the roster row for an auto-confirmed public application. */
+function makeConfirmedAssignment(
+	job: CouchJob,
+	selected: CouchJobShift | null,
+	volunteerId: string,
+	shelterCode: string,
+	now: string
+): ShiftAssignment | null {
+	const shift = concreteShift(selected);
+	if (!shift) return null;
+	const input: ShiftAssignmentInput = {
+		job_id: job._id,
+		shift_id: shift.id,
+		volunteer_id: volunteerId,
+		date: shift.date,
+		shift: shiftKindFor(shift),
+		station: selected?.station?.trim() || job.title,
+		duty_window: shiftDutyWindow(shift)
+	};
+	const assignment = makeShiftAssignment(
+		input,
+		{ shelterCode, createdBy: 'public' },
+		{ status: 'standby', dispatch_status: 'accepted' }
+	);
+	return shiftAssignmentSchema.parse({
+		...assignment,
+		created_at: now,
+		updated_at: now
+	}) as ShiftAssignment;
 }
 
 function quotaOf(shift: CouchJobShift): number {
@@ -355,17 +415,37 @@ export async function applyPublicVolunteerApplication(
 		source: 'public'
 	};
 
+	const assignment =
+		status === 'confirmed'
+			? makeConfirmedAssignment(job, selected, volunteerId, shelterCode, now)
+			: null;
 	const appPut = await putAsPublicWriter(dbName, applicationId, application);
 	if (appPut.status < 200 || appPut.status >= 300) {
 		if (status === 'confirmed') await releaseSlot(dbName, jobId, selected);
 		throw new PublicApplicationError('WRITE_FAILED', 502);
 	}
+	let assignmentPut: { status: number; data: unknown } | null = null;
+	if (assignment) {
+		assignmentPut = await putAsPublicWriter(dbName, assignment._id, assignment);
+		if (assignmentPut.status < 200 || assignmentPut.status >= 300) {
+			const applicationRev = (appPut.data as { rev?: string } | null)?.rev;
+			if (applicationRev)
+				await rollbackAsPublicWriter(dbName, [{ id: applicationId, rev: applicationRev }]);
+			await releaseSlot(dbName, jobId, selected);
+			throw new PublicApplicationError('WRITE_FAILED', 502);
+		}
+	}
 	const volunteerPut = await putAsPublicWriter(dbName, volunteerId, volunteer);
 	if (volunteerPut.status < 200 || volunteerPut.status >= 300) {
 		const applicationRev = (appPut.data as { rev?: string } | null)?.rev;
-		if (applicationRev) {
-			await rollbackAsPublicWriter(dbName, [{ id: applicationId, rev: applicationRev }]);
-		}
+		const assignmentRev = (assignmentPut?.data as { rev?: string } | null)?.rev;
+		await rollbackAsPublicWriter(
+			dbName,
+			[
+				applicationRev ? { id: applicationId, rev: applicationRev } : null,
+				assignmentRev && assignment ? { id: assignment._id, rev: assignmentRev } : null
+			].filter((row): row is { id: string; rev: string } => row !== null)
+		);
 		if (status === 'confirmed') await releaseSlot(dbName, jobId, selected);
 		throw new PublicApplicationError('WRITE_FAILED', 502);
 	}
