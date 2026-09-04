@@ -5,10 +5,10 @@ import type { PageLoad } from './$types';
 /**
  * The route CR-092 §5 names for the volunteer dashboard.
  *
- * The one implementation lives on the public volunteer hub, which carries the portal as one
- * of its three tabs. This used to be a second, mock-data copy of the same screen behind
- * the staff auth wall — which volunteers have no account for.
+ * The one implementation lives at `/volunteers/portal`. This used to be a second,
+ * mock-data copy of the same screen behind the staff auth wall — which volunteers have
+ * no account for.
  */
 export const load = (() => {
-	redirect(308, `${resolve('/volunteers/portal')}?tab=portal`);
+	redirect(308, resolve('/volunteers/portal'));
 }) satisfies PageLoad;

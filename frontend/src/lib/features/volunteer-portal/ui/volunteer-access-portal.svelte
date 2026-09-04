@@ -43,8 +43,8 @@
 	} from '../domain/volunteer';
 
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
-	// One shape for both sources. The demo fixtures below and the live API are mapped
-	// into it, so the markup underneath never has to know which one it is rendering.
+	// The shape the markup below renders. The API's own types are mapped into it so a
+	// field moving upstream is a change to one mapper, not to the whole template.
 	interface PortalShift {
 		id: string;
 		shiftPeriod: string;
@@ -396,7 +396,6 @@
 		}
 	});
 
-	// Filter demo list
 	function handlePhoneLogin(e: SubmitEvent) {
 		e.preventDefault();
 		loginError = '';

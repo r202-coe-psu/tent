@@ -165,7 +165,7 @@
 				// the volunteer signs in with the number they just typed — worth landing
 				// them there anyway rather than failing a booking that already succeeded.
 			}
-			await goto(`${resolve('/volunteers/portal')}?tab=portal`);
+			await goto(resolve('/volunteers/portal'));
 		} catch (err) {
 			formError = err instanceof Error ? err.message : 'จองภารกิจไม่สำเร็จ';
 			toast.error(formError);
