@@ -31,117 +31,37 @@
 		isControlled: boolean;
 	}
 
-	// Mock fallback data if database has no jobs yet
-	const fallbackJobs: QuickApplyJob[] = [
-		{
-			id: 'job-1',
-			title: 'ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC ม.อ.',
-			shelter: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-			shifts: [
-				{
-					id: 's1',
-					date: '2026-06-13',
-					time: '08:00 - 12:00 น.',
-					start_time: '08:00',
-					end_time: '12:00',
-					quota: 10,
-					confirmed: 6
-				},
-				{
-					id: 's2',
-					date: '2026-06-13',
-					time: '12:00 - 16:00 น.',
-					start_time: '12:00',
-					end_time: '16:00',
-					quota: 10,
-					confirmed: 10
-				}
-			],
-			skills_required: ['คัดกรองและสแกนประวัติ', 'ประสานงาน / ต้อนรับ']
-		},
-		{
-			id: 'job-2',
-			title: 'ทีมแพทย์และพยาบาลประจำจุดปฐมพยาบาล',
-			shelter: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)',
-			shifts: [
-				{
-					id: 's1',
-					date: '2026-06-13',
-					time: '08:00 - 16:00 น.',
-					start_time: '08:00',
-					end_time: '16:00',
-					quota: 4,
-					confirmed: 3
-				}
-			],
-			skills_required: ['การแพทย์ / ปฐมพยาบาล']
-		},
-		{
-			id: 'job-3',
-			title: 'ทีมครัวกลางและจัดเตรียมอาหารกล่องพระราชทาน',
-			shelter: 'ศูนย์พักพิง เทศบาลเมืองบ้านพรุ',
-			shifts: [
-				{
-					id: 's1',
-					date: '2026-06-13',
-					time: '08:00 - 12:00 น.',
-					start_time: '08:00',
-					end_time: '12:00',
-					quota: 10,
-					confirmed: 10
-				},
-				{
-					id: 's2',
-					date: '2026-06-13',
-					time: '12:00 - 18:00 น.',
-					start_time: '12:00',
-					end_time: '18:00',
-					quota: 15,
-					confirmed: 8
-				}
-			],
-			skills_required: ['ประกอบอาหาร / ครัวสนาม']
-		},
-		{
-			id: 'job-4',
-			title: 'ทีมคลังพัสดุและขนย้ายถุงยังชีพฉุกเฉิน',
-			shelter: 'บ้านพี่เลี้ยงชุมชนคอหงส์',
-			shifts: [
-				{
-					id: 's1',
-					date: '2026-06-13',
-					time: '13:00 - 17:00 น.',
-					start_time: '13:00',
-					end_time: '17:00',
-					quota: 8,
-					confirmed: 8
-				}
-			],
-			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ']
-		}
-	];
-
 	interface RawPublicJobShift {
 		id?: string;
 		date: string;
 		start_time: string;
 		end_time: string;
 		quota: number;
+		confirmed?: number;
 	}
 
 	interface RawPublicJob {
-		_id: string;
+		_id?: string;
+		job_id?: string;
 		title: string;
 		description?: string;
 		shelter_code?: string;
+		shelter_name?: string;
 		tier?: string;
 		status?: string;
 		quota?: number;
 		skills_required?: string[];
 		shifts?: RawPublicJobShift[];
+		shift_template?: {
+			shift_name?: string;
+			start_time?: string;
+			end_time?: string;
+			days?: string[];
+		};
 		slots_confirmed?: number;
 		slots_remaining?: number;
 		is_urgent?: boolean;
+		requires_review?: boolean;
 	}
 
 	let rawJobs = $state<RawPublicJob[]>([]);
@@ -180,38 +100,67 @@
 	const displayedJobs = $derived.by<DisplayJobCard[]>(() => {
 		if (rawJobs && rawJobs.length > 0) {
 			return rawJobs.map((job: RawPublicJob) => {
+				const jobId = job.job_id || job._id || '';
+				const cleanJobId = jobId.replace(/^job:/, '');
 				const shelterName =
-					shelterMap[job.shelter_code || ''] ?? (job.shelter_code || 'ศูนย์พักพิงหลัก');
+					job.shelter_name ||
+					shelterMap[job.shelter_code || ''] ||
+					job.shelter_code ||
+					'ศูนย์พักพิงหลัก';
 				const isControlled =
 					job.tier === 'staff-capable' ||
+					job.requires_review === true ||
 					(job.skills_required?.some((s: string) => s.includes('แพทย์') || s.includes('พยาบาล')) ??
 						false);
 
-				const shifts: DisplayShift[] =
-					job.shifts && job.shifts.length > 0
-						? job.shifts.map((s: RawPublicJobShift, idx: number) => ({
-								id: s.id || `s-${idx}`,
-								date: s.date,
-								time: `${s.start_time} - ${s.end_time} น.`,
-								start_time: s.start_time,
-								end_time: s.end_time,
-								quota: s.quota,
-								confirmed: Math.min(
-									s.quota,
+				let shifts: DisplayShift[];
+				if (job.shifts && job.shifts.length > 0) {
+					shifts = job.shifts.map((s: RawPublicJobShift, idx: number) => {
+						const st = s.start_time || '08:00';
+						const et = s.end_time || '16:00';
+						return {
+							id: s.id || `s-${idx}`,
+							date: s.date || new Date().toISOString().slice(0, 10),
+							time: `${st} - ${et} น.`,
+							start_time: st,
+							end_time: et,
+							quota: s.quota || 10,
+							confirmed:
+								s.confirmed ??
+								Math.min(
+									s.quota || 10,
 									Math.round((job.slots_confirmed || 0) / (job.shifts?.length || 1))
 								)
-							}))
-						: [
-								{
-									id: 'default-shift',
-									date: new Date().toISOString().slice(0, 10),
-									time: '08:00 - 16:00 น.',
-									start_time: '08:00',
-									end_time: '16:00',
-									quota: job.quota || 10,
-									confirmed: job.slots_confirmed || 0
-								}
-							];
+						};
+					});
+				} else if (job.shift_template) {
+					const tmpl = job.shift_template;
+					const stTime = tmpl.start_time || '08:00';
+					const edTime = tmpl.end_time || '16:00';
+					const days =
+						tmpl.days && tmpl.days.length > 0 ? tmpl.days : [new Date().toISOString().slice(0, 10)];
+					shifts = days.map((day: string, idx: number) => ({
+						id: `st-${cleanJobId}-${idx}`,
+						date: day,
+						time: `${stTime} - ${edTime} น.`,
+						start_time: stTime,
+						end_time: edTime,
+						quota: job.quota || 10,
+						confirmed: job.slots_confirmed || 0
+					}));
+				} else {
+					shifts = [
+						{
+							id: `default-${cleanJobId}`,
+							date: new Date().toISOString().slice(0, 10),
+							time: '08:00 - 16:00 น.',
+							start_time: '08:00',
+							end_time: '16:00',
+							quota: job.quota || 10,
+							confirmed: job.slots_confirmed || 0
+						}
+					];
+				}
 
 				const tags: {
 					label: string;
@@ -225,6 +174,10 @@
 
 				if (job.status === 'open') {
 					tags.push({ label: 'เปิดรับสมัคร', variant: 'success' });
+				} else if (job.status === 'almost_full') {
+					tags.push({ label: 'ใกล้เต็ม', variant: 'warning' });
+				} else if (job.status === 'full') {
+					tags.push({ label: 'เต็มแล้ว', variant: 'outline' });
 				}
 
 				if (job.skills_required) {
@@ -234,7 +187,7 @@
 				}
 
 				return {
-					id: (job._id || '').replace(/^job:/, ''),
+					id: cleanJobId,
 					title: job.title,
 					shelter: shelterName,
 					shelter_code: job.shelter_code,
@@ -247,26 +200,7 @@
 			});
 		}
 
-		// Use fallback formatted jobs
-		return fallbackJobs.map((j) => ({
-			id: j.id,
-			title: j.title,
-			shelter: j.shelter,
-			description: 'ช่วยเหลืองานในศูนย์พักพิงตามภารกิจที่ได้รับมอบหมาย',
-			shifts: j.shifts ?? [],
-			tags: [
-				{
-					label: j.skills_required?.includes('การแพทย์ / ปฐมพยาบาล')
-						? 'ภารกิจควบคุม'
-						: 'ภารกิจทั่วไป',
-					variant: j.skills_required?.includes('การแพทย์ / ปฐมพยาบาล') ? 'purple' : 'default'
-				},
-				{ label: 'เปิดรับสมัคร', variant: 'success' },
-				...(j.skills_required?.map((s) => ({ label: s, variant: 'outline' as const })) ?? [])
-			],
-			skills_required: j.skills_required,
-			isControlled: j.skills_required?.includes('การแพทย์ / ปฐมพยาบาล') ?? false
-		}));
+		return [];
 	});
 
 	let isApplyModalOpen = $state(false);
