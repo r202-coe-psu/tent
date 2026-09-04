@@ -132,7 +132,7 @@ export function buildValidateDocUpdate(code: string): string {
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit
   var appendOnly = [
     'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
-    'kitchen_requisition', 'meal_service', 'gas_ledger'
+    'meal_service', 'gas_ledger'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
@@ -148,7 +148,7 @@ export function buildValidateDocUpdate(code: string): string {
       }
       return;
     }
-    if (wasAppendOnly) {
+    if (wasAppendOnly || (oldDoc && oldDoc.type === 'kitchen_requisition')) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
     }
     return;
@@ -179,6 +179,7 @@ export function buildValidateDocUpdate(code: string): string {
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
+    'meal_session', 'kitchen_counter',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override'
@@ -189,6 +190,11 @@ export function buildValidateDocUpdate(code: string): string {
   // 1. append-only: stock_ledger / audit / movement / screening are never rewritten
   if (appendOnly.indexOf(newDoc.type) !== -1 && oldDoc) {
     throw { forbidden: 'Cannot update append-only ' + newDoc.type + ' documents' };
+  }
+  if (newDoc.type === 'kitchen_requisition' && oldDoc) {
+    if (oldDoc.status === 'approved' || oldDoc.status === 'rejected') {
+      throw { forbidden: 'Cannot update finalized kitchen_requisition documents' };
+    }
   }
   // T-42: saved simulations are immutable snapshots and manager-owned planning evidence.
   if (newDoc.type === 'simulation') {

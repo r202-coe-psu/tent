@@ -27,6 +27,9 @@ export {
 	isRecipe
 } from './domain/catalog';
 
+// Domain — item name resolution
+export { getItemDisplayName, type NamedItem } from './domain/item-name';
+
 // Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';
 export { catalogRepository, CATALOG_DB } from './data/catalog.remote';

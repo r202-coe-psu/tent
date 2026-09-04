@@ -507,7 +507,11 @@ describe('buildValidateDocUpdate', () => {
 			).not.toThrow();
 		});
 
-		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+		it.each(['meal_session', 'kitchen_counter'])('includes %s in the allowed whitelist', (type) => {
+			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
+		});
+
+		it.each(['meal_service', 'gas_ledger'])(
 			'rejects updating an existing %s (append-only)',
 			(type) => {
 				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
@@ -517,6 +521,31 @@ describe('buildValidateDocUpdate', () => {
 				);
 			}
 		);
+
+		it('allows updating a pending kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'pending'
+			};
+			expect(() => compile()({ ...doc, status: 'approved' }, doc, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects updating an approved kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'approved'
+			};
+			expectForbidden(
+				() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+				/Cannot update finalized kitchen_requisition/
+			);
+		});
 
 		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
 			'rejects deleting an existing %s (append-only)',

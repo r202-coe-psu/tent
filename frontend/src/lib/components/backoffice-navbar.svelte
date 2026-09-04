@@ -19,9 +19,15 @@
 		isGroup,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
+	import { useKitchenRequisitions } from '$lib/features/kitchen';
 
 	let collapsed = $state(false);
 	let mobileMenuOpen = $state(false);
+
+	const requisitionsQuery = useKitchenRequisitions();
+	const pendingRequisitionsCount = $derived(
+		(requisitionsQuery.data ?? []).filter((r) => r.status === 'pending').length
+	);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
@@ -155,9 +161,13 @@
 								{#if isGroup(item)}
 									{@const expanded = isExpanded(item.label, item)}
 									{@const active = groupIsActive(item)}
+									{@const hasPendingRequisition =
+										item.children.some(
+											(c) => c.href && String(c.href).includes('kitchen-requisitions')
+										) && pendingRequisitionsCount > 0}
 									<button
 										type="button"
-										class="flex w-full items-center rounded-xl px-4 py-3 transition-colors {collapsed
+										class="relative flex w-full items-center rounded-xl px-4 py-3 transition-colors {collapsed
 											? 'justify-center'
 											: 'gap-3'} {active ? 'bg-primary-muted text-primary' : 'hover:bg-muted/60'}"
 										onclick={() => toggleExpanded(item.label)}
@@ -167,8 +177,23 @@
 										<Icon
 											class="h-4 w-4 shrink-0 {active ? 'text-primary' : 'text-muted-foreground'}"
 										/>
+										{#if collapsed && hasPendingRequisition}
+											<span
+												class="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-amber-500"
+												title="มีคำขอเบิกรอดำเนินการ {pendingRequisitionsCount} รายการ"
+											></span>
+										{/if}
 										{#if !collapsed}
 											<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
+											{#if hasPendingRequisition && !expanded}
+												<span
+													class="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-700 {active
+														? 'bg-amber-500/30'
+														: ''}"
+												>
+													{pendingRequisitionsCount}
+												</span>
+											{/if}
 											<ChevronDown
 												class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 													? 'rotate-180'
@@ -196,6 +221,15 @@
 																: 'text-muted-foreground'}"
 														/>
 														<span class="whitespace-nowrap">{child.label}</span>
+														{#if child.href && String(child.href).includes('kitchen-requisitions') && pendingRequisitionsCount > 0}
+															<span
+																class="ml-auto rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-700 {childActive
+																	? 'bg-white/20 text-white'
+																	: ''}"
+															>
+																{pendingRequisitionsCount}
+															</span>
+														{/if}
 													</a>
 												{:else}
 													<span
@@ -358,6 +392,10 @@
 									{#if isGroup(item)}
 										{@const expanded = isExpanded(item.label, item)}
 										{@const active = groupIsActive(item)}
+										{@const hasPendingRequisition =
+											item.children.some(
+												(c) => c.href && String(c.href).includes('kitchen-requisitions')
+											) && pendingRequisitionsCount > 0}
 										<button
 											type="button"
 											class="flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-colors {active
@@ -370,6 +408,15 @@
 												class="h-4 w-4 shrink-0 {active ? 'text-primary' : 'text-muted-foreground'}"
 											/>
 											<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
+											{#if hasPendingRequisition && !expanded}
+												<span
+													class="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-700 {active
+														? 'bg-amber-500/30'
+														: ''}"
+												>
+													{pendingRequisitionsCount}
+												</span>
+											{/if}
 											<ChevronDown
 												class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 													? 'rotate-180'
@@ -396,6 +443,15 @@
 																	: 'text-muted-foreground'}"
 															/>
 															<span class="whitespace-nowrap">{child.label}</span>
+															{#if child.href && String(child.href).includes('kitchen-requisitions') && pendingRequisitionsCount > 0}
+																<span
+																	class="ml-auto rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-700 {childActive
+																		? 'bg-white/20 text-white'
+																		: ''}"
+																>
+																	{pendingRequisitionsCount}
+																</span>
+															{/if}
 														</a>
 													{:else}
 														<span
