@@ -22,9 +22,6 @@ export const SHIFT_STATUSES = [
 ] as const;
 export type ShiftStatus = (typeof SHIFT_STATUSES)[number];
 
-export const DISPATCH_STATUSES = ['dispatched', 'accepted', 'declined'] as const;
-export type DispatchStatus = (typeof DISPATCH_STATUSES)[number];
-
 export type JobShiftTemplate = {
 	shift_name: string;
 	start_time: string;
@@ -98,8 +95,6 @@ export type ScheduleShift = {
 	check_in_at: string | null;
 	check_out_at: string | null;
 	status: ShiftStatus | string;
-	/** `dispatched` is an offer awaiting the volunteer's answer — CR-092 FR-VOL-06. */
-	dispatch_status: DispatchStatus | string | null;
 };
 
 export type TicketSummary = {
@@ -309,6 +304,20 @@ export function ticketStatusLabel(status: string): string {
 	}
 }
 
+/**
+ * How the portal names the kind of personnel someone is (`volunteer.personnel_type`).
+ *
+ * Only staff-capable volunteers are issued an account, so the distinction is worth
+ * showing: it tells the holder which of the two things their pass is. An unrecognised
+ * value falls through to the operational label rather than rendering a raw enum at
+ * someone — the field is optional upstream and old documents predate it.
+ */
+export function personnelTypeLabel(personnelType: string): string {
+	return personnelType === 'staff'
+		? '🛡️ Staff-Capable (จิตอาสาช่วยงานระบบ)'
+		: '⚡ Operational (จิตอาสาทั่วไป)';
+}
+
 export function shiftStatusLabel(status: string): string {
 	switch (status) {
 		case 'assigned':
@@ -342,32 +351,3 @@ export function isUpcomingShift(shift: ScheduleShift, now: Date = new Date()): b
 	const parsed = new Date(end);
 	return Number.isNaN(parsed.getTime()) ? true : parsed.getTime() >= now.getTime();
 }
-
-/** The offer is live only while it is still awaiting an answer (CR-092 FR-VOL-06). */
-export function needsDispatchResponse(shift: ScheduleShift): boolean {
-	return shift.dispatch_status === 'dispatched' && shift.status !== 'cancelled';
-}
-
-/**
- * The code a shelter manager reads out when offering a shift.
- *
- * Six characters from an alphabet with the look-alikes removed, shown as `4K7-2M9`.
- * Accepted however it was heard and typed: any case, with or without the dash, and
- * with the spaces someone writing it down mid-call tends to add.
- */
-export const responseCodeSchema = z
-	.string()
-	.trim()
-	.min(1, 'กรุณากรอกรหัสที่เจ้าหน้าที่แจ้ง')
-	.transform((value) => value.replace(/[\s-]/g, '').toUpperCase())
-	// Exactly the alphabet the server mints from: no I, L, O, U, 0 or 1. Written out as
-	// two ranges around K–N rather than J-N, which would let the L back in.
-	.refine((value) => /^[2-9A-HJKMNP-TV-Z]{6}$/.test(value), 'รหัสไม่ถูกต้อง');
-
-export const dispatchRespondSchema = z.object({
-	assignment_id: z.string().min(1),
-	code: responseCodeSchema,
-	action: z.enum(['accepted', 'declined'])
-});
-
-export type DispatchRespondInput = z.infer<typeof dispatchRespondSchema>;

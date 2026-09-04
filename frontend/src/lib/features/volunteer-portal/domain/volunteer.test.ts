@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-	dispatchRespondSchema,
 	isJobApplicable,
 	isUpcomingShift,
 	normalizeTicketToken,
 	ticketTokenFromScan,
 	isValidThaiNationalId,
-	needsDispatchResponse,
-	responseCodeSchema,
+	personnelTypeLabel,
 	shiftStatusLabel,
 	ticketStatusLabel,
 	volunteerApplySchema,
@@ -79,7 +77,6 @@ function shift(overrides: Partial<ScheduleShift> = {}): ScheduleShift {
 		check_in_at: null,
 		check_out_at: null,
 		status: 'assigned',
-		dispatch_status: null,
 		...overrides
 	};
 }
@@ -113,20 +110,6 @@ describe('isUpcomingShift', () => {
 	});
 });
 
-describe('needsDispatchResponse', () => {
-	it('is true only while an offer is still awaiting an answer', () => {
-		expect(needsDispatchResponse(shift({ dispatch_status: 'dispatched' }))).toBe(true);
-		expect(needsDispatchResponse(shift({ dispatch_status: 'accepted' }))).toBe(false);
-		expect(needsDispatchResponse(shift({ dispatch_status: null }))).toBe(false);
-	});
-
-	it('does not ask for an answer on a cancelled shift', () => {
-		expect(
-			needsDispatchResponse(shift({ dispatch_status: 'dispatched', status: 'cancelled' }))
-		).toBe(false);
-	});
-});
-
 describe('shiftStatusLabel', () => {
 	it('maps the CR-092 shift lifecycle to Thai copy', () => {
 		expect(shiftStatusLabel('checked_in')).toBe('ปฏิบัติหน้าที่อยู่');
@@ -135,54 +118,6 @@ describe('shiftStatusLabel', () => {
 
 	it('treats the schema.md spelling `done` as `completed`', () => {
 		expect(shiftStatusLabel('done')).toBe(shiftStatusLabel('completed'));
-	});
-});
-
-describe('responseCodeSchema', () => {
-	it('accepts the code however it was heard down the phone', () => {
-		for (const typed of ['4K7-2M9', '4k72m9', ' 4K7 2M9 ', '4k7-2m9']) {
-			const parsed = responseCodeSchema.safeParse(typed);
-			expect(parsed.success, typed).toBe(true);
-			if (parsed.success) expect(parsed.data).toBe('4K72M9');
-		}
-	});
-
-	it('rejects the characters the alphabet leaves out, so a mishearing is caught here', () => {
-		// I, L, O, U, 0 and 1 are excluded precisely because they are misheard.
-		for (const bad of ['4I7-2M9', '4O7-2M9', '4L7-2M9', '407-2M9', '417-2M9']) {
-			expect(responseCodeSchema.safeParse(bad).success, bad).toBe(false);
-		}
-	});
-
-	it('rejects a code of the wrong length', () => {
-		expect(responseCodeSchema.safeParse('4K7-2M').success).toBe(false);
-		expect(responseCodeSchema.safeParse('4K7-2M99').success).toBe(false);
-	});
-
-	it('rejects an empty code with a message the volunteer can act on', () => {
-		const parsed = responseCodeSchema.safeParse('  ');
-		expect(parsed.success).toBe(false);
-		if (!parsed.success) {
-			expect(parsed.error.issues[0]?.message).toContain('รหัส');
-		}
-	});
-});
-
-describe('dispatchRespondSchema', () => {
-	it('carries the normalised code through, not what was typed', () => {
-		const parsed = dispatchRespondSchema.safeParse({
-			assignment_id: 'shift_assignment:01A',
-			code: '4k7 2m9',
-			action: 'accepted'
-		});
-		expect(parsed.success).toBe(true);
-		if (parsed.success) expect(parsed.data.code).toBe('4K72M9');
-	});
-
-	it('only allows the two answers the spec defines', () => {
-		const base = { assignment_id: 'shift_assignment:01A', code: '4K7-2M9' };
-		expect(dispatchRespondSchema.safeParse({ ...base, action: 'declined' }).success).toBe(true);
-		expect(dispatchRespondSchema.safeParse({ ...base, action: 'maybe' }).success).toBe(false);
 	});
 });
 
@@ -289,5 +224,21 @@ describe('volunteerProfileUpdateSchema', () => {
 			status: 'inactive'
 		});
 		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
+	});
+});
+
+describe('personnelTypeLabel', () => {
+	it('names a staff-capable volunteer, who holds an account', () => {
+		expect(personnelTypeLabel('staff')).toBe('🛡️ Staff-Capable (จิตอาสาช่วยงานระบบ)');
+	});
+
+	it('names an ordinary operational volunteer', () => {
+		expect(personnelTypeLabel('volunteer')).toBe('⚡ Operational (จิตอาสาทั่วไป)');
+	});
+
+	it('falls back to the operational label rather than showing a raw value', () => {
+		// The field is optional upstream and documents written before it exist.
+		expect(personnelTypeLabel('')).toBe('⚡ Operational (จิตอาสาทั่วไป)');
+		expect(personnelTypeLabel('something_new')).toBe('⚡ Operational (จิตอาสาทั่วไป)');
 	});
 });

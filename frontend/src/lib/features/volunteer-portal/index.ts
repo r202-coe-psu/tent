@@ -12,10 +12,7 @@
  * The only entry point other code may import.
  */
 export {
-	DISPATCH_STATUSES,
 	SHIFT_STATUSES,
-	dispatchRespondSchema,
-	responseCodeSchema,
 	TICKET_STATUSES,
 	isJobApplicable,
 	isUpcomingShift,
@@ -24,7 +21,7 @@ export {
 	portalCredentialSchema,
 	ticketTokenFromScan,
 	isValidThaiNationalId,
-	needsDispatchResponse,
+	personnelTypeLabel,
 	shiftStatusLabel,
 	ticketFindSchema,
 	ticketStatusLabel,
@@ -32,8 +29,6 @@ export {
 	volunteerProfileUpdateSchema
 } from './domain/volunteer';
 export type {
-	DispatchRespondInput,
-	DispatchStatus,
 	JobShiftTemplate,
 	PortalCredential,
 	PublicJobFilter,
@@ -59,7 +54,6 @@ export {
 	useCancelTicketMutation,
 	useFindTicketsMutation,
 	useVolunteerJobs,
-	useRespondToDispatchMutation,
 	useVolunteerSchedule,
 	useVolunteerTicket,
 	useVolunteerTickets,

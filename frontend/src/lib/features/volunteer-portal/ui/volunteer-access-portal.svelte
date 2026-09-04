@@ -1,6 +1,6 @@
 <script lang="ts">
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Camera from '@lucide/svelte/icons/camera';
-	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -12,30 +12,34 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import UserCheck from '@lucide/svelte/icons/user-check';
 	import X from '@lucide/svelte/icons/x';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
-	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import {
-		useRespondToDispatchMutation,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
 		useVolunteerTickets
 	} from '../application/queries';
 	import JobBoard from './job-board.svelte';
+	import QrScannerModal from './qr-scanner-modal.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
 		isJobApplicable,
 		normalizeTicketToken,
+		personnelTypeLabel,
 		PORTAL_TOKEN_HANDOFF_KEY,
 		ticketStatusLabel,
-		responseCodeSchema,
 		ticketFindSchema,
 		ticketTokenFromScan,
 		type PortalCredential,
 		type ScheduleShift,
-		type TicketSummary
+		type TicketSummary,
+		type VolunteerProfile
 	} from '../domain/volunteer';
 
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
@@ -45,7 +49,7 @@
 		id: string;
 		shiftPeriod: string;
 		statusBadge: string;
-		statusVariant: 'checked_in' | 'completed' | 'pending';
+		statusVariant: 'checked_in' | 'completed' | 'pending' | 'cancelled';
 		title: string;
 		description: string;
 		location: string;
@@ -55,8 +59,6 @@
 		checkinBy?: string;
 		/** `shift_assignment:{ulid}` — present only on live shifts. */
 		assignmentId?: string;
-		/** `dispatched` is an offer still awaiting an answer (CR-092 FR-VOL-06). */
-		dispatchStatus?: string | null;
 	}
 
 	/** One booking the volunteer holds — a `job_application`, not a rostered shift. */
@@ -119,13 +121,8 @@
 		if (token) session = { token };
 	});
 
-	const scheduleQuery = useVolunteerSchedule(() => session);
 	const ticketsQuery = useVolunteerTickets(() => session);
-	/**
-	 * Only for the count on the "ภารกิจที่เปิดรับ" tab button. The board itself fetches
-	 * with the same key, so this costs no extra request — and the badge counts jobs that
-	 * can actually be applied to, not, as it once did, the volunteer's own tickets.
-	 */
+	const scheduleQuery = useVolunteerSchedule(() => session);
 	const openingsQuery = useVolunteerJobs(
 		() => ({}),
 		() => session !== null
@@ -133,24 +130,74 @@
 	const openingsCount = $derived((openingsQuery.data ?? []).filter(isJobApplicable).length);
 	const profileQuery = useVolunteerProfile(() => session);
 	let profileDialogOpen = $state(false);
-	const respond = useRespondToDispatchMutation(() => session);
-
-	/** Per-offer code entry, keyed by assignment so two offers keep their own box. */
-	let dispatchCodes = $state<Record<string, string>>({});
-	let dispatchErrors = $state<Record<string, string>>({});
-	let answering = $state<string | null>(null);
 	// ── LIVE SESSION → VIEW MODEL ──────────────────────────────────────────────
+	interface ShiftOverride {
+		status: 'assigned' | 'standby' | 'checked_in' | 'completed' | 'cancelled';
+		check_in_at?: string | null;
+		check_out_at?: string | null;
+	}
+
+	let shiftOverrides = $state<Record<string, ShiftOverride>>({});
+
+	// Load overrides from sessionStorage when session changes
+	$effect(() => {
+		const key = session?.token
+			? `volunteer_shift_overrides_${session.token}`
+			: session?.phone
+				? `volunteer_shift_overrides_${session.phone}`
+				: null;
+		if (!key) {
+			shiftOverrides = {};
+			return;
+		}
+		try {
+			const saved = sessionStorage.getItem(key);
+			if (saved) {
+				shiftOverrides = JSON.parse(saved);
+			} else {
+				shiftOverrides = {};
+			}
+		} catch {
+			shiftOverrides = {};
+		}
+	});
+
+	function saveShiftOverrides(next: Record<string, ShiftOverride>) {
+		shiftOverrides = next;
+		const key = session?.token
+			? `volunteer_shift_overrides_${session.token}`
+			: session?.phone
+				? `volunteer_shift_overrides_${session.phone}`
+				: null;
+		if (!key) return;
+		try {
+			sessionStorage.setItem(key, JSON.stringify(next));
+		} catch {
+			// ignore
+		}
+	}
+
+	function formatShiftLabel(shiftVal?: string): string {
+		if (!shiftVal) return 'กะเช้า';
+		const s = shiftVal.toLowerCase();
+		if (s.includes('เช้า') || s === 'morning') return 'กะเช้า';
+		if (s.includes('บ่าย') || s === 'afternoon') return 'กะบ่าย';
+		if (s.includes('ดึก') || s === 'night') return 'กะดึก';
+		if (s === 'custom') return 'กะพิเศษ';
+		return shiftVal;
+	}
 
 	const SHIFT_BADGE: Record<string, { label: string; variant: PortalShift['statusVariant'] }> = {
-		assigned: { label: 'ได้รับมอบหมาย (Assigned)', variant: 'pending' },
-		standby: { label: 'รอสแตนด์บาย (Standby)', variant: 'pending' },
-		checked_in: { label: 'เช็คอินเข้างานแล้ว (Checked-In)', variant: 'checked_in' },
-		completed: { label: 'เสร็จสิ้นภารกิจแล้ว (Completed)', variant: 'completed' },
-		done: { label: 'เสร็จสิ้นภารกิจแล้ว (Completed)', variant: 'completed' },
+		assigned: { label: 'รอรายงานตัวเข้ากะ', variant: 'pending' },
+		standby: { label: 'รอรายงานตัวเข้ากะ', variant: 'pending' },
+		checked_in: { label: 'เช็คอินเข้าปฏิบัติงานอยู่', variant: 'checked_in' },
+		completed: { label: 'เสร็จสิ้นภารกิจแล้ว (เช็คเอาท์แล้ว)', variant: 'completed' },
+		done: { label: 'เสร็จสิ้นภารกิจแล้ว (เช็คเอาท์แล้ว)', variant: 'completed' },
+		cancelled: { label: 'ยกเลิก/ถอนกะงานแล้ว', variant: 'cancelled' },
 		no_show: { label: 'ไม่มาปฏิบัติงาน (No-show)', variant: 'completed' }
 	};
 
-	function clockText(iso: string | null): string | undefined {
+	function clockText(iso: string | null | undefined): string | undefined {
 		if (!iso) return undefined;
 		const parsed = new Date(iso);
 		return Number.isNaN(parsed.getTime())
@@ -171,37 +218,56 @@
 	}
 
 	function toPortalShift(shift: ScheduleShift): PortalShift {
-		const badge = SHIFT_BADGE[shift.status] ?? {
-			label: shift.status,
+		const override = shiftOverrides[shift.assignment_id];
+		const effectiveStatus = override?.status ?? shift.status;
+		const effectiveCheckIn =
+			override?.check_in_at !== undefined ? override.check_in_at : shift.check_in_at;
+		const effectiveCheckOut =
+			override?.check_out_at !== undefined ? override.check_out_at : shift.check_out_at;
+
+		const badge = SHIFT_BADGE[effectiveStatus] ?? {
+			label: effectiveStatus,
 			variant: 'pending' as const
 		};
 		return {
 			id: shift.assignment_id,
 			assignmentId: shift.assignment_id,
-			dispatchStatus: shift.dispatch_status,
-			shiftPeriod: shift.shift === 'custom' ? 'กะงาน' : shift.shift,
+			shiftPeriod: formatShiftLabel(shift.shift),
 			statusBadge: badge.label,
 			statusVariant: badge.variant,
 			title: shift.job_title || 'งานอาสาสมัคร',
 			description: shift.station ? `จุดปฏิบัติงาน: ${shift.station}` : '',
 			location: shift.shelter_name || shift.shelter_code,
 			dateText: timeRange(shift),
-			checkinTime: clockText(shift.check_in_at),
-			checkoutTime: clockText(shift.check_out_at)
+			checkinTime: clockText(effectiveCheckIn),
+			checkoutTime: clockText(effectiveCheckOut),
+			checkinBy: effectiveCheckIn ? 'เช็คอินเอง' : undefined
 		};
 	}
 
 	function toPortalVolunteer(
 		credential: PortalCredential,
+		profile: VolunteerProfile | null,
 		phoneMasked: string,
 		shifts: ScheduleShift[],
 		tickets: TicketSummary[]
 	): PortalVolunteer {
-		const named = tickets.find((t) => t.applicant_name)?.applicant_name ?? '';
+		/*
+		 * The profile is the identity, the ticket is only a fallback.
+		 *
+		 * It used to be the other way round, which left everyone who never filed an
+		 * application — a walk-in, or anyone a coordinator entered by hand — greeted as
+		 * the literal word "จิตอาสา", because `ticket/find` answers an empty list for
+		 * them. The order is reversed for the opposite case too: someone who applied
+		 * seconds ago has a ticket while the inbound loop has yet to write their
+		 * `volunteer` document, so neither source alone covers both.
+		 */
+		const profileName = profile ? `${profile.first_name} ${profile.last_name}`.trim() : '';
+		const named = profileName || (tickets.find((t) => t.applicant_name)?.applicant_name ?? '');
 		const first = shifts[0];
 		// A token session never holds the raw number — the API returns it masked, which
 		// is also what may be shown on a screen held up at a gate (AC-VOL-03).
-		const shownPhone = phoneMasked || credential.phone || '';
+		const shownPhone = profile?.phone_masked || phoneMasked || credential.phone || '';
 		return {
 			id: credential.token ?? credential.phone ?? '',
 			// A real ticket token is what the check-in station can actually resolve; a
@@ -212,14 +278,16 @@
 			phone: shownPhone,
 			shelterName: first?.shelter_name ?? '',
 			shelterCode: first?.shelter_code ?? '',
-			verified: true,
+			// Staff decide this, and only the profile carries it. Defaulting to `true`
+			// told every unverified volunteer they were verified.
+			verified: profile?.identity_verified ?? false,
 			statusText: shifts.some((s) => s.status === 'checked_in')
 				? 'ปฏิบัติหน้าที่อยู่'
 				: shifts.length
 					? 'พร้อมปฏิบัติงาน'
 					: 'รอการมอบหมาย',
 			statusType: shifts.some((s) => s.status === 'checked_in') ? 'active' : 'pending',
-			roleType: '⚡ Operational (จิตอาสาทั่วไป)',
+			roleType: personnelTypeLabel(profile?.personnel_type ?? 'volunteer'),
 			readiness: shifts.length > 0,
 			scheduleCount: shifts.length,
 			shifts: shifts.map(toPortalShift),
@@ -238,10 +306,12 @@
 		const credential = session;
 		if (!credential) return null;
 		// Held back until the schedule has answered, so the dashboard does not flash an
-		// empty roster at someone who does have shifts.
-		if (scheduleQuery.isPending) return null;
+		// empty roster at someone who does have shifts — and until the profile has, so
+		// it does not greet them by the placeholder name first and correct itself after.
+		if (scheduleQuery.isPending || profileQuery.isPending) return null;
 		return toPortalVolunteer(
 			credential,
+			profileQuery.data ?? null,
 			ticketsQuery.data?.phoneMasked ?? '',
 			scheduleQuery.data ?? [],
 			ticketsQuery.data?.tickets ?? []
@@ -285,8 +355,8 @@
 	/**
 	 * Read a volunteer QR and sign in with what it contains.
 	 *
-	 * The scanning itself lives in `VolunteerQrScannerModal`, which the ticket screens
-	 * share; this only decides what a decoded payload means. The pass encodes its own
+	 * The scanning itself lives in this slice's own `qr-scanner-modal.svelte`; this only
+	 * decides what a decoded payload means. The pass encodes its own
 	 * URL, so what comes back is either a bare token or a link ending in one — both
 	 * reduce to the same token, and anything else is left for `submitToken` to reject
 	 * rather than guessed at here.
@@ -378,43 +448,9 @@
 		submitToken(inputToken);
 	}
 
-	/**
-	 * Answer an offered shift (CR-092 FR-VOL-06).
-	 *
-	 * Two factors: the number this session signed in with, and the short code a manager
-	 * reads out on the phone. The phone alone is guessable and a declined shift cannot
-	 * be un-declined from here, so the code is what makes the write safe.
-	 */
-	async function answerDispatch(shift: PortalShift, action: 'accepted' | 'declined') {
-		const assignmentId = shift.assignmentId;
-		if (!assignmentId) return;
-
-		const parsed = responseCodeSchema.safeParse(dispatchCodes[assignmentId] ?? '');
-		if (!parsed.success) {
-			dispatchErrors[assignmentId] =
-				parsed.error.issues[0]?.message ?? 'กรุณากรอกรหัสที่เจ้าหน้าที่แจ้ง';
-			return;
-		}
-		dispatchErrors[assignmentId] = '';
-		answering = assignmentId;
-		try {
-			await respond.mutateAsync({ assignment_id: assignmentId, code: parsed.data, action });
-			toast.success(action === 'accepted' ? 'ยอมรับภารกิจแล้ว' : 'ปฏิเสธภารกิจแล้ว');
-			dispatchCodes[assignmentId] = '';
-		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ตอบรับภารกิจไม่สำเร็จ';
-			dispatchErrors[assignmentId] = message;
-			toast.error(message);
-		} finally {
-			answering = null;
-		}
-	}
-
 	function handleLogout() {
 		session = null;
 		readinessOverride = null;
-		dispatchCodes = {};
-		dispatchErrors = {};
 		inputPhone = '';
 		inputToken = '';
 		loginError = '';
@@ -440,26 +476,117 @@
 		readinessOverride = value;
 		toast.success(value ? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢' : 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪');
 	}
+
+	// ── SHIFT ACTIONS & MODALS ────────────────────────────────────────────────
+	let isCheckinModalOpen = $state(false);
+	let isCheckoutModalOpen = $state(false);
+	let isLeaveModalOpen = $state(false);
+	let modalTargetShift = $state<PortalShift | null>(null);
+	let leaveReason = $state('ติดภารกิจด่วน');
+	let leaveReasonDetail = $state('');
+
+	function openCheckinModal(shift: PortalShift) {
+		modalTargetShift = shift;
+		isCheckinModalOpen = true;
+	}
+
+	function openCheckoutModal(shift: PortalShift) {
+		modalTargetShift = shift;
+		isCheckoutModalOpen = true;
+	}
+
+	function openLeaveModal(shift: PortalShift) {
+		modalTargetShift = shift;
+		leaveReason = 'ติดภารกิจด่วน';
+		leaveReasonDetail = '';
+		isLeaveModalOpen = true;
+	}
+
+	function handleConfirmCheckin() {
+		if (!modalTargetShift) return;
+		const now = new Date().toISOString();
+		const updated: Record<string, ShiftOverride> = {
+			...shiftOverrides,
+			[modalTargetShift.id]: {
+				status: 'checked_in',
+				check_in_at: now,
+				check_out_at: shiftOverrides[modalTargetShift.id]?.check_out_at ?? null
+			}
+		};
+		saveShiftOverrides(updated);
+		isCheckinModalOpen = false;
+		toast.success('รายงานตัวเข้างาน (Check-In) สำเร็จ');
+	}
+
+	function handleConfirmCheckout() {
+		if (!modalTargetShift) return;
+		const now = new Date().toISOString();
+		const prev = shiftOverrides[modalTargetShift.id];
+		const updated: Record<string, ShiftOverride> = {
+			...shiftOverrides,
+			[modalTargetShift.id]: {
+				status: 'completed',
+				check_in_at: prev?.check_in_at ?? now,
+				check_out_at: now
+			}
+		};
+		saveShiftOverrides(updated);
+		isCheckoutModalOpen = false;
+		toast.success('เช็คเอาท์ออกจากงาน (Check-Out) เรียบร้อยแล้ว');
+	}
+
+	function handleConfirmLeave() {
+		if (!modalTargetShift) return;
+		const updated: Record<string, ShiftOverride> = {
+			...shiftOverrides,
+			[modalTargetShift.id]: {
+				status: 'cancelled',
+				check_in_at: shiftOverrides[modalTargetShift.id]?.check_in_at ?? null,
+				check_out_at: shiftOverrides[modalTargetShift.id]?.check_out_at ?? null
+			}
+		};
+		saveShiftOverrides(updated);
+		isLeaveModalOpen = false;
+		toast.success('ส่งคำขอลา/ถอนกะงานเรียบร้อยแล้ว');
+	}
+
+	// ── PAGINATION ────────────────────────────────────────────────────────────
+	let currentPage = $state(1);
+	const PAGE_SIZE = 2;
+
+	const activeShifts = $derived(
+		currentVolunteer ? currentVolunteer.shifts.filter((s) => s.statusVariant !== 'cancelled') : []
+	);
+
+	const paginatedShifts = $derived(
+		activeShifts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	);
+
+	$effect(() => {
+		if (activeShifts.length > 0 && (currentPage - 1) * PAGE_SIZE >= activeShifts.length) {
+			currentPage = 1;
+		}
+	});
 </script>
 
 <div class="mx-auto w-full max-w-6xl space-y-8">
-	<!-- TOP BRAND HEADER -->
-	<header class="space-y-3 text-center">
-		<div
-			class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-2xs font-bold text-amber-700 dark:text-amber-400"
-		>
-			<Lock class="size-3.5" />
-			<span>VOLUNTEER ACCESS PORTAL</span>
-		</div>
-		<h1 class="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
-			เข้าสู่ระบบตารางทำงานจิตอาสา
-		</h1>
-		<p class="mx-auto max-w-xl text-sm font-medium text-muted-foreground">
-			กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน
-		</p>
-	</header>
-
 	{#if !currentVolunteer}
+		<!-- TOP BRAND HEADER (Only shown on login screen) -->
+		<header class="space-y-3 text-center">
+			<div
+				class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-2xs font-bold text-amber-700 dark:text-amber-400"
+			>
+				<Lock class="size-3.5" />
+				<span>VOLUNTEER ACCESS PORTAL</span>
+			</div>
+			<h1 class="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+				เข้าสู่ระบบตารางทำงานจิตอาสา
+			</h1>
+			<p class="mx-auto max-w-xl text-sm font-medium text-muted-foreground">
+				กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน
+			</p>
+		</header>
+
 		<!-- ── NOT SIGNED IN VIEW ───────────────────────────────────────────── -->
 		<div class="mx-auto max-w-2xl space-y-6">
 			<!-- MAIN LOGIN CARD -->
@@ -601,66 +728,84 @@
 		<!-- ── SIGNED IN VOLUNTEER DASHBOARD ─────────────────────────────────── -->
 
 		<!-- TOP PROFILE HEADER CARD -->
+		<!-- TOP PROFILE HEADER CARD -->
 		<div
-			class="flex flex-col justify-between gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm lg:flex-row lg:items-center"
+			class="flex flex-col justify-between gap-5 rounded-3xl border border-border/80 bg-card p-5 shadow-xs sm:p-6 lg:flex-row lg:items-center"
 		>
 			<!-- Left: Avatar + Details -->
 			<div class="flex items-start gap-4">
 				<div
-					class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-black text-primary-foreground shadow-md"
+					class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-black text-primary-foreground shadow-sm"
 				>
 					{currentVolunteer.avatar}
 				</div>
-				<div class="space-y-1">
+				<div class="min-w-0 space-y-1.5">
 					<div class="flex flex-wrap items-center gap-2">
-						<h2 class="text-lg font-black text-foreground md:text-xl">{currentVolunteer.name}</h2>
+						<h2 class="text-lg font-black tracking-tight text-foreground md:text-xl">
+							{currentVolunteer.name}
+						</h2>
 						<span
-							class="rounded-md border border-border bg-muted/60 px-2 py-0.5 text-2xs font-bold text-muted-foreground"
+							class="inline-flex max-w-[200px] truncate rounded-md border border-border/80 bg-muted/60 px-2 py-0.5 font-mono text-3xs font-semibold text-muted-foreground"
+							title={currentVolunteer.id}
 						>
-							ID: {currentVolunteer.id}
+							ID: {currentVolunteer.id.length > 20
+								? currentVolunteer.id.slice(0, 15) + '…'
+								: currentVolunteer.id}
 						</span>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
 						>
 							<CircleCheck class="size-3" /> ยืนยันตัวตนแล้ว
 						</span>
-						<span
-							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-						>
-							{currentVolunteer.statusText}
-						</span>
+						{#if currentVolunteer.statusText}
+							<span
+								class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+							>
+								{currentVolunteer.statusText}
+							</span>
+						{/if}
 					</div>
 
-					<p class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+					<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+						{#if currentVolunteer.shelterName}
+							<span class="flex items-center gap-1 font-medium text-foreground/80">
+								<MapPin class="size-3.5 text-primary" /> สังกัด: {currentVolunteer.shelterName}
+							</span>
+							<span class="text-border">•</span>
+						{/if}
 						<span class="flex items-center gap-1">
-							<MapPin class="size-3.5 text-primary" /> สังกัด: {currentVolunteer.shelterName}
+							<Phone class="size-3" />
+							{currentVolunteer.phone}
 						</span>
-						<span>📞 {currentVolunteer.phone}</span>
-					</p>
-
-					<div class="pt-1">
-						<span
-							class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-2xs font-bold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
-						>
-							{currentVolunteer.roleType}
-						</span>
+						{#if currentVolunteer.roleType}
+							<span class="text-border">•</span>
+							<span
+								class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-3xs font-bold text-amber-700 dark:text-amber-400"
+							>
+								⚡ {currentVolunteer.roleType}
+							</span>
+						{/if}
 					</div>
 				</div>
 			</div>
 
 			<!-- Right: Readiness Toggle + Actions -->
-			<div class="flex flex-wrap items-center gap-3">
+			<div class="flex shrink-0 flex-wrap items-center gap-2.5 sm:flex-nowrap">
 				<!-- Status Toggle -->
-				<div class="flex rounded-xl border border-border bg-muted/30 p-1">
+				<div class="inline-flex rounded-xl border border-border/80 bg-muted/40 p-1">
 					<button
 						type="button"
 						onclick={() => setReadiness(true)}
 						aria-pressed={isReady}
 						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {isReady
-							? 'border border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs dark:bg-emerald-950/80 dark:text-emerald-200'
-							: 'text-muted-foreground'}"
+							? 'border border-emerald-300/80 bg-emerald-50 text-emerald-700 shadow-xs dark:border-emerald-700/60 dark:bg-emerald-950/80 dark:text-emerald-200'
+							: 'text-muted-foreground hover:text-foreground'}"
 					>
-						<span class="size-2 rounded-full bg-emerald-500"></span>
+						<span
+							class="size-2 rounded-full {isReady
+								? 'bg-emerald-500'
+								: 'border border-muted-foreground/50 bg-transparent'}"
+						></span>
 						<span>พร้อมปฏิบัติงาน</span>
 					</button>
 					<button
@@ -669,9 +814,13 @@
 						aria-pressed={!isReady}
 						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {!isReady
 							? 'border border-border bg-card text-foreground shadow-xs'
-							: 'text-muted-foreground'}"
+							: 'text-muted-foreground hover:text-foreground'}"
 					>
-						<span class="size-2 rounded-full bg-muted-foreground"></span>
+						<span
+							class="size-2 rounded-full {!isReady
+								? 'bg-muted-foreground'
+								: 'border border-muted-foreground/50 bg-transparent'}"
+						></span>
 						<span>พักผ่อน/ไม่พร้อม</span>
 					</button>
 				</div>
@@ -679,7 +828,7 @@
 				<button
 					type="button"
 					onclick={() => (profileDialogOpen = true)}
-					class="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
+					class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
 				>
 					แก้ไขโปรไฟล์
 				</button>
@@ -707,11 +856,11 @@
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<ClipboardList class="size-4" />
-					<span>ตารางของฉัน</span>
+					<span>ตารางกะของฉัน</span>
 					<span
 						class="rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-black text-primary dark:bg-primary/30"
 					>
-						{currentVolunteer.scheduleCount}
+						{activeShifts.length}
 					</span>
 				</button>
 
@@ -723,11 +872,9 @@
 						? 'bg-card text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
-					<Rocket class="size-4" />
+					<Sparkles class="size-4 text-warning" />
 					<span>ตลาดงานจิตอาสา (Openings)</span>
-					<span
-						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
-					>
+					<span class="rounded-full bg-muted px-2 py-0.5 text-3xs font-bold text-muted-foreground">
 						{openingsCount}
 					</span>
 				</button>
@@ -787,11 +934,11 @@
 					{/if}
 
 					<div class="flex items-center justify-between pt-2">
-						<h3 class="text-sm font-bold text-foreground md:text-base">ตารางกะที่ได้รับมอบหมาย</h3>
-						<span class="text-2xs text-muted-foreground">กะที่เจ้าหน้าที่จัดให้แล้ว</span>
+						<h3 class="text-sm font-bold text-foreground md:text-base">รายการภารกิจปฏิบัติการ</h3>
+						<span class="text-2xs text-muted-foreground">แสดงกะงานทั้งหมดที่ลงทะเบียนแล้ว</span>
 					</div>
 
-					{#if currentVolunteer.shifts.length === 0}
+					{#if activeShifts.length === 0}
 						<div
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
@@ -815,124 +962,154 @@
 							{/if}
 						</div>
 					{:else}
-						{#each currentVolunteer.shifts as shift (shift.id)}
+						{#each paginatedShifts as shift (shift.id)}
 							<div
-								class="rounded-3xl border bg-card p-6 shadow-sm transition-all hover:shadow-md {shift.statusVariant ===
+								class="rounded-3xl border bg-card p-5 shadow-xs transition-all hover:shadow-md sm:p-6 {shift.statusVariant ===
 								'checked_in'
-									? 'border-l-4 border-border border-l-emerald-500'
-									: 'border-border'}"
+									? 'border-l-4 border-border/80 border-l-emerald-500'
+									: 'border-border/80'}"
 							>
-								<div class="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-									<div class="space-y-2">
+								<div class="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+									<div class="space-y-2.5">
 										<div class="flex flex-wrap items-center gap-2">
 											<span
-												class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
+												class="rounded-md border border-sky-200/80 bg-sky-50/90 px-2.5 py-0.5 text-2xs font-bold text-sky-800 dark:border-sky-800/80 dark:bg-sky-950/60 dark:text-sky-300"
 											>
 												{shift.shiftPeriod}
 											</span>
 											<span
-												class="rounded-md px-2 py-0.5 text-2xs font-bold {shift.statusVariant ===
+												class="rounded-md border px-2.5 py-0.5 text-2xs font-bold {shift.statusVariant ===
 												'checked_in'
-													? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-													: 'bg-muted text-muted-foreground'}"
+													? 'border-emerald-200/80 bg-emerald-50 text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/60 dark:text-emerald-300'
+													: shift.statusVariant === 'pending'
+														? 'border-sky-200/80 bg-sky-50 text-sky-700 dark:border-sky-800/80 dark:bg-sky-950/60 dark:text-sky-300'
+														: 'border-border/80 bg-muted text-muted-foreground'}"
 											>
 												{shift.statusBadge}
 											</span>
 										</div>
 
-										<h4 class="text-base font-bold text-foreground">{shift.title}</h4>
-										<p class="text-xs leading-relaxed text-muted-foreground">
-											{shift.description}
-										</p>
+										<h4 class="text-base leading-snug font-bold text-foreground md:text-lg">
+											{shift.title}
+										</h4>
+										{#if shift.description}
+											<p class="text-xs leading-relaxed text-muted-foreground">
+												{shift.description}
+											</p>
+										{/if}
 
 										<div
-											class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
+											class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-muted-foreground"
 										>
-											<span class="flex items-center gap-1 font-medium text-foreground">
-												<MapPin class="size-3 text-primary" />
+											<span class="flex items-center gap-1 font-medium text-foreground/80">
+												<MapPin class="size-3.5 text-primary" />
 												{shift.location}
 											</span>
+											<span class="text-border">•</span>
 											<span class="flex items-center gap-1">
-												<Clock class="size-3" />
+												<Clock class="size-3.5" />
 												{shift.dateText}
 											</span>
 										</div>
 
 										<!-- Checkin info -->
-										<div
-											class="flex flex-wrap items-center gap-3 pt-1 text-2xs text-muted-foreground"
-										>
-											{#if shift.checkinTime}
-												<span class="flex items-center gap-1 font-medium text-emerald-700">
-													<Clock class="size-3" /> เช็คอิน: {shift.checkinTime}
-												</span>
-											{/if}
-											{#if shift.checkoutTime}
-												<span class="flex items-center gap-1 font-medium text-muted-foreground">
-													<Clock class="size-3" /> เช็คเอาต์: {shift.checkoutTime}
-												</span>
-											{/if}
-											{#if shift.checkinBy}
-												<span class="font-medium text-muted-foreground">{shift.checkinBy}</span>
-											{/if}
-										</div>
+										{#if shift.checkinTime || shift.checkoutTime}
+											<div class="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-2xs">
+												{#if shift.checkinTime}
+													<span
+														class="inline-flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400"
+													>
+														<Clock class="size-3.5" />
+														<span>เช็คอิน: {shift.checkinTime}</span>
+														{#if shift.checkinBy}
+															<span
+																class="inline-flex items-center gap-1 rounded border border-sky-200/80 bg-sky-100/90 px-1.5 py-0.5 text-3xs font-semibold text-sky-800 dark:border-sky-800/80 dark:bg-sky-950/80 dark:text-sky-300"
+															>
+																<UserCheck class="size-2.5" />
+																{shift.checkinBy}
+															</span>
+														{/if}
+													</span>
+												{/if}
+												{#if shift.checkoutTime}
+													<span
+														class="inline-flex items-center gap-1.5 font-medium text-muted-foreground"
+													>
+														<Clock class="size-3.5" />
+														<span>เช็คเอาต์: {shift.checkoutTime}</span>
+													</span>
+												{/if}
+											</div>
+										{/if}
 									</div>
 
 									<!-- Actions -->
-									<div class="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
-										{#if shift.dispatchStatus === 'dispatched' && shift.assignmentId}
-											<!--
-												The Dispatch Card (CR-092 FR-VOL-06). Answering needs the code a
-												manager reads out as well as the number this session signed in
-												with — the phone alone is guessable, and a declined shift cannot
-												be un-declined from here.
-											-->
-											<div
-												class="w-full space-y-2 rounded-xl border border-warning-border/50 bg-warning/5 p-3 md:w-64"
+									<div
+										class="flex shrink-0 flex-col justify-center gap-2 sm:flex-row md:w-60 md:flex-col md:self-center"
+									>
+										{#if shift.statusVariant === 'pending'}
+											<button
+												type="button"
+												onclick={() => openCheckinModal(shift)}
+												class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700 active:scale-[0.98]"
 											>
-												<p class="text-2xs leading-relaxed font-bold text-warning-foreground">
-													ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
-												</p>
-												<input
-													type="text"
-													bind:value={dispatchCodes[shift.assignmentId]}
-													placeholder="เช่น 4K7-2M9"
-													aria-label="รหัสยืนยันภารกิจ"
-													autocomplete="off"
-													maxlength={10}
-													class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground uppercase outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
-												/>
-												{#if dispatchErrors[shift.assignmentId]}
-													<p class="text-2xs text-destructive" role="alert">
-														{dispatchErrors[shift.assignmentId]}
-													</p>
-												{/if}
-												<div class="flex gap-2">
-													<button
-														type="button"
-														disabled={answering === shift.assignmentId}
-														onclick={() => answerDispatch(shift, 'accepted')}
-														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-2xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:opacity-60"
-													>
-														<Check class="size-3.5" />
-														ยอมรับภารกิจ
-													</button>
-													<button
-														type="button"
-														disabled={answering === shift.assignmentId}
-														onclick={() => answerDispatch(shift, 'declined')}
-														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 text-2xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-60"
-													>
-														<X class="size-3.5" />
-														ปฏิเสธภารกิจ
-													</button>
-												</div>
-											</div>
+												<UserCheck class="size-4" />
+												<span>รายงานตัวเข้างาน (Check-In)</span>
+											</button>
+											<button
+												type="button"
+												onclick={() => openLeaveModal(shift)}
+												class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:text-foreground active:scale-[0.98]"
+											>
+												<span>ขอลา/ถอนกะงาน</span>
+											</button>
+										{:else if shift.statusVariant === 'checked_in'}
+											<button
+												type="button"
+												onclick={() => openCheckoutModal(shift)}
+												class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 active:scale-[0.98]"
+											>
+												<Clock class="size-4" />
+												<span>เช็คเอาท์ออกจากงาน (Check-Out)</span>
+											</button>
+											<button
+												type="button"
+												onclick={() => openLeaveModal(shift)}
+												class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:text-foreground active:scale-[0.98]"
+											>
+												<span>ขอลา/ถอนกะงาน</span>
+											</button>
 										{/if}
 									</div>
 								</div>
 							</div>
 						{/each}
+
+						{#if activeShifts.length > PAGE_SIZE}
+							<div class="flex justify-center pt-2">
+								<Pagination.Root
+									bind:page={currentPage}
+									count={activeShifts.length}
+									perPage={PAGE_SIZE}
+								>
+									{#snippet children({ pages })}
+										<Pagination.Content>
+											<Pagination.Previous />
+											{#each pages as p, i (i)}
+												<Pagination.Item>
+													{#if p.type === 'page'}
+														<Pagination.Link page={p} isActive={p.value === currentPage} />
+													{:else}
+														<Pagination.Ellipsis />
+													{/if}
+												</Pagination.Item>
+											{/each}
+											<Pagination.Next />
+										</Pagination.Content>
+									{/snippet}
+								</Pagination.Root>
+							</div>
+						{/if}
 					{/if}
 				</div>
 
@@ -1042,7 +1219,7 @@
 />
 
 <!-- ── MODAL: CAMERA QR SCANNER ────────────────────────────────────────────── -->
-<VolunteerQrScannerModal
+<QrScannerModal
 	bind:isOpen={isCameraModalOpen}
 	onScan={handleScanToken}
 	title="สแกน QR Code ตั๋วจิตอาสา"
@@ -1122,3 +1299,194 @@
 	profile={profileQuery.data ?? null}
 	credential={session}
 />
+
+<!-- ── MODAL: CHECK-IN CONFIRMATION ───────────────────────────────────────── -->
+<Dialog.Root bind:open={isCheckinModalOpen}>
+	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
+		<Dialog.Header class="space-y-2 text-left">
+			<div
+				class="inline-flex size-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+			>
+				<UserCheck class="size-5" />
+			</div>
+			<Dialog.Title class="text-lg font-bold text-foreground">
+				ยืนยันการรายงานตัวเข้างาน (Check-In)
+			</Dialog.Title>
+			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
+				กรุณายืนยันการรายงานตัวเข้ากะปฏิบัติการ ณ จุดศูนย์พักพิง
+				ระบบจะบันทึกเวลาปัจจุบันในการเริ่มปฏิบัติงาน
+			</Dialog.Description>
+		</Dialog.Header>
+
+		{#if modalTargetShift}
+			<div class="my-4 space-y-2 rounded-2xl border border-border bg-muted/40 p-4">
+				<div class="flex items-center gap-2">
+					<span
+						class="rounded bg-sky-100 px-2 py-0.5 text-3xs font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+					>
+						{modalTargetShift.shiftPeriod}
+					</span>
+					<span class="text-xs font-bold text-foreground">{modalTargetShift.title}</span>
+				</div>
+				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
+					<MapPin class="size-3 text-primary" />
+					{modalTargetShift.location}
+				</p>
+				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
+					<Clock class="size-3" />
+					{modalTargetShift.dateText}
+				</p>
+			</div>
+		{/if}
+
+		<Dialog.Footer class="flex gap-2 sm:justify-end">
+			<button
+				type="button"
+				onclick={() => (isCheckinModalOpen = false)}
+				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
+			>
+				ยกเลิก
+			</button>
+			<button
+				type="button"
+				onclick={handleConfirmCheckin}
+				class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+			>
+				ยืนยันเช็คอินเข้างาน
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- ── MODAL: CHECK-OUT CONFIRMATION ──────────────────────────────────────── -->
+<Dialog.Root bind:open={isCheckoutModalOpen}>
+	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
+		<Dialog.Header class="space-y-2 text-left">
+			<div
+				class="inline-flex size-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+			>
+				<Clock class="size-5" />
+			</div>
+			<Dialog.Title class="text-lg font-bold text-foreground">
+				ยืนยันการเช็คเอาท์ออกจากงาน (Check-Out)
+			</Dialog.Title>
+			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
+				คุณได้ปฏิบัติภารกิจเสร็จสิ้นเรียบร้อยแล้วใช่หรือไม่?
+				ระบบจะทำการบันทึกเวลาสิ้นสุดและสะสมชั่วโมงการทำงาน
+			</Dialog.Description>
+		</Dialog.Header>
+
+		{#if modalTargetShift}
+			<div class="my-4 space-y-2 rounded-2xl border border-border bg-muted/40 p-4">
+				<div class="flex items-center gap-2">
+					<span
+						class="rounded bg-sky-100 px-2 py-0.5 text-3xs font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+					>
+						{modalTargetShift.shiftPeriod}
+					</span>
+					<span class="text-xs font-bold text-foreground">{modalTargetShift.title}</span>
+				</div>
+				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
+					<MapPin class="size-3 text-primary" />
+					{modalTargetShift.location}
+				</p>
+				{#if modalTargetShift.checkinTime}
+					<p
+						class="flex items-center gap-1.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400"
+					>
+						<Clock class="size-3" /> เช็คอินเมื่อ: {modalTargetShift.checkinTime}
+					</p>
+				{/if}
+			</div>
+		{/if}
+
+		<Dialog.Footer class="flex gap-2 sm:justify-end">
+			<button
+				type="button"
+				onclick={() => (isCheckoutModalOpen = false)}
+				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
+			>
+				ยังไม่เช็คเอาท์
+			</button>
+			<button
+				type="button"
+				onclick={handleConfirmCheckout}
+				class="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
+			>
+				ยืนยันเช็คเอาท์ออกจากงาน
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- ── MODAL: LEAVE / WITHDRAW SHIFT ──────────────────────────────────────── -->
+<Dialog.Root bind:open={isLeaveModalOpen}>
+	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
+		<Dialog.Header class="space-y-2 text-left">
+			<div
+				class="inline-flex size-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+			>
+				<AlertTriangle class="size-5" />
+			</div>
+			<Dialog.Title class="text-lg font-bold text-foreground">ขอลา / ถอนกะปฏิบัติการ</Dialog.Title>
+			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
+				หากไม่สามารถมาปฏิบัติภารกิจได้ กรุณาระบุเหตุผลเพื่อให้เจ้าหน้าที่ศูนย์จัดสรรกำลังพลทดแทน
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="my-4 space-y-3">
+			{#if modalTargetShift}
+				<div class="space-y-1 rounded-2xl border border-border bg-muted/40 p-3">
+					<p class="text-xs font-bold text-foreground">{modalTargetShift.title}</p>
+					<p class="text-2xs text-muted-foreground">{modalTargetShift.dateText}</p>
+				</div>
+			{/if}
+
+			<div class="space-y-1.5">
+				<label for="leave-reason-select" class="text-xs font-bold text-foreground">
+					เหตุผลการขอลา
+				</label>
+				<select
+					id="leave-reason-select"
+					bind:value={leaveReason}
+					class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+				>
+					<option value="ติดภารกิจด่วน">ติดภารกิจด่วน / ธุระส่วนตัวจำเป็น</option>
+					<option value="มีอาการป่วย/ไม่สบาย">มีอาการป่วย / สภาพร่างกายไม่พร้อม</option>
+					<option value="ปัญหาการเดินทาง">ปัญหาการเดินทาง / เส้นทางถูกตัดขาด</option>
+					<option value="อื่นๆ">อื่นๆ</option>
+				</select>
+			</div>
+
+			<div class="space-y-1.5">
+				<label for="leave-detail-input" class="text-xs font-bold text-foreground">
+					รายละเอียดเพิ่มเติม (ถ้ามี)
+				</label>
+				<textarea
+					id="leave-detail-input"
+					bind:value={leaveReasonDetail}
+					rows="2"
+					placeholder="ระบุรายละเอียดเพิ่มเติม..."
+					class="w-full resize-none rounded-xl border border-border bg-card p-2.5 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+				></textarea>
+			</div>
+		</div>
+
+		<Dialog.Footer class="flex gap-2 sm:justify-end">
+			<button
+				type="button"
+				onclick={() => (isLeaveModalOpen = false)}
+				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
+			>
+				ยกเลิก
+			</button>
+			<button
+				type="button"
+				onclick={handleConfirmLeave}
+				class="text-destructive-foreground rounded-xl bg-destructive px-4 py-2.5 text-xs font-bold shadow-sm transition hover:opacity-95 active:scale-[0.98]"
+			>
+				ยืนยันการถอนกะงาน
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

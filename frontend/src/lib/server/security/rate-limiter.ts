@@ -118,17 +118,8 @@ export const volunteerTicketFindLimiter = new RateLimiter(60000, 5);
 /** Reading or cancelling one's own ticket. Token-gated; the page refetches after a change. */
 export const volunteerTicketLimiter = new RateLimiter(60000, 30);
 /**
- * Answering a dispatched shift. The tightest of the volunteer limiters: it is the only
- * public volunteer surface where a correct guess performs a write, the code is six
- * characters rather than 128 bits, and a declined shift cannot be un-declined by the
- * volunteer. Ten a minute leaves room for mistyping a code read over a bad phone line,
- * and nothing like enough for a search.
- */
-/**
  * Editing your own profile from the portal. Tighter than the reads because it is a
  * write reached with a guessable credential, loose enough that someone correcting a
  * typo and re-picking their skills does not get locked out mid-edit.
  */
 export const volunteerProfileUpdateLimiter = new RateLimiter(60000, 10);
-
-export const volunteerDispatchRespondLimiter = new RateLimiter(60000, 10);

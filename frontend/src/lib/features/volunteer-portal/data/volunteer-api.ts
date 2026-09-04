@@ -26,8 +26,6 @@ const ERROR_COPY: Record<string, string> = {
 	PROFILE_UPDATE_FAILED: 'บันทึกโปรไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	CAPTCHA_REQUIRED: 'ไม่สามารถยืนยันว่าไม่ใช่บอทได้ กรุณารีเฟรชหน้าแล้วลองใหม่',
 	CAPTCHA_FAILED: 'ไม่ผ่านการตรวจสอบ reCAPTCHA กรุณาลองใหม่อีกครั้ง',
-	OFFER_NOT_FOUND: 'ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง กรุณาตรวจสอบกับเจ้าหน้าที่',
-	OFFER_ALREADY_ANSWERED: 'ภารกิจนี้ถูกตอบไปแล้ว',
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่'
@@ -101,23 +99,6 @@ export async function fetchSchedule(credential: PortalCredential): Promise<Sched
 		throw apiError(data, response.status, 'ไม่สามารถโหลดตารางงานได้');
 	}
 	return (data as { shifts?: ScheduleShift[] }).shifts ?? [];
-}
-
-export async function respondToDispatch(
-	vars: {
-		assignment_id: string;
-		code: string;
-		action: 'accepted' | 'declined';
-	} & PortalCredential
-): Promise<void> {
-	const response = await fetch('/api/public/v1/volunteer/schedule/respond', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(vars)
-	});
-	if (!response.ok) {
-		throw apiError(await readJson(response), response.status, 'ตอบรับภารกิจไม่สำเร็จ');
-	}
 }
 
 export async function fetchJobs(filter: PublicJobFilter = {}): Promise<PublicJob[]> {

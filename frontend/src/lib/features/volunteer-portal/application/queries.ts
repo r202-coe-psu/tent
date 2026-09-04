@@ -8,7 +8,6 @@ import {
 	fetchSchedule,
 	findTickets,
 	getTicket,
-	respondToDispatch,
 	updateProfileSkills
 } from '../data/volunteer-api';
 import type { PortalCredential, PublicJobFilter, VolunteerApplyInput } from '../domain/volunteer';
@@ -84,22 +83,6 @@ export function useVolunteerTickets(credential: () => PortalCredential | null) {
 		queryFn: () => findTickets(credential()!),
 		enabled: credential() !== null,
 		staleTime: 0
-	}));
-}
-
-/**
- * Answer an offered shift. Invalidates the schedule so the card disappears and the
- * status badge moves without the volunteer having to reload.
- */
-export function useRespondToDispatchMutation(credential: () => PortalCredential | null) {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: (vars: { assignment_id: string; code: string; action: 'accepted' | 'declined' }) =>
-			respondToDispatch({ ...vars, ...credential()! }),
-		onSuccess: () => {
-			const key = credential();
-			if (key) void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.schedule(key) });
-		}
 	}));
 }
 
