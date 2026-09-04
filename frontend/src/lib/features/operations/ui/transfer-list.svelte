@@ -11,7 +11,9 @@
 		useReceiveTransfer,
 		useCancelTransfer,
 		useDisputeTransfer,
-		useResumeTransfer
+		useResumeTransfer,
+		useDeleteTransfer,
+		useRestoreTransfer
 	} from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -27,6 +29,7 @@
 	import Ban from '@lucide/svelte/icons/ban';
 	import CirclePause from '@lucide/svelte/icons/circle-pause';
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 
 	const transfersQuery = useTransfers();
 	const dispatchMutation = useDispatchTransfer();
@@ -34,6 +37,11 @@
 	const cancelMutation = useCancelTransfer();
 	const disputeMutation = useDisputeTransfer();
 	const resumeMutation = useResumeTransfer();
+	const deleteMutation = useDeleteTransfer();
+	const restoreMutation = useRestoreTransfer();
+
+	/** CR-090 FR-04/FR-06 — how long a deleted request stays recoverable. */
+	const UNDO_WINDOW_MS = 5000;
 
 	const ownShelter = getShelterCode();
 
@@ -88,7 +96,9 @@
 		dispatchMutation.isPending ||
 			cancelMutation.isPending ||
 			disputeMutation.isPending ||
-			resumeMutation.isPending
+			resumeMutation.isPending ||
+			deleteMutation.isPending ||
+			restoreMutation.isPending
 	);
 
 	function isOutgoing(t: StockTransfer): boolean {
@@ -181,6 +191,49 @@
 		});
 	}
 
+	/**
+	 * CR-090 FR-01/FR-04/FR-05 — delete, then offer 5 seconds to take it back.
+	 *
+	 * The body that gets restored is the one the SERVER read just before deleting, not a snapshot
+	 * taken here, so the undo cannot put back a row that was already stale on screen.
+	 */
+	async function handleDelete(t: StockTransfer) {
+		let removed: { id: string; rev: string; doc: StockTransfer };
+		try {
+			removed = await deleteMutation.mutateAsync(t._id);
+		} catch (err) {
+			toast.error(errorMessage(err));
+			return;
+		}
+
+		// FR-06 — the captured body lives in this closure and nowhere else, and the flag closes
+		// the window on time even if the toast itself is still on screen. Nothing outside this
+		// call can reach the deleted document afterwards.
+		let canRestore = true;
+		setTimeout(() => {
+			canRestore = false;
+		}, UNDO_WINDOW_MS);
+
+		toast.success('ลบคำร้องโอนย้ายแล้ว', {
+			duration: UNDO_WINDOW_MS,
+			action: {
+				label: 'เลิกทำ',
+				onClick: () => {
+					if (!canRestore) {
+						toast.error('หมดเวลากู้คืนแล้ว — กรุณาสร้างคำร้องใหม่');
+						return;
+					}
+					canRestore = false;
+					toast.promise(restoreMutation.mutateAsync(removed.doc), {
+						loading: 'กำลังกู้คืนคำร้อง...',
+						success: 'กู้คืนคำร้องแล้ว',
+						error: errorMessage
+					});
+				}
+			}
+		});
+	}
+
 	/** CR-089 FR-05 — resume needs no extra field, so it fires straight from the row. */
 	function handleResume(t: StockTransfer) {
 		toast.promise(resumeMutation.mutateAsync(t._id), {
@@ -258,6 +311,13 @@
 										class={buttonVariants({ size: 'sm', variant: 'outline' })}
 									>
 										<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
+									</button>
+									<button
+										onclick={() => handleDelete(t)}
+										disabled={outgoingBusy}
+										class={buttonVariants({ size: 'sm', variant: 'destructive' })}
+									>
+										<Trash2 class="mr-1 h-3.5 w-3.5" />ลบ
 									</button>
 								{:else if isOutgoing(t) && t.status === 'disputed'}
 									<button

@@ -95,6 +95,8 @@ export {
 	receiveTransfer,
 	cancelTransfer,
 	isStockTransfer,
+	parseStockTransfer,
+	stockTransferDocSchema,
 	transferInputSchema,
 	transferFilterSchema,
 	receivedItemSchema,
@@ -132,6 +134,8 @@ export {
 	useCancelTransfer,
 	useDisputeTransfer,
 	useResumeTransfer,
+	useDeleteTransfer,
+	useRestoreTransfer,
 	useCrossShelterStockBalances,
 	useCrossShelterLedger,
 	startOperationsLiveQuery

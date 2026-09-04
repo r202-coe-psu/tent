@@ -20,11 +20,13 @@ vi.mock('$lib/server/couch-admin', () => ({
 
 const mockList = vi.fn();
 const mockCreate = vi.fn();
+const mockRestore = vi.fn();
 
 vi.mock('$lib/features/operations/data/transfer.server-repository', () => {
 	class MockTransferServerRepository {
 		list = mockList;
 		create = mockCreate;
+		restore = mockRestore;
 	}
 	return {
 		TransferServerRepository: MockTransferServerRepository
@@ -191,5 +193,76 @@ describe('BFF Transfer List and Create Endpoints', () => {
 			expect(res.status).toBe(422);
 			expect(mockCreate).not.toHaveBeenCalled();
 		});
+	});
+});
+
+describe('POST /api/back-office/transfer — restore branch (CR-090 FR-05)', () => {
+	const deletedDoc: StockTransfer = {
+		_id: 'stock_transfer:1',
+		type: 'stock_transfer',
+		schema_v: 3,
+		shelter_code: 'SH001',
+		created_at: '2026-08-22T05:00:00.000Z',
+		updated_at: '2026-08-22T05:00:00.000Z',
+		created_by: 'ws_user',
+		from_shelter: 'SH001',
+		to_shelter: 'SH002',
+		items: [{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+		status: 'requested',
+		timeline: { requested: { at: '2026-08-22T05:00:00.000Z', by: 'ws_user' } }
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'ws_user',
+			roles: ['warehouse_staff', 'shelter:SH001'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+	});
+
+	it('routes a `restore` envelope to restore(), not create()', async () => {
+		mockRestore.mockResolvedValue({ ...deletedDoc, _rev: '5-restored' });
+
+		const res = await POST(createMockEvent({}, { restore: { doc: deletedDoc } }));
+		expect(res.status).toBe(201);
+
+		const data = await res.json();
+		expect(data._id).toBe('stock_transfer:1');
+		expect(mockRestore).toHaveBeenCalledWith(deletedDoc, 'SH001');
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it('leaves the ordinary create path untouched', async () => {
+		// FR-05 keeps restore as a separate code path; a normal create must never be able to
+		// choose its own `_id`.
+		mockCreate.mockResolvedValue(deletedDoc);
+
+		const res = await POST(
+			createMockEvent(
+				{},
+				{
+					from_shelter: 'SH001',
+					to_shelter: 'SH002',
+					items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+				}
+			)
+		);
+		expect(res.status).toBe(201);
+		expect(mockCreate).toHaveBeenCalled();
+		expect(mockRestore).not.toHaveBeenCalled();
+	});
+
+	it('passes a repository refusal through with its status', async () => {
+		mockRestore.mockRejectedValue(
+			Object.assign(new Error('Only a `requested` transfer can be restored'), { status: 403 })
+		);
+
+		const res = await POST(
+			createMockEvent({}, { restore: { doc: { ...deletedDoc, status: 'shipped' } } })
+		);
+		expect(res.status).toBe(403);
+		expect(mockCreate).not.toHaveBeenCalled();
 	});
 });

@@ -545,4 +545,136 @@ describe('TransferServerRepository', () => {
 			)
 		).rejects.toBeInstanceOf(TransferServerRepositoryError);
 	});
+
+	// --- CR-090 remove() / restore() ---
+
+	describe('remove (CR-090)', () => {
+		it('deletes with the stored rev and returns the tombstone rev plus the deleted body', async () => {
+			const stored = requestedTransfer({ _rev: '3-current' });
+			const calls: [string, string][] = [];
+			adminRaw.mockImplementation(async (path: string, method: string) => {
+				calls.push([decodeURIComponent(path), method]);
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: stored };
+				}
+				if (method === 'DELETE') {
+					return { status: 200, data: { ok: true, id: TRANSFER_ID, rev: '4-tombstone' } };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const result = await repo.remove(TRANSFER_ID, 'SH001');
+
+			expect(result.rev).toBe('4-tombstone');
+			expect(result.doc).toEqual(stored);
+			const del = calls.find(([, method]) => method === 'DELETE');
+			expect(del?.[0]).toBe(`/central_ops/${TRANSFER_ID}?rev=3-current`);
+		});
+
+		it('rejects a delete of a transfer that is no longer `requested`', async () => {
+			// CR-090 FR-03 — the status is re-read here, so hiding the button is not the gate.
+			for (const status of ['shipped', 'received', 'cancelled', 'disputed'] as const) {
+				adminRaw.mockImplementation(async (path: string, method: string) => {
+					if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+						return { status: 200, data: requestedTransfer({ status }) };
+					}
+					return { status: 200, data: {} };
+				});
+
+				const repo = new TransferServerRepository('central_ops', 'SH001');
+				await expect(repo.remove(TRANSFER_ID, 'SH001')).rejects.toMatchObject({
+					status: 422
+				});
+				expect(adminRaw.mock.calls.every(([, method]) => method !== 'DELETE')).toBe(true);
+				vi.clearAllMocks();
+			}
+		});
+
+		it('rejects a delete driven by the destination shelter', async () => {
+			adminRaw.mockImplementation(async (path: string, method: string) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: requestedTransfer() };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH002');
+			await expect(repo.remove(TRANSFER_ID, 'SH002')).rejects.toMatchObject({ status: 403 });
+			expect(adminRaw.mock.calls.every(([, method]) => method !== 'DELETE')).toBe(true);
+		});
+
+		it('404s when the transfer is already gone', async () => {
+			adminRaw.mockImplementation(async () => ({ status: 404, data: { error: 'not_found' } }));
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await expect(repo.remove(TRANSFER_ID, 'SH001')).rejects.toMatchObject({ status: 404 });
+		});
+	});
+
+	describe('restore (CR-090)', () => {
+		it('PUTs the body verbatim and never attaches a _rev', async () => {
+			// The 2026-09-04 spike measured CouchDB 3.5.2: a rev-less PUT restores the document,
+			// while attaching the tombstone rev returns 409 every time (FR-09).
+			let putBody: Record<string, unknown> | undefined;
+			adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+				if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					putBody = body as Record<string, unknown>;
+					return { status: 201, data: { ok: true, id: TRANSFER_ID, rev: '5-restored' } };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const deleted = requestedTransfer({ _rev: '4-tombstone' });
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const restored = await repo.restore(deleted, 'SH001');
+
+			expect(putBody).toBeDefined();
+			expect(putBody).not.toHaveProperty('_rev');
+			// FR-05/FR-08 — the envelope and the timeline must survive the round trip untouched.
+			expect(putBody?.created_at).toBe(deleted.created_at);
+			expect(putBody?.created_by).toBe(deleted.created_by);
+			expect(putBody?.updated_at).toBe(deleted.updated_at);
+			expect(putBody?.timeline).toEqual(deleted.timeline);
+			expect(putBody?._id).toBe(TRANSFER_ID);
+			expect(restored._rev).toBe('5-restored');
+		});
+
+		it('reports a 409 as a refusal to overwrite a live document', async () => {
+			// FR-10's no-overwrite rule is enforced by CouchDB itself, not by a read-then-check.
+			adminRaw.mockImplementation(async (path: string, method: string) => {
+				if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 409, data: { error: 'conflict' } };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await expect(repo.restore(requestedTransfer(), 'SH001')).rejects.toMatchObject({
+				status: 409
+			});
+		});
+
+		it('rejects a body that is not `requested` or belongs to another shelter', async () => {
+			adminRaw.mockImplementation(async () => ({ status: 200, data: {} }));
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+
+			await expect(
+				repo.restore(requestedTransfer({ status: 'shipped' }), 'SH001')
+			).rejects.toMatchObject({ status: 403 });
+			await expect(repo.restore(requestedTransfer(), 'SH002')).rejects.toMatchObject({
+				status: 403
+			});
+			expect(adminRaw.mock.calls.every(([, method]) => method !== 'PUT')).toBe(true);
+		});
+
+		it('rejects a malformed body before it reaches CouchDB', async () => {
+			adminRaw.mockImplementation(async () => ({ status: 200, data: {} }));
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+
+			await expect(repo.restore({ type: 'stock_transfer' }, 'SH001')).rejects.toMatchObject({
+				status: 422
+			});
+			expect(adminRaw.mock.calls.every(([, method]) => method !== 'PUT')).toBe(true);
+		});
+	});
 });

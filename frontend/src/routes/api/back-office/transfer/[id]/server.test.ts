@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-imports */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GET } from './+server';
+import { GET, DELETE } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import type { RequestEvent } from './$types';
 import type { StockTransfer } from '$lib/features/operations/domain/operations';
@@ -18,10 +18,12 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 
 const mockGet = vi.fn();
+const mockRemove = vi.fn();
 
 vi.mock('$lib/features/operations/data/transfer.server-repository', () => {
 	class MockTransferServerRepository {
 		get = mockGet;
+		remove = mockRemove;
 	}
 	return {
 		TransferServerRepository: MockTransferServerRepository
@@ -145,5 +147,63 @@ describe('GET /api/back-office/transfer/[id]', () => {
 
 		const data = await res.json();
 		expect(data.error).toContain('Transfer not found');
+	});
+});
+
+describe('DELETE /api/back-office/transfer/[id] (CR-090)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'ws_user',
+			roles: ['warehouse_staff', 'shelter:SH001'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+	});
+
+	it('returns the tombstone rev and the deleted body so the caller can offer an undo', async () => {
+		mockRemove.mockResolvedValue({
+			id: 'stock_transfer:1',
+			rev: '4-tombstone',
+			doc: mockTransfer
+		});
+
+		const res = await DELETE(createMockEvent('stock_transfer:1'));
+		expect(res.status).toBe(200);
+
+		const data = await res.json();
+		expect(data.ok).toBe(true);
+		expect(data.rev).toBe('4-tombstone');
+		expect(data.doc._id).toBe('stock_transfer:1');
+		expect(mockRemove).toHaveBeenCalledWith('stock_transfer:1', 'SH001');
+	});
+
+	it('passes the repository status through — a `shipped` transfer is refused with 422', async () => {
+		// CR-090 FR-03 — this must hold for a request sent straight at the API, not only for a
+		// button the UI hides.
+		mockRemove.mockRejectedValue(
+			Object.assign(new Error('Cannot delete a transfer in status "shipped"'), { status: 422 })
+		);
+
+		const res = await DELETE(createMockEvent('stock_transfer:1'));
+		expect(res.status).toBe(422);
+
+		const data = await res.json();
+		expect(data.error).toContain('shipped');
+	});
+
+	it('passes a 403 through when the caller is not the source shelter', async () => {
+		mockRemove.mockRejectedValue(
+			Object.assign(new Error('Only the source shelter can delete this transfer'), { status: 403 })
+		);
+
+		const res = await DELETE(createMockEvent('stock_transfer:1'));
+		expect(res.status).toBe(403);
+	});
+
+	it('returns 400 without an id', async () => {
+		const res = await DELETE(createMockEvent(''));
+		expect(res.status).toBe(400);
+		expect(mockRemove).not.toHaveBeenCalled();
 	});
 });
