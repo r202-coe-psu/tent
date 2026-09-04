@@ -97,9 +97,9 @@ export interface AssignRosterInput {
 	controlledSkills?: readonly string[];
 	/**
 	 * Master Data skill options (CR-100). Supplied, the skill match resolves
-	 * both sides through the catalog first — a job stores master **codes**
-	 * while `volunteer.skills` still stores labels, so without it the two
-	 * never meet. Omitted, matching falls back to exact string equality
+	 * both sides through the catalog first — current documents store master
+	 * **codes**, while legacy volunteer documents may still store labels.
+	 * Omitted, matching falls back to exact string equality
 	 * (pre-CR-100 behaviour).
 	 */
 	skillOptions?: readonly SkillOption[];

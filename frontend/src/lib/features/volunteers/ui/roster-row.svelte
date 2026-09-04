@@ -34,8 +34,8 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import RosterManualCheckinDialog from './roster-manual-checkin-dialog.svelte';
-	import { useCheckIn, useCheckOut } from '../application/queries';
-	import { findSkill } from '../domain/skill-master';
+	import { useCheckIn, useCheckOut, useSkillOptions } from '../application/queries';
+	import { resolveSkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type {
 		ShiftAssignment,
@@ -96,6 +96,13 @@
 
 	const dutyWindowLabel = $derived(
 		`${formatTime(assignment.duty_window.start_ts)}–${formatTime(assignment.duty_window.end_ts)} น.`
+	);
+	const skillCatalog = useSkillOptions();
+	const skills = $derived(
+		volunteer.skills.flatMap((value) => {
+			const option = resolveSkillOption(value, skillCatalog.options);
+			return option ? [option] : [];
+		})
 	);
 
 	const queryClient = useQueryClient();
@@ -161,15 +168,11 @@
 		<p class="text-xs text-muted-foreground">
 			{dutyWindowLabel} ({SHIFT_LABELS[assignment.shift]})
 		</p>
-		{#if volunteer.skills.length > 0}
+		{#if skills.length > 0}
 			<p class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
 				<span>ทักษะ:</span>
-				{#each volunteer.skills as skill, i (skill)}
-					{@const master = findSkill(skill)}
-					<span
-						>{master?.icon ?? ''}
-						{master?.label ?? skill}{i < volunteer.skills.length - 1 ? ',' : ''}</span
-					>
+				{#each skills as skill, i (skill.code)}
+					<span>{skill.icon}{skill.label}{i < skills.length - 1 ? ',' : ''}</span>
 				{/each}
 			</p>
 		{/if}

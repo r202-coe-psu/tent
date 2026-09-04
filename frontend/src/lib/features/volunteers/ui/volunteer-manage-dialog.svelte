@@ -35,6 +35,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { useUpdateVolunteer, useSkillOptions } from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
+	import { toSkillCode, toSkillCodes } from '../domain/skill-catalog';
 	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -88,16 +89,17 @@
 		if (lastOpenedId === volunteer._id) return;
 		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
 		phone = volunteer.phone ?? '';
-		selectedSkills = [...volunteer.skills];
+		selectedSkills = toSkillCodes(volunteer.skills, skillsList);
 		personnelType = volunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
 		lastOpenedId = volunteer._id;
 	});
 
-	function toggleSkill(key: string) {
-		selectedSkills = selectedSkills.includes(key)
-			? selectedSkills.filter((s) => s !== key)
-			: [...selectedSkills, key];
+	function toggleSkill(code: string) {
+		const canonicalCode = toSkillCode(code, skillsList);
+		selectedSkills = selectedSkills.includes(canonicalCode)
+			? selectedSkills.filter((s) => s !== canonicalCode)
+			: [...selectedSkills, canonicalCode];
 	}
 
 	const generalSelectedCount = $derived(
@@ -299,13 +301,13 @@
 					</p>
 					<div class="grid gap-2 sm:grid-cols-2">
 						{#each skillsList.filter((s) => !s.controlled) as skill (skill.code)}
-							{@const checked = selectedSkills.includes(skill.label)}
+							{@const checked = selectedSkills.includes(skill.code)}
 							<label
 								class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
 									? 'border-primary bg-primary/5'
 									: 'border-border hover:bg-muted/40'}"
 							>
-								<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.label)} />
+								<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.code)} />
 								<span class="min-w-0 text-xs">
 									<span class="flex items-center gap-1.5 font-medium">
 										<span aria-hidden="true">{skill.icon}</span>
@@ -329,7 +331,7 @@
 						</Badge>
 					</div>
 					{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
-						{@const has = selectedSkills.includes(skill.label)}
+						{@const has = selectedSkills.includes(skill.code)}
 						<div
 							class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background p-2.5"
 						>

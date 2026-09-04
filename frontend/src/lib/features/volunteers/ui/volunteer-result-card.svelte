@@ -23,7 +23,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { resolve } from '$app/paths';
-	import { findSkill } from '../domain/skill-master';
+	import { useSkillOptions } from '../application/queries';
+	import { resolveSkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Job } from '../domain/job.schema';
@@ -93,6 +94,14 @@
 			timeZone: 'Asia/Bangkok'
 		});
 	}
+
+	const skillCatalog = useSkillOptions();
+	const skills = $derived(
+		volunteer?.skills.flatMap((value) => {
+			const option = resolveSkillOption(value, skillCatalog.options);
+			return option ? [option] : [];
+		}) ?? []
+	);
 </script>
 
 {#if volunteer}
@@ -198,17 +207,16 @@
 					</div>
 				</div>
 
-				{#if volunteer.skills.length > 0}
+				{#if skills.length > 0}
 					<div>
 						<p class="mb-1.5 text-[11px] font-semibold text-muted-foreground">
 							ทักษะความชำนาญที่ผ่านการรับรอง (SKILLS)
 						</p>
 						<div class="flex flex-wrap gap-1.5">
-							{#each volunteer.skills as skill (skill)}
-								{@const master = findSkill(skill)}
+							{#each skills as skill (skill.code)}
 								<Badge variant="outline" class="text-[11px]">
-									{master?.icon ?? ''}
-									{master?.label ?? skill}
+									{skill.icon}
+									{skill.label}
 								</Badge>
 							{/each}
 						</div>

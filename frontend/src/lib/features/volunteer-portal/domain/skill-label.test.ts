@@ -50,10 +50,9 @@ describe('skillLabel', () => {
 });
 
 describe('skillLabels', () => {
-	it('keeps the job order and pairs each value with its label', () => {
+	it('keeps the job order and omits values missing from Master Data', () => {
 		expect(skillLabels(['kitchen', 'ทักษะลับ'], OPTIONS)).toEqual([
-			{ value: 'kitchen', label: 'ประกอบอาหาร / ครัวสนาม' },
-			{ value: 'ทักษะลับ', label: 'ทักษะลับ' }
+			{ value: 'kitchen', label: 'ประกอบอาหาร / ครัวสนาม' }
 		]);
 	});
 });

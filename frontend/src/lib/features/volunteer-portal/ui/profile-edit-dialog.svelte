@@ -13,9 +13,8 @@
 	 *
 	 * The skill list comes from Master Data (`volunteer_skills`), the same list the back
 	 * office settings screen edits — so a skill added there appears here without a deploy
-	 * (FR-VOL-08.5). A skill already on the profile that the list no longer carries is
-	 * kept and shown, never silently dropped by opening this dialog, and if the lookup
-	 * fails the volunteer can still see and keep what they have.
+	 * (FR-VOL-08.5). Values no longer carried by Master Data are omitted from the UI so
+	 * internal IDs never leak to the volunteer.
 	 */
 	import BadgeCheck from '@lucide/svelte/icons/badge-check';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -27,6 +26,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { useUpdateProfileMutation, useVolunteerSkills } from '../application/queries';
 	import type { PortalCredential, VolunteerProfile } from '../domain/volunteer';
+	import { findSkillOption } from '../domain/skill-label';
 
 	let {
 		open = $bindable(false),
@@ -50,31 +50,33 @@
 	// leaves nothing behind and a staff-side change made meanwhile is what gets shown.
 	$effect(() => {
 		if (open) {
-			selected = [...(profile?.skills ?? [])];
+			selected = (profile?.skills ?? []).map(
+				(value) => findSkillOption(value, skillsQuery.data ?? [])?.code ?? value
+			);
 			error = '';
 		}
 	});
 
-	/** Master-list skills, plus anything on the profile the list no longer carries. */
+	/** Master-list skills; unknown stored values are intentionally not rendered. */
 	const options = $derived.by(() => {
 		const master = skillsQuery.data ?? [];
-		// Stored on the profile as the label, which is what the apply form sends and what
-		// the back office filters on — the code is master data's own key, not the value.
 		const known = master.map((entry) => ({
-			key: entry.label,
+			key: entry.code,
 			label: entry.label,
 			description: entry.description,
 			controlled: entry.category === 'controlled'
 		}));
-		const extras = (profile?.skills ?? [])
-			.filter((skill) => !known.some((entry) => entry.key === skill))
-			.map((skill) => ({ key: skill, label: skill, description: '', controlled: false }));
-		return [...known, ...extras];
+		return known;
 	});
 
+	const profileSkillCodes = $derived(
+		(profile?.skills ?? []).map(
+			(value) => findSkillOption(value, skillsQuery.data ?? [])?.code ?? value
+		)
+	);
 	const dirty = $derived(
-		selected.length !== (profile?.skills.length ?? 0) ||
-			selected.some((skill) => !profile?.skills.includes(skill))
+		selected.length !== profileSkillCodes.length ||
+			selected.some((skill) => !profileSkillCodes.includes(skill))
 	);
 
 	function toggle(key: string) {
@@ -86,7 +88,10 @@
 	async function submit() {
 		error = '';
 		try {
-			await save.mutateAsync(selected);
+			const skills = selected.map(
+				(value) => findSkillOption(value, skillsQuery.data ?? [])?.code ?? value
+			);
+			await save.mutateAsync([...new Set(skills)]);
 			toast.success('บันทึกโปรไฟล์แล้ว');
 			open = false;
 		} catch (err) {

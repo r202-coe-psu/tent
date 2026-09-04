@@ -16,7 +16,7 @@
  */
 
 export interface SkillMasterEntry {
-	/** Stored value in `job.skills_required[]` / `volunteer.skills[]`. */
+	/** Legacy fallback key; live documents store the Master Data code. */
 	key: string;
 	label: string;
 	description: string;

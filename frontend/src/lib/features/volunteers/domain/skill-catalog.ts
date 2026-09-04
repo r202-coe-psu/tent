@@ -121,8 +121,8 @@ export function toSkillCodes(values: readonly string[], options: readonly SkillO
 
 /**
  * Every value that means "one of the controlled skills" — each controlled
- * option's code AND its label, because `volunteer.skills` still stores labels
- * (CR-100 keeps it that way) and pre-CR-100 jobs/applications do too. Feed this
+ * option's code AND its label, because legacy `volunteer.skills` documents
+ * still store labels and pre-CR-100 jobs/applications do too. Feed this
  * to `skills.ts#initialStatusForSkills` so the gate follows Master Data instead
  * of the hardcoded floor.
  */
@@ -137,9 +137,8 @@ export function controlledSkillValues(options: readonly SkillOption[]): string[]
 }
 
 /**
- * Do two stored values mean the same skill? Used where one side is a job
- * (codes from CR-100) and the other a volunteer profile (labels) — resolving
- * both to a code first is what lets those two meet.
+ * Do two stored values mean the same skill? Resolving both to a Master Data
+ * code first lets current code values and legacy label values meet.
  */
 export function skillMatches(a: string, b: string, options: readonly SkillOption[]): boolean {
 	const left = resolveSkillOption(a, options);

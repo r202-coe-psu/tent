@@ -35,7 +35,7 @@
 	import { useJobs, todayDateString, useSkillOptions } from '../application/queries';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
 	import { shiftDutyWindow } from '../domain/duty-window';
-	import { hasAnyRequiredSkill, resolveSkillLabel } from '../domain/skill-catalog';
+	import { hasAnyRequiredSkill, resolveSkillOption } from '../domain/skill-catalog';
 
 	let {
 		open,
@@ -93,7 +93,10 @@
 		for (const job of jobs) {
 			const splits = jobShiftQuotaSplits(job);
 			const required = job.skills_required ?? [];
-			const requiredSkillLabels = required.map((v) => resolveSkillLabel(v, skillsList));
+			const requiredSkillLabels = required.flatMap((value) => {
+				const option = resolveSkillOption(value, skillsList);
+				return option ? [option.label] : [];
+			});
 			job.shifts.forEach((shift, index) => {
 				const split = splits[index];
 				if (!split || shift.date < today || split.remaining <= 0) return;

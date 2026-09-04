@@ -163,11 +163,33 @@
 	}
 
 	function toggleSkill(skillLabelOrCode: string) {
-		if (formData.skills.includes(skillLabelOrCode)) {
-			formData.skills = formData.skills.filter((s) => s !== skillLabelOrCode);
+		const code = canonicalSkillId(skillLabelOrCode);
+		if (formData.skills.includes(code)) {
+			formData.skills = formData.skills.filter((s) => s !== code);
 		} else {
-			formData.skills = [...formData.skills, skillLabelOrCode];
+			formData.skills = [...formData.skills, code];
 		}
+	}
+
+	/** Compare job/applicant skills by Master Data code, with legacy labels supported. */
+	function canonicalSkillId(value: string): string {
+		const normalized = value.trim().toLowerCase();
+		return (
+			masterSkills.find(
+				(skill) =>
+					skill.id === value ||
+					skill.key === value ||
+					skill.label.trim().toLowerCase() === normalized
+			)?.id ?? value
+		);
+	}
+
+	function skillMatchesJob(skillCode: string): boolean {
+		const target = canonicalSkillId(skillCode);
+		return (
+			job?.skills_required?.some((required: string) => canonicalSkillId(required) === target) ??
+			false
+		);
 	}
 
 	async function handleSubmit(e: Event) {
@@ -574,12 +596,9 @@
 							{:else}
 								<div class="flex flex-wrap gap-2.5">
 									{#each masterSkills as skill (skill.id)}
-										{@const isSelected =
-											formData.skills.includes(skill.label) || formData.skills.includes(skill.id)}
+										{@const isSelected = formData.skills.includes(skill.id)}
 										{@const isControlled = skill.controlled}
-										{@const isRequiredByJob =
-											job.skills_required?.includes(skill.label) ||
-											job.skills_required?.includes(skill.id)}
+										{@const isRequiredByJob = skillMatchesJob(skill.id)}
 										<button
 											type="button"
 											onclick={() => toggleSkill(skill.key || skill.id || skill.label)}

@@ -83,6 +83,14 @@
 		return findSkillOption(value, skillOptions)?.label?.trim() ?? '';
 	}
 
+	/** Compare filter values and stored job values by Master Data code. */
+	function skillsMatch(left: string, right: string): boolean {
+		const leftOption = findSkillOption(left, skillOptions);
+		const rightOption = findSkillOption(right, skillOptions);
+		if (leftOption && rightOption) return leftOption.code === rightOption.code;
+		return left.trim().toLowerCase() === right.trim().toLowerCase();
+	}
+
 	const weekdayIndexes: Record<string, number> = {
 		sun: 0,
 		sunday: 0,
@@ -326,10 +334,9 @@
 			}
 
 			if (selectedSkill !== 'all') {
-				const targetSkill = selectedSkill.toLowerCase().trim();
 				const hasSkill =
-					j.skills_required?.some((s) => s.toLowerCase().trim() === targetSkill) ||
-					j.tags.some((t) => t.label.toLowerCase().trim() === targetSkill);
+					j.skills_required?.some((s) => skillsMatch(s, selectedSkill)) ||
+					j.tags.some((t) => t.label.toLowerCase().trim() === selectedSkill.toLowerCase().trim());
 				if (!hasSkill) return false;
 			}
 

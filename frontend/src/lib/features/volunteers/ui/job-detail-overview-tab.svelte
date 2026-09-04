@@ -104,10 +104,8 @@
 						<div class="min-w-0 rounded-xl border border-border bg-muted/30 p-3">
 							<p class="flex items-start gap-1.5 text-sm font-bold break-words text-foreground">
 								<Target class="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
-								<span>
-									{#if skill.entry}<span aria-hidden="true">{skill.entry.icon}</span>
-									{/if}{skill.entry?.label ?? skill.key}
-								</span>
+								<span aria-hidden="true">{skill.entry?.icon}</span>
+								<span>{skill.entry?.label}</span>
 							</p>
 							{#if skill.entry}
 								<p class="mt-1 pl-5 text-xs leading-relaxed break-words text-muted-foreground">

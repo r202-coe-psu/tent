@@ -63,6 +63,7 @@
 	} from '../domain/volunteer.schema';
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
+	import { toSkillCode } from '../domain/skill-catalog';
 	import JobShiftPicker, { type JobShiftSelection } from './job-shift-picker.svelte';
 	import {
 		useCreateWalkInVolunteer,
@@ -81,9 +82,9 @@
 	/**
 	 * Master Data `volunteer_skills`, effective for this shelter (CR-100).
 	 *
-	 * `volunteer.skills[]` deliberately keeps storing the LABEL (CR-100 leaves
-	 * that field alone — the portal profile form writes labels too), so the
-	 * ticked value here is `option.label`, not its code.
+	 * `volunteer.skills[]` stores the canonical Master Data code. Labels are
+	 * presentation-only; this keeps walk-in skills comparable to
+	 * `job.skills_required[]` and the job picker by ID.
 	 */
 	const skillCatalog = useSkillOptions();
 	const skillsList = $derived(skillCatalog.options);
@@ -95,10 +96,11 @@
 	let selectedSkills = $state<string[]>([]);
 	let instantCheckIn = $state(true);
 
-	function toggleSkill(key: string) {
-		selectedSkills = selectedSkills.includes(key)
-			? selectedSkills.filter((s) => s !== key)
-			: [...selectedSkills, key];
+	function toggleSkill(code: string) {
+		const canonicalCode = toSkillCode(code, skillsList);
+		selectedSkills = selectedSkills.includes(canonicalCode)
+			? selectedSkills.filter((s) => s !== canonicalCode)
+			: [...selectedSkills, canonicalCode];
 	}
 
 	/** Set by `job-shift-picker.svelte`'s `onchange` — `null` while nothing is picked. */
@@ -319,10 +321,10 @@
 				</div>
 				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 					{#each skillsList.filter((s) => !s.controlled) as skill (skill.code)}
-						{@const checked = selectedSkills.includes(skill.label)}
+						{@const checked = selectedSkills.includes(skill.code)}
 						<button
 							type="button"
-							onclick={() => toggleSkill(skill.label)}
+							onclick={() => toggleSkill(skill.code)}
 							aria-pressed={checked}
 							class="flex flex-col items-center gap-1 rounded-xl border p-3 text-center text-xs font-medium transition-colors {checked
 								? 'border-primary bg-primary/5 text-primary'
@@ -335,13 +337,13 @@
 				</div>
 
 				{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
-					{@const checked = selectedSkills.includes(skill.label)}
+					{@const checked = selectedSkills.includes(skill.code)}
 					<label
 						class="flex cursor-pointer items-start gap-2 rounded-xl border p-3 {checked
 							? 'border-amber-300 bg-amber-50'
 							: 'border-border'}"
 					>
-						<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.label)} class="mt-0.5" />
+						<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.code)} class="mt-0.5" />
 						<span class="min-w-0 flex-1 text-xs">
 							<span class="flex flex-wrap items-center gap-1.5 font-medium">
 								<span aria-hidden="true">{skill.icon}</span>

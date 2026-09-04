@@ -43,14 +43,12 @@
 		personnelType?: PersonnelType | '';
 	} = $props();
 
-	// `volunteer.skills` stores the master **label**, not the code (CR-100
-	// compat rule — see `application/queries.ts#useSkillOptions`), so the
-	// filter value must match on label too, same as the old static list did
-	// (`SKILL_MASTER`'s `key` and `label` were always identical).
+	// Keep the filter value as the Master Data code. Legacy volunteer documents
+	// containing labels are handled by `skillMatches` in `people-tab.svelte`.
 	const skillCatalog = useSkillOptions();
 	const skillOptions = $derived([
 		{ value: '', label: 'ทุกทักษะ' },
-		...skillCatalog.options.map((s) => ({ value: s.label, label: s.label }))
+		...skillCatalog.options.map((s) => ({ value: s.code, label: s.label }))
 	]);
 
 	const SHIFT_STATUS_LABELS: Record<ShiftAssignmentStatus, string> = {

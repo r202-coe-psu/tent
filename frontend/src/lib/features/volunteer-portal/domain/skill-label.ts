@@ -10,8 +10,8 @@
  * plain labels on documents written before it. The public board therefore
  * resolves by code first and falls back to a normalised label match, exactly
  * like `volunteers/domain/skill-catalog.ts` does back-office side. A value the
- * skill list no longer carries is shown as-is rather than hidden — a required
- * skill that silently disappears would misrepresent the job.
+ * skill list no longer carries is omitted so internal IDs never leak into the
+ * public UI.
  */
 
 import type { VolunteerSkillOption } from './volunteer';
@@ -43,5 +43,8 @@ export function skillLabels(
 	values: readonly string[],
 	options: readonly VolunteerSkillOption[]
 ): { value: string; label: string }[] {
-	return values.map((value) => ({ value, label: skillLabel(value, options) }));
+	return values.flatMap((value) => {
+		const option = findSkillOption(value, options);
+		return option?.label?.trim() ? [{ value, label: option.label.trim() }] : [];
+	});
 }
