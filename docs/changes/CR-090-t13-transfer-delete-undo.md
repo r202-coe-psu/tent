@@ -3,13 +3,14 @@ id: CR-090
 title: T-13 โอนย้ายข้ามศูนย์ — ลบคำร้อง (เฉพาะ requested) + Undo 5 วินาที
 status: approved
 date: 2026-08-25
-updated: 2026-09-02
+updated: 2026-09-04
 requested_by: CR-059 follow-up (§4.5 UI Safety Standards, Task #13) — spun out จาก CR-089 (2026-08-25, ไม่แตะ schema_v)
 decided_by: Project Owner
 layer: volatile
 affects:
   - frontend/src/lib/features/operations/domain/transfer.authorization.ts
   - frontend/src/lib/features/operations/data/transfer.server-repository.ts (remove() + restore() — ดู FR-05/FR-08/FR-09)
+  - frontend/src/routes/api/back-office/transfer/+server.ts (POST + branch restore — ดู FR-05)
   - frontend/src/lib/features/operations/data/operations.remote.ts
   - frontend/src/lib/features/operations/application/queries.ts
   - frontend/src/lib/features/operations/ui/transfer-list.svelte
@@ -69,10 +70,16 @@ application + ui layer) และ 1 API route · **status `approved` (2026-09-01
   | `updated_at` | ค่าเดิมก่อนลบ |
   | `timeline.requested.at` / `.by` | ค่าเดิมก่อนลบ |
   | `status` | ต้องเป็น `requested` เท่านั้น (สอดคล้อง FR-01) |
-- **FR-09** — การลบต้องเก็บ `rev` ที่ CouchDB คืนมาจาก `DELETE` ไว้ส่งกลับให้ client พร้อม response
-  และเส้นทาง restore ต้องแนบ `_rev` นั้นไปกับ `PUT` · เหตุผล: `DELETE` ทิ้ง tombstone ที่ยังถือ
-  revision history อยู่ การ `PUT` `_id` เดิมกลับโดยไม่แนบ `_rev` มีโอกาสได้ `409 conflict`
-  (พฤติกรรมจริงต้องยืนยันด้วย spike ก่อน — ดู §Spike)
+- **FR-09** (amend 2026-09-04 — **กลับด้านจากฉบับ 2026-09-02** ตามผล §Spike) — เส้นทาง restore ต้อง
+  `PUT` **โดยไม่แนบ `_rev`** · ผลวัดจริงกับ CouchDB 3.5.2 (ดู §Spike): `PUT` `_id` เดิมกลับหลัง
+  `DELETE` โดยไม่แนบ `_rev` ได้ `201` และ CouchDB ต่อ revision chain จาก tombstone ให้เอง ส่วนการ
+  แนบ tombstone `_rev` — ไม่ว่าจะใส่ใน body หรือ `?rev=` — ได้ `409 conflict` เสมอ ⇒ การแนบ `_rev`
+  ทำให้ restore พังทุกครั้ง **ห้ามแนบ**
+  `rev` ที่ `DELETE` คืนมายังส่งกลับไปกับ response ของการลบตามเดิม (ไว้อ้างอิง/ตรวจสอบ) แต่ client
+  ไม่ต้องส่งกลับมาตอน restore
+  **ผลพลอยได้:** `PUT` แบบไม่แนบ `_rev` ทับเอกสารที่ยัง**ไม่ถูกลบ**ก็ได้ `409` เหมือนกัน ⇒ CouchDB
+  บังคับข้อ "ห้ามทับเอกสารที่มีอยู่" ของ FR-10 ให้เองในระดับ storage โดยไม่ต้อง read-then-check
+  (ซึ่ง race ได้) — โค้ดเพียง map `409` เป็น error ที่อ่านรู้เรื่อง
 - **FR-10** — guard ของเส้นทาง restore ต้องบังคับกฎเดียวกับ FR-01/FR-03: source shelter เท่านั้น และ
   body ที่กู้คืนต้องมี `status === 'requested'` — client ต้องไม่สามารถใช้เส้นทางนี้สร้างเอกสารใหม่
   หรือทับเอกสารที่มีอยู่ได้
@@ -89,8 +96,8 @@ application + ui layer) และ 1 API route · **status `approved` (2026-09-01
 - [ ] ปลายทาง (`to_shelter`) กดลบคำร้องของศูนย์ตนเองไม่ได้ (source-only) (FR-01)
 - [ ] หลัง Undo — `created_at` / `created_by` / `updated_at` / `timeline.requested` ของ doc ที่กู้คืน
       **เท่ากับค่าก่อนลบทุกตัว** (ไม่ใช่เวลาที่กด Undo) (FR-05, FR-08)
-- [ ] ยิง restore โดยไม่แนบ `_rev` ที่ `DELETE` คืนมา → พฤติกรรมตรงกับผลที่บันทึกไว้ใน §Spike
-      (ถ้า spike พบว่าได้ `409` ต้องมี test ยืนยันว่าเส้นทางปกติแนบ `_rev` เสมอ) (FR-09)
+- [ ] เส้นทาง restore `PUT` โดย**ไม่แนบ** `_rev` (ตรงกับผลที่บันทึกไว้ใน §Spike) และมี test ยืนยันว่า
+      body ที่ส่งไป CouchDB ไม่มี `_rev` ติดไป · restore ทับ `_id` ที่ยังมีเอกสารอยู่ → `409` (FR-09, FR-10)
 - [ ] ยิง restore ด้วย body ที่ `status !== 'requested'` หรือจากศูนย์ที่ไม่ใช่ `from_shelter`
       → ถูก server reject (FR-10)
 
@@ -107,6 +114,19 @@ application + ui layer) และ 1 API route · **status `approved` (2026-09-01
 
 บันทึกผลทั้ง 2 เคสลง Decision log ของไฟล์นี้ก่อนเปิด PR — ถ้าผลออกมาว่า `PUT` โดยไม่แนบ `_rev` สำเร็จ
 ให้ amend FR-09 ตามผลจริง (ห้ามเดาจากเอกสาร CouchDB อย่างเดียว)
+
+### ผลจริง (รัน 2026-09-04 · CouchDB 3.5.2 · db `central_ops` · doc `type: stock_transfer`)
+
+| เคส | คำสั่ง | ผล |
+| --- | --- | --- |
+| A | `PUT /central_ops/{id}` body เดิม **ไม่แนบ** `_rev` (หลัง `DELETE`) | **`201`** — `rev` ที่ได้คือ `3-…` (ต่อ chain จาก tombstone `2-…`) · อ่านกลับมาแล้ว `created_at` / `created_by` / `updated_at` / `timeline.requested` ตรงกับก่อนลบครบทุกตัว |
+| B | `PUT /central_ops/{id}` **แนบ** tombstone `_rev` ใน body | **`409`** `{"error":"conflict","reason":"Document update conflict."}` |
+| B′ | `PUT /central_ops/{id}?rev={tombstone}` (ไม่ใส่ `_rev` ใน body) | **`409`** — เหมือนเคส B |
+| C | `PUT /central_ops/{id}` **ไม่แนบ** `_rev` ทับเอกสารที่ยัง**ไม่ถูกลบ** | **`409`** — CouchDB กันการทับให้เอง |
+
+สรุป: สมมติฐานของ FR-09 ฉบับ 2026-09-02 ผิด — tombstone `_rev` **ใช้ restore ไม่ได้เลย** ไม่ใช่แค่
+"ไม่จำเป็น" ⇒ amend FR-09 กลับด้าน · เคส C ทำให้ข้อ "ห้ามทับเอกสารที่มีอยู่" ของ FR-10 ได้มาฟรีจาก
+storage layer ซึ่งกัน race ได้ดีกว่า read-then-check ในโค้ด
 
 ---
 
@@ -180,6 +200,14 @@ N/A — ไม่แตะ `schema_v` ของ `stock_transfer` เลย (dele
   เอกสารได้ถ้า guard หลวม · การแก้นี้ไม่เปลี่ยน `schema_v`, enum, หรือ state machine — เป็นการเติม
   ข้อบังคับให้ FR-05 ที่ approve แล้วทำได้จริง ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2
   ที่ต้องเปิด CR ใหม่
+- 2026-09-04 — **รัน §Spike แล้ว · amend FR-09 กลับด้าน** (tracking = amend + Decision log ตามที่
+  §Spike สั่งไว้เอง) — ผลวัดจริงกับ CouchDB 3.5.2 อยู่ในตาราง §Spike: restore ต้อง `PUT` **โดยไม่แนบ**
+  `_rev` (ได้ `201`) ส่วนการแนบ tombstone `_rev` ได้ `409` ทุกรูปแบบ ⇒ ข้อสันนิษฐานของ FR-09 ฉบับ
+  2026-09-02 ("ต้องแนบ `_rev` ไม่งั้นเสี่ยง `409`") ผิดทั้งข้อ · ปรับ FR-09 + DoD ข้อ 7 ตามผลจริง
+  เพิ่มเติม: `PUT` แบบไม่แนบ `_rev` ทับเอกสารที่ยังมีอยู่ได้ `409` ⇒ ข้อ "ห้ามทับเอกสารที่มีอยู่" ของ
+  FR-10 บังคับโดย storage layer เอง โค้ดจึงไม่ต้อง read-then-check (ซึ่ง race ได้) แค่ map `409`
+  การแก้นี้ไม่เปลี่ยน `schema_v`, enum, state machine หรือ scope — เป็นการแก้ข้อเท็จจริงทางเทคนิคของ
+  FR ที่ §Spike เปิดช่องให้แก้ไว้แล้ว ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2 ที่ต้องเปิด CR ใหม่
 - **ทางเลือกที่พิจารณาแล้วไม่เลือกในรอบนี้:** (ข) แยก endpoint `POST .../transfer/[id]/restore` —
   จัดการ `_rev` ตรงกว่าแต่เพิ่ม API surface และ pattern ใหม่ที่ไม่มีที่อื่นในโค้ดฐาน · (ค) เลื่อนการลบจริง
   5 วินาที (Undo = ยกเลิก timer ไม่เคยยิง `DELETE`) — failure mode ปลอดภัยกว่า แต่ขัดตัวอักษร
