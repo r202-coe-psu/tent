@@ -1,5 +1,4 @@
 <script lang="ts">
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -15,7 +14,6 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import X from '@lucide/svelte/icons/x';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
@@ -131,52 +129,6 @@
 	const profileQuery = useVolunteerProfile(() => session);
 	let profileDialogOpen = $state(false);
 	// ── LIVE SESSION → VIEW MODEL ──────────────────────────────────────────────
-	interface ShiftOverride {
-		status: 'assigned' | 'standby' | 'checked_in' | 'completed' | 'cancelled';
-		check_in_at?: string | null;
-		check_out_at?: string | null;
-	}
-
-	let shiftOverrides = $state<Record<string, ShiftOverride>>({});
-
-	// Load overrides from sessionStorage when session changes
-	$effect(() => {
-		const key = session?.token
-			? `volunteer_shift_overrides_${session.token}`
-			: session?.phone
-				? `volunteer_shift_overrides_${session.phone}`
-				: null;
-		if (!key) {
-			shiftOverrides = {};
-			return;
-		}
-		try {
-			const saved = sessionStorage.getItem(key);
-			if (saved) {
-				shiftOverrides = JSON.parse(saved);
-			} else {
-				shiftOverrides = {};
-			}
-		} catch {
-			shiftOverrides = {};
-		}
-	});
-
-	function saveShiftOverrides(next: Record<string, ShiftOverride>) {
-		shiftOverrides = next;
-		const key = session?.token
-			? `volunteer_shift_overrides_${session.token}`
-			: session?.phone
-				? `volunteer_shift_overrides_${session.phone}`
-				: null;
-		if (!key) return;
-		try {
-			sessionStorage.setItem(key, JSON.stringify(next));
-		} catch {
-			// ignore
-		}
-	}
-
 	function formatShiftLabel(shiftVal?: string): string {
 		if (!shiftVal) return 'กะเช้า';
 		const s = shiftVal.toLowerCase();
@@ -218,15 +170,8 @@
 	}
 
 	function toPortalShift(shift: ScheduleShift): PortalShift {
-		const override = shiftOverrides[shift.assignment_id];
-		const effectiveStatus = override?.status ?? shift.status;
-		const effectiveCheckIn =
-			override?.check_in_at !== undefined ? override.check_in_at : shift.check_in_at;
-		const effectiveCheckOut =
-			override?.check_out_at !== undefined ? override.check_out_at : shift.check_out_at;
-
-		const badge = SHIFT_BADGE[effectiveStatus] ?? {
-			label: effectiveStatus,
+		const badge = SHIFT_BADGE[shift.status] ?? {
+			label: shift.status,
 			variant: 'pending' as const
 		};
 		return {
@@ -239,9 +184,9 @@
 			description: shift.station ? `จุดปฏิบัติงาน: ${shift.station}` : '',
 			location: shift.shelter_name || shift.shelter_code,
 			dateText: timeRange(shift),
-			checkinTime: clockText(effectiveCheckIn),
-			checkoutTime: clockText(effectiveCheckOut),
-			checkinBy: effectiveCheckIn ? 'เช็คอินเอง' : undefined
+			checkinTime: clockText(shift.check_in_at),
+			checkoutTime: clockText(shift.check_out_at),
+			checkinBy: shift.check_in_at ? 'เช็คอินที่จุดรายงานตัว' : undefined
 		};
 	}
 
@@ -474,79 +419,6 @@
 		if (isReady === value) return;
 		readinessOverride = value;
 		toast.success(value ? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢' : 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪');
-	}
-
-	// ── SHIFT ACTIONS & MODALS ────────────────────────────────────────────────
-	let isCheckinModalOpen = $state(false);
-	let isCheckoutModalOpen = $state(false);
-	let isLeaveModalOpen = $state(false);
-	let modalTargetShift = $state<PortalShift | null>(null);
-	let leaveReason = $state('ติดภารกิจด่วน');
-	let leaveReasonDetail = $state('');
-
-	function openCheckinModal(shift: PortalShift) {
-		modalTargetShift = shift;
-		isCheckinModalOpen = true;
-	}
-
-	function openCheckoutModal(shift: PortalShift) {
-		modalTargetShift = shift;
-		isCheckoutModalOpen = true;
-	}
-
-	function openLeaveModal(shift: PortalShift) {
-		modalTargetShift = shift;
-		leaveReason = 'ติดภารกิจด่วน';
-		leaveReasonDetail = '';
-		isLeaveModalOpen = true;
-	}
-
-	function handleConfirmCheckin() {
-		if (!modalTargetShift) return;
-		const now = new Date().toISOString();
-		const updated: Record<string, ShiftOverride> = {
-			...shiftOverrides,
-			[modalTargetShift.id]: {
-				status: 'checked_in',
-				check_in_at: now,
-				check_out_at: shiftOverrides[modalTargetShift.id]?.check_out_at ?? null
-			}
-		};
-		saveShiftOverrides(updated);
-		isCheckinModalOpen = false;
-		toast.success('รายงานตัวเข้างาน (Check-In) สำเร็จ');
-	}
-
-	function handleConfirmCheckout() {
-		if (!modalTargetShift) return;
-		const now = new Date().toISOString();
-		const prev = shiftOverrides[modalTargetShift.id];
-		const updated: Record<string, ShiftOverride> = {
-			...shiftOverrides,
-			[modalTargetShift.id]: {
-				status: 'completed',
-				check_in_at: prev?.check_in_at ?? now,
-				check_out_at: now
-			}
-		};
-		saveShiftOverrides(updated);
-		isCheckoutModalOpen = false;
-		toast.success('เช็คเอาท์ออกจากงาน (Check-Out) เรียบร้อยแล้ว');
-	}
-
-	function handleConfirmLeave() {
-		if (!modalTargetShift) return;
-		const updated: Record<string, ShiftOverride> = {
-			...shiftOverrides,
-			[modalTargetShift.id]: {
-				status: 'cancelled',
-				check_in_at: shiftOverrides[modalTargetShift.id]?.check_in_at ?? null,
-				check_out_at: shiftOverrides[modalTargetShift.id]?.check_out_at ?? null
-			}
-		};
-		saveShiftOverrides(updated);
-		isLeaveModalOpen = false;
-		toast.success('ส่งคำขอลา/ถอนกะงานเรียบร้อยแล้ว');
 	}
 
 	// ── PAGINATION ────────────────────────────────────────────────────────────
@@ -1046,38 +918,34 @@
 									<div
 										class="flex shrink-0 flex-col justify-center gap-2 sm:flex-row md:w-60 md:flex-col md:self-center"
 									>
-										{#if shift.statusVariant === 'pending'}
+										{#if shift.statusVariant === 'pending' || shift.statusVariant === 'checked_in'}
+											<!--
+								Shown but inert until self check-in has a write path.
+
+								CR-104 §3.4 puts self check-in on the volunteer's own ticket, behind a
+								scan of the shelter's printed QR — a button here could be pressed from
+								home. Nothing server-side accepts a volunteer-initiated check-in yet, so
+								these say so rather than reporting a success the shelter never records.
+							-->
 											<button
 												type="button"
-												onclick={() => openCheckinModal(shift)}
-												class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700 active:scale-[0.98]"
+												disabled
+												class="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs font-bold text-muted-foreground"
 											>
-												<UserCheck class="size-4" />
-												<span>รายงานตัวเข้างาน (Check-In)</span>
+												{#if shift.statusVariant === 'pending'}
+													<UserCheck class="size-4" />
+													<span>รายงานตัวเข้างาน (Check-In)</span>
+												{:else}
+													<Clock class="size-4" />
+													<span>เช็คเอาท์ออกจากงาน (Check-Out)</span>
+												{/if}
 											</button>
-											<button
-												type="button"
-												onclick={() => openLeaveModal(shift)}
-												class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:text-foreground active:scale-[0.98]"
+											<p
+												class="flex items-start gap-1.5 px-0.5 text-3xs leading-snug text-muted-foreground"
 											>
-												<span>ขอลา/ถอนกะงาน</span>
-											</button>
-										{:else if shift.statusVariant === 'checked_in'}
-											<button
-												type="button"
-												onclick={() => openCheckoutModal(shift)}
-												class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 active:scale-[0.98]"
-											>
-												<Clock class="size-4" />
-												<span>เช็คเอาท์ออกจากงาน (Check-Out)</span>
-											</button>
-											<button
-												type="button"
-												onclick={() => openLeaveModal(shift)}
-												class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:text-foreground active:scale-[0.98]"
-											>
-												<span>ขอลา/ถอนกะงาน</span>
-											</button>
+												<CircleAlert class="mt-0.5 size-3 shrink-0" />
+												<span>ยังไม่เชื่อมระบบ — รายงานตัวที่จุดเช็คอินหน้าศูนย์พักพิง</span>
+											</p>
 										{/if}
 									</div>
 								</div>
@@ -1300,192 +1168,3 @@
 />
 
 <!-- ── MODAL: CHECK-IN CONFIRMATION ───────────────────────────────────────── -->
-<Dialog.Root bind:open={isCheckinModalOpen}>
-	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
-		<Dialog.Header class="space-y-2 text-left">
-			<div
-				class="inline-flex size-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-			>
-				<UserCheck class="size-5" />
-			</div>
-			<Dialog.Title class="text-lg font-bold text-foreground">
-				ยืนยันการรายงานตัวเข้างาน (Check-In)
-			</Dialog.Title>
-			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
-				กรุณายืนยันการรายงานตัวเข้ากะปฏิบัติการ ณ จุดศูนย์พักพิง
-				ระบบจะบันทึกเวลาปัจจุบันในการเริ่มปฏิบัติงาน
-			</Dialog.Description>
-		</Dialog.Header>
-
-		{#if modalTargetShift}
-			<div class="my-4 space-y-2 rounded-2xl border border-border bg-muted/40 p-4">
-				<div class="flex items-center gap-2">
-					<span
-						class="rounded bg-sky-100 px-2 py-0.5 text-3xs font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300"
-					>
-						{modalTargetShift.shiftPeriod}
-					</span>
-					<span class="text-xs font-bold text-foreground">{modalTargetShift.title}</span>
-				</div>
-				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
-					<MapPin class="size-3 text-primary" />
-					{modalTargetShift.location}
-				</p>
-				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
-					<Clock class="size-3" />
-					{modalTargetShift.dateText}
-				</p>
-			</div>
-		{/if}
-
-		<Dialog.Footer class="flex gap-2 sm:justify-end">
-			<button
-				type="button"
-				onclick={() => (isCheckinModalOpen = false)}
-				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
-			>
-				ยกเลิก
-			</button>
-			<button
-				type="button"
-				onclick={handleConfirmCheckin}
-				class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
-			>
-				ยืนยันเช็คอินเข้างาน
-			</button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- ── MODAL: CHECK-OUT CONFIRMATION ──────────────────────────────────────── -->
-<Dialog.Root bind:open={isCheckoutModalOpen}>
-	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
-		<Dialog.Header class="space-y-2 text-left">
-			<div
-				class="inline-flex size-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-			>
-				<Clock class="size-5" />
-			</div>
-			<Dialog.Title class="text-lg font-bold text-foreground">
-				ยืนยันการเช็คเอาท์ออกจากงาน (Check-Out)
-			</Dialog.Title>
-			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
-				คุณได้ปฏิบัติภารกิจเสร็จสิ้นเรียบร้อยแล้วใช่หรือไม่?
-				ระบบจะทำการบันทึกเวลาสิ้นสุดและสะสมชั่วโมงการทำงาน
-			</Dialog.Description>
-		</Dialog.Header>
-
-		{#if modalTargetShift}
-			<div class="my-4 space-y-2 rounded-2xl border border-border bg-muted/40 p-4">
-				<div class="flex items-center gap-2">
-					<span
-						class="rounded bg-sky-100 px-2 py-0.5 text-3xs font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300"
-					>
-						{modalTargetShift.shiftPeriod}
-					</span>
-					<span class="text-xs font-bold text-foreground">{modalTargetShift.title}</span>
-				</div>
-				<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
-					<MapPin class="size-3 text-primary" />
-					{modalTargetShift.location}
-				</p>
-				{#if modalTargetShift.checkinTime}
-					<p
-						class="flex items-center gap-1.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400"
-					>
-						<Clock class="size-3" /> เช็คอินเมื่อ: {modalTargetShift.checkinTime}
-					</p>
-				{/if}
-			</div>
-		{/if}
-
-		<Dialog.Footer class="flex gap-2 sm:justify-end">
-			<button
-				type="button"
-				onclick={() => (isCheckoutModalOpen = false)}
-				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
-			>
-				ยังไม่เช็คเอาท์
-			</button>
-			<button
-				type="button"
-				onclick={handleConfirmCheckout}
-				class="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
-			>
-				ยืนยันเช็คเอาท์ออกจากงาน
-			</button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- ── MODAL: LEAVE / WITHDRAW SHIFT ──────────────────────────────────────── -->
-<Dialog.Root bind:open={isLeaveModalOpen}>
-	<Dialog.Content class="rounded-3xl p-6 sm:max-w-md">
-		<Dialog.Header class="space-y-2 text-left">
-			<div
-				class="inline-flex size-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-			>
-				<AlertTriangle class="size-5" />
-			</div>
-			<Dialog.Title class="text-lg font-bold text-foreground">ขอลา / ถอนกะปฏิบัติการ</Dialog.Title>
-			<Dialog.Description class="text-xs leading-relaxed text-muted-foreground">
-				หากไม่สามารถมาปฏิบัติภารกิจได้ กรุณาระบุเหตุผลเพื่อให้เจ้าหน้าที่ศูนย์จัดสรรกำลังพลทดแทน
-			</Dialog.Description>
-		</Dialog.Header>
-
-		<div class="my-4 space-y-3">
-			{#if modalTargetShift}
-				<div class="space-y-1 rounded-2xl border border-border bg-muted/40 p-3">
-					<p class="text-xs font-bold text-foreground">{modalTargetShift.title}</p>
-					<p class="text-2xs text-muted-foreground">{modalTargetShift.dateText}</p>
-				</div>
-			{/if}
-
-			<div class="space-y-1.5">
-				<label for="leave-reason-select" class="text-xs font-bold text-foreground">
-					เหตุผลการขอลา
-				</label>
-				<select
-					id="leave-reason-select"
-					bind:value={leaveReason}
-					class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
-				>
-					<option value="ติดภารกิจด่วน">ติดภารกิจด่วน / ธุระส่วนตัวจำเป็น</option>
-					<option value="มีอาการป่วย/ไม่สบาย">มีอาการป่วย / สภาพร่างกายไม่พร้อม</option>
-					<option value="ปัญหาการเดินทาง">ปัญหาการเดินทาง / เส้นทางถูกตัดขาด</option>
-					<option value="อื่นๆ">อื่นๆ</option>
-				</select>
-			</div>
-
-			<div class="space-y-1.5">
-				<label for="leave-detail-input" class="text-xs font-bold text-foreground">
-					รายละเอียดเพิ่มเติม (ถ้ามี)
-				</label>
-				<textarea
-					id="leave-detail-input"
-					bind:value={leaveReasonDetail}
-					rows="2"
-					placeholder="ระบุรายละเอียดเพิ่มเติม..."
-					class="w-full resize-none rounded-xl border border-border bg-card p-2.5 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
-				></textarea>
-			</div>
-		</div>
-
-		<Dialog.Footer class="flex gap-2 sm:justify-end">
-			<button
-				type="button"
-				onclick={() => (isLeaveModalOpen = false)}
-				class="rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:bg-muted"
-			>
-				ยกเลิก
-			</button>
-			<button
-				type="button"
-				onclick={handleConfirmLeave}
-				class="text-destructive-foreground rounded-xl bg-destructive px-4 py-2.5 text-xs font-bold shadow-sm transition hover:opacity-95 active:scale-[0.98]"
-			>
-				ยืนยันการถอนกะงาน
-			</button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
