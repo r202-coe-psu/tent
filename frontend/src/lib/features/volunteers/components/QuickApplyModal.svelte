@@ -193,15 +193,16 @@
 			}
 
 			const cleanPhone = formData.phone.replace(/[-\s]/g, '').trim();
+			const targetJobId = job.id.startsWith('job:') ? job.id : `job:${job.id}`;
 
-			// Call public application API endpoint (NO-AUTH FLOW + UNIQUE PHONE CHECK)
-			const res = await fetch('/api/public/v1/volunteer/apply', {
+			// Direct CouchDB Apply via SvelteKit Server BFF (No FastAPI dependency)
+			const couchRes = await fetch('/api/public/v1/volunteer/apply', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({
-					job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
+					job_id: targetJobId,
 					applicant: {
 						first_name: firstName,
 						last_name: lastName,
@@ -217,19 +218,22 @@
 				})
 			});
 
-			const data = await res.json();
+			const couchData = await couchRes.json().catch(() => null);
 
-			if (!res.ok || !data.success) {
-				if (res.status === 409 || data.error === 'DUPLICATE_PHONE') {
-					const dupMsg =
-						data.message ||
-						'เบอร์โทรศัพท์นี้ได้ทำการสมัครงานนี้ไว้แล้ว ไม่สามารถใช้เบอร์เดิมสมัครซ้ำได้';
-					errorMessage = dupMsg;
-					toast.error(dupMsg);
-					return;
-				}
-				throw new Error(data.message || 'เกิดข้อผิดพลาดในการส่งใบสมัคร');
+			if (!couchRes.ok || !couchData?.success) {
+				const errorMsg =
+					couchData?.message ||
+					(couchRes.status === 409
+						? 'ช่วงเวลากะงานนี้ทับซ้อนหรือเบอร์โทรศัพท์นี้ได้ทำการสมัครงานนี้ไว้แล้ว'
+						: couchRes.status === 429
+							? 'คุณได้ส่งคำขอบ่อยเกินไป กรุณารอสักครู่'
+							: 'เกิดข้อผิดพลาดในการส่งใบสมัคร');
+				errorMessage = errorMsg;
+				toast.error(errorMsg);
+				return;
 			}
+
+			const trackingToken = couchData.tracking_token;
 
 			toast.success('ส่งใบสมัครสำเร็จ! คุณจะได้รับตั๋วดิจิทัล (QR Code) ทันที');
 
@@ -240,13 +244,12 @@
 				phone: formData.phone,
 				email: formData.email,
 				skills: formData.skills,
-				trackingToken: data.tracking_token
+				trackingToken
 			});
 
 			isOpen = false;
 
 			// Reset form
-			const tokenToOpen = data.tracking_token;
 			formData = {
 				firstName: '',
 				lastName: '',
@@ -258,8 +261,8 @@
 				consentPdpa: false
 			};
 
-			if (tokenToOpen) {
-				await goto(`/volunteers/ticket/${tokenToOpen}`);
+			if (trackingToken) {
+				await goto(`/volunteers/ticket/${trackingToken}`);
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการส่งใบสมัคร';
@@ -551,7 +554,7 @@
 											job.skills_required?.includes(skill.id)}
 										<button
 											type="button"
-											onclick={() => toggleSkill(skill.label)}
+											onclick={() => toggleSkill(skill.key || skill.id || skill.label)}
 											class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all {isSelected
 												? 'border-primary bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
 												: isRequiredByJob

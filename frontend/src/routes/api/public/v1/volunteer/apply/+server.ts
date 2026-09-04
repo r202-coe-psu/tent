@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { adminRaw } from '$lib/server/couch-admin';
-import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import {
 	volunteerApplyIpLimiter,
@@ -186,33 +185,37 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		const normalizedJobId = job_id.startsWith('job:') ? job_id : `job:${job_id}`;
 
 		// 2. Locate target shelter database and shelter code
-		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
-		const regData = regRes.data as CouchAllDocsResponse<ShelterRegistryDoc> | undefined;
-		let targetShelterDb: string | null = null;
-		let targetShelterCode: string = 'SH001';
+		let targetShelterDb = 'shelter_sh001';
+		let targetShelterCode = 'SH001';
 
-		if (regRes.status === 200 && Array.isArray(regData?.rows)) {
-			for (const r of regData.rows) {
-				const doc = r.doc;
-				if (doc && doc.type === 'shelter' && doc.db) {
-					try {
-						const jRes = await adminRaw(`/${doc.db}/${encodeURIComponent(normalizedJobId)}`, 'GET');
-						const jData = jRes.data as { _id?: string } | undefined;
-						if (jRes.status === 200 && jData?._id) {
-							targetShelterDb = doc.db;
-							targetShelterCode = doc.code || 'SH001';
-							break;
+		try {
+			const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
+			const regData = regRes.data as CouchAllDocsResponse<ShelterRegistryDoc> | undefined;
+
+			if (regRes.status === 200 && Array.isArray(regData?.rows)) {
+				for (const r of regData.rows) {
+					const doc = r.doc;
+					if (doc && doc.type === 'shelter' && doc.code) {
+						const dbName = `shelter_${doc.code.toLowerCase()}`;
+						try {
+							const jRes = await adminRaw(
+								`/${dbName}/${encodeURIComponent(normalizedJobId)}`,
+								'GET'
+							);
+							const jData = jRes.data as { _id?: string } | undefined;
+							if (jRes.status === 200 && jData?._id) {
+								targetShelterDb = dbName;
+								targetShelterCode = doc.code;
+								break;
+							}
+						} catch {
+							// Continue searching
 						}
-					} catch {
-						// Continue searching
 					}
 				}
 			}
-		}
-
-		// Fallback to primary shelter db if not found
-		if (!targetShelterDb) {
-			targetShelterDb = 'shelter_sh001';
+		} catch {
+			// Fallback to default
 		}
 
 		// 3. Query existing volunteer profile and job applications for this phone
@@ -288,15 +291,23 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 					{
 						success: false,
 						error: 'TIME_CONFLICT',
-						message: `ช่วงเวลากะงาน (${selected_shift.start_time} - ${selected_shift.end_time} น.) ทับซ้อนกับกะงานที่คุณได้สมัครไว้แล้วในวันที่ ${appShift.date} (${appShift.start_time} - ${appShift.end_time} น.)`
+						message: 'ช่วงเวลากะงานที่เลือกทับซ้อนกับกะงานที่เคยลงทะเบียนไว้แล้ว กรุณาเลือกกะอื่น'
 					},
 					{ status: 409 }
 				);
 			}
 		}
 
+		function generateTrackingToken(): string {
+			const bytes = new Uint8Array(16);
+			crypto.getRandomValues(bytes);
+			const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
+				.join('')
+				.toUpperCase();
+			return `TKT-VOL-${hex}`;
+		}
+
 		// 5. CREATE OR UPDATE VOLUNTEER IDENTITY (APPEND TO VOLUNTEER)
-		// QR code is generated from volunteerToken (sha256 hash of volunteer ID)
 		const now = new Date().toISOString();
 		let volunteerId: string;
 		let volunteerToken: string;
@@ -311,7 +322,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 		if (existingVolunteer) {
 			volunteerId = existingVolunteer._id;
-			volunteerToken = existingVolunteer.tracking_token || (await sha256Hex(volunteerId));
+			volunteerToken = existingVolunteer.tracking_token || generateTrackingToken();
 
 			// Always preserve initial registration info from the first time
 			finalApplicantInfo = {
@@ -373,6 +384,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				skills: finalApplicantInfo.skills,
 				status: 'active',
 				checked_in: false,
+				current_shelter_code: targetShelterCode,
 				tracking_token: volunteerToken,
 				volunteer_code: nextCode,
 				identity_verified: false,
@@ -386,9 +398,13 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			);
 		}
 
-		// 6. CREATE JOB_APPLICATION DOCUMENT
-		const applicationUlid = ulid().toLowerCase();
+		// 6. CREATE JOB_APPLICATION DOCUMENT (Schema v2)
+		const applicationUlid = ulid();
 		const docId = `job_application:${applicationUlid}`;
+		const isControlled = applicant.skills.some(
+			(s) => s.includes('แพทย์') || s.includes('พยาบาล') || s === 'medical'
+		);
+		const applicationStatus = isControlled ? 'pending_review' : 'confirmed';
 
 		const applicationDoc = {
 			_id: docId,
@@ -405,7 +421,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				end_time: selected_shift.end_time
 			},
 			tracking_token: volunteerToken,
-			status: 'pending_review',
+			tracking_token_hash: await sha256Hex(volunteerToken),
+			status: applicationStatus,
 			review_notes: null,
 			reviewed_at: null,
 			reviewed_by: null,
@@ -415,25 +432,116 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			updated_by: 'public'
 		};
 
-		const putRes = await putAsPublicWriter(targetShelterDb, docId, applicationDoc);
-		if (putRes && putRes.status !== 200 && putRes.status !== 201) {
-			const adminPut = await adminRaw(
-				`/${targetShelterDb}/${encodeURIComponent(docId)}`,
-				'PUT',
-				applicationDoc
+		await adminRaw(`/${targetShelterDb}/${encodeURIComponent(docId)}`, 'PUT', applicationDoc);
+
+		// 7. CREATE SHIFT_ASSIGNMENT DOCUMENT (Schema v3)
+		const assignmentId = `shift_assignment:${applicationUlid}`;
+		const startTime = selected_shift.start_time || '08:00';
+		const endTime = selected_shift.end_time || '16:00';
+		const shiftDate = selected_shift.date || now.slice(0, 10);
+		const startTs = `${shiftDate}T${startTime}:00Z`;
+		let endTs = `${shiftDate}T${endTime}:00Z`;
+		if (endTs <= startTs) {
+			endTs = `${shiftDate}T23:59:59Z`;
+		}
+
+		const startHour = parseInt(startTime.split(':')[0] || '8', 10);
+		let shiftKind = 'morning';
+		if (startHour >= 6 && startHour < 14) shiftKind = 'morning';
+		else if (startHour >= 14 && startHour < 22) shiftKind = 'afternoon';
+		else shiftKind = 'night';
+
+		const shiftAssignmentDoc = {
+			_id: assignmentId,
+			type: 'shift_assignment',
+			schema_v: 3,
+			shelter_code: targetShelterCode,
+			job_id: normalizedJobId,
+			volunteer_id: volunteerId,
+			date: shiftDate,
+			shift: shiftKind,
+			station: 'จุดปฏิบัติการทั่วไป',
+			duty_window: {
+				start_ts: startTs,
+				end_ts: endTs
+			},
+			check_in_at: null,
+			check_out_at: null,
+			check_in_by: null,
+			status: 'assigned',
+			dispatch_status: null,
+			check_in_method: 'qr',
+			check_in_reason: null,
+			created_at: now,
+			updated_at: now,
+			created_by: 'public_apply',
+			updated_by: 'public_apply'
+		};
+
+		await adminRaw(
+			`/${targetShelterDb}/${encodeURIComponent(assignmentId)}`,
+			'PUT',
+			shiftAssignmentDoc
+		);
+
+		// 8. UPDATE JOB SLOTS IN COUCHDB
+		try {
+			const jobGetRes = await adminRaw(
+				`/${targetShelterDb}/${encodeURIComponent(normalizedJobId)}`,
+				'GET'
 			);
-			if (adminPut && adminPut.status !== 200 && adminPut.status !== 201) {
-				return json(
-					{ success: false, error: 'SAVE_FAILED', message: 'ไม่สามารถบันทึกข้อมูลใบสมัครได้' },
-					{ status: 500 }
+			if (jobGetRes.status === 200 && jobGetRes.data) {
+				const currentJob = jobGetRes.data as {
+					_id: string;
+					_rev: string;
+					shifts?: {
+						date: string;
+						start_time: string;
+						quota: number;
+						slots_confirmed?: number;
+						slots_remaining?: number;
+					}[];
+					slots_confirmed?: number;
+					slots_remaining?: number;
+					quota?: number;
+					status?: string;
+					updated_at?: string;
+				};
+				if (Array.isArray(currentJob.shifts)) {
+					for (const s of currentJob.shifts) {
+						if (s.date === shiftDate || (!s.date && s.start_time === startTime)) {
+							s.slots_confirmed = (s.slots_confirmed || 0) + 1;
+							s.slots_remaining = Math.max(0, (s.quota || 10) - s.slots_confirmed);
+							break;
+						}
+					}
+				}
+				currentJob.slots_confirmed = (currentJob.slots_confirmed || 0) + 1;
+				currentJob.slots_remaining = Math.max(
+					0,
+					(currentJob.quota || 10) - currentJob.slots_confirmed
+				);
+				if (currentJob.slots_remaining === 0) {
+					currentJob.status = 'full';
+				} else if (currentJob.slots_remaining <= 2) {
+					currentJob.status = 'almost_full';
+				}
+				currentJob.updated_at = now;
+				await adminRaw(
+					`/${targetShelterDb}/${encodeURIComponent(normalizedJobId)}`,
+					'PUT',
+					currentJob
 				);
 			}
+		} catch {
+			// Non-fatal if job update fails
 		}
 
 		return json({
 			success: true,
 			tracking_token: volunteerToken,
 			volunteer_id: volunteerId,
+			status: applicationStatus,
 			application: applicationDoc,
 			message: existingVolunteer ? 'เพิ่มกะงานให้อาสาสมัครสำเร็จ' : 'ส่งใบสมัครสำเร็จ'
 		});
