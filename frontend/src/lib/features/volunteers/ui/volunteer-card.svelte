@@ -8,10 +8,9 @@
 	 * Of the 3 action buttons (จัดการข้อมูล/ ออกสิทธิ์ใช้งานระบบ / ลบ):
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
-	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte` (see its
-	 *     header comment — it persists `volunteer.user_name` but does NOT mint
-	 *     a real CouchDB account/password/role grant, since no such repository
-	 *     call exists).
+	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte`, which
+	 *     creates a CouchDB login through the authorized users API and links
+	 *     its username/email back to the volunteer profile.
 	 * (Cross-shelter transfer was cut by CR-104 AC-104-10 — a volunteer now
 	 * applies directly to any shelter's jobs via the Job Board instead.)
 	 * "ลบ" stays a UI-only stub for this pass (explicit scope call from the

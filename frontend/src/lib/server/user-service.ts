@@ -6,7 +6,7 @@ import {
 	isStaffOnly,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
-import { validatePassword } from '$lib/server/password-policy';
+import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
 	hashSecurityAnswer,
 	verifySecurityAnswer,
@@ -193,7 +193,11 @@ export async function createUser(input: {
 	if (isProtectedBootstrapAdmin({ name, roles }, bootstrap)) {
 		throw new ServiceError('FORBIDDEN', 'Cannot create a user with the bootstrap admin name');
 	}
-	const password = validatePassword(input.password);
+	const password = validateProvisionedPassword(input.password, {
+		phone,
+		personnelType: personnel_type,
+		mustChangePassword: must_change_password
+	});
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,

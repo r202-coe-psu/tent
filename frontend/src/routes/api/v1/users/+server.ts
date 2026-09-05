@@ -7,7 +7,7 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import { createUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
-import { validatePassword } from '$lib/server/password-policy';
+import { validateProvisionedPassword } from '$lib/server/password-policy';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
 // (api-contract.md §2/§3) so it is a drop-in swap for the future FastAPI.
@@ -28,6 +28,7 @@ interface CreateUserBody {
 	notes?: unknown;
 	volunteer_id?: unknown;
 	duty_window?: unknown;
+	must_change_password?: unknown;
 	affiliation_tags?: unknown;
 }
 
@@ -88,9 +89,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: [];
+		const must_change_password =
+			typeof body.must_change_password === 'boolean' ? body.must_change_password : false;
 
 		if (name.length < 3) throw new ServiceError('VALIDATION', 'name must be at least 3 characters');
-		const validPassword = validatePassword(password);
+		const validPassword = validateProvisionedPassword(password, {
+			phone,
+			personnelType: personnel_type,
+			mustChangePassword: must_change_password
+		});
 		if (display_name.length < 1)
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
 		if (personnel_type === 'staff' && !organization) {
@@ -111,6 +118,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			notes,
 			volunteer_id,
 			duty_window,
+			must_change_password,
 			affiliation_tags
 		});
 		return json({ ok: true });

@@ -80,6 +80,22 @@ describe('user-service', () => {
 		expect(saved.active).toBe(true);
 	});
 
+	it('accepts a volunteer phone as a forced first-login password', async () => {
+		await createUser({
+			name: 'volunteer@example.com',
+			password: '0812345678',
+			display_name: 'อาสา ทดลอง',
+			personnel_type: 'volunteer',
+			phone: '0812345678',
+			roles: ['shelter:SH001', 'registration_staff'],
+			must_change_password: true
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:volunteer%40example.com'];
+		expect(saved.password).toBe('0812345678');
+		expect(saved.must_change_password).toBe(true);
+	});
+
 	it('resets user password by admin with memorable temporary passphrase', async () => {
 		await createUser({
 			name: '0899999999',

@@ -53,6 +53,7 @@ export function createUser(input: {
 		start_ts: string;
 		end_ts: string;
 	} | null;
+	must_change_password?: boolean;
 	affiliation_tags?: string[];
 }): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });

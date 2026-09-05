@@ -1,44 +1,18 @@
 <script lang="ts">
-	/**
-	 * "ออกสิทธิ์ใช้งานระบบหลังบ้าน" — grant staff system access (owner-approved
-	 * mockup, 2026-08-29). Opened from `volunteer-card.svelte`'s per-row
-	 * "ออกสิทธิ์ใช้งานระบบ" button.
-	 *
-	 * Real, persisted: the entered email is saved to `volunteer.user_name` via
-	 * `useUpdateVolunteer` (`VolunteerRepository#update()`) — this is the same
-	 * field `volunteer-manage-dialog.svelte`'s STAFF SYSTEM ACCESS badge reads.
-	 *
-	 * Everything else on this screen is deliberately NOT wired, because there is
-	 * no backend to wire it to (`volunteer-card.svelte`'s header comment already
-	 * flags this): no RoleKey-grant repository call exists (FR-VOL-05R is a
-	 * CouchDB-native time-bound grant), which means no `_users` document, no
-	 * password, and no role assignment is actually created here. This is a
-	 * deliberate scope line, not an oversight — actually minting CouchDB
-	 * credentials requires an admin-credentialed server route
-	 * (`$lib/server/couch-admin.ts`, `frontend/CONTRIBUTING.md` §4 "do not
-	 * bypass"), which doesn't exist yet, and the mockup's "default password =
-	 * phone number" is not something to wire up as-is even once that route
-	 * exists (guessable default credential) — flagged for the CR alongside the
-	 * FR-VOL-05R gap. Role assignment options are still drawn from the real
-	 * `STAFF_CAPABILITIES` RoleKey vocabulary (`$lib/auth/roles`) so the picker
-	 * shows real capability names, even though selecting one doesn't persist
-	 * anything yet.
-	 */
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Mail from '@lucide/svelte/icons/mail';
 	import Lock from '@lucide/svelte/icons/lock';
-	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Save from '@lucide/svelte/icons/save';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
-	import { useUpdateVolunteer } from '../application/queries';
+	import { volunteerKeys } from '../application/queries';
+	import { grantVolunteerAccess, volunteerAccessSchema } from '../application/volunteer-access';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
 	let {
@@ -52,13 +26,13 @@
 	} = $props();
 
 	const queryClient = useQueryClient();
-	const updateMutation = useUpdateVolunteer(queryClient);
+	let pending = $state(false);
 
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	let email = $state('');
 	let role = $state<StaffCapability>('registration_staff');
-	let qrTicketAuth = $state(true);
+	let password = $state('');
 
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
@@ -67,27 +41,37 @@
 			return;
 		}
 		if (lastOpenedId === volunteer._id) return;
-		email = volunteer.user_name ?? '';
+		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = 'registration_staff';
-		qrTicketAuth = true;
+		password = volunteer.phone ?? '';
 		lastOpenedId = volunteer._id;
 	});
 
-	const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 	async function submit() {
-		const trimmed = email.trim();
-		if (!trimmed || !EMAIL_RE.test(trimmed)) {
-			toast.error('กรุณากรอกอีเมลให้ถูกต้อง');
+		if (pending) return;
+		const parsed = volunteerAccessSchema.safeParse({ email, password, role });
+		if (!parsed.success) {
+			toast.error(parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล');
 			return;
 		}
+		pending = true;
 		try {
-			await updateMutation.mutateAsync({ ...volunteer, user_name: trimmed });
-			toast.success(`บันทึกชื่อผู้ใช้งาน (${trimmed}) แล้ว`);
-			toast.info('การสร้างบัญชีเข้าสู่ระบบจริง (รหัสผ่าน/บทบาท/QR) ยังอยู่ระหว่างการพัฒนา');
+			const result = await grantVolunteerAccess(volunteer, parsed.data);
+			toast.success(
+				result.created
+					? `สร้างบัญชี (${parsed.data.email}) และออกสิทธิ์แล้ว`
+					: `ผูกบัญชี (${parsed.data.email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`
+			);
+			password = '';
 			open = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : 'สร้างบัญชีไม่สำเร็จ');
+		} finally {
+			await Promise.allSettled([
+				queryClient.invalidateQueries({ queryKey: ['users'] }),
+				queryClient.invalidateQueries({ queryKey: volunteerKeys.all })
+			]);
+			pending = false;
 		}
 	}
 </script>
@@ -119,7 +103,7 @@
 						<p class="font-semibold text-foreground">{fullName}</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">เบอร์โทรศัพท์ / รหัสผ่านเริ่มต้น:</p>
+						<p class="text-emerald-800">เบอร์โทรศัพท์:</p>
 						<p class="font-semibold text-foreground">{volunteer.phone ?? '—'}</p>
 					</div>
 					<div>
@@ -130,10 +114,8 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<p class="text-xs font-bold text-foreground">
-					บทบาท/สิทธิ์สำหรับกะงานนี้ (ROLE ASSIGNMENT)
-				</p>
-				<Select.Root type="single" bind:value={role}>
+				<p class="text-xs font-bold text-foreground">บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT)</p>
+				<Select.Root type="single" bind:value={role} disabled={pending}>
 					<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
 						<span class="truncate">{roleOptionLabel(role)}</span>
 					</Select.Trigger>
@@ -144,8 +126,7 @@
 					</Select.Content>
 				</Select.Root>
 				<p class="text-[11px] text-muted-foreground">
-					* สิทธิ์การใช้งานจะผล Active ต่อเนื่องทันทีหลังบันทึก
-					(สามารถเพิกถอนสิทธิ์ได้ทุกเมื่อผ่านปุ่ม [🔒 เพิกถอนสิทธิ์])
+					* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
 				</p>
 			</div>
 
@@ -168,6 +149,9 @@
 					<Input
 						type="email"
 						bind:value={email}
+						disabled={pending}
+						autocomplete="off"
+						aria-label="อีเมลสำหรับเข้าสู่ระบบ"
 						class="h-11"
 						placeholder="เช่น volunteer@example.com หรือ volunteer@gmail.com"
 					/>
@@ -178,60 +162,46 @@
 				</div>
 
 				<div class="space-y-1.5 rounded-lg border border-border p-3">
-					<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+					<label
+						for={`volunteer-access-password-${volunteer._id}`}
+						class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+					>
 						<KeyRound class="h-3.5 w-3.5" />
-						รหัสผ่านเริ่มต้น (Default Password):
-					</p>
-					<div class="flex flex-wrap items-center justify-between gap-2">
-						<Badge
-							variant="outline"
-							class="gap-1.5 border-emerald-300 bg-emerald-50 text-sm text-emerald-800"
-						>
-							📱 {volunteer.phone ?? '—'}
-						</Badge>
-						<span class="text-[11px] text-muted-foreground">
-							(ใช้เบอร์โทรศัพท์มือถือของอาสาเป็นรหัสผ่าน)
-						</span>
-					</div>
+						รหัสผ่านสำหรับบัญชีใหม่ <span class="text-destructive">*</span>
+					</label>
+					<Input
+						id={`volunteer-access-password-${volunteer._id}`}
+						type="password"
+						bind:value={password}
+						disabled={pending}
+						autocomplete="new-password"
+						class="h-11"
+						placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
+					/>
 					<p class="text-[11px] text-muted-foreground">
-						ระบบกำหนดให้ใช้ "เบอร์โทรศัพท์มือถือของอาสาสมัคร" เป็นรหัสผ่านเริ่มต้นในการเข้าสู่ระบบ
-						เพื่อความสะดวกและง่ายต่อการจดจำ
+						ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
+						และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
+						ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
+					</p>
+					<p class="text-[11px] text-muted-foreground">
+						หากสร้างบัญชีแล้วแต่บันทึกโปรไฟล์ไม่สำเร็จ ให้ลองอีกครั้งด้วยอีเมลและบทบาทเดิม
+						ระบบจะผูกบัญชีที่สร้างไว้โดยไม่เปลี่ยนรหัสผ่านเดิม
 					</p>
 				</div>
-
-				<label
-					class="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 {qrTicketAuth
-						? 'border-primary bg-primary/5'
-						: 'border-border'}"
-				>
-					<Checkbox
-						checked={qrTicketAuth}
-						onCheckedChange={(v) => (qrTicketAuth = !!v)}
-						class="mt-0.5"
-					/>
-					<span class="min-w-0 text-xs">
-						<span class="flex items-center gap-1.5 font-medium text-foreground">
-							<QrCode class="h-3.5 w-3.5" />
-							อนุญาตให้สแกน QR Code ตั๋วประจำตัวจิตอาสาเพื่อล็อกอินด่วน (Ticket QR Auth)
-						</span>
-						<span class="mt-0.5 block text-[11px] text-muted-foreground">
-							อาสาสมัครสามารถเปิดตั๋วดิจิทัลแล้วให้เจ้าหน้าที่สแกน QR Code
-							ประจำตัวเพื่อเข้าสู่ระบบหน้าด่านได้ทันที
-						</span>
-					</span>
-				</label>
 			</div>
 		</div>
 
 		<div class="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-			<Button type="button" variant="ghost" onclick={() => (open = false)}>ยกเลิก</Button>
+			<Button type="button" variant="ghost" disabled={pending} onclick={() => (open = false)}
+				>ยกเลิก</Button
+			>
 			<Button
 				type="button"
 				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-				disabled={updateMutation.isPending}
+				disabled={pending}
 				onclick={submit}
 			>
-				{#if updateMutation.isPending}
+				{#if pending}
 					กำลังบันทึก...
 				{:else}
 					<Save class="h-4 w-4" />

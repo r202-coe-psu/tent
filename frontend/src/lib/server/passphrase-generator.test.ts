@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateTemporaryPassphrase, PASSPHRASE_WORDS } from './passphrase-generator';
-import { validatePassword } from './password-policy';
+import { validatePassword, validateProvisionedPassword } from './password-policy';
 
 describe('passphrase-generator', () => {
 	it('has at least 100 memorable words in the pool', () => {
@@ -27,5 +27,24 @@ describe('passphrase-generator', () => {
 			expect(/[0-9]/.test(passphrase)).toBe(true);
 			expect(/[^A-Za-z0-9]/.test(passphrase)).toBe(true);
 		}
+	});
+});
+
+describe('validateProvisionedPassword', () => {
+	it('allows a volunteer phone only as a forced first-login password', () => {
+		expect(
+			validateProvisionedPassword('0812345678', {
+				phone: '0812345678',
+				personnelType: 'volunteer',
+				mustChangePassword: true
+			})
+		).toBe('0812345678');
+		expect(() =>
+			validateProvisionedPassword('0812345678', {
+				phone: '0812345678',
+				personnelType: 'staff',
+				mustChangePassword: false
+			})
+		).toThrow();
 	});
 });
