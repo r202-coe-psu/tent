@@ -38,6 +38,16 @@ describe('ensurePublicWriter', () => {
 		expect(couchReq).not.toHaveBeenCalled();
 	});
 
+	it('returns invalid_format when writer URL is malformed', async () => {
+		const couchReq = vi.fn() as unknown as CouchReq;
+		await expect(
+			ensurePublicWriter(couchReq, 'http://public_writer:@couchdb:5984')
+		).resolves.toEqual({
+			outcome: 'invalid_format'
+		});
+		expect(couchReq).not.toHaveBeenCalled();
+	});
+
 	it('creates the user when PUT returns 201', async () => {
 		const couchReq = vi.fn(async () => ({ status: 201, data: { ok: true } })) as CouchReq;
 		await expect(ensurePublicWriter(couchReq, writerUrl)).resolves.toEqual({

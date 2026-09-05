@@ -1,7 +1,7 @@
 FROM node:24-slim AS builder
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -24,7 +24,9 @@ RUN PUBLIC_APP_TITLE=$PUBLIC_APP_TITLE \
 FROM node:24-slim AS runner
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
@@ -32,7 +34,7 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/.svelte-kit ./.svelte-kit
-COPY --from=builder /app/package.json /app/tsconfig.json /app/svelte.config.js ./
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/tsconfig.json /app/svelte.config.js ./
 
 # corepack (pnpm) writes cache under $HOME when `docker compose run … pnpm db:sync`
 RUN mkdir -p /home/node/.cache && chown -R node:node /app /home/node
