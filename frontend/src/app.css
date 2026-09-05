@@ -85,6 +85,55 @@
 	--shelter-accent-emerald-text: oklch(0.45 0.2 140);
 	--shelter-accent-rose-bg: oklch(0.95 0.04 15);
 	--shelter-accent-rose-text: oklch(0.55 0.22 15);
+
+	/* Civic Light Standard: Brand Foundations */
+	--brand-primary: #0a2647;
+	--brand-primary-hover: #051930;
+	--brand-primary-subtle: #f0f4f8;
+	--brand-primary-border: #cbd5e1;
+
+	/* Civic Light Standard: Secondary, Accent & Operations */
+	--brand-secondary: #0284c7;
+	--brand-secondary-hover: #0369a1;
+	--brand-secondary-subtle: #f0f9ff;
+	--brand-secondary-border: #bae6fd;
+	--brand-secondary-text: #075985;
+
+	--brand-destructive: #dc2626;
+	--brand-destructive-hover: #b91c1c;
+	--brand-destructive-subtle: #fef2f2;
+	--brand-destructive-border: #fecaca;
+	--brand-destructive-text: #991b1b;
+
+	--brand-accent: #0284c7;
+	--brand-accent-bg: #f0f9ff;
+	--brand-accent-border: #bae6fd;
+	--brand-accent-text: #0369a1;
+
+	--ops-kitchen: #ea580c;
+	--ops-kitchen-bg: #fff7ed;
+	--ops-kitchen-border: #fed7aa;
+	--ops-kitchen-text: #9a3412;
+
+	--ops-family: #e11d48;
+	--ops-family-bg: #fff1f2;
+	--ops-family-border: #fecdd3;
+	--ops-family-text: #9f1239;
+
+	--ops-donor: var(--brand-secondary);
+	--ops-donor-bg: var(--brand-secondary-subtle);
+	--ops-donor-border: var(--brand-secondary-border);
+	--ops-donor-text: var(--brand-secondary-text);
+
+	--ops-volunteer: #059669;
+	--ops-volunteer-bg: #ecfdf5;
+	--ops-volunteer-border: #a7f3d0;
+	--ops-volunteer-text: #065f46;
+
+	--ops-inventory: #0d9488;
+	--ops-inventory-bg: #f0fdfa;
+	--ops-inventory-border: #99f6e4;
+	--ops-inventory-text: #115e59;
 }
 
 .dark {
@@ -158,6 +207,10 @@
 }
 
 @theme inline {
+	--font-sans:
+		'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'Geist Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+
 	--text-3xs: 0.5rem;
 	--text-3xs--line-height: 1.2;
 	--text-2xs: 0.625rem;
@@ -260,20 +313,13 @@
 	html {
 		font-size: 18px;
 		scrollbar-gutter: stable;
-		font-family:
-			'IBM Plex Sans Thai',
-			'Inter',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			Roboto,
-			sans-serif;
+		font-family: var(--font-sans);
 	}
 	* {
 		@apply border-border outline-ring/50;
 	}
 	body {
-		@apply bg-background text-base text-foreground antialiased;
+		@apply bg-background font-sans text-base text-foreground antialiased;
 		font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 	}
 
@@ -393,5 +439,79 @@
 	}
 	.sticky-section-nav::-webkit-scrollbar {
 		display: none;
+	}
+
+	/* Civic Button Variants */
+	.btn-primary-brand {
+		background-color: var(--brand-primary, #0a2647);
+		color: #ffffff;
+		@apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98];
+	}
+	.btn-primary-brand:hover {
+		background-color: var(--brand-primary-hover, #051930);
+	}
+	.btn-secondary-brand {
+		background-color: var(--brand-secondary, #0284c7);
+		color: #ffffff;
+		@apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98];
+	}
+	.btn-secondary-brand:hover {
+		background-color: var(--brand-secondary-hover, #0369a1);
+	}
+	.btn-secondary-outline {
+		@apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-[0.98];
+	}
+	.btn-destructive-brand {
+		background-color: var(--brand-destructive, #dc2626);
+		color: #ffffff;
+		@apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98];
+	}
+	.btn-destructive-brand:hover {
+		background-color: var(--brand-destructive-hover, #b91c1c);
+	}
+
+	/* Civic Functional Badges */
+	.badge-accent {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900;
+	}
+	.badge-warning-advisory {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900;
+	}
+	.badge-muted {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700;
+	}
+
+	/* Domain & Specialized Operations Badges */
+	.badge-kitchen {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-900;
+	}
+	.badge-family {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-900;
+	}
+	.badge-donor {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900;
+	}
+	.badge-volunteer {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900;
+	}
+	.badge-inventory {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900;
+	}
+
+	/* Domain 360° Card Framing */
+	.card-ops-kitchen {
+		@apply border-2 border-orange-200 bg-white transition-all hover:border-orange-300 hover:bg-orange-50/20;
+	}
+	.card-ops-family {
+		@apply border-2 border-rose-200 bg-white transition-all hover:border-rose-300 hover:bg-rose-50/20;
+	}
+	.card-ops-donor {
+		@apply border-2 border-sky-200 bg-white transition-all hover:border-sky-300 hover:bg-sky-50/20;
+	}
+	.card-ops-volunteer {
+		@apply border-2 border-emerald-200 bg-white transition-all hover:border-emerald-300 hover:bg-emerald-50/20;
+	}
+	.card-ops-inventory {
+		@apply border-2 border-teal-200 bg-white transition-all hover:border-teal-300 hover:bg-teal-50/20;
 	}
 }
