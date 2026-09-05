@@ -11,6 +11,7 @@ import Error from './field-error.svelte';
 
 export {
 	Field,
+	Field as Root,
 	Set,
 	Legend,
 	Group,
