@@ -143,6 +143,9 @@ export function buildValidateDocUpdate(code: string): string {
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
+    if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
+      throw { forbidden: 'Closed distribution_batch cannot be modified' };
+    }
     if (oldDoc && oldDoc.type === 'simulation') {
       var canDeleteSimulation = isRole('shelter_manager');
       if (!canDeleteSimulation) {
@@ -154,7 +157,7 @@ export function buildValidateDocUpdate(code: string): string {
       return;
     }
     var protectedCoordinationDelete = oldDoc && [
-      'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard'
+      'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
     if (wasAppendOnly || protectedCoordinationDelete) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
@@ -199,7 +202,7 @@ export function buildValidateDocUpdate(code: string): string {
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
-    'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard',
+    'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
@@ -691,6 +694,9 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'New distribution_batch must start activating' };
     }
     if (oldDoc) {
+      if (oldDoc.status === 'closed') {
+        throw { forbidden: 'Closed distribution_batch cannot be modified' };
+      }
       if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
       if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
@@ -703,11 +709,20 @@ export function buildValidateDocUpdate(code: string): string {
       if (JSON.stringify(newDoc.allocations) !== JSON.stringify(oldDoc.allocations)) {
         throw { forbidden: 'Cannot modify allocations on distribution_batch' };
       }
-      if (oldDoc.status === 'activating' && newDoc.status !== 'active') {
-        throw { forbidden: 'Activating batch can only transition to active' };
+      var validBatchTransitions = {
+        activating: ['active'],
+        active: ['closing'],
+        closing: ['closed'],
+        closed: []
+      };
+      var validBatchStatuses = ['activating', 'active', 'closing', 'closed'];
+      if (validBatchStatuses.indexOf(oldDoc.status) === -1 ||
+          validBatchStatuses.indexOf(newDoc.status) === -1) {
+        throw { forbidden: 'Invalid distribution_batch status' };
       }
-      if (oldDoc.status === 'active' && newDoc.status !== 'active') {
-        throw { forbidden: 'Active batch status cannot be changed' };
+      if (oldDoc.status !== newDoc.status &&
+          validBatchTransitions[oldDoc.status].indexOf(newDoc.status) === -1) {
+        throw { forbidden: 'Invalid distribution_batch transition from ' + oldDoc.status + ' to ' + newDoc.status };
       }
     }
   }
@@ -883,6 +898,57 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
       if (newDoc.batch_id !== oldDoc.batch_id) throw { forbidden: 'Cannot change batch_id on capacity record' };
       if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on capacity record' };
+    }
+  }
+  // 9.5 batch-wide Issue/Close gate: Issue roles mutate open claims; close roles seal/reopen.
+  if (newDoc.type === 'distribution_issue_gate') {
+    var isIssueGateStaff = isRole('registration_staff') || isRole('shelter_manager');
+    var isCloseGateStaff = isRole('warehouse_staff');
+    if (typeof newDoc._id !== 'string' || !/^distribution_issue_gate:[0-9a-f]{64}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_issue_gate requires deterministic SHA-256 id' };
+    }
+    if (typeof newDoc.batch_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.batch_id)) {
+      throw { forbidden: 'distribution_issue_gate requires valid batch_id' };
+    }
+    if ((newDoc.state !== 'open' && newDoc.state !== 'sealed') || !Array.isArray(newDoc.pending_claims)) {
+      throw { forbidden: 'distribution_issue_gate requires valid state and pending_claims' };
+    }
+    for (var gateIndex = 0; gateIndex < newDoc.pending_claims.length; gateIndex++) {
+      var gateClaim = newDoc.pending_claims[gateIndex];
+      if (!gateClaim || typeof gateClaim.operation_id !== 'string' || !gateClaim.operation_id ||
+          typeof gateClaim.issue_id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(gateClaim.issue_id) ||
+          typeof gateClaim.claimed_at !== 'string' || isNaN(Date.parse(gateClaim.claimed_at))) {
+        throw { forbidden: 'distribution_issue_gate contains invalid pending claim' };
+      }
+      for (var priorGateIndex = 0; priorGateIndex < gateIndex; priorGateIndex++) {
+        if (newDoc.pending_claims[priorGateIndex].operation_id === gateClaim.operation_id) {
+          throw { forbidden: 'distribution_issue_gate cannot contain duplicate operation_id' };
+        }
+      }
+    }
+    if (newDoc.state === 'sealed') {
+      if (newDoc.pending_claims.length !== 0 || typeof newDoc.closing_operation_id !== 'string' || !newDoc.closing_operation_id) {
+        throw { forbidden: 'Sealed distribution_issue_gate requires zero claims and closing_operation_id' };
+      }
+      if (!isCloseGateStaff) throw { forbidden: 'Only warehouse staff or system admin can seal issue gate' };
+    } else {
+      if (typeof newDoc.closing_operation_id !== 'undefined') {
+        throw { forbidden: 'Open distribution_issue_gate cannot retain closing_operation_id' };
+      }
+      if (oldDoc && oldDoc.state === 'sealed') {
+        if (!isCloseGateStaff) throw { forbidden: 'Only warehouse staff or system admin can reopen issue gate' };
+      } else if (!isIssueGateStaff && !( !oldDoc && isCloseGateStaff && newDoc.pending_claims.length === 0)) {
+        throw { forbidden: 'Only issue staff can manage open issue gate claims' };
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.batch_id !== oldDoc.batch_id) throw { forbidden: 'Cannot change batch_id on issue gate' };
+      if (oldDoc.state === 'sealed' && newDoc.state === 'sealed') {
+        throw { forbidden: 'Sealed distribution_issue_gate cannot be modified' };
+      }
     }
   }
   // 10. distribution_one_time_guard role and validation rules (CR-059 Phase 3B)

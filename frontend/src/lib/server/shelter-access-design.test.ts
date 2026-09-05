@@ -696,6 +696,33 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(distLedger, null, WAREHOUSE)).not.toThrow();
 		});
 
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', { name: 'admin', roles: ['system_admin'] }]
+		])('allows distribution_return stock_ledger from %s', (_role, userCtx) => {
+			const returnLedger = ledger({
+				qty: '2',
+				reason: 'distribution_return',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expect(() => compile()(returnLedger, null, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['shelter_manager', { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] }],
+			['registration_staff', REGISTRATION],
+			['supply_coordinator', { name: 'supply', roles: ['shelter:SH001', 'supply_coordinator'] }]
+		])('rejects distribution_return stock_ledger from %s', (_role, userCtx) => {
+			const returnLedger = ledger({
+				qty: '2',
+				reason: 'distribution_return',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(() => compile()(returnLedger, null, userCtx), /Only warehouse staff/);
+		});
+
 		it('enforces distribute ref, lot, qty, and old-document append-only invariants', () => {
 			const valid = ledger({
 				qty: '-1.5',
@@ -730,6 +757,15 @@ describe('buildValidateDocUpdate', () => {
 	describe('distribution doc types access rules', () => {
 		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
 		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+		const SUPPLY_COORDINATOR: UserCtx = {
+			name: 'supply',
+			roles: ['shelter:SH001', 'supply_coordinator']
+		};
+		const SCOPED_WAREHOUSE: UserCtx = { name: 'scoped-ws', roles: ['SH001:warehouse_staff'] };
+		const CROSS_SHELTER_WAREHOUSE: UserCtx = {
+			name: 'cross-ws',
+			roles: ['SH002:warehouse_staff']
+		};
 		const UNAUTHORIZED: UserCtx = { name: 'unknown', roles: ['shelter:SH001'] };
 
 		const reqDoc = (over: Doc = {}, user: UserCtx = REGISTRATION): Doc => ({
@@ -1136,6 +1172,126 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(active, activating, WAREHOUSE)).not.toThrow();
 		});
 
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', ADMIN]
+		])('allows active to closing transition by %s', (_role, userCtx) => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expect(() => compile()(closing, active, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', ADMIN]
+		])('allows closing to closed transition by %s', (_role, userCtx) => {
+			const closing = batchDoc({ status: 'closing' });
+			const closed = batchDoc({ status: 'closed' });
+			expect(() => compile()(closed, closing, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['active', 'closed'],
+			['closing', 'active'],
+			['closing', 'activating']
+		])('rejects invalid distribution_batch transition from %s to %s', (from, to) => {
+			expectForbidden(
+				() => compile()(batchDoc({ status: to }), batchDoc({ status: from }), WAREHOUSE),
+				/Invalid distribution_batch transition/
+			);
+		});
+
+		it.each(['active', 'closing', 'activating'])(
+			'rejects closed distribution_batch transition to %s',
+			(to) => {
+				const closed = batchDoc({ status: 'closed' });
+				expectForbidden(
+					() => compile()(batchDoc({ status: to }), closed, WAREHOUSE),
+					/Closed distribution_batch cannot be modified/
+				);
+			}
+		);
+
+		it('rejects any update to a closed distribution_batch', () => {
+			const closed = batchDoc({ status: 'closed', return_ledger_ids: [] });
+			expectForbidden(
+				() =>
+					compile()({ ...closed, return_ledger_ids: ['stock_ledger:return'] }, closed, WAREHOUSE),
+				/Closed distribution_batch cannot be modified/
+			);
+		});
+
+		it('rejects deletion of a closed distribution_batch', () => {
+			const closed = batchDoc({ status: 'closed' });
+			expectForbidden(
+				() => compile()({ _id: closed._id, _deleted: true }, closed, WAREHOUSE),
+				/Closed distribution_batch cannot be modified/
+			);
+		});
+
+		it.each([
+			['shelter_manager', MANAGER],
+			['registration_staff', REGISTRATION],
+			['supply_coordinator', SUPPLY_COORDINATOR]
+		])('rejects active to closing transition by %s', (_role, userCtx) => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expectForbidden(
+				() => compile()(closing, active, userCtx),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('allows same-shelter scoped warehouse_staff to close a batch', () => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expect(() => compile()(closing, active, SCOPED_WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects cross-shelter scoped warehouse_staff closing', () => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expectForbidden(
+				() => compile()(closing, active, CROSS_SHELTER_WAREHOUSE),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('enforces issue-gate admission, seal, and shelter-scoped role boundaries', () => {
+			const gate = {
+				...envelope,
+				schema_v: 1,
+				_id: `distribution_issue_gate:${'a'.repeat(64)}`,
+				type: 'distribution_issue_gate',
+				batch_id: 'distribution_batch:01J',
+				state: 'open',
+				pending_claims: []
+			};
+			const admitted = {
+				...gate,
+				pending_claims: [
+					{
+						operation_id: 'distribution_issue_idempotency:op',
+						issue_id: 'distribution_issue:01J00000000000000000000000',
+						claimed_at: '2026-07-22T00:00:00.000Z'
+					}
+				]
+			};
+			const sealed = {
+				...gate,
+				state: 'sealed',
+				closing_operation_id: '01J00000000000000000000000'
+			};
+			expect(() => compile()(admitted, gate, REGISTRATION)).not.toThrow();
+			expect(() => compile()(sealed, gate, WAREHOUSE)).not.toThrow();
+			expectForbidden(() => compile()(sealed, gate, REGISTRATION), /seal issue gate/);
+			expectForbidden(() => compile()(admitted, gate, WAREHOUSE), /open issue gate claims/);
+			expectForbidden(
+				() => compile()(sealed, gate, { name: 'ws2', roles: ['SH002:warehouse_staff'] }),
+				/seal issue gate/
+			);
+		});
+
 		it('rejects modifying request_id on existing batch', () => {
 			const activating = batchDoc({ status: 'activating' });
 			const tampered = batchDoc({
@@ -1277,15 +1433,6 @@ describe('buildValidateDocUpdate', () => {
 			expectForbidden(
 				() => compile()(modifiedAllocs, activating, WAREHOUSE),
 				/Cannot modify allocations on distribution_batch/
-			);
-		});
-
-		it('rejects changing status of active batch', () => {
-			const active = batchDoc({ status: 'active' });
-			const tampered = batchDoc({ status: 'activating' });
-			expectForbidden(
-				() => compile()(tampered, active, WAREHOUSE),
-				/Active batch status cannot be changed/
 			);
 		});
 
