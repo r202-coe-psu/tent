@@ -32,7 +32,11 @@ import {
 	type SkillOption
 } from '../domain/skill-catalog';
 import type { Job, JobInput } from '../domain/job.schema';
-import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
+import type {
+	JobApplication,
+	JobApplicationInput,
+	JobApplicationStatus
+} from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
 import { jobRepository } from '../data/job.remote';
@@ -150,6 +154,17 @@ export const useJobApplicationByToken = (
 		queryFn: () => jobApplicationRepository().getByTrackingToken(token()),
 		enabled: enabled() && !!token()
 	}));
+
+/**
+ * Imperative counterpart to `useJobApplicationByToken`, for the on-site
+ * check-in scanner: a scan is a discrete action, not something to bind a
+ * reactive query to. Resolves a digital-pass ticket token to its
+ * `job_application` doc — `tracking_token`/`tracking_token_hash` live there
+ * (schema.md §2.18), never as a matchable plaintext field on `volunteer`
+ * itself (§2.8), so the caller must go through `job_application.volunteer_id`.
+ */
+export const findJobApplicationByToken = (token: string): Promise<JobApplication | null> =>
+	jobApplicationRepository().getByTrackingToken(token);
 
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 	createQuery(() => ({

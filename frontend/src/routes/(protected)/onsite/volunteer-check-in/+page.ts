@@ -1,6 +1,6 @@
-import { requireEvacueeRegistration } from '$lib/guards/auth';
+import { requireVolunteerCheckIn } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch }) => {
-	await requireEvacueeRegistration(fetch);
+	await requireVolunteerCheckIn(fetch);
 }) satisfies PageLoad;

@@ -12,17 +12,25 @@
 	 * — the scan input, search box, result panel and recent feed are each
 	 * their own `volunteer-*.svelte` component, composed here.
 	 *
-	 *   - A scanned/typed code resolves against the already-loaded `useVolunteers()`
-	 *     list (same "fetch once, filter client-side" convention
+	 *   - A scanned/typed code is normalized by `extractScanCode` (../domain/scan-code.ts)
+	 *     before matching, since the one QR volunteers actually carry — the public
+	 *     digital pass (`volunteer-portal/ui/digital-pass.svelte`) — encodes a full
+	 *     ticket URL (`.../volunteer/ticket/TKT-VOL-xxx`), not a bare code; this
+	 *     strips it down to the trailing path segment first. The normalized code
+	 *     is first tried against the already-loaded `useVolunteers()` list (same
+	 *     "fetch once, filter client-side" convention
 	 *     `people-tab.svelte`/`roster-attendance-tab.svelte` use for this
-	 *     feature) — by `_id`, `volunteer_code` (the "V-xxx" badge every
-	 *     profile carries), `tracking_token`, or an exact full 10-digit phone
-	 *     match (not last-4, so two volunteers sharing a last-4 never collide
-	 *     on a scan/type match — the "ค้นหาด่วน" fallback still lists every
-	 *     partial name/phone match). There is no dedicated volunteer QR
-	 *     artifact yet (flagged for a future CR); until one exists,
-	 *     `volunteer_code` is the practical scan target front-desk
-	 *     badges/printouts can encode.
+	 *     feature) — by `_id`, `volunteer_code` (the "V-xxx" badge every profile
+	 *     carries), or an exact full 10-digit phone match (not last-4, so two
+	 *     volunteers sharing a last-4 never collide on a scan/type match — the
+	 *     "ค้นหาด่วน" fallback still lists every partial name/phone match).
+	 *     `volunteer` itself never carries a matchable plaintext ticket token
+	 *     (schema.md §2.8 has no such field; `tracking_token`/`tracking_token_hash`
+	 *     live on `job_application`, §2.18, generated + hashed once at apply time
+	 *     and never copied back) — a digital-pass scan that misses the local list
+	 *     falls through to `findJobApplicationByToken`, which hashes the code and
+	 *     queries `job_application` by `tracking_token_hash` (or legacy plaintext
+	 *     `tracking_token`), then resolves the volunteer via its `volunteer_id`.
 	 *   - The matched volunteer's TODAY `shift_assignment` (from
 	 *     `useTodayAttendance()`) drives check-in/out, reusing `roster-row.svelte`'s
 	 *     identity-verification gate verbatim (FR-VOL-11 "ต้องตรวจบัตร ปชช.
@@ -54,9 +62,11 @@
 		useHubMetrics,
 		useTodayAttendance,
 		useVolunteers,
-		useJobs
+		useJobs,
+		findJobApplicationByToken
 	} from '../application/queries';
 	import { DEFAULT_GRACE_MINUTES } from '../domain/duty-window';
+	import { extractScanCode } from '../domain/scan-code';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 
@@ -92,15 +102,13 @@
 		return `${v.first_name} ${v.last_name}`.trim();
 	}
 
-	function findVolunteerByCode(code: string): Volunteer | undefined {
-		const clean = code.trim();
+	function findVolunteerByCode(clean: string): Volunteer | undefined {
 		if (!clean) return undefined;
 		const idLookup = clean.startsWith('volunteer:') ? clean : `volunteer:${clean}`;
 		const lower = clean.toLowerCase();
 		return (
 			volunteers.find((v) => v._id === idLookup) ??
 			volunteers.find((v) => v.volunteer_code.toLowerCase() === lower) ??
-			volunteers.find((v) => !!v.tracking_token && v.tracking_token === clean) ??
 			(/^\d{10}$/.test(clean)
 				? volunteers.find((v) => (v.phone ?? '').replace(/\D/g, '') === clean)
 				: undefined)
@@ -112,18 +120,44 @@
 		notFoundCode = null;
 	}
 
-	function handleScanSubmit(code: string) {
+	function reportNotFound(code: string) {
+		matchedVolunteer = null;
+		notFoundCode = code;
+		toast.error(`ไม่พบรหัส "${code}" — โปรดตรวจสอบอีกครั้งหรือค้นหาด้วยชื่อ/เบอร์โทร`);
+	}
+
+	async function handleScanSubmit(code: string) {
 		isProcessing = true;
 		try {
-			const found = findVolunteerByCode(code);
-			if (!found) {
-				matchedVolunteer = null;
-				notFoundCode = code;
-				toast.error(`ไม่พบรหัส "${code}" — โปรดตรวจสอบอีกครั้งหรือค้นหาด้วยชื่อ/เบอร์โทร`);
+			const clean = extractScanCode(code);
+			if (!clean) {
+				reportNotFound(code);
 				return;
 			}
-			selectVolunteer(found);
-			toast.success(`พบข้อมูล ${fullName(found)}`);
+
+			const localMatch = findVolunteerByCode(clean);
+			if (localMatch) {
+				selectVolunteer(localMatch);
+				toast.success(`พบข้อมูล ${fullName(localMatch)}`);
+				return;
+			}
+
+			// Not a volunteer_code/_id/phone match — the scan may be a public
+			// digital-pass ticket QR. Its token only exists on `job_application`
+			// (tracking_token/tracking_token_hash), never as a matchable plaintext
+			// field on `volunteer` itself, so resolve it via the application's
+			// volunteer_id before giving up.
+			const application = await findJobApplicationByToken(clean).catch(() => null);
+			const viaTicket = application?.volunteer_id
+				? volunteersById.get(application.volunteer_id)
+				: undefined;
+
+			if (!viaTicket) {
+				reportNotFound(code);
+				return;
+			}
+			selectVolunteer(viaTicket);
+			toast.success(`พบข้อมูล ${fullName(viaTicket)}`);
 		} finally {
 			isProcessing = false;
 		}
