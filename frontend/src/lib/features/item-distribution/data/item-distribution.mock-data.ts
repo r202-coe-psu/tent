@@ -84,6 +84,14 @@ export function createMockCatalogItems(): CatalogItem[] {
 			unit: 'เครื่อง',
 			typeClass: 'EQUIPMENT',
 			defaultMode: 'borrow_return'
+		},
+		{
+			id: 'item-010',
+			name: 'รองเท้าบูทยาง',
+			category: 'เครื่องแต่งกาย/อุปกรณ์ปฏิบัติงาน',
+			unit: 'คู่',
+			typeClass: 'CONSUMABLE',
+			defaultMode: 'permanent'
 		}
 	];
 }
@@ -167,12 +175,51 @@ export function createMockReadyStockItems(): ReadyStockItem[] {
 			unit: 'แพ็ค',
 			location: 'จุดบริการสุขอนามัย',
 			mode: 'permanent'
+		},
+		{
+			id: 'stock-007',
+			item_id: 'item-010',
+			name: 'รองเท้าบูทยาง',
+			category: 'เครื่องแต่งกาย/อุปกรณ์ปฏิบัติงาน',
+			totalQuantity: 100,
+			availableQuantity: 45,
+			distributedQuantity: 55,
+			damagedQuantity: 0,
+			unit: 'คู่',
+			location: 'โซน B - จุดแจกจ่ายอุปกรณ์',
+			mode: 'permanent'
 		}
 	];
 }
 
 export function createMockRequisitions(): RequisitionTicket[] {
 	return [
+		{
+			ticket_code: 'TKT-DIST-51421',
+			hub_id: 'hub-psu-01',
+			hub_name: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
+			target_group: 'volunteer',
+			distribution_mode: 'permanent',
+			items: [
+				{
+					item_id: 'item-010',
+					name: 'รองเท้าบูทยาง',
+					quantity: 9,
+					unit: 'คู่',
+					distributed_qty: 9,
+					damaged_qty: 0,
+					returned_qty: 0
+				}
+			],
+			total_requested: 9,
+			total_distributed: 9,
+			total_damaged: 0,
+			total_returned: 0,
+			status: 'pending_approval',
+			created_at: '1 ก.ย. 69 20:07',
+			reason: 'คำร้องขอเบิกพัสดุเพื่อแจกจ่ายช่วยเหลืออาสาสมัคร [โหมด: แจกจ่ายขาด] (1 รายการ)',
+			requested_by: 'คุณ (เจ้าหน้าที่แจกจ่ายหน้างาน)'
+		},
 		{
 			ticket_code: 'TKT-DIST-23261',
 			hub_id: 'hub-psu-01',
