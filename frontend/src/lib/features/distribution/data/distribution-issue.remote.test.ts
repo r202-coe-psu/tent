@@ -954,6 +954,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				(r) => r.status === 'rejected'
 			) as PromiseRejectedResult;
 			expect(rejectedResult.reason).toBeInstanceOf(IssueConflictError);
+			const rejectedIdempotencyKey = resA.status === 'rejected' ? 'idem-one-A' : 'idem-one-B';
 			await expect(
 				repo.createIssue(
 					{
@@ -961,7 +962,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						evacuee_id: 'evacuee:01J1',
 						item_id: 'item:blanket',
 						qty: '1',
-						idempotency_key: 'idem-one-B'
+						idempotency_key: rejectedIdempotencyKey
 					},
 					regStaffCtx
 				)

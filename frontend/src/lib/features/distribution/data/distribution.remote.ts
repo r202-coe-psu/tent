@@ -2,12 +2,14 @@ import { allDocsByIds, allDocsByType, getDoc, putDoc, putDocStrict } from '$lib/
 import { getShelterDb } from '$lib/db/shelter';
 import { now, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-import { addQty, persistQty, qtyGt, qtyNeg, subQty } from '$lib/utils/qty';
+import { addQty, persistQty, qtyGt, qtyGte, qtyNeg, subQty } from '$lib/utils/qty';
 import {
 	hasStaffCapability,
 	isShelterManager,
 	isSystemAdmin,
-	isWarehouseStaff
+	isWarehouseStaff,
+	parseCompoundCapability,
+	WAREHOUSE_STAFF
 } from '$lib/auth/roles';
 import { ConflictError } from '$lib/utils/errors';
 import {
@@ -16,6 +18,7 @@ import {
 	createDistributionIssue,
 	createDistributionIssueIdempotency,
 	createDistributionIssueCapacity,
+	createDistributionIssueGate,
 	createDistributionOneTimeGuard,
 	createStockLotReservation,
 	canTransitionDistributionRequest,
@@ -24,6 +27,7 @@ import {
 	distributionIssueDocSchema,
 	distributionIssueIdempotencyDocSchema,
 	distributionIssueCapacityDocSchema,
+	distributionIssueGateDocSchema,
 	distributionOneTimeGuardDocSchema,
 	isDistributionIssue,
 	type DistributionAllocation,
@@ -37,12 +41,20 @@ import {
 	type DistributionIssue,
 	type DistributionIssueIdempotency,
 	type DistributionIssueCapacity,
+	type DistributionIssueGate,
 	type DistributionOneTimeGuard
 } from '../domain/distribution';
 import {
 	evaluateDistributionEligibility,
 	type EligibilityHistoryEntry
 } from '../domain/eligibility';
+import {
+	calculateReconciliation,
+	closeBatchInputSchema,
+	type CloseBatchInput,
+	type ReconciliationRow,
+	ReconciliationIntegrityError
+} from '../domain/reconciliation';
 import { isEvacuee, type Evacuee } from '$lib/features/people/domain/people';
 import {
 	createStockLedger,
@@ -64,15 +76,19 @@ import {
 	assertSemanticLedgerMatch,
 	assertSemanticIdempotencyMatch,
 	assertSemanticIssueMatch,
+	assertSemanticClosingMatch,
+	BatchClosingConflictError,
 	InsufficientStockError,
 	IntegrityError,
 	makeLotReservationDocId,
 	makeIssueIdempotencyDocId,
 	makeIssueCapacityDocId,
+	makeIssueGateDocId,
 	makeOneTimeGuardDocId,
 	ValidationError,
 	IssueConflictError,
 	IssueCapacityError,
+	IssueInFlightError,
 	RecipientNotActiveError,
 	DistributionEligibilityError
 } from './semantic-verify';
@@ -1019,6 +1035,553 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		return batchDoc;
 	}
 
+	private assertAuthorizedCloseBatch(ctx: AuthorContext): void {
+		if (!ctx.roles) {
+			throw new Error(
+				'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+			);
+		}
+		if (isSystemAdmin(ctx.roles)) return;
+
+		const scopedRole = `${ctx.shelterCode}:${WAREHOUSE_STAFF}`;
+		const hasSameShelterCompound = ctx.roles.includes(scopedRole);
+		const hasCapability = hasStaffCapability(ctx.roles, WAREHOUSE_STAFF, ctx.shelterCode);
+		const hasFlatRole = ctx.roles.includes(WAREHOUSE_STAFF);
+
+		const hasCrossShelterOnly =
+			ctx.roles.some((r) => {
+				const parsed = parseCompoundCapability(r);
+				return parsed && parsed.capability === WAREHOUSE_STAFF && parsed.code !== ctx.shelterCode;
+			}) &&
+			!hasSameShelterCompound &&
+			!hasCapability &&
+			!hasFlatRole;
+
+		if (hasCrossShelterOnly) {
+			throw new Error(
+				'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+			);
+		}
+
+		if (hasCapability || hasSameShelterCompound || hasFlatRole) {
+			return;
+		}
+
+		throw new Error(
+			'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+		);
+	}
+
+	private parseIssueGate(
+		doc: unknown,
+		docId: string,
+		batchId: string,
+		ctx: AuthorContext
+	): DistributionIssueGate {
+		const parsed = distributionIssueGateDocSchema.safeParse(doc);
+		if (!parsed.success || parsed.data._id !== docId || parsed.data.batch_id !== batchId) {
+			throw new IntegrityError(`Issue gate ${docId} is malformed`);
+		}
+		if (parsed.data.shelter_code !== ctx.shelterCode) {
+			throw new IntegrityError(`Issue gate ${docId} belongs to another shelter`);
+		}
+		return parsed.data as DistributionIssueGate;
+	}
+
+	private async acquireIssueGateClaimWithRetry(
+		batchId: string,
+		operationId: string,
+		issueId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		const hash = docId.slice('distribution_issue_gate:'.length);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) {
+					await putDocStrict<DistributionIssueGate>(
+						this.dbName,
+						createDistributionIssueGate(
+							{
+								batch_id: batchId,
+								state: 'open',
+								pending_claims: [
+									{ operation_id: operationId, issue_id: issueId, claimed_at: now() }
+								]
+							},
+							hash,
+							ctx
+						)
+					);
+					return;
+				}
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					throw new ValidationError(
+						`Distribution batch ${batchId} is closing and cannot accept new issues`
+					);
+				}
+				const mine = gate.pending_claims.find((claim) => claim.operation_id === operationId);
+				if (mine) {
+					if (mine.issue_id !== issueId)
+						throw new IssueConflictError(
+							'Existing issue gate claim does not match operation intent'
+						);
+					return;
+				}
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					pending_claims: [
+						...gate.pending_claims,
+						{ operation_id: operationId, issue_id: issueId, claimed_at: now() }
+					],
+					updated_at: now()
+				});
+				return;
+			} catch (err) {
+				if (
+					!(err instanceof ConflictError) &&
+					!(err instanceof Error && err.message.includes('Conflict'))
+				)
+					throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async releaseIssueGateClaimWithRetry(
+		batchId: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) return;
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					if (gate.pending_claims.some((claim) => claim.operation_id === operationId)) {
+						throw new IntegrityError(`Sealed issue gate ${docId} retains an admitted issue claim`);
+					}
+					return;
+				}
+				if (!gate.pending_claims.some((claim) => claim.operation_id === operationId)) return;
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					pending_claims: gate.pending_claims.filter((claim) => claim.operation_id !== operationId),
+					updated_at: now()
+				});
+				return;
+			} catch (err) {
+				if (
+					!(err instanceof ConflictError) &&
+					!(err instanceof Error && err.message.includes('Conflict'))
+				)
+					throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async sealIssueGateWithRetry(
+		batchId: string,
+		closingOperationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		const hash = docId.slice('distribution_issue_gate:'.length);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) {
+					await putDocStrict<DistributionIssueGate>(
+						this.dbName,
+						createDistributionIssueGate(
+							{ batch_id: batchId, state: 'open', pending_claims: [] },
+							hash,
+							ctx
+						)
+					);
+					continue;
+				}
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					throw new BatchClosingConflictError(`Batch ${batchId} is already sealed for closing`);
+				}
+				if (gate.pending_claims.length > 0) {
+					throw new IssueInFlightError(
+						`Cannot close batch ${batchId}: ${gate.pending_claims.length} admitted issue operation(s) remain`
+					);
+				}
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					state: 'sealed',
+					pending_claims: [],
+					closing_operation_id: closingOperationId,
+					updated_at: now()
+				});
+				return;
+			} catch (err) {
+				if (
+					!(err instanceof ConflictError) &&
+					!(err instanceof Error && err.message.includes('Conflict'))
+				)
+					throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async reopenIssueGateBeforeForwardCommit(
+		batchId: string,
+		closingOperationId: string,
+		ctx: AuthorContext
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		const rawBatch = await getDoc<DistributionBatch>(this.dbName, batchId);
+		const rawGate = await getDoc<DistributionIssueGate>(this.dbName, docId);
+		if (!rawBatch || !rawGate || rawBatch.status !== 'active') return;
+		const gate = this.parseIssueGate(rawGate, docId, batchId, ctx);
+		if (gate.state !== 'sealed' || gate.closing_operation_id !== closingOperationId) return;
+		await putDocStrict<DistributionIssueGate>(this.dbName, {
+			...gate,
+			state: 'open',
+			closing_operation_id: undefined,
+			updated_at: now()
+		});
+	}
+
+	async closeBatch(
+		batchId: string,
+		rawInput: CloseBatchInput,
+		ctx: AuthorContext
+	): Promise<DistributionBatch> {
+		// 1. Authorize role: only warehouse_staff scoped to this shelter or system_admin
+		this.assertAuthorizedCloseBatch(ctx);
+
+		if (!batchId || !batchId.startsWith('distribution_batch:')) {
+			throw new ValidationError('Valid distribution_batch batch_id is required');
+		}
+
+		// 2. Parse client input (strictly operator-entered reconciliation facts)
+		const parsedInput = closeBatchInputSchema.parse(rawInput ?? {});
+
+		// 3. Load authoritative batch
+		const rawBatch = await getDoc<DistributionBatch>(this.dbName, batchId);
+		if (!rawBatch) {
+			throw new Error(`Distribution batch ${batchId} not found`);
+		}
+		const batchParse = distributionBatchDocSchema.safeParse(rawBatch);
+		if (!batchParse.success) {
+			throw new IntegrityError(`Distribution batch ${batchId} is malformed`);
+		}
+		const batch = batchParse.data as DistributionBatch;
+
+		if (batch.shelter_code !== ctx.shelterCode) {
+			throw new Error('Cross-shelter access denied');
+		}
+
+		// 4. Handle terminal and in-progress states
+		if (batch.status === 'closed') {
+			if (!batch.reconciliation || batch.reconciliation.length === 0) {
+				throw new IntegrityError(
+					`Closed batch ${batchId} is missing persisted reconciliation snapshot`
+				);
+			}
+			if (parsedInput.reconciliation.length > 0) {
+				assertSemanticClosingMatch(batch.reconciliation, parsedInput.reconciliation);
+			}
+			return batch;
+		}
+
+		if (batch.status === 'activating') {
+			throw new ValidationError(`Distribution batch ${batchId} is activating and cannot be closed`);
+		}
+
+		let closingOperationId: string;
+		let closingOccurredAt: string;
+		let reconciliationRows: ReconciliationRow[];
+		let forwardCommitted = false;
+
+		if (batch.status === 'closing') {
+			// Resume existing closing operation
+			if (!batch.closing_operation_id) {
+				throw new IntegrityError(`Closing batch ${batchId} is missing closing_operation_id`);
+			}
+			if (!batch.reconciliation || batch.reconciliation.length === 0) {
+				throw new IntegrityError(
+					`Closing batch ${batchId} is missing persisted reconciliation snapshot`
+				);
+			}
+			if (parsedInput.reconciliation.length > 0) {
+				assertSemanticClosingMatch(batch.reconciliation, parsedInput.reconciliation);
+			}
+			closingOperationId = batch.closing_operation_id;
+			closingOccurredAt = batch.updated_at;
+			reconciliationRows = batch.reconciliation;
+		} else if (batch.status === 'active') {
+			// 5. Seal the batch-wide Issue gate before reading the authoritative Issue snapshot.
+			// Gate admission and gate sealing CAS on the same `_rev`, so no Issue can cross this boundary.
+			closingOperationId = ulid();
+			await this.sealIssueGateWithRetry(batch._id, closingOperationId, ctx);
+			try {
+				// Defense-in-depth: legacy capacity claims remain an in-flight close blocker.
+				for (const item of batch.items) {
+					const capDocId = await makeIssueCapacityDocId(batch._id, item.item_id);
+					const rawCapDoc = await getDoc<DistributionIssueCapacity>(this.dbName, capDocId);
+					if (rawCapDoc) {
+						const capDoc = this.parseCapacityDoc(rawCapDoc, capDocId, batch._id, item.item_id, ctx);
+						if (capDoc.pending_claims && capDoc.pending_claims.length > 0) {
+							throw new IssueInFlightError(
+								`Cannot close batch ${batch._id}: item ${item.item_id} has ${capDoc.pending_claims.length} issue claim(s) in flight`
+							);
+						}
+					}
+				}
+
+				// 6. Derive authoritative distributed quantity from committed persisted issues
+				const committedIssues = await this.listIssuesByBatch(batch._id);
+				const distributedByItem = new Map<string, string>();
+				for (const issue of committedIssues) {
+					distributedByItem.set(
+						issue.item_id,
+						addQty(distributedByItem.get(issue.item_id) ?? '0', issue.qty)
+					);
+				}
+
+				// 7. Map operator inputs and validate against authoritative allocations
+				type ParsedCloseBatchItem = (typeof parsedInput.reconciliation)[number];
+				const inputByLot = new Map<string, ParsedCloseBatchItem>();
+				const inputByItem = new Map<string, ParsedCloseBatchItem>();
+				for (const userRow of parsedInput.reconciliation) {
+					if (userRow.lot_ref) {
+						const allocMatch = batch.allocations.find((a) => a.lot_ref === userRow.lot_ref);
+						if (!allocMatch) {
+							throw new ValidationError(
+								`Reconciliation lot_ref ${userRow.lot_ref} is not allocated to batch ${batch._id}`
+							);
+						}
+						if (allocMatch.item_id !== userRow.item_id) {
+							throw new ValidationError(
+								`Reconciliation item_id ${userRow.item_id} does not match allocated item ${allocMatch.item_id} for lot ${userRow.lot_ref}`
+							);
+						}
+						inputByLot.set(userRow.lot_ref, userRow);
+					} else {
+						const itemMatch = batch.items.find((i) => i.item_id === userRow.item_id);
+						if (!itemMatch) {
+							throw new ValidationError(
+								`Reconciliation item_id ${userRow.item_id} is not present in batch ${batch._id}`
+							);
+						}
+						inputByItem.set(userRow.item_id, userRow);
+					}
+				}
+
+				// 8. Lot-level reconciliation calculation preserving Physical Lot identity & avoiding multi-lot duplication
+				reconciliationRows = [];
+				for (const item of batch.items) {
+					let remainingDistributed = distributedByItem.get(item.item_id) ?? '0';
+					const itemAllocations = batch.allocations.filter((a) => a.item_id === item.item_id);
+
+					const itemLevelInput = inputByItem.get(item.item_id);
+					let remainingDamaged = itemLevelInput ? itemLevelInput.damaged_qty : '0';
+					let remainingLost = itemLevelInput ? itemLevelInput.lost_qty : '0';
+
+					for (const alloc of itemAllocations) {
+						let distributedForAlloc: string;
+						if (qtyGte(remainingDistributed, alloc.qty)) {
+							distributedForAlloc = alloc.qty;
+							remainingDistributed = subQty(remainingDistributed, alloc.qty);
+						} else {
+							distributedForAlloc = remainingDistributed;
+							remainingDistributed = '0';
+						}
+
+						const lotSpecificInput = inputByLot.get(alloc.lot_ref);
+						let damagedQty = '0';
+						let lostQty = '0';
+						let damagedNote: string | undefined = undefined;
+						let lostNote: string | undefined = undefined;
+
+						if (lotSpecificInput) {
+							damagedQty = lotSpecificInput.damaged_qty;
+							lostQty = lotSpecificInput.lost_qty;
+							damagedNote = lotSpecificInput.damaged_note;
+							lostNote = lotSpecificInput.lost_note;
+						} else if (itemLevelInput) {
+							const availableUndistributed = subQty(alloc.qty, distributedForAlloc);
+							if (qtyGt(remainingDamaged, 0)) {
+								if (qtyGte(availableUndistributed, remainingDamaged)) {
+									damagedQty = remainingDamaged;
+									remainingDamaged = '0';
+								} else {
+									damagedQty = availableUndistributed;
+									remainingDamaged = subQty(remainingDamaged, availableUndistributed);
+								}
+								damagedNote = itemLevelInput.damaged_note;
+							}
+							const capacityAfterDamage = subQty(availableUndistributed, damagedQty);
+							if (qtyGt(remainingLost, 0)) {
+								if (qtyGte(capacityAfterDamage, remainingLost)) {
+									lostQty = remainingLost;
+									remainingLost = '0';
+								} else {
+									lostQty = capacityAfterDamage;
+									remainingLost = subQty(remainingLost, capacityAfterDamage);
+								}
+								lostNote = itemLevelInput.lost_note;
+							}
+						}
+
+						const reconRow = calculateReconciliation({
+							item_id: alloc.item_id,
+							lot_ref: alloc.lot_ref,
+							allocated_qty: alloc.qty,
+							distributed_qty: distributedForAlloc,
+							damaged_qty: damagedQty,
+							lost_qty: lostQty,
+							damaged_note: damagedNote,
+							lost_note: lostNote
+						});
+						reconciliationRows.push(reconRow);
+					}
+
+					if (qtyGt(remainingDistributed, 0)) {
+						throw new ReconciliationIntegrityError(
+							`Total distributed quantity for item ${item.item_id} exceeds total allocated quantity in batch ${batch._id}`
+						);
+					}
+					if (qtyGt(remainingDamaged, 0) || qtyGt(remainingLost, 0)) {
+						throw new ReconciliationIntegrityError(
+							`Reported damaged (${itemLevelInput?.damaged_qty}) or lost (${itemLevelInput?.lost_qty}) exceeds remaining undistributed stock for item ${item.item_id}`
+						);
+					}
+				}
+
+				// 9. CAS active -> closing with authoritative snapshot (closed_at and closed_by deferred to final closed state)
+				closingOccurredAt = now();
+				const closingBatch: DistributionBatch = {
+					...batch,
+					status: 'closing',
+					closing_operation_id: closingOperationId,
+					reconciliation: reconciliationRows,
+					closed_by: undefined,
+					closed_at: undefined,
+					updated_at: closingOccurredAt
+				};
+				await putDocStrict<DistributionBatch>(this.dbName, closingBatch);
+				forwardCommitted = true;
+			} catch (err) {
+				if (!forwardCommitted) {
+					try {
+						await this.reopenIssueGateBeforeForwardCommit(batch._id, closingOperationId, ctx);
+					} catch (reopenError) {
+						throw new IntegrityError(
+							`Close gate recovery could not be confirmed: ${String(reopenError)}`
+						);
+					}
+				}
+				throw err;
+			}
+		} else {
+			throw new ValidationError(`Distribution batch ${batchId} has invalid status ${batch.status}`);
+		}
+
+		// 10. Prepare return plan & write deterministic return stock ledgers (Step 3 compatible)
+		const returnLedgerIds: string[] = [];
+		for (let idx = 0; idx < reconciliationRows.length; idx++) {
+			const row = reconciliationRows[idx];
+			if (qtyGt(row.return_qty, 0)) {
+				const ledgerIdSuffix = `${closingOperationId}:${idx}`;
+				const ledgerId = `stock_ledger:${ledgerIdSuffix}`;
+				const alloc = batch.allocations.find((a) => a.lot_ref === row.lot_ref);
+				const batchItem = batch.items.find((i) => i.item_id === row.item_id);
+
+				const returnLedger = createStockLedger(
+					{
+						item_id: row.item_id,
+						qty: persistQty(row.return_qty),
+						unit: batchItem?.unit ?? 'unit',
+						reason: 'distribution_return',
+						ref_id: batch._id,
+						lot_ref: row.lot_ref,
+						...(alloc?.lot ? { lot: alloc.lot } : {}),
+						occurred_at: closingOccurredAt
+					},
+					ctx,
+					ledgerIdSuffix
+				);
+
+				const writtenLedger = await putDoc(this.dbName, returnLedger, undefined, {
+					onConflict: 'return-existing'
+				});
+
+				assertSemanticLedgerMatch(writtenLedger, {
+					_id: ledgerId,
+					item_id: row.item_id,
+					qty: persistQty(row.return_qty),
+					unit: batchItem?.unit ?? 'unit',
+					reason: 'distribution_return',
+					ref_id: batch._id,
+					lot_ref: row.lot_ref,
+					shelter_code: ctx.shelterCode,
+					occurred_at: closingOccurredAt,
+					...(alloc?.lot ? { lot: alloc.lot } : {})
+				});
+
+				returnLedgerIds.push(ledgerId);
+			}
+		}
+
+		// 11. CAS closing -> closed (closed_at and closed_by set strictly at this terminal transition)
+		const latestClosingBatch = await getDoc<DistributionBatch>(this.dbName, batch._id);
+		if (!latestClosingBatch) {
+			throw new IntegrityError(`Closing batch ${batch._id} not found during final close step`);
+		}
+
+		const closedBatch: DistributionBatch = {
+			...latestClosingBatch,
+			status: 'closed',
+			return_ledger_ids: returnLedgerIds,
+			reconciliation: reconciliationRows,
+			closed_by: ctx.createdBy,
+			closed_at: now(),
+			updated_at: now()
+		};
+
+		try {
+			return await putDocStrict<DistributionBatch>(this.dbName, closedBatch);
+		} catch (err) {
+			if (
+				err instanceof ConflictError ||
+				(err instanceof Error && err.message.includes('Conflict'))
+			) {
+				const current = await getDoc<DistributionBatch>(this.dbName, batch._id);
+				if (
+					current &&
+					current.status === 'closed' &&
+					current.closing_operation_id === closingOperationId
+				) {
+					// Verify semantic match on already-closed batch
+					assertSemanticClosingMatch(current.reconciliation, reconciliationRows);
+					if (JSON.stringify(current.return_ledger_ids) !== JSON.stringify(returnLedgerIds)) {
+						throw new IntegrityError(
+							`Concurrent close of batch ${batch._id} produced different return_ledger_ids`
+						);
+					}
+					return current;
+				}
+			}
+			throw err;
+		}
+	}
+
 	private assertAuthorizedIssueStaff(ctx: AuthorContext): void {
 		if (
 			!ctx.roles ||
@@ -1588,6 +2151,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				shelter_code: ctx.shelterCode
 			});
 			// Clean up any stale claims and return existing issue
+			await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
 			await this.releaseCapacityClaimWithRetry(input.batch_id, input.item_id, operationId, ctx, 3);
 			if (authoritativeDistributionType === 'one_time') {
 				await this.releaseOneTimeClaimWithRetry(
@@ -1601,11 +2165,16 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			return parsedIssue;
 		}
 
+		let gateClaimAcquired = false;
 		let oneTimeClaimAcquired = false;
 		let capacityClaimAcquired = false;
 
 		try {
-			// 6. Frozen Order: ONE-TIME GUARD -> CAPACITY GUARD
+			// 6. Frozen order: BATCH GATE -> ONE-TIME GUARD -> CAPACITY GUARD.
+			// The gate claim is the shared admission barrier used by closeBatch.
+			await this.acquireIssueGateClaimWithRetry(input.batch_id, operationId, effectiveIssueId, ctx);
+			gateClaimAcquired = true;
+
 			if (authoritativeDistributionType === 'one_time') {
 				await this.acquireOneTimeGuardWithRetry(
 					input.evacuee_id,
@@ -1678,6 +2247,14 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				effectiveIssueUlid
 			);
 
+			// Double-check batch status right before persist to prevent race with closeBatch
+			const latestBatch = await getDoc<DistributionBatch>(this.dbName, input.batch_id);
+			if (!latestBatch || latestBatch.status !== 'active') {
+				throw new ValidationError(
+					`Distribution batch ${input.batch_id} must be active to issue goods (status: ${latestBatch?.status})`
+				);
+			}
+
 			const rawPersistedIssue = await putDoc<DistributionIssue>(this.dbName, newIssue, undefined, {
 				onConflict: 'return-existing'
 			});
@@ -1714,6 +2291,8 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				);
 				oneTimeClaimAcquired = false;
 			}
+			await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
+			gateClaimAcquired = false;
 
 			return persistedIssue;
 		} catch (err) {
@@ -1735,6 +2314,8 @@ export class DistributionRemoteRepository implements DistributionRepository {
 						ctx,
 						3
 					);
+				if (gateClaimAcquired)
+					await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
 			} catch (cleanupError) {
 				throw new IntegrityError(
 					`Issue pre-commit cleanup could not be confirmed: ${String(cleanupError)}`
