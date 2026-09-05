@@ -564,6 +564,68 @@ export function createDistributionIssueCapacity(
 	) as DistributionIssueCapacity;
 }
 
+/** Batch-wide CAS authority coordinating Issue admission against Batch closing. */
+export const distributionIssueGateStateSchema = z.enum(['open', 'sealed']);
+export type DistributionIssueGateState = z.infer<typeof distributionIssueGateStateSchema>;
+
+export const issueGatePendingClaimSchema = z.object({
+	operation_id: z.string().min(1),
+	issue_id: distributionIssueIdSchema,
+	claimed_at: z.string().datetime()
+});
+export type IssueGatePendingClaim = z.infer<typeof issueGatePendingClaimSchema>;
+
+export const distributionIssueGateInputSchema = z
+	.object({
+		batch_id: distributionBatchIdSchema,
+		state: distributionIssueGateStateSchema.default('open'),
+		pending_claims: z.array(issueGatePendingClaimSchema).default([]),
+		closing_operation_id: z.string().min(1).optional()
+	})
+	.superRefine((gate, ctx) => {
+		if (gate.state === 'open' && gate.closing_operation_id) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['closing_operation_id'],
+				message: 'Open gate cannot have closing operation'
+			});
+		}
+		if (gate.state === 'sealed' && !gate.closing_operation_id) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['closing_operation_id'],
+				message: 'Sealed gate requires closing operation'
+			});
+		}
+		if (gate.state === 'sealed' && gate.pending_claims.length > 0) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['pending_claims'],
+				message: 'Sealed gate cannot retain issue claims'
+			});
+		}
+	});
+export type DistributionIssueGateInput = z.input<typeof distributionIssueGateInputSchema>;
+
+export const distributionIssueGateDocSchema = distributionIssueGateInputSchema.safeExtend({
+	_id: z.string().regex(/^distribution_issue_gate:[0-9a-f]{64}$/),
+	type: z.literal('distribution_issue_gate'),
+	...baseDocShape
+});
+export type DistributionIssueGate = BaseDoc & z.infer<typeof distributionIssueGateDocSchema>;
+
+export function createDistributionIssueGate(
+	input: DistributionIssueGateInput,
+	hash: string,
+	ctx: AuthorContext
+): DistributionIssueGate {
+	const parsed = distributionIssueGateInputSchema.parse(input);
+	if (!hash.trim()) throw new Error('hash is required');
+	return distributionIssueGateDocSchema.parse(
+		makeDoc('distribution_issue_gate', 1, parsed, ctx, hash)
+	) as DistributionIssueGate;
+}
+
 export const oneTimeGuardPendingClaimSchema = z.object({
 	operation_id: z.string().min(1),
 	issue_id: distributionIssueIdSchema,

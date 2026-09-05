@@ -32,6 +32,11 @@ export {
 	distributionIssueCapacityInputSchema,
 	distributionIssueCapacityDocSchema,
 	createDistributionIssueCapacity,
+	distributionIssueGateStateSchema,
+	issueGatePendingClaimSchema,
+	distributionIssueGateInputSchema,
+	distributionIssueGateDocSchema,
+	createDistributionIssueGate,
 	oneTimeGuardPendingClaimSchema,
 	distributionOneTimeGuardInputSchema,
 	distributionOneTimeGuardDocSchema,
@@ -59,6 +64,10 @@ export {
 	type IssueCapacityPendingClaim,
 	type DistributionIssueCapacityInput,
 	type DistributionIssueCapacity,
+	type DistributionIssueGateState,
+	type IssueGatePendingClaim,
+	type DistributionIssueGateInput,
+	type DistributionIssueGate,
 	type OneTimeGuardPendingClaim,
 	type DistributionOneTimeGuardInput,
 	type DistributionOneTimeGuard,
@@ -87,8 +96,12 @@ export {
 	reconciliationRowSchema,
 	calculateReconciliation,
 	ReconciliationIntegrityError,
+	closeBatchItemInputSchema,
+	closeBatchInputSchema,
 	type ReconciliationInput,
-	type ReconciliationRow
+	type ReconciliationRow,
+	type CloseBatchItemInput,
+	type CloseBatchInput
 } from './domain/reconciliation';
 
 export {
@@ -155,14 +168,18 @@ export {
 	ValidationError,
 	IssueConflictError,
 	IssueCapacityError,
+	IssueInFlightError,
+	BatchClosingConflictError,
 	RecipientNotActiveError,
 	DistributionEligibilityError,
 	makeLotReservationDocId,
 	makeIssueIdempotencyDocId,
 	makeIssueCapacityDocId,
+	makeIssueGateDocId,
 	makeOneTimeGuardDocId,
 	assertSemanticLedgerMatch,
 	assertSemanticBatchMatch,
 	assertSemanticIdempotencyMatch,
-	assertSemanticIssueMatch
+	assertSemanticIssueMatch,
+	assertSemanticClosingMatch
 } from './data/semantic-verify';

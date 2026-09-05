@@ -8,6 +8,7 @@ import type {
 	DistributionIssue
 } from '../domain/distribution';
 import type { RepeatOverrideReason } from '../domain/eligibility';
+import type { CloseBatchInput } from '../domain/reconciliation';
 
 export interface DistributionAllocationInput {
 	item_id: string;
@@ -67,6 +68,11 @@ export interface DistributionRepository {
 		status: DistributionBatchStatus | undefined,
 		ctx: AuthorContext
 	): Promise<DistributionBatch[]>;
+	closeBatch(
+		batchId: string,
+		input: CloseBatchInput,
+		ctx: AuthorContext
+	): Promise<DistributionBatch>;
 
 	listActiveRecipients(ctx: AuthorContext, search?: string): Promise<DistributionRecipient[]>;
 	getRecipient(id: string, ctx: AuthorContext): Promise<DistributionRecipient | null>;

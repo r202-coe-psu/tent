@@ -39,6 +39,48 @@ export const reconciliationRowSchema = reconciliationInputSchema.safeExtend({
 
 export type ReconciliationRow = z.infer<typeof reconciliationRowSchema>;
 
+/**
+ * Client-provided input contract for closing a batch.
+ * The client is authoritative ONLY for operator-entered facts (damaged, lost, notes).
+ * It CANNOT specify allocated_qty, distributed_qty, return_qty, status, or timestamps.
+ */
+export const closeBatchItemInputSchema = z
+	.object({
+		item_id: z.string().min(1),
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/, 'lot_ref must reference a stock ledger')
+			.optional(),
+		damaged_qty: qtyStrCoerceNonNegativeSchema.default('0'),
+		lost_qty: qtyStrCoerceNonNegativeSchema.default('0'),
+		damaged_note: optionalAuditNoteSchema,
+		lost_note: optionalAuditNoteSchema
+	})
+	.superRefine((row, ctx) => {
+		if (qtyGt(row.damaged_qty, 0) && !row.damaged_note) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['damaged_note'],
+				message: 'damaged_note is required when damaged_qty is greater than zero'
+			});
+		}
+		if (qtyGt(row.lost_qty, 0) && !row.lost_note) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lost_note'],
+				message: 'lost_note is required when lost_qty is greater than zero'
+			});
+		}
+	});
+
+export type CloseBatchItemInput = z.input<typeof closeBatchItemInputSchema>;
+
+export const closeBatchInputSchema = z.object({
+	reconciliation: z.array(closeBatchItemInputSchema).default([])
+});
+
+export type CloseBatchInput = z.input<typeof closeBatchInputSchema>;
+
 export class ReconciliationIntegrityError extends Error {
 	constructor(message: string) {
 		super(message);
