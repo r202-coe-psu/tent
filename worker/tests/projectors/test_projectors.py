@@ -14,11 +14,18 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.projectors.occupancy import aggregate_occupancy
 from worker.projectors.shelter import (
     is_shelter_open,
     map_public_shelter_status,
     project_shelter,
     resolve_site_kind,
+)
+from worker.projectors.stock import (
+    calculate_reorder_threshold,
+    category_to_type_code,
+    compute_shelter_stocks,
+    resolve_reorder_threshold,
 )
 
 
@@ -516,3 +523,259 @@ def test_compute_needs_without_ledgers_behaves_as_before():
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
     )
     assert remaining["item:rice"] == "450.0"
+
+
+# --- EXT-005: aggregate_occupancy (pure) ---
+
+
+def _active_evacuee(**overrides) -> dict:
+    doc = {
+        "_id": "evacuee:01",
+        "type": "evacuee",
+        "gender": "male",
+        "current_stay": {"status": "active"},
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_aggregate_occupancy_counts_only_active_evacuees():
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "gender": "female",
+                "current_stay": {"status": "checked_out"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "gender": "female",
+                "current_stay": {"status": "pre_registered"},
+            },
+        ]
+    )
+    assert total == 1
+    assert breakdown["male"] == 1
+    assert breakdown["female"] == 0
+
+
+def test_aggregate_occupancy_gender_split():
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", gender="male"),
+            _active_evacuee(_id="e2", gender="female"),
+            _active_evacuee(_id="e3", gender="other"),
+        ]
+    )
+    assert total == 3
+    assert breakdown["male"] == 1
+    assert breakdown["female"] == 1
+
+
+def test_aggregate_occupancy_age_buckets():
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", age=3),
+            _active_evacuee(_id="e2", age=61),
+            _active_evacuee(_id="e3", age=30),
+        ]
+    )
+    assert total == 3
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
+def test_aggregate_occupancy_special_needs_tags_are_case_insensitive():
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", special_needs=["Pregnant"]),
+            _active_evacuee(_id="e2", special_needs=["bedridden", "disabled"]),
+        ]
+    )
+    assert total == 2
+    assert breakdown["pregnant"] == 1
+    assert breakdown["bedridden"] == 1
+    assert breakdown["disabled"] == 1
+
+
+def test_aggregate_occupancy_overlapping_groups_do_not_sum_to_total():
+    """ODT EXT-005 note — breakdown groups may overlap and needn't sum to total."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(
+                _id="e1", age=61, gender="female", special_needs=["bedridden"]
+            )
+        ]
+    )
+    assert total == 1
+    assert breakdown["female"] == 1
+    assert breakdown["elderly_over_60"] == 1
+    assert breakdown["bedridden"] == 1
+
+
+def test_aggregate_occupancy_ignores_non_evacuee_docs_and_missing_age():
+    total, breakdown = aggregate_occupancy(
+        [
+            {"_id": "x1", "type": "household"},
+            _active_evacuee(_id="e1", age=None),
+        ]
+    )
+    assert total == 1
+    assert breakdown["child_under_5"] == 0
+    assert breakdown["elderly_over_60"] == 0
+
+
+def test_aggregate_occupancy_empty_list():
+    total, breakdown = aggregate_occupancy([])
+    assert total == 0
+    assert breakdown == {
+        "male": 0,
+        "female": 0,
+        "child_under_5": 0,
+        "elderly_over_60": 0,
+        "pregnant": 0,
+        "bedridden": 0,
+        "disabled": 0,
+    }
+
+
+# --- EXT-004/006: stock projector (pure) ---
+
+
+def test_category_to_type_code_maps_known_categories():
+    assert category_to_type_code("food") == "food"
+    assert category_to_type_code("medicine") == "medication"
+    assert category_to_type_code("medical equipment") == "medical-equipment"
+
+
+def test_category_to_type_code_falls_back_to_genaral():
+    """`genaral` (M6's own spelling) is the intentional catch-all — CR-109 / ADR 0002."""
+    assert category_to_type_code("hygiene") == "genaral"
+    assert category_to_type_code(None) == "genaral"
+    assert category_to_type_code("") == "genaral"
+
+
+def test_calculate_reorder_threshold_daily():
+    # 100 occupants * 3 L/person/day * 2 days reserve = 600
+    assert (
+        calculate_reorder_threshold(
+            100, consumption_rate="3", target_reserve_days=2, timeframe="daily"
+        )
+        == 600.0
+    )
+
+
+def test_calculate_reorder_threshold_weekly_divides_by_seven():
+    assert (
+        calculate_reorder_threshold(
+            70, consumption_rate="7", target_reserve_days=1, timeframe="weekly"
+        )
+        == 70.0
+    )
+
+
+def test_calculate_reorder_threshold_missing_inputs_returns_none():
+    assert (
+        calculate_reorder_threshold(
+            100, consumption_rate=None, target_reserve_days=2, timeframe=None
+        )
+        is None
+    )
+    assert (
+        calculate_reorder_threshold(
+            100, consumption_rate="3", target_reserve_days=None, timeframe=None
+        )
+        is None
+    )
+
+
+def test_resolve_reorder_threshold_override_reorder_level_wins_without_rate():
+    threshold = resolve_reorder_threshold(
+        occupancy=100,
+        item={"consumption_rate": None, "target_reserve_days": None, "timeframe": None},
+        override={
+            "reorder_level": 50,
+            "consumption_rate": None,
+            "target_reserve_days": None,
+        },
+    )
+    assert threshold == 50.0
+
+
+def test_resolve_reorder_threshold_override_rate_takes_priority_over_reorder_level():
+    threshold = resolve_reorder_threshold(
+        occupancy=100,
+        item={
+            "consumption_rate": None,
+            "target_reserve_days": None,
+            "timeframe": "daily",
+        },
+        override={
+            "reorder_level": 999,
+            "consumption_rate": "1",
+            "target_reserve_days": 2,
+        },
+    )
+    assert threshold == 200.0
+
+
+def test_resolve_reorder_threshold_falls_back_to_catalog_item_when_no_override():
+    threshold = resolve_reorder_threshold(
+        occupancy=100,
+        item={"consumption_rate": "3", "target_reserve_days": 2, "timeframe": "daily"},
+        override=None,
+    )
+    assert threshold == 600.0
+
+
+def test_resolve_reorder_threshold_none_when_nothing_configured():
+    assert (
+        resolve_reorder_threshold(
+            occupancy=100,
+            item={
+                "consumption_rate": None,
+                "target_reserve_days": None,
+                "timeframe": None,
+            },
+            override=None,
+        )
+        is None
+    )
+
+
+def test_compute_shelter_stocks_maps_fields_and_keeps_zero_balances():
+    ledgers = [
+        {"type": "stock_ledger", "item_id": "item:rice", "qty": "480"},
+        {"type": "stock_ledger", "item_id": "item:blanket", "qty": "120"},
+        {"type": "stock_ledger", "item_id": "item:soap", "qty": "10"},
+        {"type": "stock_ledger", "item_id": "item:soap", "qty": "-10"},
+    ]
+    catalog = {
+        "item:rice": {
+            "name": "ข้าวสาร",
+            "category": "food",
+            "unit": "กก.",
+            "sku": "GEN-005",
+        },
+        "item:blanket": {"name": "ผ้าห่ม", "category": None, "unit": "ผืน", "sku": None},
+    }
+    payloads = compute_shelter_stocks(ledgers, catalog, {}, occupancy=0)
+    by_item = {p["item_id"]: p for p in payloads}
+
+    assert by_item["item:rice"]["quantity_on_hand"] == 480.0
+    assert by_item["item:rice"]["type_code"] == "food"
+    assert by_item["item:rice"]["m6_item_code"] == "GEN-005"
+    assert by_item["item:rice"]["m6_reference_id"] is None
+    assert by_item["item:rice"]["source"] == "direct_donation"
+
+    assert by_item["item:blanket"]["type_code"] == "genaral"
+    assert by_item["item:blanket"]["name_th"] == "ผ้าห่ม"
+
+    # Zero-balance items stay listed (unlike public_needs, which drops satisfied needs).
+    assert by_item["item:soap"]["quantity_on_hand"] == 0.0
+    assert (
+        by_item["item:soap"]["name_th"] == "item:soap"
+    )  # not in catalog — id fallback

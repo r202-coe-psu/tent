@@ -6,7 +6,12 @@ from worker.mongo.need import apply_need, delete_needs_for_shelter
 from worker.mongo.on_hand import refresh_on_hand
 from worker.mongo.person import apply_person, delete_persons_for_shelter
 from worker.mongo.registry import resolve_shelter_code_for_registry_delete
-from worker.mongo.shelter import apply_shelter, apply_shelter_deactivate
+from worker.mongo.shelter import (
+    apply_shelter,
+    apply_shelter_deactivate,
+    refresh_occupancy,
+)
+from worker.mongo.stock import apply_shelter_stock, refresh_shelter_stock
 
 __all__ = [
     "apply_announcement",
@@ -17,8 +22,11 @@ __all__ = [
     "apply_person",
     "apply_shelter",
     "apply_shelter_deactivate",
+    "apply_shelter_stock",
     "delete_needs_for_shelter",
     "delete_persons_for_shelter",
+    "refresh_occupancy",
     "refresh_on_hand",
+    "refresh_shelter_stock",
     "resolve_shelter_code_for_registry_delete",
 ]

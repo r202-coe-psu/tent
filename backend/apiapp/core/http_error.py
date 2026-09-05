@@ -13,6 +13,8 @@ def _partner_error_body(exc: HTTPException) -> dict:
         body: dict = {"status": exc.status_code, "message": inner.get("message", "")}
         if code:
             body["code"] = code
+        if "detail" in inner:
+            body["detail"] = inner["detail"]
         if code == "location_not_found":
             body["result"] = []
         return body

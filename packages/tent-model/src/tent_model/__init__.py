@@ -15,14 +15,17 @@ from tent_model.public_announcement import PublicAnnouncement
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
-from tent_model.public_shelter import GeoJsonPoint, GeoPoint, PublicShelter
+from tent_model.public_shelter import GeoJsonPoint, GeoPoint, OccupancyBreakdown, PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
+from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
+from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
 
 __all__ = [
 	"ALL_DOCUMENTS",
+	"M6_TYPE_CODES",
 	"THIRD_PARTY_SCOPES",
 	"ApiKey",
 	"DeclaredItem",
@@ -31,6 +34,7 @@ __all__ = [
 	"DonorBuffer",
 	"GeoJsonPoint",
 	"GeoPoint",
+	"OccupancyBreakdown",
 	"PublicAnnouncement",
 	"PublicDonation",
 	"PublicNeed",
@@ -39,7 +43,9 @@ __all__ = [
 	"ReserveResult",
 	"RetentionAudit",
 	"SearchAudit",
+	"ShelterStock",
 	"SyncCheckpoint",
+	"ThirdPartyAccessLog",
 	"ThirdPartyClient",
 	"close_db",
 	"counter_id",

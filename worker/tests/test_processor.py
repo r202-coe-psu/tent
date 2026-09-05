@@ -300,6 +300,7 @@ async def test_process_stock_ledger_change_refreshes_the_ceiling():
         patch(
             "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
         ) as refresh,
+        patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
     ):
         await process_change(couch, "shelter_sh001", change)
 
@@ -324,6 +325,79 @@ async def test_process_deleted_stock_ledger_raises_the_ceiling_back():
         ),
         patch(
             "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
+        ) as refresh,
+        patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_evacuee_change_refreshes_occupancy():
+    """EXT-005 — a check-in/out or any evacuee field change shifts the headcount."""
+    couch = AsyncMock()
+    change = {
+        "seq": 62,
+        "id": "evacuee:01",
+        "doc": {
+            "_id": "evacuee:01",
+            "type": "evacuee",
+            "current_stay": {"status": "active"},
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_evacuee",
+            return_value=("upsert", {"_id": "evacuee:01"}),
+        ),
+        patch(
+            "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_deleted_evacuee_refreshes_occupancy():
+    couch = AsyncMock()
+    change = {"seq": 63, "id": "evacuee:01", "deleted": True}
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_stock_threshold_override_change_refreshes_stock():
+    couch = AsyncMock()
+    change = {
+        "seq": 64,
+        "id": "stock_threshold_override:SH001:item:rice",
+        "doc": {
+            "_id": "stock_threshold_override:SH001:item:rice",
+            "type": "stock_threshold_override",
+            "item_id": "item:rice",
+            "reorder_level": 50,
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock
         ) as refresh,
     ):
         await process_change(couch, "shelter_sh001", change)

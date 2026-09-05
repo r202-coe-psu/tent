@@ -17,6 +17,8 @@ from worker.mongo import (
     apply_shelter_deactivate,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
+    refresh_occupancy,
+    refresh_shelter_stock,
     resolve_shelter_code_for_registry_delete,
 )
 from worker.mongo.announcement import apply_announcement
@@ -67,7 +69,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             shelter_code = shelter_code_from_db_name(database)
             if shelter_code:
                 await apply_person("delete", {"_id": doc_id})
-                if doc_id.startswith("donation:"):
+                if doc_id.startswith("evacuee:"):
+                    # EXT-005: a departed/removed evacuee changes the headcount too.
+                    await refresh_occupancy(couch, shelter_code)
+                elif doc_id.startswith("donation:"):
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
                     await _reproject_needs(couch, shelter_code)
@@ -76,7 +81,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     # go back up with it — a delete row carries no doc to read a type
                     # from, hence the id prefix.
                     await refresh_on_hand(couch, shelter_code)
+                    await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
                     await _reproject_needs(couch, shelter_code)
+                elif doc_id.startswith("stock_threshold_override:"):
+                    await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
         await save_checkpoint(database, seq)
         return
 
@@ -116,6 +124,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc, shelter_code=shelter_code, household=household
                 )
                 await apply_person(action, payload)
+                # EXT-005: check-in/out, zone move, or any other evacuee field change
+                # can shift the headcount/demographic breakdown.
+                await refresh_occupancy(couch, shelter_code)
             elif doc_type == "donation":
                 action, payload = project_donation(doc, shelter_code=shelter_code)
                 await apply_donation(action, payload)
@@ -150,7 +161,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # at all: the board kept advertising the old shortfall and the counter
                 # kept accepting bookings against the bare target.
                 await refresh_on_hand(couch, shelter_code)
+                await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
                 await _reproject_needs(couch, shelter_code)
+            elif doc_type == "stock_threshold_override":
+                await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
             elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
 
