@@ -1,6 +1,7 @@
 import type {
 	MealDistributionDay,
 	MealDistributionSession,
+	MealDistributionTransaction,
 	MealRecipient
 } from '../domain/meal-distribution';
 import { todayIsoDate } from '../domain/meal-distribution';
