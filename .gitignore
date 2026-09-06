@@ -21,6 +21,10 @@ Thumbs.db
 # Private
 .private/
 
+# Local agent scratch / temp publish bodies (not shared)
+.scratch/
+.tmp-*
+
 # Local slides deck (not part of app repo)
 /slides/
 /frontend/slides/
