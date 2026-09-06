@@ -121,12 +121,13 @@ async function findShelterCodeForJob(jobId: string, preferred?: string): Promise
 	return null;
 }
 
-function selectedShift(job: CouchJob, input: DirectApplicationInput): CouchJobShift | null {
+export function selectedShift(job: CouchJob, input: DirectApplicationInput): CouchJobShift | null {
 	const shifts = job.shifts ?? [];
 	if (shifts.length === 0) return null;
 	if (input.shift_id) {
 		const found = shifts.find((shift) => (shift.shift_id || shift.id) === input.shift_id);
-		if (found) return found;
+		if (!found) throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
+		return found;
 	}
 	if (input.shift_date) {
 		const candidates = shifts.filter((shift) => shift.date === input.shift_date);
@@ -140,16 +141,14 @@ function selectedShift(job: CouchJob, input: DirectApplicationInput): CouchJobSh
 				);
 				if (timeMatch) return timeMatch;
 			}
-			return candidates[0];
+			throw new PublicApplicationError('SHIFT_DATE_AMBIGUOUS', 422);
 		}
+		throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
 	}
 	if (shifts.length === 1) {
 		return shifts[0];
 	}
-	if (shifts.length > 0) {
-		return shifts[0];
-	}
-	return null;
+	throw new PublicApplicationError('SHIFT_ID_REQUIRED', 422);
 }
 
 async function controlledSkills(shelterCode: string): Promise<Set<string>> {
@@ -251,12 +250,11 @@ async function reserveSlot(
 		const next = structuredClone(current) as CouchJob;
 		if (selected) {
 			const wanted = shiftId(selected);
-			const live =
-				next.shifts?.find((shift) =>
-					wanted
-						? (shift.shift_id || shift.id) === wanted
-						: shift.date === selected.date && shift.start_time === selected.start_time
-				) ?? next.shifts?.[0];
+			const live = next.shifts?.find((shift) =>
+				wanted
+					? (shift.shift_id || shift.id) === wanted
+					: shift.date === selected.date && shift.start_time === selected.start_time
+			);
 			if (!live) throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
 			const quota = quotaOf(live);
 			const confirmed = live.slots_confirmed ?? 0;
@@ -294,12 +292,11 @@ async function releaseSlot(
 		const next = structuredClone(current) as CouchJob;
 		if (selected) {
 			const wanted = shiftId(selected);
-			const live =
-				next.shifts?.find((shift) =>
-					wanted
-						? (shift.shift_id || shift.id) === wanted
-						: shift.date === selected.date && shift.start_time === selected.start_time
-				) ?? next.shifts?.[0];
+			const live = next.shifts?.find((shift) =>
+				wanted
+					? (shift.shift_id || shift.id) === wanted
+					: shift.date === selected.date && shift.start_time === selected.start_time
+			);
 			if (!live || (live.slots_confirmed ?? 0) <= 0) return;
 			live.slots_confirmed = (live.slots_confirmed ?? 0) - 1;
 			live.slots_remaining = (live.slots_remaining ?? 0) + 1;

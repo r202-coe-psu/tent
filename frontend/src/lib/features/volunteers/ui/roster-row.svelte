@@ -35,7 +35,6 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import RosterManualCheckinDialog from './roster-manual-checkin-dialog.svelte';
 	import { useCheckIn, useCheckOut, useSkillOptions } from '../application/queries';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type {
@@ -100,7 +99,9 @@
 	);
 	const skillCatalog = useSkillOptions();
 	const skills = $derived.by<SkillOption[]>(() => {
-		const map = new SvelteMap<string, SkillOption>();
+		// This map is a local deduplication buffer and is not exposed to the template.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, SkillOption>();
 		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillCatalog.options);
 			if (option && !map.has(option.code)) {

@@ -83,6 +83,32 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		expect(json.ticket.token).toBe('app_01m1ceqt8vwxgzrmks1ybmk6v2');
 		expect(json.ticket.applicant_name).toBe('สมชาย ใจดี');
 		expect(json.ticket.job_title).toBe('ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC ม.อ.');
+		const appQuery = adminRawMock.mock.calls[1]?.[2] as {
+			selector?: { $or?: Record<string, string>[] };
+		};
+		expect(appQuery.selector?.$or).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ tracking_token: 'app_01m1ceqt8vwxgzrmks1ybmk6v2' }),
+				expect.objectContaining({ tracking_token_hash: expect.any(String) })
+			])
+		);
+		expect(appQuery.selector?.$or?.some((selector) => '_id' in selector)).toBe(false);
+	});
+
+	it('does not treat an internal CouchDB document id as a public ticket credential', async () => {
+		const adminRawMock = vi.mocked(adminRaw);
+		adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [] } });
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [] } });
+
+		const res = await GET(makeEvent('job_application:app_known-internal-id'));
+
+		expect(res.status).toBe(404);
+		expect((await res.json()).error).toBe('TICKET_NOT_FOUND');
+		const appQuery = adminRawMock.mock.calls[1]?.[2] as {
+			selector?: { $or?: Record<string, string>[] };
+		};
+		expect(appQuery.selector?.$or?.some((selector) => '_id' in selector)).toBe(false);
 	});
 
 	it('returns 404 when token is not found in any shelter database', async () => {

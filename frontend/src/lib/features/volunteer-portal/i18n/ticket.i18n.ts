@@ -175,14 +175,41 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 	}
 };
 
+/**
+ * Parse timestamps emitted by the backend. Explicit offsets are authoritative;
+ * legacy naive datetime values are interpreted as UTC by contract without relying
+ * on the browser's local timezone.
+ */
+function parseBackendTimestamp(value: string): Date {
+	const normalized = value.trim().replace(' ', 'T');
+	if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) return new Date(normalized);
+
+	const naive = normalized.match(
+		/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/
+	);
+	if (naive) {
+		const [, year, month, day, hour, minute, second = '0', fraction = ''] = naive;
+		const milliseconds = Number(fraction.slice(0, 3).padEnd(3, '0') || '0');
+		return new Date(
+			Date.UTC(
+				Number(year),
+				Number(month) - 1,
+				Number(day),
+				Number(hour),
+				Number(minute),
+				Number(second),
+				milliseconds
+			)
+		);
+	}
+
+	return new Date(normalized);
+}
+
 /** Formats ISO timestamp into localized date & time (e.g. "5 ก.ย. 2569, 18:55 น." / "Sep 5, 2026, 6:55 PM") */
 export function formatLocalizedDateTime(isoString: string, lang: LanguageCode = 'th'): string {
 	if (!isoString) return '';
-	let normalized = isoString.trim();
-	if (normalized && !normalized.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(normalized)) {
-		normalized = normalized.includes('T') ? `${normalized}Z` : `${normalized.replace(' ', 'T')}Z`;
-	}
-	const date = new Date(normalized);
+	const date = parseBackendTimestamp(isoString);
 	if (Number.isNaN(date.getTime())) return isoString;
 
 	if (lang === 'th') {

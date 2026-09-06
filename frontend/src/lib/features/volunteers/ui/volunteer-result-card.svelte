@@ -23,7 +23,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { resolve } from '$app/paths';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
@@ -99,7 +98,9 @@
 	const skillCatalog = useSkillOptions();
 	const skills = $derived.by<SkillOption[]>(() => {
 		if (!volunteer) return [];
-		const map = new SvelteMap<string, SkillOption>();
+		// This map is a local deduplication buffer and is not exposed to the template.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, SkillOption>();
 		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillCatalog.options);
 			if (option && !map.has(option.code)) {

@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import Lock from '@lucide/svelte/icons/lock';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import User from '@lucide/svelte/icons/user';
@@ -88,7 +87,6 @@
 		category: 'operational' | 'controlled';
 		controlled: boolean;
 		description: string;
-		icon: string;
 	}
 
 	let masterSkills = $state<SkillOption[]>([]);
@@ -109,8 +107,7 @@
 							label: i.label,
 							category: (i.category ?? 'operational') as 'operational' | 'controlled',
 							controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
-							description: i.description ?? '',
-							icon: i.category === 'controlled' ? '🩺' : '✨'
+							description: i.description ?? ''
 						})
 					);
 					return;
@@ -227,8 +224,13 @@
 			errorMessage = t.errNoJobSelected;
 			return;
 		}
-		if (isPortalApplicant && (!applicantCredential || !('phone' in applicantCredential))) {
-			errorMessage = 'กรุณาเข้าสู่ระบบด้วยเบอร์โทรศัพท์ก่อนสมัครภารกิจจาก portal';
+		if (
+			isPortalApplicant &&
+			applicantCredential &&
+			'token' in applicantCredential &&
+			!formData.phone.trim()
+		) {
+			errorMessage = 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal';
 			return;
 		}
 
@@ -342,7 +344,7 @@
 			};
 
 			if (trackingToken) {
-				await goto(`/volunteers/ticket/${trackingToken}`);
+				await goto(`/volunteer/ticket/${encodeURIComponent(trackingToken)}`);
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : t.errApplyGeneric;
@@ -387,15 +389,6 @@
 						<X class="h-5 w-5" />
 					</button>
 
-					<div
-						class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium"
-					>
-						<span>{t.applyBadgeNoAuth}</span>
-						<span class="flex items-center gap-1 border-l border-white/30 pl-2">
-							<Lock class="h-3 w-3" />
-							{t.applyBadgeNoPassword}
-						</span>
-					</div>
 					<h2 class="mb-3 text-2xl font-bold">{job.title}</h2>
 					<div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
 						<span class="flex items-center gap-1.5">
@@ -419,6 +412,32 @@
 						>
 							<AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
 							<span>{errorMessage}</span>
+						</div>
+					{/if}
+
+					{#if isPortalApplicant && applicantCredential && 'token' in applicantCredential}
+						<div
+							class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900"
+						>
+							<p class="font-bold">คุณเข้าสู่ระบบด้วย QR Code ตั๋วอาสาสมัคร</p>
+							<p class="mt-1 leading-relaxed">
+								เพื่อสมัครภารกิจใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
+								ระบบจะใช้เบอร์นี้เชื่อมใบสมัครกับโปรไฟล์ Volunteer ของคุณ
+							</p>
+							<label for="portalApplyPhone" class="mt-3 block font-bold">
+								เบอร์โทรศัพท์ที่ใช้สมัครเดิม <span class="text-danger">*</span>
+							</label>
+							<input
+								id="portalApplyPhone"
+								type="tel"
+								required
+								bind:value={formData.phone}
+								oninput={(e) => {
+									formData.phone = e.currentTarget.value.replace(/[-\s]/g, '');
+								}}
+								placeholder="0812345678"
+								class="mt-1.5 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+							/>
 						</div>
 					{/if}
 

@@ -41,6 +41,13 @@ describe('ticket.i18n and formatters', () => {
 		expect(formattedEn).toContain('7:04 PM');
 	});
 
+	it('honors an explicit local offset without applying Bangkok conversion twice', () => {
+		const offsetIso = '2026-09-05T12:04:00+07:00';
+		const formattedTh = formatLocalizedDateTime(offsetIso, 'th');
+
+		expect(formattedTh).toContain('12:04');
+	});
+
 	it('formats ISO date into Thai and English full dates', () => {
 		const dateStr = '2026-09-02';
 		const thDate = formatLocalizedDate(dateStr, 'th');

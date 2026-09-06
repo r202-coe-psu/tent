@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { volunteerTicketLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { sha256Hex } from '$lib/db/hash';
 
 interface CouchAllDocsRow<T = Record<string, unknown>> {
 	id: string;
@@ -108,8 +109,9 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 		// Fall through to CouchDB fallback if FastAPI is offline or not found
 	}
 
-	// 2. Direct CouchDB fallback — search by tracking_token or document ID
+	// 2. Direct CouchDB fallback — search by tracking token (plain or hashed)
 	try {
+		const tokenHash = await sha256Hex(token);
 		const shelterDbs = new Map<string, { code: string; name: string }>();
 		shelterDbs.set('shelter_sh001', { code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' });
 
@@ -136,11 +138,9 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 				let app: ApplicationDoc | null = null;
 				let volunteer: VolunteerDoc | null = null;
 
-				const appSelectors = [
-					{ tracking_token: token },
-					{ _id: token },
-					...(token.startsWith('app_') ? [{ _id: `job_application:${token}` }] : [])
-				];
+				// The public credential is the unguessable tracking token. CouchDB document
+				// IDs are internal references and must never become an alternate credential.
+				const appSelectors = [{ tracking_token_hash: tokenHash }, { tracking_token: token }];
 
 				const findRes = await adminRaw(`/${dbName}/_find`, 'POST', {
 					selector: {
@@ -153,11 +153,7 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 				if (findRes.status === 200 && Array.isArray(findData?.docs) && findData.docs.length > 0) {
 					app = findData.docs[0];
 				} else {
-					const volSelectors = [
-						{ tracking_token: token },
-						{ _id: token },
-						...(token.startsWith('vol_') ? [{ _id: `volunteer:${token}` }] : [])
-					];
+					const volSelectors = [{ tracking_token_hash: tokenHash }, { tracking_token: token }];
 
 					const volFindRes = await adminRaw(`/${dbName}/_find`, 'POST', {
 						selector: {

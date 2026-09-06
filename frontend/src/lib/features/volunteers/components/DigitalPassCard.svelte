@@ -58,10 +58,16 @@
 		toast.success('ดาวน์โหลดรูปภาพ QR Code เรียบร้อยแล้ว');
 	}
 
-	function copyLink() {
-		if (typeof window !== 'undefined') {
-			navigator.clipboard.writeText(window.location.href);
+	async function copyLink() {
+		if (typeof window === 'undefined' || !navigator.clipboard?.writeText) {
+			toast.error('คัดลอกลิงก์ไม่สำเร็จ');
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(window.location.href);
 			toast.success('คัดลอกลิงก์ตั๋วดิจิทัลเรียบร้อยแล้ว');
+		} catch {
+			toast.error('คัดลอกลิงก์ไม่สำเร็จ');
 		}
 	}
 </script>

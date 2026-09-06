@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * "จองภารกิจ" — the No-Auth booking form (CR-092 FR-VOL-02 / AC-VOL-02).
+	 * "จองภารกิจ" — the public booking form (CR-092 FR-VOL-02 / AC-VOL-02).
 	 *
 	 * The spec calls this an application (`job_application`) and it still is one on the
 	 * wire; what the volunteer does on this screen is book a place, which is why the copy
@@ -29,7 +29,6 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
-	import Lock from '@lucide/svelte/icons/lock';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Tag from '@lucide/svelte/icons/tag';
 	import User from '@lucide/svelte/icons/user';
@@ -211,14 +210,6 @@
 		>
 			<div class="overflow-y-auto">
 				<div class="bg-primary-dark px-6 py-8 text-primary-foreground">
-					<div
-						class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium"
-					>
-						<span>ระบบจองภารกิจจิตอาสาภาคประชาชน (NO-AUTH FLOW)</span>
-						<span class="flex items-center gap-1 border-l border-white/30 pl-2">
-							<Lock class="h-3 w-3" /> ไม่ต้องใช้รหัสผ่าน ไม่ต้องรอ SMS
-						</span>
-					</div>
 					<h2 class="mb-3 text-2xl font-bold">{job.title}</h2>
 					<div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
 						<span class="flex items-center gap-1.5">

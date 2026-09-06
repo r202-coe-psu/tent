@@ -126,12 +126,19 @@
 		const masterList = skillsQuery.data ?? [];
 		return skillLabels(ticket.skills, masterList).map(({ value, label }) => ({
 			code: value,
-			name: label,
-			icon: masterList.find((skill) => skill.code === value)?.category === 'controlled' ? '🩺' : ''
+			name: label
 		}));
 	});
 
 	async function copyLink() {
+		if (
+			typeof window === 'undefined' ||
+			typeof navigator === 'undefined' ||
+			!navigator.clipboard?.writeText
+		) {
+			toast.error(t.toastCopyError);
+			return;
+		}
 		try {
 			await navigator.clipboard.writeText(window.location.href);
 			toast.success(t.toastCopySuccess);
@@ -381,7 +388,6 @@
 									<span
 										class="flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] text-sky-700"
 									>
-										{#if skill.icon}<span>{skill.icon}</span>{/if}
 										<span>{skill.name}</span>
 									</span>
 								{/each}

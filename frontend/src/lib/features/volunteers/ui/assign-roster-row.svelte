@@ -16,7 +16,7 @@
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { SvelteMap } from 'svelte/reactivity';
+
 	import type { AssignCandidate } from '../domain/assign-roster';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 
@@ -40,7 +40,9 @@
 	const fullName = $derived(`${v.first_name} ${v.last_name}`);
 	const rowId = $derived(`assign-row-${v._id}`);
 	const skills = $derived.by<SkillOption[]>(() => {
-		const map = new SvelteMap<string, SkillOption>();
+		// This map is a local deduplication buffer and is not exposed to the template.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, SkillOption>();
 		for (const value of v.skills) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {

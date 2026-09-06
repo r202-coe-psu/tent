@@ -10,7 +10,6 @@ export interface JobsTranslations {
 	portalLink: string;
 	// Job Board Search & Filters
 	jobBoardSectionTitle: string;
-	jobBoardSectionSubtitle: string;
 	searchPlaceholder: string;
 	filterLabel: string;
 	filterAll: string;
@@ -69,8 +68,6 @@ export interface JobsTranslations {
 	cameraScanHint: string;
 	closeModal: string;
 	// Quick Apply Modal
-	applyBadgeNoAuth: string;
-	applyBadgeNoPassword: string;
 	shiftDateLabel: string;
 	applyStep1Title: string;
 	applyStep2Title: string;
@@ -127,14 +124,12 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		portalLink: 'เข้าสู่ระบบจิตอาสา / ตารางงานของฉัน →',
 		// Job Board Search & Filters
 		jobBoardSectionTitle: 'ตลาดงานอาสาสมัครในศูนย์พักพิง',
-		jobBoardSectionSubtitle:
-			'เลือกภารกิจและกะเวลาที่คุณสะดวก แล้วกดสมัครเพื่อรับบัตรตั๋วดิจิทัล (QR Code Pass) ทันที (ไม่ต้องใช้รหัสผ่าน)',
 		searchPlaceholder: 'ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์...',
 		filterLabel: 'ตัวกรอง:',
 		filterAll: 'ทั้งหมด',
 		filterOpen: 'เปิดรับสมัคร (Open)',
 		filterNearFull: 'ใกล้เต็ม (Near Full)',
-		filterControlled: '🩺 ทักษะวิชาชีพ/ควบคุม',
+		filterControlled: 'ทักษะวิชาชีพ/ควบคุม',
 		skillsLabel: 'ทักษะ:',
 		clearFilter: '✕ ล้างตัวกรอง',
 		shelterLabel: 'ศูนย์:',
@@ -158,8 +153,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		requiredQuota: 'ต้องการ',
 		availableSeats: 'ว่าง',
 		fullSeats: 'เต็มแล้ว (0 ที่)',
-		applyShift: '🚀 สมัครกะนี้',
-		shiftFull: '🔒 กะเต็มแล้ว',
+		applyShift: 'สมัครกะนี้',
+		shiftFull: 'กะเต็มแล้ว',
 		openBadge: 'เปิดรับ',
 		fullBadge: 'เต็มแล้ว',
 		quotaCap: 'รับ',
@@ -189,8 +184,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		cameraScanHint: 'หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงานจิตอาสา',
 		closeModal: 'ปิดหน้าต่าง',
 		// Quick Apply Modal
-		applyBadgeNoAuth: 'ระบบสมัครงานจิตอาสาภาคประชาชน (NO-AUTH FLOW)',
-		applyBadgeNoPassword: 'ปลอดภัย ไม่ต้องใช้รหัสผ่าน',
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',
 		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน (Shifts)',
@@ -247,14 +240,12 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		portalLink: 'Volunteer Portal / My Schedule →',
 		// Job Board Search & Filters
 		jobBoardSectionTitle: 'Volunteer Job Board in Evacuation Shelters',
-		jobBoardSectionSubtitle:
-			'Choose tasks and shifts that fit your schedule, then apply to receive your instant Digital Pass (QR Code) without passwords.',
 		searchPlaceholder: 'Search job title, skills, or shelter...',
 		filterLabel: 'Filter:',
 		filterAll: 'All',
 		filterOpen: 'Openings (Open)',
 		filterNearFull: 'Almost Full',
-		filterControlled: '🩺 Controlled / Professional',
+		filterControlled: 'Controlled / Professional',
 		skillsLabel: 'Skills:',
 		clearFilter: '✕ Clear Filter',
 		shelterLabel: 'Shelter:',
@@ -278,8 +269,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		requiredQuota: 'Required',
 		availableSeats: 'Available',
 		fullSeats: 'Full (0 seats)',
-		applyShift: '🚀 Apply Shift',
-		shiftFull: '🔒 Shift Full',
+		applyShift: 'Apply Shift',
+		shiftFull: 'Shift Full',
 		openBadge: 'Open',
 		fullBadge: 'Full',
 		quotaCap: 'Quota',
@@ -309,8 +300,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		cameraScanHint: 'Point camera at the QR code on your Digital Pass or volunteer badge',
 		closeModal: 'Close',
 		// Quick Apply Modal
-		applyBadgeNoAuth: 'Public Volunteer Registration (NO-AUTH FLOW)',
-		applyBadgeNoPassword: 'Secure & Passwordless',
 		shiftDateLabel: 'Shift Date',
 		applyStep1Title: '1. Volunteer Identity Information',
 		applyStep2Title: '2. Select Shift Time (Shifts)',

@@ -99,10 +99,6 @@
 					<Briefcase class="h-6 w-6 text-primary" />
 					ตลาดงานอาสาสมัครในศูนย์พักพิง
 				</h2>
-				<p class="mt-2 text-sm text-muted-foreground">
-					เลือกภารกิจและกะที่คุณสะดวก แล้วกดจองเพื่อรับบัตรตั๋วดิจิทัล (QR Code Pass) ทันที
-					ไม่ต้องรอรหัส SMS
-				</p>
 			</div>
 
 			<div class="relative w-full shrink-0 md:w-[340px]">
@@ -163,7 +159,7 @@
 						? 'border-accent-purple bg-accent-purple/15 text-accent-purple shadow-sm'
 						: 'border-accent-purple/30 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/10'}"
 				>
-					🩺 ทักษะวิชาชีพ/ควบคุม
+					ทักษะวิชาชีพ/ควบคุม
 				</button>
 			</div>
 
@@ -175,7 +171,7 @@
 						aria-label="ศูนย์พักพิง"
 						class="w-full cursor-pointer appearance-none rounded-xl border border-border/80 bg-muted/20 px-4 py-2.5 pl-10 text-sm font-bold outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 					>
-						<option value="all">📍 ทุกศูนย์พักพิง</option>
+						<option value="all">ทุกศูนย์พักพิง</option>
 						{#each shelters as shelter (shelter.code)}
 							<option value={shelter.code}>{shelter.name}</option>
 						{/each}

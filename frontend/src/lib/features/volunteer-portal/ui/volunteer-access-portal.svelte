@@ -5,7 +5,6 @@
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
-	import Lock from '@lucide/svelte/icons/lock';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
@@ -14,6 +13,7 @@
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
@@ -162,7 +162,7 @@
 	}
 
 	/** Restore a short-lived session or the token handed over after a new booking. */
-	$effect(() => {
+	onMount(() => {
 		if (session) {
 			restoring = false;
 			if (mode === 'entry' && session.portal_id) void goto(portalPath(session.portal_id));
@@ -537,18 +537,14 @@
 <div class="mx-auto w-full max-w-6xl space-y-8">
 	<!-- TOP BRAND HEADER -->
 	<header class="space-y-3 text-center">
-		<div
-			class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-2xs font-bold text-amber-700 dark:text-amber-400"
-		>
-			<Lock class="size-3.5" />
-			<span>VOLUNTEER ACCESS PORTAL</span>
-		</div>
 		<h1 class="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
-			เข้าสู่ระบบตารางทำงานจิตอาสา
+			{currentVolunteer ? 'ตารางงานจิตอาสา' : 'เข้าสู่ระบบตารางทำงานจิตอาสา'}
 		</h1>
-		<p class="mx-auto max-w-xl text-sm font-medium text-muted-foreground">
-			กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน
-		</p>
+		{#if !currentVolunteer}
+			<p class="mx-auto max-w-xl text-sm font-medium text-muted-foreground">
+				กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน
+			</p>
+		{/if}
 	</header>
 
 	{#if mode !== 'entry' && session && (restoring || !currentVolunteer)}

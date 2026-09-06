@@ -28,7 +28,6 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
@@ -65,7 +64,9 @@
 	const initial = $derived(volunteer.first_name.trim().charAt(0) || '?');
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 	const skills = $derived.by<SkillOption[]>(() => {
-		const map = new SvelteMap<string, SkillOption>();
+		// This map is a local deduplication buffer and is not exposed to the template.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, SkillOption>();
 		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {

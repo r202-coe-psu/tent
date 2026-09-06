@@ -94,7 +94,6 @@
 	interface FilterSkillItem {
 		code: string;
 		label: string;
-		icon: string;
 		isControlled: boolean;
 	}
 
@@ -353,7 +352,6 @@
 				result.push({
 					code,
 					label,
-					icon: opt.category === 'controlled' ? '🩺' : '🏷️',
 					isControlled: opt.category === 'controlled'
 				});
 			}
@@ -434,9 +432,6 @@
 					<Briefcase class="h-5 w-5 shrink-0 text-primary sm:h-6 sm:w-6" />
 					<span>{t.jobBoardSectionTitle}</span>
 				</h2>
-				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">
-					{t.jobBoardSectionSubtitle}
-				</p>
 			</div>
 
 			<!-- Search Bar -->
@@ -556,7 +551,6 @@
 										? 'border border-accent-purple/40 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/15'
 										: 'border border-border/80 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
 							>
-								<span>{skill.icon}</span>
 								<span>{skill.label}</span>
 							</button>
 						{/each}
@@ -577,7 +571,7 @@
 							class="h-10 w-full rounded-xl border-border/80 bg-muted/20 pl-10 text-xs font-bold text-foreground sm:h-11 sm:text-sm"
 						>
 							{#if selectedShelter === 'all'}
-								📍 {t.allShelters} ({availableShelters.length})
+								{t.allShelters} ({availableShelters.length})
 							{:else}
 								{availableShelters.find((s) => s.code === selectedShelter)?.name ?? t.selectShelter}
 							{/if}
@@ -585,7 +579,7 @@
 						<Select.Content>
 							<Select.Group>
 								<Select.Item value="all" label={`${t.allShelters} (${availableShelters.length})`}>
-									📍 {t.allShelters} ({availableShelters.length})
+									{t.allShelters} ({availableShelters.length})
 								</Select.Item>
 								{#each availableShelters as shelter (shelter.code)}
 									<Select.Item value={shelter.code} label={shelter.name}>
