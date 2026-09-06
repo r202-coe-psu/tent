@@ -33,6 +33,8 @@ def _patches():
             new_callable=AsyncMock,
             return_value=[],
         ),
+        patch("worker.couch.bootstrap.refresh_occupancy", new_callable=AsyncMock),
+        patch("worker.couch.bootstrap.refresh_shelter_stock", new_callable=AsyncMock),
     )
 
 
@@ -58,16 +60,25 @@ async def test_bootstrap_seeds_need_counters_for_existing_campaigns():
         ]
     )
 
-    cp, person, donation, need, needs_for = _patches()
-    with cp, person, donation, need, needs_for, patch(
-        "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
-    ) as counters:
+    cp, person, donation, need, needs_for, occ, stock = _patches()
+    with (
+        cp,
+        person,
+        donation,
+        need,
+        needs_for,
+        occ,
+        stock,
+        patch(
+            "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
+        ) as counters,
+    ):
         await bootstrap_database(couch, "shelter_sh001")
 
     seeds = counters.await_args.args[0]
     assert [(s.shelter_code, s.item_id, s.qty_target) for s in seeds] == [
-        ("SH001", "item:rice", Decimal("500")),
-        ("SH001", "item:water", Decimal("1000")),
+        ("SH001", "item:rice", Decimal(500)),
+        ("SH001", "item:water", Decimal(1000)),
     ]
 
 
@@ -84,10 +95,19 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         ]
     )
 
-    cp, person, donation, need, needs_for = _patches()
-    with cp, person, donation, need, needs_for, patch(
-        "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
-    ) as counters:
+    cp, person, donation, need, needs_for, occ, stock = _patches()
+    with (
+        cp,
+        person,
+        donation,
+        need,
+        needs_for,
+        occ,
+        stock,
+        patch(
+            "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
+        ) as counters,
+    ):
         await bootstrap_database(couch, "shelter_sh001")
 
     assert counters.await_args.args[0] == []
