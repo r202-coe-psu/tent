@@ -11,8 +11,6 @@
 	import Terminal from '@lucide/svelte/icons/terminal';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Code from '@lucide/svelte/icons/code';
-	import Search from '@lucide/svelte/icons/search';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import Bell from '@lucide/svelte/icons/bell';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -53,6 +51,8 @@
 	import CommandIcon from '@lucide/svelte/icons/command';
 	import Database from '@lucide/svelte/icons/database';
 	import AlertOctagon from '@lucide/svelte/icons/alert-octagon';
+	import Search from '@lucide/svelte/icons/search';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -65,7 +65,6 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { toast } from 'svelte-sonner';
 	import CivicCommandPalette from '$lib/components/CivicCommandPalette.svelte';
-
 	// Page State
 	let activeTab = $state<'components' | 'prompt-guide'>('components');
 	let copiedKey = $state<string | null>(null);

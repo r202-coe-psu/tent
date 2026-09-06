@@ -21,7 +21,8 @@ export const EVACUEE_EWAR_I18N = {
 		healthyLabel: 'Healthy / No Symptoms',
 		next: 'Next →',
 		back: 'Back',
-		toastSelectRequired: 'Please select symptoms or check "Healthy / No Symptoms" before proceeding',
+		toastSelectRequired:
+			'Please select symptoms or check "Healthy / No Symptoms" before proceeding',
 		toastMedicalRequired:
 			'Please complete each health field or tap "None" on each field before proceeding',
 		toastSpecialRequired:

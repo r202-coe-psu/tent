@@ -33,6 +33,8 @@ import {
 	dispatchTransfer,
 	receiveTransfer,
 	cancelTransfer,
+	disputeTransfer,
+	resumeTransfer,
 	nextLotNos,
 	lotDateStamp,
 	stockLotSchema,
@@ -1006,6 +1008,20 @@ describe('createDistributeEntry', () => {
 	});
 });
 
+const DISPATCH_INFO = { driver_name: 'สมชาย ใจดี', vehicle_plate: 'กข 1234 เชียงราย' };
+
+/** A `requested` transfer from SH001 to SH002 — the starting point of every transition test. */
+function requestedTransfer() {
+	return createTransfer(
+		{
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		},
+		ctx
+	);
+}
+
 describe('Inter-shelter Transfers', () => {
 	it('creates and dispatches a transfer', () => {
 		const t = createTransfer(
@@ -1018,7 +1034,7 @@ describe('Inter-shelter Transfers', () => {
 		);
 		expect(t.status).toBe('requested');
 
-		const { transfer: shipped, ledgers } = dispatchTransfer(t, ctx);
+		const { transfer: shipped, ledgers } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 		expect(shipped.status).toBe('shipped');
 		expect(shipped.timeline.shipped).toBeDefined();
 		expect(ledgers).toHaveLength(1);
@@ -1035,7 +1051,7 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 
 		const { transfer: received, ledgers } = receiveTransfer(
 			shipped,
@@ -1059,7 +1075,7 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 
 		// Receiver only gets 85
 		const { transfer: received, ledgers } = receiveTransfer(
@@ -1084,7 +1100,7 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 
 		// Receiver gets 0
 		const { transfer: received, ledgers } = receiveTransfer(
@@ -1107,8 +1123,8 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
-		expect(() => dispatchTransfer(shipped, ctx)).toThrow();
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
+		expect(() => dispatchTransfer(shipped, ctx, DISPATCH_INFO)).toThrow();
 	});
 
 	it('rejects receiving a transfer that has not shipped', () => {
@@ -1132,7 +1148,7 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 
 		expect(() => receiveTransfer(shipped, [{ item_id: 'item:rice', qty: 150 }], ctx)).toThrow(
 			/exceeds dispatched quantity/
@@ -1150,7 +1166,7 @@ describe('Inter-shelter Transfers', () => {
 		);
 		expect(t.items[0].qty).toBe('0.2');
 
-		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx);
+		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 		expect(out[0].qty).toBe('-0.2');
 
 		// Partial receipt (0.1 of the 0.2 dispatched) — received qty can never exceed dispatched.
@@ -1174,7 +1190,7 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
 
 		const { transfer: received } = receiveTransfer(
 			shipped,
@@ -1196,7 +1212,7 @@ describe('Inter-shelter Transfers', () => {
 			ctx
 		);
 
-		const { transfer: cancelled } = cancelTransfer(t);
+		const { transfer: cancelled } = cancelTransfer(t, { cancel_reason: 'ผู้รับแจ้งยกเลิก' });
 		expect(cancelled.status).toBe('cancelled');
 	});
 
@@ -1209,8 +1225,106 @@ describe('Inter-shelter Transfers', () => {
 			},
 			ctx
 		);
-		const { transfer: shipped } = dispatchTransfer(t, ctx);
-		expect(() => cancelTransfer(shipped)).toThrow();
+		const { transfer: shipped } = dispatchTransfer(t, ctx, DISPATCH_INFO);
+		expect(() => cancelTransfer(shipped, { cancel_reason: 'ผู้รับแจ้งยกเลิก' })).toThrow();
+	});
+
+	// ---------------------------------------------------------------- CR-089
+
+	it('stamps schema_v 3 on a new transfer', () => {
+		expect(requestedTransfer().schema_v).toBe(3);
+	});
+
+	it('records driver and plate when dispatching (FR-01, FR-02)', () => {
+		const { transfer: shipped } = dispatchTransfer(requestedTransfer(), ctx, DISPATCH_INFO);
+		expect(shipped.driver_name).toBe('สมชาย ใจดี');
+		expect(shipped.vehicle_plate).toBe('กข 1234 เชียงราย');
+	});
+
+	it.each([
+		['missing driver', { driver_name: '', vehicle_plate: 'กข 1234' }],
+		['missing plate', { driver_name: 'สมชาย', vehicle_plate: '' }],
+		['whitespace only', { driver_name: '   ', vehicle_plate: '   ' }]
+	])('rejects dispatch with %s (FR-01)', (_label, info) => {
+		expect(() => dispatchTransfer(requestedTransfer(), ctx, info)).toThrow();
+	});
+
+	it('writes no ledger when dispatch is rejected for a missing driver (FR-01)', () => {
+		// The guard must run before the ledger rows are built, otherwise stock is deducted for a
+		// transfer that never shipped.
+		let ledgers: unknown[] | undefined;
+		try {
+			({ ledgers } = dispatchTransfer(requestedTransfer(), ctx, {
+				driver_name: '',
+				vehicle_plate: ''
+			}));
+		} catch {
+			// expected
+		}
+		expect(ledgers).toBeUndefined();
+	});
+
+	it('requires a reason to cancel (FR-03)', () => {
+		expect(() => cancelTransfer(requestedTransfer(), { cancel_reason: '  ' })).toThrow();
+		const { transfer } = cancelTransfer(requestedTransfer(), { cancel_reason: 'ของไม่พร้อม' });
+		expect(transfer.cancel_reason).toBe('ของไม่พร้อม');
+	});
+
+	it('disputes a requested transfer and stamps the timeline (FR-04, FR-11)', () => {
+		const { transfer } = disputeTransfer(requestedTransfer(), ctx, {
+			dispute_reason: 'รอตรวจสอบยอดก่อน'
+		});
+		expect(transfer.status).toBe('disputed');
+		expect(transfer.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect(transfer.timeline.disputed?.by).toBe(ctx.createdBy);
+		expect(transfer.timeline.disputed?.at).toBeTruthy();
+	});
+
+	it('requires a reason to dispute (FR-04)', () => {
+		expect(() => disputeTransfer(requestedTransfer(), ctx, { dispute_reason: '' })).toThrow();
+	});
+
+	it('resumes a disputed transfer and keeps the last hold on record (FR-05, FR-11)', () => {
+		const { transfer: held } = disputeTransfer(requestedTransfer(), ctx, {
+			dispute_reason: 'รอตรวจสอบยอดก่อน'
+		});
+		const { transfer: resumed } = resumeTransfer(held);
+
+		expect(resumed.status).toBe('requested');
+		expect(resumed.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect(resumed.timeline.disputed).toEqual(held.timeline.disputed);
+	});
+
+	it('overwrites the previous hold when disputed a second time (FR-05, FR-11)', () => {
+		const { transfer: first } = disputeTransfer(requestedTransfer(), ctx, {
+			dispute_reason: 'รอบแรก'
+		});
+		const { transfer: resumed } = resumeTransfer(first);
+		const { transfer: second } = disputeTransfer(resumed, ctx, { dispute_reason: 'รอบสอง' });
+
+		expect(second.dispute_reason).toBe('รอบสอง');
+		// One entry, not a history — the timeline holds the latest dispute only.
+		expect(Object.keys(second.timeline).sort()).toEqual(['disputed', 'requested']);
+	});
+
+	it('lets a disputed transfer out only back to requested (FR-07)', () => {
+		const { transfer: held } = disputeTransfer(requestedTransfer(), ctx, {
+			dispute_reason: 'ระงับไว้ก่อน'
+		});
+
+		expect(() => dispatchTransfer(held, ctx, DISPATCH_INFO)).toThrow();
+		expect(() => cancelTransfer(held, { cancel_reason: 'ยกเลิก' })).toThrow();
+		expect(() => receiveTransfer(held, [], ctx)).toThrow();
+		expect(resumeTransfer(held).transfer.status).toBe('requested');
+	});
+
+	it('rejects disputing a transfer that is not requested (FR-07)', () => {
+		const { transfer: shipped } = dispatchTransfer(requestedTransfer(), ctx, DISPATCH_INFO);
+		expect(() => disputeTransfer(shipped, ctx, { dispute_reason: 'สาย' })).toThrow();
+	});
+
+	it('rejects resuming a transfer that is not disputed (FR-07)', () => {
+		expect(() => resumeTransfer(requestedTransfer())).toThrow();
 	});
 });
 

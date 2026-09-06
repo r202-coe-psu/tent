@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
-import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop/domain/daily-sop';
+import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
