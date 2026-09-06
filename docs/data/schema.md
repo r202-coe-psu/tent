@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-09
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation
+updated: 2026-09-13
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata
 ---
 
 # Database Schema v5 — field-level
@@ -1538,9 +1538,8 @@ closed   → (terminal)
 > **ปิดแล้วโดย CR-089 (schema_v 2 → 3):** บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนอนุมัติส่งมอบ และสิทธิ์
 > คัดค้าน/ระงับคำสั่ง — อยู่ใน field table ด้านบนแล้ว
 >
-> **ยังไม่ approve (กลุ่ม Lot):** การจัดสรรเบิกข้ามล็อต ("+ แบ่งจากอีกล็อต/โซน"), Destination Lot ID
-> ใหม่ปลายทาง, การอ้างอิงล็อตต้นทางแบบ read-only — อยู่ใน CR-106 ซึ่งยังเป็น `proposed` · ห้ามเพิ่มเข้า
-> field table นี้ก่อน CR-106 approve
+> **อนุมัติแล้วตาม [CR-118](../changes/CR-118-t13-transfer-lot-metadata.md) (schema_v 3 → 4):** การจัดสรรเบิกข้ามล็อต ("+ แบ่งจากอีกล็อต/โซน"),
+> Destination Lot ID ใหม่ปลายทาง, การอ้างอิงล็อตต้นทางแบบ read-only — สเปกอนุมัติแล้ว (implementation จะทยอยเข้าตาม acceptance criteria)
 
 ---
 
