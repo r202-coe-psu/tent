@@ -9,6 +9,7 @@ import {
 	findTickets,
 	getTicket,
 	respondToDispatch,
+	resolvePortalAccess,
 	updateProfileSkills
 } from '../data/volunteer-api';
 import type { PortalCredential, PublicJobFilter, VolunteerApplyInput } from '../domain/volunteer';
@@ -151,6 +152,12 @@ export function useVolunteerProfile(credential: () => PortalCredential | null) {
 		queryFn: () => fetchProfile(credential()!),
 		enabled: credential() !== null,
 		staleTime: 0
+	}));
+}
+
+export function useResolvePortalAccessMutation() {
+	return createMutation(() => ({
+		mutationFn: (credential: PortalCredential) => resolvePortalAccess(credential)
 	}));
 }
 

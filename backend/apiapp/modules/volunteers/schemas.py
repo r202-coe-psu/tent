@@ -153,6 +153,9 @@ class PortalCredential(BaseModel):
 
     phone: str | None = Field(default=None, min_length=6, max_length=30)
     token: str | None = Field(default=None, min_length=6, max_length=200)
+    #: Opaque public reference from the resolved profile. It binds a URL session to the
+    #: public volunteer record without putting a phone number in the URL.
+    portal_id: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class TicketFindRequest(PortalCredential):
@@ -268,6 +271,8 @@ class VolunteerProfile(BaseModel):
     personnel_type: str = "volunteer"
     #: Every shelter the person holds a profile at, newest first.
     shelter_codes: list[str] = Field(default_factory=list)
+    #: Opaque public reference used by the volunteer portal URL.
+    portal_id: str = ""
 
 
 class VolunteerProfileResponse(BaseModel):

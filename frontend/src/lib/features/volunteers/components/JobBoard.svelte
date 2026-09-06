@@ -9,13 +9,24 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { fetchVolunteerSkills } from '$lib/features/volunteer-portal/data/volunteer-api';
-	import { findSkillOption } from '$lib/features/volunteer-portal/domain/skill-label';
-	import type { VolunteerSkillOption } from '$lib/features/volunteer-portal/domain/volunteer';
-	import { SKILL_MASTER } from '../domain/skill-master';
+	import { findSkillOption, skillLabel } from '$lib/features/volunteer-portal/domain/skill-label';
+	import type {
+		PortalCredential,
+		VolunteerProfile,
+		VolunteerSkillOption
+	} from '$lib/features/volunteer-portal/domain/volunteer';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import JobCard from './JobCard.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './QuickApplyModal.svelte';
+
+	let {
+		applicantProfile = null,
+		applicantCredential = null
+	}: {
+		applicantProfile?: VolunteerProfile | null;
+		applicantCredential?: PortalCredential | null;
+	} = $props();
 
 	const t = $derived(jobsI18n[languageStore.current]);
 
@@ -89,20 +100,12 @@
 
 	let rawJobs = $state<RawPublicJob[]>([]);
 	let sheltersList = $state<{ code: string; name: string }[]>([]);
-	// Initialize with Master Data fallback so full skills list is available immediately
-	let skillOptions = $state<VolunteerSkillOption[]>(
-		SKILL_MASTER.map((s) => ({
-			code: s.key,
-			label: s.label,
-			category: s.controlled ? 'controlled' : 'operational',
-			description: s.description,
-			is_default: false
-		}))
-	);
+	// Skills come only from the effective volunteer_skills Master Data endpoint.
+	let skillOptions = $state<VolunteerSkillOption[]>([]);
 	let isLoading = $state(true);
 
 	function resolvedSkillLabel(value: string): string {
-		return findSkillOption(value, skillOptions)?.label?.trim() ?? value.trim();
+		return skillLabel(value, skillOptions);
 	}
 
 	/** Compare filter values and stored job values by Master Data code or label. */
@@ -155,14 +158,7 @@
 
 	function isControlledSkill(value: string): boolean {
 		const option = findSkillOption(value, skillOptions);
-		if (option?.category?.toLowerCase() === 'controlled') return true;
-		const masterEntry = SKILL_MASTER.find(
-			(m) =>
-				m.key.toLowerCase() === value.toLowerCase() || m.label.toLowerCase() === value.toLowerCase()
-		);
-		if (masterEntry?.controlled) return true;
-		const text = `${option?.label ?? ''} ${value}`.toLowerCase();
-		return text.includes('แพทย์') || text.includes('พยาบาล');
+		return option?.category?.toLowerCase() === 'controlled';
 	}
 
 	async function fetchPublicJobs() {
@@ -191,14 +187,8 @@
 		} catch (err) {
 			console.warn('Failed to load volunteer skill master data from API:', err);
 		}
-		// Fallback to SKILL_MASTER
-		skillOptions = SKILL_MASTER.map((s) => ({
-			code: s.key,
-			label: s.label,
-			category: s.controlled ? 'controlled' : 'operational',
-			description: s.description,
-			is_default: false
-		}));
+		// No fallback labels: Master Data is the source of truth for this list.
+		skillOptions = [];
 	}
 
 	onMount(() => {
@@ -344,61 +334,28 @@
 		return Object.entries(shelters).map(([code, name]) => ({ code, name }));
 	});
 
-	// Full comprehensive list of skills for filtering (Master Data + SKILL_MASTER + Any extra from jobs)
+	// Full list of active skills from Master Data. Job values not present in the
+	// master list are intentionally omitted instead of leaking internal codes.
 	const availableSkills = $derived.by<FilterSkillItem[]>(() => {
 		const result: FilterSkillItem[] = [];
 		const seenCodes = new SvelteSet<string>();
 
-		const baseList =
-			skillOptions.length > 0
-				? skillOptions
-				: SKILL_MASTER.map((s) => ({
-						code: s.key,
-						label: s.label,
-						category: s.controlled ? ('controlled' as const) : ('operational' as const)
-					}));
+		const baseList = skillOptions;
 
 		// 1. Add skills from Master Data
 		for (const opt of baseList) {
 			const code = opt.code || opt.label;
+			const label = skillLabel(code, skillOptions);
 			const normCode = code.trim().toLowerCase();
-			if (code && !seenCodes.has(normCode)) {
+			if (code && label && !seenCodes.has(normCode)) {
 				seenCodes.add(normCode);
-				seenCodes.add(opt.label.trim().toLowerCase());
-				const masterEntry = SKILL_MASTER.find(
-					(m) =>
-						m.key.toLowerCase() === normCode ||
-						m.label.toLowerCase() === opt.label.trim().toLowerCase()
-				);
+				seenCodes.add(label.toLowerCase());
 				result.push({
 					code,
-					label: opt.label,
-					icon: masterEntry?.icon ?? (opt.category === 'controlled' ? '🩺' : '🏷️'),
-					isControlled: opt.category === 'controlled' || masterEntry?.controlled === true
+					label,
+					icon: opt.category === 'controlled' ? '🩺' : '🏷️',
+					isControlled: opt.category === 'controlled'
 				});
-			}
-		}
-
-		// 2. Also ensure any custom skills attached to jobs are included if not present
-		for (const j of displayedJobs) {
-			if (j.skills_required && Array.isArray(j.skills_required)) {
-				for (const s of j.skills_required) {
-					const trimmed = s.trim();
-					const norm = trimmed.toLowerCase();
-					if (trimmed && !seenCodes.has(norm)) {
-						const resolved = resolvedSkillLabel(trimmed) || trimmed;
-						if (!seenCodes.has(resolved.toLowerCase())) {
-							seenCodes.add(norm);
-							seenCodes.add(resolved.toLowerCase());
-							result.push({
-								code: trimmed,
-								label: resolved,
-								icon: isControlledSkill(trimmed) ? '🩺' : '🏷️',
-								isControlled: isControlledSkill(trimmed)
-							});
-						}
-					}
-				}
 			}
 		}
 
@@ -671,4 +628,9 @@
 	</div>
 </div>
 
-<QuickApplyModal bind:isOpen={isApplyModalOpen} job={selectedJob} />
+<QuickApplyModal
+	bind:isOpen={isApplyModalOpen}
+	job={selectedJob}
+	{applicantProfile}
+	{applicantCredential}
+/>

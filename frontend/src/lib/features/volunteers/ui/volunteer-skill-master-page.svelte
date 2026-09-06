@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { useMasterData, usePutMaster, type MasterDataItem } from '$lib/features/master-data';
-	import { SKILL_MASTER } from '../domain/skill-master';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -25,21 +24,7 @@
 	);
 	const putMutation = usePutMaster();
 
-	// Fallback seed items if CouchDB registry document has no items yet
-	const initialFallbackItems: MasterDataItem[] = SKILL_MASTER.map((s, idx) => ({
-		code: s.key === 'การแพทย์ / ปฐมพยาบาล' ? 'medical' : `skill_${idx + 1}`,
-		label: s.label,
-		category: s.controlled ? 'controlled' : 'operational',
-		description: s.description,
-		is_default: idx === 0,
-		status: 'active'
-	}));
-
-	const rawItems = $derived<MasterDataItem[]>(
-		masterQuery.data?.items && masterQuery.data.items.length > 0
-			? masterQuery.data.items
-			: initialFallbackItems
-	);
+	const rawItems = $derived<MasterDataItem[]>(masterQuery.data?.items ?? []);
 
 	// Filters & Search
 	let searchQuery = $state('');

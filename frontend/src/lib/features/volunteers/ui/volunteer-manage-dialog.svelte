@@ -55,8 +55,7 @@
 	const updateMutation = useUpdateVolunteer(queryClient);
 
 	// Master Data `volunteer_skills`, effective for this shelter (CR-100) —
-	// same source `job-form-dialog.svelte` uses, instead of the old static
-	// `SKILL_MASTER` list.
+	// the same source used by the job and walk-in forms.
 	const skillCatalog = useSkillOptions();
 	const skillsList = $derived(skillCatalog.options);
 

@@ -526,6 +526,13 @@ class VolunteersUseCase:
         )
         return buffer.applicant.phone_hash if buffer else None
 
+    async def _portal_id_matches(self, *, phone_hash_value: str, portal_id: str | None) -> bool:
+        """Bind a URL session to one of the public volunteer records it resolved."""
+        if not portal_id:
+            return True
+        rows = await PublicVolunteer.find(PublicVolunteer.phone_hash == phone_hash_value).to_list()
+        return any(row.id == portal_id for row in rows)
+
     async def get_ticket(self, token: str) -> VolunteerTicketResponse:
         """Open one pass, by the applicant's tracking token or a phone-lookup reference.
 
@@ -615,7 +622,11 @@ class VolunteersUseCase:
         )
 
     async def find_tickets(
-        self, *, phone: str | None = None, token: str | None = None
+        self,
+        *,
+        phone: str | None = None,
+        token: str | None = None,
+        portal_id: str | None = None,
     ) -> TicketFindResponse:
         """Resolve a phone number — or a token already in hand — to that person's tickets.
 
@@ -641,6 +652,8 @@ class VolunteersUseCase:
         """
         hashed = await self._phone_hash_for(phone=phone, token=token)
         if hashed is None:
+            return TicketFindResponse()
+        if not await self._portal_id_matches(phone_hash_value=hashed, portal_id=portal_id):
             return TicketFindResponse()
         projected = await PublicJobApplication.find(
             PublicJobApplication.phone_hash == hashed
@@ -699,7 +712,11 @@ class VolunteersUseCase:
         return TicketFindResponse(tickets=tickets, phone_masked=phone_masked)
 
     async def schedule(
-        self, *, phone: str | None = None, token: str | None = None
+        self,
+        *,
+        phone: str | None = None,
+        token: str | None = None,
+        portal_id: str | None = None,
     ) -> VolunteerScheduleResponse:
         """The volunteer's roster — every shift they hold, soonest first.
 
@@ -713,6 +730,8 @@ class VolunteersUseCase:
         """
         hashed = await self._phone_hash_for(phone=phone, token=token)
         if hashed is None:
+            return VolunteerScheduleResponse()
+        if not await self._portal_id_matches(phone_hash_value=hashed, portal_id=portal_id):
             return VolunteerScheduleResponse()
         assignments = await PublicShiftAssignment.find(
             PublicShiftAssignment.phone_hash == hashed
@@ -753,7 +772,11 @@ class VolunteersUseCase:
         return VolunteerScheduleResponse(shifts=shifts)
 
     async def profile(
-        self, *, phone: str | None = None, token: str | None = None
+        self,
+        *,
+        phone: str | None = None,
+        token: str | None = None,
+        portal_id: str | None = None,
     ) -> VolunteerProfileResponse:
         """The volunteer's own profile, merged across the shelters they hold one at.
 
@@ -763,11 +786,18 @@ class VolunteersUseCase:
         hashed = await self._phone_hash_for(phone=phone, token=token)
         if hashed is None:
             return VolunteerProfileResponse()
+        if not await self._portal_id_matches(phone_hash_value=hashed, portal_id=portal_id):
+            return VolunteerProfileResponse()
         profile = await self._merged_profile(hashed)
         return VolunteerProfileResponse(profile=profile)
 
     async def update_profile(
-        self, *, skills: list[str], phone: str | None = None, token: str | None = None
+        self,
+        *,
+        skills: list[str],
+        phone: str | None = None,
+        token: str | None = None,
+        portal_id: str | None = None,
     ) -> VolunteerProfileUpdateResponse:
         """Queue a profile edit for every ``volunteer`` document this person holds.
 
@@ -787,6 +817,11 @@ class VolunteersUseCase:
             else []
         )
         if not rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "PROFILE_NOT_FOUND"},
+            )
+        if portal_id and not any(row.id == portal_id for row in rows):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"success": False, "error": "PROFILE_NOT_FOUND"},
@@ -845,6 +880,7 @@ class VolunteersUseCase:
             identity_verified=any(row.identity_verified for row in rows),
             personnel_type=newest.personnel_type,
             shelter_codes=[row.shelter_code for row in rows],
+            portal_id=newest.id,
         )
 
     async def respond_to_dispatch(
@@ -855,6 +891,7 @@ class VolunteersUseCase:
         action: str,
         phone: str | None = None,
         token: str | None = None,
+        portal_id: str | None = None,
     ) -> DispatchRespondResponse:
         """Accept or decline an offered shift (CR-092 FR-VOL-06).
 
@@ -882,6 +919,10 @@ class VolunteersUseCase:
             # Already answered, never offered, or withdrawn — all the same answer.
             raise not_found
         caller_hash = await self._phone_hash_for(phone=phone, token=token)
+        if caller_hash and not await self._portal_id_matches(
+            phone_hash_value=caller_hash, portal_id=portal_id
+        ):
+            raise not_found
         if not assignment.phone_hash or assignment.phone_hash != caller_hash:
             raise not_found
         if not assignment.response_code_hash or not hmac.compare_digest(

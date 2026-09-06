@@ -15,25 +15,22 @@
 
 import type { Job } from './job.schema';
 import type { JobApplicationStatus } from './job-application.schema';
-import { CONTROLLED_SKILL_KEYS } from './skill-master';
 import { normalizeSkillText } from './skill-catalog';
 
 /**
- * Fallback controlled-skill list until the settings master data is wired.
- *
- * Derived from `skill-master.ts` so the cards the SM ticks on the job form and
- * the gate that forces `pending_review` can never disagree, plus the loose
- * Thai/English synonyms a free-text walk-in entry may produce.
+ * Compatibility floor for legacy free-text applications. The selectable skill
+ * list and the normal controlled-skill list come from Master Data; these values
+ * only protect old records written before `volunteer_skills` existed.
  */
 export const DEFAULT_CONTROLLED_SKILLS: readonly string[] = [
-	...CONTROLLED_SKILL_KEYS,
 	'medical',
 	'nursing',
 	'first aid',
 	'พยาบาล',
 	'การแพทย์',
 	'แพทย์',
-	'ปฐมพยาบาล'
+	'ปฐมพยาบาล',
+	'การแพทย์ / ปฐมพยาบาล'
 ];
 
 // `normalizeSkillText` trims/lowercases and NFC-composes so Thai text pasted

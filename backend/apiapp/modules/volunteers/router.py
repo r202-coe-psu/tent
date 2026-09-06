@@ -121,7 +121,9 @@ async def find_tickets(
 ) -> TicketFindResponse:
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.find_tickets(phone=payload.phone, token=payload.token)
+    return await use_case.find_tickets(
+        phone=payload.phone, token=payload.token, portal_id=payload.portal_id
+    )
 
 
 @router.post(
@@ -156,7 +158,9 @@ async def volunteer_schedule(
     # Check-in state changes during a shift; a cached schedule shows someone as not yet
     # arrived after they have scanned in.
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.schedule(phone=payload.phone, token=payload.token)
+    return await use_case.schedule(
+        phone=payload.phone, token=payload.token, portal_id=payload.portal_id
+    )
 
 
 @router.post(
@@ -177,8 +181,28 @@ async def respond_to_dispatch(
         assignment_id=payload.assignment_id,
         phone=payload.phone,
         token=payload.token,
+        portal_id=payload.portal_id,
         code=payload.code,
         action=payload.action,
+    )
+
+
+@router.post(
+    "/volunteer/access/resolve",
+    response_model=VolunteerProfileResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def resolve_volunteer_access(
+    request: Request,
+    response: Response,
+    payload: TicketFindRequest,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> VolunteerProfileResponse:
+    """Resolve a portal credential before a browser session is created."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.profile(
+        phone=payload.phone, token=payload.token, portal_id=payload.portal_id
     )
 
 
@@ -216,5 +240,8 @@ async def update_volunteer_profile(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.update_profile(
-        skills=payload.skills, phone=payload.phone, token=payload.token
+        skills=payload.skills,
+        phone=payload.phone,
+        token=payload.token,
+        portal_id=payload.portal_id,
     )

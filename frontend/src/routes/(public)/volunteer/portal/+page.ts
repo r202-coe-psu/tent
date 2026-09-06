@@ -10,5 +10,5 @@ import type { PageLoad } from './$types';
  * the staff auth wall — which volunteers have no account for.
  */
 export const load = (() => {
-	redirect(308, `${resolve('/volunteers/portal')}?tab=portal`);
+	redirect(308, resolve('/volunteers/portal'));
 }) satisfies PageLoad;

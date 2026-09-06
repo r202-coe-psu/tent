@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	FALLBACK_SKILL_OPTIONS,
 	controlledSkillValues,
 	hasAnyRequiredSkill,
 	normalizeSkillText,
@@ -116,18 +115,6 @@ describe('hasAnyRequiredSkill', () => {
 	it('matches across the code/label boundary', () => {
 		expect(hasAnyRequiredSkill(['การแพทย์ / ปฐมพยาบาล'], ['medical'], OPTIONS)).toBe(true);
 		expect(hasAnyRequiredSkill(['kitchen'], ['medical'], OPTIONS)).toBe(false);
-	});
-});
-
-describe('FALLBACK_SKILL_OPTIONS', () => {
-	it('uses the pre-CR-100 stored value as both code and label', () => {
-		expect(FALLBACK_SKILL_OPTIONS.every((o) => o.code === o.label)).toBe(true);
-	});
-
-	it('still marks the medical entry controlled', () => {
-		expect(FALLBACK_SKILL_OPTIONS.filter((o) => o.controlled).map((o) => o.label)).toEqual([
-			'การแพทย์ / ปฐมพยาบาล'
-		]);
 	});
 });
 

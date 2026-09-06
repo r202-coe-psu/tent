@@ -214,7 +214,8 @@ export type TicketFindInput = z.infer<typeof ticketFindSchema>;
  * re-opening the pass.
  */
 export type PortalCredential =
-	{ phone: string; token?: undefined } | { token: string; phone?: undefined };
+	| { phone: string; token?: undefined; portal_id?: string }
+	| { token: string; phone?: undefined; portal_id?: string };
 
 /**
  * Validates whichever credential a portal request carries — the BFF's gate before
@@ -224,8 +225,11 @@ export type PortalCredential =
  * with dashes here hashes to the one stored at sign-up.
  */
 export const portalCredentialSchema = z.union([
-	z.object({ phone: phoneField }),
-	z.object({ token: z.string().trim().min(6).max(200) })
+	z.object({ phone: phoneField, portal_id: z.string().trim().min(1).max(120).optional() }),
+	z.object({
+		token: z.string().trim().min(6).max(200),
+		portal_id: z.string().trim().min(1).max(120).optional()
+	})
 ]);
 
 /**
@@ -263,6 +267,8 @@ export type VolunteerProfile = {
 	identity_verified: boolean;
 	personnel_type: string;
 	shelter_codes: string[];
+	/** Opaque public reference used in `/volunteers/portal/volunteer/{portal_id}`. */
+	portal_id: string;
 };
 
 /**
@@ -287,6 +293,9 @@ export type VolunteerProfileUpdateInput = z.infer<typeof volunteerProfileUpdateS
  * the same tab, not a stored session.
  */
 export const PORTAL_TOKEN_HANDOFF_KEY = 'volunteer-portal-handoff-token';
+
+/** Short-lived browser handoff between the public login screen and dashboard route. */
+export const PORTAL_SESSION_KEY = 'volunteer-portal-session';
 
 const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
 const VIEW_TOKEN_PREFIX = 'VIEW-';

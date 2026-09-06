@@ -26,7 +26,6 @@ import { useMasterData } from '$lib/features/master-data';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
 import {
-	FALLBACK_SKILL_OPTIONS,
 	controlledSkillValues,
 	skillOptionsFromMaster,
 	type SkillOption
@@ -275,8 +274,8 @@ export const useAssignVolunteers = (queryClient: QueryClient) =>
  * ones this shelter disabled coming back `inactive` — and TanStack dedupes the
  * shared query key, so calling this from several components costs one request.
  *
- * Falls back to the pre-CR-100 hardcoded list while the query is in flight or
- * when the registry document is still empty, so a form is never skill-less.
+ * An empty result means the registry has no active skills yet. The UI must not
+ * manufacture labels from implementation codes when Master Data is unavailable.
  */
 export function useSkillOptions() {
 	const masterQuery = useMasterData(() => 'volunteer_skills');
@@ -286,9 +285,7 @@ export function useSkillOptions() {
 		},
 		get options(): readonly SkillOption[] {
 			const items = masterQuery.data?.items ?? [];
-			if (items.length === 0) return FALLBACK_SKILL_OPTIONS;
-			const mapped = skillOptionsFromMaster(items);
-			return mapped.length > 0 ? mapped : FALLBACK_SKILL_OPTIONS;
+			return skillOptionsFromMaster(items);
 		},
 		/** Values that force `pending_review` — pass straight to `initialStatusForSkills`. */
 		get controlledValues(): string[] {

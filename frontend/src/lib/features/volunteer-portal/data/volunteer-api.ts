@@ -35,7 +35,9 @@ const ERROR_COPY: Record<string, string> = {
 	OFFER_ALREADY_ANSWERED: 'ภารกิจนี้ถูกตอบไปแล้ว',
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
-	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่'
+	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
+	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
+	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง'
 };
 
 function apiError(body: unknown, status: number, fallback: string): Error {
@@ -175,6 +177,22 @@ export async function fetchProfile(credential: PortalCredential): Promise<Volunt
 	const data = await readJson(response);
 	if (!response.ok || !data) {
 		throw apiError(data, response.status, 'ไม่สามารถโหลดโปรไฟล์ได้');
+	}
+	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
+}
+
+/** Resolve the credential before creating a portal session or putting an id in the URL. */
+export async function resolvePortalAccess(
+	credential: PortalCredential
+): Promise<VolunteerProfile | null> {
+	const response = await fetch('/api/public/v1/volunteer/access/resolve', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(credential)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้');
 	}
 	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
 }

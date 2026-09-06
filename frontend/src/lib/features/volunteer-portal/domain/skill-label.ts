@@ -20,6 +20,11 @@ function normalize(value: string): string {
 	return value.trim().toLowerCase().normalize('NFC');
 }
 
+/** Master Data codes are implementation details and must never be a label. */
+export function isTechnicalSkillValue(value: string): boolean {
+	return /^item_[a-z0-9]+$/i.test(value.trim());
+}
+
 /** The master option a stored value refers to, by code then by legacy label. */
 export function findSkillOption(
 	value: string,
@@ -35,7 +40,9 @@ export function findSkillOption(
 
 /** Human label for a stored value — the raw value when the list has dropped it. */
 export function skillLabel(value: string, options: readonly VolunteerSkillOption[]): string {
-	return findSkillOption(value, options)?.label ?? value;
+	const option = findSkillOption(value, options);
+	const label = option?.label?.trim() ?? value.trim();
+	return isTechnicalSkillValue(label) ? '' : label;
 }
 
 /** `{ value, label }` per stored skill, in the order the job lists them. */
@@ -44,7 +51,8 @@ export function skillLabels(
 	options: readonly VolunteerSkillOption[]
 ): { value: string; label: string }[] {
 	return values.flatMap((value) => {
-		const option = findSkillOption(value, options);
-		return option?.label?.trim() ? [{ value, label: option.label.trim() }] : [];
+		if (!findSkillOption(value, options)) return [];
+		const label = skillLabel(value, options);
+		return label ? [{ value, label }] : [];
 	});
 }

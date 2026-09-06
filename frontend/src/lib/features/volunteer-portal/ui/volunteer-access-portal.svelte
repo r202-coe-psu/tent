@@ -13,34 +13,45 @@
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
+	import { goto } from '$app/navigation';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import {
 		useRespondToDispatchMutation,
+		useResolvePortalAccessMutation,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
 		useVolunteerTickets
 	} from '../application/queries';
-	import JobBoard from './job-board.svelte';
+	import { volunteerPortalKeys } from '../application/queries';
+	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
 		isJobApplicable,
 		normalizeTicketToken,
+		portalCredentialSchema,
+		PORTAL_SESSION_KEY,
 		PORTAL_TOKEN_HANDOFF_KEY,
 		ticketStatusLabel,
 		responseCodeSchema,
 		ticketFindSchema,
 		ticketTokenFromScan,
 		type PortalCredential,
+		type VolunteerProfile,
 		type ScheduleShift,
 		type TicketSummary
 	} from '../domain/volunteer';
 
+	let {
+		mode = 'entry',
+		portalId = ''
+	}: { mode?: 'entry' | 'dashboard' | 'openings'; portalId?: string } = $props();
+
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
-	// One shape for both sources. The demo fixtures below and the live API are mapped
-	// into it, so the markup underneath never has to know which one it is rendering.
+	// The live profile, schedule and ticket responses are mapped into one render model.
 	interface PortalShift {
 		id: string;
 		shiftPeriod: string;
@@ -99,24 +110,104 @@
 	 * below is written against the credential, never against "the phone".
 	 */
 	let session = $state<PortalCredential | null>(null);
+	let restoring = $state(true);
+	let isLoggingIn = $state(false);
 
-	/**
-	 * Pick up the token a just-completed booking left behind, so the volunteer lands on
-	 * their own ตารางทำงาน already signed in instead of being asked for the number they
-	 * typed thirty seconds ago. Cleared immediately: a shared tablet must not sign the
-	 * next person in as this one.
-	 */
+	function persistSession(credential: PortalCredential | null) {
+		try {
+			if (credential) sessionStorage.setItem(PORTAL_SESSION_KEY, JSON.stringify(credential));
+			else sessionStorage.removeItem(PORTAL_SESSION_KEY);
+		} catch {
+			// Storage can be unavailable in private mode; the current page still works.
+		}
+	}
+
+	function portalPath(id: string, section = 'dashboard') {
+		return `/volunteers/portal/volunteer/${encodeURIComponent(id)}/${section}`;
+	}
+
+	function clearPortalSession() {
+		try {
+			sessionStorage.removeItem(PORTAL_SESSION_KEY);
+			sessionStorage.removeItem(PORTAL_TOKEN_HANDOFF_KEY);
+		} catch {
+			// Storage unavailable.
+		}
+	}
+
+	function enterDashboard(credential: PortalCredential & { portal_id: string }) {
+		session = credential;
+		persistSession(credential);
+		void goto(portalPath(credential.portal_id));
+	}
+
+	const resolveAccess = useResolvePortalAccessMutation();
+	const queryClient = useQueryClient();
+
+	async function resolveAndEnter(credential: PortalCredential) {
+		isLoggingIn = true;
+		loginError = '';
+		try {
+			const profile = await resolveAccess.mutateAsync(credential);
+			if (!profile?.portal_id) {
+				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				return;
+			}
+			enterDashboard({ ...credential, portal_id: profile.portal_id });
+		} catch (error) {
+			loginError = error instanceof Error ? error.message : 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้';
+		} finally {
+			isLoggingIn = false;
+		}
+	}
+
+	/** Restore a short-lived session or the token handed over after a new booking. */
 	$effect(() => {
-		if (session) return;
+		if (session) {
+			restoring = false;
+			if (mode === 'entry' && session.portal_id) void goto(portalPath(session.portal_id));
+			return;
+		}
 		let handed: string | null = null;
+		let stored: string | null = null;
 		try {
 			handed = sessionStorage.getItem(PORTAL_TOKEN_HANDOFF_KEY);
 			if (handed) sessionStorage.removeItem(PORTAL_TOKEN_HANDOFF_KEY);
+			stored = sessionStorage.getItem(PORTAL_SESSION_KEY);
 		} catch {
-			// Storage unavailable (private mode). The login form is still there.
+			// Storage unavailable; the login form is still there.
 		}
 		const token = handed ? normalizeTicketToken(handed) : null;
-		if (token) session = { token };
+		if (token) {
+			void resolveAndEnter({ token });
+			restoring = false;
+			return;
+		}
+		if (!stored) {
+			restoring = false;
+			if (mode !== 'entry') void goto('/volunteers/portal');
+			return;
+		}
+		try {
+			const parsed = portalCredentialSchema.safeParse(JSON.parse(stored));
+			if (parsed.success && parsed.data.portal_id) {
+				if (mode !== 'entry' && portalId !== parsed.data.portal_id) {
+					clearPortalSession();
+					void goto('/volunteers/portal');
+					restoring = false;
+					return;
+				}
+				session = parsed.data;
+				if (mode === 'entry') void goto(portalPath(parsed.data.portal_id));
+			} else {
+				clearPortalSession();
+				if (mode !== 'entry') void goto('/volunteers/portal');
+			}
+		} catch {
+			clearPortalSession();
+			if (mode !== 'entry') void goto('/volunteers/portal');
+		}
+		restoring = false;
 	});
 
 	const scheduleQuery = useVolunteerSchedule(() => session);
@@ -192,35 +283,33 @@
 	}
 
 	function toPortalVolunteer(
+		profile: VolunteerProfile,
 		credential: PortalCredential,
-		phoneMasked: string,
 		shifts: ScheduleShift[],
 		tickets: TicketSummary[]
 	): PortalVolunteer {
-		const named = tickets.find((t) => t.applicant_name)?.applicant_name ?? '';
+		const named = `${profile.first_name} ${profile.last_name}`.trim();
 		const first = shifts[0];
 		// A token session never holds the raw number — the API returns it masked, which
 		// is also what may be shown on a screen held up at a gate (AC-VOL-03).
-		const shownPhone = phoneMasked || credential.phone || '';
+		const shownPhone = profile.phone_masked;
 		return {
-			id: credential.token ?? credential.phone ?? '',
-			// A real ticket token is what the check-in station can actually resolve; a
-			// phone session has none, so it falls back to the number it signed in with.
-			token: credential.token ?? `VOL-${credential.phone}`,
-			name: named || 'จิตอาสา',
-			avatar: (named || 'อา').slice(0, 2),
+			id: profile.portal_id,
+			token: credential.token ?? '',
+			name: named || profile.nickname || 'จิตอาสา',
+			avatar: (named || profile.nickname || 'อา').slice(0, 2),
 			phone: shownPhone,
 			shelterName: first?.shelter_name ?? '',
 			shelterCode: first?.shelter_code ?? '',
-			verified: true,
+			verified: profile.identity_verified,
 			statusText: shifts.some((s) => s.status === 'checked_in')
 				? 'ปฏิบัติหน้าที่อยู่'
 				: shifts.length
 					? 'พร้อมปฏิบัติงาน'
 					: 'รอการมอบหมาย',
 			statusType: shifts.some((s) => s.status === 'checked_in') ? 'active' : 'pending',
-			roleType: '⚡ Operational (จิตอาสาทั่วไป)',
-			readiness: shifts.length > 0,
+			roleType: profile.personnel_type || 'จิตอาสา',
+			readiness: false,
 			scheduleCount: shifts.length,
 			shifts: shifts.map(toPortalShift),
 			bookings: tickets.map((ticket) => ({
@@ -239,10 +328,13 @@
 		if (!credential) return null;
 		// Held back until the schedule has answered, so the dashboard does not flash an
 		// empty roster at someone who does have shifts.
-		if (scheduleQuery.isPending) return null;
+		if (restoring || profileQuery.isPending || scheduleQuery.isPending || ticketsQuery.isPending)
+			return null;
+		const profile = profileQuery.data;
+		if (!profile || !profile.portal_id || profile.portal_id !== credential.portal_id) return null;
 		return toPortalVolunteer(
+			profile,
 			credential,
-			ticketsQuery.data?.phoneMasked ?? '',
 			scheduleQuery.data ?? [],
 			ticketsQuery.data?.tickets ?? []
 		);
@@ -252,6 +344,10 @@
 	const currentVolunteer = $derived(liveVolunteer);
 
 	let dashboardTab = $state<'schedule' | 'openings'>('schedule');
+	$effect(() => {
+		if (mode === 'openings') dashboardTab = 'openings';
+		if (mode === 'dashboard') dashboardTab = 'schedule';
+	});
 	let isPassModalOpen = $state(false);
 	let passModalEl = $state<HTMLElement | null>(null);
 	let isPassFullscreen = $state(false);
@@ -309,7 +405,11 @@
 	// Generate QR Code data URL when volunteer is active
 	$effect(() => {
 		if (currentVolunteer) {
-			const payload = `SMARTSHELTER:VOLUNTEER:${currentVolunteer.token}:${currentVolunteer.phone}`;
+			if (!currentVolunteer.token) {
+				qrDataUrl = '';
+				return;
+			}
+			const payload = `SMARTSHELTER:VOLUNTEER:${currentVolunteer.token}`;
 			generateQrDataUrl(payload, {
 				width: 320,
 				margin: 1,
@@ -326,8 +426,7 @@
 		}
 	});
 
-	// Filter demo list
-	function handlePhoneLogin(e: SubmitEvent) {
+	async function handlePhoneLogin(e: SubmitEvent) {
 		e.preventDefault();
 		loginError = '';
 		const trimmed = inputPhone.trim().replace(/[-\s]/g, '');
@@ -341,10 +440,7 @@
 			loginError = parsed.error.issues[0]?.message ?? 'เบอร์โทรศัพท์ไม่ถูกต้อง';
 			return;
 		}
-		// The normalised form, so the query key matches however it was typed. What comes
-		// back is whatever the server holds — a number with no shifts opens an empty
-		// dashboard rather than a session invented on the spot.
-		session = { phone: parsed.data.phone };
+		await resolveAndEnter({ phone: parsed.data.phone });
 	}
 
 	/**
@@ -359,7 +455,7 @@
 	 * empty dashboard, the same as an unknown phone number, so this screen cannot be
 	 * used to probe which tokens exist.
 	 */
-	function submitToken(value: string) {
+	async function submitToken(value: string) {
 		loginError = '';
 		if (!value.trim()) {
 			loginError = 'กรุณากรอกรหัส Token หรือรหัสตั๋วจิตอาสา';
@@ -370,12 +466,12 @@
 			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL- หรือ VIEW-';
 			return;
 		}
-		session = { token };
+		await resolveAndEnter({ token });
 	}
 
 	function handleTokenLogin(e: SubmitEvent) {
 		e.preventDefault();
-		submitToken(inputToken);
+		void submitToken(inputToken);
 	}
 
 	/**
@@ -412,34 +508,30 @@
 
 	function handleLogout() {
 		session = null;
-		readinessOverride = null;
+		clearPortalSession();
 		dispatchCodes = {};
 		dispatchErrors = {};
 		inputPhone = '';
 		inputToken = '';
 		loginError = '';
+		queryClient.removeQueries({ queryKey: volunteerPortalKeys.all });
 		toast.info('ออกจากระบบแล้ว');
+		void goto('/volunteers/portal');
 	}
 
-	/**
-	 * Availability, as the volunteer last set it in this session.
-	 *
-	 * Held separately from `currentVolunteer` because that is derived from the server
-	 * response: writing to it was lost the moment the schedule refetched, which is why
-	 * the two buttons appeared to do nothing.
-	 *
-	 * Not persisted yet — no endpoint accepts it. See the note in CR-096.
-	 */
-	let readinessOverride = $state<boolean | null>(null);
-	const isReady = $derived(readinessOverride ?? currentVolunteer?.readiness ?? false);
-
-	function setReadiness(value: boolean) {
-		// Two buttons, each setting one value. They used to share a toggle, so pressing
-		// the one already active flipped the state to the opposite of what it said.
-		if (isReady === value) return;
-		readinessOverride = value;
-		toast.success(value ? 'อัปเดตสถานะ: พร้อมปฏิบัติงาน 🟢' : 'อัปเดตสถานะ: พักผ่อน/ไม่พร้อม ⚪');
-	}
+	$effect(() => {
+		if (
+			mode !== 'entry' &&
+			session &&
+			!restoring &&
+			!profileQuery.isPending &&
+			(profileQuery.isError || profileQuery.data === null)
+		) {
+			session = null;
+			clearPortalSession();
+			void goto('/volunteers/portal');
+		}
+	});
 </script>
 
 <div class="mx-auto w-full max-w-6xl space-y-8">
@@ -459,7 +551,14 @@
 		</p>
 	</header>
 
-	{#if !currentVolunteer}
+	{#if mode !== 'entry' && session && (restoring || !currentVolunteer)}
+		<div
+			class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-10 text-center shadow-sm"
+		>
+			<p class="text-sm font-bold text-foreground">กำลังตรวจสอบข้อมูลจิตอาสา…</p>
+			<p class="mt-2 text-xs text-muted-foreground">กำลังโหลดโปรไฟล์และตารางงานของคุณ</p>
+		</div>
+	{:else if !currentVolunteer}
 		<!-- ── NOT SIGNED IN VIEW ───────────────────────────────────────────── -->
 		<div class="mx-auto max-w-2xl space-y-6">
 			<!-- MAIN LOGIN CARD -->
@@ -528,10 +627,11 @@
 
 						<button
 							type="submit"
-							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-all hover:opacity-95 active:scale-[0.99]"
+							disabled={isLoggingIn}
+							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-all hover:opacity-95 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
 						>
 							<Rocket class="size-4" />
-							<span>เข้าสู่ระบบทันที</span>
+							<span>{isLoggingIn ? 'กำลังตรวจสอบ…' : 'เข้าสู่ระบบทันที'}</span>
 						</button>
 					</form>
 				{:else}
@@ -551,7 +651,8 @@
 								/>
 								<button
 									type="submit"
-									class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-95"
+									disabled={isLoggingIn}
+									class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
 								>
 									<Rocket class="size-3.5" />
 									<span>เข้าสู่ระบบ</span>
@@ -648,34 +749,8 @@
 				</div>
 			</div>
 
-			<!-- Right: Readiness Toggle + Actions -->
+			<!-- Right: Actions -->
 			<div class="flex flex-wrap items-center gap-3">
-				<!-- Status Toggle -->
-				<div class="flex rounded-xl border border-border bg-muted/30 p-1">
-					<button
-						type="button"
-						onclick={() => setReadiness(true)}
-						aria-pressed={isReady}
-						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {isReady
-							? 'border border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs dark:bg-emerald-950/80 dark:text-emerald-200'
-							: 'text-muted-foreground'}"
-					>
-						<span class="size-2 rounded-full bg-emerald-500"></span>
-						<span>พร้อมปฏิบัติงาน</span>
-					</button>
-					<button
-						type="button"
-						onclick={() => setReadiness(false)}
-						aria-pressed={!isReady}
-						class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {!isReady
-							? 'border border-border bg-card text-foreground shadow-xs'
-							: 'text-muted-foreground'}"
-					>
-						<span class="size-2 rounded-full bg-muted-foreground"></span>
-						<span>พักผ่อน/ไม่พร้อม</span>
-					</button>
-				</div>
-
 				<button
 					type="button"
 					onclick={() => (profileDialogOpen = true)}
@@ -700,7 +775,7 @@
 			<div class="inline-flex rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1">
 				<button
 					type="button"
-					onclick={() => (dashboardTab = 'schedule')}
+					onclick={() => void goto(portalPath(currentVolunteer.id, 'dashboard'))}
 					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
 					'schedule'
 						? 'bg-card text-foreground shadow-sm'
@@ -717,7 +792,7 @@
 
 				<button
 					type="button"
-					onclick={() => (dashboardTab = 'openings')}
+					onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
 					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
 					'openings'
 						? 'bg-card text-foreground shadow-sm'
@@ -807,7 +882,7 @@
 								<p class="mt-1 text-xs">คุณสามารถเลือกดูงานที่เปิดรับได้ที่แท็บ "ตลาดงานจิตอาสา"</p>
 								<button
 									type="button"
-									onclick={() => (dashboardTab = 'openings')}
+									onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
 									class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
 								>
 									ดูตลาดงานจิตอาสา
@@ -975,50 +1050,61 @@
 							<h4 class="text-xs font-bold text-foreground">
 								บัตรอาสาสมัครอัจฉริยะ (QR Role Card)
 							</h4>
-							<button
-								type="button"
-								onclick={() => (isPassModalOpen = true)}
-								class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline"
-							>
-								<Maximize2 class="size-3" /> ขยายบัตร
-							</button>
+							{#if currentVolunteer.token}
+								<button
+									type="button"
+									onclick={() => (isPassModalOpen = true)}
+									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline"
+								>
+									<Maximize2 class="size-3" /> ขยายบัตร
+								</button>
+							{/if}
 						</div>
 						<p class="mt-2 text-2xs text-muted-foreground">
 							คุณสามารถรับสิทธิสวัสดิการ อาหารร้อน น้ำดื่ม และเวชภัณฑ์ที่เจ้าหน้าที่จัดเตรียมไว้
 							โดยใช้บัตรนี้แสดงต่อเจ้าหน้าที่ ณ จุดแจกจ่าย
 						</p>
 
-						<!-- Mini QR Role Card -->
+						<!-- Mini QR Role Card, available when the session holds a real ticket token. -->
 						<div
 							class="mt-4 rounded-2xl border border-border bg-muted/20 p-4 text-center transition-all hover:bg-muted/30"
 						>
-							{#if qrDataUrl}
-								<img
-									src={qrDataUrl}
-									alt="QR Code"
-									class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
-								/>
-							{:else}
-								<div
-									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
-								>
-									<QrCode class="size-16" />
+							{#if currentVolunteer.token}
+								{#if qrDataUrl}
+									<img
+										src={qrDataUrl}
+										alt="QR Code"
+										class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
+									/>
+								{:else}
+									<div
+										class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
+									>
+										<QrCode class="size-16" />
+									</div>
+								{/if}
+								<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
+								<p class="text-2xs font-semibold text-muted-foreground">{currentVolunteer.token}</p>
+								<div class="mt-2 flex justify-center gap-1">
+									<span
+										class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+									>
+										🟢 ยืนยันตัวตนแล้ว
+									</span>
+									<span
+										class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+									>
+										🟢 ปฏิบัติหน้าที่อยู่
+									</span>
 								</div>
+							{:else}
+								<QrCode class="mx-auto size-10 text-muted-foreground/60" />
+								<p class="mt-3 text-xs font-bold text-foreground">ยังไม่มี QR ตั๋วใน session นี้</p>
+								<p class="mt-1 text-2xs text-muted-foreground">
+									การเข้าสู่ระบบด้วยเบอร์โทรศัพท์ใช้สำหรับดูตารางงาน หากต้องการ QR
+									ให้เปิดตั๋วจากรายการจอง
+								</p>
 							{/if}
-							<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
-							<p class="text-2xs font-semibold text-muted-foreground">{currentVolunteer.token}</p>
-							<div class="mt-2 flex justify-center gap-1">
-								<span
-									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
-								>
-									🟢 ยืนยันตัวตนแล้ว
-								</span>
-								<span
-									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
-								>
-									🟢 ปฏิบัติหน้าที่อยู่
-								</span>
-							</div>
 						</div>
 					</div>
 				</div>
@@ -1031,7 +1117,7 @@
 				own search, filters and no-auth application form, and TanStack dedupes the
 				fetch with the `openingsQuery` above rather than asking twice.
 			-->
-			<JobBoard />
+			<JobBoard applicantProfile={profileQuery.data} applicantCredential={session} />
 		{/if}
 	{/if}
 </div>

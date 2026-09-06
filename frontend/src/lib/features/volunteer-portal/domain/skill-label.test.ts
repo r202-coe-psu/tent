@@ -40,6 +40,21 @@ describe('skillLabel', () => {
 		expect(skillLabel('kitchen', OPTIONS)).toBe('ประกอบอาหาร / ครัวสนาม');
 	});
 
+	it('labels a real Master Data code even though the code itself looks technical', () => {
+		const masterOptions: VolunteerSkillOption[] = [
+			{
+				code: 'item_01m1vs0fj92e25krt2when7cjc',
+				label: 'ประกอบอาหาร / ครัวสนาม',
+				category: 'operational',
+				description: '',
+				is_default: true
+			}
+		];
+		expect(skillLabel('item_01m1vs0fj92e25krt2when7cjc', masterOptions)).toBe(
+			'ประกอบอาหาร / ครัวสนาม'
+		);
+	});
+
 	it('shows an unknown value as-is instead of hiding it', () => {
 		expect(skillLabel('ทักษะลับ', OPTIONS)).toBe('ทักษะลับ');
 	});

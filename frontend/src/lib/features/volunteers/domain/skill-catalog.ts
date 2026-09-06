@@ -18,8 +18,6 @@
  * gating correctly, and moves to a code the next time it is saved.
  */
 
-import { SKILL_MASTER } from './skill-master';
-
 /** One selectable skill as the UI needs it. */
 export interface SkillOption {
 	/** Master Data `code` — the value stored on documents from CR-100 onward. */
@@ -70,20 +68,6 @@ export function skillOptionsFromMaster(items: readonly MasterSkillItem[]): Skill
 			controlled: isControlledCategory(item.category)
 		}));
 }
-
-/**
- * Options used until Master Data answers (or when a registry doc is still
- * empty), derived from the pre-CR-100 hardcoded list. Its `key` was the stored
- * value back then, so it doubles as both code and label here — which is
- * exactly what the compat rule expects to find.
- */
-export const FALLBACK_SKILL_OPTIONS: readonly SkillOption[] = SKILL_MASTER.map((skill) => ({
-	code: skill.key,
-	label: skill.label,
-	description: skill.description,
-	icon: skill.icon,
-	controlled: skill.controlled
-}));
 
 /** The option a stored value refers to: by `code`, else by legacy label. */
 export function resolveSkillOption(

@@ -130,6 +130,9 @@ async function mockPortalApi(page: Page) {
 	await page.route('**/api/public/v1/volunteer/profile', (route) =>
 		route.fulfill(json({ success: true, profile: PROFILE }))
 	);
+	await page.route('**/api/public/v1/volunteer/access/resolve', (route) =>
+		route.fulfill(json({ success: true, profile: PROFILE }))
+	);
 	// The profile form offers whatever Master Data holds, so the fixture stands in for it.
 	await page.route('**/api/public/v1/config/volunteer-skills*', (route) =>
 		route.fulfill(json({ volunteerSkills: SKILLS }))
@@ -161,6 +164,7 @@ const SKILLS = [
 ];
 
 const PROFILE = {
+	portal_id: '01PORTALVOLUNTEER',
 	first_name: 'สมชาย',
 	last_name: 'ใจดี',
 	nickname: null,
@@ -176,11 +180,11 @@ const PROFILE = {
 
 /** Open the portal tab — it is the second tab, not the landing one. */
 async function openPortalTab(page: Page) {
-	await page.goto('/volunteers/portal?tab=portal');
+	await page.goto('/volunteers/portal');
 	await expect(page.locator('#volunteer-phone-input')).toBeVisible();
 }
 
-/** Sign in with a phone number. Fixture numbers open the demo; others go live. */
+/** Sign in with a phone number. The resolve endpoint decides whether it exists. */
 async function signIn(page: Page, value: string) {
 	await page.locator('#volunteer-phone-input').fill(value);
 	await page.getByRole('button', { name: 'เข้าสู่ระบบทันที' }).click();
@@ -214,9 +218,12 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 	test('every number goes to the server — there is no built-in fixture session', async ({
 		page
 	}) => {
-		// The demonstration fixtures were removed once the portal was wired to the API.
-		// A number the server does not know opens an empty dashboard, never a made-up one.
+		// A number the server does not know must stay on the login screen, never open a
+		// made-up dashboard.
 		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/access/resolve', (route) =>
+			route.fulfill(json({ success: true, profile: null }))
+		);
 		await page.route('**/api/public/v1/volunteer/schedule', (route) =>
 			route.fulfill(json({ success: true, shifts: [] }))
 		);
@@ -226,7 +233,8 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await openPortalTab(page);
 		await signIn(page, '081-9992211');
 
-		await expect(signOutButton(page)).toBeVisible();
+		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา')).toBeVisible();
+		await expect(signOutButton(page)).toHaveCount(0);
 		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 		await expect(page.getByText('นายเก่งกล้า')).toHaveCount(0);
 	});
@@ -268,9 +276,9 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 
 		await expect(signOutButton(page)).toBeVisible();
 		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร').first()).toBeVisible();
-		await expect(page).toHaveURL(/\/volunteers\/portal/);
+		await expect(page).toHaveURL(/\/volunteers\/portal\/volunteer\/01PORTALVOLUNTEER\/dashboard/);
 		// The token goes to the server as the credential; the phone is never invented here.
-		expect(asked).toEqual({ token: TRACKING_TOKEN });
+		expect(asked).toEqual({ token: TRACKING_TOKEN, portal_id: '01PORTALVOLUNTEER' });
 	});
 
 	test('refuses a code that is neither a ticket token nor a view reference', async ({ page }) => {
@@ -367,10 +375,10 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await page.getByRole('checkbox').check();
 		await page.getByRole('button', { name: /ยืนยันการจอง/ }).click();
 
-		await expect(page).toHaveURL(/\/volunteers\/portal\?tab=portal/);
+		await expect(page).toHaveURL(/\/volunteers\/portal\/volunteer\/01PORTALVOLUNTEER\/dashboard/);
 		await expect(signOutButton(page)).toBeVisible();
 		// Signed in with the booking's own token, never with a phone the page kept around.
-		expect(scheduleAskedWith).toEqual({ token: TRACKING_TOKEN });
+		expect(scheduleAskedWith).toEqual({ token: TRACKING_TOKEN, portal_id: '01PORTALVOLUNTEER' });
 	});
 });
 
@@ -418,7 +426,11 @@ test.describe('Editing your own profile', () => {
 		await dialog.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' }).click();
 
 		await expect(dialog).toHaveCount(0);
-		expect(sent).toEqual({ phone: PHONE, skills: ['ขับขี่ยานพาหนะ / ขนส่ง'] });
+		expect(sent).toEqual({
+			phone: PHONE,
+			portal_id: '01PORTALVOLUNTEER',
+			skills: ['ขับขี่ยานพาหนะ / ขนส่ง']
+		});
 	});
 
 	test('says what went wrong instead of closing on a refusal', async ({ page }) => {
@@ -536,6 +548,7 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 			assignment_id: 'shift_assignment:01UPCOMING',
 			// Both factors travel together — neither is enough on its own.
 			phone: PHONE,
+			portal_id: '01PORTALVOLUNTEER',
 			// Normalised client-side, so the server compares one canonical form.
 			code: 'SEED99',
 			action: 'accepted'

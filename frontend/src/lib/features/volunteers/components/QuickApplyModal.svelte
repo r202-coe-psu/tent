@@ -19,7 +19,10 @@
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '../i18n/jobs.i18n';
-	import { SKILL_MASTER } from '../domain/skill-master';
+	import type {
+		PortalCredential,
+		VolunteerProfile
+	} from '$lib/features/volunteer-portal/domain/volunteer';
 
 	export interface ShiftDetail {
 		id: string;
@@ -44,10 +47,14 @@
 	let {
 		job,
 		isOpen = $bindable(false),
-		onSubmit
+		onSubmit,
+		applicantProfile = null,
+		applicantCredential = null
 	} = $props<{
 		job: QuickApplyJob | null;
 		isOpen: boolean;
+		applicantProfile?: VolunteerProfile | null;
+		applicantCredential?: PortalCredential | null;
 		onSubmit?: (data: {
 			firstName?: string;
 			lastName?: string;
@@ -60,6 +67,19 @@
 	}>();
 
 	const t = $derived(jobsI18n[languageStore.current]);
+
+	const isPortalApplicant = $derived(Boolean(applicantProfile));
+
+	function renumberSectionTitle(title: string, number: number): string {
+		return title.replace(/^\d+\.\s*/, `${number}. `);
+	}
+
+	const shiftSectionTitle = $derived(
+		renumberSectionTitle(t.applyStep2Title, isPortalApplicant ? 1 : 2)
+	);
+	const skillsSectionTitle = $derived(
+		renumberSectionTitle(t.applyStep3Title, isPortalApplicant ? 2 : 3)
+	);
 
 	interface SkillOption {
 		id: string;
@@ -97,21 +117,12 @@
 				}
 			}
 		} catch {
-			// Fallback to static skills if endpoint unreachable
+			// Master Data is authoritative; do not expose implementation codes as labels.
 		} finally {
 			isLoadingSkills = false;
 		}
 
-		// Fallback to SKILL_MASTER
-		masterSkills = SKILL_MASTER.map((s) => ({
-			id: s.key,
-			key: s.key,
-			label: s.label,
-			category: s.controlled ? ('controlled' as const) : ('operational' as const),
-			controlled: s.controlled,
-			description: s.description,
-			icon: s.icon
-		}));
+		masterSkills = [];
 	}
 
 	$effect(() => {
@@ -149,6 +160,16 @@
 		email: '',
 		skills: [] as string[],
 		consentPdpa: false
+	});
+
+	$effect(() => {
+		if (!isOpen || !applicantProfile) return;
+		formData.firstName = applicantProfile.first_name;
+		formData.lastName = applicantProfile.last_name;
+		formData.nickname = applicantProfile.nickname ?? '';
+		formData.phone = applicantProfile.phone_masked;
+		formData.email = applicantProfile.email ?? '';
+		formData.skills = applicantProfile.skills.map(canonicalSkillId);
 	});
 
 	let isSubmitting = $state(false);
@@ -206,6 +227,10 @@
 			errorMessage = t.errNoJobSelected;
 			return;
 		}
+		if (isPortalApplicant && (!applicantCredential || !('phone' in applicantCredential))) {
+			errorMessage = 'กรุณาเข้าสู่ระบบด้วยเบอร์โทรศัพท์ก่อนสมัครภารกิจจาก portal';
+			return;
+		}
 
 		errorMessage = null;
 		isSubmitting = true;
@@ -238,7 +263,11 @@
 				shiftDate = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
 			}
 
-			const cleanPhone = formData.phone.replace(/[-\s]/g, '').trim();
+			const rawApplicantPhone =
+				applicantCredential && 'phone' in applicantCredential
+					? applicantCredential.phone
+					: formData.phone;
+			const cleanPhone = rawApplicantPhone.replace(/[-\s]/g, '').trim();
 			const targetJobId = job.id.startsWith('job:') ? job.id : `job:${job.id}`;
 
 			// Direct CouchDB Apply via SvelteKit Server BFF (No FastAPI dependency)
@@ -254,7 +283,7 @@
 						first_name: firstName,
 						last_name: lastName,
 						phone: cleanPhone,
-						email: formData.email.trim() || null,
+						email: isPortalApplicant ? null : formData.email.trim() || null,
 						skills: formData.skills
 					},
 					selected_shift: activeShift
@@ -394,112 +423,128 @@
 					{/if}
 
 					<div class="space-y-8">
-						<!-- Section 1: ข้อมูลผู้สมัคร -->
-						<section>
-							<h3 class="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
-								<User class="h-4 w-4 text-muted-foreground" />
-								{t.applyStep1Title}
-							</h3>
-							<div class="space-y-4">
-								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<div>
-										<label for="firstName" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyFirstName} <span class="text-danger">*</span>
-										</label>
-										<input
-											id="firstName"
-											type="text"
-											required
-											bind:value={formData.firstName}
-											placeholder="เช่น เก่งกล้า"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
+						<!-- Personal details are collected only on the public Job Board. -->
+						{#if !isPortalApplicant}
+							<section>
+								<h3
+									class="mb-4 flex flex-wrap items-center gap-2 text-sm font-bold text-foreground"
+								>
+									<User class="h-4 w-4 text-muted-foreground" />
+									{t.applyStep1Title}
+								</h3>
+								<div class="space-y-4">
+									<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										<div>
+											<label for="firstName" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyFirstName} <span class="text-danger">*</span>
+											</label>
+											<input
+												id="firstName"
+												type="text"
+												required
+												bind:value={formData.firstName}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="เช่น เก่งกล้า"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
+										<div>
+											<label for="lastName" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyLastName} <span class="text-danger">*</span>
+											</label>
+											<input
+												id="lastName"
+												type="text"
+												required
+												bind:value={formData.lastName}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="เช่น งานอาสา"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
 									</div>
-									<div>
-										<label for="lastName" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyLastName} <span class="text-danger">*</span>
-										</label>
-										<input
-											id="lastName"
-											type="text"
-											required
-											bind:value={formData.lastName}
-											placeholder="เช่น งานอาสา"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
+									<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										<div>
+											<label for="nickname" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyNickname}
+												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+											</label>
+											<input
+												id="nickname"
+												type="text"
+												bind:value={formData.nickname}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="เช่น กล้า, พิมพ์"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
+										<div>
+											<label for="phone" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyPhone} <span class="text-danger">*</span>
+											</label>
+											<input
+												id="phone"
+												type="tel"
+												required
+												bind:value={formData.phone}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												oninput={(e) => {
+													formData.phone = e.currentTarget.value.replace(/[-\s]/g, '');
+												}}
+												placeholder="0812345678"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+											<p class="mt-1 text-3xs text-muted-foreground">
+												{t.applyPhoneLimitHint}
+											</p>
+										</div>
+									</div>
+									<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										<div>
+											<label for="lineId" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyLineId}
+												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+											</label>
+											<input
+												id="lineId"
+												type="text"
+												bind:value={formData.lineId}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="เช่น kenglkla_vol"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
+										<div>
+											<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyEmail}
+												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+											</label>
+											<input
+												id="email"
+												type="email"
+												bind:value={formData.email}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="volunteer@example.com"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
 									</div>
 								</div>
-								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<div>
-										<label for="nickname" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyNickname}
-											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-										</label>
-										<input
-											id="nickname"
-											type="text"
-											bind:value={formData.nickname}
-											placeholder="เช่น กล้า, พิมพ์"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
-									</div>
-									<div>
-										<label for="phone" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyPhone} <span class="text-danger">*</span>
-										</label>
-										<input
-											id="phone"
-											type="tel"
-											required
-											bind:value={formData.phone}
-											oninput={(e) => {
-												formData.phone = e.currentTarget.value.replace(/[-\s]/g, '');
-											}}
-											placeholder="0812345678"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
-										<p class="mt-1 text-3xs text-muted-foreground">
-											{t.applyPhoneLimitHint}
-										</p>
-									</div>
-								</div>
-								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<div>
-										<label for="lineId" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyLineId}
-											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-										</label>
-										<input
-											id="lineId"
-											type="text"
-											bind:value={formData.lineId}
-											placeholder="เช่น kenglkla_vol"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
-									</div>
-									<div>
-										<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyEmail}
-											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-										</label>
-										<input
-											id="email"
-											type="email"
-											bind:value={formData.email}
-											placeholder="volunteer@example.com"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
-									</div>
-								</div>
-							</div>
-						</section>
+							</section>
+						{/if}
 
-						<!-- Section 2: เลือกรอบกะเวลาปฏิบัติงานจาก Data จริง -->
+						<!-- Shift selection; numbering is adjusted when the personal section is hidden. -->
 						<section>
 							<div class="mb-4 flex items-center justify-between">
 								<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 									<Clock class="h-4 w-4 text-muted-foreground" />
-									{t.applyStep2Title}
+									{shiftSectionTitle}
 								</h3>
 								{#if job.shifts && job.shifts.length > 1}
 									<span class="text-xs text-muted-foreground"
@@ -591,13 +636,13 @@
 							</div>
 						</section>
 
-						<!-- Section 3: ทักษะจาก Master Data (CR-099) -->
+						<!-- Skills from Master Data (CR-099). -->
 						<section>
 							<div class="mb-3 flex items-center justify-between">
 								<div>
 									<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 										<Tag class="h-4 w-4 text-muted-foreground" />
-										{t.applyStep3Title}
+										{skillsSectionTitle}
 									</h3>
 									<p class="mt-0.5 text-2xs text-muted-foreground">
 										{t.applyStep3Subtitle}

@@ -13,14 +13,13 @@
 	import User from '@lucide/svelte/icons/user';
 	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
-	import { SvelteSet } from 'svelte/reactivity';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { languageStore } from '$lib/stores/language.svelte';
-	import { SKILL_MASTER } from '$lib/features/volunteers/domain/skill-master';
+	import { skillLabels } from '../domain/skill-label';
 	import {
 		useCancelTicketMutation,
 		useVolunteerSkills,
@@ -125,25 +124,11 @@
 	const renderedSkills = $derived.by(() => {
 		if (!ticket?.skills || !Array.isArray(ticket.skills)) return [];
 		const masterList = skillsQuery.data ?? [];
-		const seen = new SvelteSet<string>();
-		const result: { code: string; name: string; icon?: string }[] = [];
-
-		for (const skillCodeOrLabel of ticket.skills) {
-			if (!skillCodeOrLabel || seen.has(skillCodeOrLabel)) continue;
-			seen.add(skillCodeOrLabel);
-
-			const masterOpt = masterList.find(
-				(m) => m.code === skillCodeOrLabel || m.label === skillCodeOrLabel
-			);
-			const fallbackMaster = SKILL_MASTER.find(
-				(s) => s.key === skillCodeOrLabel || s.label === skillCodeOrLabel
-			);
-
-			const name = masterOpt?.label ?? fallbackMaster?.label ?? skillCodeOrLabel;
-			const icon = fallbackMaster?.icon ?? '';
-			result.push({ code: skillCodeOrLabel, name, icon });
-		}
-		return result;
+		return skillLabels(ticket.skills, masterList).map(({ value, label }) => ({
+			code: value,
+			name: label,
+			icon: masterList.find((skill) => skill.code === value)?.category === 'controlled' ? '🩺' : ''
+		}));
 	});
 
 	async function copyLink() {
