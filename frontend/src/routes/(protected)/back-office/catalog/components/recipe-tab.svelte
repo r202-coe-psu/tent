@@ -161,7 +161,7 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row>
-						<Table.Head class="font-bold">ชื่อข้อมูลมาตรฐาน</Table.Head>
+						<Table.Head class="font-bold">ชื่อสูตรอาหารมาตรฐาน</Table.Head>
 						<Table.Head class="w-24 text-center font-bold">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -294,7 +294,9 @@
 				</span>
 
 				<h1 class="text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100">
-					➕ บันทึกข้อมูลตั้งค่ามาตรฐานใหม่
+					{viewMode === 'create'
+						? '➕ บันทึกสูตรอาหารมาตรฐาน (BOM) ใหม่'
+						: '🛠️ แก้ไขสูตรอาหารมาตรฐาน (BOM)'}
 				</h1>
 			</div>
 
