@@ -6,7 +6,16 @@ from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from apiapp.core.config import Settings
+from apiapp.modules.evacuee.use_case import map_public_status
 from apiapp.utils.masking import mask_last_name, national_id_hash, phone_hash
+
+
+def test_map_public_status_includes_arriving_and_room_confirmed():
+    """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
+    assert map_public_status("arriving") == "arriving"
+    assert map_public_status("room_confirmed") == "room_confirmed"
+    assert map_public_status("active") == "active"
+    assert map_public_status("teleported") == "unknown"
 
 
 async def _insert_person(
