@@ -19,7 +19,8 @@
 		national_id: 'บัตรประชาชน',
 		passport: 'หนังสือเดินทาง',
 		pink_card: 'บัตรชมพู',
-		other: 'เอกสารอื่นๆ'
+		other: 'เอกสารอื่นๆ',
+		anonymous: 'บัตรไม่ระบุตัวตน'
 	};
 
 	const ageYears = $derived(evacueeAgeYears(evacuee));
@@ -69,7 +70,9 @@
 		<div class="col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">เลขที่เอกสาร</span>
 			<span class="mt-0.5 block font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{maskNationalId(evacuee.person_id?.number)}
+				{evacuee.person_id?.cardType === 'anonymous'
+					? (evacuee.person_id.number ?? '—')
+					: maskNationalId(evacuee.person_id?.number)}
 			</span>
 		</div>
 		<div>

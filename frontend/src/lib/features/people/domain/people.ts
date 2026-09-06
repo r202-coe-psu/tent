@@ -8,6 +8,7 @@ import {
 	phoneSchema,
 	registeredViaSchema
 } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
 
 /**
  * People domain — the registration baseline (FR-4..13).
@@ -21,20 +22,39 @@ import {
  */
 
 // ---------------------------------------------------------------- enums
-export const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other']);
+export const cardTypeSchema = z.enum([
+	'national_id',
+	'passport',
+	'pink_card',
+	'other',
+	'anonymous'
+]);
 export type CardType = z.infer<typeof cardTypeSchema>;
 
 /**
  * Max length for `person_id.number` by card type (UI `maxlength` + Zod).
  * Matches household pre-register forms: Thai national ID 13 digits, passport 9 chars;
- * pink_card / other have no fixed max.
+ * pink_card / other / anonymous have no fixed max (Anonymous ID is system-minted).
  */
 export const CARD_NUMBER_MAX_LENGTH: Readonly<Record<CardType, number | undefined>> = {
 	national_id: 13,
 	passport: 9,
 	pink_card: undefined,
-	other: undefined
+	other: undefined,
+	anonymous: undefined
 };
+
+const ANON_ID_RE = /^ANON-[0-9A-HJKMNP-TV-Z]{26}$/i;
+
+/** Mint a unique Anonymous ID handle (`ANON-{ulid}`). */
+export function mintAnonymousId(): string {
+	return `ANON-${ulid()}`;
+}
+
+/** True when `value` is a syntactically valid Anonymous ID. */
+export function isAnonymousId(value: string): boolean {
+	return ANON_ID_RE.test(value);
+}
 
 export function cardNumberMaxLength(cardType: CardType): number | undefined {
 	return CARD_NUMBER_MAX_LENGTH[cardType];
@@ -561,17 +581,19 @@ export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
 	person_id: z
 		.object({
-			cardType: z
-				.enum(['national_id', 'passport', 'pink_card', 'other'], {
-					error: 'กรุณาเลือกประเภทบัตร'
-				})
-				.default('national_id'),
-			number: z
-				.string({ error: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร' })
-				.trim()
-				.min(1, 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร')
+			cardType: cardTypeSchema.default('national_id'),
+			number: z.string().trim().optional().default('')
 		})
 		.superRefine((data, ctx) => {
+			if (data.cardType === 'anonymous') return;
+			if (!data.number?.trim()) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['number'],
+					message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
+				});
+				return;
+			}
 			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
 		})
 		.default({ cardType: 'national_id', number: '' }),
@@ -905,11 +927,45 @@ export type ScreeningInput = z.input<typeof screeningInputSchema>;
 
 // ---------------------------------------------------------------- factories
 
+function resolvePersonIdOnCreate(personId: PersonId | undefined): PersonId | undefined {
+	if (!personId) return undefined;
+	if (personId.cardType !== 'anonymous') return personId;
+	const existing = personId.number?.trim();
+	return {
+		cardType: 'anonymous',
+		number: existing && isAnonymousId(existing) ? existing : mintAnonymousId()
+	};
+}
+
+/**
+ * Replace an Evacuee's `person_id` (e.g. Anonymous ID → real card) in place on
+ * the same Evacuee document — no separate Person entity.
+ */
+export function replacePersonId(evacuee: Evacuee, personId: PersonId): Evacuee {
+	const parsed = personIdSchema.parse(personId);
+	if (parsed.cardType === 'anonymous') {
+		return {
+			...evacuee,
+			person_id: resolvePersonIdOnCreate(parsed),
+			updated_at: now()
+		};
+	}
+	return {
+		...evacuee,
+		person_id: {
+			cardType: parsed.cardType,
+			...(parsed.number ? { number: parsed.number } : {})
+		},
+		updated_at: now()
+	};
+}
+
 export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee {
 	const d = evacueeInputSchema.parse(input);
+	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		9, // schema_v 9: adds arriving stay status (CR-106); 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		10, // schema_v 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -918,7 +974,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(d.nickname ? { nickname: d.nickname } : {}),
 			...(d.birth_year !== undefined ? { birth_year: d.birth_year } : {}),
 			...(d.age !== undefined ? { age: d.age } : {}),
-			...(d.person_id ? { person_id: d.person_id } : {}),
+			...(person_id ? { person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
 			country: d.country,
 			special_needs: d.special_needs,
@@ -1317,6 +1373,8 @@ export function matchesEvacueeSearch(
 	) {
 		return true;
 	}
+	const cardNumber = evacuee.person_id?.number?.toLowerCase();
+	if (cardNumber?.includes(q)) return true;
 	const masked = maskNationalId(evacuee.person_id?.number).toLowerCase();
 	if (masked.includes(q)) return true;
 	const digitsOnly = q.replace(/\D/g, '');

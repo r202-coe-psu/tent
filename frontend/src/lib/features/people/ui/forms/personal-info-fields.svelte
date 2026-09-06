@@ -53,11 +53,13 @@
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน' },
 		{ value: 'passport', label: 'หนังสือเดินทาง' },
 		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย' },
-		{ value: 'other', label: 'บัตรประเภทอื่น' }
+		{ value: 'other', label: 'บัตรประเภทอื่น' },
+		{ value: 'anonymous', label: 'บัตรไม่ระบุตัวตน (Anonymous ID)' }
 	];
 
 	const activeCardType = $derived(person_id.cardType ?? 'national_id');
 	const cardNumberMax = $derived(cardNumberMaxLength(activeCardType));
+	const isAnonymousCard = $derived(activeCardType === 'anonymous');
 
 	const genderOptions: { value: Gender; label: string }[] = [
 		{ value: 'male', label: 'ชาย' },
@@ -186,10 +188,13 @@
 						val === 'national_id' ||
 						val === 'passport' ||
 						val === 'pink_card' ||
-						val === 'other'
+						val === 'other' ||
+						val === 'anonymous'
 					) {
 						person_id.cardType = val;
-						if (person_id.number) {
+						if (val === 'anonymous') {
+							person_id.number = '';
+						} else if (person_id.number) {
 							person_id.number = clampCardNumber(val, person_id.number);
 						}
 					}
@@ -211,17 +216,26 @@
 			<Label for="card-number" class="text-xs font-semibold text-foreground"
 				>เลขที่บัตรประจำตัว</Label
 			>
-			<Input
-				id="card-number"
-				value={person_id.number ?? ''}
-				oninput={onCardNumberInput}
-				{disabled}
-				maxlength={cardNumberMax}
-				inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
-				placeholder={activeCardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
-				aria-invalid={!!(errors?.cardNumber || errors?.number)}
-				class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
-			/>
+			{#if isAnonymousCard}
+				<p
+					id="card-number"
+					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-xs text-muted-foreground"
+				>
+					ระบบจะออกหมายเลข ANON-… เมื่อบันทึก
+				</p>
+			{:else}
+				<Input
+					id="card-number"
+					value={person_id.number ?? ''}
+					oninput={onCardNumberInput}
+					{disabled}
+					maxlength={cardNumberMax}
+					inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
+					placeholder={activeCardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
+					aria-invalid={!!(errors?.cardNumber || errors?.number)}
+					class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
+				/>
+			{/if}
 			{#if errors?.cardNumber || errors?.number}
 				<p class="text-2xs text-destructive">{errors.cardNumber ?? errors.number}</p>
 			{/if}

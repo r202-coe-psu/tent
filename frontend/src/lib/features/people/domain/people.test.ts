@@ -41,9 +41,13 @@ import {
 	cardNumberMaxLength,
 	cardNumberEffectiveLength,
 	clampCardNumber,
-	personIdSchema
+	personIdSchema,
+	mintAnonymousId,
+	isAnonymousId,
+	replacePersonId
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
+import { isUlid } from '$lib/db/ulid';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
 
@@ -53,12 +57,14 @@ describe('card number max length by card type', () => {
 			national_id: 13,
 			passport: 9,
 			pink_card: undefined,
-			other: undefined
+			other: undefined,
+			anonymous: undefined
 		});
 		expect(cardNumberMaxLength('national_id')).toBe(13);
 		expect(cardNumberMaxLength('passport')).toBe(9);
 		expect(cardNumberMaxLength('pink_card')).toBeUndefined();
 		expect(cardNumberMaxLength('other')).toBeUndefined();
+		expect(cardNumberMaxLength('anonymous')).toBeUndefined();
 	});
 
 	it('clamps national_id to digits and passport to 9 chars', () => {
@@ -119,6 +125,96 @@ describe('stayStatusSchema and STATUS_LABELS', () => {
 	});
 });
 
+describe('Anonymous ID', () => {
+	it('mints ANON-{ulid} handles', () => {
+		const id = mintAnonymousId();
+		expect(id.startsWith('ANON-')).toBe(true);
+		expect(isAnonymousId(id)).toBe(true);
+		expect(isUlid(id.slice('ANON-'.length))).toBe(true);
+	});
+
+	it('createEvacuee with cardType anonymous persists a unique ANON-{ulid}', () => {
+		const a = createEvacuee(
+			{
+				first_name: 'ไม่มี',
+				last_name: 'บัตร',
+				gender: 'other',
+				phone: null,
+				person_id: { cardType: 'anonymous' }
+			},
+			ctx
+		);
+		const b = createEvacuee(
+			{
+				first_name: 'อีกคน',
+				last_name: 'ไม่มีบัตร',
+				gender: 'other',
+				phone: null,
+				person_id: { cardType: 'anonymous', number: '' }
+			},
+			ctx
+		);
+		expect(a.schema_v).toBe(10);
+		expect(a.person_id?.cardType).toBe('anonymous');
+		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
+		expect(b.person_id?.number).not.toBe(a.person_id?.number);
+		expect(a.country).toBe('THAILAND');
+	});
+
+	it('finds an Evacuee by Anonymous ID via matchesEvacueeSearch', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'ค้นหา',
+				last_name: 'อนนาม',
+				gender: 'other',
+				phone: null,
+				person_id: { cardType: 'anonymous' }
+			},
+			ctx
+		);
+		const anon = e.person_id!.number!;
+		expect(matchesEvacueeSearch(e, anon)).toBe(true);
+		expect(matchesEvacueeSearch(e, anon.toLowerCase())).toBe(true);
+		expect(matchesEvacueeSearch(e, anon.slice(5, 15))).toBe(true);
+		expect(matchesEvacueeSearch(e, 'ANON-NOTREAL')).toBe(false);
+	});
+
+	it('replacePersonId swaps Anonymous ID for a real card without a separate Person entity', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'สมศรี',
+				last_name: 'มีบัตรทีหลัง',
+				gender: 'female',
+				phone: '0811111111',
+				person_id: { cardType: 'anonymous' }
+			},
+			ctx
+		);
+		const replaced = replacePersonId(e, {
+			cardType: 'national_id',
+			number: '1103700123456'
+		});
+		expect(replaced.person_id).toEqual({
+			cardType: 'national_id',
+			number: '1103700123456'
+		});
+		expect(replaced._id).toBe(e._id);
+		expect(isAnonymousId(replaced.person_id?.number ?? '')).toBe(false);
+	});
+
+	it('requires country and defaults Registration input to THAILAND', () => {
+		expect(evacueeInputSchema.safeParse({}).success).toBe(false);
+		const parsed = evacueeInputSchema.parse({
+			first_name: 'A',
+			last_name: 'B',
+			gender: 'other',
+			phone: null
+		});
+		expect(parsed.country).toBe('THAILAND');
+		expect(personIdSchema.safeParse({ cardType: 'anonymous' }).success).toBe(true);
+	});
+});
+
 describe('createEvacuee', () => {
 	it('stamps the envelope and applies spec defaults', () => {
 		const e = createEvacuee(
@@ -127,7 +223,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(9);
+		expect(e.schema_v).toBe(10);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -140,7 +236,7 @@ describe('createEvacuee', () => {
 		expect(isEvacuee(e)).toBe(true);
 	});
 
-	it('stamps schema_v: 9 and supports status arriving', () => {
+	it('stamps schema_v: 10 and supports status arriving', () => {
 		const e = createEvacuee(
 			{
 				first_name: 'วิภา',
@@ -151,7 +247,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(9);
+		expect(e.schema_v).toBe(10);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 

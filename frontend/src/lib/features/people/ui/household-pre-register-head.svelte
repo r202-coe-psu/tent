@@ -50,7 +50,8 @@
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
 		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
 		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' }
+		{ value: 'other', label: 'อื่นๆ (Other)' },
+		{ value: 'anonymous', label: 'บัตรไม่ระบุตัวตน (Anonymous ID)' }
 	];
 
 	const genderOptions = [
@@ -345,20 +346,30 @@
 											เลขที่พาสปอร์ต <span class="text-destructive">*</span>
 										{:else if $formData.person_id.cardType === 'pink_card'}
 											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย <span class="text-destructive">*</span>
+										{:else if $formData.person_id.cardType === 'anonymous'}
+											หมายเลข Anonymous ID
 										{:else}
 											เลขหมายบัตร <span class="text-destructive">*</span>
 										{/if}
 									</Form.Label>
-									<Input
-										{...props}
-										maxlength={cardNumberMaxLength($formData.person_id.cardType)}
-										placeholder={$formData.person_id.cardType === 'national_id'
-											? 'X-XXXX-XXXXX-XX-X'
-											: $formData.person_id.cardType === 'passport'
-												? 'Passport Number'
-												: 'หมายเลขบัตร'}
-										bind:value={$formData.person_id.number}
-									/>
+									{#if $formData.person_id.cardType === 'anonymous'}
+										<p
+											class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-xs text-muted-foreground"
+										>
+											ระบบจะออกหมายเลข ANON-… เมื่อบันทึก
+										</p>
+									{:else}
+										<Input
+											{...props}
+											maxlength={cardNumberMaxLength($formData.person_id.cardType)}
+											placeholder={$formData.person_id.cardType === 'national_id'
+												? 'X-XXXX-XXXXX-XX-X'
+												: $formData.person_id.cardType === 'passport'
+													? 'Passport Number'
+													: 'หมายเลขบัตร'}
+											bind:value={$formData.person_id.number}
+										/>
+									{/if}
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />

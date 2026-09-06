@@ -30,6 +30,7 @@ import {
 	assertCheckoutDestination,
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
+	replacePersonId,
 	type Medical,
 	type MedicalInput,
 	type Movement,
@@ -113,7 +114,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (input.draft_id) {
 			const existing = await this.repo.get<Evacuee>(input.draft_id);
 			if (existing && isEvacuee(existing)) {
-				const next: Evacuee = {
+				let next: Evacuee = {
 					...existing,
 					first_name: parsedInput.first_name,
 					last_name: parsedInput.last_name,
@@ -122,7 +123,6 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					...(parsedInput.nickname ? { nickname: parsedInput.nickname } : {}),
 					...(parsedInput.birth_year !== undefined ? { birth_year: parsedInput.birth_year } : {}),
 					...(parsedInput.age !== undefined ? { age: parsedInput.age } : {}),
-					...(parsedInput.person_id ? { person_id: parsedInput.person_id } : {}),
 					...(parsedInput.religion ? { religion: parsedInput.religion } : {}),
 					country: parsedInput.country,
 					special_needs: parsedInput.special_needs,
@@ -137,6 +137,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						since: now()
 					}
 				};
+				if (parsedInput.person_id) {
+					next = replacePersonId(next, parsedInput.person_id);
+				}
 				saved = await this.repo.put(touch(next));
 			} else {
 				const evacuee = buildEvacuee(parsedInput, ctx);
@@ -250,7 +253,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(id);
 		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
-		const next = { ...latest, ...patch };
+		const { person_id: personIdPatch, ...rest } = patch;
+		let next: Evacuee = { ...latest, ...rest };
+		if (personIdPatch) {
+			next = replacePersonId(next, personIdPatch);
+		}
 		const oldHouseholdId = latest.household_id;
 		if (oldHouseholdId !== next.household_id) {
 			const [households, evacuees] = await Promise.all([
