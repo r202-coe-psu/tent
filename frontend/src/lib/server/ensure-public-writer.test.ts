@@ -9,9 +9,7 @@ import {
 
 describe('publicWriterUserPath', () => {
 	it('builds the CouchDB _users doc id path', () => {
-		expect(publicWriterUserPath('public_writer')).toBe(
-			'/_users/org.couchdb.user:public_writer'
-		);
+		expect(publicWriterUserPath('public_writer')).toBe('/_users/org.couchdb.user:public_writer');
 	});
 });
 
@@ -36,6 +34,16 @@ describe('ensurePublicWriter', () => {
 		const couchReq = vi.fn() as unknown as CouchReq;
 		await expect(ensurePublicWriter(couchReq, undefined)).resolves.toEqual({
 			outcome: 'skipped'
+		});
+		expect(couchReq).not.toHaveBeenCalled();
+	});
+
+	it('returns invalid_format when writer URL is malformed', async () => {
+		const couchReq = vi.fn() as unknown as CouchReq;
+		await expect(
+			ensurePublicWriter(couchReq, 'http://public_writer:@couchdb:5984')
+		).resolves.toEqual({
+			outcome: 'invalid_format'
 		});
 		expect(couchReq).not.toHaveBeenCalled();
 	});
@@ -78,7 +86,10 @@ describe('ensurePublicWriter', () => {
 	});
 
 	it('dry-run GET reports already_exists when present', async () => {
-		const couchReq = vi.fn(async () => ({ status: 200, data: { name: 'public_writer' } })) as CouchReq;
+		const couchReq = vi.fn(async () => ({
+			status: 200,
+			data: { name: 'public_writer' }
+		})) as CouchReq;
 		await expect(ensurePublicWriter(couchReq, writerUrl, { dryRun: true })).resolves.toEqual({
 			outcome: 'already_exists',
 			username: 'public_writer'

@@ -15,6 +15,7 @@ export {
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
+	publicBookingAddressSchema,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
@@ -27,6 +28,7 @@ export {
 } from './domain/booking';
 
 export type {
+	PublicBookingAddress,
 	PublicBookingErrorCode,
 	PublicBookingInput,
 	PublicBookingLookupInput,

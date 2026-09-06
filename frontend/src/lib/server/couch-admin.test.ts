@@ -52,13 +52,26 @@ describe('assertCanGrant', () => {
 		expect(grantError(mgr, ['shelter:SH001', '_admin'])?.code).toBe('FORBIDDEN');
 	});
 
-	it('rejects more than one shelter scope (1 user 1 shelter)', () => {
-		expect(grantError(sa, ['shelter:SH001', 'shelter:SH002'])?.code).toBe('VALIDATION');
+	it('SA may grant multi-shelter compound roles', () => {
+		expect(
+			grantError(sa, [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:shelter_manager',
+				'SH002:registration_staff'
+			])
+		).toBeNull();
+	});
+
+	it('rejects empty shelter scope for non-SA grants', () => {
+		expect(grantError(sa, ['registration_staff'])?.code).toBe('VALIDATION');
 	});
 
 	it('a manager may grant own-shelter staff', () => {
 		expect(grantError(mgr, ['shelter:SH001', 'registration_staff'])).toBeNull();
-		expect(grantError(mgr, ['shelter:SH001', 'kitchen_staff', 'warehouse_staff'])).toBeNull();
+		expect(
+			grantError(mgr, ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:warehouse_staff'])
+		).toBeNull();
 	});
 
 	it('a manager may not cross shelters', () => {
@@ -77,7 +90,7 @@ describe('assertCanGrant', () => {
 			isSA: false,
 			shelterCode: null
 		};
-		expect(grantError(noScope, ['registration_staff'])?.code).toBe('FORBIDDEN');
+		expect(grantError(noScope, ['registration_staff'])?.code).toBe('VALIDATION');
 	});
 });
 

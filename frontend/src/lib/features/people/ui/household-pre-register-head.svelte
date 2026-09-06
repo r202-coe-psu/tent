@@ -16,6 +16,7 @@
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
+		cardNumberMaxLength,
 		type EvacueeInput
 	} from '../domain/people';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -151,8 +152,8 @@
 			},
 			emergency_contact: initialData.emergency_contact
 				? {
-						name: initialData.emergency_contact.name,
-						phone: initialData.emergency_contact.phone,
+						name: initialData.emergency_contact.name ?? '',
+						phone: initialData.emergency_contact.phone ?? '',
 						relation: initialData.emergency_contact.relation ?? 'contact'
 					}
 				: $formData.emergency_contact
@@ -350,11 +351,7 @@
 									</Form.Label>
 									<Input
 										{...props}
-										maxlength={$formData.person_id.cardType === 'national_id'
-											? 13
-											: $formData.person_id.cardType === 'passport'
-												? 9
-												: undefined}
+										maxlength={cardNumberMaxLength($formData.person_id.cardType)}
 										placeholder={$formData.person_id.cardType === 'national_id'
 											? 'X-XXXX-XXXXX-XX-X'
 											: $formData.person_id.cardType === 'passport'
@@ -381,10 +378,12 @@
 						<Form.Field {form} name="last_name">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label
-										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
-									>
-									<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
+									<Form.Label>นามสกุล (Last Name)</Form.Label>
+									<Input
+										{...props}
+										placeholder="เว้นว่างได้ถ้าไม่มีนามสกุล"
+										bind:value={$formData.last_name}
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />

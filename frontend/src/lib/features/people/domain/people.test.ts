@@ -9,10 +9,13 @@ import {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canChangeEvacueeZone,
 	canCancelEvacueePreRegistration,
 	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	resolveStatusChangeAction,
+	matchesEvacueeSearch,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -23,15 +26,98 @@ import {
 	assertCheckoutDestination,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
+	station1EvacueeInputSchema,
+	triageLevelSchema,
+	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
-	evacueeHealthEditFormSchema
+	evacueeHealthEditFormSchema,
+	formatPersonName,
+	stayStatusSchema,
+	STATUS_LABELS,
+	CARD_NUMBER_MAX_LENGTH,
+	cardNumberMaxLength,
+	cardNumberEffectiveLength,
+	clampCardNumber,
+	personIdSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
+
+describe('card number max length by card type', () => {
+	it('exposes max lengths matching household / Station 1 UI rules', () => {
+		expect(CARD_NUMBER_MAX_LENGTH).toEqual({
+			national_id: 13,
+			passport: 9,
+			pink_card: undefined,
+			other: undefined
+		});
+		expect(cardNumberMaxLength('national_id')).toBe(13);
+		expect(cardNumberMaxLength('passport')).toBe(9);
+		expect(cardNumberMaxLength('pink_card')).toBeUndefined();
+		expect(cardNumberMaxLength('other')).toBeUndefined();
+	});
+
+	it('clamps national_id to digits and passport to 9 chars', () => {
+		expect(clampCardNumber('national_id', '1-2345-67890-12-34')).toBe('1234567890123');
+		expect(clampCardNumber('passport', 'AB1234567890')).toBe('AB1234567');
+		expect(clampCardNumber('other', 'ABCDEFGHIJKLMNOP')).toBe('ABCDEFGHIJKLMNOP');
+	});
+
+	it('rejects person_id numbers longer than the type max via personIdSchema', () => {
+		expect(
+			personIdSchema.safeParse({ cardType: 'national_id', number: '12345678901234' }).success
+		).toBe(false);
+		expect(personIdSchema.safeParse({ cardType: 'passport', number: 'AB12345678' }).success).toBe(
+			false
+		);
+		expect(personIdSchema.safeParse({ cardType: 'passport', number: 'AB1234567' }).success).toBe(
+			true
+		);
+		expect(
+			personIdSchema.safeParse({ cardType: 'other', number: 'ABCDEFGHIJKLMNOP' }).success
+		).toBe(true);
+	});
+
+	it('rejects over-length passport on evacueePersonalEditFormSchema', () => {
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'Alex',
+			lastName: 'Doe',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'other',
+			phone: '',
+			noPhone: true,
+			cardType: 'passport',
+			cardNumber: 'AB12345678',
+			country: 'USA',
+			religion: 'unknown'
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.some((i) => i.path.includes('cardNumber'))).toBe(true);
+		}
+	});
+
+	it('reports effective length digits-only for national_id', () => {
+		expect(cardNumberEffectiveLength('national_id', '1-2345-67890-12-3')).toBe(13);
+		expect(cardNumberEffectiveLength('passport', 'AB1234567')).toBe(9);
+	});
+});
+
+describe('stayStatusSchema and STATUS_LABELS', () => {
+	it('accepts arriving', () => {
+		expect(stayStatusSchema.parse('arriving')).toBe('arriving');
+	});
+
+	it('contains arriving in STATUS_LABELS with Thai label', () => {
+		expect(STATUS_LABELS.arriving).toBe('อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)');
+	});
+});
 
 describe('createEvacuee', () => {
 	it('stamps the envelope and applies spec defaults', () => {
@@ -41,7 +127,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(8);
+		expect(e.schema_v).toBe(9);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -52,6 +138,21 @@ describe('createEvacuee', () => {
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('staff');
 		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('stamps schema_v: 9 and supports status arriving', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'วิภา',
+				last_name: 'สุขใจ',
+				gender: 'female',
+				phone: '0899999999',
+				status: 'arriving'
+			},
+			ctx
+		);
+		expect(e.schema_v).toBe(9);
+		expect(e.current_stay.status).toBe('arriving');
 	});
 
 	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
@@ -140,6 +241,15 @@ describe('createEvacuee', () => {
 		).toThrow();
 	});
 
+	it('allows an empty last name for mononyms (CR-106 FR-18)', () => {
+		const e = createEvacuee(
+			{ first_name: 'Aung San', last_name: '  ', gender: 'male', phone: null, country: 'MYANMAR' },
+			ctx
+		);
+		expect(e.first_name).toBe('Aung San');
+		expect(e.last_name).toBe('');
+	});
+
 	it('defaults photo to absent, and carries it through when set (CR-054)', () => {
 		const withoutPhoto = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null },
@@ -214,6 +324,51 @@ describe('household wizard schemas', () => {
 	});
 });
 
+describe('station1EvacueeInputSchema emergency contact', () => {
+	const base = { first_name: 'ก', last_name: 'ข', gender: 'male' as const, phone: null };
+
+	it('keeps emergency contact optional on evacueeInputSchema for kiosk and import', () => {
+		expect(evacueeInputSchema.safeParse(base).success).toBe(true);
+	});
+
+	it('accepts a missing or blank emergency contact on Station 1', () => {
+		expect(station1EvacueeInputSchema.safeParse(base).success).toBe(true);
+
+		const blank = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: '', phone: '', relation: '' }
+		});
+		expect(blank.success).toBe(true);
+		if (blank.success) {
+			expect(blank.data.emergency_contact).toBeUndefined();
+		}
+	});
+
+	it('rejects a partial emergency contact on Station 1', () => {
+		const partial = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '', relation: '' }
+		});
+		expect(partial.success).toBe(false);
+		if (!partial.success) {
+			expect(partial.error.issues.map((issue) => issue.message)).toEqual(
+				expect.arrayContaining([
+					'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก',
+					'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน'
+				])
+			);
+		}
+	});
+
+	it('accepts a complete emergency contact on Station 1', () => {
+		const result = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '0812345678', relation: 'มารดา' }
+		});
+		expect(result.success).toBe(true);
+	});
+});
+
 describe('evacueeInputSchema birth_year', () => {
 	const base = { first_name: 'ก', last_name: 'ข', gender: 'male' as const, phone: null };
 
@@ -283,6 +438,39 @@ describe('evacueePersonalEditFormSchema age', () => {
 
 		expect(result.success).toBe(true);
 	});
+
+	it('allows an empty lastName (CR-106 FR-18)', () => {
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'Suu Kyi',
+			lastName: '',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'female',
+			phone: '',
+			noPhone: true,
+			cardType: 'passport',
+			cardNumber: 'AB1234567',
+			country: 'MYANMAR',
+			religion: 'buddhist'
+		});
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.lastName).toBe('');
+		}
+	});
+});
+
+describe('formatPersonName', () => {
+	it('joins first and last name', () => {
+		expect(formatPersonName({ first_name: 'สมชาย', last_name: 'ใจดี' })).toBe('สมชาย ใจดี');
+	});
+
+	it('omits empty last name without trailing space', () => {
+		expect(formatPersonName({ first_name: 'Aung San', last_name: '' })).toBe('Aung San');
+		expect(formatPersonName({ first_name: 'Aung San', last_name: '   ' })).toBe('Aung San');
+	});
 });
 
 describe('evacueeHealthEditFormSchema temperature', () => {
@@ -348,9 +536,33 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
 	});
 
+	it('allows check_in transition from arriving to active via applyMovementToStay', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const arriving = {
+			...e,
+			current_stay: { status: 'arriving' as const, zone: null, since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(arriving)).toBe(true);
+
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'check_in',
+				zone: 'Z1',
+				occurred_at: '2026-06-11T03:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(arriving, m);
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z1');
+		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
+	});
+
 	it('allows check_in from eligible stay statuses only', () => {
 		const statuses = [
 			'pre_registered',
+			'arriving',
 			'temporary_leave',
 			'checked_out',
 			'transferred',
@@ -371,7 +583,13 @@ describe('movement → current_stay', () => {
 			})
 		);
 
-		expect(allowed).toEqual(['pre_registered', 'temporary_leave', 'checked_out', 'transferred']);
+		expect(allowed).toEqual([
+			'pre_registered',
+			'arriving',
+			'temporary_leave',
+			'checked_out',
+			'transferred'
+		]);
 	});
 
 	it('rejects check_in from deceased (terminal status)', () => {
@@ -424,6 +642,39 @@ describe('movement → current_stay', () => {
 		expect(() => assertMovementAllowed(e, 'check_out')).toThrow(/เช็คเอาท์/);
 	});
 
+	it('zone_change keeps status active and updates zone', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canChangeEvacueeZone(active)).toBe(true);
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'zone_change',
+				zone: 'Z2',
+				occurred_at: '2026-09-03T04:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(active, m);
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z2');
+		expect(updated.current_stay.since).toBe('2026-09-03T04:00:00.000Z');
+	});
+
+	it('rejects zone_change without destination or from non-active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canChangeEvacueeZone(e)).toBe(false);
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		const m = createMovement({ evacuee_id: e._id, action: 'zone_change', zone: null }, ctx);
+		expect(() => applyMovementToStay(active, m)).toThrow(/โซนปลายทาง/);
+	});
+
 	it('allows check_in from eligible stay statuses only', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
@@ -437,15 +688,119 @@ describe('movement → current_stay', () => {
 		expect(canCheckInEvacuee(active)).toBe(false);
 		expect(canCheckOutEvacuee(active)).toBe(true);
 	});
+
+	it('rejects transfer_out / leave_temporary unless status is active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(() => assertMovementAllowed(e, 'transfer_out')).toThrow(/ย้ายออก/);
+		expect(() => assertMovementAllowed(e, 'leave_temporary')).toThrow(/ลาชั่วคราว/);
+
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(() => assertMovementAllowed(active, 'transfer_out')).not.toThrow();
+		expect(() => assertMovementAllowed(active, 'leave_temporary')).not.toThrow();
+	});
+});
+
+describe('resolveStatusChangeAction', () => {
+	it('returns null when the status is unchanged', () => {
+		expect(resolveStatusChangeAction('active', 'active')).toBeNull();
+	});
+
+	it('returns null for pre_registered → checked_out (must check in first)', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'checked_out')).toBeNull();
+	});
+
+	it('returns null for checked_out → temporary_leave / transferred (must check in first)', () => {
+		expect(resolveStatusChangeAction('checked_out', 'temporary_leave')).toBeNull();
+		expect(resolveStatusChangeAction('checked_out', 'transferred')).toBeNull();
+	});
+
+	it('returns null from terminal statuses (deceased, cancelled)', () => {
+		expect(resolveStatusChangeAction('deceased', 'active')).toBeNull();
+		expect(resolveStatusChangeAction('cancelled', 'active')).toBeNull();
+	});
+
+	it('resolves valid transitions to their movement action', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'active')).toBe('check_in');
+		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('return_from_leave');
+		expect(resolveStatusChangeAction('active', 'checked_out')).toBe('check_out');
+		expect(resolveStatusChangeAction('active', 'transferred')).toBe('transfer_out');
+		expect(resolveStatusChangeAction('active', 'temporary_leave')).toBe('leave_temporary');
+		expect(resolveStatusChangeAction('active', 'deceased')).toBe('mark_deceased');
+	});
+});
+
+describe('triageLevelSchema and screeningInputSchema', () => {
+	it('validates triageLevelSchema enum green, yellow, red', () => {
+		expect(triageLevelSchema.parse('green')).toBe('green');
+		expect(triageLevelSchema.parse('yellow')).toBe('yellow');
+		expect(triageLevelSchema.parse('red')).toBe('red');
+		expect(() => triageLevelSchema.parse('blue')).toThrow();
+	});
+
+	it('screeningInputSchema accepts triage_level and vital signs', () => {
+		const parsed = screeningInputSchema.parse({
+			evacuee_id: 'evacuee:01J',
+			track: 'normal',
+			triage_level: 'yellow',
+			blood_pressure_sys: 120,
+			blood_pressure_dia: 80,
+			heart_rate: 75,
+			spo2_percent: 98
+		});
+		expect(parsed.triage_level).toBe('yellow');
+		expect(parsed.blood_pressure_sys).toBe(120);
+		expect(parsed.blood_pressure_dia).toBe(80);
+		expect(parsed.heart_rate).toBe(75);
+		expect(parsed.spo2_percent).toBe(98);
+	});
+
+	it('screeningInputSchema allows null or omitted triage_level and vitals', () => {
+		const parsed = screeningInputSchema.parse({
+			evacuee_id: 'evacuee:01J',
+			track: 'normal',
+			triage_level: null
+		});
+		expect(parsed.triage_level).toBeNull();
+		expect(parsed.blood_pressure_sys).toBeUndefined();
+	});
 });
 
 describe('createScreening', () => {
-	it('defaults the screening time to now when omitted', () => {
+	it('defaults the screening time to now when omitted, stamps schema_v: 2 and triage_level: null', () => {
 		const s = createScreening({ evacuee_id: 'evacuee:x', track: 'fast_track' }, ctx);
 		expect(s.type).toBe('screening');
+		expect(s.schema_v).toBe(2);
+		expect(s.triage_level).toBeNull();
+		expect(s.vital_signs).toBeUndefined();
 		expect(s.needs_referral).toBe(false);
 		expect(s.symptoms).toEqual([]);
 		expect(typeof s.screened_at).toBe('string');
+	});
+
+	it('stamps schema_v: 2, triage_level, and vital signs when provided', () => {
+		const s = createScreening(
+			{
+				evacuee_id: 'evacuee:x',
+				track: 'fast_track',
+				triage_level: 'red',
+				blood_pressure_sys: 140,
+				blood_pressure_dia: 90,
+				heart_rate: 105,
+				spo2_percent: 92
+			},
+			ctx
+		);
+		expect(s.schema_v).toBe(2);
+		expect(s.triage_level).toBe('red');
+		expect(s.vital_signs).toEqual({
+			blood_pressure_sys: 140,
+			blood_pressure_dia: 90,
+			heart_rate: 105,
+			spo2_percent: 92
+		});
 	});
 });
 
@@ -611,18 +966,38 @@ describe('household membership invariant', () => {
 		_id: id
 	});
 
-	it('blocks moving a member away from an active household that has other members', () => {
-		const household = makeHousehold('household:old');
+	it('blocks moving the head away from an active household that has other members', () => {
+		const household = {
+			...makeHousehold('household:old'),
+			head_evacuee_id: 'evacuee:1'
+		};
 		const target = makeHousehold('household:new');
-		const member = makeEvacuee('evacuee:1', household._id);
+		const head = makeEvacuee('evacuee:1', household._id);
 		const sibling = makeEvacuee('evacuee:2', household._id);
 
 		expect(
-			checkEvacueeHouseholdConflict(member, target._id, [household, target], [member, sibling])
+			checkEvacueeHouseholdConflict(head, target._id, [household, target], [head, sibling])
 		).toMatchObject({ conflicted: true, householdId: household._id });
 		expect(() =>
-			assertEvacueeHouseholdAssignment(member, target._id, [household, target], [member, sibling])
+			assertEvacueeHouseholdAssignment(head, target._id, [household, target], [head, sibling])
 		).toThrow(/ยังมีสมาชิกอื่นอยู่/);
+	});
+
+	it('allows a non-head to leave an active household that has other members (CR-106)', () => {
+		const household = {
+			...makeHousehold('household:old'),
+			head_evacuee_id: 'evacuee:1'
+		};
+		const target = makeHousehold('household:new');
+		const head = makeEvacuee('evacuee:1', household._id);
+		const member = makeEvacuee('evacuee:2', household._id);
+
+		expect(
+			checkEvacueeHouseholdConflict(member, target._id, [household, target], [head, member])
+		).toEqual({ conflicted: false });
+		expect(() =>
+			assertEvacueeHouseholdAssignment(member, target._id, [household, target], [head, member])
+		).not.toThrow();
 	});
 
 	it('allows moving a solo member or a member from an inactive household', () => {
@@ -693,5 +1068,44 @@ describe('assertCheckoutDestination', () => {
 		expect(() =>
 			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
 		).not.toThrow();
+	});
+});
+
+describe('matchesEvacueeSearch', () => {
+	const evacuee = createEvacuee(
+		{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
+		ctx
+	);
+
+	it('returns true for an empty/blank query', () => {
+		expect(matchesEvacueeSearch(evacuee, '')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '   ')).toBe(true);
+	});
+
+	it('matches by first name, last name, full name, and phone digits', () => {
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'สมชาย ใจดี')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, '0812345678')).toBe(true);
+		expect(matchesEvacueeSearch(evacuee, 'ไม่มีตัวตน')).toBe(false);
+	});
+
+	it('defaults to including search_excluded evacuees (internal staff search)', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย')).toBe(true);
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: false })).toBe(true);
+	});
+
+	it('excludes search_excluded evacuees only when isPublicSearch is true', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, 'สมชาย', { isPublicSearch: true })).toBe(false);
+
+		const included = { ...evacuee, privacy: { search_excluded: false } };
+		expect(matchesEvacueeSearch(included, 'สมชาย', { isPublicSearch: true })).toBe(true);
+	});
+
+	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
+		const excluded = { ...evacuee, privacy: { search_excluded: true } };
+		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
 	});
 });

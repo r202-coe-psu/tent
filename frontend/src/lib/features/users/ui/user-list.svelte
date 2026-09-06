@@ -10,14 +10,14 @@
 	let {
 		users,
 		isSA = false,
-		onedit,
+		editHref,
 		ondelete,
 		onresetpassword,
 		pending = false
 	}: {
 		users: UserSummary[];
 		isSA?: boolean;
-		onedit: (user: UserSummary) => void;
+		editHref: (user: UserSummary) => string;
 		ondelete: (name: string) => void;
 		onresetpassword?: (user: UserSummary) => void;
 		pending?: boolean;
@@ -30,7 +30,9 @@
 	<Table.Root>
 		<Table.Header class="bg-slate-50/70">
 			<Table.Row>
-				<Table.Head class="py-4 pl-6 text-left font-bold text-slate-700">ชื่อผู้ใช้ / เบอร์โทร</Table.Head>
+				<Table.Head class="py-4 pl-6 text-left font-bold text-slate-700"
+					>ชื่อผู้ใช้ / เบอร์โทร</Table.Head
+				>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ชื่อ-สกุล</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ประเภท / สังกัด</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">บทบาทในระบบ</Table.Head>
@@ -40,6 +42,7 @@
 		<Table.Body>
 			{#each users as user (user.name)}
 				{@const immutable = user.roles.includes(COUCH_ADMIN)}
+				{@const canEdit = !immutable && (isSA || isStaffOnly(user.roles))}
 				{@const isVolunteer = user.personnel_type === 'volunteer'}
 				<Table.Row class="hover:bg-slate-50/50">
 					<Table.Cell class="pl-6 font-medium">
@@ -53,29 +56,41 @@
 							{/if}
 						</div>
 					</Table.Cell>
-					<Table.Cell>
-						<div class="flex flex-col gap-1 items-start">
+					<Table.Cell class="py-3 whitespace-normal">
+						<div class="flex flex-col items-start gap-2">
 							{#if isVolunteer}
-								<Badge variant="outline" class="border-emerald-300 bg-emerald-50 text-emerald-700 text-xs gap-1">
-									<Users class="size-3" /> จิตอาสา
+								<Badge
+									variant="outline"
+									class="h-auto gap-1.5 border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700"
+								>
+									<Users class="size-3.5 shrink-0" /> จิตอาสา
 								</Badge>
 							{:else}
-								<Badge variant="outline" class="border-blue-300 bg-blue-50 text-blue-700 text-xs gap-1">
-									<Building class="size-3" /> เจ้าหน้าที่
+								<Badge
+									variant="outline"
+									class="h-auto gap-1.5 border-blue-300 bg-blue-50 px-2.5 py-1 text-xs text-blue-700"
+								>
+									<Building class="size-3.5 shrink-0" /> เจ้าหน้าที่
 								</Badge>
 							{/if}
 							{#if user.organization}
-								<span class="text-xs text-slate-600 truncate max-w-[180px]">{user.organization}</span>
+								<span class="max-w-[200px] pl-0.5 text-sm leading-snug text-slate-600"
+									>{user.organization}</span
+								>
 							{/if}
 						</div>
 					</Table.Cell>
-					<Table.Cell>
-						<Badge
-							variant="secondary"
-							class="rounded-md bg-slate-100 font-semibold text-slate-700 hover:bg-slate-100/80"
-						>
-							{formatRoleList(user.roles)}
-						</Badge>
+					<Table.Cell class="whitespace-normal">
+						<div class="flex flex-col items-start gap-1">
+							{#each formatRoleList(user.roles).split('\n') as line (line)}
+								<Badge
+									variant="secondary"
+									class="h-auto max-w-full rounded-md bg-slate-100 font-semibold whitespace-normal text-slate-700 hover:bg-slate-100/80"
+								>
+									{line}
+								</Badge>
+							{/each}
+						</div>
 					</Table.Cell>
 					<Table.Cell class="text-center">
 						<div class="flex items-center justify-center gap-1.5">
@@ -84,7 +99,7 @@
 									variant="outline"
 									size="sm"
 									class="h-8 border-amber-200 bg-amber-50/60 px-2.5 text-xs text-amber-900 hover:bg-amber-100"
-									disabled={immutable || (!isSA && !isStaffOnly(user.roles))}
+									disabled={!canEdit}
 									onclick={() => onresetpassword(user)}
 									title="รีเซ็ตรหัสผ่านชั่วคราว"
 								>
@@ -95,8 +110,8 @@
 								variant="secondary"
 								size="sm"
 								class="h-8 bg-blue-50 px-2.5 text-xs text-blue-800 hover:bg-blue-100"
-								disabled={immutable || (!isSA && !isStaffOnly(user.roles))}
-								onclick={() => onedit(user)}
+								disabled={!canEdit}
+								href={canEdit ? editHref(user) : undefined}
 							>
 								<Settings2 class="mr-1 h-3.5 w-3.5" /> แก้ไข
 							</Button>
@@ -104,7 +119,7 @@
 								variant="outline"
 								size="icon"
 								class="h-8 w-8 border-red-100 text-red-500 hover:bg-red-50 hover:text-red-600"
-								disabled={pending || immutable || (!isSA && !isStaffOnly(user.roles))}
+								disabled={pending || !canEdit}
 								onclick={() => ondelete(user.name)}
 								title="ลบผู้ใช้"
 							>
