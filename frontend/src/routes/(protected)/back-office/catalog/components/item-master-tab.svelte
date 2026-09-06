@@ -195,7 +195,7 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row>
-						<Table.Head class="font-bold">ชื่อข้อมูลมาตรฐาน</Table.Head>
+						<Table.Head class="font-bold">ชื่อรายการสิ่งของ</Table.Head>
 						<Table.Head class="w-24 text-center font-bold">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -334,7 +334,9 @@
 				</span>
 
 				<h1 class="text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100">
-					➕ บันทึกข้อมูลตั้งค่ามาตรฐานใหม่
+					{viewMode === 'create'
+						? '➕ บันทึกรายการสิ่งของ (Item Master) ใหม่'
+						: '🛠️ แก้ไขรายการสิ่งของ (Item Master)'}
 				</h1>
 			</div>
 
