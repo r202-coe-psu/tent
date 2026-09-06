@@ -236,9 +236,9 @@ test.describe('Evacuee Registration', () => {
 		});
 
 		// Assert
-		await expect(
-			page.getByRole('heading', { name: /คัดกรองสุขภาพและกลุ่มเปราะบาง/ })
-		).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByRole('heading', { name: /คัดกรองสุขภาพและกลุ่มเปราะบาง/ })).toBeVisible({
+			timeout: 5_000
+		});
 		const step2Circle = page.locator('div.rounded-full').filter({ hasText: '2' }).first();
 		await expect(step2Circle).toHaveClass(/bg-primary/);
 		await expect(step2Circle).toHaveAttribute('aria-current', 'step');

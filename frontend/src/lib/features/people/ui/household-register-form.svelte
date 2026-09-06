@@ -426,296 +426,296 @@
 	{/if}
 
 	{#if phase === 'search'}
-	<!-- Search Section -->
-	<form
-		class="space-y-4"
-		onsubmit={(e) => {
-			e.preventDefault();
-			doSearch();
-		}}
-	>
-		<!-- Search Mode Toggle -->
-		<div class="flex flex-col overflow-hidden rounded-xl bg-muted/50 p-1 sm:flex-row">
-			<button
-				type="button"
-				class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors {searchMode ===
-				'exact'
-					? 'bg-white text-foreground shadow-sm'
-					: 'text-muted-foreground hover:text-foreground'}"
-				onclick={() => {
-					searchMode = 'exact';
-					searchQuery = '';
-					searchAddressNo = '';
-					selectedLocationValue = '';
-					selectedLocation = null;
-					searchState = 'idle';
-					showNewHouseholdForm = false;
-				}}
-			>
-				<span class="mr-2 {searchMode === 'exact' ? 'text-primary' : 'text-muted-foreground'}"
-					>◉</span
+		<!-- Search Section -->
+		<form
+			class="space-y-4"
+			onsubmit={(e) => {
+				e.preventDefault();
+				doSearch();
+			}}
+		>
+			<!-- Search Mode Toggle -->
+			<div class="flex flex-col overflow-hidden rounded-xl bg-muted/50 p-1 sm:flex-row">
+				<button
+					type="button"
+					class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors {searchMode ===
+					'exact'
+						? 'bg-white text-foreground shadow-sm'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => {
+						searchMode = 'exact';
+						searchQuery = '';
+						searchAddressNo = '';
+						selectedLocationValue = '';
+						selectedLocation = null;
+						searchState = 'idle';
+						showNewHouseholdForm = false;
+					}}
 				>
-				{t.tabs.person}
-			</button>
-			<button
-				type="button"
-				class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors {searchMode ===
-				'fuzzy'
-					? 'bg-white text-foreground shadow-sm'
-					: 'text-muted-foreground hover:text-foreground'}"
-				onclick={() => {
-					searchMode = 'fuzzy';
-					searchQuery = '';
-					searchAddressNo = '';
-					selectedLocationValue = '';
-					selectedLocation = null;
-					searchState = 'idle';
-					showNewHouseholdForm = false;
-				}}
-			>
-				<span class="mr-2 {searchMode === 'fuzzy' ? 'text-primary' : 'text-muted-foreground'}"
-					>◎</span
-				>
-				{t.tabs.address}
-			</button>
-		</div>
-
-		{#if searchMode === 'exact'}
-			<div class="space-y-3">
-				<Label class="text-sm font-medium">{t.personSearch.label}</Label>
-				<div class="flex flex-col gap-3 sm:flex-row">
-					<div class="relative flex-1">
-						<Search
-							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-						/>
-						<Input
-							bind:value={searchQuery}
-							placeholder={t.personSearch.placeholder}
-							class="h-12 bg-muted/20 pl-9 sm:h-11"
-						/>
-					</div>
-					<Button type="submit" variant="default" class="h-12 px-6 sm:h-11">
-						<Search class="mr-2 h-4 w-4" />
-						{t.personSearch.btnSearch}
-					</Button>
-					<Button
-						type="button"
-						variant="secondary"
-						class="touch-target h-auto px-6 py-3"
-						onclick={startCreate}
+					<span class="mr-2 {searchMode === 'exact' ? 'text-primary' : 'text-muted-foreground'}"
+						>◉</span
 					>
-						<Plus class="mr-2 h-4 w-4" />
-						{t.personSearch.btnNew}
-					</Button>
-				</div>
+					{t.tabs.person}
+				</button>
+				<button
+					type="button"
+					class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors {searchMode ===
+					'fuzzy'
+						? 'bg-white text-foreground shadow-sm'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => {
+						searchMode = 'fuzzy';
+						searchQuery = '';
+						searchAddressNo = '';
+						selectedLocationValue = '';
+						selectedLocation = null;
+						searchState = 'idle';
+						showNewHouseholdForm = false;
+					}}
+				>
+					<span class="mr-2 {searchMode === 'fuzzy' ? 'text-primary' : 'text-muted-foreground'}"
+						>◎</span
+					>
+					{t.tabs.address}
+				</button>
 			</div>
-		{:else}
-			<div class="space-y-4">
-				{#if locationsError}
-					<div
-						class="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-						role="alert"
-					>
-						<p>{locationsError}</p>
-						<Button type="button" variant="outline" size="sm" onclick={retryLocations}>
-							{t.addressSearch.retry}
+
+			{#if searchMode === 'exact'}
+				<div class="space-y-3">
+					<Label class="text-sm font-medium">{t.personSearch.label}</Label>
+					<div class="flex flex-col gap-3 sm:flex-row">
+						<div class="relative flex-1">
+							<Search
+								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+							/>
+							<Input
+								bind:value={searchQuery}
+								placeholder={t.personSearch.placeholder}
+								class="h-12 bg-muted/20 pl-9 sm:h-11"
+							/>
+						</div>
+						<Button type="submit" variant="default" class="h-12 px-6 sm:h-11">
+							<Search class="mr-2 h-4 w-4" />
+							{t.personSearch.btnSearch}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							class="touch-target h-auto px-6 py-3"
+							onclick={startCreate}
+						>
+							<Plus class="mr-2 h-4 w-4" />
+							{t.personSearch.btnNew}
 						</Button>
 					</div>
-				{/if}
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-					<div class="space-y-2">
-						<Label class="text-sm font-medium">{t.addressSearch.addressNoLabel}</Label>
-						<Input
-							bind:value={searchAddressNo}
-							placeholder={t.addressSearch.addressNoPlaceholder}
-							class="h-12 bg-muted/20 sm:h-11"
-						/>
+				</div>
+			{:else}
+				<div class="space-y-4">
+					{#if locationsError}
+						<div
+							class="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+							role="alert"
+						>
+							<p>{locationsError}</p>
+							<Button type="button" variant="outline" size="sm" onclick={retryLocations}>
+								{t.addressSearch.retry}
+							</Button>
+						</div>
+					{/if}
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<div class="space-y-2">
+							<Label class="text-sm font-medium">{t.addressSearch.addressNoLabel}</Label>
+							<Input
+								bind:value={searchAddressNo}
+								placeholder={t.addressSearch.addressNoPlaceholder}
+								class="h-12 bg-muted/20 sm:h-11"
+							/>
+						</div>
+						<div class="relative space-y-2">
+							<Label class="text-sm font-medium">{t.addressSearch.locationLabel}</Label>
+							<SearchSelect
+								name="household_location"
+								options={locationItems}
+								bind:value={selectedLocationValue}
+								placeholder={t.addressSearch.locationPlaceholder}
+								loading={locationsLoading}
+								loadingText={t.addressSearch.locationLoading}
+								disabled={!!locationsError}
+								class="h-12 rounded-md border-border bg-muted/20 sm:h-11"
+							/>
+						</div>
 					</div>
-					<div class="relative space-y-2">
-						<Label class="text-sm font-medium">{t.addressSearch.locationLabel}</Label>
-						<SearchSelect
-							name="household_location"
-							options={locationItems}
-							bind:value={selectedLocationValue}
-							placeholder={t.addressSearch.locationPlaceholder}
-							loading={locationsLoading}
-							loadingText={t.addressSearch.locationLoading}
-							disabled={!!locationsError}
-							class="h-12 rounded-md border-border bg-muted/20 sm:h-11"
-						/>
-					</div>
+
+					<Button
+						type="submit"
+						variant="default"
+						class="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-bold"
+					>
+						<Search class="mr-2 h-4 w-4" />
+						{t.addressSearch.btnSearch}
+					</Button>
+				</div>
+			{/if}
+		</form>
+
+		<!-- Found Alert -->
+		{#if searchState === 'found' && foundResults.length > 0}
+			<div class="space-y-4">
+				<h3 class="flex items-center gap-2 text-lg font-bold">
+					{t.results.foundCount(foundResults.length)}
+				</h3>
+
+				<div class="space-y-3">
+					{#each foundResults as result (result.household._id)}
+						{@const isSelected = selectedHouseholdId === result.household._id}
+						<div
+							class="rounded-xl border {isSelected
+								? 'border-2 border-success-border bg-success-muted/30'
+								: 'border-border bg-card'} flex flex-col gap-4 p-4 shadow-xs transition-all"
+						>
+							<div
+								class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center"
+							>
+								<div class="flex-1 space-y-2">
+									<div class="flex flex-wrap items-center gap-2">
+										<User class="size-5 text-primary" />
+										<span class="text-sm font-bold"
+											>{t.results.headLabel}
+											{result.evacuee
+												? `${result.evacuee.first_name} ${result.evacuee.last_name}`
+												: result.household.label}</span
+										>
+										<button
+											type="button"
+											class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors select-none
+											{result.expanded
+												? 'border-blue-600 bg-white text-blue-700'
+												: 'border-transparent bg-blue-50 text-blue-700 hover:bg-blue-100'}"
+											onclick={() => (result.expanded = !result.expanded)}
+										>
+											{t.results.memberCount(result.count > 0 ? result.count : 1)}
+											{#if result.expanded}
+												<ChevronUp class="h-3 w-3" />
+											{:else}
+												<ChevronDown class="h-3 w-3" />
+											{/if}
+										</button>
+									</div>
+									<div class="ml-[2px] flex items-start gap-2 text-sm text-muted-foreground">
+										<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+										<span>{t.results.addressLabel} {formatAddress(result.household)}</span>
+									</div>
+								</div>
+								<Button
+									variant={isSelected ? 'default' : 'outline'}
+									class="touch-target h-auto shrink-0 rounded-xl px-4 py-3 font-medium"
+									onclick={() => {
+										selectedHouseholdId = result.household._id;
+										onselect?.(result.household);
+									}}
+								>
+									{#if isSelected}
+										<Check class="mr-2 h-4 w-4" /> {t.results.btnJoined}
+									{:else}
+										<span
+											class="mr-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-muted-foreground"
+										>
+											<span class="h-1.5 w-1.5 rounded-full bg-transparent"></span>
+										</span>
+										{t.results.btnJoin}
+									{/if}
+								</Button>
+							</div>
+
+							{#if result.expanded}
+								<div class="mt-1 border-t pt-4">
+									<h4 class="mb-3 text-sm font-bold text-primary">{t.results.membersTitle}</h4>
+
+									{#if result.members.filter((m) => m._id !== result.household.head_evacuee_id).length > 0}
+										<ul class="space-y-2 pl-1 text-sm text-muted-foreground">
+											{#each result.members.filter((m) => m._id !== result.household.head_evacuee_id) as member (member._id)}
+												<li class="flex items-center gap-2">
+													<span class="h-1.5 w-1.5 rounded-full bg-blue-300"></span>
+													<span class="font-medium text-foreground"
+														>{member.first_name} {member.last_name}</span
+													>
+													<span class="text-xs opacity-70">
+														({member.person_id?.number
+															? member.person_id.number
+															: member.phone
+																? member.phone
+																: t.results.noId})
+													</span>
+												</li>
+											{/each}
+										</ul>
+									{:else}
+										<p class="text-sm text-muted-foreground italic">
+											{t.results.noOtherMembers}
+										</p>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/each}
 				</div>
 
-				<Button
-					type="submit"
-					variant="default"
-					class="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-bold"
+				<button
+					type="button"
+					class="touch-target mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+					onclick={startCreate}
 				>
-					<Search class="mr-2 h-4 w-4" />
-					{t.addressSearch.btnSearch}
+					<Plus class="h-4 w-4" />
+					{t.results.btnSeparateNew}
+				</button>
+			</div>
+
+			<!-- Selected Alert -->
+			{#if selectedResult}
+				<div class="mt-6 rounded-xl border-2 border-success-border bg-success-muted/40 p-4 md:p-5">
+					<div class="flex items-start gap-3">
+						<CheckSquare class="mt-0.5 size-6 shrink-0 text-success" />
+						<div class="space-y-1.5 text-foreground">
+							<div class="text-base font-bold">{t.results.selectedTitle}</div>
+							<div class="text-sm">
+								{t.results.headLabel}
+								{selectedResult.evacuee
+									? `${selectedResult.evacuee.first_name} ${selectedResult.evacuee.last_name}`
+									: selectedResult.household.label} ({selectedResult.count > 0
+									? selectedResult.count
+									: 1} คน)
+							</div>
+							<div class="mt-2 text-sm">
+								<strong>{t.results.addressLabel}</strong>
+								{formatAddress(selectedResult.household)}
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+		{/if}
+
+		<!-- Not Found Alert -->
+		{#if searchState === 'not_found' && phase === 'search'}
+			<div
+				class="flex flex-col items-center justify-center gap-4 px-2 py-6 text-center"
+				role="status"
+			>
+				<div class="flex items-center gap-2 text-base font-bold text-destructive">
+					<X class="size-6 stroke-[3]" />
+					{t.notFound.title}
+				</div>
+				<Button
+					type="button"
+					variant="default"
+					class="touch-target h-auto w-full px-6 py-3 sm:w-auto"
+					onclick={startCreate}
+				>
+					<Plus class="mr-2 h-4 w-4" />
+					{t.notFound.btnNew}
 				</Button>
 			</div>
 		{/if}
-	</form>
-
-	<!-- Found Alert -->
-	{#if searchState === 'found' && foundResults.length > 0}
-		<div class="space-y-4">
-			<h3 class="flex items-center gap-2 text-lg font-bold">
-				{t.results.foundCount(foundResults.length)}
-			</h3>
-
-			<div class="space-y-3">
-				{#each foundResults as result (result.household._id)}
-					{@const isSelected = selectedHouseholdId === result.household._id}
-					<div
-						class="rounded-xl border {isSelected
-							? 'border-2 border-success-border bg-success-muted/30'
-							: 'border-border bg-card'} flex flex-col gap-4 p-4 shadow-xs transition-all"
-					>
-						<div
-							class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center"
-						>
-							<div class="flex-1 space-y-2">
-								<div class="flex flex-wrap items-center gap-2">
-									<User class="size-5 text-primary" />
-									<span class="text-sm font-bold"
-										>{t.results.headLabel}
-										{result.evacuee
-											? `${result.evacuee.first_name} ${result.evacuee.last_name}`
-											: result.household.label}</span
-									>
-									<button
-										type="button"
-										class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors select-none
-											{result.expanded
-											? 'border-blue-600 bg-white text-blue-700'
-											: 'border-transparent bg-blue-50 text-blue-700 hover:bg-blue-100'}"
-										onclick={() => (result.expanded = !result.expanded)}
-									>
-										{t.results.memberCount(result.count > 0 ? result.count : 1)}
-										{#if result.expanded}
-											<ChevronUp class="h-3 w-3" />
-										{:else}
-											<ChevronDown class="h-3 w-3" />
-										{/if}
-									</button>
-								</div>
-								<div class="ml-[2px] flex items-start gap-2 text-sm text-muted-foreground">
-									<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-									<span>{t.results.addressLabel} {formatAddress(result.household)}</span>
-								</div>
-							</div>
-							<Button
-								variant={isSelected ? 'default' : 'outline'}
-								class="touch-target h-auto shrink-0 rounded-xl px-4 py-3 font-medium"
-								onclick={() => {
-									selectedHouseholdId = result.household._id;
-									onselect?.(result.household);
-								}}
-							>
-								{#if isSelected}
-									<Check class="mr-2 h-4 w-4" /> {t.results.btnJoined}
-								{:else}
-									<span
-										class="mr-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-muted-foreground"
-									>
-										<span class="h-1.5 w-1.5 rounded-full bg-transparent"></span>
-									</span>
-									{t.results.btnJoin}
-								{/if}
-							</Button>
-						</div>
-
-						{#if result.expanded}
-							<div class="mt-1 border-t pt-4">
-								<h4 class="mb-3 text-sm font-bold text-primary">{t.results.membersTitle}</h4>
-
-								{#if result.members.filter((m) => m._id !== result.household.head_evacuee_id).length > 0}
-									<ul class="space-y-2 pl-1 text-sm text-muted-foreground">
-										{#each result.members.filter((m) => m._id !== result.household.head_evacuee_id) as member (member._id)}
-											<li class="flex items-center gap-2">
-												<span class="h-1.5 w-1.5 rounded-full bg-blue-300"></span>
-												<span class="font-medium text-foreground"
-													>{member.first_name} {member.last_name}</span
-												>
-												<span class="text-xs opacity-70">
-													({member.person_id?.number
-														? member.person_id.number
-														: member.phone
-															? member.phone
-															: t.results.noId})
-												</span>
-											</li>
-										{/each}
-									</ul>
-								{:else}
-									<p class="text-sm text-muted-foreground italic">
-										{t.results.noOtherMembers}
-									</p>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/each}
-			</div>
-
-			<button
-				type="button"
-				class="touch-target mt-4 ml-1 flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
-				onclick={startCreate}
-			>
-				<Plus class="h-4 w-4" />
-				{t.results.btnSeparateNew}
-			</button>
-		</div>
-
-		<!-- Selected Alert -->
-		{#if selectedResult}
-			<div class="mt-6 rounded-xl border-2 border-success-border bg-success-muted/40 p-4 md:p-5">
-				<div class="flex items-start gap-3">
-					<CheckSquare class="mt-0.5 size-6 shrink-0 text-success" />
-					<div class="space-y-1.5 text-foreground">
-						<div class="text-base font-bold">{t.results.selectedTitle}</div>
-						<div class="text-sm">
-							{t.results.headLabel}
-							{selectedResult.evacuee
-								? `${selectedResult.evacuee.first_name} ${selectedResult.evacuee.last_name}`
-								: selectedResult.household.label} ({selectedResult.count > 0
-								? selectedResult.count
-								: 1} คน)
-						</div>
-						<div class="mt-2 text-sm">
-							<strong>{t.results.addressLabel}</strong>
-							{formatAddress(selectedResult.household)}
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
-	{/if}
-
-	<!-- Not Found Alert -->
-	{#if searchState === 'not_found' && phase === 'search'}
-		<div
-			class="flex flex-col items-center justify-center gap-4 px-2 py-6 text-center"
-			role="status"
-		>
-			<div class="flex items-center gap-2 text-base font-bold text-destructive">
-				<X class="size-6 stroke-[3]" />
-				{t.notFound.title}
-			</div>
-			<Button
-				type="button"
-				variant="default"
-				class="touch-target h-auto w-full px-6 py-3 sm:w-auto"
-				onclick={startCreate}
-			>
-				<Plus class="mr-2 h-4 w-4" />
-				{t.notFound.btnNew}
-			</Button>
-		</div>
-	{/if}
 	{/if}
 
 	<!-- New Household Form -->

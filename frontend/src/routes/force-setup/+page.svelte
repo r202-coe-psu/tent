@@ -9,8 +9,8 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
-	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users/data/users.api';
-	import { ShieldCheck, Lock, ShieldQuestion, Info } from '@lucide/svelte';
+	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
+	import { ShieldCheck, Lock, ShieldQuestion } from '@lucide/svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -22,7 +22,6 @@
 	let answer = $state('');
 	let showPassword = $state(false);
 	let loading = $state(false);
-	let statusLoaded = $state(false);
 
 	onMount(async () => {
 		try {
@@ -32,8 +31,6 @@
 		} catch {
 			currentUsername = authStore.user?.name ?? '';
 			mustChangePassword = false;
-		} finally {
-			statusLoaded = true;
 		}
 	});
 
@@ -60,7 +57,7 @@
 			await submitForceSetup({
 				new_password: newPassword ? newPassword : undefined,
 				security_question: {
-					question_id: questionId as any,
+					question_id: questionId,
 					answer: answer.trim()
 				}
 			});
@@ -86,19 +83,25 @@
 </script>
 
 <div class="flex min-h-[var(--app-shell-height)] w-full items-center justify-center px-4 py-8">
-	<Card.Root class="w-full max-w-lg border-slate-200 shadow-xl rounded-2xl bg-white">
-		<Card.Header class="space-y-2 text-center pb-4 border-b border-slate-100">
-			<div class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+	<Card.Root class="w-full max-w-lg rounded-2xl border-slate-200 bg-white shadow-xl">
+		<Card.Header class="space-y-2 border-b border-slate-100 pb-4 text-center">
+			<div
+				class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-700"
+			>
 				<ShieldCheck class="size-6" />
 			</div>
 			<Card.Title class="text-xl font-bold text-slate-900">
-				{mustChangePassword ? 'ตั้งรหัสผ่านใหม่และบันทึกคำถามความปลอดภัย' : 'ตั้งค่าคำถามความปลอดภัยสำหรับกู้คืนบัญชี'}
+				{mustChangePassword
+					? 'ตั้งรหัสผ่านใหม่และบันทึกคำถามความปลอดภัย'
+					: 'ตั้งค่าคำถามความปลอดภัยสำหรับกู้คืนบัญชี'}
 			</Card.Title>
-			<Card.Description class="text-xs text-slate-500 leading-relaxed">
+			<Card.Description class="text-xs leading-relaxed text-slate-500">
 				{#if mustChangePassword}
-					เนื่องจากรหัสผ่านของคุณถูกรีเซ็ตโดยผู้ดูแลระบบ กรุณาตั้งรหัสผ่านใหม่และเลือกคำถามความปลอดภัยก่อนเริ่มใช้งาน
+					เนื่องจากรหัสผ่านของคุณถูกรีเซ็ตโดยผู้ดูแลระบบ
+					กรุณาตั้งรหัสผ่านใหม่และเลือกคำถามความปลอดภัยก่อนเริ่มใช้งาน
 				{:else}
-					กรุณาเลือกคำถามความปลอดภัยสำหรับกู้คืนบัญชีในอนาคต (สามารถใช้รหัสผ่านเดิมได้เลย หรือเปลี่ยนรหัสผ่านใหม่ได้ตามต้องการ)
+					กรุณาเลือกคำถามความปลอดภัยสำหรับกู้คืนบัญชีในอนาคต (สามารถใช้รหัสผ่านเดิมได้เลย
+					หรือเปลี่ยนรหัสผ่านใหม่ได้ตามต้องการ)
 				{/if}
 			</Card.Description>
 		</Card.Header>
@@ -106,14 +109,19 @@
 		<Card.Content class="p-6">
 			<form onsubmit={handleSubmit} class="space-y-5">
 				<!-- Section 1: Security Question (Primary) -->
-				<div class="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
-					<h4 class="text-xs font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
+				<div class="space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+					<h4
+						class="flex items-center gap-1.5 text-xs font-bold tracking-wider text-blue-800 uppercase"
+					>
 						<ShieldQuestion class="size-4 text-blue-600" />
 						คำถามความปลอดภัย (สำหรับกู้คืนรหัสผ่านด้วยตนเอง) <span class="text-red-500">*</span>
 					</h4>
 
 					<div>
-						<label for="security-question-select" class="mb-1 block text-xs font-bold text-slate-700">
+						<label
+							for="security-question-select"
+							class="mb-1 block text-xs font-bold text-slate-700"
+						>
 							เลือกคำถาม 1 ข้อ <span class="text-red-500">*</span>
 						</label>
 						<select
@@ -122,14 +130,17 @@
 							class="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
 							disabled={loading}
 						>
-							{#each SECURITY_QUESTIONS as q}
+							{#each SECURITY_QUESTIONS as q (q.id)}
 								<option value={q.id}>{q.label}</option>
 							{/each}
 						</select>
 					</div>
 
 					<div>
-						<label for="security-question-answer" class="mb-1 block text-xs font-bold text-slate-700">
+						<label
+							for="security-question-answer"
+							class="mb-1 block text-xs font-bold text-slate-700"
+						>
 							คำตอบความปลอดภัยของคุณ <span class="text-red-500">*</span>
 						</label>
 						<Input
@@ -145,19 +156,26 @@
 				</div>
 
 				<!-- Section 2: Password (Required if mustChangePassword, Optional for existing user) -->
-				<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+				<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
 					<div class="flex items-center justify-between">
-						<h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+						<h4
+							class="flex items-center gap-1.5 text-xs font-bold tracking-wider text-slate-700 uppercase"
+						>
 							<Lock class="size-3.5 text-slate-600" />
 							{mustChangePassword ? 'ตั้งรหัสผ่านใหม่' : 'เปลี่ยนรหัสผ่านใหม่ (ไม่บังคับ)'}
 						</h4>
 						{#if !mustChangePassword}
-							<span class="text-[11px] text-slate-500 font-normal">เว้นว่างไว้หากต้องการใช้รหัสผ่านเดิม</span>
+							<span class="text-[11px] font-normal text-slate-500"
+								>เว้นว่างไว้หากต้องการใช้รหัสผ่านเดิม</span
+							>
 						{/if}
 					</div>
 
 					<div>
-						<label for="force-setup-new-password" class="mb-1 block text-xs font-bold text-slate-700">
+						<label
+							for="force-setup-new-password"
+							class="mb-1 block text-xs font-bold text-slate-700"
+						>
 							รหัสผ่านใหม่
 							{#if mustChangePassword}
 								<span class="text-red-500">*</span>
@@ -170,7 +188,9 @@
 								id="force-setup-new-password"
 								type={showPassword ? 'text' : 'password'}
 								bind:value={newPassword}
-								placeholder={mustChangePassword ? 'อย่างน้อย 10 ตัวอักษร (A-Z, a-z, 0-9, !@#)' : 'เว้นว่างไว้หากใช้รหัสผ่านเดิม'}
+								placeholder={mustChangePassword
+									? 'อย่างน้อย 10 ตัวอักษร (A-Z, a-z, 0-9, !@#)'
+									: 'เว้นว่างไว้หากใช้รหัสผ่านเดิม'}
 								class="h-10 bg-white pr-10 text-sm"
 								disabled={loading}
 								required={mustChangePassword}
@@ -193,7 +213,10 @@
 
 					{#if newPassword.length > 0 || mustChangePassword}
 						<div>
-							<label for="force-setup-confirm-password" class="mb-1 block text-xs font-bold text-slate-700">
+							<label
+								for="force-setup-confirm-password"
+								class="mb-1 block text-xs font-bold text-slate-700"
+							>
 								ยืนยันรหัสผ่านใหม่ <span class="text-red-500">*</span>
 							</label>
 							<Input
@@ -212,7 +235,7 @@
 				<Button
 					type="submit"
 					disabled={loading || !answer.trim() || (mustChangePassword && !newPassword)}
-					class="h-11 w-full bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white font-bold"
+					class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
 				>
 					{#if loading}กำลังบันทึก...{:else}บันทึกและเข้าสู่ระบบ{/if}
 				</Button>
