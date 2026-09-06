@@ -30,6 +30,7 @@
 		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
+		"migrate:distribution-request-duplicates": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-distribution-request-duplicates.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"redeploy:access": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-access.ts",
 		"deploy:shelter-views": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/deploy-shelter-views.ts",

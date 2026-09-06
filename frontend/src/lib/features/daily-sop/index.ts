@@ -54,5 +54,6 @@ export {
 	useDailySopAssessments,
 	useUpdateDailySop
 } from './application/queries';
+export { shouldShowDailySopReconnect } from './ui/connection-action';
 export { default as DailySopActionBar } from './ui/daily-sop-action-bar.svelte';
 export { default as DailySopPage } from './ui/daily-sop-page.svelte';

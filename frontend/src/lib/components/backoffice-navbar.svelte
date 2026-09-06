@@ -82,6 +82,9 @@
 	function canSee(node: BackofficeNavbarNode): boolean {
 		if ('requiresAdmin' in node && node.requiresAdmin) return isSA;
 		if ('requiresManager' in node && node.requiresManager) return isManager;
+		if ('visibleToRoles' in node && node.visibleToRoles) {
+			return node.visibleToRoles.some((role) => roles.includes(role));
+		}
 		return true;
 	}
 </script>

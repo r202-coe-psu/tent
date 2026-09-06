@@ -6,6 +6,7 @@ import {
 	qtyAbs,
 	qtyGt,
 	qtyGte,
+	qtyIsZero,
 	qtyNeg,
 	qtyStrSignedNonZeroSchema,
 	qtyStrCoercePositiveSchema,
@@ -44,7 +45,8 @@ export const ledgerReasonSchema = z.enum([
 	'transfer_out',
 	'transfer_in',
 	'donation',
-	'purchase'
+	'purchase',
+	'distribution_return'
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 
@@ -163,6 +165,8 @@ export interface StockLedger extends BaseDoc {
 	unit: string;
 	reason: LedgerReason;
 	ref_id: string | null; // originating doc (donation/transfer/requisition)
+	/** Stable physical-lot identity. New inbound rows self-reference their own `_id`. */
+	lot_ref?: string;
 	lot?: StockLot;
 	occurred_at: Timestamp;
 }
@@ -294,7 +298,8 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | null> = {
 	transfer_in: 'stock_transfer:',
 	transfer_out: 'stock_transfer:',
 	adjust: null, // manual correction — no source document by definition
-	distribute: null, // CR-055 Q-1: revisit when CR-059 gives distribution a doc
+	distribute: 'distribution_batch:',
+	distribution_return: 'distribution_batch:',
 	receive: null // CR-055 Q-2: orphan enum value, kept but pinned to null
 };
 
@@ -337,10 +342,23 @@ export const stockLedgerInputSchema = z
 		unit: z.string().trim().min(1),
 		reason: ledgerReasonSchema,
 		ref_id: z.string().nullable().default(null),
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/)
+			.optional(),
 		lot: stockLotSchema.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkRefId(d.reason, d.ref_id, ctx));
+	.superRefine((d, ctx) => {
+		checkRefId(d.reason, d.ref_id, ctx);
+		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot_ref'],
+				message: `รายการประเภท '${d.reason}' ต้องอ้างอิง physical lot`
+			});
+		}
+	});
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
 
 /** Full persisted stock_ledger contract used before signed-sum calculations. */
@@ -359,6 +377,10 @@ export const stockLedgerDocSchema = z
 		unit: z.string().trim().min(1),
 		reason: ledgerReasonSchema,
 		ref_id: z.string().nullable(),
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/)
+			.optional(),
 		lot: stockLotSchema.optional(),
 		occurred_at: z.string().datetime()
 	})
@@ -394,7 +416,7 @@ export function createStockLedger(
 	id?: string
 ): StockLedger {
 	const d = stockLedgerInputSchema.parse(input);
-	return makeDoc(
+	const entry = makeDoc(
 		'stock_ledger',
 		4,
 		{
@@ -403,12 +425,23 @@ export function createStockLedger(
 			unit: d.unit,
 			reason: d.reason,
 			ref_id: d.ref_id,
+			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			...(d.lot ? { lot: d.lot } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
 		ctx,
 		id
 	);
+
+	// Every newly-created inbound physical lot establishes its identity at write
+	// time. A distribution return reuses the original lot instead of becoming a
+	// new physical lot. Legacy persisted rows remain readable without this field.
+	const isNewInboundLot = qtyGt(entry.qty, 0) && entry.reason !== 'distribution_return';
+	if (!isNewInboundLot) return entry;
+	if (d.lot_ref && d.lot_ref !== entry._id) {
+		throw new Error('New inbound stock ledger lot_ref must equal its own _id');
+	}
+	return { ...entry, lot_ref: entry._id };
 }
 
 export const receiveSourceSchema = z.enum([
@@ -461,7 +494,11 @@ export type ReceiveInput = z.input<typeof receiveInputSchema>;
  * See UI enforcement in receive-stock-form.svelte.
  * NOTE: CouchDB `validate_doc_update` should eventually enforce this server-side.
  */
-export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
+export function createReceiveEntry(
+	input: ReceiveInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
 	const d = receiveInputSchema.parse(input);
 	return createStockLedger(
 		{
@@ -473,7 +510,8 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 			lot: d.lot,
 			occurred_at: d.occurred_at
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
@@ -481,15 +519,18 @@ export const distributeInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	// CR-055 R8/Q-1: handing goods out has no source document, so the type — not
-	// just a runtime check — rules a value out. Revisit if CR-059 introduces one.
-	ref_id: z.null().default(null),
+	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	note: z.string().trim().optional(), // Used to store destination in lot.note
 	occurred_at: z.string().optional()
 });
 export type DistributeInput = z.input<typeof distributeInputSchema>;
 
-export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext): StockLedger {
+export function createDistributeEntry(
+	input: DistributeInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
 	const d = distributeInputSchema.parse(input);
 	return createStockLedger(
 		{
@@ -498,10 +539,45 @@ export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext
 			unit: d.unit,
 			reason: 'distribute',
 			ref_id: d.ref_id,
+			lot_ref: d.lot_ref,
 			...(d.note ? { lot: { note: d.note } } : {}),
 			occurred_at: d.occurred_at
 		},
-		ctx
+		ctx,
+		id
+	);
+}
+
+export const distributionReturnInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoercePositiveSchema,
+	unit: z.string().trim().min(1),
+	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
+	lot: stockLotSchema.optional(),
+	occurred_at: z.string().optional()
+});
+export type DistributionReturnInput = z.input<typeof distributionReturnInputSchema>;
+
+export function createDistributionReturnEntry(
+	input: DistributionReturnInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	const d = distributionReturnInputSchema.parse(input);
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: qtyAbs(d.qty),
+			unit: d.unit,
+			reason: 'distribution_return',
+			ref_id: d.ref_id,
+			lot_ref: d.lot_ref,
+			lot: d.lot,
+			occurred_at: d.occurred_at
+		},
+		ctx,
+		id
 	);
 }
 
@@ -540,6 +616,113 @@ export function stockBalance(ledger: StockLedger[]): Map<string, string> {
 		balance.set(entry.item_id, addQty(balance.get(entry.item_id) ?? '0', entry.qty));
 	}
 	return balance;
+}
+
+export interface StockLotBalance {
+	lot_ref: string;
+	item_id: string;
+	unit: string;
+	qty: string;
+	lot?: StockLot;
+	received_at: Timestamp;
+}
+
+export class StockLotIntegrityError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'StockLotIntegrityError';
+	}
+}
+
+function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): number {
+	const aExpiry = a.lot?.expiry;
+	const bExpiry = b.lot?.expiry;
+	if (aExpiry && bExpiry && aExpiry !== bExpiry) return aExpiry.localeCompare(bExpiry);
+	if (aExpiry && !bExpiry) return -1;
+	if (!aExpiry && bExpiry) return 1;
+	if (a.received_at !== b.received_at) return a.received_at.localeCompare(b.received_at);
+	return a.lot_ref.localeCompare(b.lot_ref);
+}
+
+/**
+ * Sorts physical stock lots in canonical FEFO/FIFO consumption order:
+ * 1. Earliest expiry date first (lots with expiry before lots without expiry)
+ * 2. Earliest receipt time (occurred_at / received_at)
+ * 3. lot_ref ascending deterministic tie-breaker
+ */
+export function sortStockLotsByConsumptionOrder(
+	lots: readonly StockLotBalance[]
+): StockLotBalance[] {
+	return [...lots].sort(compareLotConsumptionOrder);
+}
+
+/**
+ * Project exact per-lot balances from ledger history. Explicit `lot_ref` rows
+ * target that physical lot. A legacy inbound row uses its own `_id` as a
+ * virtual reference; a legacy outbound row consumes eligible lots FEFO, then
+ * FIFO (`occurred_at`, `_id`). Impossible histories fail closed.
+ */
+export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLotBalance[] {
+	const balances = new Map<string, StockLotBalance>();
+	const ordered = [...ledger].sort(
+		(a, b) => a.occurred_at.localeCompare(b.occurred_at) || a._id.localeCompare(b._id)
+	);
+
+	for (const entry of ordered) {
+		if (qtyGt(entry.qty, 0)) {
+			const lotRef = entry.lot_ref ?? entry._id;
+			const existing = balances.get(lotRef);
+			if (existing) {
+				if (existing.item_id !== entry.item_id || existing.unit !== entry.unit) {
+					throw new StockLotIntegrityError(`Lot identity ${lotRef} changed item or unit`);
+				}
+				existing.qty = addQty(existing.qty, entry.qty);
+				continue;
+			}
+			if (entry.reason === 'distribution_return') {
+				throw new StockLotIntegrityError(`Return references unknown physical lot ${lotRef}`);
+			}
+			balances.set(lotRef, {
+				lot_ref: lotRef,
+				item_id: entry.item_id,
+				unit: entry.unit,
+				qty: persistQty(entry.qty),
+				...(entry.lot ? { lot: entry.lot } : {}),
+				received_at: entry.occurred_at
+			});
+			continue;
+		}
+
+		let remaining = qtyAbs(entry.qty);
+		const candidates = entry.lot_ref
+			? [balances.get(entry.lot_ref)].filter((lot): lot is StockLotBalance => Boolean(lot))
+			: [...balances.values()]
+					.filter(
+						(lot) => lot.item_id === entry.item_id && lot.unit === entry.unit && qtyGt(lot.qty, 0)
+					)
+					.sort(compareLotConsumptionOrder);
+
+		for (const lot of candidates) {
+			if (lot.item_id !== entry.item_id || lot.unit !== entry.unit) continue;
+			if (!qtyGt(lot.qty, 0)) continue;
+			if (qtyGte(lot.qty, remaining)) {
+				lot.qty = subQty(lot.qty, remaining);
+				remaining = '0';
+				break;
+			}
+			remaining = subQty(remaining, lot.qty);
+			lot.qty = '0';
+		}
+
+		if (!qtyIsZero(remaining)) {
+			const target = entry.lot_ref ? ` lot ${entry.lot_ref}` : '';
+			throw new StockLotIntegrityError(
+				`Historical outbound ${entry._id} exceeds available${target} stock by ${remaining}`
+			);
+		}
+	}
+
+	return [...balances.values()].sort((a, b) => a.lot_ref.localeCompare(b.lot_ref));
 }
 
 // ---------------------------------------------------------------- donation

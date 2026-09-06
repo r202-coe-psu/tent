@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
-import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop/domain/daily-sop';
+import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -670,6 +670,1012 @@ describe('buildValidateDocUpdate', () => {
 					roles: ['_admin']
 				})
 			).not.toThrow();
+		});
+
+		it('rejects distribute stock_ledger from shelter_manager (requires warehouse_staff or system_admin)', () => {
+			const distLedger = ledger({
+				qty: '-10',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(
+				() =>
+					compile()(distLedger, null, { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] }),
+				/Only warehouse staff or system admin can write distribute stock ledger/
+			);
+		});
+
+		it('allows distribute stock_ledger from warehouse_staff', () => {
+			const distLedger = ledger({
+				qty: '-10',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expect(() => compile()(distLedger, null, WAREHOUSE)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', { name: 'admin', roles: ['system_admin'] }]
+		])('allows distribution_return stock_ledger from %s', (_role, userCtx) => {
+			const returnLedger = ledger({
+				qty: '2',
+				reason: 'distribution_return',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expect(() => compile()(returnLedger, null, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['shelter_manager', { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] }],
+			['registration_staff', REGISTRATION],
+			['supply_coordinator', { name: 'supply', roles: ['shelter:SH001', 'supply_coordinator'] }]
+		])('rejects distribution_return stock_ledger from %s', (_role, userCtx) => {
+			const returnLedger = ledger({
+				qty: '2',
+				reason: 'distribution_return',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(() => compile()(returnLedger, null, userCtx), /Only warehouse staff/);
+		});
+
+		it('enforces distribute ref, lot, qty, and old-document append-only invariants', () => {
+			const valid = ledger({
+				qty: '-1.5',
+				reason: 'distribute',
+				ref_id: 'distribution_batch:01J',
+				lot_ref: 'stock_ledger:01J'
+			});
+			expectForbidden(
+				() => compile()({ ...valid, ref_id: null }, null, WAREHOUSE),
+				/distribution_batch ref_id/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, ref_id: 'donation:01J' }, null, WAREHOUSE),
+				/distribution_batch ref_id/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, lot_ref: undefined }, null, WAREHOUSE),
+				/physical stock_ledger lot_ref/
+			);
+			expectForbidden(
+				() => compile()({ ...valid, lot_ref: 'lot:01J' }, null, WAREHOUSE),
+				/physical stock_ledger lot_ref/
+			);
+			expectForbidden(() => compile()({ ...valid, qty: '1' }, null, WAREHOUSE), /negative decimal/);
+			expectForbidden(
+				() => compile()({ ...valid, type: 'donation' }, valid, WAREHOUSE),
+				/append-only/
+			);
+		});
+	});
+
+	describe('distribution doc types access rules', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+		const SUPPLY_COORDINATOR: UserCtx = {
+			name: 'supply',
+			roles: ['shelter:SH001', 'supply_coordinator']
+		};
+		const SCOPED_WAREHOUSE: UserCtx = { name: 'scoped-ws', roles: ['SH001:warehouse_staff'] };
+		const CROSS_SHELTER_WAREHOUSE: UserCtx = {
+			name: 'cross-ws',
+			roles: ['SH002:warehouse_staff']
+		};
+		const UNAUTHORIZED: UserCtx = { name: 'unknown', roles: ['shelter:SH001'] };
+
+		const reqDoc = (over: Doc = {}, user: UserCtx = REGISTRATION): Doc => ({
+			_id: 'distribution_request:01J',
+			type: 'distribution_request',
+			status: 'pending',
+			purpose: 'Flood relief',
+			items: [{ item_id: 'item:soap', requested_qty: '10', unit: 'bar' }],
+			...envelope,
+			created_by: user.name,
+			requested_by: user.name,
+			schema_v: 1,
+			...over
+		});
+
+		const batchDoc = (over: Doc = {}): Doc => ({
+			_id: 'distribution_batch:01J',
+			type: 'distribution_batch',
+			request_id: 'distribution_request:01J',
+			status: 'activating',
+			items: [{ item_id: 'item:soap', allocated_qty: '10', unit: 'bar' }],
+			allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '10' }],
+			...envelope,
+			schema_v: 1,
+			...over
+		});
+
+		const resDoc = (over: Doc = {}): Doc => ({
+			_id: 'stock_lot_reservation:hash123',
+			type: 'stock_lot_reservation',
+			lot_ref: 'stock_ledger:01J',
+			pending_claims: [],
+			...envelope,
+			schema_v: 1,
+			...over
+		});
+
+		it.each([
+			['registration_staff', REGISTRATION],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])(
+			'allows %s to create pending distribution_request with matching provenance',
+			(_role, userCtx) => {
+				expect(() => compile()(reqDoc({}, userCtx), null, userCtx)).not.toThrow();
+			}
+		);
+
+		it('rejects creating distribution_request with forged created_by', () => {
+			expectForbidden(
+				() => compile()(reqDoc({ created_by: 'forged_author' }, REGISTRATION), null, REGISTRATION),
+				/created_by must match authenticated user/
+			);
+		});
+
+		it('rejects creating distribution_request with forged requested_by', () => {
+			expectForbidden(
+				() =>
+					compile()(reqDoc({ requested_by: 'forged_requester' }, REGISTRATION), null, REGISTRATION),
+				/requested_by must match authenticated user/
+			);
+		});
+
+		it('rejects creating distribution_request with forged created_by and requested_by', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						reqDoc({ created_by: 'attacker', requested_by: 'attacker' }, REGISTRATION),
+						null,
+						REGISTRATION
+					),
+				/created_by must match authenticated user/
+			);
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['kitchen_staff', KITCHEN],
+			['missing role', UNAUTHORIZED]
+		])('rejects %s directly creating a distribution_request', (_role, userCtx) => {
+			expectForbidden(
+				() => compile()(reqDoc({}, userCtx), null, userCtx),
+				/Only registration staff, shelter manager, or system admin can create distribution requests/
+			);
+		});
+
+		it('rejects creating distribution_request with non-pending status', () => {
+			expectForbidden(
+				() => compile()(reqDoc({ status: 'approving' }), null, REGISTRATION),
+				/New distribution_request must start pending/
+			);
+		});
+
+		it.each([
+			['approval_operation_id', { approval_operation_id: 'op-123' }],
+			['approved_by', { approved_by: 'admin' }],
+			['approved_at', { approved_at: '2026-08-31T12:00:00.000Z' }],
+			['batch_id', { batch_id: 'distribution_batch:01J' }],
+			['rejected_by', { rejected_by: 'admin' }],
+			['rejected_at', { rejected_at: '2026-08-31T12:00:00.000Z' }],
+			['rejection_reason', { rejection_reason: 'Not needed' }]
+		])('rejects creating distribution_request with injected %s', (_field, over) => {
+			expectForbidden(
+				() => compile()(reqDoc(over), null, REGISTRATION),
+				/New distribution_request cannot contain lifecycle metadata/
+			);
+		});
+
+		it.each([
+			['registration_staff', REGISTRATION],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])('allows %s to cancel a pending distribution_request', (_role, userCtx) => {
+			const pending = reqDoc();
+			expect(() => compile()(reqDoc({ status: 'cancelled' }), pending, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['kitchen_staff', KITCHEN],
+			['missing role', UNAUTHORIZED]
+		])('rejects %s directly cancelling a pending distribution_request', (_role, userCtx) => {
+			const pending = reqDoc();
+			expectForbidden(
+				() => compile()(reqDoc({ status: 'cancelled' }), pending, userCtx),
+				/Only authorized request editors can cancel distribution requests/
+			);
+		});
+
+		it('allows valid cancellation with preserved request content and provenance', () => {
+			const pending = reqDoc({
+				purpose: 'Standard Issue',
+				note: 'Initial note',
+				requested_by: 'staff-1',
+				requested_at: '2026-08-30T10:00:00.000Z',
+				created_by: 'staff-1',
+				created_at: '2026-08-30T10:00:00.000Z',
+				active_headcount_snapshot: '100',
+				buffer_percent: 10
+			});
+			expect(() =>
+				compile()(
+					reqDoc({
+						...pending,
+						status: 'cancelled',
+						updated_at: '2026-08-30T10:30:00.000Z'
+					}),
+					pending,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it.each([
+			['note', { note: 'Tampered note' }],
+			['removing note', { note: undefined }],
+			['adding note when previously undefined', { note: 'New note' }],
+			['requested_by', { requested_by: 'imposter' }],
+			['requested_at', { requested_at: '2026-08-31T00:00:00.000Z' }],
+			['created_by', { created_by: 'attacker' }],
+			['created_at', { created_at: '2026-08-31T00:00:00.000Z' }],
+			['purpose', { purpose: 'Tampered purpose' }],
+			['active_headcount_snapshot', { active_headcount_snapshot: '999' }],
+			['buffer_percent', { buffer_percent: 5 }],
+			[
+				'items',
+				{
+					items: [
+						{
+							item_id: 'item:tampered',
+							requested_qty: '99',
+							unit: 'pcs',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '99'
+						}
+					]
+				}
+			]
+		])('rejects modifying %s during pending -> cancelled', (_field, override) => {
+			const pending = reqDoc({
+				purpose: 'Original purpose',
+				note: _field === 'adding note when previously undefined' ? undefined : 'Original note',
+				requested_by: 'original-requester',
+				requested_at: '2026-08-30T10:00:00.000Z',
+				created_by: 'original-creator',
+				created_at: '2026-08-30T10:00:00.000Z',
+				active_headcount_snapshot: '100',
+				buffer_percent: 10
+			});
+			const cancelled = reqDoc({
+				...pending,
+				status: 'cancelled',
+				...override
+			});
+			expectForbidden(
+				() => compile()(cancelled, pending, REGISTRATION),
+				/Cannot modify request content or provenance while cancelling distribution_request/
+			);
+		});
+
+		it.each([
+			['approval_operation_id', { approval_operation_id: '01JOP' }],
+			['approved_by', { approved_by: 'warehouse-1' }],
+			['approved_at', { approved_at: '2026-08-30T11:00:00.000Z' }],
+			['batch_id', { batch_id: 'distribution_batch:01JBATCH' }],
+			['rejected_by', { rejected_by: 'warehouse-1' }],
+			['rejected_at', { rejected_at: '2026-08-30T11:00:00.000Z' }],
+			['rejection_reason', { rejection_reason: 'Tampered reason' }]
+		])('rejects injecting %s during pending -> cancelled', (_field, override) => {
+			const pending = reqDoc();
+			const cancelled = reqDoc({
+				...pending,
+				status: 'cancelled',
+				...override
+			});
+			expectForbidden(
+				() => compile()(cancelled, pending, REGISTRATION),
+				/Cannot inject approval or rejection metadata while cancelling distribution_request/
+			);
+		});
+
+		it.each(['approving', 'approved', 'rejected'] as const)('rejects %s -> cancelled', (status) => {
+			const current = reqDoc({
+				status,
+				...(status === 'approving' ? { approval_operation_id: '01JOP' } : {})
+			});
+			const cancelled = reqDoc({
+				...current,
+				status: 'cancelled'
+			});
+			expectForbidden(
+				() => compile()(cancelled, current, REGISTRATION),
+				/Invalid distribution_request transition|Terminal distribution_request/
+			);
+		});
+
+		it('rejects mutations of a cancelled distribution_request', () => {
+			const cancelled = reqDoc({ status: 'cancelled' });
+			expectForbidden(
+				() => compile()(cancelled, cancelled, REGISTRATION),
+				/Terminal distribution_request/
+			);
+		});
+
+		it('rejects registration_staff transitioning distribution_request to approving', () => {
+			const pending = reqDoc();
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			expectForbidden(
+				() => compile()(approving, pending, REGISTRATION),
+				/Only warehouse staff or system admin can approve or reject distribution requests/
+			);
+		});
+
+		it('allows warehouse_staff transitioning distribution_request from pending to approving to approved', () => {
+			const pending = reqDoc();
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			const approved = reqDoc({
+				status: 'approved',
+				approval_operation_id: '01JOP',
+				batch_id: 'distribution_batch:01J'
+			});
+			expect(() => compile()(approving, pending, WAREHOUSE)).not.toThrow();
+			expect(() => compile()(approved, approving, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects illegal transition from pending directly to approved', () => {
+			const pending = reqDoc();
+			const approved = reqDoc({ status: 'approved', batch_id: 'distribution_batch:01J' });
+			expectForbidden(
+				() => compile()(approved, pending, WAREHOUSE),
+				/Invalid distribution_request transition from pending to approved/
+			);
+		});
+
+		it('rejects approved distribution_request without batch_id', () => {
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP' });
+			const approvedNoBatch = reqDoc({ status: 'approved', approval_operation_id: '01JOP' });
+			expectForbidden(
+				() => compile()(approvedNoBatch, approving, WAREHOUSE),
+				/Approved distribution_request must include valid batch_id/
+			);
+		});
+
+		it('rejects new duplicate request item rows even when their metadata is compatible', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(req, null, REGISTRATION),
+				/New distribution_request cannot contain duplicate item_id values/
+			);
+		});
+
+		it('allows existing legacy duplicate rows when unit and distribution type are identical', () => {
+			const legacy = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expect(() => compile()(legacy, legacy, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects duplicate request item rows with conflicting units', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'bottle',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(req, req, REGISTRATION),
+				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
+			);
+		});
+
+		it('rejects duplicate request item rows with conflicting distribution types', () => {
+			const req = reqDoc({
+				items: [
+					{
+						item_id: 'item:rice',
+						requested_qty: '30',
+						unit: 'kg',
+						distribution_type_snapshot: 'one_time',
+						target_qty_snapshot: '30'
+					},
+					{
+						item_id: 'item:rice',
+						requested_qty: '20',
+						unit: 'kg',
+						distribution_type_snapshot: 'consumable',
+						target_qty_snapshot: '20'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(req, req, REGISTRATION),
+				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
+			);
+		});
+
+		it('rejects mutating approved request after approval', () => {
+			const approved = reqDoc({
+				status: 'approved',
+				approval_operation_id: '01JOP',
+				batch_id: 'distribution_batch:01J'
+			});
+			expectForbidden(
+				() => compile()({ ...approved, purpose: 'New purpose' }, approved, WAREHOUSE),
+				/Terminal distribution_request cannot be modified/
+			);
+		});
+
+		it('rejects distribution_batch creation from registration_staff', () => {
+			expectForbidden(
+				() => compile()(batchDoc(), null, REGISTRATION),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('allows warehouse_staff to create activating batch and transition to active', () => {
+			const activating = batchDoc();
+			const active = batchDoc({ status: 'active' });
+			expect(() => compile()(activating, null, WAREHOUSE)).not.toThrow();
+			expect(() => compile()(active, activating, WAREHOUSE)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', ADMIN]
+		])('allows active to closing transition by %s', (_role, userCtx) => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expect(() => compile()(closing, active, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['system_admin', ADMIN]
+		])('allows closing to closed transition by %s', (_role, userCtx) => {
+			const closing = batchDoc({ status: 'closing' });
+			const closed = batchDoc({ status: 'closed' });
+			expect(() => compile()(closed, closing, userCtx)).not.toThrow();
+		});
+
+		it.each([
+			['active', 'closed'],
+			['closing', 'active'],
+			['closing', 'activating']
+		])('rejects invalid distribution_batch transition from %s to %s', (from, to) => {
+			expectForbidden(
+				() => compile()(batchDoc({ status: to }), batchDoc({ status: from }), WAREHOUSE),
+				/Invalid distribution_batch transition/
+			);
+		});
+
+		it.each(['active', 'closing', 'activating'])(
+			'rejects closed distribution_batch transition to %s',
+			(to) => {
+				const closed = batchDoc({ status: 'closed' });
+				expectForbidden(
+					() => compile()(batchDoc({ status: to }), closed, WAREHOUSE),
+					/Closed distribution_batch cannot be modified/
+				);
+			}
+		);
+
+		it('rejects any update to a closed distribution_batch', () => {
+			const closed = batchDoc({ status: 'closed', return_ledger_ids: [] });
+			expectForbidden(
+				() =>
+					compile()({ ...closed, return_ledger_ids: ['stock_ledger:return'] }, closed, WAREHOUSE),
+				/Closed distribution_batch cannot be modified/
+			);
+		});
+
+		it('rejects deletion of a closed distribution_batch', () => {
+			const closed = batchDoc({ status: 'closed' });
+			expectForbidden(
+				() => compile()({ _id: closed._id, _deleted: true }, closed, WAREHOUSE),
+				/Closed distribution_batch cannot be modified/
+			);
+		});
+
+		it.each([
+			['shelter_manager', MANAGER],
+			['registration_staff', REGISTRATION],
+			['supply_coordinator', SUPPLY_COORDINATOR]
+		])('rejects active to closing transition by %s', (_role, userCtx) => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expectForbidden(
+				() => compile()(closing, active, userCtx),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('allows same-shelter scoped warehouse_staff to close a batch', () => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expect(() => compile()(closing, active, SCOPED_WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects cross-shelter scoped warehouse_staff closing', () => {
+			const active = batchDoc({ status: 'active' });
+			const closing = batchDoc({ status: 'closing' });
+			expectForbidden(
+				() => compile()(closing, active, CROSS_SHELTER_WAREHOUSE),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('enforces issue-gate admission, seal, and shelter-scoped role boundaries', () => {
+			const gate = {
+				...envelope,
+				schema_v: 1,
+				_id: `distribution_issue_gate:${'a'.repeat(64)}`,
+				type: 'distribution_issue_gate',
+				batch_id: 'distribution_batch:01J',
+				state: 'open',
+				pending_claims: []
+			};
+			const admitted = {
+				...gate,
+				pending_claims: [
+					{
+						operation_id: 'distribution_issue_idempotency:op',
+						issue_id: 'distribution_issue:01J00000000000000000000000',
+						claimed_at: '2026-07-22T00:00:00.000Z'
+					}
+				]
+			};
+			const sealed = {
+				...gate,
+				state: 'sealed',
+				closing_operation_id: '01J00000000000000000000000'
+			};
+			expect(() => compile()(admitted, gate, REGISTRATION)).not.toThrow();
+			expect(() => compile()(sealed, gate, WAREHOUSE)).not.toThrow();
+			expectForbidden(() => compile()(sealed, gate, REGISTRATION), /seal issue gate/);
+			expectForbidden(() => compile()(admitted, gate, WAREHOUSE), /open issue gate claims/);
+			expectForbidden(
+				() => compile()(sealed, gate, { name: 'ws2', roles: ['SH002:warehouse_staff'] }),
+				/seal issue gate/
+			);
+		});
+
+		it('rejects modifying request_id on existing batch', () => {
+			const activating = batchDoc({ status: 'activating' });
+			const tampered = batchDoc({
+				status: 'activating',
+				request_id: 'distribution_request:01JOTHER'
+			});
+			expectForbidden(
+				() => compile()(tampered, activating, WAREHOUSE),
+				/Cannot change request_id on distribution_batch/
+			);
+		});
+
+		it('rejects stock_lot_reservation mutation from non-warehouse staff', () => {
+			expectForbidden(
+				() => compile()(resDoc(), null, REGISTRATION),
+				/Only warehouse staff or system admin can manage stock lot reservations/
+			);
+		});
+
+		it('allows warehouse_staff to manage stock_lot_reservation', () => {
+			expect(() => compile()(resDoc(), null, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects malformed reservation claims and non-authorized pending request edits', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						resDoc({
+							pending_claims: [
+								{
+									operation_id: 'op',
+									request_id: 'distribution_request:01J',
+									batch_id: 'distribution_batch:01J',
+									item_id: 'item:soap',
+									lot_ref: 'stock_ledger:OTHER',
+									qty: '1',
+									claimed_at: '2026-08-29T00:00:00.000Z'
+								}
+							]
+						}),
+						null,
+						WAREHOUSE
+					),
+				/invalid pending claim/
+			);
+			expectForbidden(() => compile()(reqDoc(), null, KITCHEN), /Only registration staff/);
+		});
+
+		it('rejects modifying purpose, headcount, buffer, or items on non-pending request', () => {
+			const approving = reqDoc({
+				status: 'approving',
+				approval_operation_id: '01JOP',
+				purpose: 'Initial',
+				active_headcount_snapshot: '50',
+				buffer_percent: 10
+			});
+
+			expectForbidden(
+				() => compile()({ ...approving, purpose: 'Changed' }, approving, WAREHOUSE),
+				/Cannot modify purpose on non-pending distribution_request/
+			);
+			expectForbidden(
+				() => compile()({ ...approving, active_headcount_snapshot: '60' }, approving, WAREHOUSE),
+				/Cannot modify active_headcount_snapshot on non-pending distribution_request/
+			);
+			expectForbidden(
+				() => compile()({ ...approving, buffer_percent: 20 }, approving, WAREHOUSE),
+				/Cannot modify buffer_percent on non-pending distribution_request/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...approving, items: [{ item_id: 'item:other', requested_qty: '10', unit: 'bar' }] },
+						approving,
+						WAREHOUSE
+					),
+				/Cannot modify items on non-pending distribution_request/
+			);
+		});
+
+		it('rejects replacing approval_operation_id during approving', () => {
+			const approving = reqDoc({ status: 'approving', approval_operation_id: '01JOP1' });
+			const replaced = reqDoc({ status: 'approving', approval_operation_id: '01JOP2' });
+			expectForbidden(
+				() => compile()(replaced, approving, WAREHOUSE),
+				/Cannot replace approval_operation_id once approval is in progress/
+			);
+		});
+
+		it('keeps payload and approval operation immutable through approval and rollback', () => {
+			const approving = reqDoc({
+				status: 'approving',
+				approval_operation_id: '01JOP1',
+				active_headcount_snapshot: '10',
+				buffer_percent: 10
+			});
+			expectForbidden(
+				() =>
+					compile()({ ...approving, status: 'pending', purpose: 'Changed' }, approving, WAREHOUSE),
+				/Cannot modify purpose/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							...approving,
+							status: 'approved',
+							approval_operation_id: '01JOP2',
+							batch_id: 'distribution_batch:01J'
+						},
+						approving,
+						WAREHOUSE
+					),
+				/Cannot replace approval_operation_id/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...approving, status: 'pending', approval_operation_id: '01JOP2' },
+						approving,
+						WAREHOUSE
+					),
+				/Cannot replace approval_operation_id during rollback/
+			);
+		});
+
+		it('rejects modifying items or allocations on distribution_batch after creation', () => {
+			const activating = batchDoc();
+			const modifiedItems = batchDoc({
+				items: [{ item_id: 'item:soap', allocated_qty: '99', unit: 'bar' }]
+			});
+			const modifiedAllocs = batchDoc({
+				allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '99' }]
+			});
+			expectForbidden(
+				() => compile()(modifiedItems, activating, WAREHOUSE),
+				/Cannot modify items on distribution_batch/
+			);
+			expectForbidden(
+				() => compile()(modifiedAllocs, activating, WAREHOUSE),
+				/Cannot modify allocations on distribution_batch/
+			);
+		});
+
+		it('rejects direct active batch creation', () => {
+			expectForbidden(
+				() => compile()(batchDoc({ status: 'active' }), null, WAREHOUSE),
+				/start activating/
+			);
+		});
+	});
+
+	describe('distribution issue doc types access rules (Phase 3B)', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+
+		const validIssue = {
+			_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+			type: 'distribution_issue',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			qty: '1',
+			unit: 'ผืน',
+			distribution_type_snapshot: 'one_time',
+			eligibility_snapshot: {
+				eligible: true,
+				distribution_type: 'one_time',
+				decision: 'first_receipt',
+				had_previous_receipt: false,
+				previous_receipt_count: 0
+			},
+			idempotency_key: 'idem-key-1',
+			distributed_at: '2026-08-31T00:00:00.000Z',
+			distributed_by: 'staff-1'
+		};
+
+		const validIdempotency = {
+			_id: 'distribution_issue_idempotency:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_issue_idempotency',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			idempotency_key: 'idem-key-1',
+			issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			qty: '1'
+		};
+
+		const validCapacity = {
+			_id: 'distribution_issue_capacity:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_issue_capacity',
+			...envelope,
+			batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+			item_id: 'item:blanket',
+			pending_claims: [
+				{
+					operation_id: 'op-1',
+					issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+					batch_id: 'distribution_batch:01JABCDEFGHJKMNPQRSTVWXYZ1',
+					item_id: 'item:blanket',
+					qty: '1',
+					claimed_at: '2026-08-31T00:00:00.000Z'
+				}
+			]
+		};
+
+		const validGuard = {
+			_id: 'distribution_one_time_guard:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+			type: 'distribution_one_time_guard',
+			...envelope,
+			evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+			item_id: 'item:blanket',
+			pending_claims: [
+				{
+					operation_id: 'op-1',
+					issue_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
+					evacuee_id: 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ2',
+					item_id: 'item:blanket',
+					claimed_at: '2026-08-31T00:00:00.000Z'
+				}
+			]
+		};
+
+		it('allows registration_staff, shelter_manager, and system_admin to create distribution_issue', () => {
+			expect(() => compile()(validIssue, null, REGISTRATION)).not.toThrow();
+			expect(() => compile()(validIssue, null, MANAGER)).not.toThrow();
+			expect(() => compile()(validIssue, null, ADMIN)).not.toThrow();
+		});
+
+		it('rejects warehouse_staff from creating distribution_issue', () => {
+			expectForbidden(
+				() => compile()(validIssue, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin can write distribution issues/
+			);
+		});
+
+		it('rejects updating an existing distribution_issue (append-only)', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '2' }, validIssue, REGISTRATION),
+				/Cannot update append-only distribution_issue/
+			);
+		});
+
+		it('rejects deleting an existing distribution_issue (append-only)', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, _deleted: true }, validIssue, REGISTRATION),
+				/Cannot delete append-only distribution_issue/
+			);
+		});
+
+		it('rejects type-changing update of distribution_issue', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, type: 'audit' }, validIssue, REGISTRATION),
+				/Cannot update append-only distribution_issue/
+			);
+		});
+
+		it('rejects distribution_issue with invalid positive qty', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '0' }, null, REGISTRATION),
+				/positive qty decimal string/
+			);
+			expectForbidden(
+				() => compile()({ ...validIssue, qty: '-1' }, null, REGISTRATION),
+				/positive qty decimal string/
+			);
+		});
+
+		it('rejects distribution_issue with invalid batch_id or evacuee_id prefix', () => {
+			expectForbidden(
+				() => compile()({ ...validIssue, batch_id: 'invalid:123' }, null, REGISTRATION),
+				/valid batch_id/
+			);
+			expectForbidden(
+				() => compile()({ ...validIssue, evacuee_id: 'invalid:123' }, null, REGISTRATION),
+				/valid evacuee_id/
+			);
+		});
+
+		it('rejects distribution_issue with invalid eligibility snapshot', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							...validIssue,
+							eligibility_snapshot: {
+								eligible: false,
+								distribution_type: 'one_time',
+								decision: 'repeat_rejected'
+							}
+						},
+						null,
+						REGISTRATION
+					),
+				/eligibility_snapshot is structurally invalid/
+			);
+		});
+
+		it('allows valid repeat override snapshot matching repeat_override_reason', () => {
+			const overrideIssue = {
+				...validIssue,
+				repeat_override_reason: 'lost',
+				eligibility_snapshot: {
+					eligible: true,
+					distribution_type: 'one_time',
+					decision: 'repeat_override',
+					repeat_override_reason: 'lost',
+					had_previous_receipt: true,
+					previous_receipt_count: 1
+				}
+			};
+			expect(() => compile()(overrideIssue, null, REGISTRATION)).not.toThrow();
+
+			const mismatched = {
+				...overrideIssue,
+				repeat_override_reason: 'damaged'
+			};
+			expectForbidden(
+				() => compile()(mismatched, null, REGISTRATION),
+				/repeat_override_reason must match/
+			);
+		});
+
+		it('manages distribution_issue_idempotency and enforces immutability', () => {
+			expect(() => compile()(validIdempotency, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validIdempotency, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			expectForbidden(
+				() => compile()({ ...validIdempotency, qty: '2' }, validIdempotency, REGISTRATION),
+				/Cannot update append-only distribution_issue_idempotency documents/
+			);
+			expectForbidden(
+				() =>
+					compile()({ ...validIdempotency, item_id: 'item:other' }, validIdempotency, REGISTRATION),
+				/Cannot update append-only distribution_issue_idempotency documents/
+			);
+		});
+
+		it('manages distribution_issue_capacity and enforces immutability', () => {
+			expect(() => compile()(validCapacity, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validCapacity, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			const mutated = {
+				...validCapacity,
+				item_id: 'item:other',
+				pending_claims: [
+					{
+						...validCapacity.pending_claims[0],
+						item_id: 'item:other'
+					}
+				]
+			};
+			expectForbidden(
+				() => compile()(mutated, validCapacity, REGISTRATION),
+				/Cannot change item_id on capacity record/
+			);
+		});
+
+		it('manages distribution_one_time_guard and enforces immutability', () => {
+			expect(() => compile()(validGuard, null, REGISTRATION)).not.toThrow();
+			expectForbidden(
+				() => compile()(validGuard, null, WAREHOUSE),
+				/Only registration staff, shelter manager, or system admin/
+			);
+			const mutated = {
+				...validGuard,
+				evacuee_id: 'evacuee:other',
+				pending_claims: [
+					{
+						...validGuard.pending_claims[0],
+						evacuee_id: 'evacuee:other'
+					}
+				]
+			};
+			expectForbidden(
+				() => compile()(mutated, validGuard, REGISTRATION),
+				/Cannot change evacuee_id on one-time guard/
+			);
 		});
 	});
 });

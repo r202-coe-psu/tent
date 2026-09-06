@@ -128,7 +128,10 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
-			<Form.Button disabled={$submitting} class="h-11 w-full bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white font-bold">
+			<Form.Button
+				disabled={$submitting}
+				class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
+			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
 		</Field.FieldGroup>
@@ -136,7 +139,7 @@
 {/snippet}
 
 {#if showCard}
-	<Card.Root class="mx-auto w-full max-w-md border-slate-200 shadow-lg rounded-2xl">
+	<Card.Root class="mx-auto w-full max-w-md rounded-2xl border-slate-200 shadow-lg">
 		<Card.Header class="space-y-1 text-center">
 			<Card.Title class="text-2xl font-bold text-slate-900">เข้าสู่ระบบ Smart Shelter</Card.Title>
 			<Card.Description>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description>

@@ -48,6 +48,10 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 // that only need stock on hand still have to name one.
 const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
+// Phase 2A requires the strict batch reference contract (distribution_batch:*),
+// while actual batch persistence/verification is introduced in Phase 3.
+const DISTRIBUTION_BATCH_REF = 'distribution_batch:01JFIXTUREBATCH';
+
 describe('assertReceiveAgainstCatalog', () => {
 	const entry = createReceiveEntry(
 		{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
@@ -260,19 +264,28 @@ describe('OperationsRemoteRepository', () => {
 	describe('distributeStock', () => {
 		it('distributes stock and reduces balance when sufficient stock exists', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
-			await repo.receiveStock(
+			const inbound = await repo.receiveStock(
 				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			);
 
 			const distributeEntry = await repo.distributeStock(
-				{ item_id: 'item:soap', qty: 20, unit: 'bar', ref_id: null, note: 'Tent A' },
+				{
+					item_id: 'item:soap',
+					qty: 20,
+					unit: 'bar',
+					ref_id: DISTRIBUTION_BATCH_REF,
+					lot_ref: inbound._id,
+					note: 'Tent A'
+				},
 				ctx
 			);
 
 			expect(distributeEntry.item_id).toBe('item:soap');
 			expect(distributeEntry.qty).toBe('-20');
 			expect(distributeEntry.reason).toBe('distribute');
+			expect(distributeEntry.ref_id).toBe(DISTRIBUTION_BATCH_REF);
+			expect(distributeEntry.lot_ref).toBe(inbound._id);
 			expect(distributeEntry.lot?.note).toBe('Tent A');
 
 			const balance = await repo.getBalance();
@@ -281,19 +294,59 @@ describe('OperationsRemoteRepository', () => {
 
 		it('throws an error if attempting to distribute more than available stock', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
-			await repo.receiveStock(
+			const inbound = await repo.receiveStock(
 				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			);
 
 			await expect(
-				repo.distributeStock({ item_id: 'item:soap', qty: 15, unit: 'bar', ref_id: null }, ctx)
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 15,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				)
 			).rejects.toThrow('Insufficient stock');
 		});
 
 		it('throws an error if attempting to distribute stock for item with zero balance', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			// Exhaust all 10 units from the lot so balance reaches 0
+			await repo.distributeStock(
+				{
+					item_id: 'item:soap',
+					qty: 10,
+					unit: 'bar',
+					ref_id: DISTRIBUTION_BATCH_REF,
+					lot_ref: inbound._id
+				},
+				ctx
+			);
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:soap')).toBe('0');
+
+			// Attempting to distribute 1 unit when balance is 0 fails with Insufficient stock
 			await expect(
-				repo.distributeStock({ item_id: 'item:unknown', qty: 5, unit: 'bar', ref_id: null }, ctx)
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 1,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				)
 			).rejects.toThrow('Insufficient stock');
 		});
 	});

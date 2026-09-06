@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
-	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop/ui/connection-action';
+	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';

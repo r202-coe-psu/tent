@@ -2,13 +2,15 @@ export {
 	createUserSchema,
 	editUserSchema,
 	capabilitySchema,
+	forceSetupSchema,
 	shelterAssignmentSchema,
 	type CreateUserInput,
 	type EditUserInput,
 	type UserFormInput,
 	type Capability,
 	type ShelterAssignmentInput,
-	type ForgotPasswordVerifyInput
+	type ForgotPasswordVerifyInput,
+	type ForceSetupInput
 } from './domain/schema';
 export {
 	listUsers,
@@ -17,6 +19,8 @@ export {
 	updateUser,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
+	fetchAuthStatus,
+	submitForceSetup,
 	type UserSummary
 } from './data/users.api';
 export { useUsers, useCreateUser, useDeleteUser, useUpdateUser } from './application/queries';

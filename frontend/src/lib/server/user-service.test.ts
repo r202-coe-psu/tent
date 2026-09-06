@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
 	createUser,
-	updateUser,
 	resetUserPasswordByAdmin,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
@@ -10,8 +9,29 @@ import {
 } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 
+interface FakeUserDoc {
+	_id?: string;
+	_rev?: string;
+	name?: string;
+	password?: string;
+	display_name?: string;
+	personnel_type?: string;
+	organization?: string;
+	phone?: string;
+	roles?: string[];
+	active?: boolean;
+	must_change_password?: boolean;
+	security_question?: {
+		question_id: string;
+		answer_hash: string;
+		salt: string;
+		set_at: string;
+	};
+	[key: string]: unknown;
+}
+
 describe('user-service', () => {
-	let fakeUsersDb: Record<string, any>;
+	let fakeUsersDb: Record<string, FakeUserDoc>;
 
 	beforeEach(() => {
 		fakeUsersDb = {};
@@ -37,7 +57,7 @@ describe('user-service', () => {
 
 			if (method === 'PUT' && cleanPath.startsWith('/_users/org.couchdb.user:')) {
 				const id = cleanPath.slice('/_users/'.length);
-				const docBody = (body ?? {}) as Record<string, any>;
+				const docBody = (body ?? {}) as FakeUserDoc;
 				if (fakeUsersDb[id] && !docBody._rev) {
 					return { status: 409, data: { error: 'conflict', reason: 'Document update conflict.' } };
 				}
@@ -172,6 +192,6 @@ describe('user-service', () => {
 		expect(updated.password).toBe('PermanentPass123!');
 		expect(updated.must_change_password).toBe(false);
 		expect(updated.security_question).toBeDefined();
-		expect(updated.security_question.question_id).toBe('birth_province');
+		expect(updated.security_question?.question_id).toBe('birth_province');
 	});
 });
