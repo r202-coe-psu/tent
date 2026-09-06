@@ -12,6 +12,9 @@ import {
 	canChangeEvacueeZone,
 	canCancelEvacueePreRegistration,
 	canCancelHouseholdPreRegistration,
+	canConfirmRoom,
+	isPendingZoneArrivalConfirmation,
+	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	resolveStatusChangeAction,
@@ -122,12 +125,14 @@ describe('card number max length by card type', () => {
 });
 
 describe('stayStatusSchema and STATUS_LABELS', () => {
-	it('accepts arriving', () => {
+	it('accepts arriving and room_confirmed', () => {
 		expect(stayStatusSchema.parse('arriving')).toBe('arriving');
+		expect(stayStatusSchema.parse('room_confirmed')).toBe('room_confirmed');
 	});
 
-	it('contains arriving in STATUS_LABELS with Thai label', () => {
+	it('contains arriving and room_confirmed in STATUS_LABELS with Thai labels', () => {
 		expect(STATUS_LABELS.arriving).toBe('อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)');
+		expect(STATUS_LABELS.room_confirmed).toBe('ยืนยันถึงโซนแล้ว');
 	});
 });
 
@@ -776,13 +781,59 @@ describe('movement → current_stay', () => {
 		expect(canCancelHouseholdPreRegistration({ ...hh, status: 'checked_in' })).toBe(false);
 	});
 
-	it('rejects check_out unless status is active', () => {
+	it('rejects check_out unless status is active or room_confirmed, and requires reason', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckOutEvacuee(e)).toBe(false);
-		expect(() => assertMovementAllowed(e, 'check_out')).toThrow(/เช็คเอาท์/);
+		expect(() => assertMovementAllowed(e, 'check_out', { reason: 'กลับบ้าน' })).toThrow(
+			/เช็คเอาท์/
+		);
+
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(() => assertMovementAllowed(active, 'check_out')).toThrow(/เหตุผล/);
+		expect(() => assertMovementAllowed(active, 'check_out', { reason: 'กลับบ้าน' })).not.toThrow();
+
+		const confirmed = {
+			...e,
+			current_stay: { status: 'room_confirmed' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canCheckOutEvacuee(confirmed)).toBe(true);
+		expect(() =>
+			assertMovementAllowed(confirmed, 'check_out', { notes: ' ย้ายออก ' })
+		).not.toThrow();
 	});
 
-	it('zone_change keeps status active and updates zone', () => {
+	it('confirm_room moves active → room_confirmed and lists pending confirmations', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canConfirmRoom(active)).toBe(true);
+		expect(isPendingZoneArrivalConfirmation(active)).toBe(true);
+		expect(listPendingZoneArrivalConfirmations([active, e])).toEqual([active]);
+
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'confirm_room',
+				zone: 'Z1',
+				occurred_at: '2026-09-03T05:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(active, m);
+		expect(updated.current_stay.status).toBe('room_confirmed');
+		expect(updated.current_stay.zone).toBe('Z1');
+		expect(canConfirmRoom(updated)).toBe(false);
+		expect(isPendingZoneArrivalConfirmation(updated)).toBe(false);
+
+		expect(() => assertMovementAllowed(e, 'confirm_room')).toThrow(/ยืนยันถึงโซน/);
+	});
+
+	it('zone_change keeps status and updates zone from active or room_confirmed', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		const active = {
 			...e,
@@ -802,6 +853,15 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.status).toBe('active');
 		expect(updated.current_stay.zone).toBe('Z2');
 		expect(updated.current_stay.since).toBe('2026-09-03T04:00:00.000Z');
+
+		const confirmed = {
+			...e,
+			current_stay: { status: 'room_confirmed' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canChangeEvacueeZone(confirmed)).toBe(true);
+		const rezoned = applyMovementToStay(confirmed, m);
+		expect(rezoned.current_stay.status).toBe('room_confirmed');
+		expect(rezoned.current_stay.zone).toBe('Z2');
 	});
 
 	it('rejects zone_change without destination or from non-active', () => {
@@ -819,7 +879,7 @@ describe('movement → current_stay', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
 		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('pre_registered');
-		expect(CHECK_OUT_ELIGIBLE_STATUSES).toEqual(['active']);
+		expect(CHECK_OUT_ELIGIBLE_STATUSES).toEqual(['active', 'room_confirmed']);
 
 		const active = {
 			...e,
@@ -829,7 +889,7 @@ describe('movement → current_stay', () => {
 		expect(canCheckOutEvacuee(active)).toBe(true);
 	});
 
-	it('rejects transfer_out / leave_temporary unless status is active', () => {
+	it('rejects transfer_out / leave_temporary unless status is active or room_confirmed', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(() => assertMovementAllowed(e, 'transfer_out')).toThrow(/ย้ายออก/);
 		expect(() => assertMovementAllowed(e, 'leave_temporary')).toThrow(/ลาชั่วคราว/);
@@ -840,12 +900,30 @@ describe('movement → current_stay', () => {
 		};
 		expect(() => assertMovementAllowed(active, 'transfer_out')).not.toThrow();
 		expect(() => assertMovementAllowed(active, 'leave_temporary')).not.toThrow();
+
+		const confirmed = {
+			...e,
+			current_stay: { status: 'room_confirmed' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(() => assertMovementAllowed(confirmed, 'transfer_out')).not.toThrow();
+		expect(() => assertMovementAllowed(confirmed, 'leave_temporary')).not.toThrow();
+	});
+
+	it('rejects check_in without a zone', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
+		expect(() => applyMovementToStay(e, m)).toThrow(/โซน/);
 	});
 });
 
 describe('resolveStatusChangeAction', () => {
 	it('returns null when the status is unchanged', () => {
 		expect(resolveStatusChangeAction('active', 'active')).toBeNull();
+	});
+
+	it('resolves active → room_confirmed to confirm_room', () => {
+		expect(resolveStatusChangeAction('active', 'room_confirmed')).toBe('confirm_room');
+		expect(resolveStatusChangeAction('pre_registered', 'room_confirmed')).toBeNull();
 	});
 
 	it('returns null for pre_registered → checked_out (must check in first)', () => {

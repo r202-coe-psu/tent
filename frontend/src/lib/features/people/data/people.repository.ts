@@ -193,13 +193,23 @@ export interface PeopleRepository {
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
 	 * this is the only path that flips occupancy to `active` (T-06).
 	 */
-	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone?: string | null): Promise<Evacuee>;
+	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee>;
 	/**
 	 * Record a check-out movement and apply it to the evacuee's `current_stay`.
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
-	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	checkOutEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		opts?: { reason?: string; notes?: string }
+	): Promise<Evacuee>;
+	confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	confirmRoomForHousehold(
+		householdId: string,
+		evacuees: readonly Evacuee[],
+		ctx: AuthorContext
+	): Promise<Evacuee[]>;
 	/**
 	 * Record a `zone_change` movement while staying `active` (CR-106 Station 3 rezone).
 	 * Requires a non-empty destination zone.

@@ -114,6 +114,7 @@ export const stayStatusSchema = z.enum([
 	'pre_registered',
 	'arriving',
 	'active',
+	'room_confirmed',
 	'temporary_leave',
 	'transferred',
 	'checked_out',
@@ -126,6 +127,7 @@ export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 	arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
 	active: 'เช็คอินเข้าพักแล้ว',
+	room_confirmed: 'ยืนยันถึงโซนแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
 	transferred: 'ย้ายศูนย์พักพิงแล้ว',
 	checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
@@ -187,6 +189,7 @@ export type CheckoutDestination = z.infer<typeof checkoutDestinationSchema>;
 export const movementActionSchema = z.enum([
 	'check_in',
 	'check_out',
+	'confirm_room',
 	'transfer_out',
 	'transfer_in',
 	'leave_temporary',
@@ -1360,22 +1363,47 @@ export const CHECK_IN_ELIGIBLE_STATUSES = [
 	'transferred'
 ] as const satisfies readonly StayStatus[];
 
-/** Stay statuses that may receive a scan/check-out (`check_out`) action. */
-export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+/** Stay statuses that may receive Zone Arrival Confirmation (`confirm_room`). */
+export const CONFIRM_ROOM_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
 
-/** Stay statuses that may receive a `zone_change` (rezone while staying active). */
-export const ZONE_CHANGE_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+/** Stay statuses that may receive check-out / transfer / leave / deceased. */
+export const CHECK_OUT_ELIGIBLE_STATUSES = [
+	'active',
+	'room_confirmed'
+] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a `zone_change` (rezone while staying). */
+export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
+	'active',
+	'room_confirmed'
+] as const satisfies readonly StayStatus[];
 
 /** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
-export const TRANSFER_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+export const TRANSFER_OUT_ELIGIBLE_STATUSES = [
+	'active',
+	'room_confirmed'
+] as const satisfies readonly StayStatus[];
 
 /** Stay statuses that may receive a `leave_temporary` action — must be checked in first. */
 export const LEAVE_TEMPORARY_ELIGIBLE_STATUSES = [
-	'active'
+	'active',
+	'room_confirmed'
+] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive `mark_deceased`. */
+export const MARK_DECEASED_ELIGIBLE_STATUSES = [
+	'active',
+	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
 
 export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canConfirmRoom(evacuee: Evacuee): boolean {
+	return (CONFIRM_ROOM_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
 	);
 }
@@ -1404,11 +1432,30 @@ export function canLeaveTemporarily(evacuee: Evacuee): boolean {
 	);
 }
 
+export function canMarkDeceased(evacuee: Evacuee): boolean {
+	return (MARK_DECEASED_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+/** Evacuees awaiting Zone Arrival Confirmation (active with a zone; no auto-timeout). */
+export function isPendingZoneArrivalConfirmation(evacuee: Evacuee): boolean {
+	return evacuee.current_stay.status === 'active' && Boolean(evacuee.current_stay.zone?.trim());
+}
+
+export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]): Evacuee[] {
+	return evacuees.filter(isPendingZoneArrivalConfirmation);
+}
+
 /**
  * Guard movement transitions against impossible / terminal stay states.
  * `deceased` and `cancelled` are terminal — no reverse action except staying put.
  */
-export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction): void {
+export function assertMovementAllowed(
+	evacuee: Evacuee,
+	action: MovementAction,
+	opts: { reason?: string | null; notes?: string | null } = {}
+): void {
 	const status = evacuee.current_stay.status;
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
@@ -1421,8 +1468,17 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	if (action === 'check_in' && !canCheckInEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คอินจากสถานะ ${status} ได้`);
 	}
+	if (action === 'confirm_room' && !canConfirmRoom(evacuee)) {
+		throw new Error(`ไม่สามารถยืนยันถึงโซนจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
+	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+	}
+	if (action === 'check_out') {
+		const remark = (opts.reason ?? opts.notes ?? '').trim();
+		if (!remark) {
+			throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
 		throw new Error(`ไม่สามารถเปลี่ยนโซนจากสถานะ ${status} ได้`);
@@ -1432,6 +1488,9 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	}
 	if (action === 'leave_temporary' && !canLeaveTemporarily(evacuee)) {
 		throw new Error(`ไม่สามารถลาชั่วคราวจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
+	}
+	if (action === 'mark_deceased' && !canMarkDeceased(evacuee) && status !== 'deceased') {
+		throw new Error(`ไม่สามารถบันทึกเสียชีวิตจากสถานะ ${status} ได้`);
 	}
 }
 
@@ -1451,7 +1510,10 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
-	assertMovementAllowed(evacuee, movement.action);
+	assertMovementAllowed(evacuee, movement.action, {
+		reason: movement.reason,
+		notes: undefined
+	});
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
 		if (!nextZone) {
@@ -1467,9 +1529,24 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 			}
 		};
 	}
-	const statusByAction: Record<Exclude<MovementAction, 'zone_change'>, StayStatus> = {
-		check_in: 'active',
+	if (movement.action === 'check_in') {
+		const zone = movement.zone?.trim() || null;
+		if (!zone) {
+			throw new Error('การเช็คอินต้องระบุโซน');
+		}
+		return {
+			...evacuee,
+			updated_at: now(),
+			current_stay: {
+				status: 'active',
+				zone,
+				since: movement.occurred_at
+			}
+		};
+	}
+	const statusByAction: Record<Exclude<MovementAction, 'zone_change' | 'check_in'>, StayStatus> = {
 		check_out: 'checked_out',
+		confirm_room: 'room_confirmed',
 		transfer_out: 'transferred',
 		transfer_in: 'active',
 		leave_temporary: 'temporary_leave',
@@ -1508,6 +1585,8 @@ export function resolveStatusChangeAction(
 			return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
 				? 'check_in'
 				: null;
+		case 'room_confirmed':
+			return current === 'active' ? 'confirm_room' : null;
 		case 'checked_out':
 			return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
 				? 'check_out'
@@ -1521,7 +1600,9 @@ export function resolveStatusChangeAction(
 				? 'leave_temporary'
 				: null;
 		case 'deceased':
-			return 'mark_deceased';
+			return (MARK_DECEASED_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
+				? 'mark_deceased'
+				: null;
 		default:
 			return null;
 	}

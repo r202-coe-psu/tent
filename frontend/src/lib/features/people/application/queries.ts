@@ -194,15 +194,8 @@ export const usePatchEvacuee = () => {
 export const useCheckInEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({
-			evacuee,
-			ctx,
-			zone
-		}: {
-			evacuee: Evacuee;
-			ctx: AuthorContext;
-			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
+			peopleRepository().checkInEvacuee(evacuee, ctx, zone),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
@@ -215,8 +208,30 @@ export const useCheckInEvacuee = () => {
 export const useCheckOutEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({
+		mutationFn: ({
+			evacuee,
+			ctx,
+			reason,
+			notes
+		}: {
+			evacuee: Evacuee;
+			ctx: AuthorContext;
+			reason?: string;
+			notes?: string;
+		}) => peopleRepository().checkOutEvacuee(evacuee, ctx, { reason, notes }),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
+export const useConfirmRoom = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx),
+			peopleRepository().confirmRoom(evacuee, ctx),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

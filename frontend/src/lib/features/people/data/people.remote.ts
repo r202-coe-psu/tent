@@ -32,6 +32,7 @@ import {
 	canCancelEvacueePreRegistration,
 	replacePersonId,
 	migrateVulnerableGroupCodes,
+	listPendingZoneArrivalConfirmations,
 	type Medical,
 	type MedicalInput,
 	type Movement,
@@ -543,13 +544,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		});
 	}
 
-	async checkInEvacuee(
-		evacuee: Evacuee,
-		ctx: AuthorContext,
-		zone: string | null = null
-	): Promise<Evacuee> {
+	async checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
+		const nextZone = zone.trim();
+		if (!nextZone) {
+			throw new Error('การเช็คอินต้องระบุโซน');
+		}
 		assertMovementAllowed(evacuee, 'check_in');
-		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action: 'check_in', zone: nextZone },
+			ctx
+		);
 		await this.repo.put(movement);
 
 		if (evacuee.household_id) {
@@ -571,11 +575,17 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	/** Record a check-out movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
-	async checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, 'check_out');
+	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync.
+	 *  Check-out requires a nonempty trimmed reason/notes (CR-112). */
+	async checkOutEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		opts: { reason?: string; notes?: string } = {}
+	): Promise<Evacuee> {
+		const reason = (opts.reason ?? opts.notes ?? '').trim();
+		assertMovementAllowed(evacuee, 'check_out', { reason });
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'check_out', zone: null },
+			{ evacuee_id: evacuee._id, action: 'check_out', zone: null, reason },
 			ctx
 		);
 		await this.repo.put(movement);
@@ -585,7 +595,41 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 	}
 
-	/** Rezone an active evacuee via append-only `zone_change` (CR-106). */
+	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
+	async confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
+		assertMovementAllowed(evacuee, 'confirm_room');
+		const movement = createMovement(
+			{
+				evacuee_id: evacuee._id,
+				action: 'confirm_room',
+				zone: evacuee.current_stay.zone
+			},
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
+
+	/** Bulk Zone Arrival Confirmation for every pending member of a Household. */
+	async confirmRoomForHousehold(
+		householdId: string,
+		evacuees: readonly Evacuee[],
+		ctx: AuthorContext
+	): Promise<Evacuee[]> {
+		const pending = listPendingZoneArrivalConfirmations(
+			evacuees.filter((e) => e.household_id === householdId)
+		);
+		const results: Evacuee[] = [];
+		for (const evacuee of pending) {
+			results.push(await this.confirmRoom(evacuee, ctx));
+		}
+		return results;
+	}
+
+	/** Rezone an active/room_confirmed evacuee via append-only `zone_change` (CR-106/CR-112). */
 	async changeEvacueeZone(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
 		const nextZone = zone.trim();
 		if (!nextZone) {

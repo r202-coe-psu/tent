@@ -384,7 +384,7 @@ describe('PeopleRemoteRepository', () => {
 		it('filters by stay status and returns matching ids', async () => {
 			const waiting = await repo.createEvacuee(evInput({ first_name: 'Waiting' }), ctx);
 			const active = await repo.createEvacuee(evInput({ first_name: 'Active' }), ctx);
-			await repo.checkInEvacuee(active, ctx);
+			await repo.checkInEvacuee(active, ctx, 'zone-a');
 
 			const result = await repo.listEvacueesPaginated(1, 10, '', { status: 'pre_registered' });
 			expect(result.items.map((e) => e._id)).toEqual([waiting._id]);
@@ -462,7 +462,7 @@ describe('check-in / check-out', () => {
 
 		it('persists the updated status so a fresh fetch reflects it', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			await repo.checkInEvacuee(evacuee, ctx);
+			await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('active');
@@ -484,7 +484,7 @@ describe('check-in / check-out', () => {
 			});
 			const linked = await repo.updateEvacuee({ ...evacuee, household_id: household._id });
 
-			await repo.checkInEvacuee(linked, ctx);
+			await repo.checkInEvacuee(linked, ctx, 'zone-a');
 
 			const promoted = await repo.getHousehold(household._id);
 			expect(promoted?.status).toBe('checked_in');
@@ -537,7 +537,7 @@ describe('check-in / check-out', () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
 			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 
-			const updated = await repo.checkOutEvacuee(checkedIn, ctx);
+			const updated = await repo.checkOutEvacuee(checkedIn, ctx, { reason: 'กลับบ้าน' });
 
 			expect(updated.current_stay.status).toBe('checked_out');
 
@@ -546,14 +546,15 @@ describe('check-in / check-out', () => {
 			expect(movements[1]).toMatchObject({
 				evacuee_id: evacuee._id,
 				action: 'check_out',
-				zone: null
+				zone: null,
+				reason: 'กลับบ้าน'
 			});
 		});
 
 		it('persists the updated status so a fresh fetch reflects it', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			const checkedIn = await repo.checkInEvacuee(evacuee, ctx);
-			await repo.checkOutEvacuee(checkedIn, ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			await repo.checkOutEvacuee(checkedIn, ctx, { reason: 'กลับบ้าน' });
 
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('checked_out');
@@ -561,8 +562,26 @@ describe('check-in / check-out', () => {
 
 		it('rejects check-out when the evacuee is not active', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			await expect(repo.checkOutEvacuee(evacuee, ctx)).rejects.toThrow(/เช็คเอาท์/);
+			await expect(repo.checkOutEvacuee(evacuee, ctx, { reason: 'กลับบ้าน' })).rejects.toThrow(
+				/เช็คเอาท์/
+			);
 			expect(await repo.listMovements()).toHaveLength(0);
+		});
+
+		it('rejects check-out without a reason', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			await expect(repo.checkOutEvacuee(checkedIn, ctx)).rejects.toThrow(/เหตุผล/);
+		});
+	});
+
+	describe('confirmRoom', () => {
+		it('confirms zone arrival from active to room_confirmed', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const confirmed = await repo.confirmRoom(checkedIn, ctx);
+			expect(confirmed.current_stay.status).toBe('room_confirmed');
+			expect(confirmed.current_stay.zone).toBe('zone-a');
 		});
 	});
 
@@ -609,7 +628,7 @@ describe('check-in / check-out', () => {
 
 		it('records a mark_deceased movement and updates current_stay to deceased (terminal)', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			const active = await repo.checkInEvacuee(evacuee, ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 
 			const updated = await repo.recordMovement(active, 'mark_deceased', ctx);
 
@@ -619,7 +638,7 @@ describe('check-in / check-out', () => {
 
 		it('persists the updated status so a fresh fetch reflects it', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			const active = await repo.checkInEvacuee(evacuee, ctx);
+			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 			await repo.recordMovement(active, 'transfer_out', ctx);
 
 			const fetched = await repo.getEvacuee(evacuee._id);
@@ -651,7 +670,7 @@ describe('check-in / check-out', () => {
 				since: evacuee.current_stay.since
 			}
 		};
-		await expect(repo.checkInEvacuee(deceased, ctx)).rejects.toThrow(/เสียชีวิต/);
+		await expect(repo.checkInEvacuee(deceased, ctx, 'zone-a')).rejects.toThrow(/เสียชีวิต/);
 		expect(await repo.listMovements()).toHaveLength(0);
 		const fetched = await repo.getEvacuee(evacuee._id);
 		expect(fetched?.current_stay.status).toBe('pre_registered');
@@ -796,7 +815,7 @@ describe('check-in / check-out', () => {
 
 		it('throws when stay is not pre_registered', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
-			await repo.checkInEvacuee(evacuee, ctx);
+			await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 			await expect(repo.cancelEvacueePreRegistration(evacuee._id, ctx)).rejects.toThrow(
 				/สามารถยกเลิกได้เฉพาะ/
 			);
