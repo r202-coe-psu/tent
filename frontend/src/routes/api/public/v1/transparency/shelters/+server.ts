@@ -108,8 +108,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						occRes.data &&
 						(occRes.data as Record<string, unknown>).rows
 					) {
-						// active + pre_registered (CR-070 D-BOOK-OCC=C) — a web booking
-						// holds the seat immediately, so the public number must move too.
+						// CR-112: public occupancy = Forecast allow-list.
 						occupancy = sumOccupancyFromStatusRows((occRes.data as Record<string, unknown>).rows);
 					}
 

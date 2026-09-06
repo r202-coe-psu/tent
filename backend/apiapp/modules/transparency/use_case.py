@@ -12,8 +12,14 @@ from .schemas import TransparencySummary, TransparencySummaryResponse
 # Ready-to-serve (matches former CouchDB transparency OPEN+FULL mapping).
 OPEN_SHELTER_STATUSES = frozenset({"open", "full"})
 
-# Stay statuses that hold a place (CR-070 D-BOOK-OCC=C).
-OCCUPANCY_STATUSES = ("active", "pre_registered")
+# Public metrics occupancy_total = Forecast (CR-112). Kitchen/partner stay active-only.
+OCCUPANCY_STATUSES = (
+    "pre_registered",
+    "arriving",
+    "active",
+    "room_confirmed",
+    "temporary_leave",
+)
 
 
 class TransparencyUseCase:

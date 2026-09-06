@@ -946,6 +946,21 @@ export interface components {
 			/** Address */
 			address: string;
 			capacity: components['schemas']['ShelterCapacityDetail'];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
 			/** Occupancy Rate */
 			occupancy_rate: number;
 			/** Building Status */

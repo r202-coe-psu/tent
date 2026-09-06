@@ -1474,6 +1474,21 @@
 					"admin_type": { "type": "string", "title": "Admin Type" },
 					"address": { "type": "string", "title": "Address" },
 					"capacity": { "$ref": "#/components/schemas/ShelterCapacityDetail" },
+					"occupancy": {
+						"type": "integer",
+						"title": "Occupancy",
+						"description": "Forecast Occupancy headcount"
+					},
+					"present": {
+						"type": "integer",
+						"title": "Present",
+						"description": "Present Occupancy headcount"
+					},
+					"in_zone": {
+						"type": "integer",
+						"title": "In Zone",
+						"description": "In-zone Occupancy headcount (room_confirmed)"
+					},
 					"occupancy_rate": { "type": "integer", "title": "Occupancy Rate" },
 					"building_status": { "type": "string", "title": "Building Status" },
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
@@ -1505,6 +1520,9 @@
 					"admin_type",
 					"address",
 					"capacity",
+					"occupancy",
+					"present",
+					"in_zone",
 					"occupancy_rate",
 					"building_status",
 					"admission_policy",
