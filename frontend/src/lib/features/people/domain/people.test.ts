@@ -46,7 +46,9 @@ import {
 	isAnonymousId,
 	replacePersonId,
 	migrateVulnerableGroupCode,
-	migrateVulnerableGroupCodes
+	migrateVulnerableGroupCodes,
+	housingTypeSchema,
+	householdInputSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';
@@ -940,6 +942,117 @@ describe('createScreening', () => {
 	});
 });
 
+describe('pet species dog|cat|other', () => {
+	it('accepts dog/cat/other and requires notes for other', () => {
+		expect(
+			householdInputSchema.safeParse({
+				label: 'มีหมา',
+				pets: [{ species: 'dog', count: 1 }]
+			}).success
+		).toBe(true);
+		expect(
+			householdInputSchema.safeParse({
+				label: 'สัตว์อื่นๆ',
+				pets: [{ species: 'other', count: 1, notes: 'กระต่าย' }]
+			}).success
+		).toBe(true);
+		expect(
+			householdInputSchema.safeParse({
+				label: 'other ไม่มี notes',
+				pets: [{ species: 'other', count: 1 }]
+			}).success
+		).toBe(false);
+		expect(
+			householdInputSchema.safeParse({
+				label: 'bird เลิกใช้',
+				pets: [{ species: 'bird', count: 1 }]
+			}).success
+		).toBe(false);
+	});
+
+	it('migrates legacy bird pets to other with notes นก', () => {
+		expect(migratePetGroup({ species: 'bird', count: 2 })).toEqual({
+			species: 'other',
+			count: 2,
+			notes: 'นก'
+		});
+		expect(migratePetGroup({ species: 'dog', count: 1, notes: 'friendly' })).toEqual({
+			species: 'dog',
+			count: 1,
+			notes: 'friendly'
+		});
+		expect(
+			migratePetGroups([
+				{ species: 'bird', count: 1 },
+				{ species: 'cat', count: 1 }
+			])
+		).toEqual([
+			{ species: 'other', count: 1, notes: 'นก' },
+			{ species: 'cat', count: 1 }
+		]);
+	});
+});
+
+describe('household housing_type and homeless Residence', () => {
+	it('stamps housing_type and optional residence_landmark at schema_v 5', () => {
+		const h = createHousehold(
+			{
+				label: 'บ้านมีที่',
+				housing_type: 'owned_house',
+				residence_landmark: 'ใกล้สะพาน',
+				address_no: '10',
+				subdistrict: 'หาดใหญ่',
+				district: 'หาดใหญ่',
+				province: 'สงขลา'
+			},
+			ctx
+		);
+		expect(h.schema_v).toBe(5);
+		expect(h.housing_type).toBe('owned_house');
+		expect(h.residence_landmark).toBe('ใกล้สะพาน');
+		expect(housingTypeSchema.parse('homeless')).toBe('homeless');
+	});
+
+	it('allows homeless Household with empty address_no when landmark is present', () => {
+		const h = createHousehold(
+			{
+				label: 'ไร้บ้านเลขที่',
+				housing_type: 'homeless',
+				residence_landmark: 'ริมคลองข้างตลาด',
+				address_no: null
+			},
+			ctx
+		);
+		expect(h.address_no).toBeNull();
+		expect(h.housing_type).toBe('homeless');
+	});
+
+	it('allows homeless Household with empty address_no when geo is complete', () => {
+		const result = householdInputSchema.safeParse({
+			label: 'ไร้บ้านแต่มีภูมิ',
+			housing_type: 'homeless',
+			address_no: '',
+			subdistrict: 'หาดใหญ่',
+			district: 'หาดใหญ่',
+			province: 'สงขลา'
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects homeless Residence with no address_no, no landmark, and incomplete geo', () => {
+		const result = householdInputSchema.safeParse({
+			label: 'ข้อมูลไม่ครบ',
+			housing_type: 'homeless',
+			address_no: null,
+			residence_landmark: '',
+			subdistrict: 'หาดใหญ่',
+			district: null,
+			province: 'สงขลา'
+		});
+		expect(result.success).toBe(false);
+	});
+});
+
 describe('createHousehold', () => {
 	it('stamps the household document correctly and parses pets, assets, and vehicles', () => {
 		const h = createHousehold(
@@ -972,7 +1085,7 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(4);
+		expect(h.schema_v).toBe(5);
 		expect(h.status).toBe('arriving');
 		expect(h.checkout_destination).toBeNull();
 		expect(h.shelter_code).toBe('SH001');
@@ -1028,7 +1141,7 @@ describe('createHousehold', () => {
 			};
 
 			const migrated = migrateHouseholdV3ToV4(v3Doc);
-			expect(migrated.schema_v).toBe(4);
+			expect(migrated.schema_v).toBe(5);
 			expect(migrated.status).toBe('checked_in'); // fallback default for existing active stays
 			expect(migrated.checkout_destination).toBeNull();
 			expect(migrated.vehicles).toEqual([]);
@@ -1046,7 +1159,7 @@ describe('createHousehold', () => {
 			};
 
 			const migrated = migrateHouseholdV3ToV4(v2Doc);
-			expect(migrated.schema_v).toBe(4);
+			expect(migrated.schema_v).toBe(5);
 			expect(migrated.status).toBe('checked_in');
 			expect(migrated.checkout_destination).toBeNull();
 			expect(migrated.vehicles).toEqual([{ type: 'car', license_plate: 'กข 1234' }]);
@@ -1066,7 +1179,7 @@ describe('createHousehold', () => {
 			};
 
 			const migrated = migrateHouseholdV3ToV4(v3Doc);
-			expect(migrated.schema_v).toBe(4);
+			expect(migrated.schema_v).toBe(5);
 			expect(migrated.vehicles).toEqual([]);
 			// expect((migrated as any).vehicle).toBeUndefined();
 			expect(migrated).not.toHaveProperty('vehicle');
@@ -1085,7 +1198,7 @@ describe('createHousehold', () => {
 			};
 
 			const migrated = migrateHouseholdV3ToV4(activeDoc);
-			expect(migrated.schema_v).toBe(4);
+			expect(migrated.schema_v).toBe(5);
 			expect(migrated.status).toBe('pre_registered');
 		});
 	});

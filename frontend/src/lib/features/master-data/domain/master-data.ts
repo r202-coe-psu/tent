@@ -24,6 +24,7 @@ export const MASTER_DATA_TYPES = [
 	'health_condition',
 	'dietary_restrictions',
 	'pet_types',
+	'housing_type',
 	'house_damage',
 	'municipality_zone',
 	'community',
@@ -63,6 +64,7 @@ export const REGISTRATION_MASTER_TYPES = [
 
 /** Types shown on the Household Master Data page. */
 export const HOUSEHOLD_MASTER_TYPES = [
+	'housing_type',
 	'municipality_zone',
 	'community'
 ] as const satisfies readonly MasterDataType[];
@@ -76,6 +78,7 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	health_condition: 'โรคประจำตัวและอาการแพ้ (Health Condition)',
 	dietary_restrictions: 'ศาสนาและข้อจำกัดอาหาร (Dietary Restrictions)',
 	pet_types: 'ประเภทสัตว์เลี้ยง (Pet Types)',
+	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
 	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)',
 	municipality_zone: 'เขตเทศบาล (Municipality Zone)',
 	community: 'ชุมชน (Community)',

@@ -26,7 +26,8 @@ export type {
 	TriageLevel,
 	BloodGroup,
 	CardType,
-	CardSnapshot
+	CardSnapshot,
+	HousingType
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -40,6 +41,8 @@ export {
 	replacePersonId,
 	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
+	housingTypeSchema,
+	migrateHouseholdToV5,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,

@@ -25,12 +25,13 @@ function makeItem(partial: Partial<MasterDataItem> = {}): MasterDataItem {
 }
 
 describe('masterTypeSchema', () => {
-	it('accepts the 8 master types', () => {
+	it('accepts the 9 master types', () => {
 		for (const t of [
 			'vulnerable_group',
 			'health_condition',
 			'dietary_restrictions',
 			'pet_types',
+			'housing_type',
 			'house_damage',
 			'municipality_zone',
 			'community',

@@ -961,6 +961,16 @@ const MASTER_DATA_DEFS: MasterTypeDef[] = [
 		]
 	},
 	{
+		type: 'housing_type',
+		items: [
+			{ key: 'owned_house', label: 'บ้านตนเอง', is_default: true },
+			{ key: 'rented_house', label: 'บ้านเช่า' },
+			{ key: 'condo', label: 'คอนโดมิเนียม' },
+			{ key: 'apartment_dorm', label: 'อพาร์ตเมนต์/หอพัก' },
+			{ key: 'homeless', label: 'ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่' }
+		]
+	},
+	{
 		type: 'house_damage',
 		items: [
 			{ key: 'total_loss', label: 'เสียหายทั้งหลัง', is_default: true },
@@ -1043,8 +1053,10 @@ async function seedMasterData(): Promise<MasterLookup> {
 		const seeded: MasterDataItem[] = def.items.map((d) => {
 			const reuse = persistedByLabel.get(d.label);
 			const item: MasterDataItem = {
-				// Vulnerable Group uses stable CR-112 codes (= seed keys); other types keep ULID codes.
-				code: reuse?.code ?? (def.type === 'vulnerable_group' ? d.key : itemCode()),
+				// Vulnerable Group / housing_type use stable CR-112 codes (= seed keys); other types keep ULID codes.
+				code:
+					reuse?.code ??
+					(def.type === 'vulnerable_group' || def.type === 'housing_type' ? d.key : itemCode()),
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',

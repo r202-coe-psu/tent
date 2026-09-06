@@ -298,6 +298,15 @@ type LegacyHouseholdDoc = Omit<Partial<Household>, 'vehicles'> & {
 	vehicles?: HouseholdVehicle[];
 };
 
+export const housingTypeSchema = z.enum([
+	'owned_house',
+	'rented_house',
+	'condo',
+	'apartment_dorm',
+	'homeless'
+]);
+export type HousingType = z.infer<typeof housingTypeSchema>;
+
 export interface PetGroup {
 	species: 'dog' | 'cat' | 'bird' | 'other';
 	count: number;
@@ -318,6 +327,8 @@ export interface Household extends BaseDoc {
 	assets?: HouseholdAsset | null;
 	vehicles: HouseholdVehicle[];
 	notes?: string;
+	housing_type?: HousingType | null;
+	residence_landmark?: string | null;
 	address_no: string | null;
 	village_no: string | null;
 	subdistrict: string | null;
@@ -618,7 +629,15 @@ export const medicalInputSchema = z.object({
 });
 export type MedicalInput = z.input<typeof medicalInputSchema>;
 
-export const householdInputSchema = z.object({
+function hasCompleteResidenceGeo(data: {
+	subdistrict?: string | null;
+	district?: string | null;
+	province?: string | null;
+}): boolean {
+	return Boolean(data.subdistrict?.trim() && data.district?.trim() && data.province?.trim());
+}
+
+const householdInputFieldsSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
 	status: householdStatusSchema.default('arriving'),
@@ -652,6 +671,8 @@ export const householdInputSchema = z.object({
 		)
 		.default([]),
 	notes: z.string().trim().optional(),
+	housing_type: housingTypeSchema.nullable().optional().default(null),
+	residence_landmark: z.string().trim().nullable().optional().default(null),
 	address_no: z.string().trim().nullable().default(null),
 	village_no: z.string().trim().nullable().default(null),
 	subdistrict: z.string().trim().nullable().default(null),
@@ -659,12 +680,25 @@ export const householdInputSchema = z.object({
 	province: z.string().trim().nullable().default(null),
 	postal_code: z.string().trim().nullable().default(null)
 });
+
+export const householdInputSchema = householdInputFieldsSchema.superRefine((data, ctx) => {
+	if (data.housing_type !== 'homeless') return;
+	const hasAddress = Boolean(data.address_no?.trim());
+	const hasLandmark = Boolean(data.residence_landmark?.trim());
+	if (hasAddress || hasLandmark || hasCompleteResidenceGeo(data)) return;
+	ctx.addIssue({
+		code: 'custom',
+		path: ['address_no'],
+		message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+	});
+});
 export type HouseholdInput = z.input<typeof householdInputSchema>;
 export type HouseholdFormData = z.output<typeof householdInputSchema>;
 
-/** Household wizard step schema — original domicile address + in-shelter zone/community. */
-export const householdAddressFormSchema = z.object({
-	addressNo: z.string().trim().min(1, 'กรุณากรอกบ้านเลขที่'),
+const householdAddressFieldsSchema = z.object({
+	housingType: housingTypeSchema.nullable().default(null),
+	residenceLandmark: z.string().trim().default(''),
+	addressNo: z.string().trim().default(''),
 	villageNo: z.string().trim().default(''),
 	subdistrict: z.string().trim().min(1, 'กรุณาเลือกตำบล/แขวง'),
 	district: z.string().trim().min(1, 'กรุณาเลือกอำเภอ/เขต'),
@@ -674,36 +708,106 @@ export const householdAddressFormSchema = z.object({
 	community: z.string().trim().default('')
 });
 
-/** All address selectors/inputs shown as required in household pre-registration. */
-export const householdPreRegisterAddressFormSchema = householdAddressFormSchema.extend({
-	addressNo: z.string({ error: 'กรุณากรอกบ้านเลขที่' }).trim().min(1, 'กรุณากรอกบ้านเลขที่'),
-	villageNo: z
-		.string({ error: 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน' })
-		.trim()
-		.min(1, 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน'),
-	subdistrict: z.string({ error: 'กรุณาเลือกตำบล/แขวง' }).trim().min(1, 'กรุณาเลือกตำบล/แขวง'),
-	district: z.string({ error: 'กรุณาเลือกอำเภอ/เขต' }).trim().min(1, 'กรุณาเลือกอำเภอ/เขต'),
-	province: z.string({ error: 'กรุณาเลือกจังหวัด' }).trim().min(1, 'กรุณาเลือกจังหวัด'),
-	postalCode: z
-		.string({ error: 'กรุณากรอกรหัสไปรษณีย์' })
-		.trim()
-		.regex(/^\d{5}$/, 'กรุณากรอกรหัสไปรษณีย์ 5 หลัก'),
-	municipalityZone: z
-		.string({ error: 'กรุณาเลือกเขตการปกครอง' })
-		.trim()
-		.min(1, 'กรุณาเลือกเขตการปกครอง'),
-	community: z.string({ error: 'กรุณาเลือกชุมชน' }).trim().min(1, 'กรุณาเลือกชุมชน')
+/** Household wizard step schema — original domicile address + in-shelter zone/community. */
+export const householdAddressFormSchema = householdAddressFieldsSchema.superRefine((data, ctx) => {
+	const hasAddress = Boolean(data.addressNo.trim());
+	if (data.housingType === 'homeless') {
+		const hasLandmark = Boolean(data.residenceLandmark.trim());
+		const hasGeo = Boolean(data.subdistrict.trim() && data.district.trim() && data.province.trim());
+		if (!hasAddress && !hasLandmark && !hasGeo) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['addressNo'],
+				message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+			});
+		}
+		return;
+	}
+	if (!hasAddress) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['addressNo'],
+			message: 'กรุณากรอกบ้านเลขที่'
+		});
+	}
 });
+
+/** All address selectors/inputs shown as required in household pre-registration. */
+export const householdPreRegisterAddressFormSchema = householdAddressFieldsSchema
+	.extend({
+		villageNo: z
+			.string({ error: 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน' })
+			.trim()
+			.min(1, 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน'),
+		subdistrict: z.string({ error: 'กรุณาเลือกตำบล/แขวง' }).trim().min(1, 'กรุณาเลือกตำบล/แขวง'),
+		district: z.string({ error: 'กรุณาเลือกอำเภอ/เขต' }).trim().min(1, 'กรุณาเลือกอำเภอ/เขต'),
+		province: z.string({ error: 'กรุณาเลือกจังหวัด' }).trim().min(1, 'กรุณาเลือกจังหวัด'),
+		postalCode: z
+			.string({ error: 'กรุณากรอกรหัสไปรษณีย์' })
+			.trim()
+			.regex(/^\d{5}$/, 'กรุณากรอกรหัสไปรษณีย์ 5 หลัก'),
+		municipalityZone: z
+			.string({ error: 'กรุณาเลือกเขตการปกครอง' })
+			.trim()
+			.min(1, 'กรุณาเลือกเขตการปกครอง'),
+		community: z.string({ error: 'กรุณาเลือกชุมชน' }).trim().min(1, 'กรุณาเลือกชุมชน')
+	})
+	.superRefine((data, ctx) => {
+		const hasAddress = Boolean(data.addressNo.trim());
+		if (data.housingType === 'homeless') {
+			const hasLandmark = Boolean(data.residenceLandmark.trim());
+			if (!hasAddress && !hasLandmark) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['addressNo'],
+					message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต (ภูมิศาสตร์ครบจากฟอร์มนี้แล้ว)'
+				});
+			}
+			return;
+		}
+		if (!hasAddress) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['addressNo'],
+				message: 'กรุณากรอกบ้านเลขที่'
+			});
+		}
+	});
 export type HouseholdAddressForm = z.infer<typeof householdPreRegisterAddressFormSchema>;
 
 /** Path-C (post-arrival grouping) adds a free-text notes field to the same address step. */
-export const householdPostArrivalAddressFormSchema = householdAddressFormSchema.extend({
-	notes: z.string().trim().default('')
-});
+export const householdPostArrivalAddressFormSchema = householdAddressFieldsSchema
+	.extend({
+		notes: z.string().trim().default('')
+	})
+	.superRefine((data, ctx) => {
+		const hasAddress = Boolean(data.addressNo.trim());
+		if (data.housingType === 'homeless') {
+			const hasLandmark = Boolean(data.residenceLandmark.trim());
+			const hasGeo = Boolean(
+				data.subdistrict.trim() && data.district.trim() && data.province.trim()
+			);
+			if (!hasAddress && !hasLandmark && !hasGeo) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['addressNo'],
+					message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+				});
+			}
+			return;
+		}
+		if (!hasAddress) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['addressNo'],
+				message: 'กรุณากรอกบ้านเลขที่'
+			});
+		}
+	});
 export type HouseholdPostArrivalAddressForm = z.infer<typeof householdPostArrivalAddressFormSchema>;
 
 /** Household basic-info edit modal — a subset of householdInputSchema's fields. */
-export const householdBasicInfoFormSchema = householdInputSchema.pick({
+export const householdBasicInfoFormSchema = householdInputFieldsSchema.pick({
 	label: true,
 	notes: true,
 	municipality_zone: true,
@@ -1075,7 +1179,7 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		4, // schema_v 4: adds status, checkout_destination
+		5, // schema_v 5: housing_type + residence_landmark (CR-112); 4: status, checkout_destination
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
@@ -1087,6 +1191,8 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			assets: d.assets || null,
 			vehicles: d.vehicles,
 			...(d.notes ? { notes: d.notes } : {}),
+			housing_type: d.housing_type ?? null,
+			residence_landmark: d.residence_landmark || null,
 			address_no: d.address_no || null,
 			village_no: d.village_no || null,
 			subdistrict: d.subdistrict || null,
@@ -1115,15 +1221,33 @@ export function migrateHouseholdV3ToV4(doc: unknown): Household {
 		} else {
 			vehicles = [];
 		}
-		return {
+		return migrateHouseholdToV5({
 			...rest,
 			schema_v: 4,
 			status: legacy.status ?? 'checked_in',
 			checkout_destination: legacy.checkout_destination ?? null,
 			vehicles
-		} as Household;
+		} as Household);
 	}
-	return candidate as Household;
+	return migrateHouseholdToV5(candidate as Household);
+}
+
+/** Additive CR-112 fields for Household schema_v 5. */
+export function migrateHouseholdToV5(doc: Household): Household {
+	if (!doc || doc.type !== 'household') return doc;
+	if (doc.schema_v != null && doc.schema_v >= 5) {
+		return {
+			...doc,
+			housing_type: doc.housing_type ?? null,
+			residence_landmark: doc.residence_landmark ?? null
+		};
+	}
+	return {
+		...doc,
+		schema_v: 5,
+		housing_type: doc.housing_type ?? null,
+		residence_landmark: doc.residence_landmark ?? null
+	};
 }
 
 export function createMovement(input: MovementInput, ctx: AuthorContext): Movement {
