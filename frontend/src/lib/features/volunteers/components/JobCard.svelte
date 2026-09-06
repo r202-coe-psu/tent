@@ -6,6 +6,8 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 
 	interface JobTag {
 		label: string;
@@ -34,6 +36,8 @@
 		onApply: (jobId: string, shiftId: string) => void;
 	}>();
 
+	const t = $derived(jobsI18n[languageStore.current]);
+
 	let totalQuota = $derived(job.shifts.reduce((sum: number, s: JobShift) => sum + s.quota, 0));
 	let totalConfirmed = $derived(
 		job.shifts.reduce((sum: number, s: JobShift) => sum + s.confirmed, 0)
@@ -42,8 +46,8 @@
 
 	let isControlled = $derived(
 		job.tags.some(
-			(t: JobTag) =>
-				t.variant === 'purple' || t.label.includes('ควบคุม') || t.label.includes('แพทย์')
+			(tg: JobTag) =>
+				tg.variant === 'purple' || tg.label.includes('ควบคุม') || tg.label.includes('แพทย์')
 		)
 	);
 </script>
@@ -60,14 +64,14 @@
 					class="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/10 px-3 py-1 text-xs font-bold text-accent-purple"
 				>
 					<ShieldAlert class="h-3.5 w-3.5" />
-					ภารกิจควบคุม
+					{t.controlledMission}
 				</span>
 			{:else}
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
 				>
 					<Sparkles class="h-3.5 w-3.5" />
-					ภารกิจทั่วไป
+					{t.generalMission}
 				</span>
 			{/if}
 
@@ -109,11 +113,17 @@
 		>
 			<span class="flex items-center gap-2 text-sm font-bold text-primary">
 				<CalendarDays class="h-4.5 w-4.5" />
-				รอบกะเวลาและโควตาปฏิบัติงาน ({job.shifts.length} กะ)
+				{t.shiftsAndQuota} ({job.shifts.length}
+				{t.shiftsUnit})
 			</span>
 			<span class="text-xs font-bold text-muted-foreground"
-				>รวมสมัครแล้ว {job.applicants_count ?? 0} คน · ต้องการ {totalQuota} คน (ว่าง {totalRemaining}
-				ที่)</span
+				>{t.totalApplied}
+				{job.applicants_count ?? 0}
+				{t.peopleUnit} · {t.requiredQuota}
+				{totalQuota}
+				{t.peopleUnit} ({t.availableSeats}
+				{totalRemaining}
+				{t.seatsUnit})</span
 			>
 		</div>
 
@@ -135,11 +145,11 @@
 							{#if isFull}
 								<span
 									class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
-									>เต็มแล้ว</span
+									>{t.fullBadge}</span
 								>
 							{:else}
 								<span class="rounded-md bg-success/15 px-2 py-0.5 text-xs font-bold text-success"
-									>เปิดรับ</span
+									>{t.openBadge}</span
 								>
 							{/if}
 						</div>
@@ -157,10 +167,14 @@
 					<div class="mb-5">
 						<div class="mb-2 flex justify-between text-xs">
 							<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
-								>รับ {shift.quota} คน (สมัครแล้ว {shift.applicants_count ?? 0} · ยืนยันแล้ว {shift.confirmed})</span
+								>{t.quotaCap}
+								{shift.quota}
+								{t.peopleUnit} ({t.appliedCount}
+								{shift.applicants_count ?? 0} · {t.confirmedCount}
+								{shift.confirmed})</span
 							>
 							<span class="font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
-								>{isFull ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${remaining} ที่`}</span
+								>{isFull ? t.fullSeats : `${t.availableSeats} ${remaining} ${t.seatsUnit}`}</span
 							>
 						</div>
 						<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -181,9 +195,9 @@
 							: 'hover:bg-opacity-90 cursor-pointer bg-primary text-white active:scale-[0.98]'}"
 					>
 						{#if isFull}
-							🔒 กะเต็มแล้ว
+							{t.shiftFull}
 						{:else}
-							🚀 สมัครกะนี้
+							{t.applyShift}
 						{/if}
 					</button>
 				</div>

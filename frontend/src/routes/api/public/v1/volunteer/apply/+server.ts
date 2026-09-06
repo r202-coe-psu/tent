@@ -32,12 +32,17 @@ const applySchema = z.object({
 		email: z.string().email().nullable().optional(),
 		skills: z.array(z.string().trim().min(1)).default([])
 	}),
-	selected_shift: z.object({
-		shift_id: z.string().trim().min(1).optional(),
-		date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)'),
-		start_time: z.string().min(1),
-		end_time: z.string().min(1)
-	}),
+	selected_shift: z
+		.object({
+			shift_id: z.string().trim().min(1).optional(),
+			date: z
+				.string()
+				.regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)')
+				.optional(),
+			start_time: z.string().min(1).optional(),
+			end_time: z.string().min(1).optional()
+		})
+		.optional(),
 	recaptcha_token: z.string().optional()
 });
 
@@ -103,19 +108,41 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			phone: applicant.phone,
 			email: applicant.email ?? '',
 			skills: applicant.skills,
-			shift_id: selected_shift.shift_id,
-			shift_date: selected_shift.date,
+			shift_id: selected_shift?.shift_id,
+			shift_date: selected_shift?.date,
+			start_time: selected_shift?.start_time,
+			end_time: selected_shift?.end_time,
 			station: undefined
 		});
 		return json({ success: true, ...result }, { status: 201, headers: noStore });
 	} catch (error) {
 		if (error instanceof PublicApplicationError) {
+			const errorMessages: Record<string, string> = {
+				JOB_NOT_FOUND: 'ไม่พบงานที่ระบุในระบบ',
+				JOB_NOT_OPEN: 'งานนี้ปิดรับสมัครแล้ว',
+				JOB_FULL: 'งานนี้มีผู้สมัครเต็มจำนวนแล้ว',
+				SHIFT_NOT_FOUND: 'ไม่พบกะเวลาที่เลือก',
+				SHIFT_FULL: 'กะเวลานี้มีผู้สมัครเต็มจำนวนแล้ว',
+				SHIFT_ID_REQUIRED: 'กรุณาเลือกกะเวลาที่ต้องการปฏิบัติงาน',
+				SHIFT_DATE_AMBIGUOUS: 'มีกะเวลาซ้ำกันในวันที่เลือก กรุณาระบุกะเวลาให้ชัดเจน',
+				DUPLICATE_APPLICATION: 'คุณได้สมัครงานนี้ไว้แล้ว',
+				TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
+				JOB_NOT_READY: 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง',
+				WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+			};
 			return json(
-				{ success: false, error: error.code },
+				{
+					success: false,
+					error: error.code,
+					message: errorMessages[error.code] || error.message
+				},
 				{ status: error.httpStatus, headers: noStore }
 			);
 		}
 		console.error('[public-volunteer-apply] direct CouchDB write failed', error);
-		return json({ success: false, error: 'APPLY_FAILED' }, { status: 503, headers: noStore });
+		return json(
+			{ success: false, error: 'APPLY_FAILED', message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' },
+			{ status: 503, headers: noStore }
+		);
 	}
 };

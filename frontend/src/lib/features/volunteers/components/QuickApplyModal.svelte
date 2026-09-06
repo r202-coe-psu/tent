@@ -17,6 +17,8 @@
 	import X from '@lucide/svelte/icons/x';
 	import { env } from '$env/dynamic/public';
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { jobsI18n } from '../i18n/jobs.i18n';
 	import { SKILL_MASTER } from '../domain/skill-master';
 
 	export interface ShiftDetail {
@@ -56,6 +58,8 @@
 			trackingToken?: string;
 		}) => void;
 	}>();
+
+	const t = $derived(jobsI18n[languageStore.current]);
 
 	interface SkillOption {
 		id: string;
@@ -195,11 +199,11 @@
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (!formData.consentPdpa) {
-			errorMessage = 'กรุณายอมรับเงื่อนไข PDPA ก่อนดำเนินการต่อ';
+			errorMessage = t.errPdpaRequired;
 			return;
 		}
 		if (!job || !activeShift) {
-			errorMessage = 'ไม่พบข้อมูลงานหรือกะเวลาที่เลือก';
+			errorMessage = t.errNoJobSelected;
 			return;
 		}
 
@@ -209,7 +213,7 @@
 		try {
 			const recaptchaToken = await captchaToken();
 			if (recaptchaToken === null) {
-				errorMessage = 'ไม่สามารถยืนยัน reCAPTCHA ได้ กรุณาลองใหม่อีกครั้ง';
+				errorMessage = t.errRecaptchaFailed;
 				return;
 			}
 			const firstName = formData.firstName.trim();
@@ -245,6 +249,7 @@
 				},
 				body: JSON.stringify({
 					job_id: targetJobId,
+					shelter_code: job.shelter_code || undefined,
 					applicant: {
 						first_name: firstName,
 						last_name: lastName,
@@ -252,12 +257,14 @@
 						email: formData.email.trim() || null,
 						skills: formData.skills
 					},
-					selected_shift: {
-						shift_id: activeShift.id || undefined,
-						date: shiftDate,
-						start_time: startTime,
-						end_time: endTime
-					},
+					selected_shift: activeShift
+						? {
+								shift_id: activeShift.id || undefined,
+								date: shiftDate,
+								start_time: startTime,
+								end_time: endTime
+							}
+						: undefined,
 					recaptcha_token: recaptchaToken || undefined
 				})
 			});
@@ -268,10 +275,10 @@
 				const errorMsg =
 					couchData?.message ||
 					(couchRes.status === 409
-						? 'ช่วงเวลากะงานนี้ทับซ้อนหรือเบอร์โทรศัพท์นี้ได้ทำการสมัครงานนี้ไว้แล้ว'
+						? t.errDuplicatePhoneOrShift
 						: couchRes.status === 429
-							? 'คุณได้ส่งคำขอบ่อยเกินไป กรุณารอสักครู่'
-							: 'เกิดข้อผิดพลาดในการส่งใบสมัคร');
+							? t.errRateLimited
+							: t.errApplyGeneric);
 				errorMessage = errorMsg;
 				toast.error(errorMsg);
 				return;
@@ -279,7 +286,7 @@
 
 			const trackingToken = couchData.tracking_token;
 
-			toast.success('ส่งใบสมัครสำเร็จ! คุณจะได้รับตั๋วดิจิทัล (QR Code) ทันที');
+			toast.success(t.toastApplySuccess);
 
 			onSubmit?.({
 				firstName,
@@ -309,7 +316,7 @@
 				await goto(`/volunteers/ticket/${trackingToken}`);
 			}
 		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการส่งใบสมัคร';
+			const msg = err instanceof Error ? err.message : t.errApplyGeneric;
 			errorMessage = msg;
 			toast.error(msg);
 		} finally {
@@ -354,9 +361,10 @@
 					<div
 						class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium"
 					>
-						<span>ระบบสมัครงานจิตอาสาภาคประชาชน (NO-AUTH FLOW)</span>
+						<span>{t.applyBadgeNoAuth}</span>
 						<span class="flex items-center gap-1 border-l border-white/30 pl-2">
-							<Lock class="h-3 w-3" /> ปลอดภัย ไม่ต้องใช้รหัสผ่าน
+							<Lock class="h-3 w-3" />
+							{t.applyBadgeNoPassword}
 						</span>
 					</div>
 					<h2 class="mb-3 text-2xl font-bold">{job.title}</h2>
@@ -368,7 +376,8 @@
 						{#if activeShift}
 							<span class="flex items-center gap-1.5">
 								<CalendarDays class="h-4 w-4 shrink-0" />
-								กะวันที่ {activeShift.date}
+								{t.shiftDateLabel}
+								{activeShift.date}
 							</span>
 						{/if}
 					</div>
@@ -389,13 +398,13 @@
 						<section>
 							<h3 class="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
 								<User class="h-4 w-4 text-muted-foreground" />
-								1. ข้อมูลประจำตัวอาสาสมัคร
+								{t.applyStep1Title}
 							</h3>
 							<div class="space-y-4">
 								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div>
 										<label for="firstName" class="mb-1.5 block text-xs font-bold text-foreground">
-											ชื่อ <span class="text-danger">*</span>
+											{t.applyFirstName} <span class="text-danger">*</span>
 										</label>
 										<input
 											id="firstName"
@@ -408,7 +417,7 @@
 									</div>
 									<div>
 										<label for="lastName" class="mb-1.5 block text-xs font-bold text-foreground">
-											นามสกุล <span class="text-danger">*</span>
+											{t.applyLastName} <span class="text-danger">*</span>
 										</label>
 										<input
 											id="lastName"
@@ -423,7 +432,8 @@
 								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div>
 										<label for="nickname" class="mb-1.5 block text-xs font-bold text-foreground">
-											ชื่อเล่น <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+											{t.applyNickname}
+											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
 										</label>
 										<input
 											id="nickname"
@@ -435,7 +445,7 @@
 									</div>
 									<div>
 										<label for="phone" class="mb-1.5 block text-xs font-bold text-foreground">
-											เบอร์โทรศัพท์มือถือ <span class="text-danger">*</span>
+											{t.applyPhone} <span class="text-danger">*</span>
 										</label>
 										<input
 											id="phone"
@@ -449,14 +459,15 @@
 											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 										/>
 										<p class="mt-1 text-3xs text-muted-foreground">
-											1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้
+											{t.applyPhoneLimitHint}
 										</p>
 									</div>
 								</div>
 								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div>
 										<label for="lineId" class="mb-1.5 block text-xs font-bold text-foreground">
-											Line ID <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+											{t.applyLineId}
+											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
 										</label>
 										<input
 											id="lineId"
@@ -468,7 +479,8 @@
 									</div>
 									<div>
 										<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
-											อีเมล <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+											{t.applyEmail}
+											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
 										</label>
 										<input
 											id="email"
@@ -487,11 +499,11 @@
 							<div class="mb-4 flex items-center justify-between">
 								<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 									<Clock class="h-4 w-4 text-muted-foreground" />
-									2. เลือกรอบกะเวลาปฏิบัติงาน (Shifts)
+									{t.applyStep2Title}
 								</h3>
 								{#if job.shifts && job.shifts.length > 1}
 									<span class="text-xs text-muted-foreground"
-										>มี {job.shifts.length} กะให้เลือก</span
+										>{job.shifts.length} {t.applyShiftsAvailable}</span
 									>
 								{/if}
 							</div>
@@ -515,7 +527,8 @@
 										>
 											<div class="mb-1 flex items-center justify-between">
 												<span class="text-xs font-bold text-foreground">
-													วันที่ {shift.date}
+													{t.applyDatePrefix}
+													{shift.date}
 												</span>
 												{#if isSelected}
 													<span class="rounded-full bg-primary p-0.5 text-primary-foreground">
@@ -537,13 +550,17 @@
 											</div>
 
 											<div class="mt-2 flex items-center justify-between text-2xs font-bold">
-												<span class="text-success">รับแล้ว: {shift.confirmed} คน</span>
+												<span class="text-success"
+													>{t.applyShiftReceived}: {shift.confirmed} {t.peopleUnit}</span
+												>
 												<span
 													class={remaining <= 2
 														? 'text-warning-foreground'
 														: 'text-muted-foreground'}
 												>
-													{isFull ? 'กะเต็มแล้ว' : `ยังขาดอีก: ${remaining} คน`}
+													{isFull
+														? t.shiftFull
+														: `${t.applyShiftNeedMore}: ${remaining} ${t.peopleUnit}`}
 												</span>
 											</div>
 										</button>
@@ -554,7 +571,7 @@
 									>
 										<div class="flex items-center justify-between">
 											<span class="text-xs font-bold text-foreground"
-												>วันที่ {activeShift.date}</span
+												>{t.applyDatePrefix} {activeShift.date}</span
 											>
 											<span class="rounded-full bg-primary p-0.5 text-primary-foreground">
 												<Check class="h-3 w-3" />
@@ -564,7 +581,10 @@
 											{activeShift.time || `${activeShift.start_time} - ${activeShift.end_time} น.`}
 										</p>
 										<p class="mt-2 text-2xs text-muted-foreground">
-											โควตา: {activeShift.quota} คน (ยืนยันแล้ว {activeShift.confirmed} คน)
+											{t.applyQuotaLabel}: {activeShift.quota}
+											{t.peopleUnit} ({t.confirmedCount}
+											{activeShift.confirmed}
+											{t.peopleUnit})
 										</p>
 									</div>
 								{/if}
@@ -577,21 +597,23 @@
 								<div>
 									<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 										<Tag class="h-4 w-4 text-muted-foreground" />
-										3. ทักษะความสามารถ (ดึงจาก Master Data)
+										{t.applyStep3Title}
 									</h3>
 									<p class="mt-0.5 text-2xs text-muted-foreground">
-										เลือกทักษะที่คุณมีความพร้อมหรือความชำนาญ (สามารถเลือกได้มากกว่า 1 ข้อ)
+										{t.applyStep3Subtitle}
 									</p>
 								</div>
 								<span class="text-xs font-bold text-primary">
-									เลือกแล้ว {formData.skills.length} ทักษะ
+									{t.applySkillsSelected}
+									{formData.skills.length}
+									{t.skillsUnit}
 								</span>
 							</div>
 
 							{#if isLoadingSkills}
 								<div class="flex items-center gap-2 py-4 text-xs text-muted-foreground">
 									<Loader2 class="h-4 w-4 animate-spin text-primary" />
-									<span>กำลังโหลดรายการทักษะมาตรฐาน...</span>
+									<span>{t.applyLoadingSkills}</span>
 								</div>
 							{:else}
 								<div class="flex flex-wrap gap-2.5">
@@ -624,7 +646,7 @@
 														? 'bg-white/20 text-white'
 														: 'bg-warning/20 text-warning-foreground'}"
 												>
-													ทักษะควบคุม
+													{t.applyControlledSkillBadge}
 												</span>
 											{/if}
 
@@ -632,7 +654,7 @@
 												<span
 													class="rounded-full bg-primary/20 px-1.5 py-0.5 text-3xs font-bold text-primary"
 												>
-													ตรงกับงานนี้
+													{t.applyMatchesJobBadge}
 												</span>
 											{/if}
 										</button>
@@ -654,8 +676,8 @@
 								/>
 								<div>
 									<p class="text-xs leading-relaxed text-muted-foreground">
-										<strong class="text-foreground">ความยินยอม PDPA:</strong> ข้าพเจ้ายินยอมให้ศูนย์พักพิงและระบบจัดสรรจิตอาสาเก็บรวบรวมและประมวลผลข้อมูลส่วนบุคคลข้างต้น
-										เพื่อการประสานงานและจัดสรรงานจิตอาสาตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+										<strong class="text-foreground">{t.applyPdpaTitle}</strong>
+										{t.applyPdpaText}
 									</p>
 								</div>
 							</label>
@@ -663,7 +685,8 @@
 								class="mt-4 flex items-center justify-between border-t border-border/50 pt-3 text-2xs text-muted-foreground"
 							>
 								<div class="flex items-center gap-1.5">
-									<ShieldAlert class="h-3 w-3" /> Protected by Smart Shelter System & reCAPTCHA
+									<ShieldAlert class="h-3 w-3" />
+									{t.applyProtectedFooter}
 								</div>
 							</div>
 						</div>
@@ -674,14 +697,14 @@
 								onclick={() => (isOpen = false)}
 								class="flex-1 cursor-pointer rounded-2xl border border-border bg-muted/30 py-3.5 text-sm font-bold text-foreground transition-colors hover:bg-muted"
 							>
-								ยกเลิก
+								{t.applyCancelButton}
 							</button>
 							<button
 								type="submit"
 								disabled={isSubmitting || !formData.consentPdpa}
 								class="flex flex-[2] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-70"
 							>
-								{isSubmitting ? 'กำลังส่งข้อมูล...' : 'ยืนยันการสมัครและรับตั๋วดิจิทัล'}
+								{isSubmitting ? t.applySubmitting : t.applySubmitButton}
 								{#if !isSubmitting}
 									<ArrowRight class="h-4 w-4" />
 								{/if}

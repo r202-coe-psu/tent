@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -10,8 +11,13 @@
 	import { fetchVolunteerSkills } from '$lib/features/volunteer-portal/data/volunteer-api';
 	import { findSkillOption } from '$lib/features/volunteer-portal/domain/skill-label';
 	import type { VolunteerSkillOption } from '$lib/features/volunteer-portal/domain/volunteer';
+	import { SKILL_MASTER } from '../domain/skill-master';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import JobCard from './JobCard.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './QuickApplyModal.svelte';
+
+	const t = $derived(jobsI18n[languageStore.current]);
 
 	interface DisplayShift {
 		id: string;
@@ -74,21 +80,43 @@
 		requires_review?: boolean;
 	}
 
+	interface FilterSkillItem {
+		code: string;
+		label: string;
+		icon: string;
+		isControlled: boolean;
+	}
+
 	let rawJobs = $state<RawPublicJob[]>([]);
 	let sheltersList = $state<{ code: string; name: string }[]>([]);
-	let skillOptions = $state<VolunteerSkillOption[]>([]);
+	// Initialize with Master Data fallback so full skills list is available immediately
+	let skillOptions = $state<VolunteerSkillOption[]>(
+		SKILL_MASTER.map((s) => ({
+			code: s.key,
+			label: s.label,
+			category: s.controlled ? 'controlled' : 'operational',
+			description: s.description,
+			is_default: false
+		}))
+	);
 	let isLoading = $state(true);
 
 	function resolvedSkillLabel(value: string): string {
-		return findSkillOption(value, skillOptions)?.label?.trim() ?? '';
+		return findSkillOption(value, skillOptions)?.label?.trim() ?? value.trim();
 	}
 
-	/** Compare filter values and stored job values by Master Data code. */
+	/** Compare filter values and stored job values by Master Data code or label. */
 	function skillsMatch(left: string, right: string): boolean {
+		if (!left || !right) return false;
+		if (left.trim().toLowerCase() === right.trim().toLowerCase()) return true;
 		const leftOption = findSkillOption(left, skillOptions);
 		const rightOption = findSkillOption(right, skillOptions);
-		if (leftOption && rightOption) return leftOption.code === rightOption.code;
-		return left.trim().toLowerCase() === right.trim().toLowerCase();
+		if (leftOption && rightOption && leftOption.code === rightOption.code) return true;
+		if (leftOption && leftOption.label.trim().toLowerCase() === right.trim().toLowerCase())
+			return true;
+		if (rightOption && rightOption.label.trim().toLowerCase() === left.trim().toLowerCase())
+			return true;
+		return false;
 	}
 
 	const weekdayIndexes: Record<string, number> = {
@@ -120,8 +148,6 @@
 		const targetDay = weekdayIndexes[normalized.toLowerCase()];
 		const today = new Date();
 		const dayOffset = targetDay === undefined ? index : (targetDay - today.getDay() + 7) % 7;
-		// Keep legacy/template records usable even if their day value is not a
-		// recognised weekday. The application API still requires an ISO date.
 		return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset))
 			.toISOString()
 			.slice(0, 10);
@@ -130,6 +156,11 @@
 	function isControlledSkill(value: string): boolean {
 		const option = findSkillOption(value, skillOptions);
 		if (option?.category?.toLowerCase() === 'controlled') return true;
+		const masterEntry = SKILL_MASTER.find(
+			(m) =>
+				m.key.toLowerCase() === value.toLowerCase() || m.label.toLowerCase() === value.toLowerCase()
+		);
+		if (masterEntry?.controlled) return true;
 		const text = `${option?.label ?? ''} ${value}`.toLowerCase();
 		return text.includes('แพทย์') || text.includes('พยาบาล');
 	}
@@ -152,11 +183,22 @@
 
 	async function fetchMasterSkills() {
 		try {
-			skillOptions = await fetchVolunteerSkills();
+			const skills = await fetchVolunteerSkills();
+			if (skills && skills.length > 0) {
+				skillOptions = skills;
+				return;
+			}
 		} catch (err) {
-			// Unresolved skill codes stay hidden rather than leaking internal IDs to users.
-			console.warn('Failed to load volunteer skill master data:', err);
+			console.warn('Failed to load volunteer skill master data from API:', err);
 		}
+		// Fallback to SKILL_MASTER
+		skillOptions = SKILL_MASTER.map((s) => ({
+			code: s.key,
+			label: s.label,
+			category: s.controlled ? 'controlled' : 'operational',
+			description: s.description,
+			is_default: false
+		}));
 	}
 
 	onMount(() => {
@@ -172,8 +214,6 @@
 		return res;
 	});
 
-	// Render only jobs returned by the public API. Synthetic jobs cannot be applied to
-	// because their IDs do not exist in the backend.
 	const displayedJobs = $derived.by<DisplayJobCard[]>(() => {
 		if (rawJobs && rawJobs.length > 0) {
 			return rawJobs.map((job: RawPublicJob) => {
@@ -246,17 +286,17 @@
 					variant: 'default' | 'success' | 'warning' | 'purple' | 'outline';
 				}[] = [];
 				if (isControlled) {
-					tags.push({ label: 'ภารกิจควบคุม', variant: 'purple' });
+					tags.push({ label: t.controlledMission, variant: 'purple' });
 				} else {
-					tags.push({ label: 'ภารกิจทั่วไป', variant: 'default' });
+					tags.push({ label: t.generalMission, variant: 'default' });
 				}
 
 				if (job.status === 'open') {
-					tags.push({ label: 'เปิดรับสมัคร', variant: 'success' });
+					tags.push({ label: t.tagOpen, variant: 'success' });
 				} else if (job.status === 'almost_full') {
-					tags.push({ label: 'ใกล้เต็ม', variant: 'warning' });
+					tags.push({ label: t.tagNearFull, variant: 'warning' });
 				} else if (job.status === 'full') {
-					tags.push({ label: 'เต็มแล้ว', variant: 'outline' });
+					tags.push({ label: t.tagFull, variant: 'outline' });
 				}
 
 				if (job.skills_required) {
@@ -271,7 +311,7 @@
 					title: job.title,
 					shelter: job.shelter_name || shelterName,
 					shelter_code: job.shelter_code,
-					description: job.description || 'ช่วยเหลืองานในศูนย์พักพิงตามภารกิจที่ได้รับมอบหมาย',
+					description: job.description || t.defaultJobDesc,
 					shifts,
 					tags,
 					skills_required: job.skills_required,
@@ -291,10 +331,12 @@
 	let selectedShelter = $state('all');
 	let selectedSkill = $state('all');
 
-	// Unique list of shelters for the filter. Use the code for selection and the
-	// synced public name for display, with the name as a legacy fallback.
+	// Unique list of shelters for the filter
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
 		const shelters: Record<string, string> = {};
+		for (const s of sheltersList) {
+			if (s.code && s.name) shelters[s.code] = s.name;
+		}
 		for (const job of displayedJobs) {
 			const code = job.shelter_code || job.shelter;
 			if (code && job.shelter && !shelters[code]) shelters[code] = job.shelter;
@@ -302,20 +344,65 @@
 		return Object.entries(shelters).map(([code, name]) => ({ code, name }));
 	});
 
-	// Keep raw codes as filter values, but only expose skills that have a master label.
-	const availableSkills = $derived.by<string[]>(() => {
-		const skills: string[] = [];
+	// Full comprehensive list of skills for filtering (Master Data + SKILL_MASTER + Any extra from jobs)
+	const availableSkills = $derived.by<FilterSkillItem[]>(() => {
+		const result: FilterSkillItem[] = [];
+		const seenCodes = new SvelteSet<string>();
+
+		const baseList =
+			skillOptions.length > 0
+				? skillOptions
+				: SKILL_MASTER.map((s) => ({
+						code: s.key,
+						label: s.label,
+						category: s.controlled ? ('controlled' as const) : ('operational' as const)
+					}));
+
+		// 1. Add skills from Master Data
+		for (const opt of baseList) {
+			const code = opt.code || opt.label;
+			const normCode = code.trim().toLowerCase();
+			if (code && !seenCodes.has(normCode)) {
+				seenCodes.add(normCode);
+				seenCodes.add(opt.label.trim().toLowerCase());
+				const masterEntry = SKILL_MASTER.find(
+					(m) =>
+						m.key.toLowerCase() === normCode ||
+						m.label.toLowerCase() === opt.label.trim().toLowerCase()
+				);
+				result.push({
+					code,
+					label: opt.label,
+					icon: masterEntry?.icon ?? (opt.category === 'controlled' ? '🩺' : '🏷️'),
+					isControlled: opt.category === 'controlled' || masterEntry?.controlled === true
+				});
+			}
+		}
+
+		// 2. Also ensure any custom skills attached to jobs are included if not present
 		for (const j of displayedJobs) {
 			if (j.skills_required && Array.isArray(j.skills_required)) {
 				for (const s of j.skills_required) {
 					const trimmed = s.trim();
-					if (trimmed && resolvedSkillLabel(trimmed) && !skills.includes(trimmed)) {
-						skills.push(trimmed);
+					const norm = trimmed.toLowerCase();
+					if (trimmed && !seenCodes.has(norm)) {
+						const resolved = resolvedSkillLabel(trimmed) || trimmed;
+						if (!seenCodes.has(resolved.toLowerCase())) {
+							seenCodes.add(norm);
+							seenCodes.add(resolved.toLowerCase());
+							result.push({
+								code: trimmed,
+								label: resolved,
+								icon: isControlledSkill(trimmed) ? '🩺' : '🏷️',
+								isControlled: isControlledSkill(trimmed)
+							});
+						}
 					}
 				}
 			}
 		}
-		return skills;
+
+		return result;
 	});
 
 	let filteredJobs = $derived(
@@ -325,7 +412,7 @@
 				const matchText =
 					j.title.toLowerCase().includes(q) ||
 					j.shelter.toLowerCase().includes(q) ||
-					j.tags.some((t) => t.label.toLowerCase().includes(q));
+					j.tags.some((tg) => tg.label.toLowerCase().includes(q));
 				if (!matchText) return false;
 			}
 
@@ -336,7 +423,8 @@
 			if (selectedSkill !== 'all') {
 				const hasSkill =
 					j.skills_required?.some((s) => skillsMatch(s, selectedSkill)) ||
-					j.tags.some((t) => t.label.toLowerCase().trim() === selectedSkill.toLowerCase().trim());
+					j.tags.some((tg) => skillsMatch(tg.label, selectedSkill)) ||
+					skillsMatch(j.title, selectedSkill);
 				if (!hasSkill) return false;
 			}
 
@@ -377,206 +465,189 @@
 
 <div class="space-y-6">
 	<!-- Search & Filter Card -->
-	<div class="rounded-3xl border border-border/80 bg-white p-6 shadow-sm md:p-8">
+	<div
+		class="rounded-2xl border border-border/80 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6 md:p-8"
+	>
 		<!-- Header / Title -->
-		<div class="mb-8 flex flex-col justify-between gap-6 md:flex-row md:items-start">
+		<div class="mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-start">
 			<div>
 				<h2
-					class="flex items-center gap-3 text-xl font-black tracking-tight text-primary sm:text-2xl"
+					class="flex items-center gap-2.5 text-lg font-black tracking-tight text-primary sm:gap-3 sm:text-xl md:text-2xl"
 				>
-					<Briefcase class="h-6 w-6 text-primary" />
-					ตลาดงานอาสาสมัครในศูนย์พักพิง
+					<Briefcase class="h-5 w-5 shrink-0 text-primary sm:h-6 sm:w-6" />
+					<span>{t.jobBoardSectionTitle}</span>
 				</h2>
-				<p class="mt-2 text-sm text-muted-foreground">
-					เลือกภารกิจและกะเวลาที่คุณสะดวก แล้วกดสมัครเพื่อรับบัตรตั๋วดิจิทัล (QR Code Pass) ทันที
-					(ไม่ต้องใช้รหัสผ่าน)
+				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">
+					{t.jobBoardSectionSubtitle}
 				</p>
 			</div>
 
 			<!-- Search Bar -->
-			<div class="relative w-full shrink-0 md:w-[340px]">
+			<div class="relative w-full shrink-0 md:w-[320px] lg:w-[360px]">
 				<input
 					type="text"
 					bind:value={searchQuery}
-					placeholder="ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์..."
-					class="w-full rounded-2xl border border-border/80 bg-white px-5 py-3.5 pl-11 text-sm text-foreground shadow-sm outline-hidden transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:ring-1 focus:ring-primary"
+					placeholder={t.searchPlaceholder}
+					class="w-full rounded-2xl border border-border/80 bg-white px-4 py-3 pl-10 text-base text-foreground shadow-sm outline-hidden transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:ring-1 focus:ring-primary sm:px-5 sm:py-3.5 sm:pl-11 sm:text-sm"
 				/>
-				<Search class="absolute top-4 left-4 h-4.5 w-4.5 text-muted-foreground" />
+				<Search
+					class="pointer-events-none absolute top-3.5 left-3.5 h-4.5 w-4.5 text-muted-foreground sm:top-4 sm:left-4"
+				/>
 			</div>
 		</div>
 
 		<!-- Filters Area -->
-		<div class="flex flex-col gap-5">
+		<div class="flex flex-col gap-4 sm:gap-5">
 			<!-- Filter Status Pills -->
-			<div class="flex flex-wrap items-center gap-3">
-				<div class="mr-2 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+			<div class="flex flex-wrap items-center gap-2 sm:gap-3">
+				<div
+					class="mr-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground sm:mr-2 sm:text-sm"
+				>
 					<Filter class="h-4 w-4" />
-					<span>ตัวกรอง:</span>
+					<span>{t.filterLabel}</span>
 				</div>
 
 				<button
 					type="button"
 					onclick={() => (selectedFilter = 'all')}
-					class="cursor-pointer rounded-full px-5 py-2 text-xs font-bold transition-all {selectedFilter ===
+					class="cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-5 sm:py-2 {selectedFilter ===
 					'all'
 						? 'bg-primary text-white shadow-sm'
 						: 'border border-border/80 bg-white text-muted-foreground hover:bg-muted/30'}"
 				>
-					ทั้งหมด ({displayedJobs.length})
+					{t.filterAll} ({displayedJobs.length})
 				</button>
 
 				<button
 					type="button"
 					onclick={() => (selectedFilter = 'open')}
-					class="cursor-pointer rounded-full px-5 py-2 text-xs font-bold transition-all {selectedFilter ===
+					class="cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-5 sm:py-2 {selectedFilter ===
 					'open'
 						? 'border border-success bg-success/15 text-success shadow-sm'
 						: 'border border-success/30 bg-success/5 text-success hover:bg-success/10'}"
 				>
 					<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-success"></span>
-					เปิดรับสมัคร (Open)
+					{t.filterOpen}
 				</button>
 
 				<button
 					type="button"
 					onclick={() => (selectedFilter = 'near_full')}
-					class="cursor-pointer rounded-full px-5 py-2 text-xs font-bold transition-all {selectedFilter ===
+					class="cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-5 sm:py-2 {selectedFilter ===
 					'near_full'
 						? 'border border-warning bg-warning/20 text-warning-foreground shadow-sm'
 						: 'border border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/20'}"
 				>
-					<span class="mr-1.5 inline-block h-3 w-3 rounded-full bg-warning"></span>
-					ใกล้เต็ม (Near Full)
+					<span class="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-warning"></span>
+					{t.filterNearFull}
 				</button>
 
 				<button
 					type="button"
 					onclick={() => (selectedFilter = 'controlled')}
-					class="cursor-pointer rounded-full px-5 py-2 text-xs font-bold transition-all {selectedFilter ===
+					class="cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-5 sm:py-2 {selectedFilter ===
 					'controlled'
 						? 'border border-accent-purple bg-accent-purple/15 text-accent-purple shadow-sm'
 						: 'border border-accent-purple/30 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/10'}"
 				>
-					🩺 ทักษะวิชาชีพ/ควบคุม
+					{t.filterControlled}
 				</button>
 			</div>
 
-			<!-- Skill Filter Chips -->
+			<!-- Skill Filter Chips (Full Comprehensive List) -->
 			{#if availableSkills.length > 0}
-				<div class="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
-					<div class="mr-1 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-						<Tag class="h-3.5 w-3.5 text-primary" />
-						<span>ทักษะ:</span>
+				<div class="flex flex-col gap-2.5 border-t border-border/50 pt-3 sm:pt-4">
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+							<Tag class="h-3.5 w-3.5 text-primary" />
+							<span>{t.skillsLabel}</span>
+							<span class="text-3xs font-medium text-muted-foreground/70"
+								>({availableSkills.length})</span
+							>
+						</div>
+						{#if selectedSkill !== 'all'}
+							<button
+								type="button"
+								onclick={() => (selectedSkill = 'all')}
+								class="cursor-pointer text-xs font-bold text-danger hover:underline"
+							>
+								{t.clearFilter}
+							</button>
+						{/if}
 					</div>
 
-					<button
-						type="button"
-						onclick={() => (selectedSkill = 'all')}
-						class="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all {selectedSkill ===
-						'all'
-							? 'bg-primary text-white shadow-xs'
-							: 'border border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/50'}"
-					>
-						ทั้งหมด
-					</button>
-
-					{#each availableSkills as skill (skill)}
-						{@const isSelected = selectedSkill === skill}
-						<button
-							type="button"
-							onclick={() => (selectedSkill = isSelected ? 'all' : skill)}
-							class="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all {isSelected
-								? 'border border-primary bg-primary/10 font-bold text-primary shadow-xs'
-								: 'border border-border/70 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
-						>
-							🏷️ {resolvedSkillLabel(skill)}
-						</button>
-					{/each}
-
-					{#if selectedSkill !== 'all'}
+					<div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
 						<button
 							type="button"
 							onclick={() => (selectedSkill = 'all')}
-							class="ml-1 cursor-pointer text-xs font-semibold text-danger hover:underline"
+							class="cursor-pointer rounded-full px-3 py-1.5 text-xs font-bold transition-all active:scale-95 {selectedSkill ===
+							'all'
+								? 'bg-primary text-white shadow-xs ring-2 ring-primary/20'
+								: 'border border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/50'}"
 						>
-							✕ ล้างตัวกรอง
+							{t.filterAll}
 						</button>
-					{/if}
+
+						{#each availableSkills as skill (skill.code)}
+							{@const isSelected = selectedSkill === skill.code || selectedSkill === skill.label}
+							<button
+								type="button"
+								onclick={() => (selectedSkill = isSelected ? 'all' : skill.code)}
+								class="flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all active:scale-95 {isSelected
+									? 'border border-primary bg-primary font-bold text-white shadow-xs ring-2 ring-primary/20'
+									: skill.isControlled
+										? 'border border-accent-purple/40 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/15'
+										: 'border border-border/80 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
+							>
+								<span>{skill.icon}</span>
+								<span>{skill.label}</span>
+							</button>
+						{/each}
+					</div>
 				</div>
 			{/if}
 
-			<!-- Dropdown Selectors (Shelter & Skill) -->
-			<div class="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
-				<!-- Shelter Dropdown -->
-				<div class="flex items-center gap-3">
-					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ศูนย์:</span>
-					<div class="relative w-full">
-						<Select.Root type="single" bind:value={selectedShelter}>
-							<Select.Trigger
-								class="h-11 w-full rounded-xl border-border/80 bg-muted/20 pl-10 font-bold text-foreground"
-							>
-								{#if selectedShelter === 'all'}
-									📍 ทุกศูนย์พักพิง ({availableShelters.length})
-								{:else}
-									{availableShelters.find((s) => s.code === selectedShelter)?.name ??
-										'เลือกศูนย์พักพิง'}
-								{/if}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									<Select.Item value="all" label={`ทุกศูนย์พักพิง (${availableShelters.length})`}>
-										📍 ทุกศูนย์พักพิง ({availableShelters.length})
+			<!-- Shelter Selector Dropdown -->
+			<div
+				class="flex flex-col gap-2 border-t border-border/50 pt-1 sm:flex-row sm:items-center sm:gap-3"
+			>
+				<span class="w-auto shrink-0 text-xs font-bold text-muted-foreground sm:w-[60px] sm:text-sm"
+					>{t.shelterLabel}</span
+				>
+				<div class="relative w-full max-w-full sm:max-w-md">
+					<Select.Root type="single" bind:value={selectedShelter}>
+						<Select.Trigger
+							class="h-10 w-full rounded-xl border-border/80 bg-muted/20 pl-10 text-xs font-bold text-foreground sm:h-11 sm:text-sm"
+						>
+							{#if selectedShelter === 'all'}
+								📍 {t.allShelters} ({availableShelters.length})
+							{:else}
+								{availableShelters.find((s) => s.code === selectedShelter)?.name ?? t.selectShelter}
+							{/if}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								<Select.Item value="all" label={`${t.allShelters} (${availableShelters.length})`}>
+									📍 {t.allShelters} ({availableShelters.length})
+								</Select.Item>
+								{#each availableShelters as shelter (shelter.code)}
+									<Select.Item value={shelter.code} label={shelter.name}>
+										{shelter.name}
 									</Select.Item>
-									{#each availableShelters as shelter (shelter.code)}
-										<Select.Item value={shelter.code} label={shelter.name}>
-											{shelter.name}
-										</Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-						<MapPin class="absolute top-2.5 left-3.5 h-4 w-4 text-danger" />
-					</div>
-				</div>
-
-				<!-- Skill Dropdown -->
-				<div class="flex items-center gap-3">
-					<span class="w-[60px] shrink-0 text-sm font-bold text-muted-foreground">ทักษะ:</span>
-					<div class="relative w-full">
-						<Select.Root type="single" bind:value={selectedSkill}>
-							<Select.Trigger
-								class="h-11 w-full rounded-xl border-border/80 bg-muted/20 pl-10 font-bold text-foreground"
-							>
-								{#if selectedSkill === 'all'}
-									🏷️ ทุกทักษะ ({availableSkills.length})
-								{:else if resolvedSkillLabel(selectedSkill)}
-									🏷️ {resolvedSkillLabel(selectedSkill)}
-								{:else}
-									🏷️ เลือกทักษะ
-								{/if}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									<Select.Item value="all" label={`ทุกทักษะ (${availableSkills.length})`}>
-										🏷️ ทุกทักษะ ({availableSkills.length})
-									</Select.Item>
-									{#each availableSkills as skill (skill)}
-										<Select.Item value={skill} label={resolvedSkillLabel(skill)}>
-											🏷️ {resolvedSkillLabel(skill)}
-										</Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-						<Tag class="absolute top-2.5 left-3.5 h-4 w-4 text-primary" />
-					</div>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
+					<MapPin
+						class="pointer-events-none absolute top-2.5 left-3.5 h-4 w-4 text-danger sm:top-3"
+					/>
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Job Cards List -->
-	<div class="flex flex-col gap-5">
+	<div class="flex flex-col gap-4 sm:gap-5">
 		{#if isLoading}
 			<div class="space-y-4">
 				<Skeleton class="h-44 rounded-2xl" />
@@ -587,12 +658,12 @@
 				<JobCard {job} onApply={openApplyModal} />
 			{:else}
 				<div
-					class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border/80 bg-card p-12 text-center text-muted-foreground"
+					class="flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl border-2 border-dashed border-border/80 bg-card p-8 sm:p-12 text-center text-muted-foreground"
 				>
 					<Briefcase class="mb-3 h-10 w-10 text-muted-foreground/40" />
-					<h3 class="text-base font-bold text-foreground">ไม่พบกะงานที่ตรงกับเงื่อนไขการค้นหา</h3>
-					<p class="mt-1 text-xs text-muted-foreground">
-						โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น
+					<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
+					<p class="mt-1 text-xs text-muted-foreground max-w-sm">
+						{t.noJobsFoundDesc}
 					</p>
 				</div>
 			{/each}
