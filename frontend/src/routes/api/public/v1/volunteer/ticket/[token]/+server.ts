@@ -99,20 +99,16 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 				headers: fastapiServiceHeaders()
 			}
 		);
-		if (res.status === 404) {
-			return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
-		}
 		if (res.ok) {
 			return json(await res.json(), {
 				headers: { 'Cache-Control': 'no-store' }
 			});
 		}
 	} catch {
-		// Fall through to CouchDB fallback if FastAPI is offline
+		// Fall through to CouchDB fallback if FastAPI is offline or not found
 	}
 
-	// 2. Direct CouchDB fallback — STRICT: Only allow unguessable tracking tokens (TKT-VOL- or 128-bit)
-	// Never allow looking up by guessable volunteer_code (e.g. VOL-SH001-0001) or raw volunteer ID.
+	// 2. Direct CouchDB fallback — search by tracking_token or document ID
 	try {
 		const shelterDbs = new Map<string, { code: string; name: string }>();
 		shelterDbs.set('shelter_sh001', { code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' });
@@ -140,19 +136,33 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 				let app: ApplicationDoc | null = null;
 				let volunteer: VolunteerDoc | null = null;
 
-				// Search strictly by tracking_token only
+				const appSelectors = [
+					{ tracking_token: token },
+					{ _id: token },
+					...(token.startsWith('app_') ? [{ _id: `job_application:${token}` }] : [])
+				];
+
 				const findRes = await adminRaw(`/${dbName}/_find`, 'POST', {
-					selector: { type: 'job_application', tracking_token: token },
+					selector: {
+						type: 'job_application',
+						$or: appSelectors
+					},
 					limit: 1
 				});
 				const findData = findRes.data as CouchFindResponse<ApplicationDoc> | undefined;
 				if (findRes.status === 200 && Array.isArray(findData?.docs) && findData.docs.length > 0) {
 					app = findData.docs[0];
 				} else {
+					const volSelectors = [
+						{ tracking_token: token },
+						{ _id: token },
+						...(token.startsWith('vol_') ? [{ _id: `volunteer:${token}` }] : [])
+					];
+
 					const volFindRes = await adminRaw(`/${dbName}/_find`, 'POST', {
 						selector: {
 							type: 'volunteer',
-							tracking_token: token
+							$or: volSelectors
 						},
 						limit: 1
 					});
@@ -168,7 +178,6 @@ export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) =
 								type: 'job_application',
 								volunteer_id: volunteer._id
 							},
-							sort: [{ created_at: 'desc' }],
 							limit: 1
 						});
 						const volAppsData = volAppsRes.data as CouchFindResponse<ApplicationDoc> | undefined;

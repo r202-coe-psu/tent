@@ -567,7 +567,7 @@ class VolunteersUseCase:
             skills = projected.applicant.skills
             shift = TicketShift(**projected.selected_shift.model_dump())
             ticket_status = projected.status
-            applied_at = projected.updated_at
+            applied_at = projected.created_at or projected.updated_at
         else:
             assert buffer is not None
             shelter_code = buffer.shelter_code
@@ -581,6 +581,17 @@ class VolunteersUseCase:
 
         job = await PublicJob.get(job_id)
         shelter = await PublicShelter.find_one(PublicShelter.shelter_code == shelter_code)
+
+        if isinstance(applied_at, datetime):
+            if applied_at.tzinfo is None:
+                applied_at = applied_at.replace(tzinfo=UTC)
+            applied_at_str = applied_at.isoformat().replace("+00:00", "Z")
+            if not applied_at_str.endswith("Z"):
+                applied_at_str += "Z"
+        elif isinstance(applied_at, str):
+            applied_at_str = applied_at
+        else:
+            applied_at_str = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
         return VolunteerTicketResponse(
             ticket=VolunteerTicket(
@@ -598,7 +609,7 @@ class VolunteersUseCase:
                 phone_masked=phone_masked,
                 skills=list(skills),
                 selected_shift=shift,
-                applied_at=applied_at.isoformat().replace("+00:00", "Z"),
+                applied_at=applied_at_str,
                 qr_payload=_ticket_url(token),
             )
         )

@@ -319,7 +319,19 @@ export function ticketTokenFromScan(scanned: string): string | null {
 	return fromUrl ? normalizeTicketToken(fromUrl) : null;
 }
 
-export function ticketStatusLabel(status: string): string {
+export function ticketStatusLabel(status: string, lang: 'th' | 'en' = 'th'): string {
+	if (lang === 'en') {
+		switch (status) {
+			case 'confirmed':
+				return 'Confirmed';
+			case 'pending_review':
+				return 'Pending Review';
+			case 'cancelled':
+				return 'Cancelled';
+			default:
+				return status;
+		}
+	}
 	switch (status) {
 		case 'confirmed':
 			return 'ยืนยันแล้ว';
