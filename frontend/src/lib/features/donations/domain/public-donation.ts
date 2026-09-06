@@ -57,7 +57,7 @@ export interface ScanDonationView {
 	booking_ref?: string;
 	shelter_code: string;
 	status: string;
-	donor: { name: string; phone: string | null };
+	donor: { name: string; phone: string | null; email?: string | null };
 	items: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 	logistics?: PublicDonationDoc['logistics'];
 }
@@ -132,4 +132,56 @@ const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 /** Map public donation API error codes to donor-facing Thai copy. */
 export function publicDonationErrorMessage(code: string): string {
 	return PUBLIC_DONATION_ERROR_MESSAGES[code] ?? 'ไม่สามารถจองคิวบริจาคได้ กรุณาลองใหม่อีกครั้ง';
+}
+
+/**
+ * One line of the public donate wizard's item list, as far as the unit rule cares
+ * (R-15.4). The wizard keeps a display label in `unit` because the donor sees it
+ * ("กก.", "ก้อน") and may type their own for a walk-in donation; `unit_code` is the
+ * catalog `item_master.base_unit` and is only set when the line came from a need
+ * card, together with `item_id`.
+ */
+export type DonationUnitSource = {
+	unit_code?: string;
+	unit?: string;
+};
+
+/**
+ * The `unit` to put in a `POST /public/v1/donations` item.
+ *
+ * `schema.md §2.1` requires `items[].unit` to equal `item_master.base_unit` whenever
+ * `item_id` is set, and the intake counter enforces it (422 `CATALOG_MISMATCH`) —
+ * sending the Thai label instead made every booking from a need card impossible to
+ * receive into stock, with no way for warehouse staff to fix it (R-15.4).
+ *
+ * So the catalog code always wins when present; the donor-visible label is only a
+ * fallback for free-text lines, which carry no `item_id` to be checked against.
+ */
+export function donationPayloadUnit(item: DonationUnitSource, fallback: string): string {
+	return item.unit_code?.trim() || item.unit?.trim() || fallback;
+}
+
+/** One counted line, as far as the perishable rule cares. */
+export type ExpiryCheckLine = {
+	item_id?: string;
+	name?: string;
+	perishable?: boolean;
+	expiry?: string;
+};
+
+/**
+ * Lines that name a perishable catalog item but carry no expiry date.
+ *
+ * `assertCountedAgainstCatalog` refuses these server-side (schema.md §2.1 — a
+ * perishable lot without an expiry cannot be rotated or discarded on time), and the
+ * ledger is append-only, so a row written without one can never be corrected.
+ *
+ * Mirrored on the client so staff are told which line to fix in Thai, at the point of
+ * entry, instead of meeting `Perishable item item:egg requires lot.expiry to be set`
+ * after filling the whole form.
+ */
+export function linesMissingExpiry(lines: ExpiryCheckLine[]): string[] {
+	return lines
+		.filter((line) => !!line.item_id && line.perishable && !line.expiry?.trim())
+		.map((line) => line.name?.trim() || (line.item_id as string));
 }

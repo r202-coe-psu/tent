@@ -46,7 +46,9 @@ export const load: PageLoad = async ({ fetch }) => {
 
 	try {
 		const summaryRes = await fetch('/api/public/v1/transparency/summary');
-		const summaryData = (await summaryRes.json().catch(() => null)) as TransparencySummaryPayload | null;
+		const summaryData = (await summaryRes
+			.json()
+			.catch(() => null)) as TransparencySummaryPayload | null;
 
 		if (!summaryRes.ok) {
 			console.error(

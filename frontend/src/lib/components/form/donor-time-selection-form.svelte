@@ -15,7 +15,7 @@
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
-	import { publicDonationErrorMessage } from '$lib/features/donations';
+	import { donationPayloadUnit, publicDonationErrorMessage } from '$lib/features/donations';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -156,7 +156,7 @@
 									free_text: it.name || t.unspecified,
 									category: it.category || undefined,
 									qty: it.amount || 1,
-									unit: it.unit || t.defaultItemUnit,
+									unit: donationPayloadUnit(it, t.defaultItemUnit),
 									condition: it.condition || undefined,
 									note: it.remark || undefined
 								}))

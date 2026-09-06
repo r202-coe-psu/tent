@@ -24,7 +24,8 @@ function routeErrorResponse(e: unknown) {
 }
 
 /**
- * R-16.4 (CR-087) — hand a `pending_review` donation to another shelter.
+ * R-16.4 (CR-087) — hand a donation still under review to another shelter: from
+ * `pending_review`, or from `verifying` once staff open the boxes and see the problem.
  *
  * Three writes, in this order:
  *   1. `audit` in the ORIGIN db — who redirected what, and why
@@ -58,7 +59,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				{
 					success: false,
 					error_code: 'INVALID_TRANSITION',
-					error: `Cannot redirect a donation with status "${donation.status}" (only pending_review can be redirected)`
+					error: `Cannot redirect a donation with status "${donation.status}" (only a donation still under review can be redirected)`
 				},
 				{ status: 422 }
 			);

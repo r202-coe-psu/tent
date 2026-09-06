@@ -2,6 +2,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 
 	/**
 	 * Force cut-off reason prompt (T-22, CR-052 §1.6).
@@ -50,23 +51,28 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<label class="block">
-			<span class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
-				เหตุผลการปิดรับ <span class="text-red-600">*</span>
-			</span>
+		<div class="space-y-1.5">
+			<Label
+				for="force-cutoff-reason"
+				class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+			>
+				เหตุผลการปิดรับ <span class="text-destructive">*</span>
+			</Label>
 			<Textarea
+				id="force-cutoff-reason"
 				bind:value={reason}
 				rows={3}
 				placeholder="เช่น พื้นที่คลังเต็ม / ของหมดอายุใกล้ / เปลี่ยนไปรับที่ศูนย์อื่น"
-				class="mt-1.5 text-xs"
+				class="text-xs"
 			/>
-		</label>
+		</div>
 
 		<Dialog.Footer class="gap-2">
 			<Button variant="outline" class="text-xs font-bold" onclick={close}>ยกเลิก</Button>
 			<Button
 				disabled={!reason.trim()}
-				class="bg-red-600 text-xs font-bold text-white hover:bg-red-700"
+				variant="destructive"
+				class="bg-destructive text-xs font-bold text-white hover:bg-destructive/90"
 				onclick={confirm}
 			>
 				ยืนยันปิดรับ

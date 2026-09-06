@@ -104,6 +104,76 @@ export function itemMasterUnit(item: { base_unit?: string; unit?: string }): str
 	return item.base_unit || item.unit || DEFAULT_ITEM_UNIT;
 }
 
+// ---------------------------------------------------------------- catalog generations
+
+/** One pickable catalog row, whichever generation it came from. */
+export type CatalogEntry = {
+	_id: string;
+	name: string;
+	unit: string;
+	category: string;
+	perishable: boolean;
+};
+
+/**
+ * `item_master` replaces `supply_item` (schema.md §4.2, CR-013), but the migration
+ * has not been run: the seed still carries BOTH generations of the same goods —
+ * `item:rice` and `item_master:rice` — and §4.2's migration note says clients must
+ * handle either prefix meanwhile. Item pickers listed the two sources back to back,
+ * so staff saw "ข้าวสาร (kg)" twice with no way to tell which id they were binding to.
+ *
+ * Collapsed on NAME, and the LEGACY `item:` row wins when both exist. That is the
+ * opposite of the migration direction and deliberate: every `stock_ledger.item_id`
+ * and every `donation_campaign.needs[].item_id` in the data today is an `item:` id,
+ * so binding a new campaign to `item_master:rice` would open a second donor card for
+ * rice and stop its on-hand from matching (the public projection is keyed
+ * `{shelter}:{item_id}` — schema.md §2.4).
+ *
+ * WHEN THE MIGRATION RUNS, flip `LEGACY_WINS` to false — that is the whole change.
+ * An `item_master` with no legacy twin (e.g. `item_master:canned-fish`) is always
+ * listed; nothing is hidden, only de-duplicated.
+ */
+const LEGACY_WINS = true;
+
+export function mergeCatalogGenerations(
+	supplyItems: readonly {
+		_id: string;
+		name: string;
+		unit?: string;
+		category?: string;
+		perishable?: boolean;
+	}[],
+	itemMasters: readonly {
+		_id: string;
+		name: string;
+		base_unit?: string;
+		unit?: string;
+		category?: string;
+		deactivated?: boolean;
+	}[]
+): CatalogEntry[] {
+	const legacy: CatalogEntry[] = supplyItems.map((i) => ({
+		_id: i._id,
+		name: i.name,
+		unit: i.unit || '',
+		category: i.category || '',
+		perishable: i.perishable ?? false
+	}));
+	const masters: CatalogEntry[] = itemMasters
+		.filter((m) => !m.deactivated)
+		.map((m) => ({
+			_id: m._id,
+			name: m.name,
+			unit: itemMasterUnit(m) || '',
+			category: m.category || '',
+			perishable: false
+		}));
+
+	const [preferred, fallback] = LEGACY_WINS ? [legacy, masters] : [masters, legacy];
+	const claimed = new Set(preferred.map((e) => e.name.trim().toLowerCase()));
+	return [...preferred, ...fallback.filter((e) => !claimed.has(e.name.trim().toLowerCase()))];
+}
+
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),

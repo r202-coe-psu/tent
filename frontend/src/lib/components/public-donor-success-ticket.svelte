@@ -12,7 +12,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
-	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -25,7 +24,6 @@
 	let savingCourier = $state(false);
 	let courierSaved = $state(false);
 	let courierError = $state('');
-	let qrCodeUrl = $state('');
 	let isItemsModalOpen = $state(false);
 	let isCopied = $state(false);
 
@@ -39,20 +37,20 @@
 		return parts.length ? `${base}?${parts.join('&')}` : base;
 	});
 
-	const isPendingReview = $derived(
-		donationStore.deliveryMethod === 'shelter_pickup' ||
-			donationStore.items.reduce((acc, curr) => acc + curr.amount, 0) > 500 ||
-			donationStore.flowMode === 'unsolicited' ||
-			donationStore.items.some((item) => !item.item_id)
-	);
-
-	$effect(() => {
-		const token = donationStore.trackingToken || donationStore.bookingRef;
-		if (!token) return;
-		QRCode.toDataURL(token, { margin: 1, width: 256 })
-			.then((url) => (qrCodeUrl = url))
-			.catch(() => toast.error(t.qrError));
-	});
+	/**
+	 * EVERY public booking opens in `pending_review` — CR-052 §1.4 (Task #52) removed
+	 * the path that issued a check-in QR straight away, and FastAPI stamps the status
+	 * server-side (`INITIAL_DONATION_STATUS`). So this ticket always shows the waiting
+	 * state and never a QR.
+	 *
+	 * It used to guess with a client-side rule (`shelter_pickup`, total > 500,
+	 * unsolicited, or a line with no `item_id`) — so a small booking made from a needs
+	 * card got a QR at once while its doc sat in `pending_review`, and the donor arrived
+	 * holding a pass no one had approved. That rule WAS the §1.4 violation, and it is
+	 * why the ticket and the tracking page disagreed.
+	 *
+	 * The pass itself comes from the tracking page once staff approve.
+	 */
 
 	async function saveCourier() {
 		if (!donationStore.trackingToken) return;
@@ -104,24 +102,18 @@
 <div class="mx-auto w-full max-w-sm animate-in duration-300 fade-in">
 	<!-- Ticket Top Part (Voucher Header) -->
 	<div
-		class="{isPendingReview
-			? 'bg-[#ff9f0a]'
-			: 'bg-[#137333]'} relative space-y-2 overflow-hidden rounded-t-3xl p-6 text-center text-white transition-colors"
+		class="relative space-y-2 overflow-hidden rounded-t-3xl bg-[#ff9f0a] p-6 text-center text-white transition-colors"
 	>
 		<div
 			class="relative z-10 mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-xs"
 		>
-			{#if isPendingReview}
-				<Clock class="h-8 w-8 animate-pulse text-white" />
-			{:else}
-				<ShieldCheck class="h-8 w-8 text-white" />
-			{/if}
+			<Clock class="h-8 w-8 animate-pulse text-white" />
 		</div>
 		<h3 class="relative z-10 text-2xl font-bold">
-			{isPendingReview ? t.pendingReviewTitle : t.successTitle}
+			{t.pendingReviewTitle}
 		</h3>
 		<p class="relative z-10 text-xs leading-relaxed font-medium text-white/80">
-			{isPendingReview ? t.pendingReviewDesc : t.successDesc}
+			{t.pendingReviewDesc}
 		</p>
 
 		<!-- Decorative background circles -->
@@ -145,22 +137,17 @@
 
 		<div class="mt-4 mb-6 border-b-2 border-dashed border-slate-200 pb-6">
 			<div class="mx-auto mb-4 w-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-				{#if isPendingReview}
-					<div
-						class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
-					>
-						<div class="flex flex-col items-center gap-2 text-center text-amber-600">
-							<Clock class="h-10 w-10 animate-pulse" />
-							<span class="text-sm font-bold">{t.pendingWarehouse}</span>
-						</div>
+				<!-- Where the QR used to be. There is no check-in pass yet: staff have to
+				     review the request first (CR-052 §1.4) — the donor gets it on the
+				     tracking page once approved. -->
+				<div
+					class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
+				>
+					<div class="flex flex-col items-center gap-2 text-center text-amber-600">
+						<Clock class="h-10 w-10 animate-pulse" />
+						<span class="text-sm font-bold">{t.pendingWarehouse}</span>
 					</div>
-				{:else if qrCodeUrl}
-					<img src={qrCodeUrl} alt="QR Code" class="mx-auto h-[180px] w-[180px]" />
-				{:else}
-					<div class="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-slate-50">
-						<span class="text-xs text-slate-400">{t.qrFailed}</span>
-					</div>
-				{/if}
+				</div>
 			</div>
 
 			<div class="mb-1 text-2xs font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
@@ -203,8 +190,8 @@
 						<ShieldCheck class="h-3.5 w-3.5" />
 						{t.queueStatus}
 					</div>
-					<div class="text-sm font-bold {isPendingReview ? 'text-amber-600' : 'text-[#137333]'}">
-						{isPendingReview ? t.statusPendingReview : t.statusQueueConfirmed}
+					<div class="text-sm font-bold text-amber-600">
+						{t.statusPendingReview}
 					</div>
 				</div>
 

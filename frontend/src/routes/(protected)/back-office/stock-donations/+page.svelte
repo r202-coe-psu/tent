@@ -1,31 +1,45 @@
 <script lang="ts">
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
-	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
-	import Inbox from '@lucide/svelte/icons/inbox';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { toast } from 'svelte-sonner';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
-	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
-	import VerifyingBoard from '$lib/components/verifying-board.svelte';
-	import IncomingRedirectsBoard from '$lib/components/incoming-redirects-board.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import EditCampaignForm from './components/edit-campaign-form.svelte';
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
-	import { useDonationNeedsBoard } from '$lib/features/operations';
-	import type { DonationRedirect, PendingDonationRow } from '$lib/features/donations';
+	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
+	import type { PendingDonationRow } from '$lib/features/donations';
 
-	let activeSubTab = $state('scan'); // 'scan', 'pending', 'verifying', 'incoming', 'needs'
-	let viewState = $state<'list' | 'create'>('list');
-	let isModalOpen = $state(false);
+	/**
+	 * Tabs actually offered: `scan | pending | needs`.
+	 *
+	 * Two more used to sit here and were taken off on 2026-09-01 (D-11 / D-9):
+	 *
+	 * · **กำลังตรวจรับ** — the drop-off queue moved INTO the scan station, which now
+	 *   lists everything awaiting arrival (`verifying`, `pending_review`, `declared`)
+	 *   and is where the counting happens anyway. The tab showed the same rows twice.
+	 *   The `verifying` STATUS stays: the approve button creates it, and it is what
+	 *   makes the donor's QR appear (CR-052 §1.4).
+	 * · **ส่งต่อเข้ามา** — read-only with nowhere to go: a `donation_redirect` ticket
+	 *   cannot yet be turned into stock at the destination (D-9 undecided), and the
+	 *   design does not carry the tab.
+	 *
+	 * Both boards still exist (`verifying-board.svelte`,
+	 * `incoming-redirects-board.svelte`) and their routes still serve data — putting a
+	 * tab back is re-adding a button and a branch, not rebuilding a feature.
+	 */
+	let activeSubTab = $state('scan');
+	let viewState = $state<'list' | 'create' | 'edit'>('list');
+	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
+	let selectedEditingItem = $state<NeedItem | null>(null);
+	let selectedEditingItemId = $state('');
 
 	const needsBoard = useDonationNeedsBoard({
-		onRequestCreated: () => {
-			isModalOpen = false;
-		},
 		onFormCreated: () => {
 			viewState = 'list';
 		}
@@ -55,15 +69,6 @@
 	let selectedPendingRequest = $state<PendingDonationRow | null>(null);
 	let pendingActionSaving = $state(false);
 
-	// R-16.4 — redirect tickets other shelters handed to this one (CR-087).
-	let incomingRedirects = $state<DonationRedirect[]>([]);
-	let incomingLoading = $state(false);
-
-	// R-16.5 — verifying (drop-off) queue.
-	let verifyingRequests = $state<PendingDonationRow[]>([]);
-	let verifyingLoading = $state(false);
-	let verifyingBookingRef = $state<string | null>(null);
-
 	async function loadPending() {
 		pendingLoading = true;
 		try {
@@ -77,40 +82,11 @@
 		}
 	}
 
-	async function loadVerifying() {
-		verifyingLoading = true;
-		try {
-			const res = await fetch('/api/back-office/donations?status=verifying');
-			const data = await res.json();
-			verifyingRequests = data.success ? (data.donations as PendingDonationRow[]) : [];
-		} catch {
-			toast.error('โหลดรายการกำลังตรวจรับไม่สำเร็จ');
-		} finally {
-			verifyingLoading = false;
-		}
-	}
-
-	async function loadIncomingRedirects() {
-		incomingLoading = true;
-		try {
-			const res = await fetch('/api/back-office/donations/redirects');
-			const data = await res.json();
-			incomingRedirects = data.success ? (data.redirects as DonationRedirect[]) : [];
-		} catch {
-			toast.error('โหลดคำขอที่ถูกส่งต่อมาไม่สำเร็จ');
-		} finally {
-			incomingLoading = false;
-		}
-	}
-
 	function switchTab(tab: string) {
 		activeSubTab = tab;
 		viewState = 'list';
 		selectedPendingRequest = null;
-		verifyingBookingRef = null;
 		if (tab === 'pending') loadPending();
-		if (tab === 'verifying') loadVerifying();
-		if (tab === 'incoming') loadIncomingRedirects();
 	}
 
 	async function handleApprovePending(bookingRef: string, memo: string) {
@@ -205,165 +181,118 @@
 		}
 	}
 
-	// Every queue loads at mount, not on first click: the tab badges are the only
-	// signal that something is waiting, and a badge that appears only after you
-	// open the tab tells you nothing.
+	// The queue loads at mount, not on first click: the tab badge is the only signal
+	// that something is waiting, and a badge that appears only after you open the tab
+	// tells you nothing.
 	loadPending();
-	loadVerifying();
-	loadIncomingRedirects();
 </script>
 
+<svelte:head>
+	<title>กระดานรับบริจาค · SmartShelter</title>
+</svelte:head>
+
 <div class="flex w-full flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-	<div
-		class="flex scrollbar-none items-center justify-start overflow-x-auto border-b border-border"
-	>
-		<div class="-mb-px flex gap-2 whitespace-nowrap">
-			<button
-				onclick={() => switchTab('scan')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'scan'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+	<!-- Title with Accent Line — same header treatment as /back-office/supply, so the
+	     two halves of the stock domain read as one screen family. -->
+	<div class="flex items-center gap-3 border-l-4 border-primary pl-3">
+		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock &amp; Donations)</h2>
+	</div>
+
+	<Tabs.Root value={activeSubTab} onValueChange={switchTab} class="gap-4 md:gap-6">
+		<Tabs.List class="h-auto max-w-full scrollbar-none justify-start overflow-x-auto">
+			<Tabs.Trigger value="scan" class="gap-2 px-3 py-2 text-xs font-bold">
 				<Scan class="h-3.5 w-3.5" />
 				สแกนรับของเข้าคลัง
-			</button>
+			</Tabs.Trigger>
 
-			<button
-				onclick={() => switchTab('pending')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'pending'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+			<Tabs.Trigger value="pending" class="gap-2 px-3 py-2 text-xs font-bold">
 				<ClipboardList class="h-3.5 w-3.5" />
 				รอการประเมิน
 				{#if pendingRequests.length > 0}
-					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
-						>{pendingRequests.length}</span
-					>
+					<Badge class="h-4 min-w-4 bg-amber-500 px-1.5 text-2xs leading-none font-bold text-white">
+						{pendingRequests.length}
+					</Badge>
 				{/if}
-			</button>
+			</Tabs.Trigger>
 
-			<button
-				onclick={() => switchTab('verifying')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'verifying'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<PackageCheck class="h-3.5 w-3.5" />
-				กำลังตรวจรับ
-				{#if verifyingRequests.length > 0}
-					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
-						>{verifyingRequests.length}</span
-					>
-				{/if}
-			</button>
-
-			<button
-				onclick={() => switchTab('incoming')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'incoming'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<Inbox class="h-3.5 w-3.5" />
-				ส่งต่อเข้ามา
-				{#if incomingRedirects.length > 0}
-					<span
-						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
-						>{incomingRedirects.length}</span
-					>
-				{/if}
-			</button>
-
-			<button
-				onclick={() => switchTab('needs')}
-				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
-				'needs'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
+			<Tabs.Trigger value="needs" class="gap-2 px-3 py-2 text-xs font-bold">
 				<Megaphone class="h-3.5 w-3.5" />
 				จัดการความต้องการ
-			</button>
-		</div>
-	</div>
+			</Tabs.Trigger>
+		</Tabs.List>
 
-	{#if activeSubTab === 'scan'}
-		<ScanStation />
-	{:else if activeSubTab === 'pending'}
-		{#if selectedPendingRequest}
-			<PendingReviewDetail
-				request={selectedPendingRequest}
-				saving={pendingActionSaving}
-				onBack={() => (selectedPendingRequest = null)}
-				onApprove={handleApprovePending}
-				onReject={handleRejectPending}
-				onRedirect={handleRedirectPending}
-			/>
-		{:else}
-			<PendingReviewBoard
-				requests={pendingRequests}
-				loading={pendingLoading}
-				onViewDetails={(req) => {
-					selectedPendingRequest = req;
-				}}
-			/>
-		{/if}
-	{:else if activeSubTab === 'verifying'}
-		{#if verifyingBookingRef}
-			<div class="flex flex-col gap-3">
-				<button
-					onclick={() => (verifyingBookingRef = null)}
-					class="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted"
-				>
-					<ArrowLeft class="h-3.5 w-3.5" />
-					กลับไปรายการกำลังตรวจรับ
-				</button>
-				<ScanStation
-					initialQuery={verifyingBookingRef}
-					onSaved={() => {
-						verifyingBookingRef = null;
-						loadVerifying();
-					}}
-					onClose={() => (verifyingBookingRef = null)}
+		<Tabs.Content value="scan">
+			<ScanStation />
+		</Tabs.Content>
+
+		<Tabs.Content value="pending">
+			{#if selectedPendingRequest}
+				<PendingReviewDetail
+					request={selectedPendingRequest}
+					saving={pendingActionSaving}
+					onBack={() => (selectedPendingRequest = null)}
+					onApprove={handleApprovePending}
+					onReject={handleRejectPending}
+					onRedirect={handleRedirectPending}
 				/>
-			</div>
-		{:else}
-			<VerifyingBoard
-				requests={verifyingRequests}
-				loading={verifyingLoading}
-				onVerify={(bookingRef) => (verifyingBookingRef = bookingRef)}
-			/>
-		{/if}
-	{:else if activeSubTab === 'incoming'}
-		<IncomingRedirectsBoard redirects={incomingRedirects} loading={incomingLoading} />
-	{:else if activeSubTab === 'needs'}
-		{#if viewState === 'list'}
-			<NeedsBoardAdmin
-				items={needsBoard.derivedItems}
-				onAddRequest={() => (viewState = 'create')}
-				onToggleShowOnHome={needsBoard.toggleShowOnHome}
-				onToggleCutOff={handleToggleCutOff}
-			/>
-		{:else}
-			<CreateCampaignForm
-				onclose={() => (viewState = 'list')}
-				onsubmit={needsBoard.handleAddRequestFromForm}
-			/>
-		{/if}
-	{/if}
-</div>
+			{:else}
+				<PendingReviewBoard
+					requests={pendingRequests}
+					loading={pendingLoading}
+					onViewDetails={(req) => {
+						selectedPendingRequest = req;
+					}}
+				/>
+			{/if}
+		</Tabs.Content>
 
-<SpecialRequestDialog
-	open={isModalOpen}
-	onclose={() => (isModalOpen = false)}
-	onsubmit={needsBoard.handleAddRequest}
-/>
+		<Tabs.Content value="needs">
+			{#if viewState === 'list'}
+				<NeedsBoardAdmin
+					items={needsBoard.derivedItems}
+					onAddRequest={() => (viewState = 'create')}
+					onToggleShowOnHome={needsBoard.toggleShowOnHome}
+					onToggleCutOff={handleToggleCutOff}
+					onEdit={(item, itemId) => {
+						selectedEditingItem = item;
+						selectedEditingItemId = itemId;
+						viewState = 'edit';
+					}}
+				/>
+			{:else if viewState === 'create'}
+				<CreateCampaignForm
+					onclose={() => (viewState = 'list')}
+					onsubmit={needsBoard.handleAddRequestFromForm}
+				/>
+			{:else if viewState === 'edit' && selectedEditingItem && selectedEditingItemId}
+				<!-- Keyed on the row: the form seeds its fields once, so a different row
+				     has to mount a fresh form rather than reuse the previous seed. -->
+				{#key `${selectedEditingItem.id}:${selectedEditingItemId}`}
+					<EditCampaignForm
+						item={selectedEditingItem}
+						itemId={selectedEditingItemId}
+						onclose={() => {
+							selectedEditingItem = null;
+							selectedEditingItemId = '';
+							viewState = 'list';
+						}}
+						onsubmit={(updatedData) => {
+							if (!selectedEditingItem || !selectedEditingItemId) return;
+							needsBoard.handleEditRequest(
+								selectedEditingItem.id,
+								selectedEditingItemId,
+								updatedData
+							);
+							selectedEditingItem = null;
+							selectedEditingItemId = '';
+							viewState = 'list';
+						}}
+					/>
+				{/key}
+			{/if}
+		</Tabs.Content>
+	</Tabs.Root>
+</div>
 
 <ForceCutoffDialog
 	open={cutOffTarget !== null}

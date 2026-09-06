@@ -17,7 +17,8 @@ function routeErrorResponse(e: unknown) {
 }
 
 /**
- * R-16.3 — reject a `pending_review` donation. A reason is mandatory (kept on
+ * R-16.3 — reject a donation still under review: `pending_review`, or `verifying`
+ * once the goods are open on the counter. A reason is mandatory (kept on
  * the audit trail, not on the donation doc — schema.md §2.3 has no rejection
  * reason field, and the audit entry is already the record of who/why).
  */
@@ -62,7 +63,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				{
 					success: false,
 					error_code: 'INVALID_TRANSITION',
-					error: `Cannot reject a donation with status "${donation.status}" (only pending_review can be rejected)`
+					error: `Cannot reject a donation with status "${donation.status}" (only a donation still under review can be rejected)`
 				},
 				{ status: 422 }
 			);

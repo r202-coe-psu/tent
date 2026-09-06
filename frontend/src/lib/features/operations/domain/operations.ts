@@ -614,7 +614,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
  * Forward-only transitions for a donation (schema.md §2.3).
  *
  * The CR-052 review chain is `declared → pending_review → verifying → received`,
- * with `redirected` / `rejected` branching out of the review step. `declared` keeps
+ * with `redirected` / `rejected` branching out of EITHER review step: a delivery can
+ * be turned away when staff open the boxes, not only before it arrives — refusing it
+ * writes no ledger row either way, which is what keeps it out of stock. `declared` keeps
  * its direct edge to `received` for the walk-in path (`createWalkInDonation`), which
  * is keyed by staff at the counter and never goes through public review.
  */
@@ -623,7 +625,15 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	// `redirected` is terminal HERE — the destination shelter continues on its own
 	// `donation_redirect` ticket, not on this doc (CR-087).
 	pending_review: ['verifying', 'redirected', 'rejected', 'expired', 'cancelled'],
-	verifying: ['received', 'cancelled'],
+	// `verifying` spans "approved, waiting for the donor to turn up" AND "the boxes are
+	// open on the counter" — so it keeps every exit `pending_review` has:
+	//   · `redirected` / `rejected` — staff open the boxes and find the expired tin or
+	//     the wrong size (CR-087 / R-16.3);
+	//   · `expired` — the donor never came and the TTL lapsed. The worker's expiry job
+	//     already writes this for every outstanding status (`quota/expiry.py`,
+	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
+	//     disagree about a transition that happens nightly.
+	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1193,14 +1203,6 @@ export const isPurchase = (d: unknown): d is Purchase =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
-// ---------------------------------------------------------------- special request form schema
-export const specialRequestSchema = z.object({
-	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
-	target: qtyStrCoercePositiveSchema,
-	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
-});
-export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
-
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
@@ -1267,10 +1269,174 @@ export function reopenNeed(campaign: DonationCampaign, itemId: string): Donation
 	};
 }
 
+/**
+ * Change what a campaign asks for on ONE need (back-office needs board — T-22 edit).
+ *
+ * Targets the need by `item_id`, never by position: the board renders one row per
+ * need, so editing "the first need" would rewrite a different item than the row the
+ * user clicked. `status` is left untouched — closing/reopening is `forceCutOffNeed` /
+ * `reopenNeed`, which carry their own audit reason.
+ */
+export function editNeed(
+	campaign: DonationCampaign,
+	itemId: string,
+	patch: { qty_target: string; unit?: string }
+): DonationCampaign {
+	if (!campaign.needs.some((need) => need.item_id === itemId)) {
+		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
+	}
+	const qtyTarget = qtyStrCoercePositiveSchema.parse(patch.qty_target);
+	return {
+		...campaign,
+		needs: campaign.needs.map((need) =>
+			need.item_id === itemId
+				? {
+						...need,
+						qty_target: qtyTarget,
+						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {})
+					}
+				: need
+		),
+		updated_at: now()
+	};
+}
+
+/**
+ * `donation_campaign.notes` doubles as the board's free-text blurb AND the only place
+ * the needs-board form's urgency/category survive (§2.4 has no field for either).
+ * Encoding it in one place means the create form and the edit form agree, and — with
+ * `parseCampaignNotes` below — that reopening the edit form shows what was saved
+ * instead of resetting urgency to "normal" and blanking the text.
+ *
+ * Shape: `[ด่วน] หมวด: อาหาร รูป: https://… รายละเอียด...`
+ *
+ * Every tagged part is parsed off the FRONT in a fixed order, so the untagged
+ * remainder is unambiguously the description. Adding a part means adding it here and
+ * in `parseCampaignNotes` in the same position — otherwise the new tag is swallowed
+ * into the description.
+ */
+export const CAMPAIGN_URGENCY_TAG: Record<'critical' | 'important', string> = {
+	critical: '[ด่วน]',
+	important: '[สำคัญ]'
+};
+
+const CAMPAIGN_CATEGORY_PREFIX = 'หมวด:';
+const CAMPAIGN_IMAGE_PREFIX = 'รูป:';
+
+export type CampaignNotesParts = {
+	urgency: 'critical' | 'important' | 'normal';
+	category?: string;
+	/** Illustration for the donor-facing card. §2.4 has no field for it either. */
+	imageUrl?: string;
+	description?: string;
+};
+
+export function buildCampaignNotes(
+	input: Partial<CampaignNotesParts> & { location?: string }
+): string {
+	const parts: string[] = [];
+	if (input.urgency === 'critical' || input.urgency === 'important') {
+		parts.push(CAMPAIGN_URGENCY_TAG[input.urgency]);
+	}
+	const category = input.category?.trim();
+	if (category && category !== 'ถูกกำหนดอัตโนมัติ') {
+		parts.push(`${CAMPAIGN_CATEGORY_PREFIX} ${category}`);
+	}
+	// A URL carries no whitespace, so it reads back as one token like the category.
+	// A value with spaces in it would be unparseable, so it is dropped rather than
+	// written into a string the edit form would then re-read as description.
+	const imageUrl = input.imageUrl?.trim();
+	if (imageUrl && !/\s/.test(imageUrl)) {
+		parts.push(`${CAMPAIGN_IMAGE_PREFIX} ${imageUrl}`);
+	}
+	const description = input.description?.trim();
+	if (description) {
+		parts.push(description);
+	} else if (input.location?.trim()) {
+		parts.push(`ประกาศสำหรับคลัง: ${input.location.trim()}`);
+	}
+	return parts.join(' ');
+}
+
+/** Inverse of `buildCampaignNotes` — what the edit form seeds its fields from. */
+export function parseCampaignNotes(notes?: string | null): CampaignNotesParts {
+	let rest = (notes ?? '').trim();
+	let urgency: CampaignNotesParts['urgency'] = 'normal';
+	for (const [level, tag] of Object.entries(CAMPAIGN_URGENCY_TAG) as [
+		'critical' | 'important',
+		string
+	][]) {
+		if (rest.startsWith(tag)) {
+			urgency = level;
+			rest = rest.slice(tag.length).trim();
+			break;
+		}
+	}
+
+	let category: string | undefined;
+	if (rest.startsWith(CAMPAIGN_CATEGORY_PREFIX)) {
+		// The category is one whitespace-separated token in every value the form
+		// offers; the remainder is the description.
+		const afterPrefix = rest.slice(CAMPAIGN_CATEGORY_PREFIX.length).trim();
+		const [head, ...tail] = afterPrefix.split(/\s+/);
+		if (head) {
+			category = head;
+			rest = tail.join(' ');
+		}
+	}
+
+	let imageUrl: string | undefined;
+	if (rest.startsWith(CAMPAIGN_IMAGE_PREFIX)) {
+		const afterPrefix = rest.slice(CAMPAIGN_IMAGE_PREFIX.length).trim();
+		const [head, ...tail] = afterPrefix.split(/\s+/);
+		if (head) {
+			imageUrl = head;
+			rest = tail.join(' ');
+		}
+	}
+
+	return {
+		urgency,
+		...(category ? { category } : {}),
+		...(imageUrl ? { imageUrl } : {}),
+		...(rest.trim() ? { description: rest.trim() } : {})
+	};
+}
+
 // public donation time-slot booking (R2.3)
 // The slot is “used” when a donation is received into it.
 export const isDonationSlot = (d: unknown): d is DonationSlot =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';
+
+/**
+ * How many OPEN campaigns of this shelter ask for the same item, and what the donor
+ * board therefore shows as one number.
+ *
+ * The public projection is keyed `{shelter}:{item_id}` (schema.md §2.4 / T-60): two
+ * campaigns for `item:water` are one card whose quantity is their sum. Staff who filed
+ * the second campaign kept reporting it "missing" from `/donate` — it had merged. This
+ * is what the board row uses to say so.
+ *
+ * Counts only what the public side counts: a campaign that is closed, hidden
+ * (`visible_on_home === false`), or whose own need is closed contributes nothing.
+ */
+export function publicItemAggregate(
+	campaigns: DonationCampaign[],
+	itemId: string
+): { campaignCount: number; totalTarget: string } {
+	let campaignCount = 0;
+	let totalTarget = '0';
+
+	for (const campaign of campaigns) {
+		if (campaign.status !== 'open' || campaign.visible_on_home === false) continue;
+		const need = campaign.needs.find((n) => n.item_id === itemId && n.status !== 'closed');
+		if (!need) continue;
+		campaignCount += 1;
+		totalTarget = addQty(totalTarget, need.qty_target);
+	}
+
+	return { campaignCount, totalTarget };
+}
 
 /**
  * Maps a Thai item name heuristic to a slugged itemId.

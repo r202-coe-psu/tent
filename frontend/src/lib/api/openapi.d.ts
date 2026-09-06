@@ -408,6 +408,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/transparency/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Transparency Summary
+		 * @description System-wide public metrics from public_shelters + public_persons.
+		 */
+		get: operations['get_transparency_summary_public_v1_transparency_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -701,6 +721,10 @@ export interface components {
 			question: string;
 			/** Answer */
 			answer: string;
+			/** Question En */
+			question_en?: string | null;
+			/** Answer En */
+			answer_en?: string | null;
 			/**
 			 * Is Published
 			 * @default true
@@ -812,10 +836,27 @@ export interface components {
 			name: string;
 			/** Qty Needed */
 			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
 			/** Unit */
 			unit: string;
 			/** Status */
 			status: string;
+			/** Category */
+			category?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -855,6 +896,10 @@ export interface components {
 			title: string;
 			/** Description */
 			description: string;
+			/** Title En */
+			title_en?: string | null;
+			/** Description En */
+			description_en?: string | null;
 			/**
 			 * Severity
 			 * @enum {string}
@@ -1081,6 +1126,44 @@ export interface components {
 			capacity?: number | null;
 			/** Area M2 */
 			area_m2?: number | null;
+		};
+		/** TransparencySummary */
+		TransparencySummary: {
+			/** Shelters Total */
+			shelters_total: number;
+			/**
+			 * Shelters Open
+			 * @description status in {open, full}
+			 */
+			shelters_open: number;
+			/**
+			 * Occupancy Total
+			 * @description active + pre_registered across projected shelters (CR-070)
+			 */
+			occupancy_total?: number | null;
+			/**
+			 * Vulnerable Count
+			 * @description Not projected in public_persons yet — always null until schema adds age
+			 */
+			vulnerable_count?: number | null;
+		};
+		/** TransparencySummaryResponse */
+		TransparencySummaryResponse: {
+			summary: components['schemas']['TransparencySummary'];
+			/**
+			 * Last Updated
+			 * Format: date-time
+			 */
+			last_updated: string;
+			/**
+			 * Is Stale
+			 * @default false
+			 */
+			is_stale: boolean;
+			/** Flags */
+			flags?: {
+				[key: string]: boolean;
+			};
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -1490,7 +1573,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1617,7 +1700,7 @@ export interface operations {
 					'application/json': components['schemas']['M2ErrorResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1710,7 +1793,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -1892,6 +1975,26 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_transparency_summary_public_v1_transparency_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TransparencySummaryResponse'];
 				};
 			};
 		};

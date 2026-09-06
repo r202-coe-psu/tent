@@ -4,6 +4,7 @@ import {
 	canEditCourierTracking,
 	donationStatusLabel,
 	formatTrackSchedule,
+	isTerminalDonationStatus,
 	toDonationTrackView
 } from './tracking';
 
@@ -94,5 +95,26 @@ describe('item_id survives the round trip', () => {
 			items: [{ free_text: 'ของใช้เบ็ดเตล็ด', qty: '2', unit: 'ชิ้น' }]
 		});
 		expect(view.items[0]?.item_id).toBeNull();
+	});
+});
+
+/**
+ * "Is this booking finished with?" — one predicate for the whole tracking surface, so a
+ * new terminal status cannot be forgotten by a screen that lists them by hand.
+ *
+ * The QR itself is NOT gated on this: CR-052 §1.4 issues the donor's check-in pass only
+ * after staff approve, so the tracking page asks for `verifying` specifically.
+ */
+describe('isTerminalDonationStatus', () => {
+	it('is false while the booking still owes the shelter goods', () => {
+		for (const status of ['declared', 'pending_review', 'verifying']) {
+			expect(isTerminalDonationStatus(status)).toBe(false);
+		}
+	});
+
+	it('is true once nothing more will arrive', () => {
+		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
+			expect(isTerminalDonationStatus(status)).toBe(true);
+		}
 	});
 });
