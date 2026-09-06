@@ -393,13 +393,7 @@
 									{#if h.pets && h.pets.length > 0}
 										{#each h.pets as p, i (i)}
 											{@const petEmoji =
-												p.species === 'dog'
-													? '🐶'
-													: p.species === 'cat'
-														? '🐱'
-														: p.species === 'bird'
-															? '🐦'
-															: '🐾'}
+												p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : '🐾'}
 											<span
 												class="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold text-secondary-foreground"
 												>{petEmoji} {p.count}</span

@@ -957,7 +957,7 @@ const MASTER_DATA_DEFS: MasterTypeDef[] = [
 		items: [
 			{ key: 'dog', label: 'สุนัข', is_default: true },
 			{ key: 'cat', label: 'แมว' },
-			{ key: 'bird', label: 'นก' }
+			{ key: 'other', label: 'อื่นๆ' }
 		]
 	},
 	{
@@ -1056,7 +1056,11 @@ async function seedMasterData(): Promise<MasterLookup> {
 				// Vulnerable Group / housing_type use stable CR-112 codes (= seed keys); other types keep ULID codes.
 				code:
 					reuse?.code ??
-					(def.type === 'vulnerable_group' || def.type === 'housing_type' ? d.key : itemCode()),
+					(def.type === 'vulnerable_group' ||
+					def.type === 'housing_type' ||
+					def.type === 'pet_types'
+						? d.key
+						: itemCode()),
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',
@@ -1077,6 +1081,9 @@ async function seedMasterData(): Promise<MasterLookup> {
 			if (def.type === 'vulnerable_group') {
 				const migrated = VG_CODE_MIGRATE[i.code] ?? VG_LEGACY_LABEL_TO_KEY[i.label];
 				if (migrated) return false; // replaced by CR-112 active set
+			}
+			if (def.type === 'pet_types' && (i.code === 'bird' || i.label === 'นก')) {
+				return false; // CR-112: bird → other
 			}
 			return true;
 		});

@@ -96,13 +96,7 @@
 				{#if household && household.pets && household.pets.length > 0}
 					{#each household.pets as pet (pet.species)}
 						{@const speciesLabel =
-							pet.species === 'dog'
-								? 'สุนัข'
-								: pet.species === 'cat'
-									? 'แมว'
-									: pet.species === 'bird'
-										? 'นก'
-										: 'อื่นๆ'}
+							pet.species === 'dog' ? 'สุนัข' : pet.species === 'cat' ? 'แมว' : 'อื่นๆ'}
 						<div
 							class="flex flex-col gap-1 rounded-md border border-amber-100 bg-amber-50/50 p-2.5 dark:border-amber-900/30 dark:bg-amber-950/20"
 						>

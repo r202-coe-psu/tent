@@ -297,12 +297,13 @@ function resolvePhone(raw: RawRow, header: string, sink: ErrorSink): string | nu
 
 /** `ชนิด:จำนวน:หมายเหตุ` items separated by `|` → household pets. */
 function resolvePets(raw: RawRow, sink: ErrorSink) {
-	const out: { species: 'dog' | 'cat' | 'bird' | 'other'; count: number; notes?: string }[] = [];
+	const out: { species: 'dog' | 'cat' | 'other'; count: number; notes?: string }[] = [];
 	for (const item of splitMulti(cell(raw, H.pets))) {
 		const [rawSpecies = '', rawCount = '', rawNotes = ''] = item
 			.split(FIELD_SEPARATOR)
 			.map((s) => s.trim());
-		const species = matchChoice(rawSpecies, PET_SPECIES_CHOICES)?.value;
+		const legacyBird = rawSpecies === 'bird' || rawSpecies === 'นก';
+		const species = legacyBird ? 'other' : matchChoice(rawSpecies, PET_SPECIES_CHOICES)?.value;
 		if (!species) {
 			sink.push(
 				H.pets,
@@ -315,7 +316,8 @@ function resolvePets(raw: RawRow, sink: ErrorSink) {
 			sink.push(H.pets, `จำนวนของ "${rawSpecies}" ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`);
 			continue;
 		}
-		out.push({ species, count, ...(rawNotes ? { notes: rawNotes } : {}) });
+		const notes = legacyBird ? rawNotes || 'นก' : rawNotes;
+		out.push({ species, count, ...(notes ? { notes } : {}) });
 	}
 	return out;
 }

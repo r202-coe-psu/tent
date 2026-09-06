@@ -308,11 +308,35 @@ export const housingTypeSchema = z.enum([
 export type HousingType = z.infer<typeof housingTypeSchema>;
 
 export interface PetGroup {
-	species: 'dog' | 'cat' | 'bird' | 'other';
+	species: 'dog' | 'cat' | 'other';
 	count: number;
 	notes?: string;
 	has_cage?: boolean;
 	image_url?: string | null;
+}
+
+/** Legacy pet shape that may still carry `bird` from pre-CR-112 docs. */
+export type LegacyPetGroup = Omit<PetGroup, 'species'> & {
+	species: 'dog' | 'cat' | 'bird' | 'other';
+};
+
+/**
+ * Migrate a legacy Pet group: `bird` → `other` with notes `นก` (CR-112).
+ */
+export function migratePetGroup(pet: LegacyPetGroup | PetGroup): PetGroup {
+	if (pet.species === 'bird') {
+		return {
+			...pet,
+			species: 'other',
+			notes: pet.notes?.trim() ? pet.notes : 'นก'
+		};
+	}
+	const { species, ...rest } = pet;
+	return { ...rest, species: species as PetGroup['species'] };
+}
+
+export function migratePetGroups(pets: readonly (LegacyPetGroup | PetGroup)[]): PetGroup[] {
+	return pets.map(migratePetGroup);
 }
 
 export interface Household extends BaseDoc {
@@ -646,13 +670,23 @@ const householdInputFieldsSchema = z.object({
 	community: z.string().trim().nullable().default(null),
 	pets: z
 		.array(
-			z.object({
-				species: z.enum(['dog', 'cat', 'bird', 'other']),
-				count: z.coerce.number().int().positive(),
-				notes: z.string().trim().optional(),
-				has_cage: z.boolean().optional(),
-				image_url: z.string().trim().nullable().optional()
-			})
+			z
+				.object({
+					species: z.enum(['dog', 'cat', 'other']),
+					count: z.coerce.number().int().positive(),
+					notes: z.string().trim().optional(),
+					has_cage: z.boolean().optional(),
+					image_url: z.string().trim().nullable().optional()
+				})
+				.superRefine((pet, ctx) => {
+					if (pet.species === 'other' && !pet.notes?.trim()) {
+						ctx.addIssue({
+							code: 'custom',
+							path: ['notes'],
+							message: 'กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ'
+						});
+					}
+				})
 		)
 		.default([]),
 	assets: z
@@ -981,13 +1015,23 @@ export const evacueeAssetsEditFormSchema = z.object({
 	),
 	valuables: z.string().trim(),
 	pets: z.array(
-		z.object({
-			species: z.enum(['dog', 'cat', 'bird', 'other']),
-			count: z.coerce.number().int().positive('จำนวนต้องมากกว่า 0'),
-			notes: z.string().trim().optional(),
-			has_cage: z.boolean().optional(),
-			image_url: z.string().trim().nullable().optional()
-		})
+		z
+			.object({
+				species: z.enum(['dog', 'cat', 'other']),
+				count: z.coerce.number().int().positive('จำนวนต้องมากกว่า 0'),
+				notes: z.string().trim().optional(),
+				has_cage: z.boolean().optional(),
+				image_url: z.string().trim().nullable().optional()
+			})
+			.superRefine((pet, ctx) => {
+				if (pet.species === 'other' && !pet.notes?.trim()) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['notes'],
+						message: 'กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ'
+					});
+				}
+			})
 	)
 });
 
@@ -1187,7 +1231,7 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			checkout_destination: d.checkout_destination,
 			municipality_zone: d.municipality_zone,
 			community: d.community,
-			pets: d.pets,
+			pets: migratePetGroups(d.pets),
 			assets: d.assets || null,
 			vehicles: d.vehicles,
 			...(d.notes ? { notes: d.notes } : {}),
@@ -1235,18 +1279,21 @@ export function migrateHouseholdV3ToV4(doc: unknown): Household {
 /** Additive CR-112 fields for Household schema_v 5. */
 export function migrateHouseholdToV5(doc: Household): Household {
 	if (!doc || doc.type !== 'household') return doc;
+	const pets = migratePetGroups((doc.pets ?? []) as LegacyPetGroup[]);
 	if (doc.schema_v != null && doc.schema_v >= 5) {
 		return {
 			...doc,
 			housing_type: doc.housing_type ?? null,
-			residence_landmark: doc.residence_landmark ?? null
+			residence_landmark: doc.residence_landmark ?? null,
+			pets
 		};
 	}
 	return {
 		...doc,
 		schema_v: 5,
 		housing_type: doc.housing_type ?? null,
-		residence_landmark: doc.residence_landmark ?? null
+		residence_landmark: doc.residence_landmark ?? null,
+		pets
 	};
 }
 

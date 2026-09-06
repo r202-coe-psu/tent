@@ -58,7 +58,7 @@
 	const t = $derived(getTranslation(EVACUEE_PET_ASSET_VEHICLE_I18N, languageStore.current));
 	const fieldsDisabled = $derived(pending || readonly);
 
-	type PetSpecies = 'dog' | 'cat' | 'bird' | 'other';
+	type PetSpecies = 'dog' | 'cat' | 'other';
 	type PetDetail = {
 		id: number;
 		species: PetSpecies;
@@ -67,7 +67,7 @@
 		has_cage: boolean;
 	};
 
-	const SPECIES: PetSpecies[] = ['dog', 'cat', 'bird', 'other'];
+	const SPECIES: PetSpecies[] = ['dog', 'cat', 'other'];
 	let nextPetId = 0;
 
 	function petDetailFromGroup(p: PetGroup): PetDetail {

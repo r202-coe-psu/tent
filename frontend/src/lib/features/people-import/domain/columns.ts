@@ -79,10 +79,9 @@ export const SPECIAL_NEED_CHOICES: EnumChoice[] = [
 	{ value: 'bedridden', label: 'ผู้ป่วยติดเตียง' }
 ];
 
-export const PET_SPECIES_CHOICES: EnumChoice<'dog' | 'cat' | 'bird' | 'other'>[] = [
+export const PET_SPECIES_CHOICES: EnumChoice<'dog' | 'cat' | 'other'>[] = [
 	{ value: 'dog', label: 'สุนัข' },
 	{ value: 'cat', label: 'แมว' },
-	{ value: 'bird', label: 'นก' },
 	{ value: 'other', label: 'อื่นๆ' }
 ];
 

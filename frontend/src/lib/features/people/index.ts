@@ -43,6 +43,8 @@ export {
 	migrateVulnerableGroupCodes,
 	housingTypeSchema,
 	migrateHouseholdToV5,
+	migratePetGroup,
+	migratePetGroups,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,

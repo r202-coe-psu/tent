@@ -229,18 +229,18 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
  * the way into that schema is CR-010 phase 2 and has not happened yet, so it is
  * a documented spec value this feature must not widen unilaterally.
  */
-const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'bird', 'other']);
+const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 
 /**
  * Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one).
  *
  * `pet.species` is now a shelter-configured `pet_types` code (see
  * {@link publicBookingPetSpeciesSchema}), which can be anything the shelter's
- * master data offers — not necessarily one of the 4 literals the household
- * schema still accepts (CR-016, pre-dates the master-data engine). A code
- * outside that fixed set folds into `other` rather than failing `createHousehold`'s
- * validation outright; the actual configured code is preserved in `notes` so
- * staff are not left guessing what the citizen actually selected.
+ * master data offers — not necessarily one of the literals the household
+ * schema still accepts. A code outside that fixed set folds into `other` rather
+ * than failing `createHousehold`'s validation outright; the actual configured
+ * code is preserved in `notes` so staff are not left guessing what the citizen
+ * actually selected. Legacy `bird` also folds to `other` with notes `นก` (CR-112).
  *
  * `vehicles` needs no such folding — the public form offers exactly the closed
  * `car | motorcycle | other` set the household schema accepts.
@@ -251,15 +251,18 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 		head_evacuee_id: headEvacueeId,
 		status: 'pre_registered' as const,
 		pets: input.pets.map((pet) => {
+			const isBird = pet.species === 'bird';
 			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
-			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'bird' | 'other';
+			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isKnownSpecies
-				? rawNotes || undefined
-				: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
+			const notes = isBird
+				? rawNotes || 'นก'
+				: isKnownSpecies
+					? rawNotes || undefined
+					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
 			return {
 				species,
 				count: 1,

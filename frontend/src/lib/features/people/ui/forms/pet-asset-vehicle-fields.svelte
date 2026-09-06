@@ -30,7 +30,6 @@
 	const petSpeciesOptions = [
 		{ value: 'dog' as const, label: 'สุนัข' },
 		{ value: 'cat' as const, label: 'แมว' },
-		{ value: 'bird' as const, label: 'นก' },
 		{ value: 'other' as const, label: 'อื่นๆ' }
 	];
 
@@ -191,7 +190,7 @@
 									type="single"
 									value={pet.species}
 									onValueChange={(val) => {
-										if (val === 'dog' || val === 'cat' || val === 'bird' || val === 'other') {
+										if (val === 'dog' || val === 'cat' || val === 'other') {
 											pet.species = val;
 										}
 									}}

@@ -48,7 +48,9 @@ import {
 	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
 	housingTypeSchema,
-	householdInputSchema
+	householdInputSchema,
+	migratePetGroup,
+	migratePetGroups
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';

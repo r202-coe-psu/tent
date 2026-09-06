@@ -71,7 +71,6 @@
 										<Select.Content>
 											<Select.Item value="dog" label="🐶 สุนัข" />
 											<Select.Item value="cat" label="🐱 แมว" />
-											<Select.Item value="bird" label="🐦 นก" />
 											<Select.Item value="other" label="🐾 อื่นๆ" />
 										</Select.Content>
 									</Select.Root>
