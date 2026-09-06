@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-03
+updated: 2026-09-05
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -352,6 +352,8 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 
 ### 2.5 `meal_plan` — `meal_plan:{ulid}` (หลายแผนอาจใช้วัน+มื้อเดียวกันได้ — CR-045)
 
+> **Draft (Kitchen Meal Session / Production Batch)** — ปรับ `meal_plan` ทำหน้าที่เป็น Production Batch: เพิ่ม `meal_session_id` (ผูกมื้ออาหารต้นทาง), `target_tags[]` (กลุ่มเป้าหมายผู้รับ), และ `allocated_target` (จำนวนจาน/กล่องเป้าหมายของชุดการผลิตนี้) — optional, **ไม่ bump schema_v** (คงที่ 2; additive)
+>
 > **CR-085** — เพิ่ม `gas_usage[]` (ถังแก๊ส + ปริมาณที่แผนนี้จะใช้) — optional, **ไม่ bump schema_v**
 > (คงที่ 2; precedent CR-045/CR-031/CR-084)
 >
@@ -370,6 +372,9 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 | `override_reason` | str\|null | opt | **บังคับ** เมื่อ headcount ต่างจาก occupancy snapshot ล่าสุด (CR-022) |
 | `calc_source` | {`sop_profile_id`:str, `sop_profile_version`:int>0, `headcount_as_of`:ts}\|null | opt | audit trail — SOP profile + version + snapshot เวลาอ่าน headcount ที่ใช้คำนวณ |
 | `gas_usage` | [{`cylinder_id`:str, `consumption_kg`:qty_str>0}] | opt | ถังแก๊ส (อ้าง `gas_cylinder_type`) + ปริมาณที่แผนนี้คำนวณว่าต้องใช้ (CR-085); ไม่มีค่า = แผนนี้ไม่ใช้แก๊ส (ยังไม่บันทึก ไม่ใช่ 0); `issueRequisition` อ่านค่านี้ไปตัด `gas_ledger` |
+| `meal_session_id` | str\|null | opt | รหัสอ้างอิง `meal_session._id` ต้นทาง (Draft 2-Tier Meal Session) |
+| `target_tags` | [str] | opt | กลุ่มเป้าหมายที่ผลิตให้ เช่น `['everyone']`, `['halal']`, `['regular']`, `['soft_food']`, `['infant']`, `['volunteer']` |
+| `allocated_target` | int≥0 | opt | จำนวนจาน/กล่องเป้าหมายของชุดการผลิตนี้ (Production Batch) |
 
 **Headcount source — occupancy mapping (CR-022):** derive จาก evacuee ที่ `current_stay.status = 'active'` —
 `total` = จำนวนทั้งหมด, `halal` = `religion = 'muslim'`, `infant` = `special_needs` มี `'infant'`,
@@ -391,21 +396,33 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 ยังอ่าน/ใช้งานได้ปกติ ไม่ต้อง backfill — โค้ดอ้างอิงผ่าน field `date`/`meal`/`_id` ตรงๆ ไม่เคย parse
 รูปแบบ `_id` อยู่แล้ว
 
-### 2.6 `kitchen_requisition` — `kitchen_requisition:{ulid}` · **append-only**
+### 2.6 `kitchen_requisition` — `kitchen_requisition:{ulid}` · state machine · **schema_v 3**
 
+> **schema_v 3** — State Machine สำหรับระบบตั๋ว `[ShelterCode]-KITCHEN-XXXX` (CR-059 Flow 3 / Draft Kitchen Flow 3): เพิ่ม `ticket_no`, `status` (`pending`|`approved`|`rejected`), `meal_session_id`, `gas_drawdown[]`, `requested_at`, `approved_at`, `approved_by`, `reject_reason`. รหัส `stock_ledger` และ `gas_ledger` (ตัดจ่ายตาม FEFO และ consumption) จะถูกสร้างและบันทึกลง `ledger_ids` เมื่อคลังอนุมัติตั๋ว (`approved`).
+>
 > **schema_v 2** — `qty_requested` / `qty_issued` เป็น `qty_str`. CR-038.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `meal_plan_id` | str\|null | opt | เบิกนอกแผนได้ |
-| `items` | [{`item_id`:str, `qty_requested`:qty_str>0, `qty_issued`:qty_str≥0, `unit`:str}] | req | `qty_issued` < requested = เบิกบางส่วน (ของไม่พอ) |
-| `ledger_ids` | [str] | sys | `stock_ledger` (reason=`requisition`, qty ลบ) ที่เกิดจากใบนี้ |
-| `issued_at` | ts | req | — |
+| `ticket_no` | str | req | รหัสตั๋วคำขอเบิก เช่น `"CNX01-KITCHEN-0001"` (รันผ่าน `kitchen_counter:main`) |
+| `status` | enum(`pending`,`approved`,`rejected`) | req | สถานะตั๋ว (default `"pending"`) |
+| `meal_plan_id` | str\|null | opt | รหัสอ้างอิง `meal_plan._id` (เบิกนอกแผนได้) |
+| `meal_session_id` | str\|null | opt | รหัสอ้างอิง `meal_session._id` ต้นทาง |
+| `items` | [{`item_id`:str, `qty_requested`:qty_str>0, `qty_issued`:qty_str≥0, `unit`:str}] | req | รายการวัตถุดิบ; `qty_issued` บันทึกยอดที่คลังจ่ายจริง |
+| `gas_drawdown` | [{`cylinder_id`:str, `qty_kg`:qty_str>0}] | opt | แก๊สเชื้อเพลิงที่ขอเบิกพร้อมชุดการผลิต |
+| `ledger_ids` | [str] | sys | `stock_ledger` และ `gas_ledger` (reason=`consumption`) ที่เกิดจากการอนุมัติใบนี้ (สร้างเมื่อ `status = 'approved'`) |
+| `requested_at` | ts | req | เวลาที่ส่งคำขอเบิก (ตอนสร้างช่วง A) |
+| `issued_at` | ts | opt | เวลาที่คลังจ่ายของ (legacy schema_v 2 / approved) |
+| `approved_at` | ts\|null | opt | เวลาที่คลังอนุมัติตัดสต็อกจริง (ช่วง B) |
+| `approved_by` | str\|null | opt | username เจ้าหน้าที่คลังผู้อนุมัติตัดสต็อก |
+| `reject_reason` | str\|null | opt | เหตุผลการปฏิเสธคำขอเบิกจากคลังสินค้า |
 
-**Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed
+**Migration (schema_v 2 → 3):** backward-compatible fallback สำหรับ doc เดิม (schema_v 2) ให้อ่านเป็น `status: 'approved'` อัตโนมัติ (pre-prod สามารถ unseed/re-seed ข้อมูลทดสอบได้)
 
 ### 2.7 `meal_service` — `meal_service:{ulid}` · **append-only** · **schema_v 2** (CR-045)
 
+> **Draft (Kitchen Meal Session / Actual Yield & Gas)** — เพิ่ม `meal_session_id` (เชื่อมโยงมื้อหลัก) และ `actual_gas_used_kg` (แก๊สที่ใช้จริง) — optional, **ไม่ bump schema_v** (คงที่ 2)
+>
 > **CR-084** — เพิ่ม `actual_yield` (จำนวนเสิร์ฟที่ทำได้จริง) — optional, **ไม่ bump schema_v**
 > (คงที่ 2; precedent §2.5 CR-045, §4.2 CR-031)
 >
@@ -422,6 +439,8 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 | `waste` | int≥0 | req | เหลือทิ้ง |
 | `external` | {`volunteers`:int≥0, `outside_evacuees`:int≥0} | req | แจกนอกศูนย์ (ตาม source Module D) |
 | `notes` | str | opt | — |
+| `meal_session_id` | str\|null | opt | รหัสอ้างอิง `meal_session._id` ต้นทาง |
+| `actual_gas_used_kg` | qty_str>0 | opt | ปริมาณแก๊สที่ใช้จริงในกระบวนการปรุง |
 
 `_id` เป็น ulid (ไม่ deterministic อีกต่อไป, CR-045) — เหตุผลเดียวกับ `meal_plan` §2.5:
 หลายแผนอาจใช้วัน+มื้อเดียวกัน ดังนั้น "หนึ่งบันทึกต่อวัน+มื้อ" แบบเดิมใช้ไม่ได้แล้ว การซ้ำของบันทึก
@@ -492,6 +511,45 @@ entry `reason=refill` แยก (validate ไม่ให้ยอดเหล�
 flow ปกติเลย ค้างเป็น `in_use` ตลอดไป — ปุ่ม "ตัดเศษเหลือทิ้ง" หน้า UI เขียน entry เดียว
 `reason=adjust`, `qty_kg = -remaining_kg` ให้ยอดเหลือเป็น 0 พอดี (`ref_id: null`) ปฏิเสธ (throw) ถ้าถัง
 ว่างอยู่แล้ว
+
+**Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
+
+### 2.7.3 `meal_session` — `meal_session:{ulid}` · **schema_v 1**
+
+> เอกสารระดับมื้ออาหารสำหรับควบคุมภาพรวมและเป้าหมายผู้รับ 5 กลุ่ม (Draft 2-Tier Meal Session)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `name` | str | req | ชื่อมื้ออาหาร เช่น `"มื้อเช้า 28 ส.ค. 2569"` |
+| `date` | str | req | วันที่จัดมื้ออาหาร `YYYY-MM-DD` |
+| `meal` | enum(`breakfast`,`lunch`,`dinner`,`snack`) | req | ช่วงเวลาของมื้อ |
+| `status` | enum(`active`,`completed`,`cancelled`) | req | สถานะมื้ออาหาร (default `"active"`) |
+| `target_headcount` | {`halal`:int≥0, `infant`:int≥0, `soft_food`:int≥0, `regular`:int≥0, `volunteer`:int≥0, `total`:int≥0} | req | เป้าหมายผู้รับอาหารแยกตามกลุ่มคุณสมบัติ 5 กลุ่ม (ดึงจาก occupancy ทะเบียนผู้พักพิง active + ปรับ manual ได้) |
+| `notes` | str | opt | หมายเหตุเพิ่มเติมประจำมื้อ |
+
+**Sub-fields of `target_headcount`:**
+- `halal`: เป้าหมายกลุ่มอาหารฮาลาล (มุสลิม)
+- `infant`: เป้าหมายกลุ่มเด็ก/ทารก
+- `soft_food`: เป้าหมายกลุ่มเปราะบาง/อาหารอ่อน (ผู้ป่วยติดเตียง/คนชรา)
+- `regular`: เป้าหมายกลุ่มปกติทั่วไป
+- `volunteer`: เป้าหมายกลุ่มเจ้าหน้าที่และอาสาสมัคร
+- `total`: ยอดเป้าหมายรวมผู้พักพิงและผู้รับอาหารทั้งหมด
+
+**Reactive Progress Tracking:**
+- ยอด "ทำแล้ว (จาน)" ของแต่ละกลุ่มในมื้อ คำนวณแบบ Reactive (Read-time derived) จากผลรวม `actual_yield` ของทุก `meal_service` ที่เชื่อมโยงกับ `meal_plan` ที่ระบุ `target_tags` ตรงกับกลุ่มนั้น
+- หากเลือก Tag `['everyone']` ยอดผลิตจะกระจายเพิ่มให้ทุกกลุ่มในมื้อนั้น
+- หากยอด "ทำแล้ว" $\ge$ "เป้าหมาย" ของกลุ่ม แสดงสถานะ "ครบแล้ว" (สีเขียว), หากยังไม่ถึงเป้า แสดง "ยังไม่ครบ" (สีส้ม)
+
+**Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
+
+### 2.7.4 `kitchen_counter` — `kitchen_counter:main` · **schema_v 1**
+
+> Running counter doc สำหรับออกเลขตั๋วคำขอเบิกโรงครัว (`[ShelterCode]-KITCHEN-XXXX`) ให้ต่อเนื่องกันอย่างปลอดภัย
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | `'kitchen_counter:main'` | req | Fixed ID (`kitchen_counter:main`) |
+| `seq` | int≥1 | req | Running integer sequence (atomic sequential increment) |
 
 **Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
 
@@ -1354,7 +1412,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) · meal_session: (date, meal), (status) · kitchen_requisition: (status, ticket_no) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) | — |
 | `catalog` | item_master: distribution_type, target_audience_type · item_category: is_default · recipe: is_default · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
@@ -1365,8 +1423,8 @@ Design docs / `validate_doc_update` ต้อง deploy ทั้ง central แ
 write target ระหว่าง LAN fallback; schema/role enforcement ต้องเหมือนกันทุก remote.
 
 1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`) — ปฏิเสธ update/delete ทุกกรณี
-3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
+2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `meal_service`, `audit`, `search_audit`) — ปฏิเสธ update/delete ทุกกรณี
+3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, `kitchen_requisition`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db
 6. required fields ครบ + enum ถูกต้อง (โครงสร้างลึกตรวจฝั่ง client/Zod — validate_doc_update ตรวจเท่าที่จำเป็นกัน doc พัง ไม่ duplicate ทุก rule)
