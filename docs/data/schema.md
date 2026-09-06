@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-05
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
+updated: 2026-09-06
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation
 ---
 
 # Database Schema v5 — field-level
@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 10** — `person_id.cardType` เพิ่ม `anonymous` (+ ระบบออก `ANON-{ulid}`); เพิ่ม `vulnerable_groups[]`; stay เพิ่ม `room_confirmed` (CR-112).
 > **schema_v 9** — เพิ่มสถานะ `arriving` ใน `current_stay.status` (CR-106) — ผู้ประสบภัยที่รายงานตัวหน้างานแล้ว อยู่ระหว่างรอตรวจคัดกรองการแพทย์ หรือรอจัดสรรที่พัก (ไม่นับเตียงที่ถูกใช้จริงใน occupancy dashboard จนกว่าจะ check-in เป็น `active`).
 > **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
@@ -60,22 +61,34 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `first_name` | str | req | ตัดช่องว่างหัวท้าย; ห้าม empty |
 | `last_name` | str | req | ตัดช่องว่างหัวท้าย; **ว่างได้** เมื่อไม่มีนามสกุล (mononym / ชาวต่างชาติ เช่น พม่า) — field คงมีเสมอ เป็น `""` ได้ (CR-106) |
 | `gender` | enum(`male`,`female`,`other`) | req | — |
-| `phone` | str\|null | req | UI บังคับกรอก — กด/พิมพ์ "ไม่มี" → เก็บ `null`; เก็บ normalize แล้ว (ตัวเลขล้วน เช่น `"0812345678"`) |
+| `phone` | str\|null | req | UI บังคับกรอก — กด/พิมพ์ "ไม่มี" → เก็บ `null`; เก็บ normalize แล้ว (ตัวเลขล้วน เช่น `"0812345678"`); ฟิลด์เดียวต่อคน |
 | `nickname` | str | opt | — |
 | `birth_year` | int | opt | พ.ศ. 4 หลัก |
 | `age` | int | opt | อายุ (ปี) ณ ตอนกรอกล่าสุด — snapshot ตรงๆ ไม่ derive จาก/ไปเป็น `birth_year` (CR-057) |
-| `person_id` | {`cardType`:enum(`national_id`,`passport`,`pink_card`,`other`), `number`:str\|null} | opt | เอกสารแสดงตน — `cardType` default `"national_id"`; `number` คือเลขที่บัตร (opt); เก็บ plaintext ไม่ออก public tier ทุกกรณี |
+| `person_id` | {`cardType`:enum(`national_id`,`passport`,`pink_card`,`other`,`anonymous`), `number`:str\|null} | opt | เอกสารแสดงตน — `cardType` default `"national_id"`; เมื่อ `anonymous` ระบบต้องใส่ `number = ANON-{ulid}` (unique, ค้นได้); มีบัตรภายหลัง → แทนที่ `person_id` ด้วยบัตรจริง (audit/`card_snapshot` ได้); เก็บ plaintext ไม่ออก public tier ทุกกรณี |
 | `religion` | enum(`buddhist`,`muslim`,`christian`,`other`,`unknown`) | opt | ใช้วางแผนอาหาร halal |
-| `country` | str | req | ประเทศ | 
-| `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
+| `country` | str | req | ประเทศ — บังคับมีค่าทุกคน; UI default `"THAILAND"` (ไม่บังคับ ISO) |
+| `vulnerable_groups` | [str] | opt | codes จาก master `vulnerable_group` (multi-select); default `[]` — **แยก** จาก `special_needs` (CR-112) |
+| `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด; **ไม่** ปน taxonomy กลุ่มเปราะบาง) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` ก่อนจัดเข้าครัวเรือน) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`arriving`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
+
+**Occupancy metrics (CR-112)** — นับบน Couch ของศูนย์นั้นเท่านั้น (ไม่นับ Mongo Unassigned Registration จน claim):
+
+| Metric | Stay set |
+| --- | --- |
+| **Forecast** (คีย์ public `occupancy` / booking gate) | `pre_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave` |
+| **Present** | `active`, `room_confirmed`, `temporary_leave` |
+| **In-zone** | `room_confirmed` เท่านั้น |
+| Kitchen / SOP / `daily_calc.occupancy_snapshot` | `active` only (ไม่เปลี่ยน) |
+
+ไม่นับ: `transferred`, `checked_out`, `deceased`, `cancelled`
 
 **Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
 
@@ -104,6 +117,8 @@ implement — ไม่กระทบ migration นี้
 
 **Migration (schema_v 8 → 9, CR-106):** purely additive enum — เพิ่ม `arriving` ใน `current_stay.status`; doc เดิม schema_v 8 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 9
 
+**Migration (schema_v 9 → 10, CR-112):** purely additive — `anonymous` ใน `cardType`, `vulnerable_groups` default `[]` ตอนอ่าน, `room_confirmed` ใน stay; doc เดิมอ่านได้โดยไม่ต้อง backfill; เขียนใหม่ stamp schema_v 10
+
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
@@ -121,47 +136,71 @@ implement — ไม่กระทบ migration นี้
 
 ### 1.3 `household` — `household:{ulid}`
 
+> **schema_v 5** — เพิ่ม `housing_type`, `residence_landmark`; pet species `dog|cat|other` (+ notes เมื่อ `other`); `status` = derived compatibility เท่านั้น (CR-112).
 > **schema_v 4** — เพิ่ม `status`, `checkout_destination` รองรับวงจรชีวิตครัวเรือน (check-in/out). CR-029.
 > schema_v 3 — เพิ่ม `assets`, `vehicles[]` (หลายคัน), ขยาย `pets` (has_cage, image_url). CR-016.
 > schema_v 2 — ลบ `zone` เดิม; เพิ่ม `municipality_zone` + `community` + ที่อยู่ flat 6 ฟิลด์. CR-011.
 >
-> **Residence (CR-106):** ฟิลด์ `address_no`…`postal_code` คือ **Residence** (ที่พักอาศัยร่วมของ Household) — ไม่ใช่ที่อยู่บนบัตรประชาชน (Identity-document address อยู่ที่ Evacuee). Station 1 บังคับขั้นต่ำตอนสร้างครอบครัวใหม่ที่ชั้น UI/validation; ไม่ bump schema_v. UI ไทยใช้คำว่า「ครอบครัว」; canonical type ยังเป็น `household`.
+> **Residence (CR-106 / CR-112):** ฟิลด์ `address_no`…`postal_code` คือ **Residence** (ที่พักอาศัยร่วมของ Household) — ไม่ใช่ที่อยู่บนบัตรประชาชน (Identity-document address อยู่ที่ Evacuee). เมื่อ `housing_type = homeless` อนุญาตให้ `address_no` ว่างได้ แต่ต้องมี `residence_landmark` **หรือ** (`province` ∧ `district` ∧ `subdistrict`). UI ไทยใช้คำว่า「ครอบครัว」; canonical type ยังเป็น `household`.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `label` | str | req | ชื่อเรียก — Station 1 สร้างอัตโนมัติ เช่น `ครอบครัวสมชาย` (CR-106) |
 | `head_evacuee_id` | str\|null | opt | หัวหน้าครัวเรือน |
-| `status` | enum(`pre-registered`,`arriving`,`checked-in`,`checked-out`,`cancelled`) | req | สถานะครัวเรือน — default `'arriving'` (ลงทะเบียนทั่วไป) หรือ `'pre-registered'` (จองล่วงหน้า) |
+| `status` | enum(`pre-registered`,`arriving`,`checked-in`,`checked-out`,`cancelled`) | req | **derived** จากสมาชิก Evacuee (SoT = stay ของสมาชิก) — compatibility เท่านั้น; UI ห้ามเลือกสถานะ household อิสระ (CR-112) |
 | `checkout_destination` | {`type`:enum(`returned_home`,`transferred_shelter`,`referred_facility`,`other`), `destination_name`:str?, `notes`:str?} \| null | opt | ปลายทางหลังเช็คเอาต์ — บังคับเมื่อ `status = 'checked-out'` |
+| `housing_type` | enum(`owned_house`,`rented_house`,`condo`,`apartment_dorm`,`homeless`) \| null | opt | code จาก master `housing_type` (CR-112) |
+| `residence_landmark` | str\|null | opt | จุดสังเกต / ที่อยู่โดยประมาณเมื่อไม่มีบ้านเลขที่ (CR-112) |
 | `municipality_zone` | str\|null | opt | เขตเทศบาล เช่น `"zone_1"` — code จาก `master_data:municipality_zone` |
 | `community` | str\|null | opt | ชุมชน เช่น `"z1_c16"` — code จาก `master_data:community` (filter by zone) |
-| `pets` | [{`species`:enum(`dog`,`cat`,`bird`,`other`), `count`:int, `notes`:str?, `has_cage`:bool?, `image_url`:str?}] | opt | default `[]` — แสดงเฉพาะเมื่อ shelter `feature_flags.allow_pets = true` |
+| `pets` | [{`species`:enum(`dog`,`cat`,`other`), `count`:int, `notes`:str?, `has_cage`:bool?, `image_url`:str?}] | opt | default `[]` — `species=other` → `notes` บังคับ nonempty; แสดงเฉพาะเมื่อ shelter `feature_flags.allow_pets = true` |
 | `assets` | {`description`:str, `image_url`:str\|null} \| null | opt | ทรัพย์สินมีค่า/สัมภาระ — แสดงเฉพาะเมื่อ `feature_flags.allow_assets = true` |
 | `vehicles` | [{`type`:enum(`car`,`motorcycle`,`other`), `license_plate`:str\|null}] | opt | default `[]` — รายการยานพาหนะ (หลายคันได้) แสดงเฉพาะเมื่อ `feature_flags.allow_vehicles = true` |
 | `notes` | str | opt | — |
-| `address_no` | str\|null | opt | Residence — บ้านเลขที่ เช่น `"123/45"` (Station 1 บังคับตอนสร้าง) |
+| `address_no` | str\|null | opt | Residence — บ้านเลขที่ เช่น `"123/45"`; ว่างได้เมื่อ `housing_type=homeless` |
 | `village_no` | str\|null | opt | Residence — หมู่ที่ / ตรอก / ซอย / ถนน เช่น `"หมู่ 2"` |
-| `subdistrict` | str\|null | opt | Residence — ตำบล / แขวง (Station 1 บังคับตอนสร้าง) |
-| `district` | str\|null | opt | Residence — อำเภอ / เขต (Station 1 บังคับตอนสร้าง) |
-| `province` | str\|null | opt | Residence — จังหวัด (Station 1 บังคับตอนสร้าง) |
+| `subdistrict` | str\|null | opt | Residence — ตำบล / แขวง |
+| `district` | str\|null | opt | Residence — อำเภอ / เขต |
+| `province` | str\|null | opt | Residence — จังหวัด |
 | `postal_code` | str\|null | opt | Residence — รหัสไปรษณีย์ เช่น `"90110"` |
 
 สมาชิก = evacuee ที่ `household_id` ชี้มา (ทางเดียว — ไม่เก็บ list สมาชิกใน household กัน conflict)
 
+**Household status derive (CR-112):**
+
+1. if no members OR every member `cancelled` → `cancelled`
+2. else if any member Present (`active` \| `room_confirmed` \| `temporary_leave`) → `checked-in`
+3. else if any member `arriving` → `arriving`
+4. else if any member `pre_registered` → `pre-registered`
+5. else if any member in `checked_out` \| `transferred` \| `deceased` → `checked-out`
+6. else → `cancelled`
+
 **Migration (schema_v 1 → 2):** ลบ `zone`; field ใหม่ทั้งหมด optional → doc เดิมไม่ต้อง backfill.
 **Migration (schema_v 2 → 3):** `assets`/`vehicles` optional/default-empty — doc เดิมไม่ต้อง backfill; ไม่มีข้อมูล production ณ วันที่ bump จึง ignore `vehicle` เดี่ยว (ถ้ามี) แล้วเริ่มต้น `vehicles: []`.
 **Migration (schema_v 3 → 4):** lazy read-on-open — doc ที่ไม่มี `status` ได้ `status: 'checked-in'` (สมมติอยู่ในศูนย์แล้ว); `checkout_destination` default `null`; ไม่ต้อง backfill batch
+**Migration (schema_v 4 → 5, CR-112):** additive `housing_type`/`residence_landmark`; **backfill pets** `bird` → `other` + `notes = "นก"`; เขียนใหม่ stamp schema_v 5
 
 ### 1.4 `movement` — `movement:{ulid}` · **append-only**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | — |
-| `action` | enum(`check_in`,`check_out`,`transfer_out`,`transfer_in`,`leave_temporary`,`return_from_leave`,`mark_deceased`,`zone_change`) | req | ผลต่อ `current_stay.status`: `check_in`/`transfer_in`→`active` · `check_out`→`checked_out` · `transfer_out`→`transferred` · `leave_temporary`→`temporary_leave` · `return_from_leave`→`active` · `mark_deceased`→`deceased` (terminal, ไม่มี action ย้อนกลับ) · `zone_change`→**คง status** (ปกติ `active`) อัปเดตเฉพาะโซน (CR-106 Station 3 rezone) |
-| `zone` | str\|null | opt | โซนที่เข้า (`check_in`) หรือโซนปลายทาง (`zone_change`; บังคับมีค่าเมื่อ action เป็น `zone_change`) |
+| `action` | enum(`check_in`,`check_out`,`transfer_out`,`transfer_in`,`leave_temporary`,`return_from_leave`,`mark_deceased`,`zone_change`,`confirm_room`) | req | ผลต่อ `current_stay.status`: `check_in`/`transfer_in`/`return_from_leave`→`active` · `confirm_room`→`room_confirmed` (eligible จาก `active`; ต้องมี zone) · `check_out`→`checked_out` · `transfer_out`→`transferred` · `leave_temporary`→`temporary_leave` · `mark_deceased`→`deceased` (terminal) · `zone_change`→**คง status** จาก `active` หรือ `room_confirmed` อัปเดตเฉพาะโซน (CR-106 / CR-112) |
+| `zone` | str\|null | opt | โซนที่เข้า (`check_in`) หรือโซนปลายทาง (`zone_change`; บังคับมีค่าเมื่อ action เป็น `zone_change` หรือ `confirm_room`) |
 | `destination` | {`kind`:enum(`home`,`shelter`,`hospital`,`other`), `shelter_code`:str?, `detail`:str?} | opt | ใช้กับ check_out / transfer_out |
-| `reason` | str | opt | — |
+| `reason` | str | opt | **บังคับ nonempty หลัง trim เมื่อ `action = check_out`** (CR-112); อื่นๆ optional |
 | `occurred_at` | ts | req | เวลาเหตุการณ์จริง (ไม่ใช่เวลา sync) |
+
+**Guards (CR-112):**
+
+```text
+CONFIRM_ROOM_ELIGIBLE = [active]
+CHECK_IN_ELIGIBLE     = [pre_registered, arriving, temporary_leave, checked_out, transferred]
+  → result stay = active (zone required)
+CHECK_OUT / TRANSFER_OUT / LEAVE_TEMPORARY / MARK_DECEASED eligible from:
+  [active, room_confirmed]
+ZONE_CHANGE eligible from: [active, room_confirmed]
+```
 
 **Index:** `(evacuee_id, occurred_at)` · view `occupancy`
 
@@ -866,9 +905,26 @@ Stock snapshot ชุดเดียวกันถูกใช้ทั้ง C
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(7 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` |
+| `master_type` | enum(8 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` \| `housing_type` |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?}] | req | ≥1 item; `code` = ULID (`item_{ulid}`) สำหรับ item ที่สร้างใหม่ — immutable; item เดิม (seed) ที่เป็น slug/semantic code (เช่น `municipality_zone` เดิม `zone_1`) ยังใช้ได้ต่อ ไม่ rewrite; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
+
+**Seed — `vulnerable_group` active set (CR-112):**
+`bedridden`, `dialysis`, `wheelchair`, `psychiatric`, `elderly_dependent`, `infant`, `young_child`, `pregnant`, `vision_impaired`, `hearing_impaired`, `disability_other`, `chronic_illness`
+
+**Hard migrate map (CR-112):** `elderly` → `elderly_dependent`; `disabled` → `disability_other`; `chronic_illness` คงรหัส
+
+**Seed — `pet_types` active (CR-112):** `dog`, `cat`, `other` · migrate away `bird`
+
+**Seed — `housing_type` active (CR-112, master_type ใหม่):**
+
+| key | label |
+| --- | --- |
+| `owned_house` | บ้านตนเอง |
+| `rented_house` | บ้านเช่า |
+| `condo` | คอนโดมิเนียม |
+| `apartment_dorm` | อพาร์ตเมนต์/หอพัก |
+| `homeless` | คนไร้บ้าน / ไม่มีบ้านเลขที่ / ริมคลอง |
 
 **Item shape:**
 ```ts
@@ -1409,10 +1465,13 @@ Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture
 | `accepts_delivery` | bool | req | default `true` — M6 ใช้กรองปลายทางจัดส่ง |
 | `delivery_note` | str\|null | opt | ข้อจำกัดการเข้าถึง |
 | `opened_at` / `closed_at` | ts\|null | opt | จาก registry `opened_at`/`closed_at` |
-| `occupancy_total` | int | req | default `0`; นับ evacuee ที่ `current_stay.status = active` (คำนิยามเดียวกับ `daily_calc.occupancy_snapshot`, CR-035) — Worker คำนวณใหม่ทุกครั้งที่ `evacuee` เปลี่ยน (`worker/mongo/shelter.py::refresh_occupancy`) |
+| `occupancy_total` | int | req | default `0`; **Partner / legacy field** — คง semantics ตาม CR-111 (`active` only สำหรับ EXT-005). Public portal / booking ใช้คีย์ `occupancy` = **Forecast** (CR-112) แยกจาก field นี้ |
+| `occupancy` | int | opt | **Forecast** (CR-112) — stay ∈ {`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`}; ไม่นับ Unassigned Registration จน claim |
+| `present` | int | opt | **Present** (CR-112) — stay ∈ {`active`,`room_confirmed`,`temporary_leave`} |
+| `in_zone` | int | opt | **In-zone** (CR-112) — stay = `room_confirmed` เท่านั้น |
 | `occupancy_breakdown` | {`male`,`female`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-111, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive) — กลุ่มซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note) |
 | `raw_data` | {str:Any} | req | โครงสร้าง JSON ต้นฉบับจากเอกสาร `shelter` ใน CouchDB `registry` เพื่อใช้สำหรับการฉายข้อมูลแบบละเอียด โดยไม่ต้องกำหนด Field ยิบย่อยใน Schema |
-| `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด — รวมถึงตอน `occupancy_total`/`occupancy_breakdown` เปลี่ยนด้วย |
+| `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด — รวมถึงตอน occupancy fields เปลี่ยนด้วย |
 
 ### 9.2 `public_jobs` (MongoDB)
 
@@ -1480,3 +1539,24 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 | `created_at` | ts | req | เวลาที่เรียก |
 
 **Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
+
+### 9.5 `unassigned_registrations` (MongoDB) — **ใหม่ (CR-113)**
+
+คิวกลาง **Unassigned Registration** — ครัวเรือนที่ลงทะเบียนล่วงหน้าแต่ยังไม่เลือกศูนย์ · **ไม่ใช่** doc ใน `shelter_*` · **ไม่ใช่** Evacuee จน claim · **ไม่** สร้าง stub ใน `public_persons` จน claim + worker project จาก Couch · **ไม่นับ** Forecast รายศูนย์
+
+SoR ของคิวกลางจน claim = Mongo collection นี้ · เขียนตรงจาก FastAPI (ไม่ผ่าน Couch CDC)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | ULID |
+| `schema_v` | int | req | เริ่ม `1` |
+| `reserved_household_id` | str | req | `household:{ulid}` จองตั้งแต่สร้าง — ใช้ตอน claim |
+| `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + ฟิลด์คน (name, phone, person_id, country, vulnerable_groups, special_needs, …) ตาม CR-112 |
+| `household` | object | req | housing_type, residence_landmark, geo/address, pets, … |
+| `status` | str | opt | สรุประดับเอกสาร (derive จาก members ได้) |
+| `registered_via` | enum(`web`,`staff`,…) | req | ช่องทางสร้าง |
+| `created_at` | ts | req | — |
+
+**Indexes:** unique partial บน identity ของสมาชิกที่ยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ) · `(created_at)` · member status
+
+**Claim:** staff ติ๊กสมาชิก `open` → สร้าง Couch `evacuee`(+`household`) ด้วย reserved ids ที่ `pre_registered` · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → hard-delete เอกสาร · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียด API/algorithm ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)

@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-03 # Approve CR-106 (Daily SOP, renumbered from CR-100)
+updated: 2026-09-06 # Approve CR-112 registration foundation + CR-113 unassigned registration
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -129,3 +129,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-109](CR-109-meal-distribution-onsite-scan.md) | เพิ่ม meal_distribution log สำหรับแจกจ่ายอาหารหน้างาน + คุมเพดาน Distribution Limit (Soft Warning) | approved | volatile | 2026-09-02 (approved 2026-09-06) | docs/data/schema.md §2, frontend/src/lib/features/meal-distribution/, frontend/src/lib/features/kitchen/ |
 | [CR-110](CR-110-item-distribution-offline-architecture.md) | ตัดสินใจสถาปัตยกรรม Offline ของ Flow 2 (Item Distribution) — เลือก Option A: Online-only Remote-First | approved | stable | 2026-09-02 (approved 2026-09-06) | docs/data/schema.md §4/§5, CLAUDE.md, frontend/src/lib/features/item-distribution/ |
 | [CR-111](CR-111-partner-api-ext004-007.md) | Partner API EXT-004–007 — stock, occupancy, summary, occupant scaffold (ADR 0002) | approved | volatile | 2026-09-05 (approved 2026-09-06) | docs/data/schema.md §9, packages/tent-model, worker, backend/apiapp/modules/thirdparty_* |
+| [CR-112](CR-112-registration-foundation-schema-stay.md) | Registration foundation — Anonymous ID, vulnerable_groups, stay `room_confirmed`, occupancy Forecast/Present/In-zone, housing_type, pet species dog\|cat\|other | approved | volatile | 2026-09-06 | docs/data/schema.md §1.1/§1.3/§1.4/§3.3 (evacuee 9→10, household 4→5), api-contract.md, site-occupancy-booking-program.md, CONTEXT.md |
+| [CR-113](CR-113-unassigned-registration-mongo.md) | Unassigned Registration — Mongo-only `unassigned_registrations` until shelter claim (stable core: Mongo write path / SoR birth) | approved | stable | 2026-09-06 | docs/data/schema.md §9.5, couchdb-mongodb-sync.md, api-contract.md, CONTEXT.md |

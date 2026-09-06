@@ -2,12 +2,13 @@
 title: "Program — Site kind, occupancy health, booking channels, triage"
 status: active
 created: 2026-08-13
-updated: 2026-08-20
+updated: 2026-09-06
 owner: PM (John) / เจ้าของโครงการ
 audience: developer + team lead assignment
 note: >
   Wave 1–3 + T-72 approved 2026-08-13 (IMPS). Wave 4 = รอบ CR ถัดไป.
   Canonical planning = docs/task-breakdown/ T-66..T-76.
+  CR-112 supersedes D-BOOK-OCC occupancy numerator toward Forecast triple.
   CR ชุด = CR-066 (index, approved สไลซ์ล็อก) + CR-067..CR-071 approved (067 P1 / 071 slice A)
   + CR-072/CR-073 proposed.
 ---
@@ -20,7 +21,7 @@ note: >
 - บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind` — **ถอด** nav/route `/portal/system-management/host-houses` (D-HOST-NAV **B′**)
 - Public map ใช้ **ไอคอนคนละชุด** ตาม `site_kind`; สีหมุดตาม **occupancy health 5 สี** (derived จาก occupancy/capacity; `operation_status` override ได้ตาม D-STANDBY / D-HEALTH-VS-STATUS)
 - ช่องเข้าพักใหม่: จองผ่านเว็บ (`registered_via=web`) + import คน + inbound API (`api`) — ตามสถานะด้วย QR หรือ `official_code` + เบอร์โทร (D-BOOK-TOKEN=A); ยืนยันที่ประตูด้วย QR scan ที่มีอยู่แล้ว (T-51)
-- Occupancy ที่ใช้สี health / public / การจอง = stay `active` **และ** `pre_registered` (D-BOOK-OCC=**C** — ทับคำแนะนำ A และทับ T-04/T-06 ที่เคยไม่นับจอง). ไม่มี TTL; ปล่อยที่นั่งเมื่อ staff ยกเลิกชัดเจน (SA/SM/RS)
+- Occupancy ที่ใช้สี health / public / การจอง = **Forecast** (CR-112; supersedes D-BOOK-OCC=C ตัวเศษ) = stay ∈ {`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`}; additive `present` / `in_zone`. ไม่มี TTL; ปล่อยที่นั่งเมื่อ staff ยกเลิกชัดเจน (SA/SM/RS)
 - **T-72 ล็อก:** import คนทุกแถวเริ่ม `pre_registered` (นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ที่ประตู/staff เท่านั้น); ใคร import ได้ = **RS + SA + SM** (เจ้าของขยายจาก SM+SA)
 - **ยังไม่ทำ (Wave 4 — รอบ CR ถัดไป):** รายการฟิลด์ SOP-lite, เกณฑ์คัดกรองเขียว/เหลือง/แดง, payload ONE PLATFORM / external GET, inbound plane — จอด `[NEEDS DECISION]` / blocked
 - Schema bump **ยังไม่ลง** `schema.md` ในรอบ approve นี้ — bump ตอน implement ตาม Migration ของ child CR
@@ -52,7 +53,7 @@ note: >
 
 | ID | หัวข้อ | ค่าที่ล็อก | กระทบ |
 | --- | --- | --- | --- |
-| **D-BOOK-OCC** | จองล่วงหน้านับ occupancy เมื่อไร | **C** (เจ้าของทับคำแนะนำ A ของ John และทับ T-04/T-06 ที่เคยไม่นับจอง) — `pre_registered` **นับ** occupancy. กฎเดียวกันทั้ง `evacuation_center` และ `host_house`. Occupancy = stay `active` **และ** hold `pre_registered`. ใช้กับสี health / public occupancy / ตัวเลขการจอง — **ไม่** แตะ kitchen/SOP คนอยู่จริง (CR-022 `active` only) | CR-069, CR-070, T-69, T-71 |
+| **D-BOOK-OCC** | จองล่วงหน้านับ occupancy เมื่อไร | **C → superseded by CR-112 Forecast** — คีย์ public/booking `occupancy` = **Forecast** = stay ∈ {`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`}. Additive: `present` = {`active`,`room_confirmed`,`temporary_leave`}; `in_zone` = {`room_confirmed`}. กฎเดียวกันทั้ง `evacuation_center` และ `host_house`. **ไม่** แตะ kitchen/SOP คนอยู่จริง (CR-022 `active` only). Unassigned Registration Mongo **ไม่นับ** จน claim (CR-113) | CR-069, CR-070, **CR-112**, T-69, T-71 |
 | **D-HOLD-TTL** | หมดอายุ hold อัตโนมัติ | **none** — ไม่มีหน้าต่างเวลา, ไม่ auto-expire, ไม่มี job auto-cancel | CR-070, T-71 |
 | **D-PRE-REG-AGE** | แสดงอายุการจองบนรายการ staff | รายการ `pre_registered` ต้องแสดงเวลาที่ผ่านไปตั้งแต่ลงทะเบียน: **วัน, ชั่วโมง, นาที**. คำนวณตอนโหลดหน้า / รีเฟรชเท่านั้น — **ห้าม polling**, ห้ามนาฬิกาเดินสด | CR-070, T-71 |
 | **D-HOLD-CANCEL** | ปล่อย occupancy ของ hold | ปล่อยที่นั่งจาก `pre_registered` เมื่อ staff **ยกเลิกชัดเจนเท่านั้น**. ใครยกเลิกได้: **SA, SM, และ RS** (`registration_staff`) — เจ้าของเริ่มจาก SA/SM แล้วเพิ่ม RS. ทุกครั้งต้องมี audit **ใครยกเลิก + timestamp**. **ห้าม** hard-delete เอกสารคน; เปลี่ยนสถานะให้ occupancy คำนวณใหม่ตอนรีเฟรช. สถานะ: ใช้ `cancelled` ที่มีอยู่แล้วที่ household; evacuee stay ปัจจุบันไม่มี cancel/no-show (CR-035: 6 ค่า) — **เสนอ** เพิ่ม `cancelled` บน stay หลัง approve (ชื่อเดิม ไม่สร้าง `no_show`). จนกว่า bump: occupancy นับเฉพาะ `{active, pre_registered}` | CR-070, T-71 |
@@ -157,7 +158,7 @@ flowchart TD
 
 ### P3 — Occupancy health
 
-- **FR-66** — ระบบ derive `occupancy_health` จาก occupancy (จำนวน evacuee ที่ `current_stay.status ∈ {active, pre_registered}` ตาม D-BOOK-OCC=C) ÷ `capacity` + กฎปิดศูนย์ — **ไม่ persist เป็น source of truth** (คำนวณตอนอ่าน)
+- **FR-66** — ระบบ derive `occupancy_health` จาก occupancy (**Forecast** ต่อ CR-112: stay ∈ {`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`}) ÷ `capacity` + กฎปิดศูนย์ — **ไม่ persist เป็น source of truth** (คำนวณตอนอ่าน)
 - **FR-67** — ชุดสีตามตาราง §P3 (D-HEALTH-PCT + D-STANDBY=A + D-HEALTH-VS-STATUS=B ล็อก 2026-08-13)
 - **FR-68** — แสดง health บน staff list/dashboard **และ** public map/card **ตอนนี้** (D-HEALTH-SURFACE=A). EOC = ฟิลด์ API ทีหลัง (T-70)
 - **FR-69** — ฟิลด์ health บน EOC aggregate API = T-70 หลัง T-37 — **ไม่สร้าง EOC human dashboard ในแอป** (FD-14 คง)
@@ -190,7 +191,7 @@ flowchart TD
 
 ## 4. P3 — Occupancy health (D-HEALTH-PCT + Wave 2 + ตัวเศษ Wave 3)
 
-Occupancy = count evacuee ที่ `current_stay.status ∈ {active, pre_registered}` ในศูนย์นั้น (D-BOOK-OCC=**C**, Wave 3 — ทับสูตร Wave 1 ที่นับแค่ `active`). Capacity = `shelter.capacity` (manual จนกว่า T-76).
+Occupancy (คีย์ public/booking) = **Forecast** = count evacuee ที่ `current_stay.status ∈ {pre_registered, arriving, active, room_confirmed, temporary_leave}` ในศูนย์นั้น (CR-112 — supersedes D-BOOK-OCC=C ตัวเศษ Wave 3). Capacity = `shelter.capacity` (manual จนกว่า T-76). Additive: `present` / `in_zone` ตาม schema §1.1.
 
 Kitchen/SOP คนอยู่จริง (CR-022 / T-31) ยังนับ `active` อย่างเดียว — **ไม่** รวม hold.
 
@@ -290,7 +291,7 @@ Health **ไม่ persist**. ประเมินตามลำดับ (sta
 - D-HOST-NAV=B′ เพราะ stub `/host-houses` ทำให้เข้าใจผิดว่าฟีเจอร์มี และบ้านควรอยู่บนหน้ารายการศูนย์ + กรอง ไม่ใช่หน้าแยก (ไม่ใช่ A เดิม = wire stub, ไม่ใช่ B เดิม = ถอด nav อย่างเดียวโดยไม่ระบุว่าอยู่หน้าไหน).
 - D-HEALTH-PCT ใช้ตัวเลขเจ้าของโครงการ; 90% เป็นแดง (ไม่ใช่เหลือง). สูตร derived ไม่ persist. `capacity=0` ไม่หารศูนย์.
 - 2026-08-13 — **Wave 2 ล็อก** โดยเจ้าของโครงการ: D-STANDBY=A · D-HEALTH-VS-STATUS=**B** (ทับคำแนะนำ A ของ John) · D-HEALTH-SURFACE=A. กติการวมสี: `standby`/`closed` → เทา (ไม่เข้า %); `full_capacity` → แดง; นอกนั้นตาม D-HEALTH-PCT. ผิว T-69 = staff + public ตอนนี้; T-70 EOC API ทีหลัง; ห้าม dashboard EOC ในแอป (FD-14).
-- 2026-08-13 — **Wave 3 ล็อก** โดยเจ้าของโครงการ: D-BOOK-OCC=**C** (ทับคำแนะนำ A ของ John และทับ T-04/T-06 ที่เคยไม่นับ `pre_registered`) · D-HOLD-TTL=**none** · D-PRE-REG-AGE (วัน/ชม./นาที ตอนโหลด/รีเฟรช — ไม่ poll) · D-HOLD-CANCEL (SA/SM/RS; audit actor+timestamp; ห้าม hard-delete; สถานะ `cancelled`) · D-REG-VIA เพิ่ม `web`+`api` · D-BOOK-TOKEN=**A**. **ไม่ mark CR เป็น approved. ไม่ bump schema.md.**
+- 2026-09-06 — **CR-112 approved**: D-BOOK-OCC occupancy numerator → **Forecast** triple (`occupancy`/`present`/`in_zone`); pair **CR-113** Unassigned Registration Mongo.
 - 2026-08-13 — **T-72 ล็อก** โดยเจ้าของโครงการ (ไม่ใช่ Wave 4): **T-72 initial stay=A** (ทุกแถว `pre_registered`; นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ที่ประตู/staff เท่านั้น — ห้ามเลือกต่อแถวในไฟล์) · **T-72 import permission=RS+SA+SM** (เจ้าของขยายจาก proposed SM+SA). T-72 ไม่รอ stay/permission แล้ว — รอ approve CR-071 + T-48. **ไม่ mark CR เป็น approved. ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): Wave 1–3 + T-72. Wave 4 **จอดรอบ CR ถัดไป** (D-SOP-LITE, D-HOST-STAFF, D-SPHERE-CAP, D-INBOUND-PLANE, D-TRIAGE-RULES, D-TRIAGE-FIELD, D-ONE-PLATFORM). CR-072 / CR-073 คง `proposed`. **ไม่ bump schema.md ในรอบนี้.**
 - Wave 4 จอดรอบ CR ถัดไป: ห้ามเดา SOP / triage / ONE PLATFORM.

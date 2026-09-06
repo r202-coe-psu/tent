@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-13
-note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B)
+updated: 2026-09-06
+note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -105,6 +105,16 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 // public_transparency — ตัดออก (CR-017 Decision B); ใช้ public_shelters แทนสำหรับ shelter list
 ```
 
+### 3.3 Mongo SoR (ไม่ใช่ projection) — `unassigned_registrations` (CR-113)
+
+**Unassigned Registration** เก็บใน Mongo collection `unassigned_registrations` โดยตรง (FastAPI write) —
+**ไม่** มาจาก Couch CDC และ **ไม่** สร้างแถวใน `public_persons` จนกว่า staff จะ claim → สร้าง Couch
+`evacuee`/`household` ที่ `pre_registered` แล้ว worker project ตามปกติ.
+
+- ห้าม treat เป็น Evacuee / Couch SoR ก่อน claim
+- ห้ามนับเข้า Forecast occupancy รายศูนย์จนกว่า claim
+- shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field
 ใหม่ใน CouchDB **ไม่หลุด**ไป Mongo เองจนกว่าจะเพิ่มใน whitelist (กัน PII leak โดยอุบัติเหตุ).
 
@@ -187,6 +197,7 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 | --- | --- | --- | --- |
 | evacuee / person index | CouchDB | → Mongo | Mongo อ่านอย่างเดียว; แก้ที่ CouchDB เท่านั้น |
 | donation (ตอนประกาศ) | Mongo | → CouchDB | Mongo เป็นเจ้าของจนถูก persist (synced_to_couch=true) |
+| unassigned_registrations (CR-113) | Mongo | → Couch ตอน claim เท่านั้น | Mongo SoR ของคิวกลาง; claim สร้าง Couch evacuee/household; ไม่ project เป็น `public_persons` จน claim |
 | donation lifecycle | CouchDB | → Mongo | หลัง persist แล้ว CouchDB คุม status; Mongo mirror |
 | stock_ledger | CouchDB | — (ไม่ขึ้น Mongo) | ไม่ project — stock เป็นข้อมูลภายในศูนย์ |
 | needs / transparency | CouchDB (view) | → Mongo | Mongo อ่านอย่างเดียว |
@@ -202,7 +213,10 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 
 | Endpoint | แตะ Mongo | หมายเหตุ |
 | --- | --- | --- |
-| `POST /public/v1/occupants` | read `public_persons` (`$text` ชื่อ หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit` |
+| `POST /public/v1/occupants` | read `public_persons` (`$text` ชื่อ หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit`; allow-list stay รวม `arriving`/`room_confirmed` (CR-112) |
+| `POST /public/v1/unassigned-registrations` | write `unassigned_registrations` | CR-113 — ไม่แตะ Couch / ไม่สร้าง `public_persons` |
+| `GET /staff/v1/unassigned-registrations/search` | read `unassigned_registrations` | CR-113 — staff online search ตรงจากคิวกลาง |
+| `POST /staff/v1/unassigned-registrations/{id}/claim` | update/delete `unassigned_registrations` + write Couch | CR-113 — birth of Couch SoR; แล้ว worker → `public_persons` |
 | `GET /public/v1/needs` | read `public_needs` | aggregate ข้ามศูนย์ |
 | `POST /public/v1/donations` | write `donations` (inbound §4) | ตอบ tracking_token ทันที |
 | `GET /public/v1/donations/{tracking_token}` | read `public_donations` | mirror สถานะจาก CouchDB |

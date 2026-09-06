@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-21
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
+updated: 2026-09-06
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration
 ---
 
 # Smart Shelter — API Contract v1
@@ -188,7 +188,22 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | Endpoint | Method | Auth | Response |
 | --- | --- | --- | --- |
 | `/external/v1/shelters` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | รายการศูนย์พักพิง (`shelter_id`, `shelter_name`, `lat`, `long`) กรองตาม `status` |
-| `/external/v1/persons/shelter-residency` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | สถานะการเข้าพัก (`shelter_id`, `shelter_name`, `checkin_datetime`, `status: CHECKED_IN\|CHECKED_OUT`) ค้นหาจาก `?cid=...` |
+| `/external/v1/persons/shelter-residency` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | สถานะการเข้าพัก — คง `status: CHECKED_IN\|CHECKED_OUT`; **additive (CR-112):** `stay_status`, `in_zone` (bool). `CHECKED_IN` เมื่อ stay ∈ {`active`,`room_confirmed`,`temporary_leave`}; อื่นๆ = `CHECKED_OUT`. ค้นหาจาก `?cid=...` |
+
+**Public shelter occupancy (CR-112):** response ศูนย์สาธารณะคืนคีย์ `occupancy` (= Forecast), `present`, `in_zone`, `capacity` แบบ additive — ดูสูตรใน `schema.md` §1.1. Public family search allow-list รวม `arriving` และ `room_confirmed`.
+
+### 5.2 Unassigned Registration (CR-113)
+
+คิวกลาง Mongo-only เมื่อยังไม่เลือกศูนย์ — **ไม่** สร้าง Couch `evacuee` / `public_persons` จน claim:
+
+| Method | Path | Auth |
+| --- | --- | --- |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret |
+| GET | `/staff/v1/unassigned-registrations/search?q=` | staff session |
+| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope |
+| DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
+
+รายละเอียด shape/claim: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md).
 
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
