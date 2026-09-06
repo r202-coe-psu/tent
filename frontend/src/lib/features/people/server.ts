@@ -15,7 +15,9 @@ export {
 	createEvacuee,
 	createHousehold,
 	evacueeInputSchema,
-	householdInputSchema
+	householdInputSchema,
+	migrateVulnerableGroupCodes,
+	admissionSupportsVulnerableGroup
 } from './domain/people';
 
 export { registeredViaSchema } from '$lib/db/model';

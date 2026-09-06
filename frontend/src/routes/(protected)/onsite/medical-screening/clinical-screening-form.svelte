@@ -286,16 +286,21 @@
 			</div>
 		{/if}
 
-		{#if evacuee.special_needs && evacuee.special_needs.length > 0}
+		{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
 			<div class="rounded-xl border border-amber-500/30 bg-amber-50/70 p-3.5 dark:bg-amber-950/20">
 				<div class="mb-1.5 flex items-center gap-2">
 					<ShieldAlert class="size-4 text-amber-600 dark:text-amber-400" />
 					<span class="text-xs font-bold text-amber-900 dark:text-amber-200">
-						ข้อจำกัด / ความต้องการพิเศษ
+						กลุ่มเปราะบาง / ความต้องการพิเศษ
 					</span>
 				</div>
 				<div class="flex flex-wrap gap-1.5">
-					{#each evacuee.special_needs as need (need)}
+					{#each evacuee.vulnerable_groups ?? [] as need (need)}
+						<Badge variant="outline" class="border-primary/40 bg-primary/10 text-xs text-primary">
+							{getSpecialNeedLabel(need)}
+						</Badge>
+					{/each}
+					{#each evacuee.special_needs ?? [] as need (need)}
 						<Badge
 							variant="outline"
 							class="border-amber-500/40 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-300"

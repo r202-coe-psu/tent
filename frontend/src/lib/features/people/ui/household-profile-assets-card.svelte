@@ -61,7 +61,7 @@
 				<div class="flex flex-wrap gap-2">
 					{#each household.pets as p, i (i)}
 						<Badge variant="outline" class="px-2.5 py-1 text-xs">
-							{{ dog: '🐶 สุนัข', cat: '🐱 แมว', bird: '🐦 นก', other: '🐾 อื่นๆ' }[p.species]}
+							{{ dog: '🐶 สุนัข', cat: '🐱 แมว', other: '🐾 อื่นๆ' }[p.species]}
 							({p.count} ตัว)
 							{#if p.has_cage}· มีกรง{/if}
 						</Badge>

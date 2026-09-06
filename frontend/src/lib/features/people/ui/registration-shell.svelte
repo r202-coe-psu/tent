@@ -132,6 +132,8 @@
 	let residenceSuggestCheckedEmpty = $state(false);
 
 	type ResidenceFormState = {
+		housing_type: string | null;
+		residence_landmark: string;
 		address_no: string;
 		village_no: string;
 		subdistrict: string;
@@ -142,6 +144,8 @@
 
 	function emptyResidence(): ResidenceFormState {
 		return {
+			housing_type: null,
+			residence_landmark: '',
 			address_no: '',
 			village_no: '',
 			subdistrict: '',
@@ -159,6 +163,8 @@
 		if (!hasAny) return null;
 		const villageParts = [snap.village_no, snap.lane, snap.road].filter(Boolean).join(' ');
 		return {
+			housing_type: null,
+			residence_landmark: '',
 			address_no: snap.address_no ?? '',
 			village_no: villageParts,
 			subdistrict: snap.subdistrict ?? '',
@@ -170,6 +176,8 @@
 
 	function residenceFromHousehold(hh: Household): ResidenceFormState {
 		return {
+			housing_type: hh.housing_type ?? null,
+			residence_landmark: hh.residence_landmark ?? '',
 			address_no: hh.address_no ?? '',
 			village_no: hh.village_no ?? '',
 			subdistrict: hh.subdistrict ?? '',
@@ -181,6 +189,7 @@
 
 	function formatResidenceSummary(r: ResidenceFields): string {
 		const parts = [
+			r.residence_landmark,
 			r.address_no,
 			r.village_no,
 			r.subdistrict ? `ต.${r.subdistrict}` : '',
@@ -577,6 +586,8 @@
 			const residencePatch =
 				householdChoice === 'change_residence'
 					? {
+							housing_type: (residenceForm.housing_type as HouseholdInput['housing_type']) ?? null,
+							residence_landmark: residenceForm.residence_landmark || null,
 							address_no: residenceForm.address_no || null,
 							village_no: residenceForm.village_no || null,
 							subdistrict: residenceForm.subdistrict || null,
@@ -622,7 +633,11 @@
 			});
 		} else if (householdChoice === 'create') {
 			if (!hasMinimumResidence(residenceForm)) {
-				throw new Error('กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)');
+				throw new Error(
+					residenceForm.housing_type === 'homeless'
+						? 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+						: 'กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)'
+				);
 			}
 			const householdLabel = autoHouseholdLabel(formatPersonName(registeredEvacuee));
 			const householdInput: HouseholdInput = {
@@ -635,6 +650,8 @@
 				assets: sectionEVis.mode === 'editable' ? assets : null,
 				vehicles: sectionEVis.mode === 'editable' ? vehicles : [],
 				notes: '',
+				housing_type: (residenceForm.housing_type as HouseholdInput['housing_type']) ?? null,
+				residence_landmark: residenceForm.residence_landmark || null,
 				address_no: residenceForm.address_no || null,
 				village_no: residenceForm.village_no || null,
 				subdistrict: residenceForm.subdistrict || null,
@@ -694,7 +711,10 @@
 			(householdChoice === 'create' || householdChoice === 'change_residence') &&
 			!hasMinimumResidence(residenceForm)
 		) {
-			shellError = 'กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)';
+			shellError =
+				residenceForm.housing_type === 'homeless'
+					? 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+					: 'กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)';
 			scrollToSection('household');
 			toast.error(shellError);
 			return;
@@ -1052,6 +1072,8 @@
 								</p>
 							{/if}
 							<HouseholdAddressFields
+								bind:housing_type={residenceForm.housing_type}
+								bind:residence_landmark={residenceForm.residence_landmark}
 								bind:address_no={residenceForm.address_no}
 								bind:village_no={residenceForm.village_no}
 								bind:subdistrict={residenceForm.subdistrict}

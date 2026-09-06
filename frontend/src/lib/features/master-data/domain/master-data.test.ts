@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import {
 	applyItemOp,
 	createMasterData,
+	CR112_VULNERABLE_GROUP_ACTIVE,
 	enforceOneDefault,
 	dedupeItemsByCode,
 	duplicateItemCodes,
@@ -23,6 +24,30 @@ const ctx = { createdBy: 'sa-user' };
 function makeItem(partial: Partial<MasterDataItem> = {}): MasterDataItem {
 	return { code: 'elderly', label: 'ผู้สูงอายุ', is_default: false, status: 'active', ...partial };
 }
+
+describe('CR-112 vulnerable_group active set', () => {
+	it('lists the ratified active codes including disability_other, chronic_illness, infant, young_child', () => {
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).toEqual([
+			'bedridden',
+			'dialysis',
+			'wheelchair',
+			'psychiatric',
+			'elderly_dependent',
+			'infant',
+			'young_child',
+			'pregnant',
+			'vision_impaired',
+			'hearing_impaired',
+			'disability_other',
+			'chronic_illness'
+		]);
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('elderly');
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('disabled');
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.filter((i) => i.is_default)).toEqual([
+			expect.objectContaining({ code: 'elderly_dependent' })
+		]);
+	});
+});
 
 describe('masterTypeSchema', () => {
 	it('accepts the 9 master types', () => {

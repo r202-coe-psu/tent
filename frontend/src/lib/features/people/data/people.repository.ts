@@ -45,6 +45,7 @@ export type EvacueePatch = Partial<
 		| 'religion'
 		| 'photo'
 		| 'special_needs'
+		| 'vulnerable_groups'
 		| 'emergency_contact'
 		| 'household_id'
 		| 'current_stay'
@@ -61,6 +62,8 @@ export type HouseholdPatch = Partial<
 		| 'district'
 		| 'province'
 		| 'postal_code'
+		| 'housing_type'
+		| 'residence_landmark'
 		| 'vehicles'
 		| 'assets'
 		| 'pets'
@@ -224,7 +227,7 @@ export interface PeopleRepository {
 	 */
 	recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
 		ctx: AuthorContext
 	): Promise<Evacuee>;
 	/**

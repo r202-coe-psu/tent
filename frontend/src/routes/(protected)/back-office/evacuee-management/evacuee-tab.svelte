@@ -61,6 +61,11 @@
 			colorClass:
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
 		},
+		room_confirmed: {
+			label: 'ยืนยันถึงโซนแล้ว',
+			colorClass:
+				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+		},
 		temporary_leave: {
 			label: 'ออกชั่วคราว',
 			colorClass:
@@ -180,8 +185,18 @@
 
 	async function handleCheckIn(evacuee: Evacuee) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		let zone = evacuee.current_stay.zone?.trim() ?? '';
+		if (!zone) {
+			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
+			if (entered === null) return;
+			zone = entered.trim();
+		}
+		if (!zone) {
+			toast.error('การเช็คอินต้องระบุโซน');
+			return;
+		}
 		try {
-			await checkIn.mutateAsync({ evacuee, ctx });
+			await checkIn.mutateAsync({ evacuee, ctx, zone });
 			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');

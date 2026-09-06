@@ -316,7 +316,7 @@ describe('ClinicalScreeningForm component', () => {
 			}
 		});
 
-		expect(result.body).toContain('ข้อจำกัด / ความต้องการพิเศษ');
+		expect(result.body).toContain('กลุ่มเปราะบาง / ความต้องการพิเศษ');
 		expect(result.body).toContain('ใช้วีลแชร์');
 		expect(result.body).toContain('สัญญาณชีพ');
 		expect(result.body).toContain('ความดันโลหิต');

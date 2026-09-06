@@ -236,6 +236,27 @@ export const useConfirmRoom = () => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+export const useConfirmRoomForHousehold = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			householdId,
+			evacuees,
+			ctx
+		}: {
+			householdId: string;
+			evacuees: readonly Evacuee[];
+			ctx: AuthorContext;
+		}) => peopleRepository().confirmRoomForHousehold(householdId, evacuees, ctx),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };
@@ -262,7 +283,7 @@ export const useRecordMovement = () => {
 			ctx
 		}: {
 			evacuee: Evacuee;
-			action: Exclude<MovementAction, 'check_in' | 'check_out'>;
+			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>;
 			ctx: AuthorContext;
 		}) => peopleRepository().recordMovement(evacuee, action, ctx),
 		onSuccess: (updated) => {

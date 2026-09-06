@@ -477,6 +477,21 @@ describe('CR-023 — empty submit fills policy defaults', () => {
 			rules_other: null
 		});
 	});
+
+	it('hard-migrates admission_policy legacy VG codes elderly/disabled', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			admission_policy: {
+				supported_vulnerable_groups: ['elderly', 'disabled', 'pregnant'],
+				pet_policy: { policy: null, categories: [] }
+			}
+		});
+		expect(r.admission_policy.supported_vulnerable_groups).toEqual([
+			'elderly_dependent',
+			'disability_other',
+			'pregnant'
+		]);
+	});
 });
 
 describe('CR-023 Addendum A — section 6 nested pet policy', () => {

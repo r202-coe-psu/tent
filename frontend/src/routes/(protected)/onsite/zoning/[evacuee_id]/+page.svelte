@@ -18,12 +18,17 @@
 		useScreenings,
 		useCheckInEvacuee,
 		useChangeEvacueeZone,
+		useConfirmRoom,
+		useConfirmRoomForHousehold,
 		ZoneSelectionFields,
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
-		countOccupantsByZone,
+		countPresentOccupantsByZone,
 		recommendZoneKind,
+		canChangeEvacueeZone,
+		canConfirmRoom,
+		isPendingZoneArrivalConfirmation,
 		type Evacuee,
 		type TriageLevel
 	} from '$lib/features/people';
@@ -44,6 +49,8 @@
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
+	const confirmRoomMutation = useConfirmRoom();
+	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -89,9 +96,9 @@
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
-	const isRezone = $derived(
-		evacuee?.current_stay.status === 'active' && !!evacuee.current_stay.zone
-	);
+	const isAwaitingConfirm = $derived(!!evacuee && isPendingZoneArrivalConfirmation(evacuee));
+	const isRezone = $derived(!!evacuee && canChangeEvacueeZone(evacuee) && !isAwaitingConfirm);
+	const canConfirmArrival = $derived(!!evacuee && isAwaitingConfirm && canConfirmRoom(evacuee));
 
 	const pendingHouseholdMembers = $derived.by((): Evacuee[] => {
 		if (!evacuee?.household_id) return [];
@@ -107,17 +114,15 @@
 		});
 	});
 
-	const activeHouseholdMembers = $derived.by((): Evacuee[] => {
+	const rezoneHouseholdMembers = $derived.by((): Evacuee[] => {
 		if (!evacuee?.household_id) return [];
 		return allEvacuees.filter(
 			(e) =>
-				e._id !== evacuee._id &&
-				e.household_id === evacuee.household_id &&
-				e.current_stay.status === 'active'
+				e._id !== evacuee._id && e.household_id === evacuee.household_id && canChangeEvacueeZone(e)
 		);
 	});
 
-	const companionCandidates = $derived(isRezone ? activeHouseholdMembers : pendingHouseholdMembers);
+	const companionCandidates = $derived(isRezone ? rezoneHouseholdMembers : pendingHouseholdMembers);
 
 	// User edits tracked per-evacuee so query refetches don't wipe selection
 	let zoneDraft = $state<string | null>(null);
@@ -141,7 +146,7 @@
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
 
-	const occupantCounts = $derived(countOccupantsByZone(allEvacuees));
+	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
 	const householdLabel = $derived(
 		evacuee?.household_id
 			? (householdsQuery.data?.find((h) => h._id === evacuee.household_id)?.label ?? '—')
@@ -167,10 +172,42 @@
 	}
 
 	async function applyZone(target: Evacuee, zone: string) {
-		if (target.current_stay.status === 'active') {
+		if (canChangeEvacueeZone(target)) {
 			return changeZoneMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
 		}
 		return checkInMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
+	}
+
+	async function handleConfirmArrival() {
+		if (!evacuee || !canConfirmArrival) return;
+		submitting = true;
+		try {
+			await confirmRoomMutation.mutateAsync({ evacuee, ctx: authorCtx() });
+			toast.success('ยืนยันถึงโซนเรียบร้อย');
+			await goto(resolve('/onsite/zoning'));
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		} finally {
+			submitting = false;
+		}
+	}
+
+	async function handleConfirmHouseholdArrival() {
+		if (!evacuee?.household_id) return;
+		submitting = true;
+		try {
+			const confirmed = await confirmRoomHouseholdMutation.mutateAsync({
+				householdId: evacuee.household_id,
+				evacuees: allEvacuees,
+				ctx: authorCtx()
+			});
+			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+			await goto(resolve('/onsite/zoning'));
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		} finally {
+			submitting = false;
+		}
 	}
 
 	async function handleSubmit() {
@@ -301,6 +338,23 @@
 			{/if}
 
 			<div class="mt-6 flex flex-wrap gap-2">
+				{#if canConfirmArrival}
+					<Button onclick={handleConfirmArrival} disabled={submitting}>
+						{#if submitting}
+							<Loader2 class="mr-2 size-4 animate-spin" />
+						{/if}
+						ยืนยันถึงโซน
+					</Button>
+					{#if evacuee.household_id}
+						<Button
+							variant="secondary"
+							onclick={handleConfirmHouseholdArrival}
+							disabled={submitting}
+						>
+							ยืนยันทั้งครัวเรือน
+						</Button>
+					{/if}
+				{/if}
 				<Button onclick={handleSubmit} disabled={submitting || !selectedZone}>
 					{#if submitting}
 						<Loader2 class="mr-2 size-4 animate-spin" />

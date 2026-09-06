@@ -377,9 +377,17 @@
 											{formatTimeOrDate(evacuee.current_stay?.since || evacuee.created_at)}
 										</Table.TableCell>
 										<Table.TableCell class="py-3">
-											{#if evacuee.special_needs && evacuee.special_needs.length > 0}
+											{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
 												<div class="flex flex-wrap gap-1">
-													{#each evacuee.special_needs as need (need)}
+													{#each evacuee.vulnerable_groups ?? [] as need (need)}
+														<Badge
+															variant="outline"
+															class="border-primary/30 bg-primary/10 px-1.5 py-0 text-[11px] text-primary"
+														>
+															{getSpecialNeedLabel(need)}
+														</Badge>
+													{/each}
+													{#each evacuee.special_needs ?? [] as need (need)}
 														<Badge
 															variant="outline"
 															class="border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[11px] text-amber-700 dark:text-amber-300"

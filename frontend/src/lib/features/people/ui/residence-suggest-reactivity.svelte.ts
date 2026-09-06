@@ -30,6 +30,8 @@ export function readResidenceSuggestDeps(
 	return {
 		choice,
 		form: {
+			housing_type: form.housing_type,
+			residence_landmark: form.residence_landmark,
 			address_no: form.address_no,
 			village_no: form.village_no,
 			subdistrict: form.subdistrict,

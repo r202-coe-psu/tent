@@ -19,6 +19,8 @@ export type ResidenceFields = {
 	district?: string | null;
 	province?: string | null;
 	postal_code?: string | null;
+	housing_type?: string | null;
+	residence_landmark?: string | null;
 };
 
 export type ResidenceMatchCandidate = ResidenceFields & {
@@ -128,14 +130,28 @@ function trimField(value: string | null | undefined): string {
 	return (value ?? '').trim();
 }
 
-/** Minimum Residence for Station 1 create: house no + province + district + subdistrict. */
-export function hasMinimumResidence(residence: ResidenceFields): boolean {
+function hasCompleteResidenceGeo(residence: ResidenceFields): boolean {
 	return Boolean(
-		trimField(residence.address_no) &&
 		trimField(residence.province) &&
 		trimField(residence.district) &&
 		trimField(residence.subdistrict)
 	);
+}
+
+/**
+ * Minimum Residence for Station 1 create.
+ * Default: house no + province + district + subdistrict.
+ * Homeless: address_no **or** landmark **or** complete geo (CR-112).
+ */
+export function hasMinimumResidence(residence: ResidenceFields): boolean {
+	if (residence.housing_type === 'homeless') {
+		return Boolean(
+			trimField(residence.address_no) ||
+			trimField(residence.residence_landmark) ||
+			hasCompleteResidenceGeo(residence)
+		);
+	}
+	return Boolean(trimField(residence.address_no) && hasCompleteResidenceGeo(residence));
 }
 
 /** Unlinked → create; linked → keep. */

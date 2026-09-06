@@ -4,7 +4,7 @@ import {
 	buildZoningPath,
 	classifyScreeningQueueTab,
 	classifyZoningQueueTab,
-	countOccupantsByZone,
+	countPresentOccupantsByZone,
 	nextQueueLabel,
 	parseZoningQrCode,
 	recommendZoneKind
@@ -71,11 +71,29 @@ describe('nextQueueLabel', () => {
 		).toBe('รอโซน');
 	});
 
-	it('returns พักแล้ว for active or zoned', () => {
+	it('returns รอยืนยันถึงโซน when active with zone', () => {
 		expect(
 			nextQueueLabel(ev({ status: 'active', zone: 'Z1' }), {
 				enableMedicalScreening: true,
 				hasScreening: true
+			})
+		).toBe('รอยืนยันถึงโซน');
+	});
+
+	it('returns พักแล้ว for room_confirmed', () => {
+		expect(
+			nextQueueLabel(ev({ status: 'room_confirmed', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).toBe('พักแล้ว');
+	});
+
+	it('returns พักแล้ว for temporary_leave with zone', () => {
+		expect(
+			nextQueueLabel(ev({ status: 'temporary_leave', zone: 'Z1' }), {
+				enableMedicalScreening: false,
+				hasScreening: false
 			})
 		).toBe('พักแล้ว');
 	});
@@ -109,9 +127,18 @@ describe('classifyZoningQueueTab', () => {
 		).toBe('pending');
 	});
 
-	it('assigned when active with zone', () => {
+	it('awaiting_confirm when active with zone (pending Zone Arrival Confirmation)', () => {
 		expect(
 			classifyZoningQueueTab(ev({ status: 'active', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).toBe('awaiting_confirm');
+	});
+
+	it('assigned when room_confirmed with zone', () => {
+		expect(
+			classifyZoningQueueTab(ev({ status: 'room_confirmed', zone: 'Z1' }), {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
@@ -186,11 +213,11 @@ describe('parseZoningQrCode', () => {
 	});
 });
 
-describe('countOccupantsByZone', () => {
-	it('counts active/temporary_leave only', () => {
-		const counts = countOccupantsByZone([
+describe('countPresentOccupantsByZone', () => {
+	it('counts Present occupancy: active, room_confirmed, and temporary_leave', () => {
+		const counts = countPresentOccupantsByZone([
 			ev({ status: 'active', zone: 'A', id: '1' }),
-			ev({ status: 'active', zone: 'A', id: '2' }),
+			ev({ status: 'room_confirmed', zone: 'A', id: '2' }),
 			ev({ status: 'temporary_leave', zone: 'A', id: '3' }),
 			ev({ status: 'arriving', zone: null, id: '4' }),
 			ev({ status: 'checked_out', zone: 'A', id: '5' })

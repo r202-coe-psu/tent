@@ -136,9 +136,11 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 	});
 
 	describe('Household Address Fields (household-address-fields.svelte)', () => {
-		it('renders address_no, village_no, province, district, subdistrict, postal_code', () => {
+		it('renders housing type, landmark, and address fields', () => {
 			const result = render(HouseholdAddressFields, {
 				props: {
+					housing_type: 'owned_house',
+					residence_landmark: 'ใกล้สะพาน',
 					address_no: '99/1',
 					village_no: 'หมู่ 5',
 					province: 'สงขลา',
@@ -147,9 +149,12 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					postal_code: '90110'
 				}
 			});
+			expect(result.body).toContain('ประเภทที่อยู่อาศัย');
+			expect(result.body).toContain('จุดสังเกตที่อยู่');
 			expect(result.body).toContain('บ้านเลขที่');
 			expect(result.body).toContain('หมู่ที่ / ตรอก / ซอย / ถนน');
 			expect(result.body).toContain('99/1');
+			expect(result.body).toContain('ใกล้สะพาน');
 		});
 	});
 

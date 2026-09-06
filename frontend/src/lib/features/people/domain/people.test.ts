@@ -18,6 +18,8 @@ import {
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	resolveStatusChangeAction,
+	normalizeCheckoutRemark,
+	statusChangeHandlerKind,
 	matchesEvacueeSearch,
 	isEvacuee,
 	createHousehold,
@@ -51,6 +53,8 @@ import {
 	replacePersonId,
 	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
+	admissionSupportsVulnerableGroup,
+	mergeVulnerableGroupsAndSpecialNeeds,
 	housingTypeSchema,
 	householdInputSchema,
 	migratePetGroup,
@@ -172,6 +176,27 @@ describe('vulnerable_groups vs special_needs', () => {
 			'disability_other',
 			'infant'
 		]);
+	});
+
+	it('admission_policy legacy elderly/disabled still match CR-112 capability codes', () => {
+		expect(admissionSupportsVulnerableGroup(['elderly'], 'elderly_dependent')).toBe(true);
+		expect(admissionSupportsVulnerableGroup(['disabled'], 'disability_other')).toBe(true);
+		expect(admissionSupportsVulnerableGroup(['elderly_dependent'], 'elderly')).toBe(true);
+		expect(admissionSupportsVulnerableGroup(['disability_other'], 'disabled')).toBe(true);
+		expect(admissionSupportsVulnerableGroup(['wheelchair'], 'disability_other')).toBe(false);
+		expect(admissionSupportsVulnerableGroup(undefined, 'elderly_dependent')).toBe(false);
+	});
+
+	it('merges Vulnerable Groups and Special Needs independently without cross-contaminating', () => {
+		expect(
+			mergeVulnerableGroupsAndSpecialNeeds(
+				{ vulnerable_groups: ['elderly'], special_needs: ['ใช้ออกซิเจน'] },
+				{ vulnerable_groups: ['pregnant'], special_needs: ['อาหารอ่อน'] }
+			)
+		).toEqual({
+			vulnerable_groups: ['elderly_dependent', 'pregnant'],
+			special_needs: ['ใช้ออกซิเจน', 'อาหารอ่อน']
+		});
 	});
 });
 
@@ -943,11 +968,64 @@ describe('resolveStatusChangeAction', () => {
 
 	it('resolves valid transitions to their movement action', () => {
 		expect(resolveStatusChangeAction('pre_registered', 'active')).toBe('check_in');
-		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('return_from_leave');
 		expect(resolveStatusChangeAction('active', 'checked_out')).toBe('check_out');
 		expect(resolveStatusChangeAction('active', 'transferred')).toBe('transfer_out');
 		expect(resolveStatusChangeAction('active', 'temporary_leave')).toBe('leave_temporary');
 		expect(resolveStatusChangeAction('active', 'deceased')).toBe('mark_deceased');
+	});
+
+	it('resolves temporary_leave → active via check_in (zone required; not return_from_leave)', () => {
+		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('check_in');
+		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('temporary_leave');
+
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const onLeave = {
+			...e,
+			current_stay: {
+				status: 'temporary_leave' as const,
+				zone: 'Z1',
+				since: e.current_stay.since
+			}
+		};
+		expect(canCheckInEvacuee(onLeave)).toBe(true);
+		const withoutZone = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
+		expect(() => applyMovementToStay(onLeave, withoutZone)).toThrow(/โซน/);
+
+		const withZone = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'check_in',
+				zone: 'Z2',
+				occurred_at: '2026-09-03T06:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(onLeave, withZone);
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z2');
+	});
+});
+
+describe('normalizeCheckoutRemark', () => {
+	it('trims and returns a nonempty checkout remark', () => {
+		expect(normalizeCheckoutRemark(' กลับบ้าน ')).toBe('กลับบ้าน');
+	});
+
+	it('rejects empty or whitespace-only remarks', () => {
+		expect(() => normalizeCheckoutRemark('')).toThrow(/เหตุผล/);
+		expect(() => normalizeCheckoutRemark('   ')).toThrow(/เหตุผล/);
+		expect(() => normalizeCheckoutRemark(null)).toThrow(/เหตุผล/);
+		expect(() => normalizeCheckoutRemark(undefined)).toThrow(/เหตุผล/);
+	});
+});
+
+describe('statusChangeHandlerKind', () => {
+	it('routes check_in, check_out, and confirm_room to dedicated handlers', () => {
+		expect(statusChangeHandlerKind('check_in')).toBe('check_in');
+		expect(statusChangeHandlerKind('check_out')).toBe('check_out');
+		expect(statusChangeHandlerKind('confirm_room')).toBe('confirm_room');
+		expect(statusChangeHandlerKind('leave_temporary')).toBe('record');
+		expect(statusChangeHandlerKind('return_from_leave')).toBe('record');
 	});
 });
 

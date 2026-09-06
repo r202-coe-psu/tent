@@ -203,6 +203,16 @@
 		});
 	}
 
+	function petNotesText(pet: PetDetail): string {
+		return [pet.name.trim(), pet.condition.trim()].filter(Boolean).join(' | ');
+	}
+
+	function otherPetMissingNotes(pet: PetDetail): boolean {
+		return pet.species === 'other' && !petNotesText(pet);
+	}
+
+	const otherPetsInvalid = $derived(hasPets && petDetails.some((pet) => otherPetMissingNotes(pet)));
+
 	function snapshot() {
 		return {
 			pets: allowPets ? buildPetGroups() : [],
@@ -317,6 +327,7 @@
 								{@const speciesLabel = petSpeciesOptions.find(
 									(o) => o.value === pet.species
 								)?.label}
+								{@const notesMissing = otherPetMissingNotes(pet)}
 								<div class="space-y-3 rounded-xl border border-border bg-background p-3">
 									<div class="flex items-center justify-between gap-2">
 										<span class="text-sm font-bold text-foreground">
@@ -334,11 +345,19 @@
 									</div>
 									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 										<div class="space-y-1.5">
-											<Label class="text-sm">{t.pets.nameLabel}</Label>
+											<Label class="text-sm">
+												{t.pets.nameLabel}{pet.species === 'other' ? ' *' : ''}
+											</Label>
 											<Input
-												class="form-control-touch bg-background"
+												class="form-control-touch bg-background {notesMissing
+													? 'border-destructive focus-visible:ring-destructive'
+													: ''}"
 												bind:value={pet.name}
-												placeholder={t.pets.namePlaceholder}
+												placeholder={pet.species === 'other'
+													? t.pets.otherNotesPlaceholder
+													: t.pets.namePlaceholder}
+												aria-invalid={notesMissing}
+												aria-required={pet.species === 'other'}
 											/>
 										</div>
 										<div class="space-y-1.5">
@@ -350,6 +369,9 @@
 											/>
 										</div>
 									</div>
+									{#if notesMissing}
+										<p class="text-xs text-destructive">{t.pets.otherNotesRequired}</p>
+									{/if}
 									<label
 										class="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-muted/20 px-3"
 									>
@@ -533,7 +555,9 @@
 		>
 			<Button
 				type="button"
-				disabled={fieldsDisabled || (disclaimerRequired && !disclaimerAcknowledged)}
+				disabled={fieldsDisabled ||
+					otherPetsInvalid ||
+					(disclaimerRequired && !disclaimerAcknowledged)}
 				class="touch-target h-auto w-full py-3 text-base font-semibold sm:w-auto sm:px-8"
 				onclick={() =>
 					onNext?.({

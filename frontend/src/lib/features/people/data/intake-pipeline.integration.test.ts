@@ -112,7 +112,7 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 		expect(
 			classifyZoningQueueTab(checkedIn, {
 				enableMedicalScreening: true,
@@ -149,7 +149,7 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 	});
 
 	it('3. screening disabled: registration → zoning check-in without screening doc', async () => {
@@ -172,7 +172,7 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: false,
 				hasScreening: false
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 		expect(classifyScreeningQueueTab(checkedIn, new Set())).toBeNull();
 
 		const screenings = await repo.listScreenings();

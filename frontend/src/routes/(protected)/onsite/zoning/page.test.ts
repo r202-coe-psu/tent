@@ -26,9 +26,32 @@ describe('Station 3 zoning helpers (route contract)', () => {
 		);
 	});
 
-	it('recommends quarantine for yellow triage', () => {
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
+	it('classifies active+zone as awaiting_confirm (Zone Arrival Confirmation)', () => {
+		const e = {
+			_id: 'evacuee:1',
+			current_stay: { status: 'active', zone: 'Z1', since: '2026-09-03T00:00:00.000Z' }
+		} as Parameters<typeof classifyZoningQueueTab>[0];
+		expect(classifyZoningQueueTab(e, { enableMedicalScreening: false, hasScreening: false })).toBe(
+			'awaiting_confirm'
+		);
+	});
+
+	it('recommends quarantine for red/yellow triage (isolation default)', () => {
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'red')).toBe(
 			'quarantine'
 		);
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, 'yellow')).toBe(
+			'quarantine'
+		);
+	});
+
+	it('recommends vulnerable for Vulnerable Groups when triage is green', () => {
+		expect(
+			recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'green')
+		).toBe('vulnerable');
+	});
+
+	it('defaults to general when no triage and no vulnerable tags', () => {
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
 	});
 });

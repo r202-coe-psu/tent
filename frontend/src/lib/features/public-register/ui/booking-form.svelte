@@ -263,7 +263,6 @@
 			: [
 					{ code: 'dog', label: 'สุนัข', is_default: true },
 					{ code: 'cat', label: 'แมว', is_default: false },
-					{ code: 'bird', label: 'นก', is_default: false },
 					{ code: 'other', label: 'อื่น ๆ', is_default: false }
 				]
 	);

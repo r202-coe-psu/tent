@@ -247,7 +247,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			);
 		}
 
-		const saved = await this.repo.put(touch({ ...evacuee, _rev: latest._rev }));
+		const saved = await this.repo.put(
+			touch({
+				...evacuee,
+				vulnerable_groups: migrateVulnerableGroupCodes(evacuee.vulnerable_groups ?? []),
+				_rev: latest._rev
+			})
+		);
 		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
 			await this.cancelHouseholdIfEmpty(oldHouseholdId);
 			await this.refreshDerivedHouseholdStatus(oldHouseholdId);
@@ -261,6 +267,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
 		const { person_id: personIdPatch, ...rest } = patch;
 		let next: Evacuee = { ...latest, ...rest };
+		if (rest.vulnerable_groups) {
+			next = {
+				...next,
+				vulnerable_groups: migrateVulnerableGroupCodes(rest.vulnerable_groups)
+			};
+		}
 		if (personIdPatch) {
 			next = replacePersonId(next, personIdPatch);
 		}
@@ -670,7 +682,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
 	async recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
 		ctx: AuthorContext
 	): Promise<Evacuee> {
 		assertMovementAllowed(evacuee, action);

@@ -54,6 +54,8 @@
 				{:else}
 					<div class="space-y-3">
 						{#each petsList as pet, i (i)}
+							{@const notesRequired = pet.species === 'other'}
+							{@const notesMissing = notesRequired && !(pet.notes ?? '').trim()}
 							<div
 								class="grid grid-cols-12 items-end gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900"
 							>
@@ -64,9 +66,8 @@
 									>
 									<Select.Root type="single" bind:value={pet.species}>
 										<Select.Trigger id="pet_species_{i}" class="h-10 w-full bg-background text-sm">
-											{{ dog: '🐶 สุนัข', cat: '🐱 แมว', bird: '🐦 นก', other: '🐾 อื่นๆ' }[
-												pet.species
-											] ?? '— เลือก —'}
+											{{ dog: '🐶 สุนัข', cat: '🐱 แมว', other: '🐾 อื่นๆ' }[pet.species] ??
+												'— เลือก —'}
 										</Select.Trigger>
 										<Select.Content>
 											<Select.Item value="dog" label="🐶 สุนัข" />
@@ -90,18 +91,25 @@
 									/>
 								</div>
 
-								<!-- Notes -->
+								<!-- Notes (required when species === other) -->
 								<div class="col-span-6 space-y-1.5 font-normal sm:col-span-3">
-									<Label for="pet_notes_{i}" class="text-xs font-semibold text-muted-foreground"
-										>หมายเหตุ</Label
-									>
+									<Label for="pet_notes_{i}" class="text-xs font-semibold text-muted-foreground">
+										หมายเหตุ{notesRequired ? ' *' : ''}
+									</Label>
 									<Input
 										id="pet_notes_{i}"
 										type="text"
-										class="h-10 bg-background text-sm"
+										class="h-10 bg-background text-sm {notesMissing
+											? 'border-destructive focus-visible:ring-destructive'
+											: ''}"
 										bind:value={pet.notes}
-										placeholder="หมายเหตุ"
+										placeholder={notesRequired ? 'ระบุชนิดสัตว์ เช่น กระต่าย' : 'หมายเหตุ'}
+										aria-invalid={notesMissing}
+										aria-required={notesRequired}
 									/>
+									{#if notesMissing}
+										<p class="text-xs text-destructive">กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ</p>
+									{/if}
 								</div>
 
 								<!-- Has Cage Checkbox -->

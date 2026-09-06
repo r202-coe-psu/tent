@@ -76,6 +76,7 @@ import {
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
 import {
+	CR112_VULNERABLE_GROUP_ACTIVE,
 	enforceOneDefault,
 	masterDocId,
 	type MasterData,
@@ -918,20 +919,11 @@ const masterLabels = (m: MasterLookup, type: MasterDataType, ...keys: string[]) 
 const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'vulnerable_group',
-		items: [
-			{ key: 'bedridden', label: 'ผู้ป่วยติดเตียง' },
-			{ key: 'dialysis', label: 'ผู้ป่วยฟอกไต' },
-			{ key: 'wheelchair', label: 'ผู้ใช้วีลแชร์' },
-			{ key: 'psychiatric', label: 'ผู้ป่วยจิตเวช' },
-			{ key: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: true },
-			{ key: 'infant', label: 'ทารก' },
-			{ key: 'young_child', label: 'เด็กเล็ก' },
-			{ key: 'pregnant', label: 'สตรีมีครรภ์' },
-			{ key: 'vision_impaired', label: 'ผู้พิการทางการมองเห็น' },
-			{ key: 'hearing_impaired', label: 'ผู้พิการทางการได้ยิน' },
-			{ key: 'disability_other', label: 'ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด)' },
-			{ key: 'chronic_illness', label: 'ผู้มีโรคประจำตัว/เรื้อรัง' }
-		]
+		items: CR112_VULNERABLE_GROUP_ACTIVE.map((item) => ({
+			key: item.code,
+			label: item.label,
+			...('is_default' in item && item.is_default ? { is_default: true as const } : {})
+		}))
 	},
 	{
 		type: 'health_condition',

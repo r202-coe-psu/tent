@@ -74,7 +74,7 @@
 		red: 'แดง'
 	};
 
-	type StatusChip = 'all' | StayStatus | 'รอแพทย์' | 'รอโซน';
+	type StatusChip = 'all' | StayStatus | 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว';
 
 	let searchQuery = $state('');
 	let statusChip = $state<StatusChip>('pre_registered');
@@ -83,6 +83,8 @@
 	let cameraError = $state<string | null>(null);
 	let selected = $state<Evacuee | null>(null);
 	let sheetOpen = $state(false);
+
+	const NEXT_QUEUE_CHIPS = new Set<StatusChip>(['รอแพทย์', 'รอโซน', 'รอยืนยันถึงโซน', 'พักแล้ว']);
 
 	const filtered = $derived(
 		allEvacuees
@@ -93,7 +95,7 @@
 					hasScreening: screenedIds.has(e._id)
 				});
 				if (statusChip === 'all') return true;
-				if (statusChip === 'รอแพทย์' || statusChip === 'รอโซน') return next === statusChip;
+				if (NEXT_QUEUE_CHIPS.has(statusChip)) return next === statusChip;
 				return e.current_stay.status === statusChip;
 			})
 			.slice()
@@ -106,7 +108,8 @@
 		{ id: 'pre_registered', label: 'ลงทะเบียนล่วงหน้า' },
 		{ id: 'รอแพทย์', label: 'รอแพทย์' },
 		{ id: 'รอโซน', label: 'รอโซน' },
-		{ id: 'active', label: 'พักแล้ว' }
+		{ id: 'รอยืนยันถึงโซน', label: 'รอยืนยันถึงโซน' },
+		{ id: 'พักแล้ว', label: 'พักแล้ว' }
 	];
 
 	function openRow(e: Evacuee) {
@@ -158,6 +161,7 @@
 	): 'default' | 'secondary' | 'destructive' | 'outline' {
 		if (next === 'รอแพทย์') return 'destructive';
 		if (next === 'รอโซน') return 'default';
+		if (next === 'รอยืนยันถึงโซน') return 'default';
 		if (next === 'พักแล้ว') return 'secondary';
 		return 'outline';
 	}

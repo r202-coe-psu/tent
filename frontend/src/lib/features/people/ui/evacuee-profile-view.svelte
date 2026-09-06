@@ -22,8 +22,12 @@
 		useChangeEvacueeZone,
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
+		useConfirmRoom,
 		useRecordMovement,
-		resolveStatusChangeAction
+		resolveStatusChangeAction,
+		normalizeCheckoutRemark,
+		statusChangeHandlerKind,
+		canChangeEvacueeZone
 	} from '$lib/features/people';
 	import {
 		hasStaffCapability,
@@ -93,6 +97,12 @@
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
 			dotClass: 'bg-green-500'
 		},
+		room_confirmed: {
+			label: 'ยืนยันถึงโซนแล้ว (Zone Arrival Confirmed)',
+			colorClass:
+				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+			dotClass: 'bg-emerald-600'
+		},
 		pre_registered: {
 			label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
 			colorClass:
@@ -148,6 +158,7 @@
 	const patchHouseholdMutation = usePatchHousehold();
 	const checkInMutation = useCheckInEvacuee();
 	const checkOutMutation = useCheckOutEvacuee();
+	const confirmRoomMutation = useConfirmRoom();
 	const recordMovementMutation = useRecordMovement();
 	const createMedicalMutation = useCreateMedical();
 	const patchMedicalMutation = usePatchMedical();
@@ -210,6 +221,10 @@
 			dotClass: 'fill-slate-400 text-slate-400',
 			label: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)'
 		},
+		confirm_room: {
+			dotClass: 'fill-emerald-600 text-emerald-600',
+			label: 'ยืนยันถึงโซน (Zone Arrival Confirmation)'
+		},
 		transfer_in: { dotClass: 'fill-blue-500 text-blue-500', label: 'ย้ายเข้า (Transfer in)' },
 		transfer_out: { dotClass: 'fill-violet-500 text-violet-500', label: 'ย้ายออก (Transfer out)' },
 		leave_temporary: {
@@ -239,15 +254,18 @@
 
 	// Audit log — show a limited page of movements at a time, expand on demand
 	const MOVEMENTS_PAGE_SIZE = 5;
-	let visibleMovementsCount = $state(MOVEMENTS_PAGE_SIZE);
+	let visibleCountByEvacueeId = $state<Record<string, number>>({});
 
-	$effect(() => {
-		void evacueeId;
-		visibleMovementsCount = MOVEMENTS_PAGE_SIZE;
-	});
-
+	const visibleMovementsCount = $derived(visibleCountByEvacueeId[evacueeId] ?? MOVEMENTS_PAGE_SIZE);
 	const visibleMovements = $derived(movements.slice(0, visibleMovementsCount));
 	const hasMoreMovements = $derived(movements.length > visibleMovementsCount);
+
+	function loadMoreMovements() {
+		visibleCountByEvacueeId = {
+			...visibleCountByEvacueeId,
+			[evacueeId]: visibleMovementsCount + MOVEMENTS_PAGE_SIZE
+		};
+	}
 
 	function getAuthorContext() {
 		const createdBy = authStore.user?.name?.trim();
@@ -271,7 +289,7 @@
 	async function updateZone(zoneCode: string) {
 		if (!evacuee) return;
 		try {
-			if (evacuee.current_stay.status === 'active') {
+			if (canChangeEvacueeZone(evacuee)) {
 				await changeZoneMutation.mutateAsync({
 					evacuee,
 					ctx: getAuthorContext(),
@@ -302,11 +320,24 @@
 				return;
 			}
 			const ctx = getAuthorContext();
-			if (action === 'check_in') {
-				await checkInMutation.mutateAsync({ evacuee, ctx });
-			} else if (action === 'check_out') {
-				await checkOutMutation.mutateAsync({ evacuee, ctx });
-			} else {
+			const kind = statusChangeHandlerKind(action);
+			if (kind === 'check_in') {
+				const zone = evacuee.current_stay.zone?.trim();
+				if (!zone) {
+					toast.error('การเช็คอินต้องระบุโซน');
+					showStatusModal = false;
+					showZoneModal = true;
+					return;
+				}
+				await checkInMutation.mutateAsync({ evacuee, ctx, zone });
+			} else if (kind === 'check_out') {
+				const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
+				if (entered === null) return;
+				const reason = normalizeCheckoutRemark(entered);
+				await checkOutMutation.mutateAsync({ evacuee, ctx, reason });
+			} else if (kind === 'confirm_room') {
+				await confirmRoomMutation.mutateAsync({ evacuee, ctx });
+			} else if (action !== 'check_in' && action !== 'check_out' && action !== 'confirm_room') {
 				await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
 			}
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
@@ -717,7 +748,7 @@
 					<li>
 						<button
 							type="button"
-							onclick={() => (visibleMovementsCount += MOVEMENTS_PAGE_SIZE)}
+							onclick={loadMoreMovements}
 							class="cursor-pointer text-xs font-semibold text-primary transition-colors hover:text-primary/80"
 						>
 							โหลดเพิ่มเติม ({movements.length - visibleMovementsCount} รายการ)

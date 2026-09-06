@@ -35,6 +35,7 @@
 
 	const statusAccent: Record<StayStatus, string> = {
 		active: '#22c55e',
+		room_confirmed: '#059669',
 		pre_registered: '#3b82f6',
 		arriving: '#f59e0b',
 		temporary_leave: '#f59e0b',

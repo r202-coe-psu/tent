@@ -85,6 +85,25 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
 };
 
+/**
+ * CR-112 Vulnerable Group active seed set (stable codes = keys).
+ * Legacy hard-migrate: `elderly` → `elderly_dependent`; `disabled` → `disability_other`.
+ */
+export const CR112_VULNERABLE_GROUP_ACTIVE = [
+	{ code: 'bedridden', label: 'ผู้ป่วยติดเตียง', is_default: false },
+	{ code: 'dialysis', label: 'ผู้ป่วยฟอกไต', is_default: false },
+	{ code: 'wheelchair', label: 'ผู้ใช้วีลแชร์', is_default: false },
+	{ code: 'psychiatric', label: 'ผู้ป่วยจิตเวช', is_default: false },
+	{ code: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: true },
+	{ code: 'infant', label: 'ทารก', is_default: false },
+	{ code: 'young_child', label: 'เด็กเล็ก', is_default: false },
+	{ code: 'pregnant', label: 'สตรีมีครรภ์', is_default: false },
+	{ code: 'vision_impaired', label: 'ผู้พิการทางการมองเห็น', is_default: false },
+	{ code: 'hearing_impaired', label: 'ผู้พิการทางการได้ยิน', is_default: false },
+	{ code: 'disability_other', label: 'ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด)', is_default: false },
+	{ code: 'chronic_illness', label: 'ผู้มีโรคประจำตัว/เรื้อรัง', is_default: false }
+] as const;
+
 /** Stable id: global docs use `master_data:{type}`, local docs append the shelter code. */
 export function masterDocId(type: MasterDataType, shelterCode?: string | null): string {
 	return shelterCode ? `master_data:${type}:${shelterCode}` : `master_data:${type}`;

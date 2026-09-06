@@ -58,6 +58,32 @@ describe('PeopleRemoteRepository', () => {
 			expect(fetched?.privacy.search_excluded).toBe(false);
 		});
 
+		it('persists vulnerable_groups and special_needs independently', async () => {
+			const saved = await repo.createEvacuee(
+				evInput({
+					vulnerable_groups: ['elderly', 'wheelchair'],
+					special_needs: ['ใช้ออกซิเจน']
+				}),
+				ctx
+			);
+
+			expect(saved.vulnerable_groups).toEqual(['elderly_dependent', 'wheelchair']);
+			expect(saved.special_needs).toEqual(['ใช้ออกซิเจน']);
+
+			const fetched = await repo.getEvacuee(saved._id);
+			expect(fetched?.vulnerable_groups).toEqual(['elderly_dependent', 'wheelchair']);
+			expect(fetched?.special_needs).toEqual(['ใช้ออกซิเจน']);
+		});
+
+		it('hard-migrates legacy VG codes on updateEvacuee', async () => {
+			const saved = await repo.createEvacuee(evInput({ vulnerable_groups: ['wheelchair'] }), ctx);
+			const updated = await repo.updateEvacuee({
+				...saved,
+				vulnerable_groups: ['elderly', 'disabled']
+			});
+			expect(updated.vulnerable_groups).toEqual(['elderly_dependent', 'disability_other']);
+		});
+
 		it('writes a linked medical doc when medical fields are present', async () => {
 			const saved = await repo.createEvacuee(
 				evInput({ medical_conditions: ['diabetes'], medical_allergies: ['penicillin'] }),
@@ -606,6 +632,19 @@ describe('check-in / check-out', () => {
 			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 			await expect(repo.checkOutEvacuee(checkedIn, ctx)).rejects.toThrow(/เหตุผล/);
 		});
+
+		it('allows check-out from room_confirmed with a nonempty reason', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const confirmed = await repo.confirmRoom(checkedIn, ctx);
+			const updated = await repo.checkOutEvacuee(confirmed, ctx, { reason: ' กลับบ้าน ' });
+			expect(updated.current_stay.status).toBe('checked_out');
+			const movements = await repo.listMovements();
+			expect(movements.at(-1)).toMatchObject({
+				action: 'check_out',
+				reason: 'กลับบ้าน'
+			});
+		});
 	});
 
 	describe('confirmRoom', () => {
@@ -615,6 +654,67 @@ describe('check-in / check-out', () => {
 			const confirmed = await repo.confirmRoom(checkedIn, ctx);
 			expect(confirmed.current_stay.status).toBe('room_confirmed');
 			expect(confirmed.current_stay.zone).toBe('zone-a');
+
+			const movements = await repo.listMovements();
+			expect(
+				movements.some((m) => m.action === 'confirm_room' && m.evacuee_id === evacuee._id)
+			).toBe(true);
+		});
+
+		it('rejects confirm_room unless stay is active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.confirmRoom(evacuee, ctx)).rejects.toThrow(/ยืนยันถึงโซน/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
+	describe('confirmRoomForHousehold', () => {
+		it('bulk-confirms only pending household members (active with zone)', async () => {
+			const household = await repo.createHousehold({ label: 'ครัวเรือนยืนยันโซน' }, ctx);
+			const a = await repo.createEvacuee(
+				evInput({ first_name: 'A', household_id: household._id }),
+				ctx
+			);
+			const b = await repo.createEvacuee(
+				evInput({ first_name: 'B', household_id: household._id }),
+				ctx
+			);
+			const c = await repo.createEvacuee(
+				evInput({ first_name: 'C', household_id: household._id }),
+				ctx
+			);
+			const otherHh = await repo.createHousehold({ label: 'ครัวเรือนอื่น' }, ctx);
+			const outsider = await repo.createEvacuee(
+				evInput({ first_name: 'Out', household_id: otherHh._id }),
+				ctx
+			);
+
+			const activeA = await repo.checkInEvacuee(a, ctx, 'zone-a');
+			const activeB = await repo.checkInEvacuee(b, ctx, 'zone-b');
+			await repo.checkInEvacuee(outsider, ctx, 'zone-x');
+			// C stays pre_registered — not pending confirmation
+			const alreadyConfirmed = await repo.confirmRoom(activeA, ctx);
+
+			const all = await repo.listEvacuees();
+			const confirmed = await repo.confirmRoomForHousehold(household._id, all, ctx);
+
+			expect(confirmed).toHaveLength(1);
+			expect(confirmed[0]._id).toBe(activeB._id);
+			expect(confirmed[0].current_stay.status).toBe('room_confirmed');
+			expect((await repo.getEvacuee(alreadyConfirmed._id))?.current_stay.status).toBe(
+				'room_confirmed'
+			);
+			expect((await repo.getEvacuee(c._id))?.current_stay.status).toBe('pre_registered');
+			expect((await repo.getEvacuee(outsider._id))?.current_stay.status).toBe('active');
+		});
+
+		it('returns empty when no household members await Zone Arrival Confirmation', async () => {
+			const household = await repo.createHousehold({ label: 'ว่าง' }, ctx);
+			const member = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			const all = await repo.listEvacuees();
+			const confirmed = await repo.confirmRoomForHousehold(household._id, all, ctx);
+			expect(confirmed).toEqual([]);
+			expect((await repo.getEvacuee(member._id))?.current_stay.status).toBe('pre_registered');
 		});
 	});
 

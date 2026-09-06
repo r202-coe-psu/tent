@@ -32,6 +32,9 @@
 		classifyZoningQueueTab,
 		parseZoningQrCode,
 		buildZoningPath,
+		useConfirmRoom,
+		useConfirmRoomForHousehold,
+		listPendingZoneArrivalConfirmations,
 		type ZoningQueueTab,
 		type TriageLevel
 	} from '$lib/features/people';
@@ -39,12 +42,15 @@
 	import { useMasterData } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const confirmRoomMutation = useConfirmRoom();
+	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -112,6 +118,17 @@
 				}) === 'pending'
 		)
 	);
+	const awaitingConfirmEvacuees = $derived(
+		listPendingZoneArrivalConfirmations(
+			allEvacuees.filter(
+				(e) =>
+					classifyZoningQueueTab(e, {
+						enableMedicalScreening: enableMedical,
+						hasScreening: screenedIds.has(e._id)
+					}) === 'awaiting_confirm'
+			)
+		)
+	);
 	const assignedEvacuees = $derived(
 		allEvacuees.filter(
 			(e) =>
@@ -122,7 +139,13 @@
 		)
 	);
 
-	const tabEvacuees = $derived(activeTab === 'pending' ? pendingEvacuees : assignedEvacuees);
+	const tabEvacuees = $derived(
+		activeTab === 'pending'
+			? pendingEvacuees
+			: activeTab === 'awaiting_confirm'
+				? awaitingConfirmEvacuees
+				: assignedEvacuees
+	);
 
 	const filteredQueue = $derived(
 		tabEvacuees.filter((evacuee) => {
@@ -144,6 +167,37 @@
 
 	function openDetail(id: string) {
 		goto(resolve(buildZoningPath(id) as `/onsite/zoning/${string}`));
+	}
+
+	function authorCtx() {
+		return {
+			shelterCode: getShelterCode(),
+			createdBy: authStore.user?.name ?? 'unknown'
+		};
+	}
+
+	async function confirmOne(evacueeId: string) {
+		const target = allEvacuees.find((e) => e._id === evacueeId);
+		if (!target) return;
+		try {
+			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
+			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		}
+	}
+
+	async function confirmHousehold(householdId: string) {
+		try {
+			const confirmed = await confirmRoomHouseholdMutation.mutateAsync({
+				householdId,
+				evacuees: allEvacuees,
+				ctx: authorCtx()
+			});
+			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		}
 	}
 
 	function handleCodeInput(raw: string) {
@@ -253,8 +307,7 @@
 					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					คิวพร้อมจัดโซน (Cleared for Zoning) และรายการที่จัดแล้ว — ค้นหาหรือสแกน Handover / Person
-					QR
+					คิวพร้อมจัดโซน · รอยืนยันถึงโซน · ยืนยันแล้ว — ค้นหาหรือสแกน Handover / Person QR
 				</p>
 			</div>
 		</div>
@@ -267,8 +320,15 @@
 				>
 			</Badge>
 			<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
+				<Clock class="size-3.5 text-emerald-600" />
+				<span>รอยืนยัน:</span>
+				<span class="font-bold text-emerald-700 dark:text-emerald-300"
+					>{awaitingConfirmEvacuees.length} คน</span
+				>
+			</Badge>
+			<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
 				<Check class="size-3.5 text-sky-600" />
-				<span>จัดแล้ว:</span>
+				<span>ยืนยันแล้ว:</span>
 				<span class="font-bold text-sky-700 dark:text-sky-300">{assignedEvacuees.length} คน</span>
 			</Badge>
 		</div>
@@ -341,12 +401,15 @@
 	<Tabs.Root
 		value={activeTab}
 		onValueChange={(v) => {
-			if (v === 'pending' || v === 'assigned') activeTab = v;
+			if (v === 'pending' || v === 'awaiting_confirm' || v === 'assigned') activeTab = v;
 		}}
 	>
-		<Tabs.List class="mb-3">
+		<Tabs.List class="mb-3 flex h-auto flex-wrap gap-1">
 			<Tabs.Trigger value="pending">พร้อมจัดโซน ({pendingEvacuees.length})</Tabs.Trigger>
-			<Tabs.Trigger value="assigned">จัดแล้ว ({assignedEvacuees.length})</Tabs.Trigger>
+			<Tabs.Trigger value="awaiting_confirm">
+				รอยืนยันถึงโซน ({awaitingConfirmEvacuees.length})
+			</Tabs.Trigger>
+			<Tabs.Trigger value="assigned">ยืนยันแล้ว ({assignedEvacuees.length})</Tabs.Trigger>
 		</Tabs.List>
 
 		<Tabs.Content value={activeTab}>
@@ -355,9 +418,13 @@
 					<div class="flex items-center gap-2">
 						<Users class="size-4 text-amber-600" />
 						<Card.Title class="text-base font-semibold">
-							{activeTab === 'pending'
-								? 'Cleared for Zoning — คิวพร้อมจัดสรรที่พัก'
-								: 'รายการที่จัดโซนแล้ว (ย้ายโซนได้)'}
+							{#if activeTab === 'pending'}
+								Cleared for Zoning — คิวพร้อมจัดสรรที่พัก
+							{:else if activeTab === 'awaiting_confirm'}
+								รอยืนยันถึงโซน (Zone Arrival Confirmation) — ไม่หมดอายุอัตโนมัติ
+							{:else}
+								รายการที่ยืนยันถึงโซนแล้ว (ย้ายโซนได้)
+							{/if}
 						</Card.Title>
 						<Badge variant="secondary" class="text-xs">{filteredQueue.length} ราย</Badge>
 					</div>
@@ -374,7 +441,13 @@
 						<div class="flex h-48 flex-col items-center justify-center gap-2 px-6 text-center">
 							<MapPin class="size-8 text-muted-foreground/50" />
 							<p class="text-sm font-medium text-muted-foreground">
-								{activeTab === 'pending' ? emptyPendingMessage : 'ยังไม่มีรายการที่จัดโซนแล้ว'}
+								{#if activeTab === 'pending'}
+									{emptyPendingMessage}
+								{:else if activeTab === 'awaiting_confirm'}
+									ไม่มีรายการรอยืนยันถึงโซน
+								{:else}
+									ยังไม่มีรายการที่ยืนยันถึงโซนแล้ว
+								{/if}
 							</p>
 						</div>
 					{:else}
@@ -431,23 +504,51 @@
 												{hh?.label ?? '—'}
 											</Table.Cell>
 											<Table.Cell class="text-xs text-muted-foreground">
-												{#if activeTab === 'assigned'}
-													{row.current_stay.zone ?? '—'}
-												{:else}
+												{#if activeTab === 'pending'}
 													{formatTimeOrDate(row.updated_at)}
+												{:else}
+													{row.current_stay.zone ?? '—'}
 												{/if}
 											</Table.Cell>
 											<Table.Cell class="pr-5 text-right">
-												<Button
-													size="sm"
-													variant="outline"
-													onclick={(e) => {
-														e.stopPropagation();
-														openDetail(row._id);
-													}}
-												>
-													{activeTab === 'pending' ? 'จัดโซน' : 'ย้ายโซน'}
-												</Button>
+												<div class="flex justify-end gap-1.5">
+													{#if activeTab === 'awaiting_confirm'}
+														<Button
+															size="sm"
+															onclick={(e) => {
+																e.stopPropagation();
+																void confirmOne(row._id);
+															}}
+															disabled={confirmRoomMutation.isPending}
+														>
+															ยืนยันถึงโซน
+														</Button>
+														{#if row.household_id}
+															<Button
+																size="sm"
+																variant="outline"
+																onclick={(e) => {
+																	e.stopPropagation();
+																	void confirmHousehold(row.household_id!);
+																}}
+																disabled={confirmRoomHouseholdMutation.isPending}
+															>
+																ทั้งครัวเรือน
+															</Button>
+														{/if}
+													{:else}
+														<Button
+															size="sm"
+															variant="outline"
+															onclick={(e) => {
+																e.stopPropagation();
+																openDetail(row._id);
+															}}
+														>
+															{activeTab === 'pending' ? 'จัดโซน' : 'ย้ายโซน'}
+														</Button>
+													{/if}
+												</div>
 											</Table.Cell>
 										</Table.Row>
 									{/each}

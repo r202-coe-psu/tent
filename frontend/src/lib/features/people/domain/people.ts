@@ -1112,6 +1112,34 @@ export function migrateVulnerableGroupCodes(codes: readonly string[]): string[] 
 	return codes.map(migrateVulnerableGroupCode);
 }
 
+/**
+ * True when admission_policy.supported_vulnerable_groups includes any of `codes`,
+ * after CR-112 hard-migrate on both the stored list and the query codes.
+ */
+export function admissionSupportsVulnerableGroup(
+	supported: readonly string[] | null | undefined,
+	...codes: string[]
+): boolean {
+	const migrated = new Set(migrateVulnerableGroupCodes(supported ?? []));
+	return codes.some((code) => migrated.has(migrateVulnerableGroupCode(code)));
+}
+
+/**
+ * Merge Station 1 / screening intake so coded Vulnerable Groups stay
+ * separate from free-form Special Needs (CR-112).
+ */
+export function mergeVulnerableGroupsAndSpecialNeeds(
+	a: { vulnerable_groups?: readonly string[]; special_needs?: readonly string[] },
+	b: { vulnerable_groups?: readonly string[]; special_needs?: readonly string[] }
+): { vulnerable_groups: string[]; special_needs: string[] } {
+	return {
+		vulnerable_groups: migrateVulnerableGroupCodes([
+			...new Set([...(a.vulnerable_groups ?? []), ...(b.vulnerable_groups ?? [])])
+		]),
+		special_needs: [...new Set([...(a.special_needs ?? []), ...(b.special_needs ?? [])])]
+	};
+}
+
 function resolvePersonIdOnCreate(personId: PersonId | undefined): PersonId | undefined {
 	if (!personId) return undefined;
 	if (personId.cardType !== 'anonymous') return personId;
@@ -1599,7 +1627,8 @@ export function resolveStatusChangeAction(
 	if (current === 'deceased' || current === 'cancelled') return null;
 	switch (target) {
 		case 'active':
-			if (current === 'temporary_leave') return 'return_from_leave';
+			// CR-112 A1: temporary_leave return is Check-in → active (zone required),
+			// not a separate return_from_leave status-change path.
 			return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(current)
 				? 'check_in'
 				: null;
@@ -1624,6 +1653,28 @@ export function resolveStatusChangeAction(
 		default:
 			return null;
 	}
+}
+
+/** Trim and validate a checkout remark (CR-112 nonempty reason/notes). */
+export function normalizeCheckoutRemark(reason: string | null | undefined): string {
+	const remark = (reason ?? '').trim();
+	if (!remark) {
+		throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+	}
+	return remark;
+}
+
+/**
+ * Which staff mutation path executes a resolved movement action.
+ * `confirm_room` uses the dedicated Zone Arrival Confirmation write path.
+ */
+export type StatusChangeHandlerKind = 'check_in' | 'check_out' | 'confirm_room' | 'record';
+
+export function statusChangeHandlerKind(action: MovementAction): StatusChangeHandlerKind {
+	if (action === 'check_in') return 'check_in';
+	if (action === 'check_out') return 'check_out';
+	if (action === 'confirm_room') return 'confirm_room';
+	return 'record';
 }
 
 // ---------------------------------------------------------------- display helpers
