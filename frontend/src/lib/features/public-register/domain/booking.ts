@@ -354,6 +354,8 @@ export type PublicBookingErrorCode =
 	| 'CAPTCHA_FAILED'
 	| 'SHELTER_NOT_FOUND'
 	| 'SHELTER_CLOSED'
+	| 'CAPACITY_EXCEEDED'
+	| 'DUPLICATE_HOLD'
 	| 'BOOKING_NOT_FOUND'
 	| 'WRITE_FAILED';
 
@@ -363,6 +365,9 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	CAPTCHA_FAILED: 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก กรุณาเลือกใหม่',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับผู้เข้าพักแล้ว กรุณาเลือกศูนย์อื่น',
+	CAPACITY_EXCEEDED: 'ศูนย์พักพิงนี้เต็มตามจำนวนคาดการณ์แล้ว กรุณาเลือกศูนย์อื่น',
+	DUPLICATE_HOLD:
+		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
 	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
 	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
 };

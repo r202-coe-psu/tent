@@ -27,6 +27,14 @@ export {
 	toHouseholdInput
 } from './domain/booking';
 
+export {
+	findDuplicateHold,
+	holdConflictsWithBooking,
+	isActiveHoldStatus,
+	isForecastCapacityExceeded,
+	ACTIVE_HOLD_STATUSES
+} from './domain/booking-gate';
+
 export type {
 	PublicBookingAddress,
 	PublicBookingErrorCode,

@@ -6,10 +6,15 @@ import type { RequestHandler } from './$types';
 import {
 	bookingCodeFrom,
 	isCaptchaKeyConfigured,
+	isForecastCapacityExceeded,
 	publicBookingInputSchema,
 	toEvacueeInputs,
 	toHouseholdInput
 } from '$lib/features/public-register/server';
+import {
+	findConflictingHold,
+	readForecastOccupancy
+} from '$lib/features/public-register/booking-gate.server';
 import { createEvacuee, createHousehold } from '$lib/features/people/server';
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
@@ -91,6 +96,23 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	}
 	if (!isShelterBookable(master)) {
 		return json({ success: false, error: 'SHELTER_CLOSED' }, { status: 409, headers: noStore });
+	}
+
+	// 4b. Duplicate-hold prevention (CR-112) — same phone / card / Anonymous ID
+	//     across non-cancelled Forecast holds at this shelter.
+	const conflict = await findConflictingHold(input.shelter_code, {
+		phone: input.phone,
+		cardNumber: input.national_id ?? null
+	});
+	if (conflict) {
+		return json({ success: false, error: 'DUPLICATE_HOLD' }, { status: 409, headers: noStore });
+	}
+
+	// 4c. Forecast capacity gate (CR-112) — party must fit under Forecast vs capacity.
+	const capacity = typeof master.capacity === 'number' ? master.capacity : 0;
+	const forecast = await readForecastOccupancy(input.shelter_code);
+	if (forecast !== null && isForecastCapacityExceeded(forecast, capacity, input.members.length)) {
+		return json({ success: false, error: 'CAPACITY_EXCEEDED' }, { status: 409, headers: noStore });
 	}
 
 	// 5. Mint through the same domain factories staff registration uses, so a web

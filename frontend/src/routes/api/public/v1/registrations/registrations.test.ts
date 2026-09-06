@@ -3,6 +3,10 @@ import { POST } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
+import {
+	findConflictingHold,
+	readForecastOccupancy
+} from '$lib/features/public-register/booking-gate.server';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -28,6 +32,10 @@ vi.mock('$lib/server/couch-public-writer', () => ({
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	registerIpLimiter: { check: vi.fn(() => true) },
 	registerPhoneLimiter: { check: vi.fn(() => true) }
+}));
+vi.mock('$lib/features/public-register/booking-gate.server', () => ({
+	readForecastOccupancy: vi.fn(async () => 0),
+	findConflictingHold: vi.fn(async () => null)
 }));
 
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
@@ -97,6 +105,10 @@ describe('POST /api/public/v1/registrations', () => {
 		verifyToken.mockResolvedValue(true);
 		mockEnv.SECRET_RECAPTCHA_KEY = 'test-recaptcha-secret';
 		mockAppEnv.dev = false;
+		vi.mocked(readForecastOccupancy).mockReset();
+		vi.mocked(readForecastOccupancy).mockResolvedValue(0);
+		vi.mocked(findConflictingHold).mockReset();
+		vi.mocked(findConflictingHold).mockResolvedValue(null);
 	});
 
 	it('422 when the contact first name is blank', async () => {
@@ -210,7 +222,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(9);
+			expect(e.schema_v).toBe(10);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -446,5 +458,45 @@ describe('POST /api/public/v1/registrations', () => {
 		expect(serialized).not.toContain('0812345678');
 		expect(serialized).not.toContain('1234567890123');
 		expect(serialized).not.toContain('ใจดี'); // last name stays off the public ticket
+	});
+
+	describe('CR-112 Forecast gate + duplicate holds', () => {
+		it('409 CAPACITY_EXCEEDED when Forecast + party exceeds capacity', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				...OPEN_SHELTER,
+				capacity: 100
+			} as never);
+			vi.mocked(readForecastOccupancy).mockResolvedValue(99);
+
+			const res = await POST(event({ ...VALID_BODY, members: [CONTACT, { ...CONTACT }] }));
+			expect(res.status).toBe(409);
+			expect((await res.json()).error).toBe('CAPACITY_EXCEEDED');
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('still books when Forecast fits under capacity', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				...OPEN_SHELTER,
+				capacity: 100
+			} as never);
+			vi.mocked(readForecastOccupancy).mockResolvedValue(97);
+
+			const res = await POST(event({ ...VALID_BODY, members: [CONTACT, { ...CONTACT }] }));
+			expect(res.status).toBe(201);
+			expect(bulkAsPublicWriter).toHaveBeenCalled();
+		});
+
+		it('409 DUPLICATE_HOLD when a non-cancelled hold already matches phone/card', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+			vi.mocked(findConflictingHold).mockResolvedValue({
+				current_stay: { status: 'pre_registered' },
+				phone: '0812345678'
+			});
+
+			const res = await POST(event(VALID_BODY));
+			expect(res.status).toBe(409);
+			expect((await res.json()).error).toBe('DUPLICATE_HOLD');
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
 	});
 });
