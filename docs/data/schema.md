@@ -1339,12 +1339,18 @@ closed   → (terminal)
 
 > **Write path (CR-059, approved architecture):** เขียนผ่าน BFF Endpoints ที่
 > `frontend/src/routes/api/back-office/transfer/**` ด้วย `adminRaw` (`$lib/server/couch-admin.ts`) แบบ
-> เดียวกับ `referral` (§5.4) — client เลิกเขียน `stock_transfer` ตรงผ่าน `/couch` proxy · Mirror-write
-> สองทาง: `shipped` → mirror เข้า `shelter_{to_shelter}` (แบบ referral `sent`), `received` → mirror
-> ย้อนกลับเข้า `shelter_{from_shelter}` (ของใหม่ ไม่มีใน referral) เพื่อให้แต่ละศูนย์เห็นสำเนาผ่าน
-> `_changes` feed ที่ subscribe อยู่แล้ว — รายละเอียด implementation ระดับ write-order/authorization guard
-> (deterministic ledger id, critical/best-effort write tier) ยังเป็น proposed (ยังไม่ confirm กับ project
-> owner อย่างเป็นทางการ) ดู CR-059 Decision Log entry 2026-08-22 ("T-13 write-path implementation detail")
+> เดียวกับ `referral` (§5.4) — client เลิกเขียน `stock_transfer` ตรงผ่าน `/couch` proxy · **ไม่มี
+> mirror-write เข้า `shelter_{code}` เลย** — ตัดสินใจยกเลิกทั้งสองทิศทางแล้ว (ดู CR-059 Decision Log
+> entry 2026-08-22 "T-13 write-path implementation detail", รายการที่สอง ข้อ 1) หลังตรวจโค้ด `referral`
+> จริงแล้วพบว่าไม่เคย mirror-write เอกสารเข้า `shelter_{code}` เช่นกัน และ `central_ops` `_security`
+> ล็อกเฉพาะ `_admin` ทำให้ session ปกติอ่านตรงไม่ได้อยู่แล้ว: sync สถานะข้ามศูนย์ (เช่น "ส่งมอบสำเร็จ"
+> อัตโนมัติ) ใช้ **refetch-on-interaction** แทน (`invalidateQueries` หลัง mutation ของฝั่งตัวเอง — อีกฝั่ง
+> เห็นค่าล่าสุดเมื่อเปิดหน้า/refetch เอง) เหมือน `referral` ในปัจจุบัน — `stock_transfer` **ไม่ได้อยู่ใน**
+> type-map ของ `startOperationsLiveQuery` ด้วยเหตุผลเดียวกัน · retry-safety ของ ledger ใช้
+> **state-check idempotency** (`_find` หา `{type: 'stock_ledger', ref_id, item_id, reason}` ก่อนเขียนใน
+> แต่ละ transition — ไม่ใช้ deterministic `_id`) ตาม Decision Log entry เดียวกัน ข้อ 2 — ทั้งสองข้อนี้
+> **decided แล้ว ไม่ใช่ proposed อีกต่อไป** ตรงกับ implementation จริงใน
+> `frontend/src/lib/features/operations/data/transfer.server-repository.ts`
 >
 > **ปิดแล้วโดย CR-089 (schema_v 2 → 3):** บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนอนุมัติส่งมอบ และสิทธิ์
 > คัดค้าน/ระงับคำสั่ง — อยู่ใน field table ด้านบนแล้ว
