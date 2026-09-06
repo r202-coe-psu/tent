@@ -27,6 +27,7 @@ import {
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
+	deriveHouseholdStatus,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
 	station1EvacueeInputSchema,
@@ -1361,12 +1362,32 @@ describe('household status transitions', () => {
 		expect(() => assertHouseholdStatusTransition('pre_registered', 'cancelled')).not.toThrow();
 	});
 
-	it('restricts the manual (free-form UI) transition table to non-side-effect-bound statuses', () => {
-		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.pre_registered).toEqual(['arriving']);
+	it('restricts the manual (free-form UI) transition table — CR-112 no override', () => {
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.pre_registered).toEqual([]);
 		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.arriving).toEqual([]);
 		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_in).toEqual([]);
 		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_out).toEqual([]);
 		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.cancelled).toEqual([]);
+	});
+});
+
+describe('deriveHouseholdStatus (CR-112 A2)', () => {
+	it('returns cancelled when there are no members or all are cancelled', () => {
+		expect(deriveHouseholdStatus([])).toBe('cancelled');
+		expect(deriveHouseholdStatus(['cancelled', 'cancelled'])).toBe('cancelled');
+	});
+
+	it('prefers Present Occupancy → checked_in (includes room_confirmed)', () => {
+		expect(deriveHouseholdStatus(['pre_registered', 'room_confirmed'])).toBe('checked_in');
+		expect(deriveHouseholdStatus(['active'])).toBe('checked_in');
+		expect(deriveHouseholdStatus(['temporary_leave', 'arriving'])).toBe('checked_in');
+	});
+
+	it('falls through arriving → pre_registered → checked_out', () => {
+		expect(deriveHouseholdStatus(['arriving', 'pre_registered'])).toBe('arriving');
+		expect(deriveHouseholdStatus(['pre_registered', 'cancelled'])).toBe('pre_registered');
+		expect(deriveHouseholdStatus(['checked_out', 'transferred'])).toBe('checked_out');
+		expect(deriveHouseholdStatus(['deceased'])).toBe('checked_out');
 	});
 });
 

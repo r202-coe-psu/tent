@@ -92,6 +92,7 @@ export {
 	isActiveHouseholdStatus,
 	checkEvacueeHouseholdConflict,
 	assertEvacueeHouseholdAssignment,
+	deriveHouseholdStatus,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	applyMovementToStay,

@@ -161,18 +161,14 @@ export const HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 };
 
 /**
- * Transitions safe to offer as a free-standing status override (e.g. the
- * household profile's "change status" modal). `checked_in` is driven by the
- * scan/check-in flow (movement + occupancy, CR-029 §3) and `checked_out`
- * requires a `checkout_destination` (R-29-8) that only the check-out flow
- * collects; `cancelled` goes through `cancelPreRegistration` (audit-logged).
- * None of those three belong behind a free-form status picker — this is the
- * subset of {@link HOUSEHOLD_STATUS_TRANSITIONS} left over once they're excluded.
+ * Transitions safe to offer as a free-standing status override in UI.
+ * CR-112: Household status is derived from member Evacuee stays (A2) — no
+ * independent UI override. Cancel-hold stays on `cancelPreRegistration`.
  */
 export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	Record<HouseholdStatus, readonly HouseholdStatus[]>
 > = {
-	pre_registered: ['arriving'],
+	pre_registered: [],
 	arriving: [],
 	checked_in: [],
 	checked_out: [],
@@ -439,6 +435,28 @@ export function assertHouseholdStatusTransition(
 	if (!HOUSEHOLD_STATUS_TRANSITIONS[currentStatus].includes(nextStatus)) {
 		throw new Error(`ไม่สามารถเปลี่ยนสถานะครัวเรือนจาก ${currentStatus} เป็น ${nextStatus} ได้`);
 	}
+}
+
+/**
+ * Derive compatibility `household.status` from member Evacuee stay statuses
+ * (CR-112 appendix A2). Stay truth remains on Evacuees / movements.
+ */
+export function deriveHouseholdStatus(memberStayStatuses: readonly StayStatus[]): HouseholdStatus {
+	if (memberStayStatuses.length === 0) return 'cancelled';
+	if (memberStayStatuses.every((status) => status === 'cancelled')) return 'cancelled';
+
+	const present = new Set<StayStatus>(['active', 'room_confirmed', 'temporary_leave']);
+	if (memberStayStatuses.some((status) => present.has(status))) return 'checked_in';
+	if (memberStayStatuses.some((status) => status === 'arriving')) return 'arriving';
+	if (memberStayStatuses.some((status) => status === 'pre_registered')) return 'pre_registered';
+	if (
+		memberStayStatuses.some(
+			(status) => status === 'checked_out' || status === 'transferred' || status === 'deceased'
+		)
+	) {
+		return 'checked_out';
+	}
+	return 'cancelled';
 }
 
 /**

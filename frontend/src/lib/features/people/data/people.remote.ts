@@ -28,6 +28,7 @@ import {
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
+	deriveHouseholdStatus,
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
 	replacePersonId,
@@ -249,7 +250,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const saved = await this.repo.put(touch({ ...evacuee, _rev: latest._rev }));
 		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
 			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+			await this.refreshDerivedHouseholdStatus(oldHouseholdId);
 		}
+		await this.refreshDerivedHouseholdStatus(saved.household_id);
 		return saved;
 	}
 
@@ -278,7 +281,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const saved = await this.repo.put(touch(next));
 		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
 			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+			await this.refreshDerivedHouseholdStatus(oldHouseholdId);
 		}
+		await this.refreshDerivedHouseholdStatus(saved.household_id);
 		return saved;
 	}
 
@@ -344,24 +349,42 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return doc ? migrateHouseholdV3ToV4(doc) : null;
 	}
 
+	/** Refresh compatibility household.status from member Evacuee stays (CR-112 A2). */
+	private async refreshDerivedHouseholdStatus(
+		householdId: string | null | undefined
+	): Promise<void> {
+		if (!householdId) return;
+		const latestDoc = await this.repo.get<Household>(householdId);
+		if (!latestDoc) return;
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		const members = await this.listHouseholdMembers(householdId);
+		const derived = deriveHouseholdStatus(members.map((m) => m.current_stay.status));
+		if (derived === latest.status) return;
+		await this.repo.put(touch({ ...latest, status: derived }));
+	}
+
 	async updateHousehold(household: Household): Promise<Household> {
 		const latestDoc = await this.repo.get<Household>(household._id);
 		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
 		const latest = migrateHouseholdV3ToV4(latestDoc);
-		assertHouseholdStatusTransition(latest.status, household.status);
-		if (household.status === 'checked_out') {
-			assertCheckoutDestination(household.checkout_destination);
+		const members = await this.listHouseholdMembers(household._id);
+		const derived = deriveHouseholdStatus(members.map((m) => m.current_stay.status));
+		const next = { ...household, status: derived, _rev: latest._rev };
+		if (derived === 'checked_out') {
+			assertCheckoutDestination(next.checkout_destination ?? latest.checkout_destination);
 		}
-		return this.repo.put(touch({ ...household, _rev: latest._rev }));
+		return this.repo.put(touch(next));
 	}
 
 	async patchHousehold(id: string, patch: HouseholdPatch): Promise<Household> {
 		const latestDoc = await this.repo.get<Household>(id);
 		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
 		const latest = migrateHouseholdV3ToV4(latestDoc);
-		const next = { ...latest, ...patch };
-		assertHouseholdStatusTransition(latest.status, next.status);
-		if (next.status === 'checked_out') assertCheckoutDestination(next.checkout_destination);
+		const members = await this.listHouseholdMembers(id);
+		const derived = deriveHouseholdStatus(members.map((m) => m.current_stay.status));
+		// Patch may carry status; derived member stays always win (CR-112 A2).
+		const next = { ...latest, ...patch, status: derived };
+		if (derived === 'checked_out') assertCheckoutDestination(next.checkout_destination);
 		return this.repo.put(touch(next));
 	}
 
@@ -556,22 +579,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 
-		if (evacuee.household_id) {
-			const hh = await this.repo.get<Household>(evacuee.household_id);
-			if (hh && (hh.status === 'pre_registered' || hh.status === 'arriving')) {
-				await this.repo.put(
-					touch({
-						...hh,
-						status: 'checked_in' as const
-					})
-				);
-			}
-		}
-
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(
+		const updated = await this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
 	}
 
 	/** Record a check-out movement, then apply it to the evacuee's current_stay.
@@ -590,9 +603,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(
+		const updated = await this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
 	}
 
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
@@ -608,9 +623,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(
+		const updated = await this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
 	}
 
 	/** Bulk Zone Arrival Confirmation for every pending member of a Household. */
@@ -642,9 +659,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(
+		const updated = await this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
 	}
 
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
@@ -661,9 +680,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(
+		const updated = await this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
 	}
 
 	async cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void> {
@@ -815,14 +836,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			})
 		);
 
-		if (saved.household_id) {
-			const hh = await this.repo.get<Household>(saved.household_id);
-			if (hh && isHousehold(hh) && hh.status === 'pre_registered') {
-				assertHouseholdStatusTransition(hh.status, 'arriving');
-				await this.repo.put(touch({ ...hh, status: 'arriving' as const }));
-			}
-		}
-
+		await this.refreshDerivedHouseholdStatus(saved.household_id);
 		return saved;
 	}
 }

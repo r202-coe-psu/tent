@@ -260,7 +260,7 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
-	describe('household history and status transitions', () => {
+	describe('household history and derived status (CR-112 A2)', () => {
 		it('keeps checked-out households available for direct profile/edit lookups', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
@@ -273,56 +273,89 @@ describe('PeopleRemoteRepository', () => {
 			);
 		});
 
-		it('rejects reopening a terminal household through the generic update path', async () => {
+		it('ignores free-form status overrides on updateHousehold', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
 				ctx
 			);
 
-			await expect(repo.updateHousehold({ ...household, status: 'checked_in' })).rejects.toThrow(
-				/ไม่สามารถเปลี่ยนสถานะ/
-			);
+			const updated = await repo.updateHousehold({ ...household, status: 'checked_in' });
+			// No members → derived cancelled; client status is not authoritative.
+			expect(updated.status).toBe('cancelled');
 		});
 
-		it('rejects checking a household out without a checkout_destination (R-29-8)', async () => {
+		it('requires checkout_destination when derived status is checked_out', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'Out', household_id: household._id, status: 'checked_out' }),
+				ctx
+			);
+			await repo.updateEvacuee({ ...member, household_id: household._id });
 
 			await expect(
-				repo.updateHousehold({ ...household, status: 'checked_out', checkout_destination: null })
+				repo.updateHousehold({ ...household, checkout_destination: null })
 			).rejects.toThrow(/ต้องระบุปลายทาง/);
 		});
 
-		it('rejects checking out with a destination type missing its required sub-field', async () => {
+		it('rejects checked_out derive when destination type lacks required sub-field', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'Out', household_id: household._id, status: 'checked_out' }),
+				ctx
+			);
+			await repo.updateEvacuee({ ...member, household_id: household._id });
 
 			await expect(
 				repo.updateHousehold({
 					...household,
-					status: 'checked_out',
 					checkout_destination: { type: 'transferred_shelter' }
 				})
 			).rejects.toThrow(/ชื่อ\/รหัสสถานที่ปลายทาง/);
 		});
 
-		it('accepts checking out with a valid checkout_destination', async () => {
+		it('accepts derived checked_out with a valid checkout_destination', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'Out', household_id: household._id, status: 'checked_out' }),
+				ctx
+			);
+			await repo.updateEvacuee({ ...member, household_id: household._id });
 
 			const updated = await repo.updateHousehold({
 				...household,
-				status: 'checked_out',
 				checkout_destination: { type: 'returned_home' }
 			});
 
 			expect(updated.status).toBe('checked_out');
+			expect(updated.checkout_destination?.type).toBe('returned_home');
+		});
+
+		it('derives checked_in after Zone Arrival Confirmation on a member', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'arriving' },
+				ctx
+			);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'In', household_id: household._id, status: 'arriving' }),
+				ctx
+			);
+			await repo.checkInEvacuee(member, ctx, 'Z1');
+			const afterCheckIn = await repo.getHousehold(household._id);
+			expect(afterCheckIn?.status).toBe('checked_in');
+
+			const active = await repo.getEvacuee(member._id);
+			await repo.confirmRoom(active!, ctx);
+			const afterConfirm = await repo.getHousehold(household._id);
+			expect(afterConfirm?.status).toBe('checked_in');
 		});
 	});
 
