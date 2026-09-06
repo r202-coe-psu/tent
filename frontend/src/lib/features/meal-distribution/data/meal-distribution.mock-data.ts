@@ -330,7 +330,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '07:15 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-02',
@@ -340,7 +343,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '07:18 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-03',
@@ -350,7 +356,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '07:20 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-04',
@@ -360,7 +369,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '07:35 น.',
-			portions: 2
+			portions: 2,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-05',
@@ -370,7 +382,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '07:42 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-06',
@@ -380,7 +395,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'm-bf-01',
 			menuTitle: 'ข้าวต้มหมูสับเห็ดหอม + ไข่ลวก',
 			time: '08:05 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-07',
@@ -390,7 +408,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'y-m-lh-02',
 			menuTitle: 'ข้าวหมกไก่ (ฮาลาล / ครัวมุสลิม)',
 			time: '12:15 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		},
 		{
 			id: 'TX-HIST-08',
@@ -400,7 +421,10 @@ export function createMockHistoricalTransactions(): MealDistributionTransaction[
 			menuId: 'y-m-lh-02',
 			menuTitle: 'ข้าวหมกไก่ (ฮาลาล / ครัวมุสลิม)',
 			time: '12:18 น.',
-			portions: 1
+			portions: 1,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		}
 	];
 }

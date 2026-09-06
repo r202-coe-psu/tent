@@ -142,11 +142,21 @@
 						<h4
 							class="text-xs font-extrabold tracking-wider text-slate-500 uppercase dark:text-zinc-400"
 						>
-							ประวัติการบันทึกแจกรายบุคคล (AUDIT TRAIL)
+							ประวัติการบันทึกแจกรายบุคคล (AUDIT TRAIL • CR-109)
 						</h4>
-						<Badge variant="secondary" class="font-mono text-[10px] font-bold">
-							{historyLogs.length} รายการ
-						</Badge>
+						<div class="flex items-center gap-2">
+							{#if historyLogs.some((l) => l.status === 'voided')}
+								<Badge
+									variant="outline"
+									class="border-rose-200 bg-rose-50 text-[10px] font-bold text-rose-700"
+								>
+									ยกเลิกแล้ว {historyLogs.filter((l) => l.status === 'voided').length} รายการ
+								</Badge>
+							{/if}
+							<Badge variant="secondary" class="font-mono text-[10px] font-bold">
+								{historyLogs.length} รายการ
+							</Badge>
+						</div>
 					</div>
 
 					{#if historyLogs.length === 0}
@@ -171,14 +181,21 @@
 										<th class="p-3.5 pl-4">ผู้รับอาหาร</th>
 										<th class="p-3.5 text-center">เตียง / โซน</th>
 										<th class="p-3.5 text-center">เวลาแจก</th>
-										<th class="p-3.5 pr-4 text-right">จำนวนที่รับ</th>
+										<th class="p-3.5 text-center">สถานะ</th>
+										<th class="p-3.5 text-right">จำนวน</th>
+										<th class="p-3.5 pr-4 text-center">การจัดการ</th>
 									</tr>
 								</thead>
 								<tbody
 									class="divide-y divide-slate-100 text-slate-800 dark:divide-zinc-800/60 dark:text-slate-200"
 								>
 									{#each historyLogs as log (log.id)}
-										<tr class="transition-colors hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+										<tr
+											class="transition-colors hover:bg-slate-50/80 dark:hover:bg-zinc-900/50 {log.status ===
+											'voided'
+												? 'bg-slate-50/40 opacity-60'
+												: ''}"
+										>
 											<td class="p-3.5 pl-4 align-middle font-bold">
 												<div class="flex items-center gap-2.5">
 													<div
@@ -186,7 +203,11 @@
 													>
 														<User class="size-3.5" />
 													</div>
-													<span class="text-slate-900 dark:text-white">{log.recipientName}</span>
+													<span
+														class="text-slate-900 dark:text-white {log.status === 'voided'
+															? 'text-slate-400 line-through'
+															: ''}">{log.recipientName}</span
+													>
 												</div>
 											</td>
 											<td
@@ -201,13 +222,57 @@
 											<td class="p-3.5 text-center align-middle text-slate-500 dark:text-zinc-400">
 												{log.time}
 											</td>
-											<td class="p-3.5 pr-4 text-right align-middle">
+											<td class="p-3.5 text-center align-middle">
+												{#if log.status === 'voided'}
+													<span
+														class="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700"
+													>
+														ยกเลิกแล้ว (Voided)
+													</span>
+												{:else}
+													<span
+														class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+													>
+														ปกติ
+													</span>
+												{/if}
+											</td>
+											<td class="p-3.5 text-right align-middle">
 												<span
-													class="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+													class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-black {log.status ===
+													'voided'
+														? 'text-slate-400 line-through'
+														: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'}"
 												>
-													<CheckCircle2 class="size-3.5 text-emerald-600" />
+													{#if log.status !== 'voided'}
+														<CheckCircle2 class="size-3 text-emerald-600" />
+													{/if}
 													+{log.portions} ชุด
 												</span>
+											</td>
+											<td class="p-3.5 pr-4 text-center align-middle">
+												{#if log.status === 'active'}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => {
+															if (
+																confirm(
+																	`ยืนยันการยกเลิกรายการแจกจ่าย (Void) ของ "${log.recipientName}" หรือไม่?\nยอดแจกจะถูกปรับลดลงทันทีตาม CR-109`
+																)
+															) {
+																store.voidTransaction(log.id);
+															}
+														}}
+														class="h-7 border-rose-200 px-2.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-900/50 dark:hover:bg-rose-950/30"
+													>
+														ยกเลิกรายการ
+													</Button>
+												{:else}
+													<span class="text-[10px] text-slate-400">
+														{log.voided_at ? `เมื่อ ${log.voided_at}` : '—'}
+													</span>
+												{/if}
 											</td>
 										</tr>
 									{/each}

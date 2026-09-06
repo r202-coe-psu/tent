@@ -100,11 +100,27 @@ describe('hasReceivedMenu', () => {
 			menuId: 'm-1',
 			menuTitle: 'ข้าวสวย + ไข่ต้ม',
 			time: '12:00',
-			portions: 1
+			portions: 1,
+			status: 'active'
 		};
 		expect(hasReceivedMenu([tx], 'EV-1', 'm-1')).toBe(true);
 		expect(hasReceivedMenu([tx], 'EV-1', 'm-2')).toBe(false);
 		expect(hasReceivedMenu([tx], 'EV-2', 'm-1')).toBe(false);
+	});
+
+	it('returns false when transaction is voided per CR-109 (FR-MD-04)', () => {
+		const voidedTx: MealDistributionTransaction = {
+			id: 'TX-VOID-1',
+			recipientId: 'EV-1',
+			recipientName: 'นายสมชาย รักดี',
+			bed: 'A-01',
+			menuId: 'm-1',
+			menuTitle: 'ข้าวสวย + ไข่ต้ม',
+			time: '12:00',
+			portions: 1,
+			status: 'voided'
+		};
+		expect(hasReceivedMenu([voidedTx], 'EV-1', 'm-1')).toBe(false);
 	});
 });
 

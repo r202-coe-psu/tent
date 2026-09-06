@@ -57,6 +57,11 @@ export interface MealDistributionTransaction {
 	menuTitle: string;
 	time: string;
 	portions: number;
+	status: 'active' | 'voided';
+	recipient_type?: 'evacuee' | 'volunteer' | 'outside';
+	scanned_by?: string;
+	voided_at?: string;
+	voided_by?: string;
 }
 
 export const MEAL_FILTER_TAGS = [
@@ -115,7 +120,9 @@ export function hasReceivedMenu(
 	recipientId: string,
 	menuId: string
 ): boolean {
-	return transactions.some((t) => t.recipientId === recipientId && t.menuId === menuId);
+	return transactions.some(
+		(t) => t.status === 'active' && t.recipientId === recipientId && t.menuId === menuId
+	);
 }
 
 export function sessionServedTotal(session: MealDistributionSession): number {

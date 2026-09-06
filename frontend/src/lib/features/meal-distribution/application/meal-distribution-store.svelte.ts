@@ -75,7 +75,9 @@ class MealsStore {
 		return this.transactions.filter((t) => t.menuId === menu.id);
 	});
 	totalOpenSessions = $derived(this.visibleSessions.filter((s) => s.status === 'open').length);
-	todayTotalServed = $derived(MOCK_BREAKFAST_PRE_SERVED + this.transactions.length);
+	todayTotalServed = $derived(
+		MOCK_BREAKFAST_PRE_SERVED + this.transactions.filter((t) => t.status === 'active').length
+	);
 	selectedRecipientAlreadyServed = $derived(
 		this.selectedRecipient && this.activeKioskMenu
 			? hasReceivedMenu(this.transactions, this.selectedRecipient.id, this.activeKioskMenu.id)
@@ -84,6 +86,11 @@ class MealsStore {
 	selectedRecipientMismatch = $derived(
 		this.selectedRecipient && this.activeKioskMenu
 			? !recipientMatchesMenu(this.selectedRecipient, this.activeKioskMenu)
+			: false
+	);
+	selectedRecipientOverYield = $derived(
+		this.activeKioskMenu
+			? this.activeKioskMenu.served + this.servePortions > this.activeKioskMenu.target
 			: false
 	);
 
@@ -195,7 +202,10 @@ class MealsStore {
 			menuId: menu.id,
 			menuTitle: menu.title,
 			time: currentServeTimeLabel(),
-			portions
+			portions,
+			status: 'active',
+			recipient_type: 'evacuee',
+			scanned_by: 'staff-onsite'
 		};
 		this.transactions = [tx, ...this.transactions];
 
@@ -208,6 +218,31 @@ class MealsStore {
 		this.searchQuery = '';
 		this.deselectRecipient();
 		toast.success(`บันทึกการแจกจ่ายอาหารสำเร็จ: ${recipient.name}`);
+	}
+
+	/**
+	 * Void an existing distribution transaction per CR-109 (FR-MD-04).
+	 * Preserves audit trail without hard-deleting the record.
+	 */
+	voidTransaction(txId: string, voidedBy = 'เจ้าหน้าที่หน้างาน') {
+		const tx = this.transactions.find((t) => t.id === txId);
+		if (!tx || tx.status === 'voided') return;
+
+		tx.status = 'voided';
+		tx.voided_at = currentServeTimeLabel();
+		tx.voided_by = voidedBy;
+
+		// Deduct served portions from menu
+		for (const day of this.days) {
+			for (const session of day.sessions) {
+				const menu = session.menus.find((m) => m.id === tx.menuId);
+				if (menu) {
+					menu.served = Math.max(0, menu.served - tx.portions);
+				}
+			}
+		}
+
+		toast.success(`ยกเลิกรายการแจกจ่ายของ "${tx.recipientName}" แล้ว (Voided)`);
 	}
 
 	handleSimulatedScan(recipient: MealRecipient) {

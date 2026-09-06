@@ -22,6 +22,7 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Expand from '@lucide/svelte/icons/expand';
+	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import { resolve } from '$app/paths';
 
 	const store = setDistributionStore();
@@ -101,6 +102,38 @@
 >
 	<!-- Main Container -->
 	<div class="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+		<!-- Disconnected Banner per CR-110 (FR-ID-03) -->
+		{#if !store.isOnline}
+			<div
+				class="mb-4 flex flex-col items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-2xs sm:flex-row dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300"
+			>
+				<div class="flex items-center gap-3">
+					<div
+						class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs"
+					>
+						<WifiOff class="size-5" />
+					</div>
+					<div class="space-y-0.5 text-left">
+						<h4 class="text-sm font-bold">ขาดการเชื่อมต่อเครือข่าย (Offline • Remote-First)</h4>
+						<p class="text-xs text-red-800 dark:text-red-300">
+							ตามสถาปัตยกรรม CR-110 ระบบไม่มีคิวบันทึกออฟไลน์บนเครื่อง
+							กรุณาตรวจสอบสัญญาณอินเทอร์เน็ตแล้วกดลองใหม่อีกครั้ง
+						</p>
+					</div>
+				</div>
+				<Button
+					size="sm"
+					variant="outline"
+					disabled={store.isRetrying}
+					onclick={() => store.retryConnection()}
+					class="gap-1.5 border-red-300 bg-white font-bold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-slate-900 dark:text-red-300"
+				>
+					<RotateCcw class="size-3.5 {store.isRetrying ? 'animate-spin' : ''}" />
+					<span>{store.isRetrying ? 'กำลังตรวจสอบ...' : 'ลองใหม่อีกครั้ง (Retry)'}</span>
+				</Button>
+			</div>
+		{/if}
+
 		<!-- Sub-Header Card / Action Section -->
 		<div
 			class="mb-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900"

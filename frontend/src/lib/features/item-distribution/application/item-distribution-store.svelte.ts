@@ -23,6 +23,10 @@ class DistributionStore {
 	// Navigation & UI tabs
 	activeTab = $state<'stock' | 'requisitions'>('stock');
 
+	// Remote-First connectivity state per CR-110 (FR-ID-03)
+	isOnline = $state<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+	isRetrying = $state<boolean>(false);
+
 	// Search & Filters
 	searchQuery = $state<string>('');
 	statusFilter = $state<string>('all');
@@ -282,6 +286,26 @@ class DistributionStore {
 		};
 
 		this.closeReturnModal();
+	}
+
+	constructor() {
+		if (typeof window !== 'undefined') {
+			window.addEventListener('online', () => {
+				this.isOnline = true;
+			});
+			window.addEventListener('offline', () => {
+				this.isOnline = false;
+			});
+		}
+	}
+
+	async retryConnection(): Promise<void> {
+		this.isRetrying = true;
+		await new Promise((r) => setTimeout(r, 600));
+		if (typeof navigator !== 'undefined') {
+			this.isOnline = navigator.onLine;
+		}
+		this.isRetrying = false;
 	}
 }
 

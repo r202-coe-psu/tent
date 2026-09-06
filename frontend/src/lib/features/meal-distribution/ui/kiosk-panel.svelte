@@ -190,23 +190,43 @@
 							>
 								ผู้ประสบภัยรายนี้รับประทานเมนูนี้ไปแล้ว
 							</div>
-						{:else if store.selectedRecipientMismatch}
-							<div
-								class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-4 text-center dark:border-amber-900/40 dark:bg-amber-950/20"
-							>
-								<AlertTriangle class="mx-auto size-5 text-amber-600" />
-								<h5 class="text-sm font-bold text-amber-900 dark:text-amber-300">
-									กลุ่มเป้าหมายไม่ตรงกับเมนูนี้!
-								</h5>
-								<p class="text-[11px] text-amber-800 dark:text-amber-400">
-									กลุ่มเป้าหมายเมนูนี้: [{menu.tags.join(', ')}] | คุณสมบัติผู้พักพิง: [{recipient.dietaryTags.join(
-										', '
-									)}]
-								</p>
-								<p class="text-[10px] font-semibold text-amber-700 dark:text-amber-500">
-									สามารถข้ามคำเตือนเพื่อแจกจ่ายตามดุลยพินิจเจ้าหน้าที่ได้
-								</p>
-							</div>
+						{:else}
+							{#if store.selectedRecipientMismatch}
+								<div
+									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-900/40 dark:bg-amber-950/20"
+								>
+									<AlertTriangle class="mx-auto size-5 text-amber-600" />
+									<h5 class="text-sm font-bold text-amber-900 dark:text-amber-300">
+										กลุ่มเป้าหมายไม่ตรงกับเมนูนี้!
+									</h5>
+									<p class="text-xs text-amber-800 dark:text-amber-400">
+										กลุ่มเป้าหมายเมนูนี้: [{menu.tags.join(', ')}] | คุณสมบัติผู้พักพิง: [{recipient.dietaryTags.join(
+											', '
+										)}]
+									</p>
+									<p class="text-xs font-semibold text-amber-700 dark:text-amber-500">
+										สามารถข้ามคำเตือนเพื่อแจกจ่ายตามดุลยพินิจเจ้าหน้าที่ได้
+									</p>
+								</div>
+							{/if}
+
+							{#if store.selectedRecipientOverYield}
+								<div
+									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-900/40 dark:bg-amber-950/20"
+								>
+									<AlertTriangle class="mx-auto size-5 text-amber-600" />
+									<h5 class="text-sm font-bold text-amber-900 dark:text-amber-300">
+										จำนวนที่แจกจะเกินยอดปรุงเสร็จ! (CR-109 Soft Warning)
+									</h5>
+									<p class="text-xs text-amber-800 dark:text-amber-400">
+										เป้าหมายปรุงเสร็จ: {menu.target} ที่ | แจกไปแล้ว: {menu.served} ที่ | แจกเพิ่ม: {store.servePortions}
+										ที่
+									</p>
+									<p class="text-xs font-semibold text-amber-700 dark:text-amber-500">
+										อนุโลมให้เจ้าหน้าที่กดยืนยันแจกต่อได้ เพื่อไม่ให้การแจกจ่ายอาหารหน้างานหยุดชะงัก
+									</p>
+								</div>
+							{/if}
 						{/if}
 
 						<div class="flex items-center gap-2">
@@ -220,11 +240,14 @@
 							<Button
 								disabled={store.selectedRecipientAlreadyServed}
 								onclick={() => store.confirmServe()}
-								class="flex-1 gap-1.5 text-xs font-bold text-white {store.selectedRecipientMismatch
+								class="flex-1 gap-1.5 text-xs font-bold text-white {store.selectedRecipientMismatch ||
+								store.selectedRecipientOverYield
 									? 'bg-amber-600 hover:bg-amber-700'
 									: 'bg-emerald-600 hover:bg-emerald-700'}"
 							>
-								{store.selectedRecipientMismatch ? 'ข้ามเตือน & ยืนยันแจก' : 'ยืนยันแจก'} ({store.servePortions}
+								{store.selectedRecipientMismatch || store.selectedRecipientOverYield
+									? 'ข้ามเตือน & ยืนยันแจก'
+									: 'ยืนยันแจก'} ({store.servePortions}
 								ที่) ↵
 							</Button>
 						</div>
@@ -384,10 +407,19 @@
 							{#each store.menuTransactions as tx (tx.id)}
 								<div
 									transition:slide={{ duration: 150 }}
-									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-xs dark:border-zinc-800"
+									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-xs dark:border-zinc-800 {tx.status ===
+									'voided'
+										? 'bg-slate-100/60 opacity-60'
+										: ''}"
 								>
 									<div class="space-y-1">
-										<div class="font-bold text-slate-900 dark:text-white">{tx.recipientName}</div>
+										<div
+											class="font-bold text-slate-900 dark:text-white {tx.status === 'voided'
+												? 'text-slate-400 line-through'
+												: ''}"
+										>
+											{tx.recipientName}
+										</div>
 										<div class="flex items-center gap-2 text-[10px] text-slate-400">
 											<span>เตียง {tx.bed}</span>
 											<span>•</span>
@@ -396,7 +428,14 @@
 									</div>
 
 									<div class="flex items-center gap-2">
-										<span class="font-bold text-emerald-600">+{tx.portions} กล่อง</span>
+										{#if tx.status === 'voided'}
+											<span
+												class="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600"
+												>ยกเลิกแล้ว</span
+											>
+										{:else}
+											<span class="font-bold text-emerald-600">+{tx.portions} กล่อง</span>
+										{/if}
 									</div>
 								</div>
 							{/each}
