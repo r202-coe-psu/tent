@@ -51,6 +51,8 @@
 	import CommandIcon from '@lucide/svelte/icons/command';
 	import Database from '@lucide/svelte/icons/database';
 	import AlertOctagon from '@lucide/svelte/icons/alert-octagon';
+	import Search from '@lucide/svelte/icons/search';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
