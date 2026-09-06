@@ -218,6 +218,8 @@ async def test_get_person_shelter_residency_active(
     assert body["shelter_id"] == "SH001"
     assert body["shelter_name"] == "ศูนย์พักพิงเทศบาล 1"
     assert body["status"] == "CHECKED_IN"
+    assert body["stay_status"] == "active"
+    assert body["in_zone"] is False
     assert body["checkin_datetime"] == "2026-08-20T14:30:00+07:00"
 
 
@@ -252,6 +254,8 @@ async def test_get_person_shelter_residency_checked_out(
     assert body["shelter_id"] == "SH001"
     assert body["shelter_name"] == "ศูนย์พักพิงเทศบาล 1"
     assert body["status"] == "CHECKED_OUT"
+    assert body["stay_status"] == "checked_out"
+    assert body["in_zone"] is False
     assert body["checkin_datetime"] == "2026-08-15T09:00:00+07:00"
 
 
