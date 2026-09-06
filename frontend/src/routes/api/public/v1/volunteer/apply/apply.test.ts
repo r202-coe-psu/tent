@@ -92,6 +92,8 @@ describe('POST /api/public/v1/volunteer/apply compatibility adapter', () => {
 			skills: ['ครัว'],
 			shift_id: 'shift:morning',
 			shift_date: '2026-09-10',
+			start_time: '08:00',
+			end_time: '12:00',
 			station: undefined
 		});
 	});

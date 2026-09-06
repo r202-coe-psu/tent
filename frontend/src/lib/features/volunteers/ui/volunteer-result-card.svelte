@@ -23,8 +23,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { resolve } from '$app/paths';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { useSkillOptions } from '../application/queries';
-	import { resolveSkillOption } from '../domain/skill-catalog';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Job } from '../domain/job.schema';
@@ -96,12 +97,17 @@
 	}
 
 	const skillCatalog = useSkillOptions();
-	const skills = $derived(
-		volunteer?.skills.flatMap((value) => {
+	const skills = $derived.by<SkillOption[]>(() => {
+		if (!volunteer) return [];
+		const map = new SvelteMap<string, SkillOption>();
+		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillCatalog.options);
-			return option ? [option] : [];
-		}) ?? []
-	);
+			if (option && !map.has(option.code)) {
+				map.set(option.code, option);
+			}
+		}
+		return Array.from(map.values());
+	});
 </script>
 
 {#if volunteer}
@@ -213,7 +219,7 @@
 							ทักษะความชำนาญที่ผ่านการรับรอง (SKILLS)
 						</p>
 						<div class="flex flex-wrap gap-1.5">
-							{#each skills as skill (skill.code)}
+							{#each skills as skill, idx (`${skill.code}-${idx}`)}
 								<Badge variant="outline" class="text-[11px]">
 									{skill.icon}
 									{skill.label}

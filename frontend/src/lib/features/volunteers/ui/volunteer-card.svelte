@@ -28,6 +28,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
@@ -63,13 +64,16 @@
 
 	const initial = $derived(volunteer.first_name.trim().charAt(0) || '?');
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
-	const skills = $derived(
-		volunteer.skills.flatMap((value) => {
+	const skills = $derived.by<SkillOption[]>(() => {
+		const map = new SvelteMap<string, SkillOption>();
+		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillOptions);
-			return option ? [option] : [];
-		})
-	);
-	const hasControlledSkill = $derived(skills.some((skill) => skill.controlled));
+			if (option && !map.has(option.code)) {
+				map.set(option.code, option);
+			}
+		}
+		return Array.from(map.values());
+	});
 	const shelterLine = $derived(
 		shelterName ? (shelterType ? `${shelterName} (${shelterType})` : shelterName) : '—'
 	);
@@ -97,15 +101,17 @@
 					<Badge variant="outline" class="text-[11px]">{volunteer.volunteer_code}</Badge>
 				</div>
 				<div class="flex flex-wrap items-center gap-1.5">
-					<Badge variant="secondary" class="text-[11px]">{SOURCE_LABELS[volunteer.source]}</Badge>
-					{#if hasControlledSkill}
-						<Badge
-							variant="outline"
-							class="border-violet-300 bg-violet-50 text-[11px] text-violet-700"
-						>
-							ทักษะวิชาชีพ/ควบคุม
-						</Badge>
-					{/if}
+					<Badge
+						variant="outline"
+						class="text-[11px] {volunteer.personnel_type === 'staff'
+							? 'border-indigo-200 bg-indigo-50 font-bold text-indigo-700'
+							: 'text-muted-foreground'}"
+					>
+						{volunteer.personnel_type === 'staff' ? '🏢 จนท.ประจำ' : '🎫 อาสาสมัคร'}
+					</Badge>
+					<Badge variant="outline" class="text-[11px] text-muted-foreground">
+						{SOURCE_LABELS[volunteer.source]}
+					</Badge>
 					{#if !volunteer.checked_in}
 						<Badge variant="outline" class="gap-1 text-[11px] text-muted-foreground">
 							<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"></span>
@@ -134,7 +140,7 @@
 	<!-- ทักษะ (SKILLS) -->
 	<Table.Cell class="w-[16%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap content-start gap-1.5">
-			{#each skills as skill (skill.code)}
+			{#each skills as skill, idx (`${skill.code}-${idx}`)}
 				<Badge
 					variant="outline"
 					class="max-w-full gap-1 text-[11px] break-words {skill.controlled

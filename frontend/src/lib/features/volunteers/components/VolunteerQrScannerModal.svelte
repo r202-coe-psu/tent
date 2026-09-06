@@ -3,16 +3,21 @@
 	import X from '@lucide/svelte/icons/x';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 
 	let {
 		isOpen = $bindable(false),
 		onScan,
-		title = 'สแกน QR Code ตั๋วจิตอาสา'
+		title
 	} = $props<{
 		isOpen: boolean;
 		onScan: (token: string) => void;
 		title?: string;
 	}>();
+
+	const t = $derived(jobsI18n[languageStore.current]);
+	const displayTitle = $derived(title || t.ticketScanTitle);
 
 	let cameraError = $state<string>('');
 	const scannerElementId = 'volunteer-qr-camera-reader';
@@ -55,7 +60,7 @@
 			)
 			.catch((err: unknown) => {
 				console.warn('Camera start error:', err);
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+				cameraError = t.cameraPermissionError;
 			});
 
 		return () => {
@@ -81,7 +86,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2">
 					<Camera class="h-4 w-4 text-primary" />
-					<h3 class="text-sm font-bold text-foreground">{title}</h3>
+					<h3 class="text-sm font-bold text-foreground">{displayTitle}</h3>
 				</div>
 				<button
 					type="button"
@@ -107,7 +112,7 @@
 				</div>
 			{:else}
 				<p class="mb-3 text-center text-2xs text-muted-foreground">
-					หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงานจิตอาสา
+					{t.cameraScanHint}
 				</p>
 			{/if}
 
@@ -116,7 +121,7 @@
 				onclick={handleClose}
 				class="w-full cursor-pointer rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted"
 			>
-				ปิดหน้าต่าง
+				{t.closeModal}
 			</button>
 		</div>
 	</div>

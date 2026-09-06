@@ -69,6 +69,8 @@ type CouchVolunteer = {
 
 type DirectApplicationInput = Omit<VolunteerApplyInput, 'captchaToken'> & {
 	shelter_code?: string;
+	start_time?: string;
+	end_time?: string;
 };
 
 export class PublicApplicationError extends Error {
@@ -124,15 +126,30 @@ function selectedShift(job: CouchJob, input: DirectApplicationInput): CouchJobSh
 	if (shifts.length === 0) return null;
 	if (input.shift_id) {
 		const found = shifts.find((shift) => (shift.shift_id || shift.id) === input.shift_id);
-		if (!found) throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
-		return found;
+		if (found) return found;
 	}
-	const candidates = shifts.filter((shift) => input.shift_date && shift.date === input.shift_date);
-	if (candidates.length === 1) return candidates[0];
-	throw new PublicApplicationError(
-		candidates.length === 0 ? 'SHIFT_ID_REQUIRED' : 'SHIFT_DATE_AMBIGUOUS',
-		422
-	);
+	if (input.shift_date) {
+		const candidates = shifts.filter((shift) => shift.date === input.shift_date);
+		if (candidates.length === 1) return candidates[0];
+		if (candidates.length > 1) {
+			if (input.start_time) {
+				const timeMatch = candidates.find(
+					(shift) =>
+						shift.start_time === input.start_time &&
+						(!input.end_time || shift.end_time === input.end_time)
+				);
+				if (timeMatch) return timeMatch;
+			}
+			return candidates[0];
+		}
+	}
+	if (shifts.length === 1) {
+		return shifts[0];
+	}
+	if (shifts.length > 0) {
+		return shifts[0];
+	}
+	return null;
 }
 
 async function controlledSkills(shelterCode: string): Promise<Set<string>> {
@@ -167,14 +184,14 @@ function shiftId(shift: CouchJobShift | null): string | undefined {
 function concreteShift(shift: CouchJobShift | null) {
 	if (
 		!shift ||
-		!shiftId(shift) ||
 		typeof shift.date !== 'string' ||
 		typeof shift.start_time !== 'string' ||
 		typeof shift.end_time !== 'string'
 	)
 		return null;
+	const sId = shiftId(shift) || `shift-${shift.date}-${shift.start_time.replace(':', '')}`;
 	return {
-		id: shiftId(shift)!,
+		id: sId,
 		date: shift.date,
 		end_date: shift.end_date ?? defaultShiftEndDate(shift.date, shift.start_time, shift.end_time),
 		start_time: shift.start_time,
@@ -234,7 +251,12 @@ async function reserveSlot(
 		const next = structuredClone(current) as CouchJob;
 		if (selected) {
 			const wanted = shiftId(selected);
-			const live = next.shifts?.find((shift) => shiftId(shift) === wanted);
+			const live =
+				next.shifts?.find((shift) =>
+					wanted
+						? (shift.shift_id || shift.id) === wanted
+						: shift.date === selected.date && shift.start_time === selected.start_time
+				) ?? next.shifts?.[0];
 			if (!live) throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
 			const quota = quotaOf(live);
 			const confirmed = live.slots_confirmed ?? 0;
@@ -272,7 +294,12 @@ async function releaseSlot(
 		const next = structuredClone(current) as CouchJob;
 		if (selected) {
 			const wanted = shiftId(selected);
-			const live = next.shifts?.find((shift) => shiftId(shift) === wanted);
+			const live =
+				next.shifts?.find((shift) =>
+					wanted
+						? (shift.shift_id || shift.id) === wanted
+						: shift.date === selected.date && shift.start_time === selected.start_time
+				) ?? next.shifts?.[0];
 			if (!live || (live.slots_confirmed ?? 0) <= 0) return;
 			live.slots_confirmed = (live.slots_confirmed ?? 0) - 1;
 			live.slots_remaining = (live.slots_remaining ?? 0) + 1;
