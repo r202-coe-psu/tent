@@ -278,14 +278,59 @@ describe('CatalogRemoteRepository', () => {
 			);
 
 			// 4. Delete override (Reset) - should bypass category usage checks and delete override doc
-			const wasDeleted = await repo.deleteItemCategory(category._id, 'SH001');
-			expect(wasDeleted).toBe(true);
+			const result = await repo.deleteItemCategory(category._id, 'SH001');
+			expect(result.wasDeleted).toBe(true);
+			expect(result.actionTaken).toBe('reset');
 
 			// 5. Query for SH001 - should see central category again
 			const list = await repo.listItemCategories('SH001');
 			expect(list.length).toBe(1);
 			expect(list[0].name).toBe('อาหารแห้งกลาง');
 			expect(list[0].shelter_code).toBeUndefined();
+		});
+
+		it('should deactivate category when deleted if used by an item master', async () => {
+			const category = await repo.createItemCategory({ name: 'เครื่องดื่ม' }, ctx);
+
+			await repo.createItemMaster(
+				{
+					name: 'น้ำดื่มบรรจุขวด',
+					base_unit: 'ขวด',
+					category: 'เครื่องดื่ม',
+					distribution_type: 'recurring',
+					type_class: 'CONSUMABLE',
+					dietary: []
+				},
+				ctx
+			);
+
+			// Check usage details
+			const usage = await repo.inspectCategoryUsage(category._id);
+			expect(usage.centralItemMasters).toContain('น้ำดื่มบรรจุขวด');
+			expect(usage.totalItemCount).toBe(1);
+
+			// Should not delete physically, but mark deactivated = true
+			const result = await repo.deleteItemCategory(category._id);
+			expect(result.wasDeleted).toBe(false);
+			expect(result.actionTaken).toBe('deactivate');
+
+			const updated = await repo.getItemCategory(category._id);
+			expect(updated).not.toBeNull();
+			expect(updated?.deactivated).toBe(true);
+		});
+
+		it('should remove category physically when deleted if not used by any item master', async () => {
+			const category = await repo.createItemCategory({ name: 'หมวดหมู่ว่าง' }, ctx);
+
+			const usage = await repo.inspectCategoryUsage(category._id);
+			expect(usage.totalItemCount).toBe(0);
+
+			const result = await repo.deleteItemCategory(category._id);
+			expect(result.wasDeleted).toBe(true);
+			expect(result.actionTaken).toBe('hard_delete');
+
+			const removed = await repo.getItemCategory(category._id);
+			expect(removed).toBeNull();
 		});
 	});
 });

@@ -262,7 +262,7 @@
 												<Settings2 class="h-4 w-4" />
 												จัดการ
 											</Button>
-											{#if e.shelter_code === shelterCode}
+											{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
 												{#if e.deactivated}
 													<Button
 														variant="outline"
