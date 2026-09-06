@@ -940,6 +940,26 @@ describe('movement → current_stay', () => {
 		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
 		expect(() => applyMovementToStay(e, m)).toThrow(/โซน/);
 	});
+
+	it('rejects return_from_leave — leave return is Check-in → active only (CR-112 A1)', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const onLeave = {
+			...e,
+			current_stay: {
+				status: 'temporary_leave' as const,
+				zone: 'Z1',
+				since: e.current_stay.since
+			}
+		};
+		expect(() => assertMovementAllowed(onLeave, 'return_from_leave')).toThrow(/เช็คอิน/);
+		const m = createMovement({ evacuee_id: e._id, action: 'return_from_leave', zone: 'Z1' }, ctx);
+		expect(() => applyMovementToStay(onLeave, m)).toThrow(/เช็คอิน/);
+
+		const checkIn = createMovement({ evacuee_id: e._id, action: 'check_in', zone: 'Z1' }, ctx);
+		const returned = applyMovementToStay(onLeave, checkIn);
+		expect(returned.current_stay.status).toBe('active');
+		expect(returned.current_stay.zone).toBe('Z1');
+	});
 });
 
 describe('resolveStatusChangeAction', () => {

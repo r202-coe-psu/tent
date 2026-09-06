@@ -7,21 +7,14 @@
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Check from '@lucide/svelte/icons/check';
-	import {
-		EWAR_SYMPTOM_GROUPS,
-		migrateVulnerableGroupCodes,
-		type EvacueeInput
-	} from '../domain/people';
+	import { EWAR_SYMPTOM_GROUPS, type EvacueeInput } from '../domain/people';
 	import type { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_EWAR_I18N } from './_constants/evacuee-ewar.i18n';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
-	import { useMasterData } from '$lib/features/master-data';
-	import { useShelter } from '$lib/features/shelters';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { CR112_VULNERABLE_GROUP_ACTIVE, useMasterData } from '$lib/features/master-data';
 
 	export type ScreeningDraft = Pick<
 		EvacueeInput,
@@ -57,22 +50,19 @@
 	const t = $derived(getTranslation(EVACUEE_EWAR_I18N, languageStore.current));
 	const regT = $derived(getTranslation(EVACUEE_REGISTRATION_I18N, languageStore.current));
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
+	/** CR-112 active master set — same source as Station 1 registration (not admission_policy). */
 	const specialNeedChipOptions = $derived.by(() => {
-		if (!vulnerableGroupQuery.isSuccess) return [];
-		const supported = migrateVulnerableGroupCodes(
-			shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? []
-		);
 		const masterByCode = new Map(
-			vulnerableGroupQuery.data.items
+			(vulnerableGroupQuery.data?.items ?? [])
 				.filter((item) => item.status === 'active')
-				.map((item) => [item.code, item])
+				.map((item) => [item.code, item.label])
 		);
-		return supported
-			.filter((code) => masterByCode.has(code))
-			.map((code) => ({ code, label: masterByCode.get(code)!.label }));
+		return CR112_VULNERABLE_GROUP_ACTIVE.map((item) => ({
+			code: item.code,
+			label: masterByCode.get(item.code) ?? item.label
+		}));
 	});
 
 	let medicalConditionsStr = $state(screeningDraft.medical_conditions?.join(', ') ?? '');

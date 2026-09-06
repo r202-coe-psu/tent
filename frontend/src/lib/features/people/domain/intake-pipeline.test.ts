@@ -145,6 +145,15 @@ describe('classifyZoningQueueTab', () => {
 		).toBe('assigned');
 	});
 
+	it('excludes temporary_leave from assigned (confirmed) zoning tab', () => {
+		expect(
+			classifyZoningQueueTab(ev({ status: 'temporary_leave', zone: 'Z1' }), {
+				enableMedicalScreening: false,
+				hasScreening: false
+			})
+		).toBeNull();
+	});
+
 	it('clears checked-in evacuees from pending (Cleared for Zoning) queue', () => {
 		expect(
 			classifyZoningQueueTab(ev({ status: 'active', zone: 'Z1' }), {

@@ -72,7 +72,8 @@ export function classifyScreeningQueueTab(
  * Station 3 queue tab classification ("Cleared for Zoning" = pending).
  * - pending (รอจัด / พร้อมจัดโซน): arriving, zone null; when flag on also requires a screening doc
  * - awaiting_confirm (รอยืนยันถึงโซน): active with zone — Zone Arrival Confirmation pending
- * - assigned (จัดแล้ว / ยืนยันแล้ว): room_confirmed or temporary_leave with zone
+ * - assigned (จัดแล้ว / ยืนยันแล้ว): room_confirmed with zone only
+ *   (temporary_leave keeps Present occupancy but is not Zone Arrival Confirmation)
  */
 export function classifyZoningQueueTab(
 	evacuee: Evacuee,
@@ -86,7 +87,7 @@ export function classifyZoningQueueTab(
 		return 'awaiting_confirm';
 	}
 
-	if (hasZone && (status === 'room_confirmed' || status === 'temporary_leave')) {
+	if (hasZone && status === 'room_confirmed') {
 		return 'assigned';
 	}
 

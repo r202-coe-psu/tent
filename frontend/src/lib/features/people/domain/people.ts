@@ -1517,6 +1517,10 @@ export function assertMovementAllowed(
 	if (action === 'confirm_room' && !canConfirmRoom(evacuee)) {
 		throw new Error(`ไม่สามารถยืนยันถึงโซนจากสถานะ ${status} ได้ — ต้องเช็คอินก่อน`);
 	}
+	if (action === 'return_from_leave') {
+		// CR-112 A1: leave return / re-entry is Check-in → active (zone required), then confirm again.
+		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
+	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
 	}
@@ -1590,13 +1594,15 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 			}
 		};
 	}
-	const statusByAction: Record<Exclude<MovementAction, 'zone_change' | 'check_in'>, StayStatus> = {
+	const statusByAction: Record<
+		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave'>,
+		StayStatus
+	> = {
 		check_out: 'checked_out',
 		confirm_room: 'room_confirmed',
 		transfer_out: 'transferred',
 		transfer_in: 'active',
 		leave_temporary: 'temporary_leave',
-		return_from_leave: 'active',
 		mark_deceased: 'deceased'
 	};
 	return {

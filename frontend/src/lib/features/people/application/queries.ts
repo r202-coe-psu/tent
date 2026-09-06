@@ -253,8 +253,11 @@ export const useConfirmRoomForHousehold = () => {
 			evacuees: readonly Evacuee[];
 			ctx: AuthorContext;
 		}) => peopleRepository().confirmRoomForHousehold(householdId, evacuees, ctx),
-		onSuccess: () => {
+		onSuccess: (confirmed) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			for (const updated of confirmed) {
+				qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			}
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}

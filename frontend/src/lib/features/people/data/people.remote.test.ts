@@ -749,14 +749,18 @@ describe('check-in / check-out', () => {
 			expect(movements[1]).toMatchObject({ action: 'leave_temporary' });
 		});
 
-		it('records a return_from_leave movement and updates current_stay back to active', async () => {
+		it('rejects return_from_leave — leave return must use check_in (CR-112 A1)', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
 			const active = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
 			const onLeave = await repo.recordMovement(active, 'leave_temporary', ctx);
 
-			const updated = await repo.recordMovement(onLeave, 'return_from_leave', ctx);
+			await expect(repo.recordMovement(onLeave, 'return_from_leave', ctx)).rejects.toThrow(
+				/เช็คอิน/
+			);
 
-			expect(updated.current_stay.status).toBe('active');
+			const returned = await repo.checkInEvacuee(onLeave, ctx, 'zone-a');
+			expect(returned.current_stay.status).toBe('active');
+			expect(returned.current_stay.zone).toBe('zone-a');
 		});
 
 		it('records a mark_deceased movement and updates current_stay to deceased (terminal)', async () => {
