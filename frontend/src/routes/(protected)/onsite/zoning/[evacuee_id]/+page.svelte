@@ -136,7 +136,9 @@
 		companionDraftEvacueeId === evacueeId ? companionDraft : []
 	);
 
-	const recommendKind = $derived(recommendZoneKind(evacuee ?? { special_needs: [] }, latestTriage));
+	const recommendKind = $derived(
+		recommendZoneKind(evacuee ?? { vulnerable_groups: [], special_needs: [] }, latestTriage)
+	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
 
 	const occupantCounts = $derived(countOccupantsByZone(allEvacuees));

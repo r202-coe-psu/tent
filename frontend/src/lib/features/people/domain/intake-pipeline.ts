@@ -91,15 +91,20 @@ export function classifyZoningQueueTab(
 
 /**
  * Zone type recommendation for Station 3:
- * red/yellow triage → quarantine; else special_needs → vulnerable; else general.
+ * red/yellow triage → quarantine; else Vulnerable Groups → vulnerable; else general.
+ * Special Needs stay free-form and do not drive zoning taxonomy (CR-112).
  */
 export function recommendZoneKind(
-	evacuee: Pick<Evacuee, 'special_needs'>,
+	evacuee: Pick<Evacuee, 'vulnerable_groups' | 'special_needs'>,
 	triageLevel: TriageLevel | null | undefined
 ): ZoningRecommendKind {
 	if (triageLevel === 'red' || triageLevel === 'yellow') {
 		return 'quarantine';
 	}
+	if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
+		return 'vulnerable';
+	}
+	// Legacy docs may still carry coded tags in special_needs until staff re-save.
 	if (evacuee.special_needs && evacuee.special_needs.length > 0) {
 		return 'vulnerable';
 	}

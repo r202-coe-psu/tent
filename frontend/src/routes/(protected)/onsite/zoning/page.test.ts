@@ -27,6 +27,8 @@ describe('Station 3 zoning helpers (route contract)', () => {
 	});
 
 	it('recommends quarantine for yellow triage', () => {
-		expect(recommendZoneKind({ special_needs: [] }, 'yellow')).toBe('quarantine');
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
+			'quarantine'
+		);
 	});
 });

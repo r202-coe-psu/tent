@@ -14,17 +14,19 @@ function ev(partial: {
 	status: Evacuee['current_stay']['status'];
 	zone?: string | null;
 	special_needs?: string[];
+	vulnerable_groups?: string[];
 	id?: string;
 }): Evacuee {
 	return {
 		_id: partial.id ?? 'evacuee:1',
 		type: 'evacuee',
-		schema_v: 9,
+		schema_v: 10,
 		first_name: 'ก',
 		last_name: 'ข',
 		gender: 'other',
 		phone: null,
 		country: 'TH',
+		vulnerable_groups: partial.vulnerable_groups ?? [],
 		special_needs: partial.special_needs ?? [],
 		household_id: null,
 		current_stay: {
@@ -149,17 +151,25 @@ describe('classifyScreeningQueueTab', () => {
 
 describe('recommendZoneKind', () => {
 	it('prefers quarantine for red/yellow triage', () => {
-		expect(recommendZoneKind({ special_needs: ['wheelchair'] }, 'red')).toBe('quarantine');
-		expect(recommendZoneKind({ special_needs: [] }, 'yellow')).toBe('quarantine');
+		expect(recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'red')).toBe(
+			'quarantine'
+		);
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
+			'quarantine'
+		);
 	});
 
-	it('uses vulnerable for special_needs when triage green/null', () => {
-		expect(recommendZoneKind({ special_needs: ['infant'] }, 'green')).toBe('vulnerable');
-		expect(recommendZoneKind({ special_needs: ['infant'] }, null)).toBe('vulnerable');
+	it('uses vulnerable for Vulnerable Groups when triage green/null', () => {
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, 'green')).toBe(
+			'vulnerable'
+		);
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, null)).toBe(
+			'vulnerable'
+		);
 	});
 
 	it('defaults to general', () => {
-		expect(recommendZoneKind({ special_needs: [] }, null)).toBe('general');
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
 	});
 });
 

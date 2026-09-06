@@ -31,6 +31,7 @@ import {
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
 	replacePersonId,
+	migrateVulnerableGroupCodes,
 	type Medical,
 	type MedicalInput,
 	type Movement,
@@ -125,6 +126,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					...(parsedInput.age !== undefined ? { age: parsedInput.age } : {}),
 					...(parsedInput.religion ? { religion: parsedInput.religion } : {}),
 					country: parsedInput.country,
+					vulnerable_groups: migrateVulnerableGroupCodes(parsedInput.vulnerable_groups),
 					special_needs: parsedInput.special_needs,
 					...(parsedInput.emergency_contact
 						? { emergency_contact: parsedInput.emergency_contact }

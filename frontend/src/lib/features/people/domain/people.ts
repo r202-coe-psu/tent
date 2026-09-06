@@ -256,6 +256,7 @@ export interface Evacuee extends BaseDoc {
 	person_id?: PersonId;
 	country: string;
 	religion?: Religion;
+	vulnerable_groups: string[];
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	photo?: string | null;
@@ -562,6 +563,7 @@ export const evacueeInputSchema = z.object({
 	medical_medications: z.array(z.string().trim().min(1)).default([]),
 	medical_note: z.string().trim().optional(),
 	track: careTrackSchema.optional(),
+	vulnerable_groups: z.array(z.string().trim().min(1)).default([]),
 	special_needs: z.array(z.string().trim().min(1)).default([]),
 	// Optional on Station 1 / kiosk / import — blank UI shell strips to undefined.
 	emergency_contact: emergencyContactOptionalSchema,
@@ -927,6 +929,20 @@ export type ScreeningInput = z.input<typeof screeningInputSchema>;
 
 // ---------------------------------------------------------------- factories
 
+/**
+ * Hard-migrate legacy Vulnerable Group codes (CR-112).
+ * `elderly` → `elderly_dependent`; `disabled` → `disability_other`.
+ */
+export function migrateVulnerableGroupCode(code: string): string {
+	if (code === 'elderly') return 'elderly_dependent';
+	if (code === 'disabled') return 'disability_other';
+	return code;
+}
+
+export function migrateVulnerableGroupCodes(codes: readonly string[]): string[] {
+	return codes.map(migrateVulnerableGroupCode);
+}
+
 function resolvePersonIdOnCreate(personId: PersonId | undefined): PersonId | undefined {
 	if (!personId) return undefined;
 	if (personId.cardType !== 'anonymous') return personId;
@@ -977,6 +993,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(person_id ? { person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
 			country: d.country,
+			vulnerable_groups: migrateVulnerableGroupCodes(d.vulnerable_groups),
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			...(d.photo ? { photo: d.photo } : {}),
@@ -1021,6 +1038,7 @@ export function createKioskEvacueeFromCard(
 				number: cardSnapshot.citizen_id
 			},
 			country: 'THAILAND',
+			vulnerable_groups: [],
 			special_needs: [],
 			household_id: null,
 			card_snapshot: cardSnapshot,

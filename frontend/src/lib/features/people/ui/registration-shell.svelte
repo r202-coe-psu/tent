@@ -209,6 +209,7 @@
 			age: ev.age,
 			religion: ev.religion,
 			country: ev.country,
+			vulnerable_groups: ev.vulnerable_groups ?? [],
 			special_needs: ev.special_needs,
 			emergency_contact: ev.emergency_contact,
 			photo: ev.photo

@@ -38,6 +38,8 @@ export {
 	mintAnonymousId,
 	isAnonymousId,
 	replacePersonId,
+	migrateVulnerableGroupCode,
+	migrateVulnerableGroupCodes,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,

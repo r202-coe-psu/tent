@@ -57,7 +57,7 @@
 	});
 
 	const recommendedZoneType = $derived(
-		recommendZoneKind(evacuee ?? { special_needs: [] }, triage_level)
+		recommendZoneKind(evacuee ?? { vulnerable_groups: [], special_needs: [] }, triage_level)
 	);
 
 	const recommendedZone = $derived.by(() => {

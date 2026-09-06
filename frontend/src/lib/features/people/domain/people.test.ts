@@ -44,7 +44,9 @@ import {
 	personIdSchema,
 	mintAnonymousId,
 	isAnonymousId,
-	replacePersonId
+	replacePersonId,
+	migrateVulnerableGroupCode,
+	migrateVulnerableGroupCodes
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';
@@ -122,6 +124,44 @@ describe('stayStatusSchema and STATUS_LABELS', () => {
 
 	it('contains arriving in STATUS_LABELS with Thai label', () => {
 		expect(STATUS_LABELS.arriving).toBe('อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)');
+	});
+});
+
+describe('vulnerable_groups vs special_needs', () => {
+	it('defaults vulnerable_groups to [] and keeps special_needs independent', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'เปราะบาง',
+				last_name: 'แยกฟิลด์',
+				gender: 'other',
+				phone: null,
+				special_needs: ['ใช้ออกซิเจน'],
+				vulnerable_groups: ['wheelchair', 'pregnant']
+			},
+			ctx
+		);
+		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
+		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
+		expect(e.schema_v).toBe(10);
+
+		const bare = createEvacuee(
+			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
+			ctx
+		);
+		expect(bare.vulnerable_groups).toEqual([]);
+		expect(bare.special_needs).toEqual([]);
+	});
+
+	it('hard-migrates legacy VG codes elderly→elderly_dependent and disabled→disability_other', () => {
+		expect(migrateVulnerableGroupCode('elderly')).toBe('elderly_dependent');
+		expect(migrateVulnerableGroupCode('disabled')).toBe('disability_other');
+		expect(migrateVulnerableGroupCode('chronic_illness')).toBe('chronic_illness');
+		expect(migrateVulnerableGroupCode('wheelchair')).toBe('wheelchair');
+		expect(migrateVulnerableGroupCodes(['elderly', 'disabled', 'infant'])).toEqual([
+			'elderly_dependent',
+			'disability_other',
+			'infant'
+		]);
 	});
 });
 

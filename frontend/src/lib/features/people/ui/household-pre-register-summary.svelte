@@ -19,22 +19,34 @@
 	} from '../domain/people';
 	import { z } from 'zod';
 
-	const specialNeedSchema = z.enum([
-		'elderly',
-		'disabled',
-		'pregnant',
+	const vulnerableGroupSchema = z.enum([
+		'bedridden',
+		'dialysis',
+		'wheelchair',
+		'psychiatric',
+		'elderly_dependent',
 		'infant',
-		'chronic_illness',
-		'bedridden'
+		'young_child',
+		'pregnant',
+		'vision_impaired',
+		'hearing_impaired',
+		'disability_other',
+		'chronic_illness'
 	]);
 
-	const SPECIAL_NEED_CHIPS: Record<string, { emoji: string; label: string }> = {
-		elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
-		disabled: { emoji: '♿', label: 'พิการ' },
+	const VULNERABLE_GROUP_CHIPS: Record<string, { emoji: string; label: string }> = {
+		bedridden: { emoji: '🛏️', label: 'ติดเตียง' },
+		dialysis: { emoji: '🩺', label: 'ฟอกไต' },
+		wheelchair: { emoji: '♿', label: 'วีลแชร์' },
+		psychiatric: { emoji: '🧠', label: 'จิตเวช' },
+		elderly_dependent: { emoji: '👴', label: 'ผู้สูงอายุพึ่งพิง' },
+		infant: { emoji: '👶', label: 'ทารก' },
+		young_child: { emoji: '🧒', label: 'เด็กเล็ก' },
 		pregnant: { emoji: '🤰', label: 'ครรภ์' },
-		infant: { emoji: '👶', label: 'เด็กเล็ก' },
-		chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
-		bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
+		vision_impaired: { emoji: '👁️', label: 'สายตา' },
+		hearing_impaired: { emoji: '👂', label: 'การได้ยิน' },
+		disability_other: { emoji: '♿', label: 'พิการอื่นๆ' },
+		chronic_illness: { emoji: '💊', label: 'โรคเรื้อรัง' }
 	};
 	import { toast } from 'svelte-sonner';
 	import Camera from '@lucide/svelte/icons/camera';
@@ -398,13 +410,13 @@
 								</td>
 								<td class="p-3">
 									<div class="flex flex-wrap gap-1">
-										{#if m.special_needs?.length > 0}
-											{#each m.special_needs as need (need)}
+										{#if m.vulnerable_groups?.length > 0}
+											{#each m.vulnerable_groups as need (need)}
 												<span
 													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
 												>
-													{SPECIAL_NEED_CHIPS[need]?.emoji}
-													{SPECIAL_NEED_CHIPS[need]?.label}
+													{VULNERABLE_GROUP_CHIPS[need]?.emoji}
+													{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
 												</span>
 											{/each}
 										{:else}
@@ -744,19 +756,19 @@
 						</Form.Field>
 					</div>
 
-					<!-- Special Needs Chips -->
+					<!-- Vulnerable Groups (coded) — separate from free-form Special Needs -->
 					<div class="space-y-2 border-t pt-4">
-						<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+						<Label class="text-sm font-semibold">กลุ่มเปราะบาง (Vulnerable Groups)</Label>
 						<div class="flex flex-wrap gap-2 pt-1">
-							{#each specialNeedSchema.options as need (need)}
-								{@const chip = SPECIAL_NEED_CHIPS[need]}
-								{@const checked = ($memberFormData.special_needs ?? []).includes(need)}
+							{#each vulnerableGroupSchema.options as need (need)}
+								{@const chip = VULNERABLE_GROUP_CHIPS[need]}
+								{@const checked = ($memberFormData.vulnerable_groups ?? []).includes(need)}
 								<Button
 									type="button"
 									variant="outline"
 									onclick={() => {
-										const current = $memberFormData.special_needs ?? [];
-										$memberFormData.special_needs = checked
+										const current = $memberFormData.vulnerable_groups ?? [];
+										$memberFormData.vulnerable_groups = checked
 											? current.filter((n) => n !== need)
 											: [...current, need];
 									}}

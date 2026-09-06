@@ -140,6 +140,7 @@ describe('classifyScreeningQueueTab', () => {
 		gender: 'male',
 		phone: '0812345678',
 		country: 'TH',
+		vulnerable_groups: [],
 		special_needs: [],
 		current_stay: {
 			status: 'arriving',
@@ -214,7 +215,8 @@ describe('matchesMedicalScreeningSearch', () => {
 			cardType: 'national_id',
 			number: '1234567890123'
 		},
-		special_needs: ['wheelchair'],
+		vulnerable_groups: ['wheelchair'],
+		special_needs: [],
 		current_stay: {
 			status: 'arriving',
 			zone: null,
@@ -294,7 +296,8 @@ describe('ClinicalScreeningForm component', () => {
 		gender: 'female',
 		phone: '0812345678',
 		country: 'TH',
-		special_needs: ['wheelchair'],
+		vulnerable_groups: ['wheelchair'],
+		special_needs: [],
 		current_stay: {
 			status: 'arriving',
 			zone: null,

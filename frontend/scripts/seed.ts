@@ -367,8 +367,8 @@ const REGISTRY_SHELTERS = [
 				categories: [{ category: 'small_general' }, { category: 'large_dog' }]
 			},
 			supported_vulnerable_group_keys: [
-				'elderly',
-				'disabled',
+				'elderly_dependent',
+				'disability_other',
 				'wheelchair',
 				'bedridden',
 				'pregnant',
@@ -426,7 +426,7 @@ const REGISTRY_SHELTERS = [
 		},
 		admission_policy: {
 			pet_policy: { policy: 'not_allowed' },
-			supported_vulnerable_group_keys: ['elderly', 'pregnant', 'chronic_illness']
+			supported_vulnerable_group_keys: ['elderly_dependent', 'pregnant', 'chronic_illness']
 		}
 	},
 	{
@@ -522,7 +522,7 @@ const REGISTRY_SHELTERS = [
 		},
 		admission_policy: {
 			pet_policy: { policy: 'not_allowed' },
-			supported_vulnerable_group_keys: ['elderly', 'young_child']
+			supported_vulnerable_group_keys: ['elderly_dependent', 'young_child']
 		}
 	}
 ] as const;
@@ -919,14 +919,18 @@ const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'vulnerable_group',
 		items: [
-			{ key: 'elderly', label: 'ผู้สูงอายุ', is_default: true },
-			{ key: 'disabled', label: 'ผู้พิการ' },
-			{ key: 'wheelchair', label: 'ผู้ใช้วีลแชร์' },
 			{ key: 'bedridden', label: 'ผู้ป่วยติดเตียง' },
-			{ key: 'pregnant', label: 'สตรีมีครรภ์' },
+			{ key: 'dialysis', label: 'ผู้ป่วยฟอกไต' },
+			{ key: 'wheelchair', label: 'ผู้ใช้วีลแชร์' },
+			{ key: 'psychiatric', label: 'ผู้ป่วยจิตเวช' },
+			{ key: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: true },
 			{ key: 'infant', label: 'ทารก' },
 			{ key: 'young_child', label: 'เด็กเล็ก' },
-			{ key: 'chronic_illness', label: 'ผู้ป่วยเรื้อรัง' }
+			{ key: 'pregnant', label: 'สตรีมีครรภ์' },
+			{ key: 'vision_impaired', label: 'ผู้พิการทางการมองเห็น' },
+			{ key: 'hearing_impaired', label: 'ผู้พิการทางการได้ยิน' },
+			{ key: 'disability_other', label: 'ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด)' },
+			{ key: 'chronic_illness', label: 'ผู้มีโรคประจำตัว/เรื้อรัง' }
 		]
 	},
 	{
@@ -1002,6 +1006,17 @@ async function seedMasterData(): Promise<MasterLookup> {
 	const ts = now();
 	const master = {} as MasterLookup;
 
+	/** CR-112 hard migrate of Vulnerable Group seed keys / legacy labels. */
+	const VG_LEGACY_LABEL_TO_KEY: Record<string, string> = {
+		ผู้สูงอายุ: 'elderly_dependent',
+		ผู้พิการ: 'disability_other',
+		ผู้ป่วยเรื้อรัง: 'chronic_illness'
+	};
+	const VG_CODE_MIGRATE: Record<string, string> = {
+		elderly: 'elderly_dependent',
+		disabled: 'disability_other'
+	};
+
 	for (const def of MASTER_DATA_DEFS) {
 		const id = masterDocId(def.type);
 		const { status: getStatus, data } = await couchReq(
@@ -1012,11 +1027,24 @@ async function seedMasterData(): Promise<MasterLookup> {
 		// Reuse the persisted code for a label we already seeded — a re-run must
 		// not orphan `special_needs` / `community` refs on existing people docs.
 		const persistedByLabel = new Map((existing?.items ?? []).map((i) => [i.label, i]));
+		if (def.type === 'vulnerable_group' && existing?.items) {
+			for (const item of existing.items) {
+				const migratedKey = VG_LEGACY_LABEL_TO_KEY[item.label] ?? VG_CODE_MIGRATE[item.code];
+				if (migratedKey) {
+					const target = def.items.find((d) => d.key === migratedKey);
+					if (target && !persistedByLabel.has(target.label)) {
+						persistedByLabel.set(target.label, { ...item, label: target.label, code: migratedKey });
+					}
+				}
+			}
+		}
 
 		const resolved: Record<string, MasterDataItem> = {};
 		const seeded: MasterDataItem[] = def.items.map((d) => {
+			const reuse = persistedByLabel.get(d.label);
 			const item: MasterDataItem = {
-				code: persistedByLabel.get(d.label)?.code ?? itemCode(),
+				// Vulnerable Group uses stable CR-112 codes (= seed keys); other types keep ULID codes.
+				code: reuse?.code ?? (def.type === 'vulnerable_group' ? d.key : itemCode()),
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',
@@ -1031,7 +1059,15 @@ async function seedMasterData(): Promise<MasterLookup> {
 		// labels, not the whole list. Seeded items come first so `enforceOneDefault`
 		// resolves the default in the seed's favour.
 		const seededLabels = new Set(def.items.map((d) => d.label));
-		const extras = (existing?.items ?? []).filter((i) => !seededLabels.has(i.label));
+		const seededCodes = new Set(seeded.map((i) => i.code));
+		const extras = (existing?.items ?? []).filter((i) => {
+			if (seededLabels.has(i.label) || seededCodes.has(i.code)) return false;
+			if (def.type === 'vulnerable_group') {
+				const migrated = VG_CODE_MIGRATE[i.code] ?? VG_LEGACY_LABEL_TO_KEY[i.label];
+				if (migrated) return false; // replaced by CR-112 active set
+			}
+			return true;
+		});
 		const items = enforceOneDefault([...seeded, ...extras]);
 
 		await putDoc('registry', {
@@ -1547,7 +1583,8 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			phone: '0811111111',
 			birth_year: 2498,
 			religion: 'buddhist',
-			special_needs: vg('elderly'),
+			vulnerable_groups: vg('elderly_dependent'),
+			special_needs: [],
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -1558,7 +1595,8 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			phone: '0812222222',
 			birth_year: 2501,
 			religion: 'buddhist',
-			special_needs: vg('elderly'),
+			vulnerable_groups: vg('elderly_dependent'),
+			special_needs: [],
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -1580,7 +1618,8 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			phone: '0814444444',
 			birth_year: 2536,
 			religion: 'buddhist',
-			special_needs: vg('pregnant'),
+			vulnerable_groups: vg('pregnant'),
+			special_needs: [],
 			household_id: hh1._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'ประเสริฐ ใจดี', phone: '0813333333', relation: 'สามี' }
@@ -1615,7 +1654,8 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			phone: null,
 			birth_year: 2567,
 			religion: 'buddhist',
-			special_needs: vg('infant'),
+			vulnerable_groups: vg('infant'),
+			special_needs: [],
 			household_id: hh2._id,
 			registered_via: 'import'
 		},
@@ -1638,7 +1678,8 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 			phone: '0817777777',
 			birth_year: 2518,
 			religion: 'muslim',
-			special_needs: vg('chronic_illness'),
+			vulnerable_groups: vg('chronic_illness'),
+			special_needs: [],
 			household_id: hh3._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'วิชัย รักสงบ', phone: '0816666666', relation: 'สามี' }
@@ -1909,7 +1950,8 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
 			phone: '0899998888',
 			birth_year: 2538,
 			religion: 'muslim',
-			special_needs: masterCodes(master, 'vulnerable_group', 'pregnant'),
+			vulnerable_groups: masterCodes(master, 'vulnerable_group', 'pregnant'),
+			special_needs: [],
 			household_id: hh1._id,
 			registered_via: 'import'
 		}
@@ -1982,12 +2024,12 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 	// Age bucket → vulnerable_group master code, so the dashboard's vulnerable
 	// counts and the profile chips resolve against the seeded master list. Every
 	// code used here is on SH001's supported_vulnerable_groups (see REGISTRY_SHELTERS).
-	const SPECIAL_NEEDS_BY_AGE_BUCKET: Record<string, string[]> = {
+	const VULNERABLE_GROUPS_BY_AGE_BUCKET: Record<string, string[]> = {
 		'0-4': masterCodes(master, 'vulnerable_group', 'infant'),
 		'5-11': masterCodes(master, 'vulnerable_group', 'young_child'),
 		'12-17': [],
 		'18-59': [],
-		'60+': masterCodes(master, 'vulnerable_group', 'elderly')
+		'60+': masterCodes(master, 'vulnerable_group', 'elderly_dependent')
 	};
 
 	function rnd(min: number, max: number) {
@@ -2029,7 +2071,8 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 			gender: i % 2 === 0 ? 'male' : 'female',
 			phone: null,
 			birth_year,
-			special_needs: SPECIAL_NEEDS_BY_AGE_BUCKET[ageBucket],
+			vulnerable_groups: VULNERABLE_GROUPS_BY_AGE_BUCKET[ageBucket],
+			special_needs: [],
 			registered_via: 'import'
 		};
 
