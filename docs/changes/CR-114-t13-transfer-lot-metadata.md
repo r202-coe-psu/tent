@@ -1,8 +1,8 @@
 ---
-id: draft
+id: CR-114
 title: T-13 โอนย้ายข้ามศูนย์ — Lot ต้นทาง/ปลายทาง + Split Allocation (advisory per-lot, schema_v 3 → 4)
-status: proposed
-date: 2026-09-02
+status: approved
+date: 2026-09-02 (approved 2026-09-06)
 requested_by: Team-C
 decided_by: Project Owner
 layer: volatile
@@ -10,7 +10,7 @@ affects:
   - docs/data/schema.md §5.5 (stock_transfer — field table, schema_v 3 → 4)
   - ~~docs/data/schema.md §5.5 (ลบย่อหน้า mirror-write สองทางที่ค้างเก่า — CR-059 ยกเลิกไปแล้ว
     2026-08-22)~~ แก้แล้ว 2026-09-03 (FR-22)
-  - schema_v stock_transfer 3 → 4 (**ต่อจาก CR-089** — ต้อง land ก่อน ดู §Dependencies)
+  - schema_v stock_transfer 3 → 4 (**ต่อจาก CR-089** — landed แล้ว)
   - docs/task-breakdown/05-D-kitchen.md T-13
   - frontend/src/lib/features/operations/domain/operations.ts (StockTransferItem, StockTransfer, transferItemSchema, transferInputSchema, receivedItemSchema, createTransfer, dispatchTransfer, receiveTransfer, + lotBalanceByItem ใหม่)
   - frontend/src/lib/features/operations/data/transfer.server-repository.ts (assertSufficientStock, transition, + mint dest lot)
@@ -19,11 +19,11 @@ affects:
   - frontend/src/lib/features/operations/ui/transfer-form.svelte (lot picker + ปุ่มแบ่งล็อต + ฟอร์มตรวจรับ)
   - frontend/src/lib/server/lot-number.ts (ใช้ซ้ำ ไม่แก้)
   - CR-088 (ใช้ `lot_no`/`storage_zone`/ตัว mint ที่ CR-088 วางไว้ — ไม่ reinvent)
-  - CR-089 (schema_v ต่อกัน 3 → 4), CR-091 (FR-03 "ไม่มี lot/source_lot" ถูก supersede)
+  - CR-089 (schema_v ต่อกัน 3 → 4, landed), CR-091 (FR-03 "ไม่มี lot/source_lot" ถูก supersede)
   - CR-059 (ปิด backlog note กลุ่ม Lot ของ Flow 1 §4.1/§4.2)
 ---
 
-# draft-t13-transfer-lot-metadata — T-13 โอนย้ายข้ามศูนย์: Lot ต้นทาง/ปลายทาง + Split Allocation
+# CR-114 — T-13 โอนย้ายข้ามศูนย์: Lot ต้นทาง/ปลายทาง + Split Allocation
 
 ## สรุป (TL;DR)
 CR-059 Flow 1 follow-up — 5 ข้อของกลุ่ม Lot (§4.1/§4.2) ที่ CR-089 ตัดออกทั้งหมด 2026-08-25 และยังไม่มี CR ไหน cover
@@ -36,8 +36,7 @@ CR-059 Flow 1 follow-up — 5 ข้อของกลุ่ม Lot (§4.1/§4.2
 
 ## Dependencies
 
-- **ต้อง land หลัง [CR-089](CR-089-t13-transfer-driver-dispute.md)** — CR-089 ถือ `stock_transfer`
-  schema_v 2 → 3 อยู่ CR นี้จึงเป็น 3 → 4 · ถ้าสลับลำดับ ต้องแก้เลขทั้งสองไฟล์ก่อนเริ่มโค้ด
+- **ต้อง land หลัง [CR-089](CR-089-t13-transfer-driver-dispute.md)** — CR-089 (`schema_v 2 → 3`) ได้รับการ merge เข้า `develop` แล้ว (PR #221) CR นี้จึงเป็น `schema_v 3 → 4` ตามลำดับ
 - ไม่ผูกกับ [CR-090](CR-090-t13-transfer-delete-undo.md) · [CR-091](CR-091-t13-transfer-detail-page.md)
   ship ก่อนหรือหลังก็ได้ (แต่ FR-21 แก้ข้อความใน CR-091)
 
@@ -255,17 +254,16 @@ CR นี้ใช้ field `lot` ที่มีอยู่แล้ว ไม
   (`CR-105-user-form-redesign-security-questions-and-passphrase-reset.md`, merge มากับ `e533bcac`) ·
   รันเลขก่อน approve โดยเจตนาเพื่อให้เปิด PR ให้ PM review ได้ — **`status` ยังเป็น `proposed`**
   การเคาะ `approved` จะเกิดใน PR นั้น ไม่ใช่ในคอมมิตนี้
-- **ยังไม่ตัดสินใจ:** สถานะยังเป็น `proposed` · ต้อง approve ก่อนเริ่มโค้ด ·
-  จุดที่ควรพิจารณาเป็นพิเศษ: FR-09/FR-10 (ยอด advisory ที่สูงกว่าความจริงเสมอ — ยอมรับได้หรือควรรอ
-  enforced) และ FR-17/FR-18 (เปลี่ยน granularity ของ ledger จากต่อบรรทัดเป็นต่อ item)
 - 2026-09-03 — **ย้อนกลับเป็น draft** — เลข `CR-106` ถูกรันก่อน approve (ผิด Policy §3: ต้องรันเลขและ
   ลง `_index.md` **หลัง** เจ้าของโครงการเคาะ `approved` เท่านั้น) · rename ไฟล์กลับเป็น
   `draft-t13-transfer-lot-metadata.md`, `id: draft`, ถอดแถวออกจาก `_index.md` · เนื้อหา requirement/
-  rationale ไม่เปลี่ยน รอ approve แล้วรันเลขใหม่ตามลำดับจริงบน `develop` (ต้องเป็น `CR-107` ขึ้นไป — เลข
-  `CR-106` ถูก `CR-106-daily-sop-assessment-workflow.md` ใช้ไปแล้วจริงบน `develop` ระหว่างนั้น)
+  rationale ไม่เปลี่ยน รอ approve แล้วรันเลขใหม่ตามลำดับจริงบน `develop`
 - 2026-09-03 — **แก้ FR-22 ล่วงหน้าในไฟล์นี้เอง** (ก่อน draft approve) — ลบย่อหน้า mirror-write สองทางที่
   ค้างเก่าใน `schema.md` §5.5 ออก แทนที่ด้วยข้อความ refetch-on-interaction + state-check idempotency ให้
   ตรงกับ decision จริงของ CR-059 (2026-08-22) และโค้ดจริงใน `transfer.server-repository.ts` — ไม่ใช่การ
   เปลี่ยน rule ใหม่ (แค่ sync เอกสารให้ตรงกับสิ่งที่ approve/decided ไปแล้ว) จึงไม่ต้องรอ draft นี้ approve
   ก่อน แก้ไปพร้อมกับ commit นี้ ส่งรวมไปกับ draft ตอนเปิด PR — `schema.md` `updated:` bump เป็น
   2026-09-03 ด้วย
+- 2026-09-06 — **approved** — Project Owner อนุมัติสเปกตามแนวทาง advisory per-lot · รันเลข `CR-114`
+  (นับต่อจาก `CR-112` และ `CR-113` ของสาขา `feat/registration` ที่ approved แล้ว) · บันทึกลง `_index.md`
+  และพร้อม merge เข้า `develop`
