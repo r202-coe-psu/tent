@@ -123,7 +123,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `stock_transfer` | state machine | โอนของข้ามศูนย์: `requested→shipped→received` (เขียนฝั่งต้นทาง replicate ผ่าน central) |
 | `donation` | state machine | pre-declaration จาก public tier หรือบันทึกหน้างาน: `declared→received→expired` |
 | `donation_campaign` | mutable (LWW) | ความต้องการของศูนย์ (needs ที่ public เห็นเป็น aggregate) |
-| `meal_session` | mutable (LWW) | ภาพรวมมื้ออาหารและเป้าหมายผู้รับ 5 กลุ่ม (Draft 2-tier meal session) |
+| `meal_session` | mutable (LWW) | ภาพรวมมื้ออาหารและเป้าหมายผู้รับ 5 กลุ่ม (2-tier meal session — CR-112) |
 | `meal_plan` | mutable (LWW) | แผนมื้ออาหารรายวัน / Production Batch — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ ผูก `meal_session` |
 | `kitchen_requisition` | state machine | คำขอเบิกวัตถุดิบและแก๊ส: `pending→approved|rejected` (ตัด stock/gas เมื่อ approved) |
 | `kitchen_counter` | mutable (atomic incr) | running counter สำหรับออกเลขตั๋วคำขอเบิกโรงครัว (`kitchen_counter:main`) |

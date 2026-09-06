@@ -352,27 +352,27 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 
 ### 2.5 `meal_plan` — `meal_plan:{ulid}` (หลายแผนอาจใช้วัน+มื้อเดียวกันได้ — CR-045)
 
-> **Draft (Kitchen Meal Session / Production Batch)** — ปรับ `meal_plan` ทำหน้าที่เป็น Production Batch: เพิ่ม `meal_session_id` (ผูกมื้ออาหารต้นทาง), `target_tags[]` (กลุ่มเป้าหมายผู้รับ), และ `allocated_target` (จำนวนจาน/กล่องเป้าหมายของชุดการผลิตนี้) — optional, **ไม่ bump schema_v** (คงที่ 2; additive)
+> **CR-112** — ปรับ `meal_plan` ทำหน้าที่เป็น Production Batch: เพิ่ม `meal_session_id` (ผูกมื้ออาหารต้นทาง), `target_tags[]` (กลุ่มเป้าหมายผู้รับ), และ `allocated_target` (จำนวนจาน/กล่องเป้าหมายของชุดการผลิตนี้) — optional, **ไม่ bump schema_v** (คงที่ 2; additive)
 >
 > **CR-085** — เพิ่ม `gas_usage[]` (ถังแก๊ส + ปริมาณที่แผนนี้จะใช้) — optional, **ไม่ bump schema_v**
 > (คงที่ 2; precedent CR-045/CR-031/CR-084)
 >
-> **schema_v 2** — เพิ่ม `calc_source` (audit trail ของการคำนวณ ingredient จาก SOP ratio). CR-025.
-> **CR-045** — `_id` เปลี่ยนจาก deterministic `meal_plan:{date}:{meal}` → ulid; เพิ่ม `label` และ
-> `recipes[].unit` (ทั้งคู่ optional — ไม่ bump schema_v)
+> **CR-045** — ปรับ `recipes[]` รองรับสัดส่วนสูตรหลายตัวพร้อมกัน (Additive fields optional)
+>
+> **schema_v 1 → 2:** `recipes[].planned_qty` เปลี่ยนชนิดเป็น `qty_str`. ดู CR-038.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `date` | str | req | `YYYY-MM-DD` (เวลาท้องถิ่นศูนย์) |
-| `meal` | enum(`breakfast`,`lunch`,`dinner`,`snack`) | req | — |
-| `label` | str | opt | ชื่อเมนูที่ตั้งเอง (โหมด BOM/Custom) — ไม่มีค่า = ใช้ชื่อมื้อ SOP หรือชื่อสูตร BOM แทนตอนแสดงผล (CR-045) |
-| `headcount` | {`total`:int, `halal`:int, `soft_food`:int, `infant`:int} | req | มาจาก occupancy (T-06) — ดู mapping ด้านล่าง; แก้ manual ได้; แต่ละ sub-count ≤ total (มิติตั้งฉาก บวกกันไม่ได้) |
-| `recipes` | [{`recipe_id`:str, `planned_qty`:int>0, `unit`:str}] | req | qty = ปริมาณวัตถุดิบต่อมื้อ (หน่วยตาม recipe_id เช่น `ingredient:rice` = กรัม); T-26 map เป็น item_id; `unit` ต่อรายการ (opt) — ใส่เมื่อไม่ใช่ SOP มาตรฐาน (โหมด BOM/Custom อ้างอิง real `supply_item.unit`, CR-045) |
-| `status` | enum(`draft`,`confirmed`) | req | — |
+| `date` | str | req | `YYYY-MM-DD` |
+| `meal` | enum(`breakfast`,`lunch`,`dinner`,`snack`) | req | ช่วงเวลาของมื้อ |
+| `label` | str | opt | ชื่อเมนูที่ตั้งเอง (โหมด BOM/Custom — CR-023) |
+| `headcount` | {`total`:int≥0, `halal`:int≥0, `soft_food`:int≥0, `infant`:int≥0} | req | ยอดประชากร ณ ตอนคำนวณ |
+| `recipes` | [{`recipe_id`:str, `planned_qty`:qty_str>0, `unit`:str?}] | req | รายการสูตรอาหารและปริมาณที่วางแผนปรุง (CR-045) |
+| `status` | enum(`draft`,`confirmed`) | req | สถานะของแผน |
 | `override_reason` | str\|null | opt | **บังคับ** เมื่อ headcount ต่างจาก occupancy snapshot ล่าสุด (CR-022) |
 | `calc_source` | {`sop_profile_id`:str, `sop_profile_version`:int>0, `headcount_as_of`:ts}\|null | opt | audit trail — SOP profile + version + snapshot เวลาอ่าน headcount ที่ใช้คำนวณ |
 | `gas_usage` | [{`cylinder_id`:str, `consumption_kg`:qty_str>0}] | opt | ถังแก๊ส (อ้าง `gas_cylinder_type`) + ปริมาณที่แผนนี้คำนวณว่าต้องใช้ (CR-085); ไม่มีค่า = แผนนี้ไม่ใช้แก๊ส (ยังไม่บันทึก ไม่ใช่ 0); `issueRequisition` อ่านค่านี้ไปตัด `gas_ledger` |
-| `meal_session_id` | str\|null | opt | รหัสอ้างอิง `meal_session._id` ต้นทาง (Draft 2-Tier Meal Session) |
+| `meal_session_id` | str\|null | opt | รหัสอ้างอิง `meal_session._id` ต้นทาง (2-Tier Meal Session — CR-112) |
 | `target_tags` | [str] | opt | กลุ่มเป้าหมายที่ผลิตให้ เช่น `['everyone']`, `['halal']`, `['regular']`, `['soft_food']`, `['infant']`, `['volunteer']` |
 | `allocated_target` | int≥0 | opt | จำนวนจาน/กล่องเป้าหมายของชุดการผลิตนี้ (Production Batch) |
 
@@ -398,7 +398,7 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 ### 2.6 `kitchen_requisition` — `kitchen_requisition:{ulid}` · state machine · **schema_v 3**
 
-> **schema_v 3** — State Machine สำหรับระบบตั๋ว `[ShelterCode]-KITCHEN-XXXX` (CR-059 Flow 3 / Draft Kitchen Flow 3): เพิ่ม `ticket_no`, `status` (`pending`|`approved`|`rejected`), `meal_session_id`, `gas_drawdown[]`, `requested_at`, `approved_at`, `approved_by`, `reject_reason`. รหัส `stock_ledger` และ `gas_ledger` (ตัดจ่ายตาม FEFO และ consumption) จะถูกสร้างและบันทึกลง `ledger_ids` เมื่อคลังอนุมัติตั๋ว (`approved`).
+> **schema_v 3** — State Machine สำหรับระบบตั๋ว `[ShelterCode]-KITCHEN-XXXX` (CR-059 Flow 3 / CR-112): เพิ่ม `ticket_no`, `status` (`pending`|`approved`|`rejected`), `meal_session_id`, `gas_drawdown[]`, `requested_at`, `approved_at`, `approved_by`, `reject_reason`. รหัส `stock_ledger` และ `gas_ledger` (ตัดจ่ายตาม FEFO และ consumption) จะถูกสร้างและบันทึกลง `ledger_ids` เมื่อคลังอนุมัติตั๋ว (`approved`).
 >
 > **schema_v 2** — `qty_requested` / `qty_issued` เป็น `qty_str`. CR-038.
 
@@ -421,7 +421,7 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 ### 2.7 `meal_service` — `meal_service:{ulid}` · **append-only** · **schema_v 2** (CR-045)
 
-> **Draft (Kitchen Meal Session / Actual Yield & Gas)** — เพิ่ม `meal_session_id` (เชื่อมโยงมื้อหลัก) และ `actual_gas_used_kg` (แก๊สที่ใช้จริง) — optional, **ไม่ bump schema_v** (คงที่ 2)
+> **CR-112** — เพิ่ม `meal_session_id` (เชื่อมโยงมื้อหลัก) และ `actual_gas_used_kg` (แก๊สที่ใช้จริง) — optional, **ไม่ bump schema_v** (คงที่ 2)
 >
 > **CR-084** — เพิ่ม `actual_yield` (จำนวนเสิร์ฟที่ทำได้จริง) — optional, **ไม่ bump schema_v**
 > (คงที่ 2; precedent §2.5 CR-045, §4.2 CR-031)
@@ -515,8 +515,8 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 **Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
 
 ### 2.7.3 `meal_session` — `meal_session:{ulid}` · **schema_v 1**
-
-> เอกสารระดับมื้ออาหารสำหรับควบคุมภาพรวมและเป้าหมายผู้รับ 5 กลุ่ม (Draft 2-Tier Meal Session)
+ 
+> **CR-112** — เอกสารระดับมื้ออาหารสำหรับควบคุมภาพรวมและเป้าหมายผู้รับ 5 กลุ่ม (2-Tier Meal Session)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -544,7 +544,7 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 ### 2.7.4 `kitchen_counter` — `kitchen_counter:main` · **schema_v 1**
 
-> Running counter doc สำหรับออกเลขตั๋วคำขอเบิกโรงครัว (`[ShelterCode]-KITCHEN-XXXX`) ให้ต่อเนื่องกันอย่างปลอดภัย
+> **CR-112** — Running counter doc สำหรับออกเลขตั๋วคำขอเบิกโรงครัว (`[ShelterCode]-KITCHEN-XXXX`) ให้ต่อเนื่องกันอย่างปลอดภัย
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |

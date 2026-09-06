@@ -1,8 +1,8 @@
 ---
-id: draft
+id: CR-112
 title: Kitchen 2-Tier Meal Sessions, Production Setup Board (Stages A/B/C) & TKT-KITCHEN Flow 3
-status: implemented
-date: 2026-09-05
+status: approved
+date: 2026-09-05 (approved 2026-09-06)
 requested_by: Field Kitchen Operations, Logistics & Nutrition Management (CR-058 หมวด 3 & CR-059 Flow 3)
 decided_by: Project Owner
 layer: volatile
@@ -295,3 +295,4 @@ flowchart TD
 - **2026-09-03 — architecture decision:** กำหนดหมายเลขตั๋วคำขอเบิกเป็น `[ShelterCode]-KITCHEN-XXXX` โดยใช้ `kitchen_counter:main` ควบคุมเลขลำดับ เพื่อป้องกันการชนกันของการออกตั๋วในแต่ละศูนย์
 - **2026-09-04 — ui/ux decision:** แยกหน้าจอตรวจสอบตั๋วคำขอเบิกโรงครัวเป็น route อิสระ `/back-office/kitchen-requisitions` ภายใต้ Group Tab _"จัดการคำร้องเบิกจ่าย"_ พร้อมระบบ Badge แจ้งเตือนยอดตั๋วค้าง
 - **2026-09-05 — implemented & verified:** พัฒนาและตรวจสอบการทำงานเสร็จสมบูรณ์ 100% ผ่าน Unit, Integration, E2E Tests, Linting, และ Svelte Typecheck
+- **2026-09-06 — approved:** Project Owner approved and ratified as CR-112
