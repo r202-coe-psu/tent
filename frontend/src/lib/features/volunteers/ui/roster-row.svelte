@@ -35,7 +35,8 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import RosterManualCheckinDialog from './roster-manual-checkin-dialog.svelte';
 	import { useCheckIn, useCheckOut, useSkillOptions } from '../application/queries';
-	import { resolveSkillOption } from '../domain/skill-catalog';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type {
 		ShiftAssignment,
@@ -98,12 +99,16 @@
 		`${formatTime(assignment.duty_window.start_ts)}–${formatTime(assignment.duty_window.end_ts)} น.`
 	);
 	const skillCatalog = useSkillOptions();
-	const skills = $derived(
-		volunteer.skills.flatMap((value) => {
+	const skills = $derived.by<SkillOption[]>(() => {
+		const map = new SvelteMap<string, SkillOption>();
+		for (const value of volunteer.skills) {
 			const option = resolveSkillOption(value, skillCatalog.options);
-			return option ? [option] : [];
-		})
-	);
+			if (option && !map.has(option.code)) {
+				map.set(option.code, option);
+			}
+		}
+		return Array.from(map.values());
+	});
 
 	const queryClient = useQueryClient();
 	const checkInMutation = useCheckIn(queryClient);
@@ -171,7 +176,7 @@
 		{#if skills.length > 0}
 			<p class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
 				<span>ทักษะ:</span>
-				{#each skills as skill, i (skill.code)}
+				{#each skills as skill, i (`${skill.code}-${i}`)}
 					<span>{skill.icon}{skill.label}{i < skills.length - 1 ? ',' : ''}</span>
 				{/each}
 			</p>

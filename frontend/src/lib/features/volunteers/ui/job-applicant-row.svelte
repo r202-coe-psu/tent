@@ -24,6 +24,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import type { JobApplication } from '../domain/job-application.schema';
@@ -56,12 +57,16 @@
 	const shift = $derived(application.selected_shift);
 	const statusMeta = $derived(APPLICATION_STATUS_META[application.status]);
 	const isPending = $derived(application.status === 'pending_review');
-	const skills = $derived(
-		a.skills.flatMap((key) => {
+	const skills = $derived.by<{ key: string; label: string; controlled: boolean }[]>(() => {
+		const map = new SvelteMap<string, { key: string; label: string; controlled: boolean }>();
+		for (const key of a.skills) {
 			const entry = resolveSkillOption(key, skillOptions);
-			return entry ? [{ key, label: entry.label, controlled: entry.controlled }] : [];
-		})
-	);
+			if (entry && !map.has(entry.code)) {
+				map.set(entry.code, { key: entry.code, label: entry.label, controlled: entry.controlled });
+			}
+		}
+		return Array.from(map.values());
+	});
 </script>
 
 <li class="space-y-2.5 rounded-xl border border-border bg-muted/40 p-3.5">
@@ -115,7 +120,7 @@
 	{#if skills.length > 0}
 		<div class="flex flex-wrap items-center gap-1.5">
 			<span class="text-xs text-muted-foreground">ทักษะ:</span>
-			{#each skills as skill (skill.key)}
+			{#each skills as skill, idx (`${skill.key}-${idx}`)}
 				<span
 					class={[
 						'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium',

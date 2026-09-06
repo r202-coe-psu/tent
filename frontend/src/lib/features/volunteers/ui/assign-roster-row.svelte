@@ -16,6 +16,7 @@
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { AssignCandidate } from '../domain/assign-roster';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 
@@ -38,12 +39,16 @@
 	const v = $derived(candidate.volunteer);
 	const fullName = $derived(`${v.first_name} ${v.last_name}`);
 	const rowId = $derived(`assign-row-${v._id}`);
-	const skills = $derived(
-		v.skills.flatMap((value) => {
+	const skills = $derived.by<SkillOption[]>(() => {
+		const map = new SvelteMap<string, SkillOption>();
+		for (const value of v.skills) {
 			const option = resolveSkillOption(value, skillOptions);
-			return option ? [option] : [];
-		})
-	);
+			if (option && !map.has(option.code)) {
+				map.set(option.code, option);
+			}
+		}
+		return Array.from(map.values());
+	});
 </script>
 
 <li
@@ -111,7 +116,7 @@
 				{#if skills.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5">
 						<span class="text-[11px] text-muted-foreground">ทักษะ:</span>
-						{#each skills as skill (skill.code)}
+						{#each skills as skill, idx (`${skill.code}-${idx}`)}
 							<span
 								class="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
 							>
