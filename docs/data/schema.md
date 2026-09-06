@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-03
+updated: 2026-09-05
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -1380,22 +1380,39 @@ write target ระหว่าง LAN fallback; schema/role enforcement ต้�
 
 ### 9.1 `public_shelters` (MongoDB)
 
-Read model สำหรับฉายข้อมูลศูนย์พักพิงออกสู่ Public Portal (ค้นหาและดูรายละเอียดศูนย์พักพิง) โดย Backend จะเป็นผู้คัดลอกข้อมูลจาก CouchDB มาเขียนลงที่นี่
+Read model สำหรับฉายข้อมูลศูนย์พักพิงออกสู่ Public Portal (ค้นหาและดูรายละเอียดศูนย์พักพิง) **และ**
+Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture.md`) โดย Worker
+เป็นผู้คัดลอกข้อมูลจาก CouchDB มาเขียนลงที่นี่แบบต่อเนื่อง (`worker/src/worker/projectors/shelter.py`,
+`.../occupancy.py`). ตารางนี้ถูกปรับให้ตรงกับ field ที่มีจริงในโค้ด ณ CR-109 (field ที่มาจาก EXT-002/003,
+`e4d69d95`, ไม่เคยถูกบันทึกลง schema.md มาก่อน ถูกเพิ่มพร้อมกันคราวนี้).
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | `shelter_code` (เช่น `SH001`) |
 | `shelter_code` | str | req | รหัสศูนย์พักพิง |
-| `registry_id` | str\|null | opt | อ้างอิง ID จากฐานข้อมูลส่วนกลาง |
-| `name` | str | req | ชื่อศูนย์พักพิง |
-| `status` | enum(`open`,`closed`,`full`,`standby`) | req | สถานะของศูนย์พักพิง |
-| `geo` | {`lat`:num, `lng`:num}\|null | opt | พิกัด |
+| `registry_id` | str\|null | opt | อ้างอิง `_id` ของเอกสาร `shelter` ต้นทางใน CouchDB `registry` |
+| `name` | str | req | ชื่อศูนย์พักพิง (`name_th` ฝั่ง partner API) |
+| `name_short` | str\|null | opt | ชื่อย่อสำหรับแสดงบนแผนที่ (EXT-002 `name_short`) |
+| `site_kind` | enum(`evacuation_center`,`host_house`) | req | ประเภทจุดพักพิง (CR-067) |
+| `status` | enum(`open`,`closed`,`full`,`standby`) | req | สถานะของศูนย์พักพิง (public portal ใช้ field นี้) |
+| `location_status` | enum(`open`,`closed`,`full`,`standby`) | req | มิเรอร์ `status` — ชื่อ field ตาม partner ODT (EXT-002 "State Separation": operational status, **ไม่ใช่** record status) |
+| `is_active` | bool | req | default `true`; record status ของทะเบียน (partner ODT "Soft Delete") — `false` เฉพาะเมื่อ CouchDB ส่ง signal ลบ/archive จริง ไม่ผูกกับ `location_status=closed` (ปิดปกติยังคง `true`) |
+| `location_type` | str | req | default `"shelter"` — ชุดอ้างอิงเดียวกับ M6 (partner ODT) |
+| `location_subtype` | str\|null | opt | เช่น `school`, `temple` (`shelter_type` เดิมจาก registry) |
+| `location` | {`type`:`"Point"`, `coordinates`:[lng,lat]}\|null | opt | GeoJSON — index `2dsphere` |
+| `geo` | {`lat`:num, `lng`:num}\|null | opt | พิกัดแบบเดิม (คงไว้ให้ public portal ที่ใช้อยู่) |
 | `capacity` | int | req | ความจุที่รองรับได้ทั้งหมด |
-| `province` | str\|null | opt | จังหวัด |
-| `district` | str\|null | opt | อำเภอ |
-| `subdistrict` | str\|null | opt | ตำบล |
+| `province` / `district` / `subdistrict` | str\|null | opt | ชื่อเขตการปกครองแบบ free text (DOPA code แปลที่ API layer เท่านั้น — `thirdparty_locations/dopa_codes.py`, ไม่ทับ CouchDB) |
+| `address` | str\|null | opt | ที่อยู่ประกอบ (`compose_address`, CR-023 structured fields หรือ legacy `location.address`) |
+| `contact_name` / `contact_phone` | str\|null | opt | ผู้ติดต่อ — ODT ขอเป็นตำแหน่งงาน ไม่ใช่ชื่อบุคคล |
+| `operating_org` | str\|null | opt | หน่วยงานที่ดูแล |
+| `accepts_delivery` | bool | req | default `true` — M6 ใช้กรองปลายทางจัดส่ง |
+| `delivery_note` | str\|null | opt | ข้อจำกัดการเข้าถึง |
+| `opened_at` / `closed_at` | ts\|null | opt | จาก registry `opened_at`/`closed_at` |
+| `occupancy_total` | int | req | default `0`; นับ evacuee ที่ `current_stay.status = active` (คำนิยามเดียวกับ `daily_calc.occupancy_snapshot`, CR-035) — Worker คำนวณใหม่ทุกครั้งที่ `evacuee` เปลี่ยน (`worker/mongo/shelter.py::refresh_occupancy`) |
+| `occupancy_breakdown` | {`male`,`female`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-109, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive) — กลุ่มซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note) |
 | `raw_data` | {str:Any} | req | โครงสร้าง JSON ต้นฉบับจากเอกสาร `shelter` ใน CouchDB `registry` เพื่อใช้สำหรับการฉายข้อมูลแบบละเอียด โดยไม่ต้องกำหนด Field ยิบย่อยใน Schema |
-| `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
+| `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด — รวมถึงตอน `occupancy_total`/`occupancy_breakdown` เปลี่ยนด้วย |
 
 ### 9.2 `public_jobs` (MongoDB)
 
@@ -1416,3 +1433,50 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `slots_remaining` | int | req | ยอดยังขาดรวม (⚪) |
 | `status` | enum(`open`,`almost_full`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
+
+### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-109, EXT-004/006)**
+
+Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /api/thirdparty/locations/{code}/stock`
+(scope `location-stock-read`) และ `critical_items` ใน EXT-006 summary. Worker คำนวณใหม่ทั้งชุดทุกครั้งที่
+`stock_ledger`/`stock_threshold_override` ในศูนย์นั้นเปลี่ยน (`worker/mongo/stock.py::refresh_shelter_stock`
+— full-rescan pattern เดียวกับ `refresh_on_hand`, CR-032/T-22). ไม่มี read path จาก CouchDB สำหรับ partner
+(ADR 0002 — MongoDB-only partner plane).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `{shelter_code}:{item_id}` เช่น `SH001:item_master:rice` |
+| `shelter_code` | str | req | รหัสศูนย์พักพิง |
+| `item_id` | str | req | อ้างอิง `item_master`/`supply_item` ใน CouchDB `catalog` (SoR อยู่ที่นั่น ไม่ทับ schema) |
+| `m6_reference_id` | int\|null | opt | รหัสอ้างอิงฝั่ง M6 — เป็น `null` เสมอจนกว่าจะมี catalog alignment CR ในอนาคต (ADR 0002 §5) |
+| `m6_item_code` | str\|null | opt | จาก `item_master.SKU` ถ้ามี |
+| `name_th` | str | req | ชื่อสินค้าภาษาไทย |
+| `type_code` | enum(`food`,`genaral`,`medical-equipment`,`medication`) | req | แมพจาก `item_master.category`/`item_category.name` แบบ best-effort keyword match (`worker/projectors/stock.py::category_to_type_code`) — `genaral` เป็นตัวสะกดของ M6 เอง ตั้งใจคงไว้ตามคำ (ไม่ใช่ typo ของเรา) |
+| `unit_label` | str | req | จาก `item_master.base_unit` (หรือ `supply_item.unit` — legacy) |
+| `unit_ratio` | num | req | คงที่ `1` ในสไลซ์นี้ — ตัวนับอยู่ในหน่วยฐานเดียวกับ ledger เสมออยู่แล้ว (schema §2.1 invariant) |
+| `quantity_on_hand` | num | req | ผลรวม `stock_ledger.qty` ของ item นั้นในศูนย์ (เหมือน `on_hand_decimals`, T-22) — เก็บแม้เท่ากับ `0` (ไม่ลบแถวเหมือน `public_needs`) |
+| `source` | enum(`m6_transfer`,`direct_donation`) | req | default `direct_donation` จนกว่าจะมี catalog alignment |
+| `reorder_threshold` | num\|null | opt | ใช้ภายในสำหรับ derive `critical_items` (EXT-006) เท่านั้น — ไม่ใช่ field ที่ partner ODT เอกสาร EXT-004 เอง; คำนวณจาก `stock_threshold_override` (CR-094, ศูนย์นั้น) หรือ fallback ไป `item_master.consumption_rate`/`target_reserve_days` คูณ `occupancy_total` (สูตรเดียวกับ `calculateReorderLevel`, `frontend/.../threshold-calc.ts`) |
+| `updated_at` | ts | req | เวลาที่คำนวณ balance ล่าสุด |
+
+**Index:** `(shelter_code)` · `(shelter_code, item_id)` unique
+
+### 9.4 `third_party_access_logs` (MongoDB) — **ใหม่ (CR-109, EXT-007)**
+
+Audit trail ของทุกครั้งที่มีการเรียก EXT-007 (`GET .../occupants`) ไม่ว่าจะได้รับอนุญาตหรือไม่ — ตาม
+partner ODT "นโยบายควบคุมการเข้าถึงข้อมูลส่วนบุคคล" (PDPA) และ ADR 0002 §6. TTL 1 ปี — เก็บไว้นานพอสำหรับ
+ตรวจสอบย้อนหลัง แล้ว purge อัตโนมัติ (ไม่ใช่ collection ที่ควรโตไม่จำกัด).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | ULID |
+| `client_id` | str | req | จาก JWT claims (`sub`) — ไม่ใช่จาก request body |
+| `module_name` | str | req | `M6`/`M7` จาก claims |
+| `endpoint` | str | req | คงที่ `"EXT-007"` ในสไลซ์นี้ |
+| `location_code` | str | req | จาก path param — ไม่ตรวจว่ามีจริงก่อน log (log ทุก attempt ตาม ODT) |
+| `purpose` | str | req | จาก query param; `""` เมื่อผู้เรียกไม่ส่งมา (denied_missing_purpose ก็ยัง log) |
+| `ip` | str | req | `client_ip()` เดียวกับที่ใช้ทั้งระบบ (`apiapp/utils/request_meta.py`) |
+| `status` | enum(`denied_missing_purpose`,`denied_insufficient_scope`,`granted_location_not_found`,`granted_no_data_source`) | req | ผลลัพธ์ของ attempt นั้น — ไม่มีค่า "granted" จริงในสไลซ์นี้ (ไม่มี client ไหนถือ `occupancy-pii-read`) |
+| `result_count` | int | req | default `0` — จำนวนรายการที่คืนกลับจริง (ODT ขอให้เก็บ); เป็น `0` เสมอในสไลซ์นี้ |
+| `created_at` | ts | req | เวลาที่เรียก |
+
+**Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
