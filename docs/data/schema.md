@@ -1383,7 +1383,7 @@ write target ระหว่าง LAN fallback; schema/role enforcement ต้�
 Read model สำหรับฉายข้อมูลศูนย์พักพิงออกสู่ Public Portal (ค้นหาและดูรายละเอียดศูนย์พักพิง) **และ**
 Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture.md`) โดย Worker
 เป็นผู้คัดลอกข้อมูลจาก CouchDB มาเขียนลงที่นี่แบบต่อเนื่อง (`worker/src/worker/projectors/shelter.py`,
-`.../occupancy.py`). ตารางนี้ถูกปรับให้ตรงกับ field ที่มีจริงในโค้ด ณ CR-109 (field ที่มาจาก EXT-002/003,
+`.../occupancy.py`). ตารางนี้ถูกปรับให้ตรงกับ field ที่มีจริงในโค้ด ณ CR-111 (field ที่มาจาก EXT-002/003,
 `e4d69d95`, ไม่เคยถูกบันทึกลง schema.md มาก่อน ถูกเพิ่มพร้อมกันคราวนี้).
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -1410,7 +1410,7 @@ Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture
 | `delivery_note` | str\|null | opt | ข้อจำกัดการเข้าถึง |
 | `opened_at` / `closed_at` | ts\|null | opt | จาก registry `opened_at`/`closed_at` |
 | `occupancy_total` | int | req | default `0`; นับ evacuee ที่ `current_stay.status = active` (คำนิยามเดียวกับ `daily_calc.occupancy_snapshot`, CR-035) — Worker คำนวณใหม่ทุกครั้งที่ `evacuee` เปลี่ยน (`worker/mongo/shelter.py::refresh_occupancy`) |
-| `occupancy_breakdown` | {`male`,`female`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-109, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive) — กลุ่มซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note) |
+| `occupancy_breakdown` | {`male`,`female`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-111, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive) — กลุ่มซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note) |
 | `raw_data` | {str:Any} | req | โครงสร้าง JSON ต้นฉบับจากเอกสาร `shelter` ใน CouchDB `registry` เพื่อใช้สำหรับการฉายข้อมูลแบบละเอียด โดยไม่ต้องกำหนด Field ยิบย่อยใน Schema |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด — รวมถึงตอน `occupancy_total`/`occupancy_breakdown` เปลี่ยนด้วย |
 
@@ -1434,7 +1434,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `status` | enum(`open`,`almost_full`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
 
-### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-109, EXT-004/006)**
+### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
 
 Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /api/thirdparty/locations/{code}/stock`
 (scope `location-stock-read`) และ `critical_items` ใน EXT-006 summary. Worker คำนวณใหม่ทั้งชุดทุกครั้งที่
@@ -1460,7 +1460,7 @@ Read model per ศูนย์+รายการสินค้า สำหร
 
 **Index:** `(shelter_code)` · `(shelter_code, item_id)` unique
 
-### 9.4 `third_party_access_logs` (MongoDB) — **ใหม่ (CR-109, EXT-007)**
+### 9.4 `third_party_access_logs` (MongoDB) — **ใหม่ (CR-111, EXT-007)**
 
 Audit trail ของทุกครั้งที่มีการเรียก EXT-007 (`GET .../occupants`) ไม่ว่าจะได้รับอนุญาตหรือไม่ — ตาม
 partner ODT "นโยบายควบคุมการเข้าถึงข้อมูลส่วนบุคคล" (PDPA) และ ADR 0002 §6. TTL 1 ปี — เก็บไว้นานพอสำหรับ

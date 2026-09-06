@@ -1,10 +1,11 @@
 ---
-id: 
+id: CR-111
 title: Partner API EXT-004–007 — stock, occupancy, summary, occupant scaffold
-status: proposed
+status: approved
+updated: 2026-09-06
 date: 2026-09-05
 requested_by: dev Team-B
-decided_by:
+decided_by: Project Owner
 layer: volatile
 affects:
   - packages/tent-model/src/tent_model/public_shelter.py (new field: occupancy_breakdown)
@@ -91,4 +92,6 @@ collection/field design below is this CR's own to make and record.
 Purely additive — new Mongo collections, one new optional-with-default field on `public_shelters`.
 No existing persisted document shape changes; CouchDB SoR untouched. N/A for `schema_v` (MongoDB read
 models in this project aren't schema_v-versioned).
-
+## Decision log
+- 2026-09-05 — proposed
+- 2026-09-06 — approved by Project Owner (จูนรหัสทางการ CR-111, รับรอง 6 ข้อ Judgment Calls และอนุมัติการเชื่อมต่อ Partner API M6/M7 ครบถ้วน)
