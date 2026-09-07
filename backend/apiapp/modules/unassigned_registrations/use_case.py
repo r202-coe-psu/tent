@@ -213,15 +213,7 @@ class UnassignedRegistrationsUseCase:
         try:
             docs = await UnassignedRegistration.find(mongo_filter).sort("-created_at").to_list()
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "error": {
-                        "code": "ONLINE_REQUIRED",
-                        "message": "Unassigned Registration search requires central Mongo",
-                    }
-                },
-            ) from exc
+            raise _mongo_unavailable("search") from exc
 
         results: list[UnassignedRegistrationSearchHit] = []
         for doc in docs:

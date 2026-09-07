@@ -146,7 +146,11 @@ async def test_system_admin_hard_deletes_mongo_document(sa_client: AsyncClient) 
     assert await UnassignedRegistration.get(doc_id) is None
 
 
-async def test_purge_verifiable_without_claim(sa_client: AsyncClient, app) -> None:
+async def test_purge_verifiable_without_claim(
+    sa_client: AsyncClient,
+    app,
+    registration_staff_session: StaffSession,
+) -> None:
     """Purge removes the queue doc; search no longer finds it (no claim required)."""
     doc = await _seed_registration()
     doc_id = doc.id
@@ -155,13 +159,7 @@ async def test_purge_verifiable_without_claim(sa_client: AsyncClient, app) -> No
     assert delete_resp.status_code == 204
     assert await UnassignedRegistration.get(doc_id) is None
 
-    staff = StaffSession(
-        name="reg.staff",
-        roles=["shelter:SH001", "SH001:registration_staff"],
-        shelter_code="SH001",
-        is_sa=False,
-    )
-    app.dependency_overrides[require_registration_staff] = lambda: staff
+    app.dependency_overrides[require_registration_staff] = lambda: registration_staff_session
     try:
         search = await sa_client.get(
             "/staff/v1/unassigned-registrations/search", params={"q": "สมชาย"}
