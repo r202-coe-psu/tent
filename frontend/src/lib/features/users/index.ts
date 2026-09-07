@@ -17,7 +17,10 @@ export {
 	updateUser,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
-	type UserSummary
+	fetchAuthStatus,
+	submitForceSetup,
+	type UserSummary,
+	type AuthStatus
 } from './data/users.api';
 export { useUsers, useCreateUser, useDeleteUser, useUpdateUser } from './application/queries';
 export { default as UserForm } from './ui/user-form.svelte';

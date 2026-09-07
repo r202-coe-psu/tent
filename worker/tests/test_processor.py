@@ -24,9 +24,15 @@ async def test_process_donation_change_reprojects_needs():
     change = {"seq": 42, "id": "donation:01TEST", "doc": donation_doc}
 
     with (
-        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock) as save_cp,
-        patch("worker.couch.processor.apply_donation", new_callable=AsyncMock) as apply_don,
-        patch("worker.couch.processor.apply_need", new_callable=AsyncMock) as apply_need,
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+        patch(
+            "worker.couch.processor.apply_donation", new_callable=AsyncMock
+        ) as apply_don,
+        patch(
+            "worker.couch.processor.apply_need", new_callable=AsyncMock
+        ) as apply_need,
         patch(
             "worker.couch.processor.project_needs_for_shelter",
             new_callable=AsyncMock,
@@ -138,10 +144,18 @@ async def test_process_deleted_donation_reprojects_needs():
     change = {"seq": 43, "id": "donation:01TEST", "deleted": True}
 
     with (
-        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock) as save_cp,
-        patch("worker.couch.processor.apply_person", new_callable=AsyncMock) as apply_person,
-        patch("worker.couch.processor.apply_donation", new_callable=AsyncMock) as apply_don,
-        patch("worker.couch.processor.apply_need", new_callable=AsyncMock) as apply_need,
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+        patch(
+            "worker.couch.processor.apply_person", new_callable=AsyncMock
+        ) as apply_person,
+        patch(
+            "worker.couch.processor.apply_donation", new_callable=AsyncMock
+        ) as apply_don,
+        patch(
+            "worker.couch.processor.apply_need", new_callable=AsyncMock
+        ) as apply_need,
         patch(
             "worker.couch.processor.project_needs_for_shelter",
             new_callable=AsyncMock,
@@ -173,7 +187,9 @@ async def test_process_campaign_change_still_reprojects_needs():
 
     with (
         patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
-        patch("worker.couch.processor.apply_need", new_callable=AsyncMock) as apply_need,
+        patch(
+            "worker.couch.processor.apply_need", new_callable=AsyncMock
+        ) as apply_need,
         patch(
             "worker.couch.processor.project_needs_for_shelter",
             new_callable=AsyncMock,
@@ -222,8 +238,8 @@ async def test_process_campaign_change_seeds_need_counters():
 
     seeds = apply_counters.await_args.args[0]
     assert [(s.shelter_code, s.item_id, s.qty_target) for s in seeds] == [
-        ("SH001", "item:rice", Decimal("10")),
-        ("SH001", "item:water", Decimal("25")),
+        ("SH001", "item:rice", Decimal(10)),
+        ("SH001", "item:water", Decimal(25)),
     ]
 
 
@@ -284,6 +300,7 @@ async def test_process_stock_ledger_change_refreshes_the_ceiling():
         patch(
             "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
         ) as refresh,
+        patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
     ):
         await process_change(couch, "shelter_sh001", change)
 
@@ -309,7 +326,114 @@ async def test_process_deleted_stock_ledger_raises_the_ceiling_back():
         patch(
             "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
         ) as refresh,
+        patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
     ):
         await process_change(couch, "shelter_sh001", change)
 
     refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_evacuee_change_refreshes_occupancy():
+    """EXT-005 — a check-in/out or any evacuee field change shifts the headcount."""
+    couch = AsyncMock()
+    change = {
+        "seq": 62,
+        "id": "evacuee:01",
+        "doc": {
+            "_id": "evacuee:01",
+            "type": "evacuee",
+            "current_stay": {"status": "active"},
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_evacuee",
+            return_value=("upsert", {"_id": "evacuee:01"}),
+        ),
+        patch(
+            "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_deleted_evacuee_refreshes_occupancy():
+    couch = AsyncMock()
+    change = {"seq": 63, "id": "evacuee:01", "deleted": True}
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_stock_threshold_override_change_refreshes_stock():
+    couch = AsyncMock()
+    change = {
+        "seq": 64,
+        "id": "stock_threshold_override:SH001:item:rice",
+        "doc": {
+            "_id": "stock_threshold_override:SH001:item:rice",
+            "type": "stock_threshold_override",
+            "item_id": "item:rice",
+            "reorder_level": 50,
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_registry_shelter_tombstone_deactivates_not_deletes():
+    """True CouchDB delete/archive signal — per the partner ODT, flip `is_active` False
+    rather than hard-deleting the `public_shelters` row (M6 keeps historical reference)."""
+    couch = AsyncMock()
+    change = {"seq": 77, "id": "shelter:01ARCHIVED", "deleted": True}
+
+    with (
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+        patch(
+            "worker.couch.processor.resolve_shelter_code_for_registry_delete",
+            new_callable=AsyncMock,
+            return_value="SH001",
+        ),
+        patch(
+            "worker.couch.processor.apply_shelter_deactivate", new_callable=AsyncMock
+        ) as deactivate,
+        patch(
+            "worker.couch.processor.delete_persons_for_shelter", new_callable=AsyncMock
+        ) as del_persons,
+        patch(
+            "worker.couch.processor.delete_needs_for_shelter", new_callable=AsyncMock
+        ) as del_needs,
+    ):
+        await process_change(couch, "registry", change)
+
+    deactivate.assert_awaited_once_with("SH001")
+    del_persons.assert_awaited_once_with("SH001")
+    del_needs.assert_awaited_once_with("SH001")
+    save_cp.assert_awaited_once_with("registry", 77)

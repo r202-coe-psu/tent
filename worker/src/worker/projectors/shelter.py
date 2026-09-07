@@ -61,7 +61,43 @@ def backfill_capacity(doc: dict[str, Any]) -> int:
     return 100
 
 
-def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, Any] | None]:
+def _parse_timestamp(raw: Any) -> datetime | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def compose_address(doc: dict[str, Any]) -> str | None:
+    """Compose a partner-facing address string from the structured Residence-style
+    fields (schema §3.1, CR-023) — falls back to the legacy `location.address` string."""
+    parts = [
+        doc.get("address_no"),
+        doc.get("village_no"),
+        f"ต.{doc['subdistrict']}" if doc.get("subdistrict") else None,
+        f"อ.{doc['district']}" if doc.get("district") else None,
+        f"จ.{doc['province']}" if doc.get("province") else None,
+    ]
+    composed = " ".join(str(p) for p in parts if p)
+    if composed:
+        return composed
+    location_doc = doc.get("location") or {}
+    return location_doc.get("address")
+
+
+def project_shelter(
+    doc: dict[str, Any],
+) -> tuple[ProjectionAction, dict[str, Any] | None]:
+    """Upsert every valid registry shelter doc — never delete on `operation_status` alone.
+
+    Per the partner ODT (B_Data_We_Request_From_Partner_Systems, "Soft Delete" / "State
+    Separation"): closing a location must never hard-delete its `public_shelters` row —
+    only a true CouchDB delete/archive signal does that, and even then the processor
+    flips `is_active` to `False` rather than removing the row (see
+    ``worker.couch.processor`` / ``worker.mongo.shelter.apply_shelter_deactivate``).
+    """
     if doc.get("type") != "shelter":
         return ("delete", None)
 
@@ -70,12 +106,6 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
         return ("delete", None)
 
     registry_id = doc.get("_id")
-
-    if not is_shelter_open(doc):
-        payload: dict[str, Any] = {"_id": code}
-        if registry_id:
-            payload["registry_id"] = registry_id
-        return ("delete", payload)
 
     location_doc = doc.get("location") or {}
     lat = location_doc.get("lat")
@@ -89,23 +119,32 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
         location_geojson = {"type": "Point", "coordinates": [lng_f, lat_f]}
 
     updated_raw = doc.get("updated_at") or doc.get("created_at")
-    updated_at = (
-        datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
-        if isinstance(updated_raw, str)
-        else datetime.now(UTC)
-    )
+    updated_at = _parse_timestamp(updated_raw) or datetime.now(UTC)
 
-    payload = {
+    contact = doc.get("contact") or {}
+    mapped_status = map_public_shelter_status(doc)
+
+    payload: dict[str, Any] = {
         "_id": code,
         "shelter_code": code,
         "registry_id": registry_id,
         "name": doc.get("name") or code,
         "site_kind": resolve_site_kind(doc),
-        "status": map_public_shelter_status(doc),
+        "status": mapped_status,
+        # Own stored field mirroring `status` — see PublicShelter.location_status.
+        "location_status": mapped_status,
+        "is_active": True,
+        "location_type": "shelter",
+        "location_subtype": doc.get("shelter_type"),
         "capacity": backfill_capacity(doc),
         "province": doc.get("province"),
         "district": doc.get("district"),
         "subdistrict": doc.get("subdistrict"),
+        "address": compose_address(doc),
+        "contact_name": contact.get("name"),
+        "contact_phone": contact.get("phone"),
+        "opened_at": _parse_timestamp(doc.get("opened_at")),
+        "closed_at": _parse_timestamp(doc.get("closed_at")),
         "raw_data": doc,
         "updated_at": updated_at,
     }

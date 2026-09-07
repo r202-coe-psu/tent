@@ -25,7 +25,10 @@ export type {
 	StockTransfer,
 	StockTransferItem,
 	TransferInput,
-	TransferFilter
+	TransferFilter,
+	DispatchInfoInput,
+	CancelInfoInput,
+	DisputeInfoInput
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -130,6 +133,8 @@ export {
 	useDispatchTransfer,
 	useReceiveTransfer,
 	useCancelTransfer,
+	useDisputeTransfer,
+	useResumeTransfer,
 	useCrossShelterStockBalances,
 	useCrossShelterLedger,
 	startOperationsLiveQuery
