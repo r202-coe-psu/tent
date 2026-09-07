@@ -5,39 +5,6 @@
 
 import { z } from 'zod';
 
-export type OpenMemberStatus = 'open';
-
-export interface PersonIdHit {
-	cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
-	number: string | null;
-}
-
-export interface OpenMemberHit {
-	reserved_evacuee_id: string;
-	status: OpenMemberStatus;
-	first_name: string;
-	last_name: string;
-	gender: string;
-	phone: string | null;
-	person_id: PersonIdHit | null;
-	country: string;
-	vulnerable_groups: string[];
-	special_needs: string[];
-}
-
-export interface UnassignedRegistrationSearchHit {
-	id: string;
-	reserved_household_id: string;
-	registered_via: 'web' | 'staff';
-	status: string;
-	created_at: string;
-	open_members: OpenMemberHit[];
-}
-
-export interface UnassignedRegistrationSearchResponse {
-	results: UnassignedRegistrationSearchHit[];
-}
-
 const personIdHitSchema = z.object({
 	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
 	number: z.string().nullable()
@@ -56,6 +23,23 @@ export const openMemberHitSchema = z.object({
 	vulnerable_groups: z.array(z.string()),
 	special_needs: z.array(z.string())
 });
+
+export type PersonIdHit = z.infer<typeof personIdHitSchema>;
+export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
+export type OpenMemberStatus = OpenMemberHit['status'];
+
+export interface UnassignedRegistrationSearchHit {
+	id: string;
+	reserved_household_id: string;
+	registered_via: 'web' | 'staff';
+	status: string;
+	created_at: string;
+	open_members: OpenMemberHit[];
+}
+
+export interface UnassignedRegistrationSearchResponse {
+	results: UnassignedRegistrationSearchHit[];
+}
 
 export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();
