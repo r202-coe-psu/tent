@@ -3,7 +3,7 @@ id: CR-113
 title: Unassigned Registration — Mongo-only pre-registration without shelter until claim
 status: approved
 date: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-08
 requested_by: เจ้าของโครงการ (grill-with-docs session)
 decided_by: เจ้าของโครงการ
 layer: stable
@@ -20,6 +20,8 @@ tracking_note: >-
   track=CR file. sheet=OK 2026-09-06. Owner approved + stable-core review OK
   2026-09-06. Pair: CR-112 (registration foundation). Schema delta §6 merged from
   docs/data/proposed-registration-foundation-schema-delta.md (superseded).
+  2026-09-08: claim algorithm locked to option B (Mongo mark/lock → Couch birth →
+  revert on Couch failure); #247 review alignment — edit in place, no new CR.
 ---
 
 # Unassigned Registration — Mongo-only, shelter not chosen yet
@@ -65,15 +67,18 @@ unassigned_registrations
 
 **Indexes:** unique partial บน identity ที่สมาชิกยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ Q66 — unique บัตร/ANON เข้ม, เบอร์ตาม implement note ใน foundation) · index `created_at`, member status.
 
-### Claim algorithm (locked)
+### Claim algorithm (locked) — option B: Mongo mark/lock → Couch birth
 
-1. Staff โหลดเอกสาร · ติ๊กสมาชิกที่จะรับเข้าศูนย์นี้  
-2. สำหรับแต่ละคนที่ติ๊ก (`open`): สร้าง Couch `evacuee` ด้วย `reserved_evacuee_id` + household ด้วย `reserved_household_id` (สร้าง household ครั้งแรกถ้ายังไม่มีในศูนย์) สถานะ `pre_registered`  
-3. ตั้ง `members[].status = claimed` (+ metadata shelter/time/actor ตามต้องการ)  
-4. คนที่ไม่ติ๊กคง `open`  
-5. ถ้าไม่มีสมาชิก `open` เหลือ → hard-delete เอกสาร `unassigned_registrations`  
-6. Worker project → `public_persons` จาก Couch (ครั้งแรกที่มีแถวสาธารณะ)  
-7. ศูนย์อื่น claim สมาชิกที่ `claimed` แล้วไม่ได้; สมาชิก `open` ยังอยู่ในคิวให้ศูนย์อื่น/รอบหลังได้ตามนโยบายค้น
+ลำดับนี้ตั้งใจให้ศูนย์อื่น claim คนเดียวกันไม่ได้ระหว่าง birth — **ห้าม** สลับเป็น Couch-first.
+
+1. Staff โหลดเอกสาร · ติ๊กสมาชิกที่จะรับเข้าศูนย์นี้ (ต้องเลือกเอง — ไม่ pre-check ทั้งชุด)
+2. **Atomic mark ใน Mongo:** สำหรับทุกคนที่ติ๊กที่ยัง `open` → ตั้ง `members[].status = claimed` (+ shelter/time/actor) และอัปเดต identity indexes / document status — ถ้า mark ไม่ผ่าน (แข่ง claim) → 409 ไม่แตะ Couch
+3. **Birth Couch SoR:** สร้าง `evacuee` ด้วย `reserved_evacuee_id` + `household` ด้วย `reserved_household_id` (สร้าง household ครั้งแรกถ้ายังไม่มีในศูนย์) สถานะ `pre_registered` · `_bulk_docs` `conflict` บน reserved id = สำเร็จแบบ idempotent (เอกสารเกิดแล้ว)
+4. ถ้า Couch birth ล้มเหลว (ยกเว้น conflict ที่ถือว่าสำเร็จ) → **revert** สมาชิกที่ mark ไปกลับเป็น `open` ใน Mongo แล้วตอบ 503 `ONLINE_REQUIRED`
+5. คนที่ไม่ติ๊กคง `open`
+6. ถ้าไม่มีสมาชิก `open` เหลือ → **best-effort** hard-delete เอกสาร `unassigned_registrations` (ไม่ atomic กับ birth; orphan claimed-without-delete ยอมได้จนกว่า cleanup)
+7. Worker project → `public_persons` จาก Couch (ครั้งแรกที่มีแถวสาธารณะ)
+8. ศูนย์อื่น claim สมาชิกที่ `claimed` แล้วไม่ได้; สมาชิก `open` ยังอยู่ในคิวให้ศูนย์อื่น/รอบหลังได้ตามนโยบายค้น
 
 ### APIs (indicative)
 
@@ -118,6 +123,7 @@ unassigned_registrations
 - 2026-09-06 — grill Q35=C (Mongo-only เมื่อไม่รู้ศูนย์); Q39+ sheet=OK แทน draft ชื่อ Central Pool / `central_pool_registration`
 - 2026-09-06 — เลิกคำหลัก Central Pool → **Unassigned Registration**; collection **`unassigned_registrations`**
 - 2026-09-06 — Owner approve: `track=CR file` + stable review OK → **CR-113**; merge delta §6 เข้า `schema.md`
+- 2026-09-08 — #247 review: lock claim order = **option B** (Mongo mark → Couch birth → revert on Couch failure); `_bulk_docs` conflict = OK; full-claim hard-delete = best-effort; Station 1 checkboxes start empty
 
 ## Relationship
 

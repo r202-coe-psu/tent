@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -18,7 +19,14 @@ from tent_model.unassigned_registration import (
 from ...core.staff_session import StaffSession
 from ...utils.masking import normalize_national_id, normalize_phone
 from ...utils.ulid import new_ulid
-from .couch_birth import CouchBirthError, CouchBirthPort, couch_unavailable, get_couch_birth
+from .couch_birth import (
+    CouchBirthError,
+    CouchBirthPort,
+    build_couch_evacuee,
+    build_couch_household,
+    couch_unavailable,
+    get_couch_birth,
+)
 from .schemas import (
     ClaimedMemberOut,
     MemberCreated,
@@ -36,6 +44,31 @@ from .schemas import (
 
 # Same shape as staff Anonymous ID (CR-112): ANON- + Crockford ULID.
 _ANON_ID_RE = re.compile(r"^ANON-[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimMarkParams:
+    """Atomic Mongo mark/lock before Couch birth (CR-113 option B)."""
+
+    registration_id: str
+    member_ids: list[str]
+    shelter_code: str
+    actor: str
+    claimed_at: datetime
+    open_person_id_numbers: list[str]
+    open_phones: list[str]
+    document_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimRevertParams:
+    """Undo a prior mark when Couch birth fails."""
+
+    registration_id: str
+    member_ids: list[str]
+    open_person_id_numbers: list[str]
+    open_phones: list[str]
+    document_status: str
 
 
 def _is_anonymous_id(value: str) -> bool:
@@ -346,8 +379,8 @@ class UnassignedRegistrationsUseCase:
         ]
         next_open_ids, next_open_phones = _open_identity_keys(remaining_before_write)
 
-        # Atomic gate: only proceed if every target member is still open.
-        claimed = await _atomic_mark_claimed(
+        # Option B: atomic Mongo mark/lock first, then Couch birth (revert on failure).
+        mark = ClaimMarkParams(
             registration_id=doc.id,
             member_ids=member_ids,
             shelter_code=shelter_code,
@@ -357,6 +390,7 @@ class UnassignedRegistrationsUseCase:
             open_phones=next_open_phones,
             document_status="open" if remaining_before_write else "claimed",
         )
+        claimed = await _atomic_mark_claimed(mark)
         if not claimed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -368,11 +402,11 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
-        household_doc = _build_couch_household(
+        household_doc = build_couch_household(
             doc, claim_targets[0], shelter_code, session.name, now
         )
         evacuee_docs = [
-            _build_couch_evacuee(
+            build_couch_evacuee(
                 member, doc.reserved_household_id, shelter_code, session.name, now, doc
             )
             for member in claim_targets
@@ -387,15 +421,26 @@ class UnassignedRegistrationsUseCase:
             )
         except CouchBirthError as exc:
             await _atomic_revert_claim(
-                registration_id=doc.id,
-                member_ids=member_ids,
-                open_person_id_numbers=list(doc.open_person_id_numbers),
-                open_phones=list(doc.open_phones),
-                document_status=doc.status,
+                ClaimRevertParams(
+                    registration_id=doc.id,
+                    member_ids=member_ids,
+                    open_person_id_numbers=list(doc.open_person_id_numbers),
+                    open_phones=list(doc.open_phones),
+                    document_status=doc.status,
+                )
             )
             raise couch_unavailable(
                 "Unassigned Registration claim requires central Couch for Evacuee birth"
             ) from exc
+
+        claimed_out = [
+            ClaimedMemberOut(
+                reserved_evacuee_id=m.reserved_evacuee_id,
+                first_name=m.first_name,
+                last_name=m.last_name,
+            )
+            for m in claim_targets
+        ]
 
         if not remaining_before_write:
             try:
@@ -410,14 +455,7 @@ class UnassignedRegistrationsUseCase:
                 shelter_code=shelter_code,
                 household_id=doc.reserved_household_id,
                 evacuee_ids=member_ids,
-                claimed=[
-                    ClaimedMemberOut(
-                        reserved_evacuee_id=m.reserved_evacuee_id,
-                        first_name=m.first_name,
-                        last_name=m.last_name,
-                    )
-                    for m in claim_targets
-                ],
+                claimed=claimed_out,
                 remaining_open=[],
             )
 
@@ -427,14 +465,7 @@ class UnassignedRegistrationsUseCase:
             shelter_code=shelter_code,
             household_id=doc.reserved_household_id,
             evacuee_ids=member_ids,
-            claimed=[
-                ClaimedMemberOut(
-                    reserved_evacuee_id=m.reserved_evacuee_id,
-                    first_name=m.first_name,
-                    last_name=m.last_name,
-                )
-                for m in claim_targets
-            ],
+            claimed=claimed_out,
             remaining_open=[_open_member_hit(m) for m in remaining_before_write],
         )
 
@@ -475,21 +506,11 @@ def _resolve_claim_shelter(session: StaffSession, requested: str | None) -> str:
     return session.shelter_code
 
 
-async def _atomic_mark_claimed(
-    *,
-    registration_id: str,
-    member_ids: list[str],
-    shelter_code: str,
-    actor: str,
-    claimed_at: datetime,
-    open_person_id_numbers: list[str],
-    open_phones: list[str],
-    document_status: str,
-) -> bool:
+async def _atomic_mark_claimed(params: ClaimMarkParams) -> bool:
     collection = UnassignedRegistration.get_motor_collection()
     result = await collection.update_one(
         {
-            "_id": registration_id,
+            "_id": params.registration_id,
             "$and": [
                 {
                     "members": {
@@ -499,23 +520,23 @@ async def _atomic_mark_claimed(
                         }
                     }
                 }
-                for mid in member_ids
+                for mid in params.member_ids
             ],
         },
         {
             "$set": {
                 "members.$[m].status": "claimed",
-                "members.$[m].claimed_shelter_code": shelter_code,
-                "members.$[m].claimed_by": actor,
-                "members.$[m].claimed_at": claimed_at,
-                "open_person_id_numbers": open_person_id_numbers,
-                "open_phones": open_phones,
-                "status": document_status,
+                "members.$[m].claimed_shelter_code": params.shelter_code,
+                "members.$[m].claimed_by": params.actor,
+                "members.$[m].claimed_at": params.claimed_at,
+                "open_person_id_numbers": params.open_person_id_numbers,
+                "open_phones": params.open_phones,
+                "status": params.document_status,
             }
         },
         array_filters=[
             {
-                "m.reserved_evacuee_id": {"$in": member_ids},
+                "m.reserved_evacuee_id": {"$in": params.member_ids},
                 "m.status": "open",
             }
         ],
@@ -523,149 +544,28 @@ async def _atomic_mark_claimed(
     return result.modified_count == 1
 
 
-async def _atomic_revert_claim(
-    *,
-    registration_id: str,
-    member_ids: list[str],
-    open_person_id_numbers: list[str],
-    open_phones: list[str],
-    document_status: str,
-) -> None:
+async def _atomic_revert_claim(params: ClaimRevertParams) -> None:
     collection = UnassignedRegistration.get_motor_collection()
     await collection.update_one(
-        {"_id": registration_id},
+        {"_id": params.registration_id},
         {
             "$set": {
                 "members.$[m].status": "open",
                 "members.$[m].claimed_shelter_code": None,
                 "members.$[m].claimed_by": None,
                 "members.$[m].claimed_at": None,
-                "open_person_id_numbers": open_person_id_numbers,
-                "open_phones": open_phones,
-                "status": document_status,
+                "open_person_id_numbers": params.open_person_id_numbers,
+                "open_phones": params.open_phones,
+                "status": params.document_status,
             }
         },
         array_filters=[
             {
-                "m.reserved_evacuee_id": {"$in": member_ids},
+                "m.reserved_evacuee_id": {"$in": params.member_ids},
                 "m.status": "claimed",
             }
         ],
     )
-
-
-def _iso(ts: datetime) -> str:
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=UTC)
-    return ts.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _household_label(doc: UnassignedRegistration, head: UnassignedMember) -> str:
-    if doc.household.label and doc.household.label.strip():
-        return doc.household.label.strip()
-    joined = f"{head.first_name} {head.last_name}".strip()
-    return f"ครอบครัว{joined}" if joined else "ครอบครัวผู้ลงทะเบียนล่วงหน้า"
-
-
-def _build_couch_household(
-    doc: UnassignedRegistration,
-    head: UnassignedMember,
-    shelter_code: str,
-    actor: str,
-    now: datetime,
-) -> dict:
-    hh = doc.household
-    ts = _iso(now)
-    return {
-        "_id": doc.reserved_household_id,
-        "type": "household",
-        "schema_v": 5,
-        "shelter_code": shelter_code,
-        "created_at": ts,
-        "updated_at": ts,
-        "created_by": actor,
-        "label": _household_label(doc, head),
-        "head_evacuee_id": head.reserved_evacuee_id,
-        "status": "pre_registered",
-        "checkout_destination": None,
-        "municipality_zone": None,
-        "community": None,
-        "pets": [
-            {
-                "species": pet.species,
-                "count": pet.count,
-                **({"notes": pet.notes} if pet.notes else {}),
-                "has_cage": pet.has_cage,
-            }
-            for pet in hh.pets
-        ],
-        "assets": None,
-        "vehicles": [],
-        "housing_type": hh.housing_type,
-        "residence_landmark": hh.residence_landmark,
-        "address_no": hh.address_no,
-        "village_no": hh.village_no,
-        "subdistrict": hh.subdistrict,
-        "district": hh.district,
-        "province": hh.province,
-        "postal_code": hh.postal_code,
-    }
-
-
-_RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
-
-
-def _build_couch_evacuee(
-    member: UnassignedMember,
-    household_id: str,
-    shelter_code: str,
-    actor: str,
-    now: datetime,
-    doc: UnassignedRegistration,
-) -> dict:
-    ts = _iso(now)
-    person_id = None
-    if member.person_id is not None:
-        person_id = {
-            "cardType": member.person_id.cardType,
-            "number": member.person_id.number,
-        }
-    registered_via = doc.registered_via if doc.registered_via in {"web", "staff"} else "web"
-    body: dict = {
-        "_id": member.reserved_evacuee_id,
-        "type": "evacuee",
-        "schema_v": 10,
-        "shelter_code": shelter_code,
-        "created_at": ts,
-        "updated_at": ts,
-        "created_by": actor,
-        "first_name": member.first_name,
-        "last_name": member.last_name or "",
-        "gender": member.gender,
-        "phone": member.phone,
-        "country": member.country or "THAILAND",
-        "vulnerable_groups": list(member.vulnerable_groups),
-        "special_needs": list(member.special_needs),
-        "household_id": household_id,
-        "current_stay": {
-            "status": "pre_registered",
-            "zone": None,
-            "since": ts,
-        },
-        "privacy": {"search_excluded": False},
-        "registered_via": registered_via,
-    }
-    if person_id is not None:
-        body["person_id"] = person_id
-    if member.birth_year is not None:
-        body["birth_year"] = member.birth_year
-    if member.age is not None:
-        body["age"] = member.age
-    if member.nickname:
-        body["nickname"] = member.nickname
-    if member.religion and member.religion in _RELIGION_ALLOWED:
-        body["religion"] = member.religion
-    return body
 
 
 def _mongo_unavailable(action: str) -> HTTPException:

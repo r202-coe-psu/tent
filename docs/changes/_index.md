@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-06 # Approve CR-112 registration foundation + CR-113 unassigned registration
+updated: 2026-09-08 # CR-113 claim algorithm option B alignment (#247 review)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 

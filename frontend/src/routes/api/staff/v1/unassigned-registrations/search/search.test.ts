@@ -15,16 +15,16 @@ vi.mock('$lib/auth/roles', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/auth/roles')>();
 	return {
 		...actual,
-		canSearchUnassignedRegistrations: vi.fn()
+		canAccessUnassignedRegistrationQueue: vi.fn()
 	};
 });
 
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { canSearchUnassignedRegistrations } from '$lib/auth/roles';
+import { canAccessUnassignedRegistrationQueue } from '$lib/auth/roles';
 import { GET } from './+server';
 
 const requireScope = vi.mocked(requireShelterScopeOrSA);
-const canSearch = vi.mocked(canSearchUnassignedRegistrations);
+const canAccessQueue = vi.mocked(canAccessUnassignedRegistrationQueue);
 
 function makeEvent(q: string, cookie = 'AuthSession=abc') {
 	const url = new URL(`http://localhost/api/staff/v1/unassigned-registrations/search?q=${q}`);
@@ -44,7 +44,7 @@ describe('GET /api/staff/v1/unassigned-registrations/search', () => {
 			isSA: false,
 			shelterCode: 'SH001'
 		});
-		canSearch.mockReturnValue(true);
+		canAccessQueue.mockReturnValue(true);
 	});
 
 	it('forwards cookie to FastAPI and returns results', async () => {
@@ -88,7 +88,7 @@ describe('GET /api/staff/v1/unassigned-registrations/search', () => {
 	});
 
 	it('rejects callers without registration hold capability', async () => {
-		canSearch.mockReturnValue(false);
+		canAccessQueue.mockReturnValue(false);
 		const event = makeEvent('สมชาย');
 		const res = await GET(event);
 		expect(res.status).toBe(403);

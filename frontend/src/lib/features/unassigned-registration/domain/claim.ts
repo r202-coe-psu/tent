@@ -3,35 +3,54 @@
  * Staff ticks open members → Couch birth at pre_registered.
  */
 
-import type { OpenMemberHit } from './search';
+import { z } from 'zod';
 
 export interface UnassignedRegistrationClaimRequest {
 	member_ids: string[];
 	shelter_code?: string;
 }
 
-export interface ClaimedMemberOut {
-	reserved_evacuee_id: string;
-	status: 'claimed';
-	first_name: string;
-	last_name: string;
-}
+const personIdHitSchema = z.object({
+	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
+	number: z.string().nullable()
+});
 
-export interface UnassignedRegistrationClaimResponse {
-	success: boolean;
-	id: string | null;
-	deleted: boolean;
-	shelter_code: string;
-	household_id: string;
-	evacuee_ids: string[];
-	claimed: ClaimedMemberOut[];
-	remaining_open: OpenMemberHit[];
-}
+const openMemberHitSchema = z.object({
+	reserved_evacuee_id: z.string(),
+	status: z.literal('open'),
+	first_name: z.string(),
+	last_name: z.string(),
+	gender: z.string(),
+	phone: z.string().nullable(),
+	person_id: personIdHitSchema.nullable(),
+	country: z.string(),
+	vulnerable_groups: z.array(z.string()),
+	special_needs: z.array(z.string())
+});
 
-/** Prefer selecting every open member by default when opening a claim sheet. */
-export function defaultSelectedMemberIds(openMembers: readonly OpenMemberHit[]): string[] {
-	return openMembers.map((m) => m.reserved_evacuee_id);
-}
+const claimedMemberOutSchema = z.object({
+	reserved_evacuee_id: z.string(),
+	status: z.literal('claimed'),
+	first_name: z.string(),
+	last_name: z.string()
+});
+
+/** Narrow BFF/FastAPI claim success bodies (CONVENTIONS §3 — no `as` at the boundary). */
+export const unassignedRegistrationClaimResponseSchema = z.object({
+	success: z.boolean(),
+	id: z.string().nullable(),
+	deleted: z.boolean(),
+	shelter_code: z.string(),
+	household_id: z.string(),
+	evacuee_ids: z.array(z.string()),
+	claimed: z.array(claimedMemberOutSchema),
+	remaining_open: z.array(openMemberHitSchema)
+});
+
+export type ClaimedMemberOut = z.infer<typeof claimedMemberOutSchema>;
+export type UnassignedRegistrationClaimResponse = z.infer<
+	typeof unassignedRegistrationClaimResponseSchema
+>;
 
 export function toggleMemberSelection(
 	selected: readonly string[],

@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-06
+updated: 2026-09-08
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation
 ---
 
@@ -1559,4 +1559,4 @@ SoR ของคิวกลางจน claim = Mongo collection นี้ · �
 
 **Indexes:** unique partial บน identity ของสมาชิกที่ยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ) · `(created_at)` · member status
 
-**Claim:** staff ติ๊กสมาชิก `open` → สร้าง Couch `evacuee`(+`household`) ด้วย reserved ids ที่ `pre_registered` · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → hard-delete เอกสาร · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียด API/algorithm ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+**Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`) ด้วย reserved ids ที่ `pre_registered` · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)

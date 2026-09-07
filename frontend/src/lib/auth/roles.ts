@@ -252,10 +252,11 @@ export function canCancelHold(roles: readonly string[], shelterCode?: string | n
 }
 
 /**
- * Station 1 Unassigned Registration queue search (CR-113) — same registration desk gate
- * as hold cancel (SA / shelter_manager / registration_staff).
+ * Station 1 Unassigned Registration queue desk (CR-113 / #247) — search + claim.
+ * Same registration desk gate as hold cancel (SA / shelter_manager / registration_staff).
+ * Not a separate claim-only permission.
  */
-export function canSearchUnassignedRegistrations(
+export function canAccessUnassignedRegistrationQueue(
 	roles: readonly string[],
 	shelterCode?: string | null
 ): boolean {

@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-06
+updated: 2026-09-08
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration
 ---
 
@@ -203,7 +203,7 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-รายละเอียด shape/claim: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md).
+Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5.
 
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 

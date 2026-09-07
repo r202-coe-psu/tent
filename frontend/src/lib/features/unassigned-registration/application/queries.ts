@@ -11,7 +11,7 @@ import {
 export { formatOpenMemberName, isOnlineRequiredError };
 export type { UnassignedRegistrationSearchHit };
 export { UnassignedRegistrationApiError } from '../data/unassigned-registration.remote';
-export { defaultSelectedMemberIds, toggleMemberSelection } from '../domain/claim';
+export { toggleMemberSelection } from '../domain/claim';
 export type {
 	UnassignedRegistrationClaimRequest,
 	UnassignedRegistrationClaimResponse

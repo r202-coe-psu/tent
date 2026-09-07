@@ -2,9 +2,10 @@
  * Browser → SvelteKit BFF for staff Unassigned Registration search/claim (CR-113).
  * Never calls FastAPI from the browser.
  */
-import type {
-	UnassignedRegistrationClaimRequest,
-	UnassignedRegistrationClaimResponse
+import {
+	unassignedRegistrationClaimResponseSchema,
+	type UnassignedRegistrationClaimRequest,
+	type UnassignedRegistrationClaimResponse
 } from '../domain/claim';
 import type { UnassignedRegistrationSearchResponse } from '../domain/search';
 import type { UnassignedRegistrationRepository } from './unassigned-registration.repository';
@@ -86,7 +87,15 @@ export const unassignedRegistrationRemote: UnassignedRegistrationRepository = {
 		if (!response.ok || !body) {
 			throw errorFromBody(body, response.status, 'CLAIM_FAILED', 'รับสมาชิกเข้าศูนย์ไม่สำเร็จ');
 		}
-		return body as unknown as UnassignedRegistrationClaimResponse;
+		const parsed = unassignedRegistrationClaimResponseSchema.safeParse(body);
+		if (!parsed.success) {
+			throw new UnassignedRegistrationApiError(
+				'CLAIM_FAILED',
+				'รูปแบบคำตอบรับเข้าศูนย์ไม่ถูกต้อง',
+				response.status
+			);
+		}
+		return parsed.data;
 	}
 };
 

@@ -10,7 +10,6 @@
 	import * as Table from '$lib/components/ui/table';
 
 	import {
-		defaultSelectedMemberIds,
 		formatOpenMemberName,
 		isOnlineRequiredError,
 		toggleMemberSelection,
@@ -49,7 +48,7 @@
 
 	function openDocument(hit: UnassignedRegistrationSearchHit) {
 		selected = hit;
-		selectedMemberIds = defaultSelectedMemberIds(hit.open_members);
+		selectedMemberIds = [];
 		sheetOpen = true;
 	}
 
@@ -82,9 +81,8 @@
 					...selected,
 					open_members: result.remaining_open
 				};
-				selectedMemberIds = defaultSelectedMemberIds(result.remaining_open);
+				selectedMemberIds = [];
 			}
-			await search.refetch();
 		} catch {
 			// toast handled in mutation onError
 		}

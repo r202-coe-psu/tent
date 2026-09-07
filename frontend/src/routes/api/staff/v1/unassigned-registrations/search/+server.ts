@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { canSearchUnassignedRegistrations } from '$lib/auth/roles';
+import { canAccessUnassignedRegistrationQueue } from '$lib/auth/roles';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, unwrapFastapiError } from '$lib/server/fastapi';
 
@@ -17,7 +17,7 @@ export const GET: RequestHandler = async ({ url, request, fetch }) => {
 	const cookie = request.headers.get('cookie');
 	try {
 		const caller = await requireShelterScopeOrSA(cookie);
-		if (!canSearchUnassignedRegistrations(caller.roles, caller.shelterCode)) {
+		if (!canAccessUnassignedRegistrationQueue(caller.roles, caller.shelterCode)) {
 			return json(
 				{ error: { code: 'FORBIDDEN', message: 'Requires registration_staff or above' } },
 				{ status: 403, headers: noStore }

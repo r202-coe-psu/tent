@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	formatRoleList,
 	canCancelHold,
+	canAccessUnassignedRegistrationQueue,
 	canAccessMedicalScreening,
 	canAccessZoning,
 	capabilitiesForShelter,
@@ -151,6 +152,16 @@ describe('roles kernel', () => {
 		expect(canCancelHold(['shelter:SH001', 'kitchen_staff'])).toBe(false);
 		expect(canCancelHold(['shelter:SH001', 'warehouse_staff'])).toBe(false);
 		expect(canCancelHold([])).toBe(false);
+	});
+
+	it('canAccessUnassignedRegistrationQueue mirrors hold-cancel desk gate for search+claim', () => {
+		expect(canAccessUnassignedRegistrationQueue(['system_admin'])).toBe(true);
+		expect(canAccessUnassignedRegistrationQueue(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canAccessUnassignedRegistrationQueue(['shelter:SH001', 'registration_staff'])).toBe(
+			true
+		);
+		expect(canAccessUnassignedRegistrationQueue(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canAccessUnassignedRegistrationQueue([])).toBe(false);
 	});
 
 	it('canAccessMedicalScreening allows medical_staff, triage_staff, shelter_manager, system_admin only', () => {

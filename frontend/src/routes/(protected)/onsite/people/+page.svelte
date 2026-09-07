@@ -39,7 +39,7 @@
 	import {
 		canAccessMedicalScreening,
 		canAccessZoning,
-		canSearchUnassignedRegistrations
+		canAccessUnassignedRegistrationQueue
 	} from '$lib/auth/roles';
 	import { useMasterData } from '$lib/features/master-data';
 
@@ -55,8 +55,11 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const canMedical = $derived(canAccessMedicalScreening(roles) && enableMedical);
 	const canZoning = $derived(canAccessZoning(roles));
-	const canSearchUnassigned = $derived(
-		canSearchUnassignedRegistrations(roles, shelterStore.selectedShelterCode ?? getShelterCode())
+	const canAccessUnassignedQueue = $derived(
+		canAccessUnassignedRegistrationQueue(
+			roles,
+			shelterStore.selectedShelterCode ?? getShelterCode()
+		)
 	);
 
 	type DeskMode = 'shelter' | 'unassigned';
@@ -258,7 +261,7 @@
 		</Button>
 	</div>
 
-	{#if canSearchUnassigned}
+	{#if canAccessUnassignedQueue}
 		<div class="flex flex-wrap gap-2">
 			<button
 				type="button"
@@ -283,7 +286,7 @@
 		</div>
 	{/if}
 
-	{#if deskMode === 'unassigned' && canSearchUnassigned}
+	{#if deskMode === 'unassigned' && canAccessUnassignedQueue}
 		<Card.Root class="border-border p-4 shadow-sm">
 			<UnassignedQueueSearchPanel />
 		</Card.Root>

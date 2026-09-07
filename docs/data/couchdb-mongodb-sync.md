@@ -2,7 +2,7 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-06
+updated: 2026-09-08
 note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations
 ---
 
@@ -113,6 +113,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 
 - ห้าม treat เป็น Evacuee / Couch SoR ก่อน claim
 - ห้ามนับเข้า Forecast occupancy รายศูนย์จนกว่า claim
+- claim order (locked, option B): Mongo mark/lock → Couch birth → revert Mongo on Couch failure
 - shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
 
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field

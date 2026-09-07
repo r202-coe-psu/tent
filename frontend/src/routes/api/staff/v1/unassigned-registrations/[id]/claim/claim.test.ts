@@ -15,16 +15,16 @@ vi.mock('$lib/auth/roles', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/auth/roles')>();
 	return {
 		...actual,
-		canSearchUnassignedRegistrations: vi.fn()
+		canAccessUnassignedRegistrationQueue: vi.fn()
 	};
 });
 
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { canSearchUnassignedRegistrations } from '$lib/auth/roles';
+import { canAccessUnassignedRegistrationQueue } from '$lib/auth/roles';
 import { POST } from './+server';
 
 const requireScope = vi.mocked(requireShelterScopeOrSA);
-const canSearch = vi.mocked(canSearchUnassignedRegistrations);
+const canAccessQueue = vi.mocked(canAccessUnassignedRegistrationQueue);
 
 function makeEvent(id: string, body: unknown, cookie = 'AuthSession=abc') {
 	return {
@@ -50,7 +50,7 @@ describe('POST /api/staff/v1/unassigned-registrations/[id]/claim', () => {
 			isSA: false,
 			shelterCode: 'SH001'
 		});
-		canSearch.mockReturnValue(true);
+		canAccessQueue.mockReturnValue(true);
 	});
 
 	it('forwards cookie and member_ids to FastAPI', async () => {
@@ -102,7 +102,7 @@ describe('POST /api/staff/v1/unassigned-registrations/[id]/claim', () => {
 	});
 
 	it('rejects callers without registration capability', async () => {
-		canSearch.mockReturnValue(false);
+		canAccessQueue.mockReturnValue(false);
 		const event = makeEvent('doc1', { member_ids: ['evacuee:1'] });
 		const res = await POST(event);
 		expect(res.status).toBe(403);

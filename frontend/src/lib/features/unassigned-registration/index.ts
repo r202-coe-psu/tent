@@ -18,7 +18,7 @@ export type {
 } from './domain/claim';
 
 export { formatOpenMemberName, isOnlineRequiredError } from './domain/search';
-export { defaultSelectedMemberIds, toggleMemberSelection } from './domain/claim';
+export { toggleMemberSelection, unassignedRegistrationClaimResponseSchema } from './domain/claim';
 
 export type { UnassignedRegistrationRepository } from './data/unassigned-registration.repository';
 export {

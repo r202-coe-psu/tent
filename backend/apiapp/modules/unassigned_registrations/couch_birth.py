@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Protocol
 
 import httpx
 from fastapi import HTTPException, status
+from tent_model.unassigned_registration import UnassignedMember, UnassignedRegistration
 
 from ...core.config import settings
 
 _COUCH_TIMEOUT_SECONDS = 15.0
+_RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
 
 
 class CouchBirthError(Exception):
@@ -31,6 +34,117 @@ class CouchBirthPort(Protocol):
 
 def shelter_db_name(shelter_code: str) -> str:
     return f"shelter_{shelter_code.lower()}"
+
+
+def _iso(ts: datetime) -> str:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _household_label(doc: UnassignedRegistration, head: UnassignedMember) -> str:
+    if doc.household.label and doc.household.label.strip():
+        return doc.household.label.strip()
+    joined = f"{head.first_name} {head.last_name}".strip()
+    return f"ครอบครัว{joined}" if joined else "ครอบครัวผู้ลงทะเบียนล่วงหน้า"
+
+
+def build_couch_household(
+    doc: UnassignedRegistration,
+    head: UnassignedMember,
+    shelter_code: str,
+    actor: str,
+    now: datetime,
+) -> dict:
+    hh = doc.household
+    ts = _iso(now)
+    return {
+        "_id": doc.reserved_household_id,
+        "type": "household",
+        "schema_v": 5,
+        "shelter_code": shelter_code,
+        "created_at": ts,
+        "updated_at": ts,
+        "created_by": actor,
+        "label": _household_label(doc, head),
+        "head_evacuee_id": head.reserved_evacuee_id,
+        "status": "pre_registered",
+        "checkout_destination": None,
+        "municipality_zone": None,
+        "community": None,
+        "pets": [
+            {
+                "species": pet.species,
+                "count": pet.count,
+                **({"notes": pet.notes} if pet.notes else {}),
+                "has_cage": pet.has_cage,
+            }
+            for pet in hh.pets
+        ],
+        "assets": None,
+        "vehicles": [],
+        "housing_type": hh.housing_type,
+        "residence_landmark": hh.residence_landmark,
+        "address_no": hh.address_no,
+        "village_no": hh.village_no,
+        "subdistrict": hh.subdistrict,
+        "district": hh.district,
+        "province": hh.province,
+        "postal_code": hh.postal_code,
+    }
+
+
+def build_couch_evacuee(
+    member: UnassignedMember,
+    household_id: str,
+    shelter_code: str,
+    actor: str,
+    now: datetime,
+    doc: UnassignedRegistration,
+) -> dict:
+    ts = _iso(now)
+    person_id = None
+    if member.person_id is not None:
+        person_id = {
+            "cardType": member.person_id.cardType,
+            "number": member.person_id.number,
+        }
+    registered_via = doc.registered_via if doc.registered_via in {"web", "staff"} else "web"
+    body: dict = {
+        "_id": member.reserved_evacuee_id,
+        "type": "evacuee",
+        "schema_v": 10,
+        "shelter_code": shelter_code,
+        "created_at": ts,
+        "updated_at": ts,
+        "created_by": actor,
+        "first_name": member.first_name,
+        "last_name": member.last_name or "",
+        "gender": member.gender,
+        "phone": member.phone,
+        "country": member.country or "THAILAND",
+        "vulnerable_groups": list(member.vulnerable_groups),
+        "special_needs": list(member.special_needs),
+        "household_id": household_id,
+        "current_stay": {
+            "status": "pre_registered",
+            "zone": None,
+            "since": ts,
+        },
+        "privacy": {"search_excluded": False},
+        "registered_via": registered_via,
+    }
+    if person_id is not None:
+        body["person_id"] = person_id
+    if member.birth_year is not None:
+        body["birth_year"] = member.birth_year
+    if member.age is not None:
+        body["age"] = member.age
+    if member.nickname:
+        body["nickname"] = member.nickname
+    if member.religion and member.religion in _RELIGION_ALLOWED:
+        body["religion"] = member.religion
+    return body
 
 
 class HttpCouchBirth:
