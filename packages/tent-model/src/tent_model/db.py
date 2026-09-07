@@ -20,6 +20,7 @@ from tent_model.shelter_stock import ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import ThirdPartyClient
+from tent_model.unassigned_registration import UnassignedRegistration
 
 ALL_DOCUMENTS = [
 	SyncCheckpoint,
@@ -36,6 +37,7 @@ ALL_DOCUMENTS = [
 	ThirdPartyClient,
 	ShelterStock,
 	ThirdPartyAccessLog,
+	UnassignedRegistration,
 ]
 
 _client: AsyncIOMotorClient | None = None

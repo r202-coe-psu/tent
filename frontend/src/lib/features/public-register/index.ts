@@ -81,3 +81,14 @@ export type {
 	PublicBookingLookupInput,
 	PublicBookingMember
 } from './domain/booking';
+
+export {
+	toUnassignedRegistrationPayload,
+	unassignedRegistrationErrorMessage,
+	unassignedRegistrationInputSchema
+} from './domain/unassigned-registration';
+
+export type {
+	UnassignedRegistrationErrorCode,
+	UnassignedRegistrationInput
+} from './domain/unassigned-registration';
