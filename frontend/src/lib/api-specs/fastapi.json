@@ -2719,8 +2719,7 @@
 					"geo": {
 						"anyOf": [
 							{
-								"additionalProperties": true,
-								"type": "object"
+								"$ref": "#/components/schemas/GeoPoint"
 							},
 							{
 								"type": "null"
@@ -3531,7 +3530,7 @@
 					"person_id": {
 						"anyOf": [
 							{
-								"$ref": "#/components/schemas/PersonIdInput"
+								"$ref": "#/components/schemas/PersonIdOut"
 							},
 							{
 								"type": "null"
@@ -3941,6 +3940,22 @@
 				},
 				"type": "object",
 				"title": "PersonIdInput"
+			},
+			"PersonIdOut": {
+				"properties": {
+					"cardType": {
+						"type": "string",
+						"enum": ["national_id", "passport", "pink_card", "other", "anonymous"],
+						"title": "Cardtype"
+					},
+					"number": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Number"
+					}
+				},
+				"type": "object",
+				"required": ["cardType"],
+				"title": "PersonIdOut"
 			},
 			"PetInput": {
 				"properties": {

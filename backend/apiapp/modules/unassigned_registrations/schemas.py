@@ -92,9 +92,8 @@ class HouseholdInput(BaseModel):
                 )
             return self
 
-        if housing is None:
-            return self
-
+        # Non-homeless and housing_type omitted: same floor as BFF Zod —
+        # domicile address required so Bearer callers cannot skip FR-RF-09.
         if not address_no or not geo_complete:
             raise ValueError(
                 "non-homeless residence requires address_no and province/district/subdistrict"

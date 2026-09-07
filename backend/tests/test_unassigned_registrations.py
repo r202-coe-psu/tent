@@ -141,6 +141,18 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     )
 
 
+async def test_create_rejects_missing_address_when_housing_type_omitted(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(household={"pets": []}),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
 async def test_create_rejects_homeless_without_landmark_or_geo(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -311,6 +323,7 @@ async def test_create_rejects_duplicate_open_passport(
 async def test_create_rejects_duplicate_open_anonymous_id(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
+    anon = "ANON-01HTESTANON0000000000001"
     anon = f"ANON-{new_ulid()}"
     first = await client.post(
         "/public/v1/unassigned-registrations",
