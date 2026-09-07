@@ -1,4 +1,4 @@
-"""Unassigned Registration create + staff search (CR-113 / FR-UR-01 / FR-UR-02)."""
+"""Unassigned Registration create + staff search/purge (CR-113 / FR-UR-01/02/04)."""
 
 from __future__ import annotations
 
@@ -248,6 +248,39 @@ class UnassignedRegistrationsUseCase:
                 )
             )
         return UnassignedRegistrationSearchResponse(results=results)
+
+    async def hard_delete(self, registration_id: str) -> None:
+        """system_admin purge of a central-queue document (FR-UR-04) — no claim required."""
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("purge") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        try:
+            await doc.delete()
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("purge") from exc
+
+
+def _mongo_unavailable(action: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "error": {
+                "code": "ONLINE_REQUIRED",
+                "message": f"Unassigned Registration {action} requires central Mongo",
+            }
+        },
+    )
 
 
 def _escape_regex(value: str) -> str:

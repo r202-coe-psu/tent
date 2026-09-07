@@ -133,3 +133,12 @@ async def require_registration_staff(
     if _has_registration_staff(session.roles, session.shelter_code):
         return session
     raise _forbidden("Requires registration_staff, shelter_manager, or system_admin")
+
+
+async def require_system_admin(
+    session: Annotated[StaffSession, Depends(require_staff_session)],
+) -> StaffSession:
+    """System-admin-only gate — e.g. hard-delete of Unassigned Registration (FR-UR-04)."""
+    if session.is_sa:
+        return session
+    raise _forbidden("Requires system_admin")

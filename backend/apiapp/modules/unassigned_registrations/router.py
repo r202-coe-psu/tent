@@ -1,4 +1,4 @@
-"""Unassigned Registration API — public create + staff search (CR-113)."""
+"""Unassigned Registration API — public create + staff search/purge (CR-113)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from ...core.security import verify_external_secret
-from ...core.staff_session import StaffSession, require_registration_staff
+from ...core.staff_session import StaffSession, require_registration_staff, require_system_admin
 from ...utils.request_meta import client_ip
 from .schemas import (
     UnassignedRegistrationCreateRequest,
@@ -84,3 +84,20 @@ async def search_unassigned_registrations(
     """Staff online search of open Unassigned Registrations (FR-UR-02 / #245)."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(q)
+
+
+@staff_router.delete(
+    "/{registration_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_unassigned_registration(
+    registration_id: str,
+    response: Response,
+    _session: StaffSession = Depends(require_system_admin),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> None:
+    """system_admin hard-delete of a central-queue document (FR-UR-04 / #246)."""
+    response.headers["Cache-Control"] = "no-store"
+    await use_case.hard_delete(registration_id)
