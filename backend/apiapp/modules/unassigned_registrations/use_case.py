@@ -1,4 +1,4 @@
-"""Create Unassigned Registration in Mongo only (CR-113 / FR-UR-01)."""
+"""Unassigned Registration create + staff search (CR-113 / FR-UR-01 / FR-UR-02)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from tent_model.unassigned_registration import (
     PersonId,
     UnassignedHousehold,
@@ -20,10 +20,13 @@ from ...utils.ulid import new_ulid
 from .schemas import (
     MemberCreated,
     MemberInput,
+    OpenMemberHit,
     PersonIdInput,
     PersonIdOut,
     UnassignedRegistrationCreateRequest,
     UnassignedRegistrationCreateResponse,
+    UnassignedRegistrationSearchHit,
+    UnassignedRegistrationSearchResponse,
 )
 
 # Same shape as staff Anonymous ID (CR-112): ANON- + Crockford ULID.
@@ -199,6 +202,165 @@ class UnassignedRegistrationsUseCase:
             status=doc.status,
             created_at=doc.created_at.isoformat(),
         )
+
+    async def search(self, raw_query: str) -> UnassignedRegistrationSearchResponse:
+        """Search open members on the Mongo queue (FR-UR-02) — no public_persons."""
+        query = raw_query.strip()
+        if not query:
+            return UnassignedRegistrationSearchResponse(results=[])
+
+        mongo_filter = _open_member_search_filter(query)
+        try:
+            docs = await UnassignedRegistration.find(mongo_filter).sort("-created_at").to_list()
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": {
+                        "code": "ONLINE_REQUIRED",
+                        "message": "Unassigned Registration search requires central Mongo",
+                    }
+                },
+            ) from exc
+
+        results: list[UnassignedRegistrationSearchHit] = []
+        for doc in docs:
+            open_members = [
+                _open_member_hit(m)
+                for m in doc.members
+                if m.status == "open" and _member_matches_query(m, query)
+            ]
+            if not open_members:
+                # Doc matched via denormalized keys but no open member text-match —
+                # still include all open members when identity keys matched.
+                if _identity_keys_match(doc, query):
+                    open_members = [_open_member_hit(m) for m in doc.members if m.status == "open"]
+            if not open_members:
+                continue
+            results.append(
+                UnassignedRegistrationSearchHit(
+                    id=doc.id,
+                    reserved_household_id=doc.reserved_household_id,
+                    registered_via=doc.registered_via,
+                    status=doc.status,
+                    created_at=doc.created_at.isoformat(),
+                    open_members=open_members,
+                )
+            )
+        return UnassignedRegistrationSearchResponse(results=results)
+
+
+def _escape_regex(value: str) -> str:
+    return re.escape(value)
+
+
+def _open_member_search_filter(query: str) -> dict:
+    """Mongo filter: documents with at least one open member matching q."""
+    compact = re.sub(r"[\s\-]+", "", query)
+    phone = normalize_phone(compact) if compact else ""
+    nid = normalize_national_id(compact) if compact.isdigit() and len(compact) == 13 else ""
+    or_clauses: list[dict] = [
+        {
+            "members": {
+                "$elemMatch": {
+                    "status": "open",
+                    "first_name": {"$regex": _escape_regex(query), "$options": "i"},
+                }
+            }
+        },
+        {
+            "members": {
+                "$elemMatch": {
+                    "status": "open",
+                    "last_name": {"$regex": _escape_regex(query), "$options": "i"},
+                }
+            }
+        },
+        {
+            "members": {
+                "$elemMatch": {
+                    "status": "open",
+                    "person_id.number": {
+                        "$regex": _escape_regex(compact or query),
+                        "$options": "i",
+                    },
+                }
+            }
+        },
+    ]
+    if phone:
+        or_clauses.append(
+            {
+                "members": {
+                    "$elemMatch": {
+                        "status": "open",
+                        "phone": phone,
+                    }
+                }
+            }
+        )
+        or_clauses.append({"open_phones": phone})
+    if nid:
+        or_clauses.append({"open_person_id_numbers": nid})
+        or_clauses.append(
+            {
+                "members": {
+                    "$elemMatch": {
+                        "status": "open",
+                        "person_id.number": nid,
+                    }
+                }
+            }
+        )
+    return {"$or": or_clauses}
+
+
+def _member_matches_query(member: UnassignedMember, query: str) -> bool:
+    q = query.strip().lower()
+    if not q:
+        return False
+    if q in member.first_name.lower() or q in (member.last_name or "").lower():
+        return True
+    compact = re.sub(r"[\s\-]+", "", q)
+    digits = re.sub(r"\D", "", compact)
+    if member.phone and digits and digits in re.sub(r"\D", "", member.phone):
+        return True
+    number = (member.person_id.number if member.person_id else None) or ""
+    if number and (compact in number.lower() or (digits and digits in re.sub(r"\D", "", number))):
+        return True
+    return False
+
+
+def _identity_keys_match(doc: UnassignedRegistration, query: str) -> bool:
+    compact = re.sub(r"[\s\-]+", "", query.strip())
+    phone = normalize_phone(compact) if compact else ""
+    nid = normalize_national_id(compact) if compact.isdigit() and len(compact) == 13 else ""
+    if phone and phone in doc.open_phones:
+        return True
+    if nid and nid in doc.open_person_id_numbers:
+        return True
+    return False
+
+
+def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
+    person_id = None
+    if member.person_id is not None:
+        person_id = PersonIdOut(
+            cardType=member.person_id.cardType,
+            number=member.person_id.number,
+        )
+    return OpenMemberHit(
+        reserved_evacuee_id=member.reserved_evacuee_id,
+        status="open",
+        first_name=member.first_name,
+        last_name=member.last_name,
+        gender=member.gender,
+        phone=member.phone,
+        person_id=person_id,
+        country=member.country,
+        vulnerable_groups=list(member.vulnerable_groups),
+        special_needs=list(member.special_needs),
+    )
 
 
 def get_unassigned_registrations_use_case() -> UnassignedRegistrationsUseCase:

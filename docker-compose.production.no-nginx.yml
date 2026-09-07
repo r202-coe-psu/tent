@@ -90,6 +90,7 @@ services:
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
       SECRET_KEY: ${SECRET_KEY}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
     restart: unless-stopped
 
   frontend:

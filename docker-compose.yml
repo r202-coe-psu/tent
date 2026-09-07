@@ -82,11 +82,14 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      couchdb:
+        condition: service_healthy
     environment:
       APP_ENV: dev
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+      COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
     ports:
       - "9000:9000"
     restart: unless-stopped

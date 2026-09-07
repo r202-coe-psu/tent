@@ -1,1 +1,1 @@
-"""Unassigned Registration public create (CR-113)."""
+"""Unassigned Registration — Mongo queue create + staff search (CR-113)."""

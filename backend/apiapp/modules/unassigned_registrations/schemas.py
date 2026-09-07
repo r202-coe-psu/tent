@@ -129,3 +129,31 @@ class UnassignedRegistrationCreateResponse(BaseModel):
     registered_via: Literal["web", "staff"]
     status: str
     created_at: str
+
+
+class OpenMemberHit(BaseModel):
+    """Open member surfaced by staff search — claimable (not claimed/cancelled)."""
+
+    reserved_evacuee_id: str
+    status: Literal["open"] = "open"
+    first_name: str
+    last_name: str
+    gender: str
+    phone: str | None = None
+    person_id: PersonIdOut | None = None
+    country: str
+    vulnerable_groups: list[str] = Field(default_factory=list)
+    special_needs: list[str] = Field(default_factory=list)
+
+
+class UnassignedRegistrationSearchHit(BaseModel):
+    id: str
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    open_members: list[OpenMemberHit]
+
+
+class UnassignedRegistrationSearchResponse(BaseModel):
+    results: list[UnassignedRegistrationSearchHit]

@@ -1,4 +1,4 @@
-"""Public Unassigned Registration API — Mongo-only create (CR-113)."""
+"""Unassigned Registration API — public create + staff search (CR-113)."""
 
 from __future__ import annotations
 
@@ -6,16 +6,26 @@ import threading
 import time
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from ...core.security import verify_external_secret
+from ...core.staff_session import StaffSession, require_registration_staff
 from ...utils.request_meta import client_ip
-from .schemas import UnassignedRegistrationCreateRequest, UnassignedRegistrationCreateResponse
+from .schemas import (
+    UnassignedRegistrationCreateRequest,
+    UnassignedRegistrationCreateResponse,
+    UnassignedRegistrationSearchResponse,
+)
 from .use_case import UnassignedRegistrationsUseCase, get_unassigned_registrations_use_case
 
 router = APIRouter(
     prefix="/public/v1/unassigned-registrations",
     tags=["Unassigned Registrations"],
+)
+
+staff_router = APIRouter(
+    prefix="/staff/v1/unassigned-registrations",
+    tags=["Unassigned Registrations (Staff)"],
 )
 
 _RATE_WINDOW_SECONDS = 60
@@ -57,3 +67,20 @@ async def create_unassigned_registration(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.create(payload)
+
+
+@staff_router.get(
+    "/search",
+    response_model=UnassignedRegistrationSearchResponse,
+)
+async def search_unassigned_registrations(
+    response: Response,
+    q: str = Query(default="", description="Name, phone, or person id of an open member"),
+    _session: StaffSession = Depends(require_registration_staff),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationSearchResponse:
+    """Staff online search of open Unassigned Registrations (FR-UR-02 / #245)."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.search(q)

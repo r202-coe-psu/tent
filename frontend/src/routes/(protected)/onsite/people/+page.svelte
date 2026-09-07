@@ -31,11 +31,12 @@
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
+	import { UnassignedQueueSearchPanel } from '$lib/features/unassigned-registration';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
+	import { canAccessMedicalScreening, canAccessZoning, canCancelHold } from '$lib/auth/roles';
 	import { useMasterData } from '$lib/features/master-data';
 
 	const allEvacueesQuery = useEvacuees();
@@ -50,6 +51,12 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const canMedical = $derived(canAccessMedicalScreening(roles) && enableMedical);
 	const canZoning = $derived(canAccessZoning(roles));
+	const canSearchUnassigned = $derived(
+		canCancelHold(roles, shelterStore.selectedShelterCode ?? getShelterCode())
+	);
+
+	type DeskMode = 'shelter' | 'unassigned';
+	let deskMode = $state<DeskMode>('shelter');
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
@@ -247,125 +254,156 @@
 		</Button>
 	</div>
 
-	<div class="flex flex-wrap gap-2">
-		{#each chips as chip (chip.id)}
-			{#if !(chip.id === 'รอแพทย์' && !enableMedical)}
-				<button
-					type="button"
-					onclick={() => (statusChip = chip.id)}
-					class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {statusChip ===
-					chip.id
-						? 'border-primary bg-primary text-primary-foreground'
-						: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
-				>
-					{chip.label}
-				</button>
-			{/if}
-		{/each}
-	</div>
+	{#if canSearchUnassigned}
+		<div class="flex flex-wrap gap-2">
+			<button
+				type="button"
+				onclick={() => (deskMode = 'shelter')}
+				class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {deskMode ===
+				'shelter'
+					? 'border-primary bg-primary text-primary-foreground'
+					: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
+			>
+				คิวในศูนย์
+			</button>
+			<button
+				type="button"
+				onclick={() => (deskMode = 'unassigned')}
+				class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {deskMode ===
+				'unassigned'
+					? 'border-primary bg-primary text-primary-foreground'
+					: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
+			>
+				คิวไม่ระบุศูนย์
+			</button>
+		</div>
+	{/if}
 
-	<Card.Root class="border-border p-4 shadow-sm">
-		<div class="flex flex-col gap-3 md:flex-row md:items-center">
-			<div class="relative flex-1">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<Input
-					placeholder="ค้นหาชื่อ เบอร์โทร เลขบัตร..."
-					bind:value={searchQuery}
-					class="h-10 pl-9"
-				/>
-				{#if searchQuery}
+	{#if deskMode === 'unassigned' && canSearchUnassigned}
+		<Card.Root class="border-border p-4 shadow-sm">
+			<UnassignedQueueSearchPanel />
+		</Card.Root>
+	{:else}
+		<div class="flex flex-wrap gap-2">
+			{#each chips as chip (chip.id)}
+				{#if !(chip.id === 'รอแพทย์' && !enableMedical)}
 					<button
 						type="button"
-						class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
-						onclick={() => (searchQuery = '')}
+						onclick={() => (statusChip = chip.id)}
+						class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {statusChip ===
+						chip.id
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
 					>
-						<X class="size-3.5" />
+						{chip.label}
 					</button>
 				{/if}
-			</div>
-			<div class="flex gap-2">
-				<div class="relative min-w-[200px]">
-					<Scan
+			{/each}
+		</div>
+
+		<Card.Root class="border-border p-4 shadow-sm">
+			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+				<div class="relative flex-1">
+					<Search
 						class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 					/>
 					<Input
-						placeholder="สแกน Person QR"
-						bind:value={barcodeInput}
-						class="h-10 pl-9 font-mono text-xs"
-						onkeydown={(e) => {
-							if (e.key === 'Enter') {
-								e.preventDefault();
-								handleCodeInput(barcodeInput);
-							}
-						}}
+						placeholder="ค้นหาชื่อ เบอร์โทร เลขบัตร..."
+						bind:value={searchQuery}
+						class="h-10 pl-9"
 					/>
+					{#if searchQuery}
+						<button
+							type="button"
+							class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
+							onclick={() => (searchQuery = '')}
+						>
+							<X class="size-3.5" />
+						</button>
+					{/if}
 				</div>
-				<Button variant="outline" onclick={() => handleCodeInput(barcodeInput)}>ยืนยัน</Button>
-				<Button onclick={() => (showCameraModal = true)} class="gap-1.5">
-					<Camera class="size-4" /> สแกน
-				</Button>
+				<div class="flex gap-2">
+					<div class="relative min-w-[200px]">
+						<Scan
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							placeholder="สแกน Person QR"
+							bind:value={barcodeInput}
+							class="h-10 pl-9 font-mono text-xs"
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									handleCodeInput(barcodeInput);
+								}
+							}}
+						/>
+					</div>
+					<Button variant="outline" onclick={() => handleCodeInput(barcodeInput)}>ยืนยัน</Button>
+					<Button onclick={() => (showCameraModal = true)} class="gap-1.5">
+						<Camera class="size-4" /> สแกน
+					</Button>
+				</div>
 			</div>
-		</div>
-	</Card.Root>
+		</Card.Root>
 
-	<Card.Root class="overflow-hidden border-border shadow-sm">
-		{#if allEvacueesQuery.isPending}
-			<div class="flex h-40 items-center justify-center text-sm text-muted-foreground">
-				กำลังโหลด...
-			</div>
-		{:else if filtered.length === 0}
-			<div
-				class="flex h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
-			>
-				<p>ไม่พบรายการ</p>
-				<Button variant="outline" href={resolve('/onsite/people/new')}>ลงทะเบียนใหม่</Button>
-			</div>
-		{:else}
-			<div class="overflow-x-auto">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row class="bg-muted/30">
-							<Table.Head class="pl-4">ชื่อ</Table.Head>
-							<Table.Head>สถานะ</Table.Head>
-							<Table.Head>ความต้องการพิเศษ</Table.Head>
-							<Table.Head>ครอบครัว</Table.Head>
-							<Table.Head>โซน</Table.Head>
-							<Table.Head>อัปเดต</Table.Head>
-							<Table.Head class="pr-4">คิวถัดไป</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each filtered as row (row._id)}
-							{@const next = nextQueueLabel(row, {
-								enableMedicalScreening: enableMedical,
-								hasScreening: screenedIds.has(row._id)
-							})}
-							{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-							<Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
-								<Table.Cell class="pl-4 font-medium">{formatPersonName(row)}</Table.Cell>
-								<Table.Cell class="text-xs"
-									>{STATUS_LABELS[row.current_stay.status] ?? row.current_stay.status}</Table.Cell
-								>
-								<Table.Cell class="max-w-[10rem] truncate text-xs"
-									>{specialNeedsShort(row.special_needs)}</Table.Cell
-								>
-								<Table.Cell class="text-xs text-muted-foreground">{hh?.label ?? '—'}</Table.Cell>
-								<Table.Cell class="text-xs">{row.current_stay.zone ?? '—'}</Table.Cell>
-								<Table.Cell class="text-xs text-muted-foreground"
-									>{formatUpdated(row.updated_at)}</Table.Cell
-								>
-								<Table.Cell class="pr-4">
-									<Badge variant="secondary">{next}</Badge>
-								</Table.Cell>
+		<Card.Root class="overflow-hidden border-border shadow-sm">
+			{#if allEvacueesQuery.isPending}
+				<div class="flex h-40 items-center justify-center text-sm text-muted-foreground">
+					กำลังโหลด...
+				</div>
+			{:else if filtered.length === 0}
+				<div
+					class="flex h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+				>
+					<p>ไม่พบรายการ</p>
+					<Button variant="outline" href={resolve('/onsite/people/new')}>ลงทะเบียนใหม่</Button>
+				</div>
+			{:else}
+				<div class="overflow-x-auto">
+					<Table.Root>
+						<Table.Header>
+							<Table.Row class="bg-muted/30">
+								<Table.Head class="pl-4">ชื่อ</Table.Head>
+								<Table.Head>สถานะ</Table.Head>
+								<Table.Head>ความต้องการพิเศษ</Table.Head>
+								<Table.Head>ครอบครัว</Table.Head>
+								<Table.Head>โซน</Table.Head>
+								<Table.Head>อัปเดต</Table.Head>
+								<Table.Head class="pr-4">คิวถัดไป</Table.Head>
 							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div>
-		{/if}
-	</Card.Root>
+						</Table.Header>
+						<Table.Body>
+							{#each filtered as row (row._id)}
+								{@const next = nextQueueLabel(row, {
+									enableMedicalScreening: enableMedical,
+									hasScreening: screenedIds.has(row._id)
+								})}
+								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
+								<Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
+									<Table.Cell class="pl-4 font-medium">{formatPersonName(row)}</Table.Cell>
+									<Table.Cell class="text-xs"
+										>{STATUS_LABELS[row.current_stay.status] ?? row.current_stay.status}</Table.Cell
+									>
+									<Table.Cell class="max-w-[10rem] truncate text-xs"
+										>{specialNeedsShort(row.special_needs)}</Table.Cell
+									>
+									<Table.Cell class="text-xs text-muted-foreground">{hh?.label ?? '—'}</Table.Cell>
+									<Table.Cell class="text-xs">{row.current_stay.zone ?? '—'}</Table.Cell>
+									<Table.Cell class="text-xs text-muted-foreground"
+										>{formatUpdated(row.updated_at)}</Table.Cell
+									>
+									<Table.Cell class="pr-4">
+										<Badge variant="secondary">{next}</Badge>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</div>
+			{/if}
+		</Card.Root>
+	{/if}
 </div>
 
 <Sheet.Root bind:open={sheetOpen}>
