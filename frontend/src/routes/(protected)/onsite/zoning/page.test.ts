@@ -36,7 +36,13 @@ describe('Station 3 zoning helpers (route contract)', () => {
 		);
 	});
 
-	it('recommends quarantine for red/yellow triage (isolation default)', () => {
+	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
+		expect(
+			recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, ['fever', 'diarrhea'])
+		).toBe('quarantine');
+	});
+
+	it('recommends quarantine for red/yellow triage (legacy isolation default)', () => {
 		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'red')).toBe(
 			'quarantine'
 		);
@@ -45,13 +51,17 @@ describe('Station 3 zoning helpers (route contract)', () => {
 		);
 	});
 
-	it('recommends vulnerable for Vulnerable Groups when triage is green', () => {
+	it('recommends vulnerable for Vulnerable Groups when triage is green or EWAR empty', () => {
 		expect(
 			recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'green')
 		).toBe('vulnerable');
+		expect(recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, [])).toBe(
+			'vulnerable'
+		);
 	});
 
 	it('defaults to general when no triage and no vulnerable tags', () => {
 		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, [])).toBe('general');
 	});
 });

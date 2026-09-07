@@ -308,7 +308,7 @@ describe('ClinicalScreeningForm component', () => {
 		household_id: null
 	} as Evacuee;
 
-	it('renders clinical form with EWAR, medical, vitals — without zone/check-in actions', () => {
+	it('renders simplified 3-section screening form per CR-106 without triage, vitals, blood group, or referral', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -316,23 +316,40 @@ describe('ClinicalScreeningForm component', () => {
 			}
 		});
 
-		expect(result.body).toContain('กลุ่มเปราะบาง / ความต้องการพิเศษ');
-		expect(result.body).toContain('ใช้วีลแชร์');
-		expect(result.body).toContain('สัญญาณชีพ');
-		expect(result.body).toContain('ความดันโลหิต');
-		expect(result.body).toContain('ชีพจร');
-		expect(result.body).toContain('SpO2');
-		expect(result.body).toContain('อาการเฝ้าระวัง');
-		expect(result.body).toContain('หมู่เลือด');
+		// Section 1: Health History & Care Track
+		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
+		expect(result.body).toContain('แนวทางดูแล (Care Track)');
+		expect(result.body).toContain('ดูแลตามปกติ (Normal)');
+		expect(result.body).toContain('Fast track');
 		expect(result.body).toContain('โรคประจำตัว');
 		expect(result.body).toContain('ยาที่ใช้ประจำ');
 		expect(result.body).toContain('ประวัติการแพ้');
-		expect(result.body).toContain('ระดับความเร่งด่วน (Triage Level)');
-		expect(result.body).toContain('สีเขียว');
-		expect(result.body).toContain('สีเหลือง');
-		expect(result.body).toContain('สีแดง');
-		expect(result.body).toContain('สถานะการส่งต่อ');
+
+		// Section 2: General Symptoms
+		expect(result.body).toContain('2. อาการทั่วไป (General Symptoms)');
+		expect(result.body).toContain('อาการและข้อสังเกต');
+
+		// Section 3: EWAR Surveillance Symptoms
+		expect(result.body).toContain('3. อาการเฝ้าระวังทางระบาดวิทยา');
+		expect(result.body).toContain('อาการเฝ้าระวัง (EWAR Symptoms Checklist)');
+
+		// Save button
 		expect(result.body).toContain('บันทึกผลคัดกรอง');
+
+		// DEPRECATED FIELDS COMPLETELY ABSENT (CR-106)
+		expect(result.body).not.toContain('ระดับความเร่งด่วน (Triage Level)');
+		expect(result.body).not.toContain('สีเขียว (Green)');
+		expect(result.body).not.toContain('สีเหลือง (Yellow)');
+		expect(result.body).not.toContain('สีแดง (Red)');
+		expect(result.body).not.toContain('สัญญาณชีพ (Vital Signs)');
+		expect(result.body).not.toContain('ความดันโลหิต (Blood Pressure)');
+		expect(result.body).not.toContain('ความดันโลหิตบน');
+		expect(result.body).not.toContain('ความดันโลหิตล่าง');
+		expect(result.body).not.toContain('ชีพจร (Heart Rate)');
+		expect(result.body).not.toContain('ระดับออกซิเจน (SpO2)');
+		expect(result.body).not.toContain('อุณหภูมิร่างกาย');
+		expect(result.body).not.toContain('หมู่เลือด');
+		expect(result.body).not.toContain('สถานะการส่งต่อ (Referral)');
 		expect(result.body).not.toContain('จัดโซนและเช็คอินเข้าพักทันที');
 		expect(result.body).not.toContain('บันทึกผลตรวจและส่งต่อไปจุดจัดโซน');
 		expect(result.body).not.toContain('บันทึกและจัดโซนทันที');
@@ -358,7 +375,7 @@ describe('ClinicalScreeningForm component', () => {
 });
 
 describe('medical-screening queue page (+page.svelte)', () => {
-	it('renders รอตรวจ / ตรวจแล้ว tabs, navigates by path, and has no side-panel form', async () => {
+	it('renders รอตรวจ / ตรวจแล้ว tabs, navigates by path, checks enable_medical_screening, and has no side-panel form', async () => {
 		const { readFile } = await import('node:fs/promises');
 		const { fileURLToPath } = await import('node:url');
 		const pagePath = fileURLToPath(new URL('./+page.svelte', import.meta.url));
@@ -367,6 +384,8 @@ describe('medical-screening queue page (+page.svelte)', () => {
 		expect(source).toContain('รอตรวจ');
 		expect(source).toContain('ตรวจแล้ว');
 		expect(source).toContain('buildMedicalScreeningPath');
+		expect(source).toContain('enable_medical_screening');
+		expect(source).toContain('จุดคัดกรองการแพทย์ถูกปิดใช้งาน');
 		expect(source).not.toContain('ClinicalScreeningForm');
 		expect(source).not.toContain("searchParams.get('evacuee_id')");
 		expect(source).not.toContain("searchParams.set('evacuee_id'");
@@ -374,7 +393,7 @@ describe('medical-screening queue page (+page.svelte)', () => {
 });
 
 describe('medical-screening form page ([evacuee_id]/+page.svelte)', () => {
-	it('hosts ClinicalScreeningForm full-screen with sticky footer save and dirty leave confirm', async () => {
+	it('hosts ClinicalScreeningForm full-screen with explicit save handoff buttons and shelter toggle check', async () => {
 		const { readFile } = await import('node:fs/promises');
 		const { fileURLToPath } = await import('node:url');
 		const pagePath = fileURLToPath(new URL('./[evacuee_id]/+page.svelte', import.meta.url));
@@ -383,6 +402,11 @@ describe('medical-screening form page ([evacuee_id]/+page.svelte)', () => {
 		expect(source).toContain('ClinicalScreeningForm');
 		expect(source).toContain('shouldConfirmLeave');
 		expect(source).toContain('/onsite/medical-screening');
+		expect(source).toContain('enable_medical_screening');
+		expect(source).toContain('จุดคัดกรองการแพทย์ถูกปิดใช้งาน');
+		// Save handoff explicit buttons
+		expect(source).toContain('ไปจัดโซนเลย');
+		expect(source).toContain('กลับคิวแพทย์');
 		expect(source).not.toContain('ZoneSelectionFields');
 		expect(source).not.toContain('directCheckIn');
 	});

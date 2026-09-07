@@ -102,15 +102,19 @@ export function classifyZoningQueueTab(
 }
 
 /**
- * Zone type recommendation for Station 3:
- * red/yellow triage → quarantine; else Vulnerable Groups → vulnerable; else general.
- * Special Needs stay free-form and do not drive zoning taxonomy (CR-112).
+ * Zone type recommendation for Station 3 (CR-106):
+ * EWAR surveillance symptoms → quarantine; else Vulnerable Groups / Special Needs → vulnerable; else general.
+ * Supports legacy TriageLevel for backward compatibility.
  */
 export function recommendZoneKind(
 	evacuee: Pick<Evacuee, 'vulnerable_groups' | 'special_needs'>,
-	triageLevel: TriageLevel | null | undefined
+	ewarSymptomsOrTriage?: readonly string[] | TriageLevel | null
 ): ZoningRecommendKind {
-	if (triageLevel === 'red' || triageLevel === 'yellow') {
+	if (Array.isArray(ewarSymptomsOrTriage)) {
+		if (ewarSymptomsOrTriage.length > 0) {
+			return 'quarantine';
+		}
+	} else if (ewarSymptomsOrTriage === 'red' || ewarSymptomsOrTriage === 'yellow') {
 		return 'quarantine';
 	}
 	if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {

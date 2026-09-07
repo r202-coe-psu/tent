@@ -175,22 +175,23 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 	});
 
 	describe('Health Medical Fields (health-medical-fields.svelte)', () => {
-		it('renders blood group, conditions, medications, allergies, notes, and triage level', () => {
+		it('renders conditions, medications, allergies, notes, and care track without triage or blood group (CR-106)', () => {
 			const result = render(HealthMedicalFields, {
 				props: {
-					blood_group: 'B',
 					conditions: 'เบาหวาน',
 					medications: 'Metformin',
 					allergies: 'ไม่มี',
 					medical_notes: 'ติดตามความดัน',
-					triage_level: 'green'
+					care_track: 'normal'
 				}
 			});
-			expect(result.body).toContain('หมู่เลือด');
 			expect(result.body).toContain('โรคประจำตัว');
 			expect(result.body).toContain('ยาที่ใช้ประจำ');
 			expect(result.body).toContain('ประวัติการแพ้');
-			expect(result.body).toContain('Triage');
+			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).not.toContain('หมู่เลือด');
+			expect(result.body).not.toContain('Triage');
+			expect(result.body).not.toContain('สถานะการส่งต่อ');
 		});
 	});
 

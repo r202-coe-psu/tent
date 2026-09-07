@@ -16,16 +16,26 @@
 		evacueeAgeYears,
 		type Screening
 	} from '$lib/features/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import ClinicalScreeningForm from '../clinical-screening-form.svelte';
 	import { shouldConfirmLeave } from '../medical-screening.utils';
 
 	let { data } = $props();
 
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const enableMedical = $derived(
+		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
+	);
+
 	const evacueesQuery = useEvacuees();
 	const screeningsQuery = useScreenings();
 
 	const evacueeId = $derived(data.evacueeId);
-	const isLoading = $derived(evacueesQuery.isPending || screeningsQuery.isPending);
+	const isLoading = $derived(
+		evacueesQuery.isPending || screeningsQuery.isPending || shelterQuery.isPending
+	);
 
 	const evacuee = $derived((evacueesQuery.data ?? []).find((e) => e._id === evacueeId) ?? null);
 
@@ -133,6 +143,33 @@
 				class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 			></div>
 			<p class="text-xs">กำลังโหลดข้อมูลผู้ประสบภัย...</p>
+		</div>
+	{:else if !enableMedical}
+		<div class="flex flex-1 items-center justify-center p-6">
+			<Card.Root class="w-full max-w-md border-border bg-card p-6 text-center shadow-sm">
+				<div
+					class="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600"
+				>
+					<Stethoscope class="size-6" />
+				</div>
+				<h2 class="text-base font-bold text-foreground">จุดคัดกรองการแพทย์ถูกปิดใช้งาน</h2>
+				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
+				</p>
+				<div class="mt-5 flex flex-col gap-2">
+					<Button variant="default" class="w-full" onclick={() => goto(resolve('/onsite'))}>
+						กลับหน้าระบบส่วนหน้า
+					</Button>
+					<Button
+						variant="outline"
+						class="w-full"
+						onclick={() =>
+							goto(resolve(`/onsite/zoning/${evacueeId}` as `/onsite/zoning/${string}`))}
+					>
+						ไปจุดจัดสรรที่พัก (Station 3)
+					</Button>
+				</div>
+			</Card.Root>
 		</div>
 	{:else if !evacuee}
 		<div class="flex flex-1 items-center justify-center p-6">

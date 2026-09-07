@@ -1,25 +1,24 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import Activity from '@lucide/svelte/icons/activity';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import History from '@lucide/svelte/icons/history';
 	import Save from '@lucide/svelte/icons/save';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
+	import FileText from '@lucide/svelte/icons/file-text';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Textarea } from '$lib/components/ui/textarea';
 
 	import {
 		EwarSymptomsFields,
-		HealthMedicalFields,
 		useRecordMedicalScreening,
 		useMedicals,
 		type Evacuee,
-		type BloodGroup,
 		type CareTrack,
-		type TriageLevel,
 		type Screening
 	} from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
@@ -81,53 +80,55 @@
 		return need;
 	}
 
+	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = [
+		{
+			value: 'normal',
+			label: 'ดูแลตามปกติ (Normal)',
+			desc: 'ไม่มีภาวะเร่งด่วน จัดกลุ่มการดูแลตามปกติ'
+		},
+		{
+			value: 'fast_track',
+			label: 'Fast track',
+			desc: 'มีภาวะเร่งด่วนหรือต้องการการติดตามอย่างใกล้ชิด'
+		}
+	];
+
 	const recordMutation = safeQuery(() => useRecordMedicalScreening(), {
 		mutateAsync: async () => ({
 			screening: undefined as never
 		})
 	} as unknown as ReturnType<typeof useRecordMedicalScreening>);
+
 	const medicalsQuery = safeQuery(() => useMedicals(), {
 		data: undefined,
 		isLoading: false,
 		isError: false
 	} as ReturnType<typeof useMedicals>);
 
-	let temperature_c = $state<number | null>(null);
-	let blood_pressure_sys = $state<number | null>(null);
-	let blood_pressure_dia = $state<number | null>(null);
-	let heart_rate = $state<number | null>(null);
-	let spo2_percent = $state<number | null>(null);
-	let symptoms = $state<string[]>([]);
-	let blood_group = $state<BloodGroup>('unknown');
+	// Section 1: Health History & Care Track
 	let conditions = $state<string>('');
 	let medications = $state<string>('');
 	let allergies = $state<string>('');
-	let medical_notes = $state<string>('');
-	let triage_level = $state<TriageLevel>('green');
 	let care_track = $state<CareTrack>('normal');
-	let screening_notes = $state<string>('');
-	let referral = $state<boolean>(false);
+
+	// Section 2: General symptoms (free-text)
+	let general_symptoms = $state<string>('');
+
+	// Section 3: EWAR surveillance symptoms
+	let symptoms = $state<string[]>([]);
+
 	let isSubmitting = $state<boolean>(false);
 	let lastLoadedEvacueeId = $state<string | null>(null);
 	let baselineSnapshot = $state<string>('');
 
 	function currentSnapshot(): string {
 		return JSON.stringify({
-			temperature_c,
-			blood_pressure_sys,
-			blood_pressure_dia,
-			heart_rate,
-			spo2_percent,
-			symptoms,
-			blood_group,
-			conditions,
-			medications,
-			allergies,
-			medical_notes,
-			triage_level,
+			conditions: conditions.trim(),
+			medications: medications.trim(),
+			allergies: allergies.trim(),
 			care_track,
-			screening_notes,
-			referral
+			general_symptoms: general_symptoms.trim(),
+			symptoms: [...symptoms].sort()
 		});
 	}
 
@@ -145,30 +146,17 @@
 
 		const existingMedical = medicals.find((m) => m.evacuee_id === evacuee._id);
 		if (existingMedical) {
-			if (existingMedical.blood_group) blood_group = existingMedical.blood_group;
 			if (existingMedical.conditions?.length) conditions = existingMedical.conditions.join(', ');
 			if (existingMedical.medications?.length) medications = existingMedical.medications.join(', ');
 			if (existingMedical.allergies?.length) allergies = existingMedical.allergies.join(', ');
-			if (existingMedical.notes) medical_notes = existingMedical.notes;
 			if (existingMedical.track) care_track = existingMedical.track;
 		}
 
 		const latest = priorScreening?.latest;
 		if (latest) {
 			if (latest.symptoms?.length) symptoms = [...latest.symptoms];
-			if (latest.temperature_c != null) temperature_c = latest.temperature_c;
-			if (latest.triage_level) triage_level = latest.triage_level;
 			if (latest.track) care_track = latest.track;
-			if (latest.needs_referral != null) referral = latest.needs_referral;
-			if (latest.notes) screening_notes = latest.notes;
-			if (latest.vital_signs) {
-				if (latest.vital_signs.blood_pressure_sys != null)
-					blood_pressure_sys = latest.vital_signs.blood_pressure_sys;
-				if (latest.vital_signs.blood_pressure_dia != null)
-					blood_pressure_dia = latest.vital_signs.blood_pressure_dia;
-				if (latest.vital_signs.heart_rate != null) heart_rate = latest.vital_signs.heart_rate;
-				if (latest.vital_signs.spo2_percent != null) spo2_percent = latest.vital_signs.spo2_percent;
-			}
+			if (latest.notes) general_symptoms = latest.notes;
 		}
 
 		baselineSnapshot = currentSnapshot();
@@ -214,37 +202,24 @@
 				.filter(Boolean);
 
 			const hasMedicalData =
-				blood_group !== 'unknown' ||
-				conditionsArr.length > 0 ||
-				medicationsArr.length > 0 ||
-				allergiesArr.length > 0 ||
-				medical_notes.trim().length > 0;
+				conditionsArr.length > 0 || medicationsArr.length > 0 || allergiesArr.length > 0;
 
 			await recordMutation.mutateAsync({
 				input: {
 					screening: {
 						evacuee_id: evacuee._id,
 						track: care_track,
-						triage_level,
-						needs_referral: referral,
 						symptoms,
-						temperature_c,
-						notes: [screening_notes, medical_notes].filter(Boolean).join('\n') || undefined,
-						blood_pressure_sys: blood_pressure_sys !== null ? Number(blood_pressure_sys) : null,
-						blood_pressure_dia: blood_pressure_dia !== null ? Number(blood_pressure_dia) : null,
-						heart_rate: heart_rate !== null ? Number(heart_rate) : null,
-						spo2_percent: spo2_percent !== null ? Number(spo2_percent) : null
+						notes: general_symptoms.trim() || undefined
 					},
 					...(hasMedicalData
 						? {
 								medical: {
 									evacuee_id: evacuee._id,
-									blood_group,
 									conditions: conditionsArr,
 									medications: medicationsArr,
 									allergies: allergiesArr,
-									track: care_track,
-									notes: medical_notes.trim() || undefined
+									track: care_track
 								}
 							}
 						: {})
@@ -312,120 +287,136 @@
 			</div>
 		{/if}
 
+		<!-- Section 1: Health history & care track -->
 		<div class="space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<Activity class="size-4 text-emerald-600 dark:text-emerald-400" />
-				<h3 class="text-sm font-bold text-foreground">
-					สัญญาณชีพ (Vital Signs) &amp; อุณหภูมิร่างกาย
-				</h3>
+				<HeartPulse class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<div>
+					<h3 class="text-sm font-bold text-foreground">
+						1. ประวัติสุขภาพและแนวทางดูแล (Health History &amp; Care Track)
+					</h3>
+					<p class="text-2xs text-muted-foreground">
+						ซักประวัติโรคประจำตัว ยาที่ใช้ประจำ ประวัติการแพ้ และจัดกลุ่มแนวทางดูแล
+					</p>
+				</div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+			<div class="space-y-3">
 				<div class="space-y-1.5">
-					<Label for="vital-bp-sys" class="text-xs font-semibold text-foreground">
-						ความดันโลหิตบน (Sys)
-					</Label>
-					<div class="relative flex items-center">
-						<Input
-							id="vital-bp-sys"
-							type="number"
-							placeholder="120"
-							bind:value={blood_pressure_sys}
-							min="50"
-							max="300"
-							class="pr-12 text-xs"
-							disabled={isSubmitting}
-						/>
-						<span class="pointer-events-none absolute right-2.5 text-2xs text-muted-foreground">
-							mmHg
-						</span>
+					<Label class="text-xs font-semibold text-foreground">แนวทางดูแล (Care Track)</Label>
+					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+						{#each careTrackOptions as opt (opt.value)}
+							{@const selected = care_track === opt.value}
+							<button
+								type="button"
+								disabled={isSubmitting}
+								onclick={() => (care_track = opt.value)}
+								class="flex flex-col items-start rounded-lg border p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {selected
+									? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100'
+									: 'border-border bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
+							>
+								<div class="flex items-center gap-2">
+									<span
+										class="size-2 rounded-full {selected
+											? 'bg-emerald-500'
+											: 'bg-muted-foreground/40'}"
+									></span>
+									<span class="text-xs font-bold text-foreground">{opt.label}</span>
+								</div>
+								<span class="mt-1 text-2xs text-muted-foreground">{opt.desc}</span>
+							</button>
+						{/each}
 					</div>
 				</div>
-				<div class="space-y-1.5">
-					<Label for="vital-bp-dia" class="text-xs font-semibold text-foreground">
-						ความดันโลหิตล่าง (Dia)
-					</Label>
-					<div class="relative flex items-center">
-						<Input
-							id="vital-bp-dia"
-							type="number"
-							placeholder="80"
-							bind:value={blood_pressure_dia}
-							min="30"
-							max="200"
-							class="pr-12 text-xs"
+
+				<div class="grid grid-cols-1 gap-3 pt-2 md:grid-cols-3">
+					<div class="space-y-1.5">
+						<Label for="med-conditions" class="text-xs font-medium text-foreground">
+							โรคประจำตัว
+						</Label>
+						<Textarea
+							id="med-conditions"
+							bind:value={conditions}
 							disabled={isSubmitting}
+							rows={3}
+							placeholder="เช่น เบาหวาน, โรคหัวใจ, หอบหืด"
+							class="text-xs"
 						/>
-						<span class="pointer-events-none absolute right-2.5 text-2xs text-muted-foreground">
-							mmHg
-						</span>
 					</div>
-				</div>
-				<div class="space-y-1.5">
-					<Label for="vital-hr" class="text-xs font-semibold text-foreground">
-						ชีพจร (Heart Rate)
-					</Label>
-					<div class="relative flex items-center">
-						<Input
-							id="vital-hr"
-							type="number"
-							placeholder="72"
-							bind:value={heart_rate}
-							min="30"
-							max="250"
-							class="pr-10 text-xs"
+
+					<div class="space-y-1.5">
+						<Label for="med-medications" class="text-xs font-medium text-foreground">
+							ยาที่ใช้ประจำ
+						</Label>
+						<Textarea
+							id="med-medications"
+							bind:value={medications}
 							disabled={isSubmitting}
+							rows={3}
+							placeholder="เช่น ยาลดความดัน, อินซูลิน"
+							class="text-xs"
 						/>
-						<span class="pointer-events-none absolute right-2.5 text-2xs text-muted-foreground">
-							bpm
-						</span>
 					</div>
-				</div>
-				<div class="space-y-1.5">
-					<Label for="vital-spo2" class="text-xs font-semibold text-foreground">
-						ระดับออกซิเจน (SpO2)
-					</Label>
-					<div class="relative flex items-center">
-						<Input
-							id="vital-spo2"
-							type="number"
-							placeholder="98"
-							bind:value={spo2_percent}
-							min="50"
-							max="100"
-							class="pr-8 text-xs"
+
+					<div class="space-y-1.5">
+						<Label for="med-allergies" class="text-xs font-medium text-foreground">
+							ประวัติการแพ้
+						</Label>
+						<Textarea
+							id="med-allergies"
+							bind:value={allergies}
 							disabled={isSubmitting}
+							rows={3}
+							placeholder="เช่น เพนิซิลลิน, อาหารทะเล"
+							class="text-xs"
 						/>
-						<span class="pointer-events-none absolute right-2.5 text-2xs text-muted-foreground">
-							%
-						</span>
 					</div>
 				</div>
 			</div>
 		</div>
 
+		<!-- Section 2: General symptoms (free-text textarea) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-			<EwarSymptomsFields
-				bind:symptoms
-				bind:temperature_c
-				disabled={isSubmitting}
-				showTemperature={true}
-			/>
+			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
+				<FileText class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<div>
+					<h3 class="text-sm font-bold text-foreground">2. อาการทั่วไป (General Symptoms)</h3>
+					<p class="text-2xs text-muted-foreground">
+						บันทึกอาการที่พบเบื้องต้นหรือข้อสังเกตของผู้ประสบภัยแบบข้อความอิสระ
+					</p>
+				</div>
+			</div>
+
+			<div class="space-y-1.5">
+				<Label for="general-symptoms" class="text-xs font-medium text-foreground">
+					อาการและข้อสังเกต
+				</Label>
+				<Textarea
+					id="general-symptoms"
+					bind:value={general_symptoms}
+					disabled={isSubmitting}
+					rows={3}
+					placeholder="กรอกอาการทั่วไป เช่น ปวดศีรษะ เวียนศีรษะ ปวดเมื่อยตัว อ่อนเพลีย บาดแผล ฯลฯ (เว้นว่างได้ถ้าไม่มีอาการ)"
+					class="text-xs"
+				/>
+			</div>
 		</div>
 
+		<!-- Section 3: EWAR surveillance symptoms (checkboxes) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-			<HealthMedicalFields
-				bind:blood_group
-				bind:conditions
-				bind:medications
-				bind:allergies
-				bind:medical_notes
-				bind:triage_level
-				bind:care_track
-				bind:screening_notes
-				bind:referral
-				disabled={isSubmitting}
-			/>
+			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
+				<AlertCircle class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<div>
+					<h3 class="text-sm font-bold text-foreground">
+						3. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)
+					</h3>
+					<p class="text-2xs text-muted-foreground">
+						กลุ่มอาการเฝ้าระวังโรคระบาด — หากไม่มีอาการไม่ต้องติ๊กเลือก (ไม่บังคับเลือกอาการ)
+					</p>
+				</div>
+			</div>
+
+			<EwarSymptomsFields bind:symptoms disabled={isSubmitting} showTemperature={false} />
 		</div>
 	</div>
 

@@ -30,7 +30,7 @@
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
 		type Evacuee,
-		type TriageLevel
+		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { useMasterData } from '$lib/features/master-data';
@@ -58,24 +58,13 @@
 	const evacuee = $derived(evacueeQuery.data ?? null);
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
-	const latestTriage = $derived.by((): TriageLevel | null => {
+	const latestScreening = $derived.by((): Screening | null => {
 		if (!evacuee) return null;
 		const list = (screeningsQuery.data ?? [])
 			.filter((s) => s.evacuee_id === evacuee._id)
 			.sort((a, b) => (b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at));
-		return list[0]?.triage_level ?? null;
+		return list[0] ?? null;
 	});
-
-	const TRIAGE_LABELS: Record<TriageLevel, string> = {
-		green: 'เขียว',
-		yellow: 'เหลือง',
-		red: 'แดง'
-	};
-	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
-		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
-		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
-		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
-	};
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
 		bedridden: 'ผู้ป่วยติดเตียง',
@@ -142,7 +131,10 @@
 	);
 
 	const recommendKind = $derived(
-		recommendZoneKind(evacuee ?? { vulnerable_groups: [], special_needs: [] }, latestTriage)
+		recommendZoneKind(
+			evacuee ?? { vulnerable_groups: [], special_needs: [] },
+			latestScreening?.symptoms
+		)
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
 
@@ -275,16 +267,26 @@
 					{householdLabel}
 				</p>
 				<div class="flex flex-wrap items-center gap-2">
-					{#if latestTriage}
-						<span class="text-xs text-muted-foreground">Triage</span>
-						<Badge variant="outline" class={TRIAGE_BADGE_CLASS[latestTriage]}>
-							{TRIAGE_LABELS[latestTriage]}
+					{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
+						<Badge
+							variant="outline"
+							class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+						>
+							เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
 						</Badge>
-						{#if isolationDefault}
-							<span class="text-xs text-amber-700 dark:text-amber-300"
-								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
-							>
-						{/if}
+					{/if}
+					{#if latestScreening?.track === 'fast_track'}
+						<Badge
+							variant="outline"
+							class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
+						>
+							Fast Track
+						</Badge>
+					{/if}
+					{#if isolationDefault}
+						<span class="text-xs text-amber-700 dark:text-amber-300"
+							>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
+						>
 					{/if}
 				</div>
 				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
@@ -304,7 +306,7 @@
 			<ZoneSelectionFields
 				bind:selected_zone={() => selectedZone, setSelectedZone}
 				{evacuee}
-				triage_level={latestTriage}
+				ewar_symptoms={latestScreening?.symptoms}
 				occupant_counts={occupantCounts}
 				shelter_zones={shelterQuery.data?.zones}
 			/>

@@ -35,8 +35,7 @@
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
 		listPendingZoneArrivalConfirmations,
-		type ZoningQueueTab,
-		type TriageLevel
+		type ZoningQueueTab
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { useMasterData } from '$lib/features/master-data';
@@ -59,29 +58,18 @@
 	const householdMap = $derived(new SvelteMap((householdsQuery.data ?? []).map((h) => [h._id, h])));
 	const screenings = $derived(screeningsQuery.data ?? []);
 	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
-	const triageByEvacuee = $derived.by(() => {
-		const map = new SvelteMap<string, TriageLevel>();
+	const ewarSymptomsByEvacuee = $derived.by(() => {
+		const map = new SvelteMap<string, string[]>();
 		const sorted = [...screenings].sort((a, b) =>
 			(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
 		);
 		for (const s of sorted) {
-			if (s.triage_level && !map.has(s.evacuee_id)) {
-				map.set(s.evacuee_id, s.triage_level);
+			if (s.symptoms && !map.has(s.evacuee_id)) {
+				map.set(s.evacuee_id, s.symptoms);
 			}
 		}
 		return map;
 	});
-
-	const TRIAGE_LABELS: Record<TriageLevel, string> = {
-		green: 'เขียว',
-		yellow: 'เหลือง',
-		red: 'แดง'
-	};
-	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
-		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
-		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
-		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
-	};
 
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
@@ -457,7 +445,7 @@
 									<Table.Row class="bg-muted/30 hover:bg-muted/30">
 										<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
 										<Table.Head>บัตร</Table.Head>
-										<Table.Head>Triage</Table.Head>
+										<Table.Head>เฝ้าระวัง (EWAR)</Table.Head>
 										<Table.Head>ความต้องการพิเศษ</Table.Head>
 										<Table.Head>ครอบครัว</Table.Head>
 										<Table.Head>{activeTab === 'pending' ? 'อัปเดต' : 'โซน'}</Table.Head>
@@ -467,7 +455,7 @@
 								<Table.Body>
 									{#each filteredQueue as row (row._id)}
 										{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-										{@const triage = triageByEvacuee.get(row._id)}
+										{@const ewarSymptoms = ewarSymptomsByEvacuee.get(row._id)}
 										<Table.Row class="cursor-pointer" onclick={() => openDetail(row._id)}>
 											<Table.Cell class="pl-5 font-medium">
 												{formatPersonName(row)}
@@ -476,9 +464,12 @@
 												{maskNationalId(row.person_id?.number)}
 											</Table.Cell>
 											<Table.Cell>
-												{#if triage}
-													<Badge variant="outline" class={TRIAGE_BADGE_CLASS[triage]}>
-														{TRIAGE_LABELS[triage]}
+												{#if ewarSymptoms && ewarSymptoms.length > 0}
+													<Badge
+														variant="outline"
+														class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+													>
+														เฝ้าระวัง ({ewarSymptoms.length})
 													</Badge>
 												{:else}
 													<span class="text-xs text-muted-foreground">—</span>

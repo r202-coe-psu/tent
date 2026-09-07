@@ -186,25 +186,38 @@ describe('classifyScreeningQueueTab', () => {
 });
 
 describe('recommendZoneKind', () => {
-	it('prefers quarantine for red/yellow triage', () => {
+	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
+		expect(
+			recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, [
+				'fever',
+				'cough'
+			])
+		).toBe('quarantine');
+		expect(
+			recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, ['watery_diarrhea'])
+		).toBe('quarantine');
+	});
+
+	it('uses vulnerable when EWAR symptoms are empty and evacuee has vulnerable groups', () => {
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, [])).toBe(
+			'vulnerable'
+		);
+	});
+
+	it('defaults to general when EWAR symptoms are empty and no special needs', () => {
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, [])).toBe('general');
+	});
+
+	it('preserves legacy triage support (red/yellow -> quarantine, green -> non-quarantine)', () => {
 		expect(recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'red')).toBe(
 			'quarantine'
 		);
 		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
 			'quarantine'
 		);
-	});
-
-	it('uses vulnerable for Vulnerable Groups when triage green/null', () => {
 		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, 'green')).toBe(
 			'vulnerable'
 		);
-		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, null)).toBe(
-			'vulnerable'
-		);
-	});
-
-	it('defaults to general', () => {
 		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
 	});
 });

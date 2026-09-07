@@ -15,7 +15,7 @@ _Avoid_: Guest ID, temporary ID, other (generic cardType), null identity with no
 **Household**:
 A grouping of one or more Evacuees who arrive and are managed together, with a designated head. It is not the primary carrier of stay/occupancy state — stay truth lives on each Evacuee (and movements). Existing `household.status` may be retained only as a coarse derived/compatibility field, not as a parallel lifecycle to track.
 _Avoid_: Family, group, tent party, household as the source of stay truth.
-_UI (th)_: ครอบครัว — display label only; canonical term remains Household.
+_UI (th)_: ครอบครัว — display label only; canonical term remains Household. In Unified Registration UI, the first member is presented as 'ผู้ติดต่อหลัก' (Primary Contact) while mapping to `head_evacuee_id` under the hood.
 
 **Residence**:
 The shared dwelling address of a Household (where the unit lives while displaced or at home of record for the unit). May omit house number; may record only an approximate origin (landmark, road, subdistrict) when the unit is homeless or has no formal address.
