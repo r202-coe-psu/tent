@@ -24,7 +24,11 @@ export class DistributionStore {
 	activeTab = $state<'stock' | 'requisitions'>('stock');
 
 	// Remote-First connectivity state per CR-110 (FR-ID-03)
-	isOnline = $state<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+	isOnline = $state<boolean>(
+		typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+			? navigator.onLine
+			: true
+	);
 	isRetrying = $state<boolean>(false);
 
 	// Search & Filters
@@ -321,7 +325,7 @@ export class DistributionStore {
 	async retryConnection(): Promise<void> {
 		this.isRetrying = true;
 		await new Promise((r) => setTimeout(r, 600));
-		if (typeof navigator !== 'undefined') {
+		if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
 			this.isOnline = navigator.onLine;
 		}
 		this.isRetrying = false;
