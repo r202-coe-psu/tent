@@ -36,7 +36,11 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { canAccessMedicalScreening, canAccessZoning, canCancelHold } from '$lib/auth/roles';
+	import {
+		canAccessMedicalScreening,
+		canAccessZoning,
+		canSearchUnassignedRegistrations
+	} from '$lib/auth/roles';
 	import { useMasterData } from '$lib/features/master-data';
 
 	const allEvacueesQuery = useEvacuees();
@@ -52,7 +56,7 @@
 	const canMedical = $derived(canAccessMedicalScreening(roles) && enableMedical);
 	const canZoning = $derived(canAccessZoning(roles));
 	const canSearchUnassigned = $derived(
-		canCancelHold(roles, shelterStore.selectedShelterCode ?? getShelterCode())
+		canSearchUnassignedRegistrations(roles, shelterStore.selectedShelterCode ?? getShelterCode())
 	);
 
 	type DeskMode = 'shelter' | 'unassigned';

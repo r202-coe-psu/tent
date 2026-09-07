@@ -13,7 +13,12 @@ export type {
 
 export { formatOpenMemberName, isOnlineRequiredError } from './domain/search';
 
-export { searchUnassignedRegistrations, UnassignedRegistrationApiError } from './data/staff-api';
+export type { UnassignedRegistrationRepository } from './data/unassigned-registration.repository';
+export {
+	searchUnassignedRegistrations,
+	UnassignedRegistrationApiError,
+	unassignedRegistrationRemote
+} from './data/unassigned-registration.remote';
 
 export { unassignedRegistrationKeys, useUnassignedRegistrationSearch } from './application/queries';
 

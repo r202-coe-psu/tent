@@ -1,5 +1,14 @@
 import { createQuery } from '@tanstack/svelte-query';
-import { searchUnassignedRegistrations } from '../data/staff-api';
+import { unassignedRegistrationRemote } from '../data/unassigned-registration.remote';
+import {
+	formatOpenMemberName,
+	isOnlineRequiredError,
+	type UnassignedRegistrationSearchHit
+} from '../domain/search';
+
+export { formatOpenMemberName, isOnlineRequiredError };
+export type { UnassignedRegistrationSearchHit };
+export { UnassignedRegistrationApiError } from '../data/unassigned-registration.remote';
 
 export const unassignedRegistrationKeys = {
 	all: ['unassigned-registration'] as const,
@@ -12,7 +21,7 @@ export function useUnassignedRegistrationSearch(getQuery: () => string) {
 		const q = getQuery().trim();
 		return {
 			queryKey: unassignedRegistrationKeys.search(q),
-			queryFn: () => searchUnassignedRegistrations(q),
+			queryFn: () => unassignedRegistrationRemote.searchOpen(q),
 			enabled: q.length > 0,
 			retry: false
 		};

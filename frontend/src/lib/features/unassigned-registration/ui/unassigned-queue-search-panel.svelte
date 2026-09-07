@@ -14,7 +14,7 @@
 		useUnassignedRegistrationSearch,
 		UnassignedRegistrationApiError,
 		type UnassignedRegistrationSearchHit
-	} from '$lib/features/unassigned-registration';
+	} from '../application/queries';
 
 	let searchQuery = $state('');
 	let submittedQuery = $state('');

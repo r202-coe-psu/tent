@@ -252,6 +252,17 @@ export function canCancelHold(roles: readonly string[], shelterCode?: string | n
 }
 
 /**
+ * Station 1 Unassigned Registration queue search (CR-113) — same registration desk gate
+ * as hold cancel (SA / shelter_manager / registration_staff).
+ */
+export function canSearchUnassignedRegistrations(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return canCancelHold(roles, shelterCode);
+}
+
+/**
  * True when the actor may access the Station 2 medical screening route / queue:
  * system_admin, shelter_manager, medical_staff, or triage_staff.
  */

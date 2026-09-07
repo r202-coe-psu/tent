@@ -5,12 +5,12 @@
 
 export type OpenMemberStatus = 'open';
 
-export type PersonIdHit = {
+export interface PersonIdHit {
 	cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 	number: string | null;
-};
+}
 
-export type OpenMemberHit = {
+export interface OpenMemberHit {
 	reserved_evacuee_id: string;
 	status: OpenMemberStatus;
 	first_name: string;
@@ -21,20 +21,20 @@ export type OpenMemberHit = {
 	country: string;
 	vulnerable_groups: string[];
 	special_needs: string[];
-};
+}
 
-export type UnassignedRegistrationSearchHit = {
+export interface UnassignedRegistrationSearchHit {
 	id: string;
 	reserved_household_id: string;
 	registered_via: 'web' | 'staff';
 	status: string;
 	created_at: string;
 	open_members: OpenMemberHit[];
-};
+}
 
-export type UnassignedRegistrationSearchResponse = {
+export interface UnassignedRegistrationSearchResponse {
 	results: UnassignedRegistrationSearchHit[];
-};
+}
 
 export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();
