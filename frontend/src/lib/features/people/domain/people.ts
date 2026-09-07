@@ -1594,6 +1594,9 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 			}
 		};
 	}
+	if (movement.action === 'return_from_leave') {
+		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
+	}
 	const statusByAction: Record<
 		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave'>,
 		StayStatus
