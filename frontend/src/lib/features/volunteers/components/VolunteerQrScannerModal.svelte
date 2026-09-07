@@ -2,18 +2,22 @@
 	import { Html5Qrcode } from 'html5-qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Camera from '@lucide/svelte/icons/camera';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import CameraOff from '@lucide/svelte/icons/camera-off';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 
 	let {
 		isOpen = $bindable(false),
 		onScan,
-		title
+		title,
+		inline = false,
+		disabled = false
 	} = $props<{
-		isOpen: boolean;
+		isOpen?: boolean;
 		onScan: (token: string) => void;
 		title?: string;
+		inline?: boolean;
+		disabled?: boolean;
 	}>();
 
 	const t = $derived(jobsI18n[languageStore.current]);
@@ -21,6 +25,8 @@
 
 	let cameraError = $state<string>('');
 	const scannerElementId = 'volunteer-qr-camera-reader';
+	let lastScannedCode = '';
+	let lastScanTime = 0;
 
 	function tokenFromScan(decoded: string): string {
 		const trimmed = decoded.trim();
@@ -32,6 +38,7 @@
 	function cameraAttachment(node: HTMLDivElement) {
 		const reader = new Html5Qrcode(node.id);
 		let handled = false;
+		let isMounted = true;
 
 		reader
 			.start(
@@ -44,26 +51,39 @@
 					}
 				},
 				(decodedText) => {
-					if (handled) return;
+					if (disabled || (!inline && handled)) return;
 					const token = tokenFromScan(decodedText);
 					if (!token) return;
+					const now = Date.now();
+					const isDuplicate = token === lastScannedCode;
+					const cooldown = isDuplicate ? 3000 : 1500;
+					if (now - lastScanTime <= cooldown) return;
+					lastScanTime = now;
+					lastScannedCode = token;
 					handled = true;
 					if (typeof navigator !== 'undefined' && navigator.vibrate) {
 						navigator.vibrate(100);
 					}
-					isOpen = false;
+					if (!inline) isOpen = false;
 					onScan(token);
 				},
 				() => {
 					// Frame without QR
 				}
 			)
+			.then(() => {
+				if (!isMounted && reader.isScanning) {
+					reader.stop().catch(() => {});
+				}
+			})
 			.catch((err: unknown) => {
+				if (!isMounted) return;
 				console.warn('Camera start error:', err);
 				cameraError = t.cameraPermissionError;
 			});
 
 		return () => {
+			isMounted = false;
 			if (reader.isScanning) {
 				reader.stop().catch(() => {
 					// Stop scanning on unmount
@@ -78,7 +98,48 @@
 	}
 </script>
 
-{#if isOpen}
+{#snippet cameraViewport()}
+	<div
+		class="relative mx-auto my-5 flex aspect-square w-full max-w-[280px] items-center justify-center overflow-hidden rounded-2xl bg-slate-950"
+		style="isolation: isolate; transform: translateZ(0);"
+	>
+		<div
+			id={scannerElementId}
+			{@attach cameraAttachment}
+			class="h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:rounded-2xl! [&_video]:bg-transparent! [&_video]:object-cover!"
+			style="isolation: isolate; transform: translateZ(0);"
+		></div>
+
+		{#if !cameraError}
+			<div class="pointer-events-none absolute inset-4">
+				<div
+					class="absolute top-0 left-0 h-6 w-6 rounded-tl-md border-t-4 border-l-4 border-white/80"
+				></div>
+				<div
+					class="absolute top-0 right-0 h-6 w-6 rounded-tr-md border-t-4 border-r-4 border-white/80"
+				></div>
+				<div
+					class="absolute bottom-0 left-0 h-6 w-6 rounded-bl-md border-b-4 border-l-4 border-white/80"
+				></div>
+				<div
+					class="absolute right-0 bottom-0 h-6 w-6 rounded-br-md border-r-4 border-b-4 border-white/80"
+				></div>
+			</div>
+		{:else}
+			<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+				<CameraOff class="size-10 text-red-400" />
+				<p class="text-xs font-semibold text-red-400">{cameraError}</p>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+{#if inline}
+	{@render cameraViewport()}
+	{#if !cameraError}
+		<p class="mb-3 text-center text-2xs text-muted-foreground">{t.cameraScanHint}</p>
+	{/if}
+{:else if isOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
 		<div
 			class="relative w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
@@ -97,20 +158,9 @@
 				</button>
 			</div>
 
-			<div
-				class="my-5 overflow-hidden rounded-2xl border-2 border-dashed border-primary/50 bg-black/10"
-			>
-				<div id={scannerElementId} {@attach cameraAttachment} class="w-full"></div>
-			</div>
+			{@render cameraViewport()}
 
-			{#if cameraError}
-				<div
-					class="mb-3 flex items-center gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive"
-				>
-					<CircleAlert class="size-4 shrink-0" />
-					<span>{cameraError}</span>
-				</div>
-			{:else}
+			{#if !cameraError}
 				<p class="mb-3 text-center text-2xs text-muted-foreground">
 					{t.cameraScanHint}
 				</p>

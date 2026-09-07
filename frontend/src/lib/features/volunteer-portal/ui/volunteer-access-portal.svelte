@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
+	import Download from '@lucide/svelte/icons/download';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
@@ -82,7 +82,7 @@
 
 	interface PortalVolunteer {
 		id: string;
-		token: string;
+		volunteerCode: string;
 		name: string;
 		avatar: string;
 		phone: string;
@@ -153,6 +153,7 @@
 				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
 				return;
 			}
+			toast.success('เข้าสู่ระบบสำเร็จ');
 			enterDashboard({ ...credential, portal_id: profile.portal_id });
 		} catch (error) {
 			loginError = error instanceof Error ? error.message : 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้';
@@ -284,7 +285,6 @@
 
 	function toPortalVolunteer(
 		profile: VolunteerProfile,
-		credential: PortalCredential,
 		shifts: ScheduleShift[],
 		tickets: TicketSummary[]
 	): PortalVolunteer {
@@ -295,7 +295,7 @@
 		const shownPhone = profile.phone_masked;
 		return {
 			id: profile.portal_id,
-			token: credential.token ?? '',
+			volunteerCode: profile.volunteer_code,
 			name: named || profile.nickname || 'จิตอาสา',
 			avatar: (named || profile.nickname || 'อา').slice(0, 2),
 			phone: shownPhone,
@@ -332,12 +332,7 @@
 			return null;
 		const profile = profileQuery.data;
 		if (!profile || !profile.portal_id || profile.portal_id !== credential.portal_id) return null;
-		return toPortalVolunteer(
-			profile,
-			credential,
-			scheduleQuery.data ?? [],
-			ticketsQuery.data?.tickets ?? []
-		);
+		return toPortalVolunteer(profile, scheduleQuery.data ?? [], ticketsQuery.data?.tickets ?? []);
 	});
 
 	/** The open session, or null when signed out. The markup below reads only this. */
@@ -376,13 +371,11 @@
 		if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
 		isPassModalOpen = false;
 	}
-	let isCameraModalOpen = $state(false);
-
 	/**
 	 * Read a volunteer QR and sign in with what it contains.
 	 *
-	 * The scanning itself lives in `VolunteerQrScannerModal`, which the ticket screens
-	 * share; this only decides what a decoded payload means. The pass encodes its own
+	 * The scanning itself lives in the shared volunteer QR scanner; this only decides
+	 * what a decoded payload means. The pass encodes its own
 	 * URL, so what comes back is either a bare token or a link ending in one — both
 	 * reduce to the same token, and anything else is left for `submitToken` to reject
 	 * rather than guessed at here.
@@ -401,29 +394,30 @@
 		submitToken(token);
 	}
 	let qrDataUrl = $state<string>('');
+	let qrGeneration = 0;
 
-	// Generate QR Code data URL when volunteer is active
+	// The role card must carry a resolvable token, never the internal volunteer id. A
+	// token-login session already has the applicant's tracking token. Phone login receives
+	// a short-lived read-only VIEW token for the first booking, which still gives the
+	// onsite scanner a token-shaped payload without exposing a cancellable ticket token.
 	$effect(() => {
-		if (currentVolunteer) {
-			if (!currentVolunteer.token) {
-				qrDataUrl = '';
-				return;
-			}
-			const payload = `SMARTSHELTER:VOLUNTEER:${currentVolunteer.token}`;
-			generateQrDataUrl(payload, {
-				width: 320,
-				margin: 1,
-				color: { dark: '#0A2647', light: '#ffffff' }
-			})
-				.then((url) => {
-					qrDataUrl = url;
-				})
-				.catch(() => {
-					qrDataUrl = '';
-				});
-		} else {
+		const payload = session?.token ?? currentVolunteer?.bookings[0]?.id;
+		const generation = ++qrGeneration;
+		if (!payload) {
 			qrDataUrl = '';
+			return;
 		}
+		generateQrDataUrl(payload, {
+			width: 320,
+			margin: 1,
+			color: { dark: '#0A2647', light: '#ffffff' }
+		})
+			.then((url) => {
+				if (generation === qrGeneration) qrDataUrl = url;
+			})
+			.catch(() => {
+				if (generation === qrGeneration) qrDataUrl = '';
+			});
 	});
 
 	async function handlePhoneLogin(e: SubmitEvent) {
@@ -517,6 +511,18 @@
 		queryClient.removeQueries({ queryKey: volunteerPortalKeys.all });
 		toast.info('ออกจากระบบแล้ว');
 		void goto('/volunteers/portal');
+	}
+
+	function downloadRoleCardQr() {
+		if (!qrDataUrl || !currentVolunteer) {
+			toast.info('QR Code ยังไม่พร้อมดาวน์โหลด');
+			return;
+		}
+		const link = document.createElement('a');
+		link.href = qrDataUrl;
+		link.download = `volunteer-role-card-${currentVolunteer.volunteerCode}.png`;
+		link.click();
+		toast.success('ดาวน์โหลด QR Role Card เรียบร้อยแล้ว');
 	}
 
 	$effect(() => {
@@ -666,20 +672,7 @@
 						<!-- QR SCANNER SECTION -->
 						<div class="space-y-4 text-center">
 							<p class="text-xs font-bold text-foreground">สแกน QR Code ตั๋วประจำตัวอาสาสมัคร</p>
-							<div
-								class="mx-auto flex size-20 items-center justify-center rounded-2xl border border-sky-200/60 bg-sky-50 text-sky-600 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-400"
-							>
-								<QrCode class="size-10" />
-							</div>
-
-							<button
-								type="button"
-								onclick={() => (isCameraModalOpen = true)}
-								class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-all hover:opacity-95 active:scale-[0.99]"
-							>
-								<Camera class="size-4" />
-								<span>เปิดกล้องสแกน QR Code ตั๋ว</span>
-							</button>
+							<VolunteerQrScannerModal inline disabled={isLoggingIn} onScan={handleScanToken} />
 						</div>
 
 						{#if loginError}
@@ -825,32 +818,38 @@
 
 						<div class="space-y-3">
 							{#each currentVolunteer.bookings as booking (booking.id)}
-								<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
-									<div class="flex flex-wrap items-start justify-between gap-3">
-										<div class="min-w-0 space-y-1">
-											<p class="text-sm font-bold text-foreground">{booking.title}</p>
-											<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
-												<MapPin class="size-3.5 shrink-0" />
-												{booking.location}
-												<span class="text-muted-foreground/60">·</span>
-												{booking.dateText}
-											</p>
-										</div>
-										<div class="flex shrink-0 items-center gap-2">
+								<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
+									<div class="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+										<div class="space-y-2">
 											<span
-												class="rounded-lg px-2.5 py-1 text-3xs font-bold {booking.confirmed
-													? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-													: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
+												class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
 											>
-												{booking.statusLabel}
+												ภารกิจที่จองไว้
 											</span>
-											<a
-												href="/volunteer/ticket/{booking.id}"
-												class="rounded-lg border border-border px-2.5 py-1 text-3xs font-bold text-foreground hover:bg-muted"
+											<h4 class="text-base font-bold text-foreground">{booking.title}</h4>
+											<p class="text-xs leading-relaxed text-muted-foreground">
+												การจองนี้อยู่ระหว่างรอเจ้าหน้าที่จัดกะให้
+											</p>
+											<div
+												class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
 											>
-												เปิดตั๋ว
-											</a>
+												<span class="flex items-center gap-1 font-medium text-foreground">
+													<MapPin class="size-3 text-primary" />
+													ศูนย์พักพิง: {booking.location}
+												</span>
+												<span class="flex items-center gap-1">
+													<Clock class="size-3" />
+													วันที่ปฏิบัติงาน: {booking.dateText}
+												</span>
+											</div>
 										</div>
+										<span
+											class="shrink-0 self-start rounded-lg px-2.5 py-1 text-3xs font-bold {booking.confirmed
+												? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+												: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
+										>
+											{booking.statusLabel}
+										</span>
 									</div>
 								</div>
 							{/each}
@@ -1046,7 +1045,15 @@
 							<h4 class="text-xs font-bold text-foreground">
 								บัตรอาสาสมัครอัจฉริยะ (QR Role Card)
 							</h4>
-							{#if currentVolunteer.token}
+							<div class="flex items-center gap-3">
+								<button
+									type="button"
+									onclick={downloadRoleCardQr}
+									disabled={!qrDataUrl}
+									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline disabled:cursor-wait disabled:opacity-50"
+								>
+									<Download class="size-3" /> ดาวน์โหลด QR
+								</button>
 								<button
 									type="button"
 									onclick={() => (isPassModalOpen = true)}
@@ -1054,53 +1061,46 @@
 								>
 									<Maximize2 class="size-3" /> ขยายบัตร
 								</button>
-							{/if}
+							</div>
 						</div>
 						<p class="mt-2 text-2xs text-muted-foreground">
 							คุณสามารถรับสิทธิสวัสดิการ อาหารร้อน น้ำดื่ม และเวชภัณฑ์ที่เจ้าหน้าที่จัดเตรียมไว้
 							โดยใช้บัตรนี้แสดงต่อเจ้าหน้าที่ ณ จุดแจกจ่าย
 						</p>
 
-						<!-- Mini QR Role Card, available when the session holds a real ticket token. -->
+						<!-- Mini QR Role Card, available for every resolved volunteer session. -->
 						<div
 							class="mt-4 rounded-2xl border border-border bg-muted/20 p-4 text-center transition-all hover:bg-muted/30"
 						>
-							{#if currentVolunteer.token}
-								{#if qrDataUrl}
-									<img
-										src={qrDataUrl}
-										alt="QR Code"
-										class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
-									/>
-								{:else}
-									<div
-										class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
-									>
-										<QrCode class="size-16" />
-									</div>
-								{/if}
-								<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
-								<p class="text-2xs font-semibold text-muted-foreground">{currentVolunteer.token}</p>
-								<div class="mt-2 flex justify-center gap-1">
-									<span
-										class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
-									>
-										🟢 ยืนยันตัวตนแล้ว
-									</span>
-									<span
-										class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
-									>
-										🟢 ปฏิบัติหน้าที่อยู่
-									</span>
-								</div>
+							{#if qrDataUrl}
+								<img
+									src={qrDataUrl}
+									alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
+									class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
+								/>
 							{:else}
-								<QrCode class="mx-auto size-10 text-muted-foreground/60" />
-								<p class="mt-3 text-xs font-bold text-foreground">ยังไม่มี QR ตั๋วใน session นี้</p>
-								<p class="mt-1 text-2xs text-muted-foreground">
-									การเข้าสู่ระบบด้วยเบอร์โทรศัพท์ใช้สำหรับดูตารางงาน หากต้องการ QR
-									ให้เปิดตั๋วจากรายการจอง
-								</p>
+								<div
+									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
+								>
+									<QrCode class="size-16 animate-pulse" />
+								</div>
 							{/if}
+							<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
+							<p class="text-2xs font-semibold text-muted-foreground">
+								รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}
+							</p>
+							<div class="mt-2 flex justify-center gap-1">
+								<span
+									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+								>
+									🟢 ยืนยันตัวตนแล้ว
+								</span>
+								<span
+									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+								>
+									🟢 ปฏิบัติหน้าที่อยู่
+								</span>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -1121,13 +1121,6 @@
 <!-- Esc and the browser's own control leave fullscreen without touching our flag. -->
 <svelte:document
 	onfullscreenchange={() => (isPassFullscreen = Boolean(document.fullscreenElement))}
-/>
-
-<!-- ── MODAL: CAMERA QR SCANNER ────────────────────────────────────────────── -->
-<VolunteerQrScannerModal
-	bind:isOpen={isCameraModalOpen}
-	onScan={handleScanToken}
-	title="สแกน QR Code ตั๋วจิตอาสา"
 />
 
 <!-- ── MODAL: DIGITAL PASS VIEW ───────────────────────────────────────────── -->
@@ -1164,7 +1157,7 @@
 					{currentVolunteer.avatar}
 				</div>
 				<h3 class="text-base font-black text-foreground">{currentVolunteer.name}</h3>
-				<p class="font-mono text-xs text-muted-foreground">{currentVolunteer.token}</p>
+				<p class="font-mono text-xs text-muted-foreground">{currentVolunteer.volunteerCode}</p>
 
 				{#if qrDataUrl}
 					<img

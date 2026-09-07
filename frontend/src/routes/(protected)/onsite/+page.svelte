@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Expand from '@lucide/svelte/icons/expand';
+	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import Search from '@lucide/svelte/icons/search';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { resolve } from '$app/paths';
@@ -84,7 +85,7 @@
 			<div
 				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
 			>
-				<Expand class="size-6" />
+				<HeartHandshake class="size-6" />
 			</div>
 			<div>
 				<h2 class="mb-1 text-2xl font-bold text-foreground">เช็คอินจิตอาสาเข้างาน</h2>
