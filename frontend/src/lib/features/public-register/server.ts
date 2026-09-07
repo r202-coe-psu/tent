@@ -53,5 +53,6 @@ export {
 
 export type {
 	UnassignedRegistrationErrorCode,
-	UnassignedRegistrationInput
+	UnassignedRegistrationInput,
+	UnassignedRegistrationPayload
 } from './domain/unassigned-registration';
