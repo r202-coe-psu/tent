@@ -197,13 +197,6 @@
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 			document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
 			document.body.scrollTo({ top: 0, behavior: 'smooth' });
-
-			const scrollContainers = document.querySelectorAll(
-				'.overflow-y-auto, .overflow-auto, [class*="overflow-y-auto"], main'
-			);
-			scrollContainers.forEach((el) => {
-				el.scrollTo({ top: 0, behavior: 'smooth' });
-			});
 		});
 	}
 

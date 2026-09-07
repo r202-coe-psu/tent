@@ -30,13 +30,11 @@
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 </script>
 
-<div
-	class="flex min-h-0 w-full flex-1 flex-col items-stretch overflow-hidden bg-muted/30 text-foreground md:flex-row"
->
+<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground md:flex-row">
 	<SystemManagementNavbar />
-	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<header
-			class="flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
+			class="sticky top-14 z-30 flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
 		>
 			<div class="flex items-center justify-between gap-4">
 				<div class="flex items-center gap-2">
@@ -55,7 +53,7 @@
 			</div>
 		</header>
 
-		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+		<div class="flex flex-1 flex-col">
 			{@render children()}
 		</div>
 	</div>

@@ -77,7 +77,7 @@
 </script>
 
 <aside
-	class="relative hidden min-h-0 shrink-0 flex-col border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
+	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >

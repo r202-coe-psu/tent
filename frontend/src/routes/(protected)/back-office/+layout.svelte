@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
-	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop/ui/connection-action';
+	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';
@@ -106,14 +106,12 @@
 	);
 </script>
 
-<div
-	class="flex min-h-0 w-full flex-1 flex-col items-stretch overflow-hidden bg-muted/30 text-foreground md:flex-row"
->
+<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground md:flex-row">
 	<BackofficeNavbar />
-	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-		<!-- Static Top Header Bar (shared by all backoffice pages) -->
+	<div class="flex w-full min-w-0 flex-1 flex-col">
+		<!-- Sticky top header (shared by all backoffice pages) -->
 		<header
-			class="flex shrink-0 flex-col justify-center border-b border-sidebar-border bg-card {isDailySopPage
+			class="sticky top-0 z-30 flex shrink-0 flex-col justify-center border-b border-sidebar-border bg-card {isDailySopPage
 				? 'min-h-16 px-4 py-3 md:px-6'
 				: 'h-16 px-4 md:px-6'}"
 		>
@@ -212,12 +210,8 @@
 			</div>
 		</header>
 
-		<!-- Content Area: evacuee management owns scrolling inside its tab content. -->
-		<div
-			class="flex min-h-0 flex-1 flex-col {page.url.pathname === '/back-office/evacuee-management'
-				? 'overflow-hidden'
-				: 'overflow-y-auto'}"
-		>
+		<!-- Content grows with the document; window scroll is the primary scroller. -->
+		<div class="flex flex-1 flex-col">
 			<!-- Reset scoped pages when the navbar changes shelter so every query/form
 			     is recreated with the newly selected shelter context. -->
 			{#key shelterStore.selectedShelterCode}
