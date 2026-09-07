@@ -35,6 +35,7 @@ type CouchJob = {
 	updated_at?: string;
 	tier: string;
 	auto_accept?: boolean;
+	skills_required?: string[];
 	quota: number;
 	slots_confirmed: number;
 	slots_dispatched: number;
@@ -83,6 +84,7 @@ export class PublicApplicationError extends Error {
 			| 'SHIFT_FULL'
 			| 'SHIFT_ID_REQUIRED'
 			| 'SHIFT_DATE_AMBIGUOUS'
+			| 'MISSING_REQUIRED_SKILLS'
 			| 'DUPLICATE_APPLICATION'
 			| 'TIME_CONFLICT'
 			| 'JOB_NOT_READY'
@@ -126,8 +128,19 @@ export function selectedShift(job: CouchJob, input: DirectApplicationInput): Cou
 	if (shifts.length === 0) return null;
 	if (input.shift_id) {
 		const found = shifts.find((shift) => (shift.shift_id || shift.id) === input.shift_id);
-		if (!found) throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
-		return found;
+		if (found) return found;
+		if (input.shift_date) {
+			const timeMatch = shifts.find(
+				(shift) =>
+					shift.date === input.shift_date &&
+					(!input.start_time || shift.start_time === input.start_time)
+			);
+			if (timeMatch) return timeMatch;
+			const dateMatch = shifts.filter((shift) => shift.date === input.shift_date);
+			if (dateMatch.length === 1) return dateMatch[0];
+		}
+		if (shifts.length === 1) return shifts[0];
+		throw new PublicApplicationError('SHIFT_NOT_FOUND', 422);
 	}
 	if (input.shift_date) {
 		const candidates = shifts.filter((shift) => shift.date === input.shift_date);
@@ -331,6 +344,44 @@ export async function applyPublicVolunteerApplication(
 	const selected = selectedShift(job, input);
 	const verifiedShiftId = shiftId(selected);
 	const skills = [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))];
+
+	if (job.skills_required && job.skills_required.length > 0) {
+		let masterItems: Array<{ code: string; label: string }> = [];
+		try {
+			const masterDoc = await readEffectiveMasterDoc('volunteer_skills', shelterCode);
+			if (masterDoc?.items) {
+				masterItems = masterDoc.items;
+			}
+		} catch {
+			// ignore
+		}
+
+		const matchSkill = (a: string, b: string): boolean => {
+			const normA = a.trim().toLowerCase();
+			const normB = b.trim().toLowerCase();
+			if (normA === normB || normA.includes(normB) || normB.includes(normA)) return true;
+			const itemA = masterItems.find(
+				(item) => item.code.toLowerCase() === normA || item.label.toLowerCase() === normA
+			);
+			const itemB = masterItems.find(
+				(item) => item.code.toLowerCase() === normB || item.label.toLowerCase() === normB
+			);
+			if (itemA && itemB) return itemA.code.toLowerCase() === itemB.code.toLowerCase();
+			if (itemA && (itemA.code.toLowerCase() === normB || itemA.label.toLowerCase() === normB))
+				return true;
+			if (itemB && (itemB.code.toLowerCase() === normA || itemB.label.toLowerCase() === normA))
+				return true;
+			return false;
+		};
+
+		const hasRequired = job.skills_required.some((needed) =>
+			skills.some((held) => matchSkill(held, needed))
+		);
+		if (!hasRequired) {
+			throw new PublicApplicationError('MISSING_REQUIRED_SKILLS', 422);
+		}
+	}
+
 	const controlled = await controlledSkills(shelterCode);
 	const status = needsReview(job, skills, controlled) ? 'pending_review' : 'confirmed';
 	const phoneHash = await sha256Hex(input.phone);

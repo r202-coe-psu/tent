@@ -233,6 +233,17 @@
 			errorMessage = 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal';
 			return;
 		}
+		if (formData.skills.length === 0) {
+			errorMessage = t.errSkills;
+			return;
+		}
+		if (job?.skills_required && job.skills_required.length > 0) {
+			const hasMatching = formData.skills.some((skillCode) => skillMatchesJob(skillCode));
+			if (!hasMatching) {
+				errorMessage = t.errMissingRequiredSkill;
+				return;
+			}
+		}
 
 		errorMessage = null;
 		isSubmitting = true;
@@ -673,6 +684,25 @@
 									{t.skillsUnit}
 								</span>
 							</div>
+
+							{#if job?.skills_required && job.skills_required.length > 0}
+								{@const hasSelectedRequired = formData.skills.some((s) => skillMatchesJob(s))}
+								<div
+									class="mb-3.5 flex items-center gap-2 rounded-xl p-3 text-xs font-medium transition-all {hasSelectedRequired
+										? 'border border-success/30 bg-success/10 text-success'
+										: 'border border-warning/30 bg-warning/10 text-warning-foreground'}"
+								>
+									<Tag class="h-4 w-4 shrink-0" />
+									<span>
+										{#if hasSelectedRequired}
+											✓ คุณได้เลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้แล้ว
+										{:else}
+											ภารกิจนี้กำหนดให้ต้องมีทักษะเฉพาะ (ป้ายกำกับสีฟ้า) กรุณาเลือกอย่างน้อย 1
+											ทักษะที่ตรงกันเพื่อสมัคร
+										{/if}
+									</span>
+								</div>
+							{/if}
 
 							{#if isLoadingSkills}
 								<div class="flex items-center gap-2 py-4 text-xs text-muted-foreground">

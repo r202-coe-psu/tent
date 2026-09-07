@@ -77,7 +77,10 @@ describe('GET /api/public/v1/volunteer/jobs', () => {
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get('Cache-Control')).toBe('no-store');
-		expect(await response.json()).toEqual({ success: true, jobs: [{ job_id: 'job:1' }] });
+		expect(await response.json()).toEqual({
+			success: true,
+			jobs: [{ job_id: 'job:1', applicants_count: 0 }]
+		});
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:9000/public/v1/jobs',
 			expect.objectContaining({

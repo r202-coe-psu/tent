@@ -222,6 +222,14 @@
 					shifts = job.shifts.map((s: RawPublicJobShift, idx: number) => {
 						const st = s.start_time || '08:00';
 						const et = s.end_time || '16:00';
+						const shiftConfirmed =
+							s.slots_confirmed ??
+							s.confirmed ??
+							Math.min(
+								s.quota || 10,
+								Math.round((job.slots_confirmed || 0) / (job.shifts?.length || 1))
+							);
+						const shiftApplicants = Math.max(s.applicants_count ?? 0, shiftConfirmed);
 						return {
 							id: s.shift_id || s.id || `s-${idx}`,
 							date: s.date || new Date().toISOString().slice(0, 10),
@@ -229,14 +237,8 @@
 							start_time: st,
 							end_time: et,
 							quota: s.quota || 10,
-							applicants_count: s.applicants_count ?? 0,
-							confirmed:
-								s.slots_confirmed ??
-								s.confirmed ??
-								Math.min(
-									s.quota || 10,
-									Math.round((job.slots_confirmed || 0) / (job.shifts?.length || 1))
-								)
+							applicants_count: shiftApplicants,
+							confirmed: shiftConfirmed
 						};
 					});
 				} else if (job.shift_template) {
@@ -245,17 +247,23 @@
 					const edTime = tmpl.end_time || '16:00';
 					const days =
 						tmpl.days && tmpl.days.length > 0 ? tmpl.days : [new Date().toISOString().slice(0, 10)];
-					shifts = days.map((day: string, idx: number) => ({
-						id: `st-${cleanJobId}-${idx}`,
-						date: asApplyDate(day, idx),
-						time: `${stTime} - ${edTime} น.`,
-						start_time: stTime,
-						end_time: edTime,
-						quota: job.quota || 10,
-						applicants_count: job.applicants_count || 0,
-						confirmed: job.slots_confirmed || 0
-					}));
+					const confirmedPerShift = Math.round((job.slots_confirmed || 0) / (days.length || 1));
+					shifts = days.map((day: string, idx: number) => {
+						const shiftConfirmed = confirmedPerShift;
+						const shiftApplicants = Math.max(job.applicants_count || 0, shiftConfirmed);
+						return {
+							id: `st-${cleanJobId}-${idx}`,
+							date: asApplyDate(day, idx),
+							time: `${stTime} - ${edTime} น.`,
+							start_time: stTime,
+							end_time: edTime,
+							quota: job.quota || 10,
+							applicants_count: shiftApplicants,
+							confirmed: shiftConfirmed
+						};
+					});
 				} else {
+					const shiftConfirmed = job.slots_confirmed || 0;
 					shifts = [
 						{
 							id: `default-${cleanJobId}`,
@@ -264,11 +272,18 @@
 							start_time: '08:00',
 							end_time: '16:00',
 							quota: job.quota || 10,
-							applicants_count: job.applicants_count || 0,
-							confirmed: job.slots_confirmed || 0
+							applicants_count: Math.max(job.applicants_count || 0, shiftConfirmed),
+							confirmed: shiftConfirmed
 						}
 					];
 				}
+
+				const totalConfirmed = shifts.reduce((sum, s) => sum + s.confirmed, 0);
+				const totalApplicants = Math.max(
+					job.applicants_count || 0,
+					totalConfirmed,
+					shifts.reduce((sum, s) => sum + s.applicants_count, 0)
+				);
 
 				const tags: {
 					label: string;
@@ -304,7 +319,7 @@
 					shifts,
 					tags,
 					skills_required: job.skills_required,
-					applicants_count: job.applicants_count || 0,
+					applicants_count: totalApplicants,
 					isControlled
 				};
 			});

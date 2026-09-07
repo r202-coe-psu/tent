@@ -140,6 +140,21 @@
 			return;
 		}
 
+		if (job.skills_required && job.skills_required.length > 0) {
+			const hasMatching = skills.some((s) =>
+				job.skills_required.some(
+					(req) =>
+						req.toLowerCase() === s.toLowerCase() ||
+						req.includes(s.toLowerCase()) ||
+						s.toLowerCase().includes(req.toLowerCase())
+				)
+			);
+			if (!hasMatching) {
+				formError = 'กรุณาเลือกทักษะที่จำเป็นสำหรับภารกิจนี้อย่างน้อย 1 อย่าง';
+				return;
+			}
+		}
+
 		const parsed = volunteerApplySchema.safeParse({
 			shelter_code: job.shelter_code,
 			first_name: firstName,

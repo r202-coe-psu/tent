@@ -110,6 +110,7 @@ export interface JobsTranslations {
 	errLastName: string;
 	errPhone: string;
 	errSkills: string;
+	errMissingRequiredSkill: string;
 }
 
 export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
@@ -227,7 +228,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errFirstName: 'กรุณากรอกชื่อจริง',
 		errLastName: 'กรุณากรอกนามสกุล',
 		errPhone: 'กรุณากรอกเบอร์โทรศัพท์มือถือ 10 หลัก',
-		errSkills: 'กรุณาเลือกทักษะอย่างน้อย 1 อย่าง'
+		errSkills: 'กรุณาเลือกทักษะอย่างน้อย 1 อย่าง',
+		errMissingRequiredSkill: 'คุณต้องเลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้อย่างน้อย 1 ทักษะ'
 	},
 	en: {
 		pageTitle: 'Volunteer Job Board — Smart Shelter',
@@ -344,6 +346,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errFirstName: 'Please enter your first name',
 		errLastName: 'Please enter your last name',
 		errPhone: 'Please enter a valid 10-digit mobile phone number',
-		errSkills: 'Please select at least 1 skill'
+		errSkills: 'Please select at least 1 skill',
+		errMissingRequiredSkill: 'You must select at least 1 skill required for this job'
 	}
 };

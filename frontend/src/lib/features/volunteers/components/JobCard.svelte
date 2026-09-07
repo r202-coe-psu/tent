@@ -43,6 +43,16 @@
 		job.shifts.reduce((sum: number, s: JobShift) => sum + s.confirmed, 0)
 	);
 	let totalRemaining = $derived(Math.max(0, totalQuota - totalConfirmed));
+	let totalApplicants = $derived(
+		Math.max(
+			job.applicants_count ?? 0,
+			totalConfirmed,
+			job.shifts.reduce(
+				(sum: number, s: JobShift) => sum + Math.max(s.applicants_count ?? 0, s.confirmed),
+				0
+			)
+		)
+	);
 
 	let isControlled = $derived(
 		job.tags.some(
@@ -95,18 +105,18 @@
 				</span>
 			{/each}
 		</div>
+
+		<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+			<MapPin class="h-3.5 w-3.5 text-primary" />
+			<span class="font-medium text-foreground">{job.shelter}</span>
+		</div>
 	</div>
 
-	<!-- Title & Location -->
-	<h3 class="mb-2 text-xl font-bold text-primary">{job.title}</h3>
-	<p class="mb-4 text-sm text-muted-foreground">{job.description}</p>
+	<!-- Title & Description -->
+	<h3 class="mb-2 text-xl font-bold text-foreground">{job.title}</h3>
+	<p class="mb-4 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{job.description}</p>
 
-	<div class="mb-6 flex items-start gap-2 text-muted-foreground">
-		<MapPin class="mt-0.5 h-4 w-4 shrink-0" />
-		<span class="text-sm font-medium">{job.shelter}</span>
-	</div>
-
-	<!-- Quota Card with Horizontal Scrolling -->
+	<!-- Shifts & Quota Section -->
 	<div class="mt-2 rounded-xl border border-border bg-muted/5 p-4 sm:p-5">
 		<div
 			class="mb-4 flex flex-col justify-between gap-2 border-b border-border/50 pb-4 sm:flex-row sm:items-center"
@@ -118,7 +128,7 @@
 			</span>
 			<span class="text-xs font-bold text-muted-foreground"
 				>{t.totalApplied}
-				{job.applicants_count ?? 0}
+				{totalApplicants}
 				{t.peopleUnit} · {t.requiredQuota}
 				{totalQuota}
 				{t.peopleUnit} ({t.availableSeats}
@@ -131,6 +141,7 @@
 			{#each job.shifts as shift (shift.id)}
 				{@const remaining = Math.max(0, shift.quota - shift.confirmed)}
 				{@const isFull = remaining <= 0}
+				{@const applicants = Math.max(shift.applicants_count ?? 0, shift.confirmed)}
 				<div
 					class="w-[280px] shrink-0 snap-start rounded-xl border p-4 shadow-xs transition-colors {isFull
 						? 'border-border/60 bg-muted/10 opacity-90'
@@ -170,7 +181,7 @@
 								>{t.quotaCap}
 								{shift.quota}
 								{t.peopleUnit} ({t.appliedCount}
-								{shift.applicants_count ?? 0} · {t.confirmedCount}
+								{applicants} · {t.confirmedCount}
 								{shift.confirmed})</span
 							>
 							<span class="font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"

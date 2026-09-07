@@ -125,6 +125,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				SHIFT_FULL: 'กะเวลานี้มีผู้สมัครเต็มจำนวนแล้ว',
 				SHIFT_ID_REQUIRED: 'กรุณาเลือกกะเวลาที่ต้องการปฏิบัติงาน',
 				SHIFT_DATE_AMBIGUOUS: 'มีกะเวลาซ้ำกันในวันที่เลือก กรุณาระบุกะเวลาให้ชัดเจน',
+				MISSING_REQUIRED_SKILLS: 'คุณต้องเลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้อย่างน้อย 1 ทักษะ',
 				DUPLICATE_APPLICATION: 'คุณได้สมัครงานนี้ไว้แล้ว',
 				TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 				JOB_NOT_READY: 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง',

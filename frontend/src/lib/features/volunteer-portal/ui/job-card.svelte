@@ -35,6 +35,7 @@
 	const filledPercent = $derived(
 		job.quota > 0 ? Math.min(100, (job.slots_confirmed / job.quota) * 100) : 0
 	);
+	const applicantsCount = $derived(Math.max(job.applicants_count ?? 0, job.slots_confirmed));
 	const template = $derived(job.shift_template);
 	const timeText = $derived(
 		template.start_time && template.end_time
@@ -119,7 +120,7 @@
 		<div class="mb-5">
 			<div class="mb-2 flex justify-between text-xs">
 				<span class="font-medium {!applicable ? 'text-muted-foreground/80' : ''}"
-					>รับ {job.quota} คน (สมัครแล้ว {job.applicants_count ?? 0} · ยืนยันแล้ว {job.slots_confirmed})</span
+					>รับ {job.quota} คน (สมัครแล้ว {applicantsCount} · ยืนยันแล้ว {job.slots_confirmed})</span
 				>
 				<span class="font-bold {applicable ? 'text-success' : 'text-muted-foreground'}">
 					{!applicable ? 'เต็มแล้ว (0 ที่)' : `ว่าง ${job.slots_remaining} ที่`}
