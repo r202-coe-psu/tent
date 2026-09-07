@@ -58,9 +58,17 @@ export interface MealDistributionTransaction {
 	time: string;
 	portions: number;
 	status: 'active' | 'voided';
+	recipientType?: 'evacuee' | 'volunteer' | 'outside';
+	scannedBy?: string;
+	voidedAt?: string;
+	voidedBy?: string;
+	/** @deprecated Kept for snake_case compatibility */
 	recipient_type?: 'evacuee' | 'volunteer' | 'outside';
+	/** @deprecated Kept for snake_case compatibility */
 	scanned_by?: string;
+	/** @deprecated Kept for snake_case compatibility */
 	voided_at?: string;
+	/** @deprecated Kept for snake_case compatibility */
 	voided_by?: string;
 }
 
@@ -136,6 +144,14 @@ export function quotaPercent(served: number, target: number): number {
 
 export function remainingPortions(menu: MealMenuItem): number {
 	return Math.max(0, menu.target - menu.served);
+}
+
+/**
+ * Calculate total portions served from active transactions.
+ * Excludes voided transactions per CR-109 audit rules.
+ */
+export function totalActivePortions(transactions: MealDistributionTransaction[]): number {
+	return transactions.filter((t) => t.status === 'active').reduce((sum, t) => sum + t.portions, 0);
 }
 
 // Combine every mock day's sessions into one "ทั้งหมด (all)" view: same period

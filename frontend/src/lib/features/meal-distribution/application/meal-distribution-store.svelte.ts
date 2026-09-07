@@ -9,6 +9,7 @@ import {
 	recipientMatchesMenu,
 	searchRecipients,
 	todayIsoDate,
+	totalActivePortions,
 	type MealDateFilterMode,
 	type MealDistributionDay,
 	type MealDistributionSession,
@@ -75,9 +76,7 @@ class MealsStore {
 		return this.transactions.filter((t) => t.menuId === menu.id);
 	});
 	totalOpenSessions = $derived(this.visibleSessions.filter((s) => s.status === 'open').length);
-	todayTotalServed = $derived(
-		MOCK_BREAKFAST_PRE_SERVED + this.transactions.filter((t) => t.status === 'active').length
-	);
+	todayTotalServed = $derived(MOCK_BREAKFAST_PRE_SERVED + totalActivePortions(this.transactions));
 	selectedRecipientAlreadyServed = $derived(
 		this.selectedRecipient && this.activeKioskMenu
 			? hasReceivedMenu(this.transactions, this.selectedRecipient.id, this.activeKioskMenu.id)
@@ -181,6 +180,12 @@ class MealsStore {
 		const menu = this.activeKioskMenu;
 		if (!recipient || !menu) return;
 
+		if (menu.status === 'closed') {
+			toast.error('ไม่สามารถแจกจ่ายเมนูที่ปิดรอบแล้วได้');
+			this.deselectRecipient();
+			return;
+		}
+
 		if (this.hasReceived(recipient.id, menu.id)) {
 			this.warningMessage = `ผู้ประสบภัย ${recipient.name} ได้รับอาหารเมนูนี้ไปแล้ว!`;
 			this.showWarningOverlay = true;
@@ -204,6 +209,8 @@ class MealsStore {
 			time: currentServeTimeLabel(),
 			portions,
 			status: 'active',
+			recipientType: 'evacuee',
+			scannedBy: 'staff-onsite',
 			recipient_type: 'evacuee',
 			scanned_by: 'staff-onsite'
 		};
@@ -229,6 +236,8 @@ class MealsStore {
 		if (!tx || tx.status === 'voided') return;
 
 		tx.status = 'voided';
+		tx.voidedAt = currentServeTimeLabel();
+		tx.voidedBy = voidedBy;
 		tx.voided_at = currentServeTimeLabel();
 		tx.voided_by = voidedBy;
 

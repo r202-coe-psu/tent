@@ -20,15 +20,13 @@
 			</Dialog.Title>
 		</Dialog.Header>
 
-		<div
-			class="border-slate-150 space-y-2 rounded-xl border bg-slate-50 p-4 text-center dark:bg-zinc-800/30"
-		>
+		<div class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
 			<div
 				class="mx-auto flex size-24 items-center justify-center rounded-xl border-2 border-dashed border-amber-500 text-amber-500"
 			>
 				<QrCode class="size-12 animate-pulse" />
 			</div>
-			<p class="text-xs font-bold text-slate-700 dark:text-slate-300">
+			<p class="text-xs font-bold text-slate-700">
 				คลิกเลือกรายชื่อด้านล่างเพื่อทำการสแกนเสมือนจริง
 			</p>
 		</div>
@@ -44,24 +42,24 @@
 					class="flex w-full items-center justify-between rounded-xl border p-2.5 text-left text-xs transition-all
 						{served
 						? 'border-slate-100 bg-slate-50 opacity-60'
-						: 'bg-white hover:border-amber-500 hover:bg-amber-50/20 dark:bg-zinc-900'}"
+						: 'bg-white hover:border-amber-500 hover:bg-amber-50/20'}"
 				>
 					<div>
-						<div class="font-bold text-slate-800 dark:text-white">{recipient.name}</div>
-						<div class="text-[10px] text-slate-400">
+						<div class="font-bold text-slate-800">{recipient.name}</div>
+						<div class="text-xs text-slate-400">
 							Wristband ID: {recipient.wristbandCode} | เตียง {recipient.bed}
 						</div>
 					</div>
 
 					{#if served}
 						<span
-							class="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700"
+							class="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-xs font-bold text-emerald-700"
 						>
 							รับแล้ว
 						</span>
 					{:else}
 						<span
-							class="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800"
+							class="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-xs font-bold text-amber-800"
 						>
 							สแกน
 						</span>

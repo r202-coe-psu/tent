@@ -54,7 +54,7 @@
 	}
 
 	function getAuditTime(timestamp?: string) {
-		if (!timestamp) return '20:07';
+		if (!timestamp) return '-';
 		const match = timestamp.match(/\b\d{1,2}:\d{2}\b/);
 		return match ? match[0] : timestamp;
 	}

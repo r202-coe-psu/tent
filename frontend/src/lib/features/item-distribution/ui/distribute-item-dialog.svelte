@@ -8,6 +8,7 @@
 	import Send from '@lucide/svelte/icons/send';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Check from '@lucide/svelte/icons/check';
+	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import { toast } from 'svelte-sonner';
 
 	const store = getDistributionStore();
@@ -18,6 +19,11 @@
 
 	function handleDistribute(e: SubmitEvent) {
 		e.preventDefault();
+		if (!store.isOnline) {
+			toast.error('ระบบออฟไลน์: ไม่สามารถบันทึกการแจกจ่ายได้ (CR-110)');
+			return;
+		}
+
 		const stockItem = store.selectedStockItem;
 		if (!stockItem) return;
 
@@ -56,7 +62,7 @@
 			<Dialog.Header class="border-b p-6 pr-10 pb-4">
 				<div class="flex items-center gap-3">
 					<div
-						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600"
 					>
 						<Send class="size-5" />
 					</div>
@@ -71,22 +77,31 @@
 
 			<!-- Form Body -->
 			<form onsubmit={handleDistribute} class="space-y-5 px-6 pb-6">
+				{#if !store.isOnline}
+					<div
+						class="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"
+					>
+						<WifiOff class="size-4 shrink-0 text-rose-600" />
+						<span>ระบบอยู่ในสถานะออฟไลน์ ไม่สามารถบันทึกแจกจ่ายได้ (CR-110 Remote-First)</span>
+					</div>
+				{/if}
+
 				<!-- Item Card Summary -->
 				<div
-					class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60"
+					class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4"
 				>
 					<div>
-						<span class="block text-[11px] font-semibold tracking-wider text-slate-500 uppercase"
+						<span class="block text-xs font-semibold tracking-wider text-slate-500 uppercase"
 							>รายการพัสดุ</span
 						>
-						<h4 class="font-bold text-slate-900 dark:text-slate-100">{item.name}</h4>
+						<h4 class="font-bold text-slate-900">{item.name}</h4>
 						<p class="text-xs text-slate-500">ที่ตั้ง: {item.location}</p>
 					</div>
 					<div class="text-right">
-						<span class="block text-[11px] font-semibold tracking-wider text-slate-500 uppercase"
+						<span class="block text-xs font-semibold tracking-wider text-slate-500 uppercase"
 							>คงเหลือพร้อมแจก</span
 						>
-						<span class="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+						<span class="text-xl font-extrabold text-emerald-600">
 							{item.availableQuantity}
 							{item.unit}
 						</span>
@@ -96,9 +111,7 @@
 				<!-- Recipient Selection / QR Scan Simulation -->
 				<div class="space-y-2">
 					<div class="flex items-center justify-between">
-						<Label
-							class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
-						>
+						<Label class="block text-xs font-semibold tracking-wider text-slate-700 uppercase">
 							ผู้รับพัสดุ / เจ้าหน้าที่ <span class="text-rose-500">*</span>
 						</Label>
 						<Button
@@ -106,7 +119,7 @@
 							variant="link"
 							size="sm"
 							onclick={handleScanSimulate}
-							class="h-auto gap-1 p-0 text-xs font-semibold text-blue-600 dark:text-blue-400"
+							class="h-auto gap-1 p-0 text-xs font-semibold text-blue-600"
 						>
 							<QrCode class="size-3.5" />
 							<span>จำลองสแกน QR Code</span>
@@ -140,7 +153,7 @@
 
 					{#if simulatedScanSuccess}
 						<div
-							class="flex animate-in items-center gap-1.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-700 fade-in dark:bg-emerald-950/40 dark:text-emerald-300"
+							class="flex animate-in items-center gap-1.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-700 fade-in"
 						>
 							<Check class="size-4 text-emerald-600" />
 							<span>สแกนข้อมูลบัตรสำเร็จ</span>
@@ -152,7 +165,7 @@
 				<div class="space-y-2">
 					<Label
 						for="qty-distribute"
-						class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
+						class="block text-xs font-semibold tracking-wider text-slate-700 uppercase"
 					>
 						จำนวนที่ต้องการแจกจ่าย ({item.unit}) <span class="text-rose-500">*</span>
 					</Label>
@@ -170,9 +183,13 @@
 					<Button type="button" variant="ghost" onclick={() => store.closeDistributeModal()}>
 						ยกเลิก
 					</Button>
-					<Button type="submit" class="gap-2 bg-blue-600 font-bold hover:bg-blue-500">
+					<Button
+						type="submit"
+						disabled={!store.isOnline}
+						class="gap-2 bg-blue-600 font-bold hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+					>
 						<Send class="size-4" />
-						<span>ยืนยันการแจกจ่าย</span>
+						<span>{store.isOnline ? 'ยืนยันการแจกจ่าย' : 'ระบบออฟไลน์ (ห้ามแจก)'}</span>
 					</Button>
 				</Dialog.Footer>
 			</form>

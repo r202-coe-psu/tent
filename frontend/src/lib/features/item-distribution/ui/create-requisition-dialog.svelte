@@ -14,6 +14,7 @@
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import { toast } from 'svelte-sonner';
 	import { useShelters } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -33,9 +34,9 @@
 		}
 	});
 
-	// Item list in requisition form
-	let formItems = $state<Array<{ catalogItemId: string; quantity: number }>>([
-		{ catalogItemId: 'item-001', quantity: 1 }
+	// Item list in requisition form with stable UUID keys
+	let formItems = $state<Array<{ id: string; catalogItemId: string; quantity: number }>>([
+		{ id: crypto.randomUUID(), catalogItemId: 'item-001', quantity: 1 }
 	]);
 
 	function addItemRow() {
@@ -44,15 +45,18 @@
 				(c: CatalogItem) => !formItems.some((fi) => fi.catalogItemId === c.id)
 			) || store.catalogItems[0];
 
-		formItems = [...formItems, { catalogItemId: availableItem.id, quantity: 1 }];
+		formItems = [
+			...formItems,
+			{ id: crypto.randomUUID(), catalogItemId: availableItem.id, quantity: 1 }
+		];
 	}
 
-	function removeItemRow(index: number) {
+	function removeItemRow(id: string) {
 		if (formItems.length === 1) {
 			toast.error('ต้องมีอย่างน้อย 1 รายการ');
 			return;
 		}
-		formItems = formItems.filter((_, i) => i !== index);
+		formItems = formItems.filter((item) => item.id !== id);
 	}
 
 	function getItemUnit(catalogItemId: string): string {
@@ -62,6 +66,11 @@
 
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
+
+		if (!store.isOnline) {
+			toast.error('ระบบออฟไลน์: ไม่สามารถส่งคำร้องขอเบิกได้ (CR-110)');
+			return;
+		}
 
 		const hub = shelters.data?.find((s) => s.code === selectedHubCode);
 		if (!hub) {
@@ -86,7 +95,7 @@
 			hubName: hub.name,
 			targetGroup,
 			distributionMode,
-			items: formItems,
+			items: formItems.map((fi) => ({ catalogItemId: fi.catalogItemId, quantity: fi.quantity })),
 			reason
 		});
 
@@ -104,7 +113,7 @@
 		<Dialog.Header class="border-b p-6 pr-10 pb-4">
 			<div class="flex items-start gap-3">
 				<div
-					class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400"
+					class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-600"
 				>
 					<Package class="size-6" />
 				</div>
@@ -121,11 +130,18 @@
 
 		<!-- Modal Body (Scrollable) -->
 		<form onsubmit={handleSubmit} class="flex-1 space-y-6 overflow-y-auto p-6">
+			{#if !store.isOnline}
+				<div
+					class="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"
+				>
+					<WifiOff class="size-4 shrink-0 text-rose-600" />
+					<span>ระบบอยู่ในสถานะออฟไลน์ ไม่สามารถส่งคำร้องขอเบิกได้ (CR-110 Remote-First)</span>
+				</div>
+			{/if}
+
 			<!-- 1. ศูนย์พักพิงปลายทางที่ต้องการเบิกสินค้า -->
 			<div class="space-y-2">
-				<Label
-					class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
-				>
+				<Label class="block text-xs font-semibold tracking-wider text-slate-700 uppercase">
 					ศูนย์พักพิงปลายทางที่ต้องการเบิกสินค้า <span class="text-rose-500">*</span>
 				</Label>
 				<Select.Root type="single" bind:value={selectedHubCode}>
@@ -144,18 +160,14 @@
 
 			<!-- 2. กลุ่มเป้าหมายผู้รับพัสดุ (TARGET GROUP) -->
 			<div class="space-y-2">
-				<span
-					class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
-				>
+				<span class="block text-xs font-semibold tracking-wider text-slate-700 uppercase">
 					กลุ่มเป้าหมายผู้รับพัสดุ (TARGET GROUP) <span class="text-rose-500">*</span>
 				</span>
 				<div class="grid grid-cols-2 gap-3">
 					<Button
 						type="button"
 						variant={targetGroup === 'evacuee' ? 'default' : 'secondary'}
-						class="h-auto gap-2.5 py-3 text-sm font-bold {targetGroup === 'evacuee'
-							? 'dark:bg-emerald-600'
-							: ''}"
+						class="h-auto gap-2.5 py-3 text-sm font-bold"
 						onclick={() => (targetGroup = 'evacuee')}
 					>
 						<Users class="size-4" />
@@ -164,9 +176,7 @@
 					<Button
 						type="button"
 						variant={targetGroup === 'volunteer' ? 'default' : 'secondary'}
-						class="h-auto gap-2.5 py-3 text-sm font-bold {targetGroup === 'volunteer'
-							? 'dark:bg-emerald-600'
-							: ''}"
+						class="h-auto gap-2.5 py-3 text-sm font-bold"
 						onclick={() => (targetGroup = 'volunteer')}
 					>
 						<UserCheck class="size-4" />
@@ -178,9 +188,7 @@
 			<!-- 3. รายการสินค้าที่ต้องการเบิก -->
 			<div class="space-y-3">
 				<div class="flex items-center justify-between">
-					<span
-						class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
-					>
+					<span class="block text-xs font-semibold tracking-wider text-slate-700 uppercase">
 						รายการสินค้าที่ต้องการเบิก <span class="text-rose-500">*</span>
 					</span>
 					<Button
@@ -188,19 +196,17 @@
 						variant="link"
 						size="sm"
 						onclick={addItemRow}
-						class="h-auto gap-1.5 p-0 text-xs font-semibold text-emerald-600 dark:text-emerald-400"
+						class="h-auto gap-1.5 p-0 text-xs font-semibold text-emerald-600"
 					>
 						<Plus class="size-3.5" />
 						<span>เพิ่มรายการ</span>
 					</Button>
 				</div>
 
-				<div
-					class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-900/30"
-				>
-					{#each formItems as row, idx (idx)}
+				<div class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
+					{#each formItems as row (row.id)}
 						<div
-							class="flex items-center gap-3 rounded-lg border border-slate-200/80 bg-white p-3 shadow-xs dark:border-slate-700 dark:bg-slate-800"
+							class="flex items-center gap-3 rounded-lg border border-slate-200/80 bg-white p-3 shadow-xs"
 						>
 							<!-- Item Select -->
 							<div class="min-w-[200px] flex-1">
@@ -225,9 +231,9 @@
 
 							<!-- Qty Input -->
 							<div class="flex w-36 items-center gap-1.5">
-								<Label for="qty-input-{idx}" class="sr-only">จำนวน</Label>
+								<Label for="qty-input-{row.id}" class="sr-only">จำนวน</Label>
 								<Input
-									id="qty-input-{idx}"
+									id="qty-input-{row.id}"
 									type="number"
 									min="1"
 									bind:value={row.quantity}
@@ -244,7 +250,7 @@
 								type="button"
 								variant="ghost"
 								size="icon"
-								onclick={() => removeItemRow(idx)}
+								onclick={() => removeItemRow(row.id)}
 								title="ลบรายการ"
 								class="text-slate-400 hover:text-rose-600"
 							>
@@ -258,14 +264,10 @@
 			<!-- 4. รูปแบบการแจกจ่ายรอบนี้ (DISTRIBUTION MODE) -->
 			<div class="space-y-2">
 				<div class="flex items-center justify-between">
-					<span
-						class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
-					>
+					<span class="block text-xs font-semibold tracking-wider text-slate-700 uppercase">
 						รูปแบบการแจกจ่ายรอบนี้ (DISTRIBUTION MODE) <span class="text-rose-500">*</span>
 					</span>
-					<span
-						class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-					>
+					<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
 						Auto-default ตามประเภทพัสดุ
 					</span>
 				</div>
@@ -277,16 +279,14 @@
 						onclick={() => (distributionMode = 'permanent')}
 						class="flex flex-col justify-between rounded-xl border-2 p-4 text-left transition-all {distributionMode ===
 						'permanent'
-							? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500 dark:bg-emerald-950/20'
-							: 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-800/40'}"
+							? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
+							: 'border-slate-200 bg-white hover:border-slate-300'}"
 					>
-						<div
-							class="mb-1 flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-300"
-						>
-							<CheckCircle2 class="size-4 text-emerald-600 dark:text-emerald-400" />
+						<div class="mb-1 flex items-center gap-2 text-sm font-bold text-emerald-800">
+							<CheckCircle2 class="size-4 text-emerald-600" />
 							<span>แจกจ่ายขาด (ไม่ต้องคืน)</span>
 						</div>
-						<p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+						<p class="text-xs leading-relaxed text-slate-600">
 							* สำหรับสิ่งของใช้แล้วหมดไป เช่น น้ำดื่ม สบู่ ยาสีฟัน ข้าวสาร (ไม่ต้องบันทึกการรับคืน)
 						</p>
 					</button>
@@ -297,16 +297,14 @@
 						onclick={() => (distributionMode = 'borrow_return')}
 						class="flex flex-col justify-between rounded-xl border-2 p-4 text-left transition-all {distributionMode ===
 						'borrow_return'
-							? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500 dark:bg-emerald-950/20'
-							: 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-800/40'}"
+							? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
+							: 'border-slate-200 bg-white hover:border-slate-300'}"
 					>
-						<div
-							class="mb-1 flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200"
-						>
-							<RotateCcw class="size-4 text-blue-600 dark:text-blue-400" />
+						<div class="mb-1 flex items-center gap-2 text-sm font-bold text-slate-800">
+							<RotateCcw class="size-4 text-blue-600" />
 							<span>ยืม-คืนชั่วคราว (ส่งคืนเมื่อจบกะ/ภารกิจ)</span>
 						</div>
-						<p class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+						<p class="text-xs leading-relaxed text-slate-600">
 							* สำหรับอุปกรณ์หรือพัสดุถาวร เช่น เสื้อกั๊ก วิทยุสื่อสาร เต็นท์ ไฟฉาย (ต้องส่งคืนคลัง)
 						</p>
 					</button>
@@ -317,7 +315,7 @@
 			<div class="space-y-2">
 				<Label
 					for="reason-input"
-					class="block text-xs font-semibold tracking-wider text-slate-700 uppercase dark:text-slate-300"
+					class="block text-xs font-semibold tracking-wider text-slate-700 uppercase"
 				>
 					ระบุเหตุผล / หมายเหตุคำขอร้อง (ระบุรอบแจกจ่าย)
 				</Label>
@@ -333,8 +331,16 @@
 				<Button type="button" variant="ghost" onclick={() => store.closeCreateModal()}>
 					ยกเลิก (Cancel)
 				</Button>
-				<Button type="submit" class="gap-2 bg-emerald-600 font-bold hover:bg-emerald-500">
-					<span>ส่งคำร้องขอเบิก (Submit Request)</span>
+				<Button
+					type="submit"
+					disabled={!store.isOnline}
+					class="gap-2 bg-emerald-600 font-bold hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<span
+						>{store.isOnline
+							? 'ส่งคำร้องขอเบิก (Submit Request)'
+							: 'ระบบออฟไลน์ (ห้ามสร้างคำขอ)'}</span
+					>
 				</Button>
 			</Dialog.Footer>
 		</form>

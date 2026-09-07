@@ -99,3 +99,21 @@ const THAI_SHORT_MONTHS = [
 	'พ.ย.',
 	'ธ.ค.'
 ] as const;
+
+/**
+ * Calculates updated requisition status based on return and damaged counts.
+ */
+export function calculateReturnStatus(
+	totalReturned: number,
+	totalDamaged: number,
+	totalDistributed: number,
+	currentStatus: RequisitionStatus
+): RequisitionStatus {
+	if (totalReturned + totalDamaged >= totalDistributed && totalDistributed > 0) {
+		return 'completed';
+	}
+	if (totalReturned > 0 || totalDamaged > 0) {
+		return 'partially_returned';
+	}
+	return currentStatus;
+}

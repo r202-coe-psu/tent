@@ -181,7 +181,7 @@
 						</Select.Trigger>
 						<Select.Content align="start" class="w-[280px]">
 							<Select.Group>
-								<Select.Label class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+								<Select.Label class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 									เลือกศูนย์พักพิง (Shelter)
 								</Select.Label>
 								<Select.Item value="all" label="ภาพรวมทุกศูนย์พักพิง">
@@ -440,12 +440,12 @@
 									<tr class="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
 										<!-- 1. รหัส TICKET -->
 										<td class="p-3.5 align-top font-mono font-bold">
-											<div class="text-blue-600 dark:text-blue-400">{ticket.ticket_code}</div>
+											<div class="text-blue-600">{ticket.ticket_code}</div>
 											<span
-												class="mt-1 inline-block rounded px-2 py-0.5 font-sans text-[10px] font-semibold {ticket.distribution_mode ===
+												class="mt-1 inline-block rounded px-2 py-0.5 font-sans text-xs font-semibold {ticket.distribution_mode ===
 												'permanent'
-													? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-													: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'}"
+													? 'bg-emerald-50 text-emerald-700'
+													: 'bg-blue-50 text-blue-700'}"
 											>
 												{ticket.distribution_mode === 'permanent' ? 'ส่งเบิกขาด' : 'ยืม-คืน'}
 											</span>
@@ -453,13 +453,13 @@
 
 										<!-- 2. รายการสินค้า -->
 										<td class="p-3.5 align-top">
-											<div class="font-bold text-slate-900 dark:text-slate-100">
+											<div class="font-bold text-slate-900">
 												{ticket.items.map((i) => i.name).join(', ')}
 											</div>
-											<div class="mt-1 text-[11px] leading-snug text-slate-500">
+											<div class="mt-1 text-xs leading-snug text-slate-500">
 												{ticket.hub_name}
 											</div>
-											<div class="mt-0.5 font-mono text-[10px] text-slate-400">
+											<div class="mt-0.5 font-mono text-xs text-slate-400">
 												เบิก {ticket.total_requested} = แจก {ticket.total_distributed} + ชำรุด {ticket.total_damaged}
 												+ คืน {ticket.total_returned}
 											</div>
@@ -473,25 +473,19 @@
 
 										<!-- 4. แจกจ่ายสำเร็จแล้ว -->
 										<td class="p-3.5 text-center align-top">
-											<span
-												class="rounded-md bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-											>
+											<span class="rounded-md bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700">
 												{ticket.total_distributed}
 												{ticket.items[0]?.unit || ''}
 											</span>
 										</td>
 
 										<!-- 5. ชำรุด/สูญหาย -->
-										<td
-											class="p-3.5 text-center align-top font-bold text-slate-600 dark:text-slate-400"
-										>
+										<td class="p-3.5 text-center align-top font-bold text-slate-600">
 											{ticket.total_damaged || 0}
 										</td>
 
 										<!-- 6. ยอดคืนอนุมัติ -->
-										<td
-											class="p-3.5 text-center align-top font-bold text-slate-600 dark:text-slate-400"
-										>
+										<td class="p-3.5 text-center align-top font-bold text-slate-600">
 											{ticket.total_returned || 0}
 										</td>
 
@@ -506,7 +500,7 @@
 
 										<!-- 8. วันที่ -->
 										<td
-											class="p-3.5 text-center align-top text-[11px] whitespace-nowrap text-slate-500"
+											class="p-3.5 text-center align-top text-xs whitespace-nowrap text-slate-500"
 										>
 											{ticket.created_at}
 										</td>
@@ -637,21 +631,20 @@
 								<div>
 									<div class="mb-2 flex items-start justify-between gap-2">
 										<span
-											class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
+											class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold tracking-wider text-slate-600 uppercase"
 										>
 											{stock.category}
 										</span>
 										<span
-											class="rounded px-2 py-0.5 text-[10px] font-semibold {stock.mode ===
-											'permanent'
-												? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-												: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'}"
+											class="rounded px-2 py-0.5 text-xs font-semibold {stock.mode === 'permanent'
+												? 'bg-emerald-50 text-emerald-700'
+												: 'bg-blue-50 text-blue-700'}"
 										>
 											{stock.mode === 'permanent' ? '🟢 แจกขาด' : '🔄 ยืม-คืน'}
 										</span>
 									</div>
 
-									<h3 class="mb-1 text-base font-extrabold text-slate-900 dark:text-slate-100">
+									<h3 class="mb-1 text-base font-extrabold text-slate-900">
 										{stock.name}
 									</h3>
 									<p class="flex items-center gap-1 text-xs text-slate-500">
@@ -662,22 +655,22 @@
 
 								<!-- Qty Breakdown -->
 								<div
-									class="grid grid-cols-3 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-center text-xs dark:border-slate-800 dark:bg-slate-800/50"
+									class="grid grid-cols-3 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-center text-xs"
 								>
 									<div>
-										<span class="block text-[10px] font-medium text-slate-400">พร้อมแจก</span>
-										<span class="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+										<span class="block text-xs font-medium text-slate-400">พร้อมแจก</span>
+										<span class="text-sm font-extrabold text-emerald-600">
 											{stock.availableQuantity}
 										</span>
 									</div>
 									<div>
-										<span class="block text-[10px] font-medium text-slate-400">แจกแล้ว</span>
-										<span class="text-sm font-bold text-slate-700 dark:text-slate-300">
+										<span class="block text-xs font-medium text-slate-400">แจกแล้ว</span>
+										<span class="text-sm font-bold text-slate-700">
 											{stock.distributedQuantity}
 										</span>
 									</div>
 									<div>
-										<span class="block text-[10px] font-medium text-slate-400">ชำรุด</span>
+										<span class="block text-xs font-medium text-slate-400">ชำรุด</span>
 										<span class="text-sm font-bold text-rose-500">
 											{stock.damagedQuantity || 0}
 										</span>

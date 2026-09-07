@@ -49,12 +49,10 @@
 	}
 </script>
 
-<div class="min-h-screen w-full bg-[#f4f7fa] text-slate-800 dark:bg-zinc-950 dark:text-slate-200">
+<div class="min-h-screen w-full bg-[#F8FAFC] text-slate-800">
 	<div class="mx-auto w-full max-w-7xl p-4 md:p-6">
 		<!-- Sub-Header Card -->
-		<div
-			class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
-		>
+		<div class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
 			<div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 				<!-- Title -->
 				<div class="flex flex-wrap items-center gap-3">
@@ -82,17 +80,13 @@
 
 					<div class="flex items-center gap-3">
 						<div
-							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-400"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600"
 						>
 							<Utensils class="size-5" />
 						</div>
-						<h1
-							class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl dark:text-slate-100"
-						>
+						<h1 class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
 							<span>ระบบแจกจ่ายอาหารหน้างาน</span>
-							<span class="text-sm font-medium text-slate-400 dark:text-slate-500"
-								>(Active Meals Hub)</span
-							>
+							<span class="text-sm font-medium text-slate-400">(Active Meals Hub)</span>
 						</h1>
 					</div>
 
@@ -103,14 +97,14 @@
 						onValueChange={handleShelterChange}
 					>
 						<Select.Trigger
-							class="h-8 gap-1.5 rounded-full border border-amber-200/80 bg-amber-50/80 px-3 text-xs font-bold text-amber-900 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50"
+							class="h-8 gap-1.5 rounded-full border border-amber-200/80 bg-amber-50/80 px-3 text-xs font-bold text-amber-900 hover:bg-amber-100"
 						>
-							<Building2 class="size-3.5 text-amber-600 dark:text-amber-400" />
+							<Building2 class="size-3.5 text-amber-600" />
 							<span class="max-w-[200px] truncate">{currentShelterName}</span>
 						</Select.Trigger>
 						<Select.Content align="start" class="w-[280px]">
 							<Select.Group>
-								<Select.Label class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+								<Select.Label class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 									เลือกศูนย์พักพิง (Shelter)
 								</Select.Label>
 								<Select.Item value="all" label="ภาพรวมทุกศูนย์พักพิง">
@@ -130,7 +124,7 @@
 				<div class="flex items-center gap-3 self-end md:self-center">
 					<Badge
 						variant="outline"
-						class="gap-1.5 border-emerald-200/50 bg-emerald-50 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400"
+						class="gap-1.5 border-emerald-200/50 bg-emerald-50 text-xs font-semibold text-emerald-700"
 					>
 						<span class="size-1.5 rounded-full bg-emerald-500"></span>
 						<span>มื้อที่เปิดแจก: {store.totalOpenSessions} มื้อ</span>
@@ -138,7 +132,7 @@
 
 					<Badge
 						variant="outline"
-						class="gap-1.5 border-amber-200/50 bg-amber-50 text-xs font-bold text-amber-800 dark:bg-amber-950/20 dark:text-amber-400"
+						class="gap-1.5 border-amber-200/50 bg-amber-50 text-xs font-bold text-amber-800"
 					>
 						<BarChart3 class="size-3" />
 						<span>แจกแล้ววันนี้: {store.todayTotalServed} ที่</span>

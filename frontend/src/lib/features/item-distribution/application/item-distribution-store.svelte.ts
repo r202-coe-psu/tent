@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { getContext, setContext, onDestroy } from 'svelte';
 import {
 	createMockCatalogItems,
 	createMockReadyStockItems,
@@ -8,18 +8,18 @@ import {
 } from '../data/item-distribution.mock-data';
 import {
 	formatDistributionTimestamp,
+	calculateReturnStatus,
 	type CatalogItem,
 	type ReadyStockItem,
 	type RequisitionTicket,
 	type RequisitionItem,
 	type TargetGroup,
 	type DistributionMode,
-	type RequisitionStatus,
 	type Recipient,
 	type DistributionLog
 } from '../domain/item-distribution';
 
-class DistributionStore {
+export class DistributionStore {
 	// Navigation & UI tabs
 	activeTab = $state<'stock' | 'requisitions'>('stock');
 
@@ -176,6 +176,10 @@ class DistributionStore {
 		items: { catalogItemId: string; quantity: number }[];
 		reason: string;
 	}) {
+		if (!this.isOnline) {
+			throw new Error('ไม่สามารถสร้างคำร้องขอเบิกได้ขณะออฟไลน์ (CR-110)');
+		}
+
 		const randomNum = Math.floor(10000 + Math.random() * 90000);
 		const ticket_code = `TKT-DIST-${randomNum}`;
 
@@ -219,6 +223,10 @@ class DistributionStore {
 	}
 
 	distributeItemToRecipient(stockId: string, recipientId: string, qty: number) {
+		if (!this.isOnline) {
+			throw new Error('ไม่สามารถบันทึกการแจกจ่ายได้ขณะออฟไลน์ (CR-110)');
+		}
+
 		const stockIndex = this.readyStockItems.findIndex((s) => s.id === stockId);
 		if (stockIndex === -1) return;
 
@@ -271,12 +279,12 @@ class DistributionStore {
 		const totalReturned = ticket.items.reduce((acc, curr) => acc + curr.returned_qty, 0);
 		const totalDamaged = ticket.items.reduce((acc, curr) => acc + curr.damaged_qty, 0);
 
-		let newStatus: RequisitionStatus = ticket.status;
-		if (totalReturned + totalDamaged >= ticket.total_distributed && ticket.total_distributed > 0) {
-			newStatus = 'completed';
-		} else if (totalReturned > 0 || totalDamaged > 0) {
-			newStatus = 'partially_returned';
-		}
+		const newStatus = calculateReturnStatus(
+			totalReturned,
+			totalDamaged,
+			ticket.total_distributed,
+			ticket.status
+		);
 
 		this.requisitions[ticketIndex] = {
 			...ticket,
@@ -288,14 +296,25 @@ class DistributionStore {
 		this.closeReturnModal();
 	}
 
+	private onOnline = () => {
+		this.isOnline = true;
+	};
+
+	private onOffline = () => {
+		this.isOnline = false;
+	};
+
 	constructor() {
 		if (typeof window !== 'undefined') {
-			window.addEventListener('online', () => {
-				this.isOnline = true;
-			});
-			window.addEventListener('offline', () => {
-				this.isOnline = false;
-			});
+			window.addEventListener('online', this.onOnline);
+			window.addEventListener('offline', this.onOffline);
+		}
+	}
+
+	destroy() {
+		if (typeof window !== 'undefined') {
+			window.removeEventListener('online', this.onOnline);
+			window.removeEventListener('offline', this.onOffline);
 		}
 	}
 
@@ -309,12 +328,16 @@ class DistributionStore {
 	}
 }
 
-export type { DistributionStore };
-
 const DISTRIBUTION_STORE_KEY = Symbol('ONSITE_DISTRIBUTION_STORE');
 
 export function setDistributionStore(): DistributionStore {
-	return setContext(DISTRIBUTION_STORE_KEY, new DistributionStore());
+	const store = new DistributionStore();
+	try {
+		onDestroy(() => store.destroy());
+	} catch {
+		// Executed outside component lifecycle (e.g. tests), ignore
+	}
+	return setContext(DISTRIBUTION_STORE_KEY, store);
 }
 
 export function getDistributionStore(): DistributionStore {

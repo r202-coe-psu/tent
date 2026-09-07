@@ -6,6 +6,7 @@ import {
 	recipientMatchesMenu,
 	sessionServedTotal,
 	quotaPercent,
+	totalActivePortions,
 	type MealMenuItem,
 	type MealRecipient,
 	type MealDistributionTransaction,
@@ -165,5 +166,68 @@ describe('quotaPercent', () => {
 
 	it('rounds to the nearest percent', () => {
 		expect(quotaPercent(1, 3)).toBe(33);
+	});
+});
+
+describe('totalActivePortions', () => {
+	it('sums portions correctly when transactions have portions > 1 (CR-109)', () => {
+		const txs: MealDistributionTransaction[] = [
+			{
+				id: 'TX-1',
+				recipientId: 'EV-1',
+				recipientName: 'สมชาย',
+				bed: 'A-01',
+				menuId: 'm-1',
+				menuTitle: 'ข้าวผัด',
+				time: '12:00',
+				portions: 1,
+				status: 'active'
+			},
+			{
+				id: 'TX-2',
+				recipientId: 'EV-2',
+				recipientName: 'สมศรี',
+				bed: 'A-02',
+				menuId: 'm-1',
+				menuTitle: 'ข้าวผัด',
+				time: '12:05',
+				portions: 3, // Family member serving > 1
+				status: 'active'
+			}
+		];
+		// Previously with .length it would have been 2. Correct sum of portions is 4.
+		expect(totalActivePortions(txs)).toBe(4);
+	});
+
+	it('excludes voided transactions from the portions count (CR-109 FR-MD-04)', () => {
+		const txs: MealDistributionTransaction[] = [
+			{
+				id: 'TX-1',
+				recipientId: 'EV-1',
+				recipientName: 'สมชาย',
+				bed: 'A-01',
+				menuId: 'm-1',
+				menuTitle: 'ข้าวผัด',
+				time: '12:00',
+				portions: 2,
+				status: 'active'
+			},
+			{
+				id: 'TX-2',
+				recipientId: 'EV-2',
+				recipientName: 'สมศรี',
+				bed: 'A-02',
+				menuId: 'm-1',
+				menuTitle: 'ข้าวผัด',
+				time: '12:05',
+				portions: 3,
+				status: 'voided'
+			}
+		];
+		expect(totalActivePortions(txs)).toBe(2);
+	});
+
+	it('returns 0 when there are no transactions', () => {
+		expect(totalActivePortions([])).toBe(0);
 	});
 });

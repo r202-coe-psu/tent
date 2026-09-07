@@ -29,7 +29,7 @@
 			}
 		} else if (e.key === 'Enter') {
 			if (store.selectedRecipient) {
-				if (!store.selectedRecipientAlreadyServed) {
+				if (!store.selectedRecipientAlreadyServed && menu.status !== 'closed') {
 					e.preventDefault();
 					store.confirmServe();
 				}
@@ -46,7 +46,7 @@
 <div class="space-y-6">
 	<!-- Kiosk info banner -->
 	<div
-		class="flex flex-col gap-3 rounded-xl border border-[#fef08a] bg-[#fef9c3] p-4 shadow-sm md:flex-row md:items-center md:justify-between dark:border-amber-900/30 dark:bg-amber-950/20"
+		class="flex flex-col gap-3 rounded-xl border border-[#fef08a] bg-[#fef9c3] p-4 shadow-sm md:flex-row md:items-center md:justify-between"
 	>
 		<div class="flex items-center gap-3">
 			<div
@@ -55,10 +55,10 @@
 				<QrCode class="size-4" />
 			</div>
 			<div>
-				<h3 class="text-sm font-extrabold text-amber-950 dark:text-amber-300">
+				<h3 class="text-sm font-extrabold text-amber-950">
 					{menu.title}
 				</h3>
-				<p class="text-[10px] text-amber-800 dark:text-amber-400">
+				<p class="text-xs text-amber-800">
 					{menu.batchCode} • ผู้รับเป้าหมาย: {menu.tags.join(', ')}
 				</p>
 			</div>
@@ -66,9 +66,9 @@
 
 		<Badge
 			variant="outline"
-			class="w-fit gap-1.5 border-emerald-200 bg-emerald-100 text-xs font-extrabold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 {menu.status ===
+			class="w-fit gap-1.5 border-emerald-200 bg-emerald-100 text-xs font-extrabold text-emerald-800 {menu.status ===
 			'closed'
-				? 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
+				? 'border-rose-200 bg-rose-50 text-rose-800'
 				: ''}"
 		>
 			<span
@@ -83,13 +83,9 @@
 	<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
 		<!-- Left: scan / search -->
 		<div class="space-y-4 lg:col-span-7">
-			<div
-				class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-			>
+			<div class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 				<div class="flex items-center justify-between">
-					<h4
-						class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800 dark:text-white"
-					>
+					<h4 class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
 						<Search class="size-4" />
 						<span>สแกน QR หรือ ค้นหาผู้รับอาหาร</span>
 					</h4>
@@ -126,9 +122,7 @@
 
 				{#if store.selectedRecipient}
 					{@const recipient = store.selectedRecipient}
-					<div
-						class="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40"
-					>
+					<div class="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
 						<div class="flex items-start justify-between gap-2">
 							<div class="flex items-center gap-3">
 								<div
@@ -137,10 +131,10 @@
 									{recipient.name.charAt(0)}
 								</div>
 								<div>
-									<div class="text-sm font-bold text-slate-900 dark:text-white">
+									<div class="text-sm font-bold text-slate-900">
 										{recipient.name}
 									</div>
-									<div class="text-[11px] text-slate-400">
+									<div class="text-xs text-slate-400">
 										รหัส: {recipient.id} | โซน: {recipient.zone} | เตียง: {recipient.bed}
 									</div>
 								</div>
@@ -148,63 +142,71 @@
 							<button
 								onclick={() => store.deselectRecipient()}
 								aria-label="ยกเลิกการเลือก"
-								class="rounded-full p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+								class="rounded-full p-1 text-slate-400 hover:bg-slate-100"
 							>
 								<X class="size-4" />
 							</button>
 						</div>
 
 						<div
-							class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 dark:border-zinc-800 dark:bg-zinc-900/30"
+							class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
 						>
 							<div>
-								<div class="text-xs font-bold text-slate-700 dark:text-slate-300">
+								<div class="text-xs font-bold text-slate-700">
 									จำนวนที่รับ: <span class="text-amber-600">{store.servePortions} ที่</span>
 								</div>
-								<p class="text-[10px] text-slate-400">ปรับจำนวนหากรับแทนสมาชิกในครอบครัว</p>
+								<p class="text-xs text-slate-400">ปรับจำนวนหากรับแทนสมาชิกในครอบครัว</p>
 							</div>
-							<div class="flex items-center gap-2">
+							<div class="flex items-center gap-3">
 								<button
 									onclick={() => store.setServePortions(store.servePortions - 1)}
 									aria-label="ลดจำนวน"
-									class="flex size-7 items-center justify-center rounded-lg border text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800"
+									class="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xs transition-colors hover:bg-slate-100 active:scale-95"
 								>
-									<Minus class="size-3.5" />
+									<Minus class="size-5" />
 								</button>
-								<span class="w-6 text-center text-sm font-bold text-slate-900 dark:text-white"
+								<span class="w-8 text-center text-base font-bold text-slate-900"
 									>{store.servePortions}</span
 								>
 								<button
 									onclick={() => store.setServePortions(store.servePortions + 1)}
 									aria-label="เพิ่มจำนวน"
-									class="flex size-7 items-center justify-center rounded-lg border text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800"
+									class="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xs transition-colors hover:bg-slate-100 active:scale-95"
 								>
-									<Plus class="size-3.5" />
+									<Plus class="size-5" />
 								</button>
 							</div>
 						</div>
 
-						{#if store.selectedRecipientAlreadyServed}
+						{#if menu.status === 'closed'}
+							<div class="space-y-1 rounded-xl border border-rose-300 bg-rose-50 p-3 text-center">
+								<AlertTriangle class="mx-auto size-5 text-rose-600" />
+								<h5 class="text-sm font-bold text-rose-900">
+									เมนูนี้ปิดรอบแจกจ่ายแล้ว (Closed Batch)
+								</h5>
+								<p class="text-xs text-rose-700">
+									ไม่สามารถบันทึกแจกจ่ายเพิ่มเติมได้ เนื่องจากรอบบริการปิดลงแล้ว
+								</p>
+							</div>
+						{:else if store.selectedRecipientAlreadyServed}
 							<div
-								class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20"
+								class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-700"
 							>
 								ผู้ประสบภัยรายนี้รับประทานเมนูนี้ไปแล้ว
 							</div>
 						{:else}
 							{#if store.selectedRecipientMismatch}
 								<div
-									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-900/40 dark:bg-amber-950/20"
+									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center"
 								>
 									<AlertTriangle class="mx-auto size-5 text-amber-600" />
-									<h5 class="text-sm font-bold text-amber-900 dark:text-amber-300">
-										กลุ่มเป้าหมายไม่ตรงกับเมนูนี้!
-									</h5>
-									<p class="text-xs text-amber-800 dark:text-amber-400">
+									<h5 class="text-sm font-bold text-amber-900">กลุ่มเป้าหมายไม่ตรงกับเมนูนี้!</h5>
+									<p class="text-xs text-amber-800">
 										กลุ่มเป้าหมายเมนูนี้: [{menu.tags.join(', ')}] | คุณสมบัติผู้พักพิง: [{recipient.dietaryTags.join(
 											', '
 										)}]
 									</p>
-									<p class="text-xs font-semibold text-amber-700 dark:text-amber-500">
+									<p class="text-xs font-semibold text-amber-700">
 										สามารถข้ามคำเตือนเพื่อแจกจ่ายตามดุลยพินิจเจ้าหน้าที่ได้
 									</p>
 								</div>
@@ -212,17 +214,17 @@
 
 							{#if store.selectedRecipientOverYield}
 								<div
-									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-900/40 dark:bg-amber-950/20"
+									class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center"
 								>
 									<AlertTriangle class="mx-auto size-5 text-amber-600" />
-									<h5 class="text-sm font-bold text-amber-900 dark:text-amber-300">
+									<h5 class="text-sm font-bold text-amber-900">
 										จำนวนที่แจกจะเกินยอดปรุงเสร็จ! (CR-109 Soft Warning)
 									</h5>
-									<p class="text-xs text-amber-800 dark:text-amber-400">
+									<p class="text-xs text-amber-800">
 										เป้าหมายปรุงเสร็จ: {menu.target} ที่ | แจกไปแล้ว: {menu.served} ที่ | แจกเพิ่ม: {store.servePortions}
 										ที่
 									</p>
-									<p class="text-xs font-semibold text-amber-700 dark:text-amber-500">
+									<p class="text-xs font-semibold text-amber-700">
 										อนุโลมให้เจ้าหน้าที่กดยืนยันแจกต่อได้ เพื่อไม่ให้การแจกจ่ายอาหารหน้างานหยุดชะงัก
 									</p>
 								</div>
@@ -238,26 +240,31 @@
 								ยกเลิก (Esc)
 							</Button>
 							<Button
-								disabled={store.selectedRecipientAlreadyServed}
+								disabled={store.selectedRecipientAlreadyServed || menu.status === 'closed'}
 								onclick={() => store.confirmServe()}
-								class="flex-1 gap-1.5 text-xs font-bold text-white {store.selectedRecipientMismatch ||
-								store.selectedRecipientOverYield
-									? 'bg-amber-600 hover:bg-amber-700'
-									: 'bg-emerald-600 hover:bg-emerald-700'}"
+								class="flex-1 gap-1.5 text-xs font-bold text-white {menu.status === 'closed'
+									? 'cursor-not-allowed bg-slate-400 opacity-60'
+									: store.selectedRecipientMismatch || store.selectedRecipientOverYield
+										? 'bg-amber-600 hover:bg-amber-700'
+										: 'bg-emerald-600 hover:bg-emerald-700'}"
 							>
-								{store.selectedRecipientMismatch || store.selectedRecipientOverYield
-									? 'ข้ามเตือน & ยืนยันแจก'
-									: 'ยืนยันแจก'} ({store.servePortions}
-								ที่) ↵
+								{#if menu.status === 'closed'}
+									<Lock class="size-3.5" />
+									<span>เมนูปิดรอบแล้ว</span>
+								{:else if store.selectedRecipientMismatch || store.selectedRecipientOverYield}
+									ข้ามเตือน & ยืนยันแจก ({store.servePortions} ที่) ↵
+								{:else}
+									ยืนยันแจก ({store.servePortions} ที่) ↵
+								{/if}
 							</Button>
 						</div>
 					</div>
 				{:else if !store.searchQuery.trim()}
 					<div
-						class="flex flex-col items-center justify-center space-y-3 rounded-xl border-2 border-dashed border-slate-100 py-16 text-center dark:border-zinc-800"
+						class="flex flex-col items-center justify-center space-y-3 rounded-xl border-2 border-dashed border-slate-100 py-16 text-center"
 					>
 						<div
-							class="flex size-16 items-center justify-center rounded-full border bg-slate-50 text-slate-400 dark:bg-zinc-800"
+							class="flex size-16 items-center justify-center rounded-full border bg-slate-50 text-slate-400"
 						>
 							{#if menu.status === 'closed'}
 								<Lock class="size-8 text-rose-500" />
@@ -266,12 +273,12 @@
 							{/if}
 						</div>
 						<div class="space-y-1">
-							<h4 class="text-sm font-extrabold text-slate-900 dark:text-white">
+							<h4 class="text-sm font-extrabold text-slate-900">
 								{menu.status === 'closed'
 									? 'รอบแจกจ่ายเมนูนี้นอกช่วงเวลา (ปิดรอบแล้ว)'
 									: 'พร้อมรับสแกน QR หรือ ค้นหารายชื่อ'}
 							</h4>
-							<p class="max-w-sm text-xs text-slate-400 dark:text-zinc-500">
+							<p class="max-w-sm text-xs text-slate-400">
 								{menu.status === 'closed'
 									? 'คุณกำลังดูประวัติการแจกอาหารของเมนูที่ปิดรอบแล้ว สามารถค้นหารายชื่อผู้ประสบภัยในช่องด้านบน หรือดูรายการด้านขวา'
 									: 'ใช้เครื่องแสกนบาร์โค้ด หรือพิมพ์ค้นหาชื่อ/เลขบัตรในช่องด้านบน เพื่อเริ่มกระบวนการแจกจ่ายอาหาร'}
@@ -280,9 +287,9 @@
 
 						<Badge
 							variant="outline"
-							class="gap-1.5 text-[10px] font-bold {menu.status === 'closed'
-								? 'border-rose-100 bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300'
-								: 'border-emerald-100 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'}"
+							class="gap-1.5 text-xs font-bold {menu.status === 'closed'
+								? 'border-rose-100 bg-rose-50 text-rose-800'
+								: 'border-emerald-100 bg-emerald-50 text-emerald-800'}"
 						>
 							<span
 								class="size-1.5 rounded-full {menu.status === 'closed'
@@ -294,9 +301,7 @@
 					</div>
 				{:else}
 					<div class="max-h-[350px] space-y-2 overflow-y-auto pr-1">
-						<h5
-							class="text-[11px] font-bold tracking-wider text-slate-400 uppercase dark:text-zinc-500"
-						>
+						<h5 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 							ผลลัพธ์การค้นหา ({store.searchResults.length})
 						</h5>
 						{#if store.searchResults.length === 0}
@@ -307,16 +312,14 @@
 							{#each store.searchResults as recipient (recipient.id)}
 								{@const hasReceived = store.hasReceived(recipient.id, menu.id)}
 								<div
-									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition-colors hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900/30 dark:hover:bg-zinc-800"
+									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition-colors hover:bg-slate-50"
 								>
 									<div class="space-y-1">
 										<div class="flex items-center gap-2">
-											<span class="text-sm font-bold text-slate-900 dark:text-white"
-												>{recipient.name}</span
-											>
+											<span class="text-sm font-bold text-slate-900">{recipient.name}</span>
 											<span class="text-xs text-slate-400">อายุ {recipient.age} ปี</span>
 										</div>
-										<div class="flex items-center gap-2 text-[10px] text-slate-400">
+										<div class="flex items-center gap-2 text-xs text-slate-400">
 											<span>เตียง {recipient.bed}</span>
 											<span>•</span>
 											<span>โทร: {recipient.phone}</span>
@@ -325,7 +328,7 @@
 											{#each recipient.dietaryTags as diet (diet)}
 												<Badge
 													variant="outline"
-													class="border-none bg-slate-100 text-[9px] font-bold text-slate-600 dark:bg-zinc-800 dark:text-slate-400"
+													class="border-none bg-slate-100 text-xs font-bold text-slate-600"
 												>
 													{diet}
 												</Badge>
@@ -336,7 +339,7 @@
 									<div>
 										{#if hasReceived}
 											<span
-												class="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600 dark:bg-emerald-950/20"
+												class="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600"
 											>
 												<CheckCircle2 class="size-3.5" />
 												<span>รับประทานแล้ว</span>
@@ -362,27 +365,23 @@
 		<!-- Right: live log -->
 		<div class="space-y-4 lg:col-span-5">
 			<div
-				class="flex min-h-[420px] flex-col justify-between space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+				class="flex min-h-[420px] flex-col justify-between space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
 			>
 				<div class="space-y-4">
-					<div
-						class="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-zinc-800"
-					>
+					<div class="flex items-center justify-between border-b border-slate-100 pb-2">
 						<div>
-							<h4
-								class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800 dark:text-white"
-							>
+							<h4 class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
 								<ClipboardList class="size-4" />
 								<span>ประวัติการแจกอาหารรอบนี้</span>
 							</h4>
-							<p class="text-[10px] text-slate-400 dark:text-zinc-500">
+							<p class="text-xs text-slate-400">
 								รายการแจกอาหารเรียลไทม์ (Live Logs) • {menu.title}
 							</p>
 						</div>
 
 						<Badge
 							variant="outline"
-							class="border-emerald-200 text-[10px] font-extrabold text-emerald-700"
+							class="border-emerald-200 text-xs font-extrabold text-emerald-700"
 						>
 							แจกแล้ว {menu.served} / {menu.target} ที่
 						</Badge>
@@ -394,10 +393,8 @@
 						>
 							<Clock class="size-8 opacity-45" />
 							<div>
-								<h5 class="text-xs font-bold text-slate-600 dark:text-zinc-400">
-									ยังไม่มีประวัติการแจกในเมนูนี้
-								</h5>
-								<p class="text-[10px] text-slate-400">
+								<h5 class="text-xs font-bold text-slate-600">ยังไม่มีประวัติการแจกในเมนูนี้</h5>
+								<p class="text-xs text-slate-400">
 									คิวประวัติการแจกจะแสดงที่นี่หลังจากมีการบันทึกการแจก
 								</p>
 							</div>
@@ -407,20 +404,20 @@
 							{#each store.menuTransactions as tx (tx.id)}
 								<div
 									transition:slide={{ duration: 150 }}
-									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-xs dark:border-zinc-800 {tx.status ===
+									class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-xs {tx.status ===
 									'voided'
 										? 'bg-slate-100/60 opacity-60'
 										: ''}"
 								>
 									<div class="space-y-1">
 										<div
-											class="font-bold text-slate-900 dark:text-white {tx.status === 'voided'
+											class="font-bold text-slate-900 {tx.status === 'voided'
 												? 'text-slate-400 line-through'
 												: ''}"
 										>
 											{tx.recipientName}
 										</div>
-										<div class="flex items-center gap-2 text-[10px] text-slate-400">
+										<div class="flex items-center gap-2 text-xs text-slate-400">
 											<span>เตียง {tx.bed}</span>
 											<span>•</span>
 											<span>เวลา {tx.time} น.</span>
@@ -429,8 +426,7 @@
 
 									<div class="flex items-center gap-2">
 										{#if tx.status === 'voided'}
-											<span
-												class="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600"
+											<span class="rounded bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-600"
 												>ยกเลิกแล้ว</span
 											>
 										{:else}
@@ -443,11 +439,9 @@
 					{/if}
 				</div>
 
-				<div
-					class="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-zinc-800/80"
-				>
-					<span class="text-xs font-bold text-slate-500 dark:text-zinc-400">
-						คงเหลือ: <strong class="text-slate-950 dark:text-white"
+				<div class="flex items-center justify-between border-t border-slate-100 pt-4">
+					<span class="text-xs font-bold text-slate-500">
+						คงเหลือ: <strong class="text-slate-950"
 							>{Math.max(0, menu.target - menu.served)} ที่</strong
 						>
 					</span>

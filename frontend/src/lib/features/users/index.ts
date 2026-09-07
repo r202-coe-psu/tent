@@ -8,7 +8,8 @@ export {
 	type UserFormInput,
 	type Capability,
 	type ShelterAssignmentInput,
-	type ForgotPasswordVerifyInput
+	type ForgotPasswordVerifyInput,
+	type ForceSetupInput
 } from './domain/schema';
 export {
 	listUsers,
