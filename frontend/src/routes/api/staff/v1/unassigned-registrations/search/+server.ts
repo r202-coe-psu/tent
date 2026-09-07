@@ -1,8 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { canAccessUnassignedRegistrationQueue } from '$lib/auth/roles';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, unwrapFastapiError } from '$lib/server/fastapi';
+import { requireUnassignedRegistrationQueueAccess } from '../_auth';
 
 export const prerender = false;
 
@@ -15,29 +14,8 @@ const noStore = { 'Cache-Control': 'no-store' };
  */
 export const GET: RequestHandler = async ({ url, request, fetch }) => {
 	const cookie = request.headers.get('cookie');
-	try {
-		const caller = await requireShelterScopeOrSA(cookie);
-		if (!canAccessUnassignedRegistrationQueue(caller.roles, caller.shelterCode)) {
-			return json(
-				{ error: { code: 'FORBIDDEN', message: 'Requires registration_staff or above' } },
-				{ status: 403, headers: noStore }
-			);
-		}
-	} catch (e) {
-		const status =
-			typeof e === 'object' && e !== null && 'status' in e && typeof e.status === 'number'
-				? e.status
-				: 401;
-		return json(
-			{
-				error: {
-					code: status === 403 ? 'FORBIDDEN' : 'UNAUTHENTICATED',
-					message: e instanceof Error ? e.message : 'Authentication required'
-				}
-			},
-			{ status, headers: noStore }
-		);
-	}
+	const auth = await requireUnassignedRegistrationQueueAccess(cookie);
+	if (!auth.ok) return auth.response;
 
 	const q = url.searchParams.get('q') ?? '';
 	const upstream = new URL(`${fastapiBaseUrl()}/staff/v1/unassigned-registrations/search`);

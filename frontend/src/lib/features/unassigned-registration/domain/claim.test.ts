@@ -48,6 +48,16 @@ describe('unassignedRegistrationClaimResponseSchema', () => {
 		expect(unassignedRegistrationClaimResponseSchema.parse(valid)).toEqual(valid);
 	});
 
+	it('parses orphan full-claim response (deleted false with id)', () => {
+		const orphan = {
+			...valid,
+			id: 'reg-orphan',
+			deleted: false,
+			remaining_open: []
+		};
+		expect(unassignedRegistrationClaimResponseSchema.parse(orphan)).toEqual(orphan);
+	});
+
 	it('rejects a response missing claimed members', () => {
 		expect(() =>
 			unassignedRegistrationClaimResponseSchema.parse({ ...valid, claimed: undefined })

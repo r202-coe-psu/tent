@@ -203,7 +203,7 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5.
+Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503).
 
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 

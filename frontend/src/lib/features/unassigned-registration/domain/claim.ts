@@ -4,29 +4,12 @@
  */
 
 import { z } from 'zod';
+import { openMemberHitSchema } from './search';
 
 export interface UnassignedRegistrationClaimRequest {
 	member_ids: string[];
 	shelter_code?: string;
 }
-
-const personIdHitSchema = z.object({
-	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
-	number: z.string().nullable()
-});
-
-const openMemberHitSchema = z.object({
-	reserved_evacuee_id: z.string(),
-	status: z.literal('open'),
-	first_name: z.string(),
-	last_name: z.string(),
-	gender: z.string(),
-	phone: z.string().nullable(),
-	person_id: personIdHitSchema.nullable(),
-	country: z.string(),
-	vulnerable_groups: z.array(z.string()),
-	special_needs: z.array(z.string())
-});
 
 const claimedMemberOutSchema = z.object({
 	reserved_evacuee_id: z.string(),

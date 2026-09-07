@@ -14,6 +14,9 @@ from ...core.config import settings
 
 _COUCH_TIMEOUT_SECONDS = 15.0
 _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
+# Couch SoR schema versions at claim birth (CR-112 / schema.md) — keep local to birth.
+HOUSEHOLD_SCHEMA_V = 5
+EVACUEE_SCHEMA_V = 10
 
 
 class CouchBirthError(Exception):
@@ -61,7 +64,7 @@ def build_couch_household(
     return {
         "_id": doc.reserved_household_id,
         "type": "household",
-        "schema_v": 5,
+        "schema_v": HOUSEHOLD_SCHEMA_V,
         "shelter_code": shelter_code,
         "created_at": ts,
         "updated_at": ts,
@@ -113,7 +116,7 @@ def build_couch_evacuee(
     body: dict = {
         "_id": member.reserved_evacuee_id,
         "type": "evacuee",
-        "schema_v": 10,
+        "schema_v": EVACUEE_SCHEMA_V,
         "shelter_code": shelter_code,
         "created_at": ts,
         "updated_at": ts,

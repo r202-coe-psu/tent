@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -41,6 +42,8 @@ from .schemas import (
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 # Same shape as staff Anonymous ID (CR-112): ANON- + Crockford ULID.
 _ANON_ID_RE = re.compile(r"^ANON-[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
@@ -443,15 +446,22 @@ class UnassignedRegistrationsUseCase:
         ]
 
         if not remaining_before_write:
+            # Best-effort hard-delete after Couch birth (CR-113). On failure keep
+            # claim success — orphan claimed doc stays trackable via id.
+            deleted = False
             try:
                 refreshed = await UnassignedRegistration.get(registration_id)
                 if refreshed is not None:
                     await refreshed.delete()
-            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
-                raise _mongo_unavailable("claim") from exc
+                deleted = True
+            except (PyMongoError, ConnectionError, TimeoutError, OSError):
+                logger.exception(
+                    "Unassigned Registration %s claim succeeded but Mongo delete failed",
+                    registration_id,
+                )
             return UnassignedRegistrationClaimResponse(
-                id=None,
-                deleted=True,
+                id=None if deleted else registration_id,
+                deleted=deleted,
                 shelter_code=shelter_code,
                 household_id=doc.reserved_household_id,
                 evacuee_ids=member_ids,

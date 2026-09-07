@@ -3,6 +3,8 @@
  * Mongo central queue — not Evacuee until claim.
  */
 
+import { z } from 'zod';
+
 export type OpenMemberStatus = 'open';
 
 export interface PersonIdHit {
@@ -35,6 +37,25 @@ export interface UnassignedRegistrationSearchHit {
 export interface UnassignedRegistrationSearchResponse {
 	results: UnassignedRegistrationSearchHit[];
 }
+
+const personIdHitSchema = z.object({
+	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
+	number: z.string().nullable()
+});
+
+/** Owner of the open-member search/claim hit shape — claim imports this. */
+export const openMemberHitSchema = z.object({
+	reserved_evacuee_id: z.string(),
+	status: z.literal('open'),
+	first_name: z.string(),
+	last_name: z.string(),
+	gender: z.string(),
+	phone: z.string().nullable(),
+	person_id: personIdHitSchema.nullable(),
+	country: z.string(),
+	vulnerable_groups: z.array(z.string()),
+	special_needs: z.array(z.string())
+});
 
 export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();

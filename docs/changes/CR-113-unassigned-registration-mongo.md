@@ -1,7 +1,7 @@
 ---
 id: CR-113
 title: Unassigned Registration — Mongo-only pre-registration without shelter until claim
-status: approved
+status: done
 date: 2026-09-06
 updated: 2026-09-08
 requested_by: เจ้าของโครงการ (grill-with-docs session)
@@ -22,6 +22,8 @@ tracking_note: >-
   docs/data/proposed-registration-foundation-schema-delta.md (superseded).
   2026-09-08: claim algorithm locked to option B (Mongo mark/lock → Couch birth →
   revert on Couch failure); #247 review alignment — edit in place, no new CR.
+  2026-09-08: leftovers grill — full-claim Mongo delete best-effort; orphan returns
+  HTTP 200 with deleted:false + id; CR marked done after #245–#247 delivery.
 ---
 
 # Unassigned Registration — Mongo-only, shelter not chosen yet
@@ -76,7 +78,7 @@ unassigned_registrations
 3. **Birth Couch SoR:** สร้าง `evacuee` ด้วย `reserved_evacuee_id` + `household` ด้วย `reserved_household_id` (สร้าง household ครั้งแรกถ้ายังไม่มีในศูนย์) สถานะ `pre_registered` · `_bulk_docs` `conflict` บน reserved id = สำเร็จแบบ idempotent (เอกสารเกิดแล้ว)
 4. ถ้า Couch birth ล้มเหลว (ยกเว้น conflict ที่ถือว่าสำเร็จ) → **revert** สมาชิกที่ mark ไปกลับเป็น `open` ใน Mongo แล้วตอบ 503 `ONLINE_REQUIRED`
 5. คนที่ไม่ติ๊กคง `open`
-6. ถ้าไม่มีสมาชิก `open` เหลือ → **best-effort** hard-delete เอกสาร `unassigned_registrations` (ไม่ atomic กับ birth; orphan claimed-without-delete ยอมได้จนกว่า cleanup)
+6. ถ้าไม่มีสมาชิก `open` เหลือ → **best-effort** hard-delete เอกสาร `unassigned_registrations` (ไม่ atomic กับ birth; orphan claimed-without-delete ยอมได้จนกว่า cleanup). ถ้า delete ล้มหลัง birth สำเร็จแล้ว → ยังตอบ **HTTP 200** claim success ด้วย `deleted: false` และ `id: <registration_id>` (ตาม orphan ได้) + log ฝั่งเซิร์ฟเวอร์ — **ไม่** ตอบ 503
 7. Worker project → `public_persons` จาก Couch (ครั้งแรกที่มีแถวสาธารณะ)
 8. ศูนย์อื่น claim สมาชิกที่ `claimed` แล้วไม่ได้; สมาชิก `open` ยังอยู่ในคิวให้ศูนย์อื่น/รอบหลังได้ตามนโยบายค้น
 
@@ -124,6 +126,7 @@ unassigned_registrations
 - 2026-09-06 — เลิกคำหลัก Central Pool → **Unassigned Registration**; collection **`unassigned_registrations`**
 - 2026-09-06 — Owner approve: `track=CR file` + stable review OK → **CR-113**; merge delta §6 เข้า `schema.md`
 - 2026-09-08 — #247 review: lock claim order = **option B** (Mongo mark → Couch birth → revert on Couch failure); `_bulk_docs` conflict = OK; full-claim hard-delete = best-effort; Station 1 checkboxes start empty
+- 2026-09-08 — leftovers grill: orphan delete path = 200 + `deleted: false` + `id`; UI secondary toast; mark CR **done** after #245–#247
 
 ## Relationship
 

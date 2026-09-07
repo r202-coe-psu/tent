@@ -49,11 +49,18 @@ export function useClaimUnassignedRegistration() {
 		onSuccess: (result) => {
 			queryClient.invalidateQueries({ queryKey: unassignedRegistrationKeys.all });
 			const count = result.evacuee_ids.length;
+			const orphanQueueDoc =
+				!result.deleted && result.id != null && result.remaining_open.length === 0;
 			toast.success(
 				result.deleted
 					? `รับเข้าศูนย์ ${count} คน — เอกสารคิวถูกลบแล้ว`
-					: `รับเข้าศูนย์ ${count} คน — สมาชิกที่เหลือยังอยู่ในคิวกลาง`
+					: orphanQueueDoc
+						? `รับเข้าศูนย์ ${count} คน สำเร็จ`
+						: `รับเข้าศูนย์ ${count} คน — สมาชิกที่เหลือยังอยู่ในคิวกลาง`
 			);
+			if (orphanQueueDoc) {
+				toast.message('เอกสารลงทะเบียนอาจยังค้างในคิวกลาง — ติดต่อผู้ดูแลระบบหากยังเห็นรายการนี้');
+			}
 		},
 		onError: (error) => {
 			const message = error instanceof Error ? error.message : 'รับสมาชิกเข้าศูนย์ไม่สำเร็จ';

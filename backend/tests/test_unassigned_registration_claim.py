@@ -16,6 +16,8 @@ from tent_model.unassigned_registration import (
 
 from apiapp.core.staff_session import StaffSession, require_registration_staff
 from apiapp.modules.unassigned_registrations.couch_birth import (
+    EVACUEE_SCHEMA_V,
+    HOUSEHOLD_SCHEMA_V,
     CouchBirthError,
     InMemoryCouchBirth,
     get_couch_birth,
@@ -172,11 +174,13 @@ async def test_partial_claim_births_couch_for_ticked_only_and_leaves_open_search
     household = born[doc.reserved_household_id]
     assert household["type"] == "household"
     assert household["_id"] == doc.reserved_household_id
+    assert household["schema_v"] == HOUSEHOLD_SCHEMA_V
     assert household["status"] == "pre_registered"
     assert household["shelter_code"] == "SH001"
     evacuee = born[claim_id]
     assert evacuee["type"] == "evacuee"
     assert evacuee["_id"] == claim_id
+    assert evacuee["schema_v"] == EVACUEE_SCHEMA_V
     assert evacuee["current_stay"]["status"] == "pre_registered"
     assert evacuee["household_id"] == doc.reserved_household_id
     assert evacuee["first_name"] == "สมชาย"
@@ -216,6 +220,42 @@ async def test_full_claim_hard_deletes_mongo_document(
     assert doc.reserved_household_id in born
     assert all(eid in born for eid in ids)
     assert await PublicPerson.count() == 0
+
+
+async def test_full_claim_returns_success_when_mongo_delete_fails(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Best-effort delete: Couch birth wins; orphan Mongo doc stays trackable (CR-113)."""
+    doc = await _seed_two_member_registration()
+    ids = [m.reserved_evacuee_id for m in doc.members]
+    registration_id = doc.id
+
+    async def boom_delete(self: UnassignedRegistration) -> None:
+        raise ConnectionError("mongo delete unavailable")
+
+    monkeypatch.setattr(UnassignedRegistration, "delete", boom_delete)
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{registration_id}/claim",
+        json={"member_ids": ids},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted"] is False
+    assert body["id"] == registration_id
+    assert body["remaining_open"] == []
+    assert set(body["evacuee_ids"]) == set(ids)
+
+    born = couch_birth.docs_for("SH001")
+    assert doc.reserved_household_id in born
+    assert all(eid in born for eid in ids)
+    # Orphan remains in Mongo (all members claimed) so desk/admin can track it.
+    stored = await UnassignedRegistration.get(registration_id)
+    assert stored is not None
+    assert stored.status == "claimed"
+    assert all(m.status == "claimed" for m in stored.members)
 
 
 async def test_already_claimed_member_cannot_be_claimed_by_another_shelter(
