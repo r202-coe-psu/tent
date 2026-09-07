@@ -8,7 +8,7 @@ import {
 	toUnassignedRegistrationPayload,
 	unassignedRegistrationInputSchema
 } from '$lib/features/public-register/server';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
@@ -16,18 +16,6 @@ export const prerender = false;
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
 const noStore = { 'Cache-Control': 'no-store' };
-
-/**
- * Flatten FastAPI's `{ errors: [detail] }` envelope for the public SPA.
- */
-function unwrapFastapiError(body: unknown): Record<string, unknown> {
-	if (typeof body !== 'object' || body === null) return { error: 'WRITE_FAILED' };
-	const envelope = body as { errors?: unknown[] };
-	const detail = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
-	if (typeof detail === 'object' && detail !== null) return detail as Record<string, unknown>;
-	if (typeof detail === 'string') return { error: detail };
-	return body as Record<string, unknown>;
-}
 
 /**
  * POST /api/public/v1/unassigned-registrations — public pre-reg without shelter (CR-113).

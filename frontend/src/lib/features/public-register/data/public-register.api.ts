@@ -4,9 +4,15 @@
  * The write path is `/api/public/v1/registrations` → CouchDB via the roleless
  * public writer (CR-070 / T-71). The browser never holds a credential and never
  * talks to CouchDB or FastAPI directly (CR-063).
+ *
+ * Unassigned Registration (CR-113) uses `/api/public/v1/unassigned-registrations`
+ * → BFF Bearer → FastAPI → Mongo only.
  */
+import type { components } from '$lib/api/openapi';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 import { publicBookingErrorMessage } from '../domain/booking';
+import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
+import { unassignedRegistrationErrorMessage } from '../domain/unassigned-registration';
 
 export interface BookingTicketResponse {
 	success: true;
@@ -44,6 +50,30 @@ export async function lookupBooking(
 	});
 	if (!res.ok) throw await bookingError(res);
 	return (await res.json()) as BookingTicketResponse;
+}
+
+export type UnassignedRegistrationResponse =
+	components['schemas']['UnassignedRegistrationCreateResponse'];
+
+async function unassignedRegistrationError(res: Response): Promise<Error> {
+	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+	return new Error(unassignedRegistrationErrorMessage(body?.error as string | undefined));
+}
+
+/**
+ * Public Pre-registration without a shelter (CR-113).
+ * Browser → same-origin BFF only; never Couch or FastAPI credentials.
+ */
+export async function createUnassignedRegistration(
+	input: UnassignedRegistrationInput
+): Promise<UnassignedRegistrationResponse> {
+	const res = await fetch('/api/public/v1/unassigned-registrations', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!res.ok) throw await unassignedRegistrationError(res);
+	return (await res.json()) as UnassignedRegistrationResponse;
 }
 
 export interface PetTypeOption {

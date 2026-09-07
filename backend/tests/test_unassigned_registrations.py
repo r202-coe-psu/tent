@@ -11,6 +11,8 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.unassigned_registration import UnassignedRegistration
 
 from apiapp.core.config import Settings
+from apiapp.modules.shelter.use_case import FORECAST_OCCUPANCY_STATUSES
+from apiapp.utils.ulid import new_ulid
 
 
 @pytest.fixture
@@ -28,6 +30,7 @@ async def open_shelter() -> PublicShelter:
         capacity=100,
         occupancy_total=7,
         updated_at=datetime.now(UTC),
+        raw_data={"operation_status": "active", "capacity": 100},
     )
     await shelter.insert()
     return shelter
@@ -62,6 +65,13 @@ def _create_payload(**overrides: object) -> dict:
     return body
 
 
+async def _forecast_occupancy(client: AsyncClient, auth_headers: dict[str, str]) -> int:
+    """CR-112 Forecast = public shelter `occupancy` (PublicPerson stay allow-list)."""
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    return int(response.json()["shelter"]["occupancy"])
+
+
 async def test_create_requires_bearer(client: AsyncClient) -> None:
     response = await client.post("/public/v1/unassigned-registrations", json=_create_payload())
     assert response.status_code == 401
@@ -72,7 +82,19 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     auth_headers: dict[str, str],
     open_shelter: PublicShelter,
 ) -> None:
-    forecast_before = open_shelter.occupancy_total
+    # Seed a Forecast occupant so occupancy is derived from PublicPerson (CR-112),
+    # not the legacy denormalized occupancy_total field.
+    await PublicPerson(
+        id="evacuee:seed-forecast",
+        shelter_code="SH001",
+        first_name="มีอยู่แล้ว",
+        last_name_masked="ม.",
+        status="pre_registered",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    forecast_before = await _forecast_occupancy(client, auth_headers)
+    assert forecast_before == 1
+    assert open_shelter.occupancy_total == 7  # denormalized field is not Forecast
 
     response = await client.post(
         "/public/v1/unassigned-registrations",
@@ -85,7 +107,8 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     assert body["id"]
     assert body["reserved_household_id"].startswith("household:")
     assert len(body["members"]) == 1
-    assert body["members"][0]["reserved_evacuee_id"].startswith("evacuee:")
+    reserved_evacuee = body["members"][0]["reserved_evacuee_id"]
+    assert reserved_evacuee.startswith("evacuee:")
     assert body["members"][0]["status"] == "open"
     assert body["registered_via"] == "web"
     assert body["schema_v"] == 1
@@ -95,20 +118,83 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     assert stored.schema_v == 1
     assert stored.reserved_household_id == body["reserved_household_id"]
     assert stored.members[0].status == "open"
-    assert stored.members[0].reserved_evacuee_id == body["members"][0]["reserved_evacuee_id"]
+    assert stored.members[0].reserved_evacuee_id == reserved_evacuee
     assert stored.members[0].first_name == "สมชาย"
     assert stored.members[0].person_id is not None
     assert stored.members[0].person_id.number == "1234567890123"
     assert stored.registered_via == "web"
     assert stored.household.housing_type == "owned_house"
 
-    # No public_persons stub until claim + worker project from Couch.
-    assert await PublicPerson.count() == 0
+    # FR-UR-01: no public_persons stub until claim + worker project from Couch.
+    # FastAPI create never writes Couch; reserved ids must not appear as projections.
+    assert await PublicPerson.get(reserved_evacuee) is None
+    assert await PublicPerson.get(body["reserved_household_id"]) is None
+    assert await PublicPerson.count() == 1  # only the seeded Forecast person
 
-    # Forecast Occupancy for every shelter is unchanged (Mongo queue does not count).
-    refreshed = await PublicShelter.get("SH001")
-    assert refreshed is not None
-    assert refreshed.occupancy_total == forecast_before
+    # FR-UR-06: Forecast Occupancy (CR-112 `occupancy`) unchanged for every shelter.
+    assert await _forecast_occupancy(client, auth_headers) == forecast_before
+    assert (
+        await PublicPerson.find(
+            {"shelter_code": "SH001", "status": {"$in": list(FORECAST_OCCUPANCY_STATUSES)}}
+        ).count()
+        == forecast_before
+    )
+
+
+async def test_create_rejects_homeless_without_landmark_or_geo(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            household={
+                "housing_type": "homeless",
+                "residence_landmark": "  ",
+                "pets": [],
+            }
+        ),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_allows_homeless_with_landmark(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            household={
+                "housing_type": "homeless",
+                "residence_landmark": "ใต้สะพาน",
+                "pets": [],
+            }
+        ),
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.household.housing_type == "homeless"
+    assert stored.household.residence_landmark == "ใต้สะพาน"
+
+
+async def test_create_rejects_non_homeless_without_address(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            household={
+                "housing_type": "owned_house",
+                "pets": [],
+            }
+        ),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
 
 
 async def test_create_rejects_duplicate_open_national_id(
@@ -225,7 +311,7 @@ async def test_create_rejects_duplicate_open_passport(
 async def test_create_rejects_duplicate_open_anonymous_id(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    anon = "ANON-01HTESTANON0000000000001"
+    anon = f"ANON-{new_ulid()}"
     first = await client.post(
         "/public/v1/unassigned-registrations",
         headers=auth_headers,
@@ -330,3 +416,29 @@ async def test_create_mints_anonymous_id_when_card_type_anonymous(
     assert member["person_id"]["cardType"] == "anonymous"
     assert member["person_id"]["number"].startswith("ANON-")
     assert len(member["person_id"]["number"].removeprefix("ANON-")) == 26
+
+
+async def test_create_rejects_anonymous_number_that_is_not_anon_ulid(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            members=[
+                {
+                    "first_name": "ไม่ระบุ",
+                    "last_name": "",
+                    "gender": "other",
+                    "phone": "0811111112",
+                    "person_id": {"cardType": "anonymous", "number": "NOT-AN-ANON-ID"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ]
+        ),
+    )
+    assert response.status_code == 422
+    assert response.json()["errors"][0]["error"] == "INVALID_ANONYMOUS_ID"
+    assert await UnassignedRegistration.count() == 0

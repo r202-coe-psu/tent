@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -20,9 +21,17 @@ from .schemas import (
     MemberCreated,
     MemberInput,
     PersonIdInput,
+    PersonIdOut,
     UnassignedRegistrationCreateRequest,
     UnassignedRegistrationCreateResponse,
 )
+
+# Same shape as staff Anonymous ID (CR-112): ANON- + Crockford ULID.
+_ANON_ID_RE = re.compile(r"^ANON-[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
+
+
+def _is_anonymous_id(value: str) -> bool:
+    return bool(_ANON_ID_RE.match(value.strip()))
 
 
 def _normalize_person_id(person_id: PersonIdInput | None) -> PersonId | None:
@@ -31,13 +40,17 @@ def _normalize_person_id(person_id: PersonIdInput | None) -> PersonId | None:
     card_type = person_id.cardType
     number = person_id.number
     if card_type == "anonymous":
-        # CR-112: system mints ANON-{ulid} when anonymous and number absent.
+        # CR-112: mint ANON-{ulid} when anonymous and number absent.
+        # Reject non-ANON values instead of silently reminting (caller intent preserved).
         if not number or not str(number).strip():
             number = f"ANON-{new_ulid()}"
         else:
             number = str(number).strip().upper()
-            if not number.startswith("ANON-"):
-                number = f"ANON-{new_ulid()}"
+            if not _is_anonymous_id(number):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"error": "INVALID_ANONYMOUS_ID"},
+                )
         return PersonId(cardType="anonymous", number=number)
 
     if number is None or not str(number).strip():
@@ -108,7 +121,7 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
 def _member_response(member: UnassignedMember) -> MemberCreated:
     person_id = None
     if member.person_id is not None:
-        person_id = PersonIdInput(
+        person_id = PersonIdOut(
             cardType=member.person_id.cardType,
             number=member.person_id.number,
         )

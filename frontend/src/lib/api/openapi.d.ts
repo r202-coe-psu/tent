@@ -968,9 +968,7 @@ export interface components {
 			/** Postal Code */
 			postal_code?: string | null;
 			/** Geo */
-			geo?: {
-				[key: string]: unknown;
-			} | null;
+			geo?: components['schemas']['GeoPoint'] | null;
 			/** Pets */
 			pets?: components['schemas']['PetInput'][];
 			/** Label */
@@ -1271,7 +1269,7 @@ export interface components {
 			gender: string;
 			/** Phone */
 			phone?: string | null;
-			person_id?: components['schemas']['PersonIdInput'] | null;
+			person_id?: components['schemas']['PersonIdOut'] | null;
 			/** Country */
 			country: string;
 			/** Vulnerable Groups */
@@ -1428,6 +1426,16 @@ export interface components {
 			/**
 			 * Cardtype
 			 * @default national_id
+			 * @enum {string}
+			 */
+			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
+			/** Number */
+			number?: string | null;
+		};
+		/** PersonIdOut */
+		PersonIdOut: {
+			/**
+			 * Cardtype
 			 * @enum {string}
 			 */
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';

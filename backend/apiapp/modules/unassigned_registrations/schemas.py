@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from tent_model.public_shelter import GeoPoint
 
 
 class PersonIdInput(BaseModel):
     cardType: Literal["national_id", "passport", "pink_card", "other", "anonymous"] = "national_id"
+    number: str | None = None
+
+
+class PersonIdOut(BaseModel):
+    """Person id on create responses — distinct from request PersonIdInput."""
+
+    cardType: Literal["national_id", "passport", "pink_card", "other", "anonymous"]
     number: str | None = None
 
 
@@ -60,9 +68,38 @@ class HouseholdInput(BaseModel):
     district: str | None = None
     province: str | None = None
     postal_code: str | None = None
-    geo: dict[str, Any] | None = None
+    geo: GeoPoint | None = None
     pets: list[PetInput] = Field(default_factory=list)
     label: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_cr112_residence(self) -> HouseholdInput:
+        """CR-112 / FR-RF-09 — enforce on FastAPI so Bearer callers cannot bypass BFF Zod."""
+        housing = self.housing_type
+        landmark = (self.residence_landmark or "").strip()
+        address_no = (self.address_no or "").strip()
+        geo_complete = bool(
+            (self.province or "").strip()
+            and (self.district or "").strip()
+            and (self.subdistrict or "").strip()
+        )
+
+        if housing == "homeless":
+            if not landmark and not geo_complete and not address_no:
+                raise ValueError(
+                    "homeless residence requires residence_landmark or complete "
+                    "province/district/subdistrict (or address_no)"
+                )
+            return self
+
+        if housing is None:
+            return self
+
+        if not address_no or not geo_complete:
+            raise ValueError(
+                "non-homeless residence requires address_no and province/district/subdistrict"
+            )
+        return self
 
 
 class UnassignedRegistrationCreateRequest(BaseModel):
@@ -78,7 +115,7 @@ class MemberCreated(BaseModel):
     last_name: str
     gender: str
     phone: str | None = None
-    person_id: PersonIdInput | None = None
+    person_id: PersonIdOut | None = None
     country: str
     vulnerable_groups: list[str] = Field(default_factory=list)
     special_needs: list[str] = Field(default_factory=list)

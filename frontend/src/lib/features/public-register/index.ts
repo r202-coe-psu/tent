@@ -28,12 +28,14 @@ export {
 	useBookingProvinces,
 	useBookingSubdistricts,
 	useCreateBooking,
+	useCreateUnassignedRegistration,
 	usePetTypes
 } from './application/queries';
 
 // data
 export {
 	createBooking,
+	createUnassignedRegistration,
 	fetchDistricts,
 	fetchPetTypes,
 	fetchProvinces,
@@ -41,7 +43,8 @@ export {
 	lookupBooking,
 	type BookingTicketResponse,
 	type PetTypeOption,
-	type PublicSubdistrict
+	type PublicSubdistrict,
+	type UnassignedRegistrationResponse
 } from './data/public-register.api';
 export {
 	getStoredTickets,
@@ -90,5 +93,6 @@ export {
 
 export type {
 	UnassignedRegistrationErrorCode,
-	UnassignedRegistrationInput
+	UnassignedRegistrationInput,
+	UnassignedRegistrationPayload
 } from './domain/unassigned-registration';

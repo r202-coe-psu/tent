@@ -1,6 +1,7 @@
 import { createMutation, createQuery } from '@tanstack/svelte-query';
 import {
 	createBooking,
+	createUnassignedRegistration,
 	fetchDistricts,
 	fetchPetTypes,
 	fetchProvinces,
@@ -9,6 +10,7 @@ import {
 	lookupBooking
 } from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
+import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
 
 export const publicRegisterKeys = {
 	all: ['public-register'] as const,
@@ -33,6 +35,15 @@ export function useCreateBooking() {
 export function useBookingLookup() {
 	return createMutation(() => ({
 		mutationFn: (input: PublicBookingLookupInput) => lookupBooking(input)
+	}));
+}
+
+/**
+ * Public Pre-registration without a shelter (CR-113). Mutation — never cache/replay create.
+ */
+export function useCreateUnassignedRegistration() {
+	return createMutation(() => ({
+		mutationFn: (input: UnassignedRegistrationInput) => createUnassignedRegistration(input)
 	}));
 }
 

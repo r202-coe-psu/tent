@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from beanie import Document
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, IndexModel
+
+from tent_model.public_shelter import GeoPoint
 
 MemberStatus = Literal["open", "claimed", "cancelled"]
 CardType = Literal["national_id", "passport", "pink_card", "other", "anonymous"]
@@ -64,7 +66,7 @@ class UnassignedHousehold(BaseModel):
 	district: str | None = None
 	province: str | None = None
 	postal_code: str | None = None
-	geo: dict[str, Any] | None = None
+	geo: GeoPoint | None = None
 	pets: list[UnassignedPet] = Field(default_factory=list)
 	label: str | None = None
 

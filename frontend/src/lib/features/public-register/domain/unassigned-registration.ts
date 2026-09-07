@@ -7,12 +7,17 @@
  * Pure: no I/O, no Svelte. Safe to import from `+server.ts`.
  */
 import { z } from 'zod';
+import type { components } from '$lib/api/openapi';
 import {
 	bookingGenderSchema,
 	bookingPhoneSchema,
 	publicBookingAddressSchema,
 	publicBookingPetSchema
 } from './booking';
+
+/** FastAPI create body — derived from OpenAPI (CONVENTIONS §12). */
+export type UnassignedRegistrationPayload =
+	components['schemas']['UnassignedRegistrationCreateRequest'];
 
 const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']);
 
@@ -107,7 +112,9 @@ export const unassignedRegistrationInputSchema = z
 export type UnassignedRegistrationInput = z.infer<typeof unassignedRegistrationInputSchema>;
 
 /** Shape FastAPI `POST /public/v1/unassigned-registrations` expects. */
-export function toUnassignedRegistrationPayload(input: UnassignedRegistrationInput) {
+export function toUnassignedRegistrationPayload(
+	input: UnassignedRegistrationInput
+): UnassignedRegistrationPayload {
 	const members = input.members.map((member, index) => {
 		const phone = member.phone ?? (index === 0 && input.phone ? input.phone : null) ?? null;
 		return {
@@ -151,12 +158,13 @@ export function toUnassignedRegistrationPayload(input: UnassignedRegistrationInp
 				};
 			})
 		},
-		registered_via: 'web' as const
+		registered_via: 'web'
 	};
 }
 
 export type UnassignedRegistrationErrorCode =
 	| 'INVALID_INPUT'
+	| 'INVALID_ANONYMOUS_ID'
 	| 'RATE_LIMITED'
 	| 'CAPTCHA_REQUIRED'
 	| 'CAPTCHA_FAILED'
@@ -168,6 +176,8 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 	switch (code) {
 		case 'DUPLICATE_OPEN_IDENTITY':
 			return 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง';
+		case 'INVALID_ANONYMOUS_ID':
+			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'RATE_LIMITED':
 			return 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่';
 		case 'CAPTCHA_REQUIRED':
