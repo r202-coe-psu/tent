@@ -5,12 +5,16 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Table from '$lib/components/ui/table';
 
 	import {
+		defaultSelectedMemberIds,
 		formatOpenMemberName,
 		isOnlineRequiredError,
+		toggleMemberSelection,
+		useClaimUnassignedRegistration,
 		useUnassignedRegistrationSearch,
 		UnassignedRegistrationApiError,
 		type UnassignedRegistrationSearchHit
@@ -20,8 +24,10 @@
 	let submittedQuery = $state('');
 	let selected = $state<UnassignedRegistrationSearchHit | null>(null);
 	let sheetOpen = $state(false);
+	let selectedMemberIds = $state<string[]>([]);
 
 	const search = useUnassignedRegistrationSearch(() => submittedQuery);
+	const claimMutation = useClaimUnassignedRegistration();
 
 	const results = $derived(search.data?.results ?? []);
 	const isPending = $derived(search.isPending && submittedQuery.length > 0);
@@ -32,15 +38,18 @@
 				(search.error instanceof UnassignedRegistrationApiError &&
 					search.error.code === 'ONLINE_REQUIRED'))
 	);
+	const canClaim = $derived(selectedMemberIds.length > 0 && !claimMutation.isPending);
 
 	function runSearch() {
 		submittedQuery = searchQuery.trim();
 		selected = null;
 		sheetOpen = false;
+		selectedMemberIds = [];
 	}
 
 	function openDocument(hit: UnassignedRegistrationSearchHit) {
 		selected = hit;
+		selectedMemberIds = defaultSelectedMemberIds(hit.open_members);
 		sheetOpen = true;
 	}
 
@@ -49,6 +58,36 @@
 		submittedQuery = '';
 		selected = null;
 		sheetOpen = false;
+		selectedMemberIds = [];
+	}
+
+	function setMemberChecked(memberId: string, checked: boolean | 'indeterminate') {
+		selectedMemberIds = toggleMemberSelection(selectedMemberIds, memberId, checked === true);
+	}
+
+	async function submitClaim() {
+		if (!selected || selectedMemberIds.length === 0) return;
+		const registrationId = selected.id;
+		try {
+			const result = await claimMutation.mutateAsync({
+				registrationId,
+				payload: { member_ids: selectedMemberIds }
+			});
+			if (result.deleted || result.remaining_open.length === 0) {
+				sheetOpen = false;
+				selected = null;
+				selectedMemberIds = [];
+			} else {
+				selected = {
+					...selected,
+					open_members: result.remaining_open
+				};
+				selectedMemberIds = defaultSelectedMemberIds(result.remaining_open);
+			}
+			await search.refetch();
+		} catch {
+			// toast handled in mutation onError
+		}
 	}
 </script>
 
@@ -154,37 +193,56 @@
 <Sheet.Root bind:open={sheetOpen}>
 	<Sheet.Content side="right" class="flex w-full flex-col gap-4 sm:max-w-md">
 		<Sheet.Header>
-			<Sheet.Title>คิวลงทะเบียนล่วงหน้า (ไม่ระบุศูนย์)</Sheet.Title>
+			<Sheet.Title>รับเข้าศูนย์ (claim)</Sheet.Title>
 			<Sheet.Description>
-				เอกสารคิวกลาง — สมาชิก open ด้านล่างพร้อมรับเข้าศูนย์ (claim) ในขั้นตอนถัดไป
+				ติ๊กสมาชิกที่มาถึงศูนย์นี้ — จะสร้าง Evacuee ใน Couch ที่สถานะลงทะเบียนล่วงหน้า
 			</Sheet.Description>
 		</Sheet.Header>
 		{#if selected}
-			<div class="space-y-3 text-sm">
+			<div class="flex min-h-0 flex-1 flex-col gap-3 text-sm">
 				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
 					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
 					<p class="break-all text-slate-900 tabular-nums">{selected.id}</p>
 					<p class="mt-2 text-xs font-semibold text-slate-500">ครัวเรือนสำรอง</p>
 					<p class="break-all text-slate-900 tabular-nums">{selected.reserved_household_id}</p>
 				</div>
-				<div>
+				<div class="min-h-0 flex-1 overflow-y-auto">
 					<p class="mb-2 text-sm font-semibold text-slate-900">สมาชิกที่ยัง open</p>
 					<ul class="space-y-2">
 						{#each selected.open_members as member (member.reserved_evacuee_id)}
 							<li class="rounded-xl border border-slate-200/80 bg-white px-3 py-2">
-								<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
-								<p class="text-xs text-muted-foreground tabular-nums">
-									{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
-								</p>
-								<p class="mt-1 text-xs text-slate-500">{member.reserved_evacuee_id}</p>
+								<div class="flex items-start gap-3">
+									<Checkbox
+										checked={selectedMemberIds.includes(member.reserved_evacuee_id)}
+										onCheckedChange={(v) => setMemberChecked(member.reserved_evacuee_id, v)}
+										class="mt-1"
+										aria-label={`เลือก ${formatOpenMemberName(member)}`}
+									/>
+									<div class="min-w-0 flex-1">
+										<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
+										<p class="text-xs text-muted-foreground tabular-nums">
+											{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
+										</p>
+										<p class="mt-1 text-xs text-slate-500">{member.reserved_evacuee_id}</p>
+									</div>
+								</div>
 							</li>
 						{/each}
 					</ul>
 				</div>
-				<p class="text-xs text-muted-foreground">
-					ขั้นตอนถัดไป: รับสมาชิก open เข้าศูนย์นี้ (claim) จะสร้าง Evacuee ใน Couch ที่สถานะ
-					ลงทะเบียนล่วงหน้า
-				</p>
+				<div class="flex flex-col gap-2 border-t border-slate-200/80 pt-3">
+					<p class="text-xs text-muted-foreground">
+						เลือกแล้ว {selectedMemberIds.length} / {selected.open_members.length} คน · คนที่ไม่ติ๊กยังคง
+						open ในคิวกลาง
+					</p>
+					<Button type="button" disabled={!canClaim} onclick={submitClaim} class="w-full">
+						{#if claimMutation.isPending}
+							กำลังรับเข้าศูนย์...
+						{:else}
+							รับเข้าศูนย์นี้
+						{/if}
+					</Button>
+				</div>
 			</div>
 		{/if}
 	</Sheet.Content>

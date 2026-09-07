@@ -46,6 +46,10 @@ class UnassignedMember(BaseModel):
 	age: int | None = None
 	nickname: str | None = None
 	religion: str | None = None
+	# Claim metadata (CR-113 algorithm — optional until claimed).
+	claimed_at: datetime | None = None
+	claimed_shelter_code: str | None = None
+	claimed_by: str | None = None
 
 
 class UnassignedPet(BaseModel):

@@ -157,3 +157,45 @@ class UnassignedRegistrationSearchHit(BaseModel):
 
 class UnassignedRegistrationSearchResponse(BaseModel):
     results: list[UnassignedRegistrationSearchHit]
+
+
+class UnassignedRegistrationClaimRequest(BaseModel):
+    """Staff claim — body selects open member reserved ids (CR-113 / #247)."""
+
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+    shelter_code: str | None = None
+
+    @field_validator("member_ids")
+    @classmethod
+    def _dedupe_member_ids(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if item and str(item).strip()]
+        # Preserve order while dropping duplicates.
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("shelter_code", mode="before")
+    @classmethod
+    def _blank_shelter_to_none(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip().upper()
+            return trimmed or None
+        return value
+
+
+class ClaimedMemberOut(BaseModel):
+    reserved_evacuee_id: str
+    status: Literal["claimed"] = "claimed"
+    first_name: str
+    last_name: str
+
+
+class UnassignedRegistrationClaimResponse(BaseModel):
+    success: bool = True
+    id: str | None
+    deleted: bool
+    shelter_code: str
+    household_id: str
+    evacuee_ids: list[str]
+    claimed: list[ClaimedMemberOut]
+    remaining_open: list[OpenMemberHit]

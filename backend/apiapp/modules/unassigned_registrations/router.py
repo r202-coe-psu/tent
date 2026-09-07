@@ -1,22 +1,26 @@
-"""Unassigned Registration API — public create + staff search/purge (CR-113)."""
+"""Unassigned Registration API — public create + staff search/claim/purge (CR-113)."""
 
 from __future__ import annotations
 
 import threading
 import time
 from collections import defaultdict
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
 from ...core.security import verify_external_secret
 from ...core.staff_session import StaffSession, require_registration_staff, require_system_admin
 from ...utils.request_meta import client_ip
+from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
+    UnassignedRegistrationClaimRequest,
+    UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
     UnassignedRegistrationCreateResponse,
     UnassignedRegistrationSearchResponse,
 )
-from .use_case import UnassignedRegistrationsUseCase, get_unassigned_registrations_use_case
+from .use_case import UnassignedRegistrationsUseCase
 
 router = APIRouter(
     prefix="/public/v1/unassigned-registrations",
@@ -47,6 +51,12 @@ def _enforce_rate_limit(request: Request) -> None:
             )
         bucket.append(now)
         _rate_buckets[ip] = bucket
+
+
+def get_unassigned_registrations_use_case(
+    couch_birth: Annotated[CouchBirthPort, Depends(get_couch_birth)],
+) -> UnassignedRegistrationsUseCase:
+    return UnassignedRegistrationsUseCase(couch_birth=couch_birth)
 
 
 @router.post(
@@ -84,6 +94,32 @@ async def search_unassigned_registrations(
     """Staff online search of open Unassigned Registrations (FR-UR-02 / #245)."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(q)
+
+
+@staff_router.post(
+    "/{registration_id}/claim",
+    response_model=UnassignedRegistrationClaimResponse,
+)
+async def claim_unassigned_registration(
+    registration_id: str,
+    payload: UnassignedRegistrationClaimRequest,
+    request: Request,
+    response: Response,
+    session: StaffSession = Depends(require_registration_staff),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+    cookie: Annotated[str | None, Header(alias="Cookie")] = None,
+) -> UnassignedRegistrationClaimResponse:
+    """Claim open members into this shelter — Couch birth at pre_registered (#247)."""
+    response.headers["Cache-Control"] = "no-store"
+    cookie_header = cookie or request.headers.get("cookie")
+    return await use_case.claim(
+        registration_id,
+        payload,
+        session,
+        cookie_header=cookie_header,
+    )
 
 
 @staff_router.delete(
