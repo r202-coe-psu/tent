@@ -87,14 +87,6 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div>
-					<span class="block text-xs font-medium text-muted-foreground">หมู่เลือด:</span>
-					<span class="mt-1 block text-sm font-bold text-slate-800 dark:text-slate-200">
-						{medical?.blood_group && medical.blood_group !== 'unknown'
-							? medical.blood_group
-							: 'ไม่ระบุ'}
-					</span>
-				</div>
-				<div>
 					<span class="block text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
 					<span class="mt-1 block text-sm font-bold text-slate-800 dark:text-slate-200">
 						{medical?.conditions?.join(', ') || 'ไม่มี'}
@@ -104,7 +96,7 @@
 					<span class="block text-xs font-medium text-muted-foreground">ความเสี่ยงแพร่เชื้อ:</span>
 					{#if (screening && screening.symptoms.includes('acute_respiratory')) || medical?.notes?.includes('กักโรค') || medical?.notes?.includes('แพร่เชื้อ')}
 						<span
-							class="mt-1.5 inline-block rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-2xs font-bold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
+							class="mt-1.5 inline-block rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
 						>
 							ควรแยกกักโรค
 						</span>

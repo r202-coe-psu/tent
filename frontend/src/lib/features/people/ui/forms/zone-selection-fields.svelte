@@ -80,7 +80,7 @@
 	}
 
 	function recommendLabel(kind: string): string {
-		if (kind === 'quarantine') return 'แนะนำสำหรับ triage เหลือง/แดง (กักตัว)';
+		if (kind === 'quarantine') return 'แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)';
 		if (kind === 'vulnerable') return 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง';
 		return 'โซนที่พักทั่วไป';
 	}

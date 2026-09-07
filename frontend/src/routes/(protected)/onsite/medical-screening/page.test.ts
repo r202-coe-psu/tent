@@ -355,7 +355,7 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).not.toContain('บันทึกและจัดโซนทันที');
 	});
 
-	it('shows re-edit banner when prior screening context is provided', () => {
+	it('strictly adheres to 3-section layout and does not render re-edit banner', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -368,9 +368,11 @@ describe('ClinicalScreeningForm component', () => {
 			}
 		});
 
-		expect(result.body).toContain('แก้ไขผลการคัดกรอง');
-		expect(result.body).toMatch(/2/);
-		expect(result.body).toContain('nurse.one');
+		expect(result.body).not.toContain('re-edit-banner');
+		expect(result.body).not.toContain('แก้ไขผลการคัดกรอง (บันทึกใหม่แบบ append)');
+		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
+		expect(result.body).toContain('2. อาการทั่วไป');
+		expect(result.body).toContain('3. อาการเฝ้าระวังทางระบาดวิทยา');
 	});
 });
 

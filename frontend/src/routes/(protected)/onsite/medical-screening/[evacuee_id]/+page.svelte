@@ -181,8 +181,8 @@
 				</div>
 				<h2 class="text-base font-bold text-foreground">ไม่พบผู้ประสบภัย</h2>
 				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-					รหัส <span class="font-mono">{evacueeId}</span> ไม่มีในศูนย์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง —
-					กลับไปที่คิวคัดกรองแล้วลองค้นหาอีกครั้ง
+					รหัส <span class="font-semibold text-foreground">{evacueeId}</span> ไม่มีในศูนย์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง
+					— กลับไปที่คิวคัดกรองแล้วลองค้นหาอีกครั้ง
 				</p>
 				<Button variant="default" class="mt-4 w-full" onclick={goToQueue}>กลับไปคิวคัดกรอง</Button>
 			</Card.Root>

@@ -209,5 +209,20 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('โซน A - ทั่วไป');
 			expect(result.body).toContain('โซน B - เปราะบาง');
 		});
+
+		it('shows EWAR surveillance quarantine recommendation without deprecated triage text', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					ewar_symptoms: ['acute_respiratory', 'fever'],
+					shelter_zones: [
+						{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' },
+						{ code: 'Z-Q', name: 'โซนกักตัว', type: 'quarantine' }
+					]
+				}
+			});
+			expect(result.body).toContain('แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)');
+			expect(result.body).not.toContain('triage');
+		});
 	});
 });

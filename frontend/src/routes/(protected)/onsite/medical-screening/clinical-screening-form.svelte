@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import History from '@lucide/svelte/icons/history';
 	import Save from '@lucide/svelte/icons/save';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
@@ -12,6 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 
 	import {
 		EwarSymptomsFields,
@@ -162,24 +162,6 @@
 		baselineSnapshot = currentSnapshot();
 	});
 
-	function formatScreenedAt(iso?: string | null): string {
-		if (!iso) return '—';
-		try {
-			const d = new Date(iso);
-			return (
-				d.toLocaleString('th-TH', {
-					day: 'numeric',
-					month: 'short',
-					year: 'numeric',
-					hour: '2-digit',
-					minute: '2-digit'
-				}) + ' น.'
-			);
-		} catch {
-			return iso;
-		}
-	}
-
 	async function handleSubmit() {
 		isSubmitting = true;
 		try {
@@ -201,9 +183,6 @@
 				.map((s) => s.trim())
 				.filter(Boolean);
 
-			const hasMedicalData =
-				conditionsArr.length > 0 || medicationsArr.length > 0 || allergiesArr.length > 0;
-
 			await recordMutation.mutateAsync({
 				input: {
 					screening: {
@@ -212,17 +191,13 @@
 						symptoms,
 						notes: general_symptoms.trim() || undefined
 					},
-					...(hasMedicalData
-						? {
-								medical: {
-									evacuee_id: evacuee._id,
-									conditions: conditionsArr,
-									medications: medicationsArr,
-									allergies: allergiesArr,
-									track: care_track
-								}
-							}
-						: {})
+					medical: {
+						evacuee_id: evacuee._id,
+						conditions: conditionsArr,
+						medications: medicationsArr,
+						allergies: allergiesArr,
+						track: care_track
+					}
 				},
 				ctx
 			});
@@ -240,27 +215,6 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="space-y-6 px-4 pt-2 pb-28 md:px-6">
-		{#if priorScreening && priorScreening.screeningCount > 0}
-			<div
-				class="rounded-xl border border-sky-500/30 bg-sky-50/80 p-3.5 dark:bg-sky-950/30"
-				data-testid="re-edit-banner"
-			>
-				<div class="mb-1 flex items-center gap-2">
-					<History class="size-4 text-sky-600 dark:text-sky-400" />
-					<span class="text-xs font-bold text-sky-900 dark:text-sky-100">
-						แก้ไขผลการคัดกรอง (บันทึกใหม่แบบ append)
-					</span>
-				</div>
-				<p class="text-xs leading-relaxed text-sky-800 dark:text-sky-200">
-					เคยตรวจแล้ว {priorScreening.screeningCount} ครั้ง · ล่าสุด
-					{formatScreenedAt(priorScreening.lastScreenedAt)}
-					{#if priorScreening.lastScreenedBy}
-						· โดย {priorScreening.lastScreenedBy}
-					{/if}
-				</p>
-			</div>
-		{/if}
-
 		{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
 			<div class="rounded-xl border border-amber-500/30 bg-amber-50/70 p-3.5 dark:bg-amber-950/20">
 				<div class="mb-1.5 flex items-center gap-2">
@@ -290,12 +244,12 @@
 		<!-- Section 1: Health history & care track -->
 		<div class="space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<HeartPulse class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<HeartPulse class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">
 						1. ประวัติสุขภาพและแนวทางดูแล (Health History &amp; Care Track)
 					</h3>
-					<p class="text-2xs text-muted-foreground">
+					<p class="text-xs text-muted-foreground">
 						ซักประวัติโรคประจำตัว ยาที่ใช้ประจำ ประวัติการแพ้ และจัดกลุ่มแนวทางดูแล
 					</p>
 				</div>
@@ -304,29 +258,30 @@
 			<div class="space-y-3">
 				<div class="space-y-1.5">
 					<Label class="text-xs font-semibold text-foreground">แนวทางดูแล (Care Track)</Label>
-					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+					<RadioGroup.Root
+						value={care_track}
+						onValueChange={(v) => {
+							if (v === 'normal' || v === 'fast_track') care_track = v;
+						}}
+						disabled={isSubmitting}
+						class="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+					>
 						{#each careTrackOptions as opt (opt.value)}
 							{@const selected = care_track === opt.value}
-							<button
-								type="button"
-								disabled={isSubmitting}
-								onclick={() => (care_track = opt.value)}
-								class="flex flex-col items-start rounded-lg border p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {selected
-									? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100'
-									: 'border-border bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
+							<label
+								for="care-track-{opt.value}"
+								class="flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all {selected
+									? 'border-primary bg-primary/5 shadow-xs ring-1 ring-primary'
+									: 'border-border bg-card hover:bg-muted/30'}"
 							>
-								<div class="flex items-center gap-2">
-									<span
-										class="size-2 rounded-full {selected
-											? 'bg-emerald-500'
-											: 'bg-muted-foreground/40'}"
-									></span>
-									<span class="text-xs font-bold text-foreground">{opt.label}</span>
+								<RadioGroup.Item value={opt.value} id="care-track-{opt.value}" class="mt-0.5" />
+								<div class="space-y-0.5">
+									<span class="block text-xs font-semibold text-foreground">{opt.label}</span>
+									<span class="block text-xs text-muted-foreground">{opt.desc}</span>
 								</div>
-								<span class="mt-1 text-2xs text-muted-foreground">{opt.desc}</span>
-							</button>
+							</label>
 						{/each}
-					</div>
+					</RadioGroup.Root>
 				</div>
 
 				<div class="grid grid-cols-1 gap-3 pt-2 md:grid-cols-3">
@@ -378,10 +333,10 @@
 		<!-- Section 2: General symptoms (free-text textarea) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<FileText class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<FileText class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">2. อาการทั่วไป (General Symptoms)</h3>
-					<p class="text-2xs text-muted-foreground">
+					<p class="text-xs text-muted-foreground">
 						บันทึกอาการที่พบเบื้องต้นหรือข้อสังเกตของผู้ประสบภัยแบบข้อความอิสระ
 					</p>
 				</div>
@@ -405,12 +360,12 @@
 		<!-- Section 3: EWAR surveillance symptoms (checkboxes) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<AlertCircle class="size-4 text-emerald-600 dark:text-emerald-400" />
+				<AlertCircle class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">
 						3. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)
 					</h3>
-					<p class="text-2xs text-muted-foreground">
+					<p class="text-xs text-muted-foreground">
 						กลุ่มอาการเฝ้าระวังโรคระบาด — หากไม่มีอาการไม่ต้องติ๊กเลือก (ไม่บังคับเลือกอาการ)
 					</p>
 				</div>
@@ -427,7 +382,7 @@
 			type="button"
 			onclick={handleSubmit}
 			disabled={isSubmitting}
-			class="h-11 w-full gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700"
+			class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
 		>
 			{#if isSubmitting}
 				<Loader2 class="size-4 animate-spin" />
