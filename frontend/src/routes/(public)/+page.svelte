@@ -43,7 +43,7 @@
 <div class="relative w-full">
 	<!-- 1. Urgent Announcements (if any) -->
 	{#if data.announcements && data.announcements.length > 0}
-		<div class="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+		<div id="announcements" class="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
 			{#each data.announcements as announcement (announcement._id)}
 				<PublicEmergencyBanner {announcement} />
 			{/each}
@@ -310,18 +310,23 @@
 	</div>
 
 	<!-- 4. Floating Emergency Action Pills (Fixed Bottom Right with Civic Light Elevation) -->
-	<div class="fixed right-6 bottom-6 z-50 flex flex-col items-end gap-2.5">
+	<div class="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2.5 md:right-6 md:bottom-6">
 		<a
 			href="tel:1669"
-			class="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-red-700 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95"
+			aria-label="1669 โทรฉุกเฉิน"
+			title="1669 โทรฉุกเฉิน"
+			class="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-md transition-all duration-200 hover:bg-red-700 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:h-auto md:w-auto md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
 		>
-			<PhoneCall class="h-4 w-4" />
-			<span>1669 โทรฉุกเฉิน</span>
+			<PhoneCall class="h-5 w-5 md:h-4 md:w-4" />
+			<span class="hidden md:inline">1669 โทรฉุกเฉิน</span>
 		</a>
 		<button
 			type="button"
-			onclick={() => {}}
-			class="inline-flex items-center gap-2 rounded-full bg-[#0284C7] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95"
+			onclick={() => {
+				const el = document.getElementById('announcements');
+				if (el) el.scrollIntoView({ behavior: 'smooth' });
+			}}
+			class="hidden items-center gap-2 rounded-full bg-[#0284C7] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex"
 		>
 			<Bell class="h-4 w-4 text-amber-300" />
 			<span>แจ้งเตือนภัย (2)</span>
