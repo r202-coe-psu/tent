@@ -28,10 +28,11 @@
 		matchesEvacueeSearch,
 		nextQueueLabel,
 		STATUS_LABELS,
+		REPORT_IN_CTA_LABEL,
+		Station1IntakeSearch,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
-	import { UnassignedQueueSearchPanel } from '$lib/features/unassigned-registration';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -61,9 +62,6 @@
 			shelterStore.selectedShelterCode ?? getShelterCode()
 		)
 	);
-
-	type DeskMode = 'shelter' | 'unassigned';
-	let deskMode = $state<DeskMode>('shelter');
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
@@ -261,36 +259,19 @@
 		</Button>
 	</div>
 
-	{#if canAccessUnassignedQueue}
-		<div class="flex flex-wrap gap-2">
-			<button
-				type="button"
-				onclick={() => (deskMode = 'shelter')}
-				class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {deskMode ===
-				'shelter'
-					? 'border-primary bg-primary text-primary-foreground'
-					: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
-			>
-				คิวในศูนย์
-			</button>
-			<button
-				type="button"
-				onclick={() => (deskMode = 'unassigned')}
-				class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {deskMode ===
-				'unassigned'
-					? 'border-primary bg-primary text-primary-foreground'
-					: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
-			>
-				คิวไม่ระบุศูนย์
-			</button>
-		</div>
-	{/if}
+	<Card.Root class="rounded-xl border-border p-4 shadow-xs">
+		<p class="mb-3 text-sm text-muted-foreground">
+			ค้นหาก่อนลงทะเบียน — ตรวจซ้ำในศูนย์นี้และคิวกลาง
+		</p>
+		<Station1IntakeSearch enableCentralPool={canAccessUnassignedQueue} />
+	</Card.Root>
 
-	{#if deskMode === 'unassigned' && canAccessUnassignedQueue}
-		<Card.Root class="border-border p-4 shadow-sm">
-			<UnassignedQueueSearchPanel />
-		</Card.Root>
-	{:else}
+	<section class="flex flex-col gap-4">
+		<div>
+			<h2 class="text-base font-semibold">คิวในศูนย์</h2>
+			<p class="text-sm text-muted-foreground">กรองสถานะและจัดการคิวลงทะเบียนในศูนย์นี้</p>
+		</div>
+
 		<div class="flex flex-wrap gap-2">
 			{#each chips as chip (chip.id)}
 				{#if !(chip.id === 'รอแพทย์' && !enableMedical)}
@@ -308,7 +289,7 @@
 			{/each}
 		</div>
 
-		<Card.Root class="border-border p-4 shadow-sm">
+		<Card.Root class="rounded-xl border-border p-4 shadow-xs">
 			<div class="flex flex-col gap-3 md:flex-row md:items-center">
 				<div class="relative flex-1">
 					<Search
@@ -354,7 +335,7 @@
 			</div>
 		</Card.Root>
 
-		<Card.Root class="overflow-hidden border-border shadow-sm">
+		<Card.Root class="overflow-hidden rounded-xl border-border shadow-xs">
 			{#if allEvacueesQuery.isPending}
 				<div class="flex h-40 items-center justify-center text-sm text-muted-foreground">
 					กำลังโหลด...
@@ -410,7 +391,7 @@
 				</div>
 			{/if}
 		</Card.Root>
-	{/if}
+	</section>
 </div>
 
 <Sheet.Root bind:open={sheetOpen}>
@@ -566,7 +547,7 @@
 
 			<Sheet.Footer class="border-t border-border sm:flex-col">
 				{#if selected.current_stay.status === 'pre_registered'}
-					<Button onclick={() => goReportIn(selected!)}>รายงานตัว</Button>
+					<Button onclick={() => goReportIn(selected!)}>{REPORT_IN_CTA_LABEL}</Button>
 				{/if}
 				{#if canMedical && next === 'รอแพทย์'}
 					<Button

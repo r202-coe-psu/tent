@@ -44,3 +44,4 @@ export {
 } from './application/queries';
 
 export { default as UnassignedQueueSearchPanel } from './ui/unassigned-queue-search-panel.svelte';
+export { default as UnassignedQueueBadge } from './ui/unassigned-queue-badge.svelte';

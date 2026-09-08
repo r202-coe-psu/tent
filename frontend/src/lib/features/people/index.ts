@@ -135,6 +135,17 @@ export {
 } from './domain/intake-pipeline';
 
 export {
+	REPORT_IN_CTA_LABEL,
+	NEW_REGISTRATION_CTA_LABEL,
+	INTAKE_SEARCH_PLACEHOLDER,
+	resolveShelterHitAction,
+	shelterHitStatusLabel,
+	isIntakeNotFoundState,
+	hasFederatedIntakeHits,
+	type ShelterHitAction
+} from './domain/intake-search';
+
+export {
 	sectionEVisibility,
 	resolveHouseholdLeave,
 	autoHouseholdLabel,
@@ -221,6 +232,7 @@ export {
 } from './application/queries';
 
 // UI — feature components
+export { default as Station1IntakeSearch } from './ui/station1-intake-search.svelte';
 export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';
 export { default as RegistrationShell } from './ui/registration-shell.svelte';
