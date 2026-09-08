@@ -14,7 +14,10 @@ import type {
 	CountedItem,
 	StockTransfer,
 	TransferInput,
-	TransferFilter
+	TransferFilter,
+	DispatchInfoInput,
+	CancelInfoInput,
+	DisputeInfoInput
 } from '../domain/operations';
 import type { AuditAction } from '$lib/features/shared';
 
@@ -129,11 +132,18 @@ export interface OperationsRepository {
 	listTransfers(filter?: TransferFilter): Promise<StockTransfer[]>;
 	getTransfer(id: string): Promise<StockTransfer | null>;
 	createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer>;
-	dispatchTransfer(id: string): Promise<StockTransfer>;
+	/** CR-089 FR-01 — the driver and plate travel with the transition; the domain rejects a
+	 * dispatch that arrives without them, before any stock is deducted. */
+	dispatchTransfer(id: string, info: DispatchInfoInput): Promise<StockTransfer>;
 	receiveTransfer(
 		id: string,
 		receivedItems: { item_id: string; qty: string | number }[],
 		notes?: string
 	): Promise<StockTransfer>;
-	cancelTransfer(id: string): Promise<StockTransfer>;
+	/** CR-089 FR-03 — cancelling must say why. */
+	cancelTransfer(id: string, info: CancelInfoInput): Promise<StockTransfer>;
+	/** CR-089 FR-04 — source shelter holds a transfer at `requested` with a reason. */
+	disputeTransfer(id: string, info: DisputeInfoInput): Promise<StockTransfer>;
+	/** CR-089 FR-05 — source shelter releases the hold (`disputed` → `requested`). */
+	resumeTransfer(id: string): Promise<StockTransfer>;
 }
