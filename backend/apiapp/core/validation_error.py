@@ -1,3 +1,4 @@
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.constants import REF_PREFIX
 from fastapi.openapi.utils import validation_error_response_definition
@@ -11,7 +12,8 @@ async def http422_error_handler(
     request: Request,
     exc: RequestValidationError | ValidationError,
 ) -> JSONResponse:
-    if request.url.path.startswith("/external/v1"):
+    path = request.url.path
+    if path.startswith("/external/v1"):
         messages = [
             f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg', '')}"
             for err in exc.errors()
@@ -25,8 +27,17 @@ async def http422_error_handler(
             },
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
         )
+    if path.startswith(("/api/auth/token-third-party", "/api/thirdparty")):
+        messages = [
+            f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg', '')}"
+            for err in exc.errors()
+        ]
+        return JSONResponse(
+            {"status": HTTP_422_UNPROCESSABLE_CONTENT, "message": "; ".join(messages)},
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        )
     return JSONResponse(
-        {"errors": exc.errors()},
+        {"errors": jsonable_encoder(exc.errors())},
         status_code=HTTP_422_UNPROCESSABLE_CONTENT,
     )
 

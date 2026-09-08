@@ -76,7 +76,15 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - สร้าง transfer → ต้นทางตัดยอดเป็น in-transit, ปลายทาง confirm → รับเข้า ledger ปลายทาง
 - Confirm ยอดไม่ตรงกับที่ส่ง (ของหาย/เสียหาย) บันทึกส่วนต่าง + เหตุผลได้
 - ยกเลิก transfer ก่อน confirm ได้ ยอดคืนต้นทางถูกต้อง
-- Test state machine ครบ (pending/in-transit/confirmed/cancelled) + demo โอนข้ามศูนย์จริง
+- Test state machine ครบ + demo โอนข้ามศูนย์จริง
+- **บังคับกรอกชื่อผู้ขับขี่และทะเบียนรถก่อนอนุมัติส่งมอบ** — ขาดอย่างใดอย่างหนึ่ง server ต้อง reject
+  ก่อนตัดสต็อก (CR-089 FR-01/FR-02)
+- **ต้นทางคัดค้าน/ระงับคำร้องได้** (`requested` ↔ `disputed`, ต้องมีเหตุผล) และกลับมาดำเนินการต่อได้ ·
+  ตอน `disputed` ปลายทางทำได้แค่อ่าน (CR-089 FR-03–FR-07)
+
+> ชื่อสถานะ canonical อยู่ที่ `docs/data/schema.md` §5.5 (`requested` / `shipped` / `received` /
+> `cancelled` / `disputed`) — ถ้อยคำ "in-transit / confirmed" ในหัวข้อนี้เป็นภาษาเชิงพรรณนาของ
+> proposal ต้นทาง ไม่ใช่ค่า enum จริง
 
 ### T-14 — Stock dashboard + reorder threshold (FR-31)
 
