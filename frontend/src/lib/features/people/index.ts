@@ -154,6 +154,24 @@ export {
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
 
+export {
+	PRIMARY_CONTACT_LABEL,
+	blankUnifiedMember,
+	applyAnonymousIdToMember,
+	memberCardLabel,
+	parseUnifiedRegistration,
+	planFamilyRegistration,
+	togglePetSpecies,
+	unifiedRegistrationInputSchema,
+	unifiedMemberInputSchema,
+	unifiedHouseholdInputSchema,
+	type UnifiedRegistrationChannel,
+	type UnifiedRegistrationInput,
+	type UnifiedMemberInput,
+	type UnifiedHouseholdInput,
+	type FamilyRegistrationPlan
+} from './domain/unified-registration';
+
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
@@ -167,6 +185,7 @@ export {
 	useEvacueesPaginated,
 	useSearchEvacuees,
 	useCreateEvacuee,
+	useCreateFamilyRegistration,
 	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
@@ -209,6 +228,8 @@ export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
+export { default as FamilyBatchPrint } from './ui/family-batch-print.svelte';
+export { default as UnifiedRegistrationForm } from './ui/unified-registration-form.svelte';
 export {
 	default as EvacueeHandoverSlipModal,
 	buildScreeningDeepLink
@@ -239,6 +260,7 @@ export {
 	EwarSymptomsFields,
 	HouseholdAddressFields,
 	PetAssetVehicleFields,
+	PetQuickSelect,
 	HealthMedicalFields,
 	ZoneSelectionFields,
 	type SpecialNeedTag,

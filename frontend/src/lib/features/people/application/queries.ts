@@ -30,6 +30,10 @@ import type {
 	MovementAction,
 	ScreeningInput
 } from '../domain/people';
+import type {
+	UnifiedRegistrationChannel,
+	UnifiedRegistrationInput
+} from '../domain/unified-registration';
 import { canCancelHold } from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
 
@@ -381,6 +385,27 @@ export const useCreateHousehold = () => {
 			peopleRepository().createHousehold(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+/** Unified multi-person family registration (#249). */
+export const useCreateFamilyRegistration = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			input,
+			ctx,
+			channel = 'onsite'
+		}: {
+			input: UnifiedRegistrationInput;
+			ctx: AuthorContext;
+			channel?: UnifiedRegistrationChannel;
+		}) => peopleRepository().createFamilyRegistration(input, ctx, channel),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
 		}
 	}));
 };

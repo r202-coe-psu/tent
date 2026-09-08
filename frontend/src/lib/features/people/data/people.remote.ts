@@ -39,6 +39,11 @@ import {
 	type Movement,
 	type MovementAction
 } from '../domain/people';
+import {
+	planFamilyRegistration,
+	type UnifiedRegistrationChannel,
+	type UnifiedRegistrationInput
+} from '../domain/unified-registration';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
@@ -308,6 +313,60 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
 		return this.repo.put(buildHousehold(input, ctx));
+	}
+
+	/**
+	 * Unified multi-person registration (#249): create N Evacuees then 1 Household,
+	 * link members, set head = members[0]. Compensates created docs on failure.
+	 */
+	async createFamilyRegistration(
+		input: UnifiedRegistrationInput,
+		ctx: AuthorContext,
+		channel: UnifiedRegistrationChannel = 'onsite'
+	): Promise<{ household: Household; members: Evacuee[] }> {
+		const plan = planFamilyRegistration(input, channel);
+		const createdMemberIds: string[] = [];
+		let householdId: string | null = null;
+
+		try {
+			const members: Evacuee[] = [];
+			for (const memberInput of plan.memberInputs) {
+				const saved = await this.createEvacuee(memberInput, ctx);
+				createdMemberIds.push(saved._id);
+				members.push(saved);
+			}
+
+			const head = members[0];
+			if (!head) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
+
+			const household = await this.createHousehold(
+				{ ...plan.householdInput, head_evacuee_id: head._id },
+				ctx
+			);
+			householdId = household._id;
+
+			const linked: Evacuee[] = [];
+			for (const member of members) {
+				linked.push(await this.patchEvacuee(member._id, { household_id: household._id }));
+			}
+
+			return { household, members: linked };
+		} catch (err) {
+			if (householdId) {
+				for (const id of createdMemberIds) {
+					try {
+						await this.patchEvacuee(id, { household_id: null });
+					} catch {
+						// Best-effort unlink before household delete.
+					}
+				}
+				await this.compensateFailedHouseholdCreate(householdId);
+			}
+			for (const id of [...createdMemberIds].reverse()) {
+				await this.compensateFailedEvacueeRegistration(id);
+			}
+			throw err;
+		}
 	}
 
 	async listHouseholds(): Promise<Household[]> {

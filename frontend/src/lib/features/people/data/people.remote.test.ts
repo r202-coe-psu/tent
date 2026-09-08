@@ -1351,6 +1351,96 @@ describe('check-in / check-out', () => {
 	});
 });
 
+describe('createFamilyRegistration', () => {
+	let repo: PeopleRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	it('creates 1 Household + N Evacuees at arriving with head = member 0', async () => {
+		const result = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND',
+						emergency_contact: { name: 'สมหญิง', phone: '0899999999', relation: 'คู่สมรส' }
+					},
+					{
+						first_name: 'ลูก',
+						last_name: '',
+						gender: 'female',
+						phone: null,
+						country: 'THAILAND',
+						person_id: { cardType: 'anonymous', number: '' }
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '12/3',
+					subdistrict: 'หาดใหญ่',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					pets: [{ species: 'dog', count: 1 }],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'onsite'
+		);
+
+		expect(result.members).toHaveLength(2);
+		expect(result.members.every((m) => m.current_stay.status === 'arriving')).toBe(true);
+		expect(result.members.every((m) => m.household_id === result.household._id)).toBe(true);
+		expect(result.household.head_evacuee_id).toBe(result.members[0]!._id);
+		expect(result.household.status).toBe('arriving');
+		expect(result.household.pets).toEqual([{ species: 'dog', count: 1 }]);
+		expect(result.members[1]?.last_name).toBe('');
+		expect(result.members[1]?.person_id?.cardType).toBe('anonymous');
+		expect(result.members[1]?.person_id?.number).toMatch(/^ANON-/);
+	});
+
+	it('creates homeless Household with landmark and no address_no', async () => {
+		const result = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'ไร้บ้าน',
+						last_name: 'ทดสอบ',
+						gender: 'other',
+						phone: '0811111111',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'homeless',
+					address_no: null,
+					residence_landmark: 'ใต้สะพาน',
+					subdistrict: null,
+					district: null,
+					province: null,
+					pets: [{ species: 'other', count: 1, notes: 'ลิง' }],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'onsite'
+		);
+
+		expect(result.household.housing_type).toBe('homeless');
+		expect(result.household.address_no).toBeNull();
+		expect(result.household.residence_landmark).toBe('ใต้สะพาน');
+		expect(result.household.pets[0]).toMatchObject({ species: 'other', notes: 'ลิง' });
+	});
+});
+
 describe('peopleRepository singleton', () => {
 	it('returns a fresh instance when getShelterDb() changes', () => {
 		mockShelterDb = 'shelter_sh001';

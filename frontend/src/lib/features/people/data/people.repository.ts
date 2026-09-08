@@ -14,6 +14,10 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type {
+	UnifiedRegistrationChannel,
+	UnifiedRegistrationInput
+} from '../domain/unified-registration';
 
 export type HouseholdSearchLabels = {
 	municipalityZone: Record<string, string>;
@@ -247,4 +251,16 @@ export interface PeopleRepository {
 	 * Does not create a screening document and does not assign a zone.
 	 */
 	promoteReportIn(evacueeId: string): Promise<Evacuee>;
+	/**
+	 * Unified multi-person registration (#249): persist 1 Household + N Evacuees.
+	 * Member[0] becomes `head_evacuee_id`. Best-effort compensation on failure.
+	 */
+	createFamilyRegistration(
+		input: UnifiedRegistrationInput,
+		ctx: AuthorContext,
+		channel?: UnifiedRegistrationChannel
+	): Promise<{
+		household: Household;
+		members: Evacuee[];
+	}>;
 }

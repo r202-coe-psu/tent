@@ -5,37 +5,37 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
-		RegistrationShell,
-		EvacueeWristbandSuccess,
+		FamilyBatchPrint,
 		RegistrationSaveErrorAlert,
-		useCreateEvacuee,
+		UnifiedRegistrationForm,
+		useCreateFamilyRegistration,
 		buildSaveFailureReport,
 		EVACUEE_PAGE_I18N,
-		type EvacueeInput,
 		type Evacuee,
-		type SaveFailureReport
+		type Household,
+		type SaveFailureReport,
+		type UnifiedRegistrationInput
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 
 	const t = $derived(getTranslation(EVACUEE_PAGE_I18N, languageStore.current));
-	const createMutation = useCreateEvacuee();
+	const createFamily = useCreateFamilyRegistration();
 
-	/** After save: always show Person QR (even arriving). */
-	let completedEvacuee = $state<Evacuee | null>(null);
+	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
 
 	beforeNavigate((nav) => {
-		if (isNavigatingAfterSave || completedEvacuee) return;
+		if (isNavigatingAfterSave || completed) return;
 		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
 			nav.cancel();
 		}
 	});
 
-	async function handleRegister(input: EvacueeInput) {
+	async function handleRegister(input: UnifiedRegistrationInput) {
 		const shelterCode = getShelterCode();
 		const ctx = {
 			shelterCode,
@@ -45,15 +45,22 @@
 		saveError = null;
 
 		try {
-			return await createMutation.mutateAsync({
-				input: { ...input, status: 'arriving', track: 'normal' },
-				ctx
+			const result = await createFamily.mutateAsync({
+				input,
+				ctx,
+				channel: 'onsite'
 			});
+			saveError = null;
+			isDirty = false;
+			isNavigatingAfterSave = true;
+			completed = result;
+			toast.success(`ลงทะเบียนครอบครัว ${result.members.length} คน สำเร็จ`);
 		} catch (err) {
 			saveError = buildSaveFailureReport(err, {
 				summaryTh: t.saveErrorSummary,
 				shelterCode,
-				rollbackNote: 'compensated: deleted medical + evacuee created in this submit when possible'
+				rollbackNote:
+					'compensated: deleted household + members created in this submit when possible'
 			});
 			toast.error(t.toastSaveFailed);
 			throw err;
@@ -62,18 +69,22 @@
 
 	function backToQueue() {
 		isNavigatingAfterSave = true;
-		completedEvacuee = null;
+		completed = null;
 		goto(resolve('/onsite/people'));
 	}
 </script>
 
 <svelte:head>
-	<title>ลงทะเบียนใหม่ | SmartShelter</title>
+	<title>ลงทะเบียนครอบครัว | SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
-	{#if completedEvacuee}
-		<EvacueeWristbandSuccess evacuee={completedEvacuee} onBack={backToQueue} />
+	{#if completed}
+		<FamilyBatchPrint
+			household={completed.household}
+			members={completed.members}
+			onDone={backToQueue}
+		/>
 	{:else}
 		<button
 			type="button"
@@ -84,28 +95,20 @@
 			<span>กลับคิวทะเบียน</span>
 		</button>
 
-		<h1 class="mb-4 text-2xl font-bold md:mb-6 md:text-3xl">ลงทะเบียนผู้ประสบภัยใหม่</h1>
+		<h1 class="mb-2 text-2xl font-bold md:mb-1 md:text-3xl">ลงทะเบียนครอบครัว</h1>
+		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
+			กรอกข้อมูลครอบครัวร่วมด้านบน แล้วเพิ่มสมาชิกทีละคนด้านล่าง — คนแรกคือผู้ติดต่อหลัก
+		</p>
 
 		{#if saveError}
 			<RegistrationSaveErrorAlert report={saveError} ondismiss={() => (saveError = null)} />
 		{/if}
 
-		<div class="rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-8 md:p-10">
-			<RegistrationShell
-				mode="walk-in"
-				onsubmit={(input) => handleRegister(input)}
-				pending={createMutation.isPending}
-				onDirtyChange={(dirty) => (isDirty = dirty)}
-				onsaveerror={(report) => {
-					saveError = report;
-				}}
-				onComplete={(ev) => {
-					saveError = null;
-					isDirty = false;
-					isNavigatingAfterSave = true;
-					completedEvacuee = ev;
-				}}
-			/>
-		</div>
+		<UnifiedRegistrationForm
+			channel="onsite"
+			pending={createFamily.isPending}
+			onsubmit={handleRegister}
+			onDirtyChange={(dirty) => (isDirty = dirty)}
+		/>
 	{/if}
 </div>
