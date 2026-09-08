@@ -262,5 +262,7 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
   · `timeline.disputed` **ไม่ถูกลบ** — เป็นประวัติ ไม่ใช่ field สถานะปัจจุบัน (FR-11 คงเดิม)
   · ไม่เปลี่ยน `schema_v` (ยังเป็น 3), enum, หรือ state machine ของ CR นี้ — เปลี่ยนเฉพาะ side effect
   ของ transition ที่มีอยู่แล้ว ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2 ที่ต้องเปิด CR ใหม่
-  · **CR นี้กลับเป็น `status: approved`** จนกว่าโค้ด resume จะแก้ตาม FR-05 ฉบับใหม่เสร็จ (ทำใน
-  branch เดียวกับ CR-090 เพราะแตะไฟล์ชุดเดียวกัน) — ดู [CR-090](CR-090-t13-transfer-cancel-undo.md)
+  · **CR นี้คง `status: done`** — โค้ด resume แก้ตาม FR-05 ฉบับใหม่เสร็จแล้วในรอบเดียวกัน
+  (`resumeTransfer()` ลบ `dispute_reason`, มี unit test ครอบทั้งชั้น domain และ server repository)
+  ทำใน branch เดียวกับ [CR-090](CR-090-t13-transfer-cancel-undo.md) เพราะแตะไฟล์ชุดเดียวกัน
+  ⇒ ไม่มีช่วงที่ CR นี้ค้างโดยไม่มีโค้ดรองรับ จึงไม่ต้อง reopen

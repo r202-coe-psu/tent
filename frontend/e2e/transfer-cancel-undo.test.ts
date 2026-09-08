@@ -35,8 +35,14 @@ const SM2 = {
 
 const sessions: Record<string, string> = {};
 
-/** Unique per run so the row is findable no matter what else the shelter already has. */
-const ITEM_ID = `item:rice_${RUN_ID}`;
+/**
+ * Unique per SEEDED TRANSFER, not merely per run: the suite is `fullyParallel`, so every worker's
+ * page lists every transfer this run has seeded. A shared item id would make each row locator
+ * match all of them at once.
+ */
+function itemIdFor(suffix: string): string {
+	return `item:rice_${RUN_ID}${suffix.toLowerCase()}`;
+}
 const CREATED_AT = '2026-08-22T05:00:00.000Z';
 
 interface PersistedTransfer {
@@ -70,7 +76,7 @@ async function seedTransfer(suffix: string): Promise<PersistedTransfer> {
 		created_by: 'Seed Staff',
 		from_shelter: 'SH001',
 		to_shelter: 'SH002',
-		items: [{ item_id: ITEM_ID, qty: '100', unit: 'kg' }],
+		items: [{ item_id: itemIdFor(suffix), qty: '100', unit: 'kg' }],
 		status: 'requested',
 		timeline: { requested: { at: CREATED_AT, by: 'Seed Staff' } }
 	};
@@ -115,19 +121,28 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('CR-090 — cancel a transfer request with a 5-second undo', () => {
-	/** The row for our seeded transfer, identified by the per-run item id it lists. */
-	function transferRow(page: import('@playwright/test').Page) {
-		return page.getByRole('row').filter({ hasText: ITEM_ID });
+	/** The row for one seeded transfer, identified by the item id only that transfer lists. */
+	function transferRow(page: import('@playwright/test').Page, suffix: string) {
+		return page.getByRole('row').filter({ hasText: itemIdFor(suffix) });
 	}
 
-	function cancelButton(page: import('@playwright/test').Page) {
-		return transferRow(page).getByRole('button', { name: 'ยกเลิก', exact: true });
+	function cancelButton(page: import('@playwright/test').Page, suffix: string) {
+		return transferRow(page, suffix).getByRole('button', { name: 'ยกเลิก', exact: true });
 	}
 
-	/** Cancel needs a reason (CR-089 FR-03), so every cancel here goes through the dialog. */
-	async function cancelWithReason(page: import('@playwright/test').Page, reason: string) {
-		await cancelButton(page).click();
-		await page.getByRole('textbox').fill(reason);
+	/**
+	 * Cancel needs a reason (CR-089 FR-03), so every cancel here goes through the dialog.
+	 *
+	 * The textarea is addressed by its id: the same page also renders the create-transfer form,
+	 * so a bare `getByRole('textbox')` matches five controls.
+	 */
+	async function cancelWithReason(
+		page: import('@playwright/test').Page,
+		suffix: string,
+		reason: string
+	) {
+		await cancelButton(page, suffix).click();
+		await page.locator('#transfer-reason').fill(reason);
 		await page.getByRole('button', { name: 'ยืนยันการยกเลิก', exact: true }).click();
 	}
 
@@ -147,12 +162,12 @@ test.describe('CR-090 — cancel a transfer request with a 5-second undo', () =>
 		const seeded = await seedTransfer('A');
 
 		await openSupplyTransfers(page, SM1);
-		await expect(transferRow(page)).toBeVisible();
-		await cancelWithReason(page, 'กรอกจำนวนผิด');
+		await expect(transferRow(page, 'A')).toBeVisible();
+		await cancelWithReason(page, 'A', 'กรอกจำนวนผิด');
 
 		await expect(page.getByText('ยกเลิกคำร้องแล้ว')).toBeVisible();
 		// FR-07 — hidden from the default view, not deleted.
-		await expect(transferRow(page)).toBeHidden();
+		await expect(transferRow(page, 'A')).toBeHidden();
 
 		const after = await getTransfer(seeded._id);
 		expect(after.status, 'the document survives — this is a soft transition').toBe(200);
@@ -166,15 +181,15 @@ test.describe('CR-090 — cancel a transfer request with a 5-second undo', () =>
 		const seeded = await seedTransfer('B');
 
 		await openSupplyTransfers(page, SM1);
-		await expect(transferRow(page)).toBeVisible();
-		await cancelWithReason(page, 'กดผิดปุ่ม');
+		await expect(transferRow(page, 'B')).toBeVisible();
+		await cancelWithReason(page, 'B', 'กดผิดปุ่ม');
 
 		const undo = page.getByRole('button', { name: 'เลิกทำ' });
 		await expect(undo).toBeVisible();
 		await undo.click();
 
 		await expect(page.getByText('คำร้องกลับมารอส่งมอบแล้ว')).toBeVisible();
-		await expect(transferRow(page)).toBeVisible();
+		await expect(transferRow(page, 'B')).toBeVisible();
 
 		const restored = await getTransfer(seeded._id);
 		expect(restored.status).toBe(200);
@@ -193,8 +208,8 @@ test.describe('CR-090 — cancel a transfer request with a 5-second undo', () =>
 		const seeded = await seedTransfer('C');
 
 		await openSupplyTransfers(page, SM1);
-		await expect(transferRow(page)).toBeVisible();
-		await cancelWithReason(page, 'ปลายทางแจ้งว่าไม่ต้องการแล้ว');
+		await expect(transferRow(page, 'C')).toBeVisible();
+		await cancelWithReason(page, 'C', 'ปลายทางแจ้งว่าไม่ต้องการแล้ว');
 
 		const undo = page.getByRole('button', { name: 'เลิกทำ' });
 		await expect(undo).toBeVisible();
@@ -213,14 +228,17 @@ test.describe('CR-090 — cancel a transfer request with a 5-second undo', () =>
 		await seedTransfer('D');
 
 		await openSupplyTransfers(page, SM1);
-		await cancelWithReason(page, 'ซ้ำกับคำร้องอื่น');
-		await expect(transferRow(page)).toBeHidden();
+		await expect(transferRow(page, 'D')).toBeVisible();
+		await cancelWithReason(page, 'D', 'ซ้ำกับคำร้องอื่น');
+		await expect(transferRow(page, 'D')).toBeHidden();
 
 		await page.getByRole('button', { name: /แสดงที่ยกเลิกแล้ว/ }).click();
-		await expect(transferRow(page)).toBeVisible();
-		await expect(transferRow(page).getByText('ยกเลิกแล้ว')).toBeVisible();
+		await expect(transferRow(page, 'D')).toBeVisible();
+		await expect(transferRow(page, 'D').getByText('ยกเลิกแล้ว')).toBeVisible();
+		// FR-06 — the toast is the only undo path; a cancelled row carries no undo button of its own.
+		await expect(transferRow(page, 'D').getByRole('button', { name: 'เลิกทำ' })).toHaveCount(0);
 		// FR-10 — the filter is the only way to reach these rows, so the reason has to be on them.
-		await expect(transferRow(page).getByText('ซ้ำกับคำร้องอื่น')).toBeVisible();
+		await expect(transferRow(page, 'D').getByText('ซ้ำกับคำร้องอื่น')).toBeVisible();
 	});
 
 	test('the destination shelter gets no cancel button', async ({ page }) => {
@@ -229,7 +247,7 @@ test.describe('CR-090 — cancel a transfer request with a 5-second undo', () =>
 
 		await openSupplyTransfers(page, SM2);
 		// CR-089 FR-03 / CR-090 FR-02 — cancel and its undo are both source-only.
-		await expect(transferRow(page)).toBeVisible();
-		await expect(cancelButton(page)).toHaveCount(0);
+		await expect(transferRow(page, 'E')).toBeVisible();
+		await expect(cancelButton(page, 'E')).toHaveCount(0);
 	});
 });

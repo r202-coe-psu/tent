@@ -88,24 +88,29 @@ field/enum/`timeline` entry ใหม่) · กระทบ `operations` featur
 
 ## Acceptance (DoD)
 
-- [ ] ไม่มี handler `DELETE` บน `/api/back-office/transfer/[id]` และไม่มี branch `restore` บน
+- [x] ไม่มี handler `DELETE` บน `/api/back-office/transfer/[id]` และไม่มี branch `restore` บน
       `POST /api/back-office/transfer` (FR-01)
-- [ ] ยกเลิกคำร้อง `requested` ได้ พร้อมบังคับ `cancel_reason` ตามเดิม (CR-089 FR-03)
-- [ ] กด "เลิกทำ" ภายใน 5 วินาที → คำร้องกลับเป็น `requested` โดย `_id` / `created_at` / `created_by` /
+- [x] ยกเลิกคำร้อง `requested` ได้ พร้อมบังคับ `cancel_reason` ตามเดิม (CR-089 FR-03)
+- [x] กด "เลิกทำ" ภายใน 5 วินาที → คำร้องกลับเป็น `requested` โดย `_id` / `created_at` / `created_by` /
       `timeline.requested` ไม่เปลี่ยน (FR-02, FR-08)
-- [ ] หลัง undo เอกสาร **ไม่มี field `cancel_reason`** เหลืออยู่ (FR-04)
-- [ ] resume (`disputed → requested`) ลบ `dispute_reason` ด้วยกฎเดียวกัน แต่ **ไม่ลบ**
+- [x] หลัง undo เอกสาร **ไม่มี field `cancel_reason`** เหลืออยู่ (FR-04)
+- [x] resume (`disputed → requested`) ลบ `dispute_reason` ด้วยกฎเดียวกัน แต่ **ไม่ลบ**
       `timeline.disputed` (FR-04 + CR-089 FR-05 amend 2026-09-09)
-- [ ] ศูนย์ปลายทาง (`to_shelter`) ยิง `cancelled → requested` ไม่ผ่าน — server ตอบ `403` (FR-02, FR-03)
-- [ ] ยิง `cancelled → shipped` / `received` / `disputed` ตรง ๆ ไม่ผ่าน — server reject (FR-03)
-- [ ] เกิน 5 วินาที ปุ่ม "เลิกทำ" หายจาก toast และ **ไม่มีปุ่ม undo ที่อื่นใน UI** — แถว `cancelled`
+- [x] ศูนย์ปลายทาง (`to_shelter`) ยิง `cancelled → requested` ไม่ผ่าน — server ตอบ `403` (FR-02, FR-03)
+- [x] ยิง `cancelled → shipped` / `received` / `disputed` ตรง ๆ ไม่ผ่าน — server reject (FR-03)
+- [x] เกิน 5 วินาที ปุ่ม "เลิกทำ" หายจาก toast และ **ไม่มีปุ่ม undo ที่อื่นใน UI** — แถว `cancelled`
       ที่เปิดผ่านตัวกรองไม่มีปุ่มนี้ (FR-06)
-- [ ] เอกสารที่พลาดหน้าต่างยังอยู่ใน `central_ops` สถานะ `cancelled` พร้อม `cancel_reason` เดิม
+- [x] เอกสารที่พลาดหน้าต่างยังอยู่ใน `central_ops` สถานะ `cancelled` พร้อม `cancel_reason` เดิม
       (FR-06.1 — เอกสารไม่ถูกทำลาย แม้ UI จะไม่มีทาง undo แล้ว)
-- [ ] ตารางไม่แสดงแถว `cancelled` จนกว่าจะเปิดตัวกรอง (FR-07)
-- [ ] แถว `cancelled` แสดง `cancel_reason` ใต้ป้ายสถานะ และแถว `disputed` แสดง `dispute_reason`
+- [x] ตารางไม่แสดงแถว `cancelled` จนกว่าจะเปิดตัวกรอง (FR-07)
+- [x] แถว `cancelled` แสดง `cancel_reason` ใต้ป้ายสถานะ และแถว `disputed` แสดง `dispute_reason`
       เหมือนเดิม (FR-10)
-- [ ] E2E: ยกเลิก → แถวหายจากมุมมองตั้งต้น → กด "เลิกทำ" → แถวกลับมาเป็น "รอส่งมอบ"
+- [x] E2E: ยกเลิก → แถวหายจากมุมมองตั้งต้น → กด "เลิกทำ" → แถวกลับมาเป็น "รอส่งมอบ"
+
+> DoD ทั้งหมดผ่านเมื่อ 2026-09-09 · `pnpm check` 0 errors · `pnpm lint` สะอาด · `pnpm test`
+> 2,221 passed / 2 skipped · e2e `transfer-cancel-undo.test.ts` 5 passed (ทั้ง `--workers=1` และ
+> parallel) · `svelte-autofixer` 0 issues / 0 suggestions บน `transfer-list.svelte`
+> · **ยังไม่ปิด CR เป็น `done`** — รอ merge เข้า `develop`
 
 ---
 
