@@ -3,7 +3,7 @@ id: CR-091
 title: T-13 โอนย้ายข้ามศูนย์ — หน้ารายละเอียด Ticket (Banner + Timeline)
 status: approved
 date: 2026-08-25
-updated: 2026-09-01
+updated: 2026-09-02
 requested_by: CR-059 follow-up (§4.5 UI Safety Standards, Task #13) — spun out จาก CR-089 (2026-08-25, ไม่แตะ schema_v)
 decided_by: Project Owner
 layer: volatile
@@ -27,7 +27,8 @@ affects:
 
 เพิ่มหน้ารายละเอียด Ticket แยกต่างหาก (`/back-office/supply/transfer/[id]`) แสดง banner เส้นทางเต็มรูป
 แบบ + timeline การดำเนินการ ตาม CR-059 §4.5 · **ไม่กระทบ `schema_v`** ของ `stock_transfer` เลย (อ่าน field
-ที่มีอยู่แล้วเท่านั้น) · เพิ่ม route ใหม่ 1 หน้า + ลิงก์จากตาราง list เดิม · **status ยังเป็น `proposed`**
+ที่มีอยู่แล้วเท่านั้น) · เพิ่ม route ใหม่ 1 หน้า + ลิงก์จากตาราง list เดิม · **status `approved`
+(2026-09-01)** — แนะนำให้ทำท้ายสุดของชุด T-13 เพื่อแสดง field ที่ CR-089/CR-106 เพิ่มไว้ในรอบเดียว
 
 ---
 
@@ -118,4 +119,8 @@ N/A — ไม่แตะ `schema_v` ของ `stock_transfer` เลย (ห�
 - 2026-08-25 — เลือก tier "หน้ารายละเอียดแยก route ใหม่" โดย project owner (ต่างจากตัวเลือกที่เสนอแนะ
   เดิมคือ modal ต่อแถว ซึ่งใช้ effort น้อยกว่า) — project owner เลือกให้ตรงตามตัวอักษรสเปก "หน้ารายละเอียด
   Ticket" ของ CR-059 §4.5
-- **ยังไม่ตัดสินใจ:** สถานะยังเป็น `proposed` — รอ project owner เคาะ `approved` ในไฟล์นี้ก่อนเริ่มโค้ด
+- 2026-09-01 — **project owner เคาะ `approved`** — tier "หน้ารายละเอียดแยก route ใหม่" ตามข้อเสนอ
+  2026-08-25 ไม่มีการแก้ scope
+- 2026-09-02 — แก้ข้อความ `proposed` ที่ค้างใน TL;DR และ Decision log ให้ตรงกับ `frontmatter` ซึ่งเป็น
+  ตัวจริง (สถานะไม่เปลี่ยน — แก้ถ้อยคำที่ไม่เปลี่ยนความหมายของกฎ เข้าข้อยกเว้น
+  `docs/change-management.md` §2 จึงไม่ต้องเปิด CR ใหม่)

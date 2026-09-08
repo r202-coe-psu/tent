@@ -11,15 +11,16 @@ export function normalizeSecurityAnswer(rawAnswer: string): string {
 /**
  * Computes salted SHA-256 hash for a normalized security answer.
  */
-export function hashSecurityAnswer(rawAnswer: string, existingSalt?: string): {
+export function hashSecurityAnswer(
+	rawAnswer: string,
+	existingSalt?: string
+): {
 	answer_hash: string;
 	salt: string;
 } {
 	const normalized = normalizeSecurityAnswer(rawAnswer);
 	const salt = existingSalt ?? randomBytes(16).toString('hex');
-	const hash = createHash('sha256')
-		.update(`${salt}:${normalized}`)
-		.digest('hex');
+	const hash = createHash('sha256').update(`${salt}:${normalized}`).digest('hex');
 	return { answer_hash: hash, salt };
 }
 

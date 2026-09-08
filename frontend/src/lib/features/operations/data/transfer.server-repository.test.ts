@@ -13,6 +13,9 @@ vi.mock('$lib/server/couch-admin', () => ({
 
 const TRANSFER_ID = 'stock_transfer:01TRANSFER0000000000000000';
 
+/** CR-089 FR-01 — every dispatch must name a driver and plate. */
+const DISPATCH_OPTS = { driver_name: 'สมชาย ใจดี', vehicle_plate: 'กข 1234 เชียงราย' };
+
 function requestedTransfer(overrides: Partial<StockTransfer> = {}): StockTransfer {
 	return {
 		_id: TRANSFER_ID,
@@ -109,9 +112,9 @@ describe('TransferServerRepository', () => {
 			return { status: 200, data: {} };
 		});
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		await expect(repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001')).rejects.toMatchObject(
-			{ status: 404 }
-		);
+		await expect(
+			repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS)
+		).rejects.toMatchObject({ status: 404 });
 	});
 
 	it('rejects dispatch from a shelter that is not the source (403)', async () => {
@@ -125,9 +128,9 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH999');
-		await expect(repo.transition(TRANSFER_ID, 'shipped', 'Staff B', 'SH999')).rejects.toMatchObject(
-			{ status: 403 }
-		);
+		await expect(
+			repo.transition(TRANSFER_ID, 'shipped', 'Staff B', 'SH999', DISPATCH_OPTS)
+		).rejects.toMatchObject({ status: 403 });
 	});
 
 	it('rejects dispatch when source stock is insufficient (422)', async () => {
@@ -164,9 +167,9 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		await expect(repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001')).rejects.toMatchObject(
-			{ status: 422 }
-		);
+		await expect(
+			repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS)
+		).rejects.toMatchObject({ status: 422 });
 	});
 
 	it('dispatches: writes transfer_out ledger to the source shelter and updates central status', async () => {
@@ -207,7 +210,7 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		const result = await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS);
 
 		expect(result.status).toBe('shipped');
 		expect(result._rev).toBe('2-shipped');
@@ -259,7 +262,7 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS);
 
 		expect(ledgerPuts).toHaveLength(0);
 	});
@@ -308,7 +311,7 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		const result = await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS);
 
 		expect(result.status).toBe('shipped');
 		expect(centralPuts).toHaveLength(1);
@@ -367,7 +370,7 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', DISPATCH_OPTS);
 
 		expect(writtenLedgers).toHaveLength(2);
 		expect(writtenLedgers.map((l) => l.item_id).sort()).toEqual(['item:beans', 'item:rice']);
@@ -423,10 +426,103 @@ describe('TransferServerRepository', () => {
 		});
 
 		const repo = new TransferServerRepository('central_ops', 'SH001');
-		const result = await repo.transition(TRANSFER_ID, 'cancelled', 'Staff A', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'cancelled', 'Staff A', 'SH001', {
+			cancel_reason: 'ของไม่พร้อมส่ง'
+		});
 
 		expect(result.status).toBe('cancelled');
 		expect(putPaths).toEqual([`/central_ops/${TRANSFER_ID}`]);
+	});
+
+	it('rejects a dispatch that arrives without a driver or plate (CR-089 FR-01)', async () => {
+		const doc = requestedTransfer();
+		const putPaths: string[] = [];
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			if (method === 'PUT') {
+				putPaths.push(decoded);
+				return { status: 201, data: { ok: true, id: 'x', rev: '2-x' } };
+			}
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		await expect(repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001')).rejects.toThrow();
+
+		// Nothing may be written — neither the status nor a stock deduction (CR-089 FR-01).
+		expect(putPaths).toEqual([]);
+	});
+
+	it('disputes a requested transfer with no ledger writes (CR-089 FR-04)', async () => {
+		const doc = requestedTransfer();
+		const putPaths: string[] = [];
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			if (method === 'PUT') {
+				putPaths.push(decoded);
+				return { status: 201, data: { ok: true, id: 'x', rev: '2-disputed' } };
+			}
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'disputed', 'Staff A', 'SH001', {
+			dispute_reason: 'รอตรวจสอบยอดก่อน'
+		});
+
+		expect(result.status).toBe('disputed');
+		expect(result.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect(result.timeline.disputed?.by).toBe('Staff A');
+		expect(putPaths).toEqual([`/central_ops/${TRANSFER_ID}`]);
+	});
+
+	it('refuses a dispute driven by the destination shelter (CR-089 FR-06)', async () => {
+		const doc = requestedTransfer();
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH002');
+		await expect(
+			repo.transition(TRANSFER_ID, 'disputed', 'Staff C', 'SH002', {
+				dispute_reason: 'ไม่เห็นด้วย'
+			})
+		).rejects.toMatchObject({ status: 403 });
+	});
+
+	it('resumes a disputed transfer back to requested (CR-089 FR-05)', async () => {
+		const doc = requestedTransfer({
+			status: 'disputed',
+			dispute_reason: 'รอตรวจสอบยอดก่อน',
+			timeline: {
+				requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
+				disputed: { at: '2026-08-22T06:00:00.000Z', by: 'Staff A' }
+			}
+		});
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			if (method === 'PUT') return { status: 201, data: { ok: true, id: 'x', rev: '3-resumed' } };
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+		expect(result.status).toBe('requested');
+		// The last hold stays on record after resuming (CR-089 FR-05, FR-11).
+		expect(result.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect(result.timeline.disputed?.at).toBe('2026-08-22T06:00:00.000Z');
 	});
 
 	it('surfaces a non-2xx PUT as TransferServerRepositoryError', async () => {

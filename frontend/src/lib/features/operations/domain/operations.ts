@@ -85,7 +85,13 @@ export function isDonationOutstanding(status: DonationStatus): boolean {
 	return DONATION_OUTSTANDING_STATUSES.includes(status);
 }
 
-export const transferStatusSchema = z.enum(['requested', 'shipped', 'received', 'cancelled']);
+export const transferStatusSchema = z.enum([
+	'requested',
+	'shipped',
+	'received',
+	'cancelled',
+	'disputed'
+]);
 export type TransferStatus = z.infer<typeof transferStatusSchema>;
 
 export const donationChannelSchema = z.enum(['public', 'walk_in']);
@@ -267,7 +273,17 @@ export interface StockTransfer extends BaseDoc {
 		requested: TransferTimelineEvent;
 		shipped?: TransferTimelineEvent;
 		received?: TransferTimelineEvent;
+		/** CR-089 FR-11 — written on `requested` → `disputed`; a later dispute overwrites it
+		 * (latest only, same rule as `dispute_reason`), and `resume` does not clear it. */
+		disputed?: TransferTimelineEvent;
 	};
+	/** CR-089 FR-01/FR-02 — required to reach `shipped`, read-only afterwards. */
+	driver_name?: string;
+	vehicle_plate?: string;
+	/** CR-089 FR-03 — required to reach `cancelled`. */
+	cancel_reason?: string;
+	/** CR-089 FR-04/FR-05 — required to reach `disputed`; latest value only (no history). */
+	dispute_reason?: string;
 	notes?: string;
 }
 
@@ -860,6 +876,30 @@ export const receivedItemSchema = z.object({
 });
 export type ReceivedItemInput = z.input<typeof receivedItemSchema>;
 
+/**
+ * CR-089 FR-01 — a transfer may not reach `shipped` without naming who drives it.
+ * Parsed at the domain boundary so the rule holds for every caller, not just the form:
+ * `central_ops` has no `validate_doc_update` and every write goes through `adminRaw`,
+ * so this schema (plus `transition()`) is the only thing enforcing it.
+ */
+export const dispatchInfoSchema = z.object({
+	driver_name: z.string().trim().min(1, 'Driver name is required to dispatch a transfer'),
+	vehicle_plate: z.string().trim().min(1, 'Vehicle plate is required to dispatch a transfer')
+});
+export type DispatchInfoInput = z.input<typeof dispatchInfoSchema>;
+
+/** CR-089 FR-03 — cancelling a transfer must say why. */
+export const cancelInfoSchema = z.object({
+	cancel_reason: z.string().trim().min(1, 'A reason is required to cancel a transfer')
+});
+export type CancelInfoInput = z.input<typeof cancelInfoSchema>;
+
+/** CR-089 FR-04 — disputing (holding) a transfer must say why. */
+export const disputeInfoSchema = z.object({
+	dispute_reason: z.string().trim().min(1, 'A reason is required to dispute a transfer')
+});
+export type DisputeInfoInput = z.input<typeof disputeInfoSchema>;
+
 export const transferFilterSchema = z.object({
 	status: transferStatusSchema.optional(),
 	limit: z.number().int().positive().max(1000).default(50),
@@ -872,7 +912,7 @@ export function createTransfer(input: TransferInput, ctx: AuthorContext): StockT
 	const d = transferInputSchema.parse(input);
 	return makeDoc(
 		'stock_transfer',
-		2,
+		3,
 		{
 			from_shelter: d.from_shelter,
 			to_shelter: d.to_shelter,
@@ -893,15 +933,22 @@ export function createTransfer(input: TransferInput, ctx: AuthorContext): StockT
  */
 export function dispatchTransfer(
 	transfer: StockTransfer,
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	info: DispatchInfoInput
 ): { transfer: StockTransfer; ledgers: StockLedger[] } {
 	if (transfer.status !== 'requested') {
 		throw new Error(`Cannot dispatch transfer in status "${transfer.status}"`);
 	}
 
+	// Parsed before the ledger entries are built so a missing driver/plate rejects the whole
+	// transition rather than leaving stock already deducted (CR-089 FR-01).
+	const d = dispatchInfoSchema.parse(info);
+
 	const updatedTransfer: StockTransfer = {
 		...transfer,
 		status: 'shipped',
+		driver_name: d.driver_name,
+		vehicle_plate: d.vehicle_plate,
 		timeline: {
 			...transfer.timeline,
 			shipped: { at: now(), by: ctx.createdBy }
@@ -990,14 +1037,73 @@ export function receiveTransfer(
  * adding one is a persisted-doc shape change that needs its own CR); `status`
  * + `updated_at` (common envelope) already record the transition.
  */
-export function cancelTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
+export function cancelTransfer(
+	transfer: StockTransfer,
+	info: CancelInfoInput
+): { transfer: StockTransfer } {
 	if (transfer.status !== 'requested') {
 		throw new Error(`Cannot cancel transfer in status "${transfer.status}"`);
 	}
 
+	const d = cancelInfoSchema.parse(info);
+
 	const updatedTransfer: StockTransfer = {
 		...transfer,
 		status: 'cancelled',
+		cancel_reason: d.cancel_reason,
+		updated_at: now()
+	};
+
+	return { transfer: updatedTransfer };
+}
+
+/**
+ * Disputes (holds) a transfer — CR-089 FR-04/FR-07.
+ *
+ * `disputed` is reachable from `requested` only and leads back to `requested` only, so a held
+ * transfer can never skip ahead to `shipped`/`received` or be cancelled without first being
+ * resumed. Writes `timeline.disputed` (FR-11); a second dispute overwrites both the timeline
+ * entry and `dispute_reason` — the document keeps the latest hold, not a history of them.
+ */
+export function disputeTransfer(
+	transfer: StockTransfer,
+	ctx: AuthorContext,
+	info: DisputeInfoInput
+): { transfer: StockTransfer } {
+	if (transfer.status !== 'requested') {
+		throw new Error(`Cannot dispute transfer in status "${transfer.status}"`);
+	}
+
+	const d = disputeInfoSchema.parse(info);
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'disputed',
+		dispute_reason: d.dispute_reason,
+		timeline: {
+			...transfer.timeline,
+			disputed: { at: now(), by: ctx.createdBy }
+		},
+		updated_at: now()
+	};
+
+	return { transfer: updatedTransfer };
+}
+
+/**
+ * Resumes a disputed transfer back to `requested` — CR-089 FR-05.
+ *
+ * Keeps `dispute_reason` and `timeline.disputed` so the last hold stays visible after the
+ * transfer moves on; only a later dispute overwrites them.
+ */
+export function resumeTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
+	if (transfer.status !== 'disputed') {
+		throw new Error(`Cannot resume transfer in status "${transfer.status}"`);
+	}
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'requested',
 		updated_at: now()
 	};
 

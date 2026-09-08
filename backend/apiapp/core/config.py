@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 30 * 24 * 60
     OTP_INTERVAL: int = 30
 
+    # third-party OAuth2 client-credentials
+    THIRDPARTY_JWT_SECRET: str = "thirdparty_jwt_secret_change_me_in_env"
+    THIRDPARTY_JWT_EXPIRE_SECONDS: int = 3600
+
     API_PREFIX: str = ""
 
     # CORS

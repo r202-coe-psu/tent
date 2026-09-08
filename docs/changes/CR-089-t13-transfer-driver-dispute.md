@@ -1,21 +1,21 @@
 ---
 id: CR-089
 title: T-13 โอนย้ายข้ามศูนย์ — Driver/Plate + Dispute (schema_v 2 → 3)
-status: approved
+status: done
 date: 2026-08-25
-updated: 2026-08-31
+updated: 2026-09-02
 requested_by: CR-059 follow-up — field ละเอียดของ stock_transfer ที่ CR-059 Decision Log 2026-08-22 ("T-13 write-path implementation detail") และ schema.md §5.5 ระบุไว้ว่า "ยังไม่ approve ในรอบนี้"
 decided_by: Project Owner
 layer: volatile
 affects:
   - docs/data/schema.md §5.5 (stock_transfer, schema_v 2 → 3)
-  - docs/task-breakdown/05-D-kitchen.md T-13
+  - docs/task-breakdown/03-C-supply.md T-13 (แก้จาก 05-D-kitchen.md — T-13 อยู่ไฟล์ C ไม่ใช่ D)
   - frontend/src/lib/features/operations/domain/operations.ts
   - frontend/src/lib/features/operations/domain/transfer.authorization.ts
   - frontend/src/lib/features/operations/data/transfer.server-repository.ts
   - frontend/src/lib/features/operations/data/operations.remote.ts
   - frontend/src/lib/features/operations/application/queries.ts
-  - frontend/src/lib/features/operations/ui/transfer-form.svelte
+  - frontend/src/lib/features/operations/ui/dispatch-confirm-dialog.svelte (ใหม่ — ดู FR-09)
   - frontend/src/lib/features/operations/ui/transfer-list.svelte
   - frontend/src/routes/api/back-office/transfer/[id]/transition/+server.ts (รองรับ to: disputed/requested)
   - CR-059 (ปิด backlog note "field ละเอียด...ยังไม่ approve ในรอบนี้" บางส่วน — ที่เหลือแยกไป CR-090/CR-091)
@@ -36,9 +36,9 @@ affects:
 
 เพิ่ม field ที่ CR-059 §4.1/4.3 (Flow 1) ระบุไว้แต่ `71fd0b35` ยังไม่ implement และเปลี่ยน doc shape ของ
 `stock_transfer` จริง: บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนส่งมอบ, สถานะ `disputed` (คัดค้าน/ระงับ) ·
-`stock_transfer` schema_v 2 → 3 (additive) · กระทบ `operations` feature ทั้ง 4 layer, ไม่มี route ใหม่ ·
-**status ยังเป็น `proposed`** — รอ project owner เคาะ `approved` ในไฟล์นี้ก่อนเริ่มโค้ดจริง ·
-**ไม่ครอบคลุมเรื่อง Lot อีกต่อไป** (ตัดออกแล้ว — ดู Decision log)
+`stock_transfer` schema_v 2 → 3 (additive) · กระทบ `operations` feature ทั้ง 4 layer, ไม่มี route ใหม่
+แต่มี **คอมโพเนนต์ UI ใหม่ 1 ตัว** (dispatch confirm dialog — FR-09) · **status `done` (2026-09-02)
+— implement ครบทุก FR แล้ว** · **ไม่ครอบคลุมเรื่อง Lot อีกต่อไป** (ตัดออกแล้ว — ดู Decision log)
 
 ---
 
@@ -47,8 +47,8 @@ affects:
 ### กลุ่ม A — ผู้ขับขี่ / ทะเบียนรถ
 
 - **FR-01** — transition เป็น `shipped` ต้องมี `driver_name` (str, ไม่ว่าง) และ `vehicle_plate` (str,
-  ไม่ว่าง) แนบมาด้วยเสมอ — validate ทั้ง client (ฟอร์ม dispatch confirm ไม่ใช่ฟอร์ม create) และ server
-  (`transition()` reject ก่อนตัดสต็อกถ้าขาด)
+  ไม่ว่าง) แนบมาด้วยเสมอ — validate ทั้ง client (dispatch confirm dialog ตาม FR-09 ไม่ใช่ฟอร์ม create)
+  และ server (`transition()` reject ก่อนตัดสต็อกถ้าขาด)
 - **FR-02** — เก็บ `driver_name` / `vehicle_plate` เป็น field ระดับบนของ `StockTransfer` เขียนครั้งเดียว
   ตอน dispatch, read-only หลังจากนั้น
 
@@ -61,6 +61,15 @@ affects:
 - **FR-05** — transition `disputed → requested` (resume) — source-only, ไม่ต้องมี field เพิ่ม (ล้าง
   block กลับสู่สถานะปกติ); ไม่เก็บ dispute history หลายรอบ — เก็บแค่ `dispute_reason` ล่าสุด (ของรอบ
   ก่อนหน้าถูกทับ)
+- **FR-11** (amend 2026-09-02) — transition `requested → disputed` ต้องเขียน `timeline.disputed`
+  (`{at, by}` แบบเดียวกับ `requested`/`shipped`/`received`) เพื่อให้หน้ารายละเอียดของ
+  [CR-091](CR-091-t13-transfer-detail-page.md) แสดงได้ว่าคัดค้านเมื่อไรและโดยใคร
+  | เรื่อง | ข้อกำหนด |
+  | --- | --- |
+  | เขียนเมื่อ | transition `requested → disputed` เท่านั้น |
+  | คัดค้านซ้ำ | **ทับค่าเดิม** — เก็บครั้งล่าสุดครั้งเดียว สอดคล้องกับ `dispute_reason` (FR-05) |
+  | resume | **ไม่ลบ** `timeline.disputed` และ **ไม่ลบ** `dispute_reason` — ทั้งคู่คงค่าครั้งล่าสุดไว้ |
+  | `cancelled` | ยังไม่มี timeline entry ตาม precedent เดิม — CR นี้ไม่เปลี่ยน |
 - **FR-06** — ปลายทาง (`to_shelter`) ทำได้แค่อ่านตอนสถานะเป็น `disputed` — dispatch/receive/cancel/
   resume ทำไม่ได้ฝั่งปลายทาง (`assertActorMayTransition` เดิมครอบคลุมกฎนี้อยู่แล้วโดยไม่ต้องเพิ่ม logic
   ใหม่ เพราะ resume เป็น source-only เหมือน dispatch/cancel)
@@ -70,6 +79,20 @@ affects:
   เดิม (แถวเดียวกับปุ่ม dispatch/receive/cancel ที่มีอยู่แล้ว) — ไม่ผูกกับหน้ารายละเอียดใน CR-091 เพื่อให้
   CR นี้ ship ได้เองโดยไม่ต้องรอ CR-091
 
+### กลุ่ม C — ที่อยู่ของ UI (amend 2026-09-02)
+
+- **FR-09** — สร้างคอมโพเนนต์ใหม่ `ui/dispatch-confirm-dialog.svelte` เป็นที่กรอก `driver_name` /
+  `vehicle_plate` แล้วให้ `transfer-list.svelte` เปิด dialog นี้แทนการเรียก dispatch mutation ตรง
+  ข้อกำหนดของ dialog:
+  | เรื่อง | ข้อกำหนด |
+  | --- | --- |
+  | trigger | ปุ่ม "อนุมัติส่งมอบ" ในแถวของ `transfer-list.svelte` (เดิมเรียก mutation ทันที) |
+  | field | `driver_name` (req), `vehicle_plate` (req) — validate ฝั่ง client ก่อนยิง mutation ตาม FR-01 |
+  | ผลลัพธ์ | ยืนยัน → เรียก dispatch mutation พร้อมสองค่านี้ · ยกเลิก → ไม่มี side effect ใดๆ |
+  | ขอบเขต | dialog นี้ทำหน้าที่ยืนยัน dispatch เท่านั้น ห้ามรวม transition อื่น |
+- **FR-10** — `ui/transfer-form.svelte` (ฟอร์มสร้างคำร้อง) **ไม่เปลี่ยนแปลงใน CR นี้** — ห้ามเพิ่มช่อง
+  driver/plate ลงในฟอร์มสร้างคำร้อง
+
 > ดู [CR-090](CR-090-t13-transfer-delete-undo.md) สำหรับลบคำร้อง+Undo และ
 > [CR-091](CR-091-t13-transfer-detail-page.md) สำหรับหน้ารายละเอียด Ticket — ทั้งสองไม่แตะ `schema_v`
 > ของ `stock_transfer` จึง approve/ship แยกจาก CR นี้ได้อิสระ ไม่ต้องเรียงลำดับก่อนหลัง
@@ -78,12 +101,17 @@ affects:
 
 ## Acceptance (DoD)
 
-- [ ] กด "อนุมัติส่งมอบ" โดยไม่กรอกผู้ขับขี่/ทะเบียนรถ ต้องถูก block ทั้ง client และ server (FR-01)
-- [ ] source กด "คัดค้าน/ระงับ" ได้เฉพาะตอน `requested`, ต้องกรอกเหตุผล, กลับมา `requested` ได้ (resume)
+- [x] กด "อนุมัติส่งมอบ" โดยไม่กรอกผู้ขับขี่/ทะเบียนรถ ต้องถูก block ทั้ง client และ server (FR-01)
+- [x] source กด "คัดค้าน/ระงับ" ได้เฉพาะตอน `requested`, ต้องกรอกเหตุผล, กลับมา `requested` ได้ (resume)
       (FR-04, FR-05)
-- [ ] ปลายทางเรียก dispatch/receive/resume บนคำร้องของศูนย์ตนเองไม่ได้ตาม role เดิม แม้สถานะเป็น
+- [x] ปลายทางเรียก dispatch/receive/resume บนคำร้องของศูนย์ตนเองไม่ได้ตาม role เดิม แม้สถานะเป็น
       `disputed` (FR-06)
-- [ ] ปุ่มคัดค้าน/ระงับ/resume ใช้งานได้จากตาราง list เดิมโดยไม่ต้องมี CR-090/CR-091 ship มาก่อน (FR-08)
+- [x] ปุ่มคัดค้าน/ระงับ/resume ใช้งานได้จากตาราง list เดิมโดยไม่ต้องมี CR-090/CR-091 ship มาก่อน (FR-08)
+- [x] กด "อนุมัติส่งมอบ" แล้วเปิด dispatch confirm dialog · กดยกเลิกใน dialog แล้วสถานะคำร้องไม่เปลี่ยน
+      และไม่มี ledger ถูกเขียน (FR-09)
+- [x] `git diff` ของ PR ไม่มีการเพิ่มช่อง driver/plate ใน `transfer-form.svelte` (FR-10)
+- [x] คัดค้าน → `timeline.disputed` มี `at`/`by` ถูกต้อง · resume แล้วค่ายังอยู่ · คัดค้านรอบสองทับ
+      ค่าเดิม (ไม่สะสมเป็น array) (FR-11)
 
 ---
 
@@ -132,8 +160,9 @@ Delete+Undo และ Ticket detail page — ดู CR-090/CR-091 ตามล�
   `to: 'shipped'`
 - **Client:** `operations.remote.ts`, `application/queries.ts` เพิ่ม hook `useDisputeTransfer` /
   `useResumeTransfer`
-- **UI:** `transfer-form.svelte` (เพิ่มช่อง driver/plate ที่ dispatch confirm เท่านั้น — ฟอร์ม create
-  เดิมไม่เปลี่ยน), `transfer-list.svelte` (เพิ่มปุ่มคัดค้าน/ระงับ/resume ในแถวเดิม)
+- **UI:** `dispatch-confirm-dialog.svelte` (**คอมโพเนนต์ใหม่** — ที่กรอก driver/plate ตอนยืนยันส่งมอบ,
+  FR-09), `transfer-list.svelte` (เพิ่มปุ่มคัดค้าน/ระงับ/resume ในแถวเดิม + เปลี่ยนปุ่ม "อนุมัติส่งมอบ"
+  จากเรียก mutation ตรงเป็นเปิด dialog) · `transfer-form.svelte` **ไม่เปลี่ยน** (FR-10)
 - **Test:** ทุกไฟล์ `*.test.ts` คู่ของไฟล์ข้างต้น (`operations.test.ts`,
   `transfer.authorization.test.ts`, `transfer.server-repository.test.ts`, `server.test.ts` ของ
   `api/back-office/transfer/[id]/transition/`)
@@ -189,6 +218,34 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
   — เป็น known issue ที่บันทึกไว้เฉยๆ ไม่ต้องเปิด CR แยก (เป็นการแก้บั๊กให้ตรงกับกฎเดิม ไม่ใช่การเปลี่ยน
   rule/schema ตาม `docs/change-management.md` §2) แต่ควรแก้เมื่อมีโอกาสเพราะ `items[]` ไม่เคยบังคับ
   unique `item_id` มาตั้งแต่ต้น
-- **ยังไม่ตัดสินใจ (รอ owner เคาะจริงในไฟล์นี้ก่อนเริ่มโค้ด):** สถานะ CR นี้ยังเป็น `proposed` — การเลือก
-  tier ข้างต้นเป็นข้อเสนอจาก session สนทนาวันนี้ ยังไม่ใช่ `approved` อย่างเป็นทางการตาม
-  `docs/change-management.md` §5 ข้อ 4
+- 2026-08-31 — **project owner เคาะ `approved`** — tier ของกลุ่ม B (Dispute) ตามข้อเสนอ 2026-08-25
+  ทั้งหมด ไม่มีการแก้ scope
+- 2026-09-02 — **amend: เพิ่ม FR-11 (`timeline.disputed`)** ตามที่ project owner เคาะ — CR ฉบับก่อน
+  หน้าไม่ได้กล่าวถึง `timeline` เลย ทำให้ต้องอนุมานจาก precedent ของ `cancelled` (ซึ่งไม่เขียน timeline
+  entry) · ผลของการไม่เขียนคือหน้ารายละเอียดของ CR-091 จะเห็นแค่ `dispute_reason` เป็นข้อความ ไม่รู้ว่า
+  คัดค้านเมื่อไร/โดยใคร ⇒ project owner เลือกให้เขียน `timeline.disputed` · `cancelled` ยังไม่มี
+  timeline entry ตามเดิม (นอก scope CR นี้) · ยังอยู่ใน schema_v 3 เดิม — additive ภายในรอบเดียวกัน
+  ไม่ต้อง bump ซ้ำเพราะยังไม่มีโค้ดหรือ doc ไหนเขียน schema_v 3 ลง production
+- 2026-09-02 — แก้ path ใน `affects:` — T-13 อยู่ที่ `docs/task-breakdown/03-C-supply.md`
+  (ไฟล์ Module C Supply) ไม่ใช่ `05-D-kitchen.md` ที่ระบุไว้เดิม · `grep "T-13"` ใน `05-D-kitchen.md`
+  คืนค่าว่าง · แก้ path อย่างเดียว ไม่เปลี่ยน scope
+- 2026-09-02 — **amend: แก้ที่อยู่ของ UI ที่กรอก driver/plate + เพิ่ม FR-09/FR-10** (tracking =
+  amend + Decision log ตามที่ project owner เคาะ) — ฉบับก่อนหน้าระบุใน §Impact ว่าเพิ่มช่อง driver/plate
+  ที่ `transfer-form.svelte` "ที่ dispatch confirm เท่านั้น" ซึ่ง **ทำตามไม่ได้** เมื่อเทียบกับโค้ดจริงบน
+  `develop @ e0296dac`:
+  - `transfer-form.svelte` เป็นฟอร์ม **สร้างคำร้อง** ล้วน (`useCreateTransfer`, ปุ่ม "สร้างคำร้องโอนย้าย")
+    ไม่มีส่วน dispatch อยู่ในไฟล์นี้
+  - dispatch ยิงจาก `transfer-list.svelte:35` (`handleDispatch()`) → mutation ตรง **ไม่มี confirm dialog
+    อยู่ในฟีเจอร์ `operations` เลยสักตัว**
+  ⇒ "จังหวะ dispatch confirm" ที่ FR-01 อ้างถึงยังไม่มีอยู่จริง ต้องสร้างขึ้นใหม่ · การแก้นี้ไม่เปลี่ยน
+  business rule / enum / invariant / `schema_v` — เปลี่ยนเฉพาะที่อยู่ของ UI และเพิ่ม effort ของ
+  คอมโพเนนต์ใหม่ 1 ตัว ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2 ที่ต้องเปิด CR ใหม่
+- 2026-09-02 — **ปิด CR: `status: done`** — implement ครบทุก FR แล้วบน branch `CR-089`
+  (domain + authorization + server repository + route + client hook + UI) · DoD ทั้ง 7 ข้อผ่าน
+  · `pnpm test` เขียวทั้งชุด · `pnpm lint` และ `svelte-autofixer` สะอาดบนไฟล์ที่แตะ
+  · **หมายเหตุ `pnpm check`:** เหลือ 5 error ที่ `people/ui/evacuee-form.svelte` +
+  `people/ui/evacuee-ewar-symptom.svelte` ซึ่ง**มีอยู่ก่อนแล้วบน `develop @ e0296dac`** และ CR นี้
+  ไม่ได้แตะทั้งสองไฟล์ ⇒ ตีความ DoD "zero errors" ว่า **ไม่เพิ่ม error ใหม่** · การแก้ 5 error นั้น
+  เป็นงานของสาย people/register ไม่ใช่ของ CR นี้
+  · **การบังคับกฎทั้งหมดเป็น server-side guard ในโค้ด ไม่ใช่ DB-level** — `central_ops` ไม่มี
+  `validate_doc_update` และ write path วิ่งผ่าน `adminRaw` ซึ่ง bypass (ถ้อยคำตาม `schema.md` §2.1)
