@@ -4,7 +4,7 @@ import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
 from apiapp.core.config import Settings, get_settings
@@ -29,14 +29,14 @@ def auth_headers(settings: Settings) -> dict[str, str]:
 
 
 @pytest.fixture
-async def db_client(settings: Settings) -> AsyncGenerator[AsyncIOMotorClient, None]:
+async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient, None]:
     """Create a MongoDB client bound to the current test event loop."""
-    client = AsyncIOMotorClient(
+    client = AsyncMongoClient(
         settings.DATABASE_URI,
         serverSelectionTimeoutMS=1000,
     )
     yield client
-    client.close()
+    await client.close()
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ async def clean_db(request: pytest.FixtureRequest, settings: Settings):
         yield
         return
 
-    client = AsyncIOMotorClient(
+    client = AsyncMongoClient(
         settings.DATABASE_URI,
         serverSelectionTimeoutMS=1000,
     )
@@ -86,4 +86,4 @@ async def clean_db(request: pytest.FixtureRequest, settings: Settings):
 
         yield
     finally:
-        client.close()
+        await client.close()

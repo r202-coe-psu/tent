@@ -3,13 +3,13 @@
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
 
 
 async def _insert_shelter_doc(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -24,7 +24,7 @@ async def test_list_shelters_requires_bearer(client: AsyncClient):
 
 async def test_list_shelters_returns_open_shelters(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -76,7 +76,7 @@ async def test_list_shelters_returns_open_shelters(
 
 async def test_list_shelters_filters_by_province(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -121,7 +121,7 @@ async def test_list_shelters_filters_by_province(
 
 async def test_list_shelters_filters_by_site_kind(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -166,7 +166,7 @@ async def test_list_shelters_filters_by_site_kind(
 
 async def test_list_shelters_filters_by_radius(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -235,7 +235,7 @@ async def test_list_shelters_filters_by_radius(
 
 
 async def _insert_person_doc(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     person_id: str,
     shelter_code: str,
@@ -257,7 +257,7 @@ async def _insert_person_doc(
 
 async def test_shelter_detail_occupancy_counts_pre_registered(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):

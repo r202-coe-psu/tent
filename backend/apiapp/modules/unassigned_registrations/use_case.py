@@ -517,7 +517,7 @@ def _resolve_claim_shelter(session: StaffSession, requested: str | None) -> str:
 
 
 async def _atomic_mark_claimed(params: ClaimMarkParams) -> bool:
-    collection = UnassignedRegistration.get_motor_collection()
+    collection = UnassignedRegistration.get_pymongo_collection()
     result = await collection.update_one(
         {
             "_id": params.registration_id,
@@ -555,7 +555,7 @@ async def _atomic_mark_claimed(params: ClaimMarkParams) -> bool:
 
 
 async def _atomic_revert_claim(params: ClaimRevertParams) -> None:
-    collection = UnassignedRegistration.get_motor_collection()
+    collection = UnassignedRegistration.get_pymongo_collection()
     await collection.update_one(
         {"_id": params.registration_id},
         {

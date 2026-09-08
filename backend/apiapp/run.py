@@ -11,7 +11,7 @@ from loguru import logger
 from .core import http_error, validation_error
 from .core.config import get_settings
 from .core.router import init_routers
-from .infrastructure.database import init_beanie
+from .infrastructure.database import close_beanie, init_beanie
 from .middlewares.base import init_all_middlewares
 
 
@@ -83,7 +83,10 @@ async def lifespan(app: FastAPI):
     init_routers(app, settings)
     use_route_names_as_operation_ids(app)
     add_pagination(app)
-    yield
+    try:
+        yield
+    finally:
+        await close_beanie()
 
 
 def use_route_names_as_operation_ids(app: FastAPI) -> None:
