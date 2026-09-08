@@ -505,56 +505,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	/**
-	 * CR-090 FR-01/FR-02 — the only hard delete in this feature. The response carries the body the
-	 * server read just before deleting it, which is what the undo puts back (FR-04/FR-05).
+	 * CR-090 FR-02 — undo of a cancellation. Not a route of its own: `cancelled` → `requested` is
+	 * an ordinary transition, and the server picks the right domain function from the document's
+	 * current status (see `TransferServerRepository.transition`).
 	 */
-	async deleteTransfer(id: string): Promise<{ id: string; rev: string; doc: StockTransfer }> {
-		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
-		const res = await fetch(`/api/back-office/transfer/${encodeURIComponent(id)}?${qs}`, {
-			method: 'DELETE',
-			credentials: 'include',
-			headers: { Accept: 'application/json' }
-		});
-		const payload = await res.json().catch(() => null);
-		if (!res.ok) {
-			const message =
-				payload && typeof payload === 'object' && 'error' in payload
-					? String((payload as { error: unknown }).error)
-					: `Failed to delete transfer (${res.status})`;
-			throw new Error(message);
-		}
-		const body = payload as { id?: unknown; rev?: unknown; doc?: unknown } | null;
-		if (!body || typeof body.rev !== 'string' || !isStockTransfer(body.doc)) {
-			throw new Error('Delete transfer returned an invalid response');
-		}
-		return { id, rev: body.rev, doc: body.doc };
-	}
-
-	/**
-	 * CR-090 FR-05 — undo of a delete. Rides the create route under a `restore` envelope rather
-	 * than a route of its own, and sends the captured body untouched: the server puts it back
-	 * verbatim, so re-shaping it here would change the document the undo restores (FR-08).
-	 */
-	async restoreTransfer(doc: StockTransfer): Promise<StockTransfer> {
-		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
-		const res = await fetch(`/api/back-office/transfer?${qs}`, {
-			method: 'POST',
-			credentials: 'include',
-			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-			body: JSON.stringify({ restore: { doc } })
-		});
-		const payload = await res.json().catch(() => null);
-		if (!res.ok) {
-			const message =
-				payload && typeof payload === 'object' && 'error' in payload
-					? String((payload as { error: unknown }).error)
-					: `Failed to restore transfer (${res.status})`;
-			throw new Error(message);
-		}
-		if (!isStockTransfer(payload)) {
-			throw new Error('Restore transfer returned an invalid transfer document');
-		}
-		return payload;
+	async undoCancelTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'requested');
 	}
 }
 

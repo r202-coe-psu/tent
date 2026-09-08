@@ -10,12 +10,12 @@ import {
 import { injectSession, clearSession } from './helpers/login';
 
 /**
- * CR-090 — delete a transfer request + undo it within 5 seconds.
+ * CR-090 — cancel a transfer request + undo the cancellation within 5 seconds.
  *
- * The three acceptance criteria that unit tests cannot reach live here: the row leaving the
- * table, the undo putting the SAME document back, and the window actually closing on time.
- * Everything else about the feature (status/shelter guards, the rev-less restore PUT) is
- * covered by `transfer.server-repository.test.ts` and the route tests.
+ * The acceptance criteria that unit tests cannot reach live here: the row leaving the default
+ * view, the undo bringing back the SAME document with `cancel_reason` dropped, and the filter
+ * that keeps cancelled rows out of the way (FR-07). Guards and reason-clearing at the domain and
+ * repository level are covered by `transfer.server-repository.test.ts` and the domain tests.
  */
 
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -53,6 +53,7 @@ interface PersistedTransfer {
 	items: { item_id: string; qty: string; unit: string }[];
 	status: string;
 	timeline: { requested: { at: string; by: string } };
+	cancel_reason?: string;
 }
 
 const seededIds: string[] = [];
@@ -113,100 +114,122 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-test.describe('CR-090 — delete a transfer request with a 5-second undo', () => {
+test.describe('CR-090 — cancel a transfer request with a 5-second undo', () => {
 	/** The row for our seeded transfer, identified by the per-run item id it lists. */
 	function transferRow(page: import('@playwright/test').Page) {
 		return page.getByRole('row').filter({ hasText: ITEM_ID });
 	}
 
-	function deleteButton(page: import('@playwright/test').Page) {
-		return transferRow(page).getByRole('button', { name: 'ลบ', exact: true });
+	function cancelButton(page: import('@playwright/test').Page) {
+		return transferRow(page).getByRole('button', { name: 'ยกเลิก', exact: true });
 	}
 
-	test('source shelter deletes a `requested` transfer and the row leaves the table', async ({
+	/** Cancel needs a reason (CR-089 FR-03), so every cancel here goes through the dialog. */
+	async function cancelWithReason(page: import('@playwright/test').Page, reason: string) {
+		await cancelButton(page).click();
+		await page.getByRole('textbox').fill(reason);
+		await page.getByRole('button', { name: 'ยืนยันการยกเลิก', exact: true }).click();
+	}
+
+	async function openSupplyTransfers(
+		page: import('@playwright/test').Page,
+		user: typeof SM1 | typeof SM2
+	) {
+		await injectSession(page, user, sessions[user.name]);
+		await page.goto('/back-office/supply?tab=transfer');
+		await expect(page.getByRole('heading', { name: 'รายการโอนย้ายข้ามศูนย์' })).toBeVisible();
+	}
+
+	test('cancelling drops the row out of the default view and keeps the document', async ({
 		page
 	}) => {
 		test.setTimeout(60000);
 		const seeded = await seedTransfer('A');
 
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await page.goto('/back-office/supply?tab=transfer');
-		await expect(page.getByRole('heading', { name: 'รายการโอนย้ายข้ามศูนย์' })).toBeVisible();
-
+		await openSupplyTransfers(page, SM1);
 		await expect(transferRow(page)).toBeVisible();
-		await deleteButton(page).click();
+		await cancelWithReason(page, 'กรอกจำนวนผิด');
 
-		await expect(page.getByText('ลบคำร้องโอนย้ายแล้ว')).toBeVisible();
+		await expect(page.getByText('ยกเลิกคำร้องแล้ว')).toBeVisible();
+		// FR-07 — hidden from the default view, not deleted.
 		await expect(transferRow(page)).toBeHidden();
 
 		const after = await getTransfer(seeded._id);
-		expect(after.status, 'the document is really gone, not soft-marked').toBe(404);
+		expect(after.status, 'the document survives — this is a soft transition').toBe(200);
+		expect(after.doc?.status).toBe('cancelled');
 	});
 
-	test('undo within the window restores the same document, envelope untouched', async ({
+	test('undo within the window returns the same document with the reason dropped', async ({
 		page
 	}) => {
 		test.setTimeout(60000);
 		const seeded = await seedTransfer('B');
 
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await page.goto('/back-office/supply?tab=transfer');
-		await expect(page.getByRole('heading', { name: 'รายการโอนย้ายข้ามศูนย์' })).toBeVisible();
-
+		await openSupplyTransfers(page, SM1);
 		await expect(transferRow(page)).toBeVisible();
-		await deleteButton(page).click();
+		await cancelWithReason(page, 'กดผิดปุ่ม');
 
 		const undo = page.getByRole('button', { name: 'เลิกทำ' });
 		await expect(undo).toBeVisible();
 		await undo.click();
 
-		await expect(page.getByText('กู้คืนคำร้องแล้ว')).toBeVisible();
+		await expect(page.getByText('คำร้องกลับมารอส่งมอบแล้ว')).toBeVisible();
 		await expect(transferRow(page)).toBeVisible();
 
 		const restored = await getTransfer(seeded._id);
 		expect(restored.status).toBe(200);
-		// FR-05/FR-08 — the restored document must carry its ORIGINAL history, not the time of
-		// the undo. A restore that went through `createTransfer()` would fail every line here.
+		// FR-08 — a transition, so the envelope and the original timeline are untouched.
 		expect(restored.doc?._id).toBe(seeded._id);
 		expect(restored.doc?.created_at).toBe(CREATED_AT);
 		expect(restored.doc?.created_by).toBe('Seed Staff');
-		expect(restored.doc?.updated_at).toBe(CREATED_AT);
 		expect(restored.doc?.timeline.requested).toEqual({ at: CREATED_AT, by: 'Seed Staff' });
 		expect(restored.doc?.status).toBe('requested');
+		// FR-04 — the reason belongs to `cancelled` and leaves with it.
+		expect(restored.doc?.cancel_reason).toBeUndefined();
 	});
 
-	test('past the window the undo is gone and the transfer stays deleted', async ({ page }) => {
+	test('past the window the undo button is gone but the record is not', async ({ page }) => {
 		test.setTimeout(60000);
 		const seeded = await seedTransfer('C');
 
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await page.goto('/back-office/supply?tab=transfer');
-		await expect(page.getByRole('heading', { name: 'รายการโอนย้ายข้ามศูนย์' })).toBeVisible();
-
+		await openSupplyTransfers(page, SM1);
 		await expect(transferRow(page)).toBeVisible();
-		await deleteButton(page).click();
+		await cancelWithReason(page, 'ปลายทางแจ้งว่าไม่ต้องการแล้ว');
 
 		const undo = page.getByRole('button', { name: 'เลิกทำ' });
 		await expect(undo).toBeVisible();
 
-		// FR-06 — the toast is set to the same 5s window; give it a margin and it must be gone.
+		// FR-05/FR-06 — the toast closes on time, but missing it costs a click, not the record.
 		await expect(undo).toBeHidden({ timeout: 15000 });
 
-		await expect(transferRow(page)).toBeHidden();
 		const after = await getTransfer(seeded._id);
-		expect(after.status, 'nothing put it back after the window closed').toBe(404);
+		expect(after.status).toBe(200);
+		expect(after.doc?.status).toBe('cancelled');
+		expect(after.doc?.cancel_reason).toBe('ปลายทางแจ้งว่าไม่ต้องการแล้ว');
 	});
 
-	test('the destination shelter gets no delete button', async ({ page }) => {
+	test('the cancelled row comes back through the filter (FR-07)', async ({ page }) => {
 		test.setTimeout(60000);
 		await seedTransfer('D');
 
-		await injectSession(page, SM2, sessions[SM2.name]);
-		await page.goto('/back-office/supply?tab=transfer');
-		await expect(page.getByRole('heading', { name: 'รายการโอนย้ายข้ามศูนย์' })).toBeVisible();
+		await openSupplyTransfers(page, SM1);
+		await cancelWithReason(page, 'ซ้ำกับคำร้องอื่น');
+		await expect(transferRow(page)).toBeHidden();
 
-		// FR-01 — SH002 sees the incoming request but may not delete it.
+		await page.getByRole('button', { name: /แสดงที่ยกเลิกแล้ว/ }).click();
 		await expect(transferRow(page)).toBeVisible();
-		await expect(deleteButton(page)).toHaveCount(0);
+		await expect(transferRow(page).getByText('ยกเลิกแล้ว')).toBeVisible();
+		// FR-10 — the filter is the only way to reach these rows, so the reason has to be on them.
+		await expect(transferRow(page).getByText('ซ้ำกับคำร้องอื่น')).toBeVisible();
+	});
+
+	test('the destination shelter gets no cancel button', async ({ page }) => {
+		test.setTimeout(60000);
+		await seedTransfer('E');
+
+		await openSupplyTransfers(page, SM2);
+		// CR-089 FR-03 / CR-090 FR-02 — cancel and its undo are both source-only.
+		await expect(transferRow(page)).toBeVisible();
+		await expect(cancelButton(page)).toHaveCount(0);
 	});
 });

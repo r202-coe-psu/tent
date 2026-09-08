@@ -3,7 +3,7 @@ id: CR-059
 title: Requisitions, Inter-Shelter Transfers & NFI Distribution Control
 status: approved
 date: 2026-07-25
-updated: 2026-09-04
+updated: 2026-09-09
 requested_by: Logistics & Field Requisition Management
 decided_by: Project Owner
 layer: volatile
@@ -71,7 +71,7 @@ flowchart TD
   * **[เปลี่ยน] การสืบย้อนกลับ (Traceability):** ระบบเก็บเลขล็อตต้นทางไว้ในฟิลด์ **"อ้างอิง Lot ต้นทาง"** แบบ Read-only เพื่อรักษาสิทธิ์การสืบย้อนประวัติสินค้า *(ข้อ 4.2 / Task #13)*
   * **[เปลี่ยน] การตรวจสอบวันหมดอายุจริง:** ดึงวันหมดอายุจากต้นทางมาให้อัตโนมัติ แต่ยังคงเปิดให้แก้ไขได้ตอนตรวจรับจริง กรณีวันหมดอายุของจริงไม่ตรงป้าย *(ข้อ 4.2 / Task #13)*
 * **สิทธิ์และการซิงค์สถานะ:**
-  * **[เพิ่ม] สิทธิ์คัดค้าน/ระงับคำสั่ง:** ฝั่งต้นทางมีปุ่ม **"คัดค้าน/ระงับคำสั่งปฏิบัติการ"** เพื่อปฏิเสธหรือระงับการโอนย้ายได้ หากสต็อกไม่พร้อมส่งมอบ *(ข้อ 4.3 / Task #13)* — คำร้องที่ถูกระงับออกได้ทางเดียวคือกด "กลับมาดำเนินการต่อ" (resume) กลับสู่ `requested` ก่อน จึงจะยกเลิกหรือลบได้ *(decision sync จาก [CR-089](CR-089-t13-transfer-driver-dispute.md) FR-07 + [CR-090](CR-090-t13-transfer-delete-undo.md) FR-01 — ดู Decision Log 2026-09-04)*
+  * **[เพิ่ม] สิทธิ์คัดค้าน/ระงับคำสั่ง:** ฝั่งต้นทางมีปุ่ม **"คัดค้าน/ระงับคำสั่งปฏิบัติการ"** เพื่อปฏิเสธหรือระงับการโอนย้ายได้ หากสต็อกไม่พร้อมส่งมอบ *(ข้อ 4.3 / Task #13)* — คำร้องที่ถูกระงับออกได้ทางเดียวคือกด "กลับมาดำเนินการต่อ" (resume) กลับสู่ `requested` ก่อน จึงจะยกเลิกได้ *(decision sync จาก [CR-089](CR-089-t13-transfer-driver-dispute.md) FR-07 + [CR-090](CR-090-t13-transfer-cancel-undo.md) FR-03 — ดู Decision Log 2026-09-04 และ 2026-09-09)*
   * **[เปลี่ยน] Real-time Sync:** หลังปลายทางยืนยันรับเข้าคลังสำเร็จ สถานะฝั่งต้นทางจะเปลี่ยนเป็น **"ส่งมอบสำเร็จ"** อัตโนมัติพร้อมบันทึกประวัติการดำเนินการ *(ข้อ 4.4 / Task #13)*
 
 ---
@@ -153,7 +153,7 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
 
 ## 🛡️ มาตรการความปลอดภัยของ UI (UI Safety Standards)
 
-* **[เพิ่ม] ปุ่ม Undo การลบรายการ:** เพิ่มปุ่ม Undo การลบแถวรายการผ่าน Toast Notification ค้างไว้ 5 วินาที เพื่อป้องกันการกดลบพลาด *(ข้อ 4.5 / Task #13)*
+* **[เพิ่ม] ปุ่ม Undo การเอารายการออก:** เพิ่มปุ่ม Undo ผ่าน Toast Notification ค้างไว้ 5 วินาที เพื่อป้องกันการกดพลาด *(ข้อ 4.5 / Task #13)* — สำหรับ `stock_transfer` ข้อนี้ทำเป็น **Undo การยกเลิก** (`cancelled` → `requested`) ไม่ใช่การกู้คืนเอกสารที่ถูกลบจริง เพราะ `stock_transfer` ไม่มี hard delete *(decision sync จาก [CR-090](CR-090-t13-transfer-cancel-undo.md) FR-01/FR-05 — ดู Decision Log 2026-09-09)*
 * **[เปลี่ยน] การกั้นสิทธิ์ข้อมูลข้ามศูนย์ (Cross-shelter Isolation):** ตารางรายการ Ticket บังคับกรองเฉพาะศูนย์ใน Context จริงเท่านั้น เพื่อแก้ปัญหารั่วไหลของข้อมูลข้ามศูนย์ *(ข้อ 4.5 / Task #13)*
 * **[เพิ่ม] Banner แสดงเส้นทางส่งมอบ:** หน้ารายละเอียด Ticket มี Banner แสดงเส้นทาง **"ต้นทาง → ปลายทาง"** เต็มรูปแบบ พร้อมระบุชัดเจนว่าศูนย์ปัจจุบันทำหน้าที่เป็นฝั่งใดของคำสั่ง *(ข้อ 4.5 / Task #13)*
 
@@ -298,7 +298,7 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
   แยกต่างหากเพื่อขอ approve field เหล่านี้ ไม่ปนกับ decision ของ CR-059 ที่ปิดไปแล้ว: แยกเป็น 3 ไฟล์ตาม
   schema impact (กันปัญหา schema_v ชนกันถ้า approve ไม่พร้อมกัน) —
   **[CR-089](CR-089-t13-transfer-driver-dispute.md)** (lot/driver-plate/dispute, เปลี่ยน doc shape
-  จริง, `stock_transfer` schema_v 2 → 3), **[CR-090](CR-090-t13-transfer-delete-undo.md)** (ลบคำร้อง +
+  จริง, `stock_transfer` schema_v 2 → 3), **[CR-090](CR-090-t13-transfer-cancel-undo.md)** (ลบคำร้อง +
   Undo, ไม่แตะ schema_v), **[CR-091](CR-091-t13-transfer-detail-page.md)** (หน้ารายละเอียด Ticket, ไม่แตะ
   schema_v) — ทั้งสามยังเป็น status: `proposed` (renumbered from CR-084/085/086 เดิม 2026-08-25 —
   ชนกับ CR-084/085/086 ของ `develop` ที่ merge เข้ามาพร้อมกัน ไม่เกี่ยวกัน คนละเรื่องคนละทีม)
@@ -313,3 +313,12 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
   ปลดระงับก่อนถึงทำลายได้ ตรงกับหลักความปลอดภัยของ Flow 1 · resume ทำได้ตลอด ไม่มีกำหนดเวลา
   ไม่จำกัดจำนวนครั้ง และไม่ล้าง `dispute_reason` / `timeline.disputed`
   ⇒ CR-090 **ไม่ต้อง** amend FR-01 ให้ครอบ `disputed`
+- 2026-09-09 — **decision sync** (ไม่ใช่กฎใหม่ของ CR นี้ — บันทึกการตีความ §4.5 ที่ CR ลูกเคาะไป;
+  tracking = decision sync ตามที่ project owner เคาะ) — §4.5 "ปุ่ม Undo การลบรายการ" ถูกตีความสำหรับ
+  `stock_transfer` ว่าเป็น **Undo การยกเลิก** ไม่ใช่ hard delete + restore · ที่มา: [CR-090](CR-090-t13-transfer-cancel-undo.md)
+  amend 2026-09-09 ถอน hard delete ออกทั้งหมด เพราะระบบยึด append-only / soft-transition ทุกจุด และ
+  `cancel_reason` (CR-089 FR-03) เก็บเหตุผลของการเอาคำร้องออกไว้อยู่แล้ว
+  ⇒ ผลที่ผู้ใช้เห็น: กด "ยกเลิก" → แถวหายจากมุมมองตั้งต้น (ซ่อน `cancelled` ตาม CR-090 FR-07) →
+  มีปุ่ม "เลิกทำ" 5 วินาที · พลาดหน้าต่างแล้วต้องสร้างคำร้องใหม่เหมือนเดิม แต่เอกสารพร้อมเหตุผล
+  ที่ยกเลิกยังอยู่ให้ตรวจสอบย้อนหลัง ไม่เหมือน hard delete ที่หายถาวร (CR-090 FR-06)
+  ⇒ ข้อความใน §4.3 ที่เพิ่มไว้ 2026-09-04 ตัดคำว่า "ลบ" ออก เพราะไม่มีการลบใน `stock_transfer` แล้ว

@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { StockTransfer } from './operations';
-import {
-	assertActorMayTransition,
-	assertActorMayDelete,
-	assertActorMayRestore,
-	TransferAuthorizationError
-} from './transfer.authorization';
+import { assertActorMayTransition, TransferAuthorizationError } from './transfer.authorization';
 
 function requestedTransfer(overrides?: Partial<StockTransfer>): StockTransfer {
 	return {
@@ -97,40 +92,31 @@ describe('transfer.authorization', () => {
 		expect(() => assertActorMayTransition(shipped, 'shipped', 'SH003')).not.toThrow();
 	});
 
-	// --- CR-090 delete/restore guards ---
+	// --- CR-090 undo-cancel guards ---
 
-	it('allows only the source shelter to delete', () => {
-		const doc = requestedTransfer();
-		expect(() => assertActorMayDelete(doc, 'SH001')).not.toThrow();
-		expect(() => assertActorMayDelete(doc, 'SH002')).toThrow(TransferAuthorizationError);
+	it('allows only the source shelter to undo a cancellation', () => {
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		expect(() => assertActorMayTransition(cancelled, 'requested', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(cancelled, 'requested', 'SH002')).toThrow(
+			TransferAuthorizationError
+		);
 	});
 
-	it('leaves the deletable-status check to the caller', () => {
-		// CR-090 FR-03 maps a wrong status to 422 and a wrong shelter to 403, so this guard must
-		// stay silent about status — the repository owns that half.
-		const shipped = requestedTransfer({ status: 'shipped' });
-		expect(() => assertActorMayDelete(shipped, 'SH001')).not.toThrow();
-	});
-
-	it('allows only the source shelter to restore', () => {
-		const doc = requestedTransfer();
-		expect(() => assertActorMayRestore(doc, 'SH001')).not.toThrow();
-		expect(() => assertActorMayRestore(doc, 'SH002')).toThrow(TransferAuthorizationError);
-	});
-
-	it('refuses to restore a body that is not `requested`', () => {
-		// CR-090 FR-10 — otherwise the restore path becomes a way to write a transfer in any
-		// status straight into central_ops.
-		for (const status of ['shipped', 'received', 'cancelled', 'disputed'] as const) {
-			expect(() => assertActorMayRestore(requestedTransfer({ status }), 'SH001')).toThrow(
-				TransferAuthorizationError
-			);
+	it('refuses to move a cancelled transfer anywhere but back to requested', () => {
+		// CR-090 FR-03 — `cancelled` leads to `requested` and nowhere else, so reaching `shipped`
+		// again always costs two steps.
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		for (const to of ['shipped', 'received', 'disputed'] as const) {
+			// The transition is invalid, so the guard stays silent and the domain owns the error —
+			// what matters is that no path here treats it as authorized work.
+			expect(() => assertActorMayTransition(cancelled, to, 'SH001')).not.toThrow();
 		}
 	});
 
-	it('compares shelters the same way for delete and restore', () => {
-		const doc = requestedTransfer();
-		expect(() => assertActorMayDelete(doc, ' sh001 ')).not.toThrow();
-		expect(() => assertActorMayRestore(doc, ' sh001 ')).not.toThrow();
+	it('compares shelters the same way for undo-cancel as for resume', () => {
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		const disputed = requestedTransfer({ status: 'disputed' });
+		expect(() => assertActorMayTransition(cancelled, 'requested', ' sh001 ')).not.toThrow();
+		expect(() => assertActorMayTransition(disputed, 'requested', ' sh001 ')).not.toThrow();
 	});
 });

@@ -8,8 +8,6 @@ import {
 	qtyGte,
 	qtyNeg,
 	qtyStrSignedNonZeroSchema,
-	qtyStrPositiveSchema,
-	qtyStrNonNegativeSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceSignedNonZeroSchema,
 	qtyStrCoerceNonNegativeSchema,
@@ -276,15 +274,18 @@ export interface StockTransfer extends BaseDoc {
 		shipped?: TransferTimelineEvent;
 		received?: TransferTimelineEvent;
 		/** CR-089 FR-11 — written on `requested` → `disputed`; a later dispute overwrites it
-		 * (latest only, same rule as `dispute_reason`), and `resume` does not clear it. */
+		 * (latest only). `resume` does NOT clear it: the timeline is history, not current state
+		 * (CR-090 FR-04). */
 		disputed?: TransferTimelineEvent;
 	};
 	/** CR-089 FR-01/FR-02 — required to reach `shipped`, read-only afterwards. */
 	driver_name?: string;
 	vehicle_plate?: string;
-	/** CR-089 FR-03 — required to reach `cancelled`. */
+	/** CR-089 FR-03 — required to reach `cancelled`, and dropped again on undo. CR-090 FR-04:
+	 * a `*_reason` field exists only while the document sits in the status that demands it. */
 	cancel_reason?: string;
-	/** CR-089 FR-04/FR-05 — required to reach `disputed`; latest value only (no history). */
+	/** CR-089 FR-04/FR-05 — required to reach `disputed`; latest value only (no history), and
+	 * dropped on resume under the same rule as `cancel_reason` (CR-090 FR-04). */
 	dispute_reason?: string;
 	notes?: string;
 }
@@ -910,71 +911,6 @@ export const transferFilterSchema = z.object({
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
 
-const transferTimelineEventSchema = z.object({
-	at: z.string().datetime(),
-	by: z.string().min(1)
-});
-
-/**
- * Full persisted `stock_transfer` contract — the counterpart of `stockLedgerDocSchema`.
- *
- * CR-090 FR-10 needs this because the restore path is the one place a client hands us a whole
- * document, `_id` included. `isStockTransfer()` only looks at `type`, which is far too loose to
- * gate a write into `central_ops` (a database with no `validate_doc_update`).
- *
- * `.passthrough()` mirrors the ledger schema and is load-bearing here: FR-05 requires the restored
- * document to match the deleted one in EVERY field, so stripping unknown keys would quietly
- * violate the requirement whenever a later CR adds a field this schema has not caught up with.
- */
-export const stockTransferDocSchema = z
-	.object({
-		_id: z.string().regex(/^stock_transfer:/),
-		_rev: z.string().optional(),
-		type: z.literal('stock_transfer'),
-		// `createTransfer` mints 3 since CR-089, but documents written before it landed are still
-		// 2 and must stay restorable — failing closed on those would break delete+undo for every
-		// pre-CR-089 request.
-		schema_v: z.union([z.literal(2), z.literal(3)]),
-		shelter_code: z.string().min(1),
-		created_at: z.string().datetime(),
-		updated_at: z.string().datetime(),
-		created_by: z.string().min(1),
-		from_shelter: z.string().min(1),
-		to_shelter: z.string().min(1),
-		items: z
-			.array(
-				z
-					.object({
-						item_id: z.string().min(1),
-						qty: qtyStrPositiveSchema,
-						unit: z.string().trim().min(1),
-						received_qty: qtyStrNonNegativeSchema.optional()
-					})
-					.passthrough()
-			)
-			.min(1),
-		status: transferStatusSchema,
-		timeline: z
-			.object({
-				requested: transferTimelineEventSchema,
-				shipped: transferTimelineEventSchema.optional(),
-				received: transferTimelineEventSchema.optional(),
-				disputed: transferTimelineEventSchema.optional()
-			})
-			.passthrough(),
-		driver_name: z.string().optional(),
-		vehicle_plate: z.string().optional(),
-		cancel_reason: z.string().optional(),
-		dispute_reason: z.string().optional(),
-		notes: z.string().optional()
-	})
-	.passthrough();
-
-/** Parse a whole persisted transfer and fail closed before it is written back (CR-090 FR-10). */
-export function parseStockTransfer(input: unknown): StockTransfer {
-	return stockTransferDocSchema.parse(input) as StockTransfer;
-}
-
 export function createTransfer(input: TransferInput, ctx: AuthorContext): StockTransfer {
 	const d = transferInputSchema.parse(input);
 	return makeDoc(
@@ -1158,18 +1094,49 @@ export function disputeTransfer(
 }
 
 /**
- * Resumes a disputed transfer back to `requested` — CR-089 FR-05.
+ * Resumes a disputed transfer back to `requested` — CR-089 FR-05 (amended 2026-09-09).
  *
- * Keeps `dispute_reason` and `timeline.disputed` so the last hold stays visible after the
- * transfer moves on; only a later dispute overwrites them.
+ * Drops `dispute_reason`: a `*_reason` field belongs only to the status that demands it, so a
+ * transfer that is `requested` again must not carry the reason it was once held for (CR-090
+ * FR-04). `timeline.disputed` stays — that is history, and history survives the undo.
  */
 export function resumeTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
 	if (transfer.status !== 'disputed') {
 		throw new Error(`Cannot resume transfer in status "${transfer.status}"`);
 	}
 
+	const { dispute_reason: _dropped, ...rest } = transfer;
+	void _dropped;
+
 	const updatedTransfer: StockTransfer = {
-		...transfer,
+		...rest,
+		status: 'requested',
+		updated_at: now()
+	};
+
+	return { transfer: updatedTransfer };
+}
+
+/**
+ * Undoes a cancellation, `cancelled` → `requested` — CR-090 FR-02/FR-04.
+ *
+ * The mirror of `resumeTransfer`: drops `cancel_reason` for the same reason, and touches nothing
+ * else. `_id`, `created_at`, `created_by` and `timeline.requested` survive because this is a
+ * transition, not a fresh document (FR-08).
+ *
+ * There is no time limit here. The 5-second window belongs to the toast in the UI (FR-05/FR-06);
+ * the state machine lets the source shelter walk a cancellation back whenever it needs to.
+ */
+export function undoCancelTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
+	if (transfer.status !== 'cancelled') {
+		throw new Error(`Cannot undo cancel on transfer in status "${transfer.status}"`);
+	}
+
+	const { cancel_reason: _dropped, ...rest } = transfer;
+	void _dropped;
+
+	const updatedTransfer: StockTransfer = {
+		...rest,
 		status: 'requested',
 		updated_at: now()
 	};

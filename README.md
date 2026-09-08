@@ -31,12 +31,12 @@ GIS, Model 3 ระดับ, SOP, ข้อเสนอเชิงนโยบ
 
 ตามข้อเสนอ ความ Smart ครอบคลุม 4 มิติ:
 
-| มิติ                      | ใจความ                                                                                                    |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 1. Local Participation    | ออกแบบร่วม (co-design) กับ อปท./ชุมชน/อาสาสมัคร — SOP สะท้อนบริบทจริง                                     |
-| 2. Real-time Registration | ลงทะเบียนดิจิทัลเหลือ 2–3 นาที/ครอบครัว (QR / ThaID / เจ้าหน้าที่), ญาติค้นหาผู้ประสบภัยออนไลน์ได้        |
+| มิติ                  | ใจความ                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Local Participation    | ออกแบบร่วม (co-design) กับ อปท./ชุมชน/อาสาสมัคร — SOP สะท้อนบริบทจริง                                                                   |
+| 2. Real-time Registration | ลงทะเบียนดิจิทัลเหลือ 2–3 นาที/ครอบครัว (QR / ThaID / เจ้าหน้าที่), ญาติค้นหาผู้ประสบภัยออนไลน์ได้         |
 | 3. Resource Planning      | คำนวณ/แจ้งเตือนปริมาณอาหาร–น้ำ–เวชภัณฑ์–อาสาสมัครต่อวัน อิงยอดผู้พักพิง real-time + มาตรฐาน Sphere (2018) |
-| 4. Strategic Dashboard    | สรุปข้อมูลเชิงกลยุทธ์ ส่งต่อ One Data / EOC ระดับอำเภอ–จังหวัด                                            |
+| 4. Strategic Dashboard    | สรุปข้อมูลเชิงกลยุทธ์ ส่งต่อ One Data / EOC ระดับอำเภอ–จังหวัด                                                                           |
 
 ## สถานะปัจจุบันของ codebase
 
@@ -105,6 +105,7 @@ pnpm dev          # http://localhost:5173
 ## การตรวจคุณภาพโค้ด (Quality Gate: pre-commit & pre-push)
 
 repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit และ push:
+
 - **pre-commit:** ตรวจ format และ lint (frontend, backend, worker)
 - **pre-push:** ตรวจ type-check และ unit tests (frontend, backend, worker)
 
@@ -147,6 +148,7 @@ pnpm exec lefthook run pre-push
   docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
   docker compose -f docker-compose.yml start worker
   ```
+
   ใช้กับ staging ได้เช่นกัน ถ้า base compose มี service ชื่อ `couchdb` + `mongodb` (และ ideally `worker`)
 
 คำสั่ง worker (จาก repo root):
@@ -171,6 +173,7 @@ Services: CouchDB, frontend, MongoDB, sync worker, FastAPI (`127.0.0.1:9000`).
 (ค่าเดียวสำหรับ worker + FastAPI).
 
 Volume dirs:
+
 - staging: `/mnt/tent-data/couchdb/data`, `/mnt/tent-data/mongodb/data`
 - production: `../deployment/tent/data` (Couch), `../deployment/tent/mongodb/data` (Mongo)
 

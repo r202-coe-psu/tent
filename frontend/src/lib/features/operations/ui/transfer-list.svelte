@@ -12,8 +12,7 @@
 		useCancelTransfer,
 		useDisputeTransfer,
 		useResumeTransfer,
-		useDeleteTransfer,
-		useRestoreTransfer
+		useUndoCancelTransfer
 	} from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -29,7 +28,8 @@
 	import Ban from '@lucide/svelte/icons/ban';
 	import CirclePause from '@lucide/svelte/icons/circle-pause';
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 
 	const transfersQuery = useTransfers();
 	const dispatchMutation = useDispatchTransfer();
@@ -37,13 +37,26 @@
 	const cancelMutation = useCancelTransfer();
 	const disputeMutation = useDisputeTransfer();
 	const resumeMutation = useResumeTransfer();
-	const deleteMutation = useDeleteTransfer();
-	const restoreMutation = useRestoreTransfer();
+	const undoCancelMutation = useUndoCancelTransfer();
 
-	/** CR-090 FR-04/FR-06 — how long a deleted request stays recoverable. */
+	/** CR-090 FR-05 — how long the "undo" action stays on the toast after a cancellation. */
 	const UNDO_WINDOW_MS = 5000;
 
 	const ownShelter = getShelterCode();
+
+	/**
+	 * CR-090 FR-07 — cancelled requests are never deleted, so they accumulate. Hide them by
+	 * default and let the user opt in; the toggle is view-only and never touches the query.
+	 */
+	let showCancelled = $state(false);
+
+	const visibleTransfers = $derived(
+		(transfersQuery.data ?? []).filter((t) => showCancelled || t.status !== 'cancelled')
+	);
+
+	const cancelledCount = $derived(
+		(transfersQuery.data ?? []).filter((t) => t.status === 'cancelled').length
+	);
 
 	const STATUS_LABEL: Record<TransferStatus, string> = {
 		requested: 'รอส่งมอบ',
@@ -97,9 +110,21 @@
 			cancelMutation.isPending ||
 			disputeMutation.isPending ||
 			resumeMutation.isPending ||
-			deleteMutation.isPending ||
-			restoreMutation.isPending
+			undoCancelMutation.isPending
 	);
+
+	/**
+	 * CR-090 FR-10 — the reason a transfer stopped, shown next to the status that demands it.
+	 *
+	 * Reading it off the status rather than off the field is what keeps the row honest: a
+	 * `*_reason` only ever belongs to one status (FR-04), so a stale value left on a document by
+	 * an older build can never surface under the wrong label.
+	 */
+	function statusReason(t: StockTransfer): string | undefined {
+		if (t.status === 'disputed') return t.dispute_reason;
+		if (t.status === 'cancelled') return t.cancel_reason;
+		return undefined;
+	}
 
 	function isOutgoing(t: StockTransfer): boolean {
 		return t.from_shelter === ownShelter;
@@ -166,15 +191,22 @@
 			pending = cancelMutation.mutateAsync({ id: target._id, info: parsed.data });
 		}
 
-		toast.promise(pending, {
-			loading: reasonCopy.pendingLabel,
-			success: reasonMode === 'dispute' ? 'ระงับคำร้องแล้ว' : 'ยกเลิกคำร้องสำเร็จ',
-			error: errorMessage
-		});
+		// Cancel gets its own toast with the undo action (FR-05), so only dispute uses the generic
+		// success toast here — two success toasts for one action would stack on screen.
+		if (reasonMode === 'dispute') {
+			toast.promise(pending, {
+				loading: reasonCopy.pendingLabel,
+				success: 'ระงับคำร้องแล้ว',
+				error: errorMessage
+			});
+		} else {
+			pending.catch((err: unknown) => toast.error(errorMessage(err)));
+		}
 		try {
 			await pending;
 			reasonOpen = false;
 			reasonText = '';
+			if (reasonMode === 'cancel') offerUndoCancel(target._id);
 		} catch {
 			// Keep the dialog open so the typed reason is not lost.
 		}
@@ -192,41 +224,20 @@
 	}
 
 	/**
-	 * CR-090 FR-01/FR-04/FR-05 — delete, then offer 5 seconds to take it back.
+	 * CR-090 FR-02/FR-05 — after a cancellation lands, offer 5 seconds to walk it back.
 	 *
-	 * The body that gets restored is the one the SERVER read just before deleting, not a snapshot
-	 * taken here, so the undo cannot put back a row that was already stale on screen.
+	 * Nothing is captured in this closure: the document still exists at `cancelled`, so the undo
+	 * only needs its `_id`. Missing the window costs the user a click, not the record (FR-06).
 	 */
-	async function handleDelete(t: StockTransfer) {
-		let removed: { id: string; rev: string; doc: StockTransfer };
-		try {
-			removed = await deleteMutation.mutateAsync(t._id);
-		} catch (err) {
-			toast.error(errorMessage(err));
-			return;
-		}
-
-		// FR-06 — the captured body lives in this closure and nowhere else, and the flag closes
-		// the window on time even if the toast itself is still on screen. Nothing outside this
-		// call can reach the deleted document afterwards.
-		let canRestore = true;
-		setTimeout(() => {
-			canRestore = false;
-		}, UNDO_WINDOW_MS);
-
-		toast.success('ลบคำร้องโอนย้ายแล้ว', {
+	function offerUndoCancel(id: string) {
+		toast.success('ยกเลิกคำร้องแล้ว', {
 			duration: UNDO_WINDOW_MS,
 			action: {
 				label: 'เลิกทำ',
 				onClick: () => {
-					if (!canRestore) {
-						toast.error('หมดเวลากู้คืนแล้ว — กรุณาสร้างคำร้องใหม่');
-						return;
-					}
-					canRestore = false;
-					toast.promise(restoreMutation.mutateAsync(removed.doc), {
-						loading: 'กำลังกู้คืนคำร้อง...',
-						success: 'กู้คืนคำร้องแล้ว',
+					toast.promise(undoCancelMutation.mutateAsync(id), {
+						loading: 'กำลังเลิกทำการยกเลิก...',
+						success: 'คำร้องกลับมารอส่งมอบแล้ว',
 						error: errorMessage
 					});
 				}
@@ -248,12 +259,28 @@
 	<div class="mb-4 flex items-center gap-2 border-b border-border/60 pb-3">
 		<Truck class="h-4.5 w-4.5 text-primary" />
 		<h3 class="text-sm font-bold text-foreground">รายการโอนย้ายข้ามศูนย์</h3>
+		{#if cancelledCount > 0}
+			<button
+				onclick={() => (showCancelled = !showCancelled)}
+				class={buttonVariants({ size: 'sm', variant: 'ghost', class: 'ml-auto' })}
+			>
+				{#if showCancelled}
+					<EyeOff class="mr-1 h-3.5 w-3.5" />ซ่อนที่ยกเลิกแล้ว
+				{:else}
+					<Eye class="mr-1 h-3.5 w-3.5" />แสดงที่ยกเลิกแล้ว ({cancelledCount})
+				{/if}
+			</button>
+		{/if}
 	</div>
 
 	{#if transfersQuery.isLoading}
 		<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
 	{:else if !transfersQuery.data || transfersQuery.data.length === 0}
 		<p class="text-sm text-muted-foreground">ยังไม่มีรายการโอนย้าย</p>
+	{:else if visibleTransfers.length === 0}
+		<p class="text-sm text-muted-foreground">
+			ไม่มีรายการที่กำลังดำเนินการ — มีคำร้องที่ยกเลิกแล้ว {cancelledCount} รายการ
+		</p>
 	{:else}
 		<Table.Root>
 			<Table.Header>
@@ -265,7 +292,7 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each transfersQuery.data as t (t._id)}
+				{#each visibleTransfers as t (t._id)}
 					<Table.Row>
 						<Table.Cell>
 							<span class="font-mono text-xs font-semibold">{t.from_shelter} → {t.to_shelter}</span>
@@ -282,9 +309,9 @@
 						</Table.Cell>
 						<Table.Cell class="text-xs font-semibold">
 							{STATUS_LABEL[t.status]}
-							{#if t.status === 'disputed' && t.dispute_reason}
+							{#if statusReason(t)}
 								<div class="mt-0.5 text-[11px] font-normal text-muted-foreground">
-									{t.dispute_reason}
+									{statusReason(t)}
 								</div>
 							{/if}
 						</Table.Cell>
@@ -311,13 +338,6 @@
 										class={buttonVariants({ size: 'sm', variant: 'outline' })}
 									>
 										<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
-									</button>
-									<button
-										onclick={() => handleDelete(t)}
-										disabled={outgoingBusy}
-										class={buttonVariants({ size: 'sm', variant: 'destructive' })}
-									>
-										<Trash2 class="mr-1 h-3.5 w-3.5" />ลบ
 									</button>
 								{:else if isOutgoing(t) && t.status === 'disputed'}
 									<button

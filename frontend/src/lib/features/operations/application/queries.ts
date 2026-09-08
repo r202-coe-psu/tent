@@ -23,7 +23,6 @@ import type {
 	CountedItem,
 	TransferInput,
 	TransferFilter,
-	StockTransfer,
 	WalkInDonationInput,
 	DispatchInfoInput,
 	CancelInfoInput,
@@ -401,26 +400,14 @@ export const useResumeTransfer = () => {
 };
 
 /**
- * Mutation hook to delete a transfer request (source shelter, `requested` only).
- * CR-090 FR-01/FR-02 — resolves with the deleted body, which the caller hands back to
- * `useRestoreTransfer` if the user hits undo. No stock has moved at `requested`, so only the
- * transfer list needs invalidating.
+ * Mutation hook to undo a cancellation (source shelter, `cancelled` → `requested`).
+ * CR-090 FR-02 — no stock moved while the transfer sat at `requested` or `cancelled`, so only
+ * the transfer list needs invalidating.
  */
-export const useDeleteTransfer = () => {
+export const useUndoCancelTransfer = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => operationsRepository().deleteTransfer(id),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
-		}
-	}));
-};
-
-/** Mutation hook to undo a delete within the 5-second window (CR-090 FR-05). */
-export const useRestoreTransfer = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: (doc: StockTransfer) => operationsRepository().restoreTransfer(doc),
+		mutationFn: (id: string) => operationsRepository().undoCancelTransfer(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 		}

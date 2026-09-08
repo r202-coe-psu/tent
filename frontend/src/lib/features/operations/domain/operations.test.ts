@@ -8,7 +8,7 @@ import {
 	createStockLedger,
 	stockLedgerInputSchema,
 	parseStockLedger,
-	parseStockTransfer,
+	undoCancelTransfer,
 	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
@@ -43,6 +43,7 @@ import {
 	type LedgerReason,
 	type ReceiveSource
 } from './operations';
+import type { StockTransfer } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
@@ -1285,14 +1286,16 @@ describe('Inter-shelter Transfers', () => {
 		expect(() => disputeTransfer(requestedTransfer(), ctx, { dispute_reason: '' })).toThrow();
 	});
 
-	it('resumes a disputed transfer and keeps the last hold on record (FR-05, FR-11)', () => {
+	it('resumes a disputed transfer, dropping the reason but keeping the timeline (FR-05, FR-11)', () => {
+		// CR-089 FR-05 amended 2026-09-09 (CR-090 FR-04): `dispute_reason` belongs to `disputed`
+		// and leaves with it; `timeline.disputed` is history and stays.
 		const { transfer: held } = disputeTransfer(requestedTransfer(), ctx, {
 			dispute_reason: 'รอตรวจสอบยอดก่อน'
 		});
 		const { transfer: resumed } = resumeTransfer(held);
 
 		expect(resumed.status).toBe('requested');
-		expect(resumed.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect('dispute_reason' in resumed).toBe(false);
 		expect(resumed.timeline.disputed).toEqual(held.timeline.disputed);
 	});
 
@@ -1540,11 +1543,10 @@ describe('lot numbering (CR-088)', () => {
 	});
 });
 
-describe('parseStockTransfer (CR-090 FR-10)', () => {
-	function persistedTransfer(overrides: Record<string, unknown> = {}) {
+describe('undoCancelTransfer + resumeTransfer reason clearing (CR-090 FR-04)', () => {
+	function transferAt(status: 'cancelled' | 'disputed' | 'requested'): StockTransfer {
 		return {
 			_id: 'stock_transfer:01TRANSFER0000000000000000',
-			_rev: '1-abc',
 			type: 'stock_transfer',
 			schema_v: 3,
 			shelter_code: 'SH001',
@@ -1554,64 +1556,48 @@ describe('parseStockTransfer (CR-090 FR-10)', () => {
 			from_shelter: 'SH001',
 			to_shelter: 'SH002',
 			items: [{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
-			status: 'requested',
-			timeline: { requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' } },
-			...overrides
-		};
-	}
-
-	it('accepts a persisted transfer unchanged', () => {
-		const doc = persistedTransfer();
-		expect(parseStockTransfer(doc)).toEqual(doc);
-	});
-
-	it('accepts both schema_v 2 and 3', () => {
-		// Requests written before CR-089 landed are still 2 and must stay restorable.
-		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 2 }))).not.toThrow();
-		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 3 }))).not.toThrow();
-		expect(() => parseStockTransfer(persistedTransfer({ schema_v: 4 }))).toThrow();
-	});
-
-	it('keeps fields the schema does not name', () => {
-		// FR-05 requires the restored document to match the deleted one in EVERY field, so
-		// stripping unknown keys would break the requirement the moment a later CR adds one.
-		const doc = persistedTransfer({ some_future_field: { nested: true } });
-		expect(parseStockTransfer(doc)).toEqual(doc);
-	});
-
-	it('keeps the CR-089 fields', () => {
-		const doc = persistedTransfer({
-			status: 'disputed',
-			dispute_reason: 'สต็อกไม่พอ',
-			driver_name: 'สมชาย ใจดี',
-			vehicle_plate: 'กข 1234 เชียงราย',
+			status,
 			timeline: {
 				requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
-				disputed: { at: '2026-08-22T06:00:00.000Z', by: 'Staff A' }
-			}
-		});
-		expect(parseStockTransfer(doc)).toEqual(doc);
+				disputed:
+					status === 'disputed' ? { at: '2026-08-23T05:00:00.000Z', by: 'Staff B' } : undefined
+			},
+			cancel_reason: status === 'cancelled' ? 'กรอกจำนวนผิด' : undefined,
+			dispute_reason: status === 'disputed' ? 'สต็อกไม่พร้อม' : undefined
+		} as StockTransfer;
+	}
+
+	it('undo drops cancel_reason and returns the transfer to requested', () => {
+		const { transfer } = undoCancelTransfer(transferAt('cancelled'));
+		expect(transfer.status).toBe('requested');
+		expect('cancel_reason' in transfer).toBe(false);
 	});
 
-	it('rejects an _id that is not a stock_transfer id', () => {
-		expect(() => parseStockTransfer(persistedTransfer({ _id: 'stock_ledger:01X' }))).toThrow();
+	it('undo keeps the envelope and the requested timeline untouched (FR-08)', () => {
+		const before = transferAt('cancelled');
+		const { transfer } = undoCancelTransfer(before);
+		expect(transfer._id).toBe(before._id);
+		expect(transfer.created_at).toBe(before.created_at);
+		expect(transfer.created_by).toBe(before.created_by);
+		expect(transfer.timeline.requested).toEqual(before.timeline.requested);
 	});
 
-	it('rejects a missing requested timeline entry', () => {
-		expect(() => parseStockTransfer(persistedTransfer({ timeline: {} }))).toThrow();
+	it('resume drops dispute_reason but keeps timeline.disputed', () => {
+		// CR-089 FR-05 amended 2026-09-09: the reason belongs to the status, the timeline is
+		// history and survives.
+		const before = transferAt('disputed');
+		const { transfer } = resumeTransfer(before);
+		expect(transfer.status).toBe('requested');
+		expect('dispute_reason' in transfer).toBe(false);
+		expect(transfer.timeline.disputed).toEqual(before.timeline.disputed);
 	});
 
-	it('rejects an empty item list and a non-positive qty', () => {
-		expect(() => parseStockTransfer(persistedTransfer({ items: [] }))).toThrow();
-		expect(() =>
-			parseStockTransfer(
-				persistedTransfer({ items: [{ item_id: 'item:rice', qty: '0', unit: 'kg' }] })
-			)
-		).toThrow();
-	});
-
-	it('rejects a re-stamped envelope', () => {
-		expect(() => parseStockTransfer(persistedTransfer({ created_by: '' }))).toThrow();
-		expect(() => parseStockTransfer(persistedTransfer({ created_at: 'yesterday' }))).toThrow();
+	it('refuses to undo a transfer that is not cancelled', () => {
+		expect(() => undoCancelTransfer(transferAt('requested'))).toThrow(
+			/Cannot undo cancel on transfer in status "requested"/
+		);
+		expect(() => undoCancelTransfer(transferAt('disputed'))).toThrow(
+			/Cannot undo cancel on transfer in status "disputed"/
+		);
 	});
 });

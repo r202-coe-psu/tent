@@ -3,7 +3,7 @@ id: CR-089
 title: T-13 โอนย้ายข้ามศูนย์ — Driver/Plate + Dispute (schema_v 2 → 3)
 status: done
 date: 2026-08-25
-updated: 2026-09-02
+updated: 2026-09-09
 requested_by: CR-059 follow-up — field ละเอียดของ stock_transfer ที่ CR-059 Decision Log 2026-08-22 ("T-13 write-path implementation detail") และ schema.md §5.5 ระบุไว้ว่า "ยังไม่ approve ในรอบนี้"
 decided_by: Project Owner
 layer: volatile
@@ -26,7 +26,7 @@ affects:
 # CR-089 — T-13 โอนย้ายข้ามศูนย์: Driver/Plate + Dispute
 
 > เดิม CR นี้รวม 5 กลุ่ม (Lot/Driver-Plate/Dispute/Delete+Undo/Detail Page) — แยก **Delete+Undo** ออกเป็น
-> [CR-090](CR-090-t13-transfer-delete-undo.md) และ **หน้ารายละเอียด Ticket** ออกเป็น
+> [CR-090](CR-090-t13-transfer-cancel-undo.md) และ **หน้ารายละเอียด Ticket** ออกเป็น
 > [CR-091](CR-091-t13-transfer-detail-page.md) แล้ว (2026-08-25) เพราะสองกลุ่มนั้นไม่แตะ `schema_v` เลย —
 > **ต่อมาตัดกลุ่ม Lot ออกทั้งหมดด้วย** (2026-08-25 เช่นกัน) หลังพบว่าซ้ำกับ
 > [CR-088](CR-088-stock-ledger-lot-storage-zone.md) ที่ approve ไปวันเดียวกัน — ดู Decision log ท้ายไฟล์
@@ -58,9 +58,12 @@ affects:
   บังคับ `cancel_reason: str`
 - **FR-04** — เพิ่มค่า enum ใหม่ใน `TransferStatus`: `disputed`. Transition `requested → disputed` —
   source-only, ต้องมี `dispute_reason: str`
-- **FR-05** — transition `disputed → requested` (resume) — source-only, ไม่ต้องมี field เพิ่ม (ล้าง
-  block กลับสู่สถานะปกติ); ไม่เก็บ dispute history หลายรอบ — เก็บแค่ `dispute_reason` ล่าสุด (ของรอบ
-  ก่อนหน้าถูกทับ)
+- **FR-05** (amend 2026-09-09 — ดู Decision log) — transition `disputed → requested` (resume) —
+  source-only, ไม่ต้องมี field เพิ่ม (ล้าง block กลับสู่สถานะปกติ) · **resume ต้องลบ `dispute_reason`
+  ออกจาก doc** — `dispute_reason` มีได้เฉพาะบน doc ที่ `status === 'disputed'` เท่านั้น · ไม่เก็บ
+  dispute history หลายรอบ: คัดค้านรอบใหม่เขียนค่าใหม่ ไม่มีการสะสม
+  > ฉบับก่อน 2026-09-09 ระบุให้ resume **คง** `dispute_reason` ไว้ · เปลี่ยนตามการเคาะของ project
+  > owner พร้อมกับ CR-090 FR-04 เพื่อให้ transition ย้อนกลับทั้งสองตัวใช้กฎเดียวกัน
 - **FR-11** (amend 2026-09-02) — transition `requested → disputed` ต้องเขียน `timeline.disputed`
   (`{at, by}` แบบเดียวกับ `requested`/`shipped`/`received`) เพื่อให้หน้ารายละเอียดของ
   [CR-091](CR-091-t13-transfer-detail-page.md) แสดงได้ว่าคัดค้านเมื่อไรและโดยใคร
@@ -68,13 +71,14 @@ affects:
   | --- | --- |
   | เขียนเมื่อ | transition `requested → disputed` เท่านั้น |
   | คัดค้านซ้ำ | **ทับค่าเดิม** — เก็บครั้งล่าสุดครั้งเดียว สอดคล้องกับ `dispute_reason` (FR-05) |
-  | resume | **ไม่ลบ** `timeline.disputed` และ **ไม่ลบ** `dispute_reason` — ทั้งคู่คงค่าครั้งล่าสุดไว้ |
+  | resume | **ไม่ลบ** `timeline.disputed` (เป็นประวัติ — เก็บค่าครั้งล่าสุด) · **ลบ** `dispute_reason` (amend 2026-09-09 — ดู FR-05) |
   | `cancelled` | ยังไม่มี timeline entry ตาม precedent เดิม — CR นี้ไม่เปลี่ยน |
 - **FR-06** — ปลายทาง (`to_shelter`) ทำได้แค่อ่านตอนสถานะเป็น `disputed` — dispatch/receive/cancel/
   resume ทำไม่ได้ฝั่งปลายทาง (`assertActorMayTransition` เดิมครอบคลุมกฎนี้อยู่แล้วโดยไม่ต้องเพิ่ม logic
   ใหม่ เพราะ resume เป็น source-only เหมือน dispatch/cancel)
 - **FR-07** — `disputed` reach ได้จาก `requested` เท่านั้น และออกได้แค่กลับไป `requested` เท่านั้น (ไม่ไป
-  `shipped`/`received`/`cancelled` ตรงจาก `disputed`)
+  `shipped`/`received`/`cancelled` ตรงจาก `disputed`) — **ข้อนี้ไม่เปลี่ยน** แม้ CR-090 จะเพิ่ม
+  `cancelled → requested` เข้ามาใน state machine (2026-09-09)
 - **FR-08** — ปุ่ม "คัดค้าน/ระงับ" และ "กลับมาดำเนินการต่อ" (resume) ขึ้นที่ตาราง `transfer-list.svelte`
   เดิม (แถวเดียวกับปุ่ม dispatch/receive/cancel ที่มีอยู่แล้ว) — ไม่ผูกกับหน้ารายละเอียดใน CR-091 เพื่อให้
   CR นี้ ship ได้เองโดยไม่ต้องรอ CR-091
@@ -93,7 +97,7 @@ affects:
 - **FR-10** — `ui/transfer-form.svelte` (ฟอร์มสร้างคำร้อง) **ไม่เปลี่ยนแปลงใน CR นี้** — ห้ามเพิ่มช่อง
   driver/plate ลงในฟอร์มสร้างคำร้อง
 
-> ดู [CR-090](CR-090-t13-transfer-delete-undo.md) สำหรับลบคำร้อง+Undo และ
+> ดู [CR-090](CR-090-t13-transfer-cancel-undo.md) สำหรับยกเลิกคำร้อง+Undo การยกเลิก และ
 > [CR-091](CR-091-t13-transfer-detail-page.md) สำหรับหน้ารายละเอียด Ticket — ทั้งสองไม่แตะ `schema_v`
 > ของ `stock_transfer` จึง approve/ship แยกจาก CR นี้ได้อิสระ ไม่ต้องเรียงลำดับก่อนหลัง
 
@@ -194,7 +198,7 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
 - 2026-08-25 — **แยก CR ออกเป็น 3 ไฟล์** หลัง project owner ถามว่าทำไมไม่แยก — เหตุผลทางเทคนิค: กลุ่มที่
   เปลี่ยน doc shape ของ `stock_transfer` จริงต้องเคาะ `schema_v` 2 → 3 ร่วมกันเป็นก้อนเดียว (กันปัญหาสอง
   CR ประกาศ "2 → 3" ชนกันถ้า approve ไม่พร้อมกัน) ส่วน delete+undo และหน้ารายละเอียดไม่แตะ `schema_v`
-  เลย ไม่มีเหตุผลทางเทคนิคให้ผูกด้วยกัน ⇒ แยกเป็น **[CR-090](CR-090-t13-transfer-delete-undo.md)** และ
+  เลย ไม่มีเหตุผลทางเทคนิคให้ผูกด้วยกัน ⇒ แยกเป็น **[CR-090](CR-090-t13-transfer-cancel-undo.md)** และ
   **[CR-091](CR-091-t13-transfer-detail-page.md)**
 - 2026-08-25 — พบว่ากลุ่ม Lot (ตอนนั้นยังอยู่ใน CR นี้) **ซ้ำกับ [CR-088](CR-088-stock-ledger-lot-storage-zone.md)**
   ซึ่ง approve ไปวันเดียวกัน — CR-088 เพิ่ม `lot_no` (`L-YYMMDD-XXX`, gen จริงฝั่ง server) และ
@@ -249,3 +253,14 @@ dev/seed) อ่านได้ปกติ — ไม่มี field ใหม�
   เป็นงานของสาย people/register ไม่ใช่ของ CR นี้
   · **การบังคับกฎทั้งหมดเป็น server-side guard ในโค้ด ไม่ใช่ DB-level** — `central_ops` ไม่มี
   `validate_doc_update` และ write path วิ่งผ่าน `adminRaw` ซึ่ง bypass (ถ้อยคำตาม `schema.md` §2.1)
+- 2026-09-09 — **amend FR-05 (reopen หลัง `done`): resume ต้องลบ `dispute_reason`** (tracking =
+  amend + Decision log ตามที่ project owner เคาะ 2026-09-09) — เดิม FR-05 + FR-11 ระบุให้ resume
+  **คง** `dispute_reason` ไว้ · CR-090 (amend วันเดียวกัน) เพิ่ม transition ย้อนกลับตัวที่สอง
+  `cancelled → requested` และเคาะให้ undo **ลบ** `cancel_reason` ⇒ ถ้า resume ยังคงค่าไว้ ฟีเจอร์
+  เดียวกันจะมีกฎการจัดการ reason 2 มาตรฐาน ซึ่งเดาผิดได้ง่ายตอนแก้โค้ดต่อ
+  ⇒ กติกาที่ใช้ร่วมกันตั้งแต่นี้: **field `*_reason` มีได้เฉพาะบน doc ที่อยู่ในสถานะที่บังคับกรอกมันเท่านั้น**
+  · `timeline.disputed` **ไม่ถูกลบ** — เป็นประวัติ ไม่ใช่ field สถานะปัจจุบัน (FR-11 คงเดิม)
+  · ไม่เปลี่ยน `schema_v` (ยังเป็น 3), enum, หรือ state machine ของ CR นี้ — เปลี่ยนเฉพาะ side effect
+  ของ transition ที่มีอยู่แล้ว ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2 ที่ต้องเปิด CR ใหม่
+  · **CR นี้กลับเป็น `status: approved`** จนกว่าโค้ด resume จะแก้ตาม FR-05 ฉบับใหม่เสร็จ (ทำใน
+  branch เดียวกับ CR-090 เพราะแตะไฟล์ชุดเดียวกัน) — ดู [CR-090](CR-090-t13-transfer-cancel-undo.md)
