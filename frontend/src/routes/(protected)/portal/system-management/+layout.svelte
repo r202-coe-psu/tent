@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import type { LayoutProps } from './$types';
 	import {
 		systemManagementNavbarGroups,
@@ -7,6 +8,7 @@
 	} from '$lib/components/system-management-navbar/static';
 	import SystemManagementNavbar from '$lib/components/system-management-navbar.svelte';
 	import Building from '@lucide/svelte/icons/building';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 
 	let { children }: LayoutProps = $props();
 
@@ -39,9 +41,20 @@
 			class="flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
 		>
 			<div class="flex items-center justify-between gap-4">
-				<div class="flex items-center gap-2">
-					<PageIcon class="size-4 shrink-0 text-primary" />
-					<h1 class="text-sm font-bold text-foreground">{pageTitle}</h1>
+				<div class="flex items-center gap-2.5">
+					<a
+						href={resolve('/portal')}
+						class="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						title="กลับหน้าเลือกเมนูหลัก"
+					>
+						<ChevronLeft class="size-3.5" />
+						<span>Portal</span>
+					</a>
+					<span class="text-muted-foreground/40">/</span>
+					<div class="flex items-center gap-2">
+						<PageIcon class="size-4 shrink-0 text-primary" />
+						<h1 class="text-sm font-bold text-foreground">{pageTitle}</h1>
+					</div>
 				</div>
 
 				<div class="flex items-center gap-2 md:gap-3">
