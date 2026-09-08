@@ -284,7 +284,7 @@
 <div class="border border-teal-200 bg-teal-50 text-teal-900">SPHERE Catalog & Inventory #0D9488</div>
 
 <!-- 4. Real-world Public Portal Application (4 Service Cards) -->
-<div class="border-2 border-red-200 bg-white">1. ค้นหาที่พักพิง (#DC2626 Destructive)</div>
+<div class="border-2 border-red-200 bg-white">1. ค้นหาศูนย์พักพิง (#DC2626 Destructive)</div>
 <div class="border-2 border-sky-200 bg-white">2. ค้นหาญาติ / ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
 <div class="border-2 border-amber-200 bg-white">3. ผู้บริจาค / มอบเสบียง (#EA580C Kitchen & Food)</div>
 <div class="border-2 border-emerald-200 bg-white">4. จิตอาสา / อาสาสมัคร (#059669 Volunteers)</div>
@@ -2162,7 +2162,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">1. ค้นหาที่พักพิง</h4>
+									<h4 class="text-base font-bold text-slate-900">1. ค้นหาศูนย์พักพิง</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ค้นหาศูนย์พักพิงใกล้ตัว ตรวจสอบเตียงว่าง
 										และลงทะเบียนแจ้งความประสงค์เข้าพักพิงล่วงหน้า
@@ -2544,7 +2544,7 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#DC2626]"></span>
-										ค้นหาที่พักพิง (Card 1)
+										ค้นหาศูนย์พักพิง (Card 1)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#E7000B</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-red-700"
@@ -2552,7 +2552,7 @@
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.8:1 (WCAG AA)</td>
 									<td class="px-4 py-2.5"
-										>ปุ่มแดงสำหรับค้นหาที่พักพิงด่วน กรอบการ์ดสีแดงอ่อน 360°</td
+										>ปุ่มแดงสำหรับค้นหาศูนย์พักพิงด่วน กรอบการ์ดสีแดงอ่อน 360°</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
