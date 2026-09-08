@@ -454,7 +454,7 @@ class UnassignedRegistrationsUseCase:
                 if refreshed is not None:
                     await refreshed.delete()
                 deleted = True
-            except (PyMongoError, ConnectionError, TimeoutError, OSError):
+            except PyMongoError, ConnectionError, TimeoutError, OSError:
                 logger.exception(
                     "Unassigned Registration %s claim succeeded but Mongo delete failed",
                     registration_id,

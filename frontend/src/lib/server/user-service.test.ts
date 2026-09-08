@@ -2,16 +2,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
 	createUser,
-	updateUser,
 	resetUserPasswordByAdmin,
+	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
 	setupSecurityQuestionAndResetPassword
 } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 
+interface FakeUserDoc {
+	_id: string;
+	_rev: string;
+	name?: string;
+	type?: string;
+	roles?: string[];
+	display_name?: string;
+	personnel_type?: string;
+	organization?: string;
+	phone?: string;
+	active?: boolean;
+	password?: string;
+	must_change_password?: boolean;
+	security_question?: {
+		question_id: string;
+		answer_hash: string;
+		updated_at: string;
+	};
+	[key: string]: unknown;
+}
+
 describe('user-service', () => {
-	let fakeUsersDb: Record<string, any>;
+	let fakeUsersDb: Record<string, FakeUserDoc>;
 
 	beforeEach(() => {
 		fakeUsersDb = {};
@@ -37,7 +58,7 @@ describe('user-service', () => {
 
 			if (method === 'PUT' && cleanPath.startsWith('/_users/org.couchdb.user:')) {
 				const id = cleanPath.slice('/_users/'.length);
-				const docBody = (body ?? {}) as Record<string, any>;
+				const docBody = (body ?? {}) as Partial<FakeUserDoc>;
 				if (fakeUsersDb[id] && !docBody._rev) {
 					return { status: 409, data: { error: 'conflict', reason: 'Document update conflict.' } };
 				}
@@ -76,6 +97,30 @@ describe('user-service', () => {
 		expect(saved.organization).toBe('ปภ. เชียงใหม่');
 		expect(saved.roles).toEqual(['shelter:SH001', 'registration_staff', 'triage_staff']);
 		expect(saved.active).toBe(true);
+	});
+
+	it('getCurrentUserProfile returns display_name from _users when present', async () => {
+		fakeUsersDb['org.couchdb.user:staff1'] = {
+			_id: 'org.couchdb.user:staff1',
+			_rev: '1-abc',
+			name: 'staff1',
+			type: 'user',
+			roles: [],
+			display_name: 'Staff One'
+		};
+
+		await expect(getCurrentUserProfile('staff1')).resolves.toEqual({
+			name: 'staff1',
+			display_name: 'Staff One'
+		});
+	});
+
+	it('getCurrentUserProfile falls back to username when _users doc is missing', async () => {
+		// Bootstrap CouchDB admin often has a session but no app profile doc.
+		await expect(getCurrentUserProfile('admin')).resolves.toEqual({
+			name: 'admin',
+			display_name: 'admin'
+		});
 	});
 
 	it('resets user password by admin with memorable temporary passphrase', async () => {
@@ -172,6 +217,6 @@ describe('user-service', () => {
 		expect(updated.password).toBe('PermanentPass123!');
 		expect(updated.must_change_password).toBe(false);
 		expect(updated.security_question).toBeDefined();
-		expect(updated.security_question.question_id).toBe('birth_province');
+		expect(updated.security_question?.question_id).toBe('birth_province');
 	});
 });

@@ -107,7 +107,7 @@ async def configured_ttl_hours() -> int | None:
 def _qty(value: Any) -> Decimal | None:
     try:
         parsed = Decimal(str(value))
-    except (InvalidOperation, TypeError):
+    except InvalidOperation, TypeError:
         return None
     return parsed if parsed > 0 else None
 

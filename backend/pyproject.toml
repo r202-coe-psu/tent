@@ -1,61 +1,77 @@
-[tool.poetry]
+[project]
 name = "apiapp"
 version = "0.1.0"
-description = ""
-authors = ["jakee <jakee.indapanya@gmail.com>"]
+description = "Smart Shelter API Application"
 readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.141.0",
+    "pydantic-settings>=2.7.1",
+    "loguru>=0.7.3",
+    "pydantic[email]>=2.11.9",
+    "pymongo>=4.15.1",
+    "python-multipart>=0.0.31",
+    "werkzeug>=3.1.3",
+    "python-dotenv>=1.0.1",
+    "beanie>=2.0.1",
+    "fastapi-pagination>=0.15.16",
+    "starlette>=1.3.1",
+    "bcrypt>=5.0.0",
+    "typer>=0.21.0",
+    "rich>=14.2.0",
+    "questionary>=2.1.1",
+    "jinja2>=3.1.2",
+    "grapheme>=0.6.0",
+    "pyjwt>=2.13.0",
+    "tent-model",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<3.14"
-fastapi = { extras = ["standard"], version = "^0.141.0" }
-pydantic-settings = "^2.7.1"
-loguru = "^0.7.3"
-pydantic = { extras = ["email"], version = "^2.11.9" }
-pymongo = "^4.15.1"
-python-multipart = "^0.0.31"
-werkzeug = "^3.1.3"
-python-dotenv = "^1.0.1"
-beanie = "^2.0.1"
-fastapi-pagination = "^0.15.16"
-starlette = "^1.3.1"
-bcrypt = "^5.0.0"
-typer = "^0.21.0"
-rich = "^14.2.0"
-questionary = "^2.1.1"
-jinja2 = "^3.1.2"
-tent-model = { path = "../packages/tent-model", develop = true }
-grapheme = "^0.6.0"
-pyjwt = "^2.13.0"
+[tool.uv.sources]
+tent-model = { workspace = true }
 
+[dependency-groups]
+dev = [
+    "uvicorn>=0.34.0",
+    "ruff>=0.9.5",
+    "pytest>=8.3.2",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "asgi-lifespan>=2.1.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-uvicorn = "^0.34.0"
-ruff = "^0.9.5"
-pytest = "^8.3.2"
-pytest-asyncio = "^0.24.0"
-httpx = "^0.27.0"
-asgi-lifespan = "^2.1.0"
+[project.scripts]
+controller = "apiapp.cmd.controller:main"
+forge = "cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apiapp", "cli"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["UP046"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header", "fastapi.Cookie", "fastapi.Form", "fastapi.File"]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-
-[tool.poetry.scripts]
-controller = "apiapp.cmd.controller:main"
-forge = "cli.main:app"
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"

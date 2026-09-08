@@ -23,7 +23,7 @@
 ใช้คำสั่ง `forge generate` จาก root directory ของโปรเจกต์:
 
 ```bash
-poetry run forge generate products
+uv run forge generate products
 ```
 
 คำสั่งนี้จะสร้างไฟล์ใน `apiapp/modules/products/`:
@@ -81,5 +81,5 @@ poetry run forge generate products
 ## ข้อกำหนด
 
 - รันจาก root directory ของโปรเจกต์
-- Python 3.12+
+- Python 3.14+
 - โปรเจกต์ต้องมี `apiapp` directory

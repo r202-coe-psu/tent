@@ -29,7 +29,7 @@ def auth_headers(settings: Settings) -> dict[str, str]:
 
 
 @pytest.fixture
-async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient, None]:
+async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient]:
     """Create a MongoDB client bound to the current test event loop."""
     client = AsyncMongoClient(
         settings.DATABASE_URI,
@@ -40,7 +40,7 @@ async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient, None
 
 
 @pytest.fixture
-async def app(settings: Settings) -> AsyncGenerator[FastAPI, None]:
+async def app(settings: Settings) -> AsyncGenerator[FastAPI]:
     """Create a FastAPI application instance for a single test."""
     _app = create_app()
     async with LifespanManager(_app):
@@ -48,7 +48,7 @@ async def app(settings: Settings) -> AsyncGenerator[FastAPI, None]:
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+async def client(app: FastAPI) -> AsyncGenerator[AsyncClient]:
     """Create a test client for the FastAPI application."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
