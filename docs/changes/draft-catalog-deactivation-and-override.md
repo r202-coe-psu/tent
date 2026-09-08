@@ -3,6 +3,7 @@ id: draft
 title: Catalog Schema Deactivation & Shelter Override Alignment — เพิ่มฟิลด์ deactivated, override, และ shelter_code ในเอกสาร Catalog
 status: proposed
 date: 2026-09-03
+updated: 2026-09-09
 requested_by: Module C team / Inventory & Warehouse operations
 decided_by: project owner
 layer: volatile
@@ -11,55 +12,96 @@ affects:
   - frontend/src/lib/features/catalog/domain/catalog.ts
   - frontend/src/lib/features/catalog/domain/catalog-deletion.ts
   - frontend/src/lib/features/catalog/data/catalog.remote.ts
-  - frontend/src/lib/features/catalog/ui/item-category-form.svelte
-  - frontend/src/lib/features/catalog/ui/item-master-form.svelte
-  - frontend/src/lib/features/catalog/ui/recipe-form.svelte
+  - frontend/src/routes/(protected)/back-office/catalog/components/item-category-tab.svelte
+  - frontend/src/routes/(protected)/back-office/catalog/components/item-master-tab.svelte
+  - frontend/src/routes/(protected)/back-office/catalog/components/recipe-tab.svelte
 ---
 
 # Catalog Schema Deactivation & Shelter Override Alignment
 
-> **สรุป (TL;DR):** เพิ่มฟิลด์ `deactivated` (opt, bool, default `false`), `override` (opt, bool, default `false`), และ `shelter_code` (opt, str) ในเอกสาร Catalog ทั้ง 3 ประเภท (`item_category`, `item_master`, `recipe`) บน `docs/data/schema.md` §4 เพื่อรองรับกลไก Soft-Delete (ปิดการใช้งานเมื่อมีข้อมูลอ้างอิง) และสถาปัตยกรรม Remote-first Shelter Override โดยคง `schema_v` เดิม (Additive Non-breaking)
+> **สรุป (TL;DR):**
+> - **เปลี่ยนอะไร:** เพิ่มฟิลด์ `deactivated` (opt, bool, default `false`), `override` (opt, bool, default `false`), และ `shelter_code` (opt, str) ในเอกสาร Catalog ทั้ง 3 ประเภท (`item_category`, `item_master`, `recipe`) บน `docs/data/schema.md` §4, กำหนดนโยบายการลบเอกสารส่วนกลางเป็น Soft-Delete (`deactivate`) เสมอ, และกำหนดกลไก Master vs Override ในฐานข้อมูลระดับศูนย์พักพิง โดยคง `schema_v` เดิม (Additive Non-breaking)
+> - **เพื่อใคร/ทำไม:** ป้องกันข้อมูลประวัติในศูนย์พักพิงเสียหาย (Dangling References) จากการ Hard-delete ข้อมูลกลาง, แก้ปัญหา Multi-tenant Isolation & RBAC Violation ไม่ให้ Client-side วนลูป Query ข้ามฐานข้อมูลศูนย์พักพิง, และลดช่องว่าง Schema ระหว่างเอกสารสเปกกับโค้ดจริง
+> - **Dev ต้อง build:**
+>   - ปรับ Zod schema และ Types ใน `catalog.ts` ให้รองรับ `deactivated`, `override`, `shelter_code`
+>   - ปรับ Deletion Policy ใน `catalog-deletion.ts` ให้ Central Scope ดำเนินการ Soft-delete (`deactivate`) เสมอ และ Shelter Scope ตัดสินใจ Reset vs Deactivate vs Hard-delete ตามบริบทเฉพาะศูนย์
+>   - ลบลูปสแกนข้ามฐานข้อมูลศูนย์พักพิงใน `catalog.remote.ts` (`inspectCategoryUsage`, `inspectItemMasterUsage`, `inspectRecipeUsage`) ออก เพื่อป้องกัน N+1 queries และ RBAC 403 Forbidden
+>   - ปรับปรุง UI Tabs (`item-category-tab.svelte`, `item-master-tab.svelte`, `recipe-tab.svelte`) ให้มีปุ่ม "นำกลับมาใช้" (`RotateCcw`), Dialog พรีวิวการใช้งานก่อนลบ, และ Toast แจ้งผลตามการกระทำจริง (`reset`, `deactivate`, `hard_delete`)
+> - **กระทบ schema/scope:**
+>   - `docs/data/schema.md` §4.1, §4.2, §4.3 (คง `schema_v` เดิมทั้งหมด)
 
 ---
 
 ## 1. Requirements
 
-- **FR-01 (Deactivation Field):**
-  - เอกสาร `item_category`, `item_master`, และ `recipe` ต้องรองรับฟิลด์ `deactivated` ชนิด `bool` (optional, default `false`)
-  - เมื่อ `deactivated === true`:
-    - ต้องไม่ปรากฏใน Dropdown / ตัวเลือกสำหรับการสร้างเอกสารใหม่ (เช่น การลงทะเบียนรับของ, การสร้างเมนูอาหาร, การสร้างสินค้าใหม่)
-    - รายการประวัติย้อนหลัง (Stock ledger, Meal plan, Requisition) ที่เคยอ้างอิงเอกสารนี้ยังคงอ่านและแสดงผลชื่อเดิมได้ตามปกติ
-    - อนุญาตให้ผู้ดูแลระบบ (Admin) หรือผู้จัดการศูนย์ (Manager) เปิดใช้งานกลับมาใหม่ได้ (`deactivated = false`)
-- **FR-02 (Shelter Override Fields):**
-  - เพื่อรองรับสถาปัตยกรรม Multi-tenant / Remote-first (Master vs Override Pattern ตาม `docs/data/data-model.md` §4):
-    - เอกสารในฐานข้อมูล `catalog` (ส่วนกลาง): `shelter_code` เป็น `undefined`, `override` เป็น `undefined` หรือ `false`
-    - เอกสารในฐานข้อมูล `shelter_{code}` (เฉพาะศูนย์):
-      - กรณีปรับแต่งทับค่ามาตรฐานส่วนกลาง: `override: true`, `shelter_code: "{code}"`, `_id` ตรงกับส่วนกลาง
-      - กรณีศูนย์สร้างขึ้นเองใหม่เฉพาะศูนย์: `override: false` หรือ `undefined`, `shelter_code: "{code}"`, `_id` เป็น ID ใหม่
-- **FR-03 (Deletion Flow Invariant):**
-  - เมื่อมีคำสั่งลบเอกสาร Catalog:
-    - หากเป็นเอกสาร `override: true` $\rightarrow$ ทำการ Hard delete เอกสารใน DB ของศูนย์ทิ้ง (Reset to central default)
-    - หากเป็นเอกสารที่มีข้อมูลอ้างอิงอยู่ (เช่น หมวดหมู่ถูกสินค้าใช้, สินค้ามีในสต็อก, สูตรอาหารมีในแผนครัว) $\rightarrow$ ห้ามลบจริง ให้เปลี่ยนเป็น `deactivated = true`
-    - หากไม่มีการอ้างอิงใดๆ $\rightarrow$ อนุญาตให้ Hard delete ได้
+### FR-01: Deactivation Field (ฟิลด์ปิดการใช้งาน)
+1. เอกสาร `item_category`, `item_master`, และ `recipe` ต้องรองรับฟิลด์ `deactivated` ชนิด `bool` (optional, default `false`)
+2. เมื่อ `deactivated === true`:
+   - ต้องไม่ปรากฏใน Dropdown / ตัวเลือกสำหรับการสร้างเอกสารใหม่ (เช่น การบันทึกรับของบริจาค, การสร้างแผนอาหาร, การเพิ่มรายการสินค้าใหม่)
+   - รายการประวัติย้อนหลัง (Stock ledger, Meal plan, Requisition, Donation) ที่เคยอ้างอิงเอกสารถึง `_id` นี้ ยังคงอ่านและแสดงผลชื่อ/ข้อมูลเดิมได้ตามปกติ
+   - อนุญาตให้ผู้ดูแลระบบ (System Admin) หรือเจ้าหน้าที่ที่มีสิทธิ์จัดการข้อมูล เปิดใช้งานกลับมาใหม่ได้ (`deactivated = false`) ผ่านปุ่ม "นำกลับมาใช้" ในหน้า UI
+
+### FR-02: Shelter Override Fields (ฟิลด์ระบุสิทธิ์และการปรับแต่งเฉพาะศูนย์)
+1. เพื่อรองรับสถาปัตยกรรม Multi-tenant / Remote-first (Master vs Override Pattern ตาม `docs/data/data-model.md` §4):
+   - **เอกสารในฐานข้อมูล `catalog` (ส่วนกลาง):** `shelter_code` ต้องเป็น `undefined`, `override` เป็น `undefined` หรือ `false`
+   - **เอกสารในฐานข้อมูล `shelter_{code}` (เฉพาะศูนย์):**
+     - กรณีปรับแต่งทับค่ามาตรฐานส่วนกลาง (Override): `override: true`, `shelter_code: "{code}"`, และ `_id` ตรงกับเอกสารมาตรฐานส่วนกลาง
+     - กรณีศูนย์สร้างขึ้นเองใหม่เฉพาะศูนย์ (Custom): `override: false` หรือ `undefined`, `shelter_code: "{code}"`, และ `_id` เป็น ID ใหม่เฉพาะศูนย์
+
+### FR-03: Deletion Policy & Scope Boundary (นโยบายการลบและการแยกขอบเขต Tenant)
+1. **นโยบายระดับส่วนกลาง (Central Master Scope — `catalog` DB):**
+   - เอกสาร Master Data ส่วนกลางเป็นข้อมูลอ้างอิงของทุกศูนย์พักพิงในระบบ การลบเอกสารส่วนกลาง (`item_category`, `item_master`, `recipe`) **ต้องดำเนินการเป็น Soft-Delete (`deactivated = true`) เสมอ**
+   - **ห้ามทำการ Query หรือสแกนข้ามฐานข้อมูลศูนย์พักพิงจาก Client-side** (Cross-tenant scanning prohibition) เพื่อป้องกันการละเมิด RBAC, ป้องกันปัญหา N+1 Performance Hazard, และป้องกันการเกิด Silent Fail ที่อาจนำไปสู่การลบข้อมูลจริงโดยพลการ
+   - ในการตรวจสอบการใช้งาน (Usage Inspection) ฝั่งส่วนกลาง ให้ตรวจสอบเฉพาะความสัมพันธ์กับสินค้า/สูตรอาหารภายในฐานข้อมูล `catalog` ส่วนกลางเองเท่านั้น เพื่อนำข้อมูลมาแสดงใน Dialog ให้ผู้ดูแลระบบรับทราบ
+2. **นโยบายระดับศูนย์พักพิง (Shelter Scope — `shelter_{code}` DB):**
+   - หากเป็นเอกสาร Override (`override: true`) $\rightarrow$ ทำการ Hard delete เอกสารใน DB ของศูนย์ทิ้ง (Reset to central default) เพื่อให้ศูนย์กลับไปใช้ค่ามาตรฐานส่วนกลาง
+   - หากเป็นเอกสารสร้างขึ้นเองเฉพาะศูนย์ (`override: false` หรือไม่มี):
+     - หากมีข้อมูลภายในศูนย์อ้างอิงอยู่ (เช่น หมวดหมู่มีสินค้าในศูนย์ใช้งาน, สินค้ามีในสต็อกศูนย์, สูตรอาหารมีในแผนครัวศูนย์) $\rightarrow$ ห้ามลบจริง ให้เปลี่ยนเป็น `deactivated = true`
+     - หากไม่มีข้อมูลอ้างอิงใดๆ ภายในศูนย์ $\rightarrow$ อนุญาตให้ Hard delete เอกสารออกจาก DB ของศูนย์ได้
+
+### FR-04: UI Interactions & Feedback (การแสดงผลและการแจ้งเตือนในหน้าจอ)
+1. ในตารางรายการ Catalog (`item-category-tab`, `item-master-tab`, `recipe-tab`):
+   - รายการที่มีสถานะ `deactivated === true` ต้องแสดงป้ายกำกับ "ปิดใช้งาน (Deactivated)" และแสดงปุ่ม **"นำกลับมาใช้" (`RotateCcw`)** เพื่อให้ผู้ใช้สามารถกดเปิดใช้งานกลับมาได้โดยตรงจากตาราง
+2. ใน Dialog ยืนยันการลบ:
+   - ต้องตรวจสอบการใช้งานก่อนยืนยัน (Usage Inspection) และแสดงข้อความเหตุผลชัดเจนตามผลลัพธ์ (`reset` / `deactivate` / `hard_delete`)
+   - หากต้องปิดการใช้งาน (`deactivate`) ต้องแสดงรายการหรือจำนวนเอกสารที่กำลังอ้างอิงอยู่ให้ผู้ใช้รับทราบ
+3. ในการแจ้งเตือน (Toast):
+   - ต้องแสดงข้อความให้ตรงกับผลลัพธ์จริง (`actionTaken`):
+     - `reset`: "คืนค่ามาตรฐานสำเร็จ"
+     - `deactivate`: "เปลี่ยนสถานะเป็นปิดใช้งาน (Deactivated) เนื่องจากมีข้อมูลอ้างอิงอยู่"
+     - `hard_delete`: "ลบข้อมูลถาวรสำเร็จ"
 
 ---
 
-## 2. Why
+## 2. Acceptance Criteria (DoD)
 
-1. **ป้องกัน Data Corruption จากการ Hard-delete:**
-   - ข้อมูลใน Catalog เช่น `item_category`, `item_master`, `recipe` ถูกอ้างอิงข้ามโดเมนอย่างกว้างขวาง (สต็อกคงคลัง `stock_ledger`, การจ่ายของบริจาค `donation`, แผนประกอบอาหาร `meal_plan`, ใบเบิกวัตถุดิบ `kitchen_requisition`)
-   - หากผู้ใช้ลบรายการที่มีประวัติอยู่จริง เอกสารประวัติจะกลายเป็น Dangling reference แสดงชื่อเป็นค่าว่างหรือไม่สามารถคำนวณยอดได้
-   - การมีสถานะ `deactivated` ทำให้สามารถซ่อนรายการเลิกใช้ได้ โดยไม่สูญเสียความสมบูรณ์ของข้อมูลย้อนหลัง
-2. **Schema Inconsistency ระหว่าง Code และ Documentation:**
-   - ในซอร์สโค้ด (`catalog.ts`, Form UI, Repository) และ CR-084 มีการประกาศและใช้งานฟิลด์ `deactivated`, `override`, และ `shelter_code` อยู่แล้ว แต่ในตารางสเปกหลัก `docs/data/schema.md` §4.1–§4.3 ยังไม่ได้ระบุฟิลด์เหล่านี้ ทำให้เกิดช่องว่างในการตรวจรับงานของทีม Dev และ QA
-3. **การทำให้กลไก Master vs Override สอดคล้องกับมาตรฐานความปลอดภัย (RBAC):**
-   - ศูนย์พักพิงไม่มีสิทธิ์เขียนฐานข้อมูลกลาง `catalog` (Read-only for shelters) การปรับแต่งค่าเฉพาะศูนย์จึงต้องเขียนเป็นเอกสาร Override ในฐานข้อมูล `shelter_{code}` ของตนเอง การบันทึก `override` และ `shelter_code` ใน schema ช่วยให้การตรวจสอบสิทธิ์และ Data synchronizer ทำงานได้อย่างถูกต้อง
+- [ ] **AC-01:** ตาราง `docs/data/schema.md` §4.1, §4.2, §4.3 มีฟิลด์ `deactivated`, `override`, `shelter_code` ครบถ้วน พร้อมคำอธิบายชนิดและสถานะ required/optional
+- [ ] **AC-02:** เอกสาร Catalog ที่มี `deactivated: true` ไม่ถูกนำไปแสดงใน Dropdown สำหรับการสร้างรายการใหม่ (เช่น ใบเบิก, ใบรับบริจาค, แผนอาหาร) แต่รายการประวัติเดิมยังแสดงชื่อได้ถูกต้อง
+- [ ] **AC-03:** การสั่งลบเอกสาร Catalog ใน Central Scope (`catalog` DB) เปลี่ยนสถานะเอกสารเป็น `deactivated = true` เสมอ และไม่มีการยิง HTTP Request สแกนข้ามฐานข้อมูลศูนย์พักพิงจาก Client-side
+- [ ] **AC-04:** การสั่งลบเอกสาร Override ใน Shelter Scope (`shelter_{code}` DB) ทำการลบเอกสาร Override ออกจาก DB ของศูนย์ และคืนค่าการแสดงผลกลับไปเป็นค่ามาตรฐานจากส่วนกลาง
+- [ ] **AC-05:** หน้าจอรายการ หมวดหมู่สินค้า (`item-category-tab`), ข้อมูลสินค้า (`item-master-tab`), และสูตรอาหาร (`recipe-tab`) มีปุ่ม "นำกลับมาใช้" (`RotateCcw`) สำหรับรายการที่ปิดใช้งาน และสามารถกดเพื่อเปิดใช้งานใหม่ได้
+- [ ] **AC-06:** Dialog ยืนยันการลบและ Toast แจ้งผลแสดงข้อความตรงตาม Action ที่เกิดขึ้นจริง (`reset` / `deactivate` / `hard_delete`)
 
 ---
 
-## 3. Change (Before $\rightarrow$ After)
+## 3. Why
 
-### 3.1 `docs/data/schema.md` §4.1: `item_category`
+1. **ป้องกัน Data Corruption และคง Referential Integrity ข้ามระบบ:**
+   - เอกสาร Catalog เช่น `item_category`, `item_master`, `recipe` ถูกอ้างอิงข้ามโดเมนอย่างกว้างขวาง (`stock_ledger`, `donation`, `meal_plan`, `kitchen_requisition`)
+   - หากผู้ใช้สั่งลบเอกสารที่มีประวัติการใช้งานอยู่จริง เอกสารประวัติย้อนหลังจะกลายเป็น Dangling Reference ทำให้รายงานสต็อกหรือประวัติเบิกจ่ายเสียหาย
+   - การนำกลไก Soft-Delete (`deactivated = true`) มาใช้ ช่วยให้ระบบซ่อนรายการที่ไม่ต้องการได้ โดยไม่ทำลายความสมบูรณ์ของข้อมูลย้อนหลัง
+2. **รักษา Multi-tenant Isolation และป้องกัน N+1 Performance Hazard:**
+   - ภายใต้สถาปัตยกรรม Remote-first ผู้ใช้ระดับศูนย์พักพิงไม่มีสิทธิ์เปิดอ่าน DB ของศูนย์อื่น (RBAC 403 Forbidden)
+   - การสแกนข้ามศูนย์จากเบราว์เซอร์ก่อให้เกิด Network Request จำนวนมหาศาล ($1 + 2N$ requests) และเสี่ยงต่อการเกิด Silent Fail จนลบข้อมูลกลางผิดพลาด
+   - การกำหนดให้ Central Scope ใช้ Deactivate Policy เสมอ และตรวจสอบการใช้งานเฉพาะภายในฐานข้อมูลกลาง ช่วยตัดการเชื่อมต่อไปยังศูนย์อื่นทิ้งโดยสิ้นเชิง ปลอดภัยต่อระบบและทำงานได้รวดเร็วทันที
+3. **ขจัดความไม่สอดคล้องระหว่างเอกสารสเปก (Docs) และโค้ดจริง (Code):**
+   - ซอร์สโค้ดในระบบและ CR-084 มีการใช้งานฟิลด์ `deactivated`, `override`, และ `shelter_code` แล้ว แต่ในเอกสารหลัก `docs/data/schema.md` §4 ยังไม่ได้ระบุอย่างเป็นทางการ ทำให้เกิดความเข้าใจคลาดเคลื่อนระหว่างทีมพัฒนาและทีมตรวจรับ
+
+---
+
+## 4. Change (Before $\rightarrow$ After)
+
+### 4.1 `docs/data/schema.md` §4.1: `item_category`
 
 **Before:**
 | Field | ชนิด | req | หมายเหตุ |
@@ -79,7 +121,7 @@ _(หมายเหตุ: ลบ `is_default` ตาม CR-084)_
 
 ---
 
-### 3.2 `docs/data/schema.md` §4.2: `item_master`
+### 4.2 `docs/data/schema.md` §4.2: `item_master`
 
 **Before:**
 _(ไม่มีฟิลด์ `deactivated`, `override`, `shelter_code` ในตาราง)_
@@ -94,7 +136,7 @@ _(ไม่มีฟิลด์ `deactivated`, `override`, `shelter_code` ใ�
 
 ---
 
-### 3.3 `docs/data/schema.md` §4.3: `recipe`
+### 4.3 `docs/data/schema.md` §4.3: `recipe`
 
 **Before:**
 | Field | ชนิด | req | หมายเหตุ |
@@ -110,35 +152,35 @@ _(ไม่มีฟิลด์ `deactivated`, `override`, `shelter_code` ใ�
 | --- | --- | --- | --- |
 | `label` | str | req | ชื่อแสดงผลภาษาไทย เช่น "ข้าวไข่เจียว" |
 | `ingredients` | [{`item_master_id`:str, `quantity`:qty_str>0, `uom`:str}] | req | รายการวัตถุดิบและปริมาณ; `item_master_id` → `item_master:{sku\|ulid}` |
-| `standard_portions` | qty*str>0 | req | จำนวนที่ผลิตได้ต่อหนึ่งรอบประกอบอาหาร |
+| `standard_portions` | qty_str>0 | req | จำนวนที่ผลิตได้ต่อหนึ่งรอบประกอบอาหาร |
 | `standard_duration_hours` | qty_str>0 | req | ระยะเวลาปรุงในหน่วยชั่วโมง |
 | `deactivated` | bool | opt | default `false`; ถ้า `true` คือปิดการใช้งาน ไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่ |
-| `override` | bool | opt | default `false`; ถ้า `true` คือเอกสารปรับแต่งสูตรเฉพาะศูนย์ในฐานข้อมูล `shelter*\*`|
-|`shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
+| `override` | bool | opt | default `false`; ถ้า `true` คือเอกสารปรับแต่งสูตรเฉพาะศูนย์ในฐานข้อมูล `shelter_*` |
+| `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 _(หมายเหตุ: ลบ `is_default` ตาม CR-084)_
 
 ---
 
-## 4. Impact
+## 5. Impact
 
 - **Docs:**
   - `docs/data/schema.md`: อัปเดตตาราง §4.1, §4.2, §4.3
 - **Code:**
-  - `frontend/src/lib/features/catalog/domain/catalog.ts`: Zod schema และ interface มีฟิลด์นี้รองรับอยู่แล้ว
-  - `frontend/src/lib/features/catalog/domain/catalog-deletion.ts`: มี Logic การตัดสินใจ Deactivate vs Reset vs Delete รองรับอยู่แล้ว
-  - `frontend/src/lib/features/catalog/data/catalog.remote.ts`: มีการจัดการ query และ filter `deactivated` และ `override` รองรับอยู่แล้ว
-  - UI Forms (`item-category-form.svelte`, `item-master-form.svelte`, `recipe-form.svelte`): มี toggle เปิด/ปิด `deactivated` พร้อมใช้งาน
+  - `frontend/src/lib/features/catalog/domain/catalog.ts`: Zod schema และ Interface รองรับฟิลด์ `deactivated`, `override`, `shelter_code`
+  - `frontend/src/lib/features/catalog/domain/catalog-deletion.ts`: Logic การตัดสินใจ Deactivate vs Reset vs Delete โดยแยก Central Scope (Deactivate Always) และ Shelter Scope อย่างชัดเจน
+  - `frontend/src/lib/features/catalog/data/catalog.remote.ts`: ลบลูปสแกนข้ามศูนย์ ตัดปัญหา N+1 และความเสี่ยง 403 Forbidden
+  - UI Components (`item-category-tab.svelte`, `item-master-tab.svelte`, `recipe-tab.svelte`): มีปุ่มเปิดใช้งานกลับมาใหม่ (`RotateCcw`), Dialog แจ้งเตือนพรีวิว และ Toast message แสดงผลตรงตาม Action
 - **Tests:**
-  - `catalog-deletion.test.ts`, `catalog.test.ts`, `catalog.remote.test.ts` ครอบคลุมการทำงานแล้ว
+  - `catalog-deletion.test.ts`, `catalog.test.ts`, `catalog.remote.test.ts` ครอบคลุมการทำงานทั้ง Central และ Shelter Scope
 
 ---
 
-## 5. Migration & Versioning
+## 6. Migration & Versioning
 
 - **`schema_v`:** คงเดิม (Non-breaking additive change)
   - `item_category`: **schema_v 1**
-  - `item_master`: **schema_v 3** (หรือ 4 ตาม CR-082)
+  - `item_master`: **schema_v 3**
   - `recipe`: **schema_v 3**
 - **Data Migration:**
   - เอกสารเดิมในฐานข้อมูลที่ไม่มีฟิลด์ `deactivated` จะถูกตีความเป็น `deactivated: false` (Active) โดยอัตโนมัติ ไม่จำเป็นต้องทำ batch backfill script
@@ -146,6 +188,7 @@ _(หมายเหตุ: ลบ `is_default` ตาม CR-084)_
 
 ---
 
-## 6. Decision log
+## 7. Decision log
 
 - 2026-09-03 — proposed (จัดทำ Draft CR เพื่อบันทึกฟิลด์ deactivation และ shelter override ลงใน Canonical Schema §4 ให้ตรงกับ implementation จริง)
+- 2026-09-09 — revised (ปรับปรุงตามข้อเสนอแนะ PR Review #223: กำหนดนโยบาย Central Deactivate Always เพื่อขจัด Client-side cross-tenant scanning, กำหนดเงื่อนไข UX Reactivation, และเพิ่ม Acceptance Criteria ให้ครบถ้วน)
