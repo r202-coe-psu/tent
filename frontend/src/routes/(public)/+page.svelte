@@ -99,9 +99,9 @@
 					</PublicActionBtn>
 				</PublicQuickServiceCard>
 
-				<!-- Card 2: 2. ค้นหาญาติ / ผู้พักพิง (Family Tracing) -->
+				<!-- Card 2: 2. ผู้พักพิง (Family Tracing) -->
 				<PublicQuickServiceCard
-					title="2. ค้นหาญาติ / ผู้พักพิง"
+					title="2. ผู้พักพิง"
 					description="ค้นหารายชื่อผู้พักพิง ตรวจสอบสถานะความปลอดภัย และพิกัดศูนย์พักพิงที่คนในครอบครัวเข้าพักอยู่"
 					icon={Search}
 					iconClass="bg-sky-50 text-[#0284C7]"
@@ -120,9 +120,9 @@
 					</PublicActionBtn>
 				</PublicQuickServiceCard>
 
-				<!-- Card 3: 3. ผู้บริจาค / มอบเสบียง (Donations) -->
+				<!-- Card 3: 3. บริจาค (Donations) -->
 				<PublicQuickServiceCard
-					title="3. ผู้บริจาค / มอบเสบียง"
+					title="3. บริจาค"
 					description="ประสานงานมอบอาหารปรุงสุก น้ำดื่ม สิ่งของจำเป็น หรือสมทบทุนช่วยเหลือผู้ประสบภัย"
 					icon={Package}
 					iconClass="bg-amber-50 text-amber-500"
@@ -141,9 +141,9 @@
 					</PublicActionBtn>
 				</PublicQuickServiceCard>
 
-				<!-- Card 4: 4. จิตอาสา / อาสาสมัคร (Volunteers) -->
+				<!-- Card 4: 4. อาสาสมัคร (Volunteers) -->
 				<PublicQuickServiceCard
-					title="4. จิตอาสา / อาสาสมัคร"
+					title="4. อาสาสมัคร"
 					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ทีมแพทย์สนาม ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
 					icon={UserPlus}
 					iconClass="bg-emerald-50 text-emerald-500"
