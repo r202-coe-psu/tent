@@ -17,10 +17,7 @@ export const SECURITY_QUESTIONS: readonly SecurityQuestion[] = [
 	{ id: 'first_workplace', label: 'สถานที่ทำงานหรือบริษัทแห่งแรกของคุณคือที่ใด?' }
 ] as const;
 
-export const SECURITY_QUESTION_IDS = SECURITY_QUESTIONS.map((q) => q.id) as [
-	string,
-	...string[]
-];
+export const SECURITY_QUESTION_IDS = SECURITY_QUESTIONS.map((q) => q.id) as [string, ...string[]];
 
 export function getSecurityQuestionLabel(questionId: string): string | null {
 	const found = SECURITY_QUESTIONS.find((q) => q.id === questionId);

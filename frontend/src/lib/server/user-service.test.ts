@@ -8,28 +8,11 @@ import {
 	verifySecurityQuestionAndResetPassword,
 	setupSecurityQuestionAndResetPassword
 } from './user-service';
+import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 
-interface FakeUserDoc {
-	_id: string;
-	_rev: string;
-	name?: string;
-	type?: string;
-	roles?: string[];
-	display_name?: string;
-	personnel_type?: string;
-	organization?: string;
-	phone?: string;
-	active?: boolean;
-	password?: string;
-	must_change_password?: boolean;
-	security_question?: {
-		question_id: string;
-		answer_hash: string;
-		updated_at: string;
-	};
-	[key: string]: unknown;
-}
+/** `_users` docs carry the password field that `CouchUserDoc` intentionally omits. */
+type FakeUserDoc = CouchUserDoc & { password?: string };
 
 describe('user-service', () => {
 	let fakeUsersDb: Record<string, FakeUserDoc>;
@@ -63,7 +46,7 @@ describe('user-service', () => {
 					return { status: 409, data: { error: 'conflict', reason: 'Document update conflict.' } };
 				}
 				const rev = `1-${Date.now()}`;
-				fakeUsersDb[id] = { ...docBody, _id: id, _rev: rev };
+				fakeUsersDb[id] = { ...docBody, _id: id, _rev: rev } as FakeUserDoc;
 				return { status: 201, data: { ok: true, id, rev } };
 			}
 

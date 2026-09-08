@@ -11,8 +11,6 @@
 	import Terminal from '@lucide/svelte/icons/terminal';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Code from '@lucide/svelte/icons/code';
-	import Search from '@lucide/svelte/icons/search';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import Bell from '@lucide/svelte/icons/bell';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -53,6 +51,8 @@
 	import CommandIcon from '@lucide/svelte/icons/command';
 	import Database from '@lucide/svelte/icons/database';
 	import AlertOctagon from '@lucide/svelte/icons/alert-octagon';
+	import Search from '@lucide/svelte/icons/search';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -65,6 +65,7 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { toast } from 'svelte-sonner';
 	import CivicCommandPalette from '$lib/components/CivicCommandPalette.svelte';
+	import { AI_STUDIO_SYSTEM_PROMPT } from '$lib/tokens';
 
 	// Page State
 	let activeTab = $state<'components' | 'prompt-guide'>('components');
@@ -143,24 +144,6 @@
 			if (copiedKey === label) copiedKey = null;
 		}, 2000);
 	}
-
-	// AI Studio Complete System Prompt
-	const AI_STUDIO_SYSTEM_PROMPT = `You are an expert Frontend Engineer and UI/UX Designer specializing in the **SmartShelter Thailand Civic Light Design System v2.4 (Minimal, Modern & Clean)**.
-
-### 🏛️ DESIGN PHILOSOPHY: Civic Light & Minimal Modern
-A refined, high-contrast, crystal-clear interface designed for disaster management, humanitarian shelters, and civic operations in Thailand. It combines modern minimalist aesthetics with tactical clarity: generous whitespace, razor-thin borders, subtle micro-elevation, large readable typography, comprehensive accessibility (a11y), clear edge-case UI states, responsive layout rules, and smooth micro-interactions.
-
----
-
-### 🚫 ABSOLUTE NEGATIVE CONSTRAINTS (STRICT RULES)
-1. **ALWAYS LIGHT THEME**: Never use dark backgrounds for full pages or sections. The canvas is always Slate-50 (#F8FAFC) or Pure White (#FFFFFF).
-2. **NO SINGLE-SIDED BORDER STRIPES**: Never create cards with a colored accent stripe on only one edge (e.g. border-l-4 or border-t-4). Status cards MUST use a complete 360-degree tinted border around the entire card (e.g., border border-emerald-200 with bg-white).
-3. **NO HEAVY DROP SHADOWS**: Avoid shadow-lg, shadow-xl, or shadow-2xl. Use subtle micro-elevation (shadow-2xs or shadow-xs) with 1px crisp borders.
-4. **NO OVERLY ROUNDED CONTAINERS**: Container and card border-radius is strictly 12px to 16px (rounded-xl or rounded-2xl). Avoid rounded-3xl or pill containers for cards.
-5. **NO TINY UNREADABLE TEXT**: Base body text is 16px (text-base), field reading is 18px (text-lg). Do not use text-[10px] or text-[11px] for vital operational text. Use standard tokens (text-xs, text-sm, text-base).
-6. **NO COLOR-ONLY STATUS INDICATORS**: Always pair status colors with clear text labels and icons for colorblind accessibility.
-7. **MANDATORY SHADCN-SVELTE FORM CONTROLS**: All inputs, selects, textareas, switches, checkboxes, labels, and dialogs MUST use official shadcn-svelte components ($lib/components/ui/*) with Svelte 5 runes ($state, bind:value, bind:checked).
-8. **UNIFIED SINGLE-FONT SYSTEM (IBM Plex Sans Thai)**: 100% of UI typography (headings, body text, form controls, numbers, CID, telemetry KPIs, badges, and tables) MUST use 'IBM Plex Sans Thai' with 'tabular-nums' for digit alignment. 'font-mono' (Geist Mono) is strictly reserved for technical programming code blocks (<pre>, <code>).`;
 
 	const SNIPPETS = {
 		commandPalette: `<!-- Civic Command Palette (⌘K) Trigger & Modal Integration -->
@@ -301,7 +284,7 @@ A refined, high-contrast, crystal-clear interface designed for disaster manageme
 <div class="border border-teal-200 bg-teal-50 text-teal-900">SPHERE Catalog & Inventory #0D9488</div>
 
 <!-- 4. Real-world Public Portal Application (4 Service Cards) -->
-<div class="border-2 border-red-200 bg-white">1. ค้นหาที่พักพิง (#DC2626 Destructive)</div>
+<div class="border-2 border-red-200 bg-white">1. ค้นหาศูนย์พักพิง (#DC2626 Destructive)</div>
 <div class="border-2 border-sky-200 bg-white">2. ค้นหาญาติ / ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
 <div class="border-2 border-amber-200 bg-white">3. ผู้บริจาค / มอบเสบียง (#EA580C Kitchen & Food)</div>
 <div class="border-2 border-emerald-200 bg-white">4. จิตอาสา / อาสาสมัคร (#059669 Volunteers)</div>
@@ -2179,7 +2162,7 @@ A refined, high-contrast, crystal-clear interface designed for disaster manageme
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">1. ค้นหาที่พักพิง</h4>
+									<h4 class="text-base font-bold text-slate-900">1. ค้นหาศูนย์พักพิง</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ค้นหาศูนย์พักพิงใกล้ตัว ตรวจสอบเตียงว่าง
 										และลงทะเบียนแจ้งความประสงค์เข้าพักพิงล่วงหน้า
@@ -2561,7 +2544,7 @@ A refined, high-contrast, crystal-clear interface designed for disaster manageme
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#DC2626]"></span>
-										ค้นหาที่พักพิง (Card 1)
+										ค้นหาศูนย์พักพิง (Card 1)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#E7000B</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-red-700"
@@ -2569,7 +2552,7 @@ A refined, high-contrast, crystal-clear interface designed for disaster manageme
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.8:1 (WCAG AA)</td>
 									<td class="px-4 py-2.5"
-										>ปุ่มแดงสำหรับค้นหาที่พักพิงด่วน กรอบการ์ดสีแดงอ่อน 360°</td
+										>ปุ่มแดงสำหรับค้นหาศูนย์พักพิงด่วน กรอบการ์ดสีแดงอ่อน 360°</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
