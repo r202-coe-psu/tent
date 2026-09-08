@@ -47,6 +47,7 @@ export {
 	migrateHouseholdToV5,
 	migratePetGroup,
 	migratePetGroups,
+	isMeaningfulOtherPetNotes,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,

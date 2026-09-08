@@ -317,7 +317,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	/**
 	 * Unified multi-person registration (#249): create N Evacuees then 1 Household,
-	 * link members, set head = members[0]. Compensates created docs on failure.
+	 * link members, set head = members[0]. Compensates created docs on failure
+	 * (intentional — keep even with the 20-member / pets / vehicles batch caps).
 	 */
 	async createFamilyRegistration(
 		input: UnifiedRegistrationInput,

@@ -320,6 +320,15 @@ export type LegacyPetGroup = Omit<PetGroup, 'species'> & {
 };
 
 /**
+ * Chip/UI label 「อื่นๆ」 alone is not a real animal description (#249 Q7.3).
+ * Photo upload must not invent this as a notes placeholder.
+ */
+export function isMeaningfulOtherPetNotes(notes: string | undefined | null): boolean {
+	const trimmed = notes?.trim() ?? '';
+	return trimmed.length > 0 && trimmed !== 'อื่นๆ';
+}
+
+/**
  * Migrate a legacy Pet group: `bird` → `other` with notes `นก` (CR-112).
  */
 export function migratePetGroup(pet: LegacyPetGroup | PetGroup): PetGroup {
@@ -700,7 +709,7 @@ const householdInputFieldsSchema = z.object({
 					image_url: z.string().trim().nullable().optional()
 				})
 				.superRefine((pet, ctx) => {
-					if (pet.species === 'other' && !pet.notes?.trim()) {
+					if (pet.species === 'other' && !isMeaningfulOtherPetNotes(pet.notes)) {
 						ctx.addIssue({
 							code: 'custom',
 							path: ['notes'],
@@ -1045,7 +1054,7 @@ export const evacueeAssetsEditFormSchema = z.object({
 				image_url: z.string().trim().nullable().optional()
 			})
 			.superRefine((pet, ctx) => {
-				if (pet.species === 'other' && !pet.notes?.trim()) {
+				if (pet.species === 'other' && !isMeaningfulOtherPetNotes(pet.notes)) {
 					ctx.addIssue({
 						code: 'custom',
 						path: ['notes'],

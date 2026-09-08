@@ -120,9 +120,7 @@
 				{title}
 			</h3>
 			{#if isPrimary}
-				<p class="text-xs text-muted-foreground">
-					ผู้ติดต่อหลักของครอบครัว (ระบบจะตั้งเป็นหัวหน้าเอกสารโดยอัตโนมัติ)
-				</p>
+				<p class="text-xs text-muted-foreground">ผู้ติดต่อหลักของครอบครัว (ระบบตั้งค่าอัตโนมัติ)</p>
 			{/if}
 		</div>
 		<div class="flex flex-wrap gap-2">

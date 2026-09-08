@@ -112,6 +112,31 @@ describe('unified registration — homeless Residence', () => {
 		);
 		expect(result.success).toBe(false);
 	});
+
+	it('clears address_no when housing_type is homeless even if a house number was submitted', () => {
+		const parsed = parseUnifiedRegistration(
+			validInput({
+				household: validHousehold({
+					housing_type: 'homeless',
+					address_no: '12/3',
+					residence_landmark: 'ใต้สะพาน'
+				})
+			})
+		);
+		expect(parsed.household.address_no).toBeNull();
+
+		const plan = planFamilyRegistration(
+			validInput({
+				household: validHousehold({
+					housing_type: 'homeless',
+					address_no: '99/1',
+					residence_landmark: 'ริมคลอง'
+				})
+			}),
+			'onsite'
+		);
+		expect(plan.householdInput.address_no).toBeNull();
+	});
 });
 
 describe('unified registration — pets quick-select', () => {
@@ -141,6 +166,17 @@ describe('unified registration — pets quick-select', () => {
 			validInput({
 				household: validHousehold({
 					pets: [{ species: 'other', count: 1 }]
+				})
+			})
+		);
+		expect(result.success).toBe(false);
+	});
+
+	it('rejects other pets whose notes are only the chip label อื่นๆ', () => {
+		const result = unifiedRegistrationInputSchema.safeParse(
+			validInput({
+				household: validHousehold({
+					pets: [{ species: 'other', count: 1, notes: 'อื่นๆ', image_url: 'img-1' }]
 				})
 			})
 		);

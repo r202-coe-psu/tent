@@ -9,6 +9,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useSaveImage } from '$lib/features/images';
 	import type { PetGroup } from '../../domain/people';
+	import { isMeaningfulOtherPetNotes } from '../../domain/people';
 	import { togglePetSpecies } from '../../domain/unified-registration';
 
 	let {
@@ -70,7 +71,7 @@
 		if (disabled) return;
 		const trimmed = otherNotes.trim() || otherPet?.notes?.trim() || '';
 		const withoutOther = pets.filter((p) => p.species !== 'other');
-		if (!trimmed) {
+		if (!isMeaningfulOtherPetNotes(trimmed)) {
 			pets = withoutOther;
 			return;
 		}
@@ -89,8 +90,16 @@
 		if (disabled) return;
 		const withoutOther = pets.filter((p) => p.species !== 'other');
 		const notes = otherNotes.trim() || otherPet?.notes?.trim() || '';
-		if (!notes && !url) {
-			pets = withoutOther;
+		// Never invent notes: 'อื่นๆ' as a photo placeholder (#249 Q7.3).
+		if (!isMeaningfulOtherPetNotes(notes)) {
+			if (url) {
+				toast.error('กรุณาระบุชนิดสัตว์ก่อนแนบรูป');
+			}
+			if (otherPet || otherDraftOpen) {
+				pets = [...withoutOther, { species: 'other', count: 1, notes: '', image_url: null }];
+			} else {
+				pets = withoutOther;
+			}
 			return;
 		}
 		pets = [
@@ -98,7 +107,7 @@
 			{
 				species: 'other',
 				count: 1,
-				notes: notes || 'อื่นๆ',
+				notes,
 				image_url: url
 			}
 		];
@@ -109,6 +118,12 @@
 		const file = input.files?.[0];
 		input.value = '';
 		if (!file || disabled) return;
+
+		const notesBefore = otherNotes.trim() || otherPet?.notes?.trim() || '';
+		if (!isMeaningfulOtherPetNotes(notesBefore)) {
+			toast.error('กรุณาระบุชนิดสัตว์ก่อนแนบรูป');
+			return;
+		}
 
 		uploadingPhoto = true;
 		try {

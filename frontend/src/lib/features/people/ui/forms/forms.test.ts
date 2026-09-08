@@ -156,6 +156,24 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('99/1');
 			expect(result.body).toContain('ใกล้สะพาน');
 		});
+
+		it('hides address_no when housing_type is homeless', () => {
+			const result = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'homeless',
+					residence_landmark: 'ใต้สะพาน',
+					address_no: '99/1',
+					village_no: 'หมู่ 5',
+					province: 'สงขลา',
+					district: 'หาดใหญ่',
+					subdistrict: 'คอหงส์',
+					postal_code: '90110'
+				}
+			});
+			expect(result.body).toContain('จุดสังเกตที่อยู่');
+			expect(result.body).not.toContain('id="address-no"');
+			expect(result.body).not.toContain('บ้านเลขที่');
+		});
 	});
 
 	describe('Pet Asset Vehicle Fields (pet-asset-vehicle-fields.svelte)', () => {

@@ -99,6 +99,13 @@
 	const selectTriggerClass =
 		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
+	// Hide + clear house number when homeless (#249 Q5) — field must not linger in form state.
+	$effect(() => {
+		if (housing_type === 'homeless' && address_no) {
+			address_no = '';
+		}
+	});
+
 	$effect(() => {
 		const sd = subdistrict;
 		if (!sd) return;
@@ -170,7 +177,9 @@
 		<div class="space-y-1.5">
 			<Label for="residence-landmark" class="text-xs font-semibold text-foreground">
 				จุดสังเกตที่อยู่
-				{#if isHomeless}<span class="font-normal text-muted-foreground">(หรือบ้านเลขที่)</span>{/if}
+				{#if isHomeless}<span class="font-normal text-muted-foreground"
+						>(จำเป็นถ้าไม่มีที่ตั้งครบ)</span
+					>{/if}
 			</Label>
 			<Input
 				id="residence-landmark"
@@ -185,27 +194,26 @@
 		</div>
 	</div>
 
-	<!-- Street / house details -->
+	<!-- Street / house details — hide address_no when homeless (#249 Q5) -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		<div class="space-y-1.5">
-			<Label for="address-no" class="text-xs font-semibold text-foreground">
-				บ้านเลขที่
-				{#if addressRequired}<span class="text-destructive">*</span>{/if}
-				{#if isHomeless}<span class="font-normal text-muted-foreground"
-						>(ไม่บังคับถ้ามีจุดสังเกต)</span
-					>{/if}
-			</Label>
-			<Input
-				id="address-no"
-				bind:value={address_no}
-				{disabled}
-				placeholder="เช่น 123/45"
-				class="h-9"
-			/>
-			{#if errors?.address_no}
-				<p class="text-2xs text-destructive">{errors.address_no}</p>
-			{/if}
-		</div>
+		{#if !isHomeless}
+			<div class="space-y-1.5">
+				<Label for="address-no" class="text-xs font-semibold text-foreground">
+					บ้านเลขที่
+					{#if addressRequired}<span class="text-destructive">*</span>{/if}
+				</Label>
+				<Input
+					id="address-no"
+					bind:value={address_no}
+					{disabled}
+					placeholder="เช่น 123/45"
+					class="h-9"
+				/>
+				{#if errors?.address_no}
+					<p class="text-2xs text-destructive">{errors.address_no}</p>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="space-y-1.5">
 			<Label for="village-no" class="text-xs font-semibold text-foreground">

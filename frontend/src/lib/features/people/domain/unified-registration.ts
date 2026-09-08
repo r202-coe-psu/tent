@@ -15,6 +15,7 @@ import {
 	formatPersonName,
 	housingTypeSchema,
 	householdInputSchema,
+	isMeaningfulOtherPetNotes,
 	mintAnonymousId,
 	type EvacueeInput,
 	type HouseholdInput,
@@ -35,7 +36,7 @@ const petGroupSchema = z
 		image_url: z.string().trim().nullable().optional()
 	})
 	.superRefine((pet, ctx) => {
-		if (pet.species === 'other' && !pet.notes?.trim()) {
+		if (pet.species === 'other' && !isMeaningfulOtherPetNotes(pet.notes)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['notes'],
@@ -51,7 +52,8 @@ const vehicleSchema = z.object({
 
 /**
  * Shared household block for the unified form.
- * Homeless: hide `address_no` in UI; require landmark **or** complete geo (#249 / CR-112).
+ * Homeless: hide + clear `address_no`; require landmark **or** complete admin geo (#249 / CR-112).
+ * Caps on pets/vehicles (20) are intentional UX limits — keep create compensation; do not raise casually.
  */
 export const unifiedHouseholdInputSchema = z
 	.object({
@@ -63,6 +65,7 @@ export const unifiedHouseholdInputSchema = z
 		district: z.string().trim().nullable().optional().default(null),
 		province: z.string().trim().nullable().optional().default(null),
 		postal_code: z.string().trim().nullable().optional().default(null),
+		// Intentional caps (#249): keep createFamilyRegistration compensation; not remove.
 		pets: z.array(petGroupSchema).max(20).default([]),
 		vehicles: z.array(vehicleSchema).max(20).default([]),
 		assets: z
@@ -108,7 +111,10 @@ export const unifiedHouseholdInputSchema = z
 				message: 'กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล'
 			});
 		}
-	});
+	})
+	.transform((household) =>
+		household.housing_type === 'homeless' ? { ...household, address_no: null } : household
+	);
 
 /** Equal member card fields — personal + emergency + VG + special needs. */
 export const unifiedMemberInputSchema = evacueeInputSchema.omit({
@@ -120,6 +126,7 @@ export const unifiedMemberInputSchema = evacueeInputSchema.omit({
 });
 
 export const unifiedRegistrationInputSchema = z.object({
+	// Intentional 20-member batch cap (#249): keep create compensation; not a soft warning.
 	members: z
 		.array(unifiedMemberInputSchema)
 		.min(1, 'ต้องมีสมาชิกอย่างน้อย 1 คน')
@@ -188,7 +195,7 @@ export function togglePetSpecies(
 	}
 	if (species === 'other') {
 		const trimmed = notes?.trim() ?? '';
-		if (!trimmed) {
+		if (!isMeaningfulOtherPetNotes(trimmed)) {
 			return [...pets, { species: 'other', count: 1, notes: '' }];
 		}
 		return [...pets, { species: 'other', count: 1, notes: trimmed }];
@@ -196,11 +203,11 @@ export function togglePetSpecies(
 	return [...pets, { species, count: 1 }];
 }
 
-export type FamilyRegistrationPlan = {
+export interface FamilyRegistrationPlan {
 	headMemberIndex: 0;
 	memberInputs: EvacueeInput[];
 	householdInput: HouseholdInput;
-};
+}
 
 /**
  * Build the Couch write plan: N Evacuee inputs + 1 Household input.
