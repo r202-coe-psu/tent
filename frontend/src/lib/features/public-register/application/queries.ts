@@ -7,7 +7,8 @@ import {
 	fetchProvinces,
 	fetchShelterPolicy,
 	fetchSubdistricts,
-	lookupBooking
+	lookupBooking,
+	type PublicUnifiedBookingPayload
 } from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
@@ -27,7 +28,7 @@ export const publicRegisterKeys = {
 /** POST a new booking. Not a query — a booking must never be replayed from cache. */
 export function useCreateBooking() {
 	return createMutation(() => ({
-		mutationFn: (input: PublicBookingInput) => createBooking(input)
+		mutationFn: (input: PublicBookingInput | PublicUnifiedBookingPayload) => createBooking(input)
 	}));
 }
 

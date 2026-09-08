@@ -499,4 +499,88 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 	});
+
+	describe('Issue #254 unified multi-person registration payload', () => {
+		it('accepts shared unified payload and writes Couch Household + N Evacuees at pre_registered', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const unifiedPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: '0811112222',
+						person_id: { cardType: 'national_id', number: '1100000000001' }
+					},
+					{
+						first_name: 'สมศรี',
+						last_name: 'รักสงบ',
+						gender: 'female',
+						phone: null
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					residence_landmark: null,
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [{ species: 'dog', count: 1 }],
+					vehicles: [{ type: 'car', license_plate: '1กข 9999' }],
+					assets: { description: 'ทองคำแท่ง', image_url: null }
+				}
+			};
+
+			const res = await POST(event(unifiedPayload));
+			expect(res.status).toBe(201);
+			const jsonBody = await res.json();
+			expect(jsonBody.success).toBe(true);
+			expect(jsonBody.status).toBe('pre_registered');
+			expect(jsonBody.member_count).toBe(2);
+			expect(jsonBody.pet_count).toBe(1);
+
+			const { household, evacuees } = writtenDocs();
+			expect(household.type).toBe('household');
+			expect(household.status).toBe('pre_registered');
+			expect(household.label).toBe('ครอบครัวสมเกียรติ รักสงบ');
+			expect(evacuees).toHaveLength(2);
+			expect(evacuees[0].current_stay).toMatchObject({ status: 'pre_registered' });
+			expect(evacuees[0].registered_via).toBe('web');
+			expect(evacuees[1].current_stay).toMatchObject({ status: 'pre_registered' });
+			expect(evacuees[1].registered_via).toBe('web');
+		});
+
+		it('422 when primary contact phone is missing in unified payload', async () => {
+			const invalidPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: ''
+					}
+				],
+				household: {
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [],
+					vehicles: []
+				}
+			};
+
+			const res = await POST(event(invalidPayload));
+			expect(res.status).toBe(422);
+			expect((await res.json()).error).toBe('INVALID_INPUT');
+		});
+	});
 });

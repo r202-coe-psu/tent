@@ -9,6 +9,7 @@
  * → BFF Bearer → FastAPI → Mongo only.
  */
 import type { components } from '$lib/api/openapi';
+import type { UnifiedRegistrationInput } from '$lib/features/people';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 import { publicBookingErrorMessage } from '../domain/booking';
 import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
@@ -24,13 +25,21 @@ export interface BookingTicketResponse {
 	booked_at: string;
 }
 
+export type PublicUnifiedBookingPayload = UnifiedRegistrationInput & {
+	shelter_code: string;
+	captchaToken?: string;
+	disclaimerAcknowledged?: boolean;
+};
+
 /** Turn the BFF's `{ success:false, error }` envelope into a Thai-language Error. */
 async function bookingError(res: Response): Promise<Error> {
 	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
 	return new Error(publicBookingErrorMessage(body?.error));
 }
 
-export async function createBooking(input: PublicBookingInput): Promise<BookingTicketResponse> {
+export async function createBooking(
+	input: PublicBookingInput | PublicUnifiedBookingPayload
+): Promise<BookingTicketResponse> {
 	const res = await fetch('/api/public/v1/registrations', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

@@ -1,14 +1,19 @@
 <script lang="ts">
 	import MapPinX from '@lucide/svelte/icons/map-pin-x';
+	import LocateFixed from '@lucide/svelte/icons/locate-fixed';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { toast } from 'svelte-sonner';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useDistricts, useProvinces, useSubdistricts } from '$lib/features/shelters';
+	import { resolveCurrentThaiLocation } from '$lib/utils/nominatim';
 
 	let {
-		housing_type = $bindable(null),
+		housing_type = $bindable('owned_house'),
 		residence_landmark = $bindable(''),
 		address_no = $bindable(''),
 		village_no = $bindable(''),
@@ -73,11 +78,20 @@
 		fallbackQueryResult as unknown as ReturnType<typeof useSubdistricts>
 	);
 
-	const housingTypeItems = $derived(
-		(housingTypeQuery.data?.items ?? [])
+	const DEFAULT_HOUSING_TYPES: { value: string; label: string }[] = [
+		{ value: 'owned_house', label: 'บ้านตนเอง' },
+		{ value: 'rented_house', label: 'บ้านเช่า' },
+		{ value: 'condo', label: 'คอนโด' },
+		{ value: 'apartment_dorm', label: 'อพาร์ตเมนต์ / หอพัก' },
+		{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
+	];
+
+	const housingTypeItems = $derived.by(() => {
+		const masterItems = (housingTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
-	);
+			.map((i) => ({ value: i.code, label: i.label }));
+		return masterItems.length > 0 ? masterItems : DEFAULT_HOUSING_TYPES;
+	});
 
 	const provinceItems = $derived(
 		(provincesQuery.data ?? []).map((value) => ({ value, label: value }))
@@ -93,11 +107,43 @@
 	);
 
 	const isHomeless = $derived(housing_type === 'homeless');
+	const isApartmentDorm = $derived(housing_type === 'apartment_dorm');
+	const isCondo = $derived(housing_type === 'condo');
+
+	const addressNoLabel = $derived(
+		isApartmentDorm ? 'เลขห้อง / ห้องเลขที่' : isCondo ? 'เลขห้อง / บ้านเลขที่' : 'บ้านเลขที่'
+	);
+	const addressNoPlaceholder = $derived(
+		isApartmentDorm
+			? 'เช่น ห้อง 402 หรือ อาคาร B ชั้น 3'
+			: isCondo
+				? 'เช่น 123/45 ห้อง 402'
+				: 'เช่น 123/45'
+	);
+	const landmarkLabel = $derived(
+		isApartmentDorm
+			? 'ชื่อหอพัก / อพาร์ตเมนต์ หรือจุดสังเกต'
+			: isCondo
+				? 'ชื่อคอนโด / อาคาร หรือจุดสังเกต'
+				: 'จุดสังเกตที่อยู่'
+	);
+	const landmarkPlaceholder = $derived(
+		isHomeless
+			? 'เช่น ริมคลองข้างตลาด'
+			: isApartmentDorm
+				? 'เช่น หอพักสุขใจ หรือ อาคาร C'
+				: isCondo
+					? 'เช่น คอนโด A ซอยสุขุมวิท 21'
+					: 'เช่น ใกล้สะพาน / ปากซอย'
+	);
+
 	const addressRequired = $derived(required && !isHomeless);
 	const hasLocation = $derived(Boolean(province || district || subdistrict || postal_code));
 
+	let isLocating = $state(false);
+
 	const selectTriggerClass =
-		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+		"flex !h-9 w-full items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
 	// Hide + clear house number when homeless (#249 Q5) — field must not linger in form state.
 	$effect(() => {
@@ -145,6 +191,53 @@
 		subdistrict = '';
 		postal_code = '';
 	}
+
+	async function handleGetCurrentLocation() {
+		if (disabled || isLocating) return;
+		isLocating = true;
+		try {
+			const loc = await resolveCurrentThaiLocation();
+			if (!loc.province) {
+				toast.error('ไม่สามารถระบุจังหวัดจากพิกัดปัจจุบันได้');
+				return;
+			}
+
+			province = loc.province;
+			district = loc.district ?? '';
+			subdistrict = loc.subdistrict ?? '';
+			if (loc.postal_code) {
+				postal_code = loc.postal_code;
+			}
+			if (loc.road && !village_no) {
+				village_no = loc.road;
+			}
+
+			const parts = [
+				loc.subdistrict ? `ต.${loc.subdistrict}` : '',
+				loc.district ? `อ.${loc.district}` : '',
+				loc.province ? `จ.${loc.province}` : ''
+			]
+				.filter(Boolean)
+				.join(' ');
+
+			toast.success('ระบุตำแหน่งปัจจุบันเรียบร้อยแล้ว', {
+				description: parts || loc.display_name
+			});
+		} catch (err: unknown) {
+			const reason =
+				err && typeof err === 'object' && 'reason' in err
+					? (err as { reason?: string }).reason
+					: undefined;
+			const message = err instanceof Error ? err.message : undefined;
+			const msg =
+				reason === 'denied'
+					? 'กรุณาอนุญาตการเข้าถึงตำแหน่งที่ตั้ง (Location) ในเบราว์เซอร์'
+					: message || 'ไม่สามารถระบุตำแหน่งปัจจุบันได้';
+			toast.error(msg);
+		} finally {
+			isLocating = false;
+		}
+	}
 </script>
 
 <div class="space-y-4">
@@ -176,7 +269,7 @@
 
 		<div class="space-y-1.5">
 			<Label for="residence-landmark" class="text-xs font-semibold text-foreground">
-				จุดสังเกตที่อยู่
+				{landmarkLabel}
 				{#if isHomeless}<span class="font-normal text-muted-foreground"
 						>(จำเป็นถ้าไม่มีที่ตั้งครบ)</span
 					>{/if}
@@ -185,7 +278,7 @@
 				id="residence-landmark"
 				bind:value={residence_landmark}
 				{disabled}
-				placeholder={isHomeless ? 'เช่น ริมคลองข้างตลาด' : 'เช่น ใกล้สะพาน / ปากซอย'}
+				placeholder={landmarkPlaceholder}
 				class="h-9"
 			/>
 			{#if errors?.residence_landmark}
@@ -199,14 +292,14 @@
 		{#if !isHomeless}
 			<div class="space-y-1.5">
 				<Label for="address-no" class="text-xs font-semibold text-foreground">
-					บ้านเลขที่
+					{addressNoLabel}
 					{#if addressRequired}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<Input
 					id="address-no"
 					bind:value={address_no}
 					{disabled}
-					placeholder="เช่น 123/45"
+					placeholder={addressNoPlaceholder}
 					class="h-9"
 				/>
 				{#if errors?.address_no}
@@ -234,17 +327,35 @@
 
 	<!-- Administrative area & Postal Code -->
 	<div class="space-y-3 border-t border-border/70 pt-3">
-		<div class="flex items-center justify-between">
+		<div class="flex flex-wrap items-center justify-between gap-2">
 			<span class="text-xs font-semibold text-foreground"> พื้นที่และรหัสไปรษณีย์ </span>
-			{#if hasLocation && !disabled}
-				<button
+			<div class="flex items-center gap-2">
+				{#if hasLocation && !disabled}
+					<button
+						type="button"
+						onclick={clearLocation}
+						class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+					>
+						<MapPinX class="size-3" /> ล้างพื้นที่
+					</button>
+				{/if}
+				<Button
 					type="button"
-					onclick={clearLocation}
-					class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+					variant="outline"
+					size="sm"
+					disabled={disabled || isLocating}
+					onclick={handleGetCurrentLocation}
+					class="h-7 gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
 				>
-					<MapPinX class="size-3" /> ล้างพื้นที่
-				</button>
-			{/if}
+					{#if isLocating}
+						<Loader2 class="size-3.5 animate-spin" />
+						<span>กำลังระบุตำแหน่ง…</span>
+					{:else}
+						<LocateFixed class="size-3.5" />
+						<span>ใช้ตำแหน่งปัจจุบัน</span>
+					{/if}
+				</Button>
+			</div>
 		</div>
 
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">

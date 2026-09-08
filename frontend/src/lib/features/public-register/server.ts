@@ -56,3 +56,13 @@ export type {
 	UnassignedRegistrationInput,
 	UnassignedRegistrationPayload
 } from './domain/unassigned-registration';
+
+export {
+	executePublicFamilyRegistration,
+	PublicRegistrationWriteError
+} from './public-family-registration.server';
+
+export type {
+	ExecutePublicFamilyRegistrationOptions,
+	PublicFamilyRegistrationResult
+} from './public-family-registration.server';

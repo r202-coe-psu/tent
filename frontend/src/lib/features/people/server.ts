@@ -20,6 +20,23 @@ export {
 	admissionSupportsVulnerableGroup
 } from './domain/people';
 
+export {
+	planFamilyRegistration,
+	parseUnifiedRegistration,
+	unifiedRegistrationInputSchema,
+	unifiedHouseholdInputSchema,
+	unifiedMemberInputSchema,
+	PRIMARY_CONTACT_LABEL
+} from './domain/unified-registration';
+
 export { registeredViaSchema } from '$lib/db/model';
 
 export type { Evacuee, EvacueeInput, Household, HouseholdInput, StayStatus } from './domain/people';
+export type {
+	FamilyRegistrationPlan,
+	UnifiedRegistrationInput,
+	UnifiedRegistrationParsed,
+	UnifiedMemberInput,
+	UnifiedHouseholdInput,
+	UnifiedRegistrationChannel
+} from './domain/unified-registration';

@@ -151,6 +151,12 @@ export function hasMinimumResidence(residence: ResidenceFields): boolean {
 			hasCompleteResidenceGeo(residence)
 		);
 	}
+	if (residence.housing_type === 'apartment_dorm') {
+		return Boolean(
+			(trimField(residence.address_no) || trimField(residence.residence_landmark)) &&
+			hasCompleteResidenceGeo(residence)
+		);
+	}
 	return Boolean(trimField(residence.address_no) && hasCompleteResidenceGeo(residence));
 }
 

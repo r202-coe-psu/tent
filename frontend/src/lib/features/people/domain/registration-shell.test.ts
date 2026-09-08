@@ -78,6 +78,30 @@ describe('hasMinimumResidence', () => {
 		).toBe(true);
 	});
 
+	it('allows apartment_dorm Residence with room number or building landmark when geo is complete', () => {
+		expect(
+			hasMinimumResidence({
+				housing_type: 'apartment_dorm',
+				address_no: 'ห้อง 402',
+				residence_landmark: '',
+				province: 'สงขลา',
+				district: 'หาดใหญ่',
+				subdistrict: 'คอหงส์'
+			})
+		).toBe(true);
+
+		expect(
+			hasMinimumResidence({
+				housing_type: 'apartment_dorm',
+				address_no: '',
+				residence_landmark: 'หอพักสุขใจ',
+				province: 'สงขลา',
+				district: 'หาดใหญ่',
+				subdistrict: 'คอหงส์'
+			})
+		).toBe(true);
+	});
+
 	it('allows homeless Residence with empty address_no when geo is complete', () => {
 		expect(
 			hasMinimumResidence({

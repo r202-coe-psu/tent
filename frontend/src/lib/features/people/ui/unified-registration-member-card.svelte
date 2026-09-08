@@ -5,7 +5,7 @@
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
 	import { PersonalInfoFields, EmergencyContactFields, SpecialNeedsFields } from './forms/index.js';
 	import {
@@ -111,7 +111,7 @@
 </script>
 
 <section
-	class="space-y-5 rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5"
+	class="space-y-5 rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5"
 	aria-labelledby="member-card-title-{index}"
 >
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
@@ -186,27 +186,33 @@
 		/>
 	</div>
 
-	<div class="space-y-3">
-		<div class="flex items-center gap-2">
-			<ShieldAlert class="size-4 text-primary" />
-			<h4 class="text-sm font-semibold text-foreground">กลุ่มเปราะบาง</h4>
+	<div class="space-y-2.5">
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-2">
+				<ShieldAlert class="size-4 text-primary" />
+				<h4 class="text-sm font-semibold text-foreground">กลุ่มเปราะบาง</h4>
+			</div>
+			<span class="text-2xs text-muted-foreground">(เลือกได้มากกว่า 1 ข้อ)</span>
 		</div>
-		<Label class="sr-only">กลุ่มเปราะบาง</Label>
-		<div class="flex flex-wrap gap-2">
+		<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 			{#each CR112_VULNERABLE_GROUP_ACTIVE as item (item.code)}
-				{@const checked = (member.vulnerable_groups ?? []).includes(item.code)}
-				<Button
-					type="button"
-					variant="outline"
-					{disabled}
-					onclick={() => toggleVulnerable(item.code)}
-					class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-normal transition-colors
-					{checked
-						? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
-						: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
+				{@const isChecked = (member.vulnerable_groups ?? []).includes(item.code)}
+				<label
+					class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs transition-colors select-none {isChecked
+						? 'border-primary/60 bg-primary/5 font-semibold text-foreground'
+						: 'border-border/60 bg-background text-muted-foreground hover:border-primary/30 hover:bg-muted/30'} {disabled
+						? 'pointer-events-none opacity-60'
+						: ''}"
 				>
-					{item.label}
-				</Button>
+					<Checkbox
+						id="vg-{index}-{item.code}"
+						checked={isChecked}
+						onCheckedChange={() => toggleVulnerable(item.code)}
+						{disabled}
+						class="size-4 shrink-0"
+					/>
+					<span class="leading-tight">{item.label}</span>
+				</label>
 			{/each}
 		</div>
 	</div>

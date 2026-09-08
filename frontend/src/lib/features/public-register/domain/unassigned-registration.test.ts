@@ -71,4 +71,25 @@ describe('toUnassignedRegistrationPayload', () => {
 		expect(payload.household.address_no).toBe('123/45');
 		expect(payload.household.province).toBe('สงขลา');
 	});
+
+	it('supports anonymous cardType and blank optional member phone', () => {
+		const parsed = unassignedRegistrationInputSchema.parse({
+			...VALID,
+			members: [
+				{
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male' as const,
+					phone: '',
+					person_id: { cardType: 'anonymous' as const },
+					special_needs: [],
+					vulnerable_groups: []
+				}
+			]
+		});
+		const payload = toUnassignedRegistrationPayload(parsed);
+		expect(payload.members[0].person_id).toEqual({ cardType: 'anonymous' });
+		// Phone defaults to contact phone when member phone is empty string
+		expect(payload.members[0].phone).toBe('0812345678');
+	});
 });

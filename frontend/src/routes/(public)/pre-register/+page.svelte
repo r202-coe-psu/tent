@@ -31,54 +31,46 @@
 	let ticket = $state<BookingTicketModel | null>(null);
 
 	let shelters = $state<(PublicShelterCardModel & { available: number | null })[]>([]);
-	let vulnerableGroups = $state<{ code: string; label: string }[]>([]);
 	let loadError = $state('');
 	let isLoading = $state(true);
 
 	let storedTicketsCount = $state(0);
 
+	async function loadInitialData() {
+		try {
+			isLoading = true;
+			const shelterRes = await listPublicShelters({});
+			const cards = (shelterRes?.shelters ?? []).map((s) => toPublicShelterCard(s as never));
+
+			const codes = cards.filter((c) => c.status !== 'CLOSED').map((c) => c.code);
+			let occupancy: Record<string, number | null> = {};
+			if (codes.length > 0) {
+				try {
+					const occRes = await fetch(
+						`/api/public/v1/shelters/occupancy?codes=${codes.join(',')}`
+					).then((r) => (r.ok ? r.json() : { occupancy: {} }));
+					occupancy = occRes?.occupancy ?? {};
+				} catch {
+					// Optional occupancy count fallback
+				}
+			}
+			shelters = cards.map((c) => ({
+				...c,
+				available:
+					typeof occupancy[c.code] === 'number'
+						? Math.max(0, c.capacity - occupancy[c.code]!)
+						: null
+			}));
+		} catch {
+			loadError = 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง';
+		} finally {
+			isLoading = false;
+		}
+	}
+
 	onMount(() => {
 		storedTicketsCount = getStoredTickets().length;
-	});
-
-	$effect(() => {
-		void (async () => {
-			try {
-				isLoading = true;
-				const [shelterRes, groupRes] = await Promise.all([
-					listPublicShelters({}),
-					fetch('/api/public/v1/config/vulnerable-groups').then((r) =>
-						r.ok ? r.json() : { groups: [] }
-					)
-				]);
-				const cards = (shelterRes?.shelters ?? []).map((s) => toPublicShelterCard(s as never));
-				vulnerableGroups = groupRes?.groups ?? [];
-
-				const codes = cards.filter((c) => c.status !== 'CLOSED').map((c) => c.code);
-				let occupancy: Record<string, number | null> = {};
-				if (codes.length > 0) {
-					try {
-						const occRes = await fetch(
-							`/api/public/v1/shelters/occupancy?codes=${codes.join(',')}`
-						).then((r) => (r.ok ? r.json() : { occupancy: {} }));
-						occupancy = occRes?.occupancy ?? {};
-					} catch {
-						// Optional occupancy count fallback
-					}
-				}
-				shelters = cards.map((c) => ({
-					...c,
-					available:
-						typeof occupancy[c.code] === 'number'
-							? Math.max(0, c.capacity - occupancy[c.code]!)
-							: null
-				}));
-			} catch {
-				loadError = 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง';
-			} finally {
-				isLoading = false;
-			}
-		})();
+		void loadInitialData();
 	});
 
 	function handleNewBooking() {
@@ -152,12 +144,12 @@
 
 	<!-- Main Content Area -->
 	{#if activeTab === 'history'}
-		<div class="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+		<div class="rounded-2xl border border-border/80 bg-card p-6 shadow-2xs sm:p-8">
 			<TicketHistory onNewBooking={handleNewBooking} />
 		</div>
 	{:else if ticket}
 		<div class="space-y-6">
-			<div class="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+			<div class="rounded-2xl border border-border/80 bg-card p-6 shadow-2xs sm:p-8">
 				<BookingTicketView {ticket} />
 			</div>
 
@@ -175,12 +167,12 @@
 					class="gap-2 text-muted-foreground hover:text-foreground"
 				>
 					<History class="size-4" />
-					<span>ดูตั๋วการจองทั้งหมดที่บันทึกไว้</span>
+					<span>ดูตั๋วลงทะเบียนทั้งหมดที่บันทึกไว้</span>
 				</Button>
 			</div>
 		</div>
 	{:else if isLoading}
-		<div class="rounded-3xl border border-border bg-card p-12 text-center shadow-xs">
+		<div class="rounded-2xl border border-border/80 bg-card p-12 text-center shadow-2xs">
 			<div
 				class="mx-auto mb-3 size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
 			></div>
@@ -188,16 +180,15 @@
 		</div>
 	{:else if loadError}
 		<div
-			class="rounded-3xl border border-destructive/30 bg-destructive/10 p-6 text-center text-sm text-destructive shadow-xs"
+			class="rounded-2xl border border-destructive/30 bg-destructive/10 p-6 text-center text-sm text-destructive shadow-2xs"
 		>
 			<p>{loadError}</p>
 		</div>
 	{:else}
-		<div class="rounded-3xl border border-border bg-card p-5 shadow-xs sm:p-8 md:p-10">
+		<div class="space-y-6">
 			{#key data.shelterCode}
 				<BookingForm
 					{shelters}
-					{vulnerableGroups}
 					lockedShelterCode={data.shelterCode}
 					onbooked={(t) => {
 						ticket = t;

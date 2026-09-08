@@ -57,7 +57,7 @@ const vehicleSchema = z.object({
  */
 export const unifiedHouseholdInputSchema = z
 	.object({
-		housing_type: housingTypeSchema.nullable().optional().default(null),
+		housing_type: housingTypeSchema.nullable().optional().default('owned_house'),
 		residence_landmark: z.string().trim().nullable().optional().default(null),
 		address_no: z.string().trim().nullable().optional().default(null),
 		village_no: z.string().trim().nullable().optional().default(null),

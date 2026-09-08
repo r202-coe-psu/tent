@@ -10,6 +10,7 @@ import { z } from 'zod';
 import type { components } from '$lib/api/openapi';
 import {
 	bookingGenderSchema,
+	bookingOptionalPhoneSchema,
 	bookingPhoneSchema,
 	publicBookingAddressSchema,
 	publicBookingPetSchema
@@ -23,7 +24,7 @@ const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other', 
 
 export const unassignedPersonIdSchema = z.object({
 	cardType: cardTypeSchema.default('national_id'),
-	number: z.string().trim().min(1).max(64).optional()
+	number: z.string().trim().max(64).optional()
 });
 
 export const unassignedMemberInputSchema = z.object({
@@ -34,7 +35,7 @@ export const unassignedMemberInputSchema = z.object({
 		.max(100, 'ชื่อยาวเกินไป'),
 	last_name: z.string().trim().max(100, 'นามสกุลยาวเกินไป').default(''),
 	gender: bookingGenderSchema,
-	phone: bookingPhoneSchema.optional().nullable(),
+	phone: bookingOptionalPhoneSchema,
 	person_id: unassignedPersonIdSchema.optional(),
 	country: z.string().trim().min(1).max(100).default('THAILAND'),
 	vulnerable_groups: z.array(z.string().trim().min(1)).max(20).default([]),
@@ -57,7 +58,7 @@ export const housingTypeSchema = z.enum([
  */
 export const unassignedHouseholdInputSchema = z
 	.object({
-		housing_type: housingTypeSchema.optional().nullable(),
+		housing_type: housingTypeSchema.optional().nullable().default('owned_house'),
 		residence_landmark: z.string().trim().max(200).optional().nullable(),
 		address: publicBookingAddressSchema.optional(),
 		pets: z.array(publicBookingPetSchema).max(20).default([])
@@ -116,7 +117,8 @@ export function toUnassignedRegistrationPayload(
 	input: UnassignedRegistrationInput
 ): UnassignedRegistrationPayload {
 	const members = input.members.map((member, index) => {
-		const phone = member.phone ?? (index === 0 && input.phone ? input.phone : null) ?? null;
+		const rawPhone = member.phone?.trim();
+		const phone = rawPhone || (index === 0 && input.phone ? input.phone.trim() : null) || null;
 		return {
 			first_name: member.first_name,
 			last_name: member.last_name,
@@ -152,7 +154,7 @@ export function toUnassignedRegistrationPayload(
 					.join(' | ');
 				return {
 					species,
-					count: 1,
+					count: pet.count ?? 1,
 					...(rawNotes ? { notes: rawNotes } : {}),
 					has_cage: pet.has_cage
 				};

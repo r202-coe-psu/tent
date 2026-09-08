@@ -10,7 +10,7 @@
 	let {
 		ref = $bindable(null),
 		class: className,
-		sideOffset = 4,
+		sideOffset = 6,
 		portalProps,
 		children,
 		preventScroll = true,
@@ -18,6 +18,19 @@
 	}: WithoutChild<SelectPrimitive.ContentProps> & {
 		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
 	} = $props();
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Tab' && !e.shiftKey) {
+			const container = e.currentTarget as HTMLElement;
+			const highlighted =
+				container?.querySelector<HTMLElement>('[data-slot="select-item"][data-highlighted]') ??
+				container?.querySelector<HTMLElement>('[data-slot="select-item"][data-state="checked"]');
+			if (highlighted) {
+				highlighted.click();
+			}
+		}
+		restProps.onkeydown?.(e as never);
+	}
 </script>
 
 <SelectPortal {...portalProps}>
@@ -25,9 +38,10 @@
 		bind:ref
 		{sideOffset}
 		{preventScroll}
+		onkeydown={handleKeydown}
 		data-slot="select-content"
 		class={cn(
-			'relative isolate z-50 min-w-36 overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+			'relative isolate z-50 max-w-[calc(100vw-2rem)] min-w-36 min-w-[var(--bits-select-anchor-width)] overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-lg ring-1 ring-border/80 duration-100 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
 			className
 		)}
 		{...restProps}
@@ -35,7 +49,7 @@
 		<SelectScrollUpButton />
 		<SelectPrimitive.Viewport
 			class={cn(
-				'h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1'
+				'max-h-80 w-full min-w-[var(--bits-select-anchor-width)] scroll-my-1 overflow-x-hidden overflow-y-auto p-1.5'
 			)}
 		>
 			{@render children?.()}
