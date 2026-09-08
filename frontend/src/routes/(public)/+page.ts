@@ -25,7 +25,7 @@ export const load: PageLoad = async ({ fetch }) => {
 	let metrics: TransparencySummaryPayload | undefined;
 
 	try {
-		const configRes = await fetch('/api/public/v1/config/faqs');
+		const configRes = await fetch('/api/public/v1/config/faqs?category=public');
 		if (configRes.ok) {
 			configData = await configRes.json();
 			faqs = (configData.faqs as FaqItem[]) || [];
@@ -46,7 +46,9 @@ export const load: PageLoad = async ({ fetch }) => {
 
 	try {
 		const summaryRes = await fetch('/api/public/v1/transparency/summary');
-		const summaryData = (await summaryRes.json().catch(() => null)) as TransparencySummaryPayload | null;
+		const summaryData = (await summaryRes
+			.json()
+			.catch(() => null)) as TransparencySummaryPayload | null;
 
 		if (!summaryRes.ok) {
 			console.error(

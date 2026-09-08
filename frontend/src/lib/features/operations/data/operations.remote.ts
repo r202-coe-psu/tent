@@ -33,7 +33,10 @@ import {
 	type StockTransfer,
 	type TransferInput,
 	type TransferFilter,
-	type TransferStatus
+	type TransferStatus,
+	type DispatchInfoInput,
+	type CancelInfoInput,
+	type DisputeInfoInput
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
@@ -440,7 +443,14 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	private async transitionTransfer(
 		id: string,
 		to: TransferStatus,
-		opts?: { receivedItems?: { item_id: string; qty: string | number }[]; notes?: string }
+		opts?: {
+			receivedItems?: { item_id: string; qty: string | number }[];
+			notes?: string;
+			driver_name?: string;
+			vehicle_plate?: string;
+			cancel_reason?: string;
+			dispute_reason?: string;
+		}
 	): Promise<StockTransfer> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
 		const res = await fetch(
@@ -466,8 +476,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return payload;
 	}
 
-	async dispatchTransfer(id: string): Promise<StockTransfer> {
-		return this.transitionTransfer(id, 'shipped');
+	async dispatchTransfer(id: string, info: DispatchInfoInput): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'shipped', {
+			driver_name: info.driver_name,
+			vehicle_plate: info.vehicle_plate
+		});
 	}
 
 	async receiveTransfer(
@@ -478,8 +491,17 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return this.transitionTransfer(id, 'received', { receivedItems, notes });
 	}
 
-	async cancelTransfer(id: string): Promise<StockTransfer> {
-		return this.transitionTransfer(id, 'cancelled');
+	async cancelTransfer(id: string, info: CancelInfoInput): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'cancelled', { cancel_reason: info.cancel_reason });
+	}
+
+	async disputeTransfer(id: string, info: DisputeInfoInput): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'disputed', { dispute_reason: info.dispute_reason });
+	}
+
+	async resumeTransfer(id: string): Promise<StockTransfer> {
+		// Resume is the one transition that walks the state machine backwards (CR-089 FR-05/FR-07).
+		return this.transitionTransfer(id, 'requested');
 	}
 }
 
