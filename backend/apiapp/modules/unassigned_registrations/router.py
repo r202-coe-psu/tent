@@ -13,7 +13,7 @@ from ...core.security import verify_external_secret
 from ...core.staff_session import (
     StaffSession,
     require_registration_staff,
-    require_staff_session,
+    require_shelter_scoped_staff,
     require_system_admin,
 )
 from ...utils.request_meta import client_ip
@@ -91,15 +91,15 @@ async def create_unassigned_registration(
 async def search_unassigned_registrations(
     response: Response,
     q: str = Query(default="", description="Name, phone, or person id of an open member"),
-    _session: StaffSession = Depends(require_staff_session),  # noqa: B008
+    _session: StaffSession = Depends(require_shelter_scoped_staff),  # noqa: B008
     use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
         get_unassigned_registrations_use_case
     ),
 ) -> UnassignedRegistrationSearchResponse:
     """Staff online search of open Unassigned Registrations (FR-UR-02 / #245 / #251).
 
-    Auth is any authenticated staff session so Station 1 can federate anti-dupe
-    for non-claim roles; claim remains ``require_registration_staff``.
+    Auth is shelter-scoped staff or SA (matches BFF) so Station 1 can federate
+    anti-dupe for non-claim roles; claim remains ``require_registration_staff``.
     """
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(q)

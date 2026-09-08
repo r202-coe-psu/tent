@@ -122,6 +122,21 @@ async def require_staff_session(
     return StaffSession(name=name, roles=roles, shelter_code=shelter_code, is_sa=is_sa)
 
 
+async def require_shelter_scoped_staff(
+    session: Annotated[StaffSession, Depends(require_staff_session)],
+) -> StaffSession:
+    """Shelter-scoped staff or SA — federated intake search (#251 / CR-115).
+
+    Wider than claim (``require_registration_staff``) but tighter than a bare
+    authenticated session: callers must be system_admin or carry a shelter scope.
+    """
+    if session.is_sa:
+        return session
+    if session.shelter_code:
+        return session
+    raise _forbidden("Requires shelter-scoped staff")
+
+
 async def require_registration_staff(
     session: Annotated[StaffSession, Depends(require_staff_session)],
 ) -> StaffSession:

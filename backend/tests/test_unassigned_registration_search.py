@@ -14,7 +14,7 @@ from tent_model.unassigned_registration import (
     UnassignedRegistration,
 )
 
-from apiapp.core.staff_session import StaffSession, require_staff_session
+from apiapp.core.staff_session import StaffSession, require_shelter_scoped_staff
 from apiapp.utils.ulid import new_ulid
 
 
@@ -39,10 +39,21 @@ def kitchen_staff_session() -> StaffSession:
 
 
 @pytest.fixture
+def unsheltered_staff_session() -> StaffSession:
+    """Authenticated but neither SA nor shelter-scoped — must not search."""
+    return StaffSession(
+        name="orphan.staff",
+        roles=["kitchen_staff"],
+        shelter_code=None,
+        is_sa=False,
+    )
+
+
+@pytest.fixture
 async def authed_client(client: AsyncClient, app, staff_session: StaffSession):
-    app.dependency_overrides[require_staff_session] = lambda: staff_session
+    app.dependency_overrides[require_shelter_scoped_staff] = lambda: staff_session
     yield client
-    app.dependency_overrides.pop(require_staff_session, None)
+    app.dependency_overrides.pop(require_shelter_scoped_staff, None)
 
 
 async def _seed_registration(
@@ -204,12 +215,32 @@ async def test_search_allows_non_claim_shelter_staff(
 ) -> None:
     """#251 — federated anti-dupe search is not gated by registration_staff."""
     await _seed_registration()
-    app.dependency_overrides[require_staff_session] = lambda: kitchen_staff_session
+    app.dependency_overrides[require_shelter_scoped_staff] = lambda: kitchen_staff_session
+    try:
+        response = await client.get(
+            "/staff/v1/unassigned-registrations/search", params={"q": "สมชาย"}
+        )
+    finally:
+        app.dependency_overrides.pop(require_shelter_scoped_staff, None)
+    assert response.status_code == 200
+    assert len(response.json()["results"]) == 1
+
+
+async def test_search_rejects_authenticated_staff_without_shelter_scope(
+    client: AsyncClient, app, unsheltered_staff_session: StaffSession
+) -> None:
+    """Search auth matches BFF: shelter-scoped staff or SA only."""
+    # Do not override the dependency — exercise require_shelter_scoped_staff via
+    # a session that is authenticated but lacks shelter_code / SA.
+    from apiapp.core.staff_session import require_staff_session
+
+    app.dependency_overrides[require_staff_session] = lambda: unsheltered_staff_session
     try:
         response = await client.get(
             "/staff/v1/unassigned-registrations/search", params={"q": "สมชาย"}
         )
     finally:
         app.dependency_overrides.pop(require_staff_session, None)
-    assert response.status_code == 200
-    assert len(response.json()["results"]) == 1
+    assert response.status_code == 403
+    body = response.json()
+    assert body["errors"][0]["error"]["code"] == "FORBIDDEN"

@@ -95,6 +95,8 @@
 	let cameraError = $state<string | null>(null);
 	let selected = $state<Evacuee | null>(null);
 	let sheetOpen = $state(false);
+	/** Shared with Station1IntakeSearch — hide header new-reg while hard-gate locks. */
+	let newRegistrationLocked = $state(false);
 
 	const NEXT_QUEUE_CHIPS = new Set<StatusChip>(['รอแพทย์', 'รอโซน', 'รอยืนยันถึงโซน', 'พักแล้ว']);
 
@@ -253,17 +255,22 @@
 				<p class="text-xs text-muted-foreground">Registration Desk — คิวลงทะเบียนและรายงานตัว</p>
 			</div>
 		</div>
-		<Button href={resolve('/onsite/people/new')} class="gap-2">
-			<UserPlus class="size-4" />
-			ลงทะเบียนใหม่
-		</Button>
+		{#if !newRegistrationLocked}
+			<Button href={resolve('/onsite/people/new')} class="gap-2">
+				<UserPlus class="size-4" />
+				ลงทะเบียนใหม่
+			</Button>
+		{/if}
 	</div>
 
 	<Card.Root class="rounded-xl border-border p-4 shadow-xs">
 		<p class="mb-3 text-sm text-muted-foreground">
 			ค้นหาก่อนลงทะเบียน — ตรวจซ้ำในศูนย์นี้และคิวกลาง
 		</p>
-		<Station1IntakeSearch canClaimPool={canAccessUnassignedQueue} />
+		<Station1IntakeSearch
+			canClaimPool={canAccessUnassignedQueue}
+			onNewRegistrationLockedChange={(locked) => (newRegistrationLocked = locked)}
+		/>
 	</Card.Root>
 
 	<section class="flex flex-col gap-4">

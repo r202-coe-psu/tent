@@ -5,10 +5,11 @@ import {
 	OVERRIDE_NEW_REG_BODY,
 	OVERRIDE_NEW_REG_CANCEL,
 	OVERRIDE_NEW_REG_CONFIRM,
+	OVERRIDE_NEW_REG_POOL_ERROR_BODY,
 	OVERRIDE_NEW_REG_TITLE,
 	REPORT_IN_CTA_LABEL,
 	hasFederatedIntakeHits,
-	isIntakeNotFoundState,
+	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
 	resolveShelterHitAction,
 	shelterHitStatusLabel
@@ -40,25 +41,61 @@ describe('Station 1 intake search (#251)', () => {
 		expect(shelterHitStatusLabel('active')).toContain('เช็คอิน');
 	});
 
-	it('is not-found only after a completed search with zero hits on both planes', () => {
-		expect(
-			isIntakeNotFoundState({ hasSearched: false, localHitCount: 0, centralPoolHitCount: 0 })
-		).toBe(false);
-		expect(
-			isIntakeNotFoundState({ hasSearched: true, localHitCount: 1, centralPoolHitCount: 0 })
-		).toBe(false);
-		expect(
-			isIntakeNotFoundState({ hasSearched: true, localHitCount: 0, centralPoolHitCount: 2 })
-		).toBe(false);
-		expect(
-			isIntakeNotFoundState({ hasSearched: true, localHitCount: 0, centralPoolHitCount: 0 })
-		).toBe(true);
-	});
-
 	it('detects federated hits when either plane returns results', () => {
 		expect(hasFederatedIntakeHits(0, 0)).toBe(false);
 		expect(hasFederatedIntakeHits(1, 0)).toBe(true);
 		expect(hasFederatedIntakeHits(0, 1)).toBe(true);
+	});
+
+	it('locks new-reg on federated hits or pool-error path until override', () => {
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: true,
+				poolError: false,
+				hasFederatedHits: true,
+				overrideConfirmed: false
+			})
+		).toBe(true);
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: false,
+				overrideConfirmed: false
+			})
+		).toBe(true);
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: true,
+				overrideConfirmed: false
+			})
+		).toBe(true);
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: false,
+				overrideConfirmed: true
+			})
+		).toBe(false);
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: true,
+				poolError: false,
+				hasFederatedHits: false,
+				overrideConfirmed: false
+			})
+		).toBe(false);
+		expect(
+			isIntakeNewRegistrationLocked({
+				hasSearched: false,
+				poolError: false,
+				hasFederatedHits: false,
+				overrideConfirmed: false
+			})
+		).toBe(false);
 	});
 
 	it('hard-gates new-reg: hidden while federated hits lock without override', () => {
@@ -94,7 +131,7 @@ describe('Station 1 intake search (#251)', () => {
 		).toBe('prominent');
 	});
 
-	it('suppresses not-found and new-reg while pool verification failed', () => {
+	it('suppresses not-found while pool verification failed until override', () => {
 		expect(
 			resolveNewRegistrationCta({
 				hasSearched: true,
@@ -108,14 +145,34 @@ describe('Station 1 intake search (#251)', () => {
 				hasSearched: true,
 				poolError: true,
 				hasFederatedHits: true,
-				overrideConfirmed: true
+				overrideConfirmed: false
 			})
 		).toBe('hidden');
 	});
 
-	it('exposes Thai override confirm copy', () => {
+	it('allows outlined new-reg after override even when pool verification failed', () => {
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: false,
+				overrideConfirmed: true
+			})
+		).toBe('outlined_override');
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: true,
+				overrideConfirmed: true
+			})
+		).toBe('outlined_override');
+	});
+
+	it('exposes Thai override confirm copy including pool-error warning', () => {
 		expect(OVERRIDE_NEW_REG_TITLE).toBe('ยืนยันลงทะเบียนใหม่?');
 		expect(OVERRIDE_NEW_REG_BODY).toContain('ระบบพบรายการที่ตรงกับการค้นหา');
+		expect(OVERRIDE_NEW_REG_POOL_ERROR_BODY).toContain('ตรวจสอบคิวกลางไม่ครบ');
 		expect(OVERRIDE_NEW_REG_CONFIRM).toBe('ยืนยันลงทะเบียนใหม่');
 		expect(OVERRIDE_NEW_REG_CANCEL).toBe('ยกเลิก');
 	});

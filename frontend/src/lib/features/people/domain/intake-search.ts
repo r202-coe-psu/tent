@@ -20,6 +20,9 @@ export const INTAKE_SEARCH_PLACEHOLDER =
 export const OVERRIDE_NEW_REG_TITLE = 'ยืนยันลงทะเบียนใหม่?';
 export const OVERRIDE_NEW_REG_BODY =
 	'ระบบพบรายการที่ตรงกับการค้นหา หากเป็นคนละบุคคล กดยืนยันเพื่อลงทะเบียนใหม่';
+/** Override confirm when central pool could not be verified. */
+export const OVERRIDE_NEW_REG_POOL_ERROR_BODY =
+	'ตรวจสอบคิวกลางไม่ครบ หากยืนยันว่าเป็นคนละบุคคล กดยืนยันเพื่อลงทะเบียนใหม่';
 export const OVERRIDE_NEW_REG_CONFIRM = 'ยืนยันลงทะเบียนใหม่';
 export const OVERRIDE_NEW_REG_CANCEL = 'ยกเลิก';
 
@@ -28,6 +31,10 @@ export const POOL_VERIFY_ERROR_COPY = 'ตรวจสอบคิวกลา�
 
 /** Hint when hits lock new-reg (before override). */
 export const NEW_REG_LOCKED_HINT = 'พบรายการที่ตรงกัน — ใช้รายการด้านบน หรือยืนยันว่าเป็นคนละบุคคล';
+
+/** Hint when pool error locks new-reg (before override). */
+export const NEW_REG_POOL_ERROR_LOCKED_HINT =
+	'ยังตรวจคิวกลางไม่ครบ — ลองอีกครั้ง หรือยืนยันเพื่อลงทะเบียนใหม่';
 
 /** Trigger that opens the override confirm dialog. */
 export const NEW_REG_OVERRIDE_TRIGGER_LABEL = 'ไม่ใช่คนนี้ — ลงทะเบียนใหม่';
@@ -53,19 +60,6 @@ export function shelterHitStatusLabel(status: StayStatus): string {
 	return STATUS_LABELS[status] ?? status;
 }
 
-/**
- * True when staff have completed a search and neither plane returned hits.
- * Drives the prominent `[ + ลงทะเบียนใหม่ ]` empty state.
- */
-export function isIntakeNotFoundState(args: {
-	hasSearched: boolean;
-	localHitCount: number;
-	centralPoolHitCount: number;
-}): boolean {
-	if (!args.hasSearched) return false;
-	return args.localHitCount === 0 && args.centralPoolHitCount === 0;
-}
-
 /** True when at least one plane still has hits (hard anti-dupe predicate). */
 export function hasFederatedIntakeHits(
 	localHitCount: number,
@@ -75,10 +69,26 @@ export function hasFederatedIntakeHits(
 }
 
 /**
+ * Hard anti-dupe lock for page header + card new-reg.
+ * Locked when search finished with federated hits **or** pool-error path,
+ * until sticky override is confirmed for the current query.
+ */
+export function isIntakeNewRegistrationLocked(args: {
+	hasSearched: boolean;
+	poolError: boolean;
+	hasFederatedHits: boolean;
+	overrideConfirmed: boolean;
+}): boolean {
+	if (!args.hasSearched) return false;
+	if (args.overrideConfirmed) return false;
+	return args.hasFederatedHits || args.poolError;
+}
+
+/**
  * Hard anti-dupe gate for `[ + ลงทะเบียนใหม่ ]`.
- * - Pool error → hidden (cannot verify central queue)
- * - Zero hits → prominent not-found CTA
- * - Any federated hit → hidden until sticky override, then outlined/warned
+ * - Zero hits, no pool error → prominent not-found CTA
+ * - Federated hits or pool error → hidden until sticky override, then outlined/warned
+ * - Override stays available under pool error (central queue may be unverified)
  */
 export function resolveNewRegistrationCta(args: {
 	hasSearched: boolean;
@@ -87,8 +97,10 @@ export function resolveNewRegistrationCta(args: {
 	overrideConfirmed: boolean;
 }): NewRegistrationCtaKind {
 	if (!args.hasSearched) return 'hidden';
+	if (args.overrideConfirmed && (args.hasFederatedHits || args.poolError)) {
+		return 'outlined_override';
+	}
 	if (args.poolError) return 'hidden';
 	if (!args.hasFederatedHits) return 'prominent';
-	if (args.overrideConfirmed) return 'outlined_override';
 	return 'hidden';
 }

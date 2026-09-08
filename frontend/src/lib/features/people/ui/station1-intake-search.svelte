@@ -25,14 +25,17 @@
 		NEW_REGISTRATION_CTA_LABEL,
 		NEW_REG_LOCKED_HINT,
 		NEW_REG_OVERRIDE_TRIGGER_LABEL,
+		NEW_REG_POOL_ERROR_LOCKED_HINT,
 		OVERRIDE_NEW_REG_BODY,
 		OVERRIDE_NEW_REG_CANCEL,
 		OVERRIDE_NEW_REG_CONFIRM,
+		OVERRIDE_NEW_REG_POOL_ERROR_BODY,
 		OVERRIDE_NEW_REG_TITLE,
 		POOL_CLAIM_FORBIDDEN_HINT,
 		POOL_VERIFY_ERROR_COPY,
 		REPORT_IN_CTA_LABEL,
 		hasFederatedIntakeHits,
+		isIntakeNewRegistrationLocked,
 		resolveNewRegistrationCta,
 		resolveShelterHitAction,
 		shelterHitStatusLabel
@@ -40,10 +43,13 @@
 	import { formatPersonName, maskNationalId } from '../domain/people';
 
 	let {
-		canClaimPool = false
+		canClaimPool = false,
+		onNewRegistrationLockedChange
 	}: {
 		/** RBAC: show claim CTA on pool rows (search itself is always on). */
 		canClaimPool?: boolean;
+		/** Notifies the page when Station 1 hard-gate locks/unlocks new-reg. */
+		onNewRegistrationLockedChange?: (locked: boolean) => void;
 	} = $props();
 
 	let query = $state('');
@@ -82,15 +88,32 @@
 	const hasSearched = $derived(!!debouncedQuery && !localFetching && !poolFetching);
 	const poolError = $derived(hasSearched && poolSearch.isError);
 	const federatedHits = $derived(hasFederatedIntakeHits(localHits.length, poolHits.length));
+	const overrideActive = $derived(overrideConfirmed && overrideForQuery === debouncedQuery);
 	const newRegCta = $derived(
 		resolveNewRegistrationCta({
 			hasSearched,
 			poolError,
 			hasFederatedHits: federatedHits,
-			overrideConfirmed: overrideConfirmed && overrideForQuery === debouncedQuery
+			overrideConfirmed: overrideActive
+		})
+	);
+	const hardLocked = $derived(
+		isIntakeNewRegistrationLocked({
+			hasSearched,
+			poolError,
+			hasFederatedHits: federatedHits,
+			overrideConfirmed: overrideActive
 		})
 	);
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	const overrideDialogBody = $derived(
+		poolError ? OVERRIDE_NEW_REG_POOL_ERROR_BODY : OVERRIDE_NEW_REG_BODY
+	);
+	const lockedHint = $derived(poolError ? NEW_REG_POOL_ERROR_LOCKED_HINT : NEW_REG_LOCKED_HINT);
+
+	$effect(() => {
+		onNewRegistrationLockedChange?.(hardLocked);
+	});
 
 	function clearSearch() {
 		query = '';
@@ -302,9 +325,9 @@
 					<UserPlus class="size-4" />
 					{NEW_REGISTRATION_CTA_LABEL}
 				</Button>
-			{:else if federatedHits && !poolError}
+			{:else if hardLocked}
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-					<p class="text-sm text-slate-500">{NEW_REG_LOCKED_HINT}</p>
+					<p class="text-sm text-slate-500">{lockedHint}</p>
 					<Button
 						type="button"
 						variant="ghost"
@@ -326,7 +349,7 @@
 	<AlertDialog.Content>
 		<AlertDialog.Header>
 			<AlertDialog.Title>{OVERRIDE_NEW_REG_TITLE}</AlertDialog.Title>
-			<AlertDialog.Description>{OVERRIDE_NEW_REG_BODY}</AlertDialog.Description>
+			<AlertDialog.Description>{overrideDialogBody}</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{OVERRIDE_NEW_REG_CANCEL}</AlertDialog.Cancel>
