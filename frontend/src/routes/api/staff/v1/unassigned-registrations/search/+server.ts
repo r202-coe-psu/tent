@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fastapiBaseUrl, unwrapFastapiError } from '$lib/server/fastapi';
-import { requireUnassignedRegistrationQueueAccess } from '../_auth';
+import { requireUnassignedRegistrationSearchAccess } from '../_auth';
 
 export const prerender = false;
 
@@ -11,10 +11,11 @@ const noStore = { 'Cache-Control': 'no-store' };
  * GET /api/staff/v1/unassigned-registrations/search?q=
  * Forwards the caller's AuthSession cookie to FastAPI staff search (CR-113 / #245).
  * Browser never talks to FastAPI directly.
+ * Auth: any shelter-scoped staff (or SA) — claim stays registration-desk gated (#251).
  */
 export const GET: RequestHandler = async ({ url, request, fetch }) => {
 	const cookie = request.headers.get('cookie');
-	const auth = await requireUnassignedRegistrationQueueAccess(cookie);
+	const auth = await requireUnassignedRegistrationSearchAccess(cookie);
 	if (!auth.ok) return auth.response;
 
 	const q = url.searchParams.get('q') ?? '';

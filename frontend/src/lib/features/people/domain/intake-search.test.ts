@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
 	INTAKE_SEARCH_PLACEHOLDER,
 	NEW_REGISTRATION_CTA_LABEL,
+	OVERRIDE_NEW_REG_BODY,
+	OVERRIDE_NEW_REG_CANCEL,
+	OVERRIDE_NEW_REG_CONFIRM,
+	OVERRIDE_NEW_REG_TITLE,
 	REPORT_IN_CTA_LABEL,
 	hasFederatedIntakeHits,
 	isIntakeNotFoundState,
+	resolveNewRegistrationCta,
 	resolveShelterHitAction,
 	shelterHitStatusLabel
 } from './intake-search';
@@ -54,5 +59,64 @@ describe('Station 1 intake search (#251)', () => {
 		expect(hasFederatedIntakeHits(0, 0)).toBe(false);
 		expect(hasFederatedIntakeHits(1, 0)).toBe(true);
 		expect(hasFederatedIntakeHits(0, 1)).toBe(true);
+	});
+
+	it('hard-gates new-reg: hidden while federated hits lock without override', () => {
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: false,
+				hasFederatedHits: true,
+				overrideConfirmed: false
+			})
+		).toBe('hidden');
+	});
+
+	it('shows outlined/warned new-reg only after explicit override on hits', () => {
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: false,
+				hasFederatedHits: true,
+				overrideConfirmed: true
+			})
+		).toBe('outlined_override');
+	});
+
+	it('shows prominent new-reg when search completed with zero hits and no pool error', () => {
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: false,
+				hasFederatedHits: false,
+				overrideConfirmed: false
+			})
+		).toBe('prominent');
+	});
+
+	it('suppresses not-found and new-reg while pool verification failed', () => {
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: false,
+				overrideConfirmed: false
+			})
+		).toBe('hidden');
+		expect(
+			resolveNewRegistrationCta({
+				hasSearched: true,
+				poolError: true,
+				hasFederatedHits: true,
+				overrideConfirmed: true
+			})
+		).toBe('hidden');
+	});
+
+	it('exposes Thai override confirm copy', () => {
+		expect(OVERRIDE_NEW_REG_TITLE).toBe('ยืนยันลงทะเบียนใหม่?');
+		expect(OVERRIDE_NEW_REG_BODY).toContain('ระบบพบรายการที่ตรงกับการค้นหา');
+		expect(OVERRIDE_NEW_REG_CONFIRM).toBe('ยืนยันลงทะเบียนใหม่');
+		expect(OVERRIDE_NEW_REG_CANCEL).toBe('ยกเลิก');
 	});
 });

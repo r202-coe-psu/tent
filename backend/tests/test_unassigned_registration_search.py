@@ -14,7 +14,7 @@ from tent_model.unassigned_registration import (
     UnassignedRegistration,
 )
 
-from apiapp.core.staff_session import StaffSession, require_registration_staff
+from apiapp.core.staff_session import StaffSession, require_staff_session
 from apiapp.utils.ulid import new_ulid
 
 
@@ -29,10 +29,20 @@ def staff_session() -> StaffSession:
 
 
 @pytest.fixture
+def kitchen_staff_session() -> StaffSession:
+    return StaffSession(
+        name="kitchen.staff",
+        roles=["shelter:SH001", "SH001:kitchen_staff"],
+        shelter_code="SH001",
+        is_sa=False,
+    )
+
+
+@pytest.fixture
 async def authed_client(client: AsyncClient, app, staff_session: StaffSession):
-    app.dependency_overrides[require_registration_staff] = lambda: staff_session
+    app.dependency_overrides[require_staff_session] = lambda: staff_session
     yield client
-    app.dependency_overrides.pop(require_registration_staff, None)
+    app.dependency_overrides.pop(require_staff_session, None)
 
 
 async def _seed_registration(
@@ -187,3 +197,19 @@ async def test_search_mongo_unreachable_returns_online_required(
     assert response.status_code == 503
     detail = response.json()["errors"][0]
     assert detail["error"]["code"] == "ONLINE_REQUIRED"
+
+
+async def test_search_allows_non_claim_shelter_staff(
+    client: AsyncClient, app, kitchen_staff_session: StaffSession
+) -> None:
+    """#251 — federated anti-dupe search is not gated by registration_staff."""
+    await _seed_registration()
+    app.dependency_overrides[require_staff_session] = lambda: kitchen_staff_session
+    try:
+        response = await client.get(
+            "/staff/v1/unassigned-registrations/search", params={"q": "สมชาย"}
+        )
+    finally:
+        app.dependency_overrides.pop(require_staff_session, None)
+    assert response.status_code == 200
+    assert len(response.json()["results"]) == 1

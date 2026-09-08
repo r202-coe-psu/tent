@@ -263,7 +263,7 @@
 		<p class="mb-3 text-sm text-muted-foreground">
 			ค้นหาก่อนลงทะเบียน — ตรวจซ้ำในศูนย์นี้และคิวกลาง
 		</p>
-		<Station1IntakeSearch enableCentralPool={canAccessUnassignedQueue} />
+		<Station1IntakeSearch canClaimPool={canAccessUnassignedQueue} />
 	</Card.Root>
 
 	<section class="flex flex-col gap-4">

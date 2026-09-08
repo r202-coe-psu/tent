@@ -138,11 +138,21 @@ export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,
+	OVERRIDE_NEW_REG_TITLE,
+	OVERRIDE_NEW_REG_BODY,
+	OVERRIDE_NEW_REG_CONFIRM,
+	OVERRIDE_NEW_REG_CANCEL,
+	POOL_VERIFY_ERROR_COPY,
+	NEW_REG_LOCKED_HINT,
+	NEW_REG_OVERRIDE_TRIGGER_LABEL,
+	POOL_CLAIM_FORBIDDEN_HINT,
 	resolveShelterHitAction,
 	shelterHitStatusLabel,
 	isIntakeNotFoundState,
 	hasFederatedIntakeHits,
-	type ShelterHitAction
+	resolveNewRegistrationCta,
+	type ShelterHitAction,
+	type NewRegistrationCtaKind
 } from './domain/intake-search';
 
 export {

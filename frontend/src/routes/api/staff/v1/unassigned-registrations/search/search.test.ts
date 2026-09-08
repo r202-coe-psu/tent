@@ -7,24 +7,14 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 
-vi.mock('$lib/server/couch-admin', () => ({
-	requireShelterScopeOrSA: vi.fn()
+vi.mock('../_auth', () => ({
+	requireUnassignedRegistrationSearchAccess: vi.fn()
 }));
 
-vi.mock('$lib/auth/roles', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/auth/roles')>();
-	return {
-		...actual,
-		canAccessUnassignedRegistrationQueue: vi.fn()
-	};
-});
-
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { canAccessUnassignedRegistrationQueue } from '$lib/auth/roles';
+import { requireUnassignedRegistrationSearchAccess } from '../_auth';
 import { GET } from './+server';
 
-const requireScope = vi.mocked(requireShelterScopeOrSA);
-const canAccessQueue = vi.mocked(canAccessUnassignedRegistrationQueue);
+const requireSearchAccess = vi.mocked(requireUnassignedRegistrationSearchAccess);
 
 function makeEvent(q: string, cookie = 'AuthSession=abc') {
 	const url = new URL(`http://localhost/api/staff/v1/unassigned-registrations/search?q=${q}`);
@@ -38,13 +28,7 @@ function makeEvent(q: string, cookie = 'AuthSession=abc') {
 describe('GET /api/staff/v1/unassigned-registrations/search', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		requireScope.mockResolvedValue({
-			name: 'reg.staff',
-			roles: ['shelter:SH001', 'SH001:registration_staff'],
-			isSA: false,
-			shelterCode: 'SH001'
-		});
-		canAccessQueue.mockReturnValue(true);
+		requireSearchAccess.mockResolvedValue({ ok: true });
 	});
 
 	it('forwards cookie to FastAPI and returns results', async () => {
@@ -87,8 +71,14 @@ describe('GET /api/staff/v1/unassigned-registrations/search', () => {
 		expect(body.error.code).toBe('ONLINE_REQUIRED');
 	});
 
-	it('rejects callers without registration hold capability', async () => {
-		canAccessQueue.mockReturnValue(false);
+	it('rejects callers without shelter-scoped search access', async () => {
+		requireSearchAccess.mockResolvedValue({
+			ok: false,
+			response: new Response(
+				JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Requires shelter-scoped staff' } }),
+				{ status: 403, headers: { 'Content-Type': 'application/json' } }
+			)
+		});
 		const event = makeEvent('สมชาย');
 		const res = await GET(event);
 		expect(res.status).toBe(403);

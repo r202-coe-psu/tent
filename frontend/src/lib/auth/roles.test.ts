@@ -154,7 +154,7 @@ describe('roles kernel', () => {
 		expect(canCancelHold([])).toBe(false);
 	});
 
-	it('canAccessUnassignedRegistrationQueue mirrors hold-cancel desk gate for search+claim', () => {
+	it('canAccessUnassignedRegistrationQueue mirrors hold-cancel desk gate for claim CTA', () => {
 		expect(canAccessUnassignedRegistrationQueue(['system_admin'])).toBe(true);
 		expect(canAccessUnassignedRegistrationQueue(['shelter:SH001', 'shelter_manager'])).toBe(true);
 		expect(canAccessUnassignedRegistrationQueue(['shelter:SH001', 'registration_staff'])).toBe(

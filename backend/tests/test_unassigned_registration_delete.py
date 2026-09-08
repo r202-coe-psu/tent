@@ -15,7 +15,6 @@ from tent_model.unassigned_registration import (
 
 from apiapp.core.staff_session import (
     StaffSession,
-    require_registration_staff,
     require_staff_session,
     require_system_admin,
 )
@@ -159,13 +158,13 @@ async def test_purge_verifiable_without_claim(
     assert delete_resp.status_code == 204
     assert await UnassignedRegistration.get(doc_id) is None
 
-    app.dependency_overrides[require_registration_staff] = lambda: registration_staff_session
+    app.dependency_overrides[require_staff_session] = lambda: registration_staff_session
     try:
         search = await sa_client.get(
             "/staff/v1/unassigned-registrations/search", params={"q": "สมชาย"}
         )
     finally:
-        app.dependency_overrides.pop(require_registration_staff, None)
+        app.dependency_overrides.pop(require_staff_session, None)
 
     assert search.status_code == 200
     assert all(hit["id"] != doc_id for hit in search.json()["results"])

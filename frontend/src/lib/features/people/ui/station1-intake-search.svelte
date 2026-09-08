@@ -6,21 +6,15 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import X from '@lucide/svelte/icons/x';
 
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
-		CLAIM_FLOW_STATUS_GUIDANCE,
-		formatOpenMemberName,
-		isOnlineRequiredError,
-		pickReportInEvacueeId,
-		toggleMemberSelection,
+		ClaimDialog,
 		UnassignedQueueBadge,
-		UnassignedRegistrationApiError,
-		useClaimUnassignedRegistration,
+		formatOpenMemberName,
 		useUnassignedRegistrationSearch,
 		type UnassignedRegistrationSearchHit
 	} from '$lib/features/unassigned-registration';
@@ -29,25 +23,36 @@
 	import {
 		INTAKE_SEARCH_PLACEHOLDER,
 		NEW_REGISTRATION_CTA_LABEL,
+		NEW_REG_LOCKED_HINT,
+		NEW_REG_OVERRIDE_TRIGGER_LABEL,
+		OVERRIDE_NEW_REG_BODY,
+		OVERRIDE_NEW_REG_CANCEL,
+		OVERRIDE_NEW_REG_CONFIRM,
+		OVERRIDE_NEW_REG_TITLE,
+		POOL_CLAIM_FORBIDDEN_HINT,
+		POOL_VERIFY_ERROR_COPY,
 		REPORT_IN_CTA_LABEL,
-		isIntakeNotFoundState,
+		hasFederatedIntakeHits,
+		resolveNewRegistrationCta,
 		resolveShelterHitAction,
 		shelterHitStatusLabel
 	} from '../domain/intake-search';
 	import { formatPersonName, maskNationalId } from '../domain/people';
 
 	let {
-		enableCentralPool = false
+		canClaimPool = false
 	}: {
-		/** When true, also search Mongo central pool (#250) and show claim CTAs. */
-		enableCentralPool?: boolean;
+		/** RBAC: show claim CTA on pool rows (search itself is always on). */
+		canClaimPool?: boolean;
 	} = $props();
 
 	let query = $state('');
 	let debouncedQuery = $state('');
 	let claimOpen = $state(false);
 	let selected = $state<UnassignedRegistrationSearchHit | null>(null);
-	let selectedMemberIds = $state<string[]>([]);
+	let overrideConfirmed = $state(false);
+	let overrideForQuery = $state('');
+	let overrideDialogOpen = $state(false);
 
 	let debounceTimer: ReturnType<typeof setTimeout>;
 
@@ -68,36 +73,23 @@
 		() => debouncedQuery,
 		() => !!debouncedQuery
 	);
-	const poolSearch = useUnassignedRegistrationSearch(() =>
-		enableCentralPool && debouncedQuery ? debouncedQuery : ''
-	);
-	const claimMutation = useClaimUnassignedRegistration();
-
+	const poolSearch = useUnassignedRegistrationSearch(() => debouncedQuery);
 	const localHits = $derived(localSearch.data ?? []);
-	const poolHits = $derived(enableCentralPool ? (poolSearch.data?.results ?? []) : []);
+	const poolHits = $derived(poolSearch.data?.results ?? []);
 	const localFetching = $derived(!!debouncedQuery && localSearch.isFetching);
-	const poolFetching = $derived(enableCentralPool && !!debouncedQuery && poolSearch.isFetching);
+	const poolFetching = $derived(!!debouncedQuery && poolSearch.isFetching);
 	const isSearching = $derived(localFetching || poolFetching);
-	const hasSearched = $derived(
-		!!debouncedQuery && !localFetching && (!enableCentralPool || !poolFetching)
+	const hasSearched = $derived(!!debouncedQuery && !localFetching && !poolFetching);
+	const poolError = $derived(hasSearched && poolSearch.isError);
+	const federatedHits = $derived(hasFederatedIntakeHits(localHits.length, poolHits.length));
+	const newRegCta = $derived(
+		resolveNewRegistrationCta({
+			hasSearched,
+			poolError,
+			hasFederatedHits: federatedHits,
+			overrideConfirmed: overrideConfirmed && overrideForQuery === debouncedQuery
+		})
 	);
-	const poolError = $derived(enableCentralPool && hasSearched && poolSearch.isError);
-	const showNotFound = $derived(
-		!poolError &&
-			isIntakeNotFoundState({
-				hasSearched,
-				localHitCount: localHits.length,
-				centralPoolHitCount: poolHits.length
-			})
-	);
-	const hasHits = $derived(localHits.length > 0 || poolHits.length > 0);
-	const onlineRequired = $derived(
-		poolError &&
-			(isOnlineRequiredError(poolSearch.error) ||
-				(poolSearch.error instanceof UnassignedRegistrationApiError &&
-					poolSearch.error.code === 'ONLINE_REQUIRED'))
-	);
-	const canClaim = $derived(selectedMemberIds.length > 0 && !claimMutation.isPending);
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	function clearSearch() {
@@ -105,7 +97,9 @@
 		debouncedQuery = '';
 		selected = null;
 		claimOpen = false;
-		selectedMemberIds = [];
+		overrideConfirmed = false;
+		overrideForQuery = '';
+		overrideDialogOpen = false;
 	}
 
 	function goReportIn(id: string) {
@@ -122,37 +116,13 @@
 
 	function openClaimModal(hit: UnassignedRegistrationSearchHit) {
 		selected = hit;
-		selectedMemberIds = [];
 		claimOpen = true;
 	}
 
-	function setMemberChecked(memberId: string, checked: boolean | 'indeterminate') {
-		selectedMemberIds = toggleMemberSelection(selectedMemberIds, memberId, checked === true);
-	}
-
-	async function submitClaim() {
-		if (!selected || selectedMemberIds.length === 0) return;
-		const registrationId = selected.id;
-		try {
-			const result = await claimMutation.mutateAsync({
-				registrationId,
-				payload: {
-					member_ids: selectedMemberIds,
-					...(shelterCode ? { shelter_code: shelterCode } : {})
-				}
-			});
-			const reportInId = pickReportInEvacueeId(result.evacuee_ids);
-			claimOpen = false;
-			selected = null;
-			selectedMemberIds = [];
-			if (reportInId) {
-				await goto(
-					resolve(`/onsite/people/${reportInId}/report-in` as `/onsite/people/${string}/report-in`)
-				);
-			}
-		} catch {
-			// toast handled in mutation onError
-		}
+	function confirmOverride() {
+		overrideConfirmed = true;
+		overrideForQuery = debouncedQuery;
+		overrideDialogOpen = false;
 	}
 </script>
 
@@ -244,47 +214,34 @@
 				</section>
 			{/if}
 
-			{#if enableCentralPool}
-				<section class="space-y-3">
-					<div class="flex flex-wrap items-center gap-2">
-						<h2 class="text-base font-semibold text-slate-900">คิวกลาง</h2>
-						<UnassignedQueueBadge compact />
-					</div>
+			<section class="space-y-3">
+				<div class="flex flex-wrap items-center gap-2">
+					<h2 class="text-base font-semibold text-slate-900">คิวกลาง</h2>
+					<UnassignedQueueBadge compact />
+				</div>
 
-					{#if poolError}
-						<div
-							class="flex flex-col items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-center text-sm text-amber-950 shadow-xs"
-						>
-							<p>
-								{#if onlineRequired}
-									ต้องเชื่อมต่อส่วนกลางเพื่อค้นหาคิวลงทะเบียนล่วงหน้า (ไม่ระบุศูนย์)
-								{:else}
-									ค้นหาไม่สำเร็จ — ตรวจสอบการเชื่อมต่อส่วนกลางแล้วลองใหม่
-								{/if}
-							</p>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={() => poolSearch.refetch()}
-							>
-								ลองอีกครั้ง
-							</Button>
-						</div>
-					{:else if poolHits.length > 0}
-						<ul class="space-y-2.5">
-							{#each poolHits as hit (hit.id)}
-								<li class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
-									<div
-										class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
-									>
-										<div class="min-w-0 space-y-1">
-											<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
-											<p class="text-sm break-all text-slate-900 tabular-nums">{hit.id}</p>
-											<p class="text-xs text-muted-foreground">
-												สร้างเมื่อ {hit.created_at.slice(0, 16).replace('T', ' ')}
-											</p>
-										</div>
+				{#if poolError}
+					<div
+						class="flex flex-col items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-center text-sm text-amber-950 shadow-xs"
+					>
+						<p>{POOL_VERIFY_ERROR_COPY}</p>
+						<Button type="button" variant="outline" size="sm" onclick={() => poolSearch.refetch()}>
+							ลองอีกครั้ง
+						</Button>
+					</div>
+				{:else if poolHits.length > 0}
+					<ul class="space-y-2.5">
+						{#each poolHits as hit (hit.id)}
+							<li class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
+								<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+									<div class="min-w-0 space-y-1">
+										<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
+										<p class="text-sm break-all text-slate-900 tabular-nums">{hit.id}</p>
+										<p class="text-xs text-muted-foreground">
+											สร้างเมื่อ {hit.created_at.slice(0, 16).replace('T', ' ')}
+										</p>
+									</div>
+									{#if canClaimPool}
 										<Button
 											type="button"
 											size="sm"
@@ -294,37 +251,38 @@
 										>
 											รับเข้าศูนย์
 										</Button>
-									</div>
-									<ul class="space-y-2 border-t border-slate-200/80 pt-3">
-										{#each hit.open_members as member (member.reserved_evacuee_id)}
-											<li class="text-sm">
-												<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
-												<p class="text-xs text-muted-foreground tabular-nums">
-													{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ??
-														'ไม่มีเลขบัตร'}
-												</p>
-											</li>
-										{/each}
-									</ul>
-								</li>
-							{/each}
-						</ul>
-					{:else if localHits.length > 0}
-						<p class="text-sm text-slate-500">ไม่พบสมาชิก open ในคิวกลางที่ตรงกับคำค้น</p>
-					{/if}
-				</section>
-			{/if}
+									{:else}
+										<p class="text-xs text-muted-foreground sm:max-w-[12rem] sm:text-right">
+											{POOL_CLAIM_FORBIDDEN_HINT}
+										</p>
+									{/if}
+								</div>
+								<ul class="space-y-2 border-t border-slate-200/80 pt-3">
+									{#each hit.open_members as member (member.reserved_evacuee_id)}
+										<li class="text-sm">
+											<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
+											<p class="text-xs text-muted-foreground tabular-nums">
+												{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ??
+													'ไม่มีเลขบัตร'}
+											</p>
+										</li>
+									{/each}
+								</ul>
+							</li>
+						{/each}
+					</ul>
+				{:else if localHits.length > 0}
+					<p class="text-sm text-slate-500">ไม่พบในคิวกลาง</p>
+				{/if}
+			</section>
 
-			{#if showNotFound}
+			{#if newRegCta === 'prominent'}
 				<div
 					class="flex flex-col items-stretch gap-3 rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs sm:items-center sm:text-center"
 				>
 					<div class="space-y-1">
-						<h3 class="text-lg font-bold text-slate-900">ไม่พบรายการที่ตรงกัน</h3>
-						<p class="text-sm text-slate-500">
-							ไม่พบผู้พักพิงในศูนย์นี้{#if enableCentralPool}
-								และคิวกลาง{/if} — ลงทะเบียนใหม่ได้ทันที
-						</p>
+						<h3 class="text-lg font-bold text-slate-900">ไม่พบรายการ</h3>
+						<p class="text-sm text-slate-500">ลงทะเบียนใหม่ได้ทันที</p>
 					</div>
 					<Button
 						href={resolve('/onsite/people/new')}
@@ -334,77 +292,45 @@
 						{NEW_REGISTRATION_CTA_LABEL}
 					</Button>
 				</div>
-			{:else if hasHits}
+			{:else if newRegCta === 'outlined_override'}
 				<Button
 					href={resolve('/onsite/people/new')}
 					variant="outline"
 					size="sm"
-					class="h-10 w-full gap-2 border-slate-200/80 text-slate-700 sm:w-auto"
+					class="h-10 w-full gap-2 border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100 sm:w-auto"
 				>
 					<UserPlus class="size-4" />
-					ลงทะเบียนใหม่
+					{NEW_REGISTRATION_CTA_LABEL}
 				</Button>
+			{:else if federatedHits && !poolError}
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+					<p class="text-sm text-slate-500">{NEW_REG_LOCKED_HINT}</p>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						class="h-10 shrink-0 text-slate-700"
+						onclick={() => (overrideDialogOpen = true)}
+					>
+						{NEW_REG_OVERRIDE_TRIGGER_LABEL}
+					</Button>
+				</div>
 			{/if}
 		</div>
 	{/if}
 </div>
 
-<Dialog.Root bind:open={claimOpen}>
-	<Dialog.Content class="flex max-h-[90vh] flex-col gap-4 sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
-			<Dialog.Description>
-				{CLAIM_FLOW_STATUS_GUIDANCE}
-			</Dialog.Description>
-		</Dialog.Header>
-		{#if selected}
-			<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-sm">
-				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
-					<div class="mb-2">
-						<UnassignedQueueBadge />
-					</div>
-					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
-					<p class="break-all text-slate-900 tabular-nums">{selected.id}</p>
-					<p class="mt-2 text-xs font-semibold text-slate-500">ครัวเรือนสำรอง</p>
-					<p class="break-all text-slate-900 tabular-nums">{selected.reserved_household_id}</p>
-				</div>
-				<div class="min-h-0 flex-1 overflow-y-auto">
-					<p class="mb-2 text-sm font-semibold text-slate-900">สมาชิกที่ยัง open</p>
-					<ul class="space-y-2">
-						{#each selected.open_members as member (member.reserved_evacuee_id)}
-							<li class="rounded-xl border border-slate-200/80 bg-white px-3 py-2">
-								<div class="flex items-start gap-3">
-									<Checkbox
-										checked={selectedMemberIds.includes(member.reserved_evacuee_id)}
-										onCheckedChange={(v) => setMemberChecked(member.reserved_evacuee_id, v)}
-										class="mt-1"
-										aria-label={`เลือก ${formatOpenMemberName(member)}`}
-									/>
-									<div class="min-w-0 flex-1">
-										<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
-										<p class="text-xs text-muted-foreground tabular-nums">
-											{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
-										</p>
-									</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</div>
-				<div class="flex flex-col gap-2 border-t border-slate-200/80 pt-3">
-					<p class="text-xs text-muted-foreground">
-						เลือกแล้ว {selectedMemberIds.length} / {selected.open_members.length} คน · คนที่ไม่ติ๊กยังคง
-						open ในคิวกลาง
-					</p>
-					<Button type="button" disabled={!canClaim} onclick={submitClaim} class="w-full">
-						{#if claimMutation.isPending}
-							กำลังรับเข้าศูนย์...
-						{:else}
-							ยืนยันรับเข้าศูนย์
-						{/if}
-					</Button>
-				</div>
-			</div>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
+<ClaimDialog bind:open={claimOpen} bind:hit={selected} {shelterCode} />
+
+<AlertDialog.Root bind:open={overrideDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{OVERRIDE_NEW_REG_TITLE}</AlertDialog.Title>
+			<AlertDialog.Description>{OVERRIDE_NEW_REG_BODY}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{OVERRIDE_NEW_REG_CANCEL}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmOverride}>{OVERRIDE_NEW_REG_CONFIRM}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
