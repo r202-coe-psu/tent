@@ -1,13 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -16,23 +12,19 @@
 		CLAIM_FLOW_STATUS_GUIDANCE,
 		formatOpenMemberName,
 		isOnlineRequiredError,
-		pickReportInEvacueeId,
-		toggleMemberSelection,
-		useClaimUnassignedRegistration,
 		useUnassignedRegistrationSearch,
 		UnassignedRegistrationApiError,
 		type UnassignedRegistrationSearchHit
 	} from '../application/queries';
+	import ClaimDialog from './claim-dialog.svelte';
 	import UnassignedQueueBadge from './unassigned-queue-badge.svelte';
 
 	let searchQuery = $state('');
 	let submittedQuery = $state('');
 	let selected = $state<UnassignedRegistrationSearchHit | null>(null);
 	let claimOpen = $state(false);
-	let selectedMemberIds = $state<string[]>([]);
 
 	const search = useUnassignedRegistrationSearch(() => submittedQuery);
-	const claimMutation = useClaimUnassignedRegistration();
 
 	const results = $derived(search.data?.results ?? []);
 	const isPending = $derived(search.isPending && submittedQuery.length > 0);
@@ -43,20 +35,16 @@
 				(search.error instanceof UnassignedRegistrationApiError &&
 					search.error.code === 'ONLINE_REQUIRED'))
 	);
-	const canClaim = $derived(selectedMemberIds.length > 0 && !claimMutation.isPending);
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	function runSearch() {
 		submittedQuery = searchQuery.trim();
 		selected = null;
 		claimOpen = false;
-		selectedMemberIds = [];
 	}
 
 	function openClaimModal(hit: UnassignedRegistrationSearchHit) {
 		selected = hit;
-		// CR-113 / #247: checkboxes start empty — staff must tick present members.
-		selectedMemberIds = [];
 		claimOpen = true;
 	}
 
@@ -65,36 +53,6 @@
 		submittedQuery = '';
 		selected = null;
 		claimOpen = false;
-		selectedMemberIds = [];
-	}
-
-	function setMemberChecked(memberId: string, checked: boolean | 'indeterminate') {
-		selectedMemberIds = toggleMemberSelection(selectedMemberIds, memberId, checked === true);
-	}
-
-	async function submitClaim() {
-		if (!selected || selectedMemberIds.length === 0) return;
-		const registrationId = selected.id;
-		try {
-			const result = await claimMutation.mutateAsync({
-				registrationId,
-				payload: {
-					member_ids: selectedMemberIds,
-					...(shelterCode ? { shelter_code: shelterCode } : {})
-				}
-			});
-			const reportInId = pickReportInEvacueeId(result.evacuee_ids);
-			claimOpen = false;
-			selected = null;
-			selectedMemberIds = [];
-			if (reportInId) {
-				await goto(
-					resolve(`/onsite/people/${reportInId}/report-in` as `/onsite/people/${string}/report-in`)
-				);
-			}
-		} catch {
-			// toast handled in mutation onError
-		}
 	}
 </script>
 
@@ -207,62 +165,4 @@
 	{/if}
 </div>
 
-<Dialog.Root bind:open={claimOpen}>
-	<Dialog.Content class="flex max-h-[90vh] flex-col gap-4 sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
-			<Dialog.Description>
-				{CLAIM_FLOW_STATUS_GUIDANCE}
-			</Dialog.Description>
-		</Dialog.Header>
-		{#if selected}
-			<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-sm">
-				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
-					<div class="mb-2">
-						<UnassignedQueueBadge />
-					</div>
-					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
-					<p class="break-all text-slate-900 tabular-nums">{selected.id}</p>
-					<p class="mt-2 text-xs font-semibold text-slate-500">ครัวเรือนสำรอง</p>
-					<p class="break-all text-slate-900 tabular-nums">{selected.reserved_household_id}</p>
-				</div>
-				<div class="min-h-0 flex-1 overflow-y-auto">
-					<p class="mb-2 text-sm font-semibold text-slate-900">สมาชิกที่ยัง open</p>
-					<ul class="space-y-2">
-						{#each selected.open_members as member (member.reserved_evacuee_id)}
-							<li class="rounded-xl border border-slate-200/80 bg-white px-3 py-2">
-								<div class="flex items-start gap-3">
-									<Checkbox
-										checked={selectedMemberIds.includes(member.reserved_evacuee_id)}
-										onCheckedChange={(v) => setMemberChecked(member.reserved_evacuee_id, v)}
-										class="mt-1"
-										aria-label={`เลือก ${formatOpenMemberName(member)}`}
-									/>
-									<div class="min-w-0 flex-1">
-										<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
-										<p class="text-xs text-muted-foreground tabular-nums">
-											{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
-										</p>
-									</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</div>
-				<div class="flex flex-col gap-2 border-t border-slate-200/80 pt-3">
-					<p class="text-xs text-muted-foreground">
-						เลือกแล้ว {selectedMemberIds.length} / {selected.open_members.length} คน · คนที่ไม่ติ๊กยังคง
-						open ในคิวกลาง
-					</p>
-					<Button type="button" disabled={!canClaim} onclick={submitClaim} class="w-full">
-						{#if claimMutation.isPending}
-							กำลังรับเข้าศูนย์...
-						{:else}
-							ยืนยันรับเข้าศูนย์
-						{/if}
-					</Button>
-				</div>
-			</div>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
+<ClaimDialog bind:open={claimOpen} bind:hit={selected} {shelterCode} />

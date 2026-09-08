@@ -43,5 +43,6 @@ export {
 	useUnassignedRegistrationSearch
 } from './application/queries';
 
+export { default as ClaimDialog } from './ui/claim-dialog.svelte';
 export { default as UnassignedQueueSearchPanel } from './ui/unassigned-queue-search-panel.svelte';
 export { default as UnassignedQueueBadge } from './ui/unassigned-queue-badge.svelte';
