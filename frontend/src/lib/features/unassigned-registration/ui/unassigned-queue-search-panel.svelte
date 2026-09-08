@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
 
@@ -6,12 +8,17 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as Sheet from '$lib/components/ui/sheet';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	import {
+		UNASSIGNED_QUEUE_BADGE_LABEL,
+		UNASSIGNED_QUEUE_BADGE_SHORT,
 		formatOpenMemberName,
 		isOnlineRequiredError,
+		pickReportInEvacueeId,
 		toggleMemberSelection,
 		useClaimUnassignedRegistration,
 		useUnassignedRegistrationSearch,
@@ -22,7 +29,7 @@
 	let searchQuery = $state('');
 	let submittedQuery = $state('');
 	let selected = $state<UnassignedRegistrationSearchHit | null>(null);
-	let sheetOpen = $state(false);
+	let claimOpen = $state(false);
 	let selectedMemberIds = $state<string[]>([]);
 
 	const search = useUnassignedRegistrationSearch(() => submittedQuery);
@@ -38,25 +45,27 @@
 					search.error.code === 'ONLINE_REQUIRED'))
 	);
 	const canClaim = $derived(selectedMemberIds.length > 0 && !claimMutation.isPending);
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	function runSearch() {
 		submittedQuery = searchQuery.trim();
 		selected = null;
-		sheetOpen = false;
+		claimOpen = false;
 		selectedMemberIds = [];
 	}
 
-	function openDocument(hit: UnassignedRegistrationSearchHit) {
+	function openClaimModal(hit: UnassignedRegistrationSearchHit) {
 		selected = hit;
+		// CR-113 / #247: checkboxes start empty — staff must tick present members.
 		selectedMemberIds = [];
-		sheetOpen = true;
+		claimOpen = true;
 	}
 
 	function clearSearch() {
 		searchQuery = '';
 		submittedQuery = '';
 		selected = null;
-		sheetOpen = false;
+		claimOpen = false;
 		selectedMemberIds = [];
 	}
 
@@ -70,18 +79,19 @@
 		try {
 			const result = await claimMutation.mutateAsync({
 				registrationId,
-				payload: { member_ids: selectedMemberIds }
+				payload: {
+					member_ids: selectedMemberIds,
+					...(shelterCode ? { shelter_code: shelterCode } : {})
+				}
 			});
-			if (result.deleted || result.remaining_open.length === 0) {
-				sheetOpen = false;
-				selected = null;
-				selectedMemberIds = [];
-			} else {
-				selected = {
-					...selected,
-					open_members: result.remaining_open
-				};
-				selectedMemberIds = [];
+			const reportInId = pickReportInEvacueeId(result.evacuee_ids);
+			claimOpen = false;
+			selected = null;
+			selectedMemberIds = [];
+			if (reportInId) {
+				await goto(
+					resolve(`/onsite/people/${reportInId}/report-in` as `/onsite/people/${string}/report-in`)
+				);
 			}
 		} catch {
 			// toast handled in mutation onError
@@ -92,7 +102,9 @@
 <div class="flex flex-col gap-4">
 	<div class="rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-slate-700">
 		ค้นหาคิว <span class="font-semibold">ลงทะเบียนล่วงหน้าไม่ระบุศูนย์</span> จากส่วนกลาง (Mongo) —
-		เฉพาะสมาชิกที่ยัง <span class="font-semibold">open</span> · ต้องออนไลน์
+		เฉพาะสมาชิกที่ยัง <span class="font-semibold">open</span> · ต้องออนไลน์ ·
+		หลังรับเข้าศูนย์จะไปหน้า รายงานตัว (Report-in) เพื่อตั้งสถานะเป็น
+		<span class="font-semibold">arriving</span>
 	</div>
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -156,27 +168,44 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="bg-muted/30">
-							<Table.Head class="pl-4">สมาชิก open</Table.Head>
+							<Table.Head class="pl-4">แหล่ง</Table.Head>
+							<Table.Head>สมาชิก open</Table.Head>
 							<Table.Head>เบอร์โทร</Table.Head>
 							<Table.Head>เลขบัตร</Table.Head>
 							<Table.Head>สร้างเมื่อ</Table.Head>
-							<Table.Head class="pr-4">เอกสารคิว</Table.Head>
+							<Table.Head class="pr-4">การดำเนินการ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
 						{#each results as hit (hit.id)}
 							{#each hit.open_members as member (member.reserved_evacuee_id)}
-								<Table.Row class="cursor-pointer" onclick={() => openDocument(hit)}>
-									<Table.Cell class="pl-4 font-medium">{formatOpenMemberName(member)}</Table.Cell>
+								<Table.Row>
+									<Table.Cell class="pl-4">
+										<Badge
+											variant="outline"
+											class="border-sky-300 bg-sky-50 font-normal text-sky-900"
+											title={`[${UNASSIGNED_QUEUE_BADGE_LABEL}]`}
+										>
+											[{UNASSIGNED_QUEUE_BADGE_SHORT}]
+										</Badge>
+									</Table.Cell>
+									<Table.Cell class="font-medium">{formatOpenMemberName(member)}</Table.Cell>
 									<Table.Cell class="text-sm tabular-nums">{member.phone ?? '—'}</Table.Cell>
-									<Table.Cell class="text-sm tabular-nums"
-										>{member.person_id?.number ?? '—'}</Table.Cell
-									>
-									<Table.Cell class="text-xs text-muted-foreground"
-										>{hit.created_at.slice(0, 16).replace('T', ' ')}</Table.Cell
-									>
+									<Table.Cell class="text-sm tabular-nums">
+										{member.person_id?.number ?? '—'}
+									</Table.Cell>
+									<Table.Cell class="text-xs text-muted-foreground">
+										{hit.created_at.slice(0, 16).replace('T', ' ')}
+									</Table.Cell>
 									<Table.Cell class="pr-4">
-										<Badge variant="outline" class="font-normal">เปิดเอกสาร</Badge>
+										<Button
+											type="button"
+											size="sm"
+											variant="secondary"
+											onclick={() => openClaimModal(hit)}
+										>
+											รับเข้าศูนย์
+										</Button>
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -188,17 +217,23 @@
 	{/if}
 </div>
 
-<Sheet.Root bind:open={sheetOpen}>
-	<Sheet.Content side="right" class="flex w-full flex-col gap-4 sm:max-w-md">
-		<Sheet.Header>
-			<Sheet.Title>รับเข้าศูนย์ (claim)</Sheet.Title>
-			<Sheet.Description>
-				ติ๊กสมาชิกที่มาถึงศูนย์นี้ — จะสร้าง Evacuee ใน Couch ที่สถานะลงทะเบียนล่วงหน้า
-			</Sheet.Description>
-		</Sheet.Header>
+<Dialog.Root bind:open={claimOpen}>
+	<Dialog.Content class="flex max-h-[90vh] flex-col gap-4 sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
+			<Dialog.Description>
+				ติ๊กสมาชิกที่มาถึงศูนย์นี้ — สร้าง Evacuee ใน Couch ที่สถานะลงทะเบียนล่วงหน้า แล้วไปหน้า
+				รายงานตัวเพื่อตั้งเป็น arriving
+			</Dialog.Description>
+		</Dialog.Header>
 		{#if selected}
-			<div class="flex min-h-0 flex-1 flex-col gap-3 text-sm">
+			<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-sm">
 				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
+					<div class="mb-2">
+						<Badge variant="outline" class="border-sky-300 bg-sky-50 font-normal text-sky-900">
+							[{UNASSIGNED_QUEUE_BADGE_LABEL}]
+						</Badge>
+					</div>
 					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
 					<p class="break-all text-slate-900 tabular-nums">{selected.id}</p>
 					<p class="mt-2 text-xs font-semibold text-slate-500">ครัวเรือนสำรอง</p>
@@ -221,7 +256,6 @@
 										<p class="text-xs text-muted-foreground tabular-nums">
 											{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
 										</p>
-										<p class="mt-1 text-xs text-slate-500">{member.reserved_evacuee_id}</p>
 									</div>
 								</div>
 							</li>
@@ -237,11 +271,11 @@
 						{#if claimMutation.isPending}
 							กำลังรับเข้าศูนย์...
 						{:else}
-							รับเข้าศูนย์นี้
+							ยืนยันรับเข้าศูนย์
 						{/if}
 					</Button>
 				</div>
 			</div>
 		{/if}
-	</Sheet.Content>
-</Sheet.Root>
+	</Dialog.Content>
+</Dialog.Root>

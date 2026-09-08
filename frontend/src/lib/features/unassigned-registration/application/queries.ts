@@ -1,17 +1,25 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import { peopleKeys } from '$lib/features/people';
 import { unassignedRegistrationRemote } from '../data/unassigned-registration.remote';
 import type { UnassignedRegistrationClaimRequest } from '../domain/claim';
 import {
+	UNASSIGNED_QUEUE_BADGE_LABEL,
+	UNASSIGNED_QUEUE_BADGE_SHORT,
 	formatOpenMemberName,
 	isOnlineRequiredError,
 	type UnassignedRegistrationSearchHit
 } from '../domain/search';
 
-export { formatOpenMemberName, isOnlineRequiredError };
+export {
+	UNASSIGNED_QUEUE_BADGE_LABEL,
+	UNASSIGNED_QUEUE_BADGE_SHORT,
+	formatOpenMemberName,
+	isOnlineRequiredError
+};
 export type { UnassignedRegistrationSearchHit };
 export { UnassignedRegistrationApiError } from '../data/unassigned-registration.remote';
-export { toggleMemberSelection } from '../domain/claim';
+export { pickReportInEvacueeId, toggleMemberSelection } from '../domain/claim';
 export type {
 	UnassignedRegistrationClaimRequest,
 	UnassignedRegistrationClaimResponse
@@ -48,6 +56,8 @@ export function useClaimUnassignedRegistration() {
 		}) => unassignedRegistrationRemote.claimMembers(registrationId, payload),
 		onSuccess: (result) => {
 			queryClient.invalidateQueries({ queryKey: unassignedRegistrationKeys.all });
+			// Claim births Couch SoR — refresh Station 1 shelter queue.
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
 			const count = result.evacuee_ids.length;
 			const orphanQueueDoc =
 				!result.deleted && result.id != null && result.remaining_open.length === 0;

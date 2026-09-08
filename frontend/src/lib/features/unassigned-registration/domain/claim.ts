@@ -45,3 +45,14 @@ export function toggleMemberSelection(
 	}
 	return selected.filter((id) => id !== memberId);
 }
+
+/**
+ * After a successful claim, Station 1 continues into Report-in for the first
+ * birthed Couch evacuee (`pre_registered` → `arriving` on Report-in submit).
+ */
+export function pickReportInEvacueeId(
+	evacueeIds: readonly string[] | null | undefined
+): string | null {
+	const first = evacueeIds?.find((id) => typeof id === 'string' && id.trim().length > 0);
+	return first?.trim() ?? null;
+}

@@ -17,8 +17,17 @@ export type {
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
 
-export { formatOpenMemberName, isOnlineRequiredError } from './domain/search';
-export { toggleMemberSelection, unassignedRegistrationClaimResponseSchema } from './domain/claim';
+export {
+	UNASSIGNED_QUEUE_BADGE_LABEL,
+	UNASSIGNED_QUEUE_BADGE_SHORT,
+	formatOpenMemberName,
+	isOnlineRequiredError
+} from './domain/search';
+export {
+	pickReportInEvacueeId,
+	toggleMemberSelection,
+	unassignedRegistrationClaimResponseSchema
+} from './domain/claim';
 
 export type { UnassignedRegistrationRepository } from './data/unassigned-registration.repository';
 export {

@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { formatOpenMemberName, isOnlineRequiredError, openMemberHitSchema } from './search';
+import {
+	UNASSIGNED_QUEUE_BADGE_LABEL,
+	UNASSIGNED_QUEUE_BADGE_SHORT,
+	formatOpenMemberName,
+	isOnlineRequiredError,
+	openMemberHitSchema
+} from './search';
+
+describe('unassigned queue badges (#250)', () => {
+	it('exposes the distinct คิวกลาง labels for Station 1 results', () => {
+		expect(UNASSIGNED_QUEUE_BADGE_SHORT).toBe('คิวกลาง');
+		expect(UNASSIGNED_QUEUE_BADGE_LABEL).toBe('คิวกลาง / ยังไม่ระบุศูนย์');
+	});
+});
 
 describe('formatOpenMemberName', () => {
 	it('joins first and last name', () => {

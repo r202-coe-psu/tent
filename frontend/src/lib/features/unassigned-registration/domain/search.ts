@@ -5,6 +5,12 @@
 
 import { z } from 'zod';
 
+/** Full Station 1 badge copy for Unassigned Registration hits (#250 / CR-113). */
+export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยังไม่ระบุศูนย์';
+
+/** Compact badge text matching AC `[คิวกลาง]`. */
+export const UNASSIGNED_QUEUE_BADGE_SHORT = 'คิวกลาง';
+
 const personIdHitSchema = z.object({
 	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
 	number: z.string().nullable()

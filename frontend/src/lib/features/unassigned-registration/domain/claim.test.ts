@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { toggleMemberSelection, unassignedRegistrationClaimResponseSchema } from './claim';
+import {
+	pickReportInEvacueeId,
+	toggleMemberSelection,
+	unassignedRegistrationClaimResponseSchema
+} from './claim';
 
 describe('claim selection helpers', () => {
 	it('toggles member ids without mutating the prior selection', () => {
@@ -9,6 +13,17 @@ describe('claim selection helpers', () => {
 		expect(toggleMemberSelection(['evacuee:a', 'evacuee:b'], 'evacuee:a', false)).toEqual([
 			'evacuee:b'
 		]);
+	});
+});
+
+describe('pickReportInEvacueeId', () => {
+	it('returns the first claimed Couch id for Station 1 Report-in', () => {
+		expect(pickReportInEvacueeId(['evacuee:a', 'evacuee:b'])).toBe('evacuee:a');
+	});
+
+	it('returns null when claim created no evacuees', () => {
+		expect(pickReportInEvacueeId([])).toBeNull();
+		expect(pickReportInEvacueeId(undefined)).toBeNull();
 	});
 });
 
