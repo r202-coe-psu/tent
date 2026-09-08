@@ -4,6 +4,7 @@ import { peopleKeys } from '$lib/features/people';
 import { unassignedRegistrationRemote } from '../data/unassigned-registration.remote';
 import type { UnassignedRegistrationClaimRequest } from '../domain/claim';
 import {
+	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
 	formatOpenMemberName,
@@ -12,6 +13,7 @@ import {
 } from '../domain/search';
 
 export {
+	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
 	formatOpenMemberName,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
 	formatOpenMemberName,
@@ -11,6 +12,14 @@ describe('unassigned queue badges (#250)', () => {
 	it('exposes the distinct คิวกลาง labels for Station 1 results', () => {
 		expect(UNASSIGNED_QUEUE_BADGE_SHORT).toBe('คิวกลาง');
 		expect(UNASSIGNED_QUEUE_BADGE_LABEL).toBe('คิวกลาง / ยังไม่ระบุศูนย์');
+	});
+});
+
+describe('claim flow status guidance (#250 follow-up)', () => {
+	it('states claim creates pre_registered then Report-in advances to arriving', () => {
+		expect(CLAIM_FLOW_STATUS_GUIDANCE).toBe(
+			'รับเข้าศูนย์จะสร้าง Evacuee ใน Couch ที่สถานะ ลงทะเบียนล่วงหน้า (pre_registered) จากนั้นเปิดหน้า รายงานตัว (Report-in) เพื่อยืนยันข้อมูล แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving)'
+		);
 	});
 });
 

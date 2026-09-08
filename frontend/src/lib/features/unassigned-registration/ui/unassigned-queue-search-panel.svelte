@@ -6,7 +6,6 @@
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
@@ -14,8 +13,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	import {
-		UNASSIGNED_QUEUE_BADGE_LABEL,
-		UNASSIGNED_QUEUE_BADGE_SHORT,
+		CLAIM_FLOW_STATUS_GUIDANCE,
 		formatOpenMemberName,
 		isOnlineRequiredError,
 		pickReportInEvacueeId,
@@ -25,6 +23,7 @@
 		UnassignedRegistrationApiError,
 		type UnassignedRegistrationSearchHit
 	} from '../application/queries';
+	import UnassignedQueueBadge from './unassigned-queue-badge.svelte';
 
 	let searchQuery = $state('');
 	let submittedQuery = $state('');
@@ -101,10 +100,7 @@
 
 <div class="flex flex-col gap-4">
 	<div class="rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-slate-700">
-		ค้นหาคิว <span class="font-semibold">ลงทะเบียนล่วงหน้าไม่ระบุศูนย์</span> จากส่วนกลาง (Mongo) —
-		เฉพาะสมาชิกที่ยัง <span class="font-semibold">open</span> · ต้องออนไลน์ ·
-		หลังรับเข้าศูนย์จะไปหน้า รายงานตัว (Report-in) เพื่อตั้งสถานะเป็น
-		<span class="font-semibold">arriving</span>
+		{CLAIM_FLOW_STATUS_GUIDANCE}
 	</div>
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -181,13 +177,7 @@
 							{#each hit.open_members as member (member.reserved_evacuee_id)}
 								<Table.Row>
 									<Table.Cell class="pl-4">
-										<Badge
-											variant="outline"
-											class="border-sky-300 bg-sky-50 font-normal text-sky-900"
-											title={`[${UNASSIGNED_QUEUE_BADGE_LABEL}]`}
-										>
-											[{UNASSIGNED_QUEUE_BADGE_SHORT}]
-										</Badge>
+										<UnassignedQueueBadge compact />
 									</Table.Cell>
 									<Table.Cell class="font-medium">{formatOpenMemberName(member)}</Table.Cell>
 									<Table.Cell class="text-sm tabular-nums">{member.phone ?? '—'}</Table.Cell>
@@ -222,17 +212,14 @@
 		<Dialog.Header>
 			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
 			<Dialog.Description>
-				ติ๊กสมาชิกที่มาถึงศูนย์นี้ — สร้าง Evacuee ใน Couch ที่สถานะลงทะเบียนล่วงหน้า แล้วไปหน้า
-				รายงานตัวเพื่อตั้งเป็น arriving
+				{CLAIM_FLOW_STATUS_GUIDANCE}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if selected}
 			<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-sm">
 				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
 					<div class="mb-2">
-						<Badge variant="outline" class="border-sky-300 bg-sky-50 font-normal text-sky-900">
-							[{UNASSIGNED_QUEUE_BADGE_LABEL}]
-						</Badge>
+						<UnassignedQueueBadge />
 					</div>
 					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
 					<p class="break-all text-slate-900 tabular-nums">{selected.id}</p>

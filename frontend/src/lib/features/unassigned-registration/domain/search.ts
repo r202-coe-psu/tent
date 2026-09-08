@@ -11,6 +11,13 @@ export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยัง�
 /** Compact badge text matching AC `[คิวกลาง]`. */
 export const UNASSIGNED_QUEUE_BADGE_SHORT = 'คิวกลาง';
 
+/**
+ * Shared Station 1 claim-flow copy (banner + claim dialog).
+ * Claim births Couch at `pre_registered` (CR-113); Report-in submit sets `arriving` (CR-106).
+ */
+export const CLAIM_FLOW_STATUS_GUIDANCE =
+	'รับเข้าศูนย์จะสร้าง Evacuee ใน Couch ที่สถานะ ลงทะเบียนล่วงหน้า (pre_registered) จากนั้นเปิดหน้า รายงานตัว (Report-in) เพื่อยืนยันข้อมูล แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving)';
+
 const personIdHitSchema = z.object({
 	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
 	number: z.string().nullable()
