@@ -17,6 +17,8 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import Check from '@lucide/svelte/icons/check';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import X from '@lucide/svelte/icons/x';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -24,18 +26,25 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { computeQuota } from '../domain/quota';
 	import type { Job } from '../domain/job.schema';
-	import type { JobApplication } from '../domain/job-application.schema';
+	import {
+		JOB_APPLICATION_REVIEW_REASON_LABEL,
+		type JobApplication
+	} from '../domain/job-application.schema';
+	import type { Volunteer } from '../domain/volunteer.schema';
+	import { identityVerificationStatus, VERIFICATION_STATUS_LABEL } from '../domain/verification';
 	import { useReviewApplication } from '../application/queries';
 
 	let {
 		open = $bindable(false),
 		job,
 		application,
+		volunteer = null,
 		decision
 	}: {
 		open?: boolean;
 		job: Job;
 		application: JobApplication | null;
+		volunteer?: Volunteer | null;
 		decision: 'confirmed' | 'rejected';
 	} = $props();
 
@@ -52,6 +61,7 @@
 	const applicantName = $derived(
 		application ? `${application.applicant.first_name} ${application.applicant.last_name}` : ''
 	);
+	const identityStatus = $derived(volunteer ? identityVerificationStatus(volunteer) : null);
 	const remaining = $derived(computeQuota(job).remaining);
 	const jobFull = $derived(approving && remaining <= 0);
 	const notesRequired = $derived(!approving);
@@ -104,6 +114,41 @@
 				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span> — โควตาจะไม่ถูกตัด
 			{/if}
 		</p>
+
+		{#if application}
+			<div class="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+				<div class="flex items-center justify-between gap-2">
+					<p class="text-xs font-bold text-foreground">เช็กลิสต์ก่อนอนุมัติงาน</p>
+					<span class="text-2xs text-muted-foreground">ตรวจคน ≠ อนุมัติงาน</span>
+				</div>
+				<div class="grid gap-2 text-xs sm:grid-cols-2">
+					<div class="flex items-center gap-2 rounded-lg bg-background p-2">
+						{#if identityStatus === 'verified'}
+							<CheckCircle2 class="h-4 w-4 text-emerald-600" />
+						{:else}
+							<CircleAlert class="h-4 w-4 text-amber-600" />
+						{/if}
+						<span
+							>ตัวตน: {identityStatus
+								? VERIFICATION_STATUS_LABEL[identityStatus]
+								: 'ยังไม่เชื่อมโปรไฟล์'}</span
+						>
+					</div>
+					<div class="flex items-center gap-2 rounded-lg bg-background p-2">
+						<CheckCircle2 class="h-4 w-4 text-sky-600" />
+						<span>ความเหมาะสมของงาน: ผู้ดูแลงานเป็นผู้ตัดสินใจ</span>
+					</div>
+				</div>
+				{#if (application.review_reasons ?? []).length > 0}
+					<p class="text-2xs text-muted-foreground">
+						เหตุผลที่เข้าคิว:
+						{(application.review_reasons ?? [])
+							.map((reason) => JOB_APPLICATION_REVIEW_REASON_LABEL[reason])
+							.join(' · ')}
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		{#if jobFull}
 			<div class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/60 p-3">

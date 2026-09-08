@@ -54,6 +54,7 @@ class VolunteerApplicationBuffer(Document):
     tracking_token: str
     tracking_token_hash: str
     status: str = "pending_review"
+    review_reasons: list[str] = Field(default_factory=list)
     synced_to_couch: bool = False
     created_at: datetime
 

@@ -1,40 +1,52 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import Search from '@lucide/svelte/icons/search';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
+	import { getTicket } from '$lib/features/volunteer-portal/data/volunteer-api';
 	import VolunteerQrScannerModal from './VolunteerQrScannerModal.svelte';
-
-	let { onSearch } = $props<{
-		onSearch: (query: string) => void;
-	}>();
 
 	const t = $derived(jobsI18n[languageStore.current]);
 
 	let searchQuery = $state('');
 	let isScannerOpen = $state(false);
 	let errorMessage = $state('');
+	let isSearching = $state(false);
+	let ticketNotFound = $state(false);
 
-	function handleSearch(e: Event) {
-		e.preventDefault();
+	async function searchTicket(query: string) {
 		errorMessage = '';
-		const trimmed = searchQuery.trim();
+		ticketNotFound = false;
+		const trimmed = query.trim();
 		if (!trimmed) {
 			errorMessage = t.ticketErrorEmpty;
 			return;
 		}
-		onSearch(trimmed);
+
+		isSearching = true;
+		try {
+			await getTicket(trimmed);
+			await goto(`/volunteer/ticket/${encodeURIComponent(trimmed)}`);
+		} catch {
+			ticketNotFound = true;
+		} finally {
+			isSearching = false;
+		}
+	}
+
+	function handleSearch(e: SubmitEvent) {
+		e.preventDefault();
+		void searchTicket(searchQuery);
 	}
 
 	function handleScan(scannedToken: string) {
-		errorMessage = '';
 		const trimmed = scannedToken.trim();
-		if (trimmed) {
-			searchQuery = trimmed;
-			onSearch(trimmed);
-		}
+		if (!trimmed) return;
+		searchQuery = trimmed;
+		void searchTicket(trimmed);
 	}
 </script>
 
@@ -70,9 +82,10 @@
 			</button>
 			<button
 				type="submit"
-				class="flex-1 cursor-pointer rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark active:scale-95 sm:flex-initial"
+				disabled={isSearching}
+				class="flex-1 cursor-pointer rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark active:scale-95 disabled:cursor-wait disabled:opacity-60 sm:flex-initial"
 			>
-				{t.ticketSearchButton}
+				{isSearching ? t.ticketSearching : t.ticketSearchButton}
 			</button>
 		</div>
 	</form>
@@ -93,16 +106,33 @@
 		title={t.ticketScanTitle}
 	/>
 
-	<!-- Search Placeholder Card -->
-	<div class="mt-8 rounded-2xl border border-dashed border-border bg-muted/5 p-10 text-center">
+	{#if ticketNotFound}
+		<!-- Keep failed searches on this page instead of navigating to a broken pass URL. -->
 		<div
-			class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card text-muted-foreground/60 shadow-xs"
+			class="mt-8 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 p-10 text-center"
 		>
-			<QrCode class="h-7 w-7" />
+			<div
+				class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-destructive/20 bg-card text-destructive shadow-xs"
+			>
+				<CircleAlert class="h-7 w-7" />
+			</div>
+			<h4 class="text-sm font-bold text-foreground">{t.ticketNotFoundTitle}</h4>
+			<p class="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
+				{t.ticketNotFoundDesc}
+			</p>
 		</div>
-		<h4 class="text-sm font-bold text-foreground">{t.ticketEmptySearchTitle}</h4>
-		<p class="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
-			{t.ticketEmptySearchDesc}
-		</p>
-	</div>
+	{:else}
+		<!-- Search Placeholder Card -->
+		<div class="mt-8 rounded-2xl border border-dashed border-border bg-muted/5 p-10 text-center">
+			<div
+				class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card text-muted-foreground/60 shadow-xs"
+			>
+				<QrCode class="h-7 w-7" />
+			</div>
+			<h4 class="text-sm font-bold text-foreground">{t.ticketEmptySearchTitle}</h4>
+			<p class="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
+				{t.ticketEmptySearchDesc}
+			</p>
+		</div>
+	{/if}
 </div>

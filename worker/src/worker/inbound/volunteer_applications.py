@@ -66,6 +66,13 @@ def _volunteer_doc(
         "current_shelter_code": application.shelter_code,
         "volunteer_code": f"V-{code_num}",
         "identity_verified": False,
+        "identity_verification": {
+            "status": "pending",
+            "reviewed_at": None,
+            "reviewed_by": None,
+            "notes": None,
+        },
+        "skill_verifications": {},
         "source": "public_apply",
         "personnel_type": "volunteer",
     }
@@ -107,6 +114,7 @@ def _application_doc(
         "tracking_token": application.tracking_token,
         "tracking_token_hash": application.tracking_token_hash,
         "status": application.status,
+        "review_reasons": list(application.review_reasons),
         "review_notes": None,
         "reviewed_at": None,
         "reviewed_by": None,

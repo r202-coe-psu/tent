@@ -183,6 +183,7 @@ def project_job_application(
             "station": shift.get("station"),
         },
         "status": str(doc.get("status") or "pending_review"),
+        "review_reasons": [str(reason) for reason in (doc.get("review_reasons") or [])],
         "updated_at": _updated_at(doc),
     }
     return "upsert", payload

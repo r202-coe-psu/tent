@@ -24,6 +24,7 @@ export interface JobsTranslations {
 	loadingJobs: string;
 	noJobsFound: string;
 	noJobsFoundDesc: string;
+	paginationSummary: (from: number, to: number, total: number) => string;
 	clearAllFilters: string;
 	generalMission: string;
 	controlledMission: string;
@@ -139,6 +140,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		loadingJobs: 'กำลังโหลดข้อมูลตลาดงาน...',
 		noJobsFound: 'ไม่พบกะงานที่ตรงกับเงื่อนไขการค้นหา',
 		noJobsFoundDesc: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น',
+		paginationSummary: (from, to, total) => `แสดงงานที่ ${from} - ${to} จากทั้งหมด ${total} งาน`,
 		clearAllFilters: 'ล้างตัวกรองทั้งหมด',
 		generalMission: 'ภารกิจทั่วไป',
 		controlledMission: 'ภารกิจควบคุม',
@@ -256,6 +258,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		loadingJobs: 'Loading volunteer jobs...',
 		noJobsFound: 'No volunteer shifts match your search criteria',
 		noJobsFoundDesc: 'Try adjusting your search filters or select a different shelter',
+		paginationSummary: (from, to, total) => `Showing jobs ${from} - ${to} of ${total}`,
 		clearAllFilters: 'Clear all filters',
 		generalMission: 'General Mission',
 		controlledMission: 'Controlled Mission',

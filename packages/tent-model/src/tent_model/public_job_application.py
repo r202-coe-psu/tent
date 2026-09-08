@@ -51,6 +51,7 @@ class PublicJobApplication(Document):
     selected_shift: SelectedShift = Field(default_factory=SelectedShift)
     # CR-092: confirmed (auto-accepted) | pending_review (controlled skill) | cancelled
     status: str = "pending_review"
+    review_reasons: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime
 

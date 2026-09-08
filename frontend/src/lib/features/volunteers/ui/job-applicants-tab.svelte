@@ -44,6 +44,7 @@
 	const codeByVolunteerId = $derived(
 		new Map((volunteersQuery.data ?? []).map((v) => [v._id, v.volunteer_code]))
 	);
+	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 
 	/**
 	 * "มอบหมายแล้ว" counts real `shift_assignment` rows rather than
@@ -157,6 +158,9 @@
 				{#each queue.pending as application (application._id)}
 					<JobApplicantRow
 						{application}
+						volunteer={application.volunteer_id
+							? (volunteerById.get(application.volunteer_id) ?? null)
+							: null}
 						volunteerCode={application.volunteer_id
 							? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 							: null}
@@ -179,6 +183,9 @@
 						{#each queue.reviewed as application (application._id)}
 							<JobApplicantRow
 								{application}
+								volunteer={application.volunteer_id
+									? (volunteerById.get(application.volunteer_id) ?? null)
+									: null}
 								volunteerCode={application.volunteer_id
 									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 									: null}
@@ -197,6 +204,9 @@
 		bind:open={reviewOpen}
 		{job}
 		application={reviewTarget}
+		volunteer={reviewTarget?.volunteer_id
+			? (volunteerById.get(reviewTarget.volunteer_id) ?? null)
+			: null}
 		decision={reviewDecision}
 	/>
 </div>

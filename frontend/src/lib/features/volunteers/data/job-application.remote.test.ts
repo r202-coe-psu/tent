@@ -80,6 +80,7 @@ describe('JobApplicationRemoteRepository', () => {
 
 		const application = await applications.create(applicationInput(job._id), ctx);
 		expect(application.status).toBe('confirmed');
+		expect(application.review_reasons).toEqual([]);
 
 		const reloadedJob = await jobs.get(job._id);
 		expect(reloadedJob).toMatchObject({
@@ -96,6 +97,7 @@ describe('JobApplicationRemoteRepository', () => {
 
 		const application = await applications.create(applicationInput(job._id), ctx);
 		expect(application.status).toBe('pending_review');
+		expect(application.review_reasons).toEqual(['job_fit']);
 
 		const reloadedJob = await jobs.get(job._id);
 		expect(reloadedJob).toMatchObject({
@@ -112,6 +114,7 @@ describe('JobApplicationRemoteRepository', () => {
 
 		const application = await applications.create(applicationInput(job._id, ['พยาบาล']), ctx);
 		expect(application.status).toBe('pending_review');
+		expect(application.review_reasons).toEqual(['skill_certification']);
 
 		const reloadedJob = await jobs.get(job._id);
 		expect(reloadedJob).toMatchObject({

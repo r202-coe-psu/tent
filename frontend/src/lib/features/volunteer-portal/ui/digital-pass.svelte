@@ -34,9 +34,10 @@
 
 	interface Props {
 		token: string;
+		hideQr?: boolean;
 	}
 
-	let { token }: Props = $props();
+	let { token, hideQr = false }: Props = $props();
 
 	let cancelDialogOpen = $state(false);
 
@@ -55,7 +56,7 @@
 	 * would be PII held up at a shelter gate.
 	 */
 	const qrPromise = $derived.by(() => {
-		if (!ticket) return null;
+		if (!ticket || hideQr) return null;
 		try {
 			const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
 			const fullUrl = new URL(ticket.qr_payload, baseUrl).toString();
@@ -151,7 +152,10 @@
 		const link = document.createElement('a');
 		link.href = dataUrl;
 		link.download = `volunteer-ticket-${token}.png`;
+		link.style.display = 'none';
+		document.body.appendChild(link);
 		link.click();
+		link.remove();
 	}
 
 	async function confirmCancelTicket() {
@@ -188,12 +192,6 @@
 			<Search class="mr-1.5 size-3.5" aria-hidden="true" />
 			{t.findOtherTicket}
 		</Button>
-		<div
-			class="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-600 shadow-xs"
-		>
-			<span class="inline-block size-2 animate-pulse rounded-full bg-emerald-500"></span>
-			{t.offlineCached}
-		</div>
 	</div>
 
 	{#if query.isPending}
@@ -298,43 +296,49 @@
 					</div>
 				{/if}
 
-				<!-- QR Code Ticket Section -->
-				<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 text-center">
-					<div
-						class="mb-2 inline-block rounded-full bg-sky-50 px-3 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-700 uppercase"
-					>
-						{t.onSiteVerificationBadge}
-					</div>
-					<h2 class="text-sm font-bold text-slate-800">{t.onSiteVerificationTitle}</h2>
-					<p class="mt-0.5 text-[11px] text-slate-500">{t.onSiteVerificationSubtitle}</p>
+				<!-- QR Code Ticket Section (not needed when opened from the volunteer portal) -->
+				{#if !hideQr}
+					<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 text-center">
+						<div
+							class="mb-2 inline-block rounded-full bg-sky-50 px-3 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-700 uppercase"
+						>
+							{t.onSiteVerificationBadge}
+						</div>
+						<h2 class="text-sm font-bold text-slate-800">{t.onSiteVerificationTitle}</h2>
+						<p class="mt-0.5 text-[11px] text-slate-500">{t.onSiteVerificationSubtitle}</p>
 
-					<div class="my-5 inline-block rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
-						{#if qrPromise}
-							{#await qrPromise}
-								<div class="flex size-40 items-center justify-center">
-									<Skeleton class="size-40 rounded-lg" />
-								</div>
-							{:then dataUrl}
-								<img
-									src={dataUrl}
-									alt={t.qrAlt}
-									class="mx-auto size-40 rounded-lg object-contain"
-								/>
-							{:catch}
-								<div class="flex size-40 items-center justify-center text-xs text-muted-foreground">
-									{t.qrError}
-								</div>
-							{/await}
-						{/if}
-					</div>
+						<div
+							class="my-5 inline-block rounded-2xl border border-slate-200 bg-white p-3 shadow-xs"
+						>
+							{#if qrPromise}
+								{#await qrPromise}
+									<div class="flex size-40 items-center justify-center">
+										<Skeleton class="size-40 rounded-lg" />
+									</div>
+								{:then dataUrl}
+									<img
+										src={dataUrl}
+										alt={t.qrAlt}
+										class="mx-auto size-40 rounded-lg object-contain"
+									/>
+								{:catch}
+									<div
+										class="flex size-40 items-center justify-center text-xs text-muted-foreground"
+									>
+										{t.qrError}
+									</div>
+								{/await}
+							{/if}
+						</div>
 
-					<div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-						{t.ticketPassCodeLabel}
+						<div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+							{t.ticketPassCodeLabel}
+						</div>
+						<div class="mt-0.5 text-sm font-bold tracking-wider text-slate-800 select-all">
+							{ticket.token}
+						</div>
 					</div>
-					<div class="mt-0.5 text-sm font-bold tracking-wider text-slate-800 select-all">
-						{ticket.token}
-					</div>
-				</div>
+				{/if}
 
 				<!-- Appointment & Location 2-col Grid -->
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -398,8 +402,8 @@
 
 				<!-- CTA Buttons -->
 				<div class="space-y-2 pt-1">
-					<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-						{#if qrPromise}
+					<div class:grid-cols-1={hideQr} class="grid gap-2 md:grid-cols-2">
+						{#if !hideQr && qrPromise}
 							{#await qrPromise then dataUrl}
 								<button
 									class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#071933]"

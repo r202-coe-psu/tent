@@ -504,7 +504,12 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `checked_in` | bool | req | สถานะกำลังปฏิบัติงานสดหน้างาน ณ ปัจจุบัน (default `false`) |
 | `current_shelter_code` | str\|null | opt | รหัสศูนย์ที่กำลังปฏิบัติงานอยู่ในปัจจุบัน |
 | `user_name` | str\|null | opt | ชื่อผู้ใช้ใน `_users` (เฉพาะอาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์ชั่วคราว) |
+| `identity_verified` | bool | req | compatibility flag เดิมสำหรับ gate เข้างาน; sync จาก `identity_verification.status` เมื่อผ่านการตรวจ |
+| `identity_verification` | {`status`,`reviewed_at`,`reviewed_by`,`notes`} | opt | ผลตรวจตัวตนระดับ volunteer: `pending` / `verified` / `rejected` |
+| `skill_verifications` | map<skill_code, {`status`,`reviewed_at`,`reviewed_by`,`notes`,`credential_reference`}> | opt | ผลรับรองทักษะควบคุมระดับ volunteer พร้อมเลขใบอนุญาต/เลข ว./เลขอ้างอิงเอกสาร; ไม่เปลี่ยนรายการ `skills` |
 | `status` | enum(`active`,`inactive`) | req | default `active` |
+
+**Additive migration:** เอกสารเก่าที่ไม่มี review fields เติม `identity_verification` จาก `identity_verified` และเติม `skill_verifications: {}`; ไม่เปลี่ยน `identity_verified` และไม่ลบทักษะเดิม. ใช้ `pnpm migrate:volunteer-review --write --confirm` ใน `frontend/`.
 
 **Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
@@ -730,6 +735,7 @@ open → escalated
 | `tracking_token` | str | opt | token แบบ plaintext สำหรับเอกสารเก่า/เอกสารที่เจ้าหน้าที่สร้าง; public apply ใหม่ไม่เก็บค่านี้ใน CouchDB |
 | `tracking_token_hash` | str | req (public apply) | SHA-256 ของ token สำหรับค้นหาตั๋วโดยไม่เปิดเผย bearer token |
 | `status` | enum(`confirmed`,`pending_review`,`cancelled`) | req | default `confirmed` (เมื่อ auto_accept=true) |
+| `review_reasons` | [enum(`identity`,`skill_certification`,`job_fit`,`legacy_review`)] | opt | เหตุผลที่ใบสมัครต้องพิจารณา; เป็นสถานะระดับงาน แยกจาก review ของ volunteer |
 
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(job_id, status)` · `(tracking_token)` · `(volunteer_id, status)`
@@ -737,6 +743,8 @@ open → escalated
 **Migration (schema_v 1 → 2):** `pending → pending_review` · `accepted → confirmed` · `rejected`/`cancelled` คงเดิม ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
 
 **Migration (schema_v 2 → 3):** เอกสารใหม่เขียน `shift_id` และ `selected_shift.shift_id`; เอกสารเก่ายังอ่านได้โดยไม่มี batch migration ในรอบนี้.
+
+**Additive review migration:** เติม `review_reasons` จาก `job.tier`, `job.auto_accept` และทักษะควบคุมเท่าที่อนุมานได้; ถ้าอนุมานไม่ได้ให้ `legacy_review` เฉพาะใบสมัครที่ `pending_review`.
 
 ### 2.19 `donation_redirect` — `donation_redirect:{ulid}` · **schema_v 1**
 

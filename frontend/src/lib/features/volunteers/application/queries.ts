@@ -38,6 +38,7 @@ import type {
 } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
+import type { VerificationStatus } from '../domain/verification';
 import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
@@ -428,6 +429,55 @@ export const useCreateWalkInVolunteer = (queryClient: QueryClient) =>
 export const useUpdateVolunteer = (queryClient: QueryClient) =>
 	createMutation(() => ({
 		mutationFn: (volunteer: Volunteer) => volunteerRepository().update(volunteer),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/** Records the reusable volunteer identity decision, separate from any job application. */
+export const useReviewVolunteerIdentity = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: ({
+			id,
+			status,
+			notes
+		}: {
+			id: string;
+			status: VerificationStatus;
+			notes?: string | null;
+		}) =>
+			volunteerRepository().reviewIdentity(id, status, authStore.user?.name ?? 'unknown', notes),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/** Records one controlled-skill decision, separate from job application review. */
+export const useReviewVolunteerSkill = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: ({
+			id,
+			skillCode,
+			status,
+			notes,
+			credentialReference
+		}: {
+			id: string;
+			skillCode: string;
+			status: VerificationStatus;
+			notes?: string | null;
+			credentialReference?: string | null;
+		}) =>
+			volunteerRepository().reviewSkill(
+				id,
+				skillCode,
+				status,
+				authStore.user?.name ?? 'unknown',
+				notes,
+				credentialReference
+			),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });

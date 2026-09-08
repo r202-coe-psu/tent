@@ -140,6 +140,14 @@ describe('makeJobApplication', () => {
 		expect(app.review_notes).toBeNull();
 		expect(app.reviewed_at).toBeNull();
 		expect(app.reviewed_by).toBeNull();
+		expect(app.review_reasons).toEqual([]);
+	});
+
+	it('persists review reasons separately from the application status', () => {
+		const app = makeJobApplication(baseInput, ctx, 'pending_review', {
+			reviewReasons: ['skill_certification', 'job_fit']
+		});
+		expect(app.review_reasons).toEqual(['skill_certification', 'job_fit']);
 	});
 
 	it('can mint directly into confirmed (auto_accept path)', () => {

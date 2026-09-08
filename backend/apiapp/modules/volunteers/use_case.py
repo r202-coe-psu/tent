@@ -178,6 +178,17 @@ def _needs_review(job: PublicJob, skills: list[str], controlled: frozenset[str])
     return not job.auto_accept
 
 
+def _review_reasons(job: PublicJob, skills: list[str], controlled: frozenset[str]) -> list[str]:
+    """Persist why a ticket is queued; identity review stays on the volunteer profile."""
+    reasons: list[str] = []
+    normalized_controlled = {value.strip().casefold() for value in controlled}
+    if any(skill.strip().casefold() in normalized_controlled for skill in skills):
+        reasons.append("skill_certification")
+    if job.tier != "operational" or job.auto_accept is not True:
+        reasons.append("job_fit")
+    return reasons
+
+
 async def _shelter_names(codes: set[str]) -> dict[str, str]:
     if not codes:
         return {}
@@ -447,6 +458,7 @@ class VolunteersUseCase:
             tracking_token=token,
             tracking_token_hash=token_hash,
             status="pending_review" if needs_review else "confirmed",
+            review_reasons=_review_reasons(job, payload.skills, controlled),
             synced_to_couch=False,
             created_at=now,
         )

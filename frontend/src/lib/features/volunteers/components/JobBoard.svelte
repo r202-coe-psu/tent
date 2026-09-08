@@ -7,6 +7,7 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Tag from '@lucide/svelte/icons/tag';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { fetchVolunteerSkills } from '$lib/features/volunteer-portal/data/volunteer-api';
 	import { findSkillOption, skillLabel } from '$lib/features/volunteer-portal/domain/skill-label';
@@ -334,6 +335,8 @@
 	let selectedFilter = $state<'all' | 'open' | 'near_full' | 'controlled'>('all');
 	let selectedShelter = $state('all');
 	let selectedSkill = $state('all');
+	const PAGE_SIZE = 6;
+	let currentPage = $state(1);
 
 	// Unique list of shelters for the filter
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
@@ -414,6 +417,25 @@
 			return true;
 		})
 	);
+
+	const filterState = $derived(
+		`${searchQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
+	);
+	const totalPages = $derived(Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE)));
+	const paginatedJobs = $derived(
+		filteredJobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	);
+
+	// A changed search/filter should always show the first page of the new result set.
+	$effect(() => {
+		void filterState;
+		currentPage = 1;
+	});
+
+	// Keep the current page valid when a filter removes the last visible page.
+	$effect(() => {
+		if (currentPage > totalPages) currentPage = totalPages;
+	});
 
 	function openApplyModal(jobId: string, shiftId: string) {
 		const found = displayedJobs.find((j) => j.id === jobId);
@@ -620,7 +642,7 @@
 				<Skeleton class="h-44 rounded-2xl" />
 			</div>
 		{:else}
-			{#each filteredJobs as job (job.id)}
+			{#each paginatedJobs as job (job.id)}
 				<JobCard {job} onApply={openApplyModal} />
 			{:else}
 				<div
@@ -635,6 +657,40 @@
 			{/each}
 		{/if}
 	</div>
+
+	{#if !isLoading && filteredJobs.length > 0}
+		<div
+			class="flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-4 sm:flex-row"
+		>
+			<p class="text-xs text-muted-foreground">
+				{t.paginationSummary(
+					(currentPage - 1) * PAGE_SIZE + 1,
+					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
+					filteredJobs.length
+				)}
+			</p>
+
+			{#if totalPages > 1}
+				<Pagination.Root bind:page={currentPage} count={filteredJobs.length} perPage={PAGE_SIZE}>
+					{#snippet children({ pages })}
+						<Pagination.Content>
+							<Pagination.Previous />
+							{#each pages as page, index (index)}
+								<Pagination.Item>
+									{#if page.type === 'page'}
+										<Pagination.Link {page} isActive={page.value === currentPage} />
+									{:else}
+										<Pagination.Ellipsis />
+									{/if}
+								</Pagination.Item>
+							{/each}
+							<Pagination.Next />
+						</Pagination.Content>
+					{/snippet}
+				</Pagination.Root>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <QuickApplyModal

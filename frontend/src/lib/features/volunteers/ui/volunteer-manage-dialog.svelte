@@ -8,16 +8,13 @@
 	 * / เบอร์โทรศัพท์ / ทักษะทั่วไป / ชนิดบุคคล are real edits through
 	 * `VolunteerRepository#update()` (`useUpdateVolunteer`, LWW read-modify-write) —
 	 * ชนิดบุคคล backed by `volunteer.personnel_type` (CR-095, schema_v 2 → 3).
-	 * Everything else here has no backing repository method yet, so it stays a
-	 * UI-only stub that toasts, same convention as the rest of the card:
+	 * Identity and controlled-skill review are persisted here as volunteer-level
+	 * decisions. Job suitability stays on Job Details > Applicants:
 	 *   - กะที่มอบหมาย (ASSIGNED SHIFT): lives on `shift_assignment` (via job
 	 *     dispatch), not on `volunteer` — there is no "set default shift" call.
 	 *   - ออกสิทธิ์เข้าใช้งานระบบหลังบ้าน: no RoleKey-grant repository call
 	 *     exists yet (FR-VOL-05R).
-	 *   - ตรวจสอบ/รับรองทักษะควบคุม: no `verifyIdentity`-shaped repository
-	 *     method exists yet.
-	 * All flagged for the CR alongside the same schema gaps `volunteer-card.svelte`
-	 * already flags.
+	 *   - กะที่มอบหมาย and back-office access remain outside this dialog.
 	 */
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
@@ -31,11 +28,22 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { useUpdateVolunteer, useSkillOptions } from '../application/queries';
+	import {
+		useReviewVolunteerIdentity,
+		useUpdateVolunteer,
+		useSkillOptions
+	} from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
 	import { toSkillCode, toSkillCodes } from '../domain/skill-catalog';
+	import {
+		identityVerificationStatus,
+		skillVerificationStatus,
+		VERIFICATION_STATUS_LABEL,
+		type VerificationStatus
+	} from '../domain/verification';
 	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -43,16 +51,19 @@
 		open = $bindable(false),
 		volunteer,
 		shelterLine,
-		todayShift
+		todayShift,
+		onOpenQualificationAudit = () => {}
 	}: {
 		open?: boolean;
 		volunteer: Volunteer;
 		shelterLine: string;
 		todayShift: ShiftKind | null | undefined;
+		onOpenQualificationAudit?: (skillCode: string) => void;
 	} = $props();
 
 	const queryClient = useQueryClient();
 	const updateMutation = useUpdateVolunteer(queryClient);
+	const identityReviewMutation = useReviewVolunteerIdentity(queryClient);
 
 	// Master Data `volunteer_skills`, effective for this shelter (CR-100) —
 	// the same source used by the job and walk-in forms.
@@ -76,6 +87,7 @@
 	let selectedSkills = $state<string[]>([]);
 	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
+	let verificationNotes = $state('');
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
 	// (possibly different) row — mirrors `job-form-dialog.svelte`'s `lastOpenedKey`.
@@ -104,6 +116,29 @@
 	const generalSelectedCount = $derived(
 		selectedSkills.filter((s) => !isControlledSkill(s, skillCatalog.controlledValues)).length
 	);
+	const identityStatus = $derived(identityVerificationStatus(volunteer));
+	const identityActionStatus = $derived<VerificationStatus>(
+		identityStatus === 'verified' ? 'pending' : 'verified'
+	);
+	const identityActionLabel = $derived(
+		identityStatus === 'verified' ? 'ส่งกลับรอตรวจ' : 'ยืนยันตัวตน'
+	);
+
+	async function reviewIdentity(status: VerificationStatus) {
+		try {
+			await identityReviewMutation.mutateAsync({
+				id: volunteer._id,
+				status,
+				notes: verificationNotes.trim() || null
+			});
+			verificationNotes = '';
+			toast.success(
+				status === 'verified' ? 'ยืนยันตัวตนอาสาสมัครแล้ว' : 'ส่งกลับไปรอตรวจตัวตนแล้ว'
+			);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'บันทึกผลตรวจตัวตนไม่สำเร็จ');
+		}
+	}
 
 	async function submit() {
 		const name = fullName.trim();
@@ -156,16 +191,24 @@
 				<div class="flex flex-wrap items-center gap-1.5">
 					<Badge
 						variant="outline"
-						class="gap-1 {volunteer.identity_verified
+						class="gap-1 {identityStatus === 'verified'
 							? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-							: 'border-amber-300 bg-amber-50 text-amber-700'}"
+							: identityStatus === 'rejected'
+								? 'border-rose-300 bg-rose-50 text-rose-700'
+								: 'border-amber-300 bg-amber-50 text-amber-700'}"
 					>
 						<span
-							class="h-1.5 w-1.5 rounded-full {volunteer.identity_verified
+							class="h-1.5 w-1.5 rounded-full {identityStatus === 'verified'
 								? 'bg-emerald-500'
-								: 'bg-amber-500'}"
+								: identityStatus === 'rejected'
+									? 'bg-rose-500'
+									: 'bg-amber-500'}"
 						></span>
-						{volunteer.identity_verified ? 'ยืนยันตัวตนแล้ว' : 'รอยืนยันตัวตน'}
+						{identityStatus === 'verified'
+							? 'ยืนยันตัวตนแล้ว'
+							: identityStatus === 'rejected'
+								? 'ไม่ผ่านการยืนยัน'
+								: 'รอยืนยันตัวตน'}
 					</Badge>
 					<Badge
 						variant="outline"
@@ -182,6 +225,39 @@
 					</Badge>
 				</div>
 				<p class="text-xs text-muted-foreground">สังกัดศูนย์: {shelterLine}</p>
+				<div class="flex flex-wrap items-center gap-2 pt-1">
+					<Button
+						type="button"
+						size="sm"
+						class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+						disabled={identityReviewMutation.isPending}
+						onclick={() => reviewIdentity(identityActionStatus)}
+					>
+						<Check class="h-3.5 w-3.5" />
+						{identityActionLabel}
+					</Button>
+					{#if identityStatus !== 'rejected'}
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="h-9 border-rose-200 text-rose-700 hover:bg-rose-50"
+							disabled={identityReviewMutation.isPending}
+							onclick={() => reviewIdentity('rejected')}
+						>
+							ระบุไม่ผ่าน
+						</Button>
+					{/if}
+				</div>
+				<div class="space-y-1.5 pt-1">
+					<Label for="vm-verification-note">หมายเหตุการตรวจ (ถ้ามี)</Label>
+					<Textarea
+						id="vm-verification-note"
+						bind:value={verificationNotes}
+						rows={2}
+						placeholder="เช่น ตรวจบัตรประชาชนตัวจริงแล้ว"
+					/>
+				</div>
 			</div>
 
 			<div class="space-y-3">
@@ -331,6 +407,7 @@
 					</div>
 					{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
 						{@const has = selectedSkills.includes(skill.code)}
+						{@const skillStatus = skillVerificationStatus(volunteer, skill.code)}
 						<div
 							class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background p-2.5"
 						>
@@ -344,24 +421,33 @@
 							</span>
 							<Badge
 								variant="outline"
-								class="shrink-0 text-[10px] {has
+								class="shrink-0 text-[10px] {skillStatus === 'verified'
 									? 'border-emerald-300 text-emerald-700'
-									: 'text-muted-foreground'}"
+									: skillStatus === 'rejected'
+										? 'border-rose-300 text-rose-700'
+										: 'border-amber-300 text-amber-700'}"
 							>
-								{has ? 'มีทักษะนี้แล้ว' : 'ยังไม่มีทักษะนี้'}
+								{has ? VERIFICATION_STATUS_LABEL[skillStatus] : 'ยังไม่มีทักษะนี้'}
 							</Badge>
+							{#if has}
+								<div class="flex items-center gap-1.5">
+									<Button
+										type="button"
+										size="sm"
+										class="h-8 gap-1.5 bg-primary-dark px-2.5 text-[11px] text-white hover:bg-primary-dark/90"
+										onclick={() => onOpenQualificationAudit(skill.code)}
+									>
+										<ClipboardCheck class="h-3.5 w-3.5" />
+										ตรวจสอบ/รับรองทักษะนี้
+									</Button>
+								</div>
+							{/if}
 						</div>
 					{/each}
-					<Button
-						type="button"
-						size="sm"
-						variant="outline"
-						class="w-full gap-1.5"
-						onclick={() => stub('ตรวจสอบ/รับรองทักษะควบคุม')}
-					>
-						<ClipboardCheck class="h-3.5 w-3.5" />
-						ตรวจสอบ/รับรองทักษะนี้ (Audit Checklist)
-					</Button>
+					<div class="flex items-center gap-2 text-[11px] text-muted-foreground">
+						<ClipboardCheck class="h-3.5 w-3.5 text-primary" />
+						การรับรองทักษะมีผลกับหลายงาน ส่วนการรับเข้าทำงานต้องตัดสินใจที่หน้า Job Details
+					</div>
 				</div>
 			</div>
 		</div>

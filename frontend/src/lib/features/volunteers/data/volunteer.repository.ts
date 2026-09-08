@@ -15,6 +15,7 @@ import type {
 	VolunteerStatus,
 	VolunteerSource
 } from '../domain/volunteer.schema';
+import type { VerificationStatus } from '../domain/verification';
 import type { Job, JobInput, JobStatus, JobTier } from '../domain/job.schema';
 import type {
 	JobApplication,
@@ -146,6 +147,22 @@ export interface VolunteerRepository {
 	): Promise<Volunteer>;
 	/** Read-modify-write an edited volunteer (LWW: bumps `updated_at`). */
 	update(volunteer: Volunteer): Promise<Volunteer>;
+	/** Record the reusable identity decision without changing job applications. */
+	reviewIdentity(
+		id: string,
+		status: VerificationStatus,
+		actor: string,
+		notes?: string | null
+	): Promise<Volunteer>;
+	/** Record a controlled-skill decision without changing the volunteer's skill list. */
+	reviewSkill(
+		id: string,
+		skillCode: string,
+		status: VerificationStatus,
+		actor: string,
+		notes?: string | null,
+		credentialReference?: string | null
+	): Promise<Volunteer>;
 	/**
 	 * Flip `checked_in` + `current_shelter_code` (Time-Bound Write Access gate,
 	 * FR-VOL-05R). Read-modify-write against the latest `_rev`.

@@ -11,7 +11,7 @@ import {
 	type JobApplicationInput,
 	type JobApplicationStatus
 } from '../domain/job-application.schema';
-import { initialStatusForSkills } from '../domain/skills';
+import { initialStatusForSkills, reviewReasonsForApplication } from '../domain/skills';
 import { shiftDutyWindow } from '../domain/duty-window';
 import { shiftKindFor } from '../domain/assign-roster';
 import { jobRepository } from './job.remote';
@@ -141,7 +141,15 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 			throw new Error(`งานนี้ไม่เปิดรับสมัครแล้ว (สถานะ: ${job.status})`);
 		}
 		const status = initialStatusForSkills(input.applicant.skills, job, options?.controlledSkills);
-		const saved = await this.save(makeJobApplication(input, ctx, status));
+		const saved = await this.save(
+			makeJobApplication(input, ctx, status, {
+				reviewReasons: reviewReasonsForApplication(
+					input.applicant.skills,
+					job,
+					options?.controlledSkills
+				)
+			})
+		);
 
 		if (status === 'confirmed') {
 			try {

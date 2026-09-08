@@ -23,6 +23,21 @@ export const jobApplicationStatusSchema = z.enum([
 ]);
 export type JobApplicationStatus = z.infer<typeof jobApplicationStatusSchema>;
 
+export const jobApplicationReviewReasonSchema = z.enum([
+	'identity',
+	'skill_certification',
+	'job_fit',
+	'legacy_review'
+]);
+export type JobApplicationReviewReason = z.infer<typeof jobApplicationReviewReasonSchema>;
+
+export const JOB_APPLICATION_REVIEW_REASON_LABEL: Record<JobApplicationReviewReason, string> = {
+	identity: 'ยืนยันตัวตน',
+	skill_certification: 'รับรองทักษะควบคุม',
+	job_fit: 'พิจารณาความเหมาะสมของงาน',
+	legacy_review: 'รายการเก่าที่ต้องตรวจ'
+};
+
 /**
  * State machine transitions for JobApplication (CR-041 D-APP=A / CR-094 §3.4 / UX-DR6).
  * - `pending_review`: default initial state, can transition to `confirmed`, `rejected`, or `cancelled`.
@@ -86,6 +101,7 @@ export interface JobApplication extends BaseDoc {
 	review_notes?: string | null;
 	reviewed_at?: string | null;
 	reviewed_by?: string | null;
+	review_reasons?: JobApplicationReviewReason[];
 }
 
 export const jobApplicationSchema = z
@@ -108,7 +124,8 @@ export const jobApplicationSchema = z
 		status: jobApplicationStatusSchema,
 		review_notes: z.string().nullable().optional(),
 		reviewed_at: z.string().nullable().optional(),
-		reviewed_by: z.string().nullable().optional()
+		reviewed_by: z.string().nullable().optional(),
+		review_reasons: z.array(jobApplicationReviewReasonSchema).optional()
 	})
 	.refine((doc) => Boolean(doc.tracking_token || doc.tracking_token_hash), {
 		message: 'tracking_token or tracking_token_hash is required',
@@ -140,7 +157,8 @@ export type JobApplicationInput = z.infer<typeof jobApplicationInputSchema>;
 export function makeJobApplication(
 	input: JobApplicationInput,
 	ctx: AuthorContext,
-	status: JobApplicationStatus
+	status: JobApplicationStatus,
+	options: { reviewReasons?: JobApplicationReviewReason[] } = {}
 ): JobApplication {
 	const d = jobApplicationInputSchema.parse(input);
 	return makeDoc(
@@ -156,7 +174,8 @@ export function makeJobApplication(
 			status,
 			review_notes: null,
 			reviewed_at: null,
-			reviewed_by: null
+			reviewed_by: null,
+			review_reasons: options.reviewReasons ?? []
 		},
 		ctx
 	) as JobApplication;

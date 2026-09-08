@@ -5,7 +5,6 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
 	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
@@ -24,13 +23,6 @@
 			activeTab = 'jobs';
 		}
 	});
-
-	function handleSearchTicket(query: string) {
-		const token = query.trim();
-		if (token) {
-			goto(`/volunteer/ticket/${encodeURIComponent(token)}`);
-		}
-	}
 </script>
 
 <svelte:head>
@@ -95,6 +87,6 @@
 
 	<!-- TAB 2: Ticket Search -->
 	{#if activeTab === 'ticket'}
-		<TicketSearch onSearch={handleSearchTicket} />
+		<TicketSearch />
 	{/if}
 </PublicPageShell>

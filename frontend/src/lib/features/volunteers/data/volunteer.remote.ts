@@ -10,6 +10,7 @@ import {
 	type VolunteerStatus
 } from '../domain/volunteer.schema';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import type { VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
 
 /**
@@ -89,6 +90,55 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		const latest = await this.repo.get<Volunteer>(volunteer._id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${volunteer._id}`);
 		return this.save(touch({ ...volunteer, _rev: latest._rev }));
+	}
+
+	async reviewIdentity(
+		id: string,
+		status: VerificationStatus,
+		actor: string,
+		notes?: string | null
+	): Promise<Volunteer> {
+		const latest = await this.repo.get<Volunteer>(id);
+		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
+		return this.save(
+			touch({
+				...latest,
+				identity_verified: status === 'verified',
+				identity_verification: {
+					status,
+					reviewed_at: new Date().toISOString(),
+					reviewed_by: actor,
+					notes: notes ?? null
+				}
+			})
+		);
+	}
+
+	async reviewSkill(
+		id: string,
+		skillCode: string,
+		status: VerificationStatus,
+		actor: string,
+		notes?: string | null,
+		credentialReference?: string | null
+	): Promise<Volunteer> {
+		const latest = await this.repo.get<Volunteer>(id);
+		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
+		return this.save(
+			touch({
+				...latest,
+				skill_verifications: {
+					...(latest.skill_verifications ?? {}),
+					[skillCode]: {
+						status,
+						reviewed_at: new Date().toISOString(),
+						reviewed_by: actor,
+						notes: notes ?? null,
+						credential_reference: credentialReference ?? null
+					}
+				}
+			})
+		);
 	}
 
 	async setCheckedIn(

@@ -27,16 +27,24 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
-	import type { JobApplication } from '../domain/job-application.schema';
+	import {
+		JOB_APPLICATION_REVIEW_REASON_LABEL,
+		type JobApplication
+	} from '../domain/job-application.schema';
+	import type { Volunteer } from '../domain/volunteer.schema';
+	import { identityVerificationStatus, VERIFICATION_STATUS_LABEL } from '../domain/verification';
 
 	let {
 		application,
+		volunteer = null,
 		volunteerCode = null,
 		shiftLabel = null,
 		skillOptions = [],
 		onreview
 	}: {
 		application: JobApplication;
+		/** Linked roster profile; absent for legacy/unlinked applications. */
+		volunteer?: Volunteer | null;
 		/** `volunteer.volunteer_code` when the application is linked to a roster record. */
 		volunteerCode?: string | null;
 		/**
@@ -57,6 +65,7 @@
 	const shift = $derived(application.selected_shift);
 	const statusMeta = $derived(APPLICATION_STATUS_META[application.status]);
 	const isPending = $derived(application.status === 'pending_review');
+	const identityStatus = $derived(volunteer ? identityVerificationStatus(volunteer) : null);
 	const skills = $derived.by<{ key: string; label: string; controlled: boolean }[]>(() => {
 		const map = new SvelteMap<string, { key: string; label: string; controlled: boolean }>();
 		for (const key of a.skills) {
@@ -138,6 +147,28 @@
 			{/each}
 		</div>
 	{/if}
+
+	<div class="flex flex-wrap items-center gap-1.5 text-xs">
+		<span class="font-semibold text-muted-foreground">ระดับการตรวจ:</span>
+		{#if volunteer}
+			<span
+				class="rounded-md px-1.5 py-0.5 font-medium {identityStatus === 'verified'
+					? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+					: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'}"
+			>
+				ตัวตน: {identityStatus ? VERIFICATION_STATUS_LABEL[identityStatus] : '—'}
+			</span>
+		{:else}
+			<span class="rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground ring-1 ring-border">
+				ตัวตน: ไม่พบโปรไฟล์ที่เชื่อม
+			</span>
+		{/if}
+		{#each application.review_reasons ?? [] as reason (reason)}
+			<span class="rounded-md bg-sky-50 px-1.5 py-0.5 font-medium text-sky-700 ring-1 ring-sky-200">
+				{JOB_APPLICATION_REVIEW_REASON_LABEL[reason]}
+			</span>
+		{/each}
+	</div>
 
 	<div
 		class={[

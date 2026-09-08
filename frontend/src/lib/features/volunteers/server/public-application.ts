@@ -1,7 +1,7 @@
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
-import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
+import { DEFAULT_CONTROLLED_SKILLS, reviewReasonsForApplication } from '../domain/skills';
 import type { VolunteerApplyInput } from '$lib/features/volunteer-portal/domain/volunteer';
 import {
 	findAsPublicWriter,
@@ -448,6 +448,13 @@ export async function applyPublicVolunteerApplication(
 				current_shelter_code: null,
 				volunteer_code: nextVolunteerCode(existingCodes),
 				identity_verified: false,
+				identity_verification: {
+					status: 'pending',
+					reviewed_at: null,
+					reviewed_by: null,
+					notes: null
+				},
+				skill_verifications: {},
 				source: 'public_apply',
 				personnel_type: 'volunteer'
 			};
@@ -484,6 +491,7 @@ export async function applyPublicVolunteerApplication(
 		},
 		tracking_token_hash: trackingTokenHash,
 		status,
+		review_reasons: reviewReasonsForApplication(skills, job, Array.from(controlled)),
 		review_notes: null,
 		reviewed_at: null,
 		reviewed_by: null,

@@ -73,6 +73,37 @@ describe('VolunteerRemoteRepository', () => {
 		expect(checkedOut.current_shelter_code).toBeNull();
 	});
 
+	it('records identity and controlled-skill review separately from profile edits', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+		const created = await repo.create({ ...baseInput, skills: ['medical'] }, ctx);
+
+		const identityReviewed = await repo.reviewIdentity(
+			created._id,
+			'verified',
+			'manager-1',
+			'ตรวจบัตรแล้ว'
+		);
+		expect(identityReviewed.identity_verified).toBe(true);
+		expect(identityReviewed.identity_verification).toMatchObject({
+			status: 'verified',
+			reviewed_by: 'manager-1'
+		});
+
+		const skillReviewed = await repo.reviewSkill(
+			created._id,
+			'medical',
+			'verified',
+			'manager-1',
+			'ตรวจใบรับรองแล้ว',
+			'พย.12345'
+		);
+		expect(skillReviewed.skill_verifications?.medical).toMatchObject({
+			status: 'verified',
+			reviewed_by: 'manager-1',
+			credential_reference: 'พย.12345'
+		});
+	});
+
 	it('getByTrackingToken / getByPhoneHash return null when absent', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		expect(await repo.getByTrackingToken('missing')).toBeNull();

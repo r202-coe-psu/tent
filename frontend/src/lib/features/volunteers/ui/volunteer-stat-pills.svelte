@@ -6,8 +6,8 @@
 	/**
 	 * "People" tab (Tab 3) top pill row — owner-approved mockup, 2026-08-28.
 	 *
-	 * `pending`/`ready` here are a volunteer-level split by `identity_verified`
-	 * (schema.md §2.8), NOT the Control Hub header's `pendingApproval` tile
+	 * `pending`/`ready` here are a volunteer-level split by identity and
+	 * controlled-skill verification, NOT the Control Hub header's `pendingApproval` tile
 	 * (`domain/hub-metrics.ts`), which counts `job_application`s awaiting
 	 * review — the two use the same Thai label ("รออนุมัติ") for different
 	 * things. Flagged for the owner: this naming collision should probably be
@@ -30,7 +30,7 @@
 	const pills: { key: PeopleStatFilter; label: string; value: number; dotClass?: string }[] =
 		$derived([
 			{ key: 'all', label: 'ทั้งหมด', value: total },
-			{ key: 'pending', label: 'รออนุมัติ', value: pending, dotClass: 'bg-amber-400' },
+			{ key: 'pending', label: 'รอตรวจอาสา', value: pending, dotClass: 'bg-amber-400' },
 			{ key: 'ready', label: 'พร้อมปฏิบัติงาน', value: ready, dotClass: 'bg-emerald-500' }
 		]);
 </script>

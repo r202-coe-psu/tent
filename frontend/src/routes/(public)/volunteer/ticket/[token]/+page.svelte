@@ -6,6 +6,7 @@
 	import { ticketI18n } from '$lib/features/volunteer-portal/i18n/ticket.i18n';
 
 	const token = $derived(page.params.token ?? '');
+	const hideQr = $derived(page.url.searchParams.get('from') === 'portal');
 	const t = $derived(ticketI18n[languageStore.current]);
 </script>
 
@@ -16,5 +17,5 @@
 </svelte:head>
 
 <PublicPageShell>
-	<DigitalPass {token} />
+	<DigitalPass {token} {hideQr} />
 </PublicPageShell>

@@ -67,7 +67,7 @@
 
 	const t = $derived(jobsI18n[languageStore.current]);
 
-	const isPortalApplicant = $derived(Boolean(applicantProfile));
+	const isPortalApplicant = $derived(Boolean(applicantProfile || applicantCredential));
 
 	function renumberSectionTitle(title: string, number: number): string {
 		return title.replace(/^\d+\.\s*/, `${number}. `);
@@ -355,7 +355,8 @@
 			};
 
 			if (trackingToken) {
-				await goto(`/volunteer/ticket/${encodeURIComponent(trackingToken)}`);
+				const ticketPath = `/volunteer/ticket/${encodeURIComponent(trackingToken)}`;
+				await goto(`${ticketPath}${isPortalApplicant ? '?from=portal' : ''}`);
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : t.errApplyGeneric;

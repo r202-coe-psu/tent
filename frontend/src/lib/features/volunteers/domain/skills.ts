@@ -14,7 +14,7 @@
  */
 
 import type { Job } from './job.schema';
-import type { JobApplicationStatus } from './job-application.schema';
+import type { JobApplicationReviewReason, JobApplicationStatus } from './job-application.schema';
 import { normalizeSkillText } from './skill-catalog';
 
 /**
@@ -73,4 +73,18 @@ export function initialStatusForSkills(
 	if (skills.some((s) => isControlledSkill(s, controlledSkills))) return 'pending_review';
 	if (job.tier !== 'operational') return 'pending_review';
 	return job.auto_accept === true ? 'confirmed' : 'pending_review';
+}
+
+/** Explain why an application is queued without conflating volunteer review and job review. */
+export function reviewReasonsForApplication(
+	skills: readonly string[],
+	job: { auto_accept?: boolean; tier: string },
+	controlledSkills: readonly string[] = DEFAULT_CONTROLLED_SKILLS
+): JobApplicationReviewReason[] {
+	const reasons: JobApplicationReviewReason[] = [];
+	if (skills.some((skill) => isControlledSkill(skill, controlledSkills))) {
+		reasons.push('skill_certification');
+	}
+	if (job.tier !== 'operational' || job.auto_accept !== true) reasons.push('job_fit');
+	return reasons;
 }

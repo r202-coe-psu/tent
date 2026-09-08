@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { makeDoc, type AuthorContext, type BaseDoc } from '$lib/db/model';
+import { verificationRecordSchema, type VerificationRecord } from './verification';
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -58,6 +59,10 @@ export interface Volunteer extends BaseDoc {
 	volunteer_code: string;
 	/** CR-094 §3.1 — backs the "ยืนยันตัวตนแล้ว" badge. */
 	identity_verified: boolean;
+	/** Additive review record; `identity_verified` remains the compatibility flag. */
+	identity_verification?: VerificationRecord | null;
+	/** Controlled-skill review records keyed by canonical master-data code. */
+	skill_verifications?: Record<string, VerificationRecord>;
 	source: VolunteerSource;
 	/** CR-095 — backs the "ชนิดบุคคล" toggle, default `'volunteer'`. */
 	personnel_type: PersonnelType;
@@ -89,6 +94,8 @@ export const volunteerSchema = z.object({
 	current_shelter_code: z.string().nullable().optional(),
 	volunteer_code: z.string().min(1),
 	identity_verified: z.boolean(),
+	identity_verification: verificationRecordSchema.nullable().optional(),
+	skill_verifications: z.record(z.string(), verificationRecordSchema).optional(),
 	source: volunteerSourceSchema,
 	personnel_type: personnelTypeSchema
 });
@@ -164,6 +171,13 @@ export function makeVolunteer(
 			current_shelter_code: null,
 			volunteer_code: fields.volunteer_code,
 			identity_verified: false,
+			identity_verification: {
+				status: 'pending',
+				reviewed_at: null,
+				reviewed_by: null,
+				notes: null
+			},
+			skill_verifications: {},
 			source: d.source,
 			personnel_type: d.personnel_type
 		},

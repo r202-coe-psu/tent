@@ -130,7 +130,10 @@ import {
 	shiftDutyWindow
 } from '$lib/features/volunteers/domain/duty-window';
 import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
-import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
+import {
+	initialStatusForSkills,
+	reviewReasonsForApplication
+} from '$lib/features/volunteers/domain/skills';
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
@@ -2330,6 +2333,34 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 	v1.identity_verified = true;
 	v3.identity_verified = true;
 	v4.identity_verified = true;
+	const reviewedBy = 'seed-reviewer';
+	const reviewedAt = now();
+	for (const volunteer of [v1, v3, v4]) {
+		volunteer.identity_verification = {
+			status: 'verified',
+			reviewed_at: reviewedAt,
+			reviewed_by: reviewedBy,
+			notes: 'ตรวจข้อมูลตัวตนจากชุดข้อมูลตัวอย่างแล้ว'
+		};
+	}
+	v2.identity_verification = {
+		status: 'pending',
+		reviewed_at: null,
+		reviewed_by: null,
+		notes: null
+	};
+	v5.identity_verification = {
+		status: 'pending',
+		reviewed_at: null,
+		reviewed_by: null,
+		notes: null
+	};
+	v5.skill_verifications = Object.fromEntries(
+		v5.skills.map((skill) => [
+			skill,
+			{ status: 'pending' as const, reviewed_at: null, reviewed_by: null, notes: null }
+		])
+	);
 	// v2, v5 stay unverified — v5 doubles as the "controlled skill, not yet
 	// approved" fixture required by 00-foundation.md §00.5.
 
@@ -2425,7 +2456,9 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		},
 		tracking_token: ulid()
 	};
-	const confirmedApplication = makeJobApplication(confirmedApplicationInput, ctx, 'confirmed');
+	const confirmedApplication = makeJobApplication(confirmedApplicationInput, ctx, 'confirmed', {
+		reviewReasons: []
+	});
 	confirmedApplication.reviewed_at = now();
 	confirmedApplication.reviewed_by = 'seed';
 	confirmedApplication.review_notes = 'ตรวจสอบแล้ว ทักษะตรงตามที่ต้องการ อนุมัติเข้าปฏิบัติงาน';
@@ -2456,7 +2489,9 @@ async function seedVolunteers(master: MasterLookup): Promise<void> {
 		auto_accept: job1.auto_accept,
 		tier: job1.tier
 	});
-	const pendingApplication = makeJobApplication(pendingApplicationInput, ctx, pendingStatus);
+	const pendingApplication = makeJobApplication(pendingApplicationInput, ctx, pendingStatus, {
+		reviewReasons: reviewReasonsForApplication(v5.skills, job1)
+	});
 
 	for (const app of [confirmedApplication, pendingApplication]) jobApplicationSchema.parse(app);
 

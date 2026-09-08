@@ -29,7 +29,7 @@
 	import VolunteerCard from './volunteer-card.svelte';
 	import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
 	import { useVolunteers, useTodayAttendance, useSkillOptions } from '../application/queries';
-	import { isControlledSkill } from '../domain/skills';
+	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
 	import { skillMatches } from '../domain/skill-catalog';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -60,8 +60,21 @@
 	let sourceFilter = $state<VolunteerSource | ''>('');
 	let personnelTypeFilter = $state<PersonnelType | ''>('');
 
-	const pendingCount = $derived(volunteers.filter((v) => !v.identity_verified).length);
-	const readyCount = $derived(volunteers.filter((v) => v.identity_verified).length);
+	const pendingIdentityCount = $derived(
+		volunteers.filter((v) => identityVerificationStatus(v) !== 'verified').length
+	);
+	const pendingSkillCount = $derived(
+		volunteers.filter((v) => hasPendingControlledSkill(v, v.skills, skillCatalog.controlledValues))
+			.length
+	);
+	const pendingCount = $derived(
+		volunteers.filter(
+			(v) =>
+				identityVerificationStatus(v) !== 'verified' ||
+				hasPendingControlledSkill(v, v.skills, skillCatalog.controlledValues)
+		).length
+	);
+	const readyCount = $derived(volunteers.length - pendingCount);
 
 	function matchesSearch(v: Volunteer, term: string): boolean {
 		if (!term) return true;
@@ -78,13 +91,27 @@
 	const filteredVolunteers = $derived.by<Volunteer[]>(() => {
 		let list = volunteers;
 
-		if (statFilter === 'pending') list = list.filter((v) => !v.identity_verified);
-		else if (statFilter === 'ready') list = list.filter((v) => v.identity_verified);
+		if (statFilter === 'pending')
+			list = list.filter(
+				(v) =>
+					identityVerificationStatus(v) !== 'verified' ||
+					hasPendingControlledSkill(v, v.skills, skillCatalog.controlledValues)
+			);
+		else if (statFilter === 'ready')
+			list = list.filter(
+				(v) =>
+					identityVerificationStatus(v) === 'verified' &&
+					!hasPendingControlledSkill(v, v.skills, skillCatalog.controlledValues)
+			);
 
 		if (statFilter === 'pending' && approvalChip === 'skill_cert') {
-			list = list.filter((v) => v.skills.some((s) => isControlledSkill(s)));
+			list = list.filter((v) =>
+				hasPendingControlledSkill(v, v.skills, skillCatalog.controlledValues)
+			);
+		} else if (statFilter === 'pending' && approvalChip === 'identity') {
+			list = list.filter((v) => identityVerificationStatus(v) !== 'verified');
 		} else if (statFilter === 'pending' && approvalChip === 'shift') {
-			// "รอเข้ากะ" has no backing data yet — see `volunteer-approval-chips.svelte`.
+			// "รอเข้ากะ" is still not a volunteer verification concern.
 			list = [];
 		}
 
@@ -143,10 +170,8 @@
 	{#if statFilter === 'pending'}
 		<VolunteerApprovalChips
 			countAll={pendingCount}
-			countIdentity={pendingCount}
-			countSkillCert={volunteers.filter(
-				(v) => !v.identity_verified && v.skills.some((s) => isControlledSkill(s))
-			).length}
+			countIdentity={pendingIdentityCount}
+			countSkillCert={pendingSkillCount}
 			bind:selected={approvalChip}
 		/>
 	{/if}
@@ -190,10 +215,10 @@
 						<Table.Head class="w-[17%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
 							สังกัดศูนย์ (SHELTER)
 						</Table.Head>
-						<Table.Head class="w-[19%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+						<Table.Head class="w-[22%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
 							สถานะยืนยันตัวตน &amp; กะงาน
 						</Table.Head>
-						<Table.Head class="w-[21%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+						<Table.Head class="w-[18%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
 							จัดการ (ACTIONS)
 						</Table.Head>
 					</Table.Row>

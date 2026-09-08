@@ -5,7 +5,10 @@
 	 * each other with a shared header — mirrors `users/ui/user-list.svelte`).
 	 * Rendered inside `people-tab.svelte`'s `<Table.Body>`.
 	 *
-	 * Of the 3 action buttons (จัดการข้อมูล/ ออกสิทธิ์ใช้งานระบบ / ลบ):
+	 * Of the action buttons (ตรวจสอบ & อนุมัติ / จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ลบ):
+	 *   - Not identity-verified → only "ตรวจสอบ & อนุมัติ" opens the
+	 *     volunteer-level qualification audit. It records identity and
+	 *     controlled-skill evidence; it does not approve a specific job.
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
 	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte`, which
@@ -18,6 +21,7 @@
 	 * the CR alongside the other schema gaps.
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
+	import SearchCheck from '@lucide/svelte/icons/search-check';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Phone from '@lucide/svelte/icons/phone';
@@ -27,8 +31,10 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
+	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -78,13 +84,31 @@
 	const shelterLine = $derived(
 		shelterName ? (shelterType ? `${shelterName} (${shelterType})` : shelterName) : '—'
 	);
+	const identityStatus = $derived(identityVerificationStatus(volunteer));
+	const needsSkillReview = $derived(
+		hasPendingControlledSkill(
+			volunteer,
+			volunteer.skills,
+			skillOptions
+				.filter((option) => option.controlled)
+				.flatMap((option) => [option.code, option.label])
+		)
+	);
 
 	function stub(label: string) {
 		toast.info(`${label} — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา`);
 	}
 
 	let manageDialogOpen = $state(false);
+	let qualificationDialogOpen = $state(false);
+	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
+
+	function openQualificationAudit(skillCode?: string) {
+		manageDialogOpen = false;
+		qualificationFocusSkillCode = skillCode ?? null;
+		qualificationDialogOpen = true;
+	}
 </script>
 
 <Table.Row>
@@ -163,9 +187,9 @@
 	</Table.Cell>
 
 	<!-- สถานะยืนยันตัวตน & กะงาน -->
-	<Table.Cell class="w-[19%] p-4 align-top whitespace-normal">
+	<Table.Cell class="w-[22%] p-4 align-top whitespace-normal">
 		<div class="space-y-1.5">
-			{#if volunteer.identity_verified}
+			{#if identityStatus === 'verified'}
 				<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 					ยืนยันตัวตนแล้ว
@@ -177,12 +201,19 @@
 				</Badge>
 			{/if}
 
+			{#if needsSkillReview}
+				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-800" variant="outline">
+					<Lock class="h-3 w-3" />
+					รอรับรองทักษะควบคุม
+				</Badge>
+			{/if}
+
 			{#if volunteer.checked_in}
 				<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 					ปฏิบัติหน้าที่อยู่
 				</Badge>
-			{:else if volunteer.identity_verified}
+			{:else if identityStatus === 'verified'}
 				<Badge class="gap-1 border-sky-300 bg-sky-50 text-sky-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
 					รอสแตนด์บาย
@@ -196,19 +227,35 @@
 
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
-			{:else if !volunteer.identity_verified}
+			{:else if identityStatus !== 'verified'}
 				<p class="text-[11px] text-amber-700">ต้องให้ จนท. ตรวจบัตร ปชช. ก่อนเข้ากะ</p>
 			{/if}
 		</div>
 	</Table.Cell>
 
 	<!-- จัดการ (ACTIONS) -->
-	<Table.Cell class="w-[21%] p-4 align-top whitespace-normal">
+	<Table.Cell class="w-[18%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
-				<Pencil class="h-3.5 w-3.5" />
-				จัดการข้อมูล
-			</Button>
+			{#if identityStatus !== 'verified'}
+				<Button
+					size="sm"
+					class="gap-1.5 bg-amber-600 text-white hover:bg-amber-700"
+					onclick={() => openQualificationAudit()}
+				>
+					<SearchCheck class="h-3.5 w-3.5" />
+					ตรวจสอบ &amp; อนุมัติ
+				</Button>
+			{:else}
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5"
+					onclick={() => (manageDialogOpen = true)}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					จัดการข้อมูล
+				</Button>
+			{/if}
 
 			<div class="flex items-center gap-1.5">
 				<Button
@@ -239,5 +286,12 @@
 	{volunteer}
 	{shelterLine}
 	todayShift={todayAssignment?.shift}
+	onOpenQualificationAudit={openQualificationAudit}
+/>
+<VolunteerQualificationDialog
+	bind:open={qualificationDialogOpen}
+	{volunteer}
+	{shelterLine}
+	focusSkillCode={qualificationFocusSkillCode}
 />
 <VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />

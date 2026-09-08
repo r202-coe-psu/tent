@@ -52,6 +52,7 @@ def test_application_projection_preserves_shift_id_and_snapshot():
             "job_id": "job:01JOB",
             "shift_id": "sft:morning",
             "tracking_token_hash": "hash",
+            "review_reasons": ["skill_certification", "job_fit"],
             "applicant": {"phone": "0812345678", "first_name": "A"},
             "selected_shift": {
                 "shift_id": "sft:morning",
@@ -68,6 +69,7 @@ def test_application_projection_preserves_shift_id_and_snapshot():
     assert payload["shift_id"] == "sft:morning"
     assert payload["selected_shift"]["date"] == "2026-09-10"
     assert payload["selected_shift"]["start_time"] == "08:00"
+    assert payload["review_reasons"] == ["skill_certification", "job_fit"]
 
 
 def test_assignment_projection_carries_shift_id_without_using_window_as_identity():
