@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-08 # CR-113 marked done after #247 leftovers (orphan delete path)
+updated: 2026-09-08 # CR-115 marked done (Station 1 federated hard anti-dupe / #251)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -132,3 +132,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-112](CR-112-registration-foundation-schema-stay.md) | Registration foundation — Anonymous ID, vulnerable_groups, stay `room_confirmed`, occupancy Forecast/Present/In-zone, housing_type, pet species dog\|cat\|other | approved | volatile | 2026-09-06 | docs/data/schema.md §1.1/§1.3/§1.4/§3.3 (evacuee 9→10, household 4→5), api-contract.md, site-occupancy-booking-program.md, CONTEXT.md |
 | [CR-113](CR-113-unassigned-registration-mongo.md) | Unassigned Registration — Mongo-only `unassigned_registrations` until shelter claim (stable core: Mongo write path / SoR birth) | done | stable | 2026-09-06 | docs/data/schema.md §9.5, couchdb-mongodb-sync.md, api-contract.md, CONTEXT.md |
 | [CR-114](CR-114-primary-contact-ui-label-for-head-evacuee.md) | Staff UI — ผู้ติดต่อหลัก for `head_evacuee_id` (schema field unchanged; #249 Q4=B) | done | volatile | 2026-09-08 | CONTEXT.md, frontend people unified registration UI/domain |
+| [CR-115](CR-115-station1-federated-intake-hard-antidupe.md) | Station 1 federated intake — hard anti-dupe, always-on pool search, claim CTA RBAC (#251) | done | volatile | 2026-09-08 | people Station 1 intake-search + header lock, UR ClaimDialog compose, BFF/FastAPI shelter-scoped search |

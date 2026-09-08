@@ -1,8 +1,9 @@
 ---
 id: CR-115
 title: Station 1 federated intake — hard anti-dupe, always-on pool search, claim CTA RBAC
-status: proposed
+status: done
 date: 2026-09-08
+updated: 2026-09-08
 requested_by: เจ้าของโครงการ (grilling #251 follow-up)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -22,14 +23,15 @@ why: >-
 migration: N/A — UI/auth/workflow only; no schema_v bump
 tracking_note: >-
   track=CR file. Owner chose Q20=1 and review follow-up decision C: assign CR-115 early
-  while status stays proposed (not approved/done; not indexed in _index.md yet).
-  False-positive / strong-ID hit refinement deferred as non-blocking note on #251 (no new issue).
+  while status was proposed; owner then directed done 2026-09-08 (approved+done in one step)
+  so #251 can close. False-positive / strong-ID hit refinement remains a non-blocking note
+  on #251 (no new issue).
 ---
 
 # CR-115: Station 1 federated intake hard anti-dupe (#251)
 
-> **Status: proposed (draft).** Numbered early per owner decision C — not approved yet;
-> do not treat as accepted until status moves to `approved`.
+> **Status: done.** Implemented on `feat/registration` (`29531c3c`, `15a25de4`); indexed
+> 2026-09-08. Product-rule deltas for #251 — no schema_v.
 
 ## สรุป (TL;DR)
 
@@ -62,8 +64,8 @@ Grill #251 หลัง implement แรก: soft anti-dupe + pool search ที
 
 ## Impact
 
-- Code: people Station 1 + UR `ClaimDialog` (commit แยก) + BFF/FastAPI search auth
-- Docs: this CR (proposed); #251 AC/notes — **no** schema.md / schema_v
+- Code: people Station 1 + UR `ClaimDialog` + BFF/FastAPI search auth
+- Docs: this CR (**done**); #251 AC/notes — **no** schema.md / schema_v
 - Auth: search wider than claim but shelter-scoped (product intentional)
 
 ## Migration
@@ -76,4 +78,5 @@ N/A
 - 2026-09-08 — proposed as `draft-station1-federated-intake-hard-antidupe`
 - 2026-09-08 — review follow-ups: FastAPI search → shelter-scoped; override under pool error (A);
   header new-reg shares lock (A); delete unused `isIntakeNotFoundState`; owner decision C →
-  renumber to **CR-115** while status remains **proposed**
+  renumber to **CR-115** while status remained **proposed**
+- 2026-09-08 — owner directed **done** (approve+index+close path for #251; merge PR deferred)
