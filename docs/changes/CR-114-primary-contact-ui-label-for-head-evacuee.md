@@ -1,7 +1,7 @@
 ---
 id: CR-114
 title: Staff UI — ผู้ติดต่อหลัก for `head_evacuee_id` (schema field unchanged)
-status: approved
+status: done
 date: 2026-09-08
 updated: 2026-09-08
 requested_by: เจ้าของโครงการ (grilling #249 code-review Q4=B)
