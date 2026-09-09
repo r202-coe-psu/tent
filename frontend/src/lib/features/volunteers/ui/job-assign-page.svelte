@@ -296,6 +296,7 @@
 		const station = job.title;
 
 		const failed: string[] = [];
+		const successfulIds: string[] = [];
 		let sent = 0;
 		for (const candidate of chosen) {
 			try {
@@ -309,15 +310,19 @@
 					duty_window: dutyWindow
 				});
 				sent += 1;
+				successfulIds.push(candidate.volunteer._id);
 			} catch (err) {
-				failed.push(`${candidate.volunteer.first_name} ${candidate.volunteer.last_name}`);
+				const name = `${candidate.volunteer.first_name} ${candidate.volunteer.last_name}`.trim();
+				failed.push(name || candidate.volunteer._id);
 				// Quota is finite: once one dispatch fails there may be no seat
 				// left, so stop rather than hammering the same document.
-				if (err instanceof Error && err.message.includes('quota')) break;
+				if (err instanceof Error && /quota|โควตา|เต็ม|capacity/i.test(err.message)) break;
 			}
 		}
 
-		selectedIds = [];
+		// Keep failed candidates selected so the SM can see who still needs
+		// attention and retry after fixing the underlying quota/data issue.
+		selectedIds = selectedIds.filter((id) => !successfulIds.includes(id));
 		if (sent > 0) toast.success(`มอบหมายอาสา ${sent} คนเข้ากะนี้แล้ว`);
 		if (failed.length > 0)
 			toast.error(`มอบหมายไม่สำเร็จ ${failed.length} คน: ${failed.join(', ')}`);

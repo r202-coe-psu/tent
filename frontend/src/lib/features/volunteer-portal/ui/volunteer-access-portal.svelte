@@ -941,7 +941,9 @@
 									value={filterStatus || 'all'}
 									onValueChange={setFilterStatus}
 								>
-									<Select.Trigger class="w-full min-w-0 rounded-lg bg-background text-xs">
+									<Select.Trigger
+										class="!h-11 w-full min-w-0 rounded-lg bg-background text-xs !font-normal"
+									>
 										<span class="truncate">
 											{scheduleStatusOptions.find(
 												(option) => option.value === (filterStatus || 'all')
@@ -962,7 +964,7 @@
 									bind:value={filterJobTitle}
 									placeholder="ค้นหาชื่องาน..."
 									aria-label="ค้นหาชื่องาน"
-									class="h-9 w-full rounded-lg bg-background text-xs"
+									class="h-9 w-full rounded-lg bg-background text-xs font-normal placeholder:font-normal"
 								/>
 							</label>
 						</div>

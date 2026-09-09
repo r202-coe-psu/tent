@@ -3,7 +3,6 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Tag from '@lucide/svelte/icons/tag';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -681,7 +680,7 @@
 				<div class="relative w-full max-w-full sm:max-w-md">
 					<Select.Root type="single" bind:value={selectedShelter}>
 						<Select.Trigger
-							class="h-10 w-full rounded-xl border-border/80 bg-muted/20 pl-10 text-xs font-bold text-foreground sm:h-11 sm:text-sm"
+							class="h-10 w-full rounded-xl border-border/80 bg-muted/20 text-xs font-bold text-foreground sm:h-11 sm:text-sm"
 						>
 							{#if selectedShelter === 'all'}
 								{t.allShelters} ({availableShelters.length})
@@ -702,9 +701,6 @@
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
-					<MapPin
-						class="pointer-events-none absolute top-2.5 left-3.5 h-4 w-4 text-danger sm:top-3"
-					/>
 				</div>
 			</div>
 		</div>
