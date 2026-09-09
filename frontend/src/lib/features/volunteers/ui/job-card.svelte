@@ -137,6 +137,8 @@
 				รอยืนยัน {pendingApplicantCount}
 			</span>
 		</div>
-		<Button size="sm" variant="outline" href={detailHref}>ดูรายละเอียด</Button>
+		<Button size="sm" variant="outline" class="ml-auto shrink-0" href={detailHref}
+			>ดูรายละเอียด</Button
+		>
 	</div>
 </div>
