@@ -274,7 +274,7 @@
 							role="menuitem"
 							href={resolve('/volunteers/jobs')}
 							onclick={() => (volunteersMenuOpen = false)}
-							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteers/jobs'
 							)
 								? 'bg-primary-muted text-primary'
@@ -287,7 +287,7 @@
 							role="menuitem"
 							href={resolve('/volunteer/portal')}
 							onclick={() => (volunteersMenuOpen = false)}
-							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteer/portal'
 							)
 								? 'bg-primary-muted text-primary'
@@ -302,7 +302,7 @@
 							onclick={() => {
 								volunteersMenuOpen = false;
 							}}
-							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteers/host-home'
 							)
 								? 'bg-primary-muted text-primary'
