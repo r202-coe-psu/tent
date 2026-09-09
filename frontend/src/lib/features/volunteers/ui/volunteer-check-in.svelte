@@ -224,7 +224,7 @@
 	async function confirmCheckOut() {
 		if (!currentAssignment || !matchedVolunteer) return;
 		try {
-			await checkOut.mutateAsync(currentAssignment._id);
+			await checkOut.mutateAsync({ id: currentAssignment._id });
 			toast.success(`เช็คเอาต์ออกงาน ${fullName(matchedVolunteer)} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');

@@ -1,5 +1,6 @@
 /**
- * Shift assignment domain schema — CR-107 (`shift_assignment` schema_v 3 → 4).
+ * Shift assignment domain schema — CR-107 (`shift_assignment` schema_v 3 → 4),
+ * CR-108 (schema_v 4 → 5: check-out actor + manual-override reason).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -71,7 +72,7 @@ export const SHIFT_WINDOWS: Readonly<
 
 export interface ShiftAssignment extends BaseDoc {
 	type: 'shift_assignment';
-	schema_v: 3 | 4;
+	schema_v: 3 | 4 | 5;
 	/** F12 — `job:{ulid}`, or the migration sentinel `'legacy'` (schema.md §2.9 v1 → v2 migration note). */
 	job_id: string;
 	/** Stable identity of the concrete row in job.shifts[]. Optional only on legacy v3 rows. */
@@ -84,6 +85,8 @@ export interface ShiftAssignment extends BaseDoc {
 	check_in_at?: string | null;
 	check_out_at?: string | null;
 	check_in_by?: string | null;
+	/** CR-108 — username of the staff who performed the check-out, or `'self_service'`. */
+	check_out_by?: string | null;
 	status: ShiftAssignmentStatus;
 	/** CR-094 §3.2 — set while a dispatch offer is outstanding / being decided. */
 	dispatch_status?: DispatchStatus | null;
@@ -91,6 +94,10 @@ export interface ShiftAssignment extends BaseDoc {
 	check_in_method: CheckInMethod;
 	/** CR-094 §3.2 — required when `check_in_method === 'manual_override'` (FR-VOL-11.2). */
 	check_in_reason: string | null;
+	/** CR-108 — default `qr`; `manual_override` requires `check_out_reason`. */
+	check_out_method: CheckInMethod;
+	/** CR-108 — required when `check_out_method === 'manual_override'`. */
+	check_out_reason: string | null;
 }
 
 /** F12 — schema.md §2.9 v1 → v2 migration writes `job_id: 'legacy'` on rows that predate the `job` link; new writes must still use `job:{ulid}`. */
@@ -103,7 +110,7 @@ export const shiftAssignmentSchema = z
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
 		type: z.literal('shift_assignment'),
-		schema_v: z.union([z.literal(3), z.literal(4)]),
+		schema_v: z.union([z.literal(3), z.literal(4), z.literal(5)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -118,10 +125,13 @@ export const shiftAssignmentSchema = z
 		check_in_at: z.string().nullable().optional(),
 		check_out_at: z.string().nullable().optional(),
 		check_in_by: z.string().nullable().optional(),
+		check_out_by: z.string().nullable().optional(),
 		status: shiftAssignmentStatusSchema,
 		dispatch_status: dispatchStatusSchema.nullable().optional(),
 		check_in_method: checkInMethodSchema,
-		check_in_reason: z.string().nullable()
+		check_in_reason: z.string().nullable(),
+		check_out_method: checkInMethodSchema,
+		check_out_reason: z.string().nullable()
 	})
 	.refine(
 		(d) =>
@@ -130,6 +140,15 @@ export const shiftAssignmentSchema = z
 		{
 			message: 'กรุณาระบุเหตุผลเมื่อเช็คอินแทน (Manual Override)',
 			path: ['check_in_reason']
+		}
+	)
+	.refine(
+		(d) =>
+			d.check_out_method !== 'manual_override' ||
+			(typeof d.check_out_reason === 'string' && d.check_out_reason.trim().length > 0),
+		{
+			message: 'กรุณาระบุเหตุผลเมื่อเช็คเอาต์แทน (Manual Override)',
+			path: ['check_out_reason']
 		}
 	);
 
@@ -169,6 +188,10 @@ export interface MakeShiftAssignmentFields {
 	check_in_by?: string | null;
 	check_in_method?: CheckInMethod;
 	check_in_reason?: string | null;
+	check_out_at?: string | null;
+	check_out_by?: string | null;
+	check_out_method?: CheckInMethod;
+	check_out_reason?: string | null;
 }
 
 export function makeShiftAssignment(
@@ -178,9 +201,10 @@ export function makeShiftAssignment(
 ): ShiftAssignment {
 	const d = shiftAssignmentInputSchema.parse(input);
 	const check_in_method = fields.check_in_method ?? 'qr';
+	const check_out_method = fields.check_out_method ?? 'qr';
 	const doc = makeDoc(
 		'shift_assignment',
-		4,
+		5,
 		{
 			job_id: d.job_id,
 			shift_id: d.shift_id,
@@ -190,13 +214,17 @@ export function makeShiftAssignment(
 			station: d.station,
 			duty_window: d.duty_window,
 			check_in_at: fields.check_in_at ?? null,
-			check_out_at: null,
+			check_out_at: fields.check_out_at ?? null,
 			check_in_by: fields.check_in_by ?? null,
+			check_out_by: fields.check_out_by ?? null,
 			status: fields.status ?? 'assigned',
 			dispatch_status: fields.dispatch_status ?? null,
 			check_in_method,
 			check_in_reason:
-				check_in_method === 'manual_override' ? (fields.check_in_reason ?? null) : null
+				check_in_method === 'manual_override' ? (fields.check_in_reason ?? null) : null,
+			check_out_method,
+			check_out_reason:
+				check_out_method === 'manual_override' ? (fields.check_out_reason ?? null) : null
 		},
 		ctx
 	);

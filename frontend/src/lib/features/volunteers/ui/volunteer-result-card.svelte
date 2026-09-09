@@ -244,6 +244,18 @@
 								: 'สแกนรายงานตัวเข้ากะด้วยตนเอง (Self-Service QR)'}
 						</p>
 					</div>
+				{:else if assignment.status === 'completed' && assignment.check_out_at}
+					<div class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+						<LogOut class="mt-0.5 size-4 shrink-0 text-amber-700" />
+						<p class="text-xs text-amber-900">
+							<span class="font-bold"
+								>เช็คเอาต์ออกงานแล้วเมื่อ: {formatTime(assignment.check_out_at)} น.</span
+							><br />
+							{assignment.check_out_method === 'manual_override'
+								? `บันทึกแทนโดย จนท. (${assignment.check_out_by ?? 'ไม่ระบุ'})`
+								: `ดำเนินการโดย ${assignment.check_out_by ?? 'ไม่ระบุ'}`}
+						</p>
+					</div>
 				{:else if blockedByIdentity}
 					<div class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
 						<Lock class="mt-0.5 size-4 shrink-0 text-amber-700" />

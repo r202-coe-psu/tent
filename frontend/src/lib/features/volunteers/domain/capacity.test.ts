@@ -179,7 +179,9 @@ describe('jobShiftCapacities', () => {
 			status: status as 'assigned',
 			dispatch_status: 'accepted' as const,
 			check_in_method: 'qr' as const,
-			check_in_reason: null
+			check_in_reason: null,
+			check_out_method: 'qr' as const,
+			check_out_reason: null
 		});
 		const out = jobShiftCapacities({ ...job(shifts, 2), shifts }, [
 			assignment('a1', 'volunteer:1'),

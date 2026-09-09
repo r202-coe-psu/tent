@@ -214,11 +214,26 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		return saved;
 	}
 
-	async checkOut(id: string): Promise<ShiftAssignment> {
+	async checkOut(
+		id: string,
+		actor: string,
+		method: CheckInMethod = 'qr',
+		reason?: string | null
+	): Promise<ShiftAssignment> {
 		const latest = await this.repo.get<ShiftAssignment>(id);
 		if (!latest) throw new Error(`ไม่พบตารางเข้าเวร: ${id}`);
+		if (method === 'manual_override' && !reason) {
+			throw new Error('กรุณาระบุเหตุผลเมื่อเช็คเอาต์แทน (Manual Override)');
+		}
 		const saved = await this.save(
-			touch({ ...latest, status: 'completed' as const, check_out_at: new Date().toISOString() })
+			touch({
+				...latest,
+				status: 'completed' as const,
+				check_out_at: new Date().toISOString(),
+				check_out_by: actor,
+				check_out_method: method,
+				check_out_reason: method === 'manual_override' ? (reason ?? null) : null
+			})
 		);
 		await volunteerRepository().setCheckedIn(saved.volunteer_id, false, null);
 		return saved;

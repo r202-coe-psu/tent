@@ -18,9 +18,9 @@
 	 *     `roster-manual-checkin-dialog.svelte` (`method: 'manual_override'`,
 	 *     requires a reason — FR-VOL-11.2).
 	 *   - `checked_in` → 1-click "เช็คเอาต์ออกงาน" (`useCheckOut`) + "เช็คเอาต์แทน"
-	 *     (same dialog, `check_out` mode — see its header comment for why that
-	 *     mode carries no reason field) — available regardless of identity
-	 *     verification, per the point above.
+	 *     (same dialog, `check_out` mode, `method: 'manual_override'`, requires a
+	 *     reason — CR-108) — available regardless of identity verification, per
+	 *     the point above.
 	 *   - `completed`/`no_show`/`cancelled` → final-state badge only.
 	 */
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -126,7 +126,7 @@
 
 	async function checkOutNow() {
 		try {
-			await checkOutMutation.mutateAsync(assignment._id);
+			await checkOutMutation.mutateAsync({ id: assignment._id });
 			toast.success(`เช็คเอาต์ออกงาน ${fullName} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
@@ -242,6 +242,11 @@
 		{:else if assignment.status === 'completed' && assignment.check_out_at}
 			<p class="text-xs text-muted-foreground">
 				ออกกะล่าสุด: {formatTime(assignment.check_out_at)} น.
+				{#if assignment.check_out_by}
+					โดย {assignment.check_out_by}{assignment.check_out_method === 'manual_override'
+						? ' (จนท. บันทึกแทน)'
+						: ''}
+				{/if}
 			</p>
 		{/if}
 	</div>

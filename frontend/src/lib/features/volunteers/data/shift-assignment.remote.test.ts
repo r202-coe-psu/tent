@@ -162,7 +162,9 @@ describe('ShiftAssignmentRemoteRepository', () => {
 			status: 'assigned',
 			dispatch_status: 'accepted',
 			check_in_method: 'qr',
-			check_in_reason: null
+			check_in_reason: null,
+			check_out_method: 'qr',
+			check_out_reason: null
 		});
 
 		await expect(assignments.assign(assignmentInput(job._id, volunteer._id), ctx)).rejects.toThrow(
@@ -260,18 +262,39 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		expect(withReason.check_in_reason).toBe('QR สแกนไม่ได้');
 	});
 
-	it('checkOut() sets status=completed and clears volunteer.checked_in', async () => {
+	it('checkOut() sets status=completed, records check_out_by, and clears volunteer.checked_in', async () => {
 		const { volunteers, assignments, job, volunteer } = await setup();
 		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
 		await assignments.checkIn(assignment._id, 'staff-1');
 
-		const checkedOut = await assignments.checkOut(assignment._id);
+		const checkedOut = await assignments.checkOut(assignment._id, 'staff-2');
 		expect(checkedOut.status).toBe('completed');
 		expect(checkedOut.check_out_at).not.toBeNull();
+		expect(checkedOut.check_out_method).toBe('qr');
+		expect(checkedOut.check_out_by).toBe('staff-2');
 
 		const reloadedVolunteer = await volunteers.get(volunteer._id);
 		expect(reloadedVolunteer?.checked_in).toBe(false);
 		expect(reloadedVolunteer?.current_shelter_code).toBeNull();
+	});
+
+	it('checkOut() requires a reason for manual_override', async () => {
+		const { assignments, job, volunteer } = await setup();
+		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
+		await assignments.checkIn(assignment._id, 'staff-1');
+
+		await expect(
+			assignments.checkOut(assignment._id, 'staff-2', 'manual_override')
+		).rejects.toThrow(/Manual Override/);
+
+		const withReason = await assignments.checkOut(
+			assignment._id,
+			'staff-2',
+			'manual_override',
+			'ลืมสแกนออกก่อนกลับ'
+		);
+		expect(withReason.check_out_method).toBe('manual_override');
+		expect(withReason.check_out_reason).toBe('ลืมสแกนออกก่อนกลับ');
 	});
 
 	it('list() filters by volunteerId/jobId/date/status', async () => {

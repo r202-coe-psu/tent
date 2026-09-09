@@ -32,10 +32,13 @@ function validDoc() {
 		check_in_at: null,
 		check_out_at: null,
 		check_in_by: null,
+		check_out_by: null,
 		status: 'assigned' as const,
 		dispatch_status: null,
 		check_in_method: 'qr' as const,
-		check_in_reason: null
+		check_in_reason: null,
+		check_out_method: 'qr' as const,
+		check_out_reason: null
 	};
 }
 
@@ -143,13 +146,48 @@ describe('shiftAssignmentSchema', () => {
 	});
 
 	describe('F13 — optional fields', () => {
-		it('check_in_at/check_out_at/check_in_by/dispatch_status are optional keys', () => {
+		it('check_in_at/check_out_at/check_in_by/check_out_by/dispatch_status are optional keys', () => {
 			const doc = validDoc() as Record<string, unknown>;
 			delete doc.check_in_at;
 			delete doc.check_out_at;
 			delete doc.check_in_by;
+			delete doc.check_out_by;
 			delete doc.dispatch_status;
 			expect(shiftAssignmentSchema.safeParse(doc).success).toBe(true);
+		});
+	});
+
+	describe('CR-108 — manual_override -> check_out_reason refine', () => {
+		it('rejects manual_override with no check_out_reason', () => {
+			const result = shiftAssignmentSchema.safeParse({
+				...validDoc(),
+				check_out_method: 'manual_override',
+				check_out_reason: null
+			});
+			expect(result.success).toBe(false);
+			if (!result.success) {
+				expect(result.error.issues.some((i) => i.path.includes('check_out_reason'))).toBe(true);
+			}
+		});
+
+		it('accepts manual_override with a check_out_reason', () => {
+			expect(
+				shiftAssignmentSchema.safeParse({
+					...validDoc(),
+					check_out_method: 'manual_override',
+					check_out_reason: 'ลืมสแกนออกก่อนกลับ'
+				}).success
+			).toBe(true);
+		});
+
+		it('accepts qr method with no reason', () => {
+			expect(
+				shiftAssignmentSchema.safeParse({
+					...validDoc(),
+					check_out_method: 'qr',
+					check_out_reason: null
+				}).success
+			).toBe(true);
 		});
 	});
 
@@ -213,16 +251,42 @@ describe('shiftAssignmentInputSchema', () => {
 });
 
 describe('makeShiftAssignment', () => {
-	it('defaults to status assigned, check_in_method qr, all check-in fields null', () => {
+	it('defaults to status assigned, check_in_method/check_out_method qr, all check-in/out fields null', () => {
 		const a = makeShiftAssignment(baseInput, ctx);
 		expect(a._id).toMatch(/^shift_assignment:/);
-		expect(a.schema_v).toBe(4);
+		expect(a.schema_v).toBe(5);
 		expect(a.status).toBe('assigned');
 		expect(a.check_in_method).toBe('qr');
 		expect(a.check_in_at).toBeNull();
 		expect(a.check_in_by).toBeNull();
 		expect(a.check_in_reason).toBeNull();
+		expect(a.check_out_method).toBe('qr');
+		expect(a.check_out_at).toBeNull();
+		expect(a.check_out_by).toBeNull();
+		expect(a.check_out_reason).toBeNull();
 		expect(a.dispatch_status).toBeNull();
+	});
+
+	it('CR-108 — can set a check-out manual override with a reason at creation', () => {
+		const a = makeShiftAssignment(baseInput, ctx, {
+			status: 'completed',
+			check_out_at: '2026-08-26T16:05:00.000Z',
+			check_out_by: 'staff-1',
+			check_out_method: 'manual_override',
+			check_out_reason: 'ลืมสแกนออกก่อนกลับ'
+		});
+		expect(a.check_out_method).toBe('manual_override');
+		expect(a.check_out_reason).toBe('ลืมสแกนออกก่อนกลับ');
+		expect(a.check_out_by).toBe('staff-1');
+	});
+
+	it('CR-108 — still enforces the check-out manual_override-requires-reason refine at creation time', () => {
+		expect(() =>
+			makeShiftAssignment(baseInput, ctx, {
+				check_out_method: 'manual_override'
+				// no check_out_reason
+			})
+		).toThrow();
 	});
 
 	it('F9 — can set check_in_at/check_in_by at creation (walk-in instant check-in, FR-VOL-10.5)', () => {

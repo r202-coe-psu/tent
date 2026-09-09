@@ -317,8 +317,16 @@ export interface ShiftAssignmentRepository {
 		method?: CheckInMethod,
 		reason?: string | null
 	): Promise<ShiftAssignment>;
-	/** Record check-out (`status → completed`). */
-	checkOut(id: string): Promise<ShiftAssignment>;
+	/**
+	 * Record check-out (`status → completed`). `method` defaults to `qr`;
+	 * `manual_override` requires `reason` (schema.md §2.9 refine, CR-108).
+	 */
+	checkOut(
+		id: string,
+		actor: string,
+		method?: CheckInMethod,
+		reason?: string | null
+	): Promise<ShiftAssignment>;
 	/**
 	 * SM removes a volunteer from a shift before they've worked it — the
 	 * "ลบออกจากกะ" affordance on the job detail shifts tab.

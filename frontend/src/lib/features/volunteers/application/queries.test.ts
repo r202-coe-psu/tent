@@ -365,7 +365,7 @@ describe('mutation invalidation map', () => {
 	it('useCheckOut invalidates shiftAssignments + volunteers + hubMetrics', async () => {
 		shiftAssignmentRepo.checkOut.mockResolvedValue({});
 		const qc = fakeQueryClient();
-		await useCheckOut(qc).mutate('shift_assignment:1');
+		await useCheckOut(qc).mutate({ id: 'shift_assignment:1' });
 		expect(qc.invalidateQueries).toHaveBeenCalledTimes(3);
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({
 			queryKey: volunteerKeys.shiftAssignmentsAll()

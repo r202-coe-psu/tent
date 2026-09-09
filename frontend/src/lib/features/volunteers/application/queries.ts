@@ -381,7 +381,16 @@ export const useCheckIn = (queryClient: QueryClient) =>
 /** Records check-out: `shift_assignment.status -> completed` + `volunteer.checked_in -> false`. Same fan-out as check-in. */
 export const useCheckOut = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: (id: string) => shiftAssignmentRepository().checkOut(id),
+		mutationFn: ({
+			id,
+			method,
+			reason
+		}: {
+			id: string;
+			method?: CheckInMethod;
+			reason?: string | null;
+		}) =>
+			shiftAssignmentRepository().checkOut(id, authStore.user?.name ?? 'unknown', method, reason),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });

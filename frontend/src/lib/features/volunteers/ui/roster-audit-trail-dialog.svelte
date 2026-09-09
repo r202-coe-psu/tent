@@ -16,10 +16,9 @@
 	 * as the other schema gaps already flagged across this feature (e.g.
 	 * `volunteer-card.svelte`'s "ลบ" stub, `D-VOL-TRANSFER-APPROVE`).
 	 *
-	 * `check_out` events carry no source distinction (no `check_out_method`
-	 * column exists — see `roster-manual-checkin-dialog.svelte`'s header
-	 * comment), so the self/staff toggle here only ever filters `check_in`
-	 * events; check-out rows always show regardless of the toggle.
+	 * `check_out` events now carry the same source distinction as `check_in`
+	 * (`check_out_method`/`check_out_by`/`check_out_reason`, CR-108), so the
+	 * self/staff toggle filters both kinds symmetrically.
 	 */
 	import History from '@lucide/svelte/icons/history';
 	import LogIn from '@lucide/svelte/icons/log-in';
@@ -80,15 +79,18 @@
 				});
 			}
 			if (a.check_out_at) {
+				const manualOut = a.check_out_method === 'manual_override';
 				rows.push({
 					key: `${a._id}-out`,
 					kind: 'check_out',
 					ts: a.check_out_at,
 					volunteerId: a.volunteer_id,
 					volunteerName: name,
-					actorLine: `${name} (สแกน QR ด้วยตนเอง)`,
-					noteLine: 'ปฏิบัติงานเสร็จสิ้น / ออกจากศูนย์',
-					isManual: false
+					actorLine: manualOut
+						? `${a.check_out_by ?? 'จนท.'} (เช็คเอาต์แทนหน้างาน)`
+						: `${a.check_out_by ?? name} (สแกน QR)`,
+					noteLine: manualOut ? (a.check_out_reason ?? '—') : 'ปฏิบัติงานเสร็จสิ้น / ออกจากศูนย์',
+					isManual: manualOut
 				});
 			}
 		}
@@ -120,9 +122,8 @@
 	const filteredEvents = $derived.by(() => {
 		let list = events;
 		if (volunteerFilter) list = list.filter((e) => e.volunteerId === volunteerFilter);
-		if (sourceFilter === 'self') list = list.filter((e) => e.kind === 'check_out' || !e.isManual);
-		else if (sourceFilter === 'manual')
-			list = list.filter((e) => e.kind === 'check_in' && e.isManual);
+		if (sourceFilter === 'self') list = list.filter((e) => !e.isManual);
+		else if (sourceFilter === 'manual') list = list.filter((e) => e.isManual);
 		return list;
 	});
 
@@ -219,12 +220,12 @@
 							<span
 								class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
 							>
-								{#if event.kind === 'check_in' && event.isManual}
+								{#if event.isManual}
 									<UserCog class="h-3 w-3" />
-									จนท. เช็คอินแทน (Source)
+									จนท. {event.kind === 'check_in' ? 'เช็คอินแทน' : 'เช็คเอาต์แทน'} (Source)
 								{:else}
 									<Smartphone class="h-3 w-3" />
-									จัดอาสาเช็คอินเอง (Source)
+									{event.kind === 'check_in' ? 'จัดอาสาเช็คอินเอง' : 'จัดอาสาเช็คเอาต์เอง'} (Source)
 								{/if}
 							</span>
 							<span class="text-sm font-bold text-foreground">{event.volunteerName}</span>
