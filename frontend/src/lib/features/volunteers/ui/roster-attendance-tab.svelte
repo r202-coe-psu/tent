@@ -34,7 +34,6 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Monitor from '@lucide/svelte/icons/monitor';
 	import History from '@lucide/svelte/icons/history';
-	import Info from '@lucide/svelte/icons/info';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -216,17 +215,6 @@
 			</p>
 		</div>
 	{/if}
-
-	<div
-		class="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sky-900"
-	>
-		<Info class="mt-0.5 h-4 w-4 shrink-0" />
-		<p class="text-xs">
-			หลักเกณฑ์การทำงานร่วมกัน: สามารถใช้ปุ่ม "เช็คอินเข้างาน" หรือ "เช็คเอาต์ออกงาน"
-			ด้านล่างเพื่อบันทึกสถานะได้แบบ 1-Click ทันที หรือกดปุ่ม "เช็คอินแทน" เพื่อลงบันทึกเหตุผลพิเศษ
-			(Audit Trail) ในกรณีอุปกรณ์ขัดข้อง
-		</p>
-	</div>
 
 	{#if isLoading}
 		<div class="space-y-3">

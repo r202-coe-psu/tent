@@ -14,13 +14,13 @@
 	 * `volunteer-card.svelte`'s "ลบ" button) until that hardware integration is
 	 * built.
 	 */
-	import { toast } from 'svelte-sonner';
 	import Search from '@lucide/svelte/icons/search';
 	import Camera from '@lucide/svelte/icons/camera';
-	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
+	import { resolve } from '$app/paths';
 	import { shiftKindSchema, shiftAssignmentStatusSchema } from '../domain/shift-assignment.schema';
 	import type { ShiftAssignmentStatus, ShiftKind } from '../domain/shift-assignment.schema';
 	import { todayDateString } from '../application/queries';
@@ -64,17 +64,7 @@
 		...shiftAssignmentStatusSchema.options.map((v) => ({ value: v, label: STATUS_LABELS[v] }))
 	];
 
-	const selectTriggerClass = 'h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
-
-	/** An empty date input (the operator cleared it) falls back to today rather
-	 * than querying `date: ''`, which would match no assignment at all. */
-	function onDateInput(event: Event & { currentTarget: HTMLInputElement }) {
-		date = event.currentTarget.value || todayDateString();
-	}
-
-	function mockScan() {
-		toast.info('สแกนรับเข้างานด้วยกล้อง — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา (mock up)');
-	}
+	const selectTriggerClass = '!h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
 </script>
 
 <div class="space-y-3 rounded-2xl border border-border bg-card p-4">
@@ -124,18 +114,7 @@
 			</Select.Content>
 		</Select.Root>
 
-		<div class="relative shrink-0">
-			<CalendarDays
-				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-			/>
-			<Input
-				type="date"
-				value={date}
-				oninput={onDateInput}
-				aria-label="วันที่ของตารางกะ"
-				class="h-11 rounded-xl bg-background pl-9 shadow-xs lg:w-44"
-			/>
-		</div>
+		<DatePicker bind:value={date} placeholder="เลือกวันที่ของตารางกะ" class="lg:w-44" />
 
 		{#if !isToday}
 			<Button
@@ -147,7 +126,10 @@
 			</Button>
 		{/if}
 
-		<Button variant="outline" class="h-11 shrink-0 gap-1.5 rounded-xl" onclick={mockScan}>
+		<Button
+			href={resolve('/onsite/volunteer-check-in')}
+			class="!h-11 shrink-0 gap-1.5 rounded-xl bg-primary-dark text-white hover:bg-primary-dark/90"
+		>
 			<Camera class="h-4 w-4" />
 			สแกนรับเข้างาน
 		</Button>

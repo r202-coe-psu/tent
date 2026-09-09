@@ -75,19 +75,19 @@
 				labelClass: 'text-emerald-200/70'
 			},
 			{
-				key: 'pendingApproval',
-				label: 'รออนุมัติ',
-				value: m?.pendingApproval,
-				unit: 'ราย',
+				key: 'pendingIdentity',
+				label: 'รอตรวจสอบและอนุมัติ',
+				value: m?.pendingIdentity,
+				unit: 'คน',
 				valueClass: 'text-yellow-300',
 				labelClass: 'text-yellow-200/70',
 				dot: true
 			},
 			{
-				key: 'pendingIdentity',
-				label: 'รอยืนยันตัวตน',
-				value: m?.pendingIdentity,
-				unit: 'คน',
+				key: 'pendingApproval',
+				label: 'รอยืนยันเข้ากะ',
+				value: m?.pendingApproval,
+				unit: 'ราย',
 				valueClass: 'text-sky-300',
 				labelClass: 'text-sky-200/70'
 			}

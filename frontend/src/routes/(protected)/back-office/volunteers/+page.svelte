@@ -37,7 +37,7 @@
 	// Same `useHubMetrics()` query the header reads — the approvals badge must
 	// not recompute its own count (CR-094 FR-VOL-08.2 / AC-094-09).
 	const hubMetrics = useHubMetrics();
-	const pendingApproval = $derived(hubMetrics.data?.pendingApproval ?? 0);
+	const pendingIdentity = $derived(hubMetrics.data?.pendingIdentity ?? 0);
 
 	const tabs = $derived.by(() => [
 		{
@@ -50,7 +50,7 @@
 			key: 'people' as const,
 			label: 'รายชื่อและการอนุมัติ',
 			icon: UsersRound,
-			badge: pendingApproval
+			badge: pendingIdentity
 		}
 	]);
 
