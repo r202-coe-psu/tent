@@ -13,6 +13,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Globe from '@lucide/svelte/icons/globe';
+	import Lock from '@lucide/svelte/icons/lock';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import * as Select from '$lib/components/ui/select';
@@ -292,7 +293,7 @@
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
-							<span class="text-sm">🔐</span>
+							<Lock class="h-4 w-4 shrink-0" />
 							<span class="leading-relaxed">เข้าสู่ระบบจิตอาสา / ตารางงาน</span>
 						</a>
 						<a
@@ -455,7 +456,7 @@
 							? 'bg-primary-muted text-primary'
 							: 'text-muted-foreground'}"
 					>
-						<span class="text-base">🔐</span>
+						<Lock class="h-5 w-5 shrink-0" />
 						เข้าสู่ระบบจิตอาสา
 					</a>
 					<a
