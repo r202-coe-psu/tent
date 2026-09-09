@@ -153,7 +153,6 @@
 		lastName: '',
 		nickname: '',
 		phone: '',
-		lineId: '',
 		email: '',
 		skills: [] as string[],
 		consentPdpa: false
@@ -348,7 +347,6 @@
 				lastName: '',
 				nickname: '',
 				phone: '',
-				lineId: '',
 				email: '',
 				skills: [],
 				consentPdpa: false
@@ -445,8 +443,10 @@
 								required
 								bind:value={formData.phone}
 								oninput={(e) => {
-									formData.phone = e.currentTarget.value.replace(/[-\s]/g, '');
+									formData.phone = e.currentTarget.value.replace(/\D/g, '').slice(0, 10);
 								}}
+								inputmode="numeric"
+								maxlength={10}
 								placeholder="0812345678"
 								class="mt-1.5 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 							/>
@@ -524,8 +524,10 @@
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}
 												oninput={(e) => {
-													formData.phone = e.currentTarget.value.replace(/[-\s]/g, '');
+													formData.phone = e.currentTarget.value.replace(/\D/g, '').slice(0, 10);
 												}}
+												inputmode="numeric"
+												maxlength={10}
 												placeholder="0812345678"
 												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 											/>
@@ -534,37 +536,20 @@
 											</p>
 										</div>
 									</div>
-									<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-										<div>
-											<label for="lineId" class="mb-1.5 block text-xs font-bold text-foreground">
-												{t.applyLineId}
-												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-											</label>
-											<input
-												id="lineId"
-												type="text"
-												bind:value={formData.lineId}
-												readonly={isPortalApplicant}
-												aria-readonly={isPortalApplicant}
-												placeholder="เช่น kenglkla_vol"
-												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-											/>
-										</div>
-										<div>
-											<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
-												{t.applyEmail}
-												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-											</label>
-											<input
-												id="email"
-												type="email"
-												bind:value={formData.email}
-												readonly={isPortalApplicant}
-												aria-readonly={isPortalApplicant}
-												placeholder="volunteer@example.com"
-												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-											/>
-										</div>
+									<div>
+										<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
+											{t.applyEmail}
+											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+										</label>
+										<input
+											id="email"
+											type="email"
+											bind:value={formData.email}
+											readonly={isPortalApplicant}
+											aria-readonly={isPortalApplicant}
+											placeholder="volunteer@example.com"
+											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+										/>
 									</div>
 								</div>
 							</section>
@@ -696,9 +681,9 @@
 									<Tag class="h-4 w-4 shrink-0" />
 									<span>
 										{#if hasSelectedRequired}
-											✓ คุณได้เลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้แล้ว
+											✓ คุณได้เลือกทักษะที่ตรงตามเงื่อนไขของงานนี้แล้ว
 										{:else}
-											ภารกิจนี้กำหนดให้ต้องมีทักษะเฉพาะ (ป้ายกำกับสีฟ้า) กรุณาเลือกอย่างน้อย 1
+											งานนี้กำหนดให้ต้องมีทักษะเฉพาะ (ป้ายกำกับสีฟ้า) กรุณาเลือกอย่างน้อย 1
 											ทักษะที่ตรงกันเพื่อสมัคร
 										{/if}
 									</span>

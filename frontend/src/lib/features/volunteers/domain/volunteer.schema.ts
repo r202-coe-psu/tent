@@ -130,6 +130,7 @@ export type VolunteerInput = z.input<typeof volunteerInputSchema>;
 export const walkInVolunteerFormSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
+	nickname: z.string().trim().optional(),
 	phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทรศัพท์'),
 	email: z.string().trim().email('อีเมลไม่ถูกต้อง').optional().or(z.literal('')),
 	national_id: z

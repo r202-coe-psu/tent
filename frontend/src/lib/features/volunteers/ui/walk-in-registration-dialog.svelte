@@ -90,7 +90,7 @@
 	const skillsList = $derived(skillCatalog.options);
 
 	function emptyValues(): WalkInVolunteerFormValues {
-		return { first_name: '', last_name: '', phone: '', email: '', national_id: '' };
+		return { first_name: '', last_name: '', nickname: '', phone: '', email: '', national_id: '' };
 	}
 
 	let selectedSkills = $state<string[]>([]);
@@ -140,6 +140,7 @@
 				const volunteer = await createMutation.mutateAsync({
 					first_name: data.first_name,
 					last_name: data.last_name,
+					nickname: data.nickname || undefined,
 					phone: data.phone,
 					email: data.email || null,
 					skills: selectedSkills,
@@ -250,20 +251,36 @@
 						<Form.FieldErrors />
 					</Form.Field>
 				</div>
-				<Form.Field {form} name="phone">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
-							<Input
-								{...props}
-								bind:value={$formData.phone}
-								placeholder="08X-XXX-XXXX"
-								class="h-11"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<Form.Field {form} name="phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.phone}
+									placeholder="08X-XXX-XXXX"
+									class="h-11"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="nickname">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชื่อเล่น (ทางเลือก / Optional)</Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.nickname}
+									placeholder="เช่น ชาย"
+									class="h-11"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</div>
 				<Form.Field {form} name="email">
 					<Form.Control>
 						{#snippet children({ props })}

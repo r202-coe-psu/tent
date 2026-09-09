@@ -80,7 +80,6 @@ export interface JobsTranslations {
 	applyOptional: string;
 	applyPhone: string;
 	applyPhoneLimitHint: string;
-	applyLineId: string;
 	applyEmail: string;
 	applyShiftsAvailable: string;
 	applyDatePrefix: string;
@@ -198,7 +197,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyOptional: '(ไม่บังคับ)',
 		applyPhone: 'เบอร์โทรศัพท์มือถือ',
 		applyPhoneLimitHint: '1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้',
-		applyLineId: 'Line ID',
 		applyEmail: 'อีเมล',
 		applyShiftsAvailable: 'กะให้เลือก',
 		applyDatePrefix: 'วันที่',
@@ -316,7 +314,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyOptional: '(Optional)',
 		applyPhone: 'Mobile Phone Number',
 		applyPhoneLimitHint: '1 application per phone number for this job',
-		applyLineId: 'Line ID',
 		applyEmail: 'Email',
 		applyShiftsAvailable: 'shifts available',
 		applyDatePrefix: 'Date',
