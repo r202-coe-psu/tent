@@ -13,7 +13,7 @@ pre-commit:
     backend-lint-format:
       root: backend/
       glob: "**/*.py"
-      run: poetry run ruff check --fix {staged_files} && poetry run ruff format {staged_files}
+      run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files}
       stage_fixed: true
 
     worker-lint-format:
@@ -35,7 +35,7 @@ pre-push:
 
     backend-test:
       root: backend/
-      run: poetry run pytest
+      run: uv run pytest tests
 
     worker-test:
       root: worker/

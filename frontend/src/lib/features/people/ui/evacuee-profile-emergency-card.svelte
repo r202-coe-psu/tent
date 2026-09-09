@@ -32,17 +32,19 @@
 			</button>
 		{/if}
 	</div>
-	<div class="space-y-3.5">
-		<div>
+	<div class="min-w-0 space-y-3.5">
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ญาติ / ผู้ติดต่อ:</span>
-			<span class="mt-0.5 block text-sm font-bold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-bold text-slate-800 dark:text-slate-200"
+			>
 				{evacuee.emergency_contact?.name || 'ไม่ระบุบุคคล'}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">เบอร์โทรศัพท์ฉุกเฉิน:</span>
 			<span
-				class="mt-0.5 block text-sm font-bold {evacuee.emergency_contact?.phone
+				class="mt-0.5 block break-words text-sm font-bold {evacuee.emergency_contact?.phone
 					? 'text-slate-800 dark:text-slate-200'
 					: 'font-semibold text-red-500 dark:text-red-400'}"
 			>
@@ -50,9 +52,11 @@
 			</span>
 		</div>
 		{#if evacuee.emergency_contact?.relation}
-			<div>
+			<div class="min-w-0">
 				<span class="block text-xs font-medium text-muted-foreground">ความสัมพันธ์:</span>
-				<span class="mt-0.5 block text-sm font-bold text-slate-800 dark:text-slate-200">
+				<span
+					class="mt-0.5 block break-words text-sm font-bold text-slate-800 dark:text-slate-200"
+				>
 					{evacuee.emergency_contact.relation}
 				</span>
 			</div>

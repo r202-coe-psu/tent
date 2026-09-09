@@ -27,12 +27,17 @@
 	let ticketEl = $state<HTMLElement | null>(null);
 	let downloading = $state(false);
 
-	// The QR carries only the booking code — no name, no phone, no health data
-	// (CR-070: ไม่ expose medical/national ID บน public ticket). It is the same
-	// payload the staff card encodes, so the gate scanner resolves it unchanged.
-	// Derived rather than an $effect so the image simply follows the ticket.
+	const isUnassigned = $derived(
+		ticket.type === 'unassigned_queue' || ticket.shelter_code === 'unassigned'
+	);
+
+	const qrPayload = $derived(isUnassigned ? ticket.code : `evacuee:${ticket.code}`);
+
+	// Shelter booking: QR carries `evacuee:{ulid}` — same payload staff encode for the
+	// gate scanner. Unassigned queue (#255): QR is the Mongo registration id only —
+	// NOT a Station-1 Person QR / FamilyBatchPrint / Handover until claim into a shelter.
 	const qrPromise = $derived(
-		QRCode.toDataURL(`evacuee:${ticket.code}`, {
+		QRCode.toDataURL(qrPayload, {
 			width: 384,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }
@@ -75,13 +80,15 @@
 	}
 
 	const statusLabel = $derived(
-		ticket.status === 'pre_registered'
-			? t.statusPreRegistered
-			: ticket.status === 'active'
-				? t.statusActive
-				: ticket.status === 'cancelled'
-					? t.statusCancelled
-					: ticket.status
+		isUnassigned
+			? 'รอรับเข้าศูนย์พักพิง'
+			: ticket.status === 'pre_registered'
+				? t.statusPreRegistered
+				: ticket.status === 'active'
+					? t.statusActive
+					: ticket.status === 'cancelled'
+						? t.statusCancelled
+						: ticket.status
 	);
 </script>
 
@@ -92,9 +99,11 @@
 		>
 			<CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-success" />
 			<div>
-				<p class="text-sm font-bold text-foreground">{t.successHeaderTitle}</p>
+				<p class="text-sm font-bold text-foreground">
+					{isUnassigned ? t.unassignedSuccessTitle : t.successHeaderTitle}
+				</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					{t.successHeaderDesc}
+					{isUnassigned ? t.unassignedSuccessDesc : t.successHeaderDesc}
 				</p>
 			</div>
 		</div>
@@ -103,9 +112,17 @@
 	<div
 		class="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-black/[0.04] bg-card shadow-sm print:border-0 print:shadow-none"
 	>
-		<div class="bg-primary-dark px-6 py-4 text-center text-white">
-			<p class="mt-1 text-base font-bold">{ticket.shelter_name}</p>
-			<p class="text-xs opacity-80">{t.shelterCodeLabel} {ticket.shelter_code}</p>
+		<div
+			class="{isUnassigned ? 'bg-indigo-900' : 'bg-primary-dark'} px-6 py-4 text-center text-white"
+		>
+			<p class="mt-1 text-base font-bold">
+				{isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
+			</p>
+			{#if isUnassigned}
+				<p class="text-xs opacity-80">รหัสลงทะเบียน: {ticket.code}</p>
+			{:else}
+				<p class="text-xs opacity-80">{t.shelterCodeLabel} {ticket.shelter_code}</p>
+			{/if}
 		</div>
 
 		<!--
@@ -125,17 +142,17 @@
 			class="flex flex-col items-center gap-3 bg-card px-6 py-6"
 		>
 			<p class="hidden text-center text-sm font-bold text-foreground print:block">
-				{ticket.shelter_name}
+				{isUnassigned ? 'ยังไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
 			</p>
 			{#await qrPromise}
 				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
 			{:then qrUrl}
-				<img src={qrUrl} alt={t.qrAlt} class="h-44 w-44" />
+				<img src={qrUrl} alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt} class="h-44 w-44" />
 			{:catch}
 				<p
 					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
 				>
-					{t.qrErrorFallback}
+					{isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
 				</p>
 			{/await}
 
@@ -144,6 +161,9 @@
 					{t.bookerNameLabel}
 				</p>
 				<p class="text-base font-bold text-foreground">{fullName}</p>
+				{#if isUnassigned}
+					<p class="mt-1 font-mono text-xs text-muted-foreground">รหัส: {ticket.code}</p>
+				{/if}
 			</div>
 		</div>
 
@@ -153,6 +173,12 @@
 				<dt class="text-muted-foreground">{t.statusDtLabel}</dt>
 				<dd class="text-right font-semibold text-foreground">{statusLabel}</dd>
 			</div>
+			{#if ticket.member_count}
+				<div class="flex justify-between gap-4">
+					<dt class="text-muted-foreground">จำนวนสมาชิก</dt>
+					<dd class="text-right font-semibold text-foreground">{ticket.member_count} คน</dd>
+				</div>
+			{/if}
 			{#if bookedAt}
 				<div class="flex justify-between gap-4">
 					<dt class="text-muted-foreground">{t.bookedAtLabel}</dt>
@@ -160,6 +186,18 @@
 				</div>
 			{/if}
 		</dl>
+
+		{#if isUnassigned}
+			<div class="border-t border-indigo-500/20 bg-indigo-500/10 p-4 text-xs text-foreground">
+				<p class="font-bold text-indigo-700 dark:text-indigo-300">
+					{t.unassignedNextStepsTitle}
+				</p>
+				<p class="mt-1 text-muted-foreground">
+					{t.unassignedNextStepsBody}
+					{' '}(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
+				</p>
+			</div>
+		{/if}
 	</div>
 
 	<div class="flex justify-center print:hidden">
@@ -173,10 +211,10 @@
 <style>
 	/*
 		Print QR-only: deliberately thinner than the onsite wristband/ID-card print
-		in evacuee-qr-modal.svelte. That flow isolates a full card panel (accent bar,
-		name, zone, national ID); a booking ticket only needs the gate scanner to read
-		the QR plus the holder's name as a human-readable fallback, so the isolated
-		target here is just the QR block — no header banner, no dl summary.
+		in evacuee-qr-modal.svelte. Shelter booking needs the gate scanner to read
+		`evacuee:{ulid}`; unassigned tickets encode the Mongo registration id only
+		(queue reference — not Station-1 Person QR until claim). Plus the holder's
+		name as a human-readable fallback.
 
 		The download button no longer calls `window.print()`, but these rules still
 		earn their place: a user who hits Ctrl+P (or "Print" from the browser menu)

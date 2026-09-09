@@ -35,23 +35,25 @@
 			</button>
 		{/if}
 	</div>
-	<div class="space-y-3.5">
-		<div>
+	<div class="min-w-0 space-y-3.5">
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ศูนย์อพยพ:</span>
-			<span class="mt-0.5 block text-sm font-bold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-bold text-slate-800 dark:text-slate-200"
+			>
 				{shelterName}
 			</span>
 		</div>
-		<div class="grid grid-cols-2 gap-4">
-			<div>
+		<div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+			<div class="min-w-0">
 				<span class="block text-xs font-medium text-muted-foreground">โซนพักอาศัย:</span>
 				<span
-					class="mt-1 inline-block rounded-lg border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600 dark:border-blue-900/30 dark:bg-blue-950/40 dark:text-blue-400"
+					class="mt-1 inline-block max-w-full break-words rounded-lg border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600 dark:border-blue-900/30 dark:bg-blue-950/40 dark:text-blue-400"
 				>
-					Zone: {zoneLabel(evacuee.current_stay.zone)}
+					โซน {zoneLabel(evacuee.current_stay.zone)}
 				</span>
 			</div>
-			<div>
+			<div class="min-w-0">
 				<span class="block text-xs font-medium text-muted-foreground">หมายเลขเตียง/จุดพัก:</span>
 				<span class="mt-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">-</span>
 			</div>

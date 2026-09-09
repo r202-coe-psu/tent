@@ -26,6 +26,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_HANDOVER_SLIP_I18N } from './_constants/evacuee-handover-slip.i18n';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	let {
 		show = true,
@@ -109,6 +110,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} onEscape={onClose} />
 	<div
 		class={embedded
 			? 'flex min-h-[70vh] items-center justify-center py-6'

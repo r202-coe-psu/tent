@@ -770,7 +770,7 @@ def test_reservation_expiry_survives_an_out_of_range_ttl() -> None:
 
 async def _seed_app_config(**fields: object) -> None:
     """Stand in for the worker projecting registry `config:app` into `public_config`."""
-    collection = DonationBuffer.get_motor_collection().database["public_config"]
+    collection = DonationBuffer.get_pymongo_collection().database["public_config"]
     await collection.replace_one(
         {"_id": "config:app"}, {"_id": "config:app", **fields}, upsert=True
     )

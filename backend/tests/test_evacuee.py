@@ -3,14 +3,23 @@
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
+from apiapp.modules.evacuee.use_case import map_public_status
 from apiapp.utils.masking import mask_last_name, national_id_hash, phone_hash
 
 
+def test_map_public_status_includes_arriving_and_room_confirmed():
+    """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
+    assert map_public_status("arriving") == "arriving"
+    assert map_public_status("room_confirmed") == "room_confirmed"
+    assert map_public_status("active") == "active"
+    assert map_public_status("teleported") == "unknown"
+
+
 async def _insert_person(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -19,7 +28,7 @@ async def _insert_person(
 
 
 async def _insert_shelter(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -29,7 +38,7 @@ async def _insert_shelter(
 
 async def test_evacuee_search_by_phone_returns_masked_result(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -88,7 +97,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
 
 async def test_evacuee_search_by_national_id_exact_match(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -135,7 +144,7 @@ async def test_evacuee_search_by_national_id_exact_match(
 
 async def test_evacuee_search_includes_family_members(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -187,7 +196,7 @@ async def test_evacuee_search_includes_family_members(
 
 async def test_evacuee_search_reports_pre_registered_as_itself(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -237,7 +246,7 @@ async def test_evacuee_search_reports_pre_registered_as_itself(
 
 async def test_evacuee_search_reports_unmapped_status_as_unknown(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -271,7 +280,7 @@ async def test_evacuee_search_reports_unmapped_status_as_unknown(
 
 async def test_evacuee_search_matches_a_thai_name_prefix(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -331,7 +340,7 @@ async def test_evacuee_search_matches_a_thai_name_prefix(
 
 async def test_evacuee_search_hides_opted_out_records(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -374,7 +383,7 @@ async def test_evacuee_search_rejects_invalid_query(
 
 async def test_evacuee_search_writes_search_audit(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):

@@ -285,9 +285,9 @@
 
 <!-- 4. Real-world Public Portal Application (4 Service Cards) -->
 <div class="border-2 border-red-200 bg-white">1. ค้นหาศูนย์พักพิง (#DC2626 Destructive)</div>
-<div class="border-2 border-sky-200 bg-white">2. ค้นหาญาติ / ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
-<div class="border-2 border-amber-200 bg-white">3. ผู้บริจาค / มอบเสบียง (#EA580C Kitchen & Food)</div>
-<div class="border-2 border-emerald-200 bg-white">4. จิตอาสา / อาสาสมัคร (#059669 Volunteers)</div>
+<div class="border-2 border-sky-200 bg-white">2. ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
+<div class="border-2 border-amber-200 bg-white">3. บริจาค (#EA580C Kitchen & Food)</div>
+<div class="border-2 border-emerald-200 bg-white">4. อาสาสมัคร (#059669 Volunteers)</div>
 
 <!-- 5. 360° Refined Status Borders -->
 <div class="border border-emerald-200 bg-white text-emerald-900">Operational Green #16A34A</div>
@@ -2206,7 +2206,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">2. ค้นหาญาติ / ผู้พักพิง</h4>
+									<h4 class="text-base font-bold text-slate-900">2. ผู้พักพิง</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ค้นหารายชื่อผู้พักพิง ตรวจสอบสถานะความปลอดภัย
 										และพิกัดศูนย์พักพิงที่คนในครอบครัวเข้าพักอยู่
@@ -2250,7 +2250,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">3. ผู้บริจาค / มอบเสบียง</h4>
+									<h4 class="text-base font-bold text-slate-900">3. บริจาค</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ประสานงานมอบอาหารปรุงสุก น้ำดื่ม สิ่งของจำเป็น หรือสมทบทุนช่วยเหลือผู้ประสบภัย
 									</p>
@@ -2293,7 +2293,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">4. จิตอาสา / อาสาสมัคร</h4>
+									<h4 class="text-base font-bold text-slate-900">4. อาสาสมัคร</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ลงทะเบียนร่วมช่วยเหลือ เลือกลงกะตามความถนัด เช่น ทีมแพทย์สนาม ครัวกลาง
 										และขนย้ายผู้ประสบภัย
@@ -2558,7 +2558,7 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#0A2647]"></span>
-										ค้นหาญาติ / ผู้พักพิง (Card 2)
+										ผู้พักพิง (Card 2)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#013365 / #0284C7</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-sky-800"
@@ -2570,7 +2570,7 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#EA580C]"></span>
-										ผู้บริจาค / มอบเสบียง (Card 3)
+										บริจาค (Card 3)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#E17100</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-amber-700"
@@ -2584,7 +2584,7 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#059669]"></span>
-										จิตอาสา / อาสาสมัคร (Card 4)
+										อาสาสมัคร (Card 4)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#009866</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-emerald-700"

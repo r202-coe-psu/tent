@@ -3,13 +3,13 @@
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
 
 
 async def _insert_shelter_doc(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -24,7 +24,7 @@ async def test_list_shelters_requires_bearer(client: AsyncClient):
 
 async def test_list_shelters_returns_open_shelters(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -76,7 +76,7 @@ async def test_list_shelters_returns_open_shelters(
 
 async def test_list_shelters_filters_by_province(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -121,7 +121,7 @@ async def test_list_shelters_filters_by_province(
 
 async def test_list_shelters_filters_by_site_kind(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -166,7 +166,7 @@ async def test_list_shelters_filters_by_site_kind(
 
 async def test_list_shelters_filters_by_radius(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -235,7 +235,7 @@ async def test_list_shelters_filters_by_radius(
 
 
 async def _insert_person_doc(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     person_id: str,
     shelter_code: str,
@@ -257,12 +257,11 @@ async def _insert_person_doc(
 
 async def test_shelter_detail_occupancy_counts_pre_registered(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
-    """CR-070 D-BOOK-OCC=C — a web booking holds the seat, so `pre_registered`
-    counts toward public occupancy alongside `active`. Everything else does not."""
+    """CR-112 — public `occupancy` is Forecast; `present` / `in_zone` are additive."""
     now = datetime.now(UTC)
     await _insert_shelter_doc(
         db_client,
@@ -283,7 +282,10 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
         await _insert_person_doc(db_client, settings, f"evacuee:a{idx}", "SH001", status)
     for idx, status in enumerate(["pre_registered", "pre_registered"]):
         await _insert_person_doc(db_client, settings, f"evacuee:p{idx}", "SH001", status)
-    # Neither of these holds a place.
+    await _insert_person_doc(db_client, settings, "evacuee:arr0", "SH001", "arriving")
+    await _insert_person_doc(db_client, settings, "evacuee:rc0", "SH001", "room_confirmed")
+    await _insert_person_doc(db_client, settings, "evacuee:tl0", "SH001", "temporary_leave")
+    # Terminal statuses do not hold a Forecast seat.
     await _insert_person_doc(db_client, settings, "evacuee:c0", "SH001", "cancelled")
     await _insert_person_doc(db_client, settings, "evacuee:o0", "SH001", "checked_out")
     # Another shelter's residents must not leak in.
@@ -293,7 +295,12 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     assert response.status_code == 200
 
     shelter = response.json()["shelter"]
-    # 3 active + 2 pre_registered = 5; cancelled / checked_out / other shelters excluded.
+    # Forecast: 3 active + 2 pre_registered + 1 arriving + 1 room_confirmed + 1 temporary_leave = 8
+    assert shelter["occupancy"] == 8
+    # Present: 3 active + 1 room_confirmed + 1 temporary_leave = 5
+    assert shelter["present"] == 5
+    # In-zone: room_confirmed only
+    assert shelter["in_zone"] == 1
     assert shelter["capacity"]["total"] == 100
-    assert shelter["capacity"]["available"] == 95
-    assert shelter["occupancy_rate"] == 5
+    assert shelter["capacity"]["available"] == 92
+    assert shelter["occupancy_rate"] == 8

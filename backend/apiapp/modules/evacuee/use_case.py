@@ -20,19 +20,16 @@ logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
 
-#: The seven `current_stay.status` values of the staff data model, reported to
-#: the public search verbatim since CR-080. Before that they were collapsed into
-#: `in_shelter` / `moved` / `checked_out` (FS-2, CR-005), which answered the one
-#: question this endpoint exists for incorrectly: a person who reserved a place
-#: through the public booking flow (CR-070) but never arrived is
-#: `pre_registered`, and the old mapping displayed them as safely in the shelter.
-#: Anything outside this set is reported as `unknown` rather than guessed at, so
-#: a projection emitting a status the API has not been taught about cannot be
-#: silently rendered as some other outcome.
+#: Staff `current_stay.status` values reported to public search verbatim
+#: (CR-080 + CR-112). Includes `arriving` and `room_confirmed` so Zone Arrival
+#: Confirmation and Report-in are visible to relatives. Anything outside this
+#: set is reported as `unknown` rather than guessed at.
 PUBLIC_STAY_STATUSES = frozenset(
     {
         "pre_registered",
+        "arriving",
         "active",
+        "room_confirmed",
         "temporary_leave",
         "transferred",
         "checked_out",

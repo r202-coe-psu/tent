@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	countVulnerableFromBirthYearRows,
 	isValidThaiBirthYear,
-	sumOccupancyFromStatusRows
+	occupancyTripleFromStatusRows,
+	sumInZoneFromStatusRows,
+	sumOccupancyFromStatusRows,
+	sumPresentFromStatusRows
 } from './transparency-metrics';
 
 describe('transparency metrics', () => {
@@ -37,21 +40,47 @@ describe('transparency metrics', () => {
 	});
 });
 
-describe('sumOccupancyFromStatusRows (CR-070 D-BOOK-OCC=C)', () => {
-	it('counts active + pre_registered and ignores every other status', () => {
-		const rows = [
-			{ key: 'active', value: 3 },
-			{ key: 'pre_registered', value: 2 },
-			{ key: 'cancelled', value: 9 },
-			{ key: 'checked_out', value: 4 },
-			{ key: 'deceased', value: 1 }
-		];
-		expect(sumOccupancyFromStatusRows(rows)).toBe(5);
+describe('occupancy triple (CR-112 Forecast / Present / In-zone)', () => {
+	const rows = [
+		{ key: 'pre_registered', value: 2 },
+		{ key: 'arriving', value: 1 },
+		{ key: 'active', value: 3 },
+		{ key: 'room_confirmed', value: 4 },
+		{ key: 'temporary_leave', value: 1 },
+		{ key: 'cancelled', value: 9 },
+		{ key: 'checked_out', value: 4 },
+		{ key: 'transferred', value: 2 },
+		{ key: 'deceased', value: 1 }
+	];
+
+	it('Forecast occupancy counts pre_registered, arriving, active, room_confirmed, temporary_leave', () => {
+		// 2+1+3+4+1 = 11; terminal statuses excluded
+		expect(sumOccupancyFromStatusRows(rows)).toBe(11);
 	});
 
-	it('returns 0 when nothing holds a place', () => {
+	it('Present counts active, room_confirmed, temporary_leave only', () => {
+		expect(sumPresentFromStatusRows(rows)).toBe(8);
+	});
+
+	it('In-zone counts room_confirmed only', () => {
+		expect(sumInZoneFromStatusRows(rows)).toBe(4);
+	});
+
+	it('returns the additive triple together', () => {
+		expect(occupancyTripleFromStatusRows(rows)).toEqual({
+			occupancy: 11,
+			present: 8,
+			in_zone: 4
+		});
+	});
+
+	it('returns zeros when nothing holds a place', () => {
 		expect(sumOccupancyFromStatusRows([{ key: 'cancelled', value: 9 }])).toBe(0);
-		expect(sumOccupancyFromStatusRows([])).toBe(0);
+		expect(occupancyTripleFromStatusRows([])).toEqual({
+			occupancy: 0,
+			present: 0,
+			in_zone: 0
+		});
 	});
 
 	it('tolerates a missing or malformed view payload', () => {
@@ -62,12 +91,15 @@ describe('sumOccupancyFromStatusRows (CR-070 D-BOOK-OCC=C)', () => {
 	});
 
 	it('skips rows whose value is not a usable count', () => {
-		const rows = [
+		const bad = [
 			{ key: 'active', value: 3 },
 			{ key: 'pre_registered', value: -1 },
 			{ key: 'active', value: Number.NaN },
-			{ key: 'active', value: '7' }
+			{ key: 'active', value: '7' },
+			{ key: 'room_confirmed', value: 2 }
 		];
-		expect(sumOccupancyFromStatusRows(rows)).toBe(3);
+		expect(sumOccupancyFromStatusRows(bad)).toBe(5);
+		expect(sumPresentFromStatusRows(bad)).toBe(5);
+		expect(sumInZoneFromStatusRows(bad)).toBe(2);
 	});
 });

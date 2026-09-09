@@ -4,9 +4,9 @@
  */
 import type { Evacuee, TriageLevel } from './people';
 
-export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'พักแล้ว' | '—';
+export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
 
-export type ZoningQueueTab = 'pending' | 'assigned';
+export type ZoningQueueTab = 'pending' | 'awaiting_confirm' | 'assigned';
 
 export type ScreeningQueueTab = 'pending' | 'screened';
 
@@ -15,7 +15,8 @@ export type ZoningRecommendKind = 'quarantine' | 'vulnerable' | 'general';
 /**
  * 「คิวถัดไป」 column for Station 1 registration desk.
  * Flag on: arriving without screening → รอแพทย์; arriving with screening (or any arriving when
- * flag off) and no zone → รอโซน; active (or zoned) → พักแล้ว.
+ * flag off) and no zone → รอโซน; active + zone → รอยืนยันถึงโซน; room_confirmed /
+ * temporary_leave (and other legacy zoned stays) → พักแล้ว.
  */
 export function nextQueueLabel(
 	evacuee: Evacuee,
@@ -23,8 +24,13 @@ export function nextQueueLabel(
 ): NextQueueLabel {
 	const status = evacuee.current_stay?.status;
 	const zone = evacuee.current_stay?.zone;
+	const hasZone = zone != null && zone !== '';
 
-	if (status === 'active' || (zone != null && zone !== '')) {
+	if (status === 'active' && hasZone) {
+		return 'รอยืนยันถึงโซน';
+	}
+
+	if (status === 'room_confirmed' || status === 'temporary_leave' || hasZone) {
 		return 'พักแล้ว';
 	}
 
@@ -65,7 +71,9 @@ export function classifyScreeningQueueTab(
 /**
  * Station 3 queue tab classification ("Cleared for Zoning" = pending).
  * - pending (รอจัด / พร้อมจัดโซน): arriving, zone null; when flag on also requires a screening doc
- * - assigned (จัดแล้ว): has a zone (typically active after check-in)
+ * - awaiting_confirm (รอยืนยันถึงโซน): active with zone — Zone Arrival Confirmation pending
+ * - assigned (จัดแล้ว / ยืนยันแล้ว): room_confirmed with zone only
+ *   (temporary_leave keeps Present occupancy but is not Zone Arrival Confirmation)
  */
 export function classifyZoningQueueTab(
 	evacuee: Evacuee,
@@ -75,7 +83,11 @@ export function classifyZoningQueueTab(
 	const zone = evacuee.current_stay?.zone;
 	const hasZone = zone != null && zone !== '';
 
-	if (hasZone && (status === 'active' || status === 'temporary_leave')) {
+	if (hasZone && status === 'active') {
+		return 'awaiting_confirm';
+	}
+
+	if (hasZone && status === 'room_confirmed') {
 		return 'assigned';
 	}
 
@@ -90,30 +102,45 @@ export function classifyZoningQueueTab(
 }
 
 /**
- * Zone type recommendation for Station 3:
- * red/yellow triage → quarantine; else special_needs → vulnerable; else general.
+ * Zone type recommendation for Station 3 (CR-106):
+ * EWAR surveillance symptoms → quarantine; else Vulnerable Groups / Special Needs → vulnerable; else general.
+ * Supports legacy TriageLevel for backward compatibility.
  */
 export function recommendZoneKind(
-	evacuee: Pick<Evacuee, 'special_needs'>,
-	triageLevel: TriageLevel | null | undefined
+	evacuee: Pick<Evacuee, 'vulnerable_groups' | 'special_needs'>,
+	ewarSymptomsOrTriage?: readonly string[] | TriageLevel | null
 ): ZoningRecommendKind {
-	if (triageLevel === 'red' || triageLevel === 'yellow') {
+	if (Array.isArray(ewarSymptomsOrTriage)) {
+		if (ewarSymptomsOrTriage.length > 0) {
+			return 'quarantine';
+		}
+	} else if (ewarSymptomsOrTriage === 'red' || ewarSymptomsOrTriage === 'yellow') {
 		return 'quarantine';
 	}
+	if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
+		return 'vulnerable';
+	}
+	// Legacy docs may still carry coded tags in special_needs until staff re-save.
 	if (evacuee.special_needs && evacuee.special_needs.length > 0) {
 		return 'vulnerable';
 	}
 	return 'general';
 }
 
-/** Count active (or temporary_leave) occupants per zone code. */
-export function countOccupantsByZone(evacuees: readonly Evacuee[]): Map<string, number> {
+/**
+ * Present occupancy per zone: occupants whose stay is still "present"
+ * (`active` | `room_confirmed` | `temporary_leave`) — not In-zone-only.
+ * Includes Zone Arrival Confirmation pending (`active` + zone).
+ */
+export function countPresentOccupantsByZone(evacuees: readonly Evacuee[]): Map<string, number> {
 	const counts = new Map<string, number>();
 	for (const e of evacuees) {
 		const status = e.current_stay?.status;
 		const zone = e.current_stay?.zone;
 		if (!zone) continue;
-		if (status !== 'active' && status !== 'temporary_leave') continue;
+		if (status !== 'active' && status !== 'room_confirmed' && status !== 'temporary_leave') {
+			continue;
+		}
 		counts.set(zone, (counts.get(zone) ?? 0) + 1);
 	}
 	return counts;

@@ -10,8 +10,13 @@
 	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Loader from '@lucide/svelte/icons/loader';
-	import { lookupEvacueeByScanCode } from '$lib/features/people';
+	import { lookupFederatedByScanCode } from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	let {
 		show,
@@ -28,6 +33,8 @@
 	let manualCode = $state('');
 	let isLooking = $state(false);
 	let cameraError = $state<string | null>(null);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 
 	let lastScannedCode = '';
 	let lastScanTime = 0;
@@ -98,14 +105,23 @@
 
 		isLooking = true;
 		try {
-			const evacuee = await lookupEvacueeByScanCode(queryClient, cleanCode);
-			if (!evacuee) {
+			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
+			if (!result) {
 				toast.error(`ไม่พบข้อมูลผู้พักพิงจากรหัส "${cleanCode}" ในศูนย์ ${getShelterCode()}`);
 				return;
 			}
 			manualCode = '';
-			toast.success(`สแกนสำเร็จ: พบข้อมูล ${evacuee.first_name} ${evacuee.last_name}`);
-			onFound(evacuee._id);
+			if (result.source === 'unassigned') {
+				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				claimHit = result.hit;
+				claimOpen = true;
+				onClose();
+				return;
+			}
+			toast.success(
+				`สแกนสำเร็จ: พบข้อมูล ${result.evacuee.first_name} ${result.evacuee.last_name}`
+			);
+			onFound(result.evacuee._id);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการค้นหา');
 		} finally {
@@ -213,6 +229,12 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>
 
 <style>
 	:global(#evacuee-search-qr-reader *) {

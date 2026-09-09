@@ -4,11 +4,18 @@
 	let { children }: LayoutProps = $props();
 </script>
 
+<!--
+	--registration-sticky-top: protected app bar (3.5rem / top-14) + ShelterNavbar (52px)
+	so UnifiedRegistrationForm sticky chrome clears both bars identically on every onsite page.
+-->
 <div
-	class="flex min-h-0 w-full flex-1 flex-col items-stretch overflow-hidden bg-muted/30 text-foreground"
+	class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground"
+	style="--registration-sticky-top: 6.75rem"
 >
-	<ShelterNavbar />
-	<div class="min-h-0 w-full flex-1 flex-col overflow-y-auto">
+	<div class="sticky top-14 z-30">
+		<ShelterNavbar />
+	</div>
+	<div class="w-full flex-1 flex-col">
 		{@render children()}
 	</div>
 </div>

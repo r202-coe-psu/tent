@@ -84,7 +84,7 @@ async def test_a_full_warehouse_takes_no_bookings_at_all(db: None) -> None:
 async def test_a_counter_predating_the_field_keeps_the_old_ceiling(db: None) -> None:
     """$ifNull: an unmigrated counter has no on_hand_qty and must not stop reserving."""
     await _seed()
-    await DonationNeedCounter.get_motor_collection().update_one(
+    await DonationNeedCounter.get_pymongo_collection().update_one(
         {"_id": counter_id(SHELTER, CAMPAIGN, ITEM)}, {"$unset": {"on_hand_qty": ""}}
     )
 

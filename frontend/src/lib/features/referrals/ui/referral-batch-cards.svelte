@@ -205,8 +205,8 @@
 	}
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
-	<div class="min-h-0 flex-1 space-y-6 overflow-y-auto pb-4">
+<div class="flex flex-col pb-4">
+	<div class="space-y-6">
 		{#if mode === 'created'}
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div class="space-y-1">

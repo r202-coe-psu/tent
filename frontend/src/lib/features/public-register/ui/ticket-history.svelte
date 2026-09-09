@@ -65,9 +65,10 @@
 	{:else}
 		<div class="flex items-center justify-between">
 			<div>
-				<h2 class="text-lg font-bold text-foreground">ตั๋วการจองที่บันทึกไว้ในอุปกรณ์นี้</h2>
+				<h2 class="text-lg font-bold text-foreground">ตั๋วลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้</h2>
 				<p class="text-xs text-muted-foreground">
-					แตะที่ตั๋วเพื่อเปิดแสดง Person QR สำหรับยื่นให้เจ้าหน้าที่ ณ จุดลงทะเบียน (Station 1)
+					แตะที่ตั๋วเพื่อเปิดแสดง QR Code สำหรับแสดงต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์
+					เพื่อยืนยันการเข้าพัก
 				</p>
 			</div>
 			{#if onNewBooking}
@@ -116,9 +117,14 @@
 						<div class="space-y-1.5">
 							<div class="flex items-center gap-2">
 								<span
-									class="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-bold text-primary"
+									class="rounded-full {t.shelter_code === 'unassigned' ||
+									t.type === 'unassigned_queue'
+										? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+										: 'bg-primary/10 text-primary'} px-2 py-0.5 text-2xs font-bold"
 								>
-									{t.code}
+									{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
+										? 'ยังไม่ระบุศูนย์'
+										: t.code}
 								</span>
 								<span class="text-sm font-bold text-foreground">
 									{[t.first_name, t.last_name].filter(Boolean).join(' ') || 'ผู้จอง'}
