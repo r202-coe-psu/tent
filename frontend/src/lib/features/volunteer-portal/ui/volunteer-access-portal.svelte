@@ -1305,7 +1305,11 @@
 				own search, filters and no-auth application form, and TanStack dedupes the
 				fetch with the `openingsQuery` above rather than asking twice.
 			-->
-			<JobBoard applicantProfile={profileQuery.data} applicantCredential={session} />
+			<JobBoard
+				applicantProfile={profileQuery.data}
+				applicantCredential={session}
+				existingActivities={currentVolunteer?.activities ?? []}
+			/>
 		{/if}
 	{/if}
 </div>

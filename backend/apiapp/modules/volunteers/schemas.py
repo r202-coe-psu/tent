@@ -200,7 +200,10 @@ class TicketFindItem(BaseModel):
     job_title: str = ""
     shelter_code: str
     shift_date: str = ""
+    end_date: str | None = None
     shift_id: str | None = None
+    start_time: str = ""
+    end_time: str = ""
 
 
 class TicketFindResponse(BaseModel):

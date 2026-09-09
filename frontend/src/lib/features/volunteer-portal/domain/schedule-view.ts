@@ -1,4 +1,5 @@
 import type { ScheduleShift, ShiftStatus, TicketSummary } from './volunteer';
+import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 
 export type PortalActivityStatus = 'booking' | ShiftStatus | string;
 
@@ -107,6 +108,29 @@ function statusForTicket(ticket: TicketSummary): PortalActivityStatus {
 	return ticket.status === 'cancelled' ? 'cancelled' : 'booking';
 }
 
+function ticketWindow(ticket: TicketSummary): { start_ts: string; end_ts: string } | null {
+	if (!ticket.start_time || !ticket.end_time || !ticket.shift_date) return null;
+	try {
+		const endDate =
+			ticket.end_date ||
+			(ticket.end_time <= ticket.start_time
+				? (() => {
+						const next = new Date(ticket.shift_date + 'T00:00:00Z');
+						next.setUTCDate(next.getUTCDate() + 1);
+						return next.toISOString().slice(0, 10);
+					})()
+				: ticket.shift_date);
+		return shiftDutyWindow({
+			date: ticket.shift_date,
+			end_date: endDate,
+			start_time: ticket.start_time,
+			end_time: ticket.end_time
+		});
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Merge applications and roster rows into the one list the volunteer sees.
  *
@@ -151,6 +175,7 @@ export function mergePortalActivities(
 			if (activity) activity.ticketToken ??= ticket.view_token;
 			continue;
 		}
+		const window = ticketWindow(ticket);
 		activities.push({
 			id: `ticket:${ticket.view_token}`,
 			jobId: ticket.job_id,
@@ -163,8 +188,8 @@ export function mergePortalActivities(
 			shelterCode: ticket.shelter_code,
 			date: ticket.shift_date,
 			shiftPeriod: 'รอจัดกะ',
-			startTs: null,
-			endTs: null,
+			startTs: window?.start_ts ?? null,
+			endTs: window?.end_ts ?? null,
 			checkinAt: null,
 			checkoutAt: null,
 			status: statusForTicket(ticket),

@@ -253,6 +253,34 @@ async def test_controlled_skill_goes_to_review(
     assert response.json()["status"] == "pending_review"
 
 
+async def test_apply_refuses_a_shift_that_overlaps_a_pending_application(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A pending application still represents a time promise and blocks another one."""
+    await _make_job(job_id="job:01JOBEXISTING00000000000001", quota=5)
+    await _make_job(quota=5)
+    await PublicJobApplication(
+        id="job_application:existing-pending",
+        shelter_code="SH001",
+        job_id="job:01JOBEXISTING00000000000001",
+        volunteer_id=None,
+        tracking_token_hash="existing-pending-token",
+        phone_hash=sha256_hex("0812345678"),
+        selected_shift=SelectedShift(date="2026-09-01", start_time="08:00", end_time="12:00"),
+        status="pending_review",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    response = await client.post(
+        f"/public/v1/jobs/{JOB_ID}/apply",
+        json=_apply_body(shift_date="2026-09-01"),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "TIME_CONFLICT"
+
+
 async def _project_volunteer_skills(
     *,
     controlled_codes: list[str],

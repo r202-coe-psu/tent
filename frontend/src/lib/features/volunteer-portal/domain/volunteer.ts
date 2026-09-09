@@ -131,7 +131,10 @@ export type TicketSummary = {
 	job_title: string;
 	shelter_code: string;
 	shift_date: string;
+	end_date?: string | null;
 	shift_id?: string | null;
+	start_time?: string;
+	end_time?: string;
 };
 
 /** Thai mobile numbers, tolerant of the separators people actually type. */

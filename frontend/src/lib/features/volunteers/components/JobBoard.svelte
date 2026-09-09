@@ -16,6 +16,9 @@
 		VolunteerProfile,
 		VolunteerSkillOption
 	} from '$lib/features/volunteer-portal/domain/volunteer';
+	import type { PortalActivity } from '$lib/features/volunteer-portal/domain/schedule-view';
+	import { findBookingConflict } from '$lib/features/volunteer-portal/domain/booking-overlap';
+	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import JobCard from './JobCard.svelte';
@@ -23,10 +26,12 @@
 
 	let {
 		applicantProfile = null,
-		applicantCredential = null
+		applicantCredential = null,
+		existingActivities = []
 	}: {
 		applicantProfile?: VolunteerProfile | null;
 		applicantCredential?: PortalCredential | null;
+		existingActivities?: PortalActivity[];
 	} = $props();
 
 	const t = $derived(jobsI18n[languageStore.current]);
@@ -37,9 +42,14 @@
 		time: string;
 		start_time?: string;
 		end_time?: string;
+		end_date?: string;
 		quota: number;
 		confirmed: number;
 		applicants_count: number;
+		conflict?: {
+			title: string;
+			time: string;
+		};
 	}
 
 	interface DisplayJobCard {
@@ -59,6 +69,7 @@
 		shift_id?: string;
 		id?: string;
 		date: string;
+		end_date?: string | null;
 		start_time: string;
 		end_time: string;
 		quota: number;
@@ -156,6 +167,58 @@
 			.slice(0, 10);
 	}
 
+	function endDateFor(
+		date: string,
+		startTime: string,
+		endTime: string,
+		endDate?: string | null
+	): string {
+		if (endDate) return endDate;
+		if (endTime > startTime) return date;
+		const next = new Date(Date.parse(date + 'T00:00:00Z') + 24 * 60 * 60 * 1000);
+		return next.toISOString().slice(0, 10);
+	}
+
+	function shiftWindow(shift: Pick<DisplayShift, 'date' | 'start_time' | 'end_time' | 'end_date'>) {
+		if (!shift.start_time || !shift.end_time) return null;
+		try {
+			return shiftDutyWindow({
+				date: shift.date,
+				end_date: endDateFor(shift.date, shift.start_time, shift.end_time, shift.end_date),
+				start_time: shift.start_time,
+				end_time: shift.end_time
+			});
+		} catch {
+			return null;
+		}
+	}
+
+	function conflictTime(startTs: string, endTs: string): string {
+		const options = { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' } as const;
+		const start = new Date(startTs);
+		const end = new Date(endTs);
+		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
+			return 'ช่วงเวลาที่ตรวจสอบไม่ได้';
+		return (
+			start.toLocaleTimeString('th-TH', options) +
+			' - ' +
+			end.toLocaleTimeString('th-TH', options) +
+			' น.'
+		);
+	}
+
+	function conflictForShift(shift: DisplayShift) {
+		const window = shiftWindow(shift);
+		if (!window) return undefined;
+		const conflict = findBookingConflict(window, existingActivities);
+		return conflict
+			? {
+					title: conflict.title,
+					time: conflict.date + ' • ' + conflictTime(conflict.start_ts, conflict.end_ts)
+				}
+			: undefined;
+	}
+
 	function isControlledSkill(value: string): boolean {
 		const option = findSkillOption(value, skillOptions);
 		return option?.category?.toLowerCase() === 'controlled';
@@ -237,9 +300,16 @@
 							time: `${st} - ${et} น.`,
 							start_time: st,
 							end_time: et,
+							end_date: endDateFor(
+								s.date || new Date().toISOString().slice(0, 10),
+								st,
+								et,
+								s.end_date
+							),
 							quota: s.quota || 10,
 							applicants_count: shiftApplicants,
-							confirmed: shiftConfirmed
+							confirmed: shiftConfirmed,
+							conflict: undefined
 						};
 					});
 				} else if (job.shift_template) {
@@ -258,9 +328,11 @@
 							time: `${stTime} - ${edTime} น.`,
 							start_time: stTime,
 							end_time: edTime,
+							end_date: endDateFor(asApplyDate(day, idx), stTime, edTime, null),
 							quota: job.quota || 10,
 							applicants_count: shiftApplicants,
-							confirmed: shiftConfirmed
+							confirmed: shiftConfirmed,
+							conflict: undefined
 						};
 					});
 				} else {
@@ -272,12 +344,16 @@
 							time: '08:00 - 16:00 น.',
 							start_time: '08:00',
 							end_time: '16:00',
+							end_date: new Date().toISOString().slice(0, 10),
 							quota: job.quota || 10,
 							applicants_count: Math.max(job.applicants_count || 0, shiftConfirmed),
-							confirmed: shiftConfirmed
+							confirmed: shiftConfirmed,
+							conflict: undefined
 						}
 					];
 				}
+
+				shifts = shifts.map((shift) => ({ ...shift, conflict: conflictForShift(shift) }));
 
 				const totalConfirmed = shifts.reduce((sum, s) => sum + s.confirmed, 0);
 				const totalApplicants = Math.max(
@@ -635,7 +711,7 @@
 	</div>
 
 	<!-- Job Cards List -->
-	<div class="flex flex-col gap-4 sm:gap-5">
+	<div class="grid gap-4 sm:gap-5 xl:grid-cols-2">
 		{#if isLoading}
 			<div class="space-y-4">
 				<Skeleton class="h-44 rounded-2xl" />

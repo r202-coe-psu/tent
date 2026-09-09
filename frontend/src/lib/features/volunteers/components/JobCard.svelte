@@ -6,6 +6,7 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 
@@ -21,6 +22,10 @@
 		quota: number;
 		confirmed: number;
 		applicants_count?: number;
+		conflict?: {
+			title: string;
+			time: string;
+		};
 	}
 
 	let { job, onApply } = $props<{
@@ -63,61 +68,62 @@
 </script>
 
 <div
-	class="rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+	class="overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg"
 >
 	<!-- Header w/ Tags -->
-	<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
-		<div class="flex flex-wrap items-center gap-2">
-			<!-- Tier Badge -->
-			{#if isControlled}
-				<span
-					class="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/10 px-3 py-1 text-xs font-bold text-accent-purple"
-				>
-					<ShieldAlert class="h-3.5 w-3.5" />
-					{t.controlledMission}
-				</span>
-			{:else}
-				<span
-					class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
-				>
-					<Sparkles class="h-3.5 w-3.5" />
-					{t.generalMission}
-				</span>
-			{/if}
+	<div class="border-b border-border/70 bg-muted/20 p-5 sm:p-6">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
+			<div class="flex flex-wrap items-center gap-2">
+				<!-- Tier Badge -->
+				{#if isControlled}
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/10 px-3 py-1 text-xs font-bold text-accent-purple"
+					>
+						<ShieldAlert class="h-3.5 w-3.5" />
+						{t.controlledMission}
+					</span>
+				{:else}
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
+					>
+						<Sparkles class="h-3.5 w-3.5" />
+						{t.generalMission}
+					</span>
+				{/if}
 
-			{#each job.tags as tag (tag.label)}
-				<span
-					class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
+				{#each job.tags as tag (tag.label)}
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
 					{tag.variant === 'default' ? 'bg-primary/10 text-primary' : ''}
 					{tag.variant === 'success' ? 'bg-success/15 text-success' : ''}
 					{tag.variant === 'warning' ? 'bg-warning/15 text-warning-foreground' : ''}
 					{tag.variant === 'purple' ? 'bg-purple-500/15 text-purple-600' : ''}
 					{tag.variant === 'outline' ? 'border border-border bg-muted/30 text-muted-foreground' : ''}"
-				>
-					{#if tag.variant === 'success'}
-						<span class="h-2 w-2 rounded-full bg-success"></span>
-					{:else if tag.variant === 'outline'}
-						<Pencil class="h-3.5 w-3.5" />
-					{:else}
-						<Tag class="h-3 w-3" />
-					{/if}
-					{tag.label}
-				</span>
-			{/each}
+					>
+						{#if tag.variant === 'success'}
+							<span class="h-2 w-2 rounded-full bg-success"></span>
+						{:else if tag.variant === 'outline'}
+							<Pencil class="h-3.5 w-3.5" />
+						{:else}
+							<Tag class="h-3 w-3" />
+						{/if}
+						{tag.label}
+					</span>
+				{/each}
+			</div>
+
+			<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+				<MapPin class="h-3.5 w-3.5 text-primary" />
+				<span class="font-medium text-foreground">{job.shelter}</span>
+			</div>
 		</div>
 
-		<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
-			<MapPin class="h-3.5 w-3.5 text-primary" />
-			<span class="font-medium text-foreground">{job.shelter}</span>
-		</div>
+		<h3 class="mb-2 text-xl leading-tight font-bold text-foreground">{job.title}</h3>
+		<p class="line-clamp-1 text-sm leading-relaxed text-muted-foreground">{job.description}</p>
 	</div>
 
-	<!-- Title & Description -->
-	<h3 class="mb-2 text-xl font-bold text-foreground">{job.title}</h3>
-	<p class="mb-4 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{job.description}</p>
-
 	<!-- Shifts & Quota Section -->
-	<div class="mt-2 rounded-xl border border-border bg-muted/5 p-4 sm:p-5">
+	<div class="p-5 sm:p-6">
 		<div
 			class="mb-4 flex flex-col justify-between gap-2 border-b border-border/50 pb-4 sm:flex-row sm:items-center"
 		>
@@ -137,13 +143,14 @@
 			>
 		</div>
 
-		<div class="flex snap-x gap-4 overflow-x-auto pb-2">
+		<div class="grid gap-3 md:grid-cols-2">
 			{#each job.shifts as shift (shift.id)}
 				{@const remaining = Math.max(0, shift.quota - shift.confirmed)}
 				{@const isFull = remaining <= 0}
+				{@const isBlocked = Boolean(shift.conflict)}
 				{@const applicants = Math.max(shift.applicants_count ?? 0, shift.confirmed)}
 				<div
-					class="w-[280px] shrink-0 snap-start rounded-xl border p-4 shadow-xs transition-colors {isFull
+					class="rounded-2xl border p-4 shadow-xs transition-colors {isFull || isBlocked
 						? 'border-border/60 bg-muted/10 opacity-90'
 						: 'border-border bg-card hover:border-primary/30'}"
 				>
@@ -153,7 +160,12 @@
 								class="text-base font-bold {isFull ? 'text-muted-foreground' : 'text-foreground'}"
 								>{shift.date}</span
 							>
-							{#if isFull}
+							{#if isBlocked}
+								<span
+									class="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800"
+									>เวลาชน</span
+								>
+							{:else if isFull}
 								<span
 									class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
 									>{t.fullBadge}</span
@@ -173,6 +185,22 @@
 							{shift.time}
 						</div>
 					</div>
+
+					{#if shift.conflict}
+						<div
+							class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"
+						>
+							<div class="flex items-start gap-2">
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+								<div class="min-w-0">
+									<p class="font-bold">เวลาชนกับกะที่จองไว้</p>
+									<p class="mt-1 line-clamp-2 leading-relaxed">
+										{shift.conflict.title} · {shift.conflict.time}
+									</p>
+								</div>
+							</div>
+						</div>
+					{/if}
 
 					<!-- Quota Bar -->
 					<div class="mb-5">
@@ -200,12 +228,15 @@
 
 					<button
 						onclick={() => onApply(job.id, shift.id)}
-						disabled={isFull}
-						class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-xs transition-all {isFull
+						disabled={isFull || isBlocked}
+						class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-xs transition-all {isFull ||
+						isBlocked
 							? 'cursor-not-allowed border border-border/80 bg-muted text-muted-foreground opacity-70 select-none'
 							: 'hover:bg-opacity-90 cursor-pointer bg-primary text-white active:scale-[0.98]'}"
 					>
-						{#if isFull}
+						{#if isBlocked}
+							เวลาชนกับกะนี้
+						{:else if isFull}
 							{t.shiftFull}
 						{:else}
 							{t.applyShift}

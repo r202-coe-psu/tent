@@ -32,6 +32,10 @@
 		end_time?: string;
 		quota: number;
 		confirmed: number;
+		conflict?: {
+			title: string;
+			time: string;
+		};
 	}
 
 	export interface QuickApplyJob {
@@ -266,6 +270,10 @@
 
 	async function submitApplication() {
 		if (!job || !activeShift) return;
+		if (activeShift.conflict) {
+			errorMessage = 'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว';
+			return;
+		}
 		isSubmitting = true;
 		try {
 			const recaptchaToken = await captchaToken();
@@ -333,6 +341,10 @@
 		}
 		if (!job || !activeShift) {
 			errorMessage = t.errNoJobSelected;
+			return;
+		}
+		if (activeShift.conflict) {
+			errorMessage = 'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว กรุณาเลือกกะอื่นที่ไม่ทับซ้อนกัน';
 			return;
 		}
 		if (

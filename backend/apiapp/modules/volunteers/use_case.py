@@ -5,7 +5,8 @@ from __future__ import annotations
 import hmac
 import logging
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
@@ -117,6 +118,10 @@ _SCHEDULE_ACTION_ERRORS = {
     "check_out": "SHIFT_NOT_CHECKED_IN",
     "withdraw": "SHIFT_NOT_WITHDRAWABLE",
 }
+
+_BANGKOK = ZoneInfo("Asia/Bangkok")
+_TIME_CONFLICT_STATUSES = frozenset({"assigned", "standby", "checked_in", "completed"})
+_TIME_CONFLICT_APPLICATION_STATUSES = frozenset({"confirmed", "pending_review"})
 
 
 def _config_values(doc: dict | None, *fields: str) -> list[str]:
@@ -293,6 +298,105 @@ def _application_shift_id(
     application: PublicJobApplication | VolunteerApplicationBuffer,
 ) -> str | None:
     return application.shift_id or application.selected_shift.shift_id
+
+
+def _wall_clock_window(
+    *,
+    date: str,
+    start_time: str,
+    end_time: str,
+    end_date: str | None = None,
+) -> tuple[datetime, datetime] | None:
+    """Turn a Bangkok shift snapshot into UTC instants for overlap checks."""
+    if not date or not start_time or not end_time:
+        return None
+    try:
+        start = datetime.fromisoformat(f"{date}T{start_time}").replace(tzinfo=_BANGKOK)
+        resolved_end_date = end_date
+        if not resolved_end_date:
+            resolved_end_date = (
+                start.date() + timedelta(days=1) if end_time <= start_time else start.date()
+            ).isoformat()
+        end = datetime.fromisoformat(f"{resolved_end_date}T{end_time}").replace(tzinfo=_BANGKOK)
+    except (TypeError, ValueError):
+        return None
+    start_utc = start.astimezone(UTC)
+    end_utc = end.astimezone(UTC)
+    return (start_utc, end_utc) if start_utc < end_utc else None
+
+
+def _windows_overlap(left: tuple[datetime, datetime], right: tuple[datetime, datetime]) -> bool:
+    """Half-open interval comparison; adjacent shifts do not conflict."""
+    return left[0] < right[1] and right[0] < left[1]
+
+
+async def _assert_no_time_conflict(
+    *,
+    phone_hash: str,
+    volunteer_id: str,
+    date: str,
+    start_time: str,
+    end_time: str,
+    end_date: str | None = None,
+) -> None:
+    """Block a new application against both rostered shifts and open applications."""
+    candidate = _wall_clock_window(
+        date=date, start_time=start_time, end_time=end_time, end_date=end_date
+    )
+    if candidate is None:
+        return
+
+    assignments = await PublicShiftAssignment.find(
+        {"$or": [{"phone_hash": phone_hash}, {"volunteer_id": volunteer_id}]}
+    ).to_list()
+    for assignment in assignments:
+        if assignment.status not in _TIME_CONFLICT_STATUSES:
+            continue
+        existing = assignment.duty_window
+        if existing.start_ts is None or existing.end_ts is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"success": False, "error": "TIME_CONFLICT"},
+            )
+        if _windows_overlap(candidate, (existing.start_ts, existing.end_ts)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"success": False, "error": "TIME_CONFLICT"},
+            )
+
+    applications = await PublicJobApplication.find(
+        {
+            "$and": [
+                {"$or": [{"phone_hash": phone_hash}, {"volunteer_id": volunteer_id}]},
+                {"status": {"$in": sorted(_TIME_CONFLICT_APPLICATION_STATUSES)}},
+            ]
+        }
+    ).to_list()
+    buffers = await VolunteerApplicationBuffer.find(
+        {
+            "$and": [
+                {
+                    "$or": [
+                        {"applicant.phone_hash": phone_hash},
+                        {"volunteer_id": volunteer_id},
+                    ]
+                },
+                {"status": {"$in": sorted(_TIME_CONFLICT_APPLICATION_STATUSES)}},
+            ]
+        }
+    ).to_list()
+    for application in [*applications, *buffers]:
+        selected = application.selected_shift
+        existing = _wall_clock_window(
+            date=selected.date,
+            start_time=selected.start_time,
+            end_time=selected.end_time,
+        )
+        if existing is None or _windows_overlap(candidate, existing):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"success": False, "error": "TIME_CONFLICT"},
+            )
 
 
 async def _reserve_or_release(
@@ -531,6 +635,16 @@ class VolunteersUseCase:
                 detail={"success": False, "error": "DUPLICATE_APPLICATION"},
             )
 
+        template = selected or job.shift_template
+        await _assert_no_time_conflict(
+            phone_hash=resolution.phone_hash,
+            volunteer_id=volunteer_id,
+            date=selected.date if selected else (payload.shift_date or ""),
+            end_date=selected.end_date if selected else None,
+            start_time=template.start_time,
+            end_time=template.end_time,
+        )
+
         now = datetime.now(UTC)
         application_id = f"job_application:{new_ulid()}"
         # Six bytes is what makes TKT-VOL-475939-shaped ids in CR-092 readable, but a
@@ -568,7 +682,6 @@ class VolunteersUseCase:
                 )
             reserved = True
 
-        template = selected or job.shift_template
         selected_shift_id = selected.shift_id if selected else None
         buffer = VolunteerApplicationBuffer(
             id=application_id,
@@ -839,6 +952,8 @@ class VolunteersUseCase:
                 shelter_code=b.shelter_code,
                 shift_date=b.selected_shift.date,
                 shift_id=_application_shift_id(b),
+                start_time=b.selected_shift.start_time,
+                end_time=b.selected_shift.end_time,
             )
         for a in projected:
             merged[a.id] = TicketFindItem(
@@ -852,14 +967,40 @@ class VolunteersUseCase:
                 shelter_code=a.shelter_code,
                 shift_date=a.selected_shift.date,
                 shift_id=_application_shift_id(a),
+                start_time=a.selected_shift.start_time,
+                end_time=a.selected_shift.end_time,
             )
 
         job_ids = {a.job_id for a in projected} | {b.job_id for b in buffers}
         jobs = await PublicJob.find({"_id": {"$in": sorted(job_ids)}}).to_list()
         titles = {job.id: job.title for job in jobs}
+        jobs_by_id = {job.id: job for job in jobs}
         job_by_application = {a.id: a.job_id for a in projected} | {b.id: b.job_id for b in buffers}
         for application_id, item in merged.items():
             item.job_title = titles.get(job_by_application.get(application_id, ""), "")
+            job = jobs_by_id.get(item.job_id)
+            if job is None:
+                continue
+            matching_shift = next(
+                (
+                    shift
+                    for shift in job.shifts
+                    if item.shift_id and shift.shift_id == item.shift_id
+                ),
+                None,
+            )
+            if matching_shift is None and item.shift_date:
+                same_day = [shift for shift in job.shifts if shift.date == item.shift_date]
+                if len(same_day) == 1:
+                    matching_shift = same_day[0]
+            if matching_shift is not None:
+                item.shift_date = matching_shift.date
+                item.end_date = matching_shift.end_date
+                item.start_time = matching_shift.start_time
+                item.end_time = matching_shift.end_time
+            elif not item.start_time and not item.end_time:
+                item.start_time = job.shift_template.start_time
+                item.end_time = job.shift_template.end_time
 
         # Soonest shift first — this list is the volunteer's schedule, and the shift
         # they need to be reminded of is the next one. Undated entries sort last.
