@@ -21,36 +21,55 @@ async def apply_shelter_stock(action: str, payload: dict[str, Any] | None) -> No
     await apply_document(ShelterStock, action, payload)
 
 
-async def _load_catalog(couch: CouchClient) -> dict[str, CatalogItem]:
-    """Item catalog (`catalog` DB) keyed by item id — `item_master` (current, schema.md
-    §4.2) merged with legacy `supply_item` (still readable per §4.2 migration note)."""
+async def _load_catalog(
+    couch: CouchClient, shelter_code: str
+) -> dict[str, CatalogItem]:
+    """Item catalog keyed by item id — central `catalog` DB (`item_master`, schema.md
+    §4.2, merged with legacy `supply_item` per §4.2 migration note) overridden by any
+    shelter-local `item_master` in `shelter_{shelter_code}` (same central+local
+    precedence as `listItemMasters`, frontend/.../catalog/data/catalog.remote.ts)."""
     catalog: dict[str, CatalogItem] = {}
-    if not await couch.database_exists("catalog"):
-        return catalog
+    if await couch.database_exists("catalog"):
+        async for doc in couch.iter_all_docs("catalog"):
+            doc_id = doc.get("_id")
+            if not doc_id:
+                continue
+            doc_type = doc.get("type")
+            if doc_type == "item_master":
+                catalog[str(doc_id)] = {
+                    "name": str(doc.get("name") or doc_id),
+                    "category": doc.get("category"),
+                    "unit": str(doc.get("base_unit") or "unit"),
+                    "sku": doc.get("sku"),
+                    "reorder_level": None,
+                    "consumption_rate": doc.get("consumption_rate"),
+                    "target_reserve_days": doc.get("target_reserve_days"),
+                    "timeframe": doc.get("timeframe"),
+                }
+            elif doc_type == "supply_item":
+                catalog[str(doc_id)] = {
+                    "name": str(doc.get("name") or doc_id),
+                    "category": doc.get("category"),
+                    "unit": str(doc.get("unit") or "unit"),
+                    "sku": None,
+                    "reorder_level": doc.get("reorder_level"),
+                    "consumption_rate": doc.get("consumption_rate"),
+                    "target_reserve_days": doc.get("target_reserve_days"),
+                    "timeframe": doc.get("timeframe"),
+                }
 
-    async for doc in couch.iter_all_docs("catalog"):
-        doc_id = doc.get("_id")
-        if not doc_id:
-            continue
-        doc_type = doc.get("type")
-        if doc_type == "item_master":
+    database = shelter_db_name(shelter_code)
+    if await couch.database_exists(database):
+        async for doc in couch.iter_all_docs(database):
+            doc_id = doc.get("_id")
+            if not doc_id or doc.get("type") != "item_master":
+                continue
             catalog[str(doc_id)] = {
                 "name": str(doc.get("name") or doc_id),
                 "category": doc.get("category"),
                 "unit": str(doc.get("base_unit") or "unit"),
-                "sku": doc.get("SKU"),
+                "sku": doc.get("sku"),
                 "reorder_level": None,
-                "consumption_rate": doc.get("consumption_rate"),
-                "target_reserve_days": doc.get("target_reserve_days"),
-                "timeframe": doc.get("timeframe"),
-            }
-        elif doc_type == "supply_item":
-            catalog[str(doc_id)] = {
-                "name": str(doc.get("name") or doc_id),
-                "category": doc.get("category"),
-                "unit": str(doc.get("unit") or "unit"),
-                "sku": None,
-                "reorder_level": doc.get("reorder_level"),
                 "consumption_rate": doc.get("consumption_rate"),
                 "target_reserve_days": doc.get("target_reserve_days"),
                 "timeframe": doc.get("timeframe"),
@@ -90,7 +109,7 @@ async def refresh_shelter_stock(couch: CouchClient, shelter_code: str) -> int:
         if doc.get("type") == "stock_ledger"
         and str(doc.get("_id", "")).startswith("stock_ledger:")
     ]
-    catalog = await _load_catalog(couch)
+    catalog = await _load_catalog(couch, shelter_code)
     overrides = await _load_overrides(couch, shelter_code)
 
     shelter = await PublicShelter.get(shelter_code)
