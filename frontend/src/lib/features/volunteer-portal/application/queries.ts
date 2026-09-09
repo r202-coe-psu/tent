@@ -1,6 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import {
 	applyToJob,
+	applyScheduleAction,
 	cancelTicket,
 	fetchJobs,
 	fetchProfile,
@@ -100,6 +101,21 @@ export function useRespondToDispatchMutation(credential: () => PortalCredential 
 		onSuccess: () => {
 			const key = credential();
 			if (key) void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.schedule(key) });
+		}
+	}));
+}
+
+/** Check-in, check-out, or withdraw from a schedule row owned by the session. */
+export function useScheduleActionMutation(credential: () => PortalCredential | null) {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (vars: { assignment_id: string; action: 'check_in' | 'check_out' | 'withdraw' }) =>
+			applyScheduleAction({ ...vars, ...credential()! }),
+		onSuccess: () => {
+			const key = credential();
+			if (!key) return;
+			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.schedule(key) });
+			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.tickets(key) });
 		}
 	}));
 }

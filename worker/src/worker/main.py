@@ -15,8 +15,9 @@ from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
-from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
+from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
+from worker.inbound.volunteer_schedule_actions import run_volunteer_schedule_action_loop
 from worker.listeners.registry import ListenerManager
 from worker.retention.job import run_retention_loop
 
@@ -49,6 +50,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     volunteer_task: asyncio.Task[None] | None = None
     shift_response_task: asyncio.Task[None] | None = None
     profile_update_task: asyncio.Task[None] | None = None
+    schedule_action_task: asyncio.Task[None] | None = None
 
     try:
         if force_bootstrap or bootstrap_only or await needs_bootstrap():
@@ -78,6 +80,10 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_volunteer_profile_inbound_loop(couch, stop_event=stop),
             name="inbound-volunteer-profile-updates",
         )
+        schedule_action_task = asyncio.create_task(
+            run_volunteer_schedule_action_loop(couch, stop_event=stop),
+            name="inbound-volunteer-schedule-actions",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -90,6 +96,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             volunteer_task,
             shift_response_task,
             profile_update_task,
+            schedule_action_task,
         ):
             if task:
                 task.cancel()
@@ -102,7 +109,9 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CouchDB → MongoDB public read-model sync worker")
+    parser = argparse.ArgumentParser(
+        description="CouchDB → MongoDB public read-model sync worker"
+    )
     parser.add_argument(
         "--bootstrap",
         action="store_true",

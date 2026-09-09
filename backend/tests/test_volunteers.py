@@ -21,6 +21,7 @@ from tent_model.shift_response_buffer import ShiftResponseBuffer
 from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
 from tent_model.volunteer_job_slot import VolunteerJobSlot, seed_job_slot
 from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuffer
+from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 
 from apiapp.core.config import Settings
 from apiapp.modules.volunteers import router as volunteer_router
@@ -810,6 +811,65 @@ async def test_schedule_of_an_unknown_number_is_an_empty_list_not_a_404(
     )
     assert response.status_code == 200
     assert response.json()["shifts"] == []
+
+
+async def test_volunteer_can_check_in_and_check_out_own_schedule(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _make_job()
+    await _assign(assignment_id="shift_assignment:01ATTEND")
+
+    check_in = await client.post(
+        "/public/v1/volunteer/schedule/action",
+        json={
+            "phone": "0812345678",
+            "assignment_id": "shift_assignment:01ATTEND",
+            "action": "check_in",
+        },
+        headers=auth_headers,
+    )
+    assert check_in.status_code == 200
+    assert check_in.json()["status"] == "checked_in"
+    assert (await PublicShiftAssignment.get("shift_assignment:01ATTEND")).status == "checked_in"
+    assert await VolunteerScheduleActionBuffer.get(
+        "volunteer_schedule_action:shift_assignment:01ATTEND:check_in"
+    )
+
+    check_out = await client.post(
+        "/public/v1/volunteer/schedule/action",
+        json={
+            "phone": "0812345678",
+            "assignment_id": "shift_assignment:01ATTEND",
+            "action": "check_out",
+        },
+        headers=auth_headers,
+    )
+    assert check_out.status_code == 200
+    assert check_out.json()["status"] == "completed"
+    assignment = await PublicShiftAssignment.get("shift_assignment:01ATTEND")
+    assert assignment is not None
+    assert assignment.status == "completed"
+    assert assignment.check_in_at is not None
+    assert assignment.check_out_at is not None
+
+
+async def test_volunteer_cannot_change_someone_elses_schedule(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _make_job()
+    await _assign(assignment_id="shift_assignment:01PRIVATE")
+
+    response = await client.post(
+        "/public/v1/volunteer/schedule/action",
+        json={
+            "phone": "0899990000",
+            "assignment_id": "shift_assignment:01PRIVATE",
+            "action": "check_in",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+    assert (await PublicShiftAssignment.get("shift_assignment:01PRIVATE")).status == "assigned"
 
 
 # ── Answering an offered shift: phone + spoken code (CR-092 FR-VOL-06) ─────────

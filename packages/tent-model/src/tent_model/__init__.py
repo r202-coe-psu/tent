@@ -27,6 +27,7 @@ from tent_model.public_volunteer import PublicVolunteer
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
 from tent_model.shift_response_buffer import ShiftResponseBuffer
+from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.volunteer_application_buffer import (
 	ApplicantBuffer,
@@ -78,6 +79,7 @@ __all__ = [
 	"SelectedShift",
 	"SelectedShiftBuffer",
 	"ShiftResponseBuffer",
+	"VolunteerScheduleActionBuffer",
 	"ShiftTemplate",
 	"SlotResult",
 	"SyncCheckpoint",

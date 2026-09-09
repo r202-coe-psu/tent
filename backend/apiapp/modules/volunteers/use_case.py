@@ -38,6 +38,7 @@ from tent_model.volunteer_profile_update_buffer import (
     ProfileUpdateTarget,
     VolunteerProfileUpdateBuffer,
 )
+from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 
 from ...utils.masking import (
     mask_email,
@@ -56,6 +57,7 @@ from .schemas import (
     PublicJobItem,
     PublicJobListResponse,
     PublicJobShift,
+    ScheduleActionResponse,
     ScheduleShift,
     TicketFindItem,
     TicketFindResponse,
@@ -109,6 +111,12 @@ _VOLUNTEER_SKILLS_CONFIG_ID = "config:volunteer_skills"
 #: Statuses a ticket can still be cancelled from. A cancelled ticket stays cancelled;
 #: re-cancelling must not release a second slot.
 _CANCELLABLE_STATUSES = frozenset({"confirmed", "pending_review"})
+
+_SCHEDULE_ACTION_ERRORS = {
+    "check_in": "SHIFT_NOT_READY_FOR_CHECK_IN",
+    "check_out": "SHIFT_NOT_CHECKED_IN",
+    "withdraw": "SHIFT_NOT_WITHDRAWABLE",
+}
 
 
 def _config_values(doc: dict | None, *fields: str) -> list[str]:
@@ -824,6 +832,7 @@ class VolunteersUseCase:
         for b in buffers:
             merged[b.id] = TicketFindItem(
                 view_token=mint_view_token(b.id),
+                job_id=b.job_id,
                 applicant_name=f"{b.applicant.first_name} {b.applicant.last_name}".strip(),
                 status=b.status,
                 job_title="",
@@ -834,6 +843,7 @@ class VolunteersUseCase:
         for a in projected:
             merged[a.id] = TicketFindItem(
                 view_token=mint_view_token(a.id),
+                job_id=a.job_id,
                 applicant_name=f"{a.applicant.first_name} {a.applicant.last_name}".strip(),
                 # The projection wins on status: a manager may have confirmed or
                 # rejected this since the buffer was written.
@@ -944,6 +954,121 @@ class VolunteersUseCase:
             return VolunteerProfileResponse()
         profile = await self._merged_profile(hashed)
         return VolunteerProfileResponse(profile=profile)
+
+    async def schedule_action(
+        self,
+        *,
+        assignment_id: str,
+        action: str,
+        phone: str | None = None,
+        token: str | None = None,
+        portal_id: str | None = None,
+    ) -> ScheduleActionResponse:
+        """Queue a state change for the caller's own assigned shift.
+
+        The projected assignment is updated immediately so the Portal reflects the tap,
+        while the worker applies the same transition to the shelter CouchDB document.
+        Ownership is checked against the assignment's phone hash and the resolved
+        portal id; an internal assignment id alone can never perform the action.
+        """
+        if action not in {"check_in", "check_out", "withdraw"}:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"success": False, "error": "INVALID_ACTION"},
+            )
+
+        # Phone lookup references are intentionally read-only.  A VIEW token may be
+        # shown to anyone who knows the phone number, so it must never be enough to
+        # mark somebody else present or withdraw their shift.
+        if token and is_view_token(token):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "SHIFT_NOT_FOUND"},
+            )
+
+        not_found = HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"success": False, "error": "SHIFT_NOT_FOUND"},
+        )
+        assignment = await PublicShiftAssignment.get(assignment_id)
+        caller_hash = await self._phone_hash_for(phone=phone, token=token)
+        if (
+            assignment is None
+            or not caller_hash
+            or assignment.phone_hash != caller_hash
+            or not await self._portal_id_matches(phone_hash_value=caller_hash, portal_id=portal_id)
+        ):
+            raise not_found
+
+        allowed = {
+            "check_in": {"assigned", "standby"},
+            "check_out": {"checked_in"},
+            "withdraw": {"assigned", "standby"},
+        }[action]
+        if assignment.dispatch_status == "dispatched":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": _SCHEDULE_ACTION_ERRORS[action],
+                },
+            )
+        if assignment.status not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": _SCHEDULE_ACTION_ERRORS[action],
+                },
+            )
+
+        now = datetime.now(UTC)
+        buffer_id = f"volunteer_schedule_action:{assignment_id}:{action}"
+        existing = await VolunteerScheduleActionBuffer.get(buffer_id)
+        if existing is None:
+            if action == "withdraw":
+                # A direct assignment may not have a seeded counter yet. The assignment
+                # is still withdrawn safely; the worker/projector remains authoritative
+                # for the next counter reconciliation.
+                await _reserve_or_release(
+                    job_id=assignment.job_id,
+                    shift_id=assignment.shift_id or None,
+                    reserve=False,
+                    now=now,
+                )
+            try:
+                await VolunteerScheduleActionBuffer(
+                    id=buffer_id,
+                    assignment_id=assignment.id,
+                    shelter_code=assignment.shelter_code,
+                    job_id=assignment.job_id,
+                    shift_id=assignment.shift_id or None,
+                    volunteer_id=assignment.volunteer_id,
+                    action=action,
+                    requested_at=now,
+                    synced_to_couch=False,
+                ).insert()
+            except DuplicateKeyError:
+                existing = await VolunteerScheduleActionBuffer.get(buffer_id)
+                if existing is None:
+                    raise
+
+        if action == "check_in":
+            assignment.status = "checked_in"
+            assignment.check_in_at = now
+        elif action == "check_out":
+            assignment.status = "completed"
+            assignment.check_out_at = now
+        else:
+            assignment.status = "cancelled"
+        assignment.updated_at = now
+        await assignment.save()
+
+        return ScheduleActionResponse(
+            assignment_id=assignment.id,
+            status=assignment.status,
+            requested_at=now.isoformat().replace("+00:00", "Z"),
+        )
 
     async def update_profile(
         self,

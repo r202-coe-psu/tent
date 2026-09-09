@@ -14,6 +14,8 @@ from .schemas import (
     DispatchRespondRequest,
     DispatchRespondResponse,
     PublicJobListResponse,
+    ScheduleActionRequest,
+    ScheduleActionResponse,
     ScheduleLookupRequest,
     TicketFindRequest,
     TicketFindResponse,
@@ -203,6 +205,29 @@ async def respond_to_dispatch(
         portal_id=payload.portal_id,
         code=payload.code,
         action=payload.action,
+    )
+
+
+@router.post(
+    "/volunteer/schedule/action",
+    response_model=ScheduleActionResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def volunteer_schedule_action(
+    request: Request,
+    response: Response,
+    payload: ScheduleActionRequest,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> ScheduleActionResponse:
+    """Check in, check out, or withdraw from the caller's own assigned shift."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.schedule_action(
+        assignment_id=payload.assignment_id,
+        action=payload.action,
+        phone=payload.phone,
+        token=payload.token,
+        portal_id=payload.portal_id,
     )
 
 

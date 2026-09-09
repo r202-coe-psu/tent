@@ -22,7 +22,7 @@ const ERROR_COPY: Record<string, string> = {
 	JOB_NOT_OPEN: 'ภารกิจนี้ปิดรับสมัครแล้ว',
 	JOB_FULL: 'ภารกิจนี้เต็มแล้ว กรุณาเลือกกะหรือภารกิจอื่น',
 	SHIFT_FULL: 'กะนี้เต็มแล้ว กรุณาเลือกกะหรือภารกิจอื่น',
-	SHIFT_NOT_FOUND: 'ไม่พบกะงานที่เลือก',
+	SHIFT_NOT_FOUND: 'ไม่พบกะงานนี้ หรือกะนี้ไม่ใช่ของคุณ',
 	SHIFT_ID_REQUIRED: 'กรุณาเลือกกะที่ต้องการสมัคร',
 	SHIFT_DATE_AMBIGUOUS: 'ไม่สามารถระบุกะงานที่ต้องการได้ กรุณาเลือกกะใหม่อีกครั้ง',
 	JOB_NOT_READY: 'ภารกิจนี้กำลังเตรียมระบบรับสมัคร กรุณาลองใหม่อีกครั้งภายหลัง',
@@ -39,6 +39,10 @@ const ERROR_COPY: Record<string, string> = {
 	CAPTCHA_FAILED: 'ไม่ผ่านการตรวจสอบ reCAPTCHA กรุณาลองใหม่อีกครั้ง',
 	OFFER_NOT_FOUND: 'ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง กรุณาตรวจสอบกับเจ้าหน้าที่',
 	OFFER_ALREADY_ANSWERED: 'ภารกิจนี้ถูกตอบไปแล้ว',
+	SHIFT_NOT_READY_FOR_CHECK_IN: 'กะนี้ยังไม่อยู่ในสถานะที่เช็คอินได้',
+	SHIFT_NOT_CHECKED_IN: 'กะนี้ยังไม่ได้เช็คอิน หรือเช็คเอาต์ไปแล้ว',
+	SHIFT_NOT_WITHDRAWABLE: 'กะนี้ถอนหรือขอลาไม่ได้แล้ว',
+	ACTION_FAILED: 'ดำเนินการกับกะงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -130,6 +134,22 @@ export async function respondToDispatch(
 	});
 	if (!response.ok) {
 		throw apiError(await readJson(response), response.status, 'ตอบรับภารกิจไม่สำเร็จ');
+	}
+}
+
+export async function applyScheduleAction(
+	vars: {
+		assignment_id: string;
+		action: 'check_in' | 'check_out' | 'withdraw';
+	} & PortalCredential
+): Promise<void> {
+	const response = await fetch('/api/public/v1/volunteer/schedule/action', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(vars)
+	});
+	if (!response.ok) {
+		throw apiError(await readJson(response), response.status, 'ดำเนินการกับกะงานไม่สำเร็จ');
 	}
 }
 

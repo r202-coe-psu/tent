@@ -2,9 +2,12 @@
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Download from '@lucide/svelte/icons/download';
+	import Filter from '@lucide/svelte/icons/filter';
+	import LogIn from '@lucide/svelte/icons/log-in';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
@@ -20,6 +23,7 @@
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import {
 		useRespondToDispatchMutation,
+		useScheduleActionMutation,
 		useResolvePortalAccessMutation,
 		useVolunteerJobs,
 		useVolunteerProfile,
@@ -35,15 +39,17 @@
 		portalCredentialSchema,
 		PORTAL_SESSION_KEY,
 		PORTAL_TOKEN_HANDOFF_KEY,
-		ticketStatusLabel,
 		responseCodeSchema,
 		ticketFindSchema,
 		ticketTokenFromScan,
 		type PortalCredential,
-		type VolunteerProfile,
-		type ScheduleShift,
-		type TicketSummary
+		type VolunteerProfile
 	} from '../domain/volunteer';
+	import {
+		filterAndSortPortalActivities,
+		mergePortalActivities,
+		type PortalActivity
+	} from '../domain/schedule-view';
 
 	let {
 		mode = 'entry',
@@ -52,34 +58,6 @@
 
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
 	// The live profile, schedule and ticket responses are mapped into one render model.
-	interface PortalShift {
-		id: string;
-		shiftPeriod: string;
-		statusBadge: string;
-		statusVariant: 'checked_in' | 'completed' | 'pending';
-		title: string;
-		description: string;
-		location: string;
-		dateText: string;
-		checkinTime?: string;
-		checkoutTime?: string;
-		checkinBy?: string;
-		/** `shift_assignment:{ulid}` — present only on live shifts. */
-		assignmentId?: string;
-		/** `dispatched` is an offer still awaiting an answer (CR-092 FR-VOL-06). */
-		dispatchStatus?: string | null;
-	}
-
-	/** One booking the volunteer holds — a `job_application`, not a rostered shift. */
-	interface PortalBooking {
-		id: string;
-		title: string;
-		location: string;
-		dateText: string;
-		statusLabel: string;
-		confirmed: boolean;
-	}
-
 	interface PortalVolunteer {
 		id: string;
 		volunteerCode: string;
@@ -94,8 +72,7 @@
 		roleType: string;
 		readiness: boolean;
 		scheduleCount: number;
-		shifts: PortalShift[];
-		bookings: PortalBooking[];
+		activities: PortalActivity[];
 	}
 
 	// ── STATE ──────────────────────────────────────────────────────────────────
@@ -226,21 +203,13 @@
 	const profileQuery = useVolunteerProfile(() => session);
 	let profileDialogOpen = $state(false);
 	const respond = useRespondToDispatchMutation(() => session);
+	const scheduleAction = useScheduleActionMutation(() => session);
 
 	/** Per-offer code entry, keyed by assignment so two offers keep their own box. */
 	let dispatchCodes = $state<Record<string, string>>({});
 	let dispatchErrors = $state<Record<string, string>>({});
 	let answering = $state<string | null>(null);
 	// ── LIVE SESSION → VIEW MODEL ──────────────────────────────────────────────
-
-	const SHIFT_BADGE: Record<string, { label: string; variant: PortalShift['statusVariant'] }> = {
-		assigned: { label: 'ได้รับมอบหมาย (Assigned)', variant: 'pending' },
-		standby: { label: 'รอสแตนด์บาย (Standby)', variant: 'pending' },
-		checked_in: { label: 'เช็คอินเข้างานแล้ว (Checked-In)', variant: 'checked_in' },
-		completed: { label: 'เสร็จสิ้นภารกิจแล้ว (Completed)', variant: 'completed' },
-		done: { label: 'เสร็จสิ้นภารกิจแล้ว (Completed)', variant: 'completed' },
-		no_show: { label: 'ไม่มาปฏิบัติงาน (No-show)', variant: 'completed' }
-	};
 
 	function clockText(iso: string | null): string | undefined {
 		if (!iso) return undefined;
@@ -250,46 +219,26 @@
 			: `${parsed.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} น.`;
 	}
 
-	function timeRange(shift: ScheduleShift): string {
-		if (!shift.start_ts) return shift.date;
-		const start = new Date(shift.start_ts);
-		if (Number.isNaN(start.getTime())) return shift.date;
+	function timeRange(activity: PortalActivity): string {
+		if (!activity.startTs) return activity.date || 'ยังไม่ระบุวัน';
+		const start = new Date(activity.startTs);
+		if (Number.isNaN(start.getTime())) return activity.date || 'ยังไม่ระบุวัน';
 		const opts = { hour: '2-digit', minute: '2-digit' } as const;
 		const from = start.toLocaleTimeString('th-TH', opts);
-		const end = shift.end_ts ? new Date(shift.end_ts) : null;
+		const end = activity.endTs ? new Date(activity.endTs) : null;
 		const to =
 			end && !Number.isNaN(end.getTime()) ? ` - ${end.toLocaleTimeString('th-TH', opts)}` : '';
-		return `${shift.date} • ${from}${to}`;
-	}
-
-	function toPortalShift(shift: ScheduleShift): PortalShift {
-		const badge = SHIFT_BADGE[shift.status] ?? {
-			label: shift.status,
-			variant: 'pending' as const
-		};
-		return {
-			id: shift.assignment_id,
-			assignmentId: shift.assignment_id,
-			dispatchStatus: shift.dispatch_status,
-			shiftPeriod: shift.shift === 'custom' ? 'กะงาน' : shift.shift,
-			statusBadge: badge.label,
-			statusVariant: badge.variant,
-			title: shift.job_title || 'งานอาสาสมัคร',
-			description: shift.station ? `จุดปฏิบัติงาน: ${shift.station}` : '',
-			location: shift.shelter_name || shift.shelter_code,
-			dateText: timeRange(shift),
-			checkinTime: clockText(shift.check_in_at),
-			checkoutTime: clockText(shift.check_out_at)
-		};
+		return `${activity.date} • ${from}${to}`;
 	}
 
 	function toPortalVolunteer(
 		profile: VolunteerProfile,
-		shifts: ScheduleShift[],
-		tickets: TicketSummary[]
+		shifts: Parameters<typeof mergePortalActivities>[0],
+		tickets: Parameters<typeof mergePortalActivities>[1]
 	): PortalVolunteer {
 		const named = `${profile.first_name} ${profile.last_name}`.trim();
-		const first = shifts[0];
+		const activities = mergePortalActivities(shifts, tickets);
+		const first = activities[0];
 		// A token session never holds the raw number — the API returns it masked, which
 		// is also what may be shown on a screen held up at a gate (AC-VOL-03).
 		const shownPhone = profile.phone_masked;
@@ -299,27 +248,19 @@
 			name: named || profile.nickname || 'จิตอาสา',
 			avatar: (named || profile.nickname || 'อา').slice(0, 2),
 			phone: shownPhone,
-			shelterName: first?.shelter_name ?? '',
-			shelterCode: first?.shelter_code ?? '',
+			shelterName: first?.location ?? '',
+			shelterCode: first?.shelterCode ?? '',
 			verified: profile.identity_verified,
-			statusText: shifts.some((s) => s.status === 'checked_in')
+			statusText: activities.some((s) => s.status === 'checked_in')
 				? 'ปฏิบัติหน้าที่อยู่'
-				: shifts.length
+				: activities.length
 					? 'พร้อมปฏิบัติงาน'
 					: 'รอการมอบหมาย',
-			statusType: shifts.some((s) => s.status === 'checked_in') ? 'active' : 'pending',
+			statusType: activities.some((s) => s.status === 'checked_in') ? 'active' : 'pending',
 			roleType: profile.personnel_type || 'จิตอาสา',
 			readiness: false,
-			scheduleCount: shifts.length,
-			shifts: shifts.map(toPortalShift),
-			bookings: tickets.map((ticket) => ({
-				id: ticket.view_token,
-				title: ticket.job_title || 'ภารกิจอาสาสมัคร',
-				location: ticket.shelter_code,
-				dateText: ticket.shift_date || 'ยังไม่ระบุวัน',
-				statusLabel: ticketStatusLabel(ticket.status),
-				confirmed: ticket.status === 'confirmed'
-			}))
+			scheduleCount: activities.length,
+			activities
 		};
 	}
 
@@ -337,6 +278,101 @@
 
 	/** The open session, or null when signed out. The markup below reads only this. */
 	const currentVolunteer = $derived(liveVolunteer);
+
+	let filterFromDate = $state('');
+	let filterToDate = $state('');
+	let filterFromTime = $state('');
+	let filterToTime = $state('');
+	const visibleActivities = $derived.by(() =>
+		filterAndSortPortalActivities(currentVolunteer?.activities ?? [], {
+			fromDate: filterFromDate,
+			toDate: filterToDate,
+			fromTime: filterFromTime,
+			toTime: filterToTime
+		})
+	);
+
+	let actingAssignment = $state<string | null>(null);
+
+	function activityStatusLabel(activity: PortalActivity): string {
+		if (activity.status === 'booking') return 'รอเจ้าหน้าที่จัดกะ';
+		if (activity.dispatchStatus === 'dispatched') return 'รอยืนยันการมอบหมาย';
+		return (
+			(
+				{
+					assigned: 'รอ Check-in',
+					standby: 'รอ Check-in',
+					checked_in: 'กำลังปฏิบัติงาน',
+					completed: 'เสร็จสิ้นภารกิจแล้ว',
+					done: 'เสร็จสิ้นภารกิจแล้ว',
+					no_show: 'ไม่มาปฏิบัติงาน',
+					cancelled: 'ถอนกะแล้ว'
+				} as Record<string, string>
+			)[activity.status] ?? activity.status
+		);
+	}
+
+	function activityStatusClass(activity: PortalActivity): string {
+		if (activity.status === 'checked_in')
+			return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300';
+		if (activity.status === 'booking')
+			return 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300';
+		if (activity.status === 'completed' || activity.status === 'done')
+			return 'bg-muted text-muted-foreground';
+		return 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+	}
+
+	function canCheckIn(activity: PortalActivity): boolean {
+		return (
+			Boolean(activity.assignmentId) &&
+			activity.dispatchStatus !== 'dispatched' &&
+			['assigned', 'standby'].includes(activity.status)
+		);
+	}
+
+	function canCheckOut(activity: PortalActivity): boolean {
+		return Boolean(activity.assignmentId) && activity.status === 'checked_in';
+	}
+
+	function canWithdraw(activity: PortalActivity): boolean {
+		return (
+			Boolean(activity.assignmentId) &&
+			activity.dispatchStatus !== 'dispatched' &&
+			['assigned', 'standby'].includes(activity.status)
+		);
+	}
+
+	async function runScheduleAction(
+		activity: PortalActivity,
+		action: 'check_in' | 'check_out' | 'withdraw'
+	) {
+		if (!activity.assignmentId) return;
+		if (action === 'withdraw' && !window.confirm('ยืนยันขอลาและถอนกะจากภารกิจนี้ใช่หรือไม่?')) {
+			return;
+		}
+		actingAssignment = `${activity.assignmentId}:${action}`;
+		try {
+			await scheduleAction.mutateAsync({ assignment_id: activity.assignmentId, action });
+			toast.success(
+				action === 'check_in'
+					? 'เช็คอินเข้าปฏิบัติงานแล้ว'
+					: action === 'check_out'
+						? 'เช็คเอาต์ออกจากงานแล้ว'
+						: 'ถอนกะและส่งคำขอลาแล้ว'
+			);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'ดำเนินการกับกะงานไม่สำเร็จ');
+		} finally {
+			actingAssignment = null;
+		}
+	}
+
+	function clearScheduleFilters() {
+		filterFromDate = '';
+		filterToDate = '';
+		filterFromTime = '';
+		filterToTime = '';
+	}
 
 	let dashboardTab = $state<'schedule' | 'openings'>('schedule');
 	$effect(() => {
@@ -401,7 +437,9 @@
 	// a short-lived read-only VIEW token for the first booking, which still gives the
 	// onsite scanner a token-shaped payload without exposing a cancellable ticket token.
 	$effect(() => {
-		const payload = session?.token ?? currentVolunteer?.bookings[0]?.id;
+		const payload =
+			session?.token ??
+			currentVolunteer?.activities.find((activity) => activity.ticketToken)?.ticketToken;
 		const generation = ++qrGeneration;
 		if (!payload) {
 			qrDataUrl = '';
@@ -475,7 +513,7 @@
 	 * reads out on the phone. The phone alone is guessable and a declined shift cannot
 	 * be un-declined from here, so the code is what makes the write safe.
 	 */
-	async function answerDispatch(shift: PortalShift, action: 'accepted' | 'declined') {
+	async function answerDispatch(shift: PortalActivity, action: 'accepted' | 'declined') {
 		const assignmentId = shift.assignmentId;
 		if (!assignmentId) return;
 
@@ -803,91 +841,96 @@
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 				<!-- Left 2 Cols: Shift Tasks List -->
 				<div class="space-y-4 lg:col-span-2">
-					<!--
-						Two lists, because they are two different things and conflating them is how
-						a volunteer concludes their booking vanished: a BOOKING is the
-						`job_application` they just made, a SHIFT is the `shift_assignment` a
-						manager rosters them onto afterwards. Nothing turns the first into the
-						second automatically.
-					-->
-					{#if currentVolunteer.bookings.length > 0}
-						<div class="flex items-center justify-between">
-							<h3 class="text-sm font-bold text-foreground md:text-base">ภารกิจที่คุณจองไว้</h3>
-							<span class="text-2xs text-muted-foreground">รอเจ้าหน้าที่จัดกะให้</span>
-						</div>
-
-						<div class="space-y-3">
-							{#each currentVolunteer.bookings as booking (booking.id)}
-								<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
-									<div class="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-										<div class="space-y-2">
-											<span
-												class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
-											>
-												ภารกิจที่จองไว้
-											</span>
-											<h4 class="text-base font-bold text-foreground">{booking.title}</h4>
-											<p class="text-xs leading-relaxed text-muted-foreground">
-												การจองนี้อยู่ระหว่างรอเจ้าหน้าที่จัดกะให้
-											</p>
-											<div
-												class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
-											>
-												<span class="flex items-center gap-1 font-medium text-foreground">
-													<MapPin class="size-3 text-primary" />
-													ศูนย์พักพิง: {booking.location}
-												</span>
-												<span class="flex items-center gap-1">
-													<Clock class="size-3" />
-													วันที่ปฏิบัติงาน: {booking.dateText}
-												</span>
-											</div>
-										</div>
-										<span
-											class="shrink-0 self-start rounded-lg px-2.5 py-1 text-3xs font-bold {booking.confirmed
-												? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-												: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
-										>
-											{booking.statusLabel}
-										</span>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-
 					<div class="flex items-center justify-between pt-2">
-						<h3 class="text-sm font-bold text-foreground md:text-base">ตารางกะที่ได้รับมอบหมาย</h3>
-						<span class="text-2xs text-muted-foreground">กะที่เจ้าหน้าที่จัดให้แล้ว</span>
+						<div>
+							<h3 class="text-sm font-bold text-foreground md:text-base">รายการภารกิจของฉัน</h3>
+							<p class="mt-1 text-2xs text-muted-foreground">เรียงจากวันที่ใกล้ที่สุดก่อน</p>
+						</div>
+						<span class="rounded-full bg-primary/10 px-2.5 py-1 text-2xs font-bold text-primary">
+							{visibleActivities.length} รายการ
+						</span>
 					</div>
 
-					{#if currentVolunteer.shifts.length === 0}
+					<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
+						<div class="mb-3 flex items-center gap-2 text-xs font-bold text-foreground">
+							<Filter class="size-4 text-primary" /> ตัวกรองวันและเวลา
+						</div>
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span class="flex items-center gap-1"
+									><CalendarDays class="size-3" /> ตั้งแต่วันที่</span
+								>
+								<input
+									type="date"
+									bind:value={filterFromDate}
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								/>
+							</label>
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span class="flex items-center gap-1"
+									><CalendarDays class="size-3" /> ถึงวันที่</span
+								>
+								<input
+									type="date"
+									bind:value={filterToDate}
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								/>
+							</label>
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span>เวลาตั้งแต่</span>
+								<input
+									type="time"
+									bind:value={filterFromTime}
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								/>
+							</label>
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span>เวลาถึง</span>
+								<input
+									type="time"
+									bind:value={filterToTime}
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								/>
+							</label>
+						</div>
+						{#if filterFromDate || filterToDate || filterFromTime || filterToTime}
+							<button
+								type="button"
+								onclick={clearScheduleFilters}
+								class="mt-3 text-2xs font-bold text-primary hover:underline"
+							>
+								ล้างตัวกรอง
+							</button>
+						{/if}
+					</div>
+
+					{#if currentVolunteer.activities.length === 0}
 						<div
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<ClipboardList class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							{#if currentVolunteer.bookings.length > 0}
-								<p class="text-sm font-bold text-foreground">ยังไม่มีกะที่ได้รับมอบหมาย</p>
-								<p class="mt-1 text-xs">
-									การจองของคุณเข้าระบบแล้ว — เจ้าหน้าที่ศูนย์จะจัดกะและแจ้งให้ทราบ
-									กะที่จัดแล้วจะขึ้นที่นี่
-								</p>
-							{:else}
-								<p class="text-sm font-bold text-foreground">ยังไม่มีรายการภารกิจที่ลงทะเบียน</p>
-								<p class="mt-1 text-xs">คุณสามารถเลือกดูงานที่เปิดรับได้ที่แท็บ "ตลาดงานจิตอาสา"</p>
-								<button
-									type="button"
-									onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
-									class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
-								>
-									ดูตลาดงานจิตอาสา
-								</button>
-							{/if}
+							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีภารกิจ</p>
+							<p class="mt-1 text-xs">เมื่อมีการจองหรือได้รับมอบหมาย งานจะปรากฏรวมกันที่นี่</p>
+							<button
+								type="button"
+								onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
+								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
+							>
+								ดูตลาดงานจิตอาสา
+							</button>
+						</div>
+					{:else if visibleActivities.length === 0}
+						<div
+							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
+						>
+							<Filter class="mx-auto mb-3 size-10 text-muted-foreground/60" />
+							<p class="text-sm font-bold text-foreground">ไม่พบภารกิจตามตัวกรอง</p>
+							<p class="mt-1 text-xs">ลองขยายช่วงวันที่หรือเวลา แล้วค้นหาใหม่</p>
 						</div>
 					{:else}
-						{#each currentVolunteer.shifts as shift (shift.id)}
+						{#each visibleActivities as activity (activity.id)}
 							<div
-								class="rounded-3xl border bg-card p-6 shadow-sm transition-all hover:shadow-md {shift.statusVariant ===
+								class="rounded-3xl border bg-card p-6 shadow-sm transition-all hover:shadow-md {activity.status ===
 								'checked_in'
 									? 'border-l-4 border-border border-l-emerald-500'
 									: 'border-border'}"
@@ -898,21 +941,20 @@
 											<span
 												class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
 											>
-												{shift.shiftPeriod}
+												{activity.shiftPeriod || 'กะงาน'}
 											</span>
 											<span
-												class="rounded-md px-2 py-0.5 text-2xs font-bold {shift.statusVariant ===
-												'checked_in'
-													? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-													: 'bg-muted text-muted-foreground'}"
+												class="rounded-md px-2 py-0.5 text-2xs font-bold {activityStatusClass(
+													activity
+												)}"
 											>
-												{shift.statusBadge}
+												{activityStatusLabel(activity)}
 											</span>
 										</div>
 
-										<h4 class="text-base font-bold text-foreground">{shift.title}</h4>
+										<h4 class="text-base font-bold text-foreground">{activity.title}</h4>
 										<p class="text-xs leading-relaxed text-muted-foreground">
-											{shift.description}
+											{activity.description}
 										</p>
 
 										<div
@@ -920,11 +962,11 @@
 										>
 											<span class="flex items-center gap-1 font-medium text-foreground">
 												<MapPin class="size-3 text-primary" />
-												{shift.location}
+												{activity.location}
 											</span>
 											<span class="flex items-center gap-1">
 												<Clock class="size-3" />
-												{shift.dateText}
+												{timeRange(activity)}
 											</span>
 										</div>
 
@@ -932,25 +974,22 @@
 										<div
 											class="flex flex-wrap items-center gap-3 pt-1 text-2xs text-muted-foreground"
 										>
-											{#if shift.checkinTime}
+											{#if activity.checkinAt}
 												<span class="flex items-center gap-1 font-medium text-emerald-700">
-													<Clock class="size-3" /> เช็คอิน: {shift.checkinTime}
+													<Clock class="size-3" /> เช็คอิน: {clockText(activity.checkinAt)}
 												</span>
 											{/if}
-											{#if shift.checkoutTime}
+											{#if activity.checkoutAt}
 												<span class="flex items-center gap-1 font-medium text-muted-foreground">
-													<Clock class="size-3" /> เช็คเอาต์: {shift.checkoutTime}
+													<Clock class="size-3" /> เช็คเอาต์: {clockText(activity.checkoutAt)}
 												</span>
-											{/if}
-											{#if shift.checkinBy}
-												<span class="font-medium text-muted-foreground">{shift.checkinBy}</span>
 											{/if}
 										</div>
 									</div>
 
 									<!-- Actions -->
 									<div class="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
-										{#if shift.dispatchStatus === 'dispatched' && shift.assignmentId}
+										{#if activity.dispatchStatus === 'dispatched' && activity.assignmentId}
 											<!--
 												The Dispatch Card (CR-092 FR-VOL-06). Answering needs the code a
 												manager reads out as well as the number this session signed in
@@ -965,23 +1004,23 @@
 												</p>
 												<input
 													type="text"
-													bind:value={dispatchCodes[shift.assignmentId]}
+													bind:value={dispatchCodes[activity.assignmentId]}
 													placeholder="เช่น 4K7-2M9"
 													aria-label="รหัสยืนยันภารกิจ"
 													autocomplete="off"
 													maxlength={10}
 													class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground uppercase outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 												/>
-												{#if dispatchErrors[shift.assignmentId]}
+												{#if dispatchErrors[activity.assignmentId]}
 													<p class="text-2xs text-destructive" role="alert">
-														{dispatchErrors[shift.assignmentId]}
+														{dispatchErrors[activity.assignmentId]}
 													</p>
 												{/if}
 												<div class="flex gap-2">
 													<button
 														type="button"
-														disabled={answering === shift.assignmentId}
-														onclick={() => answerDispatch(shift, 'accepted')}
+														disabled={answering === activity.assignmentId}
+														onclick={() => answerDispatch(activity, 'accepted')}
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-2xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:opacity-60"
 													>
 														<Check class="size-3.5" />
@@ -989,8 +1028,8 @@
 													</button>
 													<button
 														type="button"
-														disabled={answering === shift.assignmentId}
-														onclick={() => answerDispatch(shift, 'declined')}
+														disabled={answering === activity.assignmentId}
+														onclick={() => answerDispatch(activity, 'declined')}
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 text-2xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-60"
 													>
 														<X class="size-3.5" />
@@ -1000,6 +1039,40 @@
 											</div>
 										{/if}
 									</div>
+									{#if canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
+										<div class="flex w-full flex-col gap-2 md:w-56">
+											{#if canCheckIn(activity)}
+												<button
+													type="button"
+													disabled={actingAssignment !== null}
+													onclick={() => runScheduleAction(activity, 'check_in')}
+													class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+												>
+													<LogIn class="size-4" /> รายงานตัว Check-in
+												</button>
+											{/if}
+											{#if canCheckOut(activity)}
+												<button
+													type="button"
+													disabled={actingAssignment !== null}
+													onclick={() => runScheduleAction(activity, 'check_out')}
+													class="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
+												>
+													<LogOut class="size-4" /> เช็คเอาต์ออกจากงาน
+												</button>
+											{/if}
+											{#if canWithdraw(activity)}
+												<button
+													type="button"
+													disabled={actingAssignment !== null}
+													onclick={() => runScheduleAction(activity, 'withdraw')}
+													class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5 disabled:opacity-60"
+												>
+													ขอลา / ถอนกะ
+												</button>
+											{/if}
+										</div>
+									{/if}
 								</div>
 							</div>
 						{/each}

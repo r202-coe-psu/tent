@@ -191,6 +191,7 @@ class TicketFindItem(BaseModel):
     #: knows the phone number can reach this list, so what it hands out must not be able
     #: to cancel a shift.
     view_token: str
+    job_id: str
     #: The name on the application, so the portal can greet the person who signed in
     #: rather than invent one. Already shown on the pass this reference opens, so it
     #: exposes nothing the same caller could not already read.
@@ -269,6 +270,20 @@ class DispatchRespondResponse(BaseModel):
     success: bool = True
     assignment_id: str
     dispatch_status: str
+
+
+class ScheduleActionRequest(PortalCredential):
+    """A state change requested by the volunteer who owns a schedule row."""
+
+    assignment_id: str = Field(min_length=1, max_length=120)
+    action: Literal["check_in", "check_out", "withdraw"]
+
+
+class ScheduleActionResponse(BaseModel):
+    success: bool = True
+    assignment_id: str
+    status: str
+    requested_at: str
 
 
 class VolunteerProfile(BaseModel):
