@@ -11,6 +11,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import Hourglass from '@lucide/svelte/icons/hourglass';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
+	import Eye from '@lucide/svelte/icons/eye';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
@@ -137,8 +138,8 @@
 				รอยืนยัน {pendingApplicantCount}
 			</span>
 		</div>
-		<Button size="sm" variant="outline" class="ml-auto shrink-0" href={detailHref}
-			>ดูรายละเอียด</Button
+		<Button size="sm" variant="outline" class="ml-auto shrink-0 gap-1.5" href={detailHref}
+			><Eye class="h-3.5 w-3.5" />ดูรายละเอียด</Button
 		>
 	</div>
 </div>
