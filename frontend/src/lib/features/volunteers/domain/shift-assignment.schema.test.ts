@@ -143,6 +143,18 @@ describe('shiftAssignmentSchema', () => {
 				}).success
 			).toBe(true);
 		});
+
+		it('accepts portal self-service check-in without a manual reason', () => {
+			expect(
+				shiftAssignmentSchema.safeParse({
+					...validDoc(),
+					status: 'checked_in',
+					check_in_method: 'portal',
+					check_in_at: '2026-08-26T08:01:00.000Z',
+					check_in_by: 'volunteer_portal'
+				}).success
+			).toBe(true);
+		});
 	});
 
 	describe('F13 — optional fields', () => {

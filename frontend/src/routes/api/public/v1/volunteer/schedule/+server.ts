@@ -2,7 +2,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
 import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import {
+	PublicScheduleError,
+	readPublicVolunteerSchedule
+} from '$lib/features/volunteers/server/public-schedule-action';
 
 /**
  * ตารางทำงานจิตอาสา — the Access Portal's schedule (CR-092 หน้าจอ 6).
@@ -17,7 +20,7 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
  * Read-only. Accepting or declining a dispatched shift is a separate write path and is
  * not reachable from here.
  */
-export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	if (!volunteerTicketFindLimiter.check(getClientAddress())) {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 	}
@@ -26,16 +29,13 @@ export const POST: RequestHandler = async ({ request, fetch, getClientAddress })
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}
-		const res = await fetch(`${fastapiBaseUrl()}/public/v1/volunteer/schedule`, {
-			method: 'POST',
-			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-			body: JSON.stringify(parsed.data)
+		return json(await readPublicVolunteerSchedule(parsed.data), {
+			headers: { 'Cache-Control': 'no-store' }
 		});
-		if (!res.ok) {
-			return json({ success: false, error: 'SCHEDULE_UNAVAILABLE' }, { status: 502 });
+	} catch (error) {
+		if (error instanceof PublicScheduleError) {
+			return json({ success: false, error: error.code }, { status: error.httpStatus });
 		}
-		return json(await res.json(), { headers: { 'Cache-Control': 'no-store' } });
-	} catch {
 		return json({ success: false, error: 'SCHEDULE_UNAVAILABLE' }, { status: 503 });
 	}
 };

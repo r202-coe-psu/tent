@@ -43,6 +43,9 @@ async def _apply_action(
     elif action.action == "check_out":
         doc["status"] = "completed"
         doc["check_out_at"] = now
+        doc["check_out_by"] = "volunteer_portal"
+        doc["check_out_method"] = "portal"
+        doc["check_out_reason"] = None
     else:
         doc["status"] = "cancelled"
     doc["updated_at"] = now

@@ -30,7 +30,8 @@ export type ShiftAssignmentStatus = z.infer<typeof shiftAssignmentStatusSchema>;
 export const dispatchStatusSchema = z.enum(['dispatched', 'accepted', 'declined']);
 export type DispatchStatus = z.infer<typeof dispatchStatusSchema>;
 
-export const checkInMethodSchema = z.enum(['qr', 'manual_override']);
+/** Portal self-service is persisted directly to CouchDB; keep it distinct from QR/manual staff actions. */
+export const checkInMethodSchema = z.enum(['qr', 'manual_override', 'portal']);
 export type CheckInMethod = z.infer<typeof checkInMethodSchema>;
 
 /**
