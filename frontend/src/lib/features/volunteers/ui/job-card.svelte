@@ -82,7 +82,6 @@
 <div
 	class="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
 >
-	<div class="h-1 bg-primary/80"></div>
 	<div class="flex min-h-0 flex-1 flex-col gap-4 p-5">
 		<div class="flex items-start justify-between gap-3">
 			<div class="flex min-w-0 flex-wrap items-center gap-1.5">
