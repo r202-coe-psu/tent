@@ -132,6 +132,7 @@ export {
 	useCancelTransfer,
 	useDisputeTransfer,
 	useResumeTransfer,
+	useUndoCancelTransfer,
 	useCrossShelterStockBalances,
 	useCrossShelterLedger,
 	startOperationsLiveQuery

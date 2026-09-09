@@ -8,6 +8,7 @@ import {
 	cancelTransfer,
 	disputeTransfer,
 	resumeTransfer,
+	undoCancelTransfer,
 	isStockTransfer,
 	isStockLedger,
 	stockBalance,
@@ -300,7 +301,12 @@ export class TransferServerRepository {
 				dispute_reason: opts?.dispute_reason ?? ''
 			}));
 		} else if (to === 'requested') {
-			({ transfer } = resumeTransfer(latest));
+			// Two different backward transitions land on `requested`, and they are not
+			// interchangeable: each drops the `*_reason` that belongs to the status it came from
+			// (CR-089 FR-05 amended + CR-090 FR-02/FR-04). Branch on where the document IS, not on
+			// where the caller says it is going.
+			({ transfer } =
+				latest.status === 'cancelled' ? undoCancelTransfer(latest) : resumeTransfer(latest));
 		} else {
 			throw new TransferServerRepositoryError(
 				`Unsupported transition to "${to}"`,

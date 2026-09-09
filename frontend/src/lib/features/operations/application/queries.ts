@@ -399,6 +399,21 @@ export const useResumeTransfer = () => {
 	}));
 };
 
+/**
+ * Mutation hook to undo a cancellation (source shelter, `cancelled` → `requested`).
+ * CR-090 FR-02 — no stock moved while the transfer sat at `requested` or `cancelled`, so only
+ * the transfer list needs invalidating.
+ */
+export const useUndoCancelTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => operationsRepository().undoCancelTransfer(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+		}
+	}));
+};
+
 export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		if (type === 'donation_campaign') {

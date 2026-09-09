@@ -8,6 +8,7 @@ import {
 	createStockLedger,
 	stockLedgerInputSchema,
 	parseStockLedger,
+	undoCancelTransfer,
 	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
@@ -42,6 +43,7 @@ import {
 	type LedgerReason,
 	type ReceiveSource
 } from './operations';
+import type { StockTransfer } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
@@ -1284,14 +1286,16 @@ describe('Inter-shelter Transfers', () => {
 		expect(() => disputeTransfer(requestedTransfer(), ctx, { dispute_reason: '' })).toThrow();
 	});
 
-	it('resumes a disputed transfer and keeps the last hold on record (FR-05, FR-11)', () => {
+	it('resumes a disputed transfer, dropping the reason but keeping the timeline (FR-05, FR-11)', () => {
+		// CR-089 FR-05 amended 2026-09-09 (CR-090 FR-04): `dispute_reason` belongs to `disputed`
+		// and leaves with it; `timeline.disputed` is history and stays.
 		const { transfer: held } = disputeTransfer(requestedTransfer(), ctx, {
 			dispute_reason: 'รอตรวจสอบยอดก่อน'
 		});
 		const { transfer: resumed } = resumeTransfer(held);
 
 		expect(resumed.status).toBe('requested');
-		expect(resumed.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		expect('dispute_reason' in resumed).toBe(false);
 		expect(resumed.timeline.disputed).toEqual(held.timeline.disputed);
 	});
 
@@ -1536,5 +1540,64 @@ describe('lot numbering (CR-088)', () => {
 		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
 		expect(entry.schema_v).toBe(4);
 		expect(parseStockLedger(entry)).toEqual(entry);
+	});
+});
+
+describe('undoCancelTransfer + resumeTransfer reason clearing (CR-090 FR-04)', () => {
+	function transferAt(status: 'cancelled' | 'disputed' | 'requested'): StockTransfer {
+		return {
+			_id: 'stock_transfer:01TRANSFER0000000000000000',
+			type: 'stock_transfer',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-08-22T05:00:00.000Z',
+			updated_at: '2026-08-22T05:00:00.000Z',
+			created_by: 'Staff A',
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+			status,
+			timeline: {
+				requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
+				disputed:
+					status === 'disputed' ? { at: '2026-08-23T05:00:00.000Z', by: 'Staff B' } : undefined
+			},
+			cancel_reason: status === 'cancelled' ? 'กรอกจำนวนผิด' : undefined,
+			dispute_reason: status === 'disputed' ? 'สต็อกไม่พร้อม' : undefined
+		} as StockTransfer;
+	}
+
+	it('undo drops cancel_reason and returns the transfer to requested', () => {
+		const { transfer } = undoCancelTransfer(transferAt('cancelled'));
+		expect(transfer.status).toBe('requested');
+		expect('cancel_reason' in transfer).toBe(false);
+	});
+
+	it('undo keeps the envelope and the requested timeline untouched (FR-08)', () => {
+		const before = transferAt('cancelled');
+		const { transfer } = undoCancelTransfer(before);
+		expect(transfer._id).toBe(before._id);
+		expect(transfer.created_at).toBe(before.created_at);
+		expect(transfer.created_by).toBe(before.created_by);
+		expect(transfer.timeline.requested).toEqual(before.timeline.requested);
+	});
+
+	it('resume drops dispute_reason but keeps timeline.disputed', () => {
+		// CR-089 FR-05 amended 2026-09-09: the reason belongs to the status, the timeline is
+		// history and survives.
+		const before = transferAt('disputed');
+		const { transfer } = resumeTransfer(before);
+		expect(transfer.status).toBe('requested');
+		expect('dispute_reason' in transfer).toBe(false);
+		expect(transfer.timeline.disputed).toEqual(before.timeline.disputed);
+	});
+
+	it('refuses to undo a transfer that is not cancelled', () => {
+		expect(() => undoCancelTransfer(transferAt('requested'))).toThrow(
+			/Cannot undo cancel on transfer in status "requested"/
+		);
+		expect(() => undoCancelTransfer(transferAt('disputed'))).toThrow(
+			/Cannot undo cancel on transfer in status "disputed"/
+		);
 	});
 });

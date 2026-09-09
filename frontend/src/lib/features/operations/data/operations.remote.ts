@@ -503,6 +503,15 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// Resume is the one transition that walks the state machine backwards (CR-089 FR-05/FR-07).
 		return this.transitionTransfer(id, 'requested');
 	}
+
+	/**
+	 * CR-090 FR-02 — undo of a cancellation. Not a route of its own: `cancelled` → `requested` is
+	 * an ordinary transition, and the server picks the right domain function from the document's
+	 * current status (see `TransferServerRepository.transition`).
+	 */
+	async undoCancelTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'requested');
+	}
 }
 
 let singleton: OperationsRepository | null = null;

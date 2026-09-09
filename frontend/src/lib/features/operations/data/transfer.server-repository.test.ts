@@ -520,8 +520,8 @@ describe('TransferServerRepository', () => {
 		const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
 
 		expect(result.status).toBe('requested');
-		// The last hold stays on record after resuming (CR-089 FR-05, FR-11).
-		expect(result.dispute_reason).toBe('รอตรวจสอบยอดก่อน');
+		// CR-089 FR-05 amended 2026-09-09 — the reason leaves with the status, the timeline stays.
+		expect('dispute_reason' in result).toBe(false);
 		expect(result.timeline.disputed?.at).toBe('2026-08-22T06:00:00.000Z');
 	});
 
@@ -544,5 +544,91 @@ describe('TransferServerRepository', () => {
 				{ shelterCode: 'SH001', createdBy: 'Staff A' }
 			)
 		).rejects.toBeInstanceOf(TransferServerRepositoryError);
+	});
+
+	// --- CR-090 undo-cancel ---
+
+	describe('undo cancel (CR-090 FR-02/FR-04)', () => {
+		function cancelledDoc() {
+			return requestedTransfer({
+				status: 'cancelled',
+				cancel_reason: 'กรอกจำนวนผิด',
+				_rev: '3-current'
+			});
+		}
+
+		function mockStored(doc: unknown) {
+			adminRaw.mockImplementation(async (path: string, method: string) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: doc };
+				}
+				if (method === 'PUT') return { status: 201, data: { ok: true, id: 'x', rev: '4-undone' } };
+				return { status: 200, data: {} };
+			});
+		}
+
+		it('walks a cancelled transfer back to requested and drops cancel_reason', async () => {
+			mockStored(cancelledDoc());
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect(result.status).toBe('requested');
+			expect('cancel_reason' in result).toBe(false);
+		});
+
+		it('writes a body without cancel_reason to CouchDB', async () => {
+			// The stored document is replaced wholesale, so the dropped key has to be absent from
+			// the PUT body itself — not merely from the value this method returns.
+			const puts: unknown[] = [];
+			adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: cancelledDoc() };
+				}
+				if (method === 'PUT') {
+					puts.push(body);
+					return { status: 201, data: { ok: true, id: 'x', rev: '4-undone' } };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect(puts).toHaveLength(1);
+			expect(Object.keys(puts[0] as object)).not.toContain('cancel_reason');
+		});
+
+		it('keeps the envelope and the requested timeline (FR-08)', async () => {
+			const stored = cancelledDoc();
+			mockStored(stored);
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect(result._id).toBe(stored._id);
+			expect(result.created_at).toBe(stored.created_at);
+			expect(result.created_by).toBe(stored.created_by);
+			expect(result.timeline.requested).toEqual(stored.timeline.requested);
+		});
+
+		it('refuses an undo from the destination shelter (403)', async () => {
+			mockStored(cancelledDoc());
+			const repo = new TransferServerRepository('central_ops', 'SH002');
+
+			await expect(
+				repo.transition(TRANSFER_ID, 'requested', 'Staff B', 'SH002')
+			).rejects.toMatchObject({ status: 403 });
+		});
+
+		it('refuses to move a cancelled transfer straight to shipped', async () => {
+			mockStored(cancelledDoc());
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+
+			await expect(
+				repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001', {
+					driver_name: 'สมชาย',
+					vehicle_plate: 'กข 1234'
+				})
+			).rejects.toThrow();
+		});
 	});
 });

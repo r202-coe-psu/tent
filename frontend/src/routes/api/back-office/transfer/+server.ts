@@ -39,6 +39,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const body = await request.json().catch(() => ({}));
+
 		const parsed = transferInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });

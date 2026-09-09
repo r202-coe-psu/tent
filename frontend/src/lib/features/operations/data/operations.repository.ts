@@ -146,4 +146,12 @@ export interface OperationsRepository {
 	disputeTransfer(id: string, info: DisputeInfoInput): Promise<StockTransfer>;
 	/** CR-089 FR-05 — source shelter releases the hold (`disputed` → `requested`). */
 	resumeTransfer(id: string): Promise<StockTransfer>;
+	/**
+	 * CR-090 FR-02/FR-04 — undo a cancellation (`cancelled` → `requested`), source shelter only.
+	 * Drops `cancel_reason` on the way back; `timeline` is history and survives.
+	 *
+	 * `disputed` has its own way back (`resumeTransfer`): CR-089 FR-07 gives that status one exit
+	 * only, so a held transfer must be resumed before it can be cancelled at all.
+	 */
+	undoCancelTransfer(id: string): Promise<StockTransfer>;
 }

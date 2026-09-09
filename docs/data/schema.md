@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-05
+updated: 2026-09-09
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -1277,7 +1277,7 @@ closed   → (terminal)
 > - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
 > - `referral-list-basic-idx`: `['type', 'created_at']`
 
-### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only, CR-059, Centralized Architecture)
+### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (CR-059, Centralized Architecture)
 
 > **ย้ายมาจาก `shelter_{shelter_code}` (§2.2 เดิม, superseded) — CR-059, approved 2026-08-22:**
 > เอกสารประเภท `stock_transfer` จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่
@@ -1301,27 +1301,32 @@ closed   → (terminal)
 | `from_shelter` / `to_shelter` | str | req | shelter_code (เช่น `SH001`) — canonical doc เดียวใน `central_ops`, ไม่ replicate ผ่าน central แบบเดิมอีกต่อไป |
 | `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ |
 | `status` | enum(`requested`,`shipped`,`received`,`cancelled`,`disputed`) | req | ดูตาราง transition ด้านล่าง · `disputed` = CR-089 |
-| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?, `disputed`:{at,by}?} | req/sys | `disputed` เขียนตอน `requested → disputed` · คัดค้านซ้ำ = ทับค่าเดิม (เก็บครั้งล่าสุดครั้งเดียว) · resume **ไม่ลบ** · `cancelled` ยังไม่มี entry (CR-089 FR-11) |
+| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?, `disputed`:{at,by}?} | req/sys | `disputed` เขียนตอน `requested → disputed` · คัดค้านซ้ำ = ทับค่าเดิม (เก็บครั้งล่าสุดครั้งเดียว) · resume **ไม่ลบ** `timeline.disputed` (เป็นประวัติ ไม่ใช่ field สถานะปัจจุบัน — CR-090 amend 2026-09-09) · `cancelled` ยังไม่มี entry (CR-089 FR-11) |
 | `driver_name` | str | opt/req | **req ตอน transition เป็น `shipped`** (ไม่ว่าง) หลังจากนั้น read-only · doc ที่ยังไม่ถึง `shipped` ไม่มี field นี้ (CR-089 FR-01/FR-02) |
 | `vehicle_plate` | str | opt/req | เงื่อนไขเดียวกับ `driver_name` (CR-089 FR-01/FR-02) |
-| `cancel_reason` | str | opt/req | **req ตอน transition เป็น `cancelled`** (CR-089 FR-03) |
-| `dispute_reason` | str | opt/req | **req ตอน transition เป็น `disputed`** · เก็บเฉพาะค่าล่าสุด — คัดค้านรอบใหม่ทับของเดิม ไม่มี dispute history (CR-089 FR-04/FR-05) |
+| `cancel_reason` | str | opt/req | **req ตอน transition เป็น `cancelled`** (CR-089 FR-03) · **ถูกลบออกจาก doc ตอน undo** (`cancelled → requested`) — field นี้มีได้เฉพาะบน doc ที่ `status === 'cancelled'` (CR-090 FR-04) |
+| `dispute_reason` | str | opt/req | **req ตอน transition เป็น `disputed`** · เก็บเฉพาะค่าล่าสุด — คัดค้านรอบใหม่ทับของเดิม ไม่มี dispute history (CR-089 FR-04) · **ถูกลบออกจาก doc ตอน resume** (`disputed → requested`) — field นี้มีได้เฉพาะบน doc ที่ `status === 'disputed'` (CR-089 FR-05 amend 2026-09-09) |
 | `notes` | str | opt | — |
 
-**Transition ที่อนุญาต (CR-059 + CR-089):**
+**Transition ที่อนุญาต (CR-059 + CR-089 + CR-090):**
 
 | จาก | ไป | ใครทำได้ | field บังคับ |
 | --- | --- | --- | --- |
 | `requested` | `shipped` | ต้นทาง (`from_shelter`) | `driver_name`, `vehicle_plate` |
 | `requested` | `cancelled` | ต้นทาง | `cancel_reason` |
 | `requested` | `disputed` | ต้นทาง | `dispute_reason` (+ เขียน `timeline.disputed`) |
-| `disputed` | `requested` | ต้นทาง | — (resume) |
+| `disputed` | `requested` | ต้นทาง | — (resume · ลบ `dispute_reason`) |
+| `cancelled` | `requested` | ต้นทาง | — (undo · ลบ `cancel_reason`) |
 | `shipped` | `received` | ปลายทาง (`to_shelter`) | — |
 
 - **`disputed` เข้าได้จาก `requested` เท่านั้น และออกได้กลับไป `requested` เท่านั้น** — ห้ามไป `shipped` /
   `received` / `cancelled` ตรงจาก `disputed` (CR-089 FR-07)
-- คู่ `disputed` ↔ `requested` เป็น**คู่เดียวที่ย้อนกลับได้** ใน state machine นี้ — ที่เหลือยัง
-  forward-only ตามเดิม
+- **คู่ที่ย้อนกลับได้มี 2 คู่:** `disputed` ↔ `requested` (resume — CR-089 FR-05/FR-07) และ
+  `cancelled` → `requested` (undo การยกเลิก — CR-090 FR-02) — ที่เหลือยัง forward-only ตามเดิม
+- **`cancelled` ไม่ใช่สถานะปลายทางอีกต่อไป** (CR-090 amend 2026-09-09) — ต้นทางย้อนกลับ `requested`
+  ได้ ไม่มีกำหนดเวลา · หน้าต่าง 5 วินาทีของปุ่ม "เลิกทำ" เป็นข้อกำหนดฝั่ง UI เท่านั้น ไม่ใช่กติกาของ
+  state machine (CR-090 FR-05) · `stock_transfer` **ไม่มี hard delete** — การเอาคำร้องออกจากงานทำได้
+  ทางเดียวคือ `cancelled` (CR-090 FR-01)
 - ตอนสถานะเป็น `disputed` ปลายทางทำได้แค่อ่าน (CR-089 FR-06)
 - ข้อบังคับเหล่านี้บังคับที่ **โค้ดฝั่ง server** เท่านั้น (`transition()` + `transfer.authorization.ts`) —
   `central_ops` ไม่มี `validate_doc_update` และ write path ทั้งหมดวิ่งผ่าน `adminRaw` ซึ่ง bypass
