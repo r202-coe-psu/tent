@@ -2,6 +2,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
+import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
 import type { VolunteerApplyInput } from '$lib/features/volunteer-portal/domain/volunteer';
 import {
 	findAsPublicWriter,
@@ -204,6 +205,17 @@ async function controlledSkills(shelterCode: string): Promise<Set<string>> {
 		// The built-in controlled-skill floor still keeps medical work pending review.
 	}
 	return values;
+}
+
+async function displaySkillLabels(shelterCode: string, values: string[]): Promise<string[]> {
+	try {
+		const master = await readEffectiveMasterDoc('volunteer_skills', shelterCode);
+		const options = skillOptionsFromMaster(master?.items ?? []);
+		return values.map((value) => resolveSkillLabel(value, options));
+	} catch {
+		// If Master Data is unavailable, preserve the stored value instead of hiding it.
+		return values;
+	}
 }
 
 function hasVerifiedSkill(profile: CouchVolunteer | undefined, skill: string): boolean {
@@ -440,15 +452,24 @@ export async function preflightPublicVolunteerApplication(
 				all.findIndex((value) => normalizedSkill(value) === normalizedSkill(skill)) === index
 		);
 	const newControlled = newSkills.filter((skill) => controlled.has(normalizedSkill(skill)));
+	const allSkillLabels = await displaySkillLabels(shelterCode, [...existingSkills, ...newSkills]);
+	const existingSkillLabels = allSkillLabels.slice(0, existingSkills.length);
+	const newSkillLabels = allSkillLabels.slice(existingSkills.length);
+	const labelsBySkill = new Map(
+		newSkills.map((skill, index) => [normalizedSkill(skill), newSkillLabels[index] ?? skill])
+	);
+	const newControlledSkillLabels = newControlled.map(
+		(skill) => labelsBySkill.get(normalizedSkill(skill)) ?? skill
+	);
 	return {
 		match: 'matched_one',
 		existing_profile: {
 			volunteer_code: existing.volunteer_code ?? '',
 			display_name: maskedDisplayName(existing),
 			identity_status: identityStatus(existing),
-			existing_skills: existingSkills,
-			new_skills: newSkills,
-			new_controlled_skills: newControlled
+			existing_skills: existingSkillLabels,
+			new_skills: newSkillLabels,
+			new_controlled_skills: newControlledSkillLabels
 		},
 		message: 'เบอร์โทรนี้เคยสมัครไว้แล้ว ระบบจะอัปเดต profile เดิมและสร้างใบสมัครใหม่'
 	};
