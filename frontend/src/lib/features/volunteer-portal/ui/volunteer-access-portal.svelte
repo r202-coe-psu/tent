@@ -2,7 +2,6 @@
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
-	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Download from '@lucide/svelte/icons/download';
@@ -21,6 +20,8 @@
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
+	import DatePicker from '$lib/components/date-picker.svelte';
+	import TimePicker from '$lib/components/time-picker.svelte';
 	import {
 		useRespondToDispatchMutation,
 		useScheduleActionMutation,
@@ -857,39 +858,35 @@
 						</div>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span class="flex items-center gap-1"
-									><CalendarDays class="size-3" /> ตั้งแต่วันที่</span
-								>
-								<input
-									type="date"
+								<span>ตั้งแต่วันที่</span>
+								<DatePicker
+									id="portal-filter-from-date"
 									bind:value={filterFromDate}
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+									placeholder="เลือกวันที่เริ่มต้น"
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span class="flex items-center gap-1"
-									><CalendarDays class="size-3" /> ถึงวันที่</span
-								>
-								<input
-									type="date"
+								<span>ถึงวันที่</span>
+								<DatePicker
+									id="portal-filter-to-date"
 									bind:value={filterToDate}
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+									placeholder="เลือกวันที่สิ้นสุด"
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
 								<span>เวลาตั้งแต่</span>
-								<input
-									type="time"
+								<TimePicker
+									id="portal-filter-from-time"
 									bind:value={filterFromTime}
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+									placeholder="เลือกเวลาเริ่มต้น"
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
 								<span>เวลาถึง</span>
-								<input
-									type="time"
+								<TimePicker
+									id="portal-filter-to-time"
 									bind:value={filterToTime}
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+									placeholder="เลือกเวลาสิ้นสุด"
 								/>
 							</label>
 						</div>

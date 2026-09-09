@@ -38,6 +38,7 @@ describe('portal schedule view', () => {
 		const activities = mergePortalActivities([shift()], [ticket()]);
 		expect(activities).toHaveLength(1);
 		expect(activities[0]?.assignmentId).toBe('shift_assignment:1');
+		expect(activities[0]?.ticketToken).toBe('VIEW-1');
 	});
 
 	it('keeps an unassigned booking visible as a pending activity', () => {

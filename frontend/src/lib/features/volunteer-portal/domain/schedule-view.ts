@@ -99,10 +99,20 @@ export function mergePortalActivities(
 		status: shift.status,
 		dispatchStatus: shift.dispatch_status
 	}));
+	const activityByAssignment = new Map(
+		activities
+			.filter((activity) => activity.assignmentId)
+			.map((activity) => [activity.assignmentId as string, activity])
+	);
 
 	for (const ticket of tickets) {
 		if (ticket.status === 'cancelled') continue;
-		if (shifts.some((shift) => sameShift(ticket, shift))) continue;
+		const matchingShift = shifts.find((shift) => sameShift(ticket, shift));
+		if (matchingShift) {
+			const activity = activityByAssignment.get(matchingShift.assignment_id);
+			if (activity) activity.ticketToken ??= ticket.view_token;
+			continue;
+		}
 		activities.push({
 			id: `ticket:${ticket.view_token}`,
 			jobId: ticket.job_id,
