@@ -111,10 +111,10 @@
 <header
 	class="sticky top-0 z-50 w-full border-b border-border bg-card/95 px-6 py-3 shadow-xs backdrop-blur-md"
 >
-	<div class="mx-auto flex max-w-7xl items-center justify-between">
+	<div class="mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-3">
 		<!-- Logo and Title -->
-		<div class="flex items-center gap-3">
-			<a href={resolve('/')} class="flex items-center gap-2">
+		<div class="flex min-w-0 shrink items-center gap-3">
+			<a href={resolve('/')} class="flex min-w-0 items-center gap-2">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-muted text-primary"
 				>
@@ -129,8 +129,8 @@
 			</a>
 		</div>
 
-		<!-- Mobile Menu Button -->
-		<div class="flex items-center gap-1.5 sm:gap-2 md:hidden">
+		<!-- Compact controls: phone + tablet (hamburger through lg) -->
+		<div class="flex shrink-0 items-center gap-1.5 sm:gap-2 lg:hidden">
 			<!-- Notification Bell Button (Mobile) -->
 			<button
 				type="button"
@@ -184,11 +184,11 @@
 			</button>
 		</div>
 
-		<!-- Navbar Links -->
-		<nav class="hidden items-center gap-1 md:flex">
+		<!-- Full horizontal nav: desktop lg+ only (avoids tablet wrap over form CTAs) -->
+		<nav class="hidden flex-nowrap items-center gap-1 lg:flex">
 			<a
 				href={resolve('/')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -198,7 +198,7 @@
 
 			<a
 				href={resolve('/shelters')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
@@ -210,7 +210,7 @@
 
 			<a
 				href={resolve('/search')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/search'
 				)
 					? 'bg-primary-muted text-primary'
@@ -222,14 +222,14 @@
 
 			<a
 				href={resolve('/pre-register')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/pre-register'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
 				<ClipboardCheck class="h-4 w-4" />
-				ลงทะเบียนล่วงหน้า
+				{t.preRegister}
 			</a>
 
 			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
@@ -240,7 +240,7 @@
 					aria-haspopup="menu"
 					aria-expanded={donationsMenuOpen}
 					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
-					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isDonationsSection() ||
 					donationsMenuOpen
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -287,7 +287,7 @@
 
 			<a
 				href={resolve('/login')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
 					'/login'
 				)
 					? 'bg-primary-muted text-primary'
@@ -297,7 +297,7 @@
 				{t.backoffice}
 			</a>
 
-			<div class="ml-2 flex items-center border-l border-border pl-3">
+			<div class="ml-2 flex shrink-0 items-center border-l border-border pl-3">
 				<Globe class="mr-1 h-4 w-4 text-muted-foreground" />
 				<Select.Root
 					type="single"
@@ -332,7 +332,7 @@
 			bind:this={alertsMenuEl}
 			role="dialog"
 			aria-label="การแจ้งเตือนภัยฉุกเฉิน"
-			class="absolute top-full right-4 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:right-6 md:right-28"
+			class="absolute top-full right-4 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:right-6"
 		>
 			<div class="flex items-center justify-between border-b border-slate-100 pb-3">
 				<div class="flex items-center gap-2">
@@ -415,9 +415,9 @@
 		</div>
 	{/if}
 
-	<!-- Mobile Menu Dropdown -->
+	<!-- Compact menu dropdown (phone + tablet) -->
 	{#if mobileMenuOpen}
-		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
+		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg lg:hidden">
 			<nav class="flex flex-col gap-2 p-4">
 				<button
 					type="button"
@@ -484,7 +484,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<ClipboardCheck class="h-5 w-5" />
-					ลงทะเบียนล่วงหน้า
+					{t.preRegister}
 				</a>
 
 				<a

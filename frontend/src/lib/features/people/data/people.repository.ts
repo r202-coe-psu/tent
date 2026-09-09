@@ -14,6 +14,11 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type {
+	FamilyReportInPayload,
+	UnifiedRegistrationChannel,
+	UnifiedRegistrationInput
+} from '../domain/unified-registration';
 
 export type HouseholdSearchLabels = {
 	municipalityZone: Record<string, string>;
@@ -45,6 +50,7 @@ export type EvacueePatch = Partial<
 		| 'religion'
 		| 'photo'
 		| 'special_needs'
+		| 'vulnerable_groups'
 		| 'emergency_contact'
 		| 'household_id'
 		| 'current_stay'
@@ -61,6 +67,8 @@ export type HouseholdPatch = Partial<
 		| 'district'
 		| 'province'
 		| 'postal_code'
+		| 'housing_type'
+		| 'residence_landmark'
 		| 'vehicles'
 		| 'assets'
 		| 'pets'
@@ -158,6 +166,10 @@ export interface PeopleRepository {
 			zone?: string | null;
 			checkIn?: boolean;
 			medical?: MedicalInput;
+			/** When set, patches the evacuee alongside the screening record (Station 2 VG confirm). */
+			vulnerable_groups?: string[];
+			/** When set, patches the evacuee alongside the screening record (Station 2 additional needs). */
+			special_needs?: string[];
 		},
 		ctx: AuthorContext
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }>;
@@ -193,13 +205,23 @@ export interface PeopleRepository {
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
 	 * this is the only path that flips occupancy to `active` (T-06).
 	 */
-	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone?: string | null): Promise<Evacuee>;
+	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee>;
 	/**
 	 * Record a check-out movement and apply it to the evacuee's `current_stay`.
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
-	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	checkOutEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		opts?: { reason?: string; notes?: string }
+	): Promise<Evacuee>;
+	confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	confirmRoomForHousehold(
+		householdId: string,
+		evacuees: readonly Evacuee[],
+		ctx: AuthorContext
+	): Promise<Evacuee[]>;
 	/**
 	 * Record a `zone_change` movement while staying `active` (CR-106 Station 3 rezone).
 	 * Requires a non-empty destination zone.
@@ -214,7 +236,7 @@ export interface PeopleRepository {
 	 */
 	recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
 		ctx: AuthorContext
 	): Promise<Evacuee>;
 	/**
@@ -234,4 +256,25 @@ export interface PeopleRepository {
 	 * Does not create a screening document and does not assign a zone.
 	 */
 	promoteReportIn(evacueeId: string): Promise<Evacuee>;
+	/**
+	 * Unified multi-person registration (#249): persist 1 Household + N Evacuees.
+	 * Member[0] becomes `head_evacuee_id`. Best-effort compensation on failure.
+	 */
+	createFamilyRegistration(
+		input: UnifiedRegistrationInput,
+		ctx: AuthorContext,
+		channel?: UnifiedRegistrationChannel
+	): Promise<{
+		household: Household;
+		members: Evacuee[];
+	}>;
+	/**
+	 * Station 1 Report-in for a family (#249 unified flow):
+	 * Updates existing household, updates existing members, creates any new members,
+	 * and promotes members selected for report-in from `pre_registered` → `arriving`.
+	 */
+	submitFamilyReportIn(payload: FamilyReportInPayload): Promise<{
+		household: Household;
+		members: Evacuee[];
+	}>;
 }

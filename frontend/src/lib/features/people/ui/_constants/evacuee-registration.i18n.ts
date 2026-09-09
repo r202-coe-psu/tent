@@ -26,7 +26,8 @@ export const EVACUEE_REGISTRATION_I18N = {
 				national_id: 'เลขประจำตัวประชาชน (Thai National ID)',
 				passport: 'หนังสือเดินทาง (Passport)',
 				pink_card: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)',
-				other: 'อื่นๆ (Other)'
+				other: 'อื่นๆ (Other)',
+				anonymous: 'บัตรไม่ระบุตัวตน (Anonymous ID)'
 			}
 		},
 		idNumber: {
@@ -34,12 +35,14 @@ export const EVACUEE_REGISTRATION_I18N = {
 				national_id: 'เลขประจำตัวประชาชน',
 				passport: 'เลขที่พาสปอร์ต',
 				pink_card: 'เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย',
-				other: 'เลขหมายบัตร'
+				other: 'เลขหมายบัตร',
+				anonymous: 'หมายเลข Anonymous ID'
 			},
 			placeholders: {
 				national_id: 'X-XXXX-XXXXX-XX-X',
 				passport: 'Passport Number',
-				other: 'หมายเลขบัตร'
+				other: 'หมายเลขบัตร',
+				anonymous: 'ระบบออกให้อัตโนมัติ'
 			}
 		},
 		personal: {
@@ -181,7 +184,8 @@ export const EVACUEE_REGISTRATION_I18N = {
 				national_id: 'Thai National ID',
 				passport: 'Passport',
 				pink_card: 'Non-Thai ID Card (Pink Card)',
-				other: 'Other'
+				other: 'Other',
+				anonymous: 'Anonymous ID'
 			}
 		},
 		idNumber: {
@@ -189,12 +193,14 @@ export const EVACUEE_REGISTRATION_I18N = {
 				national_id: 'Thai National ID Number',
 				passport: 'Passport Number',
 				pink_card: 'Non-Thai ID Card Number',
-				other: 'Card Number'
+				other: 'Card Number',
+				anonymous: 'Anonymous ID'
 			},
 			placeholders: {
 				national_id: 'X-XXXX-XXXXX-XX-X',
 				passport: 'Passport Number',
-				other: 'Card Number'
+				other: 'Card Number',
+				anonymous: 'Issued automatically on save'
 			}
 		},
 		personal: {

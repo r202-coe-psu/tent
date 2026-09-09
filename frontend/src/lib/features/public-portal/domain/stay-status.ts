@@ -1,5 +1,5 @@
 /**
- * Stay status as the public family search now reports it (CR-080).
+ * Stay status as the public family search reports it (CR-080 + CR-112).
  * Pure: no I/O, no Svelte.
  */
 
@@ -7,6 +7,7 @@ export const PUBLIC_STAY_STATUSES = [
 	'pre_registered',
 	'arriving',
 	'active',
+	'room_confirmed',
 	'in_shelter',
 	'temporary_leave',
 	'transferred',
@@ -23,6 +24,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		arriving: 'อยู่ระหว่างรอเข้าพัก',
 		active: 'เข้าพักแล้ว',
+		room_confirmed: 'ยืนยันถึงโซนแล้ว',
 		in_shelter: 'พักพิงอยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายไปแล้ว',
@@ -34,6 +36,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 		pre_registered: 'Pre-registered',
 		arriving: 'Arriving',
 		active: 'Checked-in',
+		room_confirmed: 'Zone Arrival Confirmed',
 		in_shelter: 'In Shelter',
 		temporary_leave: 'Temporary Leave',
 		transferred: 'Transferred',
@@ -45,6 +48,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 
 const TONES: Record<PublicStayStatus, StayStatusTone> = {
 	active: 'safe',
+	room_confirmed: 'safe',
 	in_shelter: 'safe',
 	pre_registered: 'pending',
 	arriving: 'pending',
@@ -75,6 +79,15 @@ export function publicStayStatusTone(status: string | null | undefined): StaySta
 	return known ? TONES[known] : 'ended';
 }
 
+/**
+ * Present Occupancy oriented “in shelter?” helper (CR-112):
+ * `active` | `room_confirmed` | `temporary_leave` (+ legacy `in_shelter`).
+ */
 export function isInShelterStatus(status: string | null | undefined): boolean {
-	return status === 'active' || status === 'in_shelter';
+	return (
+		status === 'active' ||
+		status === 'room_confirmed' ||
+		status === 'temporary_leave' ||
+		status === 'in_shelter'
+	);
 }

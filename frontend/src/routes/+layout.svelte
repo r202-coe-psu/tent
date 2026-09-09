@@ -6,7 +6,6 @@
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
-	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import TestingBanner from '$lib/components/testing-banner.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
@@ -18,8 +17,8 @@
 		data.queryClient.clear();
 	});
 
-	// Nested overflow shells (onsite / back-office / portal) own scroll — reset them
-	// on every client navigation. Skip when a hash is present so in-page anchors work.
+	// Staff shells use document/window scroll — reset on every client navigation.
+	// Skip when a hash is present so in-page anchors work.
 	afterNavigate(({ to }) => {
 		if (to?.url.hash) return;
 		requestAnimationFrame(() => {
@@ -44,5 +43,4 @@
 <QueryClientProvider client={data.queryClient}>
 	{@render children?.()}
 	<TestingBanner />
-	<SvelteQueryDevtools />
 </QueryClientProvider>

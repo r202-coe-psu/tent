@@ -4,7 +4,7 @@ import {
 	buildZoningPath,
 	classifyScreeningQueueTab,
 	classifyZoningQueueTab,
-	countOccupantsByZone,
+	countPresentOccupantsByZone,
 	nextQueueLabel,
 	parseZoningQrCode,
 	recommendZoneKind
@@ -14,17 +14,19 @@ function ev(partial: {
 	status: Evacuee['current_stay']['status'];
 	zone?: string | null;
 	special_needs?: string[];
+	vulnerable_groups?: string[];
 	id?: string;
 }): Evacuee {
 	return {
 		_id: partial.id ?? 'evacuee:1',
 		type: 'evacuee',
-		schema_v: 9,
+		schema_v: 10,
 		first_name: 'ก',
 		last_name: 'ข',
 		gender: 'other',
 		phone: null,
 		country: 'TH',
+		vulnerable_groups: partial.vulnerable_groups ?? [],
 		special_needs: partial.special_needs ?? [],
 		household_id: null,
 		current_stay: {
@@ -69,11 +71,29 @@ describe('nextQueueLabel', () => {
 		).toBe('รอโซน');
 	});
 
-	it('returns พักแล้ว for active or zoned', () => {
+	it('returns รอยืนยันถึงโซน when active with zone', () => {
 		expect(
 			nextQueueLabel(ev({ status: 'active', zone: 'Z1' }), {
 				enableMedicalScreening: true,
 				hasScreening: true
+			})
+		).toBe('รอยืนยันถึงโซน');
+	});
+
+	it('returns พักแล้ว for room_confirmed', () => {
+		expect(
+			nextQueueLabel(ev({ status: 'room_confirmed', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).toBe('พักแล้ว');
+	});
+
+	it('returns พักแล้ว for temporary_leave with zone', () => {
+		expect(
+			nextQueueLabel(ev({ status: 'temporary_leave', zone: 'Z1' }), {
+				enableMedicalScreening: false,
+				hasScreening: false
 			})
 		).toBe('พักแล้ว');
 	});
@@ -107,13 +127,31 @@ describe('classifyZoningQueueTab', () => {
 		).toBe('pending');
 	});
 
-	it('assigned when active with zone', () => {
+	it('awaiting_confirm when active with zone (pending Zone Arrival Confirmation)', () => {
 		expect(
 			classifyZoningQueueTab(ev({ status: 'active', zone: 'Z1' }), {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
+		).toBe('awaiting_confirm');
+	});
+
+	it('assigned when room_confirmed with zone', () => {
+		expect(
+			classifyZoningQueueTab(ev({ status: 'room_confirmed', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
 		).toBe('assigned');
+	});
+
+	it('excludes temporary_leave from assigned (confirmed) zoning tab', () => {
+		expect(
+			classifyZoningQueueTab(ev({ status: 'temporary_leave', zone: 'Z1' }), {
+				enableMedicalScreening: false,
+				hasScreening: false
+			})
+		).toBeNull();
 	});
 
 	it('clears checked-in evacuees from pending (Cleared for Zoning) queue', () => {
@@ -148,18 +186,39 @@ describe('classifyScreeningQueueTab', () => {
 });
 
 describe('recommendZoneKind', () => {
-	it('prefers quarantine for red/yellow triage', () => {
-		expect(recommendZoneKind({ special_needs: ['wheelchair'] }, 'red')).toBe('quarantine');
-		expect(recommendZoneKind({ special_needs: [] }, 'yellow')).toBe('quarantine');
+	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
+		expect(
+			recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, [
+				'fever',
+				'cough'
+			])
+		).toBe('quarantine');
+		expect(
+			recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, ['watery_diarrhea'])
+		).toBe('quarantine');
 	});
 
-	it('uses vulnerable for special_needs when triage green/null', () => {
-		expect(recommendZoneKind({ special_needs: ['infant'] }, 'green')).toBe('vulnerable');
-		expect(recommendZoneKind({ special_needs: ['infant'] }, null)).toBe('vulnerable');
+	it('uses vulnerable when EWAR symptoms are empty and evacuee has vulnerable groups', () => {
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, [])).toBe(
+			'vulnerable'
+		);
 	});
 
-	it('defaults to general', () => {
-		expect(recommendZoneKind({ special_needs: [] }, null)).toBe('general');
+	it('defaults to general when EWAR symptoms are empty and no special needs', () => {
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, [])).toBe('general');
+	});
+
+	it('preserves legacy triage support (red/yellow -> quarantine, green -> non-quarantine)', () => {
+		expect(recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'red')).toBe(
+			'quarantine'
+		);
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
+			'quarantine'
+		);
+		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, 'green')).toBe(
+			'vulnerable'
+		);
+		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
 	});
 });
 
@@ -176,11 +235,11 @@ describe('parseZoningQrCode', () => {
 	});
 });
 
-describe('countOccupantsByZone', () => {
-	it('counts active/temporary_leave only', () => {
-		const counts = countOccupantsByZone([
+describe('countPresentOccupantsByZone', () => {
+	it('counts Present occupancy: active, room_confirmed, and temporary_leave', () => {
+		const counts = countPresentOccupantsByZone([
 			ev({ status: 'active', zone: 'A', id: '1' }),
-			ev({ status: 'active', zone: 'A', id: '2' }),
+			ev({ status: 'room_confirmed', zone: 'A', id: '2' }),
 			ev({ status: 'temporary_leave', zone: 'A', id: '3' }),
 			ev({ status: 'arriving', zone: null, id: '4' }),
 			ev({ status: 'checked_out', zone: 'A', id: '5' })
