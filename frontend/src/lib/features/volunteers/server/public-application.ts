@@ -1,7 +1,7 @@
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
-import { DEFAULT_CONTROLLED_SKILLS, reviewReasonsForApplication } from '../domain/skills';
+import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import type { VolunteerApplyInput } from '$lib/features/volunteer-portal/domain/volunteer';
 import {
 	findAsPublicWriter,
@@ -65,6 +65,11 @@ type CouchVolunteer = {
 	last_name?: string;
 	skills?: string[];
 	tracking_token_hash?: string;
+	volunteer_code?: string;
+	identity_verified?: boolean;
+	identity_verification?: { status?: string; [key: string]: unknown };
+	skill_verifications?: Record<string, { status?: string; [key: string]: unknown }>;
+	email?: string;
 	[key: string]: unknown;
 };
 
@@ -86,6 +91,7 @@ export class PublicApplicationError extends Error {
 			| 'SHIFT_DATE_AMBIGUOUS'
 			| 'MISSING_REQUIRED_SKILLS'
 			| 'DUPLICATE_APPLICATION'
+			| 'AMBIGUOUS_VOLUNTEER'
 			| 'TIME_CONFLICT'
 			| 'JOB_NOT_READY'
 			| 'WRITE_FAILED',
@@ -100,6 +106,17 @@ function normalizedJobId(value: string): string {
 	return value.startsWith('job:') ? value : `job:${value}`;
 }
 
+function normalizePhone(value: string): string {
+	const digits = value.replace(/[\s\-()]/g, '');
+	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
+	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
+	return digits;
+}
+
+function normalizedSkill(value: string): string {
+	return value.trim().normalize('NFC').toLowerCase();
+}
+
 function docsFrom(data: unknown): Record<string, unknown>[] {
 	if (!data || typeof data !== 'object' || !Array.isArray((data as { docs?: unknown }).docs)) {
 		return [];
@@ -107,6 +124,15 @@ function docsFrom(data: unknown): Record<string, unknown>[] {
 	return (data as { docs: unknown[] }).docs.filter(
 		(doc): doc is Record<string, unknown> => Boolean(doc) && typeof doc === 'object'
 	);
+}
+
+async function matchingVolunteers(dbName: string, phoneHash: string): Promise<CouchVolunteer[]> {
+	const result = await findAsPublicWriter(
+		dbName,
+		{ type: 'volunteer', phone_hash: phoneHash },
+		{ limit: 100 }
+	);
+	return docsFrom(result.data).filter((doc): doc is CouchVolunteer => typeof doc._id === 'string');
 }
 
 async function findShelterCodeForJob(jobId: string, preferred?: string): Promise<string | null> {
@@ -180,13 +206,71 @@ async function controlledSkills(shelterCode: string): Promise<Set<string>> {
 	return values;
 }
 
-function needsReview(job: CouchJob, skills: string[], controlled: Set<string>): boolean {
+function hasVerifiedSkill(profile: CouchVolunteer | undefined, skill: string): boolean {
+	const records = profile?.skill_verifications ?? {};
+	const wanted = normalizedSkill(skill);
+	const record = Object.entries(records).find(([key]) => normalizedSkill(key) === wanted)?.[1];
+	return record?.status === 'verified';
+}
+
+function identityStatus(profile: CouchVolunteer | undefined): string {
+	return (
+		profile?.identity_verification?.status ?? (profile?.identity_verified ? 'verified' : 'pending')
+	);
+}
+
+function needsReview(
+	job: CouchJob,
+	skills: string[],
+	controlled: Set<string>,
+	profile?: CouchVolunteer
+): boolean {
 	return (
 		job.tier === 'staff-capable' ||
-		skills.some((skill) => controlled.has(skill.trim().toLowerCase())) ||
+		skills.some(
+			(skill) => controlled.has(skill.trim().toLowerCase()) && !hasVerifiedSkill(profile, skill)
+		) ||
+		(Boolean(profile) && identityStatus(profile) !== 'verified') ||
 		job.auto_accept !== true
 	);
 }
+
+function reviewReasons(
+	job: CouchJob,
+	skills: string[],
+	controlled: Set<string>,
+	profile?: CouchVolunteer
+): string[] {
+	const reasons: string[] = [];
+	if (
+		skills.some(
+			(skill) => controlled.has(skill.trim().toLowerCase()) && !hasVerifiedSkill(profile, skill)
+		)
+	)
+		reasons.push('skill_certification');
+	if (profile && identityStatus(profile) !== 'verified') reasons.push('identity');
+	if (job.tier !== 'operational' || job.auto_accept !== true) reasons.push('job_fit');
+	return reasons;
+}
+
+function maskedDisplayName(profile: CouchVolunteer): string {
+	const first = String(profile.first_name ?? '');
+	const last = String(profile.last_name ?? '');
+	return `${first.slice(0, 1)}*** ${last.slice(0, 1)}***`.trim();
+}
+
+export type PublicApplicationPreflight = {
+	match: 'no_match' | 'matched_one' | 'ambiguous_match';
+	existing_profile?: {
+		volunteer_code: string;
+		display_name: string;
+		identity_status: string;
+		existing_skills: string[];
+		new_skills: string[];
+		new_controlled_skills: string[];
+	};
+	message: string;
+};
 
 function shiftId(shift: CouchJobShift | null): string | undefined {
 	return shift ? shift.shift_id || shift.id : undefined;
@@ -324,6 +408,52 @@ async function releaseSlot(
 	}
 }
 
+export async function preflightPublicVolunteerApplication(
+	jobIdInput: string,
+	input: DirectApplicationInput
+): Promise<PublicApplicationPreflight> {
+	const jobId = normalizedJobId(jobIdInput);
+	const shelterCode = await findShelterCodeForJob(jobId, input.shelter_code);
+	if (!shelterCode) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	const jobRes = await getAsPublicWriter(shelterDbName(shelterCode), jobId);
+	if (jobRes.status === 404) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	if (jobRes.status >= 400 || !jobRes.data) throw new PublicApplicationError('JOB_NOT_READY', 409);
+	const hash = await sha256Hex(normalizePhone(input.phone));
+	const volunteers = await matchingVolunteers(shelterDbName(shelterCode), hash);
+	if (volunteers.length === 0) {
+		return { match: 'no_match', message: 'ไม่พบ Volunteer profile เดิม สามารถสมัครใหม่ได้' };
+	}
+	if (volunteers.length > 1) {
+		return {
+			match: 'ambiguous_match',
+			message: 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่'
+		};
+	}
+	const existing = volunteers[0];
+	const controlled = await controlledSkills(shelterCode);
+	const existingSkills = existing.skills ?? [];
+	const newSkills = input.skills
+		.map((skill) => skill.trim())
+		.filter(
+			(skill, index, all) =>
+				!existingSkills.some((value) => normalizedSkill(value) === normalizedSkill(skill)) &&
+				all.findIndex((value) => normalizedSkill(value) === normalizedSkill(skill)) === index
+		);
+	const newControlled = newSkills.filter((skill) => controlled.has(normalizedSkill(skill)));
+	return {
+		match: 'matched_one',
+		existing_profile: {
+			volunteer_code: existing.volunteer_code ?? '',
+			display_name: maskedDisplayName(existing),
+			identity_status: identityStatus(existing),
+			existing_skills: existingSkills,
+			new_skills: newSkills,
+			new_controlled_skills: newControlled
+		},
+		message: 'เบอร์โทรนี้เคยสมัครไว้แล้ว ระบบจะอัปเดต profile เดิมและสร้างใบสมัครใหม่'
+	};
+}
+
 export async function applyPublicVolunteerApplication(
 	jobIdInput: string,
 	input: DirectApplicationInput
@@ -383,29 +513,27 @@ export async function applyPublicVolunteerApplication(
 	}
 
 	const controlled = await controlledSkills(shelterCode);
-	const status = needsReview(job, skills, controlled) ? 'pending_review' : 'confirmed';
-	const phoneHash = await sha256Hex(input.phone);
+	const phoneHash = await sha256Hex(normalizePhone(input.phone));
+	const volunteers = await matchingVolunteers(dbName, phoneHash);
+	if (volunteers.length > 1) throw new PublicApplicationError('AMBIGUOUS_VOLUNTEER', 409);
+	const existing = volunteers[0];
+	const volunteerId = existing?._id ?? `volunteer:${ulid().toLowerCase()}`;
+	const status = needsReview(job, skills, controlled, existing) ? 'pending_review' : 'confirmed';
+	const selectedShiftId = verifiedShiftId;
 	const duplicate = await findAsPublicWriter(
 		dbName,
 		{
 			type: 'job_application',
+			volunteer_id: volunteerId,
 			job_id: jobId,
-			'applicant.phone_hash': phoneHash,
-			status: { $ne: 'cancelled' }
+			shift_id: selectedShiftId,
+			status: { $in: ['confirmed', 'pending_review'] }
 		},
 		{ limit: 1 }
 	);
 	if (docsFrom(duplicate.data).length > 0) {
 		throw new PublicApplicationError('DUPLICATE_APPLICATION', 409);
 	}
-
-	const volunteersRes = await findAsPublicWriter(
-		dbName,
-		{ type: 'volunteer', phone_hash: phoneHash },
-		{ limit: 1 }
-	);
-	const existing = docsFrom(volunteersRes.data)[0] as CouchVolunteer | undefined;
-	const volunteerId = existing?._id ?? `volunteer:${ulid().toLowerCase()}`;
 	const now = new Date().toISOString();
 	const trackingToken = `TKT-VOL-${ulid().slice(-16)}`;
 	const trackingTokenHash = await sha256Hex(trackingToken);
@@ -417,12 +545,40 @@ export async function applyPublicVolunteerApplication(
 	const existingCodes = docsFrom(codesRes.data)
 		.map((doc) => doc.volunteer_code)
 		.filter((code): code is string => typeof code === 'string');
+	const mergedSkillVerifications = { ...(existing?.skill_verifications ?? {}) };
+	for (const skill of skills) {
+		if (!controlled.has(normalizedSkill(skill))) continue;
+		const key =
+			Object.keys(mergedSkillVerifications).find(
+				(value) => normalizedSkill(value) === normalizedSkill(skill)
+			) ?? skill;
+		const record = mergedSkillVerifications[key];
+		if (record?.status === 'verified' || record?.status === 'rejected') continue;
+		mergedSkillVerifications[key] = {
+			...(record ?? {}),
+			status: 'pending',
+			reviewed_at: record?.reviewed_at ?? null,
+			reviewed_by: record?.reviewed_by ?? null,
+			notes: record?.notes ?? null
+		};
+	}
 	const volunteer = existing
 		? {
 				...existing,
+				phone: normalizePhone(input.phone),
 				phone_hash: phoneHash,
-				skills: [...new Set([...(existing.skills ?? []), ...skills])],
-				tracking_token_hash: trackingTokenHash,
+				skills: [
+					...new Map(
+						[...(existing.skills ?? []), ...skills].map((value) => [normalizedSkill(value), value])
+					).values()
+				],
+				identity_verification: existing.identity_verification ?? {
+					status: existing.identity_verified ? 'verified' : 'pending',
+					reviewed_at: null,
+					reviewed_by: null,
+					notes: null
+				},
+				skill_verifications: mergedSkillVerifications,
 				updated_at: now,
 				updated_by: 'public'
 			}
@@ -454,7 +610,7 @@ export async function applyPublicVolunteerApplication(
 					reviewed_by: null,
 					notes: null
 				},
-				skill_verifications: {},
+				skill_verifications: mergedSkillVerifications,
 				source: 'public_apply',
 				personnel_type: 'volunteer'
 			};
@@ -475,7 +631,7 @@ export async function applyPublicVolunteerApplication(
 		applicant: {
 			first_name: input.first_name,
 			last_name: input.last_name,
-			phone: input.phone,
+			phone: normalizePhone(input.phone),
 			phone_hash: phoneHash,
 			national_id: input.national_id || null,
 			national_id_hash: input.national_id ? await sha256Hex(input.national_id) : null,
@@ -491,7 +647,7 @@ export async function applyPublicVolunteerApplication(
 		},
 		tracking_token_hash: trackingTokenHash,
 		status,
-		review_reasons: reviewReasonsForApplication(skills, job, Array.from(controlled)),
+		review_reasons: reviewReasons(job, skills, controlled, existing),
 		review_notes: null,
 		reviewed_at: null,
 		reviewed_by: null,

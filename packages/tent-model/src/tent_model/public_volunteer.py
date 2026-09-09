@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from beanie import Document
 from pydantic import ConfigDict, Field
@@ -36,6 +37,8 @@ class PublicVolunteer(Document):
 	organization: str | None = None
 	#: Set by staff only — the portal renders it as a badge and never offers to edit it.
 	identity_verified: bool = False
+	identity_verification: dict[str, Any] | None = None
+	skill_verifications: dict[str, dict[str, Any]] = Field(default_factory=dict)
 	personnel_type: str = "volunteer"
 	status: str = "active"
 	updated_at: datetime

@@ -51,10 +51,13 @@ class VolunteerApplicationBuffer(Document):
     volunteer_id: str
     applicant: ApplicantBuffer
     selected_shift: SelectedShiftBuffer
+    controlled_skills: list[str] = Field(default_factory=list)
     tracking_token: str
     tracking_token_hash: str
     status: str = "pending_review"
     review_reasons: list[str] = Field(default_factory=list)
+    identity_resolution: str = "new"
+    sync_error: str | None = None
     synced_to_couch: bool = False
     created_at: datetime
 

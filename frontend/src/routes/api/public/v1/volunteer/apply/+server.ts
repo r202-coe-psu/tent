@@ -127,6 +127,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				SHIFT_DATE_AMBIGUOUS: 'มีกะเวลาซ้ำกันในวันที่เลือก กรุณาระบุกะเวลาให้ชัดเจน',
 				MISSING_REQUIRED_SKILLS: 'คุณต้องเลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้อย่างน้อย 1 ทักษะ',
 				DUPLICATE_APPLICATION: 'คุณได้สมัครงานนี้ไว้แล้ว',
+				AMBIGUOUS_VOLUNTEER: 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
 				TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 				JOB_NOT_READY: 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง',
 				WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'

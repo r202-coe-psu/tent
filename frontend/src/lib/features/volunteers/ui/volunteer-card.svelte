@@ -34,7 +34,11 @@
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
-	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
+	import {
+		hasPendingControlledSkill,
+		identityVerificationStatus,
+		skillVerificationStatus
+	} from '../domain/verification';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -93,6 +97,11 @@
 				.filter((option) => option.controlled)
 				.flatMap((option) => [option.code, option.label])
 		)
+	);
+	const pendingSkillCode = $derived(
+		skills.find(
+			(skill) => skill.controlled && skillVerificationStatus(volunteer, skill.code) !== 'verified'
+		)?.code ?? null
 	);
 
 	function stub(label: string) {
@@ -236,11 +245,14 @@
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[18%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			{#if identityStatus !== 'verified'}
+			{#if identityStatus !== 'verified' || needsSkillReview}
 				<Button
 					size="sm"
 					class="gap-1.5 bg-amber-600 text-white hover:bg-amber-700"
-					onclick={() => openQualificationAudit()}
+					onclick={() =>
+						openQualificationAudit(
+							identityStatus === 'verified' ? (pendingSkillCode ?? undefined) : undefined
+						)}
 				>
 					<SearchCheck class="h-3.5 w-3.5" />
 					ตรวจสอบ &amp; อนุมัติ

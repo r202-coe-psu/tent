@@ -170,6 +170,26 @@
 
 	let isSubmitting = $state(false);
 	let errorMessage = $state<string | null>(null);
+	let confirmationOpen = $state(false);
+	let preflightResult = $state<{
+		match: 'matched_one';
+		existing_profile: {
+			volunteer_code: string;
+			display_name: string;
+			identity_status: string;
+			existing_skills: string[];
+			new_skills: string[];
+			new_controlled_skills: string[];
+		};
+		message: string;
+	} | null>(null);
+
+	$effect(() => {
+		if (!isOpen) {
+			confirmationOpen = false;
+			preflightResult = null;
+		}
+	});
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
 
@@ -213,6 +233,117 @@
 		);
 	}
 
+	function shiftPayload() {
+		if (!activeShift) return null;
+		let startTime = activeShift.start_time ?? '08:00';
+		let endTime = activeShift.end_time ?? '12:00';
+		if (!activeShift.start_time && activeShift.time) {
+			const match = activeShift.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+			if (match) {
+				startTime = match[1];
+				endTime = match[2];
+			}
+		}
+		let date = activeShift.date;
+		const ddmmyyyy = date.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+		if (ddmmyyyy) date = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+		return {
+			shift_id: activeShift.id || undefined,
+			date,
+			start_time: startTime,
+			end_time: endTime
+		};
+	}
+
+	function cleanApplicantPhone(): string {
+		const raw =
+			applicantCredential && 'phone' in applicantCredential
+				? applicantCredential.phone
+				: formData.phone;
+		return raw.replace(/\D/g, '');
+	}
+
+	async function submitApplication() {
+		if (!job || !activeShift) return;
+		isSubmitting = true;
+		try {
+			const recaptchaToken = await captchaToken();
+			if (recaptchaToken === null) {
+				errorMessage = t.errRecaptchaFailed;
+				return;
+			}
+			const firstName = formData.firstName.trim();
+			const lastName = formData.lastName.trim();
+			const fullName = `${firstName} ${lastName}`.trim();
+			const targetJobId = job.id.startsWith('job:') ? job.id : `job:${job.id}`;
+			const couchRes = await fetch('/api/public/v1/volunteer/apply', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					job_id: targetJobId,
+					shelter_code: job.shelter_code || undefined,
+					applicant: {
+						first_name: firstName,
+						last_name: lastName,
+						phone: cleanApplicantPhone(),
+						email: isPortalApplicant ? null : formData.email.trim() || null,
+						skills: formData.skills
+					},
+					selected_shift: shiftPayload(),
+					recaptcha_token: recaptchaToken || undefined
+				})
+			});
+			const couchData = await couchRes.json().catch(() => null);
+			if (!couchRes.ok || !couchData?.success) {
+				const errorMsg =
+					couchData?.message ||
+					(couchData?.error === 'AMBIGUOUS_VOLUNTEER'
+						? 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่'
+						: couchRes.status === 409
+							? t.errDuplicatePhoneOrShift
+							: couchRes.status === 429
+								? t.errRateLimited
+								: t.errApplyGeneric);
+				errorMessage = errorMsg;
+				toast.error(errorMsg);
+				return;
+			}
+			const trackingToken = couchData.tracking_token;
+			toast.success(t.toastApplySuccess);
+			onSubmit?.({
+				firstName,
+				lastName,
+				fullName,
+				phone: formData.phone,
+				email: formData.email,
+				skills: formData.skills,
+				trackingToken
+			});
+			confirmationOpen = false;
+			preflightResult = null;
+			isOpen = false;
+			formData = {
+				firstName: '',
+				lastName: '',
+				nickname: '',
+				phone: '',
+				email: '',
+				skills: [],
+				consentPdpa: false
+			};
+			if (trackingToken) {
+				const ticketPath = `/volunteer/ticket/${encodeURIComponent(trackingToken)}`;
+				await goto(`${ticketPath}${isPortalApplicant ? '?from=portal' : ''}`);
+			}
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : t.errApplyGeneric;
+			errorMessage = msg;
+			toast.error(msg);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (!formData.consentPdpa) {
@@ -246,120 +377,43 @@
 
 		errorMessage = null;
 		isSubmitting = true;
-
 		try {
-			const recaptchaToken = await captchaToken();
-			if (recaptchaToken === null) {
-				errorMessage = t.errRecaptchaFailed;
-				return;
-			}
-			const firstName = formData.firstName.trim();
-			const lastName = formData.lastName.trim();
-			const fullName = `${firstName} ${lastName}`.trim();
-
-			// Parse times from activeShift
-			let startTime = activeShift.start_time ?? '08:00';
-			let endTime = activeShift.end_time ?? '12:00';
-			if (!activeShift.start_time && activeShift.time) {
-				const match = activeShift.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-				if (match) {
-					startTime = match[1];
-					endTime = match[2];
-				}
-			}
-
-			// Format shift date
-			let shiftDate = activeShift.date;
-			const ddmmyyyy = shiftDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-			if (ddmmyyyy) {
-				shiftDate = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
-			}
-
-			const rawApplicantPhone =
-				applicantCredential && 'phone' in applicantCredential
-					? applicantCredential.phone
-					: formData.phone;
-			const cleanPhone = rawApplicantPhone.replace(/[-\s]/g, '').trim();
-			const targetJobId = job.id.startsWith('job:') ? job.id : `job:${job.id}`;
-
-			// Direct CouchDB Apply via SvelteKit Server BFF (No FastAPI dependency)
-			const couchRes = await fetch('/api/public/v1/volunteer/apply', {
+			const preflightRes = await fetch('/api/public/v1/volunteer/apply/preflight', {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					job_id: targetJobId,
+					job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
 					shelter_code: job.shelter_code || undefined,
-					applicant: {
-						first_name: firstName,
-						last_name: lastName,
-						phone: cleanPhone,
-						email: isPortalApplicant ? null : formData.email.trim() || null,
-						skills: formData.skills
-					},
-					selected_shift: activeShift
-						? {
-								shift_id: activeShift.id || undefined,
-								date: shiftDate,
-								start_time: startTime,
-								end_time: endTime
-							}
-						: undefined,
-					recaptcha_token: recaptchaToken || undefined
+					first_name: formData.firstName.trim(),
+					last_name: formData.lastName.trim(),
+					phone: cleanApplicantPhone(),
+					email: isPortalApplicant ? '' : formData.email.trim(),
+					skills: formData.skills,
+					...(shiftPayload() ?? {})
 				})
 			});
-
-			const couchData = await couchRes.json().catch(() => null);
-
-			if (!couchRes.ok || !couchData?.success) {
-				const errorMsg =
-					couchData?.message ||
-					(couchRes.status === 409
-						? t.errDuplicatePhoneOrShift
-						: couchRes.status === 429
-							? t.errRateLimited
-							: t.errApplyGeneric);
-				errorMessage = errorMsg;
-				toast.error(errorMsg);
+			const preflight = await preflightRes.json().catch(() => null);
+			if (!preflightRes.ok || !preflight?.success) {
+				errorMessage = preflight?.message || 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
+				if (preflight?.error === 'AMBIGUOUS_VOLUNTEER') {
+					errorMessage = 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่';
+				}
 				return;
 			}
 
-			const trackingToken = couchData.tracking_token;
-
-			toast.success(t.toastApplySuccess);
-
-			onSubmit?.({
-				firstName,
-				lastName,
-				fullName,
-				phone: formData.phone,
-				email: formData.email,
-				skills: formData.skills,
-				trackingToken
-			});
-
-			isOpen = false;
-
-			// Reset form
-			formData = {
-				firstName: '',
-				lastName: '',
-				nickname: '',
-				phone: '',
-				email: '',
-				skills: [],
-				consentPdpa: false
-			};
-
-			if (trackingToken) {
-				const ticketPath = `/volunteer/ticket/${encodeURIComponent(trackingToken)}`;
-				await goto(`${ticketPath}${isPortalApplicant ? '?from=portal' : ''}`);
+			if (preflight.match === 'ambiguous_match') {
+				errorMessage = preflight.message;
+				return;
 			}
-		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : t.errApplyGeneric;
-			errorMessage = msg;
-			toast.error(msg);
+			if (preflight.match === 'matched_one') {
+				preflightResult = preflight;
+				confirmationOpen = true;
+				return;
+			}
+			isSubmitting = false;
+			await submitApplication();
+		} catch (err) {
+			errorMessage = err instanceof Error ? err.message : 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
 		} finally {
 			isSubmitting = false;
 		}
@@ -422,6 +476,83 @@
 						>
 							<AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
 							<span>{errorMessage}</span>
+						</div>
+					{/if}
+
+					{#if confirmationOpen && preflightResult}
+						<div
+							class="absolute inset-0 z-20 flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm"
+						>
+							<div
+								class="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl"
+								onclick={(event) => event.stopPropagation()}
+								onkeydown={(event) => event.stopPropagation()}
+								role="dialog"
+								aria-modal="true"
+								tabindex="-1"
+							>
+								<h3 class="text-lg font-bold text-foreground">เบอร์โทรนี้เคยสมัครไว้แล้ว</h3>
+								<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+									ระบบจะอัปเดต Volunteer profile เดิม และสร้างใบสมัครงานใหม่ให้คุณ
+									ข้อมูลการสมัครงานเดิมจะไม่ถูกลบ
+								</p>
+								<div class="mt-4 space-y-3 rounded-xl bg-muted/30 p-4 text-sm">
+									<div class="flex items-center justify-between gap-3">
+										<span class="text-muted-foreground">โปรไฟล์</span>
+										<span class="font-semibold text-foreground"
+											>{preflightResult.existing_profile.display_name}</span
+										>
+									</div>
+									<div class="flex items-center justify-between gap-3">
+										<span class="text-muted-foreground">Volunteer code</span>
+										<span class="font-semibold text-foreground"
+											>{preflightResult.existing_profile.volunteer_code || '—'}</span
+										>
+									</div>
+									<div>
+										<p class="text-xs text-muted-foreground">ทักษะเดิม</p>
+										<p class="mt-1 font-medium text-foreground">
+											{preflightResult.existing_profile.existing_skills.join(', ') || 'ยังไม่มี'}
+										</p>
+									</div>
+									{#if preflightResult.existing_profile.new_skills.length > 0}
+										<div>
+											<p class="text-xs text-muted-foreground">ทักษะใหม่ที่จะเพิ่ม</p>
+											<p class="mt-1 font-medium text-foreground">
+												{preflightResult.existing_profile.new_skills.join(', ')}
+											</p>
+										</div>
+									{/if}
+								</div>
+								{#if preflightResult.existing_profile.new_controlled_skills.length > 0}
+									<div
+										class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900"
+									>
+										ทักษะควบคุมใหม่จะรอตรวจสอบก่อนใช้งาน
+										เจ้าหน้าที่ต้องรับรองก่อนจึงจะใช้ทักษะนี้กับงานได้
+									</div>
+								{/if}
+								<div class="mt-6 flex gap-3">
+									<button
+										type="button"
+										onclick={() => {
+											confirmationOpen = false;
+											preflightResult = null;
+										}}
+										class="flex-1 rounded-xl border border-border bg-muted/30 py-3 text-sm font-bold text-foreground hover:bg-muted"
+									>
+										ยกเลิก
+									</button>
+									<button
+										type="button"
+										disabled={isSubmitting}
+										onclick={submitApplication}
+										class="flex-[2] rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground hover:bg-primary-strong disabled:opacity-70"
+									>
+										{isSubmitting ? 'กำลังบันทึก...' : 'ยืนยันอัปเดตโปรไฟล์และสมัครงาน'}
+									</button>
+								</div>
+							</div>
 						</div>
 					{/if}
 

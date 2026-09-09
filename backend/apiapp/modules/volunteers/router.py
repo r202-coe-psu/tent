@@ -20,6 +20,8 @@ from .schemas import (
     VolunteerApplyRequest,
     VolunteerApplyResponse,
     VolunteerCancelResponse,
+    VolunteerPreflightRequest,
+    VolunteerPreflightResponse,
     VolunteerProfileResponse,
     VolunteerProfileUpdateRequest,
     VolunteerProfileUpdateResponse,
@@ -72,6 +74,23 @@ async def list_jobs(
     # Quota moves with every application; a cached board sends people to a full job.
     response.headers["Cache-Control"] = "no-store"
     return await use_case.list_jobs(shelter_code=shelter_code, skill=skill)
+
+
+@router.post(
+    "/jobs/{job_id}/preflight",
+    response_model=VolunteerPreflightResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def preflight_job_application(
+    request: Request,
+    response: Response,
+    job_id: str,
+    payload: VolunteerPreflightRequest,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> VolunteerPreflightResponse:
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.preflight(job_id, payload)
 
 
 @router.post(

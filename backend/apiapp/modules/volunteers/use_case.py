@@ -20,6 +20,7 @@ from tent_model.volunteer_application_buffer import (
     SelectedShiftBuffer,
     VolunteerApplicationBuffer,
 )
+from tent_model.volunteer_identity import has_verified_skill, identity_status, merge_skills
 from tent_model.volunteer_job_slot import (
     SlotResult,
     VolunteerJobShiftSlot,
@@ -48,6 +49,7 @@ from ...utils.masking import (
 from ...utils.response_code import normalize_response_code
 from ...utils.ulid import new_ulid
 from ...utils.view_token import is_view_token, mint_view_token, resolve_view_token
+from .identity import IdentityResolution, masked_profile_summary, resolve_public_identity
 from .schemas import (
     DispatchRespondResponse,
     JobShiftTemplate,
@@ -61,6 +63,9 @@ from .schemas import (
     VolunteerApplyRequest,
     VolunteerApplyResponse,
     VolunteerCancelResponse,
+    VolunteerPreflightProfile,
+    VolunteerPreflightRequest,
+    VolunteerPreflightResponse,
     VolunteerProfile,
     VolunteerProfileResponse,
     VolunteerProfileUpdateResponse,
@@ -161,7 +166,13 @@ async def controlled_skills(shelter_code: str | None = None) -> frozenset[str]:
     return DEFAULT_CONTROLLED_SKILLS
 
 
-def _needs_review(job: PublicJob, skills: list[str], controlled: frozenset[str]) -> bool:
+def _needs_review(
+    job: PublicJob,
+    skills: list[str],
+    controlled: frozenset[str],
+    *,
+    existing_profile: dict | None = None,
+) -> bool:
     """Whether this application must wait for a manager.
 
     Three independent reasons, any one of which is enough:
@@ -173,17 +184,35 @@ def _needs_review(job: PublicJob, skills: list[str], controlled: frozenset[str])
     """
     if job.tier == "staff-capable":
         return True
-    if any(skill.strip() in controlled for skill in skills):
+    if any(
+        skill.strip().casefold() in {value.casefold() for value in controlled}
+        and not has_verified_skill(existing_profile, skill)
+        for skill in skills
+    ):
+        return True
+    if existing_profile is not None and identity_status(existing_profile) != "verified":
         return True
     return not job.auto_accept
 
 
-def _review_reasons(job: PublicJob, skills: list[str], controlled: frozenset[str]) -> list[str]:
+def _review_reasons(
+    job: PublicJob,
+    skills: list[str],
+    controlled: frozenset[str],
+    *,
+    existing_profile: dict | None = None,
+) -> list[str]:
     """Persist why a ticket is queued; identity review stays on the volunteer profile."""
     reasons: list[str] = []
     normalized_controlled = {value.strip().casefold() for value in controlled}
-    if any(skill.strip().casefold() in normalized_controlled for skill in skills):
+    if any(
+        skill.strip().casefold() in normalized_controlled
+        and not has_verified_skill(existing_profile, skill)
+        for skill in skills
+    ):
         reasons.append("skill_certification")
+    if existing_profile is not None and identity_status(existing_profile) != "verified":
+        reasons.append("identity")
     if job.tier != "operational" or job.auto_accept is not True:
         reasons.append("job_fit")
     return reasons
@@ -275,6 +304,43 @@ async def _reserve_or_release(
 
 
 class VolunteersUseCase:
+    async def _resolve_application_identity(
+        self, *, phone: str, shelter_code: str
+    ) -> IdentityResolution:
+        """Include unsynced buffers so two quick submissions share one identity."""
+        resolution = await resolve_public_identity(phone, shelter_code)
+        if resolution.status != "no_match":
+            return resolution
+        pending = await VolunteerApplicationBuffer.find(
+            {
+                "shelter_code": shelter_code.upper(),
+                "applicant.phone_hash": resolution.phone_hash,
+            }
+        ).to_list()
+        ids = {row.volunteer_id for row in pending if row.volunteer_id}
+        if len(ids) != 1:
+            if len(ids) > 1:
+                return IdentityResolution(
+                    status="ambiguous_match", phone_hash=resolution.phone_hash
+                )
+            return resolution
+        row = pending[-1]
+        profile = {
+            "_id": row.volunteer_id,
+            "first_name": row.applicant.first_name,
+            "last_name": row.applicant.last_name,
+            "skills": row.applicant.skills,
+            "identity_verification": {"status": "pending"},
+            "identity_verified": False,
+            "volunteer_code": "",
+        }
+        return IdentityResolution(
+            status="matched_one",
+            phone_hash=resolution.phone_hash,
+            volunteer_id=row.volunteer_id,
+            profile=profile,
+        )
+
     async def list_jobs(
         self, *, shelter_code: str | None = None, skill: str | None = None
     ) -> PublicJobListResponse:
@@ -372,6 +438,48 @@ class VolunteersUseCase:
         items.sort(key=lambda item: (item.shelter_code, item.title))
         return PublicJobListResponse(jobs=items)
 
+    async def preflight(
+        self, job_id: str, payload: VolunteerPreflightRequest
+    ) -> VolunteerPreflightResponse:
+        job = await PublicJob.get(job_id)
+        if job is None or job.status not in _BOARD_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "JOB_NOT_FOUND"},
+            )
+        controlled = await controlled_skills(job.shelter_code)
+        resolution = await self._resolve_application_identity(
+            phone=payload.phone, shelter_code=payload.shelter_code
+        )
+        if resolution.status == "no_match":
+            return VolunteerPreflightResponse(
+                match="no_match", message="ไม่พบ Volunteer profile เดิม สามารถสมัครใหม่ได้"
+            )
+        if resolution.status == "ambiguous_match" or not resolution.profile:
+            return VolunteerPreflightResponse(
+                match="ambiguous_match",
+                message="พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่",
+            )
+        profile = resolution.profile
+        existing = [str(value) for value in profile.get("skills", []) if str(value).strip()]
+        new_skills = [
+            skill.strip()
+            for skill in payload.skills
+            if skill.strip().casefold() not in {value.casefold() for value in existing}
+        ]
+        controlled_values = {value.casefold() for value in controlled}
+        new_controlled = [skill for skill in new_skills if skill.casefold() in controlled_values]
+        summary = masked_profile_summary(profile)
+        return VolunteerPreflightResponse(
+            match="matched_one",
+            existing_profile=VolunteerPreflightProfile(
+                **summary,
+                new_skills=merge_skills([], new_skills),
+                new_controlled_skills=merge_skills([], new_controlled),
+            ),
+            message="เบอร์โทรนี้เคยสมัครไว้แล้ว ระบบจะอัปเดต profile เดิมและสร้างใบสมัครใหม่",
+        )
+
     async def apply(self, job_id: str, payload: VolunteerApplyRequest) -> VolunteerApplyResponse:
         job = await PublicJob.get(job_id)
         if job is None or job.status not in _BOARD_STATUSES:
@@ -386,8 +494,34 @@ class VolunteersUseCase:
             )
 
         controlled = await controlled_skills(job.shelter_code)
-        needs_review = _needs_review(job, payload.skills, controlled)
+        resolution = await self._resolve_application_identity(
+            phone=payload.phone, shelter_code=job.shelter_code
+        )
+        if resolution.status == "ambiguous_match":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"success": False, "error": "AMBIGUOUS_VOLUNTEER"},
+            )
+        existing_profile = resolution.profile
+        volunteer_id = resolution.volunteer_id or f"volunteer:{new_ulid()}"
+        needs_review = _needs_review(
+            job, payload.skills, controlled, existing_profile=existing_profile
+        )
         selected = _select_concrete_shift(job, payload)
+
+        duplicate_query = {
+            "volunteer_id": volunteer_id,
+            "job_id": job_id,
+            "shift_id": selected.shift_id if selected else None,
+            "status": {"$in": ["confirmed", "pending_review"]},
+        }
+        buffer_duplicate = await VolunteerApplicationBuffer.find_one(duplicate_query)
+        projected_duplicate = await PublicJobApplication.find_one(duplicate_query)
+        if buffer_duplicate or projected_duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"success": False, "error": "DUPLICATE_APPLICATION"},
+            )
 
         now = datetime.now(UTC)
         application_id = f"job_application:{new_ulid()}"
@@ -433,7 +567,7 @@ class VolunteersUseCase:
             shelter_code=job.shelter_code,
             job_id=job_id,
             shift_id=selected_shift_id,
-            volunteer_id=f"volunteer:{new_ulid()}",
+            volunteer_id=volunteer_id,
             applicant=ApplicantBuffer(
                 first_name=payload.first_name.strip(),
                 last_name=payload.last_name.strip(),
@@ -455,10 +589,18 @@ class VolunteersUseCase:
                 if payload.station is not None
                 else getattr(template, "station", None),
             ),
+            controlled_skills=[
+                skill.strip()
+                for skill in payload.skills
+                if skill.strip().casefold() in {value.casefold() for value in controlled}
+            ],
             tracking_token=token,
             tracking_token_hash=token_hash,
             status="pending_review" if needs_review else "confirmed",
-            review_reasons=_review_reasons(job, payload.skills, controlled),
+            review_reasons=_review_reasons(
+                job, payload.skills, controlled, existing_profile=existing_profile
+            ),
+            identity_resolution=resolution.status,
             synced_to_couch=False,
             created_at=now,
         )

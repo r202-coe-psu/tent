@@ -60,6 +60,8 @@ def project_volunteer(
         "skills": [str(s) for s in (doc.get("skills") or [])],
         "organization": doc.get("organization"),
         "identity_verified": bool(doc.get("identity_verified")),
+        "identity_verification": doc.get("identity_verification"),
+        "skill_verifications": doc.get("skill_verifications") or {},
         "personnel_type": str(doc.get("personnel_type") or "volunteer"),
         "status": str(doc.get("status") or "active"),
         "updated_at": _ts(doc.get("updated_at")) or datetime.datetime.now(datetime.UTC),

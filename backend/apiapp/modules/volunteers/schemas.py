@@ -91,6 +91,30 @@ class VolunteerApplyResponse(BaseModel):
     shift_id: str | None = None
 
 
+class VolunteerPreflightRequest(BaseModel):
+    """Read-only identity preview; it never reserves a slot or writes a document."""
+
+    shelter_code: str = Field(min_length=1, max_length=80)
+    phone: str = Field(min_length=6, max_length=30)
+    skills: list[str] = Field(default_factory=list)
+
+
+class VolunteerPreflightProfile(BaseModel):
+    volunteer_code: str = ""
+    display_name: str = ""
+    identity_status: Literal["verified", "pending", "rejected"] = "pending"
+    existing_skills: list[str] = Field(default_factory=list)
+    new_skills: list[str] = Field(default_factory=list)
+    new_controlled_skills: list[str] = Field(default_factory=list)
+
+
+class VolunteerPreflightResponse(BaseModel):
+    success: bool = True
+    match: Literal["no_match", "matched_one", "ambiguous_match"]
+    existing_profile: VolunteerPreflightProfile | None = None
+    message: str = ""
+
+
 class TicketShift(BaseModel):
     shift_id: str | None = None
     date: str = ""

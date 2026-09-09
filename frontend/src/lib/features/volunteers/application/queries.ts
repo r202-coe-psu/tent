@@ -450,6 +450,7 @@ export const useReviewVolunteerIdentity = (queryClient: QueryClient) =>
 			volunteerRepository().reviewIdentity(id, status, authStore.user?.name ?? 'unknown', notes),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -480,6 +481,7 @@ export const useReviewVolunteerSkill = (queryClient: QueryClient) =>
 			),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));

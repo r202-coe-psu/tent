@@ -15,12 +15,14 @@ one application (CR-092 FR-VOL-01):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
+from tent_model.volunteer_identity import candidate_conflicts, merge_profile
 
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
@@ -40,8 +42,22 @@ def _volunteer_doc(
     application: VolunteerApplicationBuffer, *, now: str
 ) -> dict[str, Any]:
     applicant = application.applicant
+    skill_verifications = {
+        skill: {
+            "status": "pending",
+            "reviewed_at": None,
+            "reviewed_by": None,
+            "notes": None,
+        }
+        for skill in application.controlled_skills
+    }
     # Deterministic 3-digit volunteer code per volunteer ID
-    code_num = (abs(hash(application.volunteer_id)) % 900) + 100
+    code_num = (
+        int.from_bytes(
+            hashlib.sha256(application.volunteer_id.encode()).digest()[:4], "big"
+        )
+        % 900
+    ) + 100
     return {
         "_id": application.volunteer_id,
         "type": "volunteer",
@@ -72,10 +88,58 @@ def _volunteer_doc(
             "reviewed_by": None,
             "notes": None,
         },
-        "skill_verifications": {},
+        "skill_verifications": skill_verifications,
         "source": "public_apply",
         "personnel_type": "volunteer",
     }
+
+
+async def _matching_profiles(
+    couch: CouchClient, database: str, application: VolunteerApplicationBuffer
+) -> list[dict[str, Any]]:
+    return [
+        doc
+        async for doc in couch.iter_all_docs(database)
+        if doc.get("type") == "volunteer"
+        and doc.get("shelter_code") == application.shelter_code
+        and doc.get("phone_hash") == application.applicant.phone_hash
+        and not doc.get("merged_into")
+    ]
+
+
+async def _resolve_volunteer_id(
+    couch: CouchClient, database: str, application: VolunteerApplicationBuffer
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Resolve again at the system-of-record boundary to close the race after preflight."""
+    candidates = await _matching_profiles(couch, database, application)
+    if len(candidates) > 1 and candidate_conflicts(candidates):
+        return None, None
+    if len(candidates) > 1:
+        # Equal phone hashes without a fully identical identity are still unsafe to
+        # choose. Migration may resolve these explicitly; public apply must not.
+        return None, None
+    if candidates:
+        profile = candidates[0]
+        return str(profile["_id"]), profile
+    return application.volunteer_id, None
+
+
+async def _has_active_duplicate(
+    couch: CouchClient, database: str, application: VolunteerApplicationBuffer
+) -> bool:
+    shift_id = application.shift_id or application.selected_shift.shift_id
+    async for doc in couch.iter_all_docs(database):
+        if doc.get("type") != "job_application" or doc.get("_id") == application.id:
+            continue
+        if (
+            doc.get("volunteer_id") == application.volunteer_id
+            and doc.get("job_id") == application.job_id
+            and (doc.get("shift_id") or doc.get("selected_shift", {}).get("shift_id"))
+            == shift_id
+            and doc.get("status") in {"confirmed", "pending_review"}
+        ):
+            return True
+    return False
 
 
 def _application_doc(
@@ -195,23 +259,59 @@ async def _persist_application(
 
     now = _iso(datetime.now(UTC))
 
-    # 1. Persist or update volunteer profile
+    # 1. Resolve identity again against CouchDB. The Mongo projection or a UI
+    # preflight is only a hint and may be stale by the time this worker writes.
     try:
-        existing_profile = await couch.get_doc(database, application.volunteer_id)
+        resolved_id, existing_profile = await _resolve_volunteer_id(
+            couch, database, application
+        )
+        if not resolved_id:
+            application.sync_error = "AMBIGUOUS_VOLUNTEER"
+            await application.save()
+            logger.error(
+                "Ambiguous volunteer identity for application %s", application.id
+            )
+            return False
+        application.volunteer_id = resolved_id
+        if await _has_active_duplicate(couch, database, application):
+            application.sync_error = "DUPLICATE_APPLICATION"
+            application.synced_to_couch = True
+            await application.save()
+            logger.warning(
+                "Duplicate volunteer application %s was not written", application.id
+            )
+            return True
+
+        # 2. Persist or merge volunteer profile without resetting verification.
         if existing_profile is None:
             await couch.put_doc(database, _volunteer_doc(application, now=now))
+        else:
+            merged = merge_profile(
+                existing_profile,
+                first_name=application.applicant.first_name,
+                last_name=application.applicant.last_name,
+                phone=application.applicant.phone,
+                phone_hash_value=application.applicant.phone_hash,
+                national_id=application.applicant.national_id,
+                national_id_hash=application.applicant.national_id_hash,
+                email=application.applicant.email,
+                submitted_skills=application.applicant.skills,
+                controlled_skills=application.controlled_skills,
+                now=now,
+            )
+            await couch.put_doc(database, {**merged, "_id": application.volunteer_id})
     except Exception:
         logger.exception("Failed to persist volunteer profile for %s", application.id)
         return False
 
-    # 2. Persist job application document
+    # 3. Persist job application document
     try:
         result = await couch.put_doc(database, _application_doc(application, now=now))
     except Exception:
         logger.exception("Failed to persist volunteer application %s", application.id)
         return False
 
-    # 3. A confirmed public application is also a real roster booking. Pending
+    # 4. A confirmed public application is also a real roster booking. Pending
     # applications intentionally stay out of the schedule until staff approval;
     # that approval writes the assignment through the back-office repository.
     if application.status == "confirmed":

@@ -25,14 +25,19 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { computeQuota } from '../domain/quota';
+	import { isControlledSkill } from '../domain/skills';
 	import type { Job } from '../domain/job.schema';
 	import {
 		JOB_APPLICATION_REVIEW_REASON_LABEL,
 		type JobApplication
 	} from '../domain/job-application.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
-	import { identityVerificationStatus, VERIFICATION_STATUS_LABEL } from '../domain/verification';
-	import { useReviewApplication } from '../application/queries';
+	import {
+		identityVerificationStatus,
+		skillVerificationStatus,
+		VERIFICATION_STATUS_LABEL
+	} from '../domain/verification';
+	import { useReviewApplication, useSkillOptions } from '../application/queries';
 
 	let {
 		open = $bindable(false),
@@ -50,6 +55,7 @@
 
 	const queryClient = useQueryClient();
 	const reviewMutation = useReviewApplication(queryClient);
+	const skillCatalog = useSkillOptions();
 
 	let notes = $state('');
 
@@ -62,12 +68,23 @@
 		application ? `${application.applicant.first_name} ${application.applicant.last_name}` : ''
 	);
 	const identityStatus = $derived(volunteer ? identityVerificationStatus(volunteer) : null);
+	const skillAuditPending = $derived(
+		approving &&
+			(application?.review_reasons ?? []).includes('skill_certification') &&
+			(!volunteer ||
+				(application?.applicant.skills ?? []).some(
+					(skill) =>
+						isControlledSkill(skill, skillCatalog.controlledValues) &&
+						skillVerificationStatus(volunteer, skill) !== 'verified'
+				))
+	);
 	const remaining = $derived(computeQuota(job).remaining);
 	const jobFull = $derived(approving && remaining <= 0);
 	const notesRequired = $derived(!approving);
 	const canSubmit = $derived(
 		application !== null &&
 			!jobFull &&
+			!skillAuditPending &&
 			!reviewMutation.isPending &&
 			(!notesRequired || notes.trim().length > 0)
 	);
@@ -148,6 +165,11 @@
 					</p>
 				{/if}
 			</div>
+			{#if skillAuditPending}
+				<p class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+					ต้องตรวจและรับรองทักษะควบคุมก่อน จึงจะอนุมัติเข้างานและตัดโควตาได้
+				</p>
+			{/if}
 		{/if}
 
 		{#if jobFull}
