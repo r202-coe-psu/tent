@@ -15,6 +15,9 @@
 	import Filter from '@lucide/svelte/icons/filter';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Search from '@lucide/svelte/icons/search';
+	import X from '@lucide/svelte/icons/x';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { useVolunteerJobs, useVolunteerSkills } from '../application/queries';
 	import { isJobApplicable, type PublicJob } from '../domain/volunteer';
@@ -102,14 +105,26 @@
 			</div>
 
 			<div class="relative w-full shrink-0 md:w-[340px]">
-				<input
+				<Input
 					type="search"
 					bind:value={searchQuery}
-					placeholder="ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์..."
-					aria-label="ค้นหาภารกิจ"
-					class="w-full rounded-2xl border border-border/80 bg-card px-5 py-3.5 pl-11 text-sm shadow-sm outline-hidden transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:ring-1 focus:ring-primary"
+					placeholder="ค้นหาชื่องานหรือศูนย์พักพิง..."
+					aria-label="ค้นหาชื่องานหรือศูนย์พักพิง"
+					class="h-11 w-full rounded-2xl border-border/80 bg-card pr-11 pl-11 text-sm shadow-sm focus-visible:border-primary focus-visible:ring-primary"
 				/>
 				<Search class="absolute top-4 left-4 h-4.5 w-4.5 text-muted-foreground" />
+				{#if searchQuery}
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						class="absolute top-1.5 right-1.5 h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
+						aria-label="ล้างคำค้นหา"
+						onclick={() => (searchQuery = '')}
+					>
+						<X class="h-4 w-4" />
+					</Button>
+				{/if}
 			</div>
 		</div>
 

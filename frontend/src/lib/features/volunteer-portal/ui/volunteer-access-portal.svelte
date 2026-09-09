@@ -21,6 +21,8 @@
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
@@ -295,6 +297,20 @@
 	let filterToTime = $state('');
 	let filterStatus = $state('');
 	let filterJobTitle = $state('');
+	const scheduleStatusOptions = [
+		{ value: 'all', label: 'ทุกสถานะ' },
+		{ value: 'booking', label: 'รอเจ้าหน้าที่จัดกะ' },
+		{ value: 'dispatched', label: 'รอยืนยันการมอบหมาย' },
+		{ value: 'assigned', label: 'รอ Check-in' },
+		{ value: 'standby', label: 'รอ Check-in (สำรอง)' },
+		{ value: 'checked_in', label: 'กำลังปฏิบัติงาน' },
+		{ value: 'completed', label: 'เสร็จสิ้นภารกิจ' },
+		{ value: 'no_show', label: 'ไม่มาปฏิบัติงาน' }
+	] as const;
+
+	function setFilterStatus(value: string | undefined) {
+		filterStatus = value && value !== 'all' ? value : '';
+	}
 	const visibleActivities = $derived.by(() =>
 		filterAndSortPortalActivities(currentVolunteer?.activities ?? [], {
 			fromDate: filterFromDate,
@@ -920,27 +936,33 @@
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
 								<span>สถานะงาน</span>
-								<select
-									bind:value={filterStatus}
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								<Select.Root
+									type="single"
+									value={filterStatus || 'all'}
+									onValueChange={setFilterStatus}
 								>
-									<option value="">ทุกสถานะ</option>
-									<option value="booking">รอเจ้าหน้าที่จัดกะ</option>
-									<option value="dispatched">รอยืนยันการมอบหมาย</option>
-									<option value="assigned">รอ Check-in</option>
-									<option value="standby">รอ Check-in (สำรอง)</option>
-									<option value="checked_in">กำลังปฏิบัติงาน</option>
-									<option value="completed">เสร็จสิ้นภารกิจ</option>
-									<option value="no_show">ไม่มาปฏิบัติงาน</option>
-								</select>
+									<Select.Trigger class="w-full min-w-0 rounded-lg bg-background text-xs">
+										<span class="truncate">
+											{scheduleStatusOptions.find(
+												(option) => option.value === (filterStatus || 'all')
+											)?.label ?? 'ทุกสถานะ'}
+										</span>
+									</Select.Trigger>
+									<Select.Content>
+										{#each scheduleStatusOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
 								<span>ชื่องาน</span>
-								<input
+								<Input
 									type="search"
 									bind:value={filterJobTitle}
 									placeholder="ค้นหาชื่องาน..."
-									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+									aria-label="ค้นหาชื่องาน"
+									class="h-9 w-full rounded-lg bg-background text-xs"
 								/>
 							</label>
 						</div>

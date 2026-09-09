@@ -9,12 +9,10 @@
  * or collision maths of its own (the same rule AC-094-09 puts on the hub
  * counters).
  *
- * ⚠️ Which assignment belongs to WHICH sub-shift is matched by
- * `job_id + date + identical duty_window`, because `shift_assignment` still
- * carries no `job_shift_id` (the same known gap `capacity.ts` documents).
- * Two sub-shifts of one job on the same day at the same hours would be
- * indistinguishable — but `shift-batch.ts#isDuplicateShift` already forbids
- * creating that pair, so the ambiguity cannot arise through the UI.
+ * Which assignment belongs to WHICH sub-shift is matched by the stable
+ * `shift_id` when present. Rows written before that field existed fall back to
+ * `job_id + identical duty_window` during migration. The UI prevents duplicate
+ * windows, so that legacy fallback remains unambiguous for stored rows.
  */
 
 import { findTimeCollision } from './collision';
@@ -129,7 +127,9 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 	return volunteers.map((volunteer) => {
 		const held = byVolunteer.get(volunteer._id) ?? [];
 		const onThisShift = held.find(
-			(a) => a.job_id === job._id && sameWindow(a.duty_window, targetWindow)
+			(a) =>
+				a.job_id === job._id &&
+				(a.shift_id ? a.shift_id === shift.id : sameWindow(a.duty_window, targetWindow))
 		);
 
 		let state: AssignRowState;

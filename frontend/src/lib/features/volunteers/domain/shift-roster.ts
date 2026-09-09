@@ -80,6 +80,22 @@ export function assignmentCountForShift(
 	).size;
 }
 
+/** Count seats held across every concrete shift of one job. */
+export function assignmentCountForJob(
+	job: {
+		_id: string;
+		shifts: readonly (Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
+			shift_id?: string;
+		})[];
+	},
+	assignments: readonly ShiftAssignment[]
+): number {
+	return job.shifts.reduce(
+		(total, shift) => total + assignmentCountForShift(shift, job._id, assignments),
+		0
+	);
+}
+
 /**
  * Volunteers assigned to `shift` (one row of `job.shifts[]`), across every
  * `assignments` doc for `jobId`. Completed rows remain visible so the detail

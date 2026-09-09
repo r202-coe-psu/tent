@@ -32,9 +32,14 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { useJobs, todayDateString, useSkillOptions } from '../application/queries';
-	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import {
+		useJobs,
+		todayDateString,
+		useShiftAssignments,
+		useSkillOptions
+	} from '../application/queries';
 	import { shiftDutyWindow } from '../domain/duty-window';
+	import { assignmentCountForShift } from '../domain/shift-roster';
 	import { hasAnyRequiredSkill, resolveSkillOption } from '../domain/skill-catalog';
 
 	let {
@@ -67,9 +72,8 @@
 
 	/**
 	 * Every open `operational` job shift with an open seat, today or upcoming
-	 * (past dates dropped). `key` reuses `jobShiftQuotaSplits`'s
-	 * `${job_id}#${shift.id}` so it lines up with the same per-shift split every
-	 * other roster/detail screen reads.
+	 * (past dates dropped). Seat availability comes from the concrete shift
+	 * roster; job-level counters cannot tell which sub-shift owns a seat.
 	 */
 	interface AssignableShift {
 		key: string;
@@ -84,28 +88,35 @@
 	}
 
 	const jobsQuery = useJobs();
+	const assignmentsQuery = useShiftAssignments();
 
 	const assignableShifts = $derived.by<AssignableShift[]>(() => {
+		// Fail closed until the exact roster is available. Showing a projection
+		// here could let a walk-in flow offer a shift that is already full.
+		if (!assignmentsQuery.data) return [];
+		const assignments = assignmentsQuery.data;
 		const jobs = (jobsQuery.data ?? []).filter(
 			(j) => j.tier === 'operational' && j.status === 'open'
 		);
 		const out: AssignableShift[] = [];
 		for (const job of jobs) {
-			const splits = jobShiftQuotaSplits(job);
 			const required = job.skills_required ?? [];
 			const requiredSkillLabels = required.flatMap((value) => {
 				const option = resolveSkillOption(value, skillsList);
 				return option ? [option.label] : [];
 			});
-			job.shifts.forEach((shift, index) => {
-				const split = splits[index];
-				if (!split || shift.date < today || split.remaining <= 0) return;
+			job.shifts.forEach((shift) => {
+				const remaining = Math.max(
+					shift.quota - assignmentCountForShift(shift, job._id, assignments),
+					0
+				);
+				if (shift.date < today || remaining <= 0) return;
 				try {
 					out.push({
-						key: split.key,
+						key: `${job._id}#${shift.id}`,
 						job,
 						shift,
-						remaining: split.remaining,
+						remaining,
 						requiredSkillLabels,
 						skillMatch:
 							selectedSkills.length > 0 &&

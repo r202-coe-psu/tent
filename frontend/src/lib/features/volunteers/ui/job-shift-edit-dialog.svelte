@@ -8,8 +8,8 @@
 	 * from the rows, so this component can never save a job whose quota and
 	 * `shifts[]` disagree.
 	 *
-	 * `minQuota` is the number of seats this shift already holds (confirmed +
-	 * dispatched, from `domain/capacity.ts`). Cutting below it is rejected here
+	 * `minQuota` is the number of seats this concrete shift already holds,
+	 * resolved from its assignment roster. Cutting below it is rejected here
 	 * with a Thai message: `JobRepository#update` would refuse the write anyway
 	 * ("quota below what volunteers already hold"), and a rejected save after
 	 * the dialog closed reads as a silent failure.

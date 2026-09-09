@@ -45,7 +45,7 @@
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
 	import { toSkillCode, toSkillCodes } from '../domain/skill-catalog';
-	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import { assignmentCountForShift } from '../domain/shift-roster';
 	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import {
 		ALL_WEEKDAYS,
@@ -58,7 +58,12 @@
 		isDuplicateShift,
 		type Weekday
 	} from '../domain/shift-batch';
-	import { useCreateJob, useSkillOptions, useUpdateJob } from '../application/queries';
+	import {
+		useCreateJob,
+		useShiftAssignments,
+		useSkillOptions,
+		useUpdateJob
+	} from '../application/queries';
 
 	/** Superforms holds the schema's OUTPUT shape — defaults already materialised. */
 	type JobFormValues = z.output<typeof jobInputSchema>;
@@ -74,6 +79,7 @@
 	const queryClient = useQueryClient();
 	const createMutation = useCreateJob(queryClient);
 	const updateMutation = useUpdateJob(queryClient);
+	const assignmentsQuery = useShiftAssignments();
 
 	/**
 	 * Master Data `volunteer_skills`, effective for this shelter (CR-100) —
@@ -417,22 +423,17 @@
 
 	/**
 	 * Seats already held per PERSISTED shift, so editing an existing job cannot
-	 * cut a shift below what volunteers hold. Keyed by shift id off the same
-	 * chronological ordering `jobShiftQuotaSplits` assumes (it allocates
-	 * "earliest shift first" BY POSITION, so it must be handed sorted rows).
+	 * cut a shift below what volunteers hold. This must use the concrete roster;
+	 * job-level counters cannot tell which sub-shift owns a confirmed seat.
 	 * Empty while creating — a job that does not exist yet holds nothing.
 	 */
 	const heldSeatsById = $derived.by<Record<string, number>>(() => {
-		if (!job) return {};
-		const ordered = [...job.shifts].sort((a, b) =>
-			`${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`)
-		);
-		const splits = jobShiftQuotaSplits({ ...job, shifts: ordered });
+		if (!job || !assignmentsQuery.data) return {};
 		return Object.fromEntries(
-			ordered.map((shift, index) => {
-				const split = splits[index];
-				return [shift.id, split ? split.confirmed + split.dispatched : 0];
-			})
+			job.shifts.map((shift) => [
+				shift.id,
+				assignmentCountForShift(shift, job._id, assignmentsQuery.data ?? [])
+			])
 		);
 	});
 
@@ -879,5 +880,6 @@
 	shift={editShift}
 	siblings={editSiblings}
 	minQuota={editMinQuota}
+	pending={isPending || assignmentsQuery.isPending || assignmentsQuery.isError}
 	onsave={saveShiftEdit}
 />

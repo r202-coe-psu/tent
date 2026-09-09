@@ -133,6 +133,24 @@ describe('buildAssignRoster — row state', () => {
 		expect(row.assignable).toBe(false);
 	});
 
+	it('uses shift_id before the legacy duty-window fallback', () => {
+		const v = volunteer();
+		const otherShift = shift({ id: 'js-other', start_time: '16:00', end_time: '20:00' });
+		const [row] = roster({
+			volunteers: [v],
+			assignments: [
+				assignment({
+					volunteer_id: v._id,
+					shift_id: TARGET.id,
+					duty_window: shiftDutyWindow(otherShift)
+				})
+			]
+		});
+
+		expect(row.state).toEqual({ kind: 'accepted' });
+		expect(row.assignable).toBe(false);
+	});
+
 	it('names the clashing job and its wall-clock window on a collision', () => {
 		const v = volunteer();
 		const [row] = roster({

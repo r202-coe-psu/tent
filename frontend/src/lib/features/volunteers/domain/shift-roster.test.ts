@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shiftRoster } from './shift-roster';
+import { assignmentCountForJob, assignmentCountForShift, shiftRoster } from './shift-roster';
 import { shiftDutyWindow } from './duty-window';
 import type { ShiftAssignment, ShiftAssignmentStatus } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
@@ -47,6 +47,37 @@ function volunteersById(
 }
 
 describe('shiftRoster', () => {
+	it('counts unique people holding the exact shift for assignment capacity', () => {
+		const count = assignmentCountForShift(SHIFT, 'job:A', [
+			assignment({ _id: 'a:1', volunteer_id: 'volunteer:1', status: 'standby' }),
+			assignment({ _id: 'a:2', volunteer_id: 'volunteer:1', status: 'checked_in' }),
+			assignment({ _id: 'a:3', volunteer_id: 'volunteer:2', status: 'completed' }),
+			assignment({
+				_id: 'a:4',
+				volunteer_id: 'volunteer:3',
+				job_id: 'job:B'
+			}),
+			assignment({ _id: 'a:5', volunteer_id: 'volunteer:4', status: 'cancelled' })
+		]);
+
+		expect(count).toBe(2);
+	});
+
+	it('sums seats across a job from each concrete shift roster', () => {
+		const secondShift = { ...SHIFT, id: 'shift:B', start_time: '16:00', end_time: '20:00' };
+		const count = assignmentCountForJob({ _id: 'job:A', shifts: [SHIFT, secondShift] }, [
+			assignment({ _id: 'a:1', volunteer_id: 'volunteer:1' }),
+			assignment({
+				_id: 'a:2',
+				volunteer_id: 'volunteer:2',
+				shift_id: secondShift.id,
+				duty_window: shiftDutyWindow(secondShift)
+			})
+		]);
+
+		expect(count).toBe(2);
+	});
+
 	it('matches assignments whose duty_window equals the shift, by exact instant', () => {
 		const roster = shiftRoster(
 			SHIFT,

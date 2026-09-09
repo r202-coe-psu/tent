@@ -144,6 +144,7 @@
 					{job}
 					applicantCount={applicantCounts.get(job._id) ?? 0}
 					pendingApplicantCount={pendingApplicantCounts.get(job._id) ?? 0}
+					assignments={assignmentsQuery.isPending ? undefined : (assignmentsQuery.data ?? [])}
 					onedit={openEdit}
 				/>
 			{/each}

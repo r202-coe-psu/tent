@@ -10,7 +10,7 @@
 	 *
 	 * Every decision this screen renders comes from pure domain code:
 	 *   - row state / filters / counts → `domain/assign-roster.ts`
-	 *   - the 4-way quota breakdown    → `domain/capacity.ts#jobShiftQuotaSplits`
+	 *   - the selected shift's exact headcount → `domain/shift-roster.ts`
 	 *   - the UTC duty window written  → `domain/duty-window.ts#shiftDutyWindow`
 	 * Nothing here recomputes eligibility, collisions or capacity inline.
 	 *
@@ -45,8 +45,9 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { useShelter } from '$lib/features/shelters';
 	import AssignRosterRow from './assign-roster-row.svelte';
-	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import AssignVolunteerDetailDialog from './assign-volunteer-detail-dialog.svelte';
 	import { shiftDutyWindow } from '../domain/duty-window';
+	import { assignmentCountForShift } from '../domain/shift-roster';
 	import type { JobShift } from '../domain/job.schema';
 	import {
 		buildAssignRoster,
@@ -55,7 +56,8 @@
 		shiftKindFor,
 		type AvailabilityFilter,
 		type EligibilityFilter,
-		type SkillFilter
+		type SkillFilter,
+		type AssignCandidate
 	} from '../domain/assign-roster';
 	import {
 		useAssignVolunteers,
@@ -104,16 +106,29 @@
 	}
 
 	/**
-	 * Chronological, matching `job-shifts-tab.svelte` — `jobShiftQuotaSplits`
-	 * allocates seats by position, so it must be handed the same order the
-	 * detail screen shows.
+	 * Keep the shift picker chronological, matching `job-shifts-tab.svelte`.
 	 */
 	const orderedShifts = $derived(
 		[...(job?.shifts ?? [])].sort((a, b) =>
 			`${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`)
 		)
 	);
-	const splits = $derived(job ? jobShiftQuotaSplits({ ...job, shifts: orderedShifts }) : []);
+	/**
+	 * `job.slots_confirmed` and `job.slots_dispatched` are totals for the whole
+	 * job. They cannot be projected into a concrete shift by array position:
+	 * an offer on another shift would make this shift look full. This page uses
+	 * the exact shift roster instead.
+	 */
+	const assignedByShiftId = $derived.by<Map<string, number>>(() => {
+		const assignments = assignmentsQuery.data ?? [];
+		if (!job) return new Map();
+		return new Map(
+			orderedShifts.map((candidate) => [
+				candidate.id,
+				assignmentCountForShift(candidate, job._id, assignments)
+			])
+		);
+	});
 
 	/** Empty until the SM picks one — the `?shift=` deep link, else the first shift, wins. */
 	let pickedShiftId = $state('');
@@ -122,14 +137,12 @@
 	);
 	const activeIndex = $derived(orderedShifts.findIndex((s) => s.id === activeShiftId));
 	const shift = $derived(activeIndex >= 0 ? orderedShifts[activeIndex] : null);
-	const split = $derived(activeIndex >= 0 ? splits[activeIndex] : null);
 
-	function shiftLabel(s: JobShift, index: number): string {
-		const q = splits[index];
+	function shiftLabel(s: JobShift): string {
 		const crossesMidnight = s.end_date !== s.date;
 		return (
 			`${s.date} | ${s.start_time} - ${s.end_time} น.${crossesMidnight ? ` (ถึง ${s.end_date})` : ''}` +
-			` (ต้องการ ${q?.target ?? 0} คน | ได้แล้ว ${q?.confirmed ?? 0} คน)`
+			` (${assignedByShiftId.get(s.id) ?? 0}/${s.quota} คน)`
 		);
 	}
 
@@ -139,6 +152,8 @@
 	let availabilityFilter = $state<AvailabilityFilter>('all');
 	let eligibilityFilter = $state<EligibilityFilter>('all');
 	let selectedIds = $state<string[]>([]);
+	let detailCandidate = $state<AssignCandidate | null>(null);
+	let detailOpen = $state(false);
 
 	const loading = $derived(
 		jobQuery.isLoading ||
@@ -217,7 +232,8 @@
 	);
 	const allSelected = $derived(assignableCount > 0 && selectedCount === assignableCount);
 
-	const remaining = $derived(split?.remaining ?? 0);
+	const activeAssignedCount = $derived(shift ? (assignedByShiftId.get(shift.id) ?? 0) : 0);
+	const remaining = $derived(Math.max((shift?.quota ?? 0) - activeAssignedCount, 0));
 	const overCapacity = $derived(selectedCount > remaining);
 	const sending = $derived(assignMutation.isPending);
 
@@ -226,6 +242,20 @@
 		// Row states are shift-specific — a carried-over selection could dispatch
 		// someone who is not free in the newly picked shift.
 		selectedIds = [];
+		detailCandidate = null;
+		detailOpen = false;
+	}
+
+	function openDetails(candidate: AssignCandidate) {
+		detailCandidate = candidate;
+		detailOpen = true;
+	}
+
+	function candidateShelterLabel(candidate: AssignCandidate): string {
+		return candidate.volunteer.current_shelter_code &&
+			candidate.volunteer.current_shelter_code !== job?.shelter_code
+			? candidate.volunteer.current_shelter_code
+			: shelterLabel;
 	}
 
 	function toggleOne(volunteerId: string, next: boolean) {
@@ -241,13 +271,12 @@
 			: selectedIds.filter((id) => !ids.includes(id));
 	}
 
-	async function assignSelected() {
-		if (!job || !shift || sending) return;
-		const chosen = visible.filter((c) => c.assignable && selectedIds.includes(c.volunteer._id));
-		if (chosen.length === 0) return;
+	async function assignCandidates(chosen: AssignCandidate[]): Promise<number> {
+		if (!job || !shift || sending) return 0;
+		if (chosen.length === 0) return 0;
 		if (chosen.length > remaining) {
 			toast.error(`กะนี้เหลือรับได้อีก ${remaining} คน แต่เลือกไว้ ${chosen.length} คน`);
-			return;
+			return 0;
 		}
 
 		let dutyWindow: ReturnType<typeof shiftDutyWindow>;
@@ -255,7 +284,7 @@
 			dutyWindow = shiftDutyWindow(shift);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'กะนี้มีวันหรือเวลาไม่ถูกต้อง');
-			return;
+			return 0;
 		}
 		const kind = shiftKindFor(shift);
 		/**
@@ -292,6 +321,18 @@
 		if (sent > 0) toast.success(`มอบหมายอาสา ${sent} คนเข้ากะนี้แล้ว`);
 		if (failed.length > 0)
 			toast.error(`มอบหมายไม่สำเร็จ ${failed.length} คน: ${failed.join(', ')}`);
+		return sent;
+	}
+
+	async function assignSelected() {
+		const chosen = visible.filter((c) => c.assignable && selectedIds.includes(c.volunteer._id));
+		await assignCandidates(chosen);
+	}
+
+	async function assignOne(candidate: AssignCandidate) {
+		if (!candidate.assignable) return;
+		const sent = await assignCandidates([candidate]);
+		if (sent > 0) detailOpen = false;
 	}
 
 	// `flex-1` at every breakpoint (not just mobile) so each segmented row
@@ -335,17 +376,17 @@
 					<Select.Root type="single" value={activeShiftId} onValueChange={pickShift}>
 						<Select.Trigger
 							id="assign-shift"
-							class="!h-11 w-full border-white/20 bg-white/10 text-left text-sm font-bold text-white"
+							class="!h-11 w-full min-w-0 overflow-hidden border-white/20 bg-white/10 text-left text-sm font-bold text-white"
 						>
 							{#if shift && activeIndex >= 0}
-								{shiftLabel(shift, activeIndex)}
+								<span class="block min-w-0 truncate">{shiftLabel(shift)}</span>
 							{:else}
-								ยังไม่มีกะย่อยในงานนี้
+								<span class="block min-w-0 truncate">ยังไม่มีกะย่อยในงานนี้</span>
 							{/if}
 						</Select.Trigger>
 						<Select.Content>
-							{#each orderedShifts as s, index (s.id)}
-								<Select.Item value={s.id} label={shiftLabel(s, index)} />
+							{#each orderedShifts as s (s.id)}
+								<Select.Item value={s.id} label={shiftLabel(s)} />
 							{/each}
 						</Select.Content>
 					</Select.Root>
@@ -354,40 +395,33 @@
 				<div class="space-y-2">
 					<p class="inline-flex items-center gap-1.5 text-xs font-medium text-white/70">
 						<Users class="h-3.5 w-3.5" />
-						สถานะโควตากำลังพลในกะนี้ (Multi-State Quota Breakdown):
+						สถานะกำลังพลในกะนี้:
 					</p>
-					<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
 						<div class="rounded-xl bg-white/8 px-3 py-2 ring-1 ring-white/10">
 							<p class="text-[11px] text-white/60">เป้าหมายทั้งหมด</p>
-							<p class="text-lg font-bold tabular-nums">{split?.target ?? 0} คน</p>
+							<p class="text-lg font-bold tabular-nums">{shift?.quota ?? 0} คน</p>
 						</div>
 						<div class="rounded-xl bg-emerald-500/15 px-3 py-2 ring-1 ring-emerald-400/30">
-							<p class="text-[11px] text-emerald-200">🟢 ตอบรับ/ยืนยัน</p>
-							<p class="text-lg font-bold text-emerald-300 tabular-nums">
-								{split?.confirmed ?? 0} คน
+							<p class="inline-flex items-center gap-1.5 text-[11px] text-emerald-200">
+								<CircleCheck class="h-3.5 w-3.5" />
+								อยู่ในกะแล้ว
 							</p>
-						</div>
-						<div class="rounded-xl bg-amber-400/15 px-3 py-2 ring-1 ring-amber-300/30">
-							<p class="text-[11px] text-amber-200">🟡 เสนอมอบหมาย</p>
-							<p class="text-lg font-bold text-amber-300 tabular-nums">
-								{split?.dispatched ?? 0} คน
+							<p class="text-lg font-bold text-emerald-300 tabular-nums">
+								{activeAssignedCount} คน
 							</p>
 						</div>
 						<div class="rounded-xl bg-white/8 px-3 py-2 ring-1 ring-white/10">
-							<p class="text-[11px] text-white/60">⚪ ยังขาดอีก</p>
+							<p class="text-[11px] text-white/60">ยังขาดอีก</p>
 							<p class="text-lg font-bold tabular-nums">{remaining} คน</p>
 						</div>
 					</div>
-					{#if split}
-						{@const total = split.target > 0 ? split.target : 1}
+					{#if shift}
+						{@const total = shift.quota > 0 ? shift.quota : 1}
 						<div class="flex h-2 w-full overflow-hidden rounded-full bg-white/15">
 							<div
 								class="h-full bg-emerald-500"
-								style:width="{(split.confirmed / total) * 100}%"
-							></div>
-							<div
-								class="h-full bg-amber-400"
-								style:width="{(split.dispatched / total) * 100}%"
+								style:width="{(Math.min(activeAssignedCount, shift.quota) / total) * 100}%"
 							></div>
 						</div>
 					{/if}
@@ -428,7 +462,8 @@
 							class={SEGMENT_BASE}
 							onclick={() => (skillFilter = 'match')}
 						>
-							🎯 ตรงกับภารกิจนี้
+							<Target class="h-3.5 w-3.5" />
+							ตรงกับภารกิจนี้
 						</Button>
 					</div>
 				</div>
@@ -451,14 +486,16 @@
 							class={SEGMENT_BASE}
 							onclick={() => (availabilityFilter = 'ready')}
 						>
-							🟢 พร้อมปฏิบัติงาน
+							<CircleCheck class="h-3.5 w-3.5" />
+							พร้อมปฏิบัติงาน
 						</Button>
 						<Button
 							variant={availabilityFilter === 'no_collision' ? 'default' : 'ghost'}
 							class={SEGMENT_BASE}
 							onclick={() => (availabilityFilter = 'no_collision')}
 						>
-							⏱ เวลาไม่ชนกะ
+							<Timer class="h-3.5 w-3.5" />
+							เวลาไม่ชนกะ
 						</Button>
 					</div>
 				</div>
@@ -519,13 +556,12 @@
 					{#each rows as candidate (candidate.volunteer._id)}
 						<AssignRosterRow
 							{candidate}
-							shelterLabel={candidate.volunteer.current_shelter_code &&
-							candidate.volunteer.current_shelter_code !== job.shelter_code
-								? candidate.volunteer.current_shelter_code
-								: shelterLabel}
 							selected={selectedIds.includes(candidate.volunteer._id)}
 							skillOptions={skillCatalog.options}
+							capacityAvailable={remaining > 0}
 							onToggle={toggleOne}
+							onDetails={openDetails}
+							onAssign={assignOne}
 						/>
 					{/each}
 				</ul>
@@ -617,3 +653,12 @@
 		</div>
 	{/if}
 </div>
+
+<AssignVolunteerDetailDialog
+	bind:open={detailOpen}
+	candidate={detailCandidate}
+	shelterLabel={detailCandidate ? candidateShelterLabel(detailCandidate) : shelterLabel}
+	skillOptions={skillCatalog.options}
+	pending={sending}
+	onassign={assignOne}
+/>

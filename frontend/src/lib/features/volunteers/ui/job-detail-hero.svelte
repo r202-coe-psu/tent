@@ -20,7 +20,7 @@
 	import ChartColumn from '@lucide/svelte/icons/chart-column';
 	import Users from '@lucide/svelte/icons/users';
 	import { computeQuota } from '../domain/quota';
-	import { assignmentCountForShift } from '../domain/shift-roster';
+	import { assignmentCountForJob } from '../domain/shift-roster';
 	import type { Job, JobStatus } from '../domain/job.schema';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 
@@ -54,12 +54,7 @@
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
 	const quota = $derived(computeQuota(job));
 	const rosterCount = $derived(
-		assignments
-			? job.shifts.reduce(
-					(total, shift) => total + assignmentCountForShift(shift, job._id, assignments),
-					0
-				)
-			: quota.confirmed
+		assignments ? assignmentCountForJob(job, assignments) : quota.confirmed
 	);
 	const missing = $derived(Math.max(job.quota - rosterCount, 0));
 	/** Guard the divide-by-zero: a stored job always has `quota > 0`, but a bar must never render NaN%. */

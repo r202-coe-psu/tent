@@ -13,16 +13,20 @@
 	import { computeQuota } from '../domain/quota';
 
 	let {
-		job
+		job,
+		confirmedCount
 	}: {
 		job: Parameters<typeof computeQuota>[0];
+		/** Exact roster count when the caller has loaded shift assignments. */
+		confirmedCount?: number;
 	} = $props();
 
 	const quota = $derived(computeQuota(job));
+	const confirmed = $derived(confirmedCount ?? quota.confirmed);
 	const total = $derived(job.quota > 0 ? job.quota : 1);
 	/** Everything not yet approved — dispatched-but-unanswered slots included. */
-	const missing = $derived(quota.dispatched + quota.remaining);
-	const confirmedPct = $derived((quota.confirmed / total) * 100);
+	const missing = $derived(Math.max(job.quota - confirmed, 0));
+	const confirmedPct = $derived((Math.min(Math.max(confirmed, 0), job.quota) / total) * 100);
 	const missingPct = $derived((missing / total) * 100);
 </script>
 
@@ -34,12 +38,12 @@
 	<div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
 		<span class="inline-flex items-center gap-1">
 			<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-			ยืนยันแล้ว {quota.confirmed}
+			ยืนยันแล้ว {confirmed}
 		</span>
 		<span class="inline-flex items-center gap-1">
 			<span class="h-2 w-2 rounded-full bg-muted-foreground/30"></span>
 			ยังขาดอีก {missing}
 		</span>
-		<span class="ml-auto font-medium text-foreground">{quota.confirmed}/{job.quota}</span>
+		<span class="ml-auto font-medium text-foreground">{confirmed}/{job.quota}</span>
 	</div>
 </div>

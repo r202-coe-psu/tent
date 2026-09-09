@@ -7,33 +7,37 @@
 	 * — is decided by `domain/assign-roster.ts` and passed in. This component
 	 * never inspects assignments or duty windows itself.
 	 */
-	import Phone from '@lucide/svelte/icons/phone';
-	import IdCard from '@lucide/svelte/icons/id-card';
-	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Eye from '@lucide/svelte/icons/eye';
 	import UserRound from '@lucide/svelte/icons/user-round';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import Tag from '@lucide/svelte/icons/tag';
 	import BadgeCheck from '@lucide/svelte/icons/badge-check';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	import type { AssignCandidate } from '../domain/assign-roster';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 
 	let {
 		candidate,
-		shelterLabel,
 		skillOptions = [],
 		selected,
-		onToggle
+		capacityAvailable,
+		onToggle,
+		onDetails,
+		onAssign
 	}: {
 		candidate: AssignCandidate;
-		/** Resolved shelter name for this volunteer's posting, or its code. */
-		shelterLabel: string;
 		/** Effective Master Data skills for rendering labels instead of stored ids. */
 		skillOptions?: readonly SkillOption[];
 		selected: boolean;
+		capacityAvailable: boolean;
 		onToggle: (volunteerId: string, next: boolean) => void;
+		onDetails: (candidate: AssignCandidate) => void;
+		onAssign: (candidate: AssignCandidate) => void | Promise<void>;
 	} = $props();
 
 	const v = $derived(candidate.volunteer);
@@ -55,7 +59,7 @@
 
 <li
 	class={[
-		'rounded-2xl border p-3.5 transition-colors',
+		'rounded-2xl border p-3 transition-colors sm:p-3.5',
 		candidate.assignable
 			? 'border-border bg-card hover:border-primary/40'
 			: 'border-border/60 bg-muted/40'
@@ -65,16 +69,19 @@
 		<Checkbox
 			id={rowId}
 			checked={selected}
-			disabled={!candidate.assignable}
+			disabled={!candidate.assignable || !capacityAvailable}
 			aria-label={`เลือก ${fullName}`}
 			onCheckedChange={(next) => onToggle(v._id, next === true)}
 			class="mt-1 shrink-0"
 		/>
 
-		<div class="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+		<div class="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 			<div class="min-w-0 space-y-1.5">
 				<div class="flex flex-wrap items-center gap-2">
-					<label for={rowId} class="cursor-pointer text-sm font-bold break-words text-foreground">
+					<label
+						for={rowId}
+						class="cursor-pointer text-sm font-bold break-words text-foreground sm:text-base"
+					>
 						{fullName}
 					</label>
 					{#if v.identity_verified}
@@ -96,47 +103,38 @@
 						class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
 					>
 						<UserRound class="h-3 w-3" />
-						อาสาสมัคร
-					</span>
-				</div>
-
-				<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-					<span class="inline-flex items-center gap-1.5">
-						<Phone class="h-3.5 w-3.5" />
-						{v.phone ?? '—'}
-					</span>
-					<span class="inline-flex items-center gap-1.5">
-						<IdCard class="h-3.5 w-3.5" />
-						รหัสอาสา: <span class="font-mono font-bold text-foreground">{v.volunteer_code}</span>
-					</span>
-					<span class="inline-flex min-w-0 items-center gap-1.5">
-						<MapPin class="h-3.5 w-3.5 shrink-0" />
-						<span class="truncate">ศูนย์: {shelterLabel}</span>
+						{v.personnel_type === 'staff' ? 'เจ้าหน้าที่' : 'อาสาสมัคร'}
 					</span>
 				</div>
 
 				{#if skills.length > 0}
-					<div class="flex flex-wrap items-center gap-1.5">
-						<span class="text-[11px] text-muted-foreground">ทักษะ:</span>
-						{#each skills as skill, idx (`${skill.code}-${idx}`)}
+					<div class="flex min-w-0 flex-wrap items-center gap-1.5">
+						<Tag class="h-3.5 w-3.5 shrink-0 text-primary" />
+						{#each skills.slice(0, 2) as skill (skill.code)}
 							<span
 								class="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
 							>
 								{skill.label}
 							</span>
 						{/each}
+						{#if skills.length > 2}
+							<span class="text-[11px] font-medium text-muted-foreground">+{skills.length - 2}</span
+							>
+						{/if}
 					</div>
 				{/if}
 			</div>
 
-			<div class="shrink-0 lg:pl-3">
+			<div
+				class="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:flex-col lg:items-end lg:pl-4"
+			>
 				{#if candidate.state.kind === 'collision'}
 					{@const clash = candidate.state}
 					<span
 						class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200"
 					>
 						<TriangleAlert class="h-3.5 w-3.5 shrink-0" />
-						เวลาชนกับกะอื่น ({clash.jobTitle}: {clash.startTime}-{clash.endTime} น.)
+						เวลาชนกะอื่น · {clash.startTime}-{clash.endTime} น.
 					</span>
 				{:else if candidate.state.kind === 'accepted'}
 					<span
@@ -153,6 +151,28 @@
 						ว่างในกะนี้ (พร้อมปฏิบัติงาน)
 					</span>
 				{/if}
+				<div class="flex items-center gap-2 sm:justify-end">
+					<Button
+						variant="outline"
+						size="sm"
+						class="h-8 gap-1.5 text-xs"
+						onclick={() => onDetails(candidate)}
+					>
+						<Eye class="h-3.5 w-3.5" />
+						ดูรายละเอียด
+					</Button>
+					{#if candidate.assignable}
+						<Button
+							size="sm"
+							class="h-8 gap-1.5 text-xs"
+							disabled={!capacityAvailable}
+							onclick={() => onAssign(candidate)}
+						>
+							<UserPlus class="h-3.5 w-3.5" />
+							{capacityAvailable ? 'มอบหมาย' : 'กะเต็มแล้ว'}
+						</Button>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</div>

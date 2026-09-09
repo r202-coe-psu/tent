@@ -235,7 +235,8 @@
 	/** Every OTHER shift — the edit dialog's duplicate check must not match the row itself. */
 	const editSiblings = $derived(job.shifts.filter((s) => s.id !== editShiftId));
 	/** Seats this shift already holds; the edit dialog refuses to cut below it. */
-	const editMinQuota = $derived(editRow ? editRow.split.confirmed + editRow.split.dispatched : 0);
+	/** The edit guard must use this concrete shift's roster, not job-level counters. */
+	const editMinQuota = $derived(editRow ? editRow.roster.length : 0);
 
 	const removeRow = $derived(rows.find((r) => r.shift.id === removeShiftId) ?? null);
 	/**
