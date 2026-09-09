@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from tent_model.unassigned_registration import (
+    EmergencyContact,
     PersonId,
     UnassignedHousehold,
     UnassignedMember,
@@ -20,16 +21,20 @@ from tent_model.unassigned_registration import (
 from ...core.staff_session import StaffSession
 from ...utils.masking import normalize_national_id, normalize_phone
 from ...utils.ulid import new_ulid
+from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
 from .couch_birth import (
     CouchBirthError,
     CouchBirthPort,
+    CouchImagePayload,
     build_couch_evacuee,
     build_couch_household,
+    build_couch_image,
     couch_unavailable,
     get_couch_birth,
 )
 from .schemas import (
     ClaimedMemberOut,
+    EmergencyContactOut,
     MemberCreated,
     MemberInput,
     OpenMemberHit,
@@ -142,6 +147,36 @@ def _open_identity_keys(
     return person_ids, phones
 
 
+def _normalize_emergency_contact(
+    contact: object | None,
+) -> EmergencyContact | None:
+    if contact is None:
+        return None
+    name = getattr(contact, "name", "") or ""
+    phone = getattr(contact, "phone", "") or ""
+    relation = getattr(contact, "relation", "") or ""
+    name = name.strip() if isinstance(name, str) else ""
+    phone = phone.strip() if isinstance(phone, str) else ""
+    relation = relation.strip() if isinstance(relation, str) else ""
+    if not name and not phone and not relation:
+        return None
+    return EmergencyContact(name=name, phone=phone, relation=relation)
+
+
+def _normalize_photo_ref(photo: str | None) -> str | None:
+    if not photo:
+        return None
+    raw = photo.strip()
+    if not raw:
+        return None
+    if parse_photo_ref(raw) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "INVALID_PHOTO_REF"},
+        )
+    return raw if raw.startswith("gfs:") else f"gfs:{raw}"
+
+
 def _build_member(input_member: MemberInput) -> UnassignedMember:
     phone = normalize_phone(input_member.phone) if input_member.phone else None
     return UnassignedMember(
@@ -159,6 +194,18 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
         age=input_member.age,
         nickname=input_member.nickname,
         religion=input_member.religion,
+        emergency_contact=_normalize_emergency_contact(input_member.emergency_contact),
+        photo=_normalize_photo_ref(input_member.photo),
+    )
+
+
+def _emergency_out(member: UnassignedMember) -> EmergencyContactOut | None:
+    if member.emergency_contact is None:
+        return None
+    return EmergencyContactOut(
+        name=member.emergency_contact.name,
+        phone=member.emergency_contact.phone,
+        relation=member.emergency_contact.relation,
     )
 
 
@@ -180,6 +227,12 @@ def _member_response(member: UnassignedMember) -> MemberCreated:
         country=member.country,
         vulnerable_groups=list(member.vulnerable_groups),
         special_needs=list(member.special_needs),
+        birth_year=member.birth_year,
+        age=member.age,
+        nickname=member.nickname,
+        religion=member.religion,
+        emergency_contact=_emergency_out(member),
+        photo=member.photo,
     )
 
 
@@ -210,6 +263,7 @@ class UnassignedRegistrationsUseCase:
                     count=pet.count,
                     notes=pet.notes,
                     has_cage=pet.has_cage,
+                    image_url=_normalize_photo_ref(pet.image_url),
                 )
                 for pet in payload.household.pets
             ],
@@ -218,7 +272,7 @@ class UnassignedRegistrationsUseCase:
 
         doc = UnassignedRegistration(
             id=new_ulid(),
-            schema_v=1,
+            schema_v=2,
             reserved_household_id=f"household:{new_ulid()}",
             members=members,
             household=household,
@@ -267,9 +321,9 @@ class UnassignedRegistrationsUseCase:
                 if m.status == "open" and _member_matches_query(m, query)
             ]
             if not open_members:
-                # Doc matched via denormalized keys but no open member text-match —
-                # still include all open members when identity keys matched.
-                if _identity_keys_match(doc, query):
+                # Doc matched via denormalized keys / registration id but no open
+                # member text-match — still include all open members.
+                if _identity_keys_match(doc, query) or doc.id == query.strip():
                     open_members = [_open_member_hit(m) for m in doc.members if m.status == "open"]
             if not open_members:
                 continue
@@ -405,12 +459,81 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
+        # Resolve GridFS face + pet photos → Couch image:{ulid} before birth (#255).
+        photo_by_member: dict[str, str] = {}
+        pet_image_urls: dict[int, str] = {}
+        image_payloads: list[CouchImagePayload] = []
+
+        async def _append_gridfs_image(photo_ref: str, *, label: str) -> str | None:
+            loaded = await load_unassigned_photo(photo_ref)
+            if loaded is None:
+                logger.warning(
+                    "Unassigned claim: GridFS photo missing for %s (%s)",
+                    label,
+                    photo_ref,
+                )
+                return None
+            image_id = f"image:{new_ulid()}"
+            image_doc = build_couch_image(
+                image_id=image_id,
+                shelter_code=shelter_code,
+                actor=session.name,
+                now=now,
+                filename=loaded.filename,
+                content_type=loaded.content_type,
+                width=loaded.width or 0,
+                height=loaded.height or 0,
+                original_size=loaded.original_size or len(loaded.full_bytes),
+                compressed_size=loaded.compressed_size or len(loaded.full_bytes),
+                thumbnail_size=loaded.thumbnail_size
+                or len(loaded.thumb_bytes or loaded.full_bytes),
+            )
+            image_payloads.append(
+                CouchImagePayload(
+                    doc=image_doc,
+                    full_bytes=loaded.full_bytes,
+                    thumb_bytes=loaded.thumb_bytes or loaded.full_bytes,
+                    content_type=loaded.content_type,
+                )
+            )
+            return image_id
+
+        for member in claim_targets:
+            if not member.photo:
+                continue
+            image_id = await _append_gridfs_image(
+                member.photo, label=member.reserved_evacuee_id
+            )
+            if image_id:
+                photo_by_member[member.reserved_evacuee_id] = image_id
+
+        for index, pet in enumerate(doc.household.pets):
+            if not pet.image_url:
+                continue
+            image_id = await _append_gridfs_image(
+                pet.image_url, label=f"pet[{index}]"
+            )
+            if image_id:
+                pet_image_urls[index] = image_id
+
         household_doc = build_couch_household(
-            doc, claim_targets[0], shelter_code, session.name, now
+            doc,
+            claim_targets[0],
+            shelter_code,
+            session.name,
+            now,
+            pet_image_urls=pet_image_urls or None,
         )
+
         evacuee_docs = [
             build_couch_evacuee(
-                member, doc.reserved_household_id, shelter_code, session.name, now, doc
+                member,
+                doc.reserved_household_id,
+                shelter_code,
+                session.name,
+                now,
+                doc,
+                photo=photo_by_member.get(member.reserved_evacuee_id),
             )
             for member in claim_targets
         ]
@@ -421,6 +544,7 @@ class UnassignedRegistrationsUseCase:
                 household_doc=household_doc,
                 evacuee_docs=evacuee_docs,
                 cookie_header=cookie_header,
+                image_payloads=image_payloads,
             )
         except CouchBirthError as exc:
             await _atomic_revert_claim(
@@ -454,7 +578,7 @@ class UnassignedRegistrationsUseCase:
                 if refreshed is not None:
                     await refreshed.delete()
                 deleted = True
-            except PyMongoError, ConnectionError, TimeoutError, OSError:
+            except (PyMongoError, ConnectionError, TimeoutError, OSError):
                 logger.exception(
                     "Unassigned Registration %s claim succeeded but Mongo delete failed",
                     registration_id,
@@ -595,11 +719,15 @@ def _escape_regex(value: str) -> str:
 
 
 def _open_member_search_filter(query: str) -> dict:
-    """Mongo filter: documents with at least one open member matching q."""
+    """Mongo filter: documents with at least one open member matching q.
+
+    Also matches registration ``_id`` so unassigned ticket QR (Mongo id) resolves.
+    """
     compact = re.sub(r"[\s\-]+", "", query)
     phone = normalize_phone(compact) if compact else ""
     nid = normalize_national_id(compact) if compact.isdigit() and len(compact) == 13 else ""
     or_clauses: list[dict] = [
+        {"_id": query},
         {
             "members": {
                 "$elemMatch": {
@@ -700,4 +828,10 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
         country=member.country,
         vulnerable_groups=list(member.vulnerable_groups),
         special_needs=list(member.special_needs),
+        nickname=member.nickname,
+        religion=member.religion,
+        emergency_contact=_emergency_out(member),
+        photo=member.photo,
+        birth_year=member.birth_year,
+        age=member.age,
     )

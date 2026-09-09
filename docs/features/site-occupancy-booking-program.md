@@ -2,7 +2,7 @@
 title: "Program — Site kind, occupancy health, booking channels, triage"
 status: active
 created: 2026-08-13
-updated: 2026-09-06
+updated: 2026-09-09
 owner: PM (John) / เจ้าของโครงการ
 audience: developer + team lead assignment
 note: >
@@ -292,6 +292,8 @@ Health **ไม่ persist**. ประเมินตามลำดับ (sta
 - D-HEALTH-PCT ใช้ตัวเลขเจ้าของโครงการ; 90% เป็นแดง (ไม่ใช่เหลือง). สูตร derived ไม่ persist. `capacity=0` ไม่หารศูนย์.
 - 2026-08-13 — **Wave 2 ล็อก** โดยเจ้าของโครงการ: D-STANDBY=A · D-HEALTH-VS-STATUS=**B** (ทับคำแนะนำ A ของ John) · D-HEALTH-SURFACE=A. กติการวมสี: `standby`/`closed` → เทา (ไม่เข้า %); `full_capacity` → แดง; นอกนั้นตาม D-HEALTH-PCT. ผิว T-69 = staff + public ตอนนี้; T-70 EOC API ทีหลัง; ห้าม dashboard EOC ในแอป (FD-14).
 - 2026-09-06 — **CR-112 approved**: D-BOOK-OCC occupancy numerator → **Forecast** triple (`occupancy`/`present`/`in_zone`); pair **CR-113** Unassigned Registration Mongo.
+- 2026-09-09 — **#255 / CR-113 amend**: public no-shelter → Mongo Unassigned Registration via BFF executor + UnifiedRegistrationInput; ticket QR = Mongo registration id (**not** Station-1 Person QR until claim); face + pet photo via GridFS.
+- 2026-09-09 — **CR-113 amend (shelter booking photos)**: public **known-shelter** booking face + pet photos → BFF `POST /api/public/v1/registrations/photos` → Couch `image:{ulid}` (public writer); unassigned remains GridFS.
 - 2026-08-13 — **T-72 ล็อก** โดยเจ้าของโครงการ (ไม่ใช่ Wave 4): **T-72 initial stay=A** (ทุกแถว `pre_registered`; นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ที่ประตู/staff เท่านั้น — ห้ามเลือกต่อแถวในไฟล์) · **T-72 import permission=RS+SA+SM** (เจ้าของขยายจาก proposed SM+SA). T-72 ไม่รอ stay/permission แล้ว — รอ approve CR-071 + T-48. **ไม่ mark CR เป็น approved. ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): Wave 1–3 + T-72. Wave 4 **จอดรอบ CR ถัดไป** (D-SOP-LITE, D-HOST-STAFF, D-SPHERE-CAP, D-INBOUND-PLANE, D-TRIAGE-RULES, D-TRIAGE-FIELD, D-ONE-PLATFORM). CR-072 / CR-073 คง `proposed`. **ไม่ bump schema.md ในรอบนี้.**
 - Wave 4 จอดรอบ CR ถัดไป: ห้ามเดา SOP / triage / ONE PLATFORM.

@@ -21,7 +21,7 @@
 	import {
 		canCheckInEvacuee,
 		canCheckOutEvacuee,
-		lookupEvacueeByScanCode,
+		lookupFederatedByScanCode,
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useEvacuees,
@@ -31,8 +31,13 @@
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	let scanCode = $state('');
 	let isScanning = $state(false);
@@ -41,6 +46,8 @@
 		message: string;
 		evacuee?: Evacuee;
 	} | null>(null);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 
 	let showSearchModal = $state(false);
 
@@ -158,9 +165,9 @@
 		scanResult = null;
 
 		try {
-			const evacuee = await lookupEvacueeByScanCode(queryClient, cleanCode);
+			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
 
-			if (!evacuee) {
+			if (!result) {
 				scanResult = {
 					success: false,
 					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}" ในศูนย์ ${getShelterCode()}`
@@ -169,6 +176,19 @@
 				return;
 			}
 
+			if (result.source === 'unassigned') {
+				scanResult = {
+					success: false,
+					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาท์'
+				};
+				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				claimHit = result.hit;
+				claimOpen = true;
+				scanCode = '';
+				return;
+			}
+
+			const evacuee = result.evacuee;
 			scanResult = {
 				success: true,
 				message: 'พบข้อมูลผู้ประสบภัย',
@@ -641,6 +661,12 @@
 		scanCode = evacueeId;
 		handleScanSubmit(scanCode);
 	}}
+/>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
 />
 
 <style>

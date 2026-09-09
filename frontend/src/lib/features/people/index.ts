@@ -135,6 +135,13 @@ export {
 } from './domain/intake-pipeline';
 
 export {
+	extractScanLookupToken,
+	toCouchEvacueeId,
+	mongoUnassignedSearchQueries,
+	pickUnassignedSearchHit
+} from './domain/scan-lookup';
+
+export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,
@@ -186,15 +193,29 @@ export {
 	parseUnifiedRegistration,
 	planFamilyRegistration,
 	togglePetSpecies,
+	householdToUnifiedInput,
+	evacueeToUnifiedMember,
 	unifiedRegistrationInputSchema,
 	unifiedMemberInputSchema,
 	unifiedHouseholdInputSchema,
 	type UnifiedRegistrationChannel,
-	type UnifiedRegistrationInput,
 	type UnifiedMemberInput,
+	type UnifiedMemberWithMeta,
 	type UnifiedHouseholdInput,
-	type FamilyRegistrationPlan
+	type UnifiedRegistrationInput,
+	type FamilyRegistrationPlan,
+	type FamilyReportInPayload,
+	type MemberPhotoUploadMode
 } from './domain/unified-registration';
+
+export {
+	defaultBirthCalendar,
+	toDisplayBirthYear,
+	toPersistBirthYearBE,
+	ageFromBirthYearBE,
+	currentYearBE,
+	type BirthCalendar
+} from './domain/birth-calendar';
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
@@ -210,6 +231,7 @@ export {
 	useSearchEvacuees,
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
+	useSubmitFamilyReportIn,
 	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
@@ -219,6 +241,12 @@ export {
 	useChangeEvacueeZone,
 	useRecordMovement,
 	lookupEvacueeByScanCode,
+	lookupFederatedByScanCode,
+	lookupFederatedByScanCodeWithDeps,
+	type FederatedScanHit,
+	type FederatedScanCouchHit,
+	type FederatedScanUnassignedHit,
+	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
 	useHouseholdsPaginated,

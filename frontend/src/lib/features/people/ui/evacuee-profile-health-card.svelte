@@ -57,26 +57,26 @@
 		</div>
 	</div>
 
-	<div class="grid grid-cols-1 gap-5 p-5 md:grid-cols-12">
+	<div class="grid min-w-0 grid-cols-1 gap-5 p-5 md:grid-cols-12">
 		<!-- Left: health data -->
-		<div class="space-y-4 md:col-span-7">
-			<div>
+		<div class="min-w-0 space-y-4 md:col-span-7">
+			<div class="min-w-0">
 				<span class="block text-xs font-semibold text-red-600 dark:text-red-400"
 					>อาการป่วยแรกรับ:</span
 				>
 				<div
-					class="mt-1.5 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+					class="mt-1.5 break-words rounded-md border border-slate-100 bg-slate-50 p-3 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
 				>
 					{#if screening && screening.symptoms.length > 0}
 						<div class="flex flex-col gap-1">
 							{#each screening.symptoms as sym (sym)}
-								<span>• {getSymptomLabel(sym)}</span>
+								<span class="break-words">• {getSymptomLabel(sym)}</span>
 							{/each}
 						</div>
 					{:else if medical && medical.conditions.length > 0}
 						<div class="flex flex-col gap-1">
 							{#each medical.conditions as cond (cond)}
-								<span>• {cond}</span>
+								<span class="break-words">• {cond}</span>
 							{/each}
 						</div>
 					{:else}
@@ -85,14 +85,16 @@
 				</div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-4">
-				<div>
+			<div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
-					<span class="mt-1 block text-sm font-bold text-slate-800 dark:text-slate-200">
+					<span
+						class="mt-1 block break-words text-sm font-bold text-slate-800 dark:text-slate-200"
+					>
 						{medical?.conditions?.join(', ') || 'ไม่มี'}
 					</span>
 				</div>
-				<div>
+				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">ความเสี่ยงแพร่เชื้อ:</span>
 					{#if (screening && screening.symptoms.includes('acute_respiratory')) || medical?.notes?.includes('กักโรค') || medical?.notes?.includes('แพร่เชื้อ')}
 						<span
@@ -113,10 +115,12 @@
 				</span>
 			</div>
 
-			<div class="grid grid-cols-2 gap-4 border-t border-border/40 pt-3">
-				<div>
+			<div class="grid min-w-0 grid-cols-1 gap-4 border-t border-border/40 pt-3 sm:grid-cols-2">
+				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">ยาที่ใช้ประจำ:</span>
-					<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+					<span
+						class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+					>
 						{#if medical && medical.medications && medical.medications.length > 0}
 							{medical.medications.join(', ')}
 						{:else}
@@ -124,9 +128,11 @@
 						{/if}
 					</span>
 				</div>
-				<div>
+				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">ประวัติการแพ้:</span>
-					<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+					<span
+						class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+					>
 						{#if medical && medical.allergies && medical.allergies.length > 0}
 							{medical.allergies.join(', ')}
 						{:else}
@@ -136,10 +142,10 @@
 				</div>
 			</div>
 
-			<div class="border-t border-border/40 pt-3">
+			<div class="min-w-0 border-t border-border/40 pt-3">
 				<span class="block text-xs font-medium text-muted-foreground">บันทึกของพยาบาล:</span>
 				<div
-					class="mt-1.5 rounded-md border border-blue-100/50 bg-blue-50/50 p-3 text-xs font-semibold text-blue-800 dark:border-blue-900/20 dark:bg-blue-950/20 dark:text-blue-300"
+					class="mt-1.5 break-words rounded-md border border-blue-100/50 bg-blue-50/50 p-3 text-xs font-semibold text-blue-800 dark:border-blue-900/20 dark:bg-blue-950/20 dark:text-blue-300"
 				>
 					{medical?.notes || screening?.notes || 'ไม่มีบันทึกทางพยาบาล'}
 				</div>
@@ -147,16 +153,18 @@
 		</div>
 
 		<!-- Right: vulnerability -->
-		<div class="space-y-4 border-t pt-4 md:col-span-5 md:border-t-0 md:border-l md:pt-0 md:pl-6">
-			<div>
+		<div
+			class="min-w-0 space-y-4 border-t pt-4 md:col-span-5 md:border-t-0 md:border-l md:pt-0 md:pl-6"
+		>
+			<div class="min-w-0">
 				<span class="block text-xs font-medium text-muted-foreground">กลุ่มเปราะบาง:</span>
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if evacuee.special_needs && evacuee.special_needs.length > 0}
 						{#each evacuee.special_needs as need (need)}
 							<span
-								class="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+								class="inline-flex max-w-full items-center gap-1 break-words rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
 							>
-								<span>{specialNeedLabel(need)}</span>
+								<span class="break-words">{specialNeedLabel(need)}</span>
 							</span>
 						{/each}
 					{:else}
@@ -165,12 +173,12 @@
 				</div>
 			</div>
 
-			<div class="border-t border-border/40 pt-3">
+			<div class="min-w-0 border-t border-border/40 pt-3">
 				<span class="block text-xs font-medium text-muted-foreground"
 					>ความต้องการพิเศษ/ข้อแนะนำ:</span
 				>
 				<div
-					class="mt-1.5 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+					class="mt-1.5 break-words rounded-md border border-slate-100 bg-slate-50 p-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
 				>
 					{#if medical?.notes}
 						{medical.notes}

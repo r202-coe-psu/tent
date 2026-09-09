@@ -23,11 +23,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
-	import {
-		UNASSIGNED_SHELTER_CODE,
-		isCaptchaKeyConfigured,
-		type HousingType
-	} from '../domain/booking';
+	import { UNASSIGNED_SHELTER_CODE, isCaptchaKeyConfigured } from '../domain/booking';
 	import type { ShelterSummary } from '$lib/features/shelters/index.js';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 
@@ -90,7 +86,13 @@
 	let isSubmitting = $state(false);
 
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
-		if (!isUnassigned) {
+		if (isUnassigned) {
+			if (!disclaimerAcknowledged) {
+				const err = t.unassignedDisclaimerRequired;
+				toast.error(err);
+				throw new Error(err);
+			}
+		} else {
 			const groups = buildDisclaimerGroups({
 				assetDescription: unifiedInput.household.assets?.description ?? '',
 				petCount: (unifiedInput.household.pets ?? []).length,
@@ -115,51 +117,10 @@
 			const head = unifiedInput.members[0];
 
 			if (isUnassigned) {
+				// Single path: pass UnifiedRegistrationInput through BFF → Mongo executor (#255).
 				const res = await createUnassignedRegistration.mutateAsync({
-					members: unifiedInput.members.map((m, idx) => {
-						const cardType = m.person_id?.cardType;
-						const person_id =
-							cardType === 'anonymous'
-								? { cardType: 'anonymous' as const }
-								: cardType && m.person_id?.number?.trim()
-									? { cardType, number: m.person_id.number.trim() }
-									: undefined;
-						return {
-							first_name: m.first_name,
-							last_name: m.last_name ?? '',
-							gender: m.gender,
-							phone: m.phone?.trim() || (idx === 0 ? head?.phone?.trim() : null),
-							person_id,
-							country: m.country ?? 'THAILAND',
-							vulnerable_groups: m.vulnerable_groups ?? [],
-							special_needs: m.special_needs ?? [],
-							...(typeof m.birth_year === 'number' ? { birth_year: m.birth_year } : {}),
-							...(typeof m.age === 'number' ? { age: m.age } : {})
-						};
-					}),
-					household: {
-						housing_type: (unifiedInput.household.housing_type ?? null) as HousingType | null,
-						residence_landmark: unifiedInput.household.residence_landmark ?? null,
-						address: {
-							housing_type: (unifiedInput.household.housing_type ?? null) as HousingType | null,
-							residence_landmark: unifiedInput.household.residence_landmark ?? null,
-							address_no: unifiedInput.household.address_no ?? '',
-							village_no: unifiedInput.household.village_no ?? '',
-							subdistrict: unifiedInput.household.subdistrict ?? '',
-							district: unifiedInput.household.district ?? '',
-							province: unifiedInput.household.province ?? '',
-							postal_code: unifiedInput.household.postal_code ?? ''
-						},
-						pets: (unifiedInput.household.pets ?? []).map((p) => ({
-							species: p.species,
-							count: Number(p.count) || 1,
-							name: '',
-							condition: '',
-							notes: p.notes ?? '',
-							has_cage: p.has_cage ?? false
-						}))
-					},
-					phone: head?.phone?.trim() || undefined,
+					...unifiedInput,
+					disclaimerAcknowledged: true,
 					...(token ? { captchaToken: token } : {})
 				});
 
@@ -281,7 +242,10 @@
 			<Select.Root
 				type="single"
 				value={selectedShelterCode}
-				onValueChange={(v) => (selectedShelterCode = v)}
+				onValueChange={(v) => {
+					selectedShelterCode = v;
+					disclaimerAcknowledged = false;
+				}}
 				disabled={Boolean(lockedShelterCode)}
 			>
 				<Select.Trigger class="!h-11 w-full font-semibold">
@@ -326,9 +290,9 @@
 					<div>
 						<p class="font-bold text-primary">กรณีไม่ระบุศูนย์พักพิง</p>
 						<p class="mt-0.5 text-muted-foreground">
-							ท่านสามารถลงทะเบียนข้อมูลล่วงหน้าไว้ได้ เมื่อเดินทางถึงศูนย์พักพิงใดๆ
-							เพียงแจ้งเบอร์โทรศัพท์หรือแสดง QR Code
-							ให้เจ้าหน้าที่ประจำศูนย์เพื่อจัดสรรที่พักได้ทันที
+							ท่านสามารถลงทะเบียนข้อมูลล่วงหน้าไว้ในคิวกลางได้ เมื่อเดินทางถึงศูนย์พักพิง
+							แจ้งเบอร์โทรศัพท์หรือแสดง QR รหัสลงทะเบียนนี้ให้เจ้าหน้าที่ลงทะเบียนประจำศูนย์
+							(ยังไม่ใช่ QR ประตูศูนย์ / Station 1 จนกว่าเจ้าหน้าที่จะรับเข้าศูนย์)
 						</p>
 					</div>
 				</div>
@@ -354,7 +318,10 @@
 		<!-- Issue #254: Mount Shared Unified Registration Form -->
 		<UnifiedRegistrationForm
 			channel="public"
+			includeVehiclesAssets={false}
 			pending={isSubmitting}
+			enableUnassignedPhoto={isUnassigned}
+			shelterCode={isUnassigned ? '' : selectedShelterCode}
 			onsubmit={handleUnifiedSubmit}
 			submitLabel="ยืนยันการลงทะเบียน"
 		>
@@ -367,7 +334,30 @@
 							shelter: shelterPolicy as unknown as ShelterSummary
 						})
 					: []}
-				{#if currentDisclaimerGroups.length > 0}
+				{#if isUnassigned}
+					<section class="mt-2 space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+						<div class="flex items-center gap-2">
+							<ShieldAlert class="size-5 text-amber-600 dark:text-amber-400" />
+							<h4 class="text-sm font-bold text-foreground">{t.unassignedDisclaimerTitle}</h4>
+						</div>
+						<p class="text-xs leading-relaxed text-muted-foreground">
+							{t.unassignedDisclaimerBody}
+						</p>
+						<label
+							class="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-amber-500/30 bg-card p-3.5 shadow-2xs"
+						>
+							<Checkbox
+								id="unassigned-disclaimer-ack"
+								checked={disclaimerAcknowledged}
+								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
+								class="mt-0.5 size-4 shrink-0"
+							/>
+							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
+								{t.unassignedDisclaimerAck}
+							</span>
+						</label>
+					</section>
+				{:else if currentDisclaimerGroups.length > 0}
 					<section class="mt-2 space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
 						<div class="flex items-center gap-2">
 							<ShieldAlert class="size-5 text-amber-600 dark:text-amber-400" />
@@ -394,7 +384,7 @@
 								id="disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-5 shrink-0"
+								class="mt-0.5 size-4 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิงทุกประการ

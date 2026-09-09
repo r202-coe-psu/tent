@@ -106,6 +106,7 @@
 
 		<UnifiedRegistrationForm
 			channel="onsite"
+			includeVehiclesAssets={true}
 			pending={createFamily.isPending}
 			onsubmit={handleRegister}
 			onDirtyChange={(dirty) => (isDirty = dirty)}

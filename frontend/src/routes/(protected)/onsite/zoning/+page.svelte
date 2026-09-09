@@ -30,13 +30,18 @@
 		matchesEvacueeSearch,
 		formatPersonName,
 		classifyZoningQueueTab,
-		parseZoningQrCode,
 		buildZoningPath,
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
 		listPendingZoneArrivalConfirmations,
+		lookupFederatedByScanCode,
 		type ZoningQueueTab
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { useMasterData } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -50,6 +55,7 @@
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const confirmRoomMutation = useConfirmRoom();
 	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
+	const queryClient = useQueryClient();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -96,6 +102,9 @@
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
 	let activeTab = $state<ZoningQueueTab>('pending');
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+	let lookupInFlight = $state(false);
 
 	const pendingEvacuees = $derived(
 		allEvacuees.filter(
@@ -188,23 +197,30 @@
 		}
 	}
 
-	function handleCodeInput(raw: string) {
-		const parsedId = parseZoningQrCode(raw);
-		if (!parsedId) {
-			toast.error('รหัส QR หรือข้อความที่สแกนไม่ถูกต้อง');
-			return;
-		}
-
-		const found = allEvacuees.find((e) => e._id === parsedId || e.person_id?.number === parsedId);
-		if (found) {
-			toast.success(`พบผู้ประสบภัย: ${formatPersonName(found)}`);
+	async function handleCodeInput(raw: string) {
+		if (lookupInFlight) return;
+		lookupInFlight = true;
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, raw);
+			if (!result) {
+				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
-			openDetail(found._id);
-			return;
+			if (result.source === 'couch') {
+				toast.success(`พบผู้ประสบภัย: ${formatPersonName(result.evacuee)}`);
+				openDetail(result.evacuee._id);
+				return;
+			}
+			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนจัดโซน');
+			claimHit = result.hit;
+			claimOpen = true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+		} finally {
+			lookupInFlight = false;
 		}
-
-		toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -570,3 +586,9 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>

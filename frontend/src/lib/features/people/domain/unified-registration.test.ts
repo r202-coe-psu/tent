@@ -8,6 +8,8 @@ import {
 	parseUnifiedRegistration,
 	planFamilyRegistration,
 	togglePetSpecies,
+	householdToUnifiedInput,
+	evacueeToUnifiedMember,
 	unifiedRegistrationInputSchema,
 	type UnifiedRegistrationInput
 } from './unified-registration';
@@ -200,6 +202,12 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(member.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(member.person_id?.number ?? '')).toBe(true);
 	});
+
+	it('blankUnifiedMember leaves gender unset for forced male/female choice', () => {
+		const member = blankUnifiedMember();
+		expect(member.gender).toBe('');
+		expect(member.religion).toBe('unknown');
+	});
 });
 
 describe('unified registration — family plan', () => {
@@ -231,5 +239,72 @@ describe('unified registration — family plan', () => {
 	it('requires at least one member', () => {
 		const result = unifiedRegistrationInputSchema.safeParse(validInput({ members: [] }));
 		expect(result.success).toBe(false);
+	});
+});
+
+describe('unified registration — report-in converters', () => {
+	it('converts CouchDB household into UnifiedHouseholdInput', () => {
+		const household = {
+			_id: 'hh-1',
+			type: 'household' as const,
+			label: 'บ้านใจดี',
+			head_evacuee_id: 'ev-1',
+			status: 'pre_registered' as const,
+			housing_type: 'owned_house' as const,
+			residence_landmark: 'ข้างวัด',
+			address_no: '123/4',
+			village_no: '5',
+			subdistrict: 'ในเมือง',
+			district: 'เมือง',
+			province: 'เชียงใหม่',
+			postal_code: '50000',
+			pets: [{ species: 'dog' as const, count: 2 }],
+			vehicles: [{ type: 'car' as const, license_plate: 'กก 1234' }],
+			assets: { description: 'สร้อยคอ', image_url: null },
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+
+		const input = householdToUnifiedInput(household as unknown as import('./people').Household);
+		expect(input.housing_type).toBe('owned_house');
+		expect(input.address_no).toBe('123/4');
+		expect(input.province).toBe('เชียงใหม่');
+		expect(input.pets).toHaveLength(1);
+		expect(input.vehicles).toHaveLength(1);
+		expect(input.assets?.description).toBe('สร้อยคอ');
+	});
+
+	it('converts CouchDB evacuee into UnifiedMemberWithMeta and handles reporting_in flag', () => {
+		const evacuee = {
+			_id: 'ev-1',
+			_rev: '1-abc',
+			type: 'evacuee' as const,
+			household_id: 'hh-1',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male' as const,
+			phone: '0812345678',
+			person_id: { cardType: 'national_id' as const, number: '1234567890123' },
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'web' as const,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+
+		const member = evacueeToUnifiedMember(evacuee as unknown as import('./people').Evacuee, 'ev-1');
+		expect(member._id).toBe('ev-1');
+		expect(member.first_name).toBe('สมชาย');
+		expect(member.stay_status).toBe('pre_registered');
+		expect(member.reporting_in).toBe(true);
+
+		// If target was a different ID, reporting_in is false
+		const otherMember = evacueeToUnifiedMember(evacuee as unknown as import('./people').Evacuee, 'ev-2');
+		expect(otherMember.reporting_in).toBe(false);
 	});
 });

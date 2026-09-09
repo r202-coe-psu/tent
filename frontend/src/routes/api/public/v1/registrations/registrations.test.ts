@@ -555,6 +555,55 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees[1].registered_via).toBe('web');
 		});
 
+		it('persists member face photo and pet image_url as Couch image refs', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const unifiedPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: '0811112222',
+						person_id: { cardType: 'national_id', number: '1100000000001' },
+						photo: 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [
+						{
+							species: 'dog',
+							count: 1,
+							image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+						}
+					],
+					vehicles: [],
+					assets: null
+				}
+			};
+
+			const res = await POST(event(unifiedPayload));
+			expect(res.status).toBe(201);
+
+			const { household, evacuees } = writtenDocs();
+			expect(evacuees[0].photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+			expect(household.pets).toEqual([
+				{
+					species: 'dog',
+					count: 1,
+					image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+				}
+			]);
+		});
+
 		it('422 when primary contact phone is missing in unified payload', async () => {
 			const invalidPayload = {
 				shelter_code: 'SH001',

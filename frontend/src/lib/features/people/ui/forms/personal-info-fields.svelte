@@ -3,8 +3,9 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { COUNTRIES } from '$lib/utils/country';
+	import { countriesForLanguage } from '$lib/utils/country';
 	import {
 		cardNumberMaxLength,
 		clampCardNumber,
@@ -12,23 +13,38 @@
 		type Gender,
 		type Religion
 	} from '$lib/features/people';
+	import {
+		ageFromBirthYearBE,
+		currentYearBE,
+		defaultBirthCalendar,
+		toDisplayBirthYear,
+		toPersistBirthYearBE,
+		type BirthCalendar
+	} from '$lib/features/people/domain/birth-calendar';
+	import { RELIGION_UI_VALUES, normalizeReligionForUi } from '$lib/features/people/domain/religion-ui';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	let {
 		first_name = $bindable(''),
 		last_name = $bindable(''),
-		nickname = $bindable(''),
+		nickname = $bindable(),
 		person_id = $bindable<{ cardType?: CardType; number?: string }>({
 			cardType: 'national_id',
 			number: ''
 		}),
-		phone = $bindable<string | null | undefined>(''),
+		phone = $bindable<string | null | undefined>(),
 		no_phone = $bindable(false),
-		birth_year = $bindable<number | string | undefined>(''),
-		age = $bindable<number | string | undefined>(''),
-		gender = $bindable<Gender>('other'),
+		birth_year = $bindable<number | string | undefined>(),
+		age = $bindable<number | string | undefined>(),
+		gender = $bindable<Gender | ''>(''),
 		religion = $bindable<Religion>('unknown'),
 		country = $bindable('THAILAND'),
 		disabled = false,
+		/** Hide「ไม่มีเบอร์」— public primary contact must enter a phone. */
+		hideNoPhone = false,
+		idPrefix = '',
 		errors
 	}: {
 		first_name?: string;
@@ -39,46 +55,84 @@
 		no_phone?: boolean;
 		birth_year?: number | string | undefined;
 		age?: number | string | undefined;
-		gender?: Gender;
+		gender?: Gender | '';
 		religion?: Religion;
 		country?: string;
 		disabled?: boolean;
+		hideNoPhone?: boolean;
+		idPrefix?: string;
 		errors?: Record<string, string | undefined>;
 	} = $props();
+
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const countryOptions = $derived(countriesForLanguage(langState.current));
 
 	const errClass =
 		'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20';
 
-	const cardTypeOptions: { value: CardType; label: string }[] = [
-		{ value: 'national_id', label: 'เลขประจำตัวประชาชน' },
-		{ value: 'passport', label: 'หนังสือเดินทาง' },
-		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย' },
-		{ value: 'other', label: 'บัตรประเภทอื่น' },
-		{ value: 'anonymous', label: 'บัตรไม่ระบุตัวตน (Anonymous ID)' }
-	];
+	function fid(name: string): string {
+		return idPrefix ? `${idPrefix}-${name}` : name;
+	}
+
+	const cardTypeOptions = $derived([
+		{ value: 'national_id' as const, label: t.cardTypeNationalId },
+		{ value: 'passport' as const, label: t.cardTypePassport },
+		{ value: 'pink_card' as const, label: t.cardTypePinkCard },
+		{ value: 'other' as const, label: t.cardTypeOther },
+		{ value: 'anonymous' as const, label: t.cardTypeAnonymous }
+	]);
 
 	const activeCardType = $derived(person_id.cardType ?? 'national_id');
 	const cardNumberMax = $derived(cardNumberMaxLength(activeCardType));
 	const isAnonymousCard = $derived(activeCardType === 'anonymous');
 
-	const genderOptions: { value: Gender; label: string }[] = [
-		{ value: 'male', label: 'ชาย' },
-		{ value: 'female', label: 'หญิง' },
-		{ value: 'other', label: 'อื่นๆ' }
-	];
+	/** UI options only — schema still allows `other` for legacy docs. */
+	const religionOptions = $derived(
+		RELIGION_UI_VALUES.map((value) => ({
+			value,
+			label:
+				value === 'buddhist'
+					? t.religionBuddhist
+					: value === 'muslim'
+						? t.religionMuslim
+						: value === 'christian'
+							? t.religionChristian
+							: t.religionUnknown
+		}))
+	);
 
-	const religionOptions: { value: Religion; label: string }[] = [
-		{ value: 'buddhist', label: 'พุทธ' },
-		{ value: 'muslim', label: 'อิสลาม' },
-		{ value: 'christian', label: 'คริสต์' },
-		{ value: 'other', label: 'อื่นๆ' },
-		{ value: 'unknown', label: 'ไม่ระบุ' }
-	];
+	const religionSelectValue = $derived(normalizeReligionForUi(religion));
 
-	const currentYearBE = new Date().getFullYear() + 543;
+	let calendarOverride = $state<BirthCalendar | null>(null);
+	const calendar = $derived(calendarOverride ?? defaultBirthCalendar(langState.current));
+
+	$effect(() => {
+		if (hideNoPhone && no_phone) {
+			no_phone = false;
+		}
+	});
+
+	const beYearParsed = $derived.by(() => {
+		const raw = birth_year;
+		const parsed =
+			typeof raw === 'string'
+				? Number.parseInt(raw, 10)
+				: typeof raw === 'number'
+					? raw
+					: Number.NaN;
+		return Number.isFinite(parsed) ? parsed : null;
+	});
+
+	const displayBirthYear = $derived(
+		beYearParsed == null ? '' : String(toDisplayBirthYear(beYearParsed, calendar))
+	);
 
 	function digits(value: string): string {
 		return value.replace(/\D/g, '');
+	}
+
+	function setCalendar(next: BirthCalendar) {
+		calendarOverride = next;
 	}
 
 	function updateAge(value: string) {
@@ -86,16 +140,25 @@
 		age = clean;
 		const parsed = Number.parseInt(clean, 10);
 		if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 150) {
-			birth_year = String(currentYearBE - parsed);
+			birth_year = String(currentYearBE() - parsed);
 		}
 	}
 
-	function updateBirthYear(value: string) {
+	function updateBirthYearDisplay(value: string) {
 		const clean = digits(value).slice(0, 4);
-		birth_year = clean;
-		const parsed = Number.parseInt(clean, 10);
-		if (Number.isFinite(parsed) && parsed <= currentYearBE) {
-			const calculatedAge = currentYearBE - parsed;
+		if (!clean) {
+			birth_year = '';
+			return;
+		}
+		const display = Number.parseInt(clean, 10);
+		if (!Number.isFinite(display)) {
+			birth_year = clean;
+			return;
+		}
+		const be = toPersistBirthYearBE(display, calendar);
+		birth_year = String(be);
+		if (be <= currentYearBE()) {
+			const calculatedAge = ageFromBirthYearBE(be);
 			if (calculatedAge >= 0 && calculatedAge <= 150) {
 				age = String(calculatedAge);
 			}
@@ -115,21 +178,23 @@
 	const showMononymHint = $derived(
 		country !== 'THAILAND' || (person_id.cardType != null && person_id.cardType !== 'national_id')
 	);
+
+	const genderRadioValue = $derived(gender === 'male' || gender === 'female' ? gender : '');
 </script>
 
 <div class="space-y-4">
 	<!-- Name & Surname -->
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
-			<Label for="first-name" class="text-xs font-semibold text-foreground">
-				ชื่อ <span class="text-destructive">*</span>
+			<Label for={fid('first-name')} class="text-xs font-semibold text-foreground">
+				{t.firstNameLabel} <span class="text-destructive">*</span>
 			</Label>
 			<Input
-				id="first-name"
+				id={fid('first-name')}
 				bind:value={first_name}
 				{disabled}
 				autocomplete="given-name"
-				placeholder={showMononymHint ? 'ชื่อเต็มตามเอกสาร' : 'ชื่อจริง'}
+				placeholder={showMononymHint ? t.firstNamePlaceholderFull : t.firstNamePlaceholderGiven}
 				aria-invalid={!!(errors?.first_name || errors?.firstName)}
 				class="h-9 {errors?.first_name || errors?.firstName ? errClass : ''}"
 			/>
@@ -139,13 +204,15 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for="last-name" class="text-xs font-semibold text-foreground">นามสกุล</Label>
+			<Label for={fid('last-name')} class="text-xs font-semibold text-foreground"
+				>{t.lastNameLabel}</Label
+			>
 			<Input
-				id="last-name"
+				id={fid('last-name')}
 				bind:value={last_name}
 				{disabled}
 				autocomplete="family-name"
-				placeholder={showMononymHint ? 'เว้นว่างได้ถ้าไม่มีนามสกุล' : 'นามสกุล'}
+				placeholder={showMononymHint ? t.lastNamePlaceholderOptional : t.lastNamePlaceholder}
 				aria-invalid={!!(errors?.last_name || errors?.lastName)}
 				class="h-9 {errors?.last_name || errors?.lastName ? errClass : ''}"
 			/>
@@ -155,19 +222,19 @@
 		</div>
 	</div>
 	{#if showMononymHint}
-		<p class="text-2xs text-muted-foreground">
-			ถ้าไม่มีนามสกุล ใส่ชื่อเต็มในช่องชื่อ และเว้นนามสกุลได้
-		</p>
+		<p class="text-2xs text-muted-foreground">{t.mononymHint}</p>
 	{/if}
 
 	<!-- Nickname -->
 	<div class="space-y-1.5">
-		<Label for="nickname" class="text-xs font-semibold text-foreground">ชื่อเล่น</Label>
+		<Label for={fid('nickname')} class="text-xs font-semibold text-foreground"
+			>{t.nicknameLabel}</Label
+		>
 		<Input
-			id="nickname"
+			id={fid('nickname')}
 			bind:value={nickname}
 			{disabled}
-			placeholder="ชื่อเล่น (ถ้ามี)"
+			placeholder={t.nicknamePlaceholder}
 			aria-invalid={!!errors?.nickname}
 			class="h-9 {errors?.nickname ? errClass : ''}"
 		/>
@@ -176,10 +243,10 @@
 		{/if}
 	</div>
 
-	<!-- Identity Document (Card Type and Number) -->
+	<!-- Identity Document -->
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
-			<Label class="text-xs font-semibold text-foreground">ประเภทบัตรประจำตัว</Label>
+			<Label class="text-xs font-semibold text-foreground">{t.cardTypeLabel}</Label>
 			<Select.Root
 				type="single"
 				value={activeCardType}
@@ -202,7 +269,7 @@
 				{disabled}
 			>
 				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
-					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? 'เลขประจำตัวประชาชน'}
+					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? t.cardTypeNationalId}
 				</Select.Trigger>
 				<Select.Content>
 					{#each cardTypeOptions as opt (opt.value)}
@@ -213,25 +280,27 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for="card-number" class="text-xs font-semibold text-foreground"
-				>เลขที่บัตรประจำตัว</Label
+			<Label for={fid('card-number')} class="text-xs font-semibold text-foreground"
+				>{t.cardNumberLabel}</Label
 			>
 			{#if isAnonymousCard}
 				<p
-					id="card-number"
+					id={fid('card-number')}
 					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-xs text-muted-foreground"
 				>
-					ระบบจะออกหมายเลข ANON-… เมื่อบันทึก
+					{t.cardNumberAnonymousHint}
 				</p>
 			{:else}
 				<Input
-					id="card-number"
+					id={fid('card-number')}
 					value={person_id.number ?? ''}
 					oninput={onCardNumberInput}
 					{disabled}
 					maxlength={cardNumberMax}
 					inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
-					placeholder={activeCardType === 'national_id' ? 'เลข 13 หลัก' : 'เลขที่บัตรประจำตัว'}
+					placeholder={activeCardType === 'national_id'
+						? t.cardNumberPlaceholderNational
+						: t.cardNumberPlaceholderOther}
 					aria-invalid={!!(errors?.cardNumber || errors?.number)}
 					class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
 				/>
@@ -245,14 +314,48 @@
 	<!-- Birth Year, Age, Gender -->
 	<div class="grid gap-3 sm:grid-cols-3">
 		<div class="space-y-1.5">
-			<Label for="birth-year" class="text-xs font-semibold text-foreground">ปีเกิด (พ.ศ.)</Label>
+			<div class="flex items-center justify-between gap-2">
+				<Label for={fid('birth-year')} class="text-xs font-semibold text-foreground">
+					{calendar === 'BE' ? t.birthYearLabelBE : t.birthYearLabelCE}
+				</Label>
+				<div
+					class="inline-flex rounded-md border border-border p-0.5"
+					role="group"
+					aria-label={t.calendarToggleAria}
+				>
+					<button
+						type="button"
+						disabled={disabled}
+						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar ===
+						'BE'
+							? 'bg-primary text-primary-foreground'
+							: 'text-muted-foreground hover:text-foreground'}"
+						aria-pressed={calendar === 'BE'}
+						onclick={() => setCalendar('BE')}
+					>
+						{t.calendarBE}
+					</button>
+					<button
+						type="button"
+						disabled={disabled}
+						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar ===
+						'CE'
+							? 'bg-primary text-primary-foreground'
+							: 'text-muted-foreground hover:text-foreground'}"
+						aria-pressed={calendar === 'CE'}
+						onclick={() => setCalendar('CE')}
+					>
+						{t.calendarCE}
+					</button>
+				</div>
+			</div>
 			<Input
-				id="birth-year"
-				value={birth_year ?? ''}
-				oninput={(e) => updateBirthYear((e.currentTarget as HTMLInputElement).value)}
+				id={fid('birth-year')}
+				value={displayBirthYear}
+				oninput={(e) => updateBirthYearDisplay((e.currentTarget as HTMLInputElement).value)}
 				{disabled}
 				inputmode="numeric"
-				placeholder="เช่น 2535"
+				placeholder={calendar === 'BE' ? t.birthYearPlaceholderBE : t.birthYearPlaceholderCE}
 				aria-invalid={!!(errors?.birthYear || errors?.birth_year)}
 				class="h-9 {errors?.birthYear || errors?.birth_year ? errClass : ''}"
 			/>
@@ -262,14 +365,14 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for="age" class="text-xs font-semibold text-foreground">อายุ (ปี)</Label>
+			<Label for={fid('age')} class="text-xs font-semibold text-foreground">{t.ageLabel}</Label>
 			<Input
-				id="age"
+				id={fid('age')}
 				value={age ?? ''}
 				oninput={(e) => updateAge((e.currentTarget as HTMLInputElement).value)}
 				{disabled}
 				inputmode="numeric"
-				placeholder="เช่น 35"
+				placeholder={t.agePlaceholder}
 				aria-invalid={!!errors?.age}
 				class="h-9 {errors?.age ? errClass : ''}"
 			/>
@@ -279,31 +382,42 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label class="text-xs font-semibold text-foreground">
-				เพศ <span class="text-destructive">*</span>
+			<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
+				{t.genderLabel} <span class="text-destructive">*</span>
 			</Label>
-			<Select.Root
-				type="single"
-				value={gender}
+			<RadioGroup.Root
+				value={genderRadioValue}
 				onValueChange={(val) => {
-					if (val === 'male' || val === 'female' || val === 'other') {
+					if (val === 'male' || val === 'female') {
 						gender = val;
 					}
 				}}
 				{disabled}
+				aria-labelledby={fid('gender-label')}
+				aria-invalid={!!errors?.gender}
+				class="flex flex-wrap gap-3 pt-1"
 			>
-				<Select.Trigger
-					aria-invalid={!!errors?.gender}
-					class="!h-9 w-full rounded-md text-xs {errors?.gender ? errClass : ''}"
+				<label
+					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs {genderRadioValue ===
+					'male'
+						? 'border-primary bg-primary/5 font-semibold'
+						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
+					for={fid('gender-male')}
 				>
-					{genderOptions.find((o) => o.value === gender)?.label ?? 'เลือกเพศ'}
-				</Select.Trigger>
-				<Select.Content>
-					{#each genderOptions as opt (opt.value)}
-						<Select.Item value={opt.value} label={opt.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
+					<RadioGroup.Item value="male" id={fid('gender-male')} class="size-4" />
+					{t.genderMale}
+				</label>
+				<label
+					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs {genderRadioValue ===
+					'female'
+						? 'border-primary bg-primary/5 font-semibold'
+						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
+					for={fid('gender-female')}
+				>
+					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4" />
+					{t.genderFemale}
+				</label>
+			</RadioGroup.Root>
 			{#if errors?.gender}
 				<p class="text-2xs text-destructive">{errors.gender}</p>
 			{/if}
@@ -313,19 +427,19 @@
 	<!-- Nationality & Religion -->
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
-			<Label for="country" class="text-xs font-semibold text-foreground">
-				สัญชาติ <span class="text-destructive">*</span>
+			<Label for={fid('country')} class="text-xs font-semibold text-foreground">
+				{t.countryLabel} <span class="text-destructive">*</span>
 			</Label>
 			<SearchSelect
-				name="country"
-				options={COUNTRIES}
+				name={fid('country')}
+				options={countryOptions}
 				bind:value={country}
-				placeholder="เลือกสัญชาติ"
-				searchPlaceholder="ค้นหาสัญชาติ..."
-				emptyText="ไม่พบสัญชาติ"
+				placeholder={t.countryPlaceholder}
+				searchPlaceholder={t.countrySearch}
+				emptyText={t.countryEmpty}
 				{disabled}
 				class="!h-9 rounded-md text-xs {errors?.country ? errClass : ''}"
-				controlProps={{ id: 'country', 'aria-invalid': !!errors?.country }}
+				controlProps={{ id: fid('country'), 'aria-invalid': !!errors?.country }}
 			/>
 			{#if errors?.country}
 				<p class="text-2xs text-destructive">{errors.country}</p>
@@ -333,25 +447,20 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label class="text-xs font-semibold text-foreground">ศาสนา</Label>
+			<Label class="text-xs font-semibold text-foreground">{t.religionLabel}</Label>
 			<Select.Root
 				type="single"
-				value={religion}
+				value={religionSelectValue}
 				onValueChange={(val) => {
-					if (
-						val === 'buddhist' ||
-						val === 'muslim' ||
-						val === 'christian' ||
-						val === 'other' ||
-						val === 'unknown'
-					) {
-						religion = val;
+					if ((RELIGION_UI_VALUES as readonly string[]).includes(val)) {
+						religion = val as (typeof RELIGION_UI_VALUES)[number];
 					}
 				}}
 				{disabled}
 			>
 				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
-					{religionOptions.find((o) => o.value === religion)?.label ?? 'ไม่ระบุ'}
+					{religionOptions.find((o) => o.value === religionSelectValue)?.label ??
+						t.religionUnknown}
 				</Select.Trigger>
 				<Select.Content>
 					{#each religionOptions as opt (opt.value)}
@@ -362,21 +471,22 @@
 		</div>
 	</div>
 
-	<!-- Phone & No Phone Checkbox -->
+	<!-- Phone -->
 	<div class="space-y-2">
 		<div class="space-y-1.5">
-			<Label for="phone" class="text-xs font-semibold text-foreground">
-				เบอร์โทรศัพท์ {#if !no_phone}<span class="text-destructive">*</span>{/if}
+			<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
+				{t.phoneFieldLabel}
+				{#if !no_phone || hideNoPhone}<span class="text-destructive">*</span>{/if}
 			</Label>
 			<Input
-				id="phone"
+				id={fid('phone')}
 				value={phone}
 				oninput={onPhoneInput}
-				disabled={disabled || no_phone}
+				disabled={disabled || (!hideNoPhone && no_phone)}
 				inputmode="numeric"
 				maxlength={10}
 				autocomplete="tel"
-				placeholder="เบอร์โทรศัพท์ 10 หลัก"
+				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
 				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
@@ -385,19 +495,21 @@
 			{/if}
 		</div>
 
-		<div class="flex items-center gap-2">
-			<Checkbox
-				id="no-phone"
-				checked={no_phone}
-				onCheckedChange={(checked) => {
-					no_phone = !!checked;
-					if (no_phone) phone = '';
-				}}
-				{disabled}
-			/>
-			<Label for="no-phone" class="cursor-pointer text-xs text-muted-foreground">
-				ไม่มีเบอร์โทรศัพท์
-			</Label>
-		</div>
+		{#if !hideNoPhone}
+			<div class="flex items-center gap-2">
+				<Checkbox
+					id={fid('no-phone')}
+					checked={no_phone}
+					onCheckedChange={(checked) => {
+						no_phone = !!checked;
+						if (no_phone) phone = '';
+					}}
+					{disabled}
+				/>
+				<Label for={fid('no-phone')} class="cursor-pointer text-xs text-muted-foreground">
+					{t.noPhone}
+				</Label>
+			</div>
+		{/if}
 	</div>
 </div>

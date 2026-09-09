@@ -12,6 +12,7 @@ import {
 	createMedical as buildMedical,
 	type Evacuee,
 	type EvacueeInput,
+	type EmergencyContact,
 	createHousehold as buildHousehold,
 	isHousehold,
 	type Household,
@@ -41,9 +42,11 @@ import {
 } from '../domain/people';
 import {
 	planFamilyRegistration,
+	type FamilyReportInPayload,
 	type UnifiedRegistrationChannel,
 	type UnifiedRegistrationInput
 } from '../domain/unified-registration';
+import { autoHouseholdLabel } from '../domain/registration-shell';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
@@ -910,6 +913,181 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		await this.refreshDerivedHouseholdStatus(saved.household_id);
 		return saved;
+	}
+
+	async submitFamilyReportIn(
+		payload: FamilyReportInPayload
+	): Promise<{ household: Household; members: Evacuee[] }> {
+		const { householdId, household: householdInput, members: memberInputs, ctx } = payload;
+		let existingHousehold = householdId ? await this.getHousehold(householdId) : null;
+		let savedHousehold: Household;
+
+		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map((p) => {
+			const item: import('../domain/people').PetGroup = {
+				species: p.species,
+				count: Math.max(1, Number(p.count) || 1)
+			};
+			if (p.notes) item.notes = p.notes;
+			if (typeof p.has_cage === 'boolean') item.has_cage = p.has_cage;
+			if (p.image_url) item.image_url = p.image_url;
+			return item;
+		});
+
+		const normalizedVehicles: import('../domain/people').HouseholdVehicle[] = (
+			householdInput.vehicles ?? []
+		).map((v) => ({
+			type: v.type,
+			license_plate: v.license_plate ?? null
+		}));
+
+		if (!existingHousehold) {
+			const headName = formatPersonName(
+				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้ประสบภัย', last_name: '' }
+			);
+			const label = autoHouseholdLabel(headName);
+			savedHousehold = await this.createHousehold(
+				{
+					label,
+					head_evacuee_id: memberInputs[0]?._id ?? null,
+					status: 'arriving',
+					checkout_destination: null,
+					municipality_zone: null,
+					community: null,
+					housing_type: householdInput.housing_type ?? null,
+					residence_landmark: householdInput.residence_landmark ?? null,
+					address_no:
+						householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+					village_no: householdInput.village_no ?? null,
+					subdistrict: householdInput.subdistrict ?? null,
+					district: householdInput.district ?? null,
+					province: householdInput.province ?? null,
+					postal_code: householdInput.postal_code ?? null,
+					pets: normalizedPets,
+					vehicles: normalizedVehicles,
+					assets: householdInput.assets
+						? {
+								description: householdInput.assets.description ?? '',
+								image_url: householdInput.assets.image_url ?? null
+							}
+						: null,
+					notes: ''
+				},
+				ctx
+			);
+		} else {
+			const updatedHouseholdDoc: Household = touch({
+				...existingHousehold,
+				housing_type: householdInput.housing_type ?? null,
+				residence_landmark: householdInput.residence_landmark ?? null,
+				address_no:
+					householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+				village_no: householdInput.village_no ?? null,
+				subdistrict: householdInput.subdistrict ?? null,
+				district: householdInput.district ?? null,
+				province: householdInput.province ?? null,
+				postal_code: householdInput.postal_code ?? null,
+				pets: normalizedPets,
+				vehicles: normalizedVehicles,
+				assets: householdInput.assets
+					? {
+							description: householdInput.assets.description ?? '',
+							image_url: householdInput.assets.image_url ?? null
+						}
+					: null
+			});
+			savedHousehold = await this.repo.put(updatedHouseholdDoc);
+		}
+
+		const effectiveHouseholdId = savedHousehold._id;
+
+		const reportedInMembers: Evacuee[] = [];
+		const allSavedMembers: Evacuee[] = [];
+
+		for (const m of memberInputs) {
+			const willReportIn = Boolean(m.reporting_in);
+			if (m._id) {
+				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
+				if (!existingEvacuee || !isEvacuee(existingEvacuee)) {
+					throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
+				}
+
+				let updatedStay = existingEvacuee.current_stay;
+				if (willReportIn && existingEvacuee.current_stay.status === 'pre_registered') {
+					updatedStay = {
+						status: 'arriving' as const,
+						zone: null,
+						since: now()
+					};
+				}
+
+				const parsedBirthYear =
+					typeof m.birth_year === 'number'
+						? m.birth_year
+						: typeof m.birth_year === 'string' && m.birth_year
+							? Number(m.birth_year)
+							: undefined;
+				const parsedAge =
+					typeof m.age === 'number'
+						? m.age
+						: typeof m.age === 'string' && m.age
+							? Number(m.age)
+							: undefined;
+
+				const parsedPersonId = m.person_id?.cardType
+					? { cardType: m.person_id.cardType, number: m.person_id.number ?? '' }
+					: existingEvacuee.person_id;
+
+				const parsedEmergencyContact: EmergencyContact | undefined = m.emergency_contact
+					? {
+							name: m.emergency_contact.name ?? '',
+							phone: m.emergency_contact.phone ?? '',
+							relation: m.emergency_contact.relation ?? ''
+						}
+					: existingEvacuee.emergency_contact;
+
+				const updatedEvacuee: Evacuee = touch({
+					...existingEvacuee,
+					first_name: m.first_name,
+					last_name: m.last_name ?? '',
+					gender: m.gender,
+					phone: m.phone ?? null,
+					nickname: m.nickname ?? existingEvacuee.nickname,
+					birth_year: parsedBirthYear,
+					age: parsedAge,
+					person_id: parsedPersonId,
+					emergency_contact: parsedEmergencyContact,
+					vulnerable_groups: m.vulnerable_groups ?? [],
+					special_needs: m.special_needs ?? [],
+					photo: m.photo ?? existingEvacuee.photo,
+					country: m.country ?? existingEvacuee.country,
+					religion: m.religion ?? existingEvacuee.religion,
+					current_stay: updatedStay
+				});
+
+				const saved = await this.repo.put(updatedEvacuee);
+				allSavedMembers.push(saved);
+				if (willReportIn) {
+					reportedInMembers.push(saved);
+				}
+			} else {
+				const newEvacueeInput: EvacueeInput = {
+					...m,
+					household_id: effectiveHouseholdId,
+					status: 'arriving',
+					registered_via: 'staff'
+				};
+				const saved = await this.createEvacuee(newEvacueeInput, ctx);
+				allSavedMembers.push(saved);
+				reportedInMembers.push(saved);
+			}
+		}
+
+		await this.refreshDerivedHouseholdStatus(effectiveHouseholdId);
+
+		return {
+			household: savedHousehold,
+			members: reportedInMembers.length > 0 ? reportedInMembers : allSavedMembers
+		};
 	}
 }
 

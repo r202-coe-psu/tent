@@ -16,6 +16,7 @@ export {
 	createHousehold,
 	evacueeInputSchema,
 	householdInputSchema,
+	isBlankEmergencyContact,
 	migrateVulnerableGroupCodes,
 	admissionSupportsVulnerableGroup
 } from './domain/people';

@@ -8,10 +8,10 @@ import {
 	fetchShelterPolicy,
 	fetchSubdistricts,
 	lookupBooking,
-	type PublicUnifiedBookingPayload
+	type PublicUnifiedBookingPayload,
+	type PublicUnassignedRegistrationPayload
 } from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
-import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
 
 export const publicRegisterKeys = {
 	all: ['public-register'] as const,
@@ -40,11 +40,11 @@ export function useBookingLookup() {
 }
 
 /**
- * Public Pre-registration without a shelter (CR-113). Mutation — never cache/replay create.
+ * Public Pre-registration without a shelter (CR-113 / #255). Mutation — never cache/replay create.
  */
 export function useCreateUnassignedRegistration() {
 	return createMutation(() => ({
-		mutationFn: (input: UnassignedRegistrationInput) => createUnassignedRegistration(input)
+		mutationFn: (input: PublicUnassignedRegistrationPayload) => createUnassignedRegistration(input)
 	}));
 }
 

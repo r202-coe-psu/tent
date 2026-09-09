@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render } from 'svelte/server';
 import {
 	PersonalInfoFields,
@@ -11,8 +11,13 @@ import {
 	ZoneSelectionFields,
 	SPECIAL_NEEDS_COMMON_TAGS
 } from './index.js';
+import { languageStore } from '$lib/stores/language.svelte';
 
 describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)', () => {
+	afterEach(() => {
+		languageStore.setLanguage('th');
+	});
+
 	describe('Module Exports', () => {
 		it('exports all 8 required form sub-components and constants', () => {
 			expect(PersonalInfoFields).toBeDefined();
@@ -47,6 +52,102 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('นามสกุล');
 			expect(result.body).toContain('สมศรี');
 			expect(result.body).toContain('มีสุข');
+			expect(result.body).toContain('ชาย');
+			expect(result.body).toContain('หญิง');
+			expect(result.body).toContain('value="male"');
+			expect(result.body).toContain('value="female"');
+			// Gender radios only — no third "อื่น" option in the radio group.
+			expect(result.body).not.toContain('value="other"');
+		});
+
+		it('renders English placeholders and options when locale is en', () => {
+			languageStore.setLanguage('en');
+			const result = render(PersonalInfoFields, {
+				props: {
+					first_name: 'Somchai',
+					last_name: 'Meesuk',
+					phone: '0812345678',
+					birth_year: '2535',
+					age: '35',
+					gender: 'male',
+					religion: 'buddhist',
+					country: 'THAILAND',
+					person_id: { cardType: 'national_id', number: '' }
+				}
+			});
+			expect(result.body).toContain('First Name');
+			expect(result.body).toContain('Last Name');
+			expect(result.body).toContain('Given name');
+			expect(result.body).toContain('e.g. Meesuk');
+			expect(result.body).toContain('Nickname (optional)');
+			expect(result.body).toContain('Male');
+			expect(result.body).toContain('Female');
+			expect(result.body).toContain('Thai National ID');
+			expect(result.body).toContain('13 digits');
+			expect(result.body).toContain('Buddhist');
+			expect(result.body).toContain('C.E.');
+			expect(result.body).toContain('B.E.');
+			expect(result.body).toContain('No phone number');
+			expect(result.body).toContain('Thailand');
+			expect(result.body).toContain('Nationality');
+			expect(result.body).not.toContain('ชื่อจริง');
+			expect(result.body).not.toContain('เช่น มีสุข');
+			expect(result.body).not.toContain('ไม่มีเบอร์โทรศัพท์');
+			expect(result.body).not.toContain('เลข 13 หลัก');
+			expect(result.body).not.toContain('>ไทย<');
+		});
+
+		it('shows religion label defaulting to ไม่ระบุ (options live in Select portal)', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					religion: 'unknown',
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toContain('ศาสนา');
+			expect(result.body).toContain('ไม่ระบุ');
+			// Closed Select SSR only renders the trigger — no portal items / no「อื่นๆ」trigger.
+			expect(result.body).not.toMatch(/ศาสนา[\s\S]{0,400}อื่น\s*ๆ/);
+		});
+
+		it('maps legacy religion other to ไม่ระบุ on the trigger', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					religion: 'other',
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toContain('ไม่ระบุ');
+		});
+
+		it('shows BE/CE calendar toggle labels', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					birth_year: 2535,
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toMatch(/พ\.ศ\.|ค\.ศ\./);
+		});
+
+		it('hides no-phone checkbox when hideNoPhone is set', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: true,
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).not.toContain('ไม่มีเบอร์โทรศัพท์');
+		});
+
+		it('shows no-phone checkbox by default (onsite / non-head)', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: false,
+					phone: ''
+				}
+			});
+			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
 		});
 
 		it('sets card-number maxlength from selected card type', () => {

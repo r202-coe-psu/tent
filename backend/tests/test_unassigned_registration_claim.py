@@ -14,7 +14,11 @@ from tent_model.unassigned_registration import (
     UnassignedRegistration,
 )
 
-from apiapp.core.staff_session import StaffSession, require_registration_staff
+from apiapp.core.staff_session import (
+    StaffSession,
+    require_registration_staff,
+    require_shelter_scoped_staff,
+)
 from apiapp.modules.unassigned_registrations.couch_birth import (
     EVACUEE_SCHEMA_V,
     HOUSEHOLD_SCHEMA_V,
@@ -54,10 +58,15 @@ def couch_birth() -> InMemoryCouchBirth:
 async def authed_client(
     client: AsyncClient, app, staff_session: StaffSession, couch_birth: InMemoryCouchBirth
 ):
+    # Claim uses require_registration_staff; post-claim search uses the wider
+    # require_shelter_scoped_staff (#251). Override both so partial-claim tests
+    # can assert the open member remains searchable without a real Couch cookie.
     app.dependency_overrides[require_registration_staff] = lambda: staff_session
+    app.dependency_overrides[require_shelter_scoped_staff] = lambda: staff_session
     app.dependency_overrides[get_couch_birth] = lambda: couch_birth
     yield client
     app.dependency_overrides.pop(require_registration_staff, None)
+    app.dependency_overrides.pop(require_shelter_scoped_staff, None)
     app.dependency_overrides.pop(get_couch_birth, None)
 
 
@@ -354,3 +363,150 @@ async def test_claim_rejects_empty_member_ids(authed_client: AsyncClient) -> Non
         json={"member_ids": []},
     )
     assert response.status_code == 422
+
+
+async def test_claim_copies_nickname_religion_and_emergency_contact(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    """#255 — claim copies expanded public fields into Couch Evacuee."""
+    from tent_model.unassigned_registration import EmergencyContact
+
+    members = [
+        UnassignedMember(
+            reserved_evacuee_id=f"evacuee:{new_ulid()}",
+            status="open",
+            first_name="สมชาย",
+            last_name="ใจดี",
+            gender="male",
+            phone="0812345678",
+            person_id=PersonId(cardType="national_id", number="1234567890123"),
+            country="THAILAND",
+            nickname="ชาย",
+            religion="buddhist",
+            emergency_contact=EmergencyContact(
+                name="สมหญิง", phone="0899999999", relation="คู่สมรส"
+            ),
+        )
+    ]
+    doc = UnassignedRegistration(
+        id=new_ulid(),
+        schema_v=2,
+        reserved_household_id=f"household:{new_ulid()}",
+        members=members,
+        household=UnassignedHousehold(
+            housing_type="owned_house",
+            address_no="123/45",
+            subdistrict="คอหงส์",
+            district="หาดใหญ่",
+            province="สงขลา",
+            postal_code="90110",
+            pets=[],
+        ),
+        status="open",
+        registered_via="web",
+        created_at=datetime.now(UTC),
+        open_person_id_numbers=["1234567890123"],
+        open_phones=["0812345678"],
+    )
+    await doc.insert()
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [members[0].reserved_evacuee_id]},
+    )
+    assert response.status_code == 200
+    born = couch_birth.docs_for("SH001")
+    evacuee = born[members[0].reserved_evacuee_id]
+    assert evacuee["nickname"] == "ชาย"
+    assert evacuee["religion"] == "buddhist"
+    assert evacuee["emergency_contact"] == {
+        "name": "สมหญิง",
+        "phone": "0899999999",
+        "relation": "คู่สมรส",
+    }
+
+
+async def test_claim_resolves_pet_gridfs_image_url(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#255 pet photo — claim births Couch image + sets household.pets[].image_url."""
+    from tent_model.unassigned_registration import UnassignedPet
+
+    from apiapp.infrastructure.gridfs import LoadedUnassignedPhoto
+    from apiapp.modules.unassigned_registrations import use_case as claim_use_case
+
+    async def fake_load(photo_id: str) -> LoadedUnassignedPhoto | None:
+        if photo_id != "gfs:507f1f77bcf86cd799439012":
+            return None
+        return LoadedUnassignedPhoto(
+            full_bytes=b"pet-full",
+            thumb_bytes=b"pet-thumb",
+            content_type="image/webp",
+            filename="pet.webp",
+            width=100,
+            height=80,
+            original_size=200,
+            compressed_size=50,
+            thumbnail_size=20,
+        )
+
+    monkeypatch.setattr(claim_use_case, "load_unassigned_photo", fake_load)
+
+    members = [
+        UnassignedMember(
+            reserved_evacuee_id=f"evacuee:{new_ulid()}",
+            status="open",
+            first_name="สมชาย",
+            last_name="ใจดี",
+            gender="male",
+            phone="0812345678",
+            person_id=PersonId(cardType="national_id", number="1234567890123"),
+            country="THAILAND",
+        )
+    ]
+    household_id = f"household:{new_ulid()}"
+    doc = UnassignedRegistration(
+        id=new_ulid(),
+        schema_v=2,
+        reserved_household_id=household_id,
+        members=members,
+        household=UnassignedHousehold(
+            housing_type="owned_house",
+            address_no="123/45",
+            subdistrict="คอหงส์",
+            district="หาดใหญ่",
+            province="สงขลา",
+            postal_code="90110",
+            pets=[
+                UnassignedPet(
+                    species="dog",
+                    count=1,
+                    has_cage=True,
+                    image_url="gfs:507f1f77bcf86cd799439012",
+                )
+            ],
+        ),
+        status="open",
+        registered_via="web",
+        created_at=datetime.now(UTC),
+        open_person_id_numbers=["1234567890123"],
+        open_phones=["0812345678"],
+    )
+    await doc.insert()
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [members[0].reserved_evacuee_id]},
+    )
+    assert response.status_code == 200
+    born = couch_birth.docs_for("SH001")
+    household = born[household_id]
+    assert len(household["pets"]) == 1
+    pet_image = household["pets"][0]["image_url"]
+    assert pet_image.startswith("image:")
+    assert pet_image in born
+    atts = couch_birth.attachments_for("SH001")
+    assert atts[pet_image]["full"] == b"pet-full"

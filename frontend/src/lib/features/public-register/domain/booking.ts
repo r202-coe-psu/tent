@@ -419,7 +419,11 @@ export type PublicBookingErrorCode =
 	| 'CAPACITY_EXCEEDED'
 	| 'DUPLICATE_HOLD'
 	| 'BOOKING_NOT_FOUND'
-	| 'WRITE_FAILED';
+	| 'WRITE_FAILED'
+	| 'SHELTER_REQUIRED'
+	| 'EMPTY_PHOTO'
+	| 'PHOTO_TOO_LARGE'
+	| 'INVALID_INPUT';
 
 const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	RATE_LIMITED: 'มีการส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -431,7 +435,11 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	DUPLICATE_HOLD:
 		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
 	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
-	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
+	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
+	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',
+	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่'
 };
 
 export function publicBookingErrorMessage(code: unknown): string {

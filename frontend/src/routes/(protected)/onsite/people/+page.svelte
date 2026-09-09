@@ -30,9 +30,15 @@
 		STATUS_LABELS,
 		REPORT_IN_CTA_LABEL,
 		Station1IntakeSearch,
+		lookupFederatedByScanCode,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -49,6 +55,7 @@
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const queryClient = useQueryClient();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -97,6 +104,9 @@
 	let sheetOpen = $state(false);
 	/** Shared with Station1IntakeSearch — hide header new-reg while hard-gate locks. */
 	let newRegistrationLocked = $state(false);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+	let lookupInFlight = $state(false);
 
 	const NEXT_QUEUE_CHIPS = new Set<StatusChip>(['รอแพทย์', 'รอโซน', 'รอยืนยันถึงโซน', 'พักแล้ว']);
 
@@ -180,18 +190,30 @@
 		return 'outline';
 	}
 
-	function handleCodeInput(raw: string) {
-		const trimmed = raw.trim();
-		if (!trimmed) return;
-		const found = allEvacuees.find((e) => e._id === trimmed || e.person_id?.number === trimmed);
-		if (found) {
-			toast.success(`พบ: ${formatPersonName(found)}`);
+	async function handleCodeInput(raw: string) {
+		if (lookupInFlight) return;
+		lookupInFlight = true;
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, raw);
+			if (!result) {
+				toast.error('ไม่พบผู้ประสบภัยจากรหัสที่สแกน');
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
-			openRow(found);
-			return;
+			if (result.source === 'couch') {
+				toast.success(`พบ: ${formatPersonName(result.evacuee)}`);
+				openRow(result.evacuee);
+				return;
+			}
+			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+			claimHit = result.hit;
+			claimOpen = true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+		} finally {
+			lookupInFlight = false;
 		}
-		toast.error('ไม่พบผู้ประสบภัยจากรหัสที่สแกน');
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -610,3 +632,9 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>

@@ -31,11 +31,13 @@ import type {
 	ScreeningInput
 } from '../domain/people';
 import type {
+	FamilyReportInPayload,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
 import { canCancelHold } from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
+import { extractScanLookupToken, toCouchEvacueeId } from '../domain/scan-lookup';
 
 // Every key includes the active shelter code so switching the back-office
 // shelter selector (shelterStore.selectedShelterCode) invalidates and
@@ -301,35 +303,49 @@ export const useRecordMovement = () => {
 	}));
 };
 
-/** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
+/**
+ * Couch-only one-shot lookup (shelter SoR). Prefer {@link lookupFederatedByScanCode}
+ * for scanners that must also resolve unassigned ticket QR codes.
+ * Always hits Couch (bypasses TanStack staleTime cache for scan misses).
+ */
 export async function lookupEvacueeByScanCode(
 	queryClient: QueryClient,
 	code: string
 ): Promise<Evacuee | null> {
-	const cleanCode = code.trim();
-	if (!cleanCode) return null;
+	const token = extractScanLookupToken(code);
+	if (!token) return null;
 
-	let lookupId = cleanCode;
-	if (!lookupId.startsWith('evacuee:')) {
-		lookupId = `evacuee:${cleanCode}`;
-	}
+	const lookupId = toCouchEvacueeId(token);
+	const repo = peopleRepository();
 
 	try {
-		const byId = await queryClient.fetchQuery({
-			queryKey: peopleKeys.evacuee(lookupId),
-			queryFn: () => peopleRepository().getEvacuee(lookupId)
-		});
-		if (byId) return byId;
+		const byId = await repo.getEvacuee(lookupId);
+		if (byId) {
+			queryClient.setQueryData(peopleKeys.evacuee(byId._id), byId);
+			void queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			return byId;
+		}
 	} catch {
 		// Ignore direct ID fetch errors and fall through to search.
 	}
 
-	const matches = await queryClient.fetchQuery({
-		queryKey: peopleKeys.evacueesSearch(cleanCode),
-		queryFn: () => peopleRepository().searchEvacuees(cleanCode)
-	});
-	return matches[0] ?? null;
+	const matches = await repo.searchEvacuees(token);
+	const hit = matches[0] ?? null;
+	if (hit) {
+		queryClient.setQueryData(peopleKeys.evacuee(hit._id), hit);
+		void queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+	}
+	return hit;
 }
+
+export {
+	lookupFederatedByScanCode,
+	lookupFederatedByScanCodeWithDeps,
+	type FederatedScanHit,
+	type FederatedScanCouchHit,
+	type FederatedScanUnassignedHit,
+	type FederatedScanLookupDeps
+} from './federated-scan-lookup';
 
 export const useHouseholds = () =>
 	createQuery(() => ({
@@ -405,6 +421,21 @@ export const useCreateFamilyRegistration = () => {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+/** Station 1 Unified Report-in: update household & members, promote arriving (#249). */
+export const useSubmitFamilyReportIn = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (payload: FamilyReportInPayload) =>
+			peopleRepository().submitFamilyReportIn(payload),
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(result.household._id) });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
 		}
 	}));

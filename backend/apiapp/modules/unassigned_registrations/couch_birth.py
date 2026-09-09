@@ -1,8 +1,9 @@
-"""Couch SoR birth for claimed Unassigned Registration members (CR-113 / #247)."""
+"""Couch SoR birth for claimed Unassigned Registration members (CR-113 / #247 / #255)."""
 
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -17,10 +18,21 @@ _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unkn
 # Couch SoR schema versions at claim birth (CR-112 / schema.md) — keep local to birth.
 HOUSEHOLD_SCHEMA_V = 5
 EVACUEE_SCHEMA_V = 10
+IMAGE_SCHEMA_V = 1
 
 
 class CouchBirthError(Exception):
     """Raised when shelter Couch write fails during claim."""
+
+
+@dataclass(frozen=True, slots=True)
+class CouchImagePayload:
+    """Couch `image:{ulid}` doc + attachment bytes (schema.md §1.6)."""
+
+    doc: dict
+    full_bytes: bytes
+    thumb_bytes: bytes
+    content_type: str
 
 
 class CouchBirthPort(Protocol):
@@ -31,8 +43,9 @@ class CouchBirthPort(Protocol):
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        image_payloads: list[CouchImagePayload] | None = None,
     ) -> None:
-        """Write household (if absent) + evacuees into shelter_{code}."""
+        """Write household (if absent) + evacuees (+ optional images) into shelter_{code}."""
 
 
 def shelter_db_name(shelter_code: str) -> str:
@@ -58,9 +71,24 @@ def build_couch_household(
     shelter_code: str,
     actor: str,
     now: datetime,
+    *,
+    pet_image_urls: dict[int, str] | None = None,
 ) -> dict:
     hh = doc.household
     ts = _iso(now)
+    pets_out: list[dict] = []
+    for index, pet in enumerate(hh.pets):
+        pet_body: dict = {
+            "species": pet.species,
+            "count": pet.count,
+            "has_cage": pet.has_cage,
+        }
+        if pet.notes:
+            pet_body["notes"] = pet.notes
+        image_url = (pet_image_urls or {}).get(index)
+        if image_url:
+            pet_body["image_url"] = image_url
+        pets_out.append(pet_body)
     return {
         "_id": doc.reserved_household_id,
         "type": "household",
@@ -75,15 +103,7 @@ def build_couch_household(
         "checkout_destination": None,
         "municipality_zone": None,
         "community": None,
-        "pets": [
-            {
-                "species": pet.species,
-                "count": pet.count,
-                **({"notes": pet.notes} if pet.notes else {}),
-                "has_cage": pet.has_cage,
-            }
-            for pet in hh.pets
-        ],
+        "pets": pets_out,
         "assets": None,
         "vehicles": [],
         "housing_type": hh.housing_type,
@@ -97,6 +117,41 @@ def build_couch_household(
     }
 
 
+def build_couch_image(
+    *,
+    image_id: str,
+    shelter_code: str,
+    actor: str,
+    now: datetime,
+    filename: str,
+    content_type: str,
+    width: int,
+    height: int,
+    original_size: int,
+    compressed_size: int,
+    thumbnail_size: int,
+    caption: str = "",
+) -> dict:
+    ts = _iso(now)
+    return {
+        "_id": image_id,
+        "type": "image",
+        "schema_v": IMAGE_SCHEMA_V,
+        "shelter_code": shelter_code,
+        "created_at": ts,
+        "updated_at": ts,
+        "created_by": actor,
+        "filename": filename,
+        "content_type": content_type,
+        "width": width,
+        "height": height,
+        "original_size": original_size,
+        "compressed_size": compressed_size,
+        "thumbnail_size": thumbnail_size,
+        "caption": caption,
+    }
+
+
 def build_couch_evacuee(
     member: UnassignedMember,
     household_id: str,
@@ -104,6 +159,8 @@ def build_couch_evacuee(
     actor: str,
     now: datetime,
     doc: UnassignedRegistration,
+    *,
+    photo: str | None = None,
 ) -> dict:
     ts = _iso(now)
     person_id = None
@@ -147,7 +204,50 @@ def build_couch_evacuee(
         body["nickname"] = member.nickname
     if member.religion and member.religion in _RELIGION_ALLOWED:
         body["religion"] = member.religion
+    if member.emergency_contact is not None:
+        body["emergency_contact"] = {
+            "name": member.emergency_contact.name,
+            "phone": member.emergency_contact.phone,
+            "relation": member.emergency_contact.relation,
+        }
+    if photo:
+        body["photo"] = photo
     return body
+
+
+async def _put_attachment(
+    client: httpx.AsyncClient,
+    *,
+    couch_url: str,
+    db: str,
+    doc_id: str,
+    rev: str,
+    name: str,
+    data: bytes,
+    content_type: str,
+    headers: dict[str, str],
+) -> str:
+    response = await client.put(
+        f"{couch_url}/{db}/{doc_id}/{name}",
+        params={"rev": rev},
+        headers={
+            **headers,
+            "Content-Type": content_type,
+        },
+        content=data,
+    )
+    if response.status_code >= 400:
+        raise CouchBirthError(
+            f"Couch attachment put failed for {doc_id}/{name}: HTTP {response.status_code}"
+        )
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise CouchBirthError("Couch attachment put returned invalid JSON") from exc
+    rev_out = body.get("rev")
+    if not isinstance(rev_out, str) or not rev_out:
+        raise CouchBirthError(f"Couch attachment put missing rev for {doc_id}/{name}")
+    return rev_out
 
 
 class HttpCouchBirth:
@@ -160,6 +260,7 @@ class HttpCouchBirth:
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        image_payloads: list[CouchImagePayload] | None = None,
     ) -> None:
         couch_url = (settings.COUCHDB_URL or "").rstrip("/")
         if not couch_url:
@@ -185,6 +286,10 @@ class HttpCouchBirth:
                     raise CouchBirthError(
                         f"Could not read household in {db}: HTTP {existing.status_code}"
                     )
+
+                # Image metadata docs go in the same bulk write; attachments follow.
+                for payload in image_payloads or []:
+                    docs.append(payload.doc)
 
                 response = await client.post(
                     f"{couch_url}/{db}/_bulk_docs",
@@ -217,17 +322,63 @@ class HttpCouchBirth:
             )
             raise CouchBirthError(f"Couch bulk write row failures: {detail}")
 
+        if not image_payloads:
+            return
+
+        rev_by_id = {
+            row["id"]: row["rev"]
+            for row in results
+            if isinstance(row, dict) and row.get("id") and row.get("rev") and not row.get("error")
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=_COUCH_TIMEOUT_SECONDS) as client:
+                for payload in image_payloads:
+                    doc_id = payload.doc["_id"]
+                    rev = rev_by_id.get(doc_id)
+                    if not rev:
+                        # conflict / already present — skip attachments (idempotent retry).
+                        continue
+                    rev = await _put_attachment(
+                        client,
+                        couch_url=couch_url,
+                        db=db,
+                        doc_id=doc_id,
+                        rev=rev,
+                        name="full",
+                        data=payload.full_bytes,
+                        content_type=payload.content_type,
+                        headers=headers,
+                    )
+                    await _put_attachment(
+                        client,
+                        couch_url=couch_url,
+                        db=db,
+                        doc_id=doc_id,
+                        rev=rev,
+                        name="thumb",
+                        data=payload.thumb_bytes,
+                        content_type=payload.content_type,
+                        headers=headers,
+                    )
+        except httpx.HTTPError as exc:
+            raise CouchBirthError(f"Couch image attachment write failed: {exc}") from exc
+
 
 class InMemoryCouchBirth:
     """Test double — records born docs per shelter without talking to Couch."""
 
     def __init__(self) -> None:
         self._docs: dict[str, dict[str, dict]] = {}
+        self._attachments: dict[str, dict[str, dict[str, bytes]]] = {}
         self.write_counts: dict[str, dict[str, int]] = {}
         self.fail_next: CouchBirthError | None = None
 
     def docs_for(self, shelter_code: str) -> dict[str, dict]:
         return dict(self._docs.get(shelter_code, {}))
+
+    def attachments_for(self, shelter_code: str) -> dict[str, dict[str, bytes]]:
+        return dict(self._attachments.get(shelter_code, {}))
 
     async def birth(
         self,
@@ -236,6 +387,7 @@ class InMemoryCouchBirth:
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        image_payloads: list[CouchImagePayload] | None = None,
     ) -> None:
         if self.fail_next is not None:
             err = self.fail_next
@@ -254,6 +406,14 @@ class InMemoryCouchBirth:
                 continue
             shelter_docs[doc_id] = deepcopy(doc)
             counts[doc_id] = counts.get(doc_id, 0) + 1
+        for payload in image_payloads or []:
+            doc_id = payload.doc["_id"]
+            if doc_id not in shelter_docs:
+                shelter_docs[doc_id] = deepcopy(payload.doc)
+                counts[doc_id] = counts.get(doc_id, 0) + 1
+            atts = self._attachments.setdefault(shelter_code, {}).setdefault(doc_id, {})
+            atts["full"] = payload.full_bytes
+            atts["thumb"] = payload.thumb_bytes
 
 
 def get_couch_birth() -> CouchBirthPort:

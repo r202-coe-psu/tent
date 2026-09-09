@@ -11,6 +11,9 @@
 	import { useMasterData } from '$lib/features/master-data';
 	import { useDistricts, useProvinces, useSubdistricts } from '$lib/features/shelters';
 	import { resolveCurrentThaiLocation } from '$lib/utils/nominatim';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	let {
 		housing_type = $bindable('owned_house'),
@@ -47,6 +50,8 @@
 		};
 	} = $props();
 
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
 			return fn();
@@ -78,18 +83,35 @@
 		fallbackQueryResult as unknown as ReturnType<typeof useSubdistricts>
 	);
 
-	const DEFAULT_HOUSING_TYPES: { value: string; label: string }[] = [
-		{ value: 'owned_house', label: 'บ้านตนเอง' },
-		{ value: 'rented_house', label: 'บ้านเช่า' },
-		{ value: 'condo', label: 'คอนโด' },
-		{ value: 'apartment_dorm', label: 'อพาร์ตเมนต์ / หอพัก' },
-		{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
-	];
+	function housingLabelForCode(code: string, fallback: string): string {
+		switch (code) {
+			case 'owned_house':
+				return t.housingOwned;
+			case 'rented_house':
+				return t.housingRented;
+			case 'condo':
+				return t.housingCondo;
+			case 'apartment_dorm':
+				return t.housingApartment;
+			case 'homeless':
+				return t.housingHomeless;
+			default:
+				return fallback;
+		}
+	}
+
+	const DEFAULT_HOUSING_TYPES = $derived([
+		{ value: 'owned_house', label: t.housingOwned },
+		{ value: 'rented_house', label: t.housingRented },
+		{ value: 'condo', label: t.housingCondo },
+		{ value: 'apartment_dorm', label: t.housingApartment },
+		{ value: 'homeless', label: t.housingHomeless }
+	]);
 
 	const housingTypeItems = $derived.by(() => {
 		const masterItems = (housingTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }));
+			.map((i) => ({ value: i.code, label: housingLabelForCode(i.code, i.label) }));
 		return masterItems.length > 0 ? masterItems : DEFAULT_HOUSING_TYPES;
 	});
 
@@ -111,30 +133,34 @@
 	const isCondo = $derived(housing_type === 'condo');
 
 	const addressNoLabel = $derived(
-		isApartmentDorm ? 'เลขห้อง / ห้องเลขที่' : isCondo ? 'เลขห้อง / บ้านเลขที่' : 'บ้านเลขที่'
+		isApartmentDorm
+			? t.addressNoApartmentLabel
+			: isCondo
+				? t.addressNoCondoLabel
+				: t.addressNoLabel
 	);
 	const addressNoPlaceholder = $derived(
 		isApartmentDorm
-			? 'เช่น ห้อง 402 หรือ อาคาร B ชั้น 3'
+			? t.addressNoApartmentPlaceholder
 			: isCondo
-				? 'เช่น 123/45 ห้อง 402'
-				: 'เช่น 123/45'
+				? t.addressNoCondoPlaceholder
+				: t.addressNoPlaceholder
 	);
 	const landmarkLabel = $derived(
 		isApartmentDorm
-			? 'ชื่อหอพัก / อพาร์ตเมนต์ หรือจุดสังเกต'
+			? t.landmarkLabelApartment
 			: isCondo
-				? 'ชื่อคอนโด / อาคาร หรือจุดสังเกต'
-				: 'จุดสังเกตที่อยู่'
+				? t.landmarkLabelCondo
+				: t.landmarkLabelDefault
 	);
 	const landmarkPlaceholder = $derived(
 		isHomeless
-			? 'เช่น ริมคลองข้างตลาด'
+			? t.landmarkPlaceholderHomeless
 			: isApartmentDorm
-				? 'เช่น หอพักสุขใจ หรือ อาคาร C'
+				? t.landmarkPlaceholderApartment
 				: isCondo
-					? 'เช่น คอนโด A ซอยสุขุมวิท 21'
-					: 'เช่น ใกล้สะพาน / ปากซอย'
+					? t.landmarkPlaceholderCondo
+					: t.landmarkPlaceholderDefault
 	);
 
 	const addressRequired = $derived(required && !isHomeless);
@@ -198,7 +224,7 @@
 		try {
 			const loc = await resolveCurrentThaiLocation();
 			if (!loc.province) {
-				toast.error('ไม่สามารถระบุจังหวัดจากพิกัดปัจจุบันได้');
+				toast.error(t.locateNoProvince);
 				return;
 			}
 
@@ -220,7 +246,7 @@
 				.filter(Boolean)
 				.join(' ');
 
-			toast.success('ระบุตำแหน่งปัจจุบันเรียบร้อยแล้ว', {
+			toast.success(t.locateSuccess, {
 				description: parts || loc.display_name
 			});
 		} catch (err: unknown) {
@@ -229,10 +255,7 @@
 					? (err as { reason?: string }).reason
 					: undefined;
 			const message = err instanceof Error ? err.message : undefined;
-			const msg =
-				reason === 'denied'
-					? 'กรุณาอนุญาตการเข้าถึงตำแหน่งที่ตั้ง (Location) ในเบราว์เซอร์'
-					: message || 'ไม่สามารถระบุตำแหน่งปัจจุบันได้';
+			const msg = reason === 'denied' ? t.locateDenied : message || t.locateFail;
 			toast.error(msg);
 		} finally {
 			isLocating = false;
@@ -245,7 +268,7 @@
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
 			<Label for="housing-type" class="text-xs font-semibold text-foreground">
-				ประเภทที่อยู่อาศัย
+				{t.housingTypeLabel}
 			</Label>
 			<Select.Root
 				type="single"
@@ -254,7 +277,7 @@
 			>
 				<Select.Trigger id="housing-type" class={selectTriggerClass}>
 					{housingTypeItems.find((o) => o.value === housing_type)?.label ??
-						'— เลือกประเภทที่อยู่อาศัย —'}
+						t.housingTypePlaceholder}
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}
@@ -271,7 +294,7 @@
 			<Label for="residence-landmark" class="text-xs font-semibold text-foreground">
 				{landmarkLabel}
 				{#if isHomeless}<span class="font-normal text-muted-foreground"
-						>(จำเป็นถ้าไม่มีที่ตั้งครบ)</span
+						>{t.landmarkRequiredIfNoLocation}</span
 					>{/if}
 			</Label>
 			<Input
@@ -310,13 +333,13 @@
 
 		<div class="space-y-1.5">
 			<Label for="village-no" class="text-xs font-semibold text-foreground">
-				หมู่ที่ / ตรอก / ซอย / ถนน
+				{t.villageNoLabel}
 			</Label>
 			<Input
 				id="village-no"
 				bind:value={village_no}
 				{disabled}
-				placeholder="เช่น หมู่ 2 ถนนมิตรภาพ"
+				placeholder={t.villageNoPlaceholder}
 				class="h-9"
 			/>
 			{#if errors?.village_no}
@@ -328,7 +351,7 @@
 	<!-- Administrative area & Postal Code -->
 	<div class="space-y-3 border-t border-border/70 pt-3">
 		<div class="flex flex-wrap items-center justify-between gap-2">
-			<span class="text-xs font-semibold text-foreground"> พื้นที่และรหัสไปรษณีย์ </span>
+			<span class="text-xs font-semibold text-foreground"> {t.areaAndPostalHeading} </span>
 			<div class="flex items-center gap-2">
 				{#if hasLocation && !disabled}
 					<button
@@ -336,7 +359,7 @@
 						onclick={clearLocation}
 						class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
 					>
-						<MapPinX class="size-3" /> ล้างพื้นที่
+						<MapPinX class="size-3" /> {t.clearArea}
 					</button>
 				{/if}
 				<Button
@@ -349,10 +372,10 @@
 				>
 					{#if isLocating}
 						<Loader2 class="size-3.5 animate-spin" />
-						<span>กำลังระบุตำแหน่ง…</span>
+						<span>{t.locating}</span>
 					{:else}
 						<LocateFixed class="size-3.5" />
-						<span>ใช้ตำแหน่งปัจจุบัน</span>
+						<span>{t.useCurrentLocation}</span>
 					{/if}
 				</Button>
 			</div>
@@ -362,17 +385,17 @@
 			<!-- Province -->
 			<div class="space-y-1.5">
 				<Label for="province" class="text-xs font-semibold text-foreground">
-					จังหวัด {#if (required && !isHomeless) || hasLocation}<span class="text-destructive"
-							>*</span
+					{t.provinceLabel}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
 						>{/if}
 				</Label>
 				<SearchSelect
 					name="province"
 					bind:value={() => province, selectProvince}
 					options={provinceItems}
-					placeholder="เลือกจังหวัด"
-					searchPlaceholder="ค้นหาจังหวัด..."
-					emptyText={provincesQuery.isError ? 'โหลดจังหวัดไม่สำเร็จ' : 'ไม่พบจังหวัด'}
+					placeholder={t.provincePlaceholder}
+					searchPlaceholder={t.provinceSearch}
+					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
 					class="!h-9 rounded-md text-xs"
@@ -386,17 +409,17 @@
 			<!-- District -->
 			<div class="space-y-1.5">
 				<Label for="district" class="text-xs font-semibold text-foreground">
-					อำเภอ / เขต {#if (required && !isHomeless) || hasLocation}<span class="text-destructive"
-							>*</span
+					{t.districtLabel}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
 						>{/if}
 				</Label>
 				<SearchSelect
 					name="district"
 					bind:value={() => district, selectDistrict}
 					options={districtItems}
-					placeholder={!province ? 'เลือกจังหวัดก่อน' : 'เลือกอำเภอ / เขต'}
-					searchPlaceholder="ค้นหาอำเภอ / เขต..."
-					emptyText={districtsQuery.isError ? 'โหลดอำเภอไม่สำเร็จ' : 'ไม่พบอำเภอ / เขต'}
+					placeholder={!province ? t.districtNeedsProvince : t.districtPlaceholder}
+					searchPlaceholder={t.districtSearch}
+					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
 					class="!h-9 rounded-md text-xs"
@@ -410,17 +433,17 @@
 			<!-- Subdistrict -->
 			<div class="space-y-1.5">
 				<Label for="subdistrict" class="text-xs font-semibold text-foreground">
-					ตำบล / แขวง {#if (required && !isHomeless) || hasLocation}<span class="text-destructive"
-							>*</span
+					{t.subdistrictLabel}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
 						>{/if}
 				</Label>
 				<SearchSelect
 					name="subdistrict"
 					bind:value={() => subdistrict, selectSubdistrict}
 					options={subdistrictItems}
-					placeholder={!district ? 'เลือกอำเภอก่อน' : 'เลือกตำบล / แขวง'}
-					searchPlaceholder="ค้นหาตำบล / แขวง..."
-					emptyText={subdistrictsQuery.isError ? 'โหลดตำบลไม่สำเร็จ' : 'ไม่พบตำบล / แขวง'}
+					placeholder={!district ? t.subdistrictNeedsDistrict : t.subdistrictPlaceholder}
+					searchPlaceholder={t.subdistrictSearch}
+					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
 					class="!h-9 rounded-md text-xs"
@@ -434,15 +457,15 @@
 			<!-- Postal code -->
 			<div class="space-y-1.5">
 				<Label for="postal_code" class="text-xs font-semibold text-foreground">
-					รหัสไปรษณีย์ {#if (required && !isHomeless) || hasLocation}<span class="text-destructive"
-							>*</span
+					{t.postalCodeLabel}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
 						>{/if}
 				</Label>
 				<Input
 					id="postal_code"
 					bind:value={postal_code}
 					disabled
-					placeholder={!subdistrict ? 'เลือกตำบลก่อน' : 'กำลังเติมรหัสไปรษณีย์...'}
+					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
 					class="h-9 bg-muted/50 text-xs"
 				/>
 				{#if errors?.postal_code}

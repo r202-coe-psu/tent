@@ -3,7 +3,7 @@ id: CR-113
 title: Unassigned Registration — Mongo-only pre-registration without shelter until claim
 status: done
 date: 2026-09-06
-updated: 2026-09-08
+updated: 2026-09-09
 requested_by: เจ้าของโครงการ (grill-with-docs session)
 decided_by: เจ้าของโครงการ
 layer: stable
@@ -24,6 +24,11 @@ tracking_note: >-
   revert on Couch failure); #247 review alignment — edit in place, no new CR.
   2026-09-08: leftovers grill — full-claim Mongo delete best-effort; orphan returns
   HTTP 200 with deleted:false + id; CR marked done after #245–#247 delivery.
+  2026-09-09: #255 Amendment — queue field parity with public UnifiedRegistrationForm
+  (+ photo GridFS); schema_v 2 for new docs; overall status remains done.
+  2026-09-09: #255 pet photo — UnassignedPet.image_url (gfs:) + claim → Couch pet image_url.
+  2026-09-09: Amendment — public **shelter-specific** booking photos (face + pet) via
+  BFF → Couch `image:{ulid}` (public writer); unassigned remains GridFS.
 ---
 
 # Unassigned Registration — Mongo-only, shelter not chosen yet
@@ -136,5 +141,47 @@ unassigned_registrations
 
 - No-show aging report (เลื่อนทั้งก้อน — ไม่มี SOP)
 - Auto-merge offline duplicate
-- Pet image upload UX
+
+## Amendment — 2026-09-09 (#255 public no-shelter → Mongo)
+
+**Status of original CR work:** remains **done**. This amendment expands the queue
+shape so public UnifiedRegistrationForm fields (plus face photo) persist and survive
+claim into Couch — without reopening the original claim algorithm.
+
+### Decisions locked (#255 grill)
+
+| Topic | Decision |
+| --- | --- |
+| Executor | Browser → SvelteKit BFF → FastAPI (Bearer). Dedicated `executeUnassignedRegistration` mirrors #254 Couch executor but POSTs Mongo via FastAPI. Shared `UnifiedRegistrationInput` — **not** `FamilyRegistrationPlan`. |
+| Fields on Mongo member | identity/person_id, phone, nickname, religion, emergency_contact, vulnerable_groups, special_needs, birth_year/age, **photo** |
+| Household | housing / address / pets as public already collects; pets may carry optional **`image_url`** (`gfs:{oid}`) |
+| Explicitly out | vehicles/assets (public clears/hides); medical_conditions / medical_allergies / medical_medications |
+| Blank emergency_contact | `{name,phone,relation}` all blank → **omit** from Mongo and do not put on Couch at claim |
+| Non-blank emergency_contact | persist on Mongo member + copy into Couch Evacuee on claim |
+| nickname / religion | copy on claim when present |
+| schema_v | New docs stamp **`2`**; old `1` readable without backfill |
+| Photo | MongoDB **GridFS** (`unassigned_registration_photos`); member.photo = `gfs:{oid}`; pet.image_url = `gfs:{oid}` (same upload endpoint); claim births Couch `image:{ulid}` + sets `evacuee.photo` / `household.pets[].image_url` |
+| Ticket QR | Unassigned booking ticket = Mongo registration id — **not** Station-1 Person QR / FamilyBatchPrint / Handover until claim |
+| Disclaimer | General system disclaimer (i18n) must be acknowledged before unassigned submit |
+
+### Follow-up (optional)
+
+Field parity for vehicles/assets **if** public channel ever enables them — track as a separate issue; do not expand this CR again for that.
+
+## Amendment — 2026-09-09 (public shelter booking photos → Couch)
+
+**Parallel path (not Unassigned):** when the citizen **chooses a shelter**, public booking
+already writes Couch via BFF `POST /api/public/v1/registrations` (CR-070). Face + pet photos
+on that path now use **`POST /api/public/v1/registrations/photos`** → Couch `image:{ulid}`
+(+ `full`/`thumb` attachments) in `shelter_{code}` via the roleless public writer — same SoR
+shape as onsite (CR-054). Refs land on `evacuee.photo` / `household.pets[].image_url` as
+`image:{ulid}` (never `gfs:`).
+
+| Path | Photo store | Ref shape |
+| --- | --- | --- |
+| Onsite staff | Couch (AuthSession `useSaveImage`) | `image:{ulid}` |
+| Public **unassigned** (no shelter) | Mongo GridFS (#255) | `gfs:{oid}` → Couch on claim |
+| Public **shelter booking** | Couch via BFF public writer | `image:{ulid}` |
+
+Unassigned GridFS endpoint and claim migration are unchanged.
 

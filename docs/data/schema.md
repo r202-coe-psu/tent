@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-08
+updated: 2026-09-09
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation
 ---
 
@@ -235,7 +235,10 @@ Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำ�
 | `caption` | str | opt | default `''` |
 
 **Attachments:** `full` (WEBP ≤1024px, quality 0.82), `thumb` (WEBP square-crop 200px) — เขียนผ่าน
-`PUT /{db}/{docid}/{attname}?rev=...` (HTTP ตรง ผ่าน `/couch` proxy คุกกี้ `_session`)
+`PUT /{db}/{docid}/{attname}?rev=...` (HTTP ตรง). **Writers:** (1) staff onsite — browser AuthSession
+ผ่าน `/couch` proxy; (2) public **shelter booking** — BFF `POST /api/public/v1/registrations/photos`
+→ roleless `public_writer` (คืน `image:{ulid}` ให้ `evacuee.photo` / `pets[].image_url`);
+(3) Unassigned claim — FastAPI migrates GridFS `gfs:{oid}` → Couch `image:{ulid}` (CR-113 §9.5).
 ### 1.7 `people_import_log` — `people_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-071)
 
 Log 1 doc ต่อ 1 batch ของการ import ครัวเรือน+สมาชิกจาก Excel/CSV (T-72). envelope กลาง **มี
@@ -1586,14 +1589,16 @@ SoR ของคิวกลางจน claim = Mongo collection นี้ · �
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | ULID |
-| `schema_v` | int | req | เริ่ม `1` |
+| `schema_v` | int | req | **`2`** for new writes (#255 / CR-113 amend); **`1`** still readable without backfill |
 | `reserved_household_id` | str | req | `household:{ulid}` จองตั้งแต่สร้าง — ใช้ตอน claim |
-| `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + ฟิลด์คน (name, phone, person_id, country, vulnerable_groups, special_needs, …) ตาม CR-112 |
-| `household` | object | req | housing_type, residence_landmark, geo/address, pets, … |
+| `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + ฟิลด์คนตามที่ public UnifiedRegistrationForm เก็บ: name, phone, person_id, country, nickname, religion, vulnerable_groups, special_needs, birth_year/age, **emergency_contact** (omit เมื่อ name/phone/relation ว่างทั้งหมด), **photo** (`gfs:{oid}` → GridFS; claim เกิด Couch `image:{ulid}` + `evacuee.photo`). **ไม่** เก็บ medical_* / vehicles / assets บนคิวสาธารณะ |
+| `household` | object | req | housing_type, residence_landmark, geo/address, pets (`species`/`count`/`notes`/`has_cage`/`image_url` where `image_url` is optional `gfs:{oid}`), … (ไม่รวม vehicles/assets จาก public) |
 | `status` | str | opt | สรุประดับเอกสาร (derive จาก members ได้) |
 | `registered_via` | enum(`web`,`staff`,…) | req | ช่องทางสร้าง |
 | `created_at` | ts | req | — |
 
 **Indexes:** unique partial บน identity ของสมาชิกที่ยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ) · `(created_at)` · member status
 
-**Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`) ด้วย reserved ids ที่ `pre_registered` · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+**Photo (GridFS):** bucket `unassigned_registration_photos` · `POST /public/v1/unassigned-registrations/photos` · สมาชิกเก็บ `photo: gfs:{oid}` · สัตว์เลี้ยงเก็บ `pets[].image_url: gfs:{oid}` · claim อ่าน GridFS → birth Couch `image:{ulid}` (+ attachments) แล้วตั้ง `evacuee.photo` / `household.pets[].image_url`
+
+**Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)

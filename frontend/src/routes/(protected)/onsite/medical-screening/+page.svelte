@@ -23,7 +23,18 @@
 	import * as Table from '$lib/components/ui/table';
 	import * as Tabs from '$lib/components/ui/tabs';
 
-	import { useEvacuees, useHouseholds, useScreenings, maskNationalId } from '$lib/features/people';
+	import {
+		useEvacuees,
+		useHouseholds,
+		useScreenings,
+		maskNationalId,
+		lookupFederatedByScanCode
+	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -32,7 +43,6 @@
 		buildMedicalScreeningPath,
 		classifyScreeningQueueTab,
 		matchesMedicalScreeningSearch,
-		parseMedicalScreeningQrCode,
 		type ScreeningQueueTab
 	} from './medical-screening.utils';
 
@@ -44,6 +54,7 @@
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
+	const queryClient = useQueryClient();
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
@@ -55,6 +66,9 @@
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
 	let activeTab = $state<ScreeningQueueTab>('pending');
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+	let lookupInFlight = $state(false);
 
 	const pendingEvacuees = $derived(
 		allEvacuees.filter((e) => classifyScreeningQueueTab(e, screenedIds) === 'pending')
@@ -81,23 +95,32 @@
 		goto(resolve(path as `/onsite/medical-screening/${string}`));
 	}
 
-	function handleCodeInput(raw: string) {
-		const parsedId = parseMedicalScreeningQrCode(raw);
-		if (!parsedId) {
-			toast.error('รหัส QR หรือข้อความที่สแกนไม่ถูกต้อง');
-			return;
-		}
-
-		const found = allEvacuees.find((e) => e._id === parsedId || e.person_id?.number === parsedId);
-		if (found) {
-			toast.success(`พบผู้ประสบภัย: ${found.first_name} ${found.last_name}`);
+	async function handleCodeInput(raw: string) {
+		if (lookupInFlight) return;
+		lookupInFlight = true;
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, raw);
+			if (!result) {
+				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
-			openScreeningForm(found._id);
-			return;
+			if (result.source === 'couch') {
+				toast.success(
+					`พบผู้ประสบภัย: ${result.evacuee.first_name} ${result.evacuee.last_name}`
+				);
+				openScreeningForm(result.evacuee._id);
+				return;
+			}
+			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนคัดกรอง');
+			claimHit = result.hit;
+			claimOpen = true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+		} finally {
+			lookupInFlight = false;
 		}
-
-		toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -537,3 +560,9 @@
 		</Dialog.Root>
 	{/if}
 {/if}
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>

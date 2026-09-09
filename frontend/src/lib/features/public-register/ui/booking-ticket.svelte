@@ -33,10 +33,9 @@
 
 	const qrPayload = $derived(isUnassigned ? ticket.code : `evacuee:${ticket.code}`);
 
-	// The QR carries only the booking code — no name, no phone, no health data
-	// (CR-070: ไม่ expose medical/national ID บน public ticket). It is the same
-	// payload the staff card encodes, so the gate scanner resolves it unchanged.
-	// Derived rather than an $effect so the image simply follows the ticket.
+	// Shelter booking: QR carries `evacuee:{ulid}` — same payload staff encode for the
+	// gate scanner. Unassigned queue (#255): QR is the Mongo registration id only —
+	// NOT a Station-1 Person QR / FamilyBatchPrint / Handover until claim into a shelter.
 	const qrPromise = $derived(
 		QRCode.toDataURL(qrPayload, {
 			width: 384,
@@ -101,12 +100,10 @@
 			<CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-success" />
 			<div>
 				<p class="text-sm font-bold text-foreground">
-					{isUnassigned ? 'ลงทะเบียนล่วงหน้าสำเร็จ' : t.successHeaderTitle}
+					{isUnassigned ? t.unassignedSuccessTitle : t.successHeaderTitle}
 				</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					{isUnassigned
-						? 'ระบบบันทึกข้อมูลเรียบร้อยแล้ว กรุณาบันทึกภาพหน้าจอนี้ไว้ เพื่อแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์'
-						: t.successHeaderDesc}
+					{isUnassigned ? t.unassignedSuccessDesc : t.successHeaderDesc}
 				</p>
 			</div>
 		</div>
@@ -150,12 +147,12 @@
 			{#await qrPromise}
 				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
 			{:then qrUrl}
-				<img src={qrUrl} alt={t.qrAlt} class="h-44 w-44" />
+				<img src={qrUrl} alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt} class="h-44 w-44" />
 			{:catch}
 				<p
 					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
 				>
-					{t.qrErrorFallback}
+					{isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
 				</p>
 			{/await}
 
@@ -193,11 +190,11 @@
 		{#if isUnassigned}
 			<div class="border-t border-indigo-500/20 bg-indigo-500/10 p-4 text-xs text-foreground">
 				<p class="font-bold text-indigo-700 dark:text-indigo-300">
-					📌 ขั้นตอนถัดไปเมื่อเดินทางถึงศูนย์:
+					{t.unassignedNextStepsTitle}
 				</p>
 				<p class="mt-1 text-muted-foreground">
-					แจ้งเบอร์โทรศัพท์หรือแสดง QR Code นี้ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์
-					เพื่อยืนยันการเข้าพัก (รหัสอ้างอิง: <strong>{ticket.code}</strong>)
+					{t.unassignedNextStepsBody}
+					{' '}(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
 				</p>
 			</div>
 		{/if}
@@ -214,10 +211,10 @@
 <style>
 	/*
 		Print QR-only: deliberately thinner than the onsite wristband/ID-card print
-		in evacuee-qr-modal.svelte. That flow isolates a full card panel (accent bar,
-		name, zone, national ID); a booking ticket only needs the gate scanner to read
-		the QR plus the holder's name as a human-readable fallback, so the isolated
-		target here is just the QR block — no header banner, no dl summary.
+		in evacuee-qr-modal.svelte. Shelter booking needs the gate scanner to read
+		`evacuee:{ulid}`; unassigned tickets encode the Mongo registration id only
+		(queue reference — not Station-1 Person QR until claim). Plus the holder's
+		name as a human-readable fallback.
 
 		The download button no longer calls `window.print()`, but these rules still
 		earn their place: a user who hits Ctrl+P (or "Print" from the browser menu)

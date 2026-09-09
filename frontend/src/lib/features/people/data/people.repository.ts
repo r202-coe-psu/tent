@@ -15,6 +15,7 @@ import type {
 	StayStatus
 } from '../domain/people';
 import type {
+	FamilyReportInPayload,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
@@ -260,6 +261,15 @@ export interface PeopleRepository {
 		ctx: AuthorContext,
 		channel?: UnifiedRegistrationChannel
 	): Promise<{
+		household: Household;
+		members: Evacuee[];
+	}>;
+	/**
+	 * Station 1 Report-in for a family (#249 unified flow):
+	 * Updates existing household, updates existing members, creates any new members,
+	 * and promotes members selected for report-in from `pre_registered` → `arriving`.
+	 */
+	submitFamilyReportIn(payload: FamilyReportInPayload): Promise<{
 		household: Household;
 		members: Evacuee[];
 	}>;

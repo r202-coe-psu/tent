@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-08
+updated: 2026-09-09
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration
 ---
 
@@ -152,14 +152,21 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
 | `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
+| `POST /api/public/v1/registrations/photos` | rate-limit (BFF-only) — multipart → Couch `image:{ulid}` ใน DB ศูนย์ที่เลือก (face/pet; ไม่ใช่ GridFS) |
 | `POST /api/public/v1/registrations/lookup` | รหัสการจอง + เบอร์โทร (BFF-only) |
 
-> **หมายเหตุ (CR-070/T-71):** สอง endpoint ล่างเป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
+> **หมายเหตุ (CR-070/T-71):** endpoints กลุ่ม `registrations/**` เป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
 > (`frontend/src/routes/api/public/v1/registrations/**`) และเขียน CouchDB ตรงผ่าน
 > `putAsPublicWriter` (CouchDB user `public_writer` ไม่มี role → ผ่าน `validate_doc_update`).
 > **ไม่มี path คู่กันบน FastAPI** เพราะ booking ต้องกันที่ทันทีตาม D-BOOK-OCC=C ซึ่งรอ
 > projection Mongo ไม่ได้ และ QR ต้องสแกนที่ประตูได้ทันที. Auth ของทุก `/public/v1/*` บน
 > FastAPI ยังเป็น Bearer `EXTERNAL_API_SECRET` ตาม CR-063.
+>
+> **Photos (shelter booking):** `POST /api/public/v1/registrations/photos` รับ compressed
+> full/thumb + `shelter_code` แล้วสร้าง `image:{ulid}` (+ attachments) ใน `shelter_{code}`
+> ผ่าน public writer — คืน `photo_id` ให้ `evacuee.photo` / `household.pets[].image_url`
+> (เหมือน onsite CR-054). เส้น **ไม่ระบุศูนย์** ยังใช้ GridFS ผ่าน
+> `POST /api/public/v1/unassigned-registrations/photos` (§5.2).
 
 **`PATCH /public/v1/donations/{tracking_token}`** — donor แก้การจองของตัวเอง (CR-080).
 Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `items` อย่างใดอย่างหนึ่งหรือทั้งคู่:
@@ -198,22 +205,25 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 
 | Method | Path | Auth |
 | --- | --- | --- |
-| POST | `/public/v1/unassigned-registrations` | public BFF + secret |
+| POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 2` |
 | GET | `/staff/v1/unassigned-registrations/search?q=` | staff session |
-| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope |
+| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}` |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503).
+Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503). Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
 
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
 - ไม่มี REST CRUD สำหรับ doc ปฏิบัติการ (evacuee/movement/stock/...) — ใช้ sync plane เท่านั้น
-  **ข้อยกเว้นเดียว (CR-070):** public booking สร้าง `evacuee` หนึ่ง doc ผ่าน BFF
+  **ข้อยกเว้น (CR-070):** public booking สร้าง `evacuee`/`household` ผ่าน BFF
   (`POST /api/public/v1/registrations`) เพราะผู้จองไม่มี session จึงเข้า sync plane ไม่ได้
   — เป็น intake action ที่ปิดตาย ไม่ใช่ CRUD surface: ไม่มี GET/PUT/PATCH/DELETE รายตัว,
   สร้างได้อย่างเดียว, สถานะบังคับเป็น `pre_registered`, และอ่านกลับได้เฉพาะผ่าน
   `/lookup` ด้วยรหัส+เบอร์ที่ตรงกัน. แก้ไข/ยกเลิกหลังจากนั้นเป็นงาน staff บน sync plane
-  (เทียบเคียง `PATCH /public/v1/donations/{token}` ของ CR-052 ที่เขียน `donation` doc)
+  (เทียบเคียง `PATCH /public/v1/donations/{token}` ของ CR-052 ที่เขียน `donation` doc).
+  **Photos:** `POST /api/public/v1/registrations/photos` สร้าง `image` doc (+attachments)
+  ในศูนย์ที่เลือกเท่านั้น (ไม่ใช่ read/list/delete surface).
 - ไม่มี JWT/refresh-token layer — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้
 - ไม่มี EOC / Open API ในรุ่นนี้ (deferred — จะเป็น service แยกอ่าน central)
 - ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane

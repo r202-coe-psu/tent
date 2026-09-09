@@ -20,6 +20,23 @@ class PersonIdOut(BaseModel):
     number: str | None = None
 
 
+class EmergencyContactInput(BaseModel):
+    name: str = ""
+    phone: str = ""
+    relation: str = ""
+
+    @field_validator("name", "phone", "relation", mode="before")
+    @classmethod
+    def _strip_str(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class EmergencyContactOut(BaseModel):
+    name: str
+    phone: str
+    relation: str
+
+
 class MemberInput(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = ""
@@ -33,15 +50,18 @@ class MemberInput(BaseModel):
     age: int | None = None
     nickname: str | None = None
     religion: str | None = None
+    emergency_contact: EmergencyContactInput | None = None
+    # GridFS ref `gfs:{oid}` from POST …/photos (#255).
+    photo: str | None = None
 
     @field_validator("first_name", "last_name", "country", mode="before")
     @classmethod
     def _strip_str(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
 
-    @field_validator("phone", mode="before")
+    @field_validator("phone", "nickname", "religion", "photo", mode="before")
     @classmethod
-    def _blank_phone_to_none(cls, value: object) -> object:
+    def _blank_optional_str_to_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str):
@@ -49,12 +69,33 @@ class MemberInput(BaseModel):
             return trimmed or None
         return value
 
+    @model_validator(mode="after")
+    def _omit_blank_emergency_contact(self) -> MemberInput:
+        contact = self.emergency_contact
+        if contact is None:
+            return self
+        if not contact.name and not contact.phone and not contact.relation:
+            self.emergency_contact = None
+        return self
+
 
 class PetInput(BaseModel):
     species: Literal["dog", "cat", "other"]
     count: int = Field(default=1, ge=1, le=50)
     notes: str | None = None
     has_cage: bool = False
+    # GridFS ref `gfs:{oid}` from POST …/photos (#255 pet photo).
+    image_url: str | None = None
+
+    @field_validator("notes", "image_url", mode="before")
+    @classmethod
+    def _blank_optional_str_to_none(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
 
 
 class HouseholdInput(BaseModel):
@@ -118,6 +159,26 @@ class MemberCreated(BaseModel):
     country: str
     vulnerable_groups: list[str] = Field(default_factory=list)
     special_needs: list[str] = Field(default_factory=list)
+    birth_year: int | None = None
+    age: int | None = None
+    nickname: str | None = None
+    religion: str | None = None
+    emergency_contact: EmergencyContactOut | None = None
+    photo: str | None = None
+
+
+class UnassignedPhotoUploadResponse(BaseModel):
+    """Response from POST /public/v1/unassigned-registrations/photos."""
+
+    success: bool = True
+    photo_id: str
+    content_type: str
+    filename: str
+    width: int | None = None
+    height: int | None = None
+    original_size: int | None = None
+    compressed_size: int | None = None
+    thumbnail_size: int | None = None
 
 
 class UnassignedRegistrationCreateResponse(BaseModel):
@@ -144,6 +205,12 @@ class OpenMemberHit(BaseModel):
     country: str
     vulnerable_groups: list[str] = Field(default_factory=list)
     special_needs: list[str] = Field(default_factory=list)
+    nickname: str | None = None
+    religion: str | None = None
+    emergency_contact: EmergencyContactOut | None = None
+    photo: str | None = None
+    birth_year: int | None = None
+    age: int | None = None
 
 
 class UnassignedRegistrationSearchHit(BaseModel):

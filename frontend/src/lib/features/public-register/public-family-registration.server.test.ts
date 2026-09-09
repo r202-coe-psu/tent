@@ -86,7 +86,25 @@ describe('executePublicFamilyRegistration (#254)', () => {
 	});
 
 	it('creates 1 Household and N Evacuees at pre_registered and registered_via web', async () => {
-		const input = sampleInput();
+		const input = sampleInput({
+			members: [
+				{
+					...sampleInput().members[0]!,
+					photo: 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+				},
+				sampleInput().members[1]!
+			],
+			household: {
+				...sampleInput().household!,
+				pets: [
+					{
+						species: 'dog',
+						count: 1,
+						image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+					}
+				]
+			}
+		});
 		const result = await executePublicFamilyRegistration(input, { shelterCode: 'SH001' });
 
 		expect(result.household).toBeDefined();
@@ -96,11 +114,14 @@ describe('executePublicFamilyRegistration (#254)', () => {
 		expect(result.household.type).toBe('household');
 		expect(result.household.status).toBe('pre_registered');
 		expect(result.household.head_evacuee_id).toBe(result.evacuees[0]._id);
-		expect(result.household.pets).toEqual([{ species: 'dog', count: 1 }]);
+		expect(result.household.pets).toEqual([
+			{ species: 'dog', count: 1, image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ' }
+		]);
 		expect(result.household.vehicles).toEqual([{ type: 'car', license_plate: 'กก 1234' }]);
 		expect(result.household.assets?.description).toBe('สร้อยคอทองคำ');
 
-		// Evacuee checks
+		// Evacuee checks — face photo survives plan → mint
+		expect(result.evacuees[0].photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		for (const evacuee of result.evacuees) {
 			expect(evacuee.type).toBe('evacuee');
 			expect(evacuee.household_id).toBe(result.household._id);

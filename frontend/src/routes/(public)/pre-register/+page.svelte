@@ -83,7 +83,7 @@
 	<title>ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-4xl px-4 py-6 md:px-6 md:py-10">
+<div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-6 md:py-8">
 	<!-- Top Navigation -->
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 		<a

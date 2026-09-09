@@ -602,6 +602,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/photos': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Upload Unassigned Photo
+		 * @description Store a compressed face photo in Mongo GridFS (#255).
+		 */
+		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1276,6 +1296,17 @@ export interface components {
 			vulnerable_groups?: string[];
 			/** Special Needs */
 			special_needs?: string[];
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
 		};
 		/** MemberInput */
 		MemberInput: {
@@ -1311,6 +1342,39 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
+			/**
+			 * Photo
+			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255)
+			 */
+			photo?: string | null;
+		};
+		/** EmergencyContactInput */
+		EmergencyContactInput: {
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
+			/**
+			 * Phone
+			 * @default
+			 */
+			phone: string;
+			/**
+			 * Relation
+			 * @default
+			 */
+			relation: string;
+		};
+		/** EmergencyContactOut */
+		EmergencyContactOut: {
+			/** Name */
+			name: string;
+			/** Phone */
+			phone: string;
+			/** Relation */
+			relation: string;
 		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
@@ -1461,6 +1525,11 @@ export interface components {
 			 * @default false
 			 */
 			has_cage: boolean;
+			/**
+			 * Image Url
+			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255 pet photo)
+			 */
+			image_url?: string | null;
 		};
 		/**
 		 * PublicAnnouncement
@@ -1997,6 +2066,30 @@ export interface components {
 			status: string;
 			/** Created At */
 			created_at: string;
+		};
+		/** UnassignedPhotoUploadResponse */
+		UnassignedPhotoUploadResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Photo Id */
+			photo_id: string;
+			/** Content Type */
+			content_type: string;
+			/** Filename */
+			filename: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -3222,6 +3315,49 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'multipart/form-data': {
+					full: string;
+					thumb?: string;
+					filename?: string;
+					content_type?: string;
+					width?: number;
+					height?: number;
+					original_size?: number;
+					compressed_size?: number;
+					thumbnail_size?: number;
+				};
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
 				};
 			};
 			/** @description Validation Error */

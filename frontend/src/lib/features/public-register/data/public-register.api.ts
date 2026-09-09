@@ -12,7 +12,6 @@ import type { components } from '$lib/api/openapi';
 import type { UnifiedRegistrationInput } from '$lib/features/people';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 import { publicBookingErrorMessage } from '../domain/booking';
-import type { UnassignedRegistrationInput } from '../domain/unassigned-registration';
 import { unassignedRegistrationErrorMessage } from '../domain/unassigned-registration';
 
 export interface BookingTicketResponse {
@@ -64,17 +63,22 @@ export async function lookupBooking(
 export type UnassignedRegistrationResponse =
 	components['schemas']['UnassignedRegistrationCreateResponse'];
 
+export type PublicUnassignedRegistrationPayload = UnifiedRegistrationInput & {
+	captchaToken?: string;
+	disclaimerAcknowledged?: boolean;
+};
+
 async function unassignedRegistrationError(res: Response): Promise<Error> {
 	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
 	return new Error(unassignedRegistrationErrorMessage(body?.error as string | undefined));
 }
 
 /**
- * Public Pre-registration without a shelter (CR-113).
- * Browser → same-origin BFF only; never Couch or FastAPI credentials.
+ * Public Pre-registration without a shelter (CR-113 / #255).
+ * Browser → same-origin BFF only; body is UnifiedRegistrationInput (+ captcha/meta).
  */
 export async function createUnassignedRegistration(
-	input: UnassignedRegistrationInput
+	input: PublicUnassignedRegistrationPayload
 ): Promise<UnassignedRegistrationResponse> {
 	const res = await fetch('/api/public/v1/unassigned-registrations', {
 		method: 'POST',
@@ -83,6 +87,49 @@ export async function createUnassignedRegistration(
 	});
 	if (!res.ok) throw await unassignedRegistrationError(res);
 	return (await res.json()) as UnassignedRegistrationResponse;
+}
+
+export interface UnassignedPhotoUploadResponse {
+	success: true;
+	photo_id: string;
+	content_type: string;
+	filename: string;
+	width?: number | null;
+	height?: number | null;
+	original_size?: number | null;
+	compressed_size?: number | null;
+	thumbnail_size?: number | null;
+}
+
+/**
+ * Upload a compressed face or pet photo for Unassigned Registration (GridFS via BFF).
+ */
+export async function uploadUnassignedPhoto(form: FormData): Promise<UnassignedPhotoUploadResponse> {
+	const res = await fetch('/api/public/v1/unassigned-registrations/photos', {
+		method: 'POST',
+		body: form
+	});
+	if (!res.ok) throw await unassignedRegistrationError(res);
+	return (await res.json()) as UnassignedPhotoUploadResponse;
+}
+
+export type ShelterBookingPhotoUploadResponse = UnassignedPhotoUploadResponse;
+
+/**
+ * Upload a compressed face/pet photo for public **shelter** booking.
+ * BFF → Couch `image:{ulid}` in the chosen shelter DB (not GridFS).
+ */
+export async function uploadShelterBookingPhoto(
+	shelterCode: string,
+	form: FormData
+): Promise<ShelterBookingPhotoUploadResponse> {
+	form.set('shelter_code', shelterCode.trim());
+	const res = await fetch('/api/public/v1/registrations/photos', {
+		method: 'POST',
+		body: form
+	});
+	if (!res.ok) throw await bookingError(res);
+	return (await res.json()) as ShelterBookingPhotoUploadResponse;
 }
 
 export interface PetTypeOption {

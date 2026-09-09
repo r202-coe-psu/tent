@@ -8,6 +8,12 @@
 	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
 	--testing-banner-height: 1.625rem;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
+	/*
+	 * Sticky offset for shared registration form chrome (section headers + spy nav).
+	 * Layouts override: public navbar ≈ 4rem; onsite app bar + shelter nav ≈ 6.75rem.
+	 */
+	--registration-sticky-top: 4rem;
+	--registration-scroll-mt: calc(var(--registration-sticky-top) + 1.5rem);
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -428,13 +434,24 @@
 		@apply h-12 text-base sm:h-10 sm:text-sm;
 	}
 	.form-section-card {
-		@apply rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5;
+		@apply rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5;
 	}
 	.form-section-muted {
 		@apply rounded-xl border border-border bg-muted/30 p-4 sm:p-5;
 	}
+	.unified-reg-sticky {
+		top: var(--registration-sticky-top);
+	}
+	.unified-reg-scroll-mt {
+		scroll-margin-top: var(--registration-scroll-mt);
+	}
+	.unified-reg-section-header {
+		@apply sticky z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4;
+		top: var(--registration-sticky-top);
+	}
 	.sticky-section-nav {
-		@apply sticky top-0 z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-1 py-2 backdrop-blur-sm;
+		@apply sticky z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-1 py-2 backdrop-blur-sm;
+		top: var(--registration-sticky-top, 0px);
 		scrollbar-width: none;
 	}
 	.sticky-section-nav::-webkit-scrollbar {

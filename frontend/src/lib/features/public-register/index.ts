@@ -41,9 +41,13 @@ export {
 	fetchProvinces,
 	fetchSubdistricts,
 	lookupBooking,
+	uploadShelterBookingPhoto,
+	uploadUnassignedPhoto,
 	type BookingTicketResponse,
 	type PetTypeOption,
 	type PublicSubdistrict,
+	type ShelterBookingPhotoUploadResponse,
+	type UnassignedPhotoUploadResponse,
 	type UnassignedRegistrationResponse
 } from './data/public-register.api';
 export {
@@ -88,11 +92,13 @@ export type {
 export {
 	toUnassignedRegistrationPayload,
 	unassignedRegistrationErrorMessage,
-	unassignedRegistrationInputSchema
+	unassignedRegistrationInputSchema,
+	publicUnassignedRegistrationRequestSchema
 } from './domain/unassigned-registration';
 
 export type {
 	UnassignedRegistrationErrorCode,
 	UnassignedRegistrationInput,
-	UnassignedRegistrationPayload
+	UnassignedRegistrationPayload,
+	PublicUnassignedRegistrationRequest
 } from './domain/unassigned-registration';

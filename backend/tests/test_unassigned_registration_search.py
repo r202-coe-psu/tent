@@ -159,6 +159,16 @@ async def test_search_finds_open_members_by_name_phone_and_national_id(
     assert by_nid.status_code == 200
     assert by_nid.json()["results"][0]["id"] == doc.id
 
+    # Unassigned ticket QR encodes the Mongo registration id.
+    by_id = await authed_client.get(
+        "/staff/v1/unassigned-registrations/search", params={"q": doc.id}
+    )
+    assert by_id.status_code == 200
+    id_hits = by_id.json()["results"]
+    assert len(id_hits) == 1
+    assert id_hits[0]["id"] == doc.id
+    assert all(m["status"] == "open" for m in id_hits[0]["open_members"])
+
 
 async def test_search_does_not_offer_claimed_members_as_hits(
     authed_client: AsyncClient,

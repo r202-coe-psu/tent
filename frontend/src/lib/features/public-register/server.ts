@@ -47,14 +47,14 @@ export {
 	toUnassignedRegistrationPayload,
 	unassignedRegistrationErrorMessage,
 	unassignedRegistrationInputSchema,
-	unassignedHouseholdInputSchema,
-	unassignedMemberInputSchema
+	publicUnassignedRegistrationRequestSchema
 } from './domain/unassigned-registration';
 
 export type {
 	UnassignedRegistrationErrorCode,
 	UnassignedRegistrationInput,
-	UnassignedRegistrationPayload
+	UnassignedRegistrationPayload,
+	PublicUnassignedRegistrationRequest
 } from './domain/unassigned-registration';
 
 export {
@@ -66,3 +66,23 @@ export type {
 	ExecutePublicFamilyRegistrationOptions,
 	PublicFamilyRegistrationResult
 } from './public-family-registration.server';
+
+export {
+	executeUnassignedRegistration,
+	UnassignedRegistrationWriteError
+} from './execute-unassigned-registration.server';
+
+export type {
+	ExecuteUnassignedRegistrationOptions,
+	UnassignedRegistrationResult
+} from './execute-unassigned-registration.server';
+
+export {
+	savePublicBookingImage,
+	PublicBookingImageWriteError
+} from './save-public-booking-image.server';
+
+export type {
+	SavePublicBookingImageInput,
+	SavePublicBookingImageResult
+} from './save-public-booking-image.server';

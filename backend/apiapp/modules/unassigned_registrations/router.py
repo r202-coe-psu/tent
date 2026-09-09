@@ -1,4 +1,4 @@
-"""Unassigned Registration API — public create + staff search/claim/purge (CR-113)."""
+"""Unassigned Registration API — public create + staff search/claim/purge (CR-113 / #255)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,19 @@ import time
 from collections import defaultdict
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 
 from ...core.security import verify_external_secret
 from ...core.staff_session import (
@@ -16,9 +28,11 @@ from ...core.staff_session import (
     require_shelter_scoped_staff,
     require_system_admin,
 )
+from ...infrastructure.gridfs import store_unassigned_photo
 from ...utils.request_meta import client_ip
 from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
+    UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -41,6 +55,7 @@ _RATE_WINDOW_SECONDS = 60
 _RATE_MAX_REQUESTS = 30
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
 _rate_lock = threading.Lock()
+_MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 
 def _enforce_rate_limit(request: Request) -> None:
@@ -62,6 +77,74 @@ def get_unassigned_registrations_use_case(
     couch_birth: Annotated[CouchBirthPort, Depends(get_couch_birth)],
 ) -> UnassignedRegistrationsUseCase:
     return UnassignedRegistrationsUseCase(couch_birth=couch_birth)
+
+
+@router.post(
+    "/photos",
+    response_model=UnassignedPhotoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def upload_unassigned_photo(
+    request: Request,
+    response: Response,
+    full: UploadFile = File(...),  # noqa: B008
+    thumb: UploadFile | None = File(default=None),  # noqa: B008
+    filename: str = Form(default="face.webp"),
+    content_type: str = Form(default="image/webp"),
+    width: int | None = Form(default=None),
+    height: int | None = Form(default=None),
+    original_size: int | None = Form(default=None),
+    compressed_size: int | None = Form(default=None),
+    thumbnail_size: int | None = Form(default=None),
+) -> UnassignedPhotoUploadResponse:
+    """Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+
+    full_bytes = await full.read(_MAX_PHOTO_BYTES + 1)
+    if not full_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "EMPTY_PHOTO"},
+        )
+    if len(full_bytes) > _MAX_PHOTO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"error": "PHOTO_TOO_LARGE"},
+        )
+
+    thumb_bytes: bytes | None = None
+    if thumb is not None:
+        thumb_bytes = await thumb.read(_MAX_PHOTO_BYTES + 1)
+        if len(thumb_bytes) > _MAX_PHOTO_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={"error": "PHOTO_TOO_LARGE"},
+            )
+
+    mime = (content_type or full.content_type or "image/webp").strip() or "image/webp"
+    stored = await store_unassigned_photo(
+        full_bytes=full_bytes,
+        thumb_bytes=thumb_bytes,
+        filename=(filename or full.filename or "face.webp").strip() or "face.webp",
+        content_type=mime,
+        width=width,
+        height=height,
+        original_size=original_size,
+        compressed_size=compressed_size,
+        thumbnail_size=thumbnail_size,
+    )
+    return UnassignedPhotoUploadResponse(
+        photo_id=stored.photo_id,
+        content_type=stored.content_type,
+        filename=stored.filename,
+        width=stored.width,
+        height=stored.height,
+        original_size=stored.original_size,
+        compressed_size=stored.compressed_size,
+        thumbnail_size=stored.thumbnail_size,
+    )
 
 
 @router.post(

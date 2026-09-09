@@ -10,6 +10,7 @@ import {
 	hasMinimumResidence,
 	type ResidenceFields
 } from './registration-shell';
+import type { AuthorContext } from '$lib/db/model';
 import {
 	evacueeInputSchema,
 	formatPersonName,
@@ -17,15 +18,21 @@ import {
 	householdInputSchema,
 	isMeaningfulOtherPetNotes,
 	mintAnonymousId,
+	type Evacuee,
 	type EvacueeInput,
+	type Household,
 	type HouseholdInput,
-	type PetGroup
+	type PetGroup,
+	type StayStatus
 } from './people';
 
 /** UI label for members[0] — maps to `head_evacuee_id` without hierarchical wording. */
 export const PRIMARY_CONTACT_LABEL = 'ผู้ติดต่อหลัก';
 
 export type UnifiedRegistrationChannel = 'onsite' | 'public';
+
+/** How the unified member card uploads face photos. */
+export type MemberPhotoUploadMode = 'none' | 'onsite-couch' | 'unassigned-gridfs' | 'shelter-couch';
 
 const petGroupSchema = z
 	.object({
@@ -153,7 +160,8 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 	return {
 		first_name: '',
 		last_name: '',
-		gender: 'other',
+		// Empty until the user picks male/female — schema rejects unset gender.
+		gender: '' as UnifiedMemberInput['gender'],
 		phone: null,
 		nickname: '',
 		country: 'THAILAND',
@@ -255,5 +263,84 @@ export function planFamilyRegistration(
 		headMemberIndex: 0,
 		memberInputs,
 		householdInput
+	};
+}
+
+export type UnifiedMemberWithMeta = UnifiedMemberInput & {
+	_id?: string;
+	_rev?: string;
+	stay_status?: StayStatus;
+	reporting_in?: boolean;
+};
+
+export interface FamilyReportInPayload {
+	householdId: string;
+	household: UnifiedHouseholdInput;
+	members: UnifiedMemberWithMeta[];
+	ctx: AuthorContext;
+}
+
+/** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput. */
+export function householdToUnifiedInput(household: Household | null | undefined): UnifiedHouseholdInput {
+	if (!household) {
+		return {
+			housing_type: 'owned_house',
+			residence_landmark: null,
+			address_no: '',
+			village_no: '',
+			subdistrict: '',
+			district: '',
+			province: '',
+			postal_code: '',
+			pets: [],
+			vehicles: [],
+			assets: null
+		};
+	}
+	return {
+		housing_type: household.housing_type ?? 'owned_house',
+		residence_landmark: household.residence_landmark ?? null,
+		address_no: household.address_no ?? '',
+		village_no: household.village_no ?? '',
+		subdistrict: household.subdistrict ?? '',
+		district: household.district ?? '',
+		province: household.province ?? '',
+		postal_code: household.postal_code ?? '',
+		pets: household.pets ?? [],
+		vehicles: household.vehicles ?? [],
+		assets: household.assets ? { description: household.assets.description ?? '', image_url: household.assets.image_url ?? null } : null
+	};
+}
+
+/** Converts an existing CouchDB Evacuee into form-compatible UnifiedMemberWithMeta. */
+export function evacueeToUnifiedMember(
+	evacuee: Evacuee,
+	targetEvacueeId?: string
+): UnifiedMemberWithMeta {
+	const isTarget = targetEvacueeId ? evacuee._id === targetEvacueeId : true;
+	const isPreReg = evacuee.current_stay.status === 'pre_registered';
+	return {
+		_id: evacuee._id,
+		_rev: evacuee._rev,
+		first_name: evacuee.first_name,
+		last_name: evacuee.last_name ?? '',
+		gender: evacuee.gender,
+		birth_year: evacuee.birth_year ?? undefined,
+		age: evacuee.age ?? undefined,
+		person_id: evacuee.person_id ?? { cardType: 'national_id', number: '' },
+		phone: evacuee.phone ?? null,
+		nickname: evacuee.nickname ?? '',
+		emergency_contact: evacuee.emergency_contact ?? { name: '', phone: '', relation: '' },
+		vulnerable_groups: evacuee.vulnerable_groups ?? [],
+		special_needs: evacuee.special_needs ?? [],
+		medical_conditions: [],
+		medical_allergies: [],
+		medical_medications: [],
+		medical_note: undefined,
+		photo: evacuee.photo ?? null,
+		country: evacuee.country ?? 'THAILAND',
+		religion: evacuee.religion ?? 'buddhist',
+		stay_status: evacuee.current_stay.status,
+		reporting_in: isPreReg && isTarget
 	};
 }

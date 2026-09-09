@@ -1441,6 +1441,118 @@ describe('createFamilyRegistration', () => {
 	});
 });
 
+describe('submitFamilyReportIn', () => {
+	let repo: PeopleRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	it('updates household, updates member details, and promotes checked members to arriving', async () => {
+		// Create family via pre-registration
+		const reg = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND'
+					},
+					{
+						first_name: 'สมหญิง',
+						last_name: 'ใจดี',
+						gender: 'female',
+						phone: '0898765432',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '10/1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		expect(reg.household.status).toBe('pre_registered');
+		expect(reg.members[0]!.current_stay.status).toBe('pre_registered');
+		expect(reg.members[1]!.current_stay.status).toBe('pre_registered');
+
+		// Now report in only member 0 (สมชาย arrived, สมหญิง did not arrive yet)
+		// and also add member 2 (สมปอง newly arrived relative)
+		const reportInResult = await repo.submitFamilyReportIn({
+			householdId: reg.household._id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '10/1 แก้ไขใหม่',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [{ species: 'cat', count: 1 }],
+				vehicles: [{ type: 'motorcycle', license_plate: '1กข 999' }],
+				assets: { description: 'กระเป๋าทองคำ', image_url: null }
+			},
+			members: [
+				{
+					_id: reg.members[0]!._id,
+					first_name: 'สมชาย (อัปเดต)',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0812345678',
+					country: 'THAILAND',
+					reporting_in: true
+				},
+				{
+					_id: reg.members[1]!._id,
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					phone: '0898765432',
+					country: 'THAILAND',
+					reporting_in: false
+				},
+				{
+					first_name: 'สมปอง',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0855555555',
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		// Household updated
+		expect(reportInResult.household.address_no).toBe('10/1 แก้ไขใหม่');
+		expect(reportInResult.household.pets).toEqual([{ species: 'cat', count: 1 }]);
+		expect(reportInResult.household.vehicles).toEqual([{ type: 'motorcycle', license_plate: '1กข 999' }]);
+
+		// Members in result: 2 members reported in (สมชาย and สมปอง)
+		expect(reportInResult.members).toHaveLength(2);
+		expect(reportInResult.members.map((m) => m.first_name)).toEqual(['สมชาย (อัปเดต)', 'สมปอง']);
+		expect(reportInResult.members.every((m) => m.current_stay.status === 'arriving')).toBe(true);
+
+		// Unchecked member stays pre_registered
+		const somying = await repo.getEvacuee(reg.members[1]!._id);
+		expect(somying?.current_stay.status).toBe('pre_registered');
+
+		// Household status derived from member statuses: since at least one is arriving and some pre_registered
+		const updatedHh = await repo.getHousehold(reg.household._id);
+		expect(updatedHh?.status).toBe('arriving');
+	});
+});
+
 describe('peopleRepository singleton', () => {
 	it('returns a fresh instance when getShelterDb() changes', () => {
 		mockShelterDb = 'shelter_sh001';

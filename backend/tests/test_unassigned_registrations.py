@@ -111,11 +111,11 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     assert reserved_evacuee.startswith("evacuee:")
     assert body["members"][0]["status"] == "open"
     assert body["registered_via"] == "web"
-    assert body["schema_v"] == 1
+    assert body["schema_v"] == 2
 
     stored = await UnassignedRegistration.get(body["id"])
     assert stored is not None
-    assert stored.schema_v == 1
+    assert stored.schema_v == 2
     assert stored.reserved_household_id == body["reserved_household_id"]
     assert stored.members[0].status == "open"
     assert stored.members[0].reserved_evacuee_id == reserved_evacuee
@@ -190,6 +190,132 @@ async def test_create_allows_homeless_with_landmark(
     assert stored is not None
     assert stored.household.housing_type == "homeless"
     assert stored.household.residence_landmark == "ใต้สะพาน"
+
+
+async def test_create_persists_expanded_public_fields_schema_v2(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """#255 — nickname, religion, emergency_contact, photo on Mongo queue."""
+    payload = _create_payload()
+    payload["members"][0].update(
+        {
+            "nickname": "ชาย",
+            "religion": "buddhist",
+            "emergency_contact": {
+                "name": "สมหญิง",
+                "phone": "0899999999",
+                "relation": "คู่สมรส",
+            },
+            "photo": "gfs:507f1f77bcf86cd799439011",
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["schema_v"] == 2
+    assert body["members"][0]["nickname"] == "ชาย"
+    assert body["members"][0]["religion"] == "buddhist"
+    assert body["members"][0]["emergency_contact"] == {
+        "name": "สมหญิง",
+        "phone": "0899999999",
+        "relation": "คู่สมรส",
+    }
+    assert body["members"][0]["photo"] == "gfs:507f1f77bcf86cd799439011"
+
+    stored = await UnassignedRegistration.get(body["id"])
+    assert stored is not None
+    assert stored.schema_v == 2
+    assert stored.members[0].nickname == "ชาย"
+    assert stored.members[0].emergency_contact is not None
+    assert stored.members[0].emergency_contact.phone == "0899999999"
+
+
+async def test_create_persists_pet_image_url(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """#255 pet photo — household.pets[].image_url stores GridFS ref."""
+    payload = _create_payload(
+        household={
+            "housing_type": "owned_house",
+            "address_no": "123/45",
+            "subdistrict": "คอหงส์",
+            "district": "หาดใหญ่",
+            "province": "สงขลา",
+            "postal_code": "90110",
+            "pets": [
+                {
+                    "species": "dog",
+                    "count": 1,
+                    "has_cage": True,
+                    "image_url": "gfs:507f1f77bcf86cd799439011",
+                }
+            ],
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert len(stored.household.pets) == 1
+    assert stored.household.pets[0].image_url == "gfs:507f1f77bcf86cd799439011"
+
+
+async def test_create_rejects_invalid_pet_image_url(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload(
+        household={
+            "housing_type": "owned_house",
+            "address_no": "123/45",
+            "subdistrict": "คอหงส์",
+            "district": "หาดใหญ่",
+            "province": "สงขลา",
+            "postal_code": "90110",
+            "pets": [
+                {
+                    "species": "cat",
+                    "count": 1,
+                    "has_cage": False,
+                    "image_url": "not-a-gridfs-ref",
+                }
+            ],
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_omits_blank_emergency_contact(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0]["emergency_contact"] = {
+        "name": "",
+        "phone": "",
+        "relation": "",
+    }
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.members[0].emergency_contact is None
 
 
 async def test_create_rejects_non_homeless_without_address(

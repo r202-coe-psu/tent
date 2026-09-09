@@ -6,62 +6,203 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Users from '@lucide/svelte/icons/users';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import Camera from '@lucide/svelte/icons/camera';
+	import X from '@lucide/svelte/icons/x';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useSaveImage } from '$lib/features/images';
+	import {
+		uploadShelterBookingPhoto,
+		uploadUnassignedPhoto
+	} from '$lib/features/public-register/data/public-register.api';
+	import { compressImage } from '$lib/utils/image-compress';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import HouseholdAddressFields from './forms/household-address-fields.svelte';
 	import UnifiedRegistrationMemberCard from './unified-registration-member-card.svelte';
+	import UnifiedRegistrationSection from './unified-registration-section.svelte';
+	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
+	import UnifiedRegistrationSubmitBar from './unified-registration-submit-bar.svelte';
+	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
 		blankUnifiedMember,
 		unifiedRegistrationInputSchema,
+		type MemberPhotoUploadMode,
+		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel,
-		type UnifiedRegistrationInput
+		type UnifiedRegistrationInput,
+		type UnifiedHouseholdInput
 	} from '../domain/unified-registration';
-	import type { HouseholdVehicle, PetGroup } from '../domain/people';
+	import { isMeaningfulOtherPetNotes, type HouseholdVehicle, type PetGroup } from '../domain/people';
+	import {
+		forgetPhotoPreview,
+		rememberPhotoPreview,
+		resolvePhotoPreviewUrl
+	} from './registration-photo-preview';
+
+	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
 
 	let {
 		channel = 'onsite',
+		mode = 'create',
+		initialHousehold = null,
+		initialMembers = null,
 		pending = false,
 		submitLabel,
+		submitAlign = 'right',
 		stickyTopOffset,
+		includeVehiclesAssets,
+		enableUnassignedPhoto = false,
+		shelterCode = '',
 		onsubmit,
 		onDirtyChange,
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
+		mode?: 'create' | 'report-in';
+		initialHousehold?: UnifiedHouseholdInput | null;
+		initialMembers?: UnifiedMemberWithMeta[] | null;
 		pending?: boolean;
 		submitLabel?: string;
+		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
-		onsubmit: (input: UnifiedRegistrationInput) => Promise<void> | void;
+		includeVehiclesAssets?: boolean;
+		enableUnassignedPhoto?: boolean;
+		shelterCode?: string;
+		onsubmit: (
+			input: UnifiedRegistrationInput,
+			meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+		) => Promise<void> | void;
 		onDirtyChange?: (dirty: boolean) => void;
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
-	const effectiveStickyTop = $derived(
-		stickyTopOffset ?? (channel === 'onsite' ? 'top-[108px]' : 'top-16')
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
+	const showVehiclesAssets = $derived(includeVehiclesAssets ?? channel === 'onsite');
+	const formStickyStyle = $derived(
+		stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : undefined
+	);
+	const shelterPhotoEnabled = $derived(
+		channel === 'public' && !enableUnassignedPhoto && Boolean(shelterCode.trim())
+	);
+	/** Onsite / public-shelter → Couch image; public unassigned → GridFS. */
+	const showPetPhotoUpload = $derived(
+		channel === 'onsite' || enableUnassignedPhoto || shelterPhotoEnabled
+	);
+	const memberPhotoUpload = $derived.by((): MemberPhotoUploadMode => {
+		if (channel === 'onsite') return 'onsite-couch';
+		if (enableUnassignedPhoto) return 'unassigned-gridfs';
+		if (shelterPhotoEnabled) return 'shelter-couch';
+		return 'none';
+	});
+
+	function buildInitialHousehold(): UnifiedRegistrationInput['household'] {
+		if (initialHousehold) {
+			return {
+				housing_type: initialHousehold.housing_type ?? 'owned_house',
+				residence_landmark: initialHousehold.residence_landmark ?? null,
+				address_no: initialHousehold.address_no ?? '',
+				village_no: initialHousehold.village_no ?? '',
+				subdistrict: initialHousehold.subdistrict ?? '',
+				district: initialHousehold.district ?? '',
+				province: initialHousehold.province ?? '',
+				postal_code: initialHousehold.postal_code ?? '',
+				pets: (initialHousehold.pets ?? []) as PetGroup[],
+				vehicles: (initialHousehold.vehicles ?? []) as HouseholdVehicle[],
+				assets: initialHousehold.assets ?? null
+			};
+		}
+		return {
+			housing_type: 'owned_house',
+			residence_landmark: null,
+			address_no: '',
+			village_no: '',
+			subdistrict: '',
+			district: '',
+			province: '',
+			postal_code: '',
+			pets: [] as PetGroup[],
+			vehicles: [] as HouseholdVehicle[],
+			assets: null
+		};
+	}
+
+	function buildInitialMembers(): UnifiedMemberWithMeta[] {
+		if (initialMembers && initialMembers.length > 0) {
+			return initialMembers.map((m) => ({
+				...m,
+				reporting_in: m.reporting_in ?? (m.stay_status === 'pre_registered' || !m._id)
+			}));
+		}
+		return [blankUnifiedMember()];
+	}
+
+	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
+	let household = $state<UnifiedRegistrationInput['household']>(untrack(() => buildInitialHousehold()));
+	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	let formError = $state<string | null>(null);
+	let validationMessages = $state<string[]>([]);
+	let memberFieldErrors = $state<Record<number, Record<string, string>>>({});
+	let formRootEl = $state<HTMLFormElement | null>(null);
+	let touched = $state(false);
+	let activeSection = $state<FormSectionId>('address');
+	let scrollSpyPaused = $state(false);
+
+	$effect(() => {
+		if (initialMembers && !touched) {
+			members = buildInitialMembers();
+		}
+	});
+
+	$effect(() => {
+		if (initialHousehold && !touched) {
+			household = buildInitialHousehold();
+			assetDescription = initialHousehold.assets?.description ?? '';
+			petItems = parseInitialPets((initialHousehold.pets ?? []) as PetGroup[]);
+		}
+	});
+
+	const formSectionNav = $derived.by(() => {
+		const items: { id: FormSectionId; label: string; icon: typeof Home }[] = [
+			{ id: 'address', label: t.sectionAddress, icon: Home },
+			{ id: 'pets', label: t.sectionPets, icon: PawPrint }
+		];
+		if (showVehiclesAssets) {
+			items.push({ id: 'vehicles', label: t.sectionVehicles, icon: Package });
+		}
+		items.push({ id: 'members', label: t.sectionMembers, icon: Users });
+		return items;
+	});
+
+	const membersSectionDesc = $derived(
+		mode === 'report-in'
+			? 'ตรวจสอบข้อมูลสมาชิก และติ๊กเลือกผู้ที่มารายงานตัวในรอบนี้ (สามารถกดเพิ่มสมาชิกใหม่ที่เดินทางมาด้วยกันได้)'
+			: showVehiclesAssets
+				? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
+				: t.sectionMembersDesc
 	);
 
-	let members = $state<UnifiedRegistrationInput['members']>([blankUnifiedMember()]);
-	let household = $state<UnifiedRegistrationInput['household']>({
-		housing_type: 'owned_house',
-		residence_landmark: null,
-		address_no: '',
-		village_no: '',
-		subdistrict: '',
-		district: '',
-		province: '',
-		postal_code: '',
-		pets: [] as PetGroup[],
-		vehicles: [] as HouseholdVehicle[],
-		assets: null
-	});
-	let assetDescription = $state('');
-	let formError = $state<string | null>(null);
-	let touched = $state(false);
+	const effectiveSubmitLabel = $derived(
+		submitLabel ??
+			(mode === 'report-in'
+				? 'ยืนยันรายงานตัวและพิมพ์บัตร'
+				: channel === 'public'
+					? t.submitConfirm
+					: t.submitOnsite)
+	);
 
 	interface PetCardItem {
 		id: number;
@@ -70,9 +211,26 @@
 		name: string;
 		details: string;
 		has_cage: boolean;
+		image_url: string | null;
+		previewUrl: string | null;
 	}
 
 	let nextPetId = 1;
+	let uploadingPetId = $state<number | null>(null);
+
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const saveImage = safeQuery(() => useSaveImage(), {
+		mutateAsync: async () => {
+			throw new Error('image upload unavailable');
+		}
+	} as unknown as ReturnType<typeof useSaveImage>);
 
 	function parseInitialPets(pets: PetGroup[]): PetCardItem[] {
 		const result: PetCardItem[] = [];
@@ -104,15 +262,29 @@
 					customSpecies: p.species === 'other' ? customSpecies || notes : '',
 					name,
 					details: detailsList.join(' | '),
-					has_cage: p.has_cage ?? false
+					has_cage: p.has_cage ?? false,
+					image_url: p.image_url ?? null,
+					previewUrl: null
 				});
 			}
 		}
 		return result;
 	}
 
-	let petItems = $state<PetCardItem[]>(parseInitialPets(household.pets as PetGroup[]));
+	let petItems = $state<PetCardItem[]>(untrack(() => parseInitialPets(household.pets as PetGroup[])));
 	const totalPetCount = $derived(petItems.length);
+
+	function revokePetPreview(pet: PetCardItem) {
+		if (pet.previewUrl?.startsWith('blob:') && pet.image_url) {
+			// Session cache owns the blob for remount restore.
+			pet.previewUrl = null;
+			return;
+		}
+		if (pet.previewUrl?.startsWith('blob:')) {
+			URL.revokeObjectURL(pet.previewUrl);
+		}
+		pet.previewUrl = null;
+	}
 
 	function syncPetsToHousehold() {
 		household.pets = petItems.map((p) => {
@@ -137,28 +309,123 @@
 				count: 1,
 				notes,
 				has_cage: p.has_cage,
-				image_url: null
+				image_url: p.image_url
 			};
 		});
 		markDirty();
 	}
 
 	$effect(() => {
-		onDirtyChange?.(touched);
+		const mode = channel === 'onsite' ? 'pet-onsite' : 'pet-public';
+		for (const pet of petItems) {
+			if (!pet.image_url || pet.previewUrl) continue;
+			const id = pet.image_url;
+			void resolvePhotoPreviewUrl(id, mode).then((url) => {
+				const target = petItems.find((p) => p.id === pet.id && p.image_url === id);
+				if (target && url) {
+					target.previewUrl = url;
+					petItems = [...petItems];
+				}
+			});
+		}
 	});
 
+	onDestroy(() => {
+		// Cached preview blobs are kept for remount; drop only unbound local blobs.
+		for (const p of petItems) {
+			if (p.previewUrl?.startsWith('blob:') && !p.image_url) {
+				URL.revokeObjectURL(p.previewUrl);
+			}
+		}
+	});
+
+	onMount(() => {
+		onDirtyChange?.(false);
+	});
+
+	function findScrollParent(element: Element): Element | null {
+		let parent = element.parentElement;
+		while (parent) {
+			const { overflowY } = getComputedStyle(parent);
+			if (overflowY === 'auto' || overflowY === 'scroll') return parent;
+			parent = parent.parentElement;
+		}
+		return null;
+	}
+
+	function createScrollSpy(): import('svelte/attachments').Attachment {
+		return (node) => {
+			const sectionNodes = () =>
+				formSectionNav
+					.map((s) => document.getElementById(`unified-${s.id}`))
+					.filter((el): el is HTMLElement => el instanceof HTMLElement);
+
+			const scrollRoot = findScrollParent(node);
+			const stickyTopPx = readRegistrationStickyTopPx(node);
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (scrollSpyPaused) return;
+					const visible = entries
+						.filter((entry) => entry.isIntersecting)
+						.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+					const target = visible[0]?.target;
+					if (!(target instanceof HTMLElement) || !target.id.startsWith('unified-')) return;
+					const id = target.id.replace('unified-', '') as FormSectionId;
+					if (formSectionNav.some((s) => s.id === id)) activeSection = id;
+				},
+				{
+					root: scrollRoot,
+					rootMargin: `-${Math.round(stickyTopPx + 8)}px 0px -55% 0px`,
+					threshold: [0, 0.1, 0.25, 0.5, 0.75, 1]
+				}
+			);
+
+			for (const el of sectionNodes()) observer.observe(el);
+			return () => observer.disconnect();
+		};
+	}
+
+	function scrollToSection(sectionId: FormSectionId) {
+		scrollSpyPaused = true;
+		activeSection = sectionId;
+		document.getElementById(`unified-${sectionId}`)?.scrollIntoView({
+			behavior: 'smooth',
+			block: 'start'
+		});
+		window.setTimeout(() => {
+			scrollSpyPaused = false;
+		}, 700);
+	}
+
 	function markDirty() {
+		if (touched) return;
 		touched = true;
+		onDirtyChange?.(true);
+	}
+
+	function clearDirty() {
+		if (!touched) return;
+		touched = false;
+		onDirtyChange?.(false);
 	}
 
 	function addMember() {
 		if (pending) return;
-		members = [...members, blankUnifiedMember()];
+		const newMember: UnifiedMemberWithMeta = {
+			...blankUnifiedMember(),
+			reporting_in: true
+		};
+		members = [...members, newMember];
 		markDirty();
 	}
 
 	function removeMember(index: number) {
-		if (pending || index === 0 || members.length <= 1) return;
+		if (pending) return;
+		if (mode === 'report-in') {
+			if (members[index]?._id) return;
+		} else {
+			if (index === 0 || members.length <= 1) return;
+		}
 		members = members.filter((_, i) => i !== index);
 		markDirty();
 	}
@@ -166,7 +433,7 @@
 	function addPet(species: 'dog' | 'cat' | 'other') {
 		if (pending) return;
 		if (petItems.length >= 20) {
-			toast.error('สามารถบันทึกสัตว์เลี้ยงได้สูงสุด 20 ตัว');
+			toast.error(t.petMaxReached);
 			return;
 		}
 		petItems = [
@@ -177,7 +444,9 @@
 				customSpecies: '',
 				name: '',
 				details: '',
-				has_cage: false
+				has_cage: false,
+				image_url: null,
+				previewUrl: null
 			}
 		];
 		syncPetsToHousehold();
@@ -185,7 +454,83 @@
 
 	function removePet(id: number) {
 		if (pending) return;
+		const removed = petItems.find((p) => p.id === id);
+		if (removed) {
+			forgetPhotoPreview(removed.image_url);
+			revokePetPreview(removed);
+		}
 		petItems = petItems.filter((p) => p.id !== id);
+		syncPetsToHousehold();
+	}
+
+	async function onPetPhotoChange(petId: number, e: Event) {
+		if (pending || !showPetPhotoUpload) return;
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+
+		const pet = petItems.find((p) => p.id === petId);
+		if (!pet) return;
+
+		if (pet.species === 'other' && !isMeaningfulOtherPetNotes(pet.customSpecies)) {
+			toast.error(t.petSpeciesRequiredBeforePhoto);
+			return;
+		}
+
+		uploadingPetId = petId;
+		try {
+			const localPreview = URL.createObjectURL(file);
+			let photoId: string;
+			if (channel === 'onsite') {
+				const ctx = {
+					shelterCode: getShelterCode(),
+					createdBy: authStore.user?.name ?? 'unknown'
+				};
+				const res = await saveImage.mutateAsync({ file, ctx });
+				photoId = res._id;
+			} else {
+				const compressed = await compressImage(file);
+				const contentType = compressed.full.type || 'image/webp';
+				const filename = file.name || 'pet.webp';
+				const form = new FormData();
+				form.append('full', compressed.full, filename);
+				form.append('thumb', compressed.thumbnail, 'thumb.webp');
+				form.append('filename', filename);
+				form.append('content_type', contentType);
+				form.append('width', String(compressed.width));
+				form.append('height', String(compressed.height));
+				form.append('original_size', String(compressed.originalSize));
+				form.append('compressed_size', String(compressed.compressedSize));
+				form.append('thumbnail_size', String(compressed.thumbnailSize));
+				const res = enableUnassignedPhoto
+					? await uploadUnassignedPhoto(form)
+					: await uploadShelterBookingPhoto(shelterCode.trim(), form);
+				photoId = res.photo_id;
+			}
+			if (pet.image_url && pet.image_url !== photoId) {
+				forgetPhotoPreview(pet.image_url);
+			}
+			revokePetPreview(pet);
+			pet.previewUrl = localPreview;
+			pet.image_url = photoId;
+			rememberPhotoPreview(photoId, localPreview);
+			syncPetsToHousehold();
+			toast.success(t.petPhotoUploadOk);
+		} catch {
+			toast.error(t.petPhotoUploadFail);
+		} finally {
+			uploadingPetId = null;
+		}
+	}
+
+	function clearPetPhoto(petId: number) {
+		if (pending || uploadingPetId === petId) return;
+		const pet = petItems.find((p) => p.id === petId);
+		if (!pet) return;
+		forgetPhotoPreview(pet.image_url);
+		revokePetPreview(pet);
+		pet.image_url = null;
 		syncPetsToHousehold();
 	}
 
@@ -193,13 +538,13 @@
 		const sameSpecies = petItems.filter((p) => p.species === item.species);
 		const indexInSpecies = sameSpecies.findIndex((p) => p.id === item.id) + 1;
 		if (item.species === 'dog') {
-			return `สุนัข — ตัวที่ ${indexInSpecies}`;
+			return `${t.dogTitle} — ${t.petIndexSuffix} ${indexInSpecies}`;
 		}
 		if (item.species === 'cat') {
-			return `แมว — ตัวที่ ${indexInSpecies}`;
+			return `${t.catTitle} — ${t.petIndexSuffix} ${indexInSpecies}`;
 		}
-		const label = item.customSpecies.trim() ? item.customSpecies.trim() : 'สัตว์อื่นๆ';
-		return `${label} — ตัวที่ ${indexInSpecies}`;
+		const label = item.customSpecies.trim() ? item.customSpecies.trim() : t.otherPetTitle;
+		return `${label} — ${t.petIndexSuffix} ${indexInSpecies}`;
 	}
 
 	function addVehicle() {
@@ -214,14 +559,56 @@
 		markDirty();
 	}
 
+	function mapZodIssues(issues: ZodIssue[]): {
+		messages: string[];
+		memberErrors: Record<number, Record<string, string>>;
+	} {
+		const messages: string[] = [];
+		const memberErrors: Record<number, Record<string, string>> = {};
+		for (const issue of issues) {
+			messages.push(issue.message);
+			const [root, idx, field] = issue.path;
+			if (root === 'members' && typeof idx === 'number' && typeof field === 'string') {
+				memberErrors[idx] ??= {};
+				if (!memberErrors[idx][field]) memberErrors[idx][field] = issue.message;
+			}
+		}
+		return {
+			messages: [...new Set(messages.filter(Boolean))],
+			memberErrors
+		};
+	}
+
+	async function revealValidation(message: string, messages: string[] = []) {
+		formError = message;
+		validationMessages = messages.length > 0 ? messages : [message];
+		toast.error(message, {
+			description: validationMessages.slice(0, 3).join('\n'),
+			duration: 6000
+		});
+		await tick();
+		formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function jumpToFirstError() {
+		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
+		if (firstInvalid) {
+			firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
+			return;
+		}
+		scrollToSection('members');
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (pending) return;
 
 		for (const p of petItems) {
 			if (p.species === 'other' && !p.customSpecies.trim()) {
-				formError = 'กรุณาระบุชนิดสัตว์สำหรับสัตว์เลี้ยงอื่นๆ';
-				toast.error(formError);
+				memberFieldErrors = {};
+				await revealValidation(t.petOtherSpeciesRequired);
+				scrollToSection('pets');
 				return;
 			}
 		}
@@ -231,9 +618,9 @@
 			members,
 			household: {
 				...household,
-				vehicles: channel === 'onsite' ? (household.vehicles ?? []) : [],
+				vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
 				assets:
-					channel === 'onsite' && assetDescription.trim()
+					showVehiclesAssets && assetDescription.trim()
 						? { description: assetDescription.trim(), image_url: null }
 						: null
 			}
@@ -241,324 +628,408 @@
 
 		const result = unifiedRegistrationInputSchema.safeParse(payload);
 		if (!result.success) {
-			const first = result.error.issues[0];
-			formError = first?.message ?? 'กรุณากรอกข้อมูลให้ครบถ้วน';
-			toast.error(formError);
+			const mapped = mapZodIssues(result.error.issues);
+			memberFieldErrors = mapped.memberErrors;
+			const first = mapped.messages[0] ?? t.validationError;
+			await revealValidation(first, mapped.messages);
 			return;
 		}
 
 		if (channel === 'public') {
 			const headPhone = members[0]?.phone?.trim();
 			if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
-				formError = 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก';
-				toast.error(formError);
+				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
+				await revealValidation(t.headPhoneRequired);
+				return;
+			}
+		}
+
+		if (mode === 'report-in') {
+			const reportingCount = members.filter((m) => m.reporting_in).length;
+			if (reportingCount === 0) {
+				memberFieldErrors = {};
+				await revealValidation('กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้');
+				scrollToSection('members');
 				return;
 			}
 		}
 
 		formError = null;
+		validationMessages = [];
+		memberFieldErrors = {};
 		try {
-			await onsubmit(result.data as UnifiedRegistrationInput);
-			touched = false;
+			await onsubmit(result.data as UnifiedRegistrationInput, {
+				reportingInMembers: members.filter((m) => m.reporting_in),
+				allMembers: members
+			});
+			clearDirty();
 		} catch {
 			// Caller surfaces save errors.
 		}
 	}
 </script>
 
-<form class="space-y-6" onsubmit={handleSubmit} oninput={markDirty}>
-	<!-- ── Section 1: ข้อมูลที่อยู่อาศัย ─────────────────────────────────── -->
-	<section class="space-y-3">
-		<div
-			class="sticky z-20 {effectiveStickyTop} flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4"
-		>
-			<div class="flex items-center gap-2.5">
-				<Home class="size-5 text-primary" />
-				<div>
-					<h2 class="text-base font-bold text-foreground">ข้อมูลที่อยู่อาศัย</h2>
-					<p class="text-xs text-muted-foreground">ประเภทที่อยู่อาศัย และที่อยู่เดิมของครอบครัว</p>
-				</div>
-			</div>
-		</div>
+<form
+	class="space-y-6"
+	style={formStickyStyle}
+	bind:this={formRootEl}
+	onsubmit={handleSubmit}
+	oninput={markDirty}
+	{@attach createScrollSpy()}
+>
+	<UnifiedRegistrationStickyNav
+		sections={formSectionNav}
+		{activeSection}
+		ariaLabel={t.sectionNavAria}
+		onNavigate={(id) => scrollToSection(id as FormSectionId)}
+	/>
 
-		<div class="rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5">
-			<HouseholdAddressFields
-				bind:housing_type={household.housing_type}
-				bind:residence_landmark={
-					() => household.residence_landmark ?? '',
-					(v) => {
-						household.residence_landmark = v || null;
-					}
-				}
-				bind:address_no={
-					() => household.address_no ?? '',
-					(v) => {
-						household.address_no = v;
-					}
-				}
-				bind:village_no={
-					() => household.village_no ?? '',
-					(v) => {
-						household.village_no = v;
-					}
-				}
-				bind:subdistrict={
-					() => household.subdistrict ?? '',
-					(v) => {
-						household.subdistrict = v;
-					}
-				}
-				bind:district={
-					() => household.district ?? '',
-					(v) => {
-						household.district = v;
-					}
-				}
-				bind:province={
-					() => household.province ?? '',
-					(v) => {
-						household.province = v;
-					}
-				}
-				bind:postal_code={
-					() => household.postal_code ?? '',
-					(v) => {
-						household.postal_code = v;
-					}
-				}
-				required={true}
-				disabled={pending}
-			/>
-		</div>
-	</section>
-
-	<!-- ── Section 2: สัตว์เลี้ยง ────────────────────────────────────────── -->
-	<section class="space-y-3">
-		<div
-			class="sticky z-20 {effectiveStickyTop} flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4"
-		>
-			<div class="flex items-center gap-2.5">
-				<PawPrint class="size-5 text-primary" />
-				<div>
-					<div class="flex items-center gap-2">
-						<h2 class="text-base font-bold text-foreground">สัตว์เลี้ยง</h2>
-						{#if totalPetCount > 0}
-							<span
-								class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-							>
-								{totalPetCount} ตัว
-							</span>
-						{/if}
-					</div>
-					<p class="text-xs text-muted-foreground">สัตว์เลี้ยงที่นำมาด้วย (ใช้ร่วมทั้งครอบครัว)</p>
-				</div>
-			</div>
-
-			<div class="flex flex-wrap items-center gap-1.5">
+	{#if formError}
+		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
+			<CircleAlert class="size-4" />
+			<Alert.Title class="font-semibold">{t.validationSummaryTitle}</Alert.Title>
+			<Alert.Description>
+				<ul class="mt-2 list-disc space-y-1 pl-5">
+					{#each validationMessages as msg (msg)}
+						<li>{msg}</li>
+					{/each}
+				</ul>
 				<Button
 					type="button"
 					variant="outline"
 					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('dog')}
-					class="h-8 gap-1 text-xs"
+					class="mt-3 h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
+					onclick={jumpToFirstError}
 				>
-					<Plus class="size-3.5" /> สุนัข
+					{t.jumpToFirstError}
 				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('cat')}
-					class="h-8 gap-1 text-xs"
-				>
-					<Plus class="size-3.5" /> แมว
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('other')}
-					class="h-8 gap-1 text-xs"
-				>
-					<Plus class="size-3.5" /> สัตว์อื่นๆ
-				</Button>
-			</div>
-		</div>
+			</Alert.Description>
+		</Alert.Root>
+	{/if}
 
-		<div class="rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5">
-			{#if petItems.length === 0}
-				<div
-					class="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/20 p-6 text-center"
-				>
-					<PawPrint class="size-8 text-muted-foreground/50" />
-					<p class="text-sm font-medium text-foreground">ยังไม่มีการบันทึกสัตว์เลี้ยง</p>
-					<p class="text-xs text-muted-foreground">
-						หากนำสัตว์เลี้ยงมาด้วย สามารถกดปุ่มเพิ่มสัตว์เลี้ยงด้านบน หรือเลือกจากปุ่มด้านล่างนี้
-					</p>
-					<div class="mt-2 flex flex-wrap justify-center gap-2">
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={pending || petItems.length >= 20}
-							onclick={() => addPet('dog')}
-							class="h-8 gap-1 text-xs"
-						>
-							<Plus class="size-3.5" /> เพิ่มสุนัข
-						</Button>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={pending || petItems.length >= 20}
-							onclick={() => addPet('cat')}
-							class="h-8 gap-1 text-xs"
-						>
-							<Plus class="size-3.5" /> เพิ่มแมว
-						</Button>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={pending || petItems.length >= 20}
-							onclick={() => addPet('other')}
-							class="h-8 gap-1 text-xs"
-						>
-							<Plus class="size-3.5" /> เพิ่มสัตว์อื่นๆ
-						</Button>
-					</div>
+	<!-- ── Section 1: Address ─────────────────────────────────── -->
+	<UnifiedRegistrationSection
+		id="unified-address"
+		title={t.sectionAddress}
+		description={t.sectionAddressDesc}
+		icon={Home}
+	>
+		<HouseholdAddressFields
+			bind:housing_type={household.housing_type}
+			bind:residence_landmark={
+				() => household.residence_landmark ?? '',
+				(v) => {
+					household.residence_landmark = v || null;
+				}
+			}
+			bind:address_no={
+				() => household.address_no ?? '',
+				(v) => {
+					household.address_no = v;
+				}
+			}
+			bind:village_no={
+				() => household.village_no ?? '',
+				(v) => {
+					household.village_no = v;
+				}
+			}
+			bind:subdistrict={
+				() => household.subdistrict ?? '',
+				(v) => {
+					household.subdistrict = v;
+				}
+			}
+			bind:district={
+				() => household.district ?? '',
+				(v) => {
+					household.district = v;
+				}
+			}
+			bind:province={
+				() => household.province ?? '',
+				(v) => {
+					household.province = v;
+				}
+			}
+			bind:postal_code={
+				() => household.postal_code ?? '',
+				(v) => {
+					household.postal_code = v;
+				}
+			}
+			required={true}
+			disabled={pending}
+		/>
+	</UnifiedRegistrationSection>
+
+	<!-- ── Section 2: Pets ────────────────────────────────────────── -->
+	<UnifiedRegistrationSection
+		id="unified-pets"
+		title={t.sectionPets}
+		description={t.sectionPetsDesc}
+		badge={totalPetCount > 0
+			? `${totalPetCount}${t.petCountUnit ? ` ${t.petCountUnit}` : ''}`
+			: null}
+		icon={PawPrint}
+	>
+		{#snippet actions()}
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={pending || petItems.length >= 20}
+				onclick={() => addPet('dog')}
+				class="h-8 gap-1 text-xs"
+			>
+				<Plus class="size-3.5" /> {t.addDog}
+			</Button>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={pending || petItems.length >= 20}
+				onclick={() => addPet('cat')}
+				class="h-8 gap-1 text-xs"
+			>
+				<Plus class="size-3.5" /> {t.addCat}
+			</Button>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={pending || petItems.length >= 20}
+				onclick={() => addPet('other')}
+				class="h-8 gap-1 text-xs"
+			>
+				<Plus class="size-3.5" /> {t.addOtherPet}
+			</Button>
+		{/snippet}
+
+		{#if petItems.length === 0}
+			<div
+				class="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/20 p-6 text-center"
+			>
+				<PawPrint class="size-8 text-muted-foreground/50" />
+				<p class="text-sm font-medium text-foreground">{t.sectionPetsEmpty}</p>
+				<p class="text-xs text-muted-foreground">{t.sectionPetsEmptyHint}</p>
+				<div class="mt-2 flex flex-wrap justify-center gap-2">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={pending || petItems.length >= 20}
+						onclick={() => addPet('dog')}
+						class="h-8 gap-1 text-xs"
+					>
+						<Plus class="size-3.5" /> {t.addDogFull}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={pending || petItems.length >= 20}
+						onclick={() => addPet('cat')}
+						class="h-8 gap-1 text-xs"
+					>
+						<Plus class="size-3.5" /> {t.addCatFull}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={pending || petItems.length >= 20}
+						onclick={() => addPet('other')}
+						class="h-8 gap-1 text-xs"
+					>
+						<Plus class="size-3.5" /> {t.addOtherPetFull}
+					</Button>
 				</div>
-			{:else}
-				<div class="space-y-3">
-					{#each petItems as pet (pet.id)}
-						<div class="space-y-3 rounded-lg border border-border/60 bg-slate-50/50 p-3 sm:p-4">
-							<div
-								class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2"
-							>
-								<div class="flex items-center gap-2">
-									<span
-										class="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold
-										{pet.species === 'dog'
-											? 'border-amber-200 bg-amber-50 text-amber-900'
-											: pet.species === 'cat'
-												? 'border-sky-200 bg-sky-50 text-sky-900'
-												: 'border-emerald-200 bg-emerald-50 text-emerald-900'}"
-									>
-										{pet.species === 'dog' ? 'สุนัข' : pet.species === 'cat' ? 'แมว' : 'สัตว์อื่นๆ'}
-									</span>
-									<span class="text-sm font-bold text-foreground">
-										{getPetTitle(pet)}
-									</span>
-								</div>
-
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									disabled={pending}
-									onclick={() => removePet(pet.id)}
-									class="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+			</div>
+		{:else}
+			<div class="space-y-3">
+				{#each petItems as pet (pet.id)}
+					<div class="space-y-3 rounded-lg border border-border/60 bg-slate-50/50 p-3 sm:p-4">
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2"
+						>
+							<div class="flex items-center gap-2">
+								<span
+									class="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold
+									{pet.species === 'dog'
+										? 'border-amber-200 bg-amber-50 text-amber-900'
+										: pet.species === 'cat'
+											? 'border-sky-200 bg-sky-50 text-sky-900'
+											: 'border-emerald-200 bg-emerald-50 text-emerald-900'}"
 								>
-									<Trash2 class="mr-1 size-3.5" />
-									ลบ
-								</Button>
+									{pet.species === 'dog'
+										? t.dogTitle
+										: pet.species === 'cat'
+											? t.catTitle
+											: t.otherPetTitle}
+								</span>
+								<span class="text-sm font-bold text-foreground">
+									{getPetTitle(pet)}
+								</span>
 							</div>
 
-							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-								{#if pet.species === 'other'}
-									<div class="space-y-1">
-										<Label class="text-2xs font-medium text-muted-foreground">
-											ชนิดสัตว์ <span class="text-destructive">*</span>
-										</Label>
-										<Input
-											placeholder="เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์"
-											bind:value={pet.customSpecies}
-											disabled={pending}
-											class="h-8 text-xs"
-											oninput={syncPetsToHousehold}
-										/>
-									</div>
-								{/if}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								disabled={pending}
+								onclick={() => removePet(pet.id)}
+								class="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+							>
+								<Trash2 class="mr-1 size-3.5" />
+								{t.removeBtn}
+							</Button>
+						</div>
 
-								<div class="space-y-1 {pet.species !== 'other' ? 'sm:col-span-2' : ''}">
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							{#if pet.species === 'other'}
+								<div class="space-y-1">
 									<Label class="text-2xs font-medium text-muted-foreground">
-										ชื่อสัตว์เลี้ยง (ถ้ามี)
+										{t.petSpeciesCustomLabel} <span class="text-destructive">*</span>
 									</Label>
 									<Input
-										placeholder="เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้"
-										bind:value={pet.name}
+										placeholder={t.petSpeciesCustomPlaceholder}
+										bind:value={pet.customSpecies}
 										disabled={pending}
 										class="h-8 text-xs"
 										oninput={syncPetsToHousehold}
 									/>
 								</div>
+							{/if}
 
-								<div class="space-y-1 sm:col-span-2">
-									<Label class="text-2xs font-medium text-muted-foreground">
-										อาการ / สายพันธุ์ / ข้อมูลเพิ่มเติม
-									</Label>
-									<Textarea
-										placeholder="เช่น มีโรคประจำตัว, สายพันธุ์บางแก้ว, ทานอาหารเปียก, ต้องทานยาทุกเช้า"
-										bind:value={pet.details}
-										disabled={pending}
-										rows={2}
-										class="min-h-16 text-xs"
-										oninput={syncPetsToHousehold}
-									/>
-								</div>
-
-								<div class="flex items-center pt-1 sm:col-span-2">
-									<label
-										class="flex cursor-pointer items-center gap-2 text-xs text-foreground select-none"
-									>
-										<Checkbox
-											checked={pet.has_cage}
-											onCheckedChange={(v) => {
-												pet.has_cage = v === true;
-												syncPetsToHousehold();
-											}}
-											disabled={pending}
-											class="size-4"
-										/>
-										<span>มีกรง / สายจูง / ตะกร้า</span>
-									</label>
-								</div>
+							<div class="space-y-1 {pet.species !== 'other' ? 'sm:col-span-2' : ''}">
+								<Label class="text-2xs font-medium text-muted-foreground">
+									{t.petNameLabel}
+								</Label>
+								<Input
+									placeholder={t.petNamePlaceholder}
+									bind:value={pet.name}
+									disabled={pending}
+									class="h-8 text-xs"
+									oninput={syncPetsToHousehold}
+								/>
 							</div>
-						</div>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</section>
 
-	<!-- ── Section 3: ยานพาหนะและทรัพย์สิน (เฉพาะ Station 1 / Onsite) ──────── -->
-	{#if channel === 'onsite'}
-		<section class="space-y-3">
-			<div
-				class="sticky z-20 {effectiveStickyTop} flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4"
-			>
-				<div class="flex items-center gap-2.5">
-					<Package class="size-5 text-primary" />
-					<div>
-						<div class="flex items-center gap-2">
-							<h2 class="text-base font-bold text-foreground">ยานพาหนะและทรัพย์สิน</h2>
-							{#if (household.vehicles ?? []).length > 0}
-								<span
-									class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+							<div class="space-y-1 sm:col-span-2">
+								<Label class="text-2xs font-medium text-muted-foreground">
+									{t.petExtraLabel}
+								</Label>
+								<Textarea
+									placeholder={t.petExtraPlaceholder}
+									bind:value={pet.details}
+									disabled={pending}
+									rows={2}
+									class="min-h-16 text-xs"
+									oninput={syncPetsToHousehold}
+								/>
+							</div>
+
+							<div class="flex items-center pt-1 sm:col-span-2">
+								<label
+									class="flex cursor-pointer items-center gap-2 text-xs text-foreground select-none"
 								>
-									{(household.vehicles ?? []).length} คัน
-								</span>
+									<Checkbox
+										checked={pet.has_cage}
+										onCheckedChange={(v) => {
+											pet.has_cage = v === true;
+											syncPetsToHousehold();
+										}}
+										disabled={pending}
+										class="size-4"
+									/>
+									<span>{t.petHasCage}</span>
+								</label>
+							</div>
+
+							{#if showPetPhotoUpload}
+								<div class="space-y-2 sm:col-span-2">
+									<Label
+										for="pet-photo-{pet.id}"
+										class="text-2xs font-medium text-muted-foreground"
+									>
+										{t.petPhotoLabel}
+									</Label>
+									<div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+										<div
+											class="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border bg-muted/30"
+										>
+											{#if uploadingPetId === pet.id}
+												<Loader2 class="size-6 animate-spin text-primary" />
+											{:else if pet.previewUrl}
+												<img
+													src={pet.previewUrl}
+													alt={t.petPhotoLabel}
+													class="size-full object-cover"
+												/>
+											{:else}
+												<Camera class="size-8 text-muted-foreground/50" />
+											{/if}
+										</div>
+										<div class="flex flex-wrap items-center gap-2">
+											<label
+												for="pet-photo-{pet.id}"
+												class="inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {pending ||
+												uploadingPetId === pet.id
+													? 'pointer-events-none opacity-60'
+													: ''}"
+											>
+												<Camera class="size-3.5 text-primary" />
+												<span>
+													{pet.previewUrl || pet.image_url
+														? t.petPhotoChange
+														: t.petPhotoPick}
+												</span>
+											</label>
+											<input
+												id="pet-photo-{pet.id}"
+												type="file"
+												accept="image/*"
+												class="sr-only"
+												disabled={pending || uploadingPetId === pet.id}
+												onchange={(e) => void onPetPhotoChange(pet.id, e)}
+											/>
+											{#if pet.previewUrl || pet.image_url}
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													disabled={pending || uploadingPetId === pet.id}
+													onclick={() => clearPetPhoto(pet.id)}
+													class="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+													aria-label={t.petPhotoRemove}
+												>
+													<X class="size-3.5" />
+													{t.petPhotoRemove}
+												</Button>
+											{/if}
+										</div>
+									</div>
+								</div>
 							{/if}
 						</div>
-						<p class="text-xs text-muted-foreground">
-							ยานพาหนะและทรัพย์สินมีค่าที่นำติดตัวมา (เฉพาะ Station 1)
-						</p>
 					</div>
-				</div>
+				{/each}
+			</div>
+		{/if}
+	</UnifiedRegistrationSection>
 
+	<!-- ── Section 3: Vehicles + assets (optional; onsite default) ──────── -->
+	{#if showVehiclesAssets}
+		<UnifiedRegistrationSection
+			id="unified-vehicles"
+			title={t.sectionVehicles}
+			description={t.sectionVehiclesDesc}
+			badge={(household.vehicles ?? []).length > 0
+				? `${(household.vehicles ?? []).length}${t.vehicleCountUnit ? ` ${t.vehicleCountUnit}` : ''}`
+				: null}
+			icon={Package}
+		>
+			{#snippet actions()}
 				<Button
 					type="button"
 					variant="outline"
@@ -567,120 +1038,101 @@
 					onclick={addVehicle}
 					class="h-8 gap-1 text-xs"
 				>
-					<Plus class="size-3.5" /> เพิ่มยานพาหนะ
+					<Plus class="size-3.5" /> {t.addVehicle}
 				</Button>
-			</div>
+			{/snippet}
 
-			<div class="space-y-4 rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5">
-				{#if (household.vehicles ?? []).length === 0}
-					<p class="text-xs text-muted-foreground">
-						ยังไม่มียานพาหนะ (กดปุ่มเพิ่มยานพาหนะด้านบนเพื่อบันทึก)
-					</p>
-				{:else}
-					<div class="space-y-2">
-						{#each household.vehicles ?? [] as vehicle, index (index)}
-							<div
-								class="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-slate-50/50 p-2.5"
-							>
-								<div class="w-[140px] shrink-0 space-y-1">
-									<Label class="text-2xs text-muted-foreground">ประเภท</Label>
-									<Select.Root
-										type="single"
-										value={vehicle.type}
-										onValueChange={(val) => {
-											if (val === 'car' || val === 'motorcycle' || val === 'other') {
-												vehicle.type = val;
-												household.vehicles = [...(household.vehicles ?? [])];
-												markDirty();
-											}
-										}}
-										disabled={pending}
-									>
-										<Select.Trigger class="!h-8 w-full rounded-md text-xs">
-											{vehicle.type === 'car'
-												? 'รถยนต์'
-												: vehicle.type === 'motorcycle'
-													? 'รถจักรยานยนต์'
-													: 'อื่นๆ'}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="car" label="รถยนต์" />
-											<Select.Item value="motorcycle" label="รถจักรยานยนต์" />
-											<Select.Item value="other" label="อื่นๆ" />
-										</Select.Content>
-									</Select.Root>
-								</div>
-								<div class="min-w-[140px] flex-1 space-y-1">
-									<Label class="text-2xs text-muted-foreground">ทะเบียนรถ</Label>
-									<Input
-										class="h-8"
-										value={vehicle.license_plate ?? ''}
-										disabled={pending}
-										oninput={(e) => {
-											vehicle.license_plate = (e.currentTarget as HTMLInputElement).value;
+			{#if (household.vehicles ?? []).length === 0}
+				<p class="text-xs text-muted-foreground">{t.vehicleEmpty}</p>
+			{:else}
+				<div class="space-y-2">
+					{#each household.vehicles ?? [] as vehicle, index (index)}
+						<div
+							class="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-slate-50/50 p-2.5"
+						>
+							<div class="w-[140px] shrink-0 space-y-1">
+								<Label class="text-2xs text-muted-foreground">{t.vehicleTypeLabel}</Label>
+								<Select.Root
+									type="single"
+									value={vehicle.type}
+									onValueChange={(val) => {
+										if (val === 'car' || val === 'motorcycle' || val === 'other') {
+											vehicle.type = val;
 											household.vehicles = [...(household.vehicles ?? [])];
 											markDirty();
-										}}
-									/>
-								</div>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
+										}
+									}}
 									disabled={pending}
-									onclick={() => removeVehicle(index)}
-									class="h-8 text-xs text-destructive hover:text-destructive"
 								>
-									<Trash2 class="mr-1 size-3.5" />
-									ลบ
-								</Button>
+									<Select.Trigger class="!h-8 w-full rounded-md text-xs">
+										{vehicle.type === 'car'
+											? t.vehicleTypeCar
+											: vehicle.type === 'motorcycle'
+												? t.vehicleTypeMotorcycle
+												: t.vehicleTypeOther}
+									</Select.Trigger>
+									<Select.Content>
+										<Select.Item value="car" label={t.vehicleTypeCar} />
+										<Select.Item value="motorcycle" label={t.vehicleTypeMotorcycle} />
+										<Select.Item value="other" label={t.vehicleTypeOther} />
+									</Select.Content>
+								</Select.Root>
 							</div>
-						{/each}
-					</div>
-				{/if}
-
-				<div class="space-y-1.5 border-t border-border/60 pt-4">
-					<Label for="family-assets" class="text-xs font-semibold text-foreground">
-						ทรัพย์สินมีค่า
-					</Label>
-					<Textarea
-						id="family-assets"
-						bind:value={assetDescription}
-						disabled={pending}
-						rows={2}
-						placeholder="เช่น เอกสารสำคัญ เครื่องใช้ไฟฟ้า สร้อยคอทองคำ"
-						class="min-h-16 text-sm"
-					/>
+							<div class="min-w-[140px] flex-1 space-y-1">
+								<Label class="text-2xs text-muted-foreground">{t.licensePlateLabel}</Label>
+								<Input
+									class="h-8"
+									value={vehicle.license_plate ?? ''}
+									disabled={pending}
+									oninput={(e) => {
+										vehicle.license_plate = (e.currentTarget as HTMLInputElement).value;
+										household.vehicles = [...(household.vehicles ?? [])];
+										markDirty();
+									}}
+								/>
+							</div>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								disabled={pending}
+								onclick={() => removeVehicle(index)}
+								class="h-8 text-xs text-destructive hover:text-destructive"
+							>
+								<Trash2 class="mr-1 size-3.5" />
+								{t.removeBtn}
+							</Button>
+						</div>
+					{/each}
 				</div>
+			{/if}
+
+			<div class="space-y-1.5 border-t border-border/60 pt-4">
+				<Label for="family-assets" class="text-xs font-semibold text-foreground">
+					{t.assetsLabel}
+				</Label>
+				<Textarea
+					id="family-assets"
+					bind:value={assetDescription}
+					disabled={pending}
+					rows={2}
+					placeholder={t.assetsPlaceholder}
+					class="min-h-16 text-sm"
+				/>
 			</div>
-		</section>
+		</UnifiedRegistrationSection>
 	{/if}
 
-	<!-- ── Section 4: สมาชิกในครอบครัว ─────────────────────────────────── -->
-	<section class="space-y-3">
-		<div
-			class="sticky z-20 {effectiveStickyTop} flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4"
-		>
-			<div class="flex items-center gap-2.5">
-				<Users class="size-5 text-primary" />
-				<div>
-					<div class="flex items-center gap-2">
-						<h2 class="text-base font-bold text-foreground">สมาชิกในครอบครัว</h2>
-						<span
-							class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-						>
-							{members.length} คน
-						</span>
-					</div>
-					<p class="text-xs text-muted-foreground">
-						ทุกคนกรอกข้อมูลเท่ากัน · คนแรกคือผู้ติดต่อหลัก
-						{#if channel === 'onsite'}
-							· สถานะหลังบันทึก arriving
-						{/if}
-					</p>
-				</div>
-			</div>
-
+	<!-- ── Section 4: Members ─────────────────────────────────── -->
+	<UnifiedRegistrationSection
+		id="unified-members"
+		title={t.sectionMembers}
+		description={membersSectionDesc}
+		badge={`${members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
+		icon={Users}
+		bodyClass="none"
+	>
+		{#snippet actions()}
 			<Button
 				type="button"
 				variant="outline"
@@ -689,9 +1141,9 @@
 				class="h-9 gap-1.5"
 			>
 				<Plus class="size-4" />
-				เพิ่มสมาชิก
+				{t.addMember}
 			</Button>
-		</div>
+		{/snippet}
 
 		<div class="space-y-4">
 			{#each [...members.keys()] as index (index)}
@@ -704,22 +1156,34 @@
 						}
 					}
 					{index}
-					canRemove={index > 0}
+					canRemove={mode === 'report-in' ? !members[index]?._id : index > 0}
+					{mode}
+					onReportingInChange={(reportingIn) => {
+						if (members[index]) {
+							members[index].reporting_in = reportingIn;
+							members = [...members];
+							markDirty();
+						}
+					}}
 					disabled={pending}
+					photoUpload={memberPhotoUpload}
+					shelterCode={shelterCode.trim()}
+					{channel}
+					fieldErrors={memberFieldErrors[index]}
 					onRemove={() => removeMember(index)}
 				/>
 			{/each}
 		</div>
-	</section>
+	</UnifiedRegistrationSection>
 
 	{#if children}
 		<div class="pt-2">
 			{@render children({
 				household: {
 					...household,
-					vehicles: channel === 'onsite' ? (household.vehicles ?? []) : [],
+					vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
 					assets:
-						channel === 'onsite' && assetDescription.trim()
+						showVehiclesAssets && assetDescription.trim()
 							? { description: assetDescription.trim(), image_url: null }
 							: null
 				}
@@ -727,25 +1191,10 @@
 		</div>
 	{/if}
 
-	{#if formError}
-		<p class="text-sm text-destructive" role="alert">{formError}</p>
-	{/if}
-
-	<div
-		class="sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-1 py-3 backdrop-blur-sm"
-	>
-		<Button
-			type="submit"
-			disabled={pending}
-			class="h-11 w-full gap-2 text-base font-semibold sm:w-auto sm:px-8"
-		>
-			{#if pending}
-				<Loader2 class="size-4 animate-spin" />
-				กำลังบันทึก…
-			{:else}
-				{submitLabel ??
-					(channel === 'public' ? 'ยืนยันการลงทะเบียน' : 'บันทึกลงทะเบียนทั้งครอบครัว')}
-			{/if}
-		</Button>
-	</div>
+	<UnifiedRegistrationSubmitBar
+		{pending}
+		label={effectiveSubmitLabel}
+		submittingLabel={t.submitting}
+		align={submitAlign}
+	/>
 </form>
