@@ -989,11 +989,13 @@
 								<div class="flex flex-col justify-between gap-4 md:flex-row md:items-start">
 									<div class="space-y-2">
 										<div class="flex flex-wrap items-center gap-2">
-											<span
-												class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
-											>
-												{activity.shiftPeriod || 'กะงาน'}
-											</span>
+											{#if !activity.assignmentId}
+												<span
+													class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
+												>
+													{activity.shiftPeriod || 'กะงาน'}
+												</span>
+											{/if}
 											<span
 												class="rounded-md px-2 py-0.5 text-2xs font-bold {activityStatusClass(
 													activity
