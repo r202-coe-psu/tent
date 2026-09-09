@@ -11,6 +11,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import PetAssetVehicleFields from './forms/pet-asset-vehicle-fields.svelte';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	let {
 		show,
@@ -94,6 +95,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} disabled={saving} onEscape={onClose} />
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
 	>

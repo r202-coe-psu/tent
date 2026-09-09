@@ -24,6 +24,7 @@
 		SpecialNeedsFields,
 		VulnerableGroupsFields
 	} from './forms/index.js';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	export type EvacueeHealthEditData = {
 		careTrack: CareTrack;
@@ -177,6 +178,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} disabled={saving} onEscape={onClose} />
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-xs sm:p-5"
 		role="presentation"

@@ -2,6 +2,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { resolveStatusChangeAction, type Evacuee, type StayStatus } from '$lib/features/people';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	interface StatusConfig {
 		label: string;
@@ -36,6 +37,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} onEscape={onClose} />
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
 	>
