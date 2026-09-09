@@ -39,6 +39,7 @@ describe('portal schedule view', () => {
 		expect(activities).toHaveLength(1);
 		expect(activities[0]?.assignmentId).toBe('shift_assignment:1');
 		expect(activities[0]?.ticketToken).toBe('VIEW-1');
+		expect(activities[0]?.shiftPeriod).toBe('กะเช้า');
 	});
 
 	it('keeps an unassigned booking visible as a pending activity', () => {
@@ -72,5 +73,17 @@ describe('portal schedule view', () => {
 			'shift_assignment:soon',
 			'shift_assignment:late'
 		]);
+
+		const morningInBangkok = mergePortalActivities(
+			[shift({ start_ts: '2026-09-10T01:00:00.000' })],
+			[]
+		);
+		expect(
+			filterAndSortPortalActivities(
+				morningInBangkok,
+				{ fromTime: '08:00', toTime: '08:00' },
+				Date.parse('2026-09-09T00:00:00Z')
+			)
+		).toHaveLength(1);
 	});
 });

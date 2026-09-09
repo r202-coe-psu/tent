@@ -19,6 +19,8 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
@@ -49,6 +51,7 @@
 	import {
 		filterAndSortPortalActivities,
 		mergePortalActivities,
+		parsePortalTimestamp,
 		type PortalActivity
 	} from '../domain/schedule-view';
 
@@ -211,22 +214,28 @@
 	let dispatchErrors = $state<Record<string, string>>({});
 	let answering = $state<string | null>(null);
 	// ── LIVE SESSION → VIEW MODEL ──────────────────────────────────────────────
+	const PORTAL_TIME_ZONE = 'Asia/Bangkok';
 
 	function clockText(iso: string | null): string | undefined {
 		if (!iso) return undefined;
-		const parsed = new Date(iso);
+		const parsed = parsePortalTimestamp(iso);
 		return Number.isNaN(parsed.getTime())
 			? undefined
-			: `${parsed.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} น.`;
+			: `${parsed.toLocaleTimeString('th-TH', {
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit',
+					timeZone: PORTAL_TIME_ZONE
+				})} น.`;
 	}
 
 	function timeRange(activity: PortalActivity): string {
 		if (!activity.startTs) return activity.date || 'ยังไม่ระบุวัน';
-		const start = new Date(activity.startTs);
+		const start = parsePortalTimestamp(activity.startTs);
 		if (Number.isNaN(start.getTime())) return activity.date || 'ยังไม่ระบุวัน';
-		const opts = { hour: '2-digit', minute: '2-digit' } as const;
+		const opts = { hour: '2-digit', minute: '2-digit', timeZone: PORTAL_TIME_ZONE } as const;
 		const from = start.toLocaleTimeString('th-TH', opts);
-		const end = activity.endTs ? new Date(activity.endTs) : null;
+		const end = activity.endTs ? parsePortalTimestamp(activity.endTs) : null;
 		const to =
 			end && !Number.isNaN(end.getTime()) ? ` - ${end.toLocaleTimeString('th-TH', opts)}` : '';
 		return `${activity.date} • ${from}${to}`;
@@ -294,6 +303,8 @@
 	);
 
 	let actingAssignment = $state<string | null>(null);
+	let withdrawModalOpen = $state(false);
+	let pendingWithdrawal = $state<PortalActivity | null>(null);
 
 	function activityStatusLabel(activity: PortalActivity): string {
 		if (activity.status === 'booking') return 'รอเจ้าหน้าที่จัดกะ';
@@ -343,14 +354,31 @@
 		);
 	}
 
+	function openWithdrawModal(activity: PortalActivity) {
+		if (!activity.assignmentId || actingAssignment !== null) return;
+		pendingWithdrawal = activity;
+		withdrawModalOpen = true;
+	}
+
+	function closeWithdrawModal() {
+		if (actingAssignment !== null) return;
+		withdrawModalOpen = false;
+		pendingWithdrawal = null;
+	}
+
+	async function confirmWithdrawal() {
+		const activity = pendingWithdrawal;
+		if (!activity?.assignmentId || actingAssignment !== null) return;
+		withdrawModalOpen = false;
+		pendingWithdrawal = null;
+		await runScheduleAction(activity, 'withdraw');
+	}
+
 	async function runScheduleAction(
 		activity: PortalActivity,
 		action: 'check_in' | 'check_out' | 'withdraw'
 	) {
 		if (!activity.assignmentId) return;
-		if (action === 'withdraw' && !window.confirm('ยืนยันขอลาและถอนกะจากภารกิจนี้ใช่หรือไม่?')) {
-			return;
-		}
 		actingAssignment = `${activity.assignmentId}:${action}`;
 		try {
 			await scheduleAction.mutateAsync({ assignment_id: activity.assignmentId, action });
@@ -1062,7 +1090,7 @@
 												<button
 													type="button"
 													disabled={actingAssignment !== null}
-													onclick={() => runScheduleAction(activity, 'withdraw')}
+													onclick={() => openWithdrawModal(activity)}
 													class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5 disabled:opacity-60"
 												>
 													ขอลา / ถอนกะ
@@ -1173,6 +1201,50 @@
 							</div>
 						</div>
 					</div>
+
+					<Dialog.Root
+						open={withdrawModalOpen}
+						onOpenChange={(open) => !open && closeWithdrawModal()}
+					>
+						<Dialog.Content class="sm:max-w-md">
+							<Dialog.Header>
+								<Dialog.Title class="flex items-center gap-2">
+									<CircleAlert class="size-5 text-destructive" />
+									ยืนยันการลาและถอนกะ
+								</Dialog.Title>
+								<Dialog.Description>
+									เมื่อยืนยันแล้ว ระบบจะถอนการมอบหมายกะนี้และส่งสถานะการลาให้เจ้าหน้าที่รับทราบ
+								</Dialog.Description>
+							</Dialog.Header>
+
+							{#if pendingWithdrawal}
+								<div class="rounded-2xl border border-border bg-muted/30 p-4">
+									<p class="text-sm font-bold text-foreground">{pendingWithdrawal.title}</p>
+									<p class="mt-1 text-xs text-muted-foreground">
+										{pendingWithdrawal.date} · {timeRange(pendingWithdrawal)}
+									</p>
+									<p class="mt-1 text-xs text-muted-foreground">{pendingWithdrawal.location}</p>
+								</div>
+							{/if}
+
+							<Dialog.Footer class="gap-2">
+								<Button
+									variant="outline"
+									onclick={closeWithdrawModal}
+									disabled={actingAssignment !== null}
+								>
+									กลับไป
+								</Button>
+								<Button
+									variant="destructive"
+									onclick={confirmWithdrawal}
+									disabled={actingAssignment !== null || pendingWithdrawal === null}
+								>
+									ยืนยันลาและถอนกะ
+								</Button>
+							</Dialog.Footer>
+						</Dialog.Content>
+					</Dialog.Root>
 				</div>
 			</div>
 		{:else}

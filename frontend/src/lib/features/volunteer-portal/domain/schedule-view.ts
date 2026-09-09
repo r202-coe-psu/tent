@@ -29,6 +29,32 @@ export type PortalActivityFilters = {
 	toTime?: string;
 };
 
+const PORTAL_TIME_ZONE = 'Asia/Bangkok';
+
+/**
+ * API timestamps are UTC. Some legacy projected rows omit the `Z` suffix, which
+ * makes JavaScript interpret them as browser-local time. Treat an offset-less value
+ * as UTC before displaying or filtering it in the portal.
+ */
+export function parsePortalTimestamp(value: string): Date {
+	const normalized = value.trim();
+	if (!normalized) return new Date(Number.NaN);
+	const hasTimezone = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(normalized);
+	return new Date(hasTimezone ? normalized : `${normalized}Z`);
+}
+
+const SHIFT_LABELS: Record<string, string> = {
+	morning: 'กะเช้า',
+	afternoon: 'กะบ่าย',
+	night: 'กะดึก',
+	flex: 'กะยืดหยุ่น',
+	custom: 'กะกำหนดเอง'
+};
+
+function shiftLabel(shift: string): string {
+	return SHIFT_LABELS[shift] ?? 'กะงาน';
+}
+
 function dateKey(activity: PortalActivity): string {
 	if (activity.date) return activity.date;
 	if (activity.startTs) return activity.startTs.slice(0, 10);
@@ -46,12 +72,22 @@ function minutes(value: string | undefined): number | null {
 
 function startMinutes(activity: PortalActivity): number | null {
 	if (!activity.startTs) return null;
-	const date = new Date(activity.startTs);
-	return Number.isNaN(date.getTime()) ? null : date.getHours() * 60 + date.getMinutes();
+	const date = parsePortalTimestamp(activity.startTs);
+	if (Number.isNaN(date.getTime())) return null;
+	const [hour, minute] = new Intl.DateTimeFormat('en-GB', {
+		timeZone: PORTAL_TIME_ZONE,
+		hour: '2-digit',
+		minute: '2-digit',
+		hourCycle: 'h23'
+	})
+		.format(date)
+		.split(':')
+		.map(Number);
+	return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
 }
 
 function startTime(activity: PortalActivity): number {
-	const parsed = activity.startTs ? new Date(activity.startTs).getTime() : NaN;
+	const parsed = activity.startTs ? parsePortalTimestamp(activity.startTs).getTime() : NaN;
 	if (!Number.isNaN(parsed)) return parsed;
 	const date = Date.parse(`${dateKey(activity)}T00:00:00`);
 	return Number.isNaN(date) ? Number.POSITIVE_INFINITY : date;
@@ -91,7 +127,7 @@ export function mergePortalActivities(
 		location: shift.shelter_name || shift.shelter_code,
 		shelterCode: shift.shelter_code,
 		date: shift.date,
-		shiftPeriod: shift.shift === 'custom' ? 'กะงาน' : shift.shift,
+		shiftPeriod: shiftLabel(shift.shift),
 		startTs: shift.start_ts,
 		endTs: shift.end_ts,
 		checkinAt: shift.check_in_at,
