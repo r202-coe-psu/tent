@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * Job detail — Tab 3 "ผู้สมัคร (Applicants & Queue)" (01-tab-job-board.md
-	 * §01.5, approved mockup 2026-08-30): five summary tiles over one card
+	 * §01.5, approved mockup 2026-08-30): four summary tiles over one card
 	 * holding the applicant list.
 	 *
 	 * Approving is the moment a job slot is consumed — the whole write path
@@ -23,17 +23,11 @@
 	import { partitionApplicantQueue } from '../domain/applicant-queue';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
-	import {
-		useJobApplications,
-		useShiftAssignments,
-		useSkillOptions,
-		useVolunteers
-	} from '../application/queries';
+	import { useJobApplications, useSkillOptions, useVolunteers } from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const applicationsQuery = useJobApplications();
-	const assignmentsQuery = useShiftAssignments();
 	const volunteersQuery = useVolunteers();
 	const skillCatalog = useSkillOptions();
 
@@ -45,17 +39,6 @@
 		new Map((volunteersQuery.data ?? []).map((v) => [v._id, v.volunteer_code]))
 	);
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
-
-	/**
-	 * "มอบหมายแล้ว" counts real `shift_assignment` rows rather than
-	 * `job.slots_dispatched`: the quota bucket also moves for volunteers
-	 * assigned straight from the roster page, which never produced an
-	 * application and so are not in this list.
-	 */
-	const assignedCount = $derived(
-		(assignmentsQuery.data ?? []).filter((a) => a.job_id === job._id && a.status !== 'cancelled')
-			.length
-	);
 
 	const counts = $derived({
 		total: queue.pending.length + queue.reviewed.length,
@@ -69,19 +52,13 @@
 		{ key: 'total', label: 'ผู้สมัครทั้งหมด', value: counts.total, tone: 'border-border bg-card' },
 		{
 			key: 'pending',
-			label: '⏳ รออนุมัติ',
+			label: 'รอพิจารณา',
 			value: counts.pending,
 			tone: 'border-border bg-muted/50'
 		},
 		{
-			key: 'assigned',
-			label: '🟡 มอบหมายแล้ว',
-			value: assignedCount,
-			tone: 'border-amber-200 bg-amber-50/70'
-		},
-		{
 			key: 'confirmed',
-			label: '✅ อนุมัติแล้ว',
+			label: 'อนุมัติใบสมัครแล้ว',
 			value: counts.confirmed,
 			tone: 'border-emerald-200 bg-emerald-50/70'
 		},
@@ -120,7 +97,7 @@
 </script>
 
 <div class="space-y-4">
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
 		{#each tiles as tile (tile.key)}
 			<div class={['rounded-2xl border p-3.5', tile.tone]}>
 				<p class="text-xs font-medium text-muted-foreground">{tile.label}</p>
@@ -154,31 +131,37 @@
 				</p>
 			</div>
 		{:else}
-			<ul class="mt-3 space-y-3">
-				{#each queue.pending as application (application._id)}
-					<JobApplicantRow
-						{application}
-						volunteer={application.volunteer_id
-							? (volunteerById.get(application.volunteer_id) ?? null)
-							: null}
-						volunteerCode={application.volunteer_id
-							? (codeByVolunteerId.get(application.volunteer_id) ?? null)
-							: null}
-						shiftLabel={shiftLabelFor(application)}
-						skillOptions={skillCatalog.options}
-						onreview={openReview}
-					/>
-				{/each}
-			</ul>
+			{#if queue.pending.length > 0}
+				<div class="mt-4 flex items-center justify-between gap-3">
+					<h4 class="text-xs font-bold text-foreground">รอพิจารณา ({queue.pending.length} คน)</h4>
+					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
+				</div>
+				<ul class="mt-3 space-y-3">
+					{#each queue.pending as application (application._id)}
+						<JobApplicantRow
+							{application}
+							volunteer={application.volunteer_id
+								? (volunteerById.get(application.volunteer_id) ?? null)
+								: null}
+							volunteerCode={application.volunteer_id
+								? (codeByVolunteerId.get(application.volunteer_id) ?? null)
+								: null}
+							shiftLabel={shiftLabelFor(application)}
+							skillOptions={skillCatalog.options}
+							onreview={openReview}
+						/>
+					{/each}
+				</ul>
+			{/if}
 
 			{#if queue.reviewed.length > 0}
-				<details class="group mt-4" open={queue.pending.length === 0}>
-					<summary
-						class="cursor-pointer list-none text-xs font-bold text-muted-foreground hover:text-foreground"
-					>
-						พิจารณาแล้ว ({queue.reviewed.length} คน)
-						<span class="font-normal group-open:hidden">— กดเพื่อดู</span>
-					</summary>
+				<div class="mt-6 border-t border-border pt-4">
+					<div class="flex items-center justify-between gap-3">
+						<h4 class="text-xs font-bold text-foreground">
+							ประวัติการพิจารณา ({queue.reviewed.length} คน)
+						</h4>
+						<span class="text-2xs text-muted-foreground">รวมอนุมัติ ปฏิเสธ และไม่สะดวก</span>
+					</div>
 					<ul class="mt-3 space-y-3">
 						{#each queue.reviewed as application (application._id)}
 							<JobApplicantRow
@@ -195,7 +178,7 @@
 							/>
 						{/each}
 					</ul>
-				</details>
+				</div>
 			{/if}
 		{/if}
 	</div>
