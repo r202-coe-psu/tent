@@ -18,6 +18,7 @@
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '../i18n/jobs.i18n';
+	import { applyToJob } from '$lib/features/volunteer-portal/data/volunteer-api';
 	import type {
 		PortalCredential,
 		VolunteerProfile
@@ -276,39 +277,19 @@
 			const lastName = formData.lastName.trim();
 			const fullName = `${firstName} ${lastName}`.trim();
 			const targetJobId = job.id.startsWith('job:') ? job.id : `job:${job.id}`;
-			const couchRes = await fetch('/api/public/v1/volunteer/apply', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					job_id: targetJobId,
-					shelter_code: job.shelter_code || undefined,
-					applicant: {
-						first_name: firstName,
-						last_name: lastName,
-						phone: cleanApplicantPhone(),
-						email: isPortalApplicant ? null : formData.email.trim() || null,
-						skills: formData.skills
-					},
-					selected_shift: shiftPayload(),
-					recaptcha_token: recaptchaToken || undefined
-				})
+			const selectedShift = shiftPayload();
+			const result = await applyToJob(targetJobId, {
+				shelter_code: job.shelter_code || undefined,
+				first_name: firstName,
+				last_name: lastName,
+				phone: cleanApplicantPhone(),
+				email: isPortalApplicant ? '' : formData.email.trim(),
+				skills: formData.skills,
+				shift_id: selectedShift?.shift_id,
+				shift_date: selectedShift?.date,
+				...(recaptchaToken ? { captchaToken: recaptchaToken } : {})
 			});
-			const couchData = await couchRes.json().catch(() => null);
-			if (!couchRes.ok || !couchData?.success) {
-				const errorMsg =
-					couchData?.message ||
-					(couchData?.error === 'AMBIGUOUS_VOLUNTEER'
-						? 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่'
-						: couchRes.status === 409
-							? t.errDuplicatePhoneOrShift
-							: couchRes.status === 429
-								? t.errRateLimited
-								: t.errApplyGeneric);
-				errorMessage = errorMsg;
-				toast.error(errorMsg);
-				return;
-			}
-			const trackingToken = couchData.tracking_token;
+			const trackingToken = result.tracking_token;
 			toast.success(t.toastApplySuccess);
 			onSubmit?.({
 				firstName,
