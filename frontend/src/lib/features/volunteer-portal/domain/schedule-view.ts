@@ -27,6 +27,8 @@ export type PortalActivityFilters = {
 	toDate?: string;
 	fromTime?: string;
 	toTime?: string;
+	status?: string;
+	title?: string;
 };
 
 const PORTAL_TIME_ZONE = 'Asia/Bangkok';
@@ -48,7 +50,7 @@ const SHIFT_LABELS: Record<string, string> = {
 	afternoon: 'กะบ่าย',
 	night: 'กะดึก',
 	flex: 'กะยืดหยุ่น',
-	custom: 'กะกำหนดเอง'
+	custom: 'ช่วงเวลาที่กำหนดเอง'
 };
 
 function shiftLabel(shift: string): string {
@@ -180,10 +182,18 @@ export function filterAndSortPortalActivities(
 ): PortalActivity[] {
 	const fromTime = minutes(filters.fromTime);
 	const toTime = minutes(filters.toTime);
+	const titleQuery = filters.title?.trim().toLocaleLowerCase('th-TH');
 	const filtered = activities.filter((activity) => {
 		const date = dateKey(activity);
 		if (filters.fromDate && (!date || date < filters.fromDate)) return false;
 		if (filters.toDate && (!date || date > filters.toDate)) return false;
+		if (
+			filters.status &&
+			activity.status !== filters.status &&
+			activity.dispatchStatus !== filters.status
+		)
+			return false;
+		if (titleQuery && !activity.title.toLocaleLowerCase('th-TH').includes(titleQuery)) return false;
 
 		if (fromTime !== null || toTime !== null) {
 			const time = startMinutes(activity);

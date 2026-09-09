@@ -42,6 +42,11 @@ describe('portal schedule view', () => {
 		expect(activities[0]?.shiftPeriod).toBe('กะเช้า');
 	});
 
+	it('labels a manually configured shift clearly', () => {
+		const activities = mergePortalActivities([shift({ shift: 'custom' })], []);
+		expect(activities[0]?.shiftPeriod).toBe('ช่วงเวลาที่กำหนดเอง');
+	});
+
 	it('keeps an unassigned booking visible as a pending activity', () => {
 		const activities = mergePortalActivities([], [ticket({ shift_id: null })]);
 		expect(activities).toHaveLength(1);
@@ -73,6 +78,13 @@ describe('portal schedule view', () => {
 			'shift_assignment:soon',
 			'shift_assignment:late'
 		]);
+		expect(
+			filterAndSortPortalActivities(activities, {
+				status: 'assigned',
+				title: 'ครัวกลาง'
+			})
+		).toHaveLength(2);
+		expect(filterAndSortPortalActivities(activities, { title: 'งานที่ไม่มีอยู่' })).toHaveLength(0);
 
 		const morningInBangkok = mergePortalActivities(
 			[shift({ start_ts: '2026-09-10T01:00:00.000' })],

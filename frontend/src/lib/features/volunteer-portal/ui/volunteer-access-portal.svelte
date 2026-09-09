@@ -293,12 +293,16 @@
 	let filterToDate = $state('');
 	let filterFromTime = $state('');
 	let filterToTime = $state('');
+	let filterStatus = $state('');
+	let filterJobTitle = $state('');
 	const visibleActivities = $derived.by(() =>
 		filterAndSortPortalActivities(currentVolunteer?.activities ?? [], {
 			fromDate: filterFromDate,
 			toDate: filterToDate,
 			fromTime: filterFromTime,
-			toTime: filterToTime
+			toTime: filterToTime,
+			status: filterStatus,
+			title: filterJobTitle
 		})
 	);
 
@@ -401,6 +405,8 @@
 		filterToDate = '';
 		filterFromTime = '';
 		filterToTime = '';
+		filterStatus = '';
+		filterJobTitle = '';
 	}
 
 	let dashboardTab = $state<'schedule' | 'openings'>('schedule');
@@ -772,11 +778,6 @@
 					<div class="flex flex-wrap items-center gap-2">
 						<h2 class="text-lg font-black text-foreground md:text-xl">{currentVolunteer.name}</h2>
 						<span
-							class="rounded-md border border-border bg-muted/60 px-2 py-0.5 text-2xs font-bold text-muted-foreground"
-						>
-							ID: {currentVolunteer.id}
-						</span>
-						<span
 							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
 						>
 							<CircleCheck class="size-3" /> ยืนยันตัวตนแล้ว
@@ -882,7 +883,7 @@
 
 					<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
 						<div class="mb-3 flex items-center gap-2 text-xs font-bold text-foreground">
-							<Filter class="size-4 text-primary" /> ตัวกรองวันและเวลา
+							<Filter class="size-4 text-primary" /> ตัวกรองภารกิจ
 						</div>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
@@ -917,8 +918,33 @@
 									placeholder="เลือกเวลาสิ้นสุด"
 								/>
 							</label>
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span>สถานะงาน</span>
+								<select
+									bind:value={filterStatus}
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground"
+								>
+									<option value="">ทุกสถานะ</option>
+									<option value="booking">รอเจ้าหน้าที่จัดกะ</option>
+									<option value="dispatched">รอยืนยันการมอบหมาย</option>
+									<option value="assigned">รอ Check-in</option>
+									<option value="standby">รอ Check-in (สำรอง)</option>
+									<option value="checked_in">กำลังปฏิบัติงาน</option>
+									<option value="completed">เสร็จสิ้นภารกิจ</option>
+									<option value="no_show">ไม่มาปฏิบัติงาน</option>
+								</select>
+							</label>
+							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
+								<span>ชื่องาน</span>
+								<input
+									type="search"
+									bind:value={filterJobTitle}
+									placeholder="ค้นหาชื่องาน..."
+									class="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+								/>
+							</label>
 						</div>
-						{#if filterFromDate || filterToDate || filterFromTime || filterToTime}
+						{#if filterFromDate || filterToDate || filterFromTime || filterToTime || filterStatus || filterJobTitle}
 							<button
 								type="button"
 								onclick={clearScheduleFilters}
