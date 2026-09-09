@@ -10,7 +10,6 @@
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
 	import { useSaveImage } from '$lib/features/images';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -22,7 +21,12 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
-	import { PersonalInfoFields, EmergencyContactFields, SpecialNeedsFields } from './forms/index.js';
+	import {
+		PersonalInfoFields,
+		EmergencyContactFields,
+		SpecialNeedsFields,
+		VulnerableGroupsFields
+	} from './forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { STATUS_LABELS } from '../domain/people';
 	import {
@@ -72,25 +76,6 @@
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	const hideNoPhone = $derived(channel === 'public' && index === 0);
-
-	const vulnerableLabelByCode = $derived({
-		bedridden: t.vgBedridden,
-		dialysis: t.vgDialysis,
-		wheelchair: t.vgWheelchair,
-		psychiatric: t.vgPsychiatric,
-		elderly_dependent: t.vgElderlyDependent,
-		infant: t.vgInfant,
-		young_child: t.vgYoungChild,
-		pregnant: t.vgPregnant,
-		vision_impaired: t.vgVisionImpaired,
-		hearing_impaired: t.vgHearingImpaired,
-		disability_other: t.vgDisabilityOther,
-		chronic_illness: t.vgChronicIllness
-	} as Record<string, string>);
-
-	function vulnerableLabel(code: string, fallback: string): string {
-		return vulnerableLabelByCode[code] ?? fallback;
-	}
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -217,14 +202,6 @@
 	function applyAnonymous() {
 		if (disabled) return;
 		member = applyAnonymousIdToMember(member);
-	}
-
-	function toggleVulnerable(code: string) {
-		if (disabled) return;
-		const current = member.vulnerable_groups ?? [];
-		member.vulnerable_groups = current.includes(code)
-			? current.filter((c: string) => c !== code)
-			: [...current, code];
 	}
 
 	async function buildCompressedForm(file: File): Promise<FormData> {
@@ -485,27 +462,12 @@
 			</div>
 			<span class="text-2xs text-muted-foreground">{t.vulnerableMultiHint}</span>
 		</div>
-		<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-			{#each CR112_VULNERABLE_GROUP_ACTIVE as item (item.code)}
-				{@const isChecked = (member.vulnerable_groups ?? []).includes(item.code)}
-				<label
-					class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs transition-colors select-none {isChecked
-						? 'border-primary/60 bg-primary/5 font-semibold text-foreground'
-						: 'border-border/60 bg-background text-muted-foreground hover:border-primary/30 hover:bg-muted/30'} {disabled
-						? 'pointer-events-none opacity-60'
-						: ''}"
-				>
-					<Checkbox
-						id="vg-{index}-{item.code}"
-						checked={isChecked}
-						onCheckedChange={() => toggleVulnerable(item.code)}
-						{disabled}
-						class="size-4 shrink-0"
-					/>
-					<span class="leading-tight">{vulnerableLabel(item.code, item.label)}</span>
-				</label>
-			{/each}
-		</div>
+		<VulnerableGroupsFields
+			bind:vulnerable_groups={member.vulnerable_groups}
+			{disabled}
+			idPrefix="vg-{index}"
+			label=""
+		/>
 	</div>
 
 	<div class="space-y-3">

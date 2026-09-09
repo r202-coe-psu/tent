@@ -14,7 +14,6 @@
 		MAX_AGE_YEARS,
 		type EvacueeInput
 	} from '../domain/people';
-	import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
 	import { useSaveImage } from '$lib/features/images';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -28,9 +27,13 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
-	import { PersonalInfoFields, SpecialNeedsFields, EmergencyContactFields } from './forms/index.js';
+	import {
+		PersonalInfoFields,
+		SpecialNeedsFields,
+		VulnerableGroupsFields,
+		EmergencyContactFields
+	} from './forms/index.js';
 	import { collectFormErrorMessages } from './forms/form-errors.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 
 	const EMPTY_EMERGENCY_CONTACT = { name: '', phone: '', relation: '' };
 
@@ -449,29 +452,12 @@
 				<ShieldAlert class="size-5 text-primary" />
 				<h3 class="text-base font-bold text-foreground">กลุ่มเปราะบาง (Vulnerable Groups)</h3>
 			</div>
-			<Label class="sr-only">กลุ่มเปราะบาง</Label>
-			<div class="flex flex-wrap gap-2">
-				{#each CR112_VULNERABLE_GROUP_ACTIVE as item (item.code)}
-					{@const checked = ($formData.vulnerable_groups ?? []).includes(item.code)}
-					<Button
-						type="button"
-						variant="outline"
-						disabled={$submitting || pending}
-						onclick={() => {
-							const current = $formData.vulnerable_groups ?? [];
-							$formData.vulnerable_groups = checked
-								? current.filter((n) => n !== item.code)
-								: [...current, item.code];
-						}}
-						class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-normal transition-colors
-						{checked
-							? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
-							: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
-					>
-						{item.label}
-					</Button>
-				{/each}
-			</div>
+			<VulnerableGroupsFields
+				bind:vulnerable_groups={$formData.vulnerable_groups}
+				disabled={$submitting || pending}
+				idPrefix="reg-vg"
+				label=""
+			/>
 		</section>
 
 		<section id="reg-section-special" class="form-section-card scroll-mt-24 space-y-4">

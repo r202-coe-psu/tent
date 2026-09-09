@@ -166,6 +166,10 @@ export interface PeopleRepository {
 			zone?: string | null;
 			checkIn?: boolean;
 			medical?: MedicalInput;
+			/** When set, patches the evacuee alongside the screening record (Station 2 VG confirm). */
+			vulnerable_groups?: string[];
+			/** When set, patches the evacuee alongside the screening record (Station 2 additional needs). */
+			special_needs?: string[];
 		},
 		ctx: AuthorContext
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }>;

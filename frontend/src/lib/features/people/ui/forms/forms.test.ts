@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import {
 	PersonalInfoFields,
 	SpecialNeedsFields,
+	VulnerableGroupsFields,
 	EmergencyContactFields,
 	EwarSymptomsFields,
 	HouseholdAddressFields,
@@ -19,9 +20,10 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 	});
 
 	describe('Module Exports', () => {
-		it('exports all 8 required form sub-components and constants', () => {
+		it('exports all required form sub-components and constants', () => {
 			expect(PersonalInfoFields).toBeDefined();
 			expect(SpecialNeedsFields).toBeDefined();
+			expect(VulnerableGroupsFields).toBeDefined();
 			expect(EmergencyContactFields).toBeDefined();
 			expect(EwarSymptomsFields).toBeDefined();
 			expect(HouseholdAddressFields).toBeDefined();
@@ -194,6 +196,34 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 		});
 	});
 
+	describe('Vulnerable Groups Fields (vulnerable-groups-fields.svelte)', () => {
+		it('renders CR112 checkbox grid with selected codes', () => {
+			const result = render(VulnerableGroupsFields, {
+				props: {
+					vulnerable_groups: ['wheelchair', 'pregnant'],
+					idPrefix: 'test-vg'
+				}
+			});
+			expect(result.body).toContain('id="test-vg-wheelchair"');
+			expect(result.body).toContain('id="test-vg-pregnant"');
+			expect(result.body).toContain('id="test-vg-bedridden"');
+			expect(result.body).toContain('ผู้ใช้วีลแชร์');
+			expect(result.body).toContain('สตรีมีครรภ์');
+			expect(result.body).toContain('ผู้ป่วยติดเตียง');
+			expect(result.body).not.toContain('rounded-full');
+		});
+
+		it('renders optional label when provided', () => {
+			const result = render(VulnerableGroupsFields, {
+				props: {
+					vulnerable_groups: [],
+					label: 'กลุ่มเปราะบาง'
+				}
+			});
+			expect(result.body).toContain('กลุ่มเปราะบาง');
+		});
+	});
+
 	describe('Emergency Contact Fields (emergency-contact-fields.svelte)', () => {
 		it('renders name, phone, and relation inputs cleanly', () => {
 			const result = render(EmergencyContactFields, {
@@ -290,27 +320,61 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('สัมภาระและสิ่งของมีค่า');
 			expect(result.body).toContain('สัตว์เลี้ยงที่นำมาด้วย');
 			expect(result.body).toContain('กระเป๋าเดินทาง 2 ใบ');
+			expect(result.body).toContain('รูปสัตว์เลี้ยง');
+			expect(result.body).toContain('ถ่าย / แนบรูปภาพ');
+		});
+
+		it('renders pet photo change and remove buttons when image_url exists', () => {
+			const result = render(PetAssetVehicleFields, {
+				props: {
+					pets: [{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }]
+				}
+			});
+			expect(result.body).toContain('รูปสัตว์เลี้ยง');
+			expect(result.body).toContain('เปลี่ยนภาพ');
+			expect(result.body).toContain('ลบรูป');
 		});
 	});
 
 	describe('Health Medical Fields (health-medical-fields.svelte)', () => {
-		it('renders conditions, medications, allergies, notes, and care track without triage or blood group (CR-106)', () => {
+		it('renders care-track radios, medical history, and general symptoms without triage or blood group (CR-106)', () => {
 			const result = render(HealthMedicalFields, {
 				props: {
 					conditions: 'เบาหวาน',
 					medications: 'Metformin',
 					allergies: 'ไม่มี',
-					medical_notes: 'ติดตามความดัน',
-					care_track: 'normal'
+					general_symptoms: 'ปวดศีรษะ',
+					care_track: 'normal',
+					idPrefix: 'med'
 				}
 			});
+			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).toContain('ดูแลตามปกติ (Normal)');
+			expect(result.body).toContain('Fast track');
+			expect(result.body).toContain('id="med-care-track-normal"');
+			expect(result.body).toContain('id="med-care-track-fast_track"');
 			expect(result.body).toContain('โรคประจำตัว');
 			expect(result.body).toContain('ยาที่ใช้ประจำ');
 			expect(result.body).toContain('ประวัติการแพ้');
-			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).toContain('เบาหวาน');
+			expect(result.body).toContain('อาการและข้อสังเกต');
+			expect(result.body).toContain('ปวดศีรษะ');
 			expect(result.body).not.toContain('หมู่เลือด');
 			expect(result.body).not.toContain('Triage');
 			expect(result.body).not.toContain('สถานะการส่งต่อ');
+		});
+
+		it('hides general symptoms when showGeneralSymptoms is false', () => {
+			const result = render(HealthMedicalFields, {
+				props: {
+					showGeneralSymptoms: false,
+					general_symptoms: 'hidden-symptom',
+					idPrefix: 'med'
+				}
+			});
+			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).not.toContain('อาการและข้อสังเกต');
+			expect(result.body).not.toContain('hidden-symptom');
 		});
 	});
 

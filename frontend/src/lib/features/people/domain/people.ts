@@ -1007,21 +1007,23 @@ export const evacueeAddressEditFormSchema = z
 
 export const evacueeHealthEditFormSchema = z
 	.object({
-		bloodGroup: bloodGroupSchema,
-		careTrack: careTrackSchema,
-		conditions: z.string().trim(),
-		medications: z.string().trim(),
-		allergies: z.string().trim(),
-		medicalNotes: z.string().trim(),
-		screeningNotes: z.string().trim(),
-		selectedSymptoms: z.array(z.string().trim().min(1)),
-		// `<input type="number">` bindings yield a number (or null when cleared), never a string.
-		temperature: z.number().nullable(),
-		referral: z.boolean(),
-		specialNeeds: z.array(z.string().trim().min(1))
+		careTrack: careTrackSchema.default('normal'),
+		conditions: z.string().trim().default(''),
+		medications: z.string().trim().default(''),
+		allergies: z.string().trim().default(''),
+		generalSymptoms: z.string().trim().default(''),
+		vulnerableGroups: z.array(z.string().trim().min(1)).default([]),
+		specialNeeds: z.array(z.string().trim().min(1)).default([]),
+		selectedSymptoms: z.array(z.string().trim().min(1)).default([]),
+		// Legacy fields retained as optional for backwards compatibility
+		bloodGroup: bloodGroupSchema.optional().default('unknown'),
+		medicalNotes: z.string().trim().optional().default(''),
+		screeningNotes: z.string().trim().optional().default(''),
+		temperature: z.number().nullable().optional().default(null),
+		referral: z.boolean().optional().default(false)
 	})
 	.superRefine((data, ctx) => {
-		if (data.temperature === null) return;
+		if (data.temperature == null) return;
 		if (!Number.isFinite(data.temperature) || data.temperature < 30 || data.temperature > 45) {
 			ctx.addIssue({
 				code: 'custom',

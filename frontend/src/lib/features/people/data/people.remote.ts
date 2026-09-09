@@ -499,6 +499,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			zone?: string | null;
 			checkIn?: boolean;
 			medical?: MedicalInput;
+			vulnerable_groups?: string[];
+			special_needs?: string[];
 		},
 		ctx: AuthorContext
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }> {
@@ -530,6 +532,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					ctx
 				);
 			}
+		}
+		const shouldPatchNeeds =
+			input.vulnerable_groups !== undefined || input.special_needs !== undefined;
+		if (shouldPatchNeeds) {
+			const patch: EvacueePatch = {};
+			if (input.vulnerable_groups !== undefined) {
+				patch.vulnerable_groups = input.vulnerable_groups;
+			}
+			if (input.special_needs !== undefined) {
+				patch.special_needs = input.special_needs;
+			}
+			evacuee = await this.patchEvacuee(input.screening.evacuee_id, patch);
 		}
 		return { screening, ...(evacuee ? { evacuee } : {}), ...(medical ? { medical } : {}) };
 	}
@@ -922,16 +936,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		let existingHousehold = householdId ? await this.getHousehold(householdId) : null;
 		let savedHousehold: Household;
 
-		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map((p) => {
-			const item: import('../domain/people').PetGroup = {
-				species: p.species,
-				count: Math.max(1, Number(p.count) || 1)
-			};
-			if (p.notes) item.notes = p.notes;
-			if (typeof p.has_cage === 'boolean') item.has_cage = p.has_cage;
-			if (p.image_url) item.image_url = p.image_url;
-			return item;
-		});
+		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map(
+			(p) => {
+				const item: import('../domain/people').PetGroup = {
+					species: p.species,
+					count: Math.max(1, Number(p.count) || 1)
+				};
+				if (p.notes) item.notes = p.notes;
+				if (typeof p.has_cage === 'boolean') item.has_cage = p.has_cage;
+				if (p.image_url) item.image_url = p.image_url;
+				return item;
+			}
+		);
 
 		const normalizedVehicles: import('../domain/people').HouseholdVehicle[] = (
 			householdInput.vehicles ?? []

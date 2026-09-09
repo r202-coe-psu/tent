@@ -98,7 +98,7 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
 	>
 		<div
-			class="w-full max-w-xl animate-in space-y-4 rounded-3xl border border-border bg-card p-6 shadow-xl duration-150 zoom-in-95 fade-in"
+			class="w-full max-w-xl animate-in space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xl duration-150 zoom-in-95 fade-in"
 		>
 			<div class="flex items-center justify-between border-b border-border pb-2.5">
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
@@ -112,7 +112,7 @@
 				</button>
 			</div>
 
-			<div class="max-h-[460px] overflow-y-auto pr-1">
+			<div class="max-h-[min(70vh,540px)] overflow-y-auto pr-1">
 				<PetAssetVehicleFields
 					bind:vehicles
 					bind:valuables

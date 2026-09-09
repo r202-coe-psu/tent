@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -7,7 +9,16 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import type { HouseholdVehicle, PetGroup } from '$lib/features/people';
+	import {
+		isMeaningfulOtherPetNotes,
+		type HouseholdVehicle,
+		type PetGroup
+	} from '$lib/features/people';
+	import { useSaveImage } from '$lib/features/images';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { toast } from 'svelte-sonner';
+	import EvacueePhoto from '../evacuee-photo.svelte';
 
 	let {
 		vehicles = $bindable<HouseholdVehicle[]>([]),
@@ -21,6 +32,20 @@
 		disabled?: boolean;
 	} = $props();
 
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const saveImage = safeQuery(() => useSaveImage(), {
+		mutateAsync: async () => {
+			throw new Error('image upload unavailable');
+		}
+	} as unknown as ReturnType<typeof useSaveImage>);
+
 	const vehicleTypeOptions = [
 		{ value: 'car' as const, label: 'รถยนต์' },
 		{ value: 'motorcycle' as const, label: 'รถจักรยานยนต์' },
@@ -32,6 +57,18 @@
 		{ value: 'cat' as const, label: 'แมว' },
 		{ value: 'other' as const, label: 'อื่นๆ' }
 	];
+
+	let uploadingPetIndex = $state<number | null>(null);
+	let localPreviews = $state<Record<number, string>>({});
+
+	function petPreviewSrc(imageUrl: string | null | undefined): string | null {
+		const value = imageUrl?.trim();
+		if (!value) return null;
+		if (value.startsWith('http') || value.startsWith('blob:') || value.startsWith('data:')) {
+			return value;
+		}
+		return null;
+	}
 
 	function addVehicle() {
 		if (disabled) return;
@@ -50,8 +87,79 @@
 
 	function removePet(index: number) {
 		if (disabled) return;
+		if (localPreviews[index]?.startsWith('blob:')) {
+			URL.revokeObjectURL(localPreviews[index]);
+		}
+		const newPreviews: Record<number, string> = {};
+		for (const [k, v] of Object.entries(localPreviews)) {
+			const keyNum = Number(k);
+			if (keyNum < index) {
+				newPreviews[keyNum] = v;
+			} else if (keyNum > index) {
+				newPreviews[keyNum - 1] = v;
+			}
+		}
+		localPreviews = newPreviews;
 		pets = pets.filter((_, i) => i !== index);
 	}
+
+	async function onPetPhotoChange(index: number, e: Event) {
+		if (disabled || uploadingPetIndex === index) return;
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+
+		const pet = pets[index];
+		if (!pet) return;
+
+		if (pet.species === 'other' && !isMeaningfulOtherPetNotes(pet.notes)) {
+			toast.error('กรุณาระบุชนิดสัตว์ในช่องหมายเหตุก่อนแนบรูป');
+			return;
+		}
+
+		uploadingPetIndex = index;
+		try {
+			const previewUrl = URL.createObjectURL(file);
+			if (localPreviews[index]?.startsWith('blob:')) {
+				URL.revokeObjectURL(localPreviews[index]);
+			}
+			localPreviews[index] = previewUrl;
+
+			const ctx = {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'unknown'
+			};
+			const res = await saveImage.mutateAsync({ file, ctx });
+			pet.image_url = res._id;
+			toast.success('อัปโหลดรูปสัตว์เลี้ยงแล้ว');
+		} catch (err: unknown) {
+			toast.error(`อัปโหลดรูปไม่สำเร็จ: ${err instanceof Error ? err.message : String(err)}`);
+		} finally {
+			uploadingPetIndex = null;
+		}
+	}
+
+	function clearPetPhoto(index: number) {
+		if (disabled || uploadingPetIndex === index) return;
+		const pet = pets[index];
+		if (!pet) return;
+		if (localPreviews[index]?.startsWith('blob:')) {
+			URL.revokeObjectURL(localPreviews[index]);
+		}
+		delete localPreviews[index];
+		pet.image_url = null;
+	}
+
+	$effect(() => {
+		return () => {
+			for (const url of Object.values(localPreviews)) {
+				if (url.startsWith('blob:')) {
+					URL.revokeObjectURL(url);
+				}
+			}
+		};
+	});
 </script>
 
 <div class="space-y-6">
@@ -182,8 +290,29 @@
 		{:else}
 			<div class="space-y-2.5">
 				{#each pets as pet, index (index)}
-					<div class="flex items-end gap-2.5 rounded-lg border border-border/80 bg-muted/20 p-2.5">
-						<div class="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
+					{@const previewSrc = localPreviews[index] ?? petPreviewSrc(pet.image_url)}
+					{@const photoDocId = previewSrc ? null : pet.image_url?.trim() || null}
+					{@const hasPhoto = !!(previewSrc || photoDocId)}
+					<div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3.5">
+						<div class="flex items-center justify-between border-b border-border/60 pb-2">
+							<span class="text-xs font-semibold text-foreground">
+								สัตว์เลี้ยงตัวที่ {index + 1} ({petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'สัตว์เลี้ยง'})
+							</span>
+							{#if !disabled}
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onclick={() => removePet(index)}
+									class="h-7 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+									aria-label="ลบสัตว์เลี้ยง"
+								>
+									<X class="size-3.5" /> ลบ
+								</Button>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
 							<div class="space-y-1">
 								<Label class="text-2xs text-muted-foreground">ชนิดสัตว์</Label>
 								<Select.Root
@@ -219,38 +348,97 @@
 							</div>
 
 							<div class="space-y-1">
-								<Label class="text-2xs text-muted-foreground">หมายเหตุ</Label>
+								<Label class="text-2xs text-muted-foreground">
+									หมายเหตุ {pet.species === 'other' ? '(ระบุชนิด *)' : ''}
+								</Label>
 								<Input
 									bind:value={pet.notes}
 									{disabled}
-									placeholder="เช่น พันธุ์, ชื่อ"
+									placeholder={pet.species === 'other' ? 'เช่น กระต่าย, นก' : 'เช่น พันธุ์, ชื่อ'}
 									class="h-8 text-xs"
 								/>
 							</div>
 
-							<div class="flex items-center gap-2 pb-1.5">
+							<div class="flex items-center gap-2 pt-4">
 								<Checkbox
 									id={`pet-cage-${index}`}
 									checked={pet.has_cage ?? false}
 									onCheckedChange={(checked) => (pet.has_cage = !!checked)}
 									{disabled}
 								/>
-								<Label for={`pet-cage-${index}`} class="cursor-pointer text-xs">มีกรง</Label>
+								<Label for={`pet-cage-${index}`} class="cursor-pointer text-xs">มีกรง / สายจูง</Label>
 							</div>
 						</div>
 
-						{#if !disabled}
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								onclick={() => removePet(index)}
-								class="size-8 shrink-0 text-destructive hover:bg-destructive/10"
-								aria-label="ลบสัตว์เลี้ยง"
-							>
-								<X class="size-4" />
-							</Button>
-						{/if}
+						<!-- Photo Section -->
+						<div class="space-y-1.5 border-t border-border/60 pt-2.5">
+							<Label class="text-2xs font-medium text-muted-foreground">รูปสัตว์เลี้ยง (ถ้ามี)</Label>
+							<div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+								{#if uploadingPetIndex === index}
+									<div
+										class="flex size-16 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/30"
+									>
+										<Loader2 class="size-5 animate-spin text-primary" />
+									</div>
+								{:else if previewSrc}
+									<div
+										class="size-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted/30"
+									>
+										<img src={previewSrc} alt="รูปสัตว์เลี้ยง" class="size-full object-cover" />
+									</div>
+								{:else if photoDocId}
+									<EvacueePhoto
+										photoId={photoDocId}
+										alt="รูปสัตว์เลี้ยง"
+										size="md"
+										class="rounded-xl border-border"
+									/>
+								{:else}
+									<div
+										class="flex size-16 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30"
+									>
+										<Camera class="size-6 text-muted-foreground/50" />
+									</div>
+								{/if}
+
+								<div class="flex flex-wrap items-center gap-2">
+									<label
+										for="pet-photo-{index}"
+										class="inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {disabled ||
+										uploadingPetIndex === index
+											? 'pointer-events-none opacity-60'
+											: ''}"
+									>
+										<Camera class="size-3.5 text-primary" />
+										<span>
+											{hasPhoto ? 'เปลี่ยนภาพ' : 'ถ่าย / แนบรูปภาพ'}
+										</span>
+									</label>
+									<input
+										id="pet-photo-{index}"
+										type="file"
+										accept="image/*"
+										class="sr-only"
+										disabled={disabled || uploadingPetIndex === index}
+										onchange={(e) => void onPetPhotoChange(index, e)}
+									/>
+									{#if hasPhoto}
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={disabled || uploadingPetIndex === index}
+											onclick={() => clearPetPhoto(index)}
+											class="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+											aria-label="ลบรูป"
+										>
+											<X class="size-3.5" />
+											ลบรูป
+										</Button>
+									{/if}
+								</div>
+							</div>
+						</div>
 					</div>
 				{/each}
 			</div>

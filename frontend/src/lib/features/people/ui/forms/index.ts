@@ -4,6 +4,7 @@ export {
 	SPECIAL_NEEDS_COMMON_TAGS,
 	type SpecialNeedTag
 } from './special-needs-fields.svelte';
+export { default as VulnerableGroupsFields } from './vulnerable-groups-fields.svelte';
 export { default as EmergencyContactFields } from './emergency-contact-fields.svelte';
 export { default as EwarSymptomsFields } from './ewar-symptoms-fields.svelte';
 export { default as HouseholdAddressFields } from './household-address-fields.svelte';

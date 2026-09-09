@@ -522,6 +522,8 @@ export const useRecordMedicalScreening = () => {
 				zone?: string | null;
 				checkIn?: boolean;
 				medical?: MedicalInput;
+				vulnerable_groups?: string[];
+				special_needs?: string[];
 			};
 			ctx: AuthorContext;
 		}) => peopleRepository().recordMedicalScreening(input, ctx),

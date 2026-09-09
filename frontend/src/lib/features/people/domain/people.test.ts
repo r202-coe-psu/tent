@@ -687,6 +687,24 @@ describe('evacueeHealthEditFormSchema temperature', () => {
 			expect(evacueeHealthEditFormSchema.safeParse({ ...base, temperature }).success).toBe(true);
 		}
 	});
+
+	it('supports Station 2 aligned fields with defaults', () => {
+		const result = evacueeHealthEditFormSchema.safeParse({
+			careTrack: 'fast_track',
+			conditions: 'ความดันสูง',
+			medications: 'Amlodipine',
+			allergies: 'ไม่มี',
+			generalSymptoms: 'ปวดศีรษะเล็กน้อย',
+			vulnerableGroups: ['elderly_dependent', 'wheelchair'],
+			specialNeeds: ['ต้องการไม้เท้า'],
+			selectedSymptoms: ['fever']
+		});
+
+		expect(result.success).toBe(true);
+		expect(result.data?.vulnerableGroups).toEqual(['elderly_dependent', 'wheelchair']);
+		expect(result.data?.generalSymptoms).toBe('ปวดศีรษะเล็กน้อย');
+		expect(result.data?.careTrack).toBe('fast_track');
+	});
 });
 
 describe('movement → current_stay', () => {

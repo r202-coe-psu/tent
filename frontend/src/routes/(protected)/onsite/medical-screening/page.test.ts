@@ -308,7 +308,7 @@ describe('ClinicalScreeningForm component', () => {
 		household_id: null
 	} as Evacuee;
 
-	it('renders simplified 3-section screening form per CR-106 without triage, vitals, blood group, or referral', () => {
+	it('renders 4-section screening form with editable VG and additional needs, without triage/vitals/referral or amber read-only banner', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -316,7 +316,7 @@ describe('ClinicalScreeningForm component', () => {
 			}
 		});
 
-		// Section 1: Health History & Care Track
+		// Section 1: Health History & Care Track (+ general symptoms via HealthMedicalFields)
 		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
 		expect(result.body).toContain('แนวทางดูแล (Care Track)');
 		expect(result.body).toContain('ดูแลตามปกติ (Normal)');
@@ -324,17 +324,28 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).toContain('โรคประจำตัว');
 		expect(result.body).toContain('ยาที่ใช้ประจำ');
 		expect(result.body).toContain('ประวัติการแพ้');
-
-		// Section 2: General Symptoms
-		expect(result.body).toContain('2. อาการทั่วไป (General Symptoms)');
 		expect(result.body).toContain('อาการและข้อสังเกต');
 
-		// Section 3: EWAR Surveillance Symptoms
-		expect(result.body).toContain('3. อาการเฝ้าระวังทางระบาดวิทยา');
+		// Section 2: Vulnerable Groups (editable checkbox grid)
+		expect(result.body).toContain('2. กลุ่มเปราะบาง (Vulnerable Groups)');
+		expect(result.body).toContain('เลือกได้หลายรายการ (ไม่บังคับ)');
+		expect(result.body).toContain('ผู้ใช้วีลแชร์');
+		expect(result.body).toContain('ผู้ป่วยติดเตียง');
+		expect(result.body).toContain('id="med-vg-wheelchair"');
+
+		// Section 3: Additional needs
+		expect(result.body).toContain('3. ความต้องการเพิ่มเติม (Additional needs)');
+
+		// Section 4: EWAR Surveillance Symptoms
+		expect(result.body).toContain('4. อาการเฝ้าระวังทางระบาดวิทยา');
 		expect(result.body).toContain('อาการเฝ้าระวัง (EWAR Symptoms Checklist)');
 
 		// Save button
 		expect(result.body).toContain('บันทึกผลคัดกรอง');
+
+		// Old amber read-only banner removed
+		expect(result.body).not.toContain('กลุ่มเปราะบาง / ความต้องการพิเศษ');
+		expect(result.body).not.toContain('border-amber-500/30 bg-amber-50/70');
 
 		// DEPRECATED FIELDS COMPLETELY ABSENT (CR-106)
 		expect(result.body).not.toContain('ระดับความเร่งด่วน (Triage Level)');
@@ -355,7 +366,7 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).not.toContain('บันทึกและจัดโซนทันที');
 	});
 
-	it('strictly adheres to 3-section layout and does not render re-edit banner', () => {
+	it('strictly adheres to 4-section layout and does not render re-edit banner', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -371,8 +382,11 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).not.toContain('re-edit-banner');
 		expect(result.body).not.toContain('แก้ไขผลการคัดกรอง (บันทึกใหม่แบบ append)');
 		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
-		expect(result.body).toContain('2. อาการทั่วไป');
-		expect(result.body).toContain('3. อาการเฝ้าระวังทางระบาดวิทยา');
+		expect(result.body).toContain('2. กลุ่มเปราะบาง');
+		expect(result.body).toContain('3. ความต้องการเพิ่มเติม');
+		expect(result.body).toContain('4. อาการเฝ้าระวังทางระบาดวิทยา');
+		expect(result.body).not.toContain('2. อาการทั่วไป');
+		expect(result.body).not.toContain('กลุ่มเปราะบาง / ความต้องการพิเศษ');
 	});
 });
 

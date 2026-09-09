@@ -41,6 +41,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type {
+		Evacuee,
 		StayStatus,
 		PetGroup,
 		HouseholdVehicle,
@@ -537,43 +538,46 @@
 	async function saveHealth(data: EvacueeHealthEditData) {
 		if (!evacuee) return;
 		const medicalPatch = {
-			blood_group: data.bloodGroup,
 			conditions: data.conditions,
 			medications: data.medications,
 			allergies: data.allergies,
-			track: data.careTrack,
-			notes: data.medicalNotes || undefined
+			track: data.careTrack
 		};
 		const medicalHasValues =
 			data.conditions.length > 0 ||
 			data.medications.length > 0 ||
 			data.allergies.length > 0 ||
-			data.medicalNotes.length > 0 ||
-			data.bloodGroup !== 'unknown' ||
 			data.careTrack === 'fast_track';
 		const medicalChanged =
 			!medical ||
-			medical.blood_group !== data.bloodGroup ||
 			JSON.stringify(medical.conditions) !== JSON.stringify(data.conditions) ||
 			JSON.stringify(medical.medications) !== JSON.stringify(data.medications) ||
 			JSON.stringify(medical.allergies) !== JSON.stringify(data.allergies) ||
-			medical.track !== data.careTrack ||
-			(medical.notes ?? '') !== data.medicalNotes;
+			medical.track !== data.careTrack;
+
+		const currentVulnerableGroups = evacuee.vulnerable_groups ?? [];
+		const currentSpecialNeeds = evacuee.special_needs ?? [];
+		const vulnerableGroupsChanged =
+			JSON.stringify([...currentVulnerableGroups].sort()) !==
+			JSON.stringify([...data.vulnerableGroups].sort());
 		const specialNeedsChanged =
-			JSON.stringify(evacuee.special_needs) !== JSON.stringify(data.specialNeeds);
+			JSON.stringify([...currentSpecialNeeds].sort()) !==
+			JSON.stringify([...data.specialNeeds].sort());
+		const evacueeNeedsPatch = vulnerableGroupsChanged || specialNeedsChanged;
+
 		const nextSymptoms = data.ewarSymptoms;
+		const nextNotes = (data.generalSymptoms || data.screeningNotes || '').trim();
+		const currentNotes = (screening?.notes || '').trim();
 		const screeningChanged =
 			!screening ||
-			JSON.stringify(screening.symptoms) !== JSON.stringify(nextSymptoms) ||
-			screening.temperature_c !== data.temperatureC ||
-			screening.needs_referral !== data.referral ||
+			JSON.stringify([...(screening.symptoms ?? [])].sort()) !==
+				JSON.stringify([...nextSymptoms].sort()) ||
 			screening.track !== data.careTrack ||
-			(screening.notes ?? '') !== data.screeningNotes;
+			currentNotes !== nextNotes;
 		const screeningHasValues =
 			nextSymptoms.length > 0 ||
-			data.temperatureC !== null ||
-			data.referral ||
-			data.screeningNotes.length > 0;
+			nextNotes.length > 0 ||
+			data.careTrack === 'fast_track';
 
 		let patchedEvacuee = false;
 		let patchedMedical = false;
@@ -598,10 +602,13 @@
 				}
 			}
 
-			if (specialNeedsChanged) {
+			if (evacueeNeedsPatch) {
+				const evacueePatch: Partial<Evacuee> = {};
+				if (vulnerableGroupsChanged) evacueePatch.vulnerable_groups = data.vulnerableGroups;
+				if (specialNeedsChanged) evacueePatch.special_needs = data.specialNeeds;
 				await patchEvacueeMutation.mutateAsync({
 					id: evacuee._id,
-					patch: { special_needs: data.specialNeeds }
+					patch: evacueePatch
 				});
 				patchedEvacuee = true;
 			}
@@ -611,10 +618,10 @@
 					input: {
 						evacuee_id: evacuee._id,
 						symptoms: nextSymptoms,
-						temperature_c: data.temperatureC,
+						temperature_c: null,
 						track: data.careTrack,
-						needs_referral: data.referral,
-						notes: data.screeningNotes || undefined
+						needs_referral: false,
+						notes: nextNotes || undefined
 					},
 					ctx: getActor()
 				});
@@ -627,7 +634,10 @@
 				rollbacks.push(
 					patchEvacueeMutation.mutateAsync({
 						id: evacuee._id,
-						patch: { special_needs: evacuee.special_needs }
+						patch: {
+							vulnerable_groups: evacuee.vulnerable_groups,
+							special_needs: evacuee.special_needs
+						}
 					})
 				);
 			}
@@ -636,7 +646,6 @@
 					patchMedicalMutation.mutateAsync({
 						id: medical._id,
 						patch: {
-							blood_group: medical.blood_group,
 							conditions: medical.conditions,
 							medications: medical.medications,
 							allergies: medical.allergies,
@@ -767,7 +776,6 @@
 			<!-- Scroll content: Health / Household / Assets / Audit -->
 			<div class="min-w-0 space-y-4">
 				<div class="space-y-4">
-					<h2 class="px-1 text-sm font-bold text-foreground">สุขภาพ</h2>
 					<EvacueeProfileHealthCard
 						{evacuee}
 						{medical}
@@ -777,7 +785,6 @@
 					/>
 				</div>
 				<div class="space-y-4">
-					<h2 class="px-1 text-sm font-bold text-foreground">ครัวเรือน & สิ่งที่นำมา</h2>
 					<EvacueeProfileHouseholdCard
 						{evacuee}
 						{household}
@@ -892,6 +899,7 @@
 		<EvacueeZoneModal
 			show={showZoneModal}
 			{evacuee}
+			{screening}
 			{shelterZones}
 			onClose={() => (showZoneModal = false)}
 			onUpdateZone={updateZone}

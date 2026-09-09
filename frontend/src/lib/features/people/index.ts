@@ -309,6 +309,7 @@ export {
 	PersonalInfoFields,
 	SpecialNeedsFields,
 	SPECIAL_NEEDS_COMMON_TAGS,
+	VulnerableGroupsFields,
 	EmergencyContactFields,
 	EwarSymptomsFields,
 	HouseholdAddressFields,

@@ -1253,6 +1253,78 @@ describe('check-in / check-out', () => {
 			expect(medicals.filter((m) => m.evacuee_id === evacuee._id)).toHaveLength(1);
 		});
 
+		it('patches vulnerable_groups and special_needs on the evacuee when provided', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({
+					first_name: 'VGConfirm',
+					status: 'arriving',
+					vulnerable_groups: ['wheelchair'],
+					special_needs: ['ใช้ออกซิเจน']
+				}),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'fast_track',
+						symptoms: []
+					},
+					medical: {
+						evacuee_id: evacuee._id,
+						conditions: [],
+						medications: [],
+						allergies: [],
+						track: 'fast_track'
+					},
+					vulnerable_groups: ['wheelchair', 'pregnant'],
+					special_needs: ['ใช้ออกซิเจน', 'อาหารอ่อน']
+				},
+				ctx
+			);
+
+			expect(result.evacuee).toBeDefined();
+			expect(result.evacuee?.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
+			expect(result.evacuee?.special_needs).toEqual(['ใช้ออกซิเจน', 'อาหารอ่อน']);
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
+			expect(fetched?.special_needs).toEqual(['ใช้ออกซิเจน', 'อาหารอ่อน']);
+			expect(fetched?.current_stay.status).toBe('arriving');
+		});
+
+		it('can clear vulnerable_groups and special_needs via empty arrays', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({
+					first_name: 'ClearNeeds',
+					status: 'arriving',
+					vulnerable_groups: ['bedridden'],
+					special_needs: ['ผู้ป่วยติดเตียง']
+				}),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						symptoms: []
+					},
+					vulnerable_groups: [],
+					special_needs: []
+				},
+				ctx
+			);
+
+			expect(result.evacuee?.vulnerable_groups).toEqual([]);
+			expect(result.evacuee?.special_needs).toEqual([]);
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.vulnerable_groups).toEqual([]);
+			expect(fetched?.special_needs).toEqual([]);
+		});
+
 		it('assigns isolation zone on direct check-in without severing household link', async () => {
 			const household = await repo.createHousehold(
 				{ label: 'บ้านร่วม', head_evacuee_id: null, status: 'arriving' },
@@ -1536,7 +1608,9 @@ describe('submitFamilyReportIn', () => {
 		// Household updated
 		expect(reportInResult.household.address_no).toBe('10/1 แก้ไขใหม่');
 		expect(reportInResult.household.pets).toEqual([{ species: 'cat', count: 1 }]);
-		expect(reportInResult.household.vehicles).toEqual([{ type: 'motorcycle', license_plate: '1กข 999' }]);
+		expect(reportInResult.household.vehicles).toEqual([
+			{ type: 'motorcycle', license_plate: '1กข 999' }
+		]);
 
 		// Members in result: 2 members reported in (สมชาย and สมปอง)
 		expect(reportInResult.members).toHaveLength(2);
