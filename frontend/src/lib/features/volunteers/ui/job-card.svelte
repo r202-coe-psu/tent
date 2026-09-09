@@ -79,67 +79,104 @@
 	);
 </script>
 
-<div class="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-xs">
-	<div class="flex items-start justify-between gap-2">
-		<div class="flex flex-wrap items-center gap-1.5">
-			<Badge variant={statusDisplay.variant}>{statusDisplay.label}</Badge>
-			{#if job.is_urgent}
-				<Badge variant="destructive" class="gap-1">
-					<Flame class="h-3 w-3" />
-					ด่วนพิเศษ
-				</Badge>
-			{/if}
+<div
+	class="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+>
+	<div class="h-1 bg-primary/80"></div>
+	<div class="flex min-h-0 flex-1 flex-col gap-4 p-5">
+		<div class="flex items-start justify-between gap-3">
+			<div class="flex min-w-0 flex-wrap items-center gap-1.5">
+				<Badge variant={statusDisplay.variant}>{statusDisplay.label}</Badge>
+				{#if job.is_urgent}
+					<Badge variant="destructive" class="gap-1">
+						<Flame class="h-3 w-3" />
+						ด่วนพิเศษ
+					</Badge>
+				{/if}
+			</div>
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								size="icon"
+								variant="ghost"
+								class="shrink-0 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100"
+								onclick={() => onedit(job)}
+							>
+								<Pencil class="h-4 w-4" />
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content>แก้ไขงาน</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
 		</div>
-		<Tooltip.Provider>
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} size="icon" variant="ghost" onclick={() => onedit(job)}>
-							<Pencil class="h-4 w-4" />
-						</Button>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content>แก้ไขงาน</Tooltip.Content>
-			</Tooltip.Root>
-		</Tooltip.Provider>
-	</div>
 
-	<div class="min-w-0">
-		<h3 class="text-sm font-bold break-words text-foreground">{job.title}</h3>
-		<p class="mt-0.5 line-clamp-2 text-xs break-words text-muted-foreground">{job.description}</p>
-	</div>
-
-	{#if skillLabels.length > 0}
-		<div class="flex flex-wrap gap-1">
-			{#each skillLabels as skill (skill.value)}
-				<Badge variant="outline" class="max-w-full text-[11px] break-words"
-					>{skill.entry?.label}</Badge
-				>
-			{/each}
+		<div class="min-w-0">
+			<h3 class="truncate text-base leading-snug font-bold text-foreground" title={job.title}>
+				{job.title}
+			</h3>
+			<p
+				class="mt-1 truncate text-xs leading-relaxed text-muted-foreground"
+				title={job.description}
+			>
+				{job.description}
+			</p>
 		</div>
-	{/if}
 
-	<JobQuotaBar {job} />
+		{#if skillLabels.length > 0}
+			<div class="flex min-w-0 items-center gap-2">
+				<span class="shrink-0 text-[11px] font-semibold text-muted-foreground">ทักษะ</span>
+				<div class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+					{#each skillLabels.slice(0, 2) as skill (skill.value)}
+						<Badge
+							variant="outline"
+							class="max-w-[45%] truncate text-[11px]"
+							title={skill.entry?.label}>{skill.entry?.label}</Badge
+						>
+					{/each}
+					{#if skillLabels.length > 2}
+						<span class="shrink-0 text-[11px] font-semibold text-muted-foreground">
+							+{skillLabels.length - 2}
+						</span>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
-	<div
-		class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs"
-	>
-		<div class="flex items-center gap-3 text-muted-foreground">
-			<span class="inline-flex items-center gap-1">
-				<CalendarClock class="h-3.5 w-3.5" />
-				{job.shifts.length} กะ · {shiftRangeLabel}
-			</span>
-			<span class="inline-flex items-center gap-1">
-				<Users class="h-3.5 w-3.5" />
-				ผู้สมัคร {applicantCount}
-			</span>
-			<span class="inline-flex items-center gap-1 font-medium text-amber-700">
-				<Hourglass class="h-3.5 w-3.5" />
-				รอยืนยัน {pendingApplicantCount}
-			</span>
+		<div class="rounded-xl bg-muted/35 p-3">
+			<div class="mb-2 flex items-center justify-between gap-2">
+				<span class="text-[11px] font-semibold text-muted-foreground">ความคืบหน้าโควตา</span>
+				<span class="text-xs font-bold text-foreground">{job.slots_confirmed}/{job.quota}</span>
+			</div>
+			<JobQuotaBar {job} />
 		</div>
-		<Button size="sm" variant="outline" class="ml-auto shrink-0 gap-1.5" href={detailHref}
-			><Eye class="h-3.5 w-3.5" />ดูรายละเอียด</Button
-		>
+
+		<div class="mt-auto border-t border-border pt-4">
+			<div class="space-y-2 text-xs text-muted-foreground">
+				<div class="flex min-w-0 items-center gap-2">
+					<CalendarClock class="h-3.5 w-3.5 shrink-0 text-primary" />
+					<span class="truncate" title={shiftRangeLabel}
+						>{job.shifts.length} กะ <span class="text-border">·</span> {shiftRangeLabel}</span
+					>
+				</div>
+				<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+					<span class="inline-flex items-center gap-1">
+						<Users class="h-3.5 w-3.5 text-primary" />
+						ผู้สมัคร {applicantCount}
+					</span>
+					<span class="inline-flex items-center gap-1 font-medium text-amber-700">
+						<Hourglass class="h-3.5 w-3.5" />
+						รอยืนยัน {pendingApplicantCount}
+					</span>
+				</div>
+			</div>
+
+			<Button size="sm" variant="default" class="mt-4 w-full gap-1.5" href={detailHref}>
+				<Eye class="h-3.5 w-3.5" /> ดูรายละเอียด
+			</Button>
+		</div>
 	</div>
 </div>
