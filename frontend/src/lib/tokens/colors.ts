@@ -308,7 +308,7 @@ export const colors = {
 		},
 		tracing: {
 			id: 'tracing',
-			title: 'ค้นหาญาติ / ผู้พักพิง',
+			title: 'ผู้พักพิง',
 			category: 'Family Tracing & Safety Verification',
 			hex: baseBrand.primary,
 			accentHex: baseSecondary.cerulean,
@@ -321,7 +321,7 @@ export const colors = {
 		},
 		donation: {
 			id: 'donation',
-			title: 'ผู้บริจาค / มอบเสบียง',
+			title: 'บริจาค',
 			category: 'Donations, Food & Logistics Coordination',
 			hex: baseOperations.kitchen.hex,
 			bg: 'bg-white',
@@ -333,7 +333,7 @@ export const colors = {
 		},
 		volunteer: {
 			id: 'volunteer',
-			title: 'จิตอาสา / อาสาสมัคร',
+			title: 'อาสาสมัคร',
 			category: 'Field Responders, Medical & Community Volunteers',
 			hex: baseOperations.volunteer.hex,
 			bg: 'bg-white',

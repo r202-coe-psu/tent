@@ -41,9 +41,9 @@ All downstream semantic and domain tokens inherit directly from Base Primitive T
 
 #### 2. Public Portal Essential Services Mapping
 - **1. ค้นหาที่พักพิง (Shelters)**: Destructive Red #DC2626 ('portalServices.shelter': border-red-200, bg-red-50 icon container, primary btn-destructive)
-- **2. ค้นหาญาติ / ผู้พักพิง (Family Tracing)**: Brand Navy #0A2647 & Cerulean #0284C7 ('portalServices.tracing': border-sky-200, bg-sky-50 icon container, primary btn-primary)
-- **3. ผู้บริจาค / มอบเสบียง (Donations)**: Warm Amber #EA580C ('portalServices.donation': border-amber-200, bg-amber-50 icon container, primary amber button)
-- **4. จิตอาสา / อาสาสมัคร (Volunteers)**: Civic Emerald #059669 ('portalServices.volunteer': border-emerald-200, bg-emerald-50 icon container, primary emerald button)
+- **2. ผู้พักพิง (Family Tracing)**: Brand Navy #0A2647 & Cerulean #0284C7 ('portalServices.tracing': border-sky-200, bg-sky-50 icon container, primary btn-primary)
+- **3. บริจาค (Donations)**: Warm Amber #EA580C ('portalServices.donation': border-amber-200, bg-amber-50 icon container, primary amber button)
+- **4. อาสาสมัคร (Volunteers)**: Civic Emerald #059669 ('portalServices.volunteer': border-emerald-200, bg-emerald-50 icon container, primary emerald button)
 - **Floating Emergency Controls**:
   - 1669 Hotline pill: 'bg-red-600' (Destructive Red)
   - Floating Alert Bell pill ("แจ้งเตือนภัย"): **'bg-[#0284C7]' (Secondary Cerulean)** — *Strictly Secondary Cerulean, not red!*
