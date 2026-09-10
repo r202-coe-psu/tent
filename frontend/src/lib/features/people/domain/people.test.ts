@@ -135,9 +135,10 @@ describe('stayStatusSchema and STATUS_LABELS', () => {
 		expect(stayStatusSchema.parse('room_confirmed')).toBe('room_confirmed');
 	});
 
-	it('contains arriving and room_confirmed in STATUS_LABELS with Thai labels', () => {
-		expect(STATUS_LABELS.arriving).toBe('อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)');
+	it('contains arriving, room_confirmed, and checked_out in STATUS_LABELS with Thai labels', () => {
+		expect(STATUS_LABELS.arriving).toBe('รอเข้าพัก');
 		expect(STATUS_LABELS.room_confirmed).toBe('ยืนยันถึงโซนแล้ว');
+		expect(STATUS_LABELS.checked_out).toBe('เช็คเอาต์');
 	});
 });
 

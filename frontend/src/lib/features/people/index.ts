@@ -272,6 +272,10 @@ export {
 } from './application/queries';
 
 // UI — feature components
+export {
+	default as StayStatusBadge,
+	STAY_STATUS_BADGE_STYLES
+} from './ui/stay-status-badge.svelte';
 export { default as Station1IntakeSearch } from './ui/station1-intake-search.svelte';
 export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';

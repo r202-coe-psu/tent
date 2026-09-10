@@ -54,9 +54,9 @@
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
 		},
 		checked_out: {
-			label: 'ย้ายออก / กลับภูมิลำเนา',
+			label: 'เช็คเอาต์',
 			colorClass:
-				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+				'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
 		},
 		cancelled: {
 			label: 'ยกเลิกการจอง',

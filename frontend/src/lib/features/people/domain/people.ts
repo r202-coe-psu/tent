@@ -124,15 +124,15 @@ export const stayStatusSchema = z.enum([
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
-	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
-	arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
-	active: 'เช็คอินเข้าพักแล้ว',
+	pre_registered: 'ลงทะเบียนล่วงหน้า',
+	arriving: 'รอเข้าพัก',
+	active: 'เข้าพักแล้ว',
 	room_confirmed: 'ยืนยันถึงโซนแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
-	transferred: 'ย้ายศูนย์พักพิงแล้ว',
-	checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
+	transferred: 'ย้ายศูนย์',
+	checked_out: 'เช็คเอาต์',
 	deceased: 'เสียชีวิต',
-	cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
+	cancelled: 'ยกเลิก'
 };
 
 export const householdStatusSchema = z.enum([

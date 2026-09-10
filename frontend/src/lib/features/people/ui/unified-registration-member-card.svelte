@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Camera from '@lucide/svelte/icons/camera';
+	import Check from '@lucide/svelte/icons/check';
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Phone from '@lucide/svelte/icons/phone';
@@ -20,6 +21,7 @@
 	import { compressImage } from '$lib/utils/image-compress';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { cn } from '$lib/utils/shadcn.js';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import {
 		PersonalInfoFields,
@@ -76,6 +78,32 @@
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	const hideNoPhone = $derived(channel === 'public' && index === 0);
+
+	const isReportIn = $derived(mode === 'report-in');
+	const isAlreadyReported = $derived(
+		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
+	);
+	const isNewReportInMember = $derived(isReportIn && !member._id);
+	const isToggleableReportIn = $derived(
+		isReportIn &&
+			!!member._id &&
+			(!member.stay_status || member.stay_status === 'pre_registered')
+	);
+	const isReportingInSelected = $derived(member.reporting_in ?? true);
+	const cardClass = $derived(
+		cn(
+			'rounded-xl p-4 shadow-xs sm:p-5 space-y-5',
+			isToggleableReportIn
+				? isReportingInSelected
+					? 'border-2 border-primary/50 bg-sky-100/5 ring-1 ring-primary/30'
+					: 'border-2 border-dashed border-border bg-white text-muted-foreground opacity-70'
+				: isAlreadyReported
+					? 'border border-border bg-muted/40 text-muted-foreground'
+					: isNewReportInMember
+						? 'border border-emerald-300 bg-emerald-50/50'
+						: 'border border-border/60 bg-card'
+		)
+	);
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -275,17 +303,25 @@
 
 <section
 	id="unified-member-{index}"
-	class="form-section-card space-y-5"
+	class={cardClass}
 	aria-labelledby="member-card-title-{index}"
 >
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
-				<h3 id="member-card-title-{index}" class="text-base font-bold text-foreground">
+				<h3
+					id="member-card-title-{index}"
+					class={cn(
+						'text-base font-bold',
+						isToggleableReportIn && !isReportingInSelected
+							? 'text-muted-foreground'
+							: 'text-foreground'
+					)}
+				>
 					{title}
 				</h3>
-				{#if mode === 'report-in'}
-					{#if member.stay_status && member.stay_status !== 'pre_registered'}
+				{#if isReportIn}
+					{#if isAlreadyReported}
 						<Badge variant="secondary" class="text-2xs">
 							รายงานตัวแล้ว ({STATUS_LABELS[member.stay_status] ?? member.stay_status})
 						</Badge>
@@ -305,22 +341,43 @@
 			{/if}
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			{#if mode === 'report-in'}
-				{#if member.stay_status && member.stay_status !== 'pre_registered'}
-					<span class="text-xs font-medium text-muted-foreground">เข้ารายงานตัวแล้ว</span>
-				{:else if !member._id}
-					<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ รายงานตัวรอบนี้</span>
+			{#if isReportIn}
+				{#if isAlreadyReported}
+					<span
+						class="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-500"
+					>
+						เข้ารายงานตัวแล้ว
+					</span>
+				{:else if isNewReportInMember}
+					<span
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800"
+					>
+						<Check class="size-4 shrink-0" aria-hidden="true" />
+						รายงานตัวรอบนี้
+					</span>
 				{:else}
-					<label class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-semibold select-none transition-colors {member.reporting_in ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-muted/40 text-muted-foreground'}">
+					<label
+						class={cn(
+							'flex min-h-12 cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-sm font-semibold select-none transition-colors',
+							isReportingInSelected
+								? 'border-primary/50 bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/30'
+								: 'border-dashed border-border bg-muted/50 text-muted-foreground'
+						)}
+					>
 						<Checkbox
-							checked={member.reporting_in ?? true}
+							checked={isReportingInSelected}
 							{disabled}
 							onCheckedChange={(checked) => {
 								member.reporting_in = checked === true;
 								onReportingInChange?.(checked === true);
 							}}
 						/>
-						<span>เช็กชื่อรายงานตัว</span>
+						{#if isReportingInSelected}
+							<Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
+							<span>เลือกแล้ว — รายงานตัวรอบนี้</span>
+						{:else}
+							<span>ยังไม่เลือก — ไม่มาในรอบนี้</span>
+						{/if}
 					</label>
 				{/if}
 			{/if}

@@ -139,11 +139,11 @@
 			dotClass: 'bg-purple-500'
 		},
 		checked_out: {
-			label: 'ย้ายออก / กลับภูมิลำเนา (Checked-out)',
-			shortLabel: 'ย้ายออก',
+			label: 'เช็คเอาต์ (Checked-out)',
+			shortLabel: 'เช็คเอาต์',
 			colorClass:
-				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
-			dotClass: 'bg-red-500'
+				'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+			dotClass: 'bg-slate-400'
 		},
 		deceased: {
 			label: 'เสียชีวิต (Deceased)',
