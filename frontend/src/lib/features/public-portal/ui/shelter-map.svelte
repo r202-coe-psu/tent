@@ -61,6 +61,7 @@
 		center = DEFAULT_MAP_CENTER,
 		zoom = DEFAULT_MAP_ZOOM,
 		selectedId = null,
+		disablePopup = false,
 		onSelectShelter,
 		onLocationPick
 	}: {
@@ -72,6 +73,8 @@
 		zoom?: number;
 		/** Currently selected shelter ID to sync with list */
 		selectedId?: string | null;
+		/** When true (e.g. mobile view), marker click only triggers selection without showing map popup */
+		disablePopup?: boolean;
 		/** Callback when user clicks a shelter pin */
 		onSelectShelter?: (shelterId: string) => void;
 		/** Called when the user places a search-origin pin on the map. */
@@ -276,9 +279,22 @@
 			mapLoaded = true;
 			updateLabelsVisibility(); // Initial check
 		});
+
+		if (typeof ResizeObserver !== 'undefined' && mapElement) {
+			ro = new ResizeObserver(() => {
+				map.resize();
+			});
+			ro.observe(mapElement);
+		}
 	});
 
+	let ro: ResizeObserver | null = null;
+
 	onDestroy(() => {
+		if (ro) {
+			ro.disconnect();
+			ro = null;
+		}
 		if (mapInstance) {
 			mapInstance.remove();
 			mapInstance = null;
@@ -474,9 +490,13 @@
 				});
 
 				const marker = new lib.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
-					.setLngLat(lngLat)
-					.setPopup(popup)
-					.addTo(map);
+					.setLngLat(lngLat);
+
+				if (!disablePopup) {
+					marker.setPopup(popup);
+				}
+
+				marker.addTo(map);
 
 				markersLayer.push(marker);
 				const markerItem: ShelterMarkerItem = {
@@ -538,11 +558,15 @@
 
 		if (matchedItem) {
 			const target = matchedItem as ShelterMarkerItem;
-			if (activePopup && activePopup !== target.popup) {
-				activePopup.remove();
+			if (!disablePopup) {
+				if (activePopup && activePopup !== target.popup) {
+					activePopup.remove();
+				}
+				activePopup = target.popup;
+				target.popup.setLngLat([target.lng, target.lat]).addTo(mapInstance!);
+			} else {
+				closeActivePopup();
 			}
-			activePopup = target.popup;
-			target.popup.setLngLat([target.lng, target.lat]).addTo(mapInstance!);
 			mapInstance!.easeTo({
 				center: [target.lng, target.lat],
 				zoom: Math.max(mapInstance!.getZoom(), 15),
