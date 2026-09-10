@@ -12,13 +12,14 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Globe from '@lucide/svelte/icons/globe';
+	// import Globe from '@lucide/svelte/icons/globe';
 	import Bell from '@lucide/svelte/icons/bell';
 
 	import { onMount } from 'svelte';
-	import * as Select from '$lib/components/ui/select';
+	// import * as Select from '$lib/components/ui/select';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_NAVBAR_I18N, SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
+	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
+	// import { SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import type { Announcement } from '$lib/features/announcements';
 	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
@@ -194,7 +195,8 @@
 				{/if}
 			</button>
 
-			<!-- Language Switcher (Mobile) -->
+			<!-- Language Switcher (Mobile) - temporarily commented out -->
+			<!--
 			<Select.Root
 				type="single"
 				value={langState.current}
@@ -217,6 +219,7 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			-->
 
 			<button
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
@@ -344,6 +347,8 @@
 				{t.backoffice}
 			</a>
 
+			<!-- Language Switcher (Desktop) - temporarily commented out -->
+			<!--
 			<div class="ml-2 flex shrink-0 items-center border-l border-border pl-3">
 				<Globe class="mr-1 h-4 w-4 text-muted-foreground" />
 				<Select.Root
@@ -370,6 +375,7 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
+			-->
 		</nav>
 	</div>
 
