@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -26,6 +27,8 @@
 		ShelterFilterPanel,
 		ShelterMap,
 		PublicPageShell,
+		requestUserPosition,
+		canRequestGeolocation,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
@@ -52,7 +55,7 @@
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 	const cardT = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
-	$effect(() => {
+	onMount(() => {
 		if (typeof window !== 'undefined') {
 			const mql = window.matchMedia('(max-width: 1023px)');
 			isMobile = mql.matches;
@@ -60,6 +63,20 @@
 				isMobile = e.matches;
 			};
 			mql.addEventListener('change', handler);
+
+			if (!liveUserLat || !liveUserLng) {
+				if (canRequestGeolocation()) {
+					requestUserPosition()
+						.then((pos) => {
+							liveUserLat = pos.lat;
+							liveUserLng = pos.lng;
+						})
+						.catch(() => {
+							// Geolocation unavailable or user denied
+						});
+				}
+			}
+
 			return () => mql.removeEventListener('change', handler);
 		}
 	});
@@ -116,32 +133,18 @@
 		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
 
-	let hasAutoSelected = $state(false);
-
-	// Auto-select first shelter on initial load only on desktop
+	// Keep selection in sync: clear selection if the selected shelter is no longer in display list
 	$effect(() => {
-		if (displayShelters.length > 0) {
-			if (!hasAutoSelected) {
-				hasAutoSelected = true;
-				if (!isMobile) {
-					const first = displayShelters[0];
-					selectedShelterId = first.id || first.code || null;
-				}
-			} else if (
-				selectedShelterId &&
-				!displayShelters.some((s) => s.id === selectedShelterId || s.code === selectedShelterId)
-			) {
-				selectedShelterId = isMobile
-					? null
-					: displayShelters[0]?.id || displayShelters[0]?.code || null;
-			}
-		} else {
+		if (
+			selectedShelterId &&
+			!displayShelters.some((s) => s.id === selectedShelterId || s.code === selectedShelterId)
+		) {
 			selectedShelterId = null;
 		}
 	});
 
 	function handleSelectShelter(shelterId: string) {
-		selectedShelterId = shelterId;
+		selectedShelterId = shelterId || null;
 
 		if (typeof window !== 'undefined' && listContainerEl) {
 			const targetEl =
