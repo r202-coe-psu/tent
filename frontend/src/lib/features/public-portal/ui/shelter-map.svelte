@@ -90,11 +90,19 @@
 
 	let mapElement: HTMLElement;
 	let mapInstance: MapLibreMap | null = null;
+	let activePopup: MapLibrePopup | null = null;
 	let markersLayer: MapLibreMarker[] = [];
 	let shelterMarkerMap = new SvelteMap<string, ShelterMarkerItem>();
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
+
+	function closeActivePopup() {
+		if (activePopup) {
+			activePopup.remove();
+			activePopup = null;
+		}
+	}
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_MAP_I18N, langState.current));
 
@@ -307,8 +315,12 @@
 		// Re-render popups when master-data labels arrive.
 		void shelterTypeLabels.data;
 
+		closeActivePopup();
 		// Clear old markers
-		markersLayer.forEach((marker) => marker.remove());
+		markersLayer.forEach((marker) => {
+			marker.getPopup()?.remove();
+			marker.remove();
+		});
 		markersLayer = [];
 		shelterMarkerMap.clear();
 
@@ -368,9 +380,6 @@
 				// Do not apply position: relative to the root element,
 				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
-				if (shelterId === selectedId || (shelter.code && shelter.code === selectedId)) {
-					el.classList.add('is-selected');
-				}
 				el.innerHTML = `
 					<div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 24px; height: 24px;">
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s, box-shadow 0.2s;"></div>
@@ -393,8 +402,9 @@
 
 				el.addEventListener('click', (ev) => {
 					ev.stopPropagation();
-					if (shelterId) {
-						onSelectShelter?.(shelterId);
+					const idToSelect = shelter.id || shelter.code;
+					if (idToSelect) {
+						onSelectShelter?.(idToSelect);
 					}
 				});
 
@@ -414,19 +424,54 @@
 					</a>
 				`;
 
-				const popup = new lib.Popup({ offset: 12, closeButton: true, maxWidth: '240px' }).setHTML(`
-					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:170px;padding:2px 0;">
-						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:4px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
-						<div style="line-height:1.45;color:#334155;">
-							${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
-							${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
-							${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
+				const popup = new lib.Popup({
+					offset: 16,
+					closeButton: true,
+					closeOnClick: false,
+					maxWidth: '280px'
+				}).setLngLat(lngLat).setHTML(`
+					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
+						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;line-height:1.3;">${icon} ${shelter.name}</strong>
+						<div style="margin-bottom:6px;font-size:0.65rem;color:#64748b;font-weight:500;">
+							${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}
+						</div>
+						<div style="line-height:1.5;color:#334155;font-size:0.75rem;background:#f8fafc;padding:6px 8px;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:8px;">
+							<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+								<span>${t.status}</span>
+								<strong style="color:${color};">${getStatusText(shelter.status)}</strong>
+							</div>
+							<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+								<span>${t.capacity}</span>
+								<strong>${shelter.capacity} ${t.people}</strong>
+							</div>
+							${
+								shelter.distance > 0
+									? `
+							<div style="display:flex;justify-content:space-between;">
+								<span>${t.distance}</span>
+								<strong>${shelter.distance} ${t.km}</strong>
+							</div>`
+									: ''
+							}
 						</div>
 						${bookingButtonHtml}
 						${detailsButtonHtml}
 					</div>
 				`);
+
+				popup.on('close', () => {
+					if (activePopup === popup) {
+						activePopup = null;
+					}
+					const currentId = shelter.id || shelter.code;
+					if (
+						selectedId === currentId ||
+						selectedId === shelter.id ||
+						selectedId === shelter.code
+					) {
+						onSelectShelter?.('');
+					}
+				});
 
 				const marker = new lib.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
 					.setLngLat(lngLat)
@@ -434,15 +479,19 @@
 					.addTo(map);
 
 				markersLayer.push(marker);
-				if (shelterId) {
-					shelterMarkerMap.set(shelterId, {
-						marker,
-						popup,
-						el,
-						shelter,
-						lng,
-						lat
-					});
+				const markerItem: ShelterMarkerItem = {
+					marker,
+					popup,
+					el,
+					shelter,
+					lng,
+					lat
+				};
+				if (shelter.id) {
+					shelterMarkerMap.set(shelter.id, markerItem);
+				}
+				if (shelter.code) {
+					shelterMarkerMap.set(shelter.code, markerItem);
 				}
 			});
 		}
@@ -453,7 +502,7 @@
 				const centerLngLat = bounds.getCenter();
 				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 15 });
 			} else {
-				map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
+				map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
 			}
 		}
 	});
@@ -463,25 +512,45 @@
 		if (!mapLoaded || !mapInstance) return;
 		const currentSelected = selectedId;
 
+		if (!currentSelected) {
+			closeActivePopup();
+			shelterMarkerMap.forEach((item) => {
+				item.el.classList.remove('is-selected');
+			});
+			return;
+		}
+
+		let matchedItem: ShelterMarkerItem | null = null;
+
 		shelterMarkerMap.forEach((item, id) => {
 			const isMatch = Boolean(
-				currentSelected &&
-				(id === currentSelected || (item.shelter.code && item.shelter.code === currentSelected))
+				id === currentSelected ||
+				item.shelter.id === currentSelected ||
+				(item.shelter.code && item.shelter.code === currentSelected)
 			);
 			if (isMatch) {
+				matchedItem = item;
 				item.el.classList.add('is-selected');
-				if (!item.popup.isOpen()) {
-					item.popup.addTo(mapInstance!);
-				}
-				mapInstance!.easeTo({
-					center: [item.lng, item.lat],
-					zoom: Math.max(mapInstance!.getZoom(), 15),
-					duration: 500
-				});
 			} else {
 				item.el.classList.remove('is-selected');
 			}
 		});
+
+		if (matchedItem) {
+			const target = matchedItem as ShelterMarkerItem;
+			if (activePopup && activePopup !== target.popup) {
+				activePopup.remove();
+			}
+			activePopup = target.popup;
+			target.popup.setLngLat([target.lng, target.lat]).addTo(mapInstance!);
+			mapInstance!.easeTo({
+				center: [target.lng, target.lat],
+				zoom: Math.max(mapInstance!.getZoom(), 15),
+				duration: 400
+			});
+		} else {
+			closeActivePopup();
+		}
 	});
 </script>
 
@@ -492,20 +561,22 @@
 <div bind:this={mapElement} class="absolute inset-0 z-0 h-full w-full"></div>
 
 {#if onLocationPick}
-	<div class="absolute top-3 left-3 z-10 flex max-w-[min(100%-1.5rem,16rem)] flex-col gap-1.5">
+	<div
+		class="pointer-events-auto absolute top-4 left-1/2 z-10 flex max-w-[min(100%-1.5rem,16rem)] -translate-x-1/2 flex-col items-center gap-1.5"
+	>
 		<Button
 			type="button"
 			size="sm"
 			variant={placingPin ? 'default' : 'secondary'}
-			class="rounded-xl border border-border bg-card/95 text-xs font-bold shadow-md backdrop-blur-md"
+			class="rounded-full border border-border/80 bg-card/95 px-3.5 py-1.5 text-xs font-bold shadow-md backdrop-blur-md hover:bg-card"
 			onclick={() => (placingPin = !placingPin)}
 		>
-			<MapPin class="mr-1.5 h-3.5 w-3.5" />
+			<MapPin class="mr-1.5 h-3.5 w-3.5 text-primary" />
 			{placingPin ? t.cancelPlacePin : t.placePin}
 		</Button>
 		{#if placingPin}
 			<p
-				class="rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-2xs font-medium text-muted-foreground shadow-sm backdrop-blur-md"
+				class="rounded-lg border border-border bg-card/95 px-2.5 py-1 text-2xs font-medium text-muted-foreground shadow-sm backdrop-blur-md"
 			>
 				{t.placingPin}
 			</p>
@@ -515,30 +586,54 @@
 
 <!-- Legend overlay -->
 <div
-	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border bg-card/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
+	class="pointer-events-auto absolute bottom-4 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-border/80 bg-card/95 px-4 py-2 text-2xs font-medium shadow-md backdrop-blur-md sm:flex"
 >
-	<div class="mb-2 font-bold text-foreground">{t.shelterStatus}</div>
-	<div class="flex flex-col gap-1.5">
-		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white bg-[#22c55e] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">{t.statusOpen}</span>
-		</div>
-		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white bg-[#f59e0b] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">{t.statusStandby}</span>
-		</div>
-		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white bg-[#ef4444] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">{t.statusFull}</span>
-		</div>
-		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white bg-[#94a3b8] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">{t.statusClosed}</span>
-		</div>
+	<span class="font-bold text-foreground">{t.shelterStatus}:</span>
+	<div class="flex items-center gap-1.5">
+		<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#22c55e] shadow-xs"></div>
+		<span class="text-muted-foreground">{t.statusOpen}</span>
+	</div>
+	<div class="flex items-center gap-1.5">
+		<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#f59e0b] shadow-xs"></div>
+		<span class="text-muted-foreground">{t.statusStandby}</span>
+	</div>
+	<div class="flex items-center gap-1.5">
+		<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#ef4444] shadow-xs"></div>
+		<span class="text-muted-foreground">{t.statusFull}</span>
+	</div>
+	<div class="flex items-center gap-1.5">
+		<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94a3b8] shadow-xs"></div>
+		<span class="text-muted-foreground">{t.statusClosed}</span>
 	</div>
 </div>
 
 <style>
+	:global(.maplibregl-popup-content) {
+		border-radius: 1rem !important;
+		padding: 0.875rem 1rem !important;
+		box-shadow:
+			0 10px 25px -5px rgba(0, 0, 0, 0.12),
+			0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+		border: 1px solid #e2e8f0 !important;
+		font-family:
+			'IBM Plex Sans Thai',
+			-apple-system,
+			sans-serif !important;
+	}
+	:global(.maplibregl-popup-close-button) {
+		padding: 4px 8px !important;
+		color: #64748b !important;
+		font-size: 1.125rem !important;
+		line-height: 1 !important;
+		border-radius: 0.5rem !important;
+	}
+	:global(.maplibregl-popup-close-button:hover) {
+		background-color: #f1f5f9 !important;
+		color: #0f172a !important;
+	}
+	:global(.maplibregl-popup-tip) {
+		border-top-color: #ffffff !important;
+	}
 	:global(.marker-label) {
 		opacity: 0;
 		visibility: hidden;
