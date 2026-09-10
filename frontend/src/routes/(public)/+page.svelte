@@ -170,7 +170,7 @@
 					</div>
 					<div class="flex flex-col gap-2">
 						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
-							สมัครจิตอาสา (เลือกลงเวลา)
+							สมัครอาสาสมัคร (เลือกลงเวลา)
 						</PublicActionBtn>
 						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
 							ลงทะเบียนเปิดบ้านพี่เลี้ยง
@@ -248,7 +248,7 @@
 					cardClass="border-2 border-emerald-200 hover:border-emerald-300"
 				>
 					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
-						สมัครจิตอาสา (เลือกลงเวลา)
+						สมัครอาสาสมัคร (เลือกลงเวลา)
 					</PublicActionBtn>
 					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
 						ลงทะเบียนเปิดบ้านพี่เลี้ยง
@@ -334,10 +334,10 @@
 					<div class="mt-2 text-xs text-slate-400">เข้าสู่ระบบพักพิงและได้รับการดูแล</div>
 				</div>
 
-				<!-- Metric 4: จิตอาสาลงปฏิบัติงาน (EOC Command Matrix) -->
+				<!-- Metric 4: อาสาสมัครลงปฏิบัติงาน (EOC Command Matrix) -->
 				<div class="rounded-2xl {tokens.colors.status.eoc.card} p-5">
 					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">จิตอาสาลงปฏิบัติงาน</span>
+						<span class="text-xs font-medium text-slate-500">อาสาสมัครลงปฏิบัติงาน</span>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600"
 						>

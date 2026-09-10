@@ -13,7 +13,7 @@
 	const categories = [
 		{ id: 'public', label: 'หน้าเว็บสาธารณะ (Public)', desc: 'FAQ สำหรับหน้าแรก' },
 		{ id: 'registration', label: 'ระบบลงทะเบียน (Registration)', desc: 'FAQ การลงทะเบียน' },
-		{ id: 'volunteer', label: 'อาสาสมัคร (Volunteer)', desc: 'FAQ สมัครจิตอาสา' },
+		{ id: 'volunteer', label: 'อาสาสมัคร (Volunteer)', desc: 'FAQ สมัครอาสาสมัคร' },
 		{ id: 'social', label: 'ช่องทางการติดต่อ (Social Media)', desc: 'ตั้งค่าลิงก์ติดต่อ' }
 	];
 
