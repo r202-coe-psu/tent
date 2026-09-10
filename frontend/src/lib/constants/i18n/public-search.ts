@@ -1,7 +1,7 @@
 export const PUBLIC_SEARCH_I18N = {
 	th: {
-		pageTitle: 'ระบบสืบค้นญาติและครอบครัว - Smart Shelter',
-		heroTitle: 'ระบบสืบค้นญาติและครอบครัว',
+		pageTitle: 'ระบบค้นหาผู้พักพิงและครอบครัว - Smart Shelter',
+		heroTitle: 'ระบบค้นหาผู้พักพิงและครอบครัว',
 		heroDesc:
 			'สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)',
 		heroBadge: 'Restoring Family Links',

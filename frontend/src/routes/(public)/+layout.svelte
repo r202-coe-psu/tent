@@ -1,8 +1,11 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import PublicNavbar from '$lib/components/public-navbar.svelte';
 	import PublicFooter from '$lib/components/public-footer.svelte';
 
-	let { children } = $props();
+	import type { LayoutData } from './$types';
+
+	let { data, children }: { data: LayoutData; children?: Snippet } = $props();
 </script>
 
 <!--
@@ -13,7 +16,7 @@
 	class="flex min-h-svh flex-col bg-muted/30 pb-[var(--testing-banner-height)] text-foreground antialiased"
 	style="--registration-sticky-top: 4rem"
 >
-	<PublicNavbar />
+	<PublicNavbar announcements={data.announcements} />
 	<main class="flex-1">
 		{@render children?.()}
 	</main>

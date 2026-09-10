@@ -243,7 +243,7 @@ export const colors = {
 			card: 'border border-sky-200 bg-white shadow-2xs hover:border-sky-300 transition-all'
 		},
 		volunteer: {
-			name: 'จิตอาสาและบุคลากรการแพทย์ (Volunteers & Field Responders)',
+			name: 'อาสาสมัครและบุคลากรการแพทย์ (Volunteers & Field Responders)',
 			...baseOperations.volunteer,
 			badge: 'border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold',
 			card: 'border border-emerald-200 bg-white shadow-2xs hover:border-emerald-300 transition-all'
