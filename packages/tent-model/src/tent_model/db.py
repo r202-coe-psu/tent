@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from tent_model.api_key import ApiKey
 from tent_model.donation_buffer import DonationBuffer
@@ -20,6 +20,7 @@ from tent_model.shelter_stock import ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import ThirdPartyClient
+from tent_model.unassigned_registration import UnassignedRegistration
 
 ALL_DOCUMENTS = [
 	SyncCheckpoint,
@@ -36,9 +37,10 @@ ALL_DOCUMENTS = [
 	ThirdPartyClient,
 	ShelterStock,
 	ThirdPartyAccessLog,
+	UnassignedRegistration,
 ]
 
-_client: AsyncIOMotorClient | None = None
+_client: AsyncMongoClient | None = None
 
 
 def _database_name(mongodb_uri: str) -> str:
@@ -54,7 +56,7 @@ async def init_db(mongodb_uri: str) -> None:
 	global _client
 	from beanie import init_beanie
 
-	_client = AsyncIOMotorClient(mongodb_uri)
+	_client = AsyncMongoClient(mongodb_uri)
 	database = _client[_database_name(mongodb_uri)]
 	await init_beanie(database=database, document_models=ALL_DOCUMENTS)
 
@@ -62,5 +64,5 @@ async def init_db(mongodb_uri: str) -> None:
 async def close_db() -> None:
 	global _client
 	if _client is not None:
-		_client.close()
+		await _client.close()
 		_client = None

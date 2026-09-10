@@ -254,3 +254,129 @@ export async function deleteLocation(id: string): Promise<void> {
 
 // re-export id helpers for the write route to build ids from body params
 export { provinceDocId, districtDocId, subdistrictDocId };
+
+export interface ReverseGeocodeResult {
+	province?: string;
+	district?: string;
+	subdistrict?: string;
+	postal_code?: string;
+	road?: string;
+	display_name?: string;
+}
+
+function cleanPrefix(val?: string | null): string {
+	if (!val) return '';
+	return val
+		.replace(/^จังหวัด\s*/, '')
+		.replace(/^(อำเภอ|เขต)\s*/, '')
+		.replace(/^(ตำบล|แขวง)\s*/, '')
+		.trim();
+}
+
+/**
+ * Maps raw OpenStreetMap Nominatim reverse geocoding data to canonical
+ * Thailand administrative entities (province, district, subdistrict, postal_code).
+ */
+export function matchThaiLocation(nominatimData: {
+	address?: Record<string, string>;
+	display_name?: string;
+}): ReverseGeocodeResult {
+	const address = nominatimData.address ?? {};
+	const displayName = nominatimData.display_name ?? '';
+
+	// 1. Province resolution
+	const rawProvince =
+		address.province ||
+		address.state ||
+		(address.city === 'กรุงเทพมหานคร' || address.city?.includes('กรุงเทพ')
+			? 'กรุงเทพมหานคร'
+			: address.city);
+	let cleanProv = cleanPrefix(rawProvince);
+	if (cleanProv === 'Bangkok' || cleanProv.includes('กรุงเทพ')) {
+		cleanProv = 'กรุงเทพมหานคร';
+	}
+
+	const allProvinces = [...new Set(DATA.map((r) => r.province))];
+	const matchedProvince = allProvinces.find(
+		(p) => p === cleanProv || (cleanProv && (p.includes(cleanProv) || cleanProv.includes(p)))
+	);
+
+	if (!matchedProvince) {
+		return {
+			road: address.road ?? '',
+			display_name: displayName
+		};
+	}
+
+	// 2. District resolution within matchedProvince
+	const provinceRows = DATA.filter((r) => r.province === matchedProvince);
+	const provinceDistricts = [...new Set(provinceRows.map((r) => r.district))];
+
+	const rawDistrict =
+		address.county ||
+		address.district ||
+		address.city_district ||
+		(matchedProvince === 'กรุงเทพมหานคร' ? address.suburb : undefined) ||
+		address.town;
+	const cleanDist = cleanPrefix(rawDistrict);
+
+	let matchedDistrict = provinceDistricts.find(
+		(d) => d === cleanDist || (cleanDist && (d.includes(cleanDist) || cleanDist.includes(d)))
+	);
+
+	// Fallback for district: check against display_name
+	if (!matchedDistrict && displayName) {
+		matchedDistrict = provinceDistricts.find((d) => displayName.includes(d));
+	}
+
+	if (!matchedDistrict) {
+		return {
+			province: matchedProvince,
+			road: address.road ?? '',
+			display_name: displayName
+		};
+	}
+
+	// 3. Subdistrict resolution within matchedProvince + matchedDistrict
+	const districtRows = provinceRows.filter((r) => r.district === matchedDistrict);
+	const districtSubdistricts = [...new Set(districtRows.map((r) => r.subdistrict))];
+
+	const rawSubdistrict =
+		address.subdistrict ||
+		address.municipality ||
+		address.quarter ||
+		address.village ||
+		address.neighbourhood ||
+		(matchedProvince !== 'กรุงเทพมหานคร' ? address.suburb : undefined);
+	const cleanSub = cleanPrefix(rawSubdistrict);
+
+	let matchedSubdistrict = districtSubdistricts.find(
+		(s) => s === cleanSub || (cleanSub && (s.includes(cleanSub) || cleanSub.includes(s)))
+	);
+
+	// Fallback for subdistrict: check against display_name
+	if (!matchedSubdistrict && displayName) {
+		matchedSubdistrict = districtSubdistricts.find((s) => displayName.includes(s));
+	}
+
+	// 4. Postal code resolution
+	let postalCode = address.postcode ?? '';
+	if (matchedSubdistrict) {
+		const row = districtRows.find((r) => r.subdistrict === matchedSubdistrict);
+		if (row?.zipcode) {
+			postalCode = String(row.zipcode);
+		}
+	} else if (districtRows.length === 1) {
+		matchedSubdistrict = districtRows[0].subdistrict;
+		postalCode = String(districtRows[0].zipcode);
+	}
+
+	return {
+		province: matchedProvince,
+		district: matchedDistrict,
+		subdistrict: matchedSubdistrict,
+		postal_code: postalCode,
+		road: address.road ?? '',
+		display_name: displayName
+	};
+}

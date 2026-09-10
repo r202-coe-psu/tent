@@ -20,19 +20,16 @@ logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
 
-#: The seven `current_stay.status` values of the staff data model, reported to
-#: the public search verbatim since CR-080. Before that they were collapsed into
-#: `in_shelter` / `moved` / `checked_out` (FS-2, CR-005), which answered the one
-#: question this endpoint exists for incorrectly: a person who reserved a place
-#: through the public booking flow (CR-070) but never arrived is
-#: `pre_registered`, and the old mapping displayed them as safely in the shelter.
-#: Anything outside this set is reported as `unknown` rather than guessed at, so
-#: a projection emitting a status the API has not been taught about cannot be
-#: silently rendered as some other outcome.
+#: Staff `current_stay.status` values reported to public search verbatim
+#: (CR-080 + CR-112). Includes `arriving` and `room_confirmed` so Zone Arrival
+#: Confirmation and Report-in are visible to relatives. Anything outside this
+#: set is reported as `unknown` rather than guessed at.
 PUBLIC_STAY_STATUSES = frozenset(
     {
         "pre_registered",
+        "arriving",
         "active",
+        "room_confirmed",
         "temporary_leave",
         "transferred",
         "checked_out",
@@ -44,6 +41,79 @@ PUBLIC_STAY_STATUSES = frozenset(
 
 def map_public_status(stay_status: str) -> str:
     return stay_status if stay_status in PUBLIC_STAY_STATUSES else "unknown"
+
+
+def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
+    if not shelter:
+        return None
+    raw = shelter.raw_data or {}
+
+    # 1. Structured physical address fields (CR-023: address_no, village_no, etc.)
+    address_no = raw.get("address_no")
+    if address_no:
+        parts = [str(address_no)]
+        if raw.get("village_no"):
+            v = str(raw["village_no"]).strip()
+            parts.append(v if (v.startswith("ม.") or v.startswith("หมู่")) else f"ม.{v}")
+        sub = raw.get("subdistrict") or shelter.subdistrict
+        if sub:
+            s = str(sub).strip()
+            parts.append(s if (s.startswith("ต.") or s.startswith("ตำบล")) else f"ต.{s}")
+        dist = raw.get("district") or shelter.district
+        if dist:
+            d = str(dist).strip()
+            parts.append(d if (d.startswith("อ.") or d.startswith("อำเภอ")) else f"อ.{d}")
+        prov = raw.get("province") or shelter.province
+        if prov:
+            p = str(prov).strip()
+            parts.append(p if (p.startswith("จ.") or p.startswith("จังหวัด")) else f"จ.{p}")
+        if raw.get("postal_code"):
+            parts.append(str(raw["postal_code"]))
+        return " ".join(parts)
+
+    # 2. Physical address from location.address (pin/map address or free text)
+    location_doc = raw.get("location") or {}
+    loc_address = location_doc.get("address")
+    if loc_address and isinstance(loc_address, str) and loc_address.strip():
+        return loc_address.strip()
+
+    # 3. Top-level shelter address if present
+    if shelter.address and shelter.address.strip():
+        return shelter.address.strip()
+
+    # 4. Fallback administrative boundary
+    parts = []
+    sub = raw.get("subdistrict") or shelter.subdistrict
+    if sub:
+        s = str(sub).strip()
+        parts.append(s if (s.startswith("ต.") or s.startswith("ตำบล")) else f"ต.{s}")
+    dist = raw.get("district") or shelter.district
+    if dist:
+        d = str(dist).strip()
+        parts.append(d if (d.startswith("อ.") or d.startswith("อำเภอ")) else f"อ.{d}")
+    prov = raw.get("province") or shelter.province
+    if prov:
+        p = str(prov).strip()
+        parts.append(p if (p.startswith("จ.") or p.startswith("จังหวัด")) else f"จ.{p}")
+    if parts:
+        return " ".join(parts)
+
+    return None
+
+
+def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
+    if not care_zone:
+        return None
+    if not shelter or not shelter.raw_data:
+        return care_zone
+    zones = shelter.raw_data.get("zones") or []
+    for z in zones:
+        if isinstance(z, dict):
+            if z.get("code") == care_zone:
+                return z.get("name") or care_zone
+            if z.get("name") == care_zone:
+                return z.get("name")
+    return care_zone
 
 
 class EvacueeUseCase:
@@ -61,13 +131,10 @@ class EvacueeUseCase:
             )
 
         persons = await self._find_persons(parsed)
-        shelter_names = await self._load_shelter_names({person.shelter_code for person in persons})
+        shelters = await self._load_shelters({person.shelter_code for person in persons})
 
         results = [
-            await self._to_result(
-                person, shelter_names.get(person.shelter_code, person.shelter_code)
-            )
-            for person in persons
+            await self._to_result(person, shelters.get(person.shelter_code)) for person in persons
         ]
 
         await self._write_search_audit(
@@ -182,12 +249,12 @@ class EvacueeUseCase:
             .to_list()
         )
 
-    async def _load_shelter_names(self, codes: set[str]) -> dict[str, str]:
+    async def _load_shelters(self, codes: set[str]) -> dict[str, PublicShelter]:
         if not codes:
             return {}
 
         shelters = await PublicShelter.find({"shelter_code": {"$in": list(codes)}}).to_list()
-        return {shelter.shelter_code: shelter.name for shelter in shelters}
+        return {shelter.shelter_code: shelter for shelter in shelters}
 
     async def _load_family_members(
         self, person: PublicPerson, shelter_name: str
@@ -211,17 +278,28 @@ class EvacueeUseCase:
             if member.id != person.id
         ]
 
-    async def _to_result(self, person: PublicPerson, shelter_name: str) -> SearchResult:
+    async def _to_result(
+        self,
+        person: PublicPerson,
+        shelter: PublicShelter | None = None,
+        shelter_name: str | None = None,
+    ) -> SearchResult:
+        name = shelter_name or (shelter.name if shelter and shelter.name else person.shelter_code)
+        shelter_address = _extract_shelter_address(shelter)
+        zone_name = _resolve_zone_name(shelter, person.care_zone)
+
         return SearchResult(
             name=f"{person.first_name} {person.last_name_masked}",
             status=map_public_status(person.status),
             national_id=person.national_id_masked,
             gender=person.gender,
-            shelter_name=shelter_name,
+            shelter_name=name,
+            shelter_address=shelter_address,
             origin_address=person.address_masked,
             checked_in_at=person.checked_in_at,
-            care_zone=person.care_zone,
-            family_members=await self._load_family_members(person, shelter_name),
+            care_zone=zone_name,
+            zone_name=zone_name,
+            family_members=await self._load_family_members(person, name),
         )
 
 

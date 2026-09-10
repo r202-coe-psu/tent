@@ -27,6 +27,7 @@
 		peopleRepository,
 		buildSaveFailureReport,
 		formatPersonName,
+		mergeVulnerableGroupsAndSpecialNeeds,
 		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -111,6 +112,7 @@
 		medical_conditions: [],
 		medical_medications: [],
 		medical_allergies: [],
+		vulnerable_groups: [],
 		special_needs: [],
 		medical_note: ''
 	});
@@ -195,13 +197,6 @@
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 			document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
 			document.body.scrollTo({ top: 0, behavior: 'smooth' });
-
-			const scrollContainers = document.querySelectorAll(
-				'.overflow-y-auto, .overflow-auto, [class*="overflow-y-auto"], main'
-			);
-			scrollContainers.forEach((el) => {
-				el.scrollTo({ top: 0, behavior: 'smooth' });
-			});
 		});
 	}
 
@@ -230,6 +225,7 @@
 			medical_conditions: [],
 			medical_medications: [],
 			medical_allergies: [],
+			vulnerable_groups: [],
 			special_needs: [],
 			medical_note: ''
 		};
@@ -246,14 +242,14 @@
 	}
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
-		const combinedSpecialNeeds = Array.from(
-			new Set([...(screeningDraft.special_needs ?? []), ...(input.special_needs ?? [])])
-		);
+		const mergedNeeds = mergeVulnerableGroupsAndSpecialNeeds(screeningDraft, input);
 		const merged: EvacueeInput = {
 			...input,
-			special_needs: combinedSpecialNeeds
+			vulnerable_groups: mergedNeeds.vulnerable_groups,
+			special_needs: mergedNeeds.special_needs
 		};
-		screeningDraft.special_needs = combinedSpecialNeeds;
+		screeningDraft.vulnerable_groups = mergedNeeds.vulnerable_groups;
+		screeningDraft.special_needs = mergedNeeds.special_needs;
 		registrationDraft = structuredClone(merged);
 		if (activeDraftEvacuee) {
 			pendingEvacueeInput = {
@@ -558,6 +554,9 @@
 			pending={isSubmittingEvacuee || pending}
 			initialInput={{
 				...registrationDraft,
+				vulnerable_groups: registrationDraft?.vulnerable_groups?.length
+					? registrationDraft.vulnerable_groups
+					: (screeningDraft.vulnerable_groups ?? []),
 				special_needs: registrationDraft?.special_needs?.length
 					? registrationDraft.special_needs
 					: (screeningDraft.special_needs ?? [])

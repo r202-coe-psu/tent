@@ -3,14 +3,23 @@
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
+from apiapp.modules.evacuee.use_case import map_public_status
 from apiapp.utils.masking import mask_last_name, national_id_hash, phone_hash
 
 
+def test_map_public_status_includes_arriving_and_room_confirmed():
+    """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
+    assert map_public_status("arriving") == "arriving"
+    assert map_public_status("room_confirmed") == "room_confirmed"
+    assert map_public_status("active") == "active"
+    assert map_public_status("teleported") == "unknown"
+
+
 async def _insert_person(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -19,7 +28,7 @@ async def _insert_person(
 
 
 async def _insert_shelter(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
 ) -> None:
@@ -29,7 +38,7 @@ async def _insert_shelter(
 
 async def test_evacuee_search_by_phone_returns_masked_result(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -88,7 +97,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
 
 async def test_evacuee_search_by_national_id_exact_match(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -135,7 +144,7 @@ async def test_evacuee_search_by_national_id_exact_match(
 
 async def test_evacuee_search_includes_family_members(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -187,7 +196,7 @@ async def test_evacuee_search_includes_family_members(
 
 async def test_evacuee_search_reports_pre_registered_as_itself(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -237,7 +246,7 @@ async def test_evacuee_search_reports_pre_registered_as_itself(
 
 async def test_evacuee_search_reports_unmapped_status_as_unknown(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -271,7 +280,7 @@ async def test_evacuee_search_reports_unmapped_status_as_unknown(
 
 async def test_evacuee_search_matches_a_thai_name_prefix(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -331,7 +340,7 @@ async def test_evacuee_search_matches_a_thai_name_prefix(
 
 async def test_evacuee_search_hides_opted_out_records(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -374,7 +383,7 @@ async def test_evacuee_search_rejects_invalid_query(
 
 async def test_evacuee_search_writes_search_audit(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -453,3 +462,120 @@ async def test_evacuee_search_rate_limited(client: AsyncClient, auth_headers: di
     finally:
         evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
         evacuee_router._request_log.clear()
+
+
+async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    phone = "0899999999"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH002",
+            "shelter_code": "SH002",
+            "name": "ศูนย์โรงเรียนอนุบาลแม่สาย",
+            "address": "123 หมู่ 4 ต.แม่สาย อ.แม่สาย จ.เชียงราย",
+            "status": "open",
+            "capacity": 100,
+            "raw_data": {
+                "zones": [
+                    {"code": "Z1", "name": "อาคารเรียน 1"},
+                    {"code": "Z2", "name": "หอประชุมใหญ่"},
+                ]
+            },
+            "updated_at": now,
+        },
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:test_zone_addr",
+            "shelter_code": "SH002",
+            "first_name": "วันดี",
+            "last_name_masked": mask_last_name("มีทรัพย์"),
+            "phone_hash": phone_hash(phone),
+            "gender": "female",
+            "checked_in_at": datetime(2026, 6, 1, 10, 0, tzinfo=UTC),
+            "care_zone": "Z1",
+            "search_excluded": False,
+            "status": "active",
+            "updated_at": now,
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": phone},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    result = body["results"][0]
+    assert result["shelter_name"] == "ศูนย์โรงเรียนอนุบาลแม่สาย"
+    assert result["shelter_address"] == "123 หมู่ 4 ต.แม่สาย อ.แม่สาย จ.เชียงราย"
+    assert result["care_zone"] == "อาคารเรียน 1"
+    assert result["zone_name"] == "อาคารเรียน 1"
+
+
+async def test_evacuee_search_returns_physical_address_from_location(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    phone = "0877777777"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH003_TEST",
+            "shelter_code": "SH003_TEST",
+            "name": "ศูนย์อพยพ ม.อ.",
+            "province": "สงขลา",
+            "district": "หาดใหญ่",
+            "subdistrict": "คอหงส์",
+            "status": "open",
+            "capacity": 100,
+            "raw_data": {
+                "location": {
+                    "address": "15 ถ.กาญจนวนิช ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110",
+                }
+            },
+            "updated_at": now,
+        },
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:test_phys_addr",
+            "shelter_code": "SH003_TEST",
+            "first_name": "สมศรี",
+            "last_name_masked": mask_last_name("รักดี"),
+            "phone_hash": phone_hash(phone),
+            "gender": "female",
+            "checked_in_at": datetime(2026, 6, 1, 10, 0, tzinfo=UTC),
+            "search_excluded": False,
+            "status": "active",
+            "updated_at": now,
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": phone},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    result = body["results"][0]
+    assert result["shelter_address"] == "15 ถ.กาญจนวนิช ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110"

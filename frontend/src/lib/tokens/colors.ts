@@ -243,7 +243,7 @@ export const colors = {
 			card: 'border border-sky-200 bg-white shadow-2xs hover:border-sky-300 transition-all'
 		},
 		volunteer: {
-			name: 'จิตอาสาและบุคลากรการแพทย์ (Volunteers & Field Responders)',
+			name: 'อาสาสมัครและบุคลากรการแพทย์ (Volunteers & Field Responders)',
 			...baseOperations.volunteer,
 			badge: 'border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold',
 			card: 'border border-emerald-200 bg-white shadow-2xs hover:border-emerald-300 transition-all'
@@ -308,7 +308,7 @@ export const colors = {
 		},
 		tracing: {
 			id: 'tracing',
-			title: 'ค้นหาญาติ / ผู้พักพิง',
+			title: 'ผู้พักพิง',
 			category: 'Family Tracing & Safety Verification',
 			hex: baseBrand.primary,
 			accentHex: baseSecondary.cerulean,
@@ -321,7 +321,7 @@ export const colors = {
 		},
 		donation: {
 			id: 'donation',
-			title: 'ผู้บริจาค / มอบเสบียง',
+			title: 'บริจาค',
 			category: 'Donations, Food & Logistics Coordination',
 			hex: baseOperations.kitchen.hex,
 			bg: 'bg-white',
@@ -333,7 +333,7 @@ export const colors = {
 		},
 		volunteer: {
 			id: 'volunteer',
-			title: 'จิตอาสา / อาสาสมัคร',
+			title: 'อาสาสมัคร',
 			category: 'Field Responders, Medical & Community Volunteers',
 			hex: baseOperations.volunteer.hex,
 			bg: 'bg-white',

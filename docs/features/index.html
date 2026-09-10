@@ -4,29 +4,67 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Smart Shelter Feature Flow Specs</title>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
-      :root { color-scheme: light; scroll-behavior: smooth; }
-      body { background: linear-gradient(180deg, #f7fbf8, #eef5f0); }
-      .shell { max-width: 1480px; margin: 0 auto; padding: 1rem; }
-      .toc-link.active { background: rgba(37, 109, 99, 0.12); color: #256d63; font-weight: 800; }
-      @media print { .no-print { display: none !important; } body { background: #fff; } }
+      :root {
+        color-scheme: light;
+        scroll-behavior: smooth;
+      }
+      body {
+        background: linear-gradient(180deg, #f7fbf8, #eef5f0);
+      }
+      .shell {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      .toc-link.active {
+        background: rgba(37, 109, 99, 0.12);
+        color: #256d63;
+        font-weight: 800;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
     </style>
   </head>
   <body>
     <header class="navbar bg-base-100 border-b border-base-300">
       <div class="flex-1 min-w-0">
         <div>
-          <p class="text-xs uppercase tracking-normal text-base-content/60">Feature Flow Spec Set</p>
-          <h1 class="text-xl font-semibold leading-tight">Smart Shelter July MVP Screen-by-Screen Specs</h1>
+          <p class="text-xs uppercase tracking-normal text-base-content/60">
+            Feature Flow Spec Set
+          </p>
+          <h1 class="text-xl font-semibold leading-tight">
+            Smart Shelter July MVP Screen-by-Screen Specs
+          </h1>
         </div>
       </div>
       <div class="flex-none gap-2 no-print">
         <span class="badge badge-warning">Draft</span>
         <span class="badge badge-outline">v0.1</span>
-        <button class="btn btn-sm btn-primary" type="button" onclick="window.print()">Print</button>
+        <button
+          class="btn btn-sm btn-primary"
+          type="button"
+          onclick="window.print()"
+        >
+          Print
+        </button>
       </div>
     </header>
 
@@ -35,9 +73,16 @@
         <div class="card-body prose max-w-none">
           <h2 class="card-title">Summary</h2>
           <div class="alert alert-info">
-            <span>ชุดเอกสารนี้แตก feature flow จาก July MVP baseline ให้อยู่ในระดับที่ทีมออกแบบ, frontend, backend, QA และ agent ใช้เป็น implementation handoff ได้ทันที โดยไม่รออ่าน PRD เต็มทุกครั้ง</span>
+            <span
+              >ชุดเอกสารนี้แตก feature flow จาก July MVP baseline
+              ให้อยู่ในระดับที่ทีมออกแบบ, frontend, backend, QA และ agent
+              ใช้เป็น implementation handoff ได้ทันที โดยไม่รออ่าน PRD
+              เต็มทุกครั้ง</span
+            >
           </div>
-          <div class="stats stats-vertical lg:stats-horizontal shadow-none border border-base-300 w-full">
+          <div
+            class="stats stats-vertical lg:stats-horizontal shadow-none border border-base-300 w-full"
+          >
             <div class="stat">
               <div class="stat-title">Target</div>
               <div class="stat-value text-lg">July MVP</div>
@@ -70,20 +115,54 @@
               </thead>
               <tbody>
                 <tr>
-                  <td><a class="link" href="../prd/prd-smart-shelter-spec-2026-05-30/prd.html">PRD</a></td>
-                  <td>canonical FR/NFR, user journeys, UAT, scope and open questions</td>
+                  <td>
+                    <a
+                      class="link"
+                      href="../prd/prd-smart-shelter-spec-2026-05-30/prd.html"
+                      >PRD</a
+                    >
+                  </td>
+                  <td>
+                    canonical FR/NFR, user journeys, UAT, scope and open
+                    questions
+                  </td>
                 </tr>
                 <tr>
-                  <td><a class="link" href="../architecture/smart-shelter-mvp-architecture-spec.html">Architecture Spec</a></td>
-                  <td>service boundary, sync lifecycle, observability, failure modes</td>
+                  <td>
+                    <a
+                      class="link"
+                      href="../architecture/smart-shelter-mvp-architecture-spec.html"
+                      >Architecture Spec</a
+                    >
+                  </td>
+                  <td>
+                    service boundary, sync lifecycle, observability, failure
+                    modes
+                  </td>
                 </tr>
                 <tr>
                   <td>Data Model (rebuild in progress)</td>
-                  <td>old docs/data set retired 2026-06-11 — new CouchDB data model + API contract to be authored fresh</td>
+                  <td>
+                    old docs/data set retired 2026-06-11 — new CouchDB data
+                    model + API contract to be authored fresh
+                  </td>
                 </tr>
                 <tr>
-                  <td><a class="link" href="../prd/full-system-2026-06-03/html/kickoff.html">Full-System Kickoff</a></td>
-                  <td>full scope, timeline (Aug-Dec), squads, decisions — supersedes the July MVP kickoff (<a class="link" href="../legacy/mvp-kickoff.html">archived</a>)</td>
+                  <td>
+                    <a
+                      class="link"
+                      href="../prd/full-system-2026-06-03/html/kickoff.html"
+                      >Full-System Kickoff</a
+                    >
+                  </td>
+                  <td>
+                    full scope, timeline (Aug-Dec), squads, decisions —
+                    supersedes the July MVP kickoff (<a
+                      class="link"
+                      href="../legacy/mvp-kickoff.html"
+                      >archived</a
+                    >)
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -101,8 +180,15 @@
                   <h3 class="card-title text-base">1. Auth + Shelter Scope</h3>
                   <span class="badge badge-info">FR-1 to FR-3</span>
                 </div>
-                <p class="text-sm">login, session, assigned shelters, role visibility, closed-shelter constraints</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./auth-shelter-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  login, session, assigned shelters, role visibility,
+                  closed-shelter constraints
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./auth-shelter-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
             <article class="card bg-base-200 border border-base-300">
@@ -111,28 +197,53 @@
                   <h3 class="card-title text-base">2. Person Registration</h3>
                   <span class="badge badge-info">FR-4 to FR-6</span>
                 </div>
-                <p class="text-sm">minimum required fields, duplicate hints, create/edit and profile transition</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./person-registration-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  minimum required fields, duplicate hints, create/edit and
+                  profile transition
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./person-registration-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
             <article class="card bg-base-200 border border-base-300">
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">3. Screening + Medical + Fast Track</h3>
+                  <h3 class="card-title text-base">
+                    3. Screening + Medical + Fast Track
+                  </h3>
                   <span class="badge badge-info">FR-7 to FR-9</span>
                 </div>
-                <p class="text-sm">role-restricted screening, medical visibility, track assignment and summary counts</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./screening-medical-fast-track-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  role-restricted screening, medical visibility, track
+                  assignment and summary counts
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./screening-medical-fast-track-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
             <article class="card bg-base-200 border border-base-300">
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">4. QR + Search + Movement</h3>
+                  <h3 class="card-title text-base">
+                    4. QR + Search + Movement
+                  </h3>
                   <span class="badge badge-info">FR-10 to FR-13</span>
                 </div>
-                <p class="text-sm">Shelter ID/QR resolve, search results, check-in, check-out and occupancy safety</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./qr-search-movement-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  Shelter ID/QR resolve, search results, check-in, check-out and
+                  occupancy safety
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./qr-search-movement-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
             <article class="card bg-base-200 border border-base-300">
@@ -141,8 +252,15 @@
                   <h3 class="card-title text-base">5. Dashboard + Export</h3>
                   <span class="badge badge-info">FR-14 to FR-16</span>
                 </div>
-                <p class="text-sm">role-scoped dashboard, stale data policy, export job states and masking</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./dashboard-export-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  role-scoped dashboard, stale data policy, export job states
+                  and masking
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./dashboard-export-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
             <article class="card bg-base-200 border border-base-300">
@@ -151,68 +269,156 @@
                   <h3 class="card-title text-base">6. Offline + Fallback</h3>
                   <span class="badge badge-info">FR-17 to FR-18</span>
                 </div>
-                <p class="text-sm">draft, local queue, worker review, retry, cleanup and assisted import path</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./offline-fallback-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  draft, local queue, worker review, retry, cleanup and assisted
+                  import path
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./offline-fallback-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">7. Audit + Privacy + RBAC</h3>
+                  <h3 class="card-title text-base">
+                    7. Audit + Privacy + RBAC
+                  </h3>
                   <span class="badge badge-info">FR-19 to FR-20</span>
                 </div>
-                <p class="text-sm">cross-feature visibility rules, export control, audit evidence and unresolved permission matrix points</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./audit-privacy-rbac-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  cross-feature visibility rules, export control, audit evidence
+                  and unresolved permission matrix points
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./audit-privacy-rbac-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">8. Public / No-Login Tier (FAM + DN + PUB)</h3>
+                  <h3 class="card-title text-base">
+                    8. Public / No-Login Tier (FAM + DN + PUB)
+                  </h3>
                   <span class="badge badge-info">FD-16 · R2–R4</span>
                 </div>
-                <p class="text-sm">family search, donor pre-declaration and tracking, transparency aggregates — central-only public API service, least-data principle</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./public-tier-flow-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  family search, donor pre-declaration and tracking,
+                  transparency aggregates — central-only public API service,
+                  least-data principle
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./public-tier-flow-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">9. Public Portal — Landing Page</h3>
+                  <h3 class="card-title text-base">
+                    9. Public Portal — Landing Page
+                  </h3>
                   <span class="badge badge-warning">Draft · R3</span>
                 </div>
-                <p class="text-sm">หน้า landing สาธารณะ: family search hero + real-time metrics, emergency alert banner, quick services grid (victim/donor/volunteer/search), EOC help center FAQ, emergency hotline contacts</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./public-portal-landing-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  หน้า landing สาธารณะ: family search hero + real-time metrics,
+                  emergency alert banner, quick services grid
+                  (victim/donor/volunteer/search), EOC help center FAQ,
+                  emergency hotline contacts
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./public-portal-landing-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">10. Public Portal — Shelter Dashboard (ตรวจสอบศูนย์พักพิง)</h3>
+                  <h3 class="card-title text-base">
+                    10. Public Portal — Shelter Dashboard (ตรวจสอบศูนย์พักพิง)
+                  </h3>
                   <span class="badge badge-warning">Draft · R3</span>
                 </div>
-                <p class="text-sm">หน้าตรวจสอบสถานะศูนย์พักพิง (/shelters): metric cards (ศูนย์ทั้งหมด/เปิด/ผู้พักพิง/กลุ่มเปราะบาง), search + filter (จังหวัด/อำเภอ/ตำบล/ระยะทาง/สถานะ/ประเภท), map หมุดศูนย์, shelter list พร้อม occupancy/capacity — metric อ่อนไหวติด feature flag (CR-005 §D)</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./public-portal-shelter-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  หน้าตรวจสอบสถานะศูนย์พักพิง (/shelters): metric cards
+                  (ศูนย์ทั้งหมด/เปิด/ผู้พักพิง/กลุ่มเปราะบาง), search + filter
+                  (จังหวัด/อำเภอ/ตำบล/ระยะทาง/สถานะ/ประเภท), map หมุดศูนย์,
+                  shelter list พร้อม occupancy/capacity — metric อ่อนไหวติด
+                  feature flag (CR-005 §D)
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./public-portal-shelter-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">11. Public Portal — Family Search (สืบค้นญาติ)</h3>
+                  <h3 class="card-title text-base">
+                    11. Public Portal — Family Search (ค้นหาผู้พักพิง)
+                  </h3>
                   <span class="badge badge-warning">Draft · R3</span>
                 </div>
-                <p class="text-sm">หน้าสืบค้นญาติ/ครอบครัว (/search, Restoring Family Links, FAM tier): ค้นด้วยเลขบัตร 13 หลัก/passport/ชื่อ-สกุล/เบอร์ (FS-1), คืนข้อมูลบุคคลแบบ masked ตาม PDPA — ชื่อจริงเต็ม+สกุล mask, เลขบัตร mask, เพศ, ศูนย์, ภูมิลำเนา, เวลาลงทะเบียน, โซน, สถานะความปลอดภัย (FS-2/FS-3) — ขยาย FAM exposure surface (CR-005 §E)</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./public-tier-find-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  หน้าค้นหาผู้พักพิง/ครอบครัว (/search, Restoring Family Links,
+                  FAM tier): ค้นด้วยเลขบัตร 13 หลัก/passport/ชื่อ-สกุล/เบอร์
+                  (FS-1), คืนข้อมูลบุคคลแบบ masked ตาม PDPA — ชื่อจริงเต็ม+สกุล
+                  mask, เลขบัตร mask, เพศ, ศูนย์, ภูมิลำเนา, เวลาลงทะเบียน, โซน,
+                  สถานะความปลอดภัย (FS-2/FS-3) — ขยาย FAM exposure surface
+                  (CR-005 §E)
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./public-tier-find-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
-            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+            <article
+              class="card bg-base-200 border border-base-300 lg:col-span-2"
+            >
               <div class="card-body">
                 <div class="flex items-center gap-2">
-                  <h3 class="card-title text-base">12. Public Portal — Donation &amp; Queue Booking (บริจาคและจองคิว)</h3>
+                  <h3 class="card-title text-base">
+                    12. Public Portal — Donation &amp; Queue Booking
+                    (บริจาคและจองคิว)
+                  </h3>
                   <span class="badge badge-warning">Draft · R2→R3</span>
                 </div>
-                <p class="text-sm">หน้าบริจาคและจองคิว (/donate, DN tier): stepper 4 ขั้น — กระดานความต้องการด่วนทุกศูนย์ (needs), ฟอร์มผู้บริจาค + รายการสิ่งของ (pre-fill จากการ์ด), logistics + จองคิว slot เวลา/ETA (ปลายทาง lock จากการ์ด), ตั๋ว QR + booking ref ที่บันทึก/พิมพ์แปะลงของได้ — ขยาย DN surface (donor PII/slot booking, CR-005 §F; DN-1..DN-7 open)</p>
-                <a class="btn btn-sm btn-primary w-fit" href="./public-tier-donation-spec.html">Open Spec</a>
+                <p class="text-sm">
+                  หน้าบริจาคและจองคิว (/donate, DN tier): stepper 4 ขั้น —
+                  กระดานความต้องการด่วนทุกศูนย์ (needs), ฟอร์มผู้บริจาค +
+                  รายการสิ่งของ (pre-fill จากการ์ด), logistics + จองคิว slot
+                  เวลา/ETA (ปลายทาง lock จากการ์ด), ตั๋ว QR + booking ref
+                  ที่บันทึก/พิมพ์แปะลงของได้ — ขยาย DN surface (donor PII/slot
+                  booking, CR-005 §F; DN-1..DN-7 open)
+                </p>
+                <a
+                  class="btn btn-sm btn-primary w-fit"
+                  href="./public-tier-donation-spec.html"
+                  >Open Spec</a
+                >
               </div>
             </article>
           </div>

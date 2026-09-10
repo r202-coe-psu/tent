@@ -3,6 +3,7 @@ id: CR-066
 title: Program index — site kind, occupancy health, booking channels, triage
 status: approved
 date: 2026-08-13
+updated: 2026-09-07
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (IMPS, approved 2026-08-13)
 layer: volatile
@@ -61,7 +62,7 @@ Spec โปรแกรม: [`docs/features/site-occupancy-booking-program.md`](
 | CR-069 | P3 | occupancy health 5 สี (derived) | **approved** |
 | CR-070 | P4 | public booking + ยืนยันที่ประตู | **approved** |
 | CR-071 | P5 | people import + inbound API | **approved** เฉพาะ slice A (T-72); slice B = รอบ CR ถัดไป |
-| CR-072 | P6 | triage เขียว/เหลือง/แดง (blocked กฎ) | **proposed** — Wave 4 รอบ CR ถัดไป |
+| CR-072 | P6 | triage เขียว/เหลือง/แดง | **superseded** 2026-09-07 — ตัดออกจากระบบ; ดู CR-106 Station 2 |
 | CR-073 | P7 | ONE PLATFORM / external GET — **blocked stub** | **proposed** — Wave 4 รอบ CR ถัดไป |
 
 ## Impact
@@ -82,3 +83,4 @@ N/A — index เท่านั้น. Migration อยู่ใน child CR �
 - 2026-08-13 — **Wave 3 ล็อก** (decision ≠ approve CR): D-BOOK-OCC=C · D-HOLD-TTL=none · D-PRE-REG-AGE · D-HOLD-CANCEL (SA/SM/RS) · D-REG-VIA=`web`+`api` · D-BOOK-TOKEN=A. T-71 ไม่รอ Wave 3 แล้ว — รอ approve CR-070. Wave 4 (SOP / triage / ONE PLATFORM / D-INBOUND-PLANE) ยังเปิด. **ไม่ bump schema.md.**
 - 2026-08-13 — **T-72 ล็อก** (decision ≠ approve CR): T-72 initial stay=A · T-72 import permission=RS+SA+SM (เจ้าของขยายจาก proposed SM+SA). T-72 ไม่รอ stay/permission แล้ว — รอ approve CR-071 + T-48. รายละเอียดใน [program spec §0](../features/site-occupancy-booking-program.md). **ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): สไลซ์ Wave 1–3 + T-72. Wave 4 (D-SOP-LITE / D-HOST-STAFF / D-SPHERE-CAP / D-INBOUND-PLANE / D-TRIAGE-RULES / D-TRIAGE-FIELD / D-ONE-PLATFORM) **จอดรอบ CR ถัดไป**. CR-072 / CR-073 คง `proposed`. **ไม่ bump schema.md** — bump ตอน implement ตาม Migration ของ child CR.
+- **2026-09-07 — CR-072 superseded:** เจ้าของโครงการตัดคัดกรองเขียว/เหลือง/แดงออกจากระบบ; D-TRIAGE-RULES / D-TRIAGE-FIELD / T-74 ปิด; สเปก Station 2 ใหม่ใน CR-106. CR-073 (ONE PLATFORM) ยังจอดตามเดิม.
