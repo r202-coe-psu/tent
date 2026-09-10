@@ -1592,12 +1592,16 @@ export interface components {
 			gender?: string | null;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
 			/** Origin Address */
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
 			/** Care Zone */
 			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
