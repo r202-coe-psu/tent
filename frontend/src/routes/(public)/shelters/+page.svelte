@@ -13,6 +13,12 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import X from '@lucide/svelte/icons/x';
+	import Map from '@lucide/svelte/icons/map';
+	import List from '@lucide/svelte/icons/list';
+	import Navigation from '@lucide/svelte/icons/navigation';
+	import Eye from '@lucide/svelte/icons/eye';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import Users from '@lucide/svelte/icons/users';
 
 	import {
 		PublicShelterMetricCard,
@@ -22,8 +28,9 @@
 		PublicPageShell,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
+	import { Button } from '$lib/components/ui/button';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_SHELTERS_I18N } from '$lib/constants/i18n';
+	import { PUBLIC_SHELTERS_I18N, PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -33,13 +40,29 @@
 	let selectedShelterId = $state<string | null>(null);
 	let listContainerEl: HTMLElement | null = $state(null);
 
-	// Floating UI panels state
+	// Floating UI panels state (desktop)
 	let showFilterPanel = $state(true);
 	let showListPanel = $state(true);
+
+	// Mobile UI states
+	let isMobile = $state(false);
+	let mobileViewMode = $state<'map' | 'list'>('map');
 	let mobileFilterOpen = $state(false);
-	let mobileListOpen = $state(false);
 
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
+	const cardT = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
+
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			const mql = window.matchMedia('(max-width: 1023px)');
+			isMobile = mql.matches;
+			const handler = (e: MediaQueryListEvent) => {
+				isMobile = e.matches;
+			};
+			mql.addEventListener('change', handler);
+			return () => mql.removeEventListener('change', handler);
+		}
+	});
 
 	function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 		const R = 6371; // km
@@ -95,19 +118,22 @@
 
 	let hasAutoSelected = $state(false);
 
-	// Auto-select first shelter on initial load so popup appears immediately
+	// Auto-select first shelter on initial load only on desktop
 	$effect(() => {
 		if (displayShelters.length > 0) {
 			if (!hasAutoSelected) {
-				const first = displayShelters[0];
-				selectedShelterId = first.id || first.code || null;
 				hasAutoSelected = true;
+				if (!isMobile) {
+					const first = displayShelters[0];
+					selectedShelterId = first.id || first.code || null;
+				}
 			} else if (
 				selectedShelterId &&
 				!displayShelters.some((s) => s.id === selectedShelterId || s.code === selectedShelterId)
 			) {
-				const first = displayShelters[0];
-				selectedShelterId = first.id || first.code || null;
+				selectedShelterId = isMobile
+					? null
+					: displayShelters[0]?.id || displayShelters[0]?.code || null;
 			}
 		} else {
 			selectedShelterId = null;
@@ -188,9 +214,52 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-4" maxWidth="max-w-[1600px]">
-	<!-- Metric Cards (capacity directory — no occupancy aggregates per CR-017) -->
-	<div class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 lg:gap-6">
+<PublicPageShell class="space-y-3 sm:space-y-4" maxWidth="max-w-[1600px]">
+	<!-- Mobile Top Control Bar (< lg) -->
+	<div class="flex items-center justify-between gap-2 lg:hidden">
+		<!-- View Switcher Tabs -->
+		<div class="inline-flex rounded-xl border border-border/80 bg-muted/60 p-1 shadow-2xs">
+			<button
+				type="button"
+				class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {mobileViewMode ===
+				'map'
+					? 'bg-card text-primary shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'}"
+				onclick={() => (mobileViewMode = 'map')}
+			>
+				<Map class="h-3.5 w-3.5" />
+				<span>{t.mapView}</span>
+			</button>
+			<button
+				type="button"
+				class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {mobileViewMode ===
+				'list'
+					? 'bg-card text-primary shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'}"
+				onclick={() => (mobileViewMode = 'list')}
+			>
+				<List class="h-3.5 w-3.5" />
+				<span>{t.listView} ({displayShelters.length})</span>
+			</button>
+		</div>
+
+		<!-- Mobile Filter Trigger Button -->
+		<button
+			type="button"
+			class="flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-2xs transition-all active:scale-95"
+			onclick={() => (mobileFilterOpen = true)}
+		>
+			<Filter class="h-3.5 w-3.5 text-primary" />
+			<span>{t.filterBtn}</span>
+		</button>
+	</div>
+
+	<!-- Metric Cards (Desktop always; Mobile only when viewing list) -->
+	<div
+		class="{mobileViewMode === 'map'
+			? 'hidden lg:grid'
+			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 lg:gap-6"
+	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}
 			value={data?.summary?.shelters_total ?? 0}
@@ -208,9 +277,11 @@
 		/>
 	</div>
 
-	<!-- Full Map Container with Overlaid UI -->
+	<!-- Map Container (Always visible on Desktop; on Mobile visible when mobileViewMode === 'map') -->
 	<div
-		class="relative h-[calc(100vh-14rem)] min-h-[640px] w-full overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs sm:min-h-[720px]"
+		class="relative {mobileViewMode === 'list'
+			? 'hidden lg:block'
+			: 'block'} h-[calc(100dvh-10.5rem)] min-h-[460px] w-full overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs sm:h-[calc(100vh-14rem)] sm:min-h-[720px]"
 	>
 		<!-- Full Map Canvas (Background) -->
 		<div class="absolute inset-0 z-0 h-full w-full">
@@ -221,38 +292,10 @@
 					: undefined}
 				radiusKm={mapRadiusKm}
 				selectedId={selectedShelterId}
+				disablePopup={isMobile}
 				onSelectShelter={handleSelectShelter}
 				onLocationPick={applySearchOrigin}
 			/>
-		</div>
-
-		<!-- Mobile / Tablet Top Action Pills (< lg) -->
-		<div
-			class="pointer-events-none absolute top-3 right-3 left-3 z-20 flex items-center justify-between gap-2 lg:hidden"
-		>
-			<button
-				type="button"
-				class="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/80 bg-card/95 px-3.5 py-2 text-xs font-bold text-foreground shadow-md backdrop-blur-md transition-all active:scale-95"
-				onclick={() => {
-					mobileFilterOpen = !mobileFilterOpen;
-					if (mobileFilterOpen) mobileListOpen = false;
-				}}
-			>
-				<Filter class="h-3.5 w-3.5 text-primary" />
-				<span>ตัวกรอง</span>
-			</button>
-
-			<button
-				type="button"
-				class="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/80 bg-card/95 px-3.5 py-2 text-xs font-bold text-foreground shadow-md backdrop-blur-md transition-all active:scale-95"
-				onclick={() => {
-					mobileListOpen = !mobileListOpen;
-					if (mobileListOpen) mobileFilterOpen = false;
-				}}
-			>
-				<Building2 class="h-3.5 w-3.5 text-primary" />
-				<span>ศูนย์พักพิง ({displayShelters.length})</span>
-			</button>
 		</div>
 
 		<!-- Desktop Floating Filter Panel (Left) -->
@@ -355,103 +398,207 @@
 			</button>
 		{/if}
 
-		<!-- Mobile / Tablet Drawer Overlays (< lg) -->
-		{#if mobileFilterOpen}
-			<!-- Backdrop -->
-			<button
-				type="button"
-				class="absolute inset-0 z-30 bg-black/40 backdrop-blur-xs lg:hidden"
-				onclick={() => (mobileFilterOpen = false)}
-				aria-label="Close filter drawer"
-			></button>
-			<div class="absolute inset-y-3 right-3 left-3 z-40 flex max-w-sm flex-col lg:hidden">
-				<ShelterFilterPanel
-					filters={data?.filters || {}}
-					availableTypes={data?.available_types || []}
-					action="/shelters"
-					bind:userLat={liveUserLat}
-					bind:userLng={liveUserLng}
-					class="h-full"
-					onClose={() => (mobileFilterOpen = false)}
-				/>
-			</div>
-		{/if}
-
-		{#if mobileListOpen}
-			<!-- Backdrop -->
-			<button
-				type="button"
-				class="absolute inset-0 z-30 bg-black/40 backdrop-blur-xs lg:hidden"
-				onclick={() => (mobileListOpen = false)}
-				aria-label="Close shelter list drawer"
-			></button>
+		<!-- Mobile Bottom Compact Selected Card (Map Mode Only, < lg) -->
+		{#if selectedShelter && isMobile && mobileViewMode === 'map'}
 			<div
-				class="absolute inset-y-3 right-3 left-3 z-40 flex flex-col rounded-2xl border border-border/80 bg-card p-4 shadow-xl sm:left-auto sm:w-96 lg:hidden"
+				class="pointer-events-auto absolute right-3 bottom-3 left-3 z-20 mx-auto max-w-md animate-in duration-200 slide-in-from-bottom-3 lg:hidden"
 			>
-				<div class="mb-3 flex items-center justify-between border-b border-border/60 pb-2">
-					<div class="flex items-center gap-2">
-						<Building2 class="h-4 w-4 text-primary" />
-						<h3 class="text-sm font-bold text-foreground">{t.listTitle}</h3>
-						<span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-							{displayShelters.length}
-						</span>
-					</div>
-					<button
-						type="button"
-						class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-						onclick={() => (mobileListOpen = false)}
-					>
-						<X class="h-4 w-4" />
-					</button>
-				</div>
-				<div class="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
-					{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
-						{@const shelterKey = shelter.id || shelter.code || String(i)}
-						<div id={`shelter-card-mobile-${shelterKey}`} class="transition-all duration-200">
-							<PublicShelterCard
-								{shelter}
-								{getStatusColor}
-								{getStatusText}
-								isSelected={selectedShelterId === shelter.id ||
-									Boolean(shelter.code && selectedShelterId === shelter.code)}
-								onSelect={() => {
-									handleSelectShelter(shelter.id || shelter.code);
-									mobileListOpen = false;
-								}}
-								onPreRegister={openBooking}
-							/>
+				<div
+					class="relative rounded-2xl border border-border/80 bg-card/95 p-3.5 shadow-xl backdrop-blur-md"
+				>
+					<!-- Top row: Status + Distance + Close -->
+					<div class="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
+						<div class="flex items-center gap-2">
+							<span
+								class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-bold {getStatusColor(
+									selectedShelter.status
+								)}"
+							>
+								<span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>
+								{getStatusText(selectedShelter.status)}
+							</span>
+							{#if selectedShelter.distance != null && !isNaN(selectedShelter.distance) && selectedShelter.distance > 0}
+								<span
+									class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground"
+								>
+									<Navigation class="h-3 w-3" />
+									{selectedShelter.distance}
+									{cardT.km}
+								</span>
+							{/if}
 						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
+						<button
+							type="button"
+							class="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+							onclick={() => (selectedShelterId = null)}
+							aria-label="Close"
+						>
+							<X class="h-3.5 w-3.5" />
+						</button>
+					</div>
 
-		<!-- Mobile Bottom Preview Card for Selected Shelter (< lg) -->
-		{#if selectedShelter && !mobileListOpen && !mobileFilterOpen}
-			<div
-				class="pointer-events-auto absolute right-3 bottom-3 left-3 z-20 mx-auto max-w-md lg:hidden"
-			>
-				<div class="relative overflow-hidden rounded-2xl shadow-xl">
-					<PublicShelterCard
-						shelter={selectedShelter}
-						{getStatusColor}
-						{getStatusText}
-						isSelected={true}
-						onSelect={() => handleSelectShelter(selectedShelter.id || selectedShelter.code)}
-						onPreRegister={openBooking}
-					/>
-					<button
-						type="button"
-						class="absolute top-3 right-3 rounded-full border border-border/80 bg-background/90 p-1.5 text-muted-foreground shadow-sm backdrop-blur-xs hover:text-foreground"
-						onclick={() => (selectedShelterId = null)}
-						aria-label="Close preview"
-					>
-						<X class="h-3.5 w-3.5" />
-					</button>
+					<!-- Content row: Title & Capacity -->
+					<div class="mt-2">
+						<h4 class="line-clamp-1 text-sm font-bold text-foreground">
+							{selectedShelter.name}
+						</h4>
+						<div class="mt-0.5 flex items-center justify-between text-2xs text-muted-foreground">
+							<span class="line-clamp-1">
+								{selectedShelter.district
+									? `${cardT.districtPrefix}${selectedShelter.district}`
+									: ''}
+								{selectedShelter.province
+									? `, ${cardT.provincePrefix}${selectedShelter.province}`
+									: ''}
+							</span>
+							<span class="shrink-0 font-semibold text-foreground">
+								<Users class="mr-0.5 inline-block h-3 w-3 text-muted-foreground" />
+								{cardT.maxCapacity}
+								{selectedShelter.capacity ?? 0}
+								{cardT.people}
+							</span>
+						</div>
+					</div>
+
+					<!-- Actions row -->
+					<div class="mt-2.5 flex gap-1.5">
+						{#if selectedShelter.status !== 'CLOSED' && selectedShelter.code}
+							<Button
+								type="button"
+								size="sm"
+								class="h-9 flex-1 rounded-xl bg-primary text-2xs font-bold text-primary-foreground shadow-xs"
+								onclick={() => openBooking(selectedShelter.code)}
+							>
+								<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
+								{cardT.preRegister}
+							</Button>
+						{/if}
+						<Button
+							href={`/shelters/${selectedShelter.id}`}
+							variant="outline"
+							size="sm"
+							class="h-9 flex-1 rounded-xl border-border text-2xs font-bold text-foreground hover:bg-muted"
+						>
+							<Eye class="mr-1 h-3.5 w-3.5" />
+							{cardT.viewDetails}
+						</Button>
+						{#if selectedShelter.geo?.lat != null && selectedShelter.geo?.lng != null}
+							<Button
+								href={`https://www.google.com/maps/dir/?api=1&destination=${selectedShelter.geo.lat},${selectedShelter.geo.lng}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								size="sm"
+								class="h-9 w-9 shrink-0 rounded-xl bg-primary-dark p-0 text-primary-foreground hover:bg-primary"
+								aria-label={cardT.navigate}
+								title={cardT.navigate}
+							>
+								<Navigation class="h-3.5 w-3.5" />
+							</Button>
+						{/if}
+					</div>
 				</div>
 			</div>
 		{/if}
 	</div>
+
+	<!-- Mobile Shelter List View (when mobileViewMode === 'list', < lg) -->
+	{#if mobileViewMode === 'list'}
+		<div class="space-y-3 pb-16 lg:hidden">
+			<div class="flex items-center justify-between px-1 text-xs text-muted-foreground">
+				<span class="font-bold text-foreground">
+					{displayShelters.length}
+					{t.locationsUnit}
+				</span>
+				{#if liveUserLat && liveUserLng}
+					<span>เรียงตามระยะทางใกล้สุด</span>
+				{/if}
+			</div>
+
+			{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
+				{@const shelterKey = shelter.id || shelter.code || String(i)}
+				<div id={`shelter-card-mobile-${shelterKey}`} class="transition-all duration-200">
+					<PublicShelterCard
+						{shelter}
+						{getStatusColor}
+						{getStatusText}
+						isSelected={selectedShelterId === shelter.id ||
+							Boolean(shelter.code && selectedShelterId === shelter.code)}
+						onSelect={() => {
+							handleSelectShelter(shelter.id || shelter.code);
+							mobileViewMode = 'map';
+						}}
+						onPreRegister={openBooking}
+					/>
+				</div>
+			{:else}
+				<div
+					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-8 text-center text-muted-foreground"
+				>
+					<AlertTriangle class="mb-2.5 h-8 w-8 text-muted-foreground/50" />
+					<p class="text-sm font-semibold">{t.noShelters}</p>
+					<p class="mt-1 text-xs">{t.tryChangeFilter}</p>
+				</div>
+			{/each}
+
+			<!-- Mobile Floating Action to switch back to map -->
+			<div class="fixed bottom-4 left-1/2 z-30 -translate-x-1/2">
+				<button
+					type="button"
+					class="flex items-center gap-2 rounded-full border border-border/80 bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-lg backdrop-blur-md transition-all active:scale-95"
+					onclick={() => (mobileViewMode = 'map')}
+				>
+					<Map class="h-4 w-4" />
+					<span>{t.viewOnMap}</span>
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Mobile Full-Screen / Sheet Filter Modal (< lg) -->
+	{#if mobileFilterOpen}
+		<div
+			class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs lg:hidden"
+		>
+			<!-- Backdrop tap to close -->
+			<button
+				type="button"
+				class="absolute inset-0 cursor-default"
+				onclick={() => (mobileFilterOpen = false)}
+				aria-label="Close filter drawer"
+			></button>
+
+			<!-- Sheet Modal Content -->
+			<div
+				class="relative z-10 flex max-h-[85vh] w-full animate-in flex-col rounded-t-3xl border-t border-border bg-card shadow-2xl duration-300 slide-in-from-bottom"
+			>
+				<div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
+					<div class="flex items-center gap-2">
+						<Filter class="h-4 w-4 text-primary" />
+						<h3 class="text-sm font-bold text-foreground">ค้นหาและตัวกรอง</h3>
+					</div>
+					<button
+						type="button"
+						class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+						onclick={() => (mobileFilterOpen = false)}
+						aria-label="Close filter drawer"
+					>
+						<X class="h-4 w-4" />
+					</button>
+				</div>
+				<div class="flex-1 overflow-y-auto p-4">
+					<ShelterFilterPanel
+						filters={data?.filters || {}}
+						availableTypes={data?.available_types || []}
+						action="/shelters"
+						bind:userLat={liveUserLat}
+						bind:userLng={liveUserLng}
+						class="h-auto max-h-none border-0 bg-transparent p-0 shadow-none"
+						onClose={() => (mobileFilterOpen = false)}
+					/>
+				</div>
+			</div>
+		</div>
+	{/if}
 </PublicPageShell>
 
 <style>
