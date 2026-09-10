@@ -99,6 +99,7 @@
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
+	let lastCenteredUser: string | null = null;
 
 	function closeActivePopup() {
 		if (activePopup) {
@@ -245,10 +246,17 @@
 		const namespace = maplibre.default as unknown as MapLibreNamespace;
 		L = namespace;
 
+		const uLatNum = Number(userLocation?.lat);
+		const uLngNum = Number(userLocation?.lng);
+		const initialCenter: [number, number] =
+			!isNaN(uLatNum) && !isNaN(uLngNum) && uLatNum !== 0 && uLngNum !== 0
+				? [uLngNum, uLatNum]
+				: center;
+
 		const map = new namespace.Map({
 			container: mapElement,
 			style: DEFAULT_MAP_STYLE,
-			center,
+			center: initialCenter,
 			zoom
 		});
 		mapInstance = map;
@@ -342,6 +350,9 @@
 
 		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
+		let hasUserLocation = false;
+		let userLngCoord = 0;
+		let userLatCoord = 0;
 
 		// 1. Draw User Location if available
 		if (userLocation?.lat && userLocation?.lng) {
@@ -349,6 +360,9 @@
 			const uLng = Number(userLocation.lng);
 			if (!isNaN(uLat) && !isNaN(uLng)) {
 				hasMarkers = true;
+				hasUserLocation = true;
+				userLatCoord = uLat;
+				userLngCoord = uLng;
 				bounds.extend([uLng, uLat]);
 
 				const userEl = document.createElement('div');
@@ -516,13 +530,24 @@
 			});
 		}
 
-		if (hasMarkers) {
-			const markerCount = markersLayer.length;
-			if (markerCount === 1) {
-				const centerLngLat = bounds.getCenter();
-				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 15 });
-			} else {
-				map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
+		if (!selectedId) {
+			if (hasUserLocation) {
+				const userKey = `${userLngCoord.toFixed(5)},${userLatCoord.toFixed(5)}`;
+				if (lastCenteredUser !== userKey) {
+					lastCenteredUser = userKey;
+					map.easeTo({
+						center: [userLngCoord, userLatCoord],
+						zoom: Math.max(map.getZoom(), zoom)
+					});
+				}
+			} else if (hasMarkers) {
+				const markerCount = markersLayer.length;
+				if (markerCount === 1) {
+					const centerLngLat = bounds.getCenter();
+					map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 15 });
+				} else {
+					map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
+				}
 			}
 		}
 	});
