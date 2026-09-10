@@ -11,11 +11,10 @@
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Users from '@lucide/svelte/icons/users';
 	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
-	import PhoneCall from '@lucide/svelte/icons/phone-call';
 	import Bell from '@lucide/svelte/icons/bell';
 
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
-	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
+	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
@@ -24,6 +23,17 @@
 	let { data }: { data: PageData } = $props();
 
 	let searchOpen = $state(false);
+	let alertsOpen = $state(false);
+
+	const announcements = $derived(data.announcements ?? []);
+	const announcementsCount = $derived(announcements.length);
+	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
+
+	$effect(() => {
+		if (typeof window !== 'undefined' && window.location.hash === '#announcements') {
+			alertsOpen = true;
+		}
+	});
 
 	const faqList = $derived(data.faqs ?? []);
 	const defaultOpenFaq = $derived(faqList.length > 0 ? `faq-${faqList[0].id ?? 1}` : undefined);
@@ -41,14 +51,8 @@
 </svelte:head>
 
 <div class="relative w-full">
-	<!-- 1. Urgent Announcements (if any) -->
-	{#if data.announcements && data.announcements.length > 0}
-		<div id="announcements" class="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
-			{#each data.announcements as announcement (announcement._id)}
-				<PublicEmergencyBanner {announcement} />
-			{/each}
-		</div>
-	{/if}
+	<!-- Anchor for announcements navigation -->
+	<div id="announcements" class="sr-only" aria-hidden="true"></div>
 
 	<!-- 2. Hero Banner (Full-width Brand Navy Header with Institutional Authority) -->
 	<header class="bg-[#0A2647] px-4 py-12 text-center text-white sm:py-16">
@@ -77,12 +81,106 @@
 						เลือกบริการที่ท่านต้องการ
 					</h2>
 				</div>
-				<p class="mt-1 text-xs text-slate-500 sm:text-sm">
+				<p class="mt-1 hidden text-xs text-slate-500 sm:block sm:text-sm">
 					เข้าสู่ช่องทางบริการตามสถานการณ์ของท่านโดยตรง ไม่ต้องผ่านหลายขั้นตอน
 				</p>
 			</div>
 
-			<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+			<!-- Mobile View (sm:hidden): กลุ่มปุ่มตาม 4 หมวดบริการ เป็นปุ่มล้วน ๆ ไม่มีคำอธิบายยืดยาว -->
+			<div class="grid grid-cols-1 gap-3.5 sm:hidden">
+				<!-- Service 1: 1. ค้นหาศูนย์พักพิง -->
+				<div class="rounded-2xl border-2 border-red-200/90 bg-white p-4 shadow-2xs">
+					<div class="mb-3 flex items-center gap-2.5">
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
+						>
+							<ShieldAlert class="h-4 w-4" />
+						</div>
+						<h3 class="text-sm font-bold text-slate-900">1. ค้นหาศูนย์พักพิง</h3>
+					</div>
+					<div class="flex flex-col gap-2">
+						<PublicActionBtn href="/shelters" colorScheme="destructive" variant="solid">
+							ค้นหาศูนย์พักพิง
+						</PublicActionBtn>
+						<PublicActionBtn href="/pre-register" colorScheme="destructive" variant="subtle">
+							ลงทะเบียนเข้าพักล่วงหน้า
+						</PublicActionBtn>
+					</div>
+				</div>
+
+				<!-- Service 2: 2. ผู้พักพิง -->
+				<div class="rounded-2xl border-2 border-sky-200/90 bg-white p-4 shadow-2xs">
+					<div class="mb-3 flex items-center gap-2.5">
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#0284C7]"
+						>
+							<Search class="h-4 w-4" />
+						</div>
+						<h3 class="text-sm font-bold text-slate-900">2. ผู้พักพิง</h3>
+					</div>
+					<div class="flex flex-col gap-2">
+						<PublicActionBtn
+							onclick={() => (searchOpen = true)}
+							colorScheme="primary"
+							variant="solid"
+							icon={ArrowRight}
+						>
+							ค้นหารายชื่อผู้พักพิง
+						</PublicActionBtn>
+						<PublicActionBtn href="/shelters" colorScheme="sky" variant="subtle" icon={MapPin}>
+							ดูแผนที่พิกัดศูนย์พักพิง
+						</PublicActionBtn>
+					</div>
+				</div>
+
+				<!-- Service 3: 3. บริจาค -->
+				<div class="rounded-2xl border-2 border-amber-200/90 bg-white p-4 shadow-2xs">
+					<div class="mb-3 flex items-center gap-2.5">
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"
+						>
+							<Package class="h-4 w-4" />
+						</div>
+						<h3 class="text-sm font-bold text-slate-900">3. บริจาค</h3>
+					</div>
+					<div class="flex flex-col gap-2">
+						<PublicActionBtn href="/donations" colorScheme="amber" variant="solid">
+							แจ้งความประสงค์บริจาค
+						</PublicActionBtn>
+						<PublicActionBtn
+							href="/donations/track"
+							colorScheme="amber"
+							variant="subtle"
+							icon={ArrowRight}
+						>
+							ตรวจสอบสถานะการบริจาค
+						</PublicActionBtn>
+					</div>
+				</div>
+
+				<!-- Service 4: 4. อาสาสมัคร -->
+				<div class="rounded-2xl border-2 border-emerald-200/90 bg-white p-4 shadow-2xs">
+					<div class="mb-3 flex items-center gap-2.5">
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"
+						>
+							<UserPlus class="h-4 w-4" />
+						</div>
+						<h3 class="text-sm font-bold text-slate-900">4. อาสาสมัคร</h3>
+					</div>
+					<div class="flex flex-col gap-2">
+						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
+							สมัครอาสาสมัคร (เลือกลงเวลา)
+						</PublicActionBtn>
+						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
+							ลงทะเบียนเปิดบ้านพี่เลี้ยง
+						</PublicActionBtn>
+					</div>
+				</div>
+			</div>
+
+			<!-- Desktop View (hidden sm:grid): การ์ดบริการพร้อมคำอธิบายแบบเต็ม -->
+			<div class="hidden gap-5 sm:grid sm:grid-cols-2 lg:grid-cols-4">
 				<!-- Card 1: 1. ค้นหาศูนย์พักพิง (Shelter) -->
 				<PublicQuickServiceCard
 					title="1. ค้นหาศูนย์พักพิง"
@@ -144,13 +242,13 @@
 				<!-- Card 4: 4. อาสาสมัคร (Volunteers) -->
 				<PublicQuickServiceCard
 					title="4. อาสาสมัคร"
-					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ทีมแพทย์สนาม ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
+					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
 					icon={UserPlus}
 					iconClass="bg-emerald-50 text-emerald-500"
 					cardClass="border-2 border-emerald-200 hover:border-emerald-300"
 				>
 					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
-						สมัครจิตอาสา (เลือกลงเวลา)
+						สมัครอาสาสมัคร (เลือกลงเวลา)
 					</PublicActionBtn>
 					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
 						ลงทะเบียนเปิดบ้านพี่เลี้ยง
@@ -236,10 +334,10 @@
 					<div class="mt-2 text-xs text-slate-400">เข้าสู่ระบบพักพิงและได้รับการดูแล</div>
 				</div>
 
-				<!-- Metric 4: จิตอาสาลงปฏิบัติงาน (EOC Command Matrix) -->
+				<!-- Metric 4: อาสาสมัครลงปฏิบัติงาน (EOC Command Matrix) -->
 				<div class="rounded-2xl {tokens.colors.status.eoc.card} p-5">
 					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">จิตอาสาลงปฏิบัติงาน</span>
+						<span class="text-xs font-medium text-slate-500">อาสาสมัครลงปฏิบัติงาน</span>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600"
 						>
@@ -248,9 +346,9 @@
 					</div>
 					<div class="mt-2 flex items-baseline gap-1">
 						<span class="text-3xl font-bold text-slate-900 tabular-nums">5</span>
-						<span class="text-xs font-normal text-slate-400">นาย</span>
+						<span class="text-xs font-normal text-slate-400">คน</span>
 					</div>
-					<div class="mt-2 text-xs text-slate-400">ทีมแพทย์ ครัวกลาง ขนย้าย</div>
+					<div class="mt-2 text-xs text-slate-400">ครัวกลาง ขนย้าย</div>
 				</div>
 			</div>
 		</section>
@@ -311,27 +409,29 @@
 
 	<!-- 4. Floating Emergency Action Pills (Fixed Bottom Right with Civic Light Elevation) -->
 	<div class="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2.5 md:right-6 md:bottom-6">
-		<a
-			href="tel:1669"
-			aria-label="1669 โทรฉุกเฉิน"
-			title="1669 โทรฉุกเฉิน"
-			class="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-md transition-all duration-200 hover:bg-red-700 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:h-auto md:w-auto md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
-		>
-			<PhoneCall class="h-5 w-5 md:h-4 md:w-4" />
-			<span class="hidden md:inline">1669 โทรฉุกเฉิน</span>
-		</a>
 		<button
 			type="button"
-			onclick={() => {
-				const el = document.getElementById('announcements');
-				if (el) el.scrollIntoView({ behavior: 'smooth' });
-			}}
-			class="hidden items-center gap-2 rounded-full bg-[#0284C7] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex"
+			onclick={() => (alertsOpen = true)}
+			aria-label="การแจ้งเตือนภัย"
+			class="relative hidden items-center justify-center rounded-full bg-[#0284C7] whitespace-nowrap text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex md:h-auto md:w-full md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
 		>
-			<Bell class="h-4 w-4 text-amber-300" />
-			<span>แจ้งเตือนภัย (2)</span>
+			<Bell class="h-4 w-4 shrink-0 text-amber-300" />
+			<span> แจ้งเตือนภัย </span>
+			{#if announcementsCount > 0}
+				<!-- Indicator red dot -->
+				<span class="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+					{#if hasEmergency}
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"
+						></span>
+					{/if}
+					<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+					></span>
+				</span>
+			{/if}
 		</button>
 	</div>
 </div>
 
+<PublicEmergencyModal bind:open={alertsOpen} {announcements} />
 <FamilySearchModal bind:open={searchOpen} />

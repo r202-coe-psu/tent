@@ -677,13 +677,6 @@
 	oninput={markDirty}
 	{@attach createScrollSpy()}
 >
-	<UnifiedRegistrationStickyNav
-		sections={formSectionNav}
-		{activeSection}
-		ariaLabel={t.sectionNavAria}
-		onNavigate={(id) => scrollToSection(id as FormSectionId)}
-	/>
-
 	{#if formError}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
 			<CircleAlert class="size-4" />
@@ -1191,10 +1184,19 @@
 		</div>
 	{/if}
 
-	<UnifiedRegistrationSubmitBar
-		{pending}
-		label={effectiveSubmitLabel}
-		submittingLabel={t.submitting}
-		align={submitAlign}
-	/>
+	<div class="unified-reg-bottom-chrome">
+		<UnifiedRegistrationStickyNav
+			sections={formSectionNav}
+			{activeSection}
+			ariaLabel={t.sectionNavAria}
+			onNavigate={(id) => scrollToSection(id as FormSectionId)}
+		/>
+		<UnifiedRegistrationSubmitBar
+			{pending}
+			label={effectiveSubmitLabel}
+			submittingLabel={t.submitting}
+			align={submitAlign}
+			sticky={false}
+		/>
+	</div>
 </form>

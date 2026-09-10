@@ -12,7 +12,8 @@
 	class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground"
 	style="--registration-sticky-top: 6.75rem"
 >
-	<div class="sticky top-14 z-30">
+	<!-- z-40: above registration sticky chrome (spy nav z-30) so chips never cover the shelter bar -->
+	<div class="sticky top-14 z-40">
 		<ShelterNavbar />
 	</div>
 	<div class="w-full flex-1 flex-col">

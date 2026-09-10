@@ -386,7 +386,7 @@
 <!-- 2. Domain Operations Badges (Mapped to Palette) -->
 <span class="badge-kitchen">ครัวกลาง & LPG</span>
 <span class="badge-family">แม่และเด็ก / นมผง</span>
-<span class="badge-donor">ของบริจาค & จิตอาสา</span>
+<span class="badge-donor">ของบริจาค & อาสาสมัคร</span>
 <span class="badge-inventory">คลัง SPHERE</span>
 
 <!-- 3. Functional Badges -->
@@ -2026,7 +2026,7 @@
 											<UserPlus class="h-4 w-4" />
 										</div>
 										<div>
-											<div class="text-xs font-bold text-slate-900">จิตอาสา & การแพทย์</div>
+											<div class="text-xs font-bold text-slate-900">อาสาสมัคร & การแพทย์</div>
 											<div class="text-xs text-slate-500">Volunteers & Care</div>
 										</div>
 									</div>
@@ -2304,7 +2304,7 @@
 								<button
 									class="flex w-full items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-emerald-700"
 								>
-									<span>สมัครจิตอาสา (เลือกลงกะ)</span>
+									<span>สมัครอาสาสมัคร (เลือกลงกะ)</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<button
@@ -2409,7 +2409,7 @@
 									<div
 										class="border-t border-sky-50 px-3.5 pt-1 pb-3.5 text-xs leading-relaxed text-slate-600"
 									>
-										ระบบสืบค้นญาติจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
+										ระบบค้นหาผู้พักพิงจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
 										จะแสดงเฉพาะชื่อ-นามสกุล, สถานะความปลอดภัย (Safe)
 										และชื่อศูนย์พักพิงที่ลงทะเบียนไว้เท่านั้น เพื่อความปลอดภัยสูงสุด
 									</div>
@@ -2565,7 +2565,7 @@
 										>portalServices.tracing (#0A2647 / #0284C7)</td
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">14.2:1 (WCAG AAA)</td>
-									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับสืบค้นญาติ กรอบการ์ดสีฟ้าอ่อน</td>
+									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับค้นหาผู้พักพิง กรอบการ์ดสีฟ้าอ่อน</td>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
@@ -2592,7 +2592,7 @@
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.6:1 (WCAG AA)</td>
 									<td class="px-4 py-2.5"
-										>ปุ่ม Emerald สำหรับงานจิตอาสา กรอบการ์ดสีเขียวมิ้นต์อ่อน</td
+										>ปุ่ม Emerald สำหรับงานอาสาสมัคร กรอบการ์ดสีเขียวมิ้นต์อ่อน</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">

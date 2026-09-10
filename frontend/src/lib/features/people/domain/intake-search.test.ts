@@ -38,7 +38,7 @@ describe('Station 1 intake search (#251)', () => {
 
 	it('labels stay status for anti-duplicate display', () => {
 		expect(shelterHitStatusLabel('arriving')).toContain('รอเข้าพัก');
-		expect(shelterHitStatusLabel('active')).toContain('เช็คอิน');
+		expect(shelterHitStatusLabel('active')).toContain('เข้าพัก');
 	});
 
 	it('detects federated hits when either plane returns results', () => {

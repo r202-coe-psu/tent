@@ -15,7 +15,7 @@ export const PUBLIC_NAVBAR_I18N = {
 		appSubtitle: 'Public & RFL Portal',
 		home: 'หน้าแรก',
 		shelters: 'ตรวจสอบศูนย์พักพิง',
-		search: 'สืบค้นญาติ',
+		search: 'ค้นหาผู้พักพิง',
 		preRegister: 'ลงทะเบียนล่วงหน้า',
 		donate: 'บริจาค',
 		donateAndBook: 'บริจาคและจองคิว',

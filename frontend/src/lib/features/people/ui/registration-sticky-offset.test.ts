@@ -6,6 +6,25 @@ function mockEl(): Element {
 	return {} as Element;
 }
 
+function mockStyles(opts: {
+	elVars?: Record<string, string>;
+	rootFontSize?: string;
+}) {
+	const elVars = opts.elVars ?? {};
+	vi.spyOn(window, 'getComputedStyle').mockImplementation((target) => {
+		if (target === document.documentElement) {
+			return {
+				getPropertyValue: () => '',
+				fontSize: opts.rootFontSize ?? '16px'
+			} as unknown as CSSStyleDeclaration;
+		}
+		return {
+			getPropertyValue: (name: string) => elVars[name] ?? '',
+			fontSize: '16px'
+		} as unknown as CSSStyleDeclaration;
+	});
+}
+
 describe('readRegistrationStickyTopPx', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -13,28 +32,19 @@ describe('readRegistrationStickyTopPx', () => {
 
 	it('parses rem from --registration-sticky-top', () => {
 		const el = mockEl();
-		vi.spyOn(window, 'getComputedStyle').mockImplementation((target) => {
-			if (target === el) {
-				return { getPropertyValue: () => '4rem' } as unknown as CSSStyleDeclaration;
-			}
-			return { getPropertyValue: () => '', fontSize: '16px' } as unknown as CSSStyleDeclaration;
-		});
+		mockStyles({ elVars: { '--registration-sticky-top': '4rem' } });
 		expect(readRegistrationStickyTopPx(el)).toBe(64);
 	});
 
 	it('parses px values', () => {
 		const el = mockEl();
-		vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-			getPropertyValue: () => '108px'
-		} as unknown as CSSStyleDeclaration);
+		mockStyles({ elVars: { '--registration-sticky-top': '108px' } });
 		expect(readRegistrationStickyTopPx(el)).toBe(108);
 	});
 
 	it('falls back when unset', () => {
 		const el = mockEl();
-		vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-			getPropertyValue: () => ''
-		} as unknown as CSSStyleDeclaration);
+		mockStyles({ elVars: {} });
 		expect(readRegistrationStickyTopPx(el)).toBe(64);
 	});
 });

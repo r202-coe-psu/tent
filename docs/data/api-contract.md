@@ -2,19 +2,20 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-09
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration
+updated: 2026-09-10
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214)
 ---
 
 # Smart Shelter — API Contract v1
 
-**Sync boundary (ตัดสินในรุ่นนี้):** ระบบมี 3 plane —
+**Sync boundary (ตัดสินในรุ่นนี้):** ระบบมี 4 plane —
 
 | Plane | ใคร | ผ่านอะไร |
 | --- | --- | --- |
 | **A. Sync plane** | staff app (login แล้ว) | **Remote-first** กับ active endpoint เดียว: **central CouchDB** ปกติ; **edge CouchDB @ศูนย์** เฉพาะ WAN/central outage; ถ้าไม่เห็นทั้งคู่ให้ fail/retry (ไม่มี local-only write queue) (topology ดู data-model.md §1) |
 | **B. Service plane** | staff app เรียกเสริม | REST `/api/v1/*` ที่ **central เท่านั้น** (ต้องมี WAN + central session) — เฉพาะงานที่ CouchDB ทำไม่ได้: export, provisioning |
 | **C. Public plane** | ไม่ login | REST `/public/v1/*` ที่ central — ดู [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
+| **D. Partner Data API** | ระบบพันธมิตร M6/M7 (machine) | OAuth2 `POST /api/auth/token-third-party` + REST `/api/thirdparty/*` อ่านจาก MongoDB projection — ดู [as-built (reports)](../reports/2026-09-10/partner-api-as-built.md) ([stub](./partner-api.md)), [ADR 0002](../adr/0002-partner-integration-architecture.md) |
 
 ผลที่ตามมา: endpoint อย่าง `POST /evacuees` ใน feature specs เดิม **ไม่มีอยู่จริง** — การ
 "สร้าง evacuee" = เขียน doc ไปที่ CouchDB endpoint ที่ active (central ก่อน, edge ตอน failover);
@@ -190,7 +191,7 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 
 ### 5.1 External plane `/external/v1` (CR-062, CR-098 M2 Integration)
 
-สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน:
+สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน — **คนละ plane กับ Partner Data API (§5.3)** (path / auth / error shape ต่างกัน):
 
 | Endpoint | Method | Auth | Response |
 | --- | --- | --- | --- |
@@ -213,6 +214,28 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 
 Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503). Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
 
+### 5.3 Partner Data API — OAuth2 `/api/auth` + `/api/thirdparty` (EXT-001–007, #214)
+
+Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center** อ่าน MongoDB projection เท่านั้น (ไม่แตะ CouchDB SoR) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** [partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงลิงก์ `docs/data/`).
+
+| Endpoint | Method | Auth / scope | หมายเหตุสั้น |
+| --- | --- | --- | --- |
+| `/api/auth/token-third-party` | POST | body: `grant_type=client_credentials`, `client_id`, `client_secret` | JWT ~3600s + `scopes[]` (EXT-001) |
+| `/api/thirdparty/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) |
+| `/api/thirdparty/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` (EXT-003) |
+| `/api/thirdparty/locations/{code}/stock` | GET | Bearer · `location-stock-read` | stock; `updated_at` ระดับ location (EXT-004) |
+| `/api/thirdparty/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown + `updated_by_role` คงที่ (EXT-005) |
+| `/api/thirdparty/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
+| `/api/thirdparty/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
+
+```
+Success : { "status": 200, "message": "Found Data.", "result": … }
+Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…", "result"?: [] }
+         → partner ควร key off `code` เป็นหลัก (ไม่เทียบ message string)
+```
+
+แยกจาก §5.1: ไม่ใช้ `X-API-Key` / `/external/v1`; ไม่มี partner-plane rate limit 429 ในรุ่นนี้
+
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
 - ไม่มี REST CRUD สำหรับ doc ปฏิบัติการ (evacuee/movement/stock/...) — ใช้ sync plane เท่านั้น
@@ -224,6 +247,6 @@ Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../cha
   (เทียบเคียง `PATCH /public/v1/donations/{token}` ของ CR-052 ที่เขียน `donation` doc).
   **Photos:** `POST /api/public/v1/registrations/photos` สร้าง `image` doc (+attachments)
   ในศูนย์ที่เลือกเท่านั้น (ไม่ใช่ read/list/delete surface).
-- ไม่มี JWT/refresh-token layer — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้
-- ไม่มี EOC / Open API ในรุ่นนี้ (deferred — จะเป็น service แยกอ่าน central)
-- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane
+- ไม่มี JWT/refresh-token layer สำหรับ **staff sync plane** — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้ (Partner plane §5.3 ใช้ JWT client_credentials แยกต่างหาก ไม่มี refresh)
+- EOC dashboard / Open API tier เต็มรูปแบบยัง deferred เป็น service แยก — **แต่** Partner Data API EXT-001–007 (§5.3) เปิดให้อ่าน aggregate ให้ M6/M7 แล้ว
+- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane; EXT-007 เป็น scaffold เท่านั้น (ไม่มี PII payload จริง)

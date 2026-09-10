@@ -28,7 +28,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 		in_shelter: 'พักพิงอยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายไปแล้ว',
-		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
+		checked_out: 'เช็คเอาต์',
 		deceased: 'เสียชีวิต',
 		cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
 	},

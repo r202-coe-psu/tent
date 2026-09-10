@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import Camera from '@lucide/svelte/icons/camera';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import X from '@lucide/svelte/icons/x';
+	import Zap from '@lucide/svelte/icons/zap';
 
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button';
@@ -41,18 +43,27 @@
 		shelterHitStatusLabel
 	} from '../domain/intake-search';
 	import { formatPersonName, maskNationalId } from '../domain/people';
+	import StayStatusBadge from './stay-status-badge.svelte';
 
 	let {
 		canClaimPool = false,
-		onNewRegistrationLockedChange
+		onNewRegistrationLockedChange,
+		onScanClick,
+		query = $bindable(''),
+		onCodeEnter
 	}: {
 		/** RBAC: show claim CTA on pool rows (search itself is always on). */
 		canClaimPool?: boolean;
 		/** Notifies the page when Station 1 hard-gate locks/unlocks new-reg. */
 		onNewRegistrationLockedChange?: (locked: boolean) => void;
+		/** Opens camera QR scanner modal. */
+		onScanClick?: () => void;
+		/** Two-way binding for search query so parent page can filter tabs simultaneously. */
+		query?: string;
+		/** Triggered when Enter is pressed on raw barcode scan. */
+		onCodeEnter?: (code: string) => void;
 	} = $props();
 
-	let query = $state('');
 	let debouncedQuery = $state('');
 	let claimOpen = $state(false);
 	let selected = $state<UnassignedRegistrationSearchHit | null>(null);
@@ -150,32 +161,54 @@
 </script>
 
 <div class="flex w-full flex-col gap-4">
-	<div class="relative">
-		{#if isSearching}
-			<Loader2
-				class="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 animate-spin text-muted-foreground"
+	<div class="flex gap-2">
+		<div class="relative flex-1">
+			{#if isSearching}
+				<Loader2
+					class="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 animate-spin text-muted-foreground"
+				/>
+			{:else}
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground"
+				/>
+			{/if}
+			<Input
+				type="text"
+				placeholder={INTAKE_SEARCH_PLACEHOLDER}
+				bind:value={query}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						const trimmed = query.trim();
+						if (trimmed && onCodeEnter) {
+							e.preventDefault();
+							onCodeEnter(trimmed);
+						}
+					}
+				}}
+				class="h-12 rounded-xl border-slate-200/80 bg-white pr-10 pl-11 text-base shadow-xs"
+				aria-label={INTAKE_SEARCH_PLACEHOLDER}
 			/>
-		{:else}
-			<Search
-				class="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground"
-			/>
-		{/if}
-		<Input
-			type="text"
-			placeholder={INTAKE_SEARCH_PLACEHOLDER}
-			bind:value={query}
-			class="h-12 border-slate-200/80 bg-white pr-10 pl-11 text-base shadow-xs"
-			aria-label={INTAKE_SEARCH_PLACEHOLDER}
-		/>
-		{#if query}
-			<button
+			{#if query}
+				<button
+					type="button"
+					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
+					onclick={clearSearch}
+					aria-label="ล้างคำค้น"
+				>
+					<X class="size-4" />
+				</button>
+			{/if}
+		</div>
+		{#if onScanClick}
+			<Button
 				type="button"
-				class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
-				onclick={clearSearch}
-				aria-label="ล้างคำค้น"
+				variant="outline"
+				class="h-12 shrink-0 gap-2 rounded-xl border-slate-200/80 bg-white px-4 font-medium shadow-xs hover:bg-slate-50"
+				onclick={onScanClick}
 			>
-				<X class="size-4" />
-			</button>
+				<Camera class="size-5 text-primary" />
+				<span class="hidden sm:inline">สแกน QR</span>
+			</Button>
 		{/if}
 	</div>
 
@@ -200,24 +233,33 @@
 									<p class="truncate text-base font-semibold text-slate-900">
 										{formatPersonName(evacuee)}
 									</p>
-									<p class="text-sm text-slate-500">
-										สถานะ: <span class="font-medium text-slate-700">{statusLabel}</span>
+									<div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+										<span class="text-xs">สถานะ:</span>
+										<StayStatusBadge status={evacuee.current_stay.status} size="sm" />
+										{#if evacuee.current_stay.zone}
+											<span class="text-xs text-muted-foreground">· โซน {evacuee.current_stay.zone}</span>
+										{/if}
 										{#if evacuee.person_id?.number}
-											· เลขบัตร: <span class="tabular-nums"
-												>{maskNationalId(evacuee.person_id.number)}</span
-											>
+											<span class="text-xs text-muted-foreground">
+												· เลขบัตร: <span class="tabular-nums"
+													>{maskNationalId(evacuee.person_id.number)}</span
+												>
+											</span>
 										{/if}
 										{#if evacuee.phone}
-											· โทร: <span class="tabular-nums">{evacuee.phone}</span>
+											<span class="text-xs text-muted-foreground">
+												· โทร: <span class="tabular-nums">{evacuee.phone}</span>
+											</span>
 										{/if}
-									</p>
+									</div>
 								</div>
 								{#if action === 'report_in'}
 									<Button
 										type="button"
-										class="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
+										class="h-11 w-full shrink-0 gap-1.5 sm:h-9 sm:w-auto"
 										onclick={() => goReportIn(evacuee._id)}
 									>
+										<Zap class="size-4" />
 										{REPORT_IN_CTA_LABEL}
 									</Button>
 								{:else}

@@ -92,6 +92,8 @@ services:
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
     ports:
       - "9000:9000"
+    volumes:
+      - ./backend/apiapp:/app/backend/apiapp
     restart: unless-stopped
 
 networks:
