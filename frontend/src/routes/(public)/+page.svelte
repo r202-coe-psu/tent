@@ -242,7 +242,7 @@
 				<!-- Card 4: 4. อาสาสมัคร (Volunteers) -->
 				<PublicQuickServiceCard
 					title="4. อาสาสมัคร"
-					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ทีมแพทย์สนาม ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
+					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
 					icon={UserPlus}
 					iconClass="bg-emerald-50 text-emerald-500"
 					cardClass="border-2 border-emerald-200 hover:border-emerald-300"
@@ -346,9 +346,9 @@
 					</div>
 					<div class="mt-2 flex items-baseline gap-1">
 						<span class="text-3xl font-bold text-slate-900 tabular-nums">5</span>
-						<span class="text-xs font-normal text-slate-400">นาย</span>
+						<span class="text-xs font-normal text-slate-400">คน</span>
 					</div>
-					<div class="mt-2 text-xs text-slate-400">ทีมแพทย์ ครัวกลาง ขนย้าย</div>
+					<div class="mt-2 text-xs text-slate-400">ครัวกลาง ขนย้าย</div>
 				</div>
 			</div>
 		</section>
