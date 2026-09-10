@@ -72,9 +72,7 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const isPrimary = $derived(index === 0);
-	const title = $derived(
-		isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`
-	);
+	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	const hideNoPhone = $derived(channel === 'public' && index === 0);
@@ -83,11 +81,12 @@
 	const isAlreadyReported = $derived(
 		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
 	);
+	const alreadyReportedStatusLabel = $derived(
+		member.stay_status ? (STATUS_LABELS[member.stay_status] ?? member.stay_status) : ''
+	);
 	const isNewReportInMember = $derived(isReportIn && !member._id);
 	const isToggleableReportIn = $derived(
-		isReportIn &&
-			!!member._id &&
-			(!member.stay_status || member.stay_status === 'pre_registered')
+		isReportIn && !!member._id && (!member.stay_status || member.stay_status === 'pre_registered')
 	);
 	const isReportingInSelected = $derived(member.reporting_in ?? true);
 	const cardClass = $derived(
@@ -301,11 +300,7 @@
 	}
 </script>
 
-<section
-	id="unified-member-{index}"
-	class={cardClass}
-	aria-labelledby="member-card-title-{index}"
->
+<section id="unified-member-{index}" class={cardClass} aria-labelledby="member-card-title-{index}">
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
@@ -323,10 +318,13 @@
 				{#if isReportIn}
 					{#if isAlreadyReported}
 						<Badge variant="secondary" class="text-2xs">
-							รายงานตัวแล้ว ({STATUS_LABELS[member.stay_status] ?? member.stay_status})
+							รายงานตัวแล้ว ({alreadyReportedStatusLabel})
 						</Badge>
 					{:else if member._id}
-						<Badge variant="outline" class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400">
+						<Badge
+							variant="outline"
+							class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400"
+						>
 							ลงทะเบียนล่วงหน้า
 						</Badge>
 					{:else}
@@ -358,7 +356,7 @@
 				{:else}
 					<label
 						class={cn(
-							'flex min-h-12 cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-sm font-semibold select-none transition-colors',
+							'flex min-h-12 cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-sm font-semibold transition-colors select-none',
 							isReportingInSelected
 								? 'border-primary/50 bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/30'
 								: 'border-dashed border-border bg-muted/50 text-muted-foreground'
@@ -439,9 +437,7 @@
 								: ''}"
 						>
 							<Camera class="size-4 text-primary" />
-							<span
-								>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span
-							>
+							<span>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span>
 						</label>
 						<input
 							id={photoInputId}
