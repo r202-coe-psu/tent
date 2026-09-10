@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class SearchQueryKind(str, Enum):
+class SearchQueryKind(StrEnum):
     NATIONAL_ID = "national_id"
     PASSPORT = "passport"
     PHONE = "phone"

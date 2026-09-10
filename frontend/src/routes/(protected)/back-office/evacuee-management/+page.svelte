@@ -30,9 +30,9 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col overflow-hidden">
-	<!-- Tab nav -->
-	<div class="shrink-0 border-b border-border bg-background px-6 pt-4">
+<div class="flex flex-col">
+	<!-- Tab nav sticks under the back-office page header (h-16 / top-0). -->
+	<div class="sticky top-16 z-20 border-b border-border bg-background px-6 pt-4">
 		<nav class="flex gap-1">
 			<button
 				type="button"
@@ -70,13 +70,13 @@
 		</nav>
 	</div>
 
-	<!-- Tab content -->
-	<div class="min-h-0 flex-1 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-scroll">
+	<!-- Tab content scrolls with the document -->
+	<div class="[scrollbar-gutter:stable]">
 		{#if activeTab === 'dashboard'}
 			{#if shelterStore.selectedShelterCode}
 				<DashboardTab shelterCode={shelterStore.selectedShelterCode} />
 			{:else}
-				<div class="flex h-full items-center justify-center text-muted-foreground">
+				<div class="flex items-center justify-center py-24 text-muted-foreground">
 					กำลังโหลดข้อมูลศูนย์พักพิง...
 				</div>
 			{/if}

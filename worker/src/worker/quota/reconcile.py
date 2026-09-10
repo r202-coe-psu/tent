@@ -172,7 +172,7 @@ async def reconcile_shelter(
     report.computed = sum_reserved_by_key(truth, report=report)
 
     # Read raw so the exact Decimal128 can be handed back as the optimistic filter.
-    collection = DonationNeedCounter.get_motor_collection()
+    collection = DonationNeedCounter.get_pymongo_collection()
     counters = await collection.find({"shelter_code": shelter_code}).to_list(
         length=None
     )

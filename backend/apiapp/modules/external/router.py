@@ -24,6 +24,7 @@ from ..needs.schemas import NeedsListResponse
 from ..needs.use_case import NeedsUseCase, get_needs_use_case
 from ..shelter.schemas import ShelterDetailResponse
 from ..shelter.use_case import ShelterUseCase, get_shelter_use_case
+from .residency import map_shelter_residency
 from .schemas import M2ErrorResponse, M2PersonResidencyResponse, M2ShelterItem
 
 router = APIRouter(
@@ -104,9 +105,7 @@ async def get_person_shelter_residency(
             detail={"error": {"code": "not_found", "message": "ไม่พบประวัติการเข้าพักของ CID นี้"}},
         )
 
-    residency_status = (
-        "CHECKED_IN" if person.status in ("active", "temporary_leave") else "CHECKED_OUT"
-    )
+    residency_status, stay_status, in_zone = map_shelter_residency(person.status)
 
     shelter = await PublicShelter.find_one({"shelter_code": person.shelter_code})
     shelter_name = shelter.name if shelter else person.shelter_code
@@ -122,6 +121,8 @@ async def get_person_shelter_residency(
         shelter_name=shelter_name,
         checkin_datetime=iso_datetime,
         status=residency_status,
+        stay_status=stay_status,
+        in_zone=in_zone,
     )
 
 

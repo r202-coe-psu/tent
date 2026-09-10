@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render } from 'svelte/server';
 import {
 	PersonalInfoFields,
 	SpecialNeedsFields,
+	VulnerableGroupsFields,
 	EmergencyContactFields,
 	EwarSymptomsFields,
 	HouseholdAddressFields,
@@ -11,12 +12,18 @@ import {
 	ZoneSelectionFields,
 	SPECIAL_NEEDS_COMMON_TAGS
 } from './index.js';
+import { languageStore } from '$lib/stores/language.svelte';
 
 describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)', () => {
+	afterEach(() => {
+		languageStore.setLanguage('th');
+	});
+
 	describe('Module Exports', () => {
-		it('exports all 8 required form sub-components and constants', () => {
+		it('exports all required form sub-components and constants', () => {
 			expect(PersonalInfoFields).toBeDefined();
 			expect(SpecialNeedsFields).toBeDefined();
+			expect(VulnerableGroupsFields).toBeDefined();
 			expect(EmergencyContactFields).toBeDefined();
 			expect(EwarSymptomsFields).toBeDefined();
 			expect(HouseholdAddressFields).toBeDefined();
@@ -47,6 +54,102 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('นามสกุล');
 			expect(result.body).toContain('สมศรี');
 			expect(result.body).toContain('มีสุข');
+			expect(result.body).toContain('ชาย');
+			expect(result.body).toContain('หญิง');
+			expect(result.body).toContain('value="male"');
+			expect(result.body).toContain('value="female"');
+			// Gender radios only — no third "อื่น" option in the radio group.
+			expect(result.body).not.toContain('value="other"');
+		});
+
+		it('renders English placeholders and options when locale is en', () => {
+			languageStore.setLanguage('en');
+			const result = render(PersonalInfoFields, {
+				props: {
+					first_name: 'Somchai',
+					last_name: 'Meesuk',
+					phone: '0812345678',
+					birth_year: '2535',
+					age: '35',
+					gender: 'male',
+					religion: 'buddhist',
+					country: 'THAILAND',
+					person_id: { cardType: 'national_id', number: '' }
+				}
+			});
+			expect(result.body).toContain('First Name');
+			expect(result.body).toContain('Last Name');
+			expect(result.body).toContain('Given name');
+			expect(result.body).toContain('e.g. Meesuk');
+			expect(result.body).toContain('Nickname (optional)');
+			expect(result.body).toContain('Male');
+			expect(result.body).toContain('Female');
+			expect(result.body).toContain('Thai National ID');
+			expect(result.body).toContain('13 digits');
+			expect(result.body).toContain('Buddhist');
+			expect(result.body).toContain('C.E.');
+			expect(result.body).toContain('B.E.');
+			expect(result.body).toContain('No phone number');
+			expect(result.body).toContain('Thailand');
+			expect(result.body).toContain('Nationality');
+			expect(result.body).not.toContain('ชื่อจริง');
+			expect(result.body).not.toContain('เช่น มีสุข');
+			expect(result.body).not.toContain('ไม่มีเบอร์โทรศัพท์');
+			expect(result.body).not.toContain('เลข 13 หลัก');
+			expect(result.body).not.toContain('>ไทย<');
+		});
+
+		it('shows religion label defaulting to ไม่ระบุ (options live in Select portal)', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					religion: 'unknown',
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toContain('ศาสนา');
+			expect(result.body).toContain('ไม่ระบุ');
+			// Closed Select SSR only renders the trigger — no portal items / no「อื่นๆ」trigger.
+			expect(result.body).not.toMatch(/ศาสนา[\s\S]{0,400}อื่น\s*ๆ/);
+		});
+
+		it('maps legacy religion other to ไม่ระบุ on the trigger', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					religion: 'other',
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toContain('ไม่ระบุ');
+		});
+
+		it('shows BE/CE calendar toggle labels', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					birth_year: 2535,
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).toMatch(/พ\.ศ\.|ค\.ศ\./);
+		});
+
+		it('hides no-phone checkbox when hideNoPhone is set', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: true,
+					phone: '0812345678'
+				}
+			});
+			expect(result.body).not.toContain('ไม่มีเบอร์โทรศัพท์');
+		});
+
+		it('shows no-phone checkbox by default (onsite / non-head)', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: false,
+					phone: ''
+				}
+			});
+			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
 		});
 
 		it('sets card-number maxlength from selected card type', () => {
@@ -93,6 +196,34 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 		});
 	});
 
+	describe('Vulnerable Groups Fields (vulnerable-groups-fields.svelte)', () => {
+		it('renders CR112 checkbox grid with selected codes', () => {
+			const result = render(VulnerableGroupsFields, {
+				props: {
+					vulnerable_groups: ['wheelchair', 'pregnant'],
+					idPrefix: 'test-vg'
+				}
+			});
+			expect(result.body).toContain('id="test-vg-wheelchair"');
+			expect(result.body).toContain('id="test-vg-pregnant"');
+			expect(result.body).toContain('id="test-vg-bedridden"');
+			expect(result.body).toContain('ผู้ใช้วีลแชร์');
+			expect(result.body).toContain('สตรีมีครรภ์');
+			expect(result.body).toContain('ผู้ป่วยติดเตียง');
+			expect(result.body).not.toContain('rounded-full');
+		});
+
+		it('renders optional label when provided', () => {
+			const result = render(VulnerableGroupsFields, {
+				props: {
+					vulnerable_groups: [],
+					label: 'กลุ่มเปราะบาง'
+				}
+			});
+			expect(result.body).toContain('กลุ่มเปราะบาง');
+		});
+	});
+
 	describe('Emergency Contact Fields (emergency-contact-fields.svelte)', () => {
 		it('renders name, phone, and relation inputs cleanly', () => {
 			const result = render(EmergencyContactFields, {
@@ -136,9 +267,11 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 	});
 
 	describe('Household Address Fields (household-address-fields.svelte)', () => {
-		it('renders address_no, village_no, province, district, subdistrict, postal_code', () => {
+		it('renders housing type, landmark, and address fields', () => {
 			const result = render(HouseholdAddressFields, {
 				props: {
+					housing_type: 'owned_house',
+					residence_landmark: 'ใกล้สะพาน',
 					address_no: '99/1',
 					village_no: 'หมู่ 5',
 					province: 'สงขลา',
@@ -147,9 +280,30 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					postal_code: '90110'
 				}
 			});
+			expect(result.body).toContain('ประเภทที่อยู่อาศัย');
+			expect(result.body).toContain('จุดสังเกตที่อยู่');
 			expect(result.body).toContain('บ้านเลขที่');
 			expect(result.body).toContain('หมู่ที่ / ตรอก / ซอย / ถนน');
 			expect(result.body).toContain('99/1');
+			expect(result.body).toContain('ใกล้สะพาน');
+		});
+
+		it('hides address_no when housing_type is homeless', () => {
+			const result = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'homeless',
+					residence_landmark: 'ใต้สะพาน',
+					address_no: '99/1',
+					village_no: 'หมู่ 5',
+					province: 'สงขลา',
+					district: 'หาดใหญ่',
+					subdistrict: 'คอหงส์',
+					postal_code: '90110'
+				}
+			});
+			expect(result.body).toContain('จุดสังเกตที่อยู่');
+			expect(result.body).not.toContain('id="address-no"');
+			expect(result.body).not.toContain('บ้านเลขที่');
 		});
 	});
 
@@ -166,26 +320,61 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('สัมภาระและสิ่งของมีค่า');
 			expect(result.body).toContain('สัตว์เลี้ยงที่นำมาด้วย');
 			expect(result.body).toContain('กระเป๋าเดินทาง 2 ใบ');
+			expect(result.body).toContain('รูปสัตว์เลี้ยง');
+			expect(result.body).toContain('ถ่าย / แนบรูปภาพ');
+		});
+
+		it('renders pet photo change and remove buttons when image_url exists', () => {
+			const result = render(PetAssetVehicleFields, {
+				props: {
+					pets: [{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }]
+				}
+			});
+			expect(result.body).toContain('รูปสัตว์เลี้ยง');
+			expect(result.body).toContain('เปลี่ยนภาพ');
+			expect(result.body).toContain('ลบรูป');
 		});
 	});
 
 	describe('Health Medical Fields (health-medical-fields.svelte)', () => {
-		it('renders blood group, conditions, medications, allergies, notes, and triage level', () => {
+		it('renders care-track radios, medical history, and general symptoms without triage or blood group (CR-106)', () => {
 			const result = render(HealthMedicalFields, {
 				props: {
-					blood_group: 'B',
 					conditions: 'เบาหวาน',
 					medications: 'Metformin',
 					allergies: 'ไม่มี',
-					medical_notes: 'ติดตามความดัน',
-					triage_level: 'green'
+					general_symptoms: 'ปวดศีรษะ',
+					care_track: 'normal',
+					idPrefix: 'med'
 				}
 			});
-			expect(result.body).toContain('หมู่เลือด');
+			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).toContain('ดูแลตามปกติ (Normal)');
+			expect(result.body).toContain('Fast track');
+			expect(result.body).toContain('id="med-care-track-normal"');
+			expect(result.body).toContain('id="med-care-track-fast_track"');
 			expect(result.body).toContain('โรคประจำตัว');
 			expect(result.body).toContain('ยาที่ใช้ประจำ');
 			expect(result.body).toContain('ประวัติการแพ้');
-			expect(result.body).toContain('Triage');
+			expect(result.body).toContain('เบาหวาน');
+			expect(result.body).toContain('อาการและข้อสังเกต');
+			expect(result.body).toContain('ปวดศีรษะ');
+			expect(result.body).not.toContain('หมู่เลือด');
+			expect(result.body).not.toContain('Triage');
+			expect(result.body).not.toContain('สถานะการส่งต่อ');
+		});
+
+		it('hides general symptoms when showGeneralSymptoms is false', () => {
+			const result = render(HealthMedicalFields, {
+				props: {
+					showGeneralSymptoms: false,
+					general_symptoms: 'hidden-symptom',
+					idPrefix: 'med'
+				}
+			});
+			expect(result.body).toContain('แนวทางดูแล');
+			expect(result.body).not.toContain('อาการและข้อสังเกต');
+			expect(result.body).not.toContain('hidden-symptom');
 		});
 	});
 
@@ -202,6 +391,21 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			});
 			expect(result.body).toContain('โซน A - ทั่วไป');
 			expect(result.body).toContain('โซน B - เปราะบาง');
+		});
+
+		it('shows EWAR surveillance quarantine recommendation without deprecated triage text', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					ewar_symptoms: ['acute_respiratory', 'fever'],
+					shelter_zones: [
+						{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' },
+						{ code: 'Z-Q', name: 'โซนกักตัว', type: 'quarantine' }
+					]
+				}
+			});
+			expect(result.body).toContain('แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)');
+			expect(result.body).not.toContain('triage');
 		});
 	});
 });

@@ -31,8 +31,8 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		expect(result.body).toContain('ครอบครัว');
 		expect(result.body).toContain('ข้อมูลติดต่อฉุกเฉิน');
 		expect(result.body).toContain('ความต้องการพิเศษ');
+		expect(result.body).toContain('กลุ่มเปราะบาง');
 		expect(result.body).toContain('บันทึก');
-		expect(result.body).not.toContain('กลุ่มเปราะบาง');
 		expect(result.body).not.toContain('ขั้น 1 จาก 3');
 		expect(result.body).not.toContain('จัดสรรพื้นที่');
 		expect(result.body).not.toContain('คัดกรองสุขภาพ');
@@ -103,7 +103,7 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		expect(result.body).toContain('ออกแล้วสร้างใหม่');
 		expect(result.body).toContain('เข้าร่วมครอบครัวอื่น');
 		expect(result.body).toContain('ความต้องการพิเศษ');
-		expect(result.body).not.toContain('กลุ่มเปราะบาง');
+		expect(result.body).toContain('กลุ่มเปราะบาง');
 		expect(result.body).not.toContain('คนเดียว');
 	});
 
@@ -137,7 +137,7 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		});
 
 		expect(result.body).toContain('ความต้องการพิเศษ');
-		expect(result.body).not.toContain('กลุ่มเปราะบาง');
+		expect(result.body).toContain('กลุ่มเปราะบาง');
 		expect(result.body).toContain('ใช้วีลแชร์');
 	});
 

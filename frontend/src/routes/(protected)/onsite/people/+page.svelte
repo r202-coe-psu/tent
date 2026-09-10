@@ -28,14 +28,26 @@
 		matchesEvacueeSearch,
 		nextQueueLabel,
 		STATUS_LABELS,
+		REPORT_IN_CTA_LABEL,
+		Station1IntakeSearch,
+		lookupFederatedByScanCode,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
+	import {
+		canAccessMedicalScreening,
+		canAccessZoning,
+		canAccessUnassignedRegistrationQueue
+	} from '$lib/auth/roles';
 	import { useMasterData } from '$lib/features/master-data';
 
 	const allEvacueesQuery = useEvacuees();
@@ -43,6 +55,7 @@
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const queryClient = useQueryClient();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -50,6 +63,12 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const canMedical = $derived(canAccessMedicalScreening(roles) && enableMedical);
 	const canZoning = $derived(canAccessZoning(roles));
+	const canAccessUnassignedQueue = $derived(
+		canAccessUnassignedRegistrationQueue(
+			roles,
+			shelterStore.selectedShelterCode ?? getShelterCode()
+		)
+	);
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
@@ -74,7 +93,7 @@
 		red: 'แดง'
 	};
 
-	type StatusChip = 'all' | StayStatus | 'รอแพทย์' | 'รอโซน';
+	type StatusChip = 'all' | StayStatus | 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว';
 
 	let searchQuery = $state('');
 	let statusChip = $state<StatusChip>('pre_registered');
@@ -83,6 +102,13 @@
 	let cameraError = $state<string | null>(null);
 	let selected = $state<Evacuee | null>(null);
 	let sheetOpen = $state(false);
+	/** Shared with Station1IntakeSearch — hide header new-reg while hard-gate locks. */
+	let newRegistrationLocked = $state(false);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+	let lookupInFlight = $state(false);
+
+	const NEXT_QUEUE_CHIPS = new Set<StatusChip>(['รอแพทย์', 'รอโซน', 'รอยืนยันถึงโซน', 'พักแล้ว']);
 
 	const filtered = $derived(
 		allEvacuees
@@ -93,7 +119,7 @@
 					hasScreening: screenedIds.has(e._id)
 				});
 				if (statusChip === 'all') return true;
-				if (statusChip === 'รอแพทย์' || statusChip === 'รอโซน') return next === statusChip;
+				if (NEXT_QUEUE_CHIPS.has(statusChip)) return next === statusChip;
 				return e.current_stay.status === statusChip;
 			})
 			.slice()
@@ -106,7 +132,8 @@
 		{ id: 'pre_registered', label: 'ลงทะเบียนล่วงหน้า' },
 		{ id: 'รอแพทย์', label: 'รอแพทย์' },
 		{ id: 'รอโซน', label: 'รอโซน' },
-		{ id: 'active', label: 'พักแล้ว' }
+		{ id: 'รอยืนยันถึงโซน', label: 'รอยืนยันถึงโซน' },
+		{ id: 'พักแล้ว', label: 'พักแล้ว' }
 	];
 
 	function openRow(e: Evacuee) {
@@ -158,22 +185,35 @@
 	): 'default' | 'secondary' | 'destructive' | 'outline' {
 		if (next === 'รอแพทย์') return 'destructive';
 		if (next === 'รอโซน') return 'default';
+		if (next === 'รอยืนยันถึงโซน') return 'default';
 		if (next === 'พักแล้ว') return 'secondary';
 		return 'outline';
 	}
 
-	function handleCodeInput(raw: string) {
-		const trimmed = raw.trim();
-		if (!trimmed) return;
-		const found = allEvacuees.find((e) => e._id === trimmed || e.person_id?.number === trimmed);
-		if (found) {
-			toast.success(`พบ: ${formatPersonName(found)}`);
+	async function handleCodeInput(raw: string) {
+		if (lookupInFlight) return;
+		lookupInFlight = true;
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, raw);
+			if (!result) {
+				toast.error('ไม่พบผู้ประสบภัยจากรหัสที่สแกน');
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
-			openRow(found);
-			return;
+			if (result.source === 'couch') {
+				toast.success(`พบ: ${formatPersonName(result.evacuee)}`);
+				openRow(result.evacuee);
+				return;
+			}
+			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+			claimHit = result.hit;
+			claimOpen = true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+		} finally {
+			lookupInFlight = false;
 		}
-		toast.error('ไม่พบผู้ประสบภัยจากรหัสที่สแกน');
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -237,131 +277,150 @@
 				<p class="text-xs text-muted-foreground">Registration Desk — คิวลงทะเบียนและรายงานตัว</p>
 			</div>
 		</div>
-		<Button href={resolve('/onsite/people/new')} class="gap-2">
-			<UserPlus class="size-4" />
-			ลงทะเบียนใหม่
-		</Button>
+		{#if !newRegistrationLocked}
+			<Button href={resolve('/onsite/people/new')} class="gap-2">
+				<UserPlus class="size-4" />
+				ลงทะเบียนใหม่
+			</Button>
+		{/if}
 	</div>
 
-	<div class="flex flex-wrap gap-2">
-		{#each chips as chip (chip.id)}
-			{#if !(chip.id === 'รอแพทย์' && !enableMedical)}
-				<button
-					type="button"
-					onclick={() => (statusChip = chip.id)}
-					class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {statusChip ===
-					chip.id
-						? 'border-primary bg-primary text-primary-foreground'
-						: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
-				>
-					{chip.label}
-				</button>
-			{/if}
-		{/each}
-	</div>
+	<Card.Root class="rounded-xl border-border p-4 shadow-xs">
+		<p class="mb-3 text-sm text-muted-foreground">
+			ค้นหาก่อนลงทะเบียน — ตรวจซ้ำในศูนย์นี้และคิวกลาง
+		</p>
+		<Station1IntakeSearch
+			canClaimPool={canAccessUnassignedQueue}
+			onNewRegistrationLockedChange={(locked) => (newRegistrationLocked = locked)}
+		/>
+	</Card.Root>
 
-	<Card.Root class="border-border p-4 shadow-sm">
-		<div class="flex flex-col gap-3 md:flex-row md:items-center">
-			<div class="relative flex-1">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<Input
-					placeholder="ค้นหาชื่อ เบอร์โทร เลขบัตร..."
-					bind:value={searchQuery}
-					class="h-10 pl-9"
-				/>
-				{#if searchQuery}
+	<section class="flex flex-col gap-4">
+		<div>
+			<h2 class="text-base font-semibold">คิวในศูนย์</h2>
+			<p class="text-sm text-muted-foreground">กรองสถานะและจัดการคิวลงทะเบียนในศูนย์นี้</p>
+		</div>
+
+		<div class="flex flex-wrap gap-2">
+			{#each chips as chip (chip.id)}
+				{#if !(chip.id === 'รอแพทย์' && !enableMedical)}
 					<button
 						type="button"
-						class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
-						onclick={() => (searchQuery = '')}
+						onclick={() => (statusChip = chip.id)}
+						class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {statusChip ===
+						chip.id
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border bg-card text-muted-foreground hover:bg-muted'}"
 					>
-						<X class="size-3.5" />
+						{chip.label}
 					</button>
 				{/if}
-			</div>
-			<div class="flex gap-2">
-				<div class="relative min-w-[200px]">
-					<Scan
+			{/each}
+		</div>
+
+		<Card.Root class="rounded-xl border-border p-4 shadow-xs">
+			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+				<div class="relative flex-1">
+					<Search
 						class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 					/>
 					<Input
-						placeholder="สแกน Person QR"
-						bind:value={barcodeInput}
-						class="h-10 pl-9 font-mono text-xs"
-						onkeydown={(e) => {
-							if (e.key === 'Enter') {
-								e.preventDefault();
-								handleCodeInput(barcodeInput);
-							}
-						}}
+						placeholder="ค้นหาชื่อ เบอร์โทร เลขบัตร..."
+						bind:value={searchQuery}
+						class="h-10 pl-9"
 					/>
+					{#if searchQuery}
+						<button
+							type="button"
+							class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
+							onclick={() => (searchQuery = '')}
+						>
+							<X class="size-3.5" />
+						</button>
+					{/if}
 				</div>
-				<Button variant="outline" onclick={() => handleCodeInput(barcodeInput)}>ยืนยัน</Button>
-				<Button onclick={() => (showCameraModal = true)} class="gap-1.5">
-					<Camera class="size-4" /> สแกน
-				</Button>
+				<div class="flex gap-2">
+					<div class="relative min-w-[200px]">
+						<Scan
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							placeholder="สแกน Person QR"
+							bind:value={barcodeInput}
+							class="h-10 pl-9 font-mono text-xs"
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									handleCodeInput(barcodeInput);
+								}
+							}}
+						/>
+					</div>
+					<Button variant="outline" onclick={() => handleCodeInput(barcodeInput)}>ยืนยัน</Button>
+					<Button onclick={() => (showCameraModal = true)} class="gap-1.5">
+						<Camera class="size-4" /> สแกน
+					</Button>
+				</div>
 			</div>
-		</div>
-	</Card.Root>
+		</Card.Root>
 
-	<Card.Root class="overflow-hidden border-border shadow-sm">
-		{#if allEvacueesQuery.isPending}
-			<div class="flex h-40 items-center justify-center text-sm text-muted-foreground">
-				กำลังโหลด...
-			</div>
-		{:else if filtered.length === 0}
-			<div
-				class="flex h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
-			>
-				<p>ไม่พบรายการ</p>
-				<Button variant="outline" href={resolve('/onsite/people/new')}>ลงทะเบียนใหม่</Button>
-			</div>
-		{:else}
-			<div class="overflow-x-auto">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row class="bg-muted/30">
-							<Table.Head class="pl-4">ชื่อ</Table.Head>
-							<Table.Head>สถานะ</Table.Head>
-							<Table.Head>ความต้องการพิเศษ</Table.Head>
-							<Table.Head>ครอบครัว</Table.Head>
-							<Table.Head>โซน</Table.Head>
-							<Table.Head>อัปเดต</Table.Head>
-							<Table.Head class="pr-4">คิวถัดไป</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each filtered as row (row._id)}
-							{@const next = nextQueueLabel(row, {
-								enableMedicalScreening: enableMedical,
-								hasScreening: screenedIds.has(row._id)
-							})}
-							{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-							<Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
-								<Table.Cell class="pl-4 font-medium">{formatPersonName(row)}</Table.Cell>
-								<Table.Cell class="text-xs"
-									>{STATUS_LABELS[row.current_stay.status] ?? row.current_stay.status}</Table.Cell
-								>
-								<Table.Cell class="max-w-[10rem] truncate text-xs"
-									>{specialNeedsShort(row.special_needs)}</Table.Cell
-								>
-								<Table.Cell class="text-xs text-muted-foreground">{hh?.label ?? '—'}</Table.Cell>
-								<Table.Cell class="text-xs">{row.current_stay.zone ?? '—'}</Table.Cell>
-								<Table.Cell class="text-xs text-muted-foreground"
-									>{formatUpdated(row.updated_at)}</Table.Cell
-								>
-								<Table.Cell class="pr-4">
-									<Badge variant="secondary">{next}</Badge>
-								</Table.Cell>
+		<Card.Root class="overflow-hidden rounded-xl border-border shadow-xs">
+			{#if allEvacueesQuery.isPending}
+				<div class="flex h-40 items-center justify-center text-sm text-muted-foreground">
+					กำลังโหลด...
+				</div>
+			{:else if filtered.length === 0}
+				<div
+					class="flex h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+				>
+					<p>ไม่พบรายการ</p>
+					<Button variant="outline" href={resolve('/onsite/people/new')}>ลงทะเบียนใหม่</Button>
+				</div>
+			{:else}
+				<div class="overflow-x-auto">
+					<Table.Root>
+						<Table.Header>
+							<Table.Row class="bg-muted/30">
+								<Table.Head class="pl-4">ชื่อ</Table.Head>
+								<Table.Head>สถานะ</Table.Head>
+								<Table.Head>ความต้องการพิเศษ</Table.Head>
+								<Table.Head>ครอบครัว</Table.Head>
+								<Table.Head>โซน</Table.Head>
+								<Table.Head>อัปเดต</Table.Head>
+								<Table.Head class="pr-4">คิวถัดไป</Table.Head>
 							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div>
-		{/if}
-	</Card.Root>
+						</Table.Header>
+						<Table.Body>
+							{#each filtered as row (row._id)}
+								{@const next = nextQueueLabel(row, {
+									enableMedicalScreening: enableMedical,
+									hasScreening: screenedIds.has(row._id)
+								})}
+								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
+								<Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
+									<Table.Cell class="pl-4 font-medium">{formatPersonName(row)}</Table.Cell>
+									<Table.Cell class="text-xs"
+										>{STATUS_LABELS[row.current_stay.status] ?? row.current_stay.status}</Table.Cell
+									>
+									<Table.Cell class="max-w-[10rem] truncate text-xs"
+										>{specialNeedsShort(row.special_needs)}</Table.Cell
+									>
+									<Table.Cell class="text-xs text-muted-foreground">{hh?.label ?? '—'}</Table.Cell>
+									<Table.Cell class="text-xs">{row.current_stay.zone ?? '—'}</Table.Cell>
+									<Table.Cell class="text-xs text-muted-foreground"
+										>{formatUpdated(row.updated_at)}</Table.Cell
+									>
+									<Table.Cell class="pr-4">
+										<Badge variant="secondary">{next}</Badge>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</div>
+			{/if}
+		</Card.Root>
+	</section>
 </div>
 
 <Sheet.Root bind:open={sheetOpen}>
@@ -517,7 +576,7 @@
 
 			<Sheet.Footer class="border-t border-border sm:flex-col">
 				{#if selected.current_stay.status === 'pre_registered'}
-					<Button onclick={() => goReportIn(selected!)}>รายงานตัว</Button>
+					<Button onclick={() => goReportIn(selected!)}>{REPORT_IN_CTA_LABEL}</Button>
 				{/if}
 				{#if canMedical && next === 'รอแพทย์'}
 					<Button
@@ -573,3 +632,9 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>
