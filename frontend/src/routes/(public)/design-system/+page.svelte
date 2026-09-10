@@ -2409,7 +2409,7 @@
 									<div
 										class="border-t border-sky-50 px-3.5 pt-1 pb-3.5 text-xs leading-relaxed text-slate-600"
 									>
-										ระบบสืบค้นญาติจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
+										ระบบค้นหาผู้พักพิงจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
 										จะแสดงเฉพาะชื่อ-นามสกุล, สถานะความปลอดภัย (Safe)
 										และชื่อศูนย์พักพิงที่ลงทะเบียนไว้เท่านั้น เพื่อความปลอดภัยสูงสุด
 									</div>
@@ -2565,7 +2565,7 @@
 										>portalServices.tracing (#0A2647 / #0284C7)</td
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">14.2:1 (WCAG AAA)</td>
-									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับสืบค้นญาติ กรอบการ์ดสีฟ้าอ่อน</td>
+									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับค้นหาผู้พักพิง กรอบการ์ดสีฟ้าอ่อน</td>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
