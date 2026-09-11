@@ -128,7 +128,7 @@ sudo apt install -y \
   swig \
   libjpeg-dev \
   zlib1g-dev \
-  chromium-browser \
+  chromium \
   git \
   curl
 ```
@@ -137,7 +137,7 @@ sudo apt install -y \
 > - `pcscd` & `libccid`: Daemon ควบคุมเครื่องอ่านสมาร์ตการ์ดผ่านไดรเวอร์มาตรฐาน CCID
 > - `libpcsclite-dev` & `swig`: Header และ Wrapper Compiler สำหรับคอมไพล์ไลบรารี `pyscard` ใน Python (จำเป็นอย่างยิ่งบน ARM)
 > - `libjpeg-dev` & `zlib1g-dev`: สำหรับไลบรารี `Pillow` ในการถอดรหัสรูปถ่ายหน้าบัตรประชาชน
-> - `chromium-browser`: เว็บบราวเซอร์หลักของระบบที่คอมไพล์มาสำหรับชิป ARM ของ Raspberry Pi
+> - `chromium`: เว็บบราวเซอร์หลักของระบบที่ติดตั้งไว้ที่ `/usr/bin/chromium`
 
 เปิดใช้งานและรัน Service `pcscd`:
 ```bash
@@ -203,9 +203,9 @@ sudo systemctl status pcscd
 เนื่องจาก Raspberry Pi ทำงานบนสถาปัตยกรรม **ARM64 (aarch64)** วิธีที่เสถียรและเร็วที่สุดคือการใช้ **System Chromium** ที่ติดตั้งผ่าน `apt` หรือติดตั้งเบราว์เซอร์ของ Playwright:
 
 #### วิธีที่ 1 (แนะนำสำหรับ Raspberry Pi): ใช้ System Chromium
-ระบบได้ติดตั้ง `chromium-browser` มาใน Step 2 แล้ว สามารถระบุ Path ใน `.env` ได้ทันที:
+ระบบได้ติดตั้ง `chromium` มาใน Step 2 แล้ว สามารถระบุ Path ใน `.env` ได้ทันที:
 ```env
-BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ```
 
 #### วิธีที่ 2: ติดตั้ง Chromium Bundled ของ Playwright
@@ -234,7 +234,7 @@ DEVICE_ID=kiosk-test
 DEVICE_SECRET=kisok-test-secret
 
 # กำหนด Path ของ Browser ในระบบ
-BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # โหมดการแสดงผล (false = Kiosk Mode เต็มจอไม่มีแถบเครื่องมือ, true = หน้าต่างสำหรับทดสอบ)
 DEBUG=false

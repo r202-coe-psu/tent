@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import shutil
 import urllib.parse
 from typing import Any, Dict, Optional, Tuple
 
@@ -21,7 +23,7 @@ class ScannerClientManager:
         self.device_id = config.get("DEVICE_ID", "SCAN-01")
         self.device_secret = config.get("DEVICE_SECRET", "")
         self.browser_type = config.get("BROWSER", "chromium").lower()
-        self.executable_path = config.get("BROWSER_EXECUTABLE_PATH") or None
+        self.executable_path = self._resolve_executable_path(config.get("BROWSER_EXECUTABLE_PATH"))
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.is_headless = str(config.get("HEADLESS", "false")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
@@ -39,6 +41,30 @@ class ScannerClientManager:
         self.page: Optional[Page] = None
         self.context: Optional[BrowserContext] = None
         self.running = True
+
+    def _resolve_executable_path(self, raw_path: Optional[str]) -> Optional[str]:
+        """Validate or auto-detect working browser executable path"""
+        if raw_path and os.path.exists(raw_path):
+            return raw_path
+
+        if raw_path:
+            logger.warning(f"⚠️  Specified BROWSER_EXECUTABLE_PATH not found: {raw_path}")
+
+        # Auto-detect common Linux Chromium paths
+        candidates = [
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            shutil.which("chromium"),
+            shutil.which("chromium-browser"),
+            "/snap/bin/chromium",
+        ]
+        for candidate in candidates:
+            if candidate and os.path.exists(candidate):
+                logger.info(f"🌐 Auto-detected system browser executable at: {candidate}")
+                return candidate
+
+        logger.info("ℹ️  No system Chromium binary detected. Falling back to Playwright bundled browser.")
+        return None
 
     async def init_reader(self) -> bool:
         """Attempt to initialize the Smart Card Reader driver"""
