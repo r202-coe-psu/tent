@@ -104,3 +104,21 @@ export {
 	type CloseBatchItemInput,
 	type CloseBatchInput
 } from './domain/reconciliation';
+
+export {
+	type DistributionAllocationInput,
+	type DistributionRepository
+} from './data/distribution.repository';
+
+export { DistributionRemoteRepository } from './data/distribution.remote';
+
+export {
+	IntegrityError,
+	ApprovalConflictError,
+	InsufficientStockError,
+	ValidationError,
+	makeLotReservationDocId,
+	assertSemanticLedgerMatch,
+	assertSemanticBatchMatch,
+	assertSemanticReservationMatch
+} from './data/semantic-verify';

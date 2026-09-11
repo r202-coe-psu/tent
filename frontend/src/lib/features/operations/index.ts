@@ -92,6 +92,7 @@ export {
 	createDistributionReturnEntry,
 	type DistributionReturnInput,
 	projectStockLotBalances,
+	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
 	adjustInputSchema,
 	createAdjustEntry,

@@ -69,6 +69,7 @@ export interface BaseDoc {
 export interface AuthorContext {
 	shelterCode: string;
 	createdBy: string;
+	roles?: readonly string[];
 }
 
 /** `"{type}:{ulid}"` — the canonical id shape (schema.md §0). */
