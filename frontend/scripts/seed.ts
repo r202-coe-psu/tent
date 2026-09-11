@@ -835,8 +835,8 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 		}
 	}
 
-	// Seed test scanner device (kiosk-test / kisok-test-secret) in registry
-	const testScannerSecret = 'kisok-test-secret';
+	// Seed test scanner device (kiosk-test / kiosk-test-secret) in registry
+	const testScannerSecret = 'kiosk-test-secret';
 	const testScannerDoc = {
 		_id: 'scanner_device:kiosk-test',
 		type: 'scanner_device',
