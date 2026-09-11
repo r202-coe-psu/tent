@@ -285,6 +285,9 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 
 ### 2.1 `stock_ledger` — `stock_ledger:{ulid}` · **append-only**
 
+> **CR-059 Flow 2** — เพิ่ม physical-lot identity `lot_ref` และ `distribution_return` โดยไม่เปลี่ยน
+> `schema_v`. แถวรับเข้าใหม่ทุกแถวกำหนด `lot_ref === _id`; แถว legacy ที่ไม่มี `lot_ref` ยังอ่านได้
+> และใช้ `_id` ของแถวนั้นเป็น virtual lot reference. `lot_no` เป็นป้ายแสดงผลเท่านั้นและห้ามใช้เป็น identity.
 > **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
 > **schema_v 3** — เพิ่ม `purchase` ใน reason enum (CR-032) — รองรับรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากบริจาค; ยอดจริงยังมาจาก ledger. doc type `purchase` (§2.16) + write path มาใน slice ถัดไปของ CR-032. ผู้เขียน ledger ทุกที่ stamp `schema_v 3` เท่ากัน (operations `createStockLedger`, kitchen `issueRequisition`).
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
@@ -294,8 +297,9 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `item_id` | str | req | → `item_master:{sku\|ulid}` ใน catalog |
 | `qty` | qty_str | req | **signed**: + รับเข้า / − จ่ายออก; ≠ 0; ใน `base_unit` |
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
-| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`) | req | `purchase` = รับจากจัดซื้อ (CR-032) |
+| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
+| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id`; legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
 | `occurred_at` | ts | req | — |
 
@@ -321,14 +325,14 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `requisition` | `kitchen_requisition:{ulid}` — req | kitchen `issueRequisition` |
 | `transfer_in` / `transfer_out` | `stock_transfer:{ulid}` — req | transition ของ §2.2 (T-13 — ยังไม่ wired) |
 | `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ |
-| `distribute` | **`null` เสมอ** | `createDistributeEntry` — ทบทวนเมื่อ CR-059 ให้การแจกจ่ายมี doc ต้นเหตุ |
+| `distribute` | `distribution_batch:{request_ulid}` — req | จ่ายออกจาก allocation ของ batch; `qty` ลบและต้องมี `lot_ref` |
+| `distribution_return` | `distribution_batch:{request_ulid}` — req | คืนยอดคงเหลือเข้าล็อตเดิม; `qty` บวกและต้องมี `lot_ref` |
 | `receive` | **`null` เสมอ** | ค่ากำพร้า — ไม่มีผู้เขียนใน production (CR-055 Q-2 ข: คงไว้ใน enum + บังคับ `null`) |
 
-**ขอบเขตการบังคับ — client เท่านั้น:** กฎนี้บังคับที่ Zod (`stockLedgerInputSchema.superRefine` →
-`features/operations/domain/operations.ts`) ผ่าน `createStockLedger` ซึ่งเป็นทางเดียวที่เขียนแถวนี้ได้ ·
-`_design/access` ของ shelter DB (`lib/server/shelter-access-design.ts`) ตรวจ **envelope + append-only +
-role gate** ของ `stock_ledger` แต่ **ไม่ตรวจ `reason` ↔ `ref_id`** และมี `_admin` bypass (seed / back-office
-intake ไม่ผ่าน guard นี้อยู่แล้ว) ⇒ **ห้ามเคลมว่าเป็น server-side guard** (CR-055 Q-6 ก)
+**ขอบเขตการบังคับ:** Zod (`stockLedgerInputSchema.superRefine`) และ factory
+`createStockLedger` บังคับ reason/ref/lot contract. `_design/access` ตรวจ append-only, role gate และ
+รูปแบบ `distribution_batch:`/`stock_ledger:`/qty (ลบสำหรับ `reason='distribute'`, บวกสำหรับ `reason='distribution_return'`); validator ไม่สามารถ
+ตรวจความสัมพันธ์ข้ามเอกสารหรือยอดคงเหลือของ physical lot ได้.
 
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed; ไม่มี dual-read บังคับ
 **Migration (schema_v 2 → 3):** additive — เพิ่ม enum value อย่างเดียว ไม่เปลี่ยนโครงสร้าง field; doc `schema_v: 2` เดิมอ่าน/ใช้ได้ปกติ ไม่ต้อง backfill
@@ -825,6 +829,118 @@ Stock snapshot ชุดเดียวกันถูกใช้ทั้ง C
 > **Index:** `_id` (ULID). สิทธิ์บันทึกจำกัด `shelter_manager` ในศูนย์ตนเองและ `system_admin`
 > ตามศูนย์ที่เลือก. Public HTTP API, forecast ที่ occupancy เปลี่ยนรายวัน, chart, export,
 > sharing และ edit history ไม่อยู่ใน schema/Scope ของ CR-079.
+
+---
+
+### 2.21 `distribution_request` — `distribution_request:{ulid}`
+
+> **CR-059 Flow 2** — เอกสารทั้งหมดด้านล่างอยู่ใน `shelter_{shelter_code}` และใช้ common envelope (§0), `schema_v: 1`.
+> สถาปัตยกรรมปัจจุบันเป็น **CR-110 Online-only Remote-First** ผ่าน endpoint ที่เลือกไว้; ไม่มี
+> Central→Edge fallback, local mutation queue, PouchDB หรือ IndexedDB write path ใน contract นี้.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `status` | enum(`pending`,`approving`,`approved`,`rejected`,`cancelled`) | req | สร้างใหม่เป็น `pending` |
+| `requested_by` / `requested_at` | str / ts | req | ผู้ขอและเวลาขอ |
+| `purpose` / `note` | str / str | req / opt | ตัดช่องว่าง; ค่าว่างไม่ผ่าน schema |
+| `active_headcount_snapshot` | qty_str | req | จำนวนเต็ม ≥0 ณ เวลาสร้างคำขอ |
+| `buffer_percent` | int 5..10 | req | default 10 |
+| `items` | array | req | อย่างน้อย 1 แถว; ดูรูปด้านล่าง |
+| `approval_operation_id` | str | opt | ตั้งเมื่อ `pending→approving`; ใช้ operation เดิมระหว่าง recovery |
+| `approved_by` / `approved_at` / `batch_id` | str / ts / str | opt | `batch_id` → `distribution_batch:{request_ulid}` เมื่อ approved |
+| `rejected_by` / `rejected_at` / `rejection_reason` | str / ts / str | opt | audit ของการปฏิเสธ |
+
+`items[]`: `{item_id:str, requested_qty:qty_str>0, unit:str,
+distribution_type_snapshot:enum(consumable,one_time), target_qty_snapshot:qty_str≥0}`. คำขอใหม่
+ห้าม `item_id` ซ้ำ; เอกสาร legacy ที่ซ้ำยังอ่านได้เมื่อ `unit` และ `distribution_type_snapshot`
+ตรงกันทุกแถว.
+
+**Transition:** `pending→approving|rejected|cancelled`, `approving→approved`, และ
+`approving→pending` เฉพาะ recovery. `approved`, `rejected`,
+`cancelled` เป็น terminal.
+
+### 2.22 `distribution_batch` — `distribution_batch:{request_ulid}`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `request_id` | str | req | → `distribution_request:{ulid}`; `_id` derive จาก ULID เดียวกัน |
+| `status` | enum(`activating`,`active`,`closing`,`closed`) | req | สร้างใหม่เป็น `activating` |
+| `activated_by` / `activated_at` | str / ts | req | audit การเปิด batch |
+| `items` | array | req | `{item_id, allocated_qty:qty_str>0, unit, distribution_type_snapshot}` |
+| `allocations` | array | req | `{item_id, lot_ref, lot, qty:qty_str>0, allocation_ledger_id}` |
+| `closing_operation_id` | str | opt | operation identity ของการปิด batch |
+| `closed_by` / `closed_at` | str / ts | opt | audit เมื่อปิด |
+| `reconciliation` | array | req | snapshot ต่อ item/physical lot; ไม่ใช่ stock truth |
+| `return_ledger_ids` | [str] | req | → `stock_ledger:*` reason=`distribution_return` |
+
+`allocations[].lot_ref` คือ physical identity; `allocations[].lot` เป็น snapshot
+`{expiry?,note?,lot_no?,storage_zone?}` เท่านั้น. Transition: `activating→active→closing→closed`.
+Batch counters/snapshots ไม่ใช่แหล่งความจริงของ stock หรือยอดแจกถาวร.
+
+**`reconciliation[]` row:**
+
+`{item_id, lot_ref, allocated_qty, distributed_qty, damaged_qty, lost_qty, damaged_note?,
+lost_note?, return_qty}` โดยทุกปริมาณเป็น `qty_str≥0` และ
+`return_qty = allocated_qty - distributed_qty - damaged_qty - lost_qty`. ผลลบ fail closed;
+`damaged_qty>0` ต้องมี `damaged_note`, `lost_qty>0` ต้องมี `lost_note`.
+
+### 2.23 `distribution_issue` — `distribution_issue:{ulid}` · **append-only**
+
+ULID ต้องเป็น Crockford 26 ตัว. เอกสารนี้คือ permanent truth ของการแจกให้ผู้รับ; ยอดแจกต่อ
+batch/item คำนวณจากผลรวม `distribution_issue.qty` ไม่ใช่ mutable counter.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `batch_id` | str | req | → `distribution_batch:*` |
+| `evacuee_id` | str | req | → `evacuee:*` |
+| `item_id` / `qty` / `unit` | str / qty_str>0 / str | req | snapshot จาก batch + ปริมาณแจก |
+| `distributed_at` / `distributed_by` | ts / str | req | audit |
+| `distribution_type_snapshot` | enum(`consumable`,`one_time`) | req | ต้องตรงกับ eligibility snapshot |
+| `eligibility_snapshot` | object | req | `{distribution_type, had_previous_receipt, previous_receipt_count, eligible, decision, repeat_override_reason?}`; persisted issue ต้อง `eligible:true` |
+| `repeat_override_reason` | enum(`lost`,`damaged`) | opt | ต้องตรงกับ snapshot |
+| `repeat_override_note` | str | opt | audit note ของ override |
+| `idempotency_key` | str | req | non-empty; raw key ไม่ใช่ document ID |
+
+> **Coordination records:** ใช้ประสาน CAS/recovery เท่านั้น ไม่ใช่ stock truth, issue truth หรือยอดแจกสะสม.
+> `{hash}` คือ SHA-256 lowercase 64 ตัวตาม schema.
+
+### 2.24 `stock_lot_reservation` — `stock_lot_reservation:{hash}`
+
+`lot_ref:stock_ledger:*`, `pending_claims[]`. Claim:
+`{operation_id, request_id:distribution_request:*, batch_id:distribution_batch:*, item_id,
+lot_ref, qty:qty_str>0, claimed_at:ts}` และ `claim.lot_ref` ต้องตรงกับ doc.
+
+### 2.25 `distribution_issue_idempotency` — `distribution_issue_idempotency:{sha256}` · immutable
+
+เก็บ `{batch_id, idempotency_key, issue_id, evacuee_id, item_id, qty,
+repeat_override_reason?, repeat_override_note?}`. `issue_id` → `distribution_issue:{26-char-ulid}`.
+เอกสารนี้ immutable หลังสร้างและป้องกัน semantic intent ของ key เดิมไม่ให้เปลี่ยน.
+
+### 2.26 `distribution_issue_capacity` — `distribution_issue_capacity:{sha256}`
+
+เก็บ `{batch_id, item_id, pending_claims[]}`. Claim:
+`{operation_id, issue_id, batch_id, item_id, qty:qty_str>0, claimed_at:ts}`; operation ID ห้ามซ้ำ
+ภายใน doc. Permanent distributed truth ยังเป็นผลรวม `distribution_issue.qty`.
+
+### 2.27 `distribution_one_time_guard` — `distribution_one_time_guard:{sha256}`
+
+เก็บ `{evacuee_id, item_id, pending_claims[]}`. Claim:
+`{operation_id, issue_id, evacuee_id, item_id, claimed_at:ts}` และมี owner ได้มากสุด 1 claim.
+Guard ไม่ใช่ receipt history; receipt history มาจาก committed `distribution_issue` ทุก batch.
+
+### 2.28 `distribution_issue_gate` — `distribution_issue_gate:{sha256}`
+
+เก็บ `{batch_id, state:enum(open,sealed), pending_claims[], closing_operation_id?}`. Claim:
+`{operation_id, issue_id, claimed_at}`. `open` ห้ามมี `closing_operation_id`; `sealed` ต้องมี
+`closing_operation_id` และ `pending_claims` ต้องว่าง. Gate ประสานการรับ issue กับการปิด batch
+เท่านั้น ไม่ใช่ยอดแจกหรือ stock truth.
+
+### Stock source of truth
+
+`stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. Allocation,
+reservation, batch reconciliation และ coordination docs เป็น snapshot/coordination เท่านั้น.
+แถว outbound `distribute` และ inbound `distribution_return` ของ batch เดียวกันต้องอ้าง
+`lot_ref` เดียวกัน; legacy inbound ที่ไม่มี `lot_ref` ใช้ `_id` ของตนเป็น virtual identity.
 
 ---
 
@@ -1455,13 +1571,14 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `catalog` | item_master: distribution_type, target_audience_type · item_category: is_default · recipe: is_default · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
 
-## 8. Validation rules (สรุปที่ `validate_doc_update` ต้องบังคับ — ทั้ง central และ edge)
+## 8. Validation rules (สรุปที่ `validate_doc_update` ต้องบังคับ)
 
-Design docs / `validate_doc_update` ต้อง deploy ทั้ง central และ edge เพราะ edge อาจเป็น active
-write target ระหว่าง LAN fallback; schema/role enforcement ต้องเหมือนกันทุก remote.
+ตาม CR-110 client เขียนแบบ **Online-only Remote-First** ไปยัง remote endpoint ที่ระบบเลือกไว้.
+CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write queue; design doc / `validate_doc_update`
+ต้อง deploy บน remote shelter database ที่รับ write.
 
 1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`) — ปฏิเสธ update/delete ทุกกรณี
+2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db
@@ -1469,6 +1586,8 @@ write target ระหว่าง LAN fallback; schema/role enforcement ต้�
 7. master `sop_profile` (catalog) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin` เท่านั้น (replicate ลงเครื่องแบบ read-only)
 8. `sop_override` (shelter_*) ต้องเขียนโดยบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database และเซสชันการทำงาน
 9. `food_sphere_standard`, `requirement_group`, `replenishment_policy` ใน `catalog` (`source=SPHERE_BASELINE`) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin`; ใน `shelter_*` (`source=SHELTER_OVERRIDE`) เขียน/แก้ไขได้เฉพาะบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database
+10. CR-059 request/batch บังคับ role และ transition graph ตาม §2.21–2.22; `distribution_issue` และ `distribution_issue_idempotency` เป็น append-only. Coordination record ตรวจ identity และโครงสร้าง `pending_claims` ตามชนิดเอกสาร
+11. `stock_ledger` reason=`distribute`/`distribution_return` เขียนได้เฉพาะ `warehouse_staff` หรือ `system_admin`; local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
 
 ---
 
