@@ -1,9 +1,9 @@
 ---
 title: Partner Data API — As-Built (EXT-001–EXT-007)
 status: as-built
-version: 1.1
+version: 1.2
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 audience: M6 Resource Logistics / M7 Command Center (EOC) partners
 note: Self-contained as-built for partner integration; email this file alone.
 ---
@@ -12,7 +12,7 @@ note: Self-contained as-built for partner integration; email this file alone.
 
 เอกสารนี้อธิบาย **พฤติกรรมจริงของ API** ที่ Smart Shelter เปิดให้ระบบพันธมิตร (M6 / M7) เรียกใช้ และเป็น **สัญญา as-built ที่ใช้ผูก integration สำหรับ M6/M7** — พอส่งไฟล์นี้ฉบับเดียวโดยไม่ต้องอ้างเอกสารภายในอื่น
 
-**วันที่เอกสาร:** 2026-09-10 · **เวอร์ชัน:** 1.1
+**วันที่เอกสาร:** 2026-09-11 · **เวอร์ชัน:** 1.2
 
 ---
 
@@ -209,11 +209,13 @@ Partner ควร treat เป็น optional และไม่ fail เมื�
 | `status` | string | — | กรอง `location_status` (`open`/`closed`/`full`/`standby`) |
 | `updated_since` | datetime (ISO-8601) | — | คืนเฉพาะที่ `updated_at >=` ค่านี้ เช่น `2026-08-11T00:00:00+07:00` |
 | `include_inactive` | bool | `false` | รวม `is_active=false` |
+| `page` | int | `1` | หน้าข้อมูลที่ต้องการ (เริ่มต้นที่ 1) |
+| `limit` | int | `50` | จำนวนรายการต่อหน้า (สูงสุด 200) |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?updated_since=2026-08-11T00:00:00%2B07:00' \
+curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?page=1&limit=50&updated_since=2026-08-11T00:00:00%2B07:00' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -249,7 +251,13 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?updated_since=
       "occupancy_total": 42,
       "updated_at": "2026-09-10T04:12:00+00:00"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 42,
+    "total_pages": 1
+  }
 }
 ```
 
@@ -507,18 +515,18 @@ Alert คำนวณ **ฝั่งเซิร์ฟเวอร์** จา�
 
 ---
 
-## 10. EXT-007 — รายละเอียดผู้พัก (Occupants) — scaffold
+## 10. EXT-007 — รายละเอียดผู้พัก (Occupants)
 
 | | |
 | --- | --- |
 | Method / Path | `GET /api/thirdparty/locations/{location_code}/occupants` |
 | Scope | `occupancy-pii-read` |
-| Query | `purpose` (**บังคับ**) — เหตุผลการเข้าถึง (PDPA) |
+| Query | `purpose` (**บังคับ**) — เหตุผลการเข้าถึง (PDPA)<br>`page` (int, default `1`)<br>`limit` (int, default `50`, สูงสุด `200`) |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupants?purpose=eoc-ops-check' \
+curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupants?purpose=eoc-ops-check&page=1&limit=50' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -528,30 +536,54 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupant
 2. ต้องส่ง `purpose` ที่ไม่ว่าง — ไม่ส่ง → 400 `missing_purpose`
 3. ต้องมี scope `occupancy-pii-read` — ไม่มี → 403 `insufficient_scope` พร้อม `detail` ว่าต้องอนุมัติเป็นรายกรณี
 4. ทุก attempt ถูกเขียน audit log ไม่ว่าจะอนุญาตหรือไม่
-5. **แม้ได้ scope แล้ว** ในรุ่นนี้ยัง **ไม่มี data source PII** → HTTP 200, `result: []`
+5. **เมื่อได้รับ scope แล้ว** ระบบจะคืนรายการผู้พักพิงปัจจุบัน (สถานะ active) จาก MongoDB projection plane โดยปกปิดนามสกุล (Masking) และระบุช่วงอายุตามมาตรฐาน PDPA พร้อมข้อมูล `pagination`
 
-### Success เมื่อมี scope (รุ่นนี้)
+### Success เมื่อมี scope
 
 ```json
 {
   "status": 200,
   "message": "Found Data.",
-  "result": []
+  "result": [
+    {
+      "occupant_ref": "OCC-01HXYZ1234567890ABCDEF",
+      "name_masked": "สมชาย ใ.",
+      "age_range": "60-69",
+      "gender": "male",
+      "care_flags": ["bedridden"],
+      "checked_in_at": "2026-08-10T18:40:00+00:00"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 1,
+    "total_pages": 1
+  }
 }
 ```
 
-Schema ของรายการในอนาคต (ยังไม่คืนข้อมูลจริง): `occupant_ref`, `name_masked`, `age_range`, `gender`, `care_flags`, `checked_in_at`
+### `result[]` fields
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `occupant_ref` | string | no | รหัสอ้างอิงภายใน (ไม่ใช่เลขบัตรประชาชน) |
+| `name_masked` | string | no | ชื่อจริง + อักษรแรกของนามสกุล เช่น `สมชาย ใ.` |
+| `age_range` | string | no | ช่วงอายุ เช่น `0-4`, `5-17`, `18-59`, `60-69`, `70+` |
+| `gender` | string\|null | yes | `male` \| `female` \| `other` |
+| `care_flags` | string[] | no | หมวดความต้องการพิเศษ เช่น `["bedridden"]` |
+| `checked_in_at` | datetime\|null | yes | เวลาที่เริ่มเข้าพัก |
 
 ---
 
-## 11. EXT-007 — Denied by default (ชัดเจน)
+## 11. EXT-007 — Denied by default (การควบคุมสิทธิ์ตาม PDPA)
 
 | ข้อ | สถานะรุ่นนี้ |
 | --- | --- |
 | Scope `occupancy-pii-read` | **ไม่ถูกมอบโดยค่าเริ่มต้น** ให้ client ใดๆ |
-| การเรียกโดยไม่มี scope | **403** + audit |
-| การเรียกโดยมี scope (ถ้าอนุมัติพิเศษในอนาคต) | **200 + `result: []`** จนกว่าจะเปิด data source จริง |
-| Payload PII จริง | **ยังไม่มี** — อย่ารอรายชื่อ/ข้อมูลบุคคลจาก endpoint นี้ใน release ปัจจุบัน |
+| การเรียกโดยไม่มี scope | **403** + บันทึก audit log |
+| การเรียกโดยมี scope | **200 + รายการผู้พักพิงจริง** ที่สถานะ active พร้อม pagination |
+| มาตรการคุ้มครองข้อมูล (PDPA) | บังคับส่ง `purpose` ทุกครั้ง, Mask นามสกุล, ระบุช่วงอายุ (ไม่ระบุอายุจริงหรือเลขบัตรประชาชน) |
 
 การเปิดใช้งานจริงต้องผ่านการอนุมัติสิทธิ์เป็นรายกรณี — ประสานทีม Shelter
 
@@ -560,8 +592,6 @@ Schema ของรายการในอนาคต (ยังไม่ค�
 ## 12. สิ่งที่ตั้งใจยังไม่มีใน release นี้
 
 - Rate limit / HTTP 429 บน partner plane
-- Pagination / cursor บนรายการยาว
-- Payload PII จริงจาก EXT-007
 - Catalog ID ร่วม M6 (`m6_reference_id` ที่ไม่เป็น null)
 - การ map `type_code` ที่รับประกัน 100% จากทุกหมวดสินค้าภายใน (เป็น best-effort)
 

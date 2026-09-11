@@ -16,8 +16,10 @@ from worker.mongo import (
     apply_shelter,
     apply_shelter_deactivate,
     delete_needs_for_shelter,
+    delete_occupants_for_shelter,
     delete_persons_for_shelter,
     refresh_occupancy,
+    refresh_shelter_occupants,
     refresh_shelter_stock,
     resolve_shelter_code_for_registry_delete,
 )
@@ -70,8 +72,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             if shelter_code:
                 await apply_person("delete", {"_id": doc_id})
                 if doc_id.startswith("evacuee:"):
-                    # EXT-005: a departed/removed evacuee changes the headcount too.
+                    # EXT-005/007: a departed/removed evacuee changes headcount and occupant list.
                     await refresh_occupancy(couch, shelter_code)
+                    await refresh_shelter_occupants(couch, shelter_code)
                 elif doc_id.startswith("donation:"):
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
@@ -101,6 +104,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             if action == "delete" and payload and payload.get("_id"):
                 code = str(payload["_id"])
                 await delete_persons_for_shelter(code)
+                await delete_occupants_for_shelter(code)
                 await delete_needs_for_shelter(code)
         elif doc_type == "announcement":
             action, payload = project_announcement(doc)
@@ -124,9 +128,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc, shelter_code=shelter_code, household=household
                 )
                 await apply_person(action, payload)
-                # EXT-005: check-in/out, zone move, or any other evacuee field change
-                # can shift the headcount/demographic breakdown.
+                # EXT-005/007: check-in/out, zone move, or any other evacuee field change
+                # can shift the headcount/demographic breakdown and occupant list.
                 await refresh_occupancy(couch, shelter_code)
+                await refresh_shelter_occupants(couch, shelter_code)
             elif doc_type == "donation":
                 action, payload = project_donation(doc, shelter_code=shelter_code)
                 await apply_donation(action, payload)

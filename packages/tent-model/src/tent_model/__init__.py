@@ -18,6 +18,7 @@ from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import GeoJsonPoint, GeoPoint, OccupancyBreakdown, PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
+from tent_model.shelter_occupant import ShelterOccupant
 from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.third_party_access_log import ThirdPartyAccessLog
@@ -51,6 +52,7 @@ __all__ = [
 	"ReserveResult",
 	"RetentionAudit",
 	"SearchAudit",
+	"ShelterOccupant",
 	"ShelterStock",
 	"SyncCheckpoint",
 	"ThirdPartyAccessLog",

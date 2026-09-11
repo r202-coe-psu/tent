@@ -29,6 +29,8 @@ async def get_location_occupants(
     location_code: str,
     request: Request,
     purpose: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=50, ge=1, le=200, description="Items per page"),
     claims: ThirdPartyClaims = Depends(verify_thirdparty_token),  # noqa: B008
     use_case: ThirdPartyOccupantsUseCase = Depends(get_thirdparty_occupants_use_case),  # noqa: B008
 ) -> OccupantsEnvelope:
@@ -37,4 +39,6 @@ async def get_location_occupants(
         purpose=purpose,
         claims=claims,
         client_ip=client_ip(request),
+        page=page,
+        limit=limit,
     )
