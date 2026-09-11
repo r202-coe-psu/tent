@@ -1,14 +1,15 @@
 ---
-id: draft
+id: CR-116
 title: Volunteer Shift Check-Out — Record Actor and Manual-Override Reason
-status: draft
-date: 2026-09-09
+status: approved
+updated: 2026-09-11
+date: 2026-09-09 (approved 2026-09-11)
 requested_by: Dev Team B
-decided_by: 
+decided_by: Project Owner
 layer: volatile
 affects:
   - docs/data/schema.md §2.9
-  - schema_v shift_assignment 4 → 5
+  - schema_v shift_assignment 3 → 4
   - frontend/src/lib/features/volunteers/domain/shift-assignment.schema.ts
   - frontend/src/lib/features/volunteers/data/shift-assignment.remote.ts
   - frontend/src/lib/features/volunteers/data/volunteer.repository.ts
@@ -36,7 +37,7 @@ migration: >
   to be present.
 ---
 
-# CR-draft — Volunteer Shift Check-Out: Actor and Manual-Override Reason
+# CR-116 — Volunteer Shift Check-Out: Actor and Manual-Override Reason
 
 ## Why this amendment exists
 
@@ -58,7 +59,7 @@ performed it) and no `check_out_method`/`check_out_reason` pair to mirror check-
    - `check_out_reason: string | null` — required (non-empty) when
      `check_out_method === 'manual_override'`, enforced by the same `.refine()` pattern as
      `check_in_reason`.
-2. `schema_v` bumps 4 → 5 (additive).
+2. `schema_v` bumps 3 → 4 (additive).
 3. `ShiftAssignmentRepository#checkOut` signature changes from `checkOut(id)` to
    `checkOut(id, actor, method?, reason?)`, mirroring `checkIn`. `useCheckOut` now sends
    `authStore.user?.name ?? 'unknown'` as the actor, same as `useCheckIn`.
@@ -74,3 +75,8 @@ performed it) and no `check_out_method`/`check_out_reason` pair to mirror check-
 - No append-only check-in/check-out log — same known limitation as before (flagged in
   `roster-audit-trail-dialog.svelte`'s header comment); this CR only extends the existing
   latest-snapshot fields.
+
+## Decision log
+
+- 2026-09-09 — proposed by Dev Team B (PR #262)
+- 2026-09-11 — approved by Project Owner (อนุมัติหมายเลขทางการ CR-116, ปรับแก้ schema_v 3 → 4 ให้สอดคล้องกับ baseline develop)
