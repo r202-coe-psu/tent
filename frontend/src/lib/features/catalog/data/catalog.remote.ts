@@ -1,6 +1,5 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { getShelterDb } from '$lib/db/shelter';
 import {
 	createItemCategory,
 	isItemCategory,
@@ -18,10 +17,8 @@ import {
 import {
 	evaluateCategoryDeletion,
 	type CategoryUsageDetails,
-	type DeleteCategoryResult,
-	type ShelterCategoryUsage
+	type DeleteCategoryResult
 } from '../domain/catalog-deletion';
-import { sheltersRepository } from '$lib/features/shelters/data/shelters.remote';
 import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
@@ -197,7 +194,15 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return true;
 		}
 
-		const shelterDb = shelterCode ? `shelter_${shelterCode.toLowerCase()}` : getShelterDb();
+		// Central scope (System Management) -> Deactivate only to protect cross-shelter history
+		if (!shelterCode) {
+			item.deactivated = true;
+			await this.updateItemMaster(item);
+			return false;
+		}
+
+		// Shelter scope (custom item created by this shelter)
+		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const ledgerEntries = await shelterRepo.allByType(
 			'stock_ledger',
@@ -260,46 +265,15 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			.filter((item) => !item.shelter_code && item.category === categoryName)
 			.map((item) => item.name);
 
-		const shelterUsages: ShelterCategoryUsage[] = [];
-		try {
-			const shelters = await sheltersRepository().listShelters();
-			for (const s of shelters) {
-				const shelterDb = `shelter_${s.code.toLowerCase()}`;
-				const localRepo = createRemoteRepository(shelterDb);
-
-				const localMasters = await localRepo.allByType('item_master', isItemMaster);
-				const matchingMasters = localMasters
-					.filter((item) => item.category === categoryName)
-					.map((item) => item.name);
-
-				const localCategories = await localRepo.allByType('item_category', isItemCategory);
-				const hasOverride = localCategories.some((c) => c._id === id && c.override);
-
-				if (matchingMasters.length > 0 || hasOverride) {
-					shelterUsages.push({
-						shelterCode: s.code,
-						shelterName: s.name,
-						itemMasters: matchingMasters,
-						hasOverride
-					});
-				}
-			}
-		} catch {
-			// Fallback to central only if shelters repository is not available
-		}
-
-		const totalItemCount =
-			centralMatching.length + shelterUsages.reduce((sum, su) => sum + su.itemMasters.length, 0);
-
 		return {
 			categoryId: id,
 			categoryName,
 			isOverride: false,
 			shelterCode: null,
 			centralItemMasters: centralMatching,
-			shelterUsages,
-			totalItemCount,
-			totalShelterCount: shelterUsages.length
+			shelterUsages: [],
+			totalItemCount: centralMatching.length,
+			totalShelterCount: 0
 		};
 	}
 
@@ -352,7 +326,15 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return true;
 		}
 
-		const shelterDb = shelterCode ? `shelter_${shelterCode.toLowerCase()}` : getShelterDb();
+		// Central scope (System Management) -> Deactivate only to protect meal plans across shelters
+		if (!shelterCode) {
+			recipe.deactivated = true;
+			await this.updateRecipe(recipe);
+			return false;
+		}
+
+		// Shelter scope (custom recipe created by this shelter)
+		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const mealPlans = await shelterRepo.allByType(
 			'meal_plan',

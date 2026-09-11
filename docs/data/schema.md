@@ -1009,7 +1009,9 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `name` | str | req | ห้ามว่างเปล่า |
-| `is_default` | bool | req | default `false`; ถ้า `true` จะเป็นหมวดหมู่ตั้งต้น |
+| `deactivated` | bool | opt | default `false`; ถ้า `true` คือปิดการใช้งาน (Soft-deleted) ไม่แสดงในตัวเลือกใหม่ |
+| `override` | bool | opt | default `false`; ถ้า `true` คือเอกสารปรับแต่งเฉพาะศูนย์ในฐานข้อมูล `shelter_*` |
+| `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 ### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 3** (แทนที่ `supply_item`)
 
@@ -1027,7 +1029,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `default_purchasing_uom` | str | opt | หน่วยเริ่มต้นตอนทำใบสั่งซื้อ |
 | `default_inventory_uom` | str | opt | หน่วยรายงานสต็อกหลัก |
 | `default_issue_uom` | str | opt | หน่วยเริ่มต้นตอนเบิกจ่าย |
-| `distribution_type` | enum(`consumable`,`one_time`) | req | `consumable` = วัสดุสิ้นเปลือง; `one_time` = รายคน |
+| `distribution_type` | enum(`consumable`,`one_time`) | opt | `consumable` = วัสดุสิ้นเปลือง; `one_time` = รายคน (optional สำหรับ EQUIPMENT) |
 | `target_reserve_days` | num | opt | เป้าหมายจำนวนวันสำรองสูงสุด |
 | `consumption_rate` | qty_str | opt | อัตราการใช้ต่อคน/ครัวเรือน ตาม `distribution_type` |
 | `unit` | str | opt | หน่วยของ `consumption_rate` |
@@ -1037,6 +1039,9 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `target_audience_type` | enum(`all`,`specific_segments`) | req | `all` = แจกทุกคน; `specific_segments` = จำกัดกลุ่ม |
 | `target_restrictions` | {`genders`?:[str], `vulnerable_groups`?:[str], `diet_religions`?:[str]} | opt | บังคับเมื่อ `target_audience_type = specific_segments`; `genders` ∈ {`male`,`female`,`other`}; `vulnerable_groups` ∈ {`elderly`,`pregnant`,`bedridden`,`infant`,`isolated`}; `diet_religions` ∈ {`halal`,`vegetarian`,`vegan`} |
 | `is_default` | bool | req | default `false`; ตั้งเป็น item มาตรฐานหลัก |
+| `deactivated` | bool | opt | default `false`; ถ้า `true` คือปิดการใช้งาน ห้ามเบิก/รับเข้า/เลือกใหม่ |
+| `override` | bool | opt | default `false`; ถ้า `true` คือเอกสารปรับแต่งเฉพาะศูนย์ในฐานข้อมูล `shelter_*` |
+| `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 ### 4.3 `recipe` — `recipe:{ulid}` · **schema_v 3** (ขยาย field)
 
@@ -1049,6 +1054,9 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `standard_portions` | qty_str>0 | req | จำนวนที่ผลิตได้ต่อหนึ่งรอบประกอบอาหาร |
 | `standard_duration_hours` | qty_str>0 | req | ระยะเวลาปรุงในหน่วยชั่วโมง |
 | `is_default` | bool | req | default `false`; ตั้งเป็นสูตรมาตรฐานหลักของศูนย์ |
+| `deactivated` | bool | opt | default `false`; ถ้า `true` คือปิดการใช้งาน ไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่ |
+| `override` | bool | opt | default `false`; ถ้า `true` คือเอกสารปรับแต่งสูตรเฉพาะศูนย์ในฐานข้อมูล `shelter_*` |
+| `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 `producible(recipe) = min(stock_balance[item_master_id] / quantity)` — คำนวณฝั่ง client ด้วย Decimal (data-model §4)
 

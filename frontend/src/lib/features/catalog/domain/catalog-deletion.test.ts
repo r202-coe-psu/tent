@@ -14,10 +14,11 @@ describe('evaluateCategoryDeletion', () => {
 	};
 
 	describe('Central Scope (System Management)', () => {
-		it('should decide hard_delete when category is completely unused', () => {
+		it('should decide deactivate when category is completely unused in central scope', () => {
 			const decision = evaluateCategoryDeletion(baseUsage, 'central');
-			expect(decision.action).toBe('hard_delete');
-			expect(decision.canHardDelete).toBe(true);
+			expect(decision.action).toBe('deactivate');
+			expect(decision.canHardDelete).toBe(false);
+			expect(decision.reason).toContain('หมวดหมู่มาตรฐานส่วนกลางจะถูกเปลี่ยนสถานะเป็นปิดการใช้งาน');
 		});
 
 		it('should decide deactivate when category is used by central item masters', () => {

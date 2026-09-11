@@ -34,8 +34,8 @@ describe('CatalogRemoteRepository', () => {
 		repo = new CatalogRemoteRepository();
 	});
 
-	it('should delete recipe physically if not used by any meal plan', async () => {
-		// 1. Create a recipe
+	it('should deactivate central recipe when deleted even if not used by any meal plan', async () => {
+		// 1. Create a recipe in central scope
 		const recipe = await repo.createRecipe(
 			{
 				label: 'ข้าวผัด',
@@ -52,12 +52,32 @@ describe('CatalogRemoteRepository', () => {
 		const foundBefore = await repo.getRecipe(recipe._id);
 		expect(foundBefore).not.toBeNull();
 
-		// 2. Delete recipe
+		// 2. Delete recipe in central scope -> should deactivate
 		const wasDeleted = await repo.deleteRecipe(recipe._id);
+		expect(wasDeleted).toBe(false);
+
+		// Verify it remains in DB with deactivated = true
+		const foundAfter = await repo.getRecipe(recipe._id);
+		expect(foundAfter).not.toBeNull();
+		expect(foundAfter?.deactivated).toBe(true);
+	});
+
+	it('should delete custom recipe physically in shelter scope if not used by any meal plan', async () => {
+		const recipe = await repo.createRecipe(
+			{
+				label: 'ข้าวผัดเฉพาะศูนย์',
+				ingredients: [{ item_master_id: 'item_1', quantity: '10', uom: 'kg' }],
+				standard_portions: '100',
+				standard_duration_hours: '1'
+			},
+			ctx,
+			'SH001'
+		);
+
+		const wasDeleted = await repo.deleteRecipe(recipe._id, 'SH001');
 		expect(wasDeleted).toBe(true);
 
-		// Verify it is removed from DB
-		const foundAfter = await repo.getRecipe(recipe._id);
+		const foundAfter = await repo.getRecipe(recipe._id, 'SH001');
 		expect(foundAfter).toBeNull();
 	});
 
@@ -319,17 +339,33 @@ describe('CatalogRemoteRepository', () => {
 			expect(updated?.deactivated).toBe(true);
 		});
 
-		it('should remove category physically when deleted if not used by any item master', async () => {
+		it('should deactivate category when deleted in central scope even if unused by any item master', async () => {
 			const category = await repo.createItemCategory({ name: 'หมวดหมู่ว่าง' }, ctx);
 
 			const usage = await repo.inspectCategoryUsage(category._id);
 			expect(usage.totalItemCount).toBe(0);
 
 			const result = await repo.deleteItemCategory(category._id);
+			expect(result.wasDeleted).toBe(false);
+			expect(result.actionTaken).toBe('deactivate');
+
+			const updated = await repo.getItemCategory(category._id);
+			expect(updated).not.toBeNull();
+			expect(updated?.deactivated).toBe(true);
+		});
+
+		it('should remove custom category physically in shelter scope if not used by any item master', async () => {
+			const category = await repo.createItemCategory(
+				{ name: 'หมวดหมู่เฉพาะศูนย์ว่าง' },
+				ctx,
+				'SH001'
+			);
+
+			const result = await repo.deleteItemCategory(category._id, 'SH001');
 			expect(result.wasDeleted).toBe(true);
 			expect(result.actionTaken).toBe('hard_delete');
 
-			const removed = await repo.getItemCategory(category._id);
+			const removed = await repo.getItemCategory(category._id, 'SH001');
 			expect(removed).toBeNull();
 		});
 	});

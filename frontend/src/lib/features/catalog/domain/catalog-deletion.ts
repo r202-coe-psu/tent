@@ -46,8 +46,8 @@ export interface DeleteCategoryResult {
  *        - has item masters using it in this shelter -> 'deactivate'
  *        - no item masters using it -> 'hard_delete'
  * 2. Central scope (System Management):
- *    - If item masters use it (in central or in ANY shelter) OR any shelter has an override -> 'deactivate'
- *    - If completely unused across central and all shelters -> 'hard_delete'
+ *    - Always 'deactivate' (Soft-Delete only) to protect referential integrity and historical records
+ *      across shelters, and avoid client-side cross-tenant scanning hazards.
  */
 export function evaluateCategoryDeletion(
 	usage: CategoryUsageDetails,
@@ -82,37 +82,33 @@ export function evaluateCategoryDeletion(
 		};
 	}
 
-	// Central scope (System Management)
+	// Central scope (System Management) -> Deactivate Always
 	const hasCentralUsage = usage.centralItemMasters.length > 0;
 	const hasShelterUsage = usage.shelterUsages.some((s) => s.itemMasters.length > 0);
 	const hasShelterOverride = usage.shelterUsages.some((s) => s.hasOverride);
 
-	if (hasCentralUsage || hasShelterUsage || hasShelterOverride) {
-		const reasons: string[] = [];
-		if (hasCentralUsage) {
-			reasons.push(`มีสินค้าส่วนกลางใช้งานอยู่ ${usage.centralItemMasters.length} รายการ`);
-		}
-		if (hasShelterUsage) {
-			const activeShelters = usage.shelterUsages.filter((s) => s.itemMasters.length > 0);
-			reasons.push(`มีศูนย์พักพิงใช้งานอยู่ ${activeShelters.length} ศูนย์`);
-		}
-		if (hasShelterOverride) {
-			const overrideShelters = usage.shelterUsages.filter((s) => s.hasOverride);
-			reasons.push(`มีศูนย์พักพิงปรับแต่ง (Override) อยู่ ${overrideShelters.length} ศูนย์`);
-		}
-
-		return {
-			action: 'deactivate',
-			reason: `ไม่สามารถลบถาวรได้เนื่องจาก: ${reasons.join(', ')} ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทน`,
-			canHardDelete: false,
-			usage
-		};
+	const reasons: string[] = [];
+	if (hasCentralUsage) {
+		reasons.push(`มีสินค้าส่วนกลางใช้งานอยู่ ${usage.centralItemMasters.length} รายการ`);
+	}
+	if (hasShelterUsage) {
+		const activeShelters = usage.shelterUsages.filter((s) => s.itemMasters.length > 0);
+		reasons.push(`มีศูนย์พักพิงใช้งานอยู่ ${activeShelters.length} ศูนย์`);
+	}
+	if (hasShelterOverride) {
+		const overrideShelters = usage.shelterUsages.filter((s) => s.hasOverride);
+		reasons.push(`มีศูนย์พักพิงปรับแต่ง (Override) อยู่ ${overrideShelters.length} ศูนย์`);
 	}
 
+	const reason =
+		reasons.length > 0
+			? `ไม่สามารถลบถาวรได้เนื่องจาก: ${reasons.join(', ')} ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทน`
+			: 'หมวดหมู่มาตรฐานส่วนกลางจะถูกเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) เพื่อป้องกันผลกระทบต่อข้อมูลอ้างอิงข้ามศูนย์พักพิง';
+
 	return {
-		action: 'hard_delete',
-		reason: 'ไม่มีรายการสินค้าหรือศูนย์พักพิงใดใช้งานหมวดหมู่นี้ สามารถลบถาวรออกจากระบบได้',
-		canHardDelete: true,
+		action: 'deactivate',
+		reason,
+		canHardDelete: false,
 		usage
 	};
 }

@@ -15,13 +15,13 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
-	import { Settings2 } from '@lucide/svelte';
-	import { Trash2 } from '@lucide/svelte';
+	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
 	// Feature
 	import {
 		useItemCategories,
 		ItemCategoryForm,
 		useDeleteItemCategory,
+		useUpdateItemCategory,
 		useItemMasters,
 		type ItemCategory
 	} from '$lib/features/catalog';
@@ -51,6 +51,7 @@
 
 	const query = useItemCategories(() => shelterCode);
 	const deleteMutation = useDeleteItemCategory();
+	const updateCategoryMutation = useUpdateItemCategory();
 	const itemMastersQuery = useItemMasters(() => shelterCode);
 
 	const itemCounts = $derived.by(() => {
@@ -67,6 +68,18 @@
 	let deleteConfirmOpen = $state(false);
 	let pendingDeleteCategory = $state<{ id: string; name: string } | null>(null);
 
+	function activateCategory(cat: ItemCategory) {
+		const updated = { ...cat, deactivated: false };
+		updateCategoryMutation.mutate(updated, {
+			onSuccess: () => {
+				toast.success(`นำหมวดหมู่ "${cat.name}" กลับมาใช้งานสำเร็จ`);
+			},
+			onError: (err: Error) => {
+				toast.error(err.message || 'เกิดข้อผิดพลาดในการทำรายการ');
+			}
+		});
+	}
+
 	function showDeleteConfirm(id: string, name: string) {
 		pendingDeleteCategory = { id, name };
 		deleteConfirmOpen = true;
@@ -78,8 +91,16 @@
 		deleteMutation.mutate(
 			{ id, shelterCode },
 			{
-				onSuccess: () => {
-					toast.success(`ลบหมวดหมู่ "${name}" สำเร็จ`);
+				onSuccess: (result) => {
+					if (result.actionTaken === 'reset') {
+						toast.success(`คืนค่ามาตรฐานหมวดหมู่ "${result.categoryName || name}" สำเร็จ`);
+					} else if (result.actionTaken === 'deactivate') {
+						toast.info(
+							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`
+						);
+					} else {
+						toast.success(`ลบหมวดหมู่ "${result.categoryName || name}" ถาวรสำเร็จ`);
+					}
 					deleteConfirmOpen = false;
 					pendingDeleteCategory = null;
 				},
@@ -185,6 +206,13 @@
 							<Table.Row>
 								<Table.Cell class="font-bold text-foreground">
 									{e.name}
+									{#if e.deactivated}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
+										>
+											ปิดใช้งาน
+										</span>
+									{/if}
 									{#if !e.shelter_code}
 										<span
 											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
@@ -221,18 +249,31 @@
 												จัดการ
 											</Button>
 											{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
-												<Button
-													variant="outline"
-													size="sm"
-													onclick={() => showDeleteConfirm(e._id, e.name)}
-													disabled={deleteMutation.isPending}
-													class={e.override
-														? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
-														: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
-												>
-													<Trash2 class="h-4 w-4" />
-													{e.override ? 'รีเซ็ต' : 'ลบ'}
-												</Button>
+												{#if e.deactivated}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => activateCategory(e)}
+														disabled={updateCategoryMutation.isPending}
+														class="border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/20"
+													>
+														<RotateCcw class="h-4 w-4" />
+														นำกลับมาใช้
+													</Button>
+												{:else}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => showDeleteConfirm(e._id, e.name)}
+														disabled={deleteMutation.isPending}
+														class={e.override
+															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
+															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
+													>
+														<Trash2 class="h-4 w-4" />
+														{e.override ? 'รีเซ็ต' : 'ลบ'}
+													</Button>
+												{/if}
 											{/if}
 										</div>
 									{/if}
@@ -332,7 +373,9 @@
 							>{pendingDeleteCategory.name}</strong
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
-							* ไม่สามารถลบหมวดหมู่ที่มีรายการสินค้าอ้างอิงอยู่ได้
+							* หากหมวดหมู่นี้มีสินค้าใช้งานอยู่ หรือเป็นหมวดหมู่ส่วนกลาง
+							ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทนการลบถาวร
+							เพื่อไม่ให้กระทบต่อประวัติสิ่งของ
 						</span>
 					{/if}
 				{/if}
