@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-117
 title: "Master Data — เพิ่ม `volunteer_skills` (master_type ที่ 9) + schema items category & description + หน้าตั้งค่าทักษะอาสาสมัคร"
-status: proposed
+status: approved
 date: 2026-08-31
+updated: 2026-09-12
 requested_by: Chino (FR-VOL-08.5 ย้ายทักษะอาสาเป็น Master Data)
-decided_by: <เจ้าของโครงการ>
+decided_by: Project Owner
 layer: volatile
 affects:
   - docs/data/schema.md §3.3 (`master_data`)
@@ -19,7 +20,7 @@ why: ย้ายรายการทักษะอาสาสมัครจ
 migration: N/A — schema_v master_data คงที่ 3; fields category และ description บน items[] เป็น optional (Backward-compatible)
 ---
 
-# Draft — Master Data: `volunteer_skills` + Schema Items Category & Description
+# CR-117 — Master Data: `volunteer_skills` + Schema Items Category & Description
 
 ## สรุป (TL;DR)
 
@@ -180,4 +181,5 @@ Seed รายการทักษะตั้งต้น 9 รายการ
 
 - **2026-08-31 — proposed (draft):** เปิดร่าง CR (Draft-First) เพื่อเสนอการเพิ่ม `volunteer_skills` ลงใน Master Data Engine และขยาย schema `items`
 - **2026-09-11 — revision:** ปรับโครงสร้างเอกสารเข้าสู่กระบวนการ Draft-First (`id: draft`, ไฟล์ `draft-master-data-volunteer-skills.md`), สรุปข้อตกลงเรื่อง Casing เป็น lowercase (`'general'` | `'controlled'`) ทั้งหมด, และระบุความสัมพันธ์กับสถาปัตยกรรมอาสาสมัครใน CR-104
+- **2026-09-12 — approved:** Project Owner อนุมัติผ่าน PR #195 และกำหนดรหัสเอกสารเป็น CR-117
 
