@@ -872,7 +872,7 @@
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<Rocket class="size-4" />
-					<span>ตลาดงานจิตอาสา (Openings)</span>
+					<span>งานจิตอาสา (Openings)</span>
 					<span
 						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
 					>
@@ -991,7 +991,7 @@
 								onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
 								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
 							>
-								ดูตลาดงานจิตอาสา
+								ดูงานจิตอาสา
 							</button>
 						</div>
 					{:else if visibleActivities.length === 0}
@@ -1300,7 +1300,7 @@
 				</div>
 			</div>
 		{:else}
-			<!-- ── TAB 2: JOB OPENINGS (ตลาดงานจิตอาสา) ─────────────────────── -->
+			<!-- ── TAB 2: JOB OPENINGS (งานจิตอาสา) ─────────────────────── -->
 			<!--
 				The same public board `/volunteers/jobs` renders, mounted here so a signed-in
 				volunteer can pick up another shift without leaving the portal. It carries its

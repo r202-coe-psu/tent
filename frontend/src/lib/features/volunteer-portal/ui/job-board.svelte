@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * ตลาดงานอาสาสมัคร — the public job board (CR-092 หน้าจอ 1, AC-094-04).
+	 * งานอาสาสมัคร — the public job board (CR-092 หน้าจอ 1, AC-094-04).
 	 *
 	 * Reads real projected jobs through `GET /api/public/v1/volunteer/jobs`. Only the
 	 * shelter filter goes to the server (FastAPI indexes `shelter_code` and `skill`);
@@ -100,7 +100,7 @@
 					class="flex items-center gap-3 text-xl font-black tracking-tight text-primary sm:text-2xl"
 				>
 					<Briefcase class="h-6 w-6 text-primary" />
-					ตลาดงานอาสาสมัครในศูนย์พักพิง
+					งานอาสาสมัครในศูนย์พักพิง
 				</h2>
 			</div>
 

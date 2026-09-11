@@ -75,7 +75,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		confirmedAlertDesc:
 			'คุณได้รับการยืนยันเข้าร่วมกะปฏิบัติงานแล้ว กรุณาเดินทางมาถึงศูนย์พักพิงตามวันเวลาที่นัดหมาย พร้อมแสดง QR Code นี้เพื่อเช็คอิน',
 		cancelledAlertTitle: 'การสมัครถูกยกเลิกแล้ว (Cancelled)',
-		cancelledAlertDesc: 'ตั๋วใบนี้ถูกยกเลิกแล้ว หากต้องการสมัครใหม่ กรุณาเลือกกะงานอื่นจากตลาดงาน',
+		cancelledAlertDesc: 'ตั๋วใบนี้ถูกยกเลิกแล้ว หากต้องการสมัครใหม่ กรุณาเลือกกะงานอื่นจากงาน',
 		onSiteVerificationBadge: 'ON-SITE VERIFICATION QR',
 		onSiteVerificationTitle: 'สแกนรายงานตัวและเช็คอินหน้างาน',
 		onSiteVerificationSubtitle:

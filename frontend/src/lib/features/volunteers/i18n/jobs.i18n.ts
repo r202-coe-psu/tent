@@ -116,15 +116,15 @@ export interface JobsTranslations {
 export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 	th: {
 		pageTitle: 'กระดานรับสมัครอาสาสมัคร — Smart Shelter',
-		heroTitle: 'ตลาดงานอาสาสมัครในศูนย์พักพิง',
+		heroTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		heroDescription:
-			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกภารกิจที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล (QR Code Pass) ทันทีโดยไม่ต้องรอ SMS OTP',
+			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกภารกิจที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล (QR Code Pass) ',
 		heroBadge: 'Volunteer Job Board',
-		tabJobBoard: 'ตลาดงานอาสาสมัคร (Job Board)',
+		tabJobBoard: 'งานอาสาสมัคร (Job Board)',
 		tabFindTicket: 'ค้นหาตั๋วของฉัน (Find My Ticket)',
 		portalLink: 'เข้าสู่ระบบจิตอาสา / ตารางงานของฉัน →',
 		// Job Board Search & Filters
-		jobBoardSectionTitle: 'ตลาดงานอาสาสมัครในศูนย์พักพิง',
+		jobBoardSectionTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		searchPlaceholder: 'ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์...',
 		filterLabel: 'ตัวกรอง:',
 		filterAll: 'ทั้งหมด',
@@ -136,7 +136,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		shelterLabel: 'ศูนย์:',
 		allShelters: 'ทุกศูนย์พักพิง',
 		selectShelter: 'เลือกศูนย์พักพิง',
-		loadingJobs: 'กำลังโหลดข้อมูลตลาดงาน...',
+		loadingJobs: 'กำลังโหลดข้อมูลงาน...',
 		noJobsFound: 'ไม่พบกะงานที่ตรงกับเงื่อนไขการค้นหา',
 		noJobsFoundDesc: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น',
 		paginationSummary: (from, to, total) => `แสดงงานที่ ${from} - ${to} จากทั้งหมด ${total} งาน`,

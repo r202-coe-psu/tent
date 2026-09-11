@@ -1,24 +1,19 @@
 <script lang="ts">
 	/**
-	 * On-Site Check-In (`volunteer-check-in.svelte`) — camera QR scan +
-	 * manual code entry card. Mirrors `people/ui/scan-check-in-out-page.svelte`'s
-	 * `html5-qrcode` viewport pattern; owns only the scan input mechanics
-	 * (camera lifecycle, debounce/cooldown, the manual `<Input>` form) — code
-	 * resolution and the result it produces are the parent's concern, reached
-	 * only through `onsubmit`.
+	 * On-Site Check-In (`volunteer-check-in.svelte`) — camera QR scan card.
+	 * Mirrors `people/ui/scan-check-in-out-page.svelte`'s `html5-qrcode` viewport
+	 * pattern; owns only the scan input mechanics (camera lifecycle,
+	 * debounce/cooldown) — code resolution and the result it produces are the
+	 * parent's concern, reached only through `onsubmit`.
 	 */
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ScanLine from '@lucide/svelte/icons/scan-line';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
-	import Loader from '@lucide/svelte/icons/loader';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 
 	let { isProcessing, onsubmit }: { isProcessing: boolean; onsubmit: (code: string) => void } =
 		$props();
 
-	let scanCode = $state('');
 	let enableCamera = $state(true);
 	let cameraError = $state<string | null>(null);
 	let lastScannedCode = '';
@@ -28,7 +23,6 @@
 		const clean = code.trim();
 		if (!clean) return;
 		onsubmit(clean);
-		scanCode = '';
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -132,36 +126,9 @@
 		<div class="mt-6 text-center">
 			<h3 class="text-base font-bold text-foreground">สแกน QR Code ตัวมือถือ</h3>
 			<p class="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
-				ถือตั๋ว QR Code บนมือถืออาสาสมัครจ่อหน้าระบบสแกน หรือพิมพ์รหัสอาสาสมัคร (เช่น V-002)
-				ลงในช่องด้านล่าง
+				ถือตั๋ว QR Code บนมือถืออาสาสมัครจ่อหน้าระบบสแกน
 			</p>
 		</div>
-
-		<form
-			onsubmit={(e) => {
-				e.preventDefault();
-				submit(scanCode);
-			}}
-			class="mt-6 flex w-full max-w-sm gap-2"
-		>
-			<Input
-				type="text"
-				placeholder="กรอกรหัส หรือ สแกน QR..."
-				bind:value={scanCode}
-				disabled={isProcessing}
-				class="h-11 flex-1"
-			/>
-			<Button
-				type="submit"
-				disabled={isProcessing || !scanCode}
-				class="h-11 px-5 text-sm font-bold"
-			>
-				{#if isProcessing}
-					<Loader class="mr-1 size-4 animate-spin" />
-				{/if}
-				ตกลง
-			</Button>
-		</form>
 	</Card.Content>
 </Card.Root>
 

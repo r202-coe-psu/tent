@@ -339,7 +339,7 @@
 					</Button>
 				{:else}
 					<Button
-						href={resolve('/back-office/volunteers')}
+						href={resolve('/back-office/volunteers?tab=people')}
 						variant="outline"
 						class="h-11 flex-1 gap-1 rounded-xl text-sm font-bold"
 					>
