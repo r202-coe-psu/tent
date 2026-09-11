@@ -14,12 +14,19 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # Load from .env if present, otherwise system env
-    load_dotenv()
+    # Load .env first as base defaults, then allow system environment variables to override
+    env_file_values = dotenv_values(".env") if os.path.exists(".env") else {}
     config = {
+        **env_file_values,
         **os.environ,
-        **dotenv_values(".env"),
     }
+
+    # Support CLI flags to explicitly force mode
+    if "--kiosk" in sys.argv:
+        config["DEBUG"] = "false"
+    elif "--windowed" in sys.argv or "--debug" in sys.argv:
+        config["DEBUG"] = "true"
+
 
     # Ensure display environment variable is set for Linux headed mode (e.g. when launching via SSH)
     if sys.platform.startswith("linux"):
