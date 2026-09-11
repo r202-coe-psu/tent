@@ -292,6 +292,7 @@ export { default as HouseholdPostArrival } from './ui/household-post-arrival.sve
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
 export { default as FamilyBatchPrint } from './ui/family-batch-print.svelte';
 export { default as UnifiedRegistrationForm } from './ui/unified-registration-form.svelte';
+export { default as PullPreRegisteredDialog } from './ui/pull-pre-registered-dialog.svelte';
 export {
 	default as EvacueeHandoverSlipModal,
 	buildScreeningDeepLink

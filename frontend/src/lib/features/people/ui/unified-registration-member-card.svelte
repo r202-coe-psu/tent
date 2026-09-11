@@ -31,13 +31,18 @@
 	} from './forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { STATUS_LABELS } from '../domain/people';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import UserSearch from '@lucide/svelte/icons/user-search';
 	import {
 		applyAnonymousIdToMember,
+		evacueeToUnifiedMember,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberInput,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel
 	} from '../domain/unified-registration';
+	import type { Evacuee } from '../domain/people';
+	import PullPreRegisteredDialog from './pull-pre-registered-dialog.svelte';
 	import {
 		forgetPhotoPreview,
 		rememberPhotoPreview,
@@ -53,6 +58,7 @@
 		shelterCode = '',
 		channel = 'onsite',
 		mode = 'create',
+		excludeIds = [],
 		fieldErrors,
 		onRemove,
 		onReportingInChange
@@ -65,6 +71,7 @@
 		shelterCode?: string;
 		channel?: UnifiedRegistrationChannel;
 		mode?: 'create' | 'report-in';
+		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
@@ -151,6 +158,61 @@
 	});
 	let photoPreviewUrl = $state<string | null>(null);
 	let uploadingPhoto = $state(false);
+	let pullDialogOpen = $state(false);
+	let wasPulled = $state(false);
+
+	function handlePopulateFromQueue(ev: Evacuee) {
+		const converted = evacueeToUnifiedMember(ev);
+		member = {
+			...member,
+			...converted,
+			reporting_in: true
+		};
+		birthYear = converted.birth_year as string | number | undefined;
+		age = converted.age as string | number | undefined;
+		noPhone = converted.phone == null;
+		emergency.name = converted.emergency_contact?.name ?? '';
+		emergency.phone = converted.emergency_contact?.phone ?? '';
+		emergency.relation = converted.emergency_contact?.relation ?? '';
+		wasPulled = true;
+		onReportingInChange?.(true);
+		toast.success(`ดึงข้อมูลคุณ ${converted.first_name} จากคิวสำเร็จ`);
+	}
+
+	function handleUnlinkQueue() {
+		member = {
+			...member,
+			_id: undefined,
+			_rev: undefined,
+			stay_status: undefined,
+			first_name: '',
+			last_name: '',
+			gender: '' as UnifiedMemberInput['gender'],
+			birth_year: undefined,
+			age: undefined,
+			person_id: { cardType: 'national_id', number: '' },
+			phone: '',
+			nickname: '',
+			emergency_contact: { name: '', phone: '', relation: '' },
+			vulnerable_groups: [],
+			special_needs: [],
+			medical_conditions: [],
+			medical_allergies: [],
+			medical_medications: [],
+			medical_note: undefined,
+			photo: null,
+			reporting_in: true
+		};
+		birthYear = undefined;
+		age = undefined;
+		noPhone = false;
+		emergency.name = '';
+		emergency.phone = '';
+		emergency.relation = '';
+		wasPulled = false;
+		onReportingInChange?.(true);
+		toast.info('ล้างข้อมูลและยกเลิกการเชื่อมโยงเรียบร้อยแล้ว');
+	}
 
 	$effect(() => {
 		if (hideNoPhone) {
@@ -353,6 +415,17 @@
 						<Check class="size-4 shrink-0" aria-hidden="true" />
 						รายงานตัวรอบนี้
 					</span>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						{disabled}
+						onclick={() => (pullDialogOpen = true)}
+						class="h-11 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
+					>
+						<UserSearch class="size-4 text-blue-600" />
+						<span>ดึงข้อมูลจากคิว</span>
+					</Button>
 				{:else}
 					<label
 						class={cn(
@@ -377,6 +450,19 @@
 							<span>ยังไม่เลือก — ไม่มาในรอบนี้</span>
 						{/if}
 					</label>
+					{#if wasPulled}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							{disabled}
+							onclick={handleUnlinkQueue}
+							class="h-11 gap-1 text-xs text-muted-foreground hover:text-destructive"
+						>
+							<RotateCcw class="size-3.5" />
+							<span>ยกเลิกการดึง</span>
+						</Button>
+					{/if}
 				{/if}
 			{/if}
 
@@ -531,3 +617,9 @@
 		<SpecialNeedsFields bind:special_needs={member.special_needs} {disabled} label="" />
 	</div>
 </section>
+
+<PullPreRegisteredDialog
+	bind:open={pullDialogOpen}
+	{excludeIds}
+	onselect={handlePopulateFromQueue}
+/>
