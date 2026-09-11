@@ -281,7 +281,9 @@ export interface FamilyReportInPayload {
 }
 
 /** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput. */
-export function householdToUnifiedInput(household: Household | null | undefined): UnifiedHouseholdInput {
+export function householdToUnifiedInput(
+	household: Household | null | undefined
+): UnifiedHouseholdInput {
 	if (!household) {
 		return {
 			housing_type: 'owned_house',
@@ -308,7 +310,12 @@ export function householdToUnifiedInput(household: Household | null | undefined)
 		postal_code: household.postal_code ?? '',
 		pets: household.pets ?? [],
 		vehicles: household.vehicles ?? [],
-		assets: household.assets ? { description: household.assets.description ?? '', image_url: household.assets.image_url ?? null } : null
+		assets: household.assets
+			? {
+					description: household.assets.description ?? '',
+					image_url: household.assets.image_url ?? null
+				}
+			: null
 	};
 }
 

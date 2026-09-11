@@ -20,9 +20,7 @@
 	let lightboxOpen = $state(false);
 	let loadingFull = $state(false);
 
-	const sizeClass = $derived(
-		size === 'sm' ? 'size-12' : size === 'lg' ? 'size-24' : 'size-16'
-	);
+	const sizeClass = $derived(size === 'sm' ? 'size-12' : size === 'lg' ? 'size-24' : 'size-16');
 
 	$effect(() => {
 		const id = photoId;
@@ -97,7 +95,7 @@
 		onclick={openLightbox}
 		aria-label="ดูรูปขนาดใหญ่"
 		title="คลิกเพื่อดูรูปขนาดใหญ่"
-		class="shrink-0 cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 p-0 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 {sizeClass} {className}"
+		class="shrink-0 cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 p-0 transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {sizeClass} {className}"
 	>
 		<img src={thumbUrl} {alt} class="size-full object-cover" />
 	</button>

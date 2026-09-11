@@ -190,8 +190,8 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
-				initialHousehold={initialHousehold}
-				initialMembers={initialMembers}
+				{initialHousehold}
+				{initialMembers}
 				pending={submitReportIn.isPending}
 				onsubmit={handleReportIn}
 				onDirtyChange={(dirty) => (isDirty = dirty)}

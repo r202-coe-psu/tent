@@ -50,7 +50,7 @@
 				aria-label="แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง"
 				title="แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง"
 				onclick={onOpenAssetModal}
-				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
 				<Pencil class="size-4" />
 			</button>
@@ -147,7 +147,7 @@
 										</span>
 									{/if}
 									{#if pet.notes}
-										<p class="break-words text-sm text-slate-700">{pet.notes}</p>
+										<p class="text-sm break-words text-slate-700">{pet.notes}</p>
 									{/if}
 								</div>
 							</div>
@@ -170,7 +170,7 @@
 				</div>
 				{#if valuables}
 					<div
-						class="break-words rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium text-slate-800"
+						class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium break-words text-slate-800"
 					>
 						{valuables}
 					</div>

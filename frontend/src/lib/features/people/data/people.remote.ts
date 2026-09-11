@@ -933,7 +933,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		payload: FamilyReportInPayload
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const { householdId, household: householdInput, members: memberInputs, ctx } = payload;
-		let existingHousehold = householdId ? await this.getHousehold(householdId) : null;
+		const existingHousehold = householdId ? await this.getHousehold(householdId) : null;
 		let savedHousehold: Household;
 
 		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map(

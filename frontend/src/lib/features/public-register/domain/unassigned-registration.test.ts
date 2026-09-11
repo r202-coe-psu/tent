@@ -112,7 +112,10 @@ describe('toUnassignedRegistrationPayload', () => {
 
 	it('supports anonymous cardType', () => {
 		const input = sampleUnified();
-		input.members[0]!.person_id = { cardType: 'anonymous', number: 'ANON-01HTEST000000000000000000' };
+		input.members[0]!.person_id = {
+			cardType: 'anonymous',
+			number: 'ANON-01HTEST000000000000000000'
+		};
 		const payload = toUnassignedRegistrationPayload(input);
 		expect(payload.members[0].person_id).toEqual({
 			cardType: 'anonymous',

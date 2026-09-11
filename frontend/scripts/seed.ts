@@ -54,6 +54,7 @@ import {
 	createMedical,
 	createMovement,
 	createScreening,
+	type CardSnapshot,
 	type Evacuee,
 	type PeopleDoc,
 	type EvacueeInput,
@@ -1709,7 +1710,138 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 	];
 	const evacuees = evacueeInputs.map((e) => createEvacuee(e, ctx));
 
-	// — movements (check_in for every evacuee) —————————————————————————————————
+	// — pre-registered evacuees (Station 1 waiting queue with diverse channels) —
+	const preRegEvacueeInputs: EvacueeInput[] = [
+		// 1. Kiosk Smart Card (Fast-Track with card_snapshot)
+		{
+			first_name: 'กิตติศักดิ์',
+			last_name: 'มณีรัตน์',
+			gender: 'male',
+			phone: '0891112233',
+			birth_year: 2530,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '1909800123456' },
+			special_needs: [],
+			status: 'pre_registered',
+			registered_via: 'kiosk',
+			card_snapshot: {
+				citizen_id: '1909800123456',
+				title_th: 'นาย',
+				first_name_th: 'กิตติศักดิ์',
+				last_name_th: 'มณีรัตน์',
+				gender: 'male',
+				birth_year_ce: 1987,
+				age: 39,
+				address_no: '12/4',
+				village_no: '3',
+				subdistrict: 'หาดใหญ่',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110',
+				scanned_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+				device_id: 'kiosk-01',
+				station_name: 'ตู้ Kiosk ประตู 1'
+			}
+		},
+		{
+			first_name: 'วรรณภา',
+			last_name: 'ศรีสุข',
+			gender: 'female',
+			phone: '0823334455',
+			birth_year: 2542,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '1809900234567' },
+			special_needs: ['ต้องการแพมเพิส'],
+			status: 'pre_registered',
+			registered_via: 'kiosk',
+			card_snapshot: {
+				citizen_id: '1809900234567',
+				title_th: 'นางสาว',
+				first_name_th: 'วรรณภา',
+				last_name_th: 'ศรีสุข',
+				gender: 'female',
+				birth_year_ce: 1999,
+				age: 27,
+				address_no: '55/1',
+				subdistrict: 'คอหงส์',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110',
+				scanned_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+				device_id: 'kiosk-01',
+				station_name: 'ตู้ Kiosk ประตู 1'
+			}
+		},
+		// 2. Online Web (Public Portal booking)
+		{
+			first_name: 'พิมพา',
+			last_name: 'สุวรรณโชติ',
+			gender: 'female',
+			phone: '0895556677',
+			birth_year: 2535,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '3900100345678' },
+			special_needs: [],
+			status: 'pre_registered',
+			registered_via: 'web',
+			emergency_contact: { name: 'สมบัติ สุวรรณโชติ', phone: '0895556688', relation: 'บิดา' }
+		},
+		{
+			first_name: 'ณัฐวุฒิ',
+			last_name: 'ทองประเสริฐ',
+			gender: 'male',
+			phone: '0867890123',
+			birth_year: 2538,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '1709900345678' },
+			special_needs: [],
+			status: 'pre_registered',
+			registered_via: 'web'
+		},
+		// 3. Staff Onsite Desk
+		{
+			first_name: 'อำนวย',
+			last_name: 'พงษ์สวัสดิ์',
+			gender: 'male',
+			phone: '0834567890',
+			birth_year: 2505,
+			religion: 'buddhist',
+			vulnerable_groups: vg('elderly_dependent'),
+			special_needs: ['ใช้วีลแชร์'],
+			person_id: { cardType: 'national_id', number: '3900200456789' },
+			status: 'pre_registered',
+			registered_via: 'staff'
+		},
+		// 4. Backoffice Admin
+		{
+			first_name: 'สุพัตรา',
+			last_name: 'เลิศวิไล',
+			gender: 'female',
+			phone: '0856789012',
+			birth_year: 2525,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '1609900456789' },
+			special_needs: [],
+			status: 'pre_registered',
+			registered_via: 'backoffice'
+		},
+		// 5. Import / File list
+		{
+			first_name: 'ประสิทธิ์',
+			last_name: 'ชัยเจริญ',
+			gender: 'male',
+			phone: '0819876543',
+			birth_year: 2518,
+			religion: 'buddhist',
+			person_id: { cardType: 'national_id', number: '3900300567890' },
+			special_needs: [],
+			status: 'pre_registered',
+			registered_via: 'import'
+		}
+	];
+	const preRegEvacuees = preRegEvacueeInputs.map((e) => createEvacuee(e, ctx));
+
+	// — movements (check_in for every active evacuee) ——————————————————————————
 	const movementInputs: MovementInput[] = evacuees.map((e) => ({
 		evacuee_id: e._id,
 		action: 'check_in' as const,
@@ -1901,6 +2033,7 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 	const allDocs = [
 		...hhInputs.map((_, i) => [hh1, hh2, hh3][i]),
 		...checkedInEvacuees,
+		...preRegEvacuees,
 		...movements,
 		...medicals,
 		...screenings,
@@ -1913,7 +2046,7 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 	await bulkDocs(dbName, allDocs);
 
 	console.log(
-		`  ✓ ${dbName}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
+		`  ✓ ${dbName}: 3 households, ${evacuees.length + preRegEvacuees.length} evacuees (${preRegEvacuees.length} pre-registered), ${movements.length} movements`
 	);
 	console.log(`  ✓ ${dbName}: ${medicals.length} medicals, ${screenings.length} screenings`);
 	console.log(
@@ -2076,6 +2209,32 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 		stats.status[status] = (stats.status[status] || 0) + 1;
 		stats.country[country] = (stats.country[country] || 0) + 1;
 		stats.age[ageBucket] = (stats.age[ageBucket] || 0) + 1;
+
+		const CHANNELS = ['kiosk', 'web', 'staff', 'backoffice', 'import'] as const;
+		const channel = CHANNELS[i % CHANNELS.length];
+		const isKiosk = channel === 'kiosk';
+		const createdDate = randomDatePast30Days();
+
+		const cardSnapshot: CardSnapshot | undefined = isKiosk
+			? {
+					citizen_id: `1${String(i).padStart(12, '0')}`,
+					title_th: i % 2 === 0 ? 'นาย' : 'นางสาว',
+					first_name_th: `GenName${i}`,
+					last_name_th: `GenSurname${i}`,
+					gender: i % 2 === 0 ? 'male' : 'female',
+					birth_year_ce: CURRENT_YEAR - age,
+					age,
+					address_no: `${rnd(1, 99)}/${rnd(1, 20)}`,
+					subdistrict: 'หาดใหญ่',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					scanned_at: createdDate,
+					device_id: 'kiosk-01',
+					station_name: 'จุดสแกน Kiosk 1'
+				}
+			: undefined;
+
 		const input: EvacueeInput = {
 			first_name: `GenName${i}`,
 			last_name: `GenSurname${i}`,
@@ -2084,7 +2243,9 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 			birth_year,
 			vulnerable_groups: VULNERABLE_GROUPS_BY_AGE_BUCKET[ageBucket],
 			special_needs: [],
-			registered_via: 'import'
+			status,
+			registered_via: channel,
+			card_snapshot: cardSnapshot
 		};
 
 		const doc = createEvacuee(input, CTX);
@@ -2093,25 +2254,25 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 		doc._id = `evacuee:seed-genname-${i}`;
 		(doc as Evacuee & { country: string }).country = country;
 		doc.current_stay.status = status;
-
-		const createdDate = randomDatePast30Days();
 		doc.created_at = createdDate;
 		doc.updated_at = createdDate;
 
 		docs.push(doc);
 
-		// Generate check-in movement for everyone
-		const checkInMove = createMovement(
-			{
-				evacuee_id: doc._id,
-				action: 'check_in',
-				zone: 'Z1'
-			},
-			CTX
-		);
-		checkInMove._id = `movement:seed-genname-${i}-in`;
-		checkInMove.occurred_at = createdDate;
-		docs.push(checkInMove);
+		// Generate check-in movement only for those who are NOT pre_registered
+		if (status !== 'pre_registered') {
+			const checkInMove = createMovement(
+				{
+					evacuee_id: doc._id,
+					action: 'check_in',
+					zone: 'Z1'
+				},
+				CTX
+			);
+			checkInMove._id = `movement:seed-genname-${i}-in`;
+			checkInMove.occurred_at = createdDate;
+			docs.push(checkInMove);
+		}
 
 		// Generate check-out or transfer-out if applicable
 		if (status === 'checked_out' || status === 'transferred') {
