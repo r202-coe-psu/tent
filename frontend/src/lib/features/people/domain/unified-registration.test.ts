@@ -310,4 +310,53 @@ describe('unified registration — report-in converters', () => {
 		);
 		expect(otherMember.reporting_in).toBe(false);
 	});
+
+	it('pre-fills address from evacuee card_snapshot when household is null (Kiosk flow)', () => {
+		const kioskEvacuee = {
+			_id: 'ev-kiosk-1',
+			type: 'evacuee' as const,
+			household_id: null,
+			first_name: 'กิตติศักดิ์',
+			last_name: 'มณีรัตน์',
+			gender: 'male' as const,
+			card_snapshot: {
+				citizen_id: '1909800123456',
+				address_no: '12/4',
+				village_no: '3',
+				lane: 'ซอย 5',
+				road: 'ถ.เพชรเกษม',
+				subdistrict: 'ตำบลหาดใหญ่',
+				district: 'อำเภอหาดใหญ่',
+				province: 'จังหวัดสงขลา',
+				postal_code: '90110',
+				photo_base64: 'data:image/jpeg;base64,mockphoto'
+			},
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'kiosk' as const,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+
+		const input = householdToUnifiedInput(
+			null,
+			kioskEvacuee as unknown as import('./people').Evacuee
+		);
+		expect(input.address_no).toBe('12/4');
+		expect(input.village_no).toBe('3 ซอย 5 ถ.เพชรเกษม');
+		expect(input.subdistrict).toBe('หาดใหญ่');
+		expect(input.district).toBe('หาดใหญ่');
+		expect(input.province).toBe('สงขลา');
+		expect(input.postal_code).toBe('90110');
+
+		const member = evacueeToUnifiedMember(
+			kioskEvacuee as unknown as import('./people').Evacuee,
+			'ev-kiosk-1'
+		);
+		expect(member.photo).toBe('data:image/jpeg;base64,mockphoto');
+	});
 });

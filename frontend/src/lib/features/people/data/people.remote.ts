@@ -1063,6 +1063,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 				const updatedEvacuee: Evacuee = touch({
 					...existingEvacuee,
+					household_id: existingEvacuee.household_id || effectiveHouseholdId,
 					first_name: m.first_name,
 					last_name: m.last_name ?? '',
 					gender: m.gender,

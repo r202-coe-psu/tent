@@ -196,6 +196,7 @@ export class ScannerServerRepository {
 			if (stayStatus === 'cancelled') {
 				const updated: Evacuee = {
 					...existing,
+					photo: cardSnapshot.photo_base64 || existing.photo || null,
 					card_snapshot: cardSnapshot,
 					registered_via: 'kiosk',
 					current_stay: {

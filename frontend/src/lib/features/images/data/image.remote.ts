@@ -102,11 +102,35 @@ export class ImageRemoteRepository implements ImageRepository {
 	}
 
 	async getFullImageUrl(id: string): Promise<string | null> {
+		if (!id) return null;
+		if (
+			id.startsWith('data:image/') ||
+			id.startsWith('blob:') ||
+			id.startsWith('http://') ||
+			id.startsWith('https://')
+		) {
+			return id;
+		}
+		if (!id.includes(':') && id.length > 50) {
+			return `data:image/jpeg;base64,${id}`;
+		}
 		const blob = await getAttachment(this.dbName, id, 'full');
 		return blob ? URL.createObjectURL(blob) : null;
 	}
 
 	async getThumbnailUrl(id: string): Promise<string | null> {
+		if (!id) return null;
+		if (
+			id.startsWith('data:image/') ||
+			id.startsWith('blob:') ||
+			id.startsWith('http://') ||
+			id.startsWith('https://')
+		) {
+			return id;
+		}
+		if (!id.includes(':') && id.length > 50) {
+			return `data:image/jpeg;base64,${id}`;
+		}
 		const blob = await getAttachment(this.dbName, id, 'thumb');
 		return blob ? URL.createObjectURL(blob) : null;
 	}
