@@ -17,7 +17,7 @@ affects:
 # สเปคระบบอ่านบัตรประชาชนและการลงทะเบียนผู้ประสบภัย (Smart Card Reader & Fast-Track Registration)
 
 **สรุป (BLUF):**  
-บันทึกข้อมูลชิปบัตรประชาชนสร้าง entity `evacuee` โดยตรง กำหนดสถานะ `current_stay.status = 'pre_registered'`, ระบุ `registered_via: 'kiosk'`, และแนบ `card_snapshot` พร้อมคำนวณอายุและรหัสไปรษณีย์อัตโนมัติ · ข้อมูลไหลเข้าสู่คิว Station 1 (`/onsite/people`) ในแท็บ "รอรับรายงานตัว" (`pre_registered`) เช่นเดียวกับการลงทะเบียนล่วงหน้าออนไลน์ (`registered_via: 'web'`) · เจ้าหน้าที่กด "รับรายงานตัว" (`/onsite/people/[id]/report-in`) เพื่อตรวจสอบข้อมูลที่ Autofill จาก `card_snapshot` ปรับสถานะเป็น `arriving` และออก Person QR ส่งต่อไป Station 2 (คัดกรองสุขภาพ) และ Station 3 (จัดโซน/Check-in สู่ `active`) ตาม ADR-0001
+บันทึกข้อมูลชิปบัตรประชาชนสร้าง entity `evacuee` โดยตรง กำหนดสถานะ `current_stay.status = 'pre_registered'`, ระบุ `registered_via: 'kiosk'`, และแนบ `card_snapshot` พร้อมคำนวณอายุและรหัสไปรษณีย์อัตโนมัติ · ข้อมูลไหลเข้าสู่คิว Station 1 (`/onsite/people`) ในแท็บ "รอรับรายงานตัว" (`pre_registered`) พร้อมป้ายและตัวกรองช่องทาง (`RegisteredViaBadge` แยก `kiosk` / `web` / `staff`) · เจ้าหน้าที่กด "รับรายงานตัว" (`/onsite/people/[id]/report-in`) เพื่อตรวจสอบข้อมูลที่ Autofill และ Normalize ที่อยู่เดิมจาก `card_snapshot` หรือใช้ `PullPreRegisteredDialog` เพื่อดึงข้อมูลผู้ลงทะเบียนจากตู้ Kiosk มารวมเป็นสมาชิกในครัวเรือนเดียวกันได้ทันที · บันทึกรับรายงานตัวปรับสถานะเป็น `arriving` และออก Person QR ส่งต่อไป Station 2 (คัดกรองสุขภาพ) และ Station 3 (จัดโซน/Check-in สู่ `active`) ตาม ADR-0001
 
 ---
 
@@ -28,9 +28,11 @@ affects:
 ### ข้อกำหนดสำคัญ (Core Invariants):
 
 1. **Direct Pre-registration:** ผู้ประสบภัยที่เสียบบัตร ณ ตู้ Kiosk จะได้รับสถานะ `pre_registered` ทันที และมีฟิลด์ `registered_via: 'kiosk'` เพื่อแยกแยะจากช่องทางออนไลน์ (`'web'`)
-2. **Editable & Manual Override:** ข้อมูลทุกช่องที่ Autofill จาก `card_snapshot` จะต้องไม่ถูกล็อกตาย เจ้าหน้าที่และผู้ประสบภัยสามารถตรวจสอบและแก้ไขข้อมูลจริงได้ในฟอร์มรับรายงานตัว Station 1
-3. **Decoupled Pipeline Handshake:** การเสียบบัตรที่ Kiosk ทำหน้าที่เก็บข้อมูลอัตลักษณ์และที่อยู่เท่านั้น **ไม่มีการจัดเตียง/โซน และไม่มีการคัดกรองโรคที่ Kiosk หรือ Station 1** การตรวจโรคเป็นหน้าที่ของ Station 2 และการ Check-in เข้าพักจริงเป็นหน้าที่ของ Station 3 เท่านั้น
-4. **Data Privacy & Search-First:** รายการจาก Kiosk ปรากฏในคิว `pre_registered` ประจำศูนย์ และค้นหาได้ผ่าน Unified Search Omnibox ในหน้า `/onsite/people` โดยไม่เปิดเผยข้อมูลชิปบัตรสู่ Public Directory
+2. **Channel Visibility & Filtering:** หน้าจอรับรายงานตัว Station 1 แยกแยะช่องทางที่มาด้วย Badge และตัวกรอง (`all`, `kiosk`, `web`, `staff`) เพื่อให้เจ้าหน้าที่จัดคิวและตรวจสอบแหล่งที่มาได้รวดเร็ว
+3. **Household Clustering via Pull Dialog:** รองรับการจัดตั้งครัวเรือนหน้างาน กรณีสมาชิกครอบครัวแยกกันเสียบบัตรที่ตู้ Kiosk หรือจองออนไลน์ สามารถดึงข้อมูลสมาชิกเข้ามารวมเป็นครัวเรือนเดียวกันผ่าน `PullPreRegisteredDialog` ได้ทันทีโดยไม่ต้องเสียบบัตรซ้ำ
+4. **Editable & Normalized Autofill:** ข้อมูลทุกช่องที่ Autofill จาก `card_snapshot` จะต้องตัดคำนำหน้า (เช่น ตำบล/อำเภอ/จังหวัด) เพื่อให้แมปกับ Dropdown ของ Master Data ได้แม่นยำ และอนุญาตให้เจ้าหน้าที่ตรวจสอบแก้ไขได้อิสระ
+5. **Decoupled Pipeline Handshake:** การเสียบบัตรที่ Kiosk ทำหน้าที่เก็บข้อมูลอัตลักษณ์และที่อยู่เท่านั้น **ไม่มีการจัดเตียง/โซน และไม่มีการคัดกรองโรคที่ Kiosk หรือ Station 1** การตรวจโรคเป็นหน้าที่ของ Station 2 และการ Check-in เข้าพักจริงเป็นหน้าที่ของ Station 3 เท่านั้น
+6. **Data Privacy & Resource Hygiene:** ข้อมูลรูปถ่ายและตัวอย่างบัตรบน Client ต้องมีการจัดการ Memory Management (`URL.revokeObjectURL`) อย่างเคร่งครัด และไม่เปิดเผยข้อมูลผู้มีสถานะ `pre_registered` สู่ Public Directory
 
 ---
 
@@ -54,9 +56,17 @@ flowchart TD
     WarnPre --> Station1Desk
     ReactivatePre --> Station1Desk
 
-    Station1Desk --> QueuePre["แสดงใน Tab 1: ลงทะเบียนล่วงหน้า (pre_registered)<br/>หรือค้นหาด้วยเลข 13 หลัก / ชื่อ"]
-    QueuePre --> ActionReportIn["เจ้าหน้าที่กดปุ่ม: [ รับรายงานตัว ]<br/>นำทางสู่ /onsite/people/[id]/report-in"]
-    ActionReportIn --> SharedForm["Shared Registration Shell (Scroll Spy):<br/>- Autofill อัตลักษณ์จาก card_snapshot<br/>- Autofill ที่อยู่เดิม พร้อมรหัสไปรษณีย์<br/>- สร้าง/ผูก ครอบครัว (Household)<br/>- ระบุข้อมูลติดต่อฉุกเฉิน (Required)"]
+    Station1Desk --> QueuePre["แสดงใน Tab 1: ลงทะเบียนล่วงหน้า (pre_registered)<br/>- แสดง RegisteredViaBadge (kiosk / web)<br/>- ตัวกรอง Channel Filter (All / Kiosk / Web)"]
+    
+    QueuePre --> ActionReportIn["เจ้าหน้าที่กด: [ รับรายงานตัว ]<br/>นำทางสู่ /onsite/people/[id]/report-in"]
+    QueuePre --> ActionNewReg["เจ้าหน้าที่เปิดฟอร์มลงทะเบียนใหม่<br/>/onsite/people/new"]
+
+    ActionReportIn --> SharedForm["Shared Registration Shell (Scroll Spy):<br/>- Autofill อัตลักษณ์จาก card_snapshot<br/>- Normalize & Autofill ที่อยู่เดิม<br/>- สร้าง/ผูก ครอบครัว (Household)<br/>- ระบุข้อมูลติดต่อฉุกเฉิน (Required)"]
+    ActionNewReg --> SharedForm
+
+    SharedForm -.-> PullDialog["PullPreRegisteredDialog:<br/>ค้นหาและดึงข้อมูลผู้เสียบบัตร Kiosk คนอื่น<br/>เข้ามาเป็นสมาชิกในครัวเรือน (Member Card)"]
+    PullDialog -.-> SharedForm
+
     SharedForm --> SaveStation1["บันทึกข้อมูล:<br/>- ปรับ status: pre_registered -> arriving<br/>- ออก Person QR Code (+ Handover Slip)"]
 
     SaveStation1 --> CheckMedical{"เปิด Medical Screening หรือไม่?"}
@@ -82,7 +92,7 @@ flowchart TD
   - `person_id`: `{ cardType: 'national_id', number: card.citizen_id }`
   - `first_name`, `last_name`, `gender`, `birth_year`, `age`: แมปจากชิปบัตร โดยคำนวณ `age` จากปีเกิด พ.ศ. อัตโนมัติ
   - `household_id`: `null` (รอผูกครัวเรือนที่ Station 1)
-  - `card_snapshot`: เก็บ snapshot ข้อมูลบัตร, ที่อยู่ตามทะเบียนบ้าน, รูปถ่าย, พร้อมรหัสไปรษณีย์ (`postal_code`) ที่ค้นหาอัตโนมัติผ่านพจนานุกรมตำบล/อำเภอ/จังหวัด (`thailand-location`)
+  - `card_snapshot`: เก็บ snapshot ข้อมูลบัตร, ที่อยู่ตามทะเบียนบ้าน, รูปถ่าย (`photo_base64`), พร้อมรหัสไปรษณีย์ (`postal_code`) ที่ค้นหาอัตโนมัติผ่านพจนานุกรมตำบล/อำเภอ/จังหวัด (`thailand-location`)
 - **FR-CARD-03 (Re-scan & Status Handling):** การประมวลผลกรณีเลข 13 หลักมีประวัติเดิมในศูนย์:
   - `pre_registered`: ตอบกลับสถานะ `already_pre_registered` (HTTP 409) ไม่ overwrite doc ซ้ำ
   - `active`: ตอบกลับสถานะ `already_active` (HTTP 409)
@@ -97,11 +107,19 @@ flowchart TD
 
 ### 3.2 Station 1 Onsite Intake Flow (`/onsite/people`)
 
-- **FR-STAFF-01 (Queue Visibility):** ผู้ที่ลงทะเบียนผ่าน Kiosk จะปรากฏใน **Tab 1: "รายชื่อผู้ลงทะเบียนล่วงหน้า รอรับรายงานตัว"** (`activeTab = 'pre_registered'`) ควบคู่กับผู้ที่จองผ่านหน้าเว็บออนไลน์ (`web`)
+- **FR-STAFF-01 (Queue Visibility & Channel Filtering):**
+  - ผู้ที่ลงทะเบียนผ่าน Kiosk จะปรากฏใน **Tab 1: "รายชื่อผู้ลงทะเบียนล่วงหน้า รอรับรายงานตัว"** (`activeTab = 'pre_registered'`) ควบคู่กับผู้ที่จองผ่านหน้าเว็บออนไลน์ (`web`)
+  - แสดงคอมโพเนนต์ `RegisteredViaBadge` กำกับทุกรายการ (`kiosk` สีฟ้าไอคอนเครื่องอ่านบัตร / `web` สีม่วงไอคอนลูกโลก / `staff` สีเขียว)
+  - มีแถบตัวกรอง Channel (`all`, `kiosk`, `web`, `staff`) พร้อมตัวเลข badge counter แสดงจำนวนผู้รอรายงานตัวแยกตามช่องทาง
 - **FR-STAFF-02 (Omnibox Search):** เจ้าหน้าที่สามารถค้นหาผู้เสียบบัตรได้ด้วยเลข 13 หลัก, ชื่อ-นามสกุล, หรือสแกน QR Code จาก Unified Search Omnibox
 - **FR-STAFF-03 (Report-in Action):** เมื่อกดปุ่ม `[ รับรายงานตัว ]` ให้เปิดเส้นทาง `/onsite/people/[id]/report-in` เพื่อเข้าสู่ Shared Registration Shell (Scroll Spy)
-- **FR-STAFF-04 (Autofill & Override):**
-  - Autofill ข้อมูลบุคคลและที่อยู่จาก `card_snapshot` เข้าสู่ฟอร์มอัตโนมัติ
+- **FR-STAFF-04 (Autofill, Address Normalization & Photo Preview):**
+  - กรณีผู้ประสบภัยจาก Kiosk ยังไม่มีครัวเรือน (`household_id === null`) ให้ฟังก์ชัน `householdToUnifiedInput` ดึงที่อยู่จาก `card_snapshot` มาใส่ในฟอร์มครัวเรือนอัตโนมัติ:
+    - `address_no`: เลขที่บ้าน
+    - `village_no`: หมู่ที่ + ซอย + ถนน
+    - `subdistrict`, `district`, `province`: ตัดคำนำหน้า เช่น "ตำบล", "อำเภอ", "จังหวัด" ออกอัตโนมัติ เพื่อให้แมปกับตัวเลือกใน Dropdown Master Data ได้ตรงตัว
+    - `postal_code`: รหัสไปรษณีย์จากการค้นหาอัตโนมัติ
+  - รูปถ่าย: แสดงตัวอย่างรูปถ่ายจาก `card_snapshot.photo_base64` หรือ photo URL ทันที
   - เจ้าหน้าที่สามารถแก้ไขข้อมูลตัวสะกดและที่อยู่จริงได้อิสระ
   - บังคับระบุข้อมูลผู้ติดต่อฉุกเฉิน (`emergency_contact`) และการจัดตั้งหรือเข้าร่วมครัวเรือน (`household_id`)
 - **FR-STAFF-05 (Station 1 Completion):** เมื่อบันทึกรายงานตัวสำเร็จ:
@@ -109,6 +127,15 @@ flowchart TD
   - ออก **Person QR Code** ประจำตัวผู้ประสบภัย
   - หากเปิด flag `enable_medical_screening` ให้ออก Handover Slip และส่งคิวไป Station 2
   - หากปิด flag ให้ส่งคิวไป Station 3 เพื่อจัดโซนที่พักโดยตรง
+- **FR-STAFF-06 (Household Member Pull Dialog):**
+  - ในหน้า Unified Registration Form และการ์ดสมาชิก (`unified-registration-member-card.svelte`) มีปุ่ม **"ดึงข้อมูลผู้ลงทะเบียนล่วงหน้า / Kiosk"** เพื่อเปิด `PullPreRegisteredDialog`
+  - ให้เจ้าหน้าที่สามารถค้นหารายชื่อผู้ที่เสียบบัตรไว้ที่ตู้ Kiosk หรือจองออนไลน์ และดึงข้อมูลเข้ามาเป็นสมาชิกในครัวเรือน (Household Member) เดียวกันได้
+  - ข้อมูลที่ถูกนำเข้าประกอบด้วย: ชื่อ-นามสกุล, เลขบัตรประชาชน, วันเดือนปีเกิด, เพศ, เบอร์โทรศัพท์, ข้อมูลติดต่อฉุกเฉิน, รูปถ่ายจากบัตร (`photo_base64`), ความต้องการพิเศษ (`special_needs`), และกลุ่มเปราะบาง (`vulnerable_groups`)
+  - สมาชิกที่ถูกดึงเข้ามาจะได้รับการตั้งค่า `reporting_in: true` เพื่อปรับสถานะเป็น `arriving` พร้อมกันเมื่อกดบันทึกรับรายงานตัว
+
+### 3.3 การจัดการหน่วยความจำและทรัพยากร (Resource & Memory Lifecycle)
+
+- **NFR-MEM-01 (Object URL Lifecycle Management):** การสร้าง Object URL จาก Blob (เช่น การแสดงผลรูปถ่ายที่อัปโหลดหน้างานหรือดึงจาก Smart Card) ต้องจัดเก็บ reference และเรียกใช้งาน `URL.revokeObjectURL()` เมื่อคอมโพเนนต์ถูก Unmount หรือเมื่อผู้ใช้งานเปลี่ยนรูปใหม่ เพื่อป้องกันปัญหาสะสมหน่วยความจำ (Memory Leak) บนเครื่องแท็บเล็ตและอุปกรณ์หน้างานที่เปิดให้บริการตลอด 24 ชั่วโมง
 
 ---
 
@@ -129,4 +156,5 @@ flowchart TD
    - รายชื่อผู้มีสถานะ `pre_registered` จะไม่แสดงในระบบค้นหาญาติสาธารณะ (Public Directory / Public Portal) เพื่อคุ้มครองข้อมูลส่วนบุคคล
 3. **Data Protection:**
    - ข้อมูลรูปถ่ายหน้าบัตร (`photo_base64`) และที่อยู่ฉบับเต็มถูกจัดเก็บในฐานข้อมูลศูนย์พักพิงที่จำกัดสิทธิ์ (RBAC) และไม่ส่ง `national_id_hash` หรือเลขบัตรตัวเต็มออกสู่ภายนอก
+
 

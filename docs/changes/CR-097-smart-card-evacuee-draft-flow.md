@@ -1,8 +1,9 @@
 ---
 id: CR-097
-title: ระบบอ่านบัตรประชาชน Smart Card — ย้าย scanner_draft สู่ evacuee:draft, รองรับ pre_registered fast-track, และ autofill ที่อยู่ Step 3
-status: approved
+title: ระบบอ่านบัตรประชาชน Smart Card — ย้าย scanner_draft สู่ evacuee:pre_registered, รองรับ pre_registered fast-track, และ autofill ที่อยู่ Step 3
+status: done
 date: 2026-08-29
+updated: 2026-09-11
 requested_by: Jk (Project Owner)
 decided_by: Jk (Project Owner)
 layer: volatile
@@ -93,6 +94,22 @@ affects:
 - 2026-08-29 — Jk (Project Owner) เคาะแนวทางย้ายสู่ `evacuee:draft`, จัดการ `pre_registered + card_snapshot`, คัดกรอง Step 1 ใหม่ และ Autofill ที่อยู่ Step 3
 - 2026-08-29 — Jk (Project Owner) เพิ่มข้อกำหนด: 1) UI สีเหลืองแจ้งเตือนสแกนซ้ำ "ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว", 2) คำนวณอายุอัตโนมัติจากปีเกิด, 3) Overwrite ข้อมูลจากบัตรสำหรับผู้ลงทะเบียนล่วงหน้า
 - 2026-08-29 — Jk (Project Owner) ปรับการจัดเก็บทะเบียนอุปกรณ์ `scanner_device` ให้เก็บใน DB `registry` ตรงกลางก่อน เพื่อความรวดเร็วในการ lookup API authentication และบันทึก Open Question สำหรับการตัดสินใจเรื่อง Edge/Shelter Autonomy ในอนาคต
+- 2026-09-11 — As-Built Alignment: ปรับสถาปัตยกรรมสถานะให้เชื่อมต่อกับ Decoupled Pipeline ([ADR-0001](../adr/0001-decoupled-registration-and-medical-screening-flow.md)) โดยใช้สถานะ `pre_registered` พร้อม `registered_via: 'kiosk'` แทน `draft`; เพิ่ม `PullPreRegisteredDialog` สำหรับรวมครัวเรือนหน้างาน; เพิ่ม `RegisteredViaBadge` และ Channel Filter บนคิว Station 1; เพิ่ม Address Normalization และ Memory Management สำหรับ Blob URL
+
+---
+
+## As-Built Implementation Details (2026-09-11)
+
+1. **Status Integration:**
+   - ใช้ `current_stay.status = 'pre_registered'` โดยตรง และระบุ `registered_via: 'kiosk'` เพื่อให้เข้าคิวร่วมกับผู้จองออนไลน์ในแท็บ "รอรับรายงานตัว" (`/onsite/people`)
+2. **Channel Badge & Filter:**
+   - เพิ่มคอมโพเนนต์ `RegisteredViaBadge` (`kiosk`, `web`, `staff`)
+   - เพิ่มแถบ Filter แยกช่องทางบนหน้าคิวรับรายงานตัว เพื่อให้เจ้าหน้าที่แยกแยะและนับยอดผู้มาจาก Kiosk ได้รวดเร็ว
+3. **Family Clustering via `PullPreRegisteredDialog`:**
+   - เพิ่ม Dialog ดึงข้อมูลผู้ที่เสียบบัตร Kiosk หรือจองออนไลน์ เข้ามารวมเป็นสมาชิกในครัวเรือน (Household Member Card) ใน Unified Registration Shell โดยไม่ต้องกรอกใหม่หรือเสียบบัตรซ้ำ
+4. **Address Normalization & Photo Preview:**
+   - ฟังก์ชัน `householdToUnifiedInput` ดึงที่อยู่จาก `card_snapshot` กรณีผู้ประสบภัยจาก Kiosk ยังไม่มีครัวเรือน พร้อมตัดคำนำหน้าตำบล/อำเภอ/จังหวัด อัตโนมัติเพื่อให้ตรงกับ Dropdown Master Data
+   - แสดงตัวอย่างรูปถ่ายจาก `card_snapshot.photo_base64` ทันที และมี memory lifecycle cleanup ผ่าน `URL.revokeObjectURL`
 
 ---
 
@@ -110,4 +127,5 @@ affects:
 **แนวทางการตัดสินใจในอนาคต:**
 - หากโปรเจกต์ยังเน้นโมเดล **Remote-First Server (Central Cloud):** ใช้ **`registry`** ต่อไปเพราะเรียบง่ายและเสถียรที่สุด
 - หากเริ่มขยายสู่โมเดล **Edge Disaster Continuity (Offline Isolated Nodes):** พิจารณาเพิ่ม Header `X-Shelter-Code` ใน Kiosk Client แล้วย้าย `scanner_device` ลงไปไว้ที่ `shelter_{shelter_code}` ต่อไป
+
 
