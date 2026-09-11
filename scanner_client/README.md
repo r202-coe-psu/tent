@@ -351,6 +351,7 @@ cat /tmp/kiosk_autostart.log
 
 | ปัญหา | สาเหตุที่เป็นไปได้ | แนวทางแก้ไข |
 | :--- | :--- | :--- |
+| **`Failed to establish context: Access denied. (0x8010006A)`** | สิทธิ์ Polkit (PolicyKit) บน Linux บล็อกการเข้าถึง `pcscd` เมื่อรันผ่าน SSH หรือผู้ใช้ทั่วไป | 1) ตั้งค่า `--disable-polkit` ใน `/etc/default/pcscd` แล้วรัน `sudo systemctl restart pcscd`<br>2) หรือสร้างไฟล์ `/etc/polkit-1/rules.d/03-pcscd.rules` ให้อนุญาต user<br>3) หรือทดสอบชั่วคราวด้วย `sudo .venv/bin/python test_card.py` |
 | **`ImportError: No module named smartcard`** หรือ `pyscard` build ล้มเหลว | ขาดตัวคอมไพล์ C หรือ header ของ PC/SC | รัน `sudo apt install -y swig libpcsclite-dev build-essential` แล้วสั่ง `pip install --no-cache-dir pyscard` ใหม่ |
 | **`No readers found` / `SCardListReaders failed`** | Service `pcscd` ยังไม่เริ่มทำงาน หรือพอร์ต USB จ่ายไฟไม่พอ | ตรวจสอบด้วย `sudo systemctl status pcscd` หากหยุดทำงานให้รัน `sudo systemctl restart pcscd` และเสียบสาย USB ให้แน่น |
 | **`Reader is busy` / `Sharing violation`** | มีโปรเซสอื่นแย่งจองเครื่องอ่านบัตร | ปิดโปรแกรมหรือคำสั่ง `pcsc_scan` หรือ Python script อื่นที่รันค้างอยู่ |
