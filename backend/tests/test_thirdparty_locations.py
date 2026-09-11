@@ -319,3 +319,41 @@ def test_dopa_lookup_partial_and_edge_cases() -> None:
     assert lookup_dopa_codes("สงขลา", "หาดใหญ่", None) == DopaCodes("90", "9011", None)
     assert lookup_dopa_codes("", "   ", "\t\n") == DopaCodes(None, None, None)
     assert lookup_dopa_codes("ไม่มีจริง", "ไม่มีจริง", "ไม่มีจริง") == DopaCodes(None, None, None)
+
+
+async def test_list_locations_pagination(
+    client: AsyncClient,
+    location_read_headers: dict[str, str],
+    open_hatyai_shelter: PublicShelter,
+    closed_shelter: PublicShelter,
+) -> None:
+    # Default page 1, limit 50
+    resp = await client.get("/api/thirdparty/locations", headers=location_read_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "pagination" in body
+    assert body["pagination"]["page"] == 1
+    assert body["pagination"]["limit"] == 50
+    assert body["pagination"]["total"] >= 2
+    assert len(body["result"]) >= 2
+
+    # Limit 1, page 1
+    p1_resp = await client.get(
+        "/api/thirdparty/locations?page=1&limit=1", headers=location_read_headers
+    )
+    assert p1_resp.status_code == 200
+    p1 = p1_resp.json()
+    assert len(p1["result"]) == 1
+    assert p1["pagination"]["page"] == 1
+    assert p1["pagination"]["limit"] == 1
+    assert p1["pagination"]["total_pages"] >= 2
+
+    # Limit 1, page 2
+    p2_resp = await client.get(
+        "/api/thirdparty/locations?page=2&limit=1", headers=location_read_headers
+    )
+    assert p2_resp.status_code == 200
+    p2 = p2_resp.json()
+    assert len(p2["result"]) == 1
+    assert p2["pagination"]["page"] == 2
+    assert p2["result"][0]["location_code"] != p1["result"][0]["location_code"]
