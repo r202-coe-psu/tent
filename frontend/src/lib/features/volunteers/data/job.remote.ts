@@ -20,7 +20,7 @@ import {
 	QuotaError,
 	type JobQuota
 } from '../domain/quota';
-import type { JobFilter, JobRepository } from './volunteer.repository';
+import type { JobFilter, JobQuotaUsage, JobRepository } from './volunteer.repository';
 
 /** Read-modify-write retries on CouchDB 409 before giving up (00-foundation §00.3). */
 const MAX_QUOTA_RETRIES = 5;
@@ -47,6 +47,18 @@ function mergeQuota(job: Job, quota: JobQuota): Job {
 		slots_dispatched: quota.slots_dispatched,
 		slots_remaining: quota.slots_remaining
 	};
+}
+
+function assertQuotaUsage(usage: JobQuotaUsage): JobQuotaUsage {
+	if (
+		!Number.isInteger(usage.confirmed) ||
+		usage.confirmed < 0 ||
+		!Number.isInteger(usage.dispatched) ||
+		usage.dispatched < 0
+	) {
+		throw new QuotaError('คำนวณจำนวนอาสาที่ใช้งานอยู่ไม่ถูกต้อง');
+	}
+	return usage;
 }
 
 /**
@@ -185,6 +197,52 @@ export class JobRemoteRepository implements JobRepository {
 	 */
 	confirmSlot(jobId: string, count = 1): Promise<Job> {
 		return this.mutateQuota(jobId, (quota) => applyAccept(applyDispatch(quota, count), count));
+	}
+
+	/**
+	 * Rebuild the live job counters from concrete shift assignments. This is
+	 * needed by flows that write a shift row before touching the parent job:
+	 * an old/stale `slots_remaining` must not reject a booking when the actual
+	 * shift rosters still have capacity.
+	 */
+	async reconcileQuota(
+		jobId: string,
+		loadUsage: (job: Job) => Promise<JobQuotaUsage>
+	): Promise<Job> {
+		let lastError: unknown;
+		for (let attempt = 0; attempt < MAX_QUOTA_RETRIES; attempt++) {
+			const stored = await this.repo.get<Job>(jobId);
+			if (!stored) throw new Error(`ไม่พบงาน: ${jobId}`);
+			const current = withNormalizedJobStatus(stored);
+			const usage = assertQuotaUsage(await loadUsage(current));
+			const claimed = usage.confirmed + usage.dispatched;
+			if (claimed > current.quota) {
+				throw new QuotaError(
+					`จำนวนอาสาที่ใช้งานอยู่ ${claimed} คน เกินโควตางาน ${current.quota} คน`
+				);
+			}
+
+			const nextQuota: JobQuota = {
+				quota: current.quota,
+				slots_confirmed: usage.confirmed,
+				slots_dispatched: usage.dispatched,
+				slots_remaining: current.quota - claimed
+			};
+			assertQuotaInvariant(nextQuota);
+			const merged = mergeQuota(current, nextQuota);
+			const nextJob = assertWritable(touch({ ...merged, status: deriveJobStatus(merged) }));
+
+			try {
+				return await this.repo.put(nextJob);
+			} catch (err) {
+				lastError = err;
+				if (err instanceof ConflictError) continue;
+				throw err;
+			}
+		}
+		throw lastError instanceof Error
+			? lastError
+			: new ConflictError(`reconcileQuota: exceeded ${MAX_QUOTA_RETRIES} retries for ${jobId}`);
 	}
 
 	/** Direct `confirmed -> remaining` (`applyRelease`) — the inverse of {@link confirmSlot}. */

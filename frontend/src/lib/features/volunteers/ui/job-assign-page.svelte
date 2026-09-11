@@ -17,8 +17,8 @@
 	 * There is NO offer/accept step (owner decision 2026-08-29): the SM assigns
 	 * outright. `useAssignVolunteers` → `ShiftAssignmentRepository#assign`
 	 * creates the assignment already accepted AND moves
-	 * `job.slots_remaining → slots_confirmed` in the same call, retrying on
-	 * CouchDB 409. The calls are sequential on purpose — they all
+	 * the job counters from the concrete shift assignments in the same call,
+	 * retrying on CouchDB 409. The calls are sequential on purpose — they all
 	 * read-modify-write the same job document, so firing them in parallel would
 	 * just make every one of them conflict and retry.
 	 */
@@ -44,6 +44,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { useShelter } from '$lib/features/shelters';
+	import { errorMessage } from '$lib/utils/errors';
 	import AssignRosterRow from './assign-roster-row.svelte';
 	import AssignVolunteerDetailDialog from './assign-volunteer-detail-dialog.svelte';
 	import { shiftDutyWindow } from '../domain/duty-window';
@@ -313,7 +314,7 @@
 				successfulIds.push(candidate.volunteer._id);
 			} catch (err) {
 				const name = `${candidate.volunteer.first_name} ${candidate.volunteer.last_name}`.trim();
-				failed.push(name || candidate.volunteer._id);
+				failed.push(`${name || candidate.volunteer._id} (${errorMessage(err)})`);
 				// Quota is finite: once one dispatch fails there may be no seat
 				// left, so stop rather than hammering the same document.
 				if (err instanceof Error && /quota|โควตา|เต็ม|capacity/i.test(err.message)) break;

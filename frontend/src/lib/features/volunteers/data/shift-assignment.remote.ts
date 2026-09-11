@@ -10,6 +10,12 @@ import {
 	type ShiftAssignment,
 	type ShiftAssignmentInput
 } from '../domain/shift-assignment.schema';
+import {
+	activeAssignmentCountForShift,
+	jobQuotaUsageFromAssignments
+} from '../domain/shift-roster';
+import { QuotaError } from '../domain/quota';
+import type { Job as VolunteerJob } from '../domain/job.schema';
 import { jobRepository } from './job.remote';
 import { volunteerRepository } from './volunteer.remote';
 import type { ShiftAssignmentFilter, ShiftAssignmentRepository } from './volunteer.repository';
@@ -44,12 +50,16 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	}
 
 	/** A shift assignment must point at a real child row of its parent job. */
-	private async assertShiftReference(input: ShiftAssignmentInput): Promise<void> {
+	private async assertShiftReference(
+		input: ShiftAssignmentInput
+	): Promise<{ job: VolunteerJob; shift: VolunteerJob['shifts'][number] }> {
 		const job = await jobRepository().get(input.job_id);
 		if (!job) throw new Error(`ไม่พบงาน: ${input.job_id}`);
-		if (!job.shifts.some((shift) => shift.id === input.shift_id)) {
+		const shift = job.shifts.find((candidate) => candidate.id === input.shift_id);
+		if (!shift) {
 			throw new Error(`ไม่พบกะ ${input.shift_id} ในงาน ${input.job_id}`);
 		}
+		return { job, shift };
 	}
 
 	/**
@@ -59,8 +69,10 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	 * fall back to comparing `duty_window` for those rows, same as
 	 * `capacity.ts`/`shift-roster.ts` do on read.
 	 */
-	private async assertNoDuplicate(input: ShiftAssignmentInput): Promise<void> {
-		const existing = await this.list({ jobId: input.job_id });
+	private assertNoDuplicate(
+		input: ShiftAssignmentInput,
+		existing: readonly ShiftAssignment[]
+	): void {
 		if (
 			existing.some(
 				(a) =>
@@ -73,6 +85,17 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 			)
 		) {
 			throw new Error('อาสาสมัครคนนี้ถูกมอบหมายในกะนี้แล้ว');
+		}
+	}
+
+	private assertShiftCapacity(
+		job: VolunteerJob,
+		shift: VolunteerJob['shifts'][number],
+		existing: readonly ShiftAssignment[]
+	): void {
+		const used = activeAssignmentCountForShift(shift, job._id, existing);
+		if (used >= shift.quota) {
+			throw new QuotaError(`กะนี้เต็มแล้ว (${used}/${shift.quota} คน)`);
 		}
 	}
 
@@ -99,8 +122,10 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	}
 
 	async dispatch(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
-		await this.assertShiftReference(input);
-		await this.assertNoDuplicate(input);
+		const { job, shift } = await this.assertShiftReference(input);
+		const existing = await this.list({ jobId: input.job_id });
+		this.assertNoDuplicate(input, existing);
+		this.assertShiftCapacity(job, shift, existing);
 		const doc = makeShiftAssignment(input, ctx, {
 			status: input.shift === 'flex' ? 'standby' : 'assigned',
 			dispatch_status: 'dispatched'
@@ -123,20 +148,24 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	 *
 	 * Same write order and compensation as {@link dispatch}: the assignment doc
 	 * first, then the quota move. The difference is only which quota transition
-	 * runs — `confirmSlot` (remaining → confirmed) instead of `dispatch`
-	 * (remaining → dispatched) — so `slots_dispatched` stays 0 for work booked
-	 * this way and the shift's 3-colour bar shows it as filled immediately.
+	 * runs — the parent job is reconciled from active assignments, with this row
+	 * counted as confirmed instead of dispatched — so `slots_dispatched` stays 0
+	 * for work booked this way and the shift's 3-colour bar shows it as filled.
 	 */
 	async assign(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
-		await this.assertShiftReference(input);
-		await this.assertNoDuplicate(input);
+		const { job, shift } = await this.assertShiftReference(input);
+		const existing = await this.list({ jobId: input.job_id });
+		this.assertNoDuplicate(input, existing);
+		this.assertShiftCapacity(job, shift, existing);
 		const doc = makeShiftAssignment(input, ctx, {
 			status: 'standby',
 			dispatch_status: 'accepted'
 		});
 		const saved = await this.save(doc);
 		try {
-			await jobRepository().confirmSlot(input.job_id);
+			await jobRepository().reconcileQuota(input.job_id, async (latestJob) =>
+				jobQuotaUsageFromAssignments(latestJob, await this.list({ jobId: latestJob._id }))
+			);
 		} catch (err) {
 			await this.repo.remove(saved).catch(() => {
 				/* best-effort; original error still surfaces below */

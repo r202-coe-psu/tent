@@ -128,6 +128,37 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		expect(reloadedJob).toMatchObject({ slots_confirmed: 2, slots_remaining: 0 });
 	});
 
+	it('assign() repairs stale job counters from the live shift assignments', async () => {
+		const { jobs, volunteers, assignments, job, volunteer } = await setup();
+		await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+
+		// Reproduce the production mismatch: the shift has 1/2 people, but the
+		// parent job was incorrectly left at 2/2 and reports no slot remaining.
+		const staleJob = await jobs.get(job._id);
+		await memoryRepo.put({
+			...staleJob!,
+			slots_confirmed: 2,
+			slots_dispatched: 0,
+			slots_remaining: 0,
+			status: 'full'
+		});
+
+		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);
+		await expect(
+			assignments.assign(assignmentInput(job._id, second._id), ctx)
+		).resolves.toMatchObject({
+			volunteer_id: second._id
+		});
+
+		expect(await jobs.get(job._id)).toMatchObject({
+			slots_confirmed: 2,
+			slots_dispatched: 0,
+			slots_remaining: 0,
+			status: 'full'
+		});
+		expect((await assignments.list({ jobId: job._id })).length).toBe(2);
+	});
+
 	it('rejects an assignment whose shift_id is not a child of the job', async () => {
 		const { assignments, job, volunteer } = await setup();
 		await expect(

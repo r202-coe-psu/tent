@@ -180,6 +180,12 @@ export type JobFilter = {
 	isUrgent?: boolean;
 };
 
+/** Live seat usage rebuilt from concrete shift_assignment documents. */
+export interface JobQuotaUsage {
+	confirmed: number;
+	dispatched: number;
+}
+
 export interface JobRepository {
 	list(filter?: JobFilter): Promise<Job[]>;
 	get(id: string): Promise<Job | null>;
@@ -210,6 +216,12 @@ export interface JobRepository {
 	 * transitions) so no new domain logic is introduced here.
 	 */
 	confirmSlot(jobId: string, count?: number): Promise<Job>;
+	/**
+	 * Reconcile the job-level counters from concrete shift assignments and
+	 * persist the result with the same conflict retry guarantees as quota
+	 * mutations. The loader runs again after a CouchDB conflict.
+	 */
+	reconcileQuota(jobId: string, loadUsage: (job: Job) => Promise<JobQuotaUsage>): Promise<Job>;
 	/**
 	 * Direct `slots_confirmed -1, slots_remaining +1` (`applyRelease`) — the
 	 * inverse of {@link confirmSlot}. Backs
@@ -295,9 +307,9 @@ export interface ShiftAssignmentRepository {
 	/**
 	 * SM assigns a volunteer outright — no offer, no waiting for the volunteer
 	 * to accept (owner decision 2026-08-29). The `shift_assignment` is minted
-	 * already `dispatch_status: 'accepted'` and the slot goes straight from
-	 * `slots_remaining` to `slots_confirmed` (`JobRepository#confirmSlot`), so
-	 * the quota never parks in `slots_dispatched`.
+	 * already `dispatch_status: 'accepted'` and the parent job counters are
+	 * reconciled from the concrete shift assignments, so a stale aggregate
+	 * `slots_remaining` cannot reject a shift that still has capacity.
 	 *
 	 * Distinct from `dispatch()`, which is kept for the offer/accept flow the
 	 * volunteer-facing side still uses.

@@ -40,6 +40,15 @@ const ROSTER_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
 	'completed'
 ]);
 
+/** Statuses that still consume a current capacity seat. Completed shifts are
+ * kept in the roster for history, but they must not block a later booking or
+ * make the job's live quota look fuller than it is. */
+const CAPACITY_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
+	'assigned',
+	'standby',
+	'checked_in'
+]);
+
 function matchesShift(
 	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'> & {
 		shift_id?: string;
@@ -53,6 +62,35 @@ function matchesShift(
 		ROSTER_STATUSES.has(assignment.status) &&
 		(assignment.shift_id
 			? assignment.shift_id === (shift.shift_id ?? shift.id)
+			: window
+				? sameDutyWindow(assignment.duty_window, window)
+				: false)
+	);
+}
+
+function dutyWindowForShift(
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'>
+): ReturnType<typeof shiftDutyWindow> | null {
+	try {
+		return shiftDutyWindow(shift);
+	} catch {
+		// A stable shift_id can still match even when a legacy row has bad time data.
+		return null;
+	}
+}
+
+function matchesShiftWithStatuses(
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'>,
+	jobId: string,
+	assignment: ShiftAssignment,
+	statuses: ReadonlySet<ShiftAssignmentStatus>,
+	window: ReturnType<typeof shiftDutyWindow> | null
+): boolean {
+	return (
+		assignment.job_id === jobId &&
+		statuses.has(assignment.status) &&
+		(assignment.shift_id
+			? assignment.shift_id === shift.id
 			: window
 				? sameDutyWindow(assignment.duty_window, window)
 				: false)
@@ -78,6 +116,64 @@ export function assignmentCountForShift(
 			.filter((assignment) => matchesShift(shift, jobId, assignment, window))
 			.map((assignment) => assignment.volunteer_id)
 	).size;
+}
+
+/** Count unique volunteers who currently consume a seat on one concrete shift. */
+export function activeAssignmentCountForShift(
+	shift: Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'>,
+	jobId: string,
+	assignments: readonly ShiftAssignment[]
+): number {
+	const window = dutyWindowForShift(shift);
+	return new Set(
+		assignments
+			.filter((assignment) =>
+				matchesShiftWithStatuses(shift, jobId, assignment, CAPACITY_STATUSES, window)
+			)
+			.map((assignment) => assignment.volunteer_id)
+	).size;
+}
+
+/**
+ * Rebuild the job-level live quota from concrete shift assignments.
+ *
+ * This is intentionally based on active assignment statuses only. Completed
+ * rows remain visible as history, while cancelled/no-show rows have released
+ * their seats. A volunteer is counted once per shift, with a confirmed row
+ * taking precedence over a dispatched duplicate from legacy data.
+ */
+export function jobQuotaUsageFromAssignments(
+	job: {
+		_id: string;
+		shifts: readonly Pick<JobShift, 'id' | 'date' | 'end_date' | 'start_time' | 'end_time'>[];
+	},
+	assignments: readonly ShiftAssignment[]
+): { confirmed: number; dispatched: number } {
+	let confirmed = 0;
+	let dispatched = 0;
+
+	for (const shift of job.shifts) {
+		const window = dutyWindowForShift(shift);
+		const byVolunteer = new Map<string, boolean>();
+		for (const assignment of assignments) {
+			if (!matchesShiftWithStatuses(shift, job._id, assignment, CAPACITY_STATUSES, window))
+				continue;
+			const isDispatched = assignment.dispatch_status === 'dispatched';
+			const previous = byVolunteer.get(assignment.volunteer_id);
+			// A confirmed row wins if corrupt/legacy data has both states for one seat.
+			byVolunteer.set(
+				assignment.volunteer_id,
+				previous === undefined ? isDispatched : previous && isDispatched
+			);
+		}
+
+		for (const isDispatched of byVolunteer.values()) {
+			if (isDispatched) dispatched++;
+			else confirmed++;
+		}
+	}
+
+	return { confirmed, dispatched };
 }
 
 /** Count seats held across every concrete shift of one job. */

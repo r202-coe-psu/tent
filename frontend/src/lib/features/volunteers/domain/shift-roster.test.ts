@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { assignmentCountForJob, assignmentCountForShift, shiftRoster } from './shift-roster';
+import {
+	activeAssignmentCountForShift,
+	assignmentCountForJob,
+	assignmentCountForShift,
+	jobQuotaUsageFromAssignments,
+	shiftRoster
+} from './shift-roster';
 import { shiftDutyWindow } from './duty-window';
 import type { ShiftAssignment, ShiftAssignmentStatus } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
@@ -61,6 +67,29 @@ describe('shiftRoster', () => {
 		]);
 
 		expect(count).toBe(2);
+	});
+
+	it('separates live capacity from completed history when rebuilding job quota', () => {
+		const secondShift = { ...SHIFT, id: 'shift:B', start_time: '16:00', end_time: '20:00' };
+		const assignments = [
+			assignment({ _id: 'a:1', volunteer_id: 'volunteer:1', status: 'standby' }),
+			assignment({ _id: 'a:2', volunteer_id: 'volunteer:2', status: 'checked_in' }),
+			assignment({ _id: 'a:3', volunteer_id: 'volunteer:3', status: 'completed' }),
+			assignment({
+				_id: 'a:4',
+				volunteer_id: 'volunteer:4',
+				shift_id: secondShift.id,
+				status: 'standby',
+				dispatch_status: 'dispatched',
+				duty_window: shiftDutyWindow(secondShift)
+			}),
+			assignment({ _id: 'a:5', volunteer_id: 'volunteer:5', status: 'cancelled' })
+		];
+
+		expect(activeAssignmentCountForShift(SHIFT, 'job:A', assignments)).toBe(2);
+		expect(
+			jobQuotaUsageFromAssignments({ _id: 'job:A', shifts: [SHIFT, secondShift] }, assignments)
+		).toEqual({ confirmed: 2, dispatched: 1 });
 	});
 
 	it('sums seats across a job from each concrete shift roster', () => {
