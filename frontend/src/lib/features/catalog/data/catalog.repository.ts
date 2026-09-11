@@ -65,7 +65,15 @@ export interface CatalogRepository {
 
 	deleteItemMaster(id: string, shelterCode?: string | null): Promise<boolean>;
 
-	deleteItemCategory(id: string, shelterCode?: string | null): Promise<boolean>;
+	inspectCategoryUsage(
+		id: string,
+		shelterCode?: string | null
+	): Promise<import('../domain/catalog-deletion').CategoryUsageDetails>;
+
+	deleteItemCategory(
+		id: string,
+		shelterCode?: string | null
+	): Promise<import('../domain/catalog-deletion').DeleteCategoryResult>;
 
 	deleteRecipe(id: string, shelterCode?: string | null): Promise<boolean>;
 }

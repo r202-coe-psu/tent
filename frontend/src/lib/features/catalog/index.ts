@@ -6,6 +6,16 @@
 // Domain — documents
 export type { Recipe, Ingredient, ItemCategory, ItemMaster } from './domain/catalog';
 
+// Domain — deletion policy & utilities
+export {
+	type CatalogDeletionAction,
+	type ShelterCategoryUsage,
+	type CategoryUsageDetails,
+	type CatalogDeletionDecision,
+	type DeleteCategoryResult,
+	evaluateCategoryDeletion
+} from './domain/catalog-deletion';
+
 // Domain — input schemas + factories + transitions + guards
 export {
 	// Item Category
@@ -41,6 +51,7 @@ export {
 	useItemCategory,
 	useCreateItemCategory,
 	useUpdateItemCategory,
+	useInspectCategoryUsage,
 	useDeleteItemCategory,
 	// Item Master
 	useItemMasters,
