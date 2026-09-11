@@ -29,6 +29,7 @@ class ScannerClientManager:
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.window_width = int(config.get("WINDOW_WIDTH", "540"))
         self.window_height = int(config.get("WINDOW_HEIGHT", "960"))
+        self.device_scale_factor = str(config.get("DEVICE_SCALE_FACTOR") or config.get("SCALE_FACTOR") or config.get("ZOOM") or "").strip() or None
 
         # Kiosk Routes on Tent Server
         self.waiting_url = f"{self.tent_base_url}/kiosk/scanner/waiting"
@@ -215,6 +216,14 @@ class ScannerClientManager:
             "--no-sandbox",                # Prevent sandbox privilege crashes in kiosk environments
             "--touch-events=enabled",      # Enable touch screen event support
         ]
+
+        if self.device_scale_factor:
+            base_args.extend([
+                "--high-dpi-support=1",
+                f"--force-device-scale-factor={self.device_scale_factor}",
+            ])
+            logger.info(f"🔍 Applying browser scale factor: {self.device_scale_factor}")
+
         if not self.is_debug:
             # Fullscreen Kiosk Mode (match ghosa: kiosk + start-maximized without conflicting start-fullscreen)
             args = base_args + [
