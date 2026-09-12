@@ -169,14 +169,10 @@ class ScannerClientManager:
                         # 4. Show Remove Card screen with message (Green success)
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
-                    elif status in ("already_pre_registered", "duplicate_draft", "updated_pre_registered"):
-                        # 4b. Show Emerald screen for repeat / pre-registered scans so user feels successful
-                        encoded_msg = urllib.parse.quote(msg)
-                        await self.page.goto(f"{self.remove_card_url}?status={status}&message={encoded_msg}")
                     elif status is not None:
-                        # 4c. Show Yellow Warning screen for other notices (e.g. checked out, temporary leave)
+                        # 4b. Show Yellow Warning screen for existing records / notices (e.g. repeat scans, checked out, temporary leave)
                         encoded_msg = urllib.parse.quote(msg)
-                        await self.page.goto(f"{self.remove_card_url}?type=warning&message={encoded_msg}")
+                        await self.page.goto(f"{self.remove_card_url}?type=warning&status={status}&message={encoded_msg}")
                     else:
                         # 4d. Show Red Error screen for HTTP 500 / server network failures
                         error_msg = urllib.parse.quote(msg)
