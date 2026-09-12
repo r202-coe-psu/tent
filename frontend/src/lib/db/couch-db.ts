@@ -273,6 +273,21 @@ export async function allDocsByType<T>(
 	return res.rows.map((r) => r.doc).filter((d): d is T => guard(d));
 }
 
+export async function allDocsByIds<T>(
+	dbName: string,
+	ids: readonly string[],
+	guard: (d: unknown) => d is T,
+	init?: CouchFetchInit
+): Promise<T[]> {
+	if (ids.length === 0) return [];
+	const res = await couchDbFetch<AllDocsResponse>(dbName, '/_all_docs?include_docs=true', {
+		method: 'POST',
+		body: JSON.stringify({ keys: ids }),
+		...init
+	});
+	return res.rows.map((r) => r.doc).filter((d): d is T => guard(d));
+}
+
 interface FindResponse<T> {
 	docs: T[];
 	bookmark?: string;

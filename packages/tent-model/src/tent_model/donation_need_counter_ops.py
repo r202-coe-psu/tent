@@ -44,7 +44,7 @@ async def seed_counter(
 	read → ``setattr`` every field → ``save()``, which rewrites the whole document and
 	would wipe ``reserved_qty``.
 	"""
-	result = await DonationNeedCounter.get_motor_collection().update_one(
+	result = await DonationNeedCounter.get_pymongo_collection().update_one(
 		{"_id": counter_id(shelter_code, campaign_id, item_id)},
 		{
 			"$setOnInsert": {
@@ -91,7 +91,7 @@ async def reserve_quota(
 	if existing is None:
 		return ReserveResult.NOT_SEEDED
 
-	updated = await DonationNeedCounter.get_motor_collection().find_one_and_update(
+	updated = await DonationNeedCounter.get_pymongo_collection().find_one_and_update(
 		{
 			"_id": cid,
 			"$expr": {
@@ -130,7 +130,7 @@ async def set_reserved_qty(
 	The only writer of ``reserved_qty`` besides ``reserve_quota``/``release_quota``. Do
 	not add a third; keep every mutation of this field in this module (CR-047 §DRY).
 	"""
-	updated = await DonationNeedCounter.get_motor_collection().find_one_and_update(
+	updated = await DonationNeedCounter.get_pymongo_collection().find_one_and_update(
 		{
 			"_id": counter_id(shelter_code, campaign_id, item_id),
 			"reserved_qty": expected,
@@ -173,7 +173,7 @@ async def set_qty_target(
 	The caller is responsible for refusing to lower a ceiling below the quota already
 	reserved — see ``worker.quota.reconcile``.
 	"""
-	updated = await DonationNeedCounter.get_motor_collection().find_one_and_update(
+	updated = await DonationNeedCounter.get_pymongo_collection().find_one_and_update(
 		{
 			"_id": counter_id(shelter_code, campaign_id, item_id),
 			"qty_target": expected,
@@ -199,7 +199,7 @@ async def release_quota(
 	drive ``reserved_qty`` below 0.
 	"""
 	cid = counter_id(shelter_code, campaign_id, item_id)
-	await DonationNeedCounter.get_motor_collection().find_one_and_update(
+	await DonationNeedCounter.get_pymongo_collection().find_one_and_update(
 		{"_id": cid, "reserved_qty": {"$gte": bson.Decimal128(str(qty))}},
 		{"$inc": {"reserved_qty": bson.Decimal128(str(-qty))}, "$set": {"updated_at": now}},
 	)
@@ -219,7 +219,7 @@ async def set_on_hand_qty(
 	owns a share of. Every campaign asking for the item sees the whole balance, exactly
 	as ``compute_needs`` does. Returns how many counters were changed.
 	"""
-	result = await DonationNeedCounter.get_motor_collection().update_many(
+	result = await DonationNeedCounter.get_pymongo_collection().update_many(
 		{"shelter_code": shelter_code, "item_id": item_id},
 		{"$set": {"on_hand_qty": bson.Decimal128(str(qty)), "updated_at": now}},
 	)

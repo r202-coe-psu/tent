@@ -8,10 +8,19 @@ from tent_model.public_shelter import PublicShelter
 
 from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse, SiteKind
 
-# Stay statuses that hold a place at a shelter (CR-070 D-BOOK-OCC=C, FR-66):
-# a web booking reserves the seat the moment it is made, so `pre_registered`
-# counts alongside `active`. Kitchen/SOP head-counts stay `active`-only (CR-022).
-OCCUPANCY_STATUSES = ("active", "pre_registered")
+# Public occupancy triple (CR-112). `occupancy` response key = Forecast.
+# Kitchen/SOP and partner head-counts stay `active`-only (CR-022 / Q48) and
+# do not use these allow-lists.
+FORECAST_OCCUPANCY_STATUSES = (
+    "pre_registered",
+    "arriving",
+    "active",
+    "room_confirmed",
+    "temporary_leave",
+)
+PRESENT_OCCUPANCY_STATUSES = ("active", "room_confirmed", "temporary_leave")
+IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
+OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
 
 
 class ShelterUseCase:
@@ -136,7 +145,13 @@ class ShelterUseCase:
         mapped_status = status_ui.get(doc.status, "CLOSED")
 
         occupancy = await PublicPerson.find(
-            {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+            {"shelter_code": code, "status": {"$in": list(FORECAST_OCCUPANCY_STATUSES)}}
+        ).count()
+        present = await PublicPerson.find(
+            {"shelter_code": code, "status": {"$in": list(PRESENT_OCCUPANCY_STATUSES)}}
+        ).count()
+        in_zone = await PublicPerson.find(
+            {"shelter_code": code, "status": {"$in": list(IN_ZONE_OCCUPANCY_STATUSES)}}
         ).count()
 
         capacity_total = m.get("capacity") or doc.capacity or 0
@@ -213,6 +228,9 @@ class ShelterUseCase:
                 "admin_type": m.get("shelter_type") or "unspecified",
                 "address": location.get("address") or "unspecified",
                 "capacity": {"total": capacity_total, "available": capacity_available},
+                "occupancy": occupancy,
+                "present": present,
+                "in_zone": in_zone,
                 "occupancy_rate": occupancy_rate,
                 "building_status": building_status,
                 "geo": doc.geo,

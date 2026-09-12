@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import Depends
 from loguru import logger
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
 from apiapp.infrastructure.database import get_database
 
@@ -10,7 +10,7 @@ from .schemas import ConfigResponse, FaqItem
 
 
 class ConfigUseCase:
-    def __init__(self, db: AsyncIOMotorDatabase) -> None:
+    def __init__(self, db: AsyncDatabase) -> None:
         self.db = db
 
     async def get_public_faqs(self) -> ConfigResponse:
@@ -32,6 +32,6 @@ class ConfigUseCase:
 
 
 def get_config_use_case(
-    db: AsyncIOMotorDatabase = Depends(get_database),
+    db: AsyncDatabase = Depends(get_database),
 ) -> ConfigUseCase:
     return ConfigUseCase(db)

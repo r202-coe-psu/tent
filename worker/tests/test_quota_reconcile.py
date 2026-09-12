@@ -164,7 +164,7 @@ async def test_apply_stamps_last_recalculated_at(db: None) -> None:
 async def test_drift_downward_is_corrected(db: None) -> None:
     """A counter left too high (e.g. a release that never landed) is brought back down."""
     await _seed()
-    await DonationNeedCounter.get_motor_collection().update_one(
+    await DonationNeedCounter.get_pymongo_collection().update_one(
         {"shelter_code": SHELTER}, {"$set": {"reserved_qty": bson.Decimal128("40")}}
     )
     couch = _couch_stub(
@@ -181,7 +181,7 @@ async def test_drift_downward_is_corrected(db: None) -> None:
 
 async def test_counter_with_no_outstanding_donations_resets_to_zero(db: None) -> None:
     await _seed()
-    await DonationNeedCounter.get_motor_collection().update_one(
+    await DonationNeedCounter.get_pymongo_collection().update_one(
         {"shelter_code": SHELTER}, {"$set": {"reserved_qty": bson.Decimal128("9")}}
     )
     couch = _couch_stub([])
@@ -248,7 +248,7 @@ async def test_synced_buffer_and_couch_doc_are_not_double_counted(db: None) -> N
 async def test_concurrent_booking_is_reported_as_conflict_not_overwritten(db: None) -> None:
     """CR-047 Cutover Lock — a $inc landing mid-run must abort that counter's write."""
     await _seed()
-    collection = DonationNeedCounter.get_motor_collection()
+    collection = DonationNeedCounter.get_pymongo_collection()
 
     original = collection.find
 

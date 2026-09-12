@@ -18,14 +18,19 @@
 		useScreenings,
 		useCheckInEvacuee,
 		useChangeEvacueeZone,
+		useConfirmRoom,
+		useConfirmRoomForHousehold,
 		ZoneSelectionFields,
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
-		countOccupantsByZone,
+		countPresentOccupantsByZone,
 		recommendZoneKind,
+		canChangeEvacueeZone,
+		canConfirmRoom,
+		isPendingZoneArrivalConfirmation,
 		type Evacuee,
-		type TriageLevel
+		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { useMasterData } from '$lib/features/master-data';
@@ -44,6 +49,8 @@
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
+	const confirmRoomMutation = useConfirmRoom();
+	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -51,24 +58,13 @@
 	const evacuee = $derived(evacueeQuery.data ?? null);
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
-	const latestTriage = $derived.by((): TriageLevel | null => {
+	const latestScreening = $derived.by((): Screening | null => {
 		if (!evacuee) return null;
 		const list = (screeningsQuery.data ?? [])
 			.filter((s) => s.evacuee_id === evacuee._id)
 			.sort((a, b) => (b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at));
-		return list[0]?.triage_level ?? null;
+		return list[0] ?? null;
 	});
-
-	const TRIAGE_LABELS: Record<TriageLevel, string> = {
-		green: 'เขียว',
-		yellow: 'เหลือง',
-		red: 'แดง'
-	};
-	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
-		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
-		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
-		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
-	};
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
 		bedridden: 'ผู้ป่วยติดเตียง',
@@ -89,9 +85,9 @@
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
-	const isRezone = $derived(
-		evacuee?.current_stay.status === 'active' && !!evacuee.current_stay.zone
-	);
+	const isAwaitingConfirm = $derived(!!evacuee && isPendingZoneArrivalConfirmation(evacuee));
+	const isRezone = $derived(!!evacuee && canChangeEvacueeZone(evacuee) && !isAwaitingConfirm);
+	const canConfirmArrival = $derived(!!evacuee && isAwaitingConfirm && canConfirmRoom(evacuee));
 
 	const pendingHouseholdMembers = $derived.by((): Evacuee[] => {
 		if (!evacuee?.household_id) return [];
@@ -107,17 +103,15 @@
 		});
 	});
 
-	const activeHouseholdMembers = $derived.by((): Evacuee[] => {
+	const rezoneHouseholdMembers = $derived.by((): Evacuee[] => {
 		if (!evacuee?.household_id) return [];
 		return allEvacuees.filter(
 			(e) =>
-				e._id !== evacuee._id &&
-				e.household_id === evacuee.household_id &&
-				e.current_stay.status === 'active'
+				e._id !== evacuee._id && e.household_id === evacuee.household_id && canChangeEvacueeZone(e)
 		);
 	});
 
-	const companionCandidates = $derived(isRezone ? activeHouseholdMembers : pendingHouseholdMembers);
+	const companionCandidates = $derived(isRezone ? rezoneHouseholdMembers : pendingHouseholdMembers);
 
 	// User edits tracked per-evacuee so query refetches don't wipe selection
 	let zoneDraft = $state<string | null>(null);
@@ -136,10 +130,15 @@
 		companionDraftEvacueeId === evacueeId ? companionDraft : []
 	);
 
-	const recommendKind = $derived(recommendZoneKind(evacuee ?? { special_needs: [] }, latestTriage));
+	const recommendKind = $derived(
+		recommendZoneKind(
+			evacuee ?? { vulnerable_groups: [], special_needs: [] },
+			latestScreening?.symptoms
+		)
+	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
 
-	const occupantCounts = $derived(countOccupantsByZone(allEvacuees));
+	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
 	const householdLabel = $derived(
 		evacuee?.household_id
 			? (householdsQuery.data?.find((h) => h._id === evacuee.household_id)?.label ?? '—')
@@ -165,10 +164,42 @@
 	}
 
 	async function applyZone(target: Evacuee, zone: string) {
-		if (target.current_stay.status === 'active') {
+		if (canChangeEvacueeZone(target)) {
 			return changeZoneMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
 		}
 		return checkInMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
+	}
+
+	async function handleConfirmArrival() {
+		if (!evacuee || !canConfirmArrival) return;
+		submitting = true;
+		try {
+			await confirmRoomMutation.mutateAsync({ evacuee, ctx: authorCtx() });
+			toast.success('ยืนยันถึงโซนเรียบร้อย');
+			await goto(resolve('/onsite/zoning'));
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		} finally {
+			submitting = false;
+		}
+	}
+
+	async function handleConfirmHouseholdArrival() {
+		if (!evacuee?.household_id) return;
+		submitting = true;
+		try {
+			const confirmed = await confirmRoomHouseholdMutation.mutateAsync({
+				householdId: evacuee.household_id,
+				evacuees: allEvacuees,
+				ctx: authorCtx()
+			});
+			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+			await goto(resolve('/onsite/zoning'));
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		} finally {
+			submitting = false;
+		}
 	}
 
 	async function handleSubmit() {
@@ -236,16 +267,26 @@
 					{householdLabel}
 				</p>
 				<div class="flex flex-wrap items-center gap-2">
-					{#if latestTriage}
-						<span class="text-xs text-muted-foreground">Triage</span>
-						<Badge variant="outline" class={TRIAGE_BADGE_CLASS[latestTriage]}>
-							{TRIAGE_LABELS[latestTriage]}
+					{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
+						<Badge
+							variant="outline"
+							class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+						>
+							เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
 						</Badge>
-						{#if isolationDefault}
-							<span class="text-xs text-amber-700 dark:text-amber-300"
-								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
-							>
-						{/if}
+					{/if}
+					{#if latestScreening?.track === 'fast_track'}
+						<Badge
+							variant="outline"
+							class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
+						>
+							Fast Track
+						</Badge>
+					{/if}
+					{#if isolationDefault}
+						<span class="text-xs text-amber-700 dark:text-amber-300"
+							>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
+						>
 					{/if}
 				</div>
 				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
@@ -265,7 +306,7 @@
 			<ZoneSelectionFields
 				bind:selected_zone={() => selectedZone, setSelectedZone}
 				{evacuee}
-				triage_level={latestTriage}
+				ewar_symptoms={latestScreening?.symptoms}
 				occupant_counts={occupantCounts}
 				shelter_zones={shelterQuery.data?.zones}
 			/>
@@ -299,6 +340,23 @@
 			{/if}
 
 			<div class="mt-6 flex flex-wrap gap-2">
+				{#if canConfirmArrival}
+					<Button onclick={handleConfirmArrival} disabled={submitting}>
+						{#if submitting}
+							<Loader2 class="mr-2 size-4 animate-spin" />
+						{/if}
+						ยืนยันถึงโซน
+					</Button>
+					{#if evacuee.household_id}
+						<Button
+							variant="secondary"
+							onclick={handleConfirmHouseholdArrival}
+							disabled={submitting}
+						>
+							ยืนยันทั้งครัวเรือน
+						</Button>
+					{/if}
+				{/if}
 				<Button onclick={handleSubmit} disabled={submitting || !selectedZone}>
 					{#if submitting}
 						<Loader2 class="mr-2 size-4 animate-spin" />

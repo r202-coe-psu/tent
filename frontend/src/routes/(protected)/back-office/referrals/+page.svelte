@@ -89,9 +89,9 @@
 	}
 </script>
 
-<div class="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-6 overflow-hidden p-1 md:p-6">
+<div class="mx-auto flex max-w-7xl flex-col gap-6 p-1 md:p-6">
 	<div
-		class="flex shrink-0 flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
+		class="flex flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
 	>
 		<div class="space-y-1">
 			<h1
@@ -121,20 +121,16 @@
 	</div>
 
 	{#if viewMode === 'create'}
-		<div class="min-h-0 flex-1 overflow-y-auto">
-			<div class="mx-auto w-full max-w-4xl pb-6">
-				<ReferralCreateForm onBatchDone={handleBatchDone} />
-			</div>
+		<div class="mx-auto w-full max-w-4xl pb-6">
+			<ReferralCreateForm onBatchDone={handleBatchDone} />
 		</div>
 	{:else if viewMode === 'batch'}
-		<div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden">
+		<div class="mx-auto w-full max-w-5xl pb-6">
 			<ReferralBatchCards referrals={batchReferrals} failed={batchFailed} onBack={goToList} />
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12 lg:overflow-hidden">
-			<div
-				class="min-h-0 lg:col-span-5 lg:overflow-y-auto {selectedGroupKey ? 'hidden lg:block' : ''}"
-			>
+		<div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+			<div class="lg:col-span-5 {selectedGroupKey ? 'hidden lg:block' : ''}">
 				<Card.Root class="border border-border/80 shadow-sm">
 					<Card.Header class="bg-muted/20 pb-3">
 						<Card.Title class="text-lg font-bold">รายการส่งตัวทั้งหมด</Card.Title>
@@ -161,11 +157,7 @@
 				</Card.Root>
 			</div>
 
-			<div
-				class="flex min-h-0 flex-col lg:col-span-7 lg:overflow-hidden {selectedGroupKey
-					? 'min-h-0 flex-1 overflow-hidden'
-					: 'hidden lg:flex'}"
-			>
+			<div class="flex flex-col lg:col-span-7 {selectedGroupKey ? 'flex-1' : 'hidden lg:flex'}">
 				{#if selectedGroupKey}
 					{#if selectedMemberId}
 						{#if isLoadingDetail && !selectedReferral}
@@ -178,7 +170,7 @@
 								</Card.Content>
 							</Card.Root>
 						{:else if selectedReferral}
-							<div class="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
+							<div class="space-y-4 pb-6">
 								{#if liveGroupReferrals.length > 1}
 									<div class="flex justify-start">
 										<Button

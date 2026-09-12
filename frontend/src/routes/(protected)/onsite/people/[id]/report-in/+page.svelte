@@ -1,32 +1,75 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import {
-		RegistrationShell,
-		EvacueeWristbandSuccess,
+		FamilyBatchPrint,
 		RegistrationSaveErrorAlert,
+		UnifiedRegistrationForm,
 		useEvacuee,
+		useEvacuees,
+		useHousehold,
+		useSubmitFamilyReportIn,
+		buildSaveFailureReport,
+		householdToUnifiedInput,
+		evacueeToUnifiedMember,
 		type Evacuee,
-		type SaveFailureReport
+		type Household,
+		type SaveFailureReport,
+		type UnifiedRegistrationInput,
+		type UnifiedMemberWithMeta
 	} from '$lib/features/people';
 
 	let { data } = $props();
 
 	const evacueeQuery = useEvacuee(() => data.evacueeId);
+	const evacuee = $derived(evacueeQuery.data ?? null);
 
-	let completedEvacuee = $state<Evacuee | null>(null);
+	const householdQuery = useHousehold(
+		() => evacuee?.household_id ?? '',
+		() => Boolean(evacuee?.household_id)
+	);
+	const household = $derived(householdQuery.data ?? null);
+
+	const evacueesQuery = useEvacuees();
+	const allEvacuees = $derived(evacueesQuery.data ?? []);
+
+	const familyMembers = $derived.by(() => {
+		if (!evacuee) return [];
+		if (!evacuee.household_id) return [evacuee];
+		const members = allEvacuees.filter((e) => e.household_id === evacuee.household_id);
+		if (members.length === 0) return [evacuee];
+		// Place head first if available, else target evacuee first
+		const headId = household?.head_evacuee_id ?? evacuee._id;
+		return [...members].sort((a, b) => {
+			if (a._id === headId) return -1;
+			if (b._id === headId) return 1;
+			return 0;
+		});
+	});
+
+	const initialHousehold = $derived(householdToUnifiedInput(household));
+	const initialMembers = $derived(
+		familyMembers.map((m) => evacueeToUnifiedMember(m, data.evacueeId))
+	);
+
+	const submitReportIn = useSubmitFamilyReportIn();
+
+	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
 
 	beforeNavigate((nav) => {
-		if (isNavigatingAfterSave || completedEvacuee) return;
+		if (isNavigatingAfterSave || completed) return;
 		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
 			nav.cancel();
 		}
@@ -34,14 +77,47 @@
 
 	function backToQueue() {
 		isNavigatingAfterSave = true;
-		completedEvacuee = null;
+		completed = null;
 		goto(resolve('/onsite/people'));
 	}
 
-	const evacuee = $derived(evacueeQuery.data ?? null);
 	const wrongStatus = $derived(
 		Boolean(evacuee && evacuee.current_stay.status !== 'pre_registered')
 	);
+
+	async function handleReportIn(
+		input: UnifiedRegistrationInput,
+		meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+	) {
+		const shelterCode = getShelterCode();
+		const ctx = {
+			shelterCode,
+			createdBy: authStore.user?.name ?? 'unknown'
+		};
+
+		saveError = null;
+
+		try {
+			const result = await submitReportIn.mutateAsync({
+				householdId: evacuee?.household_id ?? household?._id ?? '',
+				household: input.household,
+				members: meta?.allMembers ?? (input.members as UnifiedMemberWithMeta[]),
+				ctx
+			});
+			saveError = null;
+			isDirty = false;
+			isNavigatingAfterSave = true;
+			completed = result;
+			toast.success(`รายงานตัวสำเร็จ ${result.members.length} คน`);
+		} catch (err) {
+			saveError = buildSaveFailureReport(err, {
+				summaryTh: 'บันทึกการรายงานตัวไม่สำเร็จ',
+				shelterCode
+			});
+			toast.error('บันทึกการรายงานตัวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			throw err;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -51,8 +127,12 @@
 </svelte:head>
 
 <div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
-	{#if completedEvacuee}
-		<EvacueeWristbandSuccess evacuee={completedEvacuee} onBack={backToQueue} />
+	{#if completed}
+		<FamilyBatchPrint
+			household={completed.household}
+			members={completed.members}
+			onDone={backToQueue}
+		/>
 	{:else}
 		<button
 			type="button"
@@ -63,22 +143,25 @@
 			<span>กลับคิวทะเบียน</span>
 		</button>
 
-		<div class="mb-4 flex flex-wrap items-center gap-2">
-			<ClipboardList class="size-5 text-primary" />
-			<h1 class="text-2xl font-bold md:text-3xl">รายงานตัว</h1>
+		<div class="mb-2 flex flex-wrap items-center gap-2">
+			<ClipboardList class="size-6 text-primary" />
+			<h1 class="text-2xl font-bold md:text-3xl">รายงานตัวผู้ประสบภัย</h1>
 			<Badge variant="outline">Station 1 · Report-in</Badge>
 		</div>
+		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
+			ตรวจสอบข้อมูลครอบครัว เลือกสมาชิกที่เดินทางมารายงานตัวในรอบนี้ และสามารถเพิ่มสมาชิกใหม่ได้
+		</p>
 
 		{#if saveError}
 			<RegistrationSaveErrorAlert report={saveError} ondismiss={() => (saveError = null)} />
 		{/if}
 
-		{#if evacueeQuery.isPending}
+		{#if evacueeQuery.isPending || (evacuee?.household_id && householdQuery.isPending) || evacueesQuery.isPending}
 			<div class="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
 				<div
 					class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 				></div>
-				<p class="text-xs">กำลังโหลดข้อมูลผู้ประสบภัย...</p>
+				<p class="text-xs">กำลังโหลดข้อมูลผู้ประสบภัยและครอบครัว...</p>
 			</div>
 		{:else if !evacuee}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
@@ -103,22 +186,16 @@
 				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
 			</Card.Root>
 		{:else}
-			<div class="rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-8 md:p-10">
-				<RegistrationShell
-					mode="report-in"
-					initialEvacuee={evacuee}
-					onDirtyChange={(dirty) => (isDirty = dirty)}
-					onsaveerror={(report) => {
-						saveError = report;
-					}}
-					onComplete={(ev) => {
-						saveError = null;
-						isDirty = false;
-						isNavigatingAfterSave = true;
-						completedEvacuee = ev;
-					}}
-				/>
-			</div>
+			<UnifiedRegistrationForm
+				mode="report-in"
+				channel="onsite"
+				includeVehiclesAssets={true}
+				initialHousehold={initialHousehold}
+				initialMembers={initialMembers}
+				pending={submitReportIn.isPending}
+				onsubmit={handleReportIn}
+				onDirtyChange={(dirty) => (isDirty = dirty)}
+			/>
 		{/if}
 	{/if}
 </div>

@@ -15,8 +15,10 @@ from worker.mongo import (
     apply_person,
     apply_shelter,
     delete_needs_for_shelter,
+    delete_occupants_for_shelter,
     delete_persons_for_shelter,
     refresh_occupancy,
+    refresh_shelter_occupants,
     refresh_shelter_stock,
 )
 from worker.mongo.on_hand import refresh_on_hand
@@ -56,6 +58,7 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                 if action == "delete" and payload and payload.get("_id"):
                     code = str(payload["_id"])
                     await delete_persons_for_shelter(code)
+                    await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
@@ -106,9 +109,10 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
     # bare target instead of what is genuinely still needed.
     await refresh_on_hand(couch, shelter_code)
-    # EXT-005/006: occupancy first — shelter_stocks' reorder_threshold calc reads it.
+    # EXT-005/006/007: occupancy first — shelter_stocks' reorder_threshold calc reads it.
     await refresh_occupancy(couch, shelter_code)
     await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
+    await refresh_shelter_occupants(couch, shelter_code)  # EXT-007
 
     need_actions = await project_needs_for_shelter(couch, shelter_code)
     for action, payload in need_actions:

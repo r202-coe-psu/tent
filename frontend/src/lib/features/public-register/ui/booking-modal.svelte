@@ -16,7 +16,6 @@
 	let { open = $bindable(false), shelterCode = '' }: Props = $props();
 
 	let shelters = $state<(PublicShelterCardModel & { available: number | null })[]>([]);
-	let vulnerableGroups = $state<{ code: string; label: string }[]>([]);
 	let loadError = $state('');
 	let loaded = $state(false);
 	let ticket = $state<BookingTicket | null>(null);
@@ -31,14 +30,8 @@
 		loaded = true;
 		void (async () => {
 			try {
-				const [shelterRes, groupRes] = await Promise.all([
-					listPublicShelters({}),
-					fetch('/api/public/v1/config/vulnerable-groups').then((r) =>
-						r.ok ? r.json() : { groups: [] }
-					)
-				]);
+				const shelterRes = await listPublicShelters({});
 				const cards = (shelterRes?.shelters ?? []).map((s) => toPublicShelterCard(s as never));
-				vulnerableGroups = groupRes?.groups ?? [];
 
 				// Vacancy isn't in the shelter list projection yet — queried the same way
 				// as the back-office occupancy dashboard (aggregate CouchDB view, no PII),
@@ -107,12 +100,7 @@
 			<p class="p-8 text-center text-sm text-muted-foreground">กำลังโหลดรายชื่อศูนย์พักพิง…</p>
 		{:else}
 			{#key shelterCode}
-				<BookingForm
-					{shelters}
-					{vulnerableGroups}
-					lockedShelterCode={shelterCode}
-					onbooked={(t) => (ticket = t)}
-				/>
+				<BookingForm {shelters} lockedShelterCode={shelterCode} onbooked={(t) => (ticket = t)} />
 			{/key}
 		{/if}
 	</Dialog.Content>

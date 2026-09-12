@@ -3,13 +3,13 @@
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
 
 
 async def _insert_shelter(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     *,
     code: str,
@@ -31,7 +31,7 @@ async def _insert_shelter(
 
 
 async def _insert_person(
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     *,
     person_id: str,
@@ -59,7 +59,7 @@ async def test_transparency_summary_requires_bearer(client: AsyncClient):
 
 async def test_transparency_summary_aggregates_mongo(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
@@ -103,7 +103,7 @@ async def test_transparency_summary_aggregates_mongo(
 
 async def test_shelter_detail_counts_occupancy_on_standby(
     client: AsyncClient,
-    db_client: AsyncIOMotorClient,
+    db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):

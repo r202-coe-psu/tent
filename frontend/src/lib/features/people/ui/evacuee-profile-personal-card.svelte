@@ -19,7 +19,8 @@
 		national_id: 'บัตรประชาชน',
 		passport: 'หนังสือเดินทาง',
 		pink_card: 'บัตรชมพู',
-		other: 'เอกสารอื่นๆ'
+		other: 'เอกสารอื่นๆ',
+		anonymous: 'บัตรไม่ระบุตัวตน'
 	};
 
 	const ageYears = $derived(evacueeAgeYears(evacuee));
@@ -47,56 +48,68 @@
 			</button>
 		{/if}
 	</div>
-	<div class="grid grid-cols-2 gap-x-4 gap-y-4">
-		<div class="col-span-2 border-b border-border/50 pb-3">
+	<div class="grid min-w-0 grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+		<div class="min-w-0 border-b border-border/50 pb-3 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">ชื่อ - นามสกุล</span>
-			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
 				{formatPersonName(evacuee)}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ชื่อเล่น</span>
-			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
 				{evacuee.nickname || 'ไม่ระบุ'}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">เอกสารยืนยันตัวตน</span>
-			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
 				{documentLabels[evacuee.person_id?.cardType ?? 'national_id'] ?? 'เอกสารอื่นๆ'}
 			</span>
 		</div>
-		<div class="col-span-2">
+		<div class="min-w-0 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">เลขที่เอกสาร</span>
-			<span class="mt-0.5 block font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{maskNationalId(evacuee.person_id?.number)}
+			<span
+				class="mt-0.5 block break-all font-mono text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
+				{evacuee.person_id?.cardType === 'anonymous'
+					? (evacuee.person_id.number ?? '—')
+					: maskNationalId(evacuee.person_id?.number)}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">เพศ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
 				{evacuee.gender === 'male' ? 'ชาย' : evacuee.gender === 'female' ? 'หญิง' : 'อื่นๆ'}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">อายุ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
 				{ageYears !== null ? `${ageYears} ปี` : 'ไม่ระบุ'}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ปีเกิด</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
 				{evacuee.birth_year ? `พ.ศ. ${evacuee.birth_year}` : 'ไม่ระบุ'}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">สัญชาติ</span>
-			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
 				{countryLabel(evacuee.country)}
 			</span>
 		</div>
-		<div>
+		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ศาสนา</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
 				{evacuee.religion === 'buddhist'
@@ -110,9 +123,11 @@
 								: 'ไม่ระบุ'}
 			</span>
 		</div>
-		<div class="col-span-2 border-t border-border/50 pt-3">
+		<div class="min-w-0 border-t border-border/50 pt-3 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">เบอร์โทรศัพท์</span>
-			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+			<span
+				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+			>
 				{evacuee.phone || 'ไม่มีเบอร์ติดต่อ'}
 			</span>
 		</div>

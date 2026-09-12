@@ -19,10 +19,18 @@ from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import GeoJsonPoint, GeoPoint, OccupancyBreakdown, PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
+from tent_model.shelter_occupant import ShelterOccupant
 from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
+from tent_model.unassigned_registration import (
+	PersonId,
+	UnassignedHousehold,
+	UnassignedMember,
+	UnassignedPet,
+	UnassignedRegistration,
+)
 
 __all__ = [
 	"ALL_DOCUMENTS",
@@ -36,6 +44,7 @@ __all__ = [
 	"GeoJsonPoint",
 	"GeoPoint",
 	"OccupancyBreakdown",
+	"PersonId",
 	"PublicAnnouncement",
 	"PublicDonation",
 	"PublicNeed",
@@ -44,10 +53,15 @@ __all__ = [
 	"ReserveResult",
 	"RetentionAudit",
 	"SearchAudit",
+	"ShelterOccupant",
 	"ShelterStock",
 	"SyncCheckpoint",
 	"ThirdPartyAccessLog",
 	"ThirdPartyClient",
+	"UnassignedHousehold",
+	"UnassignedMember",
+	"UnassignedPet",
+	"UnassignedRegistration",
 	"close_db",
 	"counter_id",
 	"init_db",

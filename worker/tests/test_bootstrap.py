@@ -35,6 +35,9 @@ def _patches():
         ),
         patch("worker.couch.bootstrap.refresh_occupancy", new_callable=AsyncMock),
         patch("worker.couch.bootstrap.refresh_shelter_stock", new_callable=AsyncMock),
+        patch(
+            "worker.couch.bootstrap.refresh_shelter_occupants", new_callable=AsyncMock
+        ),
     )
 
 
@@ -60,7 +63,7 @@ async def test_bootstrap_seeds_need_counters_for_existing_campaigns():
         ]
     )
 
-    cp, person, donation, need, needs_for, occ, stock = _patches()
+    cp, person, donation, need, needs_for, occ, stock, occs = _patches()
     with (
         cp,
         person,
@@ -69,6 +72,7 @@ async def test_bootstrap_seeds_need_counters_for_existing_campaigns():
         needs_for,
         occ,
         stock,
+        occs,
         patch(
             "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
         ) as counters,
@@ -95,7 +99,7 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         ]
     )
 
-    cp, person, donation, need, needs_for, occ, stock = _patches()
+    cp, person, donation, need, needs_for, occ, stock, occs = _patches()
     with (
         cp,
         person,
@@ -104,6 +108,7 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         needs_for,
         occ,
         stock,
+        occs,
         patch(
             "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
         ) as counters,

@@ -140,6 +140,8 @@
 				$formData.head_evacuee_id = initialData.head_evacuee_id;
 				headComboValue = initialData.head_evacuee_id ?? '';
 				$formData.notes = initialData.notes ?? '';
+				$formData.housing_type = initialData.housing_type ?? null;
+				$formData.residence_landmark = initialData.residence_landmark ?? '';
 				$formData.address_no = initialData.address_no ?? '';
 				$formData.village_no = initialData.village_no ?? '';
 				$formData.subdistrict = initialData.subdistrict ?? '';
@@ -164,6 +166,8 @@
 				$formData.head_evacuee_id = null;
 				headComboValue = '';
 				$formData.notes = '';
+				$formData.housing_type = null;
+				$formData.residence_landmark = '';
 				$formData.address_no = '';
 				$formData.village_no = '';
 				$formData.subdistrict = '';

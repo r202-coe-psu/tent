@@ -40,6 +40,7 @@ export interface UomConversion {
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
+	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
 }
@@ -54,7 +55,7 @@ export interface ItemMaster extends CatalogDoc {
 	conversions: UomConversion[];
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
-	distribution_type: DistributionType;
+	distribution_type?: DistributionType;
 	type_class: TypeClass;
 	deactivated?: boolean;
 	shelter_code?: string;
@@ -177,6 +178,7 @@ export function mergeCatalogGenerations(
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),
+	deactivated: z.boolean().optional(),
 	override: z.boolean().optional()
 });
 
@@ -278,6 +280,7 @@ export function createItemCategory(
 		2,
 		{
 			name: d.name,
+			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {})
 		},
@@ -307,7 +310,8 @@ export function createItemMaster(
 			})),
 			default_inventory_uom: d.default_inventory_uom,
 			default_issue_uom: d.default_issue_uom,
-			distribution_type: d.distribution_type || 'recurring',
+			distribution_type:
+				d.distribution_type || (d.type_class === 'EQUIPMENT' ? undefined : 'recurring'),
 			type_class: d.type_class,
 			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),

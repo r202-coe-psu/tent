@@ -470,6 +470,10 @@
 		</div>
 	{/if}
 
+	{#if siteKey}
+		<p class="mt-6 text-center text-xs text-muted-foreground">{t.recaptchaBranding}</p>
+	{/if}
+
 	<div class="mt-8 flex gap-4 border-t border-slate-100 pt-6">
 		<button
 			type="button"

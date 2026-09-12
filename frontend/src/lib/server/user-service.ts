@@ -57,8 +57,17 @@ export interface UserSummary {
 export async function getCurrentUserProfile(
 	name: string
 ): Promise<Pick<UserSummary, 'name' | 'display_name'>> {
-	const user = toSummary(await readUserDoc(name, 'read current user'));
-	return { name: user.name, display_name: user.display_name };
+	try {
+		const user = toSummary(await readUserDoc(name, 'read current user'));
+		return { name: user.name, display_name: user.display_name };
+	} catch (e) {
+		// Session can exist without a `_users` profile doc (bootstrap CouchDB
+		// admin). Match `/api/v1/auth/me` — fall back to username, don't 422.
+		if (e instanceof ServiceError && e.code === 'VALIDATION') {
+			return { name, display_name: name };
+		}
+		throw e;
+	}
 }
 
 export interface CouchUserDoc {
