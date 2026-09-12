@@ -107,6 +107,8 @@ export {
 
 export {
 	type DistributionAllocationInput,
+	type CreateDistributionIssueInput,
+	type DistributionRecipient,
 	type DistributionRepository
 } from './data/distribution.repository';
 
@@ -117,8 +119,22 @@ export {
 	ApprovalConflictError,
 	InsufficientStockError,
 	ValidationError,
+	IssueConflictError,
+	IssueCapacityError,
+	IssueInFlightError,
+	BatchClosingConflictError,
+	RecipientNotActiveError,
+	DistributionEligibilityError,
 	makeLotReservationDocId,
+	makeIssueIdempotencyDocId,
+	makeIssueCapacityDocId,
+	makeIssueGateDocId,
+	makeOneTimeGuardDocId,
 	assertSemanticLedgerMatch,
 	assertSemanticBatchMatch,
-	assertSemanticReservationMatch
+	assertSemanticReservationMatch,
+	assertSemanticIdempotencyMatch,
+	assertEligibilitySnapshotInvariant,
+	assertSemanticIssueMatch,
+	assertSemanticClosingMatch
 } from './data/semantic-verify';
