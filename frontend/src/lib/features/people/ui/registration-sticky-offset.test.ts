@@ -6,10 +6,7 @@ function mockEl(): Element {
 	return {} as Element;
 }
 
-function mockStyles(opts: {
-	elVars?: Record<string, string>;
-	rootFontSize?: string;
-}) {
+function mockStyles(opts: { elVars?: Record<string, string>; rootFontSize?: string }) {
 	const elVars = opts.elVars ?? {};
 	vi.spyOn(window, 'getComputedStyle').mockImplementation((target) => {
 		if (target === document.documentElement) {

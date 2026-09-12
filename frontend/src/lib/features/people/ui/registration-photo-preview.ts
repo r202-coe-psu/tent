@@ -44,6 +44,19 @@ export async function resolvePhotoPreviewUrl(
 	const cached = recallPhotoPreview(photoId);
 	if (cached) return cached;
 
+	if (
+		photoId.startsWith('data:image/') ||
+		photoId.startsWith('blob:') ||
+		photoId.startsWith('http://') ||
+		photoId.startsWith('https://')
+	) {
+		return photoId;
+	}
+
+	if (!photoId.includes(':') && photoId.length > 50) {
+		return `data:image/jpeg;base64,${photoId}`;
+	}
+
 	const isOnsiteImage =
 		photoId.startsWith('image:') && (mode === 'onsite-couch' || mode === 'pet-onsite');
 	if (isOnsiteImage) {

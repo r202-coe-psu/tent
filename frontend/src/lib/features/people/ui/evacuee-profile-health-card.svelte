@@ -45,7 +45,9 @@
 	const specialNeeds = $derived(evacuee.special_needs ?? []);
 </script>
 
-<section class="overflow-hidden rounded-xl border border-blue-200/70 bg-card dark:border-blue-950/60 shadow-2xs">
+<section
+	class="overflow-hidden rounded-xl border border-blue-200/70 bg-card shadow-2xs dark:border-blue-950/60"
+>
 	<div
 		class="flex items-center gap-2.5 border-b border-blue-100/70 bg-blue-50/60 px-5 py-4 dark:border-blue-950/40 dark:bg-blue-950/20"
 	>
@@ -74,7 +76,9 @@
 			<!-- Care Track & Infection Risk status -->
 			<div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground">แนวทางดูแล (Care Track):</span>
+					<span class="block text-xs font-medium text-muted-foreground"
+						>แนวทางดูแล (Care Track):</span
+					>
 					<div class="mt-1">
 						{#if isFastTrack}
 							<span
@@ -112,9 +116,10 @@
 
 			<!-- General symptoms from Station 2 -->
 			<div class="border-t border-border/40 pt-3">
-				<span class="block text-xs font-medium text-muted-foreground">อาการและข้อสังเกตทั่วไป:</span>
+				<span class="block text-xs font-medium text-muted-foreground">อาการและข้อสังเกตทั่วไป:</span
+				>
 				<div
-					class="mt-1.5 break-words rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+					class="mt-1.5 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm break-words text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
 				>
 					{#if screening?.notes}
 						<span class="font-medium">{screening.notes}</span>
@@ -154,7 +159,7 @@
 				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
 					<span
-						class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
 						{medical?.conditions?.length ? medical.conditions.join(', ') : 'ไม่มี'}
 					</span>
@@ -162,7 +167,7 @@
 				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">ยาที่ใช้ประจำ:</span>
 					<span
-						class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
 						{medical?.medications?.length ? medical.medications.join(', ') : 'ไม่ระบุ'}
 					</span>
@@ -170,7 +175,7 @@
 				<div class="min-w-0">
 					<span class="block text-xs font-medium text-muted-foreground">ประวัติการแพ้:</span>
 					<span
-						class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
 						{medical?.allergies?.length ? medical.allergies.join(', ') : 'ไม่ระบุ'}
 					</span>
@@ -179,9 +184,11 @@
 
 			{#if medical?.notes}
 				<div class="min-w-0 border-t border-border/40 pt-3">
-					<span class="block text-xs font-medium text-muted-foreground">บันทึกการดูแลต่อเนื่อง:</span>
+					<span class="block text-xs font-medium text-muted-foreground"
+						>บันทึกการดูแลต่อเนื่อง:</span
+					>
 					<div
-						class="mt-1.5 break-words rounded-md border border-blue-100/50 bg-blue-50/50 p-3 text-xs text-blue-800 dark:border-blue-900/20 dark:bg-blue-950/20 dark:text-blue-300"
+						class="mt-1.5 rounded-md border border-blue-100/50 bg-blue-50/50 p-3 text-xs break-words text-blue-800 dark:border-blue-900/20 dark:bg-blue-950/20 dark:text-blue-300"
 					>
 						{medical.notes}
 					</div>
@@ -197,13 +204,15 @@
 			<div class="min-w-0">
 				<div class="flex items-center gap-1.5">
 					<ShieldAlert class="size-4 text-amber-700 dark:text-amber-500" />
-					<span class="text-xs font-semibold text-foreground">กลุ่มเปราะบาง (Vulnerable Groups):</span>
+					<span class="text-xs font-semibold text-foreground"
+						>กลุ่มเปราะบาง (Vulnerable Groups):</span
+					>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if vulnerableGroups.length > 0}
 						{#each vulnerableGroups as code (code)}
 							<span
-								class="inline-flex max-w-full items-center gap-1 break-words rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+								class="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold break-words text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
 							>
 								{vulnerableLabel(code)}
 							</span>
@@ -224,7 +233,7 @@
 					{#if specialNeeds.length > 0}
 						{#each specialNeeds as need (need)}
 							<span
-								class="inline-flex max-w-full items-center gap-1 break-words rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300"
+								class="inline-flex max-w-full items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold break-words text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300"
 							>
 								{need}
 							</span>

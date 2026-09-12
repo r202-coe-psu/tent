@@ -21,7 +21,10 @@
 		toPersistBirthYearBE,
 		type BirthCalendar
 	} from '$lib/features/people/domain/birth-calendar';
-	import { RELIGION_UI_VALUES, normalizeReligionForUi } from '$lib/features/people/domain/religion-ui';
+	import {
+		RELIGION_UI_VALUES,
+		normalizeReligionForUi
+	} from '$lib/features/people/domain/religion-ui';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -325,9 +328,8 @@
 				>
 					<button
 						type="button"
-						disabled={disabled}
-						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar ===
-						'BE'
+						{disabled}
+						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar === 'BE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'BE'}
@@ -337,9 +339,8 @@
 					</button>
 					<button
 						type="button"
-						disabled={disabled}
-						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar ===
-						'CE'
+						{disabled}
+						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar === 'CE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'CE'}
@@ -459,8 +460,7 @@
 				{disabled}
 			>
 				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
-					{religionOptions.find((o) => o.value === religionSelectValue)?.label ??
-						t.religionUnknown}
+					{religionOptions.find((o) => o.value === religionSelectValue)?.label ?? t.religionUnknown}
 				</Select.Trigger>
 				<Select.Content>
 					{#each religionOptions as opt (opt.value)}

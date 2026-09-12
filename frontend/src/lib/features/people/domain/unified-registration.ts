@@ -280,18 +280,29 @@ export interface FamilyReportInPayload {
 	ctx: AuthorContext;
 }
 
-/** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput. */
-export function householdToUnifiedInput(household: Household | null | undefined): UnifiedHouseholdInput {
+function cleanAreaPrefix(name?: string | null): string {
+	if (!name) return '';
+	return name.replace(/^(ตำบล|แขวง|อำเภอ|เขต|จังหวัด|ต\.|อ\.|จ\.)/, '').trim();
+}
+
+/** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput, with optional fallback to smart card snapshot. */
+export function householdToUnifiedInput(
+	household: Household | null | undefined,
+	fallbackEvacuee?: Evacuee | null
+): UnifiedHouseholdInput {
+	const snap = fallbackEvacuee?.card_snapshot;
+	const villageParts = [snap?.village_no, snap?.lane, snap?.road].filter(Boolean).join(' ');
+
 	if (!household) {
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
-			address_no: '',
-			village_no: '',
-			subdistrict: '',
-			district: '',
-			province: '',
-			postal_code: '',
+			address_no: snap?.address_no ?? '',
+			village_no: villageParts,
+			subdistrict: cleanAreaPrefix(snap?.subdistrict),
+			district: cleanAreaPrefix(snap?.district),
+			province: cleanAreaPrefix(snap?.province),
+			postal_code: snap?.postal_code ?? '',
 			pets: [],
 			vehicles: [],
 			assets: null
@@ -300,15 +311,20 @@ export function householdToUnifiedInput(household: Household | null | undefined)
 	return {
 		housing_type: household.housing_type ?? 'owned_house',
 		residence_landmark: household.residence_landmark ?? null,
-		address_no: household.address_no ?? '',
-		village_no: household.village_no ?? '',
-		subdistrict: household.subdistrict ?? '',
-		district: household.district ?? '',
-		province: household.province ?? '',
-		postal_code: household.postal_code ?? '',
+		address_no: household.address_no ?? snap?.address_no ?? '',
+		village_no: household.village_no ?? villageParts,
+		subdistrict: household.subdistrict ?? cleanAreaPrefix(snap?.subdistrict),
+		district: household.district ?? cleanAreaPrefix(snap?.district),
+		province: household.province ?? cleanAreaPrefix(snap?.province),
+		postal_code: household.postal_code ?? snap?.postal_code ?? '',
 		pets: household.pets ?? [],
 		vehicles: household.vehicles ?? [],
-		assets: household.assets ? { description: household.assets.description ?? '', image_url: household.assets.image_url ?? null } : null
+		assets: household.assets
+			? {
+					description: household.assets.description ?? '',
+					image_url: household.assets.image_url ?? null
+				}
+			: null
 	};
 }
 
@@ -337,7 +353,7 @@ export function evacueeToUnifiedMember(
 		medical_allergies: [],
 		medical_medications: [],
 		medical_note: undefined,
-		photo: evacuee.photo ?? null,
+		photo: evacuee.photo ?? evacuee.card_snapshot?.photo_base64 ?? null,
 		country: evacuee.country ?? 'THAILAND',
 		religion: evacuee.religion ?? 'buddhist',
 		stay_status: evacuee.current_stay.status,

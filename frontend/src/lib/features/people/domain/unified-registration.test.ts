@@ -304,7 +304,112 @@ describe('unified registration — report-in converters', () => {
 		expect(member.reporting_in).toBe(true);
 
 		// If target was a different ID, reporting_in is false
-		const otherMember = evacueeToUnifiedMember(evacuee as unknown as import('./people').Evacuee, 'ev-2');
+		const otherMember = evacueeToUnifiedMember(
+			evacuee as unknown as import('./people').Evacuee,
+			'ev-2'
+		);
 		expect(otherMember.reporting_in).toBe(false);
+	});
+
+	it('pre-fills address from evacuee card_snapshot when household is null (Kiosk flow)', () => {
+		const kioskEvacuee = {
+			_id: 'ev-kiosk-1',
+			type: 'evacuee' as const,
+			household_id: null,
+			first_name: 'กิตติศักดิ์',
+			last_name: 'มณีรัตน์',
+			gender: 'male' as const,
+			card_snapshot: {
+				citizen_id: '1909800123456',
+				address_no: '12/4',
+				village_no: '3',
+				lane: 'ซอย 5',
+				road: 'ถ.เพชรเกษม',
+				subdistrict: 'ตำบลหาดใหญ่',
+				district: 'อำเภอหาดใหญ่',
+				province: 'จังหวัดสงขลา',
+				postal_code: '90110',
+				photo_base64: 'data:image/jpeg;base64,mockphoto'
+			},
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'kiosk' as const,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+
+		const input = householdToUnifiedInput(
+			null,
+			kioskEvacuee as unknown as import('./people').Evacuee
+		);
+		expect(input.address_no).toBe('12/4');
+		expect(input.village_no).toBe('3 ซอย 5 ถ.เพชรเกษม');
+		expect(input.subdistrict).toBe('หาดใหญ่');
+		expect(input.district).toBe('หาดใหญ่');
+		expect(input.province).toBe('สงขลา');
+		expect(input.postal_code).toBe('90110');
+
+		const member = evacueeToUnifiedMember(
+			kioskEvacuee as unknown as import('./people').Evacuee,
+			'ev-kiosk-1'
+		);
+		expect(member.photo).toBe('data:image/jpeg;base64,mockphoto');
+	});
+
+	it('maps all member card fields when pulled from pre-registered queue', () => {
+		const queuedSpouse = {
+			_id: 'ev-spouse-2',
+			_rev: '1-rev',
+			type: 'evacuee' as const,
+			household_id: null,
+			first_name: 'วรรณภา',
+			last_name: 'ศรีสุข',
+			nickname: 'วรรณ',
+			gender: 'female' as const,
+			birth_year: 2542,
+			age: 27,
+			phone: '0823334455',
+			person_id: { cardType: 'national_id' as const, number: '1809900234567' },
+			emergency_contact: { name: 'กิตติศักดิ์', phone: '0891112233', relation: 'สามี' },
+			special_needs: ['ต้องการแพมเพิส'],
+			vulnerable_groups: ['pregnant'],
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'kiosk' as const,
+			card_snapshot: {
+				citizen_id: '1809900234567',
+				photo_base64: 'data:image/jpeg;base64,spousephoto'
+			},
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+
+		const converted = evacueeToUnifiedMember(queuedSpouse as unknown as import('./people').Evacuee);
+		const targetMember = {
+			...blankUnifiedMember(),
+			...converted,
+			reporting_in: true
+		};
+
+		expect(targetMember._id).toBe('ev-spouse-2');
+		expect(targetMember.first_name).toBe('วรรณภา');
+		expect(targetMember.last_name).toBe('ศรีสุข');
+		expect(targetMember.nickname).toBe('วรรณ');
+		expect(targetMember.gender).toBe('female');
+		expect(targetMember.phone).toBe('0823334455');
+		expect(targetMember.photo).toBe('data:image/jpeg;base64,spousephoto');
+		expect(targetMember.stay_status).toBe('pre_registered');
+		expect(targetMember.reporting_in).toBe(true);
+		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
+		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
+		expect(targetMember.vulnerable_groups).toContain('pregnant');
 	});
 });

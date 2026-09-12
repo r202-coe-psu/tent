@@ -276,6 +276,11 @@ export {
 	default as StayStatusBadge,
 	STAY_STATUS_BADGE_STYLES
 } from './ui/stay-status-badge.svelte';
+export {
+	default as RegisteredViaBadge,
+	REGISTERED_VIA_BADGE_STYLES,
+	type RegisteredViaStyle
+} from './ui/registered-via-badge.svelte';
 export { default as Station1IntakeSearch } from './ui/station1-intake-search.svelte';
 export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';
@@ -287,6 +292,7 @@ export { default as HouseholdPostArrival } from './ui/household-post-arrival.sve
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
 export { default as FamilyBatchPrint } from './ui/family-batch-print.svelte';
 export { default as UnifiedRegistrationForm } from './ui/unified-registration-form.svelte';
+export { default as PullPreRegisteredDialog } from './ui/pull-pre-registered-dialog.svelte';
 export {
 	default as EvacueeHandoverSlipModal,
 	buildScreeningDeepLink

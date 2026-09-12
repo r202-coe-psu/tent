@@ -39,4 +39,15 @@ describe('registration-photo-preview', () => {
 		rememberPhotoPreview('image:onsite-1', 'blob:cached');
 		expect(await resolvePhotoPreviewUrl('image:onsite-1', 'onsite-couch')).toBe('blob:cached');
 	});
+
+	it('returns data: URLs, blob: URLs, and web URLs directly without Couch lookup', async () => {
+		const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...';
+		expect(await resolvePhotoPreviewUrl(dataUrl, 'onsite-couch')).toBe(dataUrl);
+
+		const blobUrl = 'blob:http://localhost:5173/abc-123';
+		expect(await resolvePhotoPreviewUrl(blobUrl, 'onsite-couch')).toBe(blobUrl);
+
+		const webUrl = 'https://example.com/photo.jpg';
+		expect(await resolvePhotoPreviewUrl(webUrl, 'onsite-couch')).toBe(webUrl);
+	});
 });

@@ -14,7 +14,8 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		qrAlt: 'QR สำหรับยืนยันตัวตนที่ประตูศูนย์',
 		qrAltUnassigned: 'QR รหัสลงทะเบียนคิวกลาง (ยังไม่ใช่ QR ประตูศูนย์)',
 		qrErrorFallback: 'สร้าง QR ไม่สำเร็จ กรุณาแจ้งชื่อ-นามสกุลกับเจ้าหน้าที่ที่ประตูศูนย์',
-		qrErrorFallbackUnassigned: 'สร้าง QR ไม่สำเร็จ กรุณาแจ้งเบอร์โทรศัพท์กับเจ้าหน้าที่ลงทะเบียนประจำศูนย์',
+		qrErrorFallbackUnassigned:
+			'สร้าง QR ไม่สำเร็จ กรุณาแจ้งเบอร์โทรศัพท์กับเจ้าหน้าที่ลงทะเบียนประจำศูนย์',
 		bookerNameLabel: 'ชื่อผู้จอง',
 		statusDtLabel: 'สถานะ',
 		bookedAtLabel: 'เวลาที่จอง',

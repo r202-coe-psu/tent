@@ -1250,6 +1250,7 @@ export function createKioskEvacueeFromCard(
 			special_needs: [],
 			household_id: null,
 			card_snapshot: cardSnapshot,
+			photo: cardSnapshot.photo_base64 ?? null,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'

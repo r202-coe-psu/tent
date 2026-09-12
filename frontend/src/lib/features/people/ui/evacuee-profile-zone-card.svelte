@@ -38,9 +38,7 @@
 	<div class="min-w-0 space-y-3.5">
 		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ศูนย์อพยพ:</span>
-			<span
-				class="mt-0.5 block break-words text-sm font-bold text-slate-800 dark:text-slate-200"
-			>
+			<span class="mt-0.5 block text-sm font-bold break-words text-slate-800 dark:text-slate-200">
 				{shelterName}
 			</span>
 		</div>
@@ -48,7 +46,7 @@
 			<div class="min-w-0">
 				<span class="block text-xs font-medium text-muted-foreground">โซนพักอาศัย:</span>
 				<span
-					class="mt-1 inline-block max-w-full break-words rounded-lg border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600 dark:border-blue-900/30 dark:bg-blue-950/40 dark:text-blue-400"
+					class="mt-1 inline-block max-w-full rounded-lg border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold break-words text-blue-600 dark:border-blue-900/30 dark:bg-blue-950/40 dark:text-blue-400"
 				>
 					โซน {zoneLabel(evacuee.current_stay.zone)}
 				</span>

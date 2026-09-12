@@ -256,7 +256,9 @@
 						<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 							<ShieldAlert class="size-4 text-primary" />
 							<div>
-								<h3 class="text-sm font-bold text-foreground">2. กลุ่มเปราะบาง (Vulnerable Groups)</h3>
+								<h3 class="text-sm font-bold text-foreground">
+									2. กลุ่มเปราะบาง (Vulnerable Groups)
+								</h3>
 								<p class="text-xs text-muted-foreground">เลือกได้หลายรายการ (ไม่บังคับ)</p>
 							</div>
 						</div>
@@ -274,7 +276,9 @@
 						<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 							<HeartHandshake class="size-4 text-primary" />
 							<div>
-								<h3 class="text-sm font-bold text-foreground">3. ความต้องการเพิ่มเติม (Additional needs)</h3>
+								<h3 class="text-sm font-bold text-foreground">
+									3. ความต้องการเพิ่มเติม (Additional needs)
+								</h3>
 								<p class="text-xs text-muted-foreground">
 									แท็กทั่วไปหรือเพิ่มความต้องการพิเศษเอง (ไม่บังคับ)
 								</p>
@@ -319,7 +323,8 @@
 				<footer
 					class="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card/95 px-4 py-3 backdrop-blur-sm sm:px-5"
 				>
-					<Button type="button" variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button>
+					<Button type="button" variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button
+					>
 					<Button type="submit" disabled={saving} class="min-w-28">
 						{#if saving}
 							<LoaderCircle class="size-4 animate-spin" aria-hidden="true" />

@@ -56,7 +56,7 @@
 		});
 	});
 
-	const initialHousehold = $derived(householdToUnifiedInput(household));
+	const initialHousehold = $derived(householdToUnifiedInput(household, evacuee));
 	const initialMembers = $derived(
 		familyMembers.map((m) => evacueeToUnifiedMember(m, data.evacueeId))
 	);
@@ -190,8 +190,8 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
-				initialHousehold={initialHousehold}
-				initialMembers={initialMembers}
+				{initialHousehold}
+				{initialMembers}
 				pending={submitReportIn.isPending}
 				onsubmit={handleReportIn}
 				onDirtyChange={(dirty) => (isDirty = dirty)}
