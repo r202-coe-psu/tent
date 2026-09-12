@@ -17,7 +17,7 @@ extends:
   - draft-seed-item-categories (อ้างอิง 10 หมวดหมู่ระบบมาตรฐาน — จำแนกอาหารปรุงเสร็จเป็น category: 'item_category:ready_meal' คลาส CONSUMABLE)
 affects:
   - docs/data/schema.md §2 (DB shelter_{shelter_code} — Operations) — doc types ใหม่: `requisition_ticket`, `distribution_log`
-  - docs/data/schema.md §1 (Catalog & Master Data) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
+  - docs/data/schema.md §4.2 (Catalog & Master Data — item_master) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
   - docs/data/schema.md §2.7 (`meal_service`) — ขยายฟิลด์ `yield_items` สำหรับ Batch Yield
   - docs/task-breakdown/03-operations.md
   - docs/task-breakdown/05-D-kitchen.md
@@ -367,6 +367,7 @@ erDiagram
         enum clear_reason "routine / bulk_dropoff / waived / lost"
         boolean is_override "อนุมัติพิเศษ"
         string override_reason "สาเหตุ override"
+        boolean is_expired_warning "แจ้งเตือนเกิน 4 ชม. opt (CR-109 / Soft Warning)"
         timestamp distributed_at "เวลาจ่ายของ"
         string distributed_by FK "staff_id"
         timestamp voided_at "เวลายกเลิกรายการ (CR-109)"
@@ -443,6 +444,7 @@ export interface TicketAmendment {
 export interface RequisitionTicket extends BaseDoc {
   _id: string; // pattern: 'requisition_ticket:{ulid}' (ULID 26 ตัวพิมพ์ใหญ่ตาม docs/data/schema.md)
   type: 'requisition_ticket';
+  schema_v: 1;
   ticket_no: string; // e.g. TKT-KITCHEN-0012 / TKT-FOOD-0045 (Human-readable Running Code สำหรับอ้างอิงหน้างาน)
   requisition_type: RequisitionType;
   status: TicketStatus;
@@ -467,6 +469,7 @@ export interface RequisitionTicket extends BaseDoc {
 export interface DistributionLog extends BaseDoc {
   _id: string; // pattern: 'distribution_log:{ulid}' (ULID 26 ตัวพิมพ์ใหญ่ตาม docs/data/schema.md)
   type: 'distribution_log';
+  schema_v: 1;
   ticket_id: string; // FK requisition_ticket (Active Batch origin)
   item_id: string; // FK item_master
   meal_service_id?: string; // FK meal_service (กรณีอาหารปรุงสุก - จาก CR-109)
@@ -489,6 +492,7 @@ export interface DistributionLog extends BaseDoc {
   // การตรวจสิทธิ์ & Void (CR-109)
   is_override: boolean;
   override_reason?: string;
+  is_expired_warning?: boolean; // บันทึก true หากแจกจ่ายอาหารที่เกิน 4 ชม. (Soft Warning Audit Log ตาม AC-DST-03.2)
   distributed_at: Timestamp;
   distributed_by: string;
   voided_at?: Timestamp | null;
@@ -516,6 +520,9 @@ export interface MealService extends BaseDoc {
   meal: MealPeriod;
   meal_plan_id: string | null;
   yield_items?: KitchenYieldItem[];
+  // หมายเหตุ Backward Compatibility: ฟิลด์ actual_yield, served, waste จัดเก็บเป็น qty_str (CR-038)
+  // เอกสารเดิมที่เคยบันทึกเป็น number (int ≥ 0) ให้ Zod Schema ใช้ z.union([z.string(), z.number().transform(String)])
+  // เพื่อให้อ่านเอกสารเดิมได้โดยอัตโนมัติ โดยไม่ต้อง bump schema_v ของฐานข้อมูลศูนย์
   actual_yield?: string; // qty_str
   served: string; // qty_str
   waste: string; // qty_str
@@ -719,8 +726,8 @@ export interface MealService extends BaseDoc {
 ## 7. ผลกระทบและการย้ายข้อมูล (Impact & Migration)
 
 ### 7.1 ผลกระทบต่อเอกสาร (Documentation Impact)
-- `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` (§2.29) และ `distribution_log` (§2.30)
-- `docs/data/schema.md` §1: รองรับการจัดเก็บอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
+- `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` (§2.22) และ `distribution_log` (§2.23)
+- `docs/data/schema.md` §4.2: รองรับการจัดเก็บอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
 - `docs/data/schema.md` §2.7: เพิ่มฟิลด์ `yield_items` ใน `meal_service`
 - `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 4 Tracks
 
@@ -737,6 +744,9 @@ export interface MealService extends BaseDoc {
 
 ### 7.3 แผนการย้ายข้อมูล (Migration Strategy)
 - **ไม่ต้อง bump `schema_v` ของฐานข้อมูลศูนย์:** เนื่องจากเป็นการเพิ่ม doc types ใหม่ (`requisition_ticket`, `distribution_log`) และเพิ่ม optional fields บนเอกสารเดิม
+- **ความเข้ากันได้ย้อนหลังของ `meal_service` (CR-038 Coercion):**
+  - เอกสาร `meal_service` ในอดีตบันทึกฟิลด์ `actual_yield`, `served`, `waste` เป็นตัวเลข (`number`)
+  - โค้ด Zod Validation ของโมเดล `mealServiceSchema` จะใช้ `z.union([z.string(), z.number().transform(String)])` เพื่อแปลงตัวเลขเดิมให้ออกมาเป็น Decimal String (`qty_str`) ตอนอ่านโดยอัตโนมัติ ทำให้เอกสารเดิมยังคงใช้งานได้สมบูรณ์โดยไม่ต้องรัน Data Migration ใน CouchDB
 - **การจัดการข้อมูล `meal_distribution` เดิม (CR-109):**
   - ข้อมูล `meal_distribution` ในสภาพแวดล้อมทดสอบ/staging จะถูกแปลง (Transform) หรือ Map เข้าสู่ `distribution_log` (`is_returnable: false`, `status: 'fulfilled'`) โดยรักษาประวัติ `voided_at` และ `voided_by` ไว้อย่างสมบูรณ์
 - **การจัดการข้อมูล `kitchen_requisition` เดิม (CR-059 Flow 1):**

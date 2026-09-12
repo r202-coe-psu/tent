@@ -192,11 +192,13 @@ function (newDoc, oldDoc, userCtx, secObj) {
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
-  if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
+  if (oldDoc && newDoc.shelter_code && oldDoc.shelter_code !== newDoc.shelter_code) {
     throw({ forbidden: 'shelter_code is immutable' });
   }
-  if (newDoc.shelter_code) {
-    var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
+  // รองรับทั้งกรณีสร้าง/แก้ไข (newDoc) และกรณีลบ (oldDoc) สำหรับ Scoped Staff
+  var targetShelter = newDoc.shelter_code || (oldDoc && oldDoc.shelter_code);
+  if (targetShelter) {
+    var hasScope = userCtx.roles.indexOf('shelter:' + targetShelter) !== -1;
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
     if (hasScope && (isManager || isWS)) {
