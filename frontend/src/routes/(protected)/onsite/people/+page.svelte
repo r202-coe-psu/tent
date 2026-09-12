@@ -5,7 +5,6 @@
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
-	import Camera from '@lucide/svelte/icons/camera';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -15,7 +14,6 @@
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
-	import X from '@lucide/svelte/icons/x';
 	import Zap from '@lucide/svelte/icons/zap';
 
 	import { Button } from '$lib/components/ui/button';
@@ -33,13 +31,11 @@
 		maskNationalId,
 		matchesEvacueeSearch,
 		nextQueueLabel,
-		STATUS_LABELS,
 		REPORT_IN_CTA_LABEL,
 		Station1IntakeSearch,
 		StayStatusBadge,
 		lookupFederatedByScanCode,
-		type Evacuee,
-		type StayStatus
+		type Evacuee
 	} from '$lib/features/people';
 	import {
 		ClaimDialog,
@@ -364,7 +360,10 @@
 	</Card.Root>
 
 	<!-- 3. Queue Stat Summary Cards -->
-	<section aria-label="สรุปยอดคิวผู้ประสบภัย" class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+	<section
+		aria-label="สรุปยอดคิวผู้ประสบภัย"
+		class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
+	>
 		<!-- Card 1: Pre-registered -->
 		<button
 			type="button"
@@ -678,7 +677,9 @@
 						class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
 					>
 						<p class="font-medium text-slate-700">ไม่มีรายการในหมวดนี้</p>
-						<p class="text-xs text-slate-500">ผู้ประสบภัยได้รับการตรวจและจัดสรรที่พักเรียบร้อยแล้ว</p>
+						<p class="text-xs text-slate-500">
+							ผู้ประสบภัยได้รับการตรวจและจัดสรรที่พักเรียบร้อยแล้ว
+						</p>
 					</div>
 				{:else}
 					<div class="overflow-x-auto">
@@ -722,7 +723,8 @@
 													<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
 														<CheckCircle2 class="size-3.5 text-emerald-600" />
 														ตรวจแล้ว{#if screening.triage_level}
-															({TRIAGE_LABELS[screening.triage_level] ?? screening.triage_level}){/if}
+															({TRIAGE_LABELS[screening.triage_level] ??
+																screening.triage_level}){/if}
 													</span>
 												{:else}
 													<span class="font-medium text-amber-700">รอตรวจคัดกรอง</span>
@@ -754,7 +756,9 @@
 													<Button
 														size="sm"
 														class="gap-1 bg-[#0A2647] text-white hover:bg-[#051930]"
-														href={resolve(`/onsite/zoning/${row._id}` as `/onsite/zoning/${string}`)}
+														href={resolve(
+															`/onsite/zoning/${row._id}` as `/onsite/zoning/${string}`
+														)}
 														onclick={(e) => e.stopPropagation()}
 													>
 														<MapPin class="size-3.5" />
@@ -793,7 +797,7 @@
 							<span class="font-medium">สถานะ:</span>
 							<select
 								bind:value={allStatusFilter}
-								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-primary"
+								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 							>
 								<option value="all">ทุกสถานะ</option>
 								<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
@@ -813,10 +817,10 @@
 								<span class="font-medium">โซน:</span>
 								<select
 									bind:value={allZoneFilter}
-									class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-primary"
+									class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 								>
 									<option value="all">ทุกโซน</option>
-									{#each availableZones as z}
+									{#each availableZones as z (z)}
 										<option value={z}>โซน {z}</option>
 									{/each}
 								</select>

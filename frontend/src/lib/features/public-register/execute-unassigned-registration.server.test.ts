@@ -68,7 +68,14 @@ describe('executeUnassignedRegistration (#255)', () => {
 				id: '01HTEST',
 				schema_v: 2,
 				reserved_household_id: 'household:01H',
-				members: [{ reserved_evacuee_id: 'evacuee:01H', status: 'open', first_name: 'สมชาย', last_name: 'ใจดี' }],
+				members: [
+					{
+						reserved_evacuee_id: 'evacuee:01H',
+						status: 'open',
+						first_name: 'สมชาย',
+						last_name: 'ใจดี'
+					}
+				],
 				registered_via: 'web',
 				status: 'open',
 				created_at: '2026-09-09T00:00:00Z'

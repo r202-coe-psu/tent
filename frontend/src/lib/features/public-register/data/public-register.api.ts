@@ -104,7 +104,9 @@ export interface UnassignedPhotoUploadResponse {
 /**
  * Upload a compressed face or pet photo for Unassigned Registration (GridFS via BFF).
  */
-export async function uploadUnassignedPhoto(form: FormData): Promise<UnassignedPhotoUploadResponse> {
+export async function uploadUnassignedPhoto(
+	form: FormData
+): Promise<UnassignedPhotoUploadResponse> {
 	const res = await fetch('/api/public/v1/unassigned-registrations/photos', {
 		method: 'POST',
 		body: form

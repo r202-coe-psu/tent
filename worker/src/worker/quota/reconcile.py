@@ -73,7 +73,7 @@ class ShelterReconcileReport:
 def _to_decimal(value: Any) -> Decimal | None:
     try:
         return Decimal(str(value))
-    except (InvalidOperation, TypeError):
+    except InvalidOperation, TypeError:
         return None
 
 

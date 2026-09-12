@@ -339,7 +339,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant staff capabilities in their own shelter'
+			'A manager may only grant staff capabilities in their own shelter, not shelter_manager or system_admin'
 		);
 	}
 }

@@ -10,10 +10,14 @@ from worker.couch.client import CouchClient
 from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
+    apply_job,
+    apply_job_application,
     apply_need,
     apply_need_counters,
     apply_person,
     apply_shelter,
+    apply_shift_assignment,
+    apply_volunteer,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
@@ -25,8 +29,11 @@ from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import is_shelter_open, project_shelter
+from worker.projectors.shift_assignment import project_shift_assignment
+from worker.projectors.volunteer import project_volunteer
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +111,32 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
             await apply_need_counters(
                 plan_need_counters(doc, shelter_code=shelter_code)
             )
+        elif doc_type == "job":
+            # Same reason as the counters below: a job posted before this worker first
+            # ran never arrives as a change event, and an unseeded VolunteerJobSlot
+            # makes reserve_job_slot answer NOT_SEEDED for a job that is genuinely open.
+            action, payload = project_job(doc, shelter_code=shelter_code)
+            await apply_job(action, payload)
+        elif doc_type == "job_application":
+            action, payload = project_job_application(doc, shelter_code=shelter_code)
+            await apply_job_application(action, payload)
+        elif doc_type == "shift_assignment":
+            volunteer_id = doc.get("volunteer_id")
+            volunteer = (
+                await couch.get_doc(database, str(volunteer_id))
+                if volunteer_id
+                else None
+            )
+            action, payload = project_shift_assignment(
+                doc, shelter_code=shelter_code, volunteer=volunteer
+            )
+            await apply_shift_assignment(action, payload)
+        elif doc_type == "volunteer":
+            # The portal reads a profile the same way it reads a schedule — by phone
+            # hash — so a volunteer registered before this worker first ran must be
+            # projected here too, or their own profile screen comes back empty.
+            action, payload = project_volunteer(doc, shelter_code=shelter_code)
+            await apply_volunteer(action, payload)
 
     # Same reason the counters are seeded above: the ledger entries already on disk
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the

@@ -50,7 +50,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
 			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
-			{ label: 'จัดการอาสาสมัคร', href: null, icon: HeartHandshake },
+			{
+				label: 'จัดการอาสาสมัคร',
+				href: resolve('/back-office/volunteers'),
+				icon: HeartHandshake
+			},
 			{
 				label: 'การส่งต่อผู้ประสบภัย',
 				href: resolve('/back-office/referrals'),
@@ -149,7 +153,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
+					{
+						label: '6. ทักษะอาสาสมัคร',
+						href: resolve('/back-office/volunteer-skills'),
+						icon: HandHeart
+					},
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}

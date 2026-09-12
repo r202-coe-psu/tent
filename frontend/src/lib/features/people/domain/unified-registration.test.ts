@@ -304,7 +304,10 @@ describe('unified registration — report-in converters', () => {
 		expect(member.reporting_in).toBe(true);
 
 		// If target was a different ID, reporting_in is false
-		const otherMember = evacueeToUnifiedMember(evacuee as unknown as import('./people').Evacuee, 'ev-2');
+		const otherMember = evacueeToUnifiedMember(
+			evacuee as unknown as import('./people').Evacuee,
+			'ev-2'
+		);
 		expect(otherMember.reporting_in).toBe(false);
 	});
 });

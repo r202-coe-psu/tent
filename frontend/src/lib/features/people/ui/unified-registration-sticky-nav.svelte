@@ -30,7 +30,7 @@
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger
 			aria-label={ariaLabel}
-			class="touch-target flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+			class="touch-target flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 		>
 			{#if activeNavItem}
 				{@const ActiveIcon = activeNavItem.icon}
@@ -39,7 +39,11 @@
 			{/if}
 			<ChevronUp class="size-4 shrink-0 text-muted-foreground" />
 		</DropdownMenu.Trigger>
-		<DropdownMenu.Content side="top" align="start" class="w-(--bits-floating-anchor-width) min-w-56">
+		<DropdownMenu.Content
+			side="top"
+			align="start"
+			class="w-(--bits-floating-anchor-width) min-w-56"
+		>
 			<DropdownMenu.RadioGroup
 				value={activeSection}
 				onValueChange={(id) => {

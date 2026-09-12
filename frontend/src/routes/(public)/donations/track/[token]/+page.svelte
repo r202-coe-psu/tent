@@ -14,7 +14,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
 		useDonationTracking,
@@ -64,7 +64,7 @@
 			return;
 		}
 		let cancelled = false;
-		QRCode.toDataURL(token, { margin: 1, width: 256 })
+		generateQrDataUrl(token, { margin: 1, width: 256 })
 			.then((url) => {
 				if (!cancelled) qrCodeUrl = url;
 			})

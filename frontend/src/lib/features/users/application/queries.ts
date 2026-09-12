@@ -31,6 +31,7 @@ export const useCreateUser = () => {
 				start_ts: string;
 				end_ts: string;
 			} | null;
+			must_change_password?: boolean;
 			affiliation_tags?: string[];
 		}) => createUser(input),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })

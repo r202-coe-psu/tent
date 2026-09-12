@@ -1,5 +1,7 @@
 from typing import Any
+
 from tent_model import SyncCheckpoint
+
 
 async def apply_config(action: str, payload: dict[str, Any] | None) -> None:
     db = SyncCheckpoint.get_pymongo_collection().database

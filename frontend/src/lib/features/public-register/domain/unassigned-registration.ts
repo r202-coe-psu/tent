@@ -85,9 +85,7 @@ export function toUnassignedRegistrationPayload(
 			cardType === 'anonymous'
 				? {
 						cardType: 'anonymous' as const,
-						...(member.person_id?.number?.trim()
-							? { number: member.person_id.number.trim() }
-							: {})
+						...(member.person_id?.number?.trim() ? { number: member.person_id.number.trim() } : {})
 					}
 				: cardType && member.person_id?.number?.trim()
 					? { cardType, number: member.person_id.number.trim() }

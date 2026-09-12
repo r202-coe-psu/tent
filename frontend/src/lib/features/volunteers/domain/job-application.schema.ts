@@ -1,0 +1,182 @@
+/**
+ * Job application domain schema — CR-094 §3.4 (schema.md §2.18, `job_application`
+ * schema_v 1 → 2). Public applications may persist only `tracking_token_hash`;
+ * the raw bearer token is retained only for legacy/staff-created documents.
+ *
+ * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
+ */
+
+import { z } from 'zod';
+import { makeDoc, type AuthorContext, type BaseDoc } from '$lib/db/model';
+import { nationalIdSchema } from './volunteer.schema';
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/** CR-094 §3.4 — replaces `pending`/`accepted`; `rejected` is kept (not dropped by CR-092). */
+export const jobApplicationStatusSchema = z.enum([
+	'pending_review',
+	'confirmed',
+	'rejected',
+	'cancelled'
+]);
+export type JobApplicationStatus = z.infer<typeof jobApplicationStatusSchema>;
+
+export const jobApplicationReviewReasonSchema = z.enum([
+	'identity',
+	'skill_certification',
+	'job_fit',
+	'legacy_review'
+]);
+export type JobApplicationReviewReason = z.infer<typeof jobApplicationReviewReasonSchema>;
+
+export const JOB_APPLICATION_REVIEW_REASON_LABEL: Record<JobApplicationReviewReason, string> = {
+	identity: 'ยืนยันตัวตน',
+	skill_certification: 'รับรองทักษะควบคุม',
+	job_fit: 'พิจารณาความเหมาะสมของงาน',
+	legacy_review: 'รายการเก่าที่ต้องตรวจ'
+};
+
+/**
+ * State machine transitions for JobApplication (CR-041 D-APP=A / CR-094 §3.4 / UX-DR6).
+ * - `pending_review`: default initial state, can transition to `confirmed`, `rejected`, or `cancelled`.
+ * - `confirmed`, `rejected`, `cancelled`: terminal states for application review lifecycle.
+ */
+export const JOB_APPLICATION_TRANSITIONS: Record<
+	JobApplicationStatus,
+	readonly JobApplicationStatus[]
+> = {
+	pending_review: ['confirmed', 'rejected', 'cancelled'],
+	confirmed: [],
+	rejected: [],
+	cancelled: []
+};
+
+export function canTransitionJobApplication(
+	from: JobApplicationStatus,
+	to: JobApplicationStatus
+): boolean {
+	return JOB_APPLICATION_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+export const applicantSchema = z.object({
+	first_name: z.string().min(1),
+	last_name: z.string().min(1),
+	phone: z.string().min(1),
+	phone_hash: z.string().min(1),
+	email: z.string().nullable(),
+	skills: z.array(z.string()),
+	/** CR-094 §3.4 — captured on the No-SMS OTP quick-apply form, optional everywhere. */
+	national_id: nationalIdSchema.nullable().optional()
+});
+export type Applicant = z.infer<typeof applicantSchema>;
+
+export const selectedShiftSchema = z.object({
+	shift_id: z.string().min(1).optional(),
+	date: z.string().min(1),
+	start_time: z.string().min(1),
+	end_time: z.string().min(1)
+});
+export type SelectedShift = z.infer<typeof selectedShiftSchema>;
+
+// ---------------------------------------------------------------------------
+// Document schema
+// ---------------------------------------------------------------------------
+
+export interface JobApplication extends BaseDoc {
+	type: 'job_application';
+	schema_v: 2 | 3;
+	job_id: string;
+	/** Stable concrete shift identity; absent only on legacy v2 documents. */
+	shift_id?: string;
+	volunteer_id: string | null;
+	applicant: Applicant;
+	selected_shift: SelectedShift;
+	/** Raw bearer token exists only on legacy/staff-created documents. */
+	tracking_token?: string;
+	/** Public applications persist this hash instead of the raw bearer token. */
+	tracking_token_hash?: string;
+	status: JobApplicationStatus;
+	review_notes?: string | null;
+	reviewed_at?: string | null;
+	reviewed_by?: string | null;
+	review_reasons?: JobApplicationReviewReason[];
+}
+
+export const jobApplicationSchema = z
+	.object({
+		_id: z.string().startsWith('job_application:'),
+		_rev: z.string().optional(),
+		type: z.literal('job_application'),
+		schema_v: z.union([z.literal(2), z.literal(3)]),
+		shelter_code: z.string().min(1),
+		created_at: z.string(),
+		updated_at: z.string(),
+		created_by: z.string().min(1),
+		job_id: z.string().startsWith('job:'),
+		shift_id: z.string().min(1).optional(),
+		volunteer_id: z.string().startsWith('volunteer:').nullable(),
+		applicant: applicantSchema,
+		selected_shift: selectedShiftSchema,
+		tracking_token: z.string().min(1).optional(),
+		tracking_token_hash: z.string().min(1).optional(),
+		status: jobApplicationStatusSchema,
+		review_notes: z.string().nullable().optional(),
+		reviewed_at: z.string().nullable().optional(),
+		reviewed_by: z.string().nullable().optional(),
+		review_reasons: z.array(jobApplicationReviewReasonSchema).optional()
+	})
+	.refine((doc) => Boolean(doc.tracking_token || doc.tracking_token_hash), {
+		message: 'tracking_token or tracking_token_hash is required',
+		path: ['tracking_token']
+	});
+
+export const isJobApplication = (d: unknown): d is JobApplication =>
+	jobApplicationSchema.safeParse(d).success;
+
+// ---------------------------------------------------------------------------
+// Creation input
+// ---------------------------------------------------------------------------
+
+export const jobApplicationInputSchema = z.object({
+	job_id: z.string().startsWith('job:', 'กรุณาเลือกงาน'),
+	shift_id: z.string().min(1).optional(),
+	volunteer_id: z.string().startsWith('volunteer:').nullable().default(null),
+	applicant: applicantSchema,
+	selected_shift: selectedShiftSchema,
+	tracking_token: z.string().min(1)
+});
+export type JobApplicationInput = z.infer<typeof jobApplicationInputSchema>;
+
+/**
+ * Build a new `job_application`. Initial `status` is the caller's call (see
+ * `skills.ts#initialStatusForSkills` — controlled skills must land on
+ * `pending_review`, never `confirmed`).
+ */
+export function makeJobApplication(
+	input: JobApplicationInput,
+	ctx: AuthorContext,
+	status: JobApplicationStatus,
+	options: { reviewReasons?: JobApplicationReviewReason[] } = {}
+): JobApplication {
+	const d = jobApplicationInputSchema.parse(input);
+	return makeDoc(
+		'job_application',
+		3,
+		{
+			job_id: d.job_id,
+			shift_id: d.shift_id,
+			volunteer_id: d.volunteer_id,
+			applicant: d.applicant,
+			selected_shift: d.selected_shift,
+			tracking_token: d.tracking_token,
+			status,
+			review_notes: null,
+			reviewed_at: null,
+			reviewed_by: null,
+			review_reasons: options.reviewReasons ?? []
+		},
+		ctx
+	) as JobApplication;
+}

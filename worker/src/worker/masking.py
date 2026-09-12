@@ -99,3 +99,16 @@ def shelter_code_from_db_name(db_name: str) -> str | None:
 
 def shelter_db_name(shelter_code: str) -> str:
     return f"shelter_{shelter_code.lower()}"
+
+
+def mask_phone(phone: str | None) -> str:
+    """``xxx-xxx-1234`` — the only phone form a public volunteer ticket may show.
+
+    FR-VOL-03.4 (CR-092). Keeps the last four digits so an applicant can recognise
+    their own ticket, and nothing more: the number itself is on the shelter's CouchDB
+    doc, not in any public response.
+    """
+    digits = normalize_phone(phone or "")
+    if len(digits) < 4:
+        return "xxx-xxx-xxxx"
+    return f"xxx-xxx-{digits[-4:]}"

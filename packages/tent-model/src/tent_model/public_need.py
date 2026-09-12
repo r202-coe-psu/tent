@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from beanie import Document
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 from pymongo import IndexModel
 
 

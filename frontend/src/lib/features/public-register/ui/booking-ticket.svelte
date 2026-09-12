@@ -1,7 +1,7 @@
 <script lang="ts">
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
@@ -37,7 +37,7 @@
 	// gate scanner. Unassigned queue (#255): QR is the Mongo registration id only —
 	// NOT a Station-1 Person QR / FamilyBatchPrint / Handover until claim into a shelter.
 	const qrPromise = $derived(
-		QRCode.toDataURL(qrPayload, {
+		generateQrDataUrl(qrPayload, {
 			width: 384,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }
@@ -194,7 +194,7 @@
 				</p>
 				<p class="mt-1 text-muted-foreground">
 					{t.unassignedNextStepsBody}
-					{' '}(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
+					(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
 				</p>
 			</div>
 		{/if}

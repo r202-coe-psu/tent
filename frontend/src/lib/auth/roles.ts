@@ -376,6 +376,13 @@ export function roleDisplayLabel(role: string): string {
 }
 
 /**
+ * Bilingual or display label for the role picker.
+ */
+export function roleOptionLabel(role: string): string {
+	return roleDisplayLabel(role);
+}
+
+/**
  * Join a role list into a single human-readable string. Returns `'ผู้ใช้ทั่วไป'`
  * for an empty list — used as the avatar tooltip in the back-office navbar
  * when the user has no assigned roles.

@@ -61,6 +61,18 @@ export function formatThaiWeekRange(start: string, end: string): string {
 	return `${formatThaiDate(start)}–${formatThaiDate(end)}`;
 }
 
+/** แปลง ISO timestamp string → วันที่แบบสั้นปีพุทธศักราช (เช่น "30/8/2569") */
+export function formatThaiShortDate(iso: string): string {
+	if (!iso) return '';
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return iso;
+	return date.toLocaleDateString('th-TH', {
+		year: 'numeric',
+		month: 'numeric',
+		day: 'numeric'
+	});
+}
+
 /** แปลง ISO timestamp string → ข้อความวันเวลาภาษาไทย (เช่น "4 ก.ค. 2569, 14:30") */
 export function formatThaiDateTime(iso: string): string {
 	if (!iso) return '';
