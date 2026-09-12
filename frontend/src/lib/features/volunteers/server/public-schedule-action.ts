@@ -10,6 +10,7 @@ import {
 } from '$lib/server/couch-public-writer';
 import { adminRaw } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { isWithinDutyWindow } from '../domain/duty-window';
 
 const MAX_WRITE_RETRIES = 5;
 
@@ -218,6 +219,22 @@ async function writeAssignment(
 			throw new PublicScheduleError('SHIFT_NOT_FOUND', 404);
 		}
 		if (current.dispatch_status === 'dispatched') throw actionError(action);
+		if (action === 'check_in') {
+			const rawWindow = current.duty_window;
+			const dutyWindow =
+				rawWindow &&
+				typeof rawWindow === 'object' &&
+				typeof (rawWindow as { start_ts?: unknown }).start_ts === 'string' &&
+				typeof (rawWindow as { end_ts?: unknown }).end_ts === 'string'
+					? {
+							start_ts: (rawWindow as { start_ts: string }).start_ts,
+							end_ts: (rawWindow as { end_ts: string }).end_ts
+						}
+					: null;
+			if (!isWithinDutyWindow(now, dutyWindow)) {
+				throw new PublicScheduleError('SHIFT_NOT_READY_FOR_CHECK_IN', 409);
+			}
+		}
 		const allowed =
 			(action === 'check_in' && ['assigned', 'standby'].includes(String(current.status))) ||
 			(action === 'check_out' && current.status === 'checked_in') ||
@@ -238,7 +255,8 @@ async function updateVolunteerAttendance(
 	volunteerId: string,
 	checkedIn: boolean,
 	shelterCode: string,
-	now: string
+	now: string,
+	assignmentId: string
 ): Promise<void> {
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
 		const currentResult = await getAsPublicWriter(dbName, volunteerId);
@@ -247,10 +265,29 @@ async function updateVolunteerAttendance(
 		}
 		const current = currentResult.data as CouchDoc;
 		if (current.type !== 'volunteer') throw new PublicScheduleError('WRITE_FAILED', 502);
+		let effectiveCheckedIn = checkedIn;
+		let effectiveShelterCode: string | null = checkedIn ? shelterCode : null;
+		if (!checkedIn) {
+			const activeResult = await findAsPublicWriter(
+				dbName,
+				{ type: 'shift_assignment', volunteer_id: volunteerId, status: 'checked_in' },
+				{ limit: 100, fields: ['_id', 'shelter_code'] }
+			);
+			const otherActiveAssignment = docsFrom(activeResult.data).find(
+				(doc) => doc._id !== assignmentId
+			);
+			if (otherActiveAssignment) {
+				effectiveCheckedIn = true;
+				effectiveShelterCode =
+					typeof otherActiveAssignment.shelter_code === 'string'
+						? otherActiveAssignment.shelter_code
+						: shelterCode;
+			}
+		}
 		const next = {
 			...current,
-			checked_in: checkedIn,
-			current_shelter_code: checkedIn ? shelterCode : null,
+			checked_in: effectiveCheckedIn,
+			current_shelter_code: effectiveCheckedIn ? effectiveShelterCode : null,
 			updated_at: now
 		};
 		const put = await putAsPublicWriter(dbName, volunteerId, next);
@@ -295,6 +332,9 @@ export async function applyPublicScheduleAction(
 	assignmentId: string,
 	action: PublicScheduleAction
 ): Promise<PublicScheduleActionResult> {
+	if (action === 'withdraw' && !credential.token) {
+		throw new PublicScheduleError('INVALID_CREDENTIAL', 401);
+	}
 	const identities = await resolveIdentities(credential);
 	if (identities.length === 0) throw new PublicScheduleError('SHIFT_NOT_FOUND', 404);
 	const now = new Date().toISOString();
@@ -311,7 +351,8 @@ export async function applyPublicScheduleAction(
 				String(saved.volunteer_id),
 				action === 'check_in',
 				identity.ref.code,
-				now
+				now,
+				assignmentId
 			);
 		}
 		if (action === 'withdraw') await releaseJobQuota(identity.ref.dbName, saved, now);

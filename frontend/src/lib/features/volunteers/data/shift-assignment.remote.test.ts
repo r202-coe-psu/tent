@@ -309,6 +309,21 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		expect(reloadedVolunteer?.current_shelter_code).toBeNull();
 	});
 
+	it('checkOut() keeps volunteer.checked_in when another assignment remains active', async () => {
+		const { jobs, volunteers, assignments, job, volunteer } = await setup();
+		const secondJob = await jobs.create({ ...jobInput, title: 'งานสนับสนุนอีกจุดหนึ่ง' }, ctx);
+		const first = await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+		const second = await assignments.assign(assignmentInput(secondJob._id, volunteer._id), ctx);
+
+		await assignments.checkIn(first._id, 'staff-1');
+		await assignments.checkIn(second._id, 'staff-1');
+		await assignments.checkOut(first._id, 'staff-2');
+
+		const reloadedVolunteer = await volunteers.get(volunteer._id);
+		expect(reloadedVolunteer?.checked_in).toBe(true);
+		expect(reloadedVolunteer?.current_shelter_code).toBe(second.shelter_code);
+	});
+
 	it('checkOut() requires a reason for manual_override', async () => {
 		const { assignments, job, volunteer } = await setup();
 		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);

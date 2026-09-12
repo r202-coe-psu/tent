@@ -56,110 +56,25 @@ interface JobDoc {
 	is_urgent?: boolean;
 }
 
-interface JobAppDoc {
-	_id: string;
-	type: string;
-	job_id?: string;
-	shift_id?: string;
-	selected_shift?: {
-		shift_id?: string;
-		date?: string;
-		start_time?: string;
-		end_time?: string;
-	};
-	status?: string;
-}
-
-interface CouchAppCounts {
-	byJob: Record<string, number>;
-	byShift: Record<string, number>;
-}
-
-async function getCouchApplicationCounts(
-	shelters: { code: string; db: string }[]
-): Promise<CouchAppCounts> {
-	const appsByJob: Record<string, Set<string>> = {};
-	const appsByShift: Record<string, Set<string>> = {};
-
-	for (const s of shelters) {
-		try {
-			const appRes = await adminRaw(
-				`/${s.db}/_all_docs?include_docs=true&startkey="job_application:"&endkey="job_application:\ufff0"`,
-				'GET'
-			);
-			const appData = appRes.data as CouchAllDocsResponse<JobAppDoc> | undefined;
-			if (appRes.status === 200 && Array.isArray(appData?.rows)) {
-				for (const r of appData.rows) {
-					const doc = r.doc;
-					if (doc && doc.type === 'job_application' && doc.status !== 'cancelled') {
-						const jid = (doc.job_id || '').replace(/^job:/, '');
-						const appId = doc._id;
-						if (jid && appId) {
-							if (!appsByJob[jid]) appsByJob[jid] = new Set();
-							appsByJob[jid].add(appId);
-
-							const rawSid = doc.shift_id || doc.selected_shift?.shift_id;
-							if (rawSid) {
-								const key = `${jid}:${rawSid}`;
-								if (!appsByShift[key]) appsByShift[key] = new Set();
-								appsByShift[key].add(appId);
-							}
-							if (doc.selected_shift?.date) {
-								const dateKey = `${jid}:${doc.selected_shift.date}`;
-								if (!appsByShift[dateKey]) appsByShift[dateKey] = new Set();
-								appsByShift[dateKey].add(appId);
-
-								const dtKey = `${jid}:${doc.selected_shift.date}:${doc.selected_shift.start_time || ''}`;
-								if (!appsByShift[dtKey]) appsByShift[dtKey] = new Set();
-								appsByShift[dtKey].add(appId);
-							}
-						}
-					}
-				}
-			}
-		} catch {
-			// ignore missing shelter database
-		}
-	}
-
-	const byJob: Record<string, number> = {};
-	for (const [jid, set] of Object.entries(appsByJob)) {
-		byJob[jid] = set.size;
-	}
-
-	const byShift: Record<string, number> = {};
-	for (const [key, set] of Object.entries(appsByShift)) {
-		byShift[key] = set.size;
-	}
-
-	return { byJob, byShift };
-}
-
-function enrichJobsWithCouchCounts(jobs: JobDoc[], counts: CouchAppCounts): void {
+/**
+ * Keep the public board's displayed counts derived from the job projection only.
+ * Do not scan `job_application` documents here: those rows contain applicant PII,
+ * and the public board only needs the already-projected quota counters.
+ */
+function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 	for (const job of jobs) {
-		const cleanId = (job.job_id || job._id || '').replace(/^job:/, '');
-		const couchApps = counts.byJob[cleanId] || 0;
 		let shiftAppsSum = 0;
 
 		if (job.shifts && Array.isArray(job.shifts)) {
 			for (const shift of job.shifts) {
-				const sid = shift.shift_id || shift.id || '';
-				const dateKey = shift.date ? `${cleanId}:${shift.date}` : '';
-				const dtKey = shift.date ? `${cleanId}:${shift.date}:${shift.start_time || ''}` : '';
-				const shiftCouchApps =
-					counts.byShift[`${cleanId}:${sid}`] ||
-					(dtKey ? counts.byShift[dtKey] : 0) ||
-					(dateKey ? counts.byShift[dateKey] : 0) ||
-					0;
 				const confirmed = shift.slots_confirmed ?? shift.confirmed ?? 0;
-				shift.applicants_count = Math.max(shift.applicants_count || 0, shiftCouchApps, confirmed);
+				shift.applicants_count = Math.max(shift.applicants_count || 0, confirmed);
 				shiftAppsSum += shift.applicants_count;
 			}
 		}
 
 		job.applicants_count = Math.max(
 			job.applicants_count || 0,
-			couchApps,
 			job.slots_confirmed || 0,
 			shiftAppsSum
 		);
@@ -188,11 +103,7 @@ export const GET: RequestHandler = async ({ url, fetch, getClientAddress }) => {
 		if (res.ok) {
 			const body = await res.json();
 			if (Array.isArray(body?.jobs) && body.jobs.length > 0) {
-				const targetShelterList = [
-					{ code: shelterCode || 'SH001', db: `shelter_${(shelterCode || 'sh001').toLowerCase()}` }
-				];
-				const counts = await getCouchApplicationCounts(targetShelterList);
-				enrichJobsWithCouchCounts(body.jobs as JobDoc[], counts);
+				enrichJobsWithQuotaCounts(body.jobs as JobDoc[]);
 			}
 			return json(body, { headers: { 'Cache-Control': 'no-store' } });
 		}
@@ -265,8 +176,7 @@ export const GET: RequestHandler = async ({ url, fetch, getClientAddress }) => {
 			}
 		}
 
-		const counts = await getCouchApplicationCounts(targetShelters);
-		enrichJobsWithCouchCounts(jobs, counts);
+		enrichJobsWithQuotaCounts(jobs);
 
 		return json({ success: true, jobs, shelters }, { headers: { 'Cache-Control': 'no-store' } });
 	} catch (err) {

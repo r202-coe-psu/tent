@@ -22,6 +22,10 @@ import {
 import { shiftDutyWindow } from '../domain/duty-window';
 import { shiftKindFor } from '../domain/assign-roster';
 import { defaultShiftEndDate } from '../domain/shift-batch';
+import {
+	windowsOverlap,
+	type BookingWindow
+} from '$lib/features/volunteer-portal/domain/booking-overlap';
 
 const MAX_QUOTA_RETRIES = 5;
 
@@ -134,6 +138,37 @@ async function matchingVolunteers(dbName: string, phoneHash: string): Promise<Co
 		{ limit: 100 }
 	);
 	return docsFrom(result.data).filter((doc): doc is CouchVolunteer => typeof doc._id === 'string');
+}
+
+function bookingWindowFrom(doc: Record<string, unknown>): BookingWindow | null {
+	const dutyWindow = doc.duty_window;
+	if (!dutyWindow || typeof dutyWindow !== 'object') return null;
+	const startTs = (dutyWindow as { start_ts?: unknown }).start_ts;
+	const endTs = (dutyWindow as { end_ts?: unknown }).end_ts;
+	return typeof startTs === 'string' && typeof endTs === 'string'
+		? { start_ts: startTs, end_ts: endTs }
+		: null;
+}
+
+async function hasActiveBookingConflict(
+	dbName: string,
+	volunteerId: string,
+	candidate: BookingWindow
+): Promise<boolean> {
+	const result = await findAsPublicWriter(
+		dbName,
+		{
+			type: 'shift_assignment',
+			volunteer_id: volunteerId,
+			status: { $in: ['assigned', 'standby', 'checked_in'] }
+		},
+		{ limit: 100, fields: ['_id', 'duty_window', 'status'] }
+	);
+
+	return docsFrom(result.data).some((assignment) => {
+		const existing = bookingWindowFrom(assignment);
+		return existing ? windowsOverlap(candidate, existing) : true;
+	});
 }
 
 async function findShelterCodeForJob(jobId: string, preferred?: string): Promise<string | null> {
@@ -370,6 +405,9 @@ async function reserveSlot(
 			const dispatched = live.slots_dispatched ?? 0;
 			const remaining = live.slots_remaining ?? quota - confirmed - dispatched;
 			if (remaining <= 0) throw new PublicApplicationError('SHIFT_FULL', 409);
+			if ((next.slots_remaining ?? 0) <= 0) {
+				throw new PublicApplicationError('JOB_FULL', 409);
+			}
 			live.slots_confirmed = confirmed + 1;
 			live.slots_remaining = remaining - 1;
 			next.slots_confirmed = (next.slots_confirmed ?? 0) + 1;
@@ -554,6 +592,13 @@ export async function applyPublicVolunteerApplication(
 	);
 	if (docsFrom(duplicate.data).length > 0) {
 		throw new PublicApplicationError('DUPLICATE_APPLICATION', 409);
+	}
+	const requestedShift = concreteShift(selected);
+	if (
+		requestedShift &&
+		(await hasActiveBookingConflict(dbName, volunteerId, shiftDutyWindow(requestedShift)))
+	) {
+		throw new PublicApplicationError('TIME_CONFLICT', 409);
 	}
 	const now = new Date().toISOString();
 	const trackingToken = `TKT-VOL-${ulid().slice(-16)}`;

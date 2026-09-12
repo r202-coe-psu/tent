@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
 	docs: new Map<string, Record<string, unknown>>(),
@@ -74,6 +74,16 @@ beforeEach(() => {
 		if (selector.type === 'volunteer')
 			return { status: 200, data: { docs: [state.docs.get(volunteer._id)] } };
 		if (selector.type === 'shift_assignment') {
+			if (selector.status === 'checked_in') {
+				return {
+					status: 200,
+					data: {
+						docs: [...state.docs.values()].filter(
+							(doc) => doc.type === 'shift_assignment' && doc.status === 'checked_in'
+						)
+					}
+				};
+			}
 			return { status: 200, data: { docs: [state.docs.get(assignment._id)] } };
 		}
 		return { status: 200, data: { docs: [] } };
@@ -88,8 +98,24 @@ beforeEach(() => {
 	});
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe('public schedule CouchDB path', () => {
+	it('requires the bearer ticket token before allowing withdrawal', async () => {
+		await expect(
+			applyPublicScheduleAction(
+				{ phone: '0812345678', portal_id: volunteer._id },
+				assignment._id,
+				'withdraw'
+			)
+		).rejects.toMatchObject({ code: 'INVALID_CREDENTIAL', httpStatus: 401 });
+		expect(state.docs.get(assignment._id)).toMatchObject({ status: 'assigned' });
+		expect(state.find).not.toHaveBeenCalled();
+	});
+
 	it('writes check-in directly to the assignment and volunteer documents', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-09T02:00:00.000Z'));
 		const result = await applyPublicScheduleAction(
 			{ phone: '0812345678', portal_id: volunteer._id },
 			assignment._id,
@@ -106,6 +132,40 @@ describe('public schedule CouchDB path', () => {
 		expect(state.docs.get(volunteer._id)).toMatchObject({
 			checked_in: true,
 			current_shelter_code: 'SH001'
+		});
+	});
+
+	it('rejects public check-in outside the duty window', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-08T02:00:00.000Z'));
+
+		await expect(
+			applyPublicScheduleAction({ phone: '0812345678' }, assignment._id, 'check_in')
+		).rejects.toMatchObject({ code: 'SHIFT_NOT_READY_FOR_CHECK_IN' });
+		expect(state.docs.get(assignment._id)).toMatchObject({ status: 'assigned' });
+		expect(state.put).not.toHaveBeenCalled();
+	});
+
+	it('keeps volunteer attendance active when another assignment is still checked in', async () => {
+		const otherAssignment = {
+			...structuredClone(assignment),
+			_id: 'shift_assignment:01OTHER',
+			shelter_code: 'SH002',
+			status: 'checked_in'
+		};
+		state.docs.set(assignment._id, { ...assignment, status: 'checked_in' });
+		state.docs.set(otherAssignment._id, otherAssignment);
+
+		const result = await applyPublicScheduleAction(
+			{ phone: '0812345678' },
+			assignment._id,
+			'check_out'
+		);
+
+		expect(result.status).toBe('completed');
+		expect(state.docs.get(volunteer._id)).toMatchObject({
+			checked_in: true,
+			current_shelter_code: 'SH002'
 		});
 	});
 

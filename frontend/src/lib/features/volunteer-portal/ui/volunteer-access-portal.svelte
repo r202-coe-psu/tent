@@ -368,6 +368,7 @@
 
 	function canWithdraw(activity: PortalActivity): boolean {
 		return (
+			Boolean(session?.token) &&
 			Boolean(activity.assignmentId) &&
 			activity.dispatchStatus !== 'dispatched' &&
 			['assigned', 'standby'].includes(activity.status)

@@ -264,7 +264,17 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 				check_out_reason: method === 'manual_override' ? (reason ?? null) : null
 			})
 		);
-		await volunteerRepository().setCheckedIn(saved.volunteer_id, false, null);
+		const otherCheckedIn = (
+			await this.list({
+				volunteerId: saved.volunteer_id,
+				status: 'checked_in'
+			})
+		).find((assignment) => assignment._id !== saved._id);
+		await volunteerRepository().setCheckedIn(
+			saved.volunteer_id,
+			Boolean(otherCheckedIn),
+			otherCheckedIn?.shelter_code ?? null
+		);
 		return saved;
 	}
 
