@@ -29,7 +29,7 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-8">
+<PublicPageShell class="flex min-h-full flex-col space-y-8">
 	<!-- Top Bar with Language Switcher -->
 	<div class="flex items-center justify-end">
 		<LanguageSwitcher />

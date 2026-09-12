@@ -530,7 +530,7 @@
 	}
 </script>
 
-<div class="space-y-6">
+<div class="flex min-h-0 flex-1 flex-col space-y-6">
 	<!-- Search & Filter Card -->
 	<div
 		class="rounded-2xl border border-border/80 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6 md:p-8"
@@ -707,7 +707,10 @@
 	</div>
 
 	<!-- Job Cards List -->
-	<div class="grid gap-4 sm:gap-5 xl:grid-cols-2">
+	<div
+		class="grid min-h-0 gap-4 sm:gap-5 {paginatedJobs.length > 0 ? 'xl:grid-cols-2' : ''}"
+		class:flex-1={!isLoading && paginatedJobs.length === 0}
+	>
 		{#if isLoading}
 			<div class="space-y-4">
 				<Skeleton class="h-44 rounded-2xl" />
@@ -718,7 +721,7 @@
 				<JobCard {job} onApply={openApplyModal} />
 			{:else}
 				<div
-					class="flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl border-2 border-dashed border-border/80 bg-card p-8 sm:p-12 text-center text-muted-foreground"
+					class="flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground sm:rounded-3xl sm:p-12"
 				>
 					<Briefcase class="mb-3 h-10 w-10 text-muted-foreground/40" />
 					<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
