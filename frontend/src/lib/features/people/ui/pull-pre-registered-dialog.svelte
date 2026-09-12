@@ -13,6 +13,7 @@
 		useEvacuees,
 		formatPersonName,
 		maskNationalId,
+		matchesEvacueeSearch,
 		type Evacuee
 	} from '$lib/features/people';
 	import EvacueePhoto from './evacuee-photo.svelte';
@@ -49,7 +50,6 @@
 	);
 
 	const filteredList = $derived.by(() => {
-		const q = searchQuery.trim().toLowerCase();
 		return preRegisteredList
 			.filter((e) => {
 				// Channel filter
@@ -59,20 +59,8 @@
 					if (e.registered_via !== 'web' || !!e.card_snapshot) return false;
 				}
 
-				// Search query
-				if (!q) return true;
-				const fullName = `${e.first_name || ''} ${e.last_name || ''}`.toLowerCase();
-				const nationalId = e.person_id?.number ? e.person_id.number.toLowerCase() : '';
-				const phone = e.phone ? e.phone.replace(/[-\s]/g, '') : '';
-				const nickname = e.nickname ? e.nickname.toLowerCase() : '';
-				const cleanQuery = q.replace(/[-\s]/g, '');
-
-				return (
-					fullName.includes(q) ||
-					nickname.includes(q) ||
-					nationalId.includes(cleanQuery) ||
-					phone.includes(cleanQuery)
-				);
+				// Search query via unified helper
+				return matchesEvacueeSearch(e, searchQuery);
 			})
 			.sort((a, b) => {
 				const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
