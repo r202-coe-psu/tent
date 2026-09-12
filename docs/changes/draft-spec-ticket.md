@@ -5,16 +5,24 @@ status: proposed
 date: 2026-09-12
 updated: 2026-09-12
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
-decided_by: <เจ้าของโครงการ>
-layer: volatile
+decided_by: <รออนุมัติจาก Project Owner>
+layer: stable
+supersedes:
+  - CR-059 Flow 2 (NFI Distribution Control & Active Batch — ยกเลิกโมเดล 3 ชั้น distribution_request/batch/issue ยุบรวมเป็น requisition_ticket และ distribution_log)
+  - CR-109 (meal_distribution — ผนวกรวมเข้าสู่ distribution_log โดยคงมติ Soft Warning 4 ชม. และ Invariants เดิมครบถ้วน)
+extends:
+  - CR-059 Flow 1 & 3 (สืบทอดฟิลด์ทะเบียนรถ/คนขับจาก Transfer และขั้นตอนเบิกวัตถุดิบครัว)
+  - CR-110 (ยึดถือสถาปัตยกรรม Online-only Remote-First หน้างาน 100% ตามมติ PO — ไม่มี Local Queue/PouchDB)
+  - CR-038 (ปฏิบัติตามมาตรฐาน Decimal qty_str ทั่วทั้งระบบ)
 affects:
   - docs/data/schema.md §2 (DB shelter_{shelter_code} — Operations) — doc types ใหม่: `requisition_ticket`, `distribution_log`
   - docs/data/schema.md §1 (Catalog & Master Data) — ขยาย `item_master` เพิ่ม `type_class: 'PREPARED_FOOD'`
   - docs/data/schema.md §2.7 (`meal_service`) — ขยายฟิลด์ `yield_items` สำหรับ Batch Yield
   - docs/task-breakdown/03-operations.md
   - docs/task-breakdown/05-D-kitchen.md
+  - frontend/src/lib/server/shelter-access-design.ts (เพิ่ม doc types ใน whitelist validate_doc_update)
   - frontend/src/lib/features/tickets/ (NEW: domain, data, application, UI)
-  - frontend/src/lib/features/distribution/ (NEW: domain, data, application, UI)
+  - frontend/src/lib/features/distribution/ (CONSOLIDATE / REFACTOR: รวมโมเดลแจกจ่ายและของยืมจาก CR-059/CR-109 ให้เป็น Single Clean Module)
   - frontend/src/lib/features/catalog/domain/catalog.ts
   - frontend/src/lib/features/kitchen/domain/kitchen.ts
   - frontend/src/lib/features/operations/domain/operations.ts
@@ -28,15 +36,16 @@ affects:
 # CR-draft: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 
 > **สรุป (TL;DR):**  
-> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109) + ขยาย `ItemMaster` (`PREPARED_FOOD`) และ `MealService` (`yield_items`)  
+> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109 และแทนที่โมเดล 3 ชั้นจาก CR-059 Flow 2) + ขยาย `ItemMaster` (`PREPARED_FOOD`) และ `MealService` (`yield_items`)  
 > **เพื่อใคร/ทำไม:** ฝ่ายคลัง, โรงครัว, จุดแจกจ่ายหน้างาน และด่านลงทะเบียน เพื่อสร้างความโปร่งใส 2 ทิศทาง (Bidirectional Visibility) คุมอายุอาหาร 4 ชม. ด้วย Soft Warning, เติมของระหว่างแจกแบบ Reactive, และติดตามของยืมคงทนไม่ใช้บาร์โค้ดพร้อมเคลียร์ตอน Check-out  
 > **dev ต้อง build อะไร:** 4 เวิร์กสเปซหลังบ้าน (`/back-office/tickets/*`), ระบบตรวจรับ-สแกนแจกจ่าย POS (`/onsite/distribution/*`), ระบบยืม-คืนพัสดุ (`/onsite/loans`, `/onsite/returns`), และด่าน Check-out Clearance Gate  
 > **กระทบ schema/scope:** เพิ่ม doc types `requisition_ticket`, `distribution_log` ใน DB `shelter_{shelter_code}` §2, ขยาย `item_master` และ `meal_service` (backward-compatible)
 
 ---
 
-## 1. Why (เหตุผลและความจำเป็น)
+## 1. Why & Predecessor Alignment (เหตุผลและความสอดคล้องกับ Change Records เดิม)
 
+### 1.1 ความจำเป็นและปัญหาในระบบปัจจุบัน
 1. **ปัญหาความกระจัดกระจายของตั๋วเบิกจ่ายคลัง:**
    ในระบบปัจจุบัน การขอเบิกวัตถุดิบครัวใช้ `kitchen_requisition` (`$lib/features/kitchen`) ส่วนการโอนย้ายข้ามศูนย์ใช้ `stock_transfer` (`$lib/features/operations` ตาม CR-059/CR-089) และยังไม่มีเอกสารรองรับการเบิกอาหารปรุงสุกไปจุดแจก หรือการเบิกสิ่งของบรรเทาทุกข์ ทำให้เจ้าหน้าที่คลังสินค้าไม่มีหน้ารวมศูนย์ (Unified Ticket Hub) ในการตรวจสอบ จัดสรร และตัดสต็อก
 2. **ปัญหา Master Data บวม (Catalog Bloat):**
@@ -47,6 +56,27 @@ affects:
    CR-109 เพิ่งอนุมัติ `meal_distribution` สำหรับอาหาร แต่การแจกสิ่งของบรรเทาทุกข์และของยืมยังไม่มี Schema รองรับ หากแยกหลาย doc type จะสร้างความสับสนและเป็นภาระต่อการ Query ด่าน Check-out จึงต้องรวมศูนย์เป็น `DistributionLog` ตัวเดียว ควบคุมโควตา 1 สิทธิ์/คน/มื้อ และคุมอายุอาหาร 4 ชม. ด้วย Soft Warning
 5. **ปัญหาการติดตามของยืมคงทนและภาระตอน Check-out:**
    สิ่งของคงทน (พัดลม, มุ้ง, เต็นท์, วีลแชร์, วอ) เสี่ยงสูญหายหากไม่มีระบบติดตาม แต่การติดบาร์โค้ดรายชิ้นทำได้ยากหน้างานภัยพิบัติ ระบบจึงต้องใช้การนับจำนวนผูกกับตัวบุคคล และมีกลไก 1-Click Resolve ที่ด่าน Check-out เพื่อไม่กักตัวผู้พักพิง
+
+### 1.2 ความสัมพันธ์และการสืบทอดจาก Change Records ก่อนหน้า (Predecessor Alignment & Supersedes Mapping)
+เอกสารฉบับนี้ไม่ได้สร้างสถาปัตยกรรมขึ้นมาใหม่โดยพลการ แต่เกิดจากการ **รวบยอดและยกระดับ (Consolidation & Succession)** มติที่เคยได้รับอนุมัติแล้วในประวัติศาสตร์ของโครงการ:
+
+1. **การแทนที่ CR-059 Flow 2 (Supersedes CR-059 Flow 2 — 3-Tier Distribution Model):**
+   - **บริบทเดิม:** ใน CR-059 Flow 2 มีการเสนอร่างโมเดลแจกสิ่งของ NFI เป็น 3 ระดับ (`distribution_request` ➔ `distribution_batch` ➔ `distribution_issue`) โดยมีสมมติฐานว่าจะรองรับ Offline Queue บนแท็บเล็ต
+   - **จุดเปลี่ยนจาก CR-110:** ต่อมา Project Owner ได้ลงมติชี้ขาดใน **CR-110 (2026-09-06) กำหนดให้สถาปัตยกรรมหน้างานยึดถือ Online-only Remote-First 100% (ไม่มี PouchDB, ไม่มี Local Write Queue)**
+   - **การปรับปรุงในสเปกนี้:** เมื่อระบบทำงานแบบ Remote-First โครงสร้าง 3 ชั้นของ CR-059 จึงซับซ้อนเกินความจำเป็นและก่อให้เกิดปัญหาความซ้ำซ้อนของข้อมูล สเปกฉบับนี้จึง **Supersedes (แทนที่)** โครงสร้าง 3 ชั้นดังกล่าว โดยยุบรวมเป็น:
+     - `distribution_request` + `distribution_batch` ➔ กลายเป็น `RequisitionTicket` (`requisition_type: 'supplies' | 'food'`)
+     - `distribution_issue` ➔ กลายเป็น `DistributionLog` (`is_returnable: false | true`)
+2. **การผนวกและสืบทอด CR-109 (Absorbs & Supersedes CR-109 — `meal_distribution`):**
+   - **บริบทเดิม:** CR-109 อนุมัติเอกสาร `meal_distribution` สำหรับบันทึกการสแกนอาหารรายบุคคล
+   - **การปรับปรุงในสเปกนี้:** เพื่อไม่ให้แยกฐานข้อมูลแจกของกินและของใช้เป็น 2 ระบบ สเปกนี้ได้ **ผนวกโมเดล `meal_distribution` เข้าสู่ `DistributionLog`** โดย **รักษาคุณสมบัติและมติของ Project Owner ไว้ครบถ้วน 100%**:
+     - คงฟิลด์สำคัญ: `meal_service_id`, `recipe_id`, `voided_at`, `voided_by`
+     - คงมติ Project Owner เรื่อง **Soft Warning 4 ชั่วโมง ไม่ใช้ Hard-block เพดานแจก**
+     - คงเงื่อนไขการตรวจจับการรับซ้ำ (คนเดิม + เมนูเดิม ในมื้อเดียวกัน)
+3. **การสืบทอด CR-059 Flow 1 & Flow 3 (Extends CR-059):**
+   - ตั๋วประเภท `transfer` สืบทอดข้อกำหนดการบังคับกรอก `driver_name` และ `license_plate` จาก Flow 1 ของ CR-059
+   - ตั๋วประเภท `kitchen` สืบทอดและปรับกระบวนการ Wizard เบิกวัตถุดิบครัวจาก Flow 3 ของ CR-059 ให้เชื่อมต่อกับ `RequisitionTicket`
+4. **การปฏิบัติตาม CR-038 (Decimal Quantity Strings Compliance):**
+   - ฟิลด์จำนวนทั้งหมดใน `RequisitionTicket`, `DistributionLog` และ `KitchenYieldItem` ต้องใช้ชนิดข้อมูล `string` (`qty_str`) ผ่าน `$lib/utils/qty.ts` เพื่อป้องกัน Floating Point Error ตาม CR-038 อย่างเคร่งครัด
 
 ---
 
@@ -276,7 +306,7 @@ erDiagram
     VOLUNTEER ||--o{ DISTRIBUTION_LOG : "recipient_id (volunteer)"
 
     REQUISITION_TICKET {
-        string _id PK "ticket:shelter_code:ulid"
+        string _id PK "requisition_ticket:ulid"
         string shelter_code FK "รหัสศูนย์"
         string ticket_no "TKT-KITCHEN-0012 / TKT-FOOD-0045 / etc."
         enum requisition_type "kitchen / food / supplies / transfer"
@@ -295,7 +325,7 @@ erDiagram
     TICKET_AMENDMENT {
         string amendment_id PK "ulid"
         string item_id FK "item_master id"
-        number added_qty "จำนวนที่เติมเพิ่ม"
+        string added_qty "จำนวนที่เติมเพิ่ม (qty_str)"
         timestamp amended_at "เวลาแก้ไข"
         string amended_by FK "staff_id คลังสินค้า"
         string reason "หมายเหตุ เช่น วอขอเพิ่ม"
@@ -307,35 +337,35 @@ erDiagram
         string category "หมวดหมู่"
         enum type_class "PREPARED_FOOD / CONSUMABLE / DURABLE / EQUIPMENT"
         boolean returnable "ของยืมต้องคืน (true) หรือแจกขาด (false)"
-        number requested_qty "ยอดขอเบิก"
-        number allocated_qty "ยอดจัดสรรสะสมจริง"
-        number distributed_qty "ยอดแจกจริง"
-        number returned_qty "ยอดส่งคืนคลัง"
-        number discrepancy_qty "ยอดสูญหาย/คลาดเคลื่อน"
+        string requested_qty "ยอดขอเบิก (qty_str - CR-038)"
+        string allocated_qty "ยอดจัดสรรสะสมจริง (qty_str)"
+        string distributed_qty "ยอดแจกจริง (qty_str - สรุปตอนปิดรอบ)"
+        string returned_qty "ยอดส่งคืนคลัง (qty_str)"
+        string discrepancy_qty "ยอดสูญหาย/คลาดเคลื่อน (qty_str)"
     }
 
     DISTRIBUTION_LOG {
-        string _id PK "dist_log:ulid"
+        string _id PK "distribution_log:ulid"
         string ticket_id FK "ticket id"
         string shelter_code FK "รหัสศูนย์"
         string item_id FK "item_master id"
-        string meal_service_id FK "meal_service id (กรณีอาหาร)"
-        string recipe_id FK "recipe id (กรณีอาหาร)"
-        number qty "จำนวนที่จ่าย/ยืม (Stepper)"
+        string meal_service_id FK "meal_service id (กรณีอาหาร - CR-109)"
+        string recipe_id FK "recipe id (กรณีอาหาร - CR-109)"
+        string qty "จำนวนที่จ่าย/ยืม (qty_str - CR-038)"
         enum recipient_type "evacuee / volunteer / outside"
         string recipient_id FK "evacuee_id / volunteer_id"
         string household_id FK "household_id opt"
         enum meal "breakfast / lunch / dinner / snack"
         boolean is_returnable "ของยืมต้องคืน (true) หรือแจกขาด (false)"
         enum status "fulfilled / active / partially_returned / returned / lost / waived / voided"
-        number qty_returned "จำนวนที่คืนแล้ว"
+        string qty_returned "จำนวนที่คืนแล้ว (qty_str)"
         enum condition_on_return "READY / MAINTENANCE / BROKEN"
         enum clear_reason "routine / bulk_dropoff / waived / lost"
         boolean is_override "อนุมัติพิเศษ"
         string override_reason "สาเหตุ override"
         timestamp distributed_at "เวลาจ่ายของ"
         string distributed_by FK "staff_id"
-        timestamp voided_at "เวลายกเลิกรายการ"
+        timestamp voided_at "เวลายกเลิกรายการ (CR-109)"
         string voided_by FK "staff_id ผู้กดยกเลิก"
     }
 
@@ -343,9 +373,9 @@ erDiagram
         string _id PK "meal_service:ulid"
         string meal_plan_id FK "meal_plan id"
         json yield_items "array: item_id, menu_name, actual_yield, unit, storage_zone"
-        number actual_yield "ยอดปรุงเสร็จรวมทุกเมนู"
-        number served "ยอดเสิร์ฟจริง"
-        number waste "ยอดสูญเสีย"
+        string actual_yield "ยอดปรุงเสร็จรวมทุกเมนู (qty_str)"
+        string served "ยอดเสิร์ฟจริง (qty_str)"
+        string waste "ยอดสูญเสีย (qty_str)"
     }
 ```
 
@@ -381,7 +411,7 @@ export type ItemCondition = 'READY' | 'MAINTENANCE' | 'BROKEN';
 export type LoanClearReason = 'routine' | 'bulk_dropoff' | 'waived' | 'lost';
 
 // ================================================================
-// หมวดที่ 2: Requisition Ticket Schemas
+// หมวดที่ 2: Requisition Ticket Schemas (Compliant with CR-038 qty_str)
 // ================================================================
 
 export interface TicketItem {
@@ -390,17 +420,17 @@ export interface TicketItem {
   category?: string;
   type_class: TypeClass;
   returnable?: boolean; // true = ของยืมต้องส่งคืน, false/undefined = ของแจกขาด
-  requested_qty: number; // ยอดขอเบิก
-  allocated_qty: number; // ยอดจัดสรรจริง (รวมยอดเติมเพิ่ม)
-  distributed_qty: number; // ยอดแจกจริงหน้างาน
-  returned_qty: number; // ยอดส่งคืนคลัง
-  discrepancy_qty?: number; // ยอดสูญหาย/คลาดเคลื่อน
+  requested_qty: string; // qty_str (CR-038)
+  allocated_qty: string; // qty_str (รวมยอดเติมเพิ่ม)
+  distributed_qty?: string; // qty_str — คำนวณ Dynamic ใน Memory ระหว่างกะ และบันทึกสรุปลงตั๋วตอนปิดรอบ (reconcile) เท่านั้น
+  returned_qty?: string; // qty_str — บันทึกตอนปิดรอบ
+  discrepancy_qty?: string; // qty_str — บันทึกตอนคลังกระทบยอดส่วนต่าง
 }
 
 export interface TicketAmendment {
   amendment_id: string; // ulid
   item_id: string; // FK item_master
-  added_qty: number; // ยอดเติมเพิ่ม (+Added)
+  added_qty: string; // qty_str ยอดเติมเพิ่ม (+Added)
   amended_at: Timestamp;
   amended_by: string; // staff user_id
   reason?: string; // หมายเหตุ เช่น "วอขอเพิ่ม 50 กล่อง"
@@ -426,7 +456,7 @@ export interface RequisitionTicket extends BaseDoc {
 }
 
 // ================================================================
-// หมวดที่ 3: Distribution Log Schema (Unified with CR-109)
+// หมวดที่ 3: Distribution Log Schema (Unified with CR-109, CR-110, CR-038)
 // ================================================================
 
 export interface DistributionLog extends BaseDoc {
@@ -435,7 +465,7 @@ export interface DistributionLog extends BaseDoc {
   item_id: string; // FK item_master
   meal_service_id?: string; // FK meal_service (กรณีอาหารปรุงสุก - จาก CR-109)
   recipe_id?: string; // FK recipe (กรณีอาหารปรุงสุก - จาก CR-109)
-  qty: number; // จำนวนที่แจก/ยืม (Stepper)
+  qty: string; // qty_str จำนวนที่แจก/ยืม (CR-038)
   recipient_type: RecipientType;
   recipient_id?: string | null; // evacuee_id / volunteer_id
   household_id?: string;
@@ -444,13 +474,13 @@ export interface DistributionLog extends BaseDoc {
   // การควบคุมของยืม
   is_returnable: boolean; // true = ของยืมต้องส่งคืน, false = ของแจกขาด
   status: DistributionStatus;
-  qty_returned?: number;
+  qty_returned?: string; // qty_str
   condition_on_return?: ItemCondition;
   clear_reason?: LoanClearReason;
   returned_at?: Timestamp;
   returned_by?: string;
 
-  // การตรวจสิทธิ์ & Void
+  // การตรวจสิทธิ์ & Void (CR-109)
   is_override: boolean;
   override_reason?: string;
   distributed_at: Timestamp;
@@ -468,7 +498,7 @@ export interface KitchenYieldItem {
   item_id: string; // StandardMealArchetypeId
   menu_name: string; // บันทึกลง stock_ledger.lot.note
   type_class: 'PREPARED_FOOD';
-  actual_yield: number;
+  actual_yield: string; // qty_str (CR-038)
   unit: string;
   storage_zone?: string;
 }
@@ -479,9 +509,9 @@ export interface MealService extends BaseDoc {
   meal: MealPeriod;
   meal_plan_id: string | null;
   yield_items?: KitchenYieldItem[];
-  actual_yield?: number;
-  served: number;
-  waste: number;
+  actual_yield?: string; // qty_str
+  served: string; // qty_str
+  waste: string; // qty_str
   external: {
     volunteers: number;
     outside_evacuees: number;
@@ -497,10 +527,10 @@ export interface MealService extends BaseDoc {
 ### หมวดที่ 1: ระบบตั๋วเบิกจ่ายคลังและผลผลิตโรงครัว (Requisitions & Kitchen Yield Module — Track A & B)
 
 #### FR-TKT-01: โครงสร้างเอกสารตั๋วเบิกจ่ายกลาง (Unified Requisition Ticket Document)
-- **คำสั่ง:** ระบบต้องบันทึกคำขอเบิกจ่ายพัสดุและอาหารทุกประเภทลงใน doc type `requisition_ticket` โดยมี `_id` ในรูปแบบ `ticket:{shelter_code}:{ulid}` และระบุ `requisition_type` (`kitchen`, `food`, `supplies`, `transfer`)
+- **คำสั่ง:** ระบบต้องบันทึกคำขอเบิกจ่ายพัสดุและอาหารทุกประเภทลงใน doc type `requisition_ticket` โดยมี `_id` ในรูปแบบ `requisition_ticket:{ulid}` และระบุ `requisition_type` (`kitchen`, `food`, `supplies`, `transfer`)
 - **AC-TKT-01.1:** การสร้างตั๋วเบิกทุกประเภทต้องผ่านการตรวจสอบด้วย Zod Schema (`requisitionTicketSchema`) สำเร็จ
 - **AC-TKT-01.2:** ตั๋วต้องมีสถานะเริ่มต้นเป็น `PENDING_PICK` และบันทึก `ticket_no` ในรูปแบบ `TKT-{TYPE}-{RUNNING}`
-- **AC-TKT-01.3:** รายการพัสดุในตั๋ว (`items`) ต้องมี `item_id`, `item_name`, `type_class`, และ `requested_qty > 0`
+- **AC-TKT-01.3:** รายการพัสดุในตั๋ว (`items`) ต้องมี `item_id`, `item_name`, `type_class`, และ `requested_qty` ในรูปแบบ Decimal String (`qty_str` ตาม CR-038) ที่มีค่ามากกว่า 0
 
 #### FR-TKT-02: ศูนย์กลางบริหารตั๋วและ 4 เวิร์กสเปซเฉพาะทาง (Ticket Hub & Workspaces)
 - **คำสั่ง:** ระบบต้องจัดเตรียมหน้า Landing Hub (`/back-office/tickets`) สรุปภาพรวมคำขอเบิกทั้ง 4 ประเภท พร้อม Badge แสดงจำนวนคำขอค้าง และแยกหน้าจอทำงานเฉพาะทาง 4 เส้นทาง:
@@ -514,14 +544,14 @@ export interface MealService extends BaseDoc {
 
 #### FR-TKT-03: วงจรการจัดของและการตรวจสอบโดยผู้จัดการ (Picking & Staged Approval)
 - **คำสั่ง:** ระบบต้องรองรับวงจรสถานะการจัดของ:
-  - ขั้นที่ 1: พนักงานคลังกดเริ่มจัดของและระบุจำนวนที่จัดได้จริง (`allocated_qty`) ตั๋วมีสถานะ `PENDING_PICK`
+  - ขั้นที่ 1: พนักงานคลังกดเริ่มจัดของและระบุจำนวนที่จัดได้จริง (`allocated_qty` เป็น `qty_str`) ตั๋วมีสถานะ `PENDING_PICK`
   - ขั้นที่ 2: เมื่อจัดของครบ พนักงานส่งให้ผู้จัดการคลังตรวจสอบ ผู้จัดการคลังกดปุ่ม `[ ✓ ตรวจสอบความถูกต้องและพร้อมส่ง ]` ระบบปรับสถานะตั๋วเป็น `READY_FOR_DISPATCH` พร้อมบันทึก `approved_by`
 - **AC-TKT-03.1:** เฉพาะผู้ใช้ที่มีสิทธิ์ระดับ `shelter_manager` หรือ `system_admin` เท่านั้นที่สามารถกดปุ่มตรวจสอบความถูกต้อง (`READY_FOR_DISPATCH`) ได้
-- **AC-TKT-03.2:** ระบบต้องไม่อนุญาตให้เปลี่ยนสถานะเป็น `READY_FOR_DISPATCH` หากมีรายการพัสดุที่ `allocated_qty <= 0`
+- **AC-TKT-03.2:** ระบบต้องไม่อนุญาตให้เปลี่ยนสถานะเป็น `READY_FOR_DISPATCH` หากมีรายการพัสดุที่ `allocated_qty` ว่างหรือน้อยกว่าเท่ากับ 0
 
 #### FR-TKT-04: การปล่อยรถและตัดสต็อกคลัง (Dispatch & Stock Deduction)
 - **คำสั่ง:** เมื่อผู้จัดการคลังหรือฝ่ายขนส่งกดยืนยันปล่อยของ `[ 🚚 เริ่มดำเนินการจัดส่ง ]` ระบบต้อง:
-  1. บันทึกตัดสต็อกจริงออกจากคลังสินค้าใน `stock_ledger` ทันทีด้วย `qty: -allocated_qty` และผูก `ref_id: ticket._id`
+  1. บันทึกตัดสต็อกจริงออกจากคลังสินค้าใน `stock_ledger` ทันทีด้วย `qty: `-${allocated_qty}`` (Signed Decimal String ตาม CR-038) และผูก `ref_id: ticket._id`
   2. กำหนด `reason` ใน `stock_ledger`:
      - เบิกครัว ➔ `reason: 'requisition'`
      - เบิกแจกอาหารหรือสิ่งของ ➔ `reason: 'distribute'`
@@ -538,8 +568,8 @@ export interface MealService extends BaseDoc {
 
 #### FR-TKT-06: การบันทึกผลผลิตโรงครัวแบบชุดรายการ (Batch Yield Integration)
 - **คำสั่ง:** หน้าบันทึกผลผลิตโรงครัว (`/back-office/kitchen/production-board`) ต้องรองรับการส่งผลผลิตเป็น Array `yield_items` ผ่าน `MealServiceInput` โดยระบบต้องบันทึกเข้า `meal_service` และสร้าง `stock_ledger` รับเข้าสต็อกคลังใน Transaction เดียวกัน
-- **AC-TKT-06.1:** เอกสาร `meal_service` ต้องเก็บข้อมูล `yield_items: KitchenYieldItem[]` และคำนวณ `actual_yield = sum(yield_items.actual_yield)`
-- **AC-TKT-06.2:** ระบบต้องสร้าง `stock_ledger` รับเข้า (`qty: +actual_yield`, `reason: 'receive'`, `ref_id: meal_service._id`) แยกตามแต่ละเมนูใน `yield_items`
+- **AC-TKT-06.1:** เอกสาร `meal_service` ต้องเก็บข้อมูล `yield_items: KitchenYieldItem[]` และคำนวณ `actual_yield = sum(yield_items.actual_yield)` ผ่าน `$lib/utils/qty.ts`
+- **AC-TKT-06.2:** ระบบต้องสร้าง `stock_ledger` รับเข้า (`qty: actual_yield`, `reason: 'receive'`, `ref_id: meal_service._id`) แยกตามแต่ละเมนูใน `yield_items`
 - **AC-TKT-06.3:** ข้อมูลล็อตใน `stock_ledger.lot` ต้องมี `note: menu_name`, `lot_no`, และคำนวณ `expiry = cooking_completed_at + 4 ชั่วโมง`
 
 ---
@@ -553,11 +583,11 @@ export interface MealService extends BaseDoc {
 
 #### FR-DST-02: การสแกนแจกจ่ายและการตรวจสิทธิ์รายบุคคล (Live QR Scan & Quota)
 - **คำสั่ง:** หน้าจอแจกจ่ายจริง (`/onsite/distribution/scan`) ต้องรองรับการสแกน QR ผู้พักพิงหรือหัวหน้าครอบครัว ตรวจสอบโควตา 1 คน ต่อ 1 มื้อ และบันทึก `distribution_log`:
-  - Default จำนวนจ่าย = 1 ชิ้น
+  - Default จำนวนจ่าย = `"1"` (qty_str)
   - มีปุ่ม Stepper `[-] 1 [+]` ให้เจ้าหน้าที่ปรับจำนวนตามสมาชิกครอบครัว
   - หากพบประวัติการรับไปแล้วในมื้อเดียวกัน ให้แสดงกล่องเตือนสีแดง และมีปุ่ม `[ กรณีพิเศษ Override ]` พร้อมบันทึกสาเหตุ
-- **AC-DST-02.1:** ทุกการกดยืนยันจ่ายของสำเร็จ ระบบต้องสร้างเอกสาร `distribution_log` (`type: 'distribution_log'`, `is_returnable: false`, `status: 'fulfilled'`) ทันที
-- **AC-DST-02.2:** ตัวเลขคงเหลือในมือ (In-Hand) บนหน้าจอแจกจ่ายต้องลดลงทันทีแบบ Local State และบันทึกสะสมลงใน `TicketItem.distributed_qty`
+- **AC-DST-02.1:** ทุกการกดยืนยันจ่ายของสำเร็จ ระบบต้องสร้างเอกสาร `distribution_log` (`type: 'distribution_log'`, `_id: distribution_log:{ulid}`, `is_returnable: false`, `status: 'fulfilled'`) ทันที
+- **AC-DST-02.2:** ตัวเลขคงเหลือในมือ (In-Hand) บนหน้าจอแจกจ่ายต้องคำนวณแบบ In-Memory Dynamic Store (`allocated_qty - sum(distribution_log.qty)`) โดยการสแกนหน้างานจะ **ไม่เขียนทับเอกสาร `requisition_ticket`** ในระหว่างกะ เพื่อป้องกันปัญหา CouchDB Concurrency Conflict (409) อย่างสมบูรณ์ ยอดสะสม `distributed_qty` จะถูกบันทึกสรุปลงในตั๋วเพียงครั้งเดียวเมื่อกดปิดรอบ (`SHIFT_CLOSED` / `/onsite/distribution/reconcile`)
 
 #### FR-DST-03: การควบคุมความปลอดภัยอาหาร 4 ชม. ด้วย Soft Warning (Food Safety Countdown)
 - **คำสั่ง:** หน้าจอสแกนแจกจ่ายอาหารต้องแสดงตัวนับเวลาถอยหลัง 4 ชั่วโมงนับจากเวลาปรุงเสร็จ หากอาหารเกิน 4 ชั่วโมง ระบบต้องแสดงแถบเตือนสีแดงเด่นชัด **"🚨 อาหารเกิน 4 ชม. (EXPIRED)"** แต่ **อนุโลมให้เจ้าหน้าที่กดยืนยันแจกต่อได้** (ตามมติ PO ใน CR-109) โดยบันทึก Flag ใน Audit Log
@@ -565,7 +595,7 @@ export interface MealService extends BaseDoc {
 - **AC-DST-03.2:** ระบบต้องบันทึก `is_expired_warning: true` ใน `distribution_log` เพื่อการตรวจสอบย้อนหลัง
 
 #### FR-DST-04: การแก้ไขตั๋วเดิมเพื่อเติมของระหว่างแจกแบบ Reactive (In-flight Amendment)
-- **คำสั่ง:** เมื่อของหน้างานใกล้หมด เจ้าหน้าที่จุดแจกติดต่อคลังผ่านวิทยุสื่อสาร วอ หรือโทรศัพท์ คลังเปิดหน้า `/back-office/tickets/[id]` กดเพิ่มจำนวน (`added_qty`) ระบบบันทึก `stock_ledger` ตัดสต็อกคลังเพิ่ม (`qty: -added_qty`) ปรับ `allocated_qty` บนตั๋ว และหน้าจอจุดแจกจ่ายอัปเดตตัวเลขในมือเพิ่มขึ้นทันทีผ่าน CouchDB Live Changes
+- **คำสั่ง:** เมื่อของหน้างานใกล้หมด เจ้าหน้าที่จุดแจกติดต่อคลังผ่านวิทยุสื่อสาร วอ หรือโทรศัพท์ คลังเปิดหน้า `/back-office/tickets/[id]` กดเพิ่มจำนวน (`added_qty` เป็น `qty_str`) ระบบบันทึก `stock_ledger` ตัดสต็อกคลังเพิ่ม (`qty: `-${added_qty}``, `reason: 'distribute'`) ปรับ `allocated_qty` บนตั๋ว และหน้าจอจุดแจกจ่ายอัปเดตตัวเลขในมือเพิ่มขึ้นทันทีผ่าน CouchDB Live Changes
 - **AC-DST-04.1:** การสแกนจ่ายหน้างานที่บันทึกลง `distribution_log` ต้องไม่เกิดการชนกันของเอกสาร (`409 Conflict`) กับการแก้ไขตั๋ว `requisition_ticket` ของฝั่งคลัง
 - **AC-DST-04.2:** ยอดคงเหลือในมือหน้าจอแจกจ่ายต้องเพิ่มขึ้นทันทีโดยไม่ต้องกด Refresh หน้าจอ
 
@@ -578,12 +608,12 @@ export interface MealService extends BaseDoc {
 
 #### FR-DST-06: การตรวจรับคืนเข้าสต็อกคลังและกระทบยอดส่วนต่าง (WMS Discrepancy Reconciliation)
 - **คำสั่ง:** เจ้าหน้าที่คลังเปิดดูตั๋วสถานะ `RETURN_PENDING_RECEIPT` ที่ `/back-office/supply` ตรวจนับของจริงเทียบกับยอดที่หน้างานส่งมา หากพบยอดคลาดเคลื่อน/ของหาย ให้แก้ไขตัวเลขรับเข้าจริง และกดปุ่ม `[ 📦 ยืนยันตรวจรับของคืนเข้าคลัง ]`
-- **AC-DST-06.1:** ระบบต้องบันทึก `stock_ledger` รับของสภาพดีกลับเข้าคลัง (`qty: +returned_qty`, `reason: 'return'`)
+- **AC-DST-06.1:** ระบบต้องบันทึก `stock_ledger` รับของสภาพดีกลับเข้าคลัง (`qty: returned_qty`, `reason: 'receive'`, `ref_id: ticket._id`, `notes: 'distribution_return'`) ตาม enum `ledgerReasonSchema`
 - **AC-DST-06.2:** ส่วนต่างที่หายไปต้องบันทึกลงใน `TicketItem.discrepancy_qty` และแจ้งเตือนไปยังผู้จัดการคลัง
 - **AC-DST-06.3:** ปรับสถานะตั๋วเป็น `RETURN_COMPLETED` จบวงจรการเบิกจ่ายสมบูรณ์ 100%
 
 #### FR-DST-07: การยกเลิกรายการแจกจ่ายผิดพลาด (Void Distribution Log)
-- **คำสั่ง:** หน้าจอแจกจ่ายต้องมีปุ่มยกเลิกรายการแจกจ่ายล่าสุด (Undo/Void) สำหรับกรณีสแกนผิดพลาด โดยระบบปรับสถานะเป็น `status: 'voided'` พร้อมบันทึก `voided_at` และ `voided_by` ห้ามลบ Document ออกจากฐานข้อมูล
+- **คำสั่ง:** หน้าจอแจกจ่ายต้องมีปุ่มยกเลิกรายการแจกจ่ายล่าสุด (Undo/Void) สำหรับกรณีสแกนผิดพลาด โดยระบบปรับสถานะเป็น `status: 'voided'` พร้อมบันทึก `voided_at` และ `voided_by` ตามข้อกำหนด CR-109 ห้ามลบ Document ออกจากฐานข้อมูล
 - **AC-DST-07.1:** เอกสารที่ถูก Void ต้องไม่ถูกนำมาคำนวณในยอดสะสม `distributed_qty`
 - **AC-DST-07.2:** ยอดคงเหลือในมือ (Remaining In-Hand) ของจุดแจกต้องคืนกลับมา +1 ทันทีที่กด Void สำเร็จ
 
@@ -593,25 +623,25 @@ export interface MealService extends BaseDoc {
 
 #### FR-LON-01: การสแกนยืมพัสดุคงทนรายบุคคลโดยไม่ใช้บาร์โค้ด (Frontline Item Loan)
 - **คำสั่ง:** เจ้าหน้าที่ประจำจุดบริการสิ่งของและของยืมเปิดหน้าจอ `/onsite/loans` สแกน QR ผู้พักพิงหรืออาสาสมัคร เลือกรหัสตั๋วที่คลังปล่อยของมา (`Active Loan Batch`) ปรับจำนวนด้วยปุ่ม Stepper `[-] 1 [+]` และกดยืนยันจ่ายยืม
-- **AC-LON-01.1:** ระบบต้องสร้างเอกสาร `distribution_log` โดยมี `is_returnable: true`, `status: 'active'`, และผูกกับ `recipient_id`
+- **AC-LON-01.1:** ระบบต้องสร้างเอกสาร `distribution_log` (`_id: distribution_log:{ulid}`, `is_returnable: true`, `status: 'active'`, `qty: qty_str`) และผูกกับ `recipient_id`
 - **AC-LON-01.2:** ไม่มีการบังคับกรอกหมายเลขบาร์โค้ดหรือ Serial Number รายชิ้น ใช้การนับจำนวนผูกกับตัวบุคคลเท่านั้น
 - **AC-LON-01.3:** ระบบต้องตัดยอดคงเหลือประจำโต๊ะของตั๋วใบนั้นทันที
 
 #### FR-LON-02: ช่องทางการรับคืนพัสดุ 2 รูปแบบ (Dual Return Channels)
 - **คำสั่ง:** หน้าจอรับคืนพัสดุ (`/onsite/returns`) ต้องรองรับการรับคืน 2 ช่องทาง:
-  1. คืนปกติที่เคาน์เตอร์: สแกน QR ผู้ยืม ดึงรายการที่ค้างส่ง (`status: 'active'`) ตรวจสภาพ (`READY` / `MAINTENANCE` / `BROKEN`) ปรับสถานะ log เป็น `returned` และบันทึก `stock_ledger` รับเข้าสต็อกทันที
-  2. คืนแบบกองรวม / กวาดเก็บหน้างาน (Bulk Drop-off): คลังตรวจนับยอดรวมของที่เก็บได้เข้าสต็อกคลังทันที โดยระเบียน `distribution_log` รายคนยังคงสถานะ `active` ไว้เพื่อไปคลี่คลายที่ด่าน Check-out
+  1. คืนปกติที่เคาน์เตอร์: สแกน QR ผู้ยืม ดึงรายการที่ค้างส่ง (`status: 'active'`) ตรวจสภาพ (`READY` / `MAINTENANCE` / `BROKEN`) ปรับสถานะ log เป็น `returned` และบันทึก `stock_ledger` รับเข้าสต็อกทันที (`qty: returned_qty`, `reason: 'receive'`, `ref_id: log._id`)
+  2. คืนแบบกองรวม / กวาดเก็บหน้างาน (Bulk Drop-off): คลังตรวจนับยอดรวมของที่เก็บได้เข้าสต็อกคลังทันที (`reason: 'receive'`) โดยระเบียน `distribution_log` รายคนยังคงสถานะ `active` ไว้เพื่อไปคลี่คลายที่ด่าน Check-out
 - **AC-LON-02.1:** การคืนปกติที่เคาน์เตอร์ต้องปิดภาระของผู้ยืมทันที (`status: 'returned'`)
 - **AC-LON-02.2:** การตรวจรับคืนกองรวมต้องลงบัญชีสต็อกคลังได้ทันทีโดยไม่บังคับให้ระบุชื่อผู้คืน
 
 #### FR-LON-03: การคืนของย้อนหลังหลังปิดรอบ (Warehouse Inbound Deposit Flow)
 - **คำสั่ง:** หากมีผู้พักพิงนำสิ่งของยืมมาคืนหลังจากที่จุดแจกกดปิดรอบขาดไปแล้ว (`SHIFT_CLOSED`) เจ้าหน้าที่คลังสินค้าสามารถเปิดหน้า `/back-office/supply` เพื่อใช้ **"Flow ฝากของ/รับเข้าใหม่ (Inbound Deposit Flow)"** รับของเข้าสต็อกคลัง และค้นหาชื่อผู้พักพิงเพื่อปิดสถานะ `distribution_log` เป็น `returned` ได้
 - **AC-LON-03.1:** ระบบต้องไม่อนุญาตให้เปิดตั๋วเดิมที่ปิดรอบแล้วกลับมารับของคืน
-- **AC-LON-03.2:** การรับของเข้าผ่าน Inbound Deposit Flow ต้องลงบัญชี `stock_ledger` ด้วย `reason: 'return'` หรือ `'adjust'` พร้อมผูกกับรหัสผู้คืน
+- **AC-LON-03.2:** การรับของเข้าผ่าน Inbound Deposit Flow ต้องลงบัญชี `stock_ledger` ด้วย `reason: 'receive'` หรือ `'adjust'` พร้อมผูกกับรหัสผู้คืน
 
 #### FR-LON-04: ด่านตรวจและปลดภาระตอน Check-out (Check-out Gate Clearance)
 - **คำสั่ง:** เมื่อผู้พักพิงหรืออาสาสมัครมาทำการ Check-out ออกจากศูนย์ที่ `/onsite/scan-check-in-out` หากระบบตรวจพบ `distribution_log` ของยืมที่ยังมีสถานะ `active` หรือ `partially_returned` ระบบต้องแสดงกล่องแจ้งเตือน Hard Warning สีส้มเด่นชัด พร้อมปุ่ม **1-Click Resolve 3 ทางเลือก** ที่เจ้าหน้าที่ประจำด่านสามารถกดผ่านได้ทันที:
-  - **`[ 📦 รับคืนที่ด่าน ]`:** บันทึกรับของเข้าสต็อกด่าน (`+Stock`) และปรับสถานะ log เป็น `returned`
+  - **`[ 📦 รับคืนที่ด่าน ]`:** บันทึกรับของเข้าสต็อกด่าน (`qty: returned_qty`, `reason: 'receive'`) และปรับสถานะ log เป็น `returned`
   - **`[ 🤝 ยืนยันว่าคืนแล้วในกองรวม ]`:** ปรับสถานะ log เป็น `returned` (`clear_reason: 'bulk_dropoff'`) โดยไม่เพิ่มสต็อกคลังซ้ำ
   - **`[ ⚠️ ยกให้ / สูญหาย (Waived/Lost) ]`:** ปรับสถานะเป็น `waived` หรือ `lost` บันทึกหมายเหตุ และอนุญาตให้ Check-out ได้ทันทีโดยไม่กักตัวผู้พักพิง
 - **AC-LON-04.1:** การกดปุ่ม 1-Click Resolve ตัวใดตัวหนึ่งต้องปิดภาระของยืม (`status != 'active'`) และปลดล็อกให้ขั้นตอน Check-out ดำเนินการต่อไปได้ทันที
@@ -673,9 +703,11 @@ export interface MealService extends BaseDoc {
 - `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 3 โมดูลระบบงาน
 
 ### 6.2 ผลกระทบต่อโค้ดและการทดสอบ (Code & Test Impact)
-- เพิ่มโฟลเดอร์โมดูลใหม่:
-  - `frontend/src/lib/features/tickets/` (`domain`, `data`, `application`, `ui`)
-  - `frontend/src/lib/features/distribution/` (`domain`, `data`, `application`, `ui`)
+- ปรับปรุงและรวมศูนย์โมดูล (Consolidate & Refactor):
+  - `frontend/src/lib/features/distribution/` (ปรับปรุงและรวมศูนย์จากโครงเดิมของ CR-059 Flow 2 และ mock components ของ `meal_distribution` ตาม CR-109 สู่โมดูลแจกจ่ายและของยืมแบบ Online-only Remote-First)
+  - `frontend/src/lib/features/tickets/` (NEW: เพิ่มโมดูลบริหารจัดการตั๋วเบิกกลาง `domain`, `data`, `application`, `ui`)
+- Server-side Security & CouchDB Access Design (`frontend/src/lib/server/shelter-access-design.ts`):
+  - เพิ่ม `'requisition_ticket'` และ `'distribution_log'` ลงในอาร์เรย์ `allowed` ของ `buildValidateDocUpdate()` เพื่อให้ Client Session ของเจ้าหน้าที่ที่มีสิทธิ์สามารถบันทึกเอกสารตั๋วและบันทึกการแจกจ่ายได้
 - อัปเดต Schema และ Interface ใน `catalog.ts`, `kitchen.ts`, `operations.ts`
 - สร้างหน้า UI ใหม่ใต้ `/back-office/tickets/`, `/onsite/distribution/`, `/onsite/loans/`, `/onsite/returns/`
 - ขยายหน้าจอ `/onsite/scan-check-in-out` สำหรับ 1-Click Resolve Dialog
@@ -683,6 +715,13 @@ export interface MealService extends BaseDoc {
 
 ### 6.3 แผนการย้ายข้อมูล (Migration Strategy)
 - **ไม่ต้อง bump `schema_v` ของฐานข้อมูลศูนย์:** เนื่องจากเป็นการเพิ่ม doc types ใหม่ (`requisition_ticket`, `distribution_log`) และเพิ่ม optional fields บนเอกสารเดิม
+- **การจัดการข้อมูล `meal_distribution` เดิม (CR-109):**
+  - ข้อมูล `meal_distribution` ในสภาพแวดล้อมทดสอบ/staging จะถูกแปลง (Transform) หรือ Map เข้าสู่ `distribution_log` (`is_returnable: false`, `status: 'fulfilled'`) โดยรักษาประวัติ `voided_at` และ `voided_by` ไว้อย่างสมบูรณ์
+- **การจัดการข้อมูล `kitchen_requisition` เดิม (CR-059 Flow 1):**
+  - เอกสาร `kitchen_requisition` ในอดีตจะคงอยู่ในฐานข้อมูลเพื่อใช้อ้างอิงประวัติย้อนหลัง (Historic Read-only) โดยไม่มีการลบทำลาย
+  - ระบบงานใหม่นับจากนี้จะเปิดตั๋วเป็น `requisition_ticket` (`requisition_type: 'kitchen'`) ทั้งหมด
+- **การรวม Codebase และ UI:**
+  - รวม mock components และ endpoints ของ `meal_distribution` เข้าสู่ `$lib/features/distribution/` ภายใต้โมดูลแบบ DDD เดียวกัน
 - **Seed Master Data:** อัปเดตสคริปต์ `seed.ts` ให้สร้าง Standard Meal Archetypes 5 รายการเข้าฐานข้อมูล `catalog`
 
 ---
