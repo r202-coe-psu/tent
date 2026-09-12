@@ -422,7 +422,7 @@ export interface TicketItem {
   returnable?: boolean; // true = ของยืมต้องส่งคืน, false/undefined = ของแจกขาด
   requested_qty: string; // qty_str (CR-038)
   allocated_qty: string; // qty_str (รวมยอดเติมเพิ่ม)
-  distributed_qty?: string; // qty_str — คำนวณ Dynamic ใน Memory ระหว่างกะ และบันทึกสรุปลงตั๋วตอนปิดรอบ (reconcile) เท่านั้น
+  distributed_qty?: string; // qty_str — คำนวณ Dynamic ใน Memory ระหว่างกะ และบันทึกสรุปลงตั๋วตอนปิดรอบ (reconcile) เท่านั้น (ห้ามเขียนทับตั๋วระหว่างสแกนแจก เพื่อป้องกัน CouchDB 409 Conflict)
   returned_qty?: string; // qty_str — บันทึกตอนปิดรอบ
   discrepancy_qty?: string; // qty_str — บันทึกตอนคลังกระทบยอดส่วนต่าง
 }
@@ -437,8 +437,9 @@ export interface TicketAmendment {
 }
 
 export interface RequisitionTicket extends BaseDoc {
+  _id: string; // pattern: 'requisition_ticket:{ulid}' (ULID 26 ตัวพิมพ์ใหญ่ตาม docs/data/schema.md)
   type: 'requisition_ticket';
-  ticket_no: string; // e.g. TKT-KITCHEN-0012 / TKT-FOOD-0045
+  ticket_no: string; // e.g. TKT-KITCHEN-0012 / TKT-FOOD-0045 (Human-readable Running Code สำหรับอ้างอิงหน้างาน)
   requisition_type: RequisitionType;
   status: TicketStatus;
   meal?: MealPeriod;
@@ -460,6 +461,7 @@ export interface RequisitionTicket extends BaseDoc {
 // ================================================================
 
 export interface DistributionLog extends BaseDoc {
+  _id: string; // pattern: 'distribution_log:{ulid}' (ULID 26 ตัวพิมพ์ใหญ่ตาม docs/data/schema.md)
   type: 'distribution_log';
   ticket_id: string; // FK requisition_ticket (Active Batch origin)
   item_id: string; // FK item_master
@@ -671,38 +673,53 @@ export interface MealService extends BaseDoc {
 
 ## 5. แผนผังสารบบหน้าจอ 18 หน้า (Sitemap & Page Directory)
 
-| โมดูลหลัก | โมดูลย่อย | ลำดับ | หน้าจอ (Page Name) | URL Route | ผู้ใช้งานหลัก | หน้าที่หลัก |
+| โมดูลหลัก | โมดูลย่อย | ลำดับ | หน้าจอ (Page Name) | URL Route | ผู้ใช้งานหลัก (Canonical Roles) | หน้าที่หลัก |
 | :--- | :--- | :---: | :--- | :--- | :--- | :--- |
-| **Back-office** | **Ticket Center** | 1 | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets` | Admin, Warehouse, Staff | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ |
-| | | 2 | ตั๋วเบิกวัตถุดิบเข้าครัว | `/back-office/tickets/kitchen` | Kitchen Lead, Warehouse | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO |
-| | | 3 | ตั๋วเบิกอาหารปรุงสุก | `/back-office/tickets/food` | Distribution Staff, Kitchen | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch |
-| | | 4 | ตั๋วเบิกสิ่งของและของยืม | `/back-office/tickets/supplies` | Service Staff, Warehouse | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ |
-| | | 5 | ตั๋วโอนย้ายพัสดุข้ามศูนย์ | `/back-office/tickets/transfers` | Logistics, Warehouse Lead | จัดการตั๋วโอนย้ายข้ามศูนย์, บังคับข้อมูลคนขับ/ทะเบียนรถ |
-| | | 6 | แบบฟอร์มสร้างตั๋วเบิก | `/back-office/tickets/new` | Staff ทุกฝ่าย | ฟอร์มขอเบิกพัสดุและอาหาร |
-| | | 7 | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ | `/back-office/tickets/[id]` | Warehouse Manager | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment) |
-| | **Warehouse** | 8 | สต็อกการ์ด & ยอดคงเหลือ | `/back-office/supply` | Warehouse Staff, Admin | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit |
-| | | 9 | ใบปล่อยของ & ชุดแจกจ่าย | `/back-office/supply/batches` | Warehouse Staff | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch |
-| | | 10 | ติดตามของยืมค้างส่ง & สูญหาย | `/back-office/supply/loans` | Warehouse Staff, Director | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy) |
-| | **Kitchen** | 11 | วางแผนมื้อ & เปิดคำขอเบิก | `/back-office/kitchen` | Kitchen Lead, Dietitian | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ |
-| | | 12 | บันทึกผลผลิตอาหารปรุงสุก | `/back-office/kitchen/production-board` | Kitchen Staff | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.) |
-| **Frontline** | **Distribution** | 13 | ตรวจรับเข้าจุด & เริ่มรอบแจก | `/onsite/distribution` | Distribution Staff | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก |
-| | | 14 | สแกน QR แจกจริง & ตรวจสิทธิ์ | `/onsite/distribution/scan` | Distribution Staff | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
-| | | 15 | ปิดรอบขาด & สรุปส่งคืนคลัง | `/onsite/distribution/reconcile` | Distribution Staff | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6) |
-| | **Loans & Gate** | 16 | สแกนยืมพัสดุคงทน (Stepper) | `/onsite/loans` | Service Staff, Volunteer | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด) |
-| | | 17 | จุดรับคืน & กองรวมพัสดุ | `/onsite/returns` | Warehouse Staff, Shift Lead | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม |
-| | | 18 | ด่าน Check-out & ปลดภาระ | `/onsite/scan-check-in-out` | Gate Staff, Registration | ตรวจจับของยืมค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก |
+| **Back-office** | **Ticket Center** | 1 | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets` | `warehouse_staff`, `shelter_manager`, `system_admin` | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ |
+| | | 2 | ตั๋วเบิกวัตถุดิบเข้าครัว | `/back-office/tickets/kitchen` | `kitchen_staff`, `warehouse_staff` | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO |
+| | | 3 | ตั๋วเบิกอาหารปรุงสุก | `/back-office/tickets/food` | `service_staff`, `registration_staff`, `kitchen_staff`, `shelter_manager` | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch |
+| | | 4 | ตั๋วเบิกสิ่งของและของยืม | `/back-office/tickets/supplies` | `service_staff`, `warehouse_staff`, `shelter_manager` | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ |
+| | | 5 | ตั๋วโอนย้ายพัสดุข้ามศูนย์ | `/back-office/tickets/transfers` | `warehouse_staff`, `supply_coordinator` | จัดการตั๋วโอนย้ายข้ามศูนย์, บังคับข้อมูลคนขับ/ทะเบียนรถ (CR-089) |
+| | | 6 | แบบฟอร์มสร้างตั๋วเบิก | `/back-office/tickets/new` | `warehouse_staff`, `kitchen_staff`, `service_staff`, `shelter_manager` | ฟอร์มขอเบิกพัสดุและอาหาร |
+| | | 7 | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ | `/back-office/tickets/[id]` | `shelter_manager`, `warehouse_staff` | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment) |
+| | **Warehouse** | 8 | สต็อกการ์ด & ยอดคงเหลือ | `/back-office/supply` | `warehouse_staff`, `system_admin` | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit |
+| | | 9 | ใบปล่อยของ & ชุดแจกจ่าย | `/back-office/supply/batches` | `warehouse_staff` | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch |
+| | | 10 | ติดตามของยืมค้างส่ง & สูญหาย | `/back-office/supply/loans` | `warehouse_staff`, `shelter_manager` | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy) |
+| | **Kitchen** | 11 | วางแผนมื้อ & เปิดคำขอเบิก | `/back-office/kitchen` | `kitchen_staff` | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ |
+| | | 12 | บันทึกผลผลิตอาหารปรุงสุก | `/back-office/kitchen/production-board` | `kitchen_staff` | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.) |
+| **Frontline** | **Distribution** | 13 | ตรวจรับเข้าจุด & เริ่มรอบแจก | `/onsite/distribution` | `service_staff`, `registration_staff`, `volunteer` | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก |
+| | | 14 | สแกน QR แจกจริง & ตรวจสิทธิ์ | `/onsite/distribution/scan` | `service_staff`, `registration_staff`, `volunteer` | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
+| | | 15 | ปิดรอบขาด & สรุปส่งคืนคลัง | `/onsite/distribution/reconcile` | `service_staff`, `registration_staff`, `volunteer` | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6) |
+| | **Loans & Gate** | 16 | สแกนยืมพัสดุคงทน (Stepper) | `/onsite/loans` | `service_staff`, `registration_staff`, `volunteer` | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด) |
+| | | 17 | จุดรับคืน & กองรวมพัสดุ | `/onsite/returns` | `warehouse_staff`, `service_staff` | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม |
+| | | 18 | ด่าน Check-out & ปลดภาระ | `/onsite/scan-check-in-out` | `registration_staff`, `shelter_manager` | ตรวจจับของยืมค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก |
 
 ---
 
-## 6. ผลกระทบและการย้ายข้อมูล (Impact & Migration)
+## 6. แผนการพัฒนาคู่ขนานและการส่งมอบ (Parallel Development & Implementation Tracks)
 
-### 6.1 ผลกระทบต่อเอกสาร (Documentation Impact)
-- `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` และ `distribution_log`
+ระบบถูกออกแบบให้สามารถแยกงานพัฒนาออกเป็น **4 สายงานคู่ขนาน (4 Parallel Tracks)** ได้ทันทีหลังจากตกลง Core Domain Contracts (`ticket.ts`, `distribution.ts`) ร่วมกัน:
+
+* **Track A: ข้อมูลหลักและผลผลิตโรงครัว (Master Data & Kitchen Yield):**  
+  ขยาย `ItemMaster` (`type_class: 'PREPARED_FOOD'`), Seed Archetypes 5 รายการใน `catalog`, และหน้าจอโรงครัว `/back-office/kitchen/production-board` ส่ง `yield_items` รับเข้าสต็อกคลัง (+4 ชม.)
+* **Track B: ศูนย์รวมตั๋วเบิกจ่ายและคลังสินค้า (Warehouse & Unified Ticket Center):**  
+  สร้าง Schema `RequisitionTicket`, วงจร WMS ขาจัดสรร (Steps 1–3: `PENDING_PICK` ➔ `READY_FOR_DISPATCH` ➔ `IN_TRANSIT`), หน้า Hub `/back-office/tickets/*`, การแก้ตั๋วเติมของ In-flight Amendment, และการตรวจรับของคืนเข้าคลัง (Step 7: `RETURN_COMPLETED`)
+* **Track C: ระบบแจกจ่ายหน้างานและการปิดรอบ (Frontline POS Distribution & Closing):**  
+  สร้าง Schema `DistributionLog` (ผนวก `meal_distribution`), วงจรหน้างาน POS (Steps 4–6: `DISTRIBUTING` ➔ `SHIFT_CLOSED` ➔ `RETURN_PENDING_RECEIPT`), หน้าจอ `/onsite/distribution/*`, Soft Warning 4 ชม., และการปิดรอบขาด 100% (No Rollover)
+* **Track D: ระบบพัสดุยืม-คืนและด่าน Check-out (Returnable Loans & Check-out Clearance Gate):**  
+  ระบบสแกนยืมพัสดุคงทนแบบ Stepper รายคนไม่ใช้บาร์โค้ดที่ `/onsite/loans`, การรับคืนและตรวจสภาพที่ `/onsite/returns`, คลังรับฝากคืนย้อนหลัง (Inbound Deposit Flow), และด่าน Check-out Clearance Gate พร้อม 1-Click Resolve 3 ทางเลือกที่ `/onsite/scan-check-in-out`
+
+---
+
+## 7. ผลกระทบและการย้ายข้อมูล (Impact & Migration)
+
+### 7.1 ผลกระทบต่อเอกสาร (Documentation Impact)
+- `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` (§2.29) และ `distribution_log` (§2.30)
 - `docs/data/schema.md` §1: เพิ่ม `type_class: 'PREPARED_FOOD'` ใน `item_master`
 - `docs/data/schema.md` §2.7: เพิ่มฟิลด์ `yield_items` ใน `meal_service`
-- `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 3 โมดูลระบบงาน
+- `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 4 Tracks
 
-### 6.2 ผลกระทบต่อโค้ดและการทดสอบ (Code & Test Impact)
+### 7.2 ผลกระทบต่อโค้ดและการทดสอบ (Code & Test Impact)
 - ปรับปรุงและรวมศูนย์โมดูล (Consolidate & Refactor):
   - `frontend/src/lib/features/distribution/` (ปรับปรุงและรวมศูนย์จากโครงเดิมของ CR-059 Flow 2 และ mock components ของ `meal_distribution` ตาม CR-109 สู่โมดูลแจกจ่ายและของยืมแบบ Online-only Remote-First)
   - `frontend/src/lib/features/tickets/` (NEW: เพิ่มโมดูลบริหารจัดการตั๋วเบิกกลาง `domain`, `data`, `application`, `ui`)
@@ -713,7 +730,7 @@ export interface MealService extends BaseDoc {
 - ขยายหน้าจอ `/onsite/scan-check-in-out` สำหรับ 1-Click Resolve Dialog
 - เพิ่ม Unit Tests และ E2E Tests สำหรับทั้ง 7 ขั้นตอนของ Lifecycle
 
-### 6.3 แผนการย้ายข้อมูล (Migration Strategy)
+### 7.3 แผนการย้ายข้อมูล (Migration Strategy)
 - **ไม่ต้อง bump `schema_v` ของฐานข้อมูลศูนย์:** เนื่องจากเป็นการเพิ่ม doc types ใหม่ (`requisition_ticket`, `distribution_log`) และเพิ่ม optional fields บนเอกสารเดิม
 - **การจัดการข้อมูล `meal_distribution` เดิม (CR-109):**
   - ข้อมูล `meal_distribution` ในสภาพแวดล้อมทดสอบ/staging จะถูกแปลง (Transform) หรือ Map เข้าสู่ `distribution_log` (`is_returnable: false`, `status: 'fulfilled'`) โดยรักษาประวัติ `voided_at` และ `voided_by` ไว้อย่างสมบูรณ์
@@ -726,7 +743,7 @@ export interface MealService extends BaseDoc {
 
 ---
 
-## 7. เกณฑ์ตรวจรับงาน (Definition of Done — DoD)
+## 8. เกณฑ์ตรวจรับงาน (Definition of Done — DoD)
 
 - [ ] Zod schema `requisitionTicketSchema` และ `distributionLogSchema` ถูกประกาศครบถ้วนพร้อม Type Export
 - [ ] วงจรสถานะ 7 ขั้นตอน (WMS Outbound ➔ POS Distribution ➔ Shift Close ➔ 100% Return ➔ Discrepancy) ทำงานถูกต้องตาม State Machine
