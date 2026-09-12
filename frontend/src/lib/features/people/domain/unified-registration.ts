@@ -282,7 +282,7 @@ export interface FamilyReportInPayload {
 
 function cleanAreaPrefix(name?: string | null): string {
 	if (!name) return '';
-	return name.replace(/^(ตำบล|แขวง|อำเภอ|เขต|จังหวัด)/, '').trim();
+	return name.replace(/^(ตำบล|แขวง|อำเภอ|เขต|จังหวัด|ต\.|อ\.|จ\.)/, '').trim();
 }
 
 /** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput, with optional fallback to smart card snapshot. */
