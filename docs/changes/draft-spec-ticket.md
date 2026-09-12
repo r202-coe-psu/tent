@@ -3,7 +3,7 @@ id: draft
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: proposed
 date: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-13
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: <รออนุมัติจาก Project Owner>
 layer: stable
@@ -14,9 +14,10 @@ extends:
   - CR-059 Flow 1 & 3 (สืบทอดฟิลด์ทะเบียนรถ/คนขับจาก Transfer และขั้นตอนเบิกวัตถุดิบครัว)
   - CR-110 (ยึดถือสถาปัตยกรรม Online-only Remote-First หน้างาน 100% ตามมติ PO — ไม่มี Local Queue/PouchDB)
   - CR-038 (ปฏิบัติตามมาตรฐาน Decimal qty_str ทั่วทั้งระบบ)
+  - draft-seed-item-categories (อ้างอิง 10 หมวดหมู่ระบบมาตรฐาน — จำแนกอาหารปรุงเสร็จเป็น category: 'item_category:ready_meal' คลาส CONSUMABLE)
 affects:
   - docs/data/schema.md §2 (DB shelter_{shelter_code} — Operations) — doc types ใหม่: `requisition_ticket`, `distribution_log`
-  - docs/data/schema.md §1 (Catalog & Master Data) — ขยาย `item_master` เพิ่ม `type_class: 'PREPARED_FOOD'`
+  - docs/data/schema.md §1 (Catalog & Master Data) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
   - docs/data/schema.md §2.7 (`meal_service`) — ขยายฟิลด์ `yield_items` สำหรับ Batch Yield
   - docs/task-breakdown/03-operations.md
   - docs/task-breakdown/05-D-kitchen.md
@@ -36,10 +37,10 @@ affects:
 # CR-draft: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 
 > **สรุป (TL;DR):**  
-> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109 และแทนที่โมเดล 3 ชั้นจาก CR-059 Flow 2) + ขยาย `ItemMaster` (`PREPARED_FOOD`) และ `MealService` (`yield_items`)  
+> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109 และแทนที่โมเดล 3 ชั้นจาก CR-059 Flow 2) + จัดเก็บอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารโดยตรง ภายใต้หมวดหมู่ `item_category:ready_meal` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md และขยาย `MealService` (`yield_items`)  
 > **เพื่อใคร/ทำไม:** ฝ่ายคลัง, โรงครัว, จุดแจกจ่ายหน้างาน และด่านลงทะเบียน เพื่อสร้างความโปร่งใส 2 ทิศทาง (Bidirectional Visibility) คุมอายุอาหาร 4 ชม. ด้วย Soft Warning, เติมของระหว่างแจกแบบ Reactive, และติดตามของยืมคงทนไม่ใช้บาร์โค้ดพร้อมเคลียร์ตอน Check-out  
 > **dev ต้อง build อะไร:** 4 เวิร์กสเปซหลังบ้าน (`/back-office/tickets/*`), ระบบตรวจรับ-สแกนแจกจ่าย POS (`/onsite/distribution/*`), ระบบยืม-คืนพัสดุ (`/onsite/loans`, `/onsite/returns`), และด่าน Check-out Clearance Gate  
-> **กระทบ schema/scope:** เพิ่ม doc types `requisition_ticket`, `distribution_log` ใน DB `shelter_{shelter_code}` §2, ขยาย `item_master` และ `meal_service` (backward-compatible)
+> **กระทบ schema/scope:** เพิ่ม doc types `requisition_ticket`, `distribution_log` ใน DB `shelter_{shelter_code}` §2, จัดเก็บอาหารปรุงสำเร็จใน `item_master` และขยาย `meal_service` (backward-compatible)
 
 ---
 
@@ -48,8 +49,8 @@ affects:
 ### 1.1 ความจำเป็นและปัญหาในระบบปัจจุบัน
 1. **ปัญหาความกระจัดกระจายของตั๋วเบิกจ่ายคลัง:**
    ในระบบปัจจุบัน การขอเบิกวัตถุดิบครัวใช้ `kitchen_requisition` (`$lib/features/kitchen`) ส่วนการโอนย้ายข้ามศูนย์ใช้ `stock_transfer` (`$lib/features/operations` ตาม CR-059/CR-089) และยังไม่มีเอกสารรองรับการเบิกอาหารปรุงสุกไปจุดแจก หรือการเบิกสิ่งของบรรเทาทุกข์ ทำให้เจ้าหน้าที่คลังสินค้าไม่มีหน้ารวมศูนย์ (Unified Ticket Hub) ในการตรวจสอบ จัดสรร และตัดสต็อก
-2. **ปัญหา Master Data บวม (Catalog Bloat):**
-   อาหารปรุงสุกของศูนย์พักพิงเปลี่ยนเมนูทุกวันตามวัตถุดิบบริจาค หากต้องเปิด SKU ใหม่ทุกวันจะทำให้ฐานข้อมูล Catalog บวมและค้นหายาก จึงจำเป็นต้องกำหนด Standard Archetypes 5 รายการหลักเป็น Flat 1:1 Doc ใน `catalog` และบันทึกชื่อเมนูจริงลงในฟิลด์ `lot.note` ของสต็อกแทน
+2. **การระบุชนิดอาหารปรุงสำเร็จที่แท้จริงใน Master Data (Per-Dish Item Master):**
+   เพื่อให้การเบิกจ่าย การควบคุมสต็อก และการแจกจ่ายหน้างานแสดงชื่ออาหารที่ชัดเจนตรงตามความเป็นจริง เมื่อโรงครัวประกอบอาหารชนิดใดเสร็จ จะบันทึกเป็น `ItemMaster` ของอาหารชนิดนั้นโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวหมกไก่, ต้มยำกุ้ง) โดยจัดหมวดหมู่อยู่ใน `item_category:ready_meal` และกำหนด `type_class: 'CONSUMABLE'` อัตโนมัติ ทำให้ผู้ปฏิบัติงานทุกฝ่ายระบุและค้นหาเมนูอาหารได้ทันที
 3. **ปัญหาการบันทึกผลผลิตโรงครัวแบบหลายเมนู (Batch Yield Limitation):**
    ใน 1 รอบมื้อ โรงครัวปรุงอาหารหลายประเภทพร้อมกัน (ข้าวกล่องทั่วไป, ฮาลาล, เจ, อาหารอ่อน, อาหารเด็ก) แต่โมเดล `meal_service` ในปัจจุบัน (`CR-085`) รองรับการบันทึก `actual_yield` เป็นตัวเลขเดี่ยว ทำให้ไม่สามารถแยกประเภทอาหารเข้าสู่สต็อกคลังและส่งมอบให้จุดแจกตามความต้องการเฉพาะกลุ่มได้
 4. **ปัญหาการบันทึกแจกจ่ายหน้างานซ้ำซ้อนและการคุมอายุอาหาร:**
@@ -84,17 +85,17 @@ affects:
 
 ### ตารางเปรียบเทียบโครงสร้างระบบ (Before ➔ After)
 
-| หมวดหมู่ | โครงสร้างเดิม (Before) | โครงสร้างใหม่ (After / Unified Spec) | เหตุผลทางเทคนิค & ผลลัพธ์ |
-| :--- | :--- | :--- | :--- |
-| **1. ตั๋วเบิกจ่ายคลัง** | แยก `kitchen_requisition` และ `stock_transfer` คนละ doc type; ไม่มีตั๋วอาหารและสิ่งของแจก | รวมเป็น `type: 'requisition_ticket'` ตัวเดียว แยกประเภทด้วย `requisition_type` | Single Repository, คลังมีแดชบอร์ดศูนย์กลางตัวเดียว |
-| **2. หน้าจอเบิกจ่าย** | มีเฉพาะหน้าเบิกครัว และหน้าโอนย้ายข้ามศูนย์ | เพิ่ม Ticket Hub (`/back-office/tickets`) + 4 หน้าจอเฉพาะทางตามประเภทตั๋ว | หน้าจอไม่ซับซ้อน ฟิลด์ตรงกับหน้าที่ของแต่ละฝ่าย |
-| **3. อาหารปรุงสำเร็จ** | จัดเป็น `CONSUMABLE` ปะปนกับของแห้ง | เพิ่ม `type_class: 'PREPARED_FOOD'` และ 5 Standard Archetypes ใน `ItemMaster` | คัดกรองไอเทมที่ต้องคุมอายุ 4 ชม. ได้ทันที |
-| **4. ผลผลิตโรงครัว** | บันทึกยอดรวม `actual_yield` เดี่ยว | เพิ่ม embedded array `yield_items` ใน `MealService` | 1 มื้อบันทึกผลผลิตได้หลายเมนูใน 1 Transaction |
-| **5. บันทึกแจกจ่ายหน้างาน** | มีเฉพาะ `meal_distribution` (CR-109) แยกของยืม | รวมเป็น `type: 'distribution_log'` ตัวเดียว (`is_returnable: boolean`) | Query ประวัติรายคนและด่าน Check-out จบในคำสั่งเดียว |
-| **6. วงจรการจัดของ WMS** | ตัดสต็อกลอยตอนสร้างตั๋ว | ควบคุม 7 ขั้นตอน (WMS Outbound ➔ POS Distribution ➔ Shift Close ➔ 100% Return) | มีจุดตรวจสอบ (Gate Checks) โปร่งใสสองทิศทาง |
-| **7. การเติมของระหว่างแจก** | ฝั่งแจกต้องเปิดตั๋วใหม่ | คลังแก้ตั๋วเดิม (`amendments[]`) + append delta `stock_ledger` | จุดแจกไม่ต้องเปิดตั๋วใหม่ สต็อกตัดเพิ่มถูกต้อง |
-| **8. การติดตามของยืม** | ไม่มีระบบติดตามของยืมรายคน | บันทึกใน `distribution_log` นับจำนวนผูก QR บุคคล (ไม่ใช้บาร์โค้ด) | ไม่เสียเวลาติดสติกเกอร์บาร์โค้ดหน้างาน |
-| **9. ด่าน Check-out** | ตรวจสอบของยืมไม่ได้ | ตรวจจับของค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก | ปลดภาระรวดเร็ว ไม่กักตัวผู้พักพิง |
+| หมวดหมู่                    | โครงสร้างเดิม (Before)                                                                | โครงสร้างใหม่ (After / Unified Spec)                                                                                                    | เหตุผลทางเทคนิค & ผลลัพธ์                                                   |
+| :------------------------ | :---------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------- |
+| **1. ตั๋วเบิกจ่ายคลัง**        | แยก `kitchen_requisition` และ `stock_transfer` คนละ doc type; ไม่มีตั๋วอาหารและสิ่งของแจก | รวมเป็น `type: 'requisition_ticket'` ตัวเดียว แยกประเภทด้วย `requisition_type`                                                            | Single Repository, คลังมีแดชบอร์ดศูนย์กลางตัวเดียว                             |
+| **2. หน้าจอเบิกจ่าย**        | มีเฉพาะหน้าเบิกครัว และหน้าโอนย้ายข้ามศูนย์                                                  | เพิ่ม Ticket Hub (`/back-office/tickets`) + 4 หน้าจอเฉพาะทางตามประเภทตั๋ว                                                                  | หน้าจอไม่ซับซ้อน ฟิลด์ตรงกับหน้าที่ของแต่ละฝ่าย                                     |
+| **3. อาหารปรุงสำเร็จ**       | จัดเป็น `CONSUMABLE` ปะปนกับของแห้งโดยไม่มีหมวดหมู่มาตรฐาน                                  | บันทึกเป็น `item_master` รายชนิดอาหารจริง ภายใต้หมวดหมู่ `item_category:ready_meal` (`READY_MEAL`) คลาส `CONSUMABLE` ตาม draft-seed-item-categories.md | คัดกรองไอเทมที่ต้องคุมอายุ 4 ชม. ด้วย `category_id` ของหมวดหมู่ระบบ                    |
+| **4. ผลผลิตโรงครัว**        | บันทึกยอดรวม `actual_yield` เดี่ยว                                                      | เพิ่ม embedded array `yield_items` ใน `MealService`                                                                                     | 1 มื้อบันทึกผลผลิตได้หลายเมนูใน 1 Transaction                                  |
+| **5. บันทึกแจกจ่ายหน้างาน**   | มีเฉพาะ `meal_distribution` (CR-109) แยกของยืม                                        | รวมเป็น `type: 'distribution_log'` ตัวเดียว (`is_returnable: boolean`)                                                                   | Query ประวัติรายคนและด่าน Check-out จบในคำสั่งเดียว                            |
+| **6. วงจรการจัดของ WMS**   | ตัดสต็อกลอยตอนสร้างตั๋ว                                                                  | ควบคุม 7 ขั้นตอน (WMS Outbound ➔ POS Distribution ➔ Shift Close ➔ 100% Return)                                                           | มีจุดตรวจสอบ (Gate Checks) โปร่งใสสองทิศทาง                                 |
+| **7. การเติมของระหว่างแจก** | ฝั่งแจกต้องเปิดตั๋วใหม่                                                                    | คลังแก้ตั๋วเดิม (`amendments[]`) + append delta `stock_ledger`                                                                             | จุดแจกไม่ต้องเปิดตั๋วใหม่ สต็อกตัดเพิ่มถูกต้อง                                       |
+| **8. การติดตามของยืม**      | ไม่มีระบบติดตามของยืมรายคน                                                              | บันทึกใน `distribution_log` นับจำนวนผูก QR บุคคล (ไม่ใช้บาร์โค้ด)                                                                               | ไม่เสียเวลาติดสติกเกอร์บาร์โค้ดหน้างาน                                          |
+| **9. ด่าน Check-out**      | ตรวจสอบของยืมไม่ได้                                                                    | ตรวจจับของค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก                                                                                         | ปลดภาระรวดเร็ว ไม่กักตัวผู้พักพิง                                               |
 
 ---
 
@@ -214,39 +215,42 @@ flowchart TD
 
 #### ตารางสรุป 7 ขั้นตอน วงจรสถานะ และการดำเนินการ (7-Step Lifecycle Matrix)
 
-| ลำดับ | เหตุการณ์ (Event) | ผู้ปฏิบัติงาน (Actor) | ระบบ/หน้าจอ (System) | สถานะตั๋ว (Ticket Status) | ป้ายสี (Badge) | ปุ่มดำเนินการ (Action Button) |
-| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | คลังเปิดตั๋ว ระบุรายการและจำนวนของที่จะจัด | เจ้าหน้าที่คลัง | WMS: `/back-office/tickets/*` | **`🟡 รอจัดของ`**<br>`PENDING_PICK` | พื้นหลังเหลืองอ่อน<br>ตัวหนังสือน้ำตาล | `[ บันทึกรายการและเริ่มจัดของ ]` |
-| **2** | พนักงานจัดของครบตามใบจัด นำให้ ผจก. ตรวจสอบ | ผู้จัดการคลัง | WMS: `/back-office/tickets/[id]` | **`🔵 พร้อมจัดส่ง`**<br>`READY_FOR_DISPATCH` | พื้นหลังฟ้าอ่อน<br>ตัวหนังสือน้ำเงิน | `[ ✓ ตรวจสอบความถูกต้องและพร้อมส่ง ]` |
-| **3** | ผจก. คลัง กดยืนยันปล่อยรถ/ขนส่งออกจากคลัง | ผู้จัดการคลัง / ทีมขนส่ง | WMS: `/back-office/tickets/[id]` | **`🚚 กำลังจัดส่ง`**<br>`IN_TRANSIT` | พื้นหลังน้ำเงินเข้ม<br>ตัวหนังสือขาว | `[ 🚚 เริ่มดำเนินการจัดส่ง ]` |
-| **4** | หน้างาน POS เห็นตั๋วขาเข้า ตรวจนับของจริงและรับเข้าจุด | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution` | **`🟢 กำลังแจกจ่าย`**<br>`DISTRIBUTING` | พื้นหลังเขียวอ่อน<br>ตัวหนังสือเขียวเข้ม | `[ 📥 ตรวจรับพัสดุเข้าจุดแจก ]` |
-| **5** | หน้างานแจกของจนครบเวลา หรือรับของยืมคืน ➔ ปิดรอบ | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution/scan` | **`⚪ ปิดรอบแล้ว`**<br>`SHIFT_CLOSED` | พื้นหลังเทาอ่อน<br>ตัวหนังสือเทาเข้ม | `[ 🔒 ยืนยันปิดรอบการแจกจ่าย ]` |
-| **6** | หน้างานสรุปของเหลือ/ยืมคืน ➔ กดส่งคืนกลับคลัง 100% | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution/reconcile` | **`🟠 รอคลังตรวจรับคืน`**<br>`RETURN_PENDING_RECEIPT` | พื้นหลังส้มอ่อน<br>ตัวหนังสือส้มเข้ม | `[ ↺ ส่งคืนพัสดุกลับคลังกลาง ]` |
-| **7** | คลังเห็นตั๋วส่งคืน ตรวจนับของจริงเข้าคลัง ➔ กดยืนยัน | เจ้าหน้าที่คลัง | WMS: `/back-office/supply` | **`✅ รับคืนเข้าคลังแล้ว`**<br>`RETURN_COMPLETED` | พื้นหลังเขียวมรกต<br>ตัวหนังสือเขียวเข้ม | `[ 📦 ยืนยันตรวจรับของคืนเข้าคลัง ]` |
+|  ลำดับ  | เหตุการณ์ (Event)                              | ผู้ปฏิบัติงาน (Actor)   | ระบบ/หน้าจอ (System)                   | สถานะตั๋ว (Ticket Status)                           | ป้ายสี (Badge)                    | ปุ่มดำเนินการ (Action Button)         |
+| :---: | :------------------------------------------- | :----------------- | :------------------------------------ | :------------------------------------------------ | :------------------------------ | :-------------------------------- |
+| **1** | คลังเปิดตั๋ว ระบุรายการและจำนวนของที่จะจัด            | เจ้าหน้าที่คลัง         | WMS: `/back-office/tickets/*`         | **`🟡 รอจัดของ`**<br>`PENDING_PICK`                 | พื้นหลังเหลืองอ่อน<br>ตัวหนังสือน้ำตาล    | `[ บันทึกรายการและเริ่มจัดของ ]`       |
+| **2** | พนักงานจัดของครบตามใบจัด นำให้ ผจก. ตรวจสอบ       | ผู้จัดการคลัง          | WMS: `/back-office/tickets/[id]`      | **`🔵 พร้อมจัดส่ง`**<br>`READY_FOR_DISPATCH`          | พื้นหลังฟ้าอ่อน<br>ตัวหนังสือน้ำเงิน       | `[ ✓ ตรวจสอบความถูกต้องและพร้อมส่ง ]` |
+| **3** | ผจก. คลัง กดยืนยันปล่อยรถ/ขนส่งออกจากคลัง          | ผู้จัดการคลัง / ทีมขนส่ง | WMS: `/back-office/tickets/[id]`      | **`🚚 กำลังจัดส่ง`**<br>`IN_TRANSIT`                   | พื้นหลังน้ำเงินเข้ม<br>ตัวหนังสือขาว      | `[ 🚚 เริ่มดำเนินการจัดส่ง ]`            |
+| **4** | หน้างาน POS เห็นตั๋วขาเข้า ตรวจนับของจริงและรับเข้าจุด | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution`           | **`🟢 กำลังแจกจ่าย`**<br>`DISTRIBUTING`               | พื้นหลังเขียวอ่อน<br>ตัวหนังสือเขียวเข้ม  | `[ 📥 ตรวจรับพัสดุเข้าจุดแจก ]`         |
+| **5** | หน้างานแจกของจนครบเวลา หรือรับของยืมคืน ➔ ปิดรอบ   | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution/scan`      | **`⚪ ปิดรอบแล้ว`**<br>`SHIFT_CLOSED`                | พื้นหลังเทาอ่อน<br>ตัวหนังสือเทาเข้ม    | `[ 🔒 ยืนยันปิดรอบการแจกจ่าย ]`        |
+| **6** | หน้างานสรุปของเหลือ/ยืมคืน ➔ กดส่งคืนกลับคลัง 100%    | เจ้าหน้าที่/จิตอาสา POS | POS: `/onsite/distribution/reconcile` | **`🟠 รอคลังตรวจรับคืน`**<br>`RETURN_PENDING_RECEIPT` | พื้นหลังส้มอ่อน<br>ตัวหนังสือส้มเข้ม      | `[ ↺ ส่งคืนพัสดุกลับคลังกลาง ]`         |
+| **7** | คลังเห็นตั๋วส่งคืน ตรวจนับของจริงเข้าคลัง ➔ กดยืนยัน     | เจ้าหน้าที่คลัง         | WMS: `/back-office/supply`            | **`✅ รับคืนเข้าคลังแล้ว`**<br>`RETURN_COMPLETED`       | พื้นหลังเขียวมรกต<br>ตัวหนังสือเขียวเข้ม | `[ 📦 ยืนยันตรวจรับของคืนเข้าคลัง ]`     |
 
 ---
 
 ## 3. รายละเอียดเชิงเทคนิคและสถาปัตยกรรมข้อมูล (Technical Specifications)
 
-### 3.1 การขยาย Master Data (`catalog.ts`)
-เพิ่มค่า `PREPARED_FOOD` ใน `TypeClass` และกำหนด Master Data กลาง 5 รายการใน `catalog`:
-- `item_master:meal_general` (ข้าวกล่องปรุงสำเร็จ อาหารทั่วไป)
-- `item_master:meal_halal` (ข้าวกล่องปรุงสำเร็จ ฮาลาล) — `dietary: ['HALAL']`
-- `item_master:meal_vegetarian` (ข้าวกล่องปรุงสำเร็จ มังสวิรัติ/เจ) — `dietary: ['VEGAN']`
-- `item_master:meal_soft` (อาหารปรุงสำเร็จ อาหารอ่อน/โจ๊ก) — `age_group: 'ELDERLY'`
-- `item_master:meal_infant` (อาหารเสริมเด็กอ่อน/ทารก) — `age_group: 'INFANT'`
+### 3.1 การกำหนด Master Data อาหารปรุงสำเร็จตามหมวดหมู่ระบบ (`catalog.ts`)
+**คง `TypeClass` เป็น 3 คลาสมาตรฐาน** (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม และจำแนกอาหารปรุงสำเร็จด้วยหมวดหมู่ระบบมาตรฐานตาม [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md):
+- **วัตถุดิบประกอบอาหาร (Food Ingredients):** จัดเก็บในหมวดหมู่ `item_category:food` (`system_key: 'FOOD'`, `default_class: 'CONSUMABLE'`) สำหรับเบิกเข้าครัว (`TKT-KITCHEN`)
+- **อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals):** จัดเก็บในหมวดหมู่ `item_category:ready_meal` (`system_key: 'READY_MEAL'`, `default_class: 'CONSUMABLE'`) สำหรับเบิกไปแจกจ่าย (`TKT-DIST-FOOD`)
 
-* **Flat 1:1 Invariant:** อาหารจัดเก็บเป็น Flat 1:1 Doc ใน `catalog` ไม่สร้าง SKU ใหม่ทุกวัน
-* **ชื่อเมนูจริง:** บันทึกลงในฟิลด์ `lot.note` เช่น `"ข้าวกะเพราไก่ไข่ดาว"`
+**การจัดเก็บอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหาร (Per-Dish ItemMaster):**
+เมื่อโรงครัวประกอบอาหารชนิดใดเสร็จ จะบันทึกเป็น `ItemMaster` ของอาหารชนิดนั้นโดยตรง เช่น:
+- `item_master:{ulid}`: `name: "ข้าวกะเพราไก่"`, `category: 'item_category:ready_meal'`, `type_class: 'CONSUMABLE'`
+- `item_master:{ulid}`: `name: "ข้าวผัดไก่ (ฮาลาล)"`, `category: 'item_category:ready_meal'`, `type_class: 'CONSUMABLE'`, `dietary: ['HALAL']`
+- `item_master:{ulid}`: `name: "ข้าวต้มหมูสับ (อาหารอ่อน)"`, `category: 'item_category:ready_meal'`, `type_class: 'CONSUMABLE'`, `age_group: 'ELDERLY'`
+
+* **การเลือก/สร้างเมนู:** ในหน้าบันทึกผลผลิตโรงครัว เจ้าหน้าที่สามารถเลือกเมนูอาหารปรุงสำเร็จที่มีอยู่เดิมใน Catalog หรือพิมพ์ชื่อเมนูใหม่เพื่อสร้าง `item_master` ใหม่ได้ทันที (On-the-fly)
+* **การคัดกรองควบคุมอายุ 4 ชม. (Soft Warning Filter):** ตรวจสอบจาก `item.category === 'item_category:ready_meal'` เสมอ
 
 ### 3.2 การบันทึกผลผลิตโรงครัวแบบชุดรายการ (`kitchen.ts`)
 ขยาย `MealService` และ `MealServiceInput` โดยเพิ่มฟิลด์ `yield_items: KitchenYieldItem[]` บันทึกผลผลิตรายเมนู พร้อมคำนวณ `lot.expiry = cooking_completed_at + 4 ชั่วโมง` และบันทึก `stock_ledger` รับเข้าสต็อกคลังใน Transaction เดียว:
 
 ```mermaid
 flowchart TD
-    K1["1. ครัวปรุงอาหารเสร็จในรอบมื้อ<br/>(เช่น กะเพราไก่ 300 กล่อง + ข้าวผัดฮาลาล 50 กล่อง)"] --> K2["2. บันทึกผลผลิตที่ /kitchen/yield เป็นชุดรายการ (MealServiceInput):<br/>• รายการที่ 1: meal_general (กะเพราไก่) ยอด 300 กล่อง<br/>• รายการที่ 2: meal_halal (ข้าวผัดไก่) ยอด 50 กล่อง"]
+    K1["1. ครัวปรุงอาหารเสร็จในรอบมื้อ<br/>(เช่น กะเพราไก่ 300 กล่อง + ข้าวผัดฮาลาล 50 กล่อง)"] --> K2["2. บันทึกผลผลิตที่ /kitchen/yield เป็นชุดรายการ (MealServiceInput):<br/>• รายการที่ 1: ข้าวกะเพราไก่ (item_master) ยอด 300 กล่อง<br/>• รายการที่ 2: ข้าวผัดฮาลาล (item_master) ยอด 50 กล่อง"]
     K2 --> T1["3. ระบบบันทึกคู่ขนานในคราวเดียว (Batch Commit):<br/>• meal_service (ฝัง yield_items 2 รายการ, actual_yield รวม = 350)<br/>• stock_ledger 2 แถว (+300 กล่อง และ +50 กล่อง, Expiry: +4 ชม.)"]
-    T1 --> W1["4. คลังอัปเดตสต็อกพร้อมเปิดเบิกทันที<br/>🍱 ข้าวกล่องทั่วไป (กะเพราไก่) 300 กล่อง<br/>🍱 ข้าวกล่องฮาลาล (ข้าวผัดไก่) 50 กล่อง"]
+    T1 --> W1["4. คลังอัปเดตสต็อกพร้อมเปิดเบิกทันที<br/>🍱 ข้าวกะเพราไก่ 300 กล่อง<br/>🍱 ข้าวผัดฮาลาล 50 กล่อง"]
     W1 --> D1["5. จุดแจกเปิดตั๋ว /back-office/tickets/food<br/>(TKT-DIST-FOOD) เบิกไปแจกจ่าย"]
 ```
 
@@ -334,8 +338,8 @@ erDiagram
     TICKET_ITEM {
         string item_id FK "item_master id"
         string item_name "ชื่อสินค้า"
-        string category "หมวดหมู่"
-        enum type_class "PREPARED_FOOD / CONSUMABLE / DURABLE / EQUIPMENT"
+        string category "หมวดหมู่ (category_id เช่น item_category:ready_meal)"
+        enum type_class "CONSUMABLE / DURABLE / EQUIPMENT"
         boolean returnable "ของยืมต้องคืน (true) หรือแจกขาด (false)"
         string requested_qty "ยอดขอเบิก (qty_str - CR-038)"
         string allocated_qty "ยอดจัดสรรสะสมจริง (qty_str)"
@@ -390,7 +394,7 @@ import type { BaseDoc, Timestamp } from '$lib/db/model';
 // หมวดที่ 1: Enums & Common Types
 // ================================================================
 
-export type TypeClass = 'PREPARED_FOOD' | 'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT';
+export type TypeClass = 'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT';
 export type RequisitionType = 'kitchen' | 'food' | 'supplies' | 'transfer';
 
 export type TicketStatus =
@@ -417,7 +421,7 @@ export type LoanClearReason = 'routine' | 'bulk_dropoff' | 'waived' | 'lost';
 export interface TicketItem {
   item_id: string; // FK item_master
   item_name: string;
-  category?: string;
+  category?: string; // category_id เช่น 'item_category:ready_meal' หรือ 'item_category:food'
   type_class: TypeClass;
   returnable?: boolean; // true = ของยืมต้องส่งคืน, false/undefined = ของแจกขาด
   requested_qty: string; // qty_str (CR-038)
@@ -497,9 +501,10 @@ export interface DistributionLog extends BaseDoc {
 // ================================================================
 
 export interface KitchenYieldItem {
-  item_id: string; // StandardMealArchetypeId
-  menu_name: string; // บันทึกลง stock_ledger.lot.note
-  type_class: 'PREPARED_FOOD';
+  item_id: string; // ItemMaster ID ของอาหารปรุงเสร็จ
+  menu_name: string; // ชื่อเมนูอาหาร (ตรงกับ ItemMaster.name)
+  category: 'item_category:ready_meal' | string; // หมวดหมู่อาหารปรุงเสร็จตาม draft-seed-item-categories.md
+  type_class: 'CONSUMABLE';
   actual_yield: string; // qty_str (CR-038)
   unit: string;
   storage_zone?: string;
@@ -562,11 +567,11 @@ export interface MealService extends BaseDoc {
 - **AC-TKT-04.1:** การตัดสต็อกใน `stock_ledger` ต้องบันทึกแยกแถวตาม `item_id` และระบุจำนวนเป็นลบตรงกับ `allocated_qty`
 - **AC-TKT-04.2:** สำหรับตั๋วประเภท `transfer` ระบบต้องบล็อกการกดปล่อยของหากยังไม่ได้ระบุ `driver_name` หรือ `license_plate`
 
-#### FR-TKT-05: การกำหนด Master Data อาหารปรุงสำเร็จ (Standard Meal Archetypes)
-- **คำสั่ง:** ระบบต้องขยาย `ItemMaster` ให้รองรับ `type_class: 'PREPARED_FOOD'` และสร้าง Seed Master Data สำหรับ Standard Meal Archetypes 5 รายการใน `catalog`:
-  - `meal_general`, `meal_halal`, `meal_vegetarian`, `meal_soft`, `meal_infant`
-- **AC-TKT-05.1:** เอกสารทั้ง 5 รายการต้องจัดเก็บเป็น Document แยกแบบ 1:1 ในฐานข้อมูล `catalog`
-- **AC-TKT-05.2:** ระบบต้องไม่อนุญาตให้สร้าง SKU อาหารปรุงสุกใหม่รายวัน ชื่อเมนูจริงต้องบันทึกใน `lot.note` เท่านั้น
+#### FR-TKT-05: การบันทึกอาหารปรุงสำเร็จเป็น ItemMaster รายชนิดอาหาร (Per-Dish ItemMaster) ในหมวดหมู่ READY_MEAL
+- **คำสั่ง:** เมื่อโรงครัวประกอบอาหารชนิดใดเสร็จ จะถูกบันทึกเป็น `item_master` ของอาหารชนิดนั้นโดยตรง โดยกำหนดให้เป็น `type_class: 'CONSUMABLE'` และจัดหมวดหมู่อยู่ภายใต้ `category: 'item_category:ready_meal'` (`system_key: 'READY_MEAL'`) ตามข้อกำหนดใน [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md)
+- **AC-TKT-05.1:** เอกสาร `item_master` ของอาหารปรุงเสร็จแต่ละชนิดต้องจัดเก็บในฐานข้อมูล `catalog` โดยระบุ `name` เป็นชื่อเมนูอาหารจริง, `category: 'item_category:ready_meal'` และ `type_class: 'CONSUMABLE'` พร้อมระบุแท็กพิเศษ (เช่น dietary: `['HALAL']`, `['VEGAN']` หรือ age_group: `'ELDERLY'`) ได้
+- **AC-TKT-05.2:** ในหน้าบันทึกผลผลิตโรงครัว เจ้าหน้าที่สามารถเลือกเมนูอาหารเดิมที่มีอยู่แล้วใน Catalog หรือสร้าง `item_master` ใหม่สำหรับเมนูนั้นได้ทันที (On-the-fly ItemMaster Creation)
+- **AC-TKT-05.3:** การระบุและคัดกรองพัสดุที่ต้องควบคุมอายุ 4 ชั่วโมง (Food Safety Countdown) ให้ใช้เงื่อนไข `category === 'item_category:ready_meal'`
 
 #### FR-TKT-06: การบันทึกผลผลิตโรงครัวแบบชุดรายการ (Batch Yield Integration)
 - **คำสั่ง:** หน้าบันทึกผลผลิตโรงครัว (`/back-office/kitchen/production-board`) ต้องรองรับการส่งผลผลิตเป็น Array `yield_items` ผ่าน `MealServiceInput` โดยระบบต้องบันทึกเข้า `meal_service` และสร้าง `stock_ledger` รับเข้าสต็อกคลังใน Transaction เดียวกัน
@@ -673,26 +678,26 @@ export interface MealService extends BaseDoc {
 
 ## 5. แผนผังสารบบหน้าจอ 18 หน้า (Sitemap & Page Directory)
 
-| โมดูลหลัก | โมดูลย่อย | ลำดับ | หน้าจอ (Page Name) | URL Route | ผู้ใช้งานหลัก (Canonical Roles) | หน้าที่หลัก |
-| :--- | :--- | :---: | :--- | :--- | :--- | :--- |
-| **Back-office** | **Ticket Center** | 1 | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets` | `warehouse_staff`, `shelter_manager`, `system_admin` | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ |
-| | | 2 | ตั๋วเบิกวัตถุดิบเข้าครัว | `/back-office/tickets/kitchen` | `kitchen_staff`, `warehouse_staff` | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO |
-| | | 3 | ตั๋วเบิกอาหารปรุงสุก | `/back-office/tickets/food` | `service_staff`, `registration_staff`, `kitchen_staff`, `shelter_manager` | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch |
-| | | 4 | ตั๋วเบิกสิ่งของและของยืม | `/back-office/tickets/supplies` | `service_staff`, `warehouse_staff`, `shelter_manager` | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ |
-| | | 5 | ตั๋วโอนย้ายพัสดุข้ามศูนย์ | `/back-office/tickets/transfers` | `warehouse_staff`, `supply_coordinator` | จัดการตั๋วโอนย้ายข้ามศูนย์, บังคับข้อมูลคนขับ/ทะเบียนรถ (CR-089) |
-| | | 6 | แบบฟอร์มสร้างตั๋วเบิก | `/back-office/tickets/new` | `warehouse_staff`, `kitchen_staff`, `service_staff`, `shelter_manager` | ฟอร์มขอเบิกพัสดุและอาหาร |
-| | | 7 | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ | `/back-office/tickets/[id]` | `shelter_manager`, `warehouse_staff` | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment) |
-| | **Warehouse** | 8 | สต็อกการ์ด & ยอดคงเหลือ | `/back-office/supply` | `warehouse_staff`, `system_admin` | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit |
-| | | 9 | ใบปล่อยของ & ชุดแจกจ่าย | `/back-office/supply/batches` | `warehouse_staff` | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch |
-| | | 10 | ติดตามของยืมค้างส่ง & สูญหาย | `/back-office/supply/loans` | `warehouse_staff`, `shelter_manager` | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy) |
-| | **Kitchen** | 11 | วางแผนมื้อ & เปิดคำขอเบิก | `/back-office/kitchen` | `kitchen_staff` | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ |
-| | | 12 | บันทึกผลผลิตอาหารปรุงสุก | `/back-office/kitchen/production-board` | `kitchen_staff` | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.) |
-| **Frontline** | **Distribution** | 13 | ตรวจรับเข้าจุด & เริ่มรอบแจก | `/onsite/distribution` | `service_staff`, `registration_staff`, `volunteer` | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก |
-| | | 14 | สแกน QR แจกจริง & ตรวจสิทธิ์ | `/onsite/distribution/scan` | `service_staff`, `registration_staff`, `volunteer` | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
-| | | 15 | ปิดรอบขาด & สรุปส่งคืนคลัง | `/onsite/distribution/reconcile` | `service_staff`, `registration_staff`, `volunteer` | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6) |
-| | **Loans & Gate** | 16 | สแกนยืมพัสดุคงทน (Stepper) | `/onsite/loans` | `service_staff`, `registration_staff`, `volunteer` | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด) |
-| | | 17 | จุดรับคืน & กองรวมพัสดุ | `/onsite/returns` | `warehouse_staff`, `service_staff` | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม |
-| | | 18 | ด่าน Check-out & ปลดภาระ | `/onsite/scan-check-in-out` | `registration_staff`, `shelter_manager` | ตรวจจับของยืมค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก |
+| โมดูลหลัก         | โมดูลย่อย           |  ลำดับ  | หน้าจอ (Page Name)            | URL Route                               | ผู้ใช้งานหลัก (Canonical Roles)                                               | หน้าที่หลัก                                                    |
+| :-------------- | :---------------- | :---: | :--------------------------- | :-------------------------------------- | :------------------------------------------------------------------------ | :--------------------------------------------------------- |
+| **Back-office** | **Ticket Center** |   1   | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets`                  | `warehouse_staff`, `shelter_manager`, `system_admin`                      | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ               |
+|                 |                   |   2   | ตั๋วเบิกวัตถุดิบเข้าครัว             | `/back-office/tickets/kitchen`          | `kitchen_staff`, `warehouse_staff`                                        | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO                  |
+|                 |                   |   3   | ตั๋วเบิกอาหารปรุงสุก              | `/back-office/tickets/food`             | `service_staff`, `registration_staff`, `kitchen_staff`, `shelter_manager` | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch       |
+|                 |                   |   4   | ตั๋วเบิกสิ่งของและของยืม           | `/back-office/tickets/supplies`         | `service_staff`, `warehouse_staff`, `shelter_manager`                     | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ                |
+|                 |                   |   5   | ตั๋วโอนย้ายพัสดุข้ามศูนย์            | `/back-office/tickets/transfers`        | `warehouse_staff`, `supply_coordinator`                                   | จัดการตั๋วโอนย้ายข้ามศูนย์, บังคับข้อมูลคนขับ/ทะเบียนรถ (CR-089)        |
+|                 |                   |   6   | แบบฟอร์มสร้างตั๋วเบิก             | `/back-office/tickets/new`              | `warehouse_staff`, `kitchen_staff`, `service_staff`, `shelter_manager`    | ฟอร์มขอเบิกพัสดุและอาหาร                                       |
+|                 |                   |   7   | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ      | `/back-office/tickets/[id]`             | `shelter_manager`, `warehouse_staff`                                      | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment)           |
+|                 | **Warehouse**     |   8   | สต็อกการ์ด & ยอดคงเหลือ         | `/back-office/supply`                   | `warehouse_staff`, `system_admin`                                         | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit  |
+|                 |                   |   9   | ใบปล่อยของ & ชุดแจกจ่าย         | `/back-office/supply/batches`           | `warehouse_staff`                                                         | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch                |
+|                 |                   |  10   | ติดตามของยืมค้างส่ง & สูญหาย      | `/back-office/supply/loans`             | `warehouse_staff`, `shelter_manager`                                      | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy)            |
+|                 | **Kitchen**       |  11   | วางแผนมื้อ & เปิดคำขอเบิก         | `/back-office/kitchen`                  | `kitchen_staff`                                                           | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ                 |
+|                 |                   |  12   | บันทึกผลผลิตอาหารปรุงสุก          | `/back-office/kitchen/production-board` | `kitchen_staff`                                                           | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.)         |
+| **Frontline**   | **Distribution**  |  13   | ตรวจรับเข้าจุด & เริ่มรอบแจก      | `/onsite/distribution`                  | `service_staff`, `registration_staff`, `volunteer`                        | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก               |
+|                 |                   |  14   | สแกน QR แจกจริง & ตรวจสิทธิ์     | `/onsite/distribution/scan`             | `service_staff`, `registration_staff`, `volunteer`                        | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
+|                 |                   |  15   | ปิดรอบขาด & สรุปส่งคืนคลัง        | `/onsite/distribution/reconcile`        | `service_staff`, `registration_staff`, `volunteer`                        | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6)               |
+|                 | **Loans & Gate**  |  16   | สแกนยืมพัสดุคงทน (Stepper)      | `/onsite/loans`                         | `service_staff`, `registration_staff`, `volunteer`                        | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด)          |
+|                 |                   |  17   | จุดรับคืน & กองรวมพัสดุ           | `/onsite/returns`                       | `warehouse_staff`, `service_staff`                                        | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม            |
+|                 |                   |  18   | ด่าน Check-out & ปลดภาระ      | `/onsite/scan-check-in-out`             | `registration_staff`, `shelter_manager`                                   | ตรวจจับของยืมค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก            |
 
 ---
 
@@ -701,7 +706,7 @@ export interface MealService extends BaseDoc {
 ระบบถูกออกแบบให้สามารถแยกงานพัฒนาออกเป็น **4 สายงานคู่ขนาน (4 Parallel Tracks)** ได้ทันทีหลังจากตกลง Core Domain Contracts (`ticket.ts`, `distribution.ts`) ร่วมกัน:
 
 * **Track A: ข้อมูลหลักและผลผลิตโรงครัว (Master Data & Kitchen Yield):**  
-  ขยาย `ItemMaster` (`type_class: 'PREPARED_FOOD'`), Seed Archetypes 5 รายการใน `catalog`, และหน้าจอโรงครัว `/back-office/kitchen/production-board` ส่ง `yield_items` รับเข้าสต็อกคลัง (+4 ชม.)
+  จัดกลุ่ม Master Data อาหารปรุงสุกใต้หมวดหมู่ `item_category:ready_meal` (`type_class: 'CONSUMABLE'`), รองรับการเลือกและสร้าง `item_master` อาหารปรุงสำเร็จรายชนิดอาหาร และหน้าจอโรงครัว `/back-office/kitchen/production-board` ส่ง `yield_items` รับเข้าสต็อกคลัง (+4 ชม.)
 * **Track B: ศูนย์รวมตั๋วเบิกจ่ายและคลังสินค้า (Warehouse & Unified Ticket Center):**  
   สร้าง Schema `RequisitionTicket`, วงจร WMS ขาจัดสรร (Steps 1–3: `PENDING_PICK` ➔ `READY_FOR_DISPATCH` ➔ `IN_TRANSIT`), หน้า Hub `/back-office/tickets/*`, การแก้ตั๋วเติมของ In-flight Amendment, และการตรวจรับของคืนเข้าคลัง (Step 7: `RETURN_COMPLETED`)
 * **Track C: ระบบแจกจ่ายหน้างานและการปิดรอบ (Frontline POS Distribution & Closing):**  
@@ -715,7 +720,7 @@ export interface MealService extends BaseDoc {
 
 ### 7.1 ผลกระทบต่อเอกสาร (Documentation Impact)
 - `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` (§2.29) และ `distribution_log` (§2.30)
-- `docs/data/schema.md` §1: เพิ่ม `type_class: 'PREPARED_FOOD'` ใน `item_master`
+- `docs/data/schema.md` §1: รองรับการจัดเก็บอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
 - `docs/data/schema.md` §2.7: เพิ่มฟิลด์ `yield_items` ใน `meal_service`
 - `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 4 Tracks
 
@@ -739,7 +744,7 @@ export interface MealService extends BaseDoc {
   - ระบบงานใหม่นับจากนี้จะเปิดตั๋วเป็น `requisition_ticket` (`requisition_type: 'kitchen'`) ทั้งหมด
 - **การรวม Codebase และ UI:**
   - รวม mock components และ endpoints ของ `meal_distribution` เข้าสู่ `$lib/features/distribution/` ภายใต้โมดูลแบบ DDD เดียวกัน
-- **Seed Master Data:** อัปเดตสคริปต์ `seed.ts` ให้สร้าง Standard Meal Archetypes 5 รายการเข้าฐานข้อมูล `catalog`
+- **Seed Master Data:** สคริปต์ `seed.ts` Seed หมวดหมู่ระบบ `item_category:ready_meal` ตาม `draft-seed-item-categories.md` โดยไม่จำเป็นต้อง Pre-seed รายการอาหารล่วงหน้า อาหารแต่ละชนิดจะถูกสร้างเป็น `item_master` เมื่อมีการปรุงจริงหรือลงทะเบียนเมนู
 
 ---
 
@@ -755,3 +760,12 @@ export interface MealService extends BaseDoc {
 - [ ] ระบบยืมพัสดุคงทนสแกนจ่ายด้วย Stepper ผูกกับบุคคลโดยไม่ใช้บาร์โค้ด
 - [ ] ด่าน Check-out Clearance Gate ตรวจจับของค้างส่งและปลดภาระด้วย 1-Click Resolve 3 ทางเลือกได้สำเร็จโดยไม่กักตัวผู้พักพิง
 - [ ] ผ่านการทดสอบ Unit Tests และ End-to-End Integration Tests ครบทั้ง 18 หน้าจอ
+
+---
+
+## 9. บันทึกการตัดสินใจ (Decision Log)
+
+- **2026-09-12 (Decision 1):** คง `TypeClass` เป็น 3 คลาสมาตรฐาน (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม โดยจำแนกอาหารปรุงเสร็จเป็น `category: 'item_category:ready_meal'` (`READY_MEAL`, `default_class: 'CONSUMABLE'`) และวัตถุดิบครัวเป็น `category: 'item_category:food'` (`FOOD`, `default_class: 'CONSUMABLE'`) ตามมติใน [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md) เพื่อรักษามาตรฐาน Data Model และความเรียบง่ายของ TypeClass
+- **2026-09-12 (Decision 2):** การคัดกรองพัสดุที่ต้องควบคุมอายุ 4 ชม. ด้วย Soft Warning ให้ตรวจสอบจาก `item.category === 'item_category:ready_meal'` แทนการตรวจสอบจาก `type_class`
+- **2026-09-13 (Decision 3):** ยกเลิกโมเดล 5 Standard Meal Archetypes โดยเปลี่ยนเป็นบันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารจริงโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวผัดฮาลาล) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`default_class: 'CONSUMABLE'`) เพื่อให้ชื่ออาหารใน Master Data, ตั๋วเบิกจ่าย, และสต็อกการ์ดตรงกับความเป็นจริงหน้างาน
+
