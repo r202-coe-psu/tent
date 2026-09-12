@@ -1704,6 +1704,7 @@ describe('submitFamilyReportIn', () => {
 					first_name: 'วิชัย',
 					last_name: 'กล้าหาญ',
 					gender: 'male',
+					phone: null,
 					reporting_in: true
 				},
 				{
@@ -1711,6 +1712,7 @@ describe('submitFamilyReportIn', () => {
 					first_name: 'วิภา',
 					last_name: 'กล้าหาญ',
 					gender: 'female',
+					phone: null,
 					reporting_in: true
 				}
 			],
@@ -1818,6 +1820,7 @@ describe('submitFamilyReportIn', () => {
 					first_name: 'นายซี',
 					last_name: 'เดี่ยว',
 					gender: 'male',
+					phone: null,
 					reporting_in: true
 				},
 				{
@@ -1825,6 +1828,7 @@ describe('submitFamilyReportIn', () => {
 					first_name: 'นายเอ',
 					last_name: 'หัวหน้า',
 					gender: 'male',
+					phone: null,
 					reporting_in: true
 				}
 			],
