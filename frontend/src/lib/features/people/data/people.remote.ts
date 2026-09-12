@@ -264,6 +264,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
 			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+			await this.repairHouseholdHeadIfNeeded(oldHouseholdId);
 			await this.refreshDerivedHouseholdStatus(oldHouseholdId);
 		}
 		await this.refreshDerivedHouseholdStatus(saved.household_id);
@@ -301,6 +302,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const saved = await this.repo.put(touch(next));
 		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
 			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+			await this.repairHouseholdHeadIfNeeded(oldHouseholdId);
 			await this.refreshDerivedHouseholdStatus(oldHouseholdId);
 		}
 		await this.refreshDerivedHouseholdStatus(saved.household_id);
@@ -487,6 +489,33 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const latest = await this.repo.get<Household>(householdId);
 		if (!latest || !isActiveHouseholdStatus(migrateHouseholdV3ToV4(latest).status)) return;
 		await this.repo.put(touch({ ...latest, head_evacuee_id: null, status: 'cancelled' as const }));
+	}
+
+	/**
+	 * When a head evacuee leaves or a household lacks a valid head, assign the
+	 * head role to an active remaining member (preferring an adult >= 18).
+	 */
+	private async repairHouseholdHeadIfNeeded(householdId: string): Promise<void> {
+		const householdDoc = await this.repo.get<Household>(householdId);
+		if (!householdDoc) return;
+		const household = migrateHouseholdV3ToV4(householdDoc);
+		if (!isActiveHouseholdStatus(household.status)) return;
+
+		const members = await this.listHouseholdMembers(householdId);
+		if (members.length === 0) return;
+
+		const isHeadValid = members.some((m) => m._id === household.head_evacuee_id);
+		if (!isHeadValid) {
+			const adult = members.find((m) => typeof m.age === 'number' && m.age >= 18);
+			const newHead = adult ?? members[0];
+			await this.repo.put(
+				touch({
+					...household,
+					head_evacuee_id: newHead._id,
+					label: autoHouseholdLabel(formatPersonName(newHead))
+				})
+			);
+		}
 	}
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
@@ -1018,6 +1047,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const reportedInMembers: Evacuee[] = [];
 		const allSavedMembers: Evacuee[] = [];
+		const affectedOldHouseholdIds = new Set<string>();
 
 		for (const m of memberInputs) {
 			const willReportIn = Boolean(m.reporting_in);
@@ -1025,6 +1055,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
 				if (!existingEvacuee || !isEvacuee(existingEvacuee)) {
 					throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
+				}
+
+				if (existingEvacuee.household_id && existingEvacuee.household_id !== effectiveHouseholdId) {
+					affectedOldHouseholdIds.add(existingEvacuee.household_id);
 				}
 
 				let updatedStay = existingEvacuee.current_stay;
@@ -1063,7 +1097,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 				const updatedEvacuee: Evacuee = touch({
 					...existingEvacuee,
-					household_id: existingEvacuee.household_id || effectiveHouseholdId,
+					household_id: effectiveHouseholdId,
 					first_name: m.first_name,
 					last_name: m.last_name ?? '',
 					gender: m.gender,
@@ -1099,10 +1133,19 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			}
 		}
 
+		for (const oldHhId of affectedOldHouseholdIds) {
+			await this.cancelHouseholdIfEmpty(oldHhId);
+			await this.repairHouseholdHeadIfNeeded(oldHhId);
+			await this.refreshDerivedHouseholdStatus(oldHhId);
+		}
+
+		await this.repairHouseholdHeadIfNeeded(effectiveHouseholdId);
 		await this.refreshDerivedHouseholdStatus(effectiveHouseholdId);
 
+		const finalHousehold = await this.getHousehold(effectiveHouseholdId);
+
 		return {
-			household: savedHousehold,
+			household: finalHousehold ?? savedHousehold,
 			members: reportedInMembers.length > 0 ? reportedInMembers : allSavedMembers
 		};
 	}
