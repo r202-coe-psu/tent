@@ -1929,8 +1929,10 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.egg, qty: '2000', unit: 'piece', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.vegetable, qty: '150', unit: 'kg', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
-		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
+		// These are opening-balance corrections, not real distributions. A `distribute`
+		// ledger must come from a distribution batch and reference its physical lot.
+		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'adjust', ref_id: null },
+		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'adjust', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 
