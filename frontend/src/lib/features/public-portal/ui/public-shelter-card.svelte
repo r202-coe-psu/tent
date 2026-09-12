@@ -23,11 +23,17 @@
 		shelter,
 		getStatusColor,
 		getStatusText,
+		isSelected = false,
+		onSelect,
 		onPreRegister
 	}: {
 		shelter: PublicShelterCardModel;
 		getStatusColor: (status: string) => string;
 		getStatusText: (status: string) => string;
+		/** Whether this shelter is currently selected */
+		isSelected?: boolean;
+		/** Callback when this card is clicked to select/focus */
+		onSelect?: () => void;
 		/** Opens booking with this shelter locked. Omit on surfaces that do not book. */
 		onPreRegister?: (shelterCode: string) => void;
 	} = $props();
@@ -122,14 +128,32 @@
 </script>
 
 <Card.Root
-	class="flex flex-col gap-2! rounded-2xl border-border p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/10 hover:shadow-md"
+	class="flex cursor-pointer flex-col gap-2! rounded-2xl border-border p-5 shadow-sm transition-all hover:border-primary/50 hover:bg-muted/10 hover:shadow-md {isSelected
+		? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/40'
+		: ''}"
+	onclick={(e: MouseEvent) => {
+		const target = e.target as HTMLElement | null;
+		if (target && target.closest('button, a')) return;
+		onSelect?.();
+	}}
 >
 	<!-- Title and Status -->
 	<div class="flex items-start justify-between gap-2">
 		<div>
+			{#if isSelected}
+				<div class="mb-1.5 flex items-center gap-1.5">
+					<Badge
+						variant="default"
+						class="h-5 bg-primary px-2 text-2xs font-bold text-primary-foreground shadow-xs"
+					>
+						✓ {t.selectedShelter}
+					</Badge>
+				</div>
+			{/if}
 			<h4 class="line-clamp-2 text-lg leading-tight font-bold text-foreground transition-colors">
 				{shelter.name}
 			</h4>
+
 			{#if adminTypeDisplay}
 				<div class="mt-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
 					<span class="h-1.5 w-1.5 rounded-full bg-primary/40"></span>
@@ -243,7 +267,9 @@
 				size="sm"
 				disabled={!canBook}
 				title={canBook ? undefined : t.preRegisterClosed}
-				class="h-9 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+				class="h-9 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 {isSelected
+					? 'shadow-sm ring-2 ring-primary/40'
+					: ''}"
 				onclick={() => {
 					if (canBook) onPreRegister(shelter.code);
 				}}

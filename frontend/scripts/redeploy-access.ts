@@ -293,6 +293,11 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 		case 'skipped':
 			console.log('   public writer: ⚠️  COUCHDB_PUBLIC_WRITER_URL unset — skipping user + grant');
 			return;
+		case 'invalid_format':
+			console.error(
+				'   public writer: ✗ COUCHDB_PUBLIC_WRITER_URL is set but invalid (missing password?)'
+			);
+			return;
 		case 'created':
 			console.log(`   public writer: ✓ _users "${result.username}" created`);
 			return;
@@ -312,9 +317,15 @@ async function main() {
 	const writerUrl = process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL;
 	const writerEnsure = await ensurePublicWriter(couchReq, writerUrl, { dryRun: DRY_RUN });
 	logPublicWriterEnsure(writerEnsure);
+	if (writerEnsure.outcome === 'invalid_format' && !DRY_RUN) {
+		console.error(
+			'✗ Cannot apply in write mode with invalid COUCHDB_PUBLIC_WRITER_URL (check COUCHDB_PUBLIC_WRITER_PASSWORD in .env)'
+		);
+		process.exit(1);
+	}
 	if (PUBLIC_WRITER_NAME) {
 		console.log(`   public writer grant: ${PUBLIC_WRITER_NAME}`);
-	} else if (writerEnsure.outcome !== 'skipped') {
+	} else if (writerEnsure.outcome !== 'skipped' && writerEnsure.outcome !== 'invalid_format') {
 		console.log('   public writer grant: ⚠️  username could not be parsed from URL');
 	}
 	console.log('');

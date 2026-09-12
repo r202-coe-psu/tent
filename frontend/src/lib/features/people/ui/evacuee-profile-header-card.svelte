@@ -4,7 +4,7 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
-	import { maskNationalId } from '$lib/features/people';
+	import { formatPersonName, maskNationalId } from '$lib/features/people';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
 	import { imageRepository } from '$lib/features/images';
 
@@ -74,7 +74,7 @@
 		{#if photoUrl}
 			<img
 				src={photoUrl}
-				alt={`${evacuee.first_name} ${evacuee.last_name}`}
+				alt={formatPersonName(evacuee)}
 				class="h-20 w-20 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
 			/>
 		{:else}
@@ -87,8 +87,7 @@
 
 		<div class="space-y-1">
 			<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
-				{evacuee.first_name}
-				{evacuee.last_name}
+				{formatPersonName(evacuee)}
 				{#if evacuee.nickname}
 					<span class="text-base font-semibold text-muted-foreground">({evacuee.nickname})</span>
 				{/if}

@@ -21,13 +21,11 @@ from tent_model.public_job_application import (
 )
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
-from tent_model.public_shelter import GeoJsonPoint, GeoPoint, PublicShelter
+from tent_model.public_shelter import GeoJsonPoint, GeoPoint, OccupancyBreakdown, PublicShelter
 from tent_model.public_shift_assignment import DutyWindow, PublicShiftAssignment
 from tent_model.public_volunteer import PublicVolunteer
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
-from tent_model.shift_response_buffer import ShiftResponseBuffer
-from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.volunteer_application_buffer import (
 	ApplicantBuffer,
@@ -50,9 +48,24 @@ from tent_model.volunteer_job_slot import (
 	seed_job_slot,
 	shift_slot_id,
 )
+from tent_model.shift_response_buffer import ShiftResponseBuffer
+from tent_model.shelter_occupant import ShelterOccupant
+from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
+from tent_model.third_party_access_log import ThirdPartyAccessLog
+from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
+from tent_model.unassigned_registration import (
+	PersonId,
+	UnassignedHousehold,
+	UnassignedMember,
+	UnassignedPet,
+	UnassignedRegistration,
+)
+from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 
 __all__ = [
 	"ALL_DOCUMENTS",
+	"M6_TYPE_CODES",
+	"THIRD_PARTY_SCOPES",
 	"ApiKey",
 	"ApplicantBuffer",
 	"ApplicantSnapshot",
@@ -63,6 +76,8 @@ __all__ = [
 	"DutyWindow",
 	"GeoJsonPoint",
 	"GeoPoint",
+	"OccupancyBreakdown",
+	"PersonId",
 	"PublicAnnouncement",
 	"PublicDonation",
 	"PublicJob",
@@ -88,6 +103,14 @@ __all__ = [
 	"VolunteerJobSlot",
 	"VolunteerProfileUpdateBuffer",
 	"accept_dispatched_slot",
+	"ShelterOccupant",
+	"ShelterStock",
+	"ThirdPartyAccessLog",
+	"ThirdPartyClient",
+	"UnassignedHousehold",
+	"UnassignedMember",
+	"UnassignedPet",
+	"UnassignedRegistration",
 	"close_db",
 	"counter_id",
 	"decline_dispatched_slot",

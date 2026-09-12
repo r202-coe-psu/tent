@@ -12,7 +12,14 @@
  */
 export {
 	countVulnerableFromBirthYearRows,
+	FORECAST_OCCUPANCY_STATUSES,
+	IN_ZONE_OCCUPANCY_STATUSES,
 	isValidThaiBirthYear,
 	OCCUPANCY_STATUSES,
-	sumOccupancyFromStatusRows
+	occupancyTripleFromStatusRows,
+	PRESENT_OCCUPANCY_STATUSES,
+	sumInZoneFromStatusRows,
+	sumOccupancyFromStatusRows,
+	sumPresentFromStatusRows,
+	type OccupancyTriple
 } from './domain/transparency-metrics';

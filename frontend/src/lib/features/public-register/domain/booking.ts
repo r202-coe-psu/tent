@@ -14,27 +14,35 @@
 import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
 
+export const UNASSIGNED_SHELTER_CODE = 'unassigned';
+
 /**
  * The shelter the citizen picked, validated against the shared
  * {@link shelterCodeSchema} but reported in Thai.
  *
- * The shared schema's message ("Shelter code must look like SH001") is a
- * developer-facing assertion about a code the *staff* UI never types by hand —
- * on a public form the only way to fail it is to submit without choosing a
- * shelter, and an English format error is the wrong thing to show for that.
- * Wrapped rather than edited: the same schema guards every staff-plane doc id.
+ * Can also be {@link UNASSIGNED_SHELTER_CODE} for central queue (CR-113).
  */
 export const bookingShelterCodeSchema = z
 	.string({ error: 'กรุณาเลือกศูนย์พักพิง' })
 	.trim()
 	.min(1, 'กรุณาเลือกศูนย์พักพิง')
-	.refine((code) => shelterCodeSchema.safeParse(code).success, 'กรุณาเลือกศูนย์พักพิงจากรายการ');
+	.refine(
+		(code) => code === UNASSIGNED_SHELTER_CODE || shelterCodeSchema.safeParse(code).success,
+		'กรุณาเลือกศูนย์พักพิงจากรายการ'
+	);
 
 /** Thai mobile number, digits only. Unlike staff intake, "ไม่มี" is not an option. */
 export const bookingPhoneSchema = z
 	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
 	.trim()
 	.regex(/^\d{10}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก');
+
+export const bookingOptionalPhoneSchema = z
+	.string()
+	.trim()
+	.refine((v) => v === '' || /^\d{10}$/.test(v), 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก')
+	.optional()
+	.nullable();
 
 export const bookingGenderSchema = z.enum(['male', 'female', 'other'], {
 	error: 'กรุณาเลือกเพศ'
@@ -46,19 +54,26 @@ export const bookingNationalIdSchema = z
 	.trim()
 	.regex(/^\d{13}$/, 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก');
 
+export const bookingCardTypeSchema = z.enum([
+	'national_id',
+	'passport',
+	'pink_card',
+	'other',
+	'anonymous'
+]);
+export type BookingCardType = z.infer<typeof bookingCardTypeSchema>;
+
+export const bookingPersonIdSchema = z.object({
+	cardType: bookingCardTypeSchema.default('national_id'),
+	number: z.string().trim().max(64).optional()
+});
+export type BookingPersonId = z.infer<typeof bookingPersonIdSchema>;
+
 /**
  * One person on the booking. `member[0]` is the household contact.
  *
- * `first_name`/`last_name` are separate fields — same split staff intake uses
- * (`evacueeInputSchema`, `evacuee-registration.svelte`) — rather than one free-text
- * "ชื่อ-นามสกุล" box, since `createEvacuee` requires both non-empty and a single-word
- * entry has no whitespace to split on.
- *
- * `special_needs` holds the labels the citizen ticked, drawn from the selected
- * shelter's `admission_policy.supported_vulnerable_groups` — the shelter decides
- * which groups it can take, so the choices are per-shelter rather than a fixed
- * list here. Stored straight into `evacuee.special_needs`, which has been
- * free-form `[str]` since CR-046.
+ * Aligned with Station 1 and CR-112/CR-113: supports person_id, phone,
+ * separate vulnerable_groups and special_needs.
  */
 export const publicBookingMemberSchema = z.object({
 	first_name: z
@@ -66,16 +81,28 @@ export const publicBookingMemberSchema = z.object({
 		.trim()
 		.min(1, 'กรุณากรอกชื่อ')
 		.max(100, 'ชื่อยาวเกินไป'),
-	last_name: z
-		.string({ error: 'กรุณากรอกนามสกุล' })
-		.trim()
-		.min(1, 'กรุณากรอกนามสกุล')
-		.max(100, 'นามสกุลยาวเกินไป'),
+	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
+	last_name: z.string().trim().max(100, 'นามสกุลยาวเกินไป').default(''),
 	gender: bookingGenderSchema,
-	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([])
+	phone: bookingOptionalPhoneSchema,
+	person_id: bookingPersonIdSchema.optional(),
+	country: z.string().trim().min(1).max(100).default('THAILAND'),
+	vulnerable_groups: z.array(z.string().trim().min(1)).max(20).default([]),
+	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([]),
+	birth_year: z.number().int().optional(),
+	age: z.number().int().min(0).max(150).optional()
 });
 
 export type PublicBookingMember = z.infer<typeof publicBookingMemberSchema>;
+
+export const housingTypeSchema = z.enum([
+	'owned_house',
+	'rented_house',
+	'condo',
+	'apartment_dorm',
+	'homeless'
+]);
+export type HousingType = z.infer<typeof housingTypeSchema>;
 
 /**
  * A pet's species, as a `master_data:pet_types` item `code` (CR-010 phase 2)
@@ -92,9 +119,12 @@ export const publicBookingPetSpeciesSchema = z
 	.min(1, 'กรุณาเลือกชนิดสัตว์เลี้ยง')
 	.max(40, 'รหัสชนิดสัตว์เลี้ยงยาวเกินไป');
 
-/** A pet travelling with the household — mirrors `household.pets[]` (CR-016). */
+/** A pet travelling with the household — mirrors `household.pets[]` (CR-016 / CR-112). */
 export const publicBookingPetSchema = z.object({
 	species: publicBookingPetSpeciesSchema,
+	count: z.coerce.number().int().positive('จำนวนต้องมากกว่า 0').default(1),
+	name: z.string().trim().max(100, 'ชื่อสัตว์เลี้ยงยาวเกินไป').optional().default(''),
+	condition: z.string().trim().max(200, 'อาการสัตว์เลี้ยงยาวเกินไป').optional().default(''),
 	notes: z.string().trim().max(200, 'รายละเอียดยาวเกินไป').optional(),
 	has_cage: z.boolean().default(false)
 });
@@ -119,10 +149,92 @@ export const publicBookingVehicleSchema = z.object({
 	license_plate: z.string().trim().max(20, 'ทะเบียนรถยาวเกินไป').optional()
 });
 
+/**
+ * The household head's home address — the domicile they evacuated *from*, not
+ * the shelter (CR-107).
+ *
+ * Mirrors the `household` address columns (`address_no`, `village_no`,
+ * `subdistrict`, `district`, `province`, `postal_code`, people domain).
+ * Supports CR-112 housing_type + homeless residence landmark.
+ */
+export const publicBookingAddressSchema = z
+	.object({
+		housing_type: housingTypeSchema.optional().nullable().default('owned_house'),
+		residence_landmark: z.string().trim().max(200).optional().nullable(),
+		address_no: z.string().trim().max(100, 'บ้านเลขที่ยาวเกินไป').default(''),
+		village_no: z.string().trim().max(100, 'ข้อมูลยาวเกินไป').default(''),
+		subdistrict: z.string().trim().max(100, 'ชื่อตำบลยาวเกินไป').default(''),
+		district: z.string().trim().max(100, 'ชื่ออำเภอยาวเกินไป').default(''),
+		province: z.string().trim().max(100, 'ชื่อจังหวัดยาวเกินไป').default(''),
+		postal_code: z
+			.string()
+			.trim()
+			.refine((v) => v === '' || /^\d{5}$/.test(v), 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก')
+			.default('')
+	})
+	.superRefine((value, ctx) => {
+		if (value.housing_type === 'homeless') {
+			const landmark = value.residence_landmark?.trim();
+			const geoComplete =
+				Boolean(value.province?.trim()) &&
+				Boolean(value.district?.trim()) &&
+				Boolean(value.subdistrict?.trim());
+			if (!landmark && !geoComplete) {
+				ctx.addIssue({
+					code: 'custom',
+					message: 'ที่พักแบบไร้บ้านเลขที่ต้องมีจุดสังเกตหรือที่ตั้งครบ',
+					path: ['residence_landmark']
+				});
+			}
+			return;
+		}
+		if (!value.address_no?.trim()) {
+			if (value.housing_type === 'apartment_dorm') {
+				if (!value.residence_landmark?.trim()) {
+					ctx.addIssue({
+						code: 'custom',
+						message: 'กรุณากรอกเลขห้อง หรือชื่อหอพัก/อาคาร',
+						path: ['address_no']
+					});
+				}
+			} else {
+				ctx.addIssue({
+					code: 'custom',
+					message: 'กรุณากรอกบ้านเลขที่',
+					path: ['address_no']
+				});
+			}
+		}
+		if (!value.province?.trim()) {
+			ctx.addIssue({
+				code: 'custom',
+				message: 'กรุณาเลือกจังหวัด',
+				path: ['province']
+			});
+		}
+		if (!value.district?.trim()) {
+			ctx.addIssue({
+				code: 'custom',
+				message: 'กรุณาเลือกอำเภอ/เขต',
+				path: ['district']
+			});
+		}
+		if (!value.subdistrict?.trim()) {
+			ctx.addIssue({
+				code: 'custom',
+				message: 'กรุณาเลือกตำบล/แขวง',
+				path: ['subdistrict']
+			});
+		}
+	});
+
+export type PublicBookingAddress = z.infer<typeof publicBookingAddressSchema>;
+
 export const publicBookingInputSchema = z.object({
 	shelter_code: bookingShelterCodeSchema,
 	phone: bookingPhoneSchema,
 	national_id: bookingNationalIdSchema.optional(),
+	address: publicBookingAddressSchema,
 	members: z
 		.array(publicBookingMemberSchema)
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
@@ -131,6 +243,7 @@ export const publicBookingInputSchema = z.object({
 		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
 	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
+	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
 	captchaToken: z.string().trim().optional()
 });
 
@@ -156,15 +269,25 @@ export function householdLabelFrom(contact: { first_name: string; last_name: str
 export function toEvacueeInputs(input: PublicBookingInput, householdId: string) {
 	return input.members.map((member, index) => {
 		const isContact = index === 0;
+		const phone = member.phone ?? (isContact ? input.phone : null);
+		const personId = member.person_id?.number
+			? { cardType: member.person_id.cardType, number: member.person_id.number }
+			: isContact && input.national_id
+				? { cardType: 'national_id' as const, number: input.national_id }
+				: member.person_id?.cardType === 'anonymous'
+					? { cardType: 'anonymous' as const, number: member.person_id.number || undefined }
+					: undefined;
 		return {
 			first_name: member.first_name,
 			last_name: member.last_name,
 			gender: member.gender,
-			phone: isContact ? input.phone : null,
-			...(isContact && input.national_id
-				? { person_id: { cardType: 'national_id' as const, number: input.national_id } }
-				: {}),
-			special_needs: member.special_needs,
+			phone,
+			...(personId ? { person_id: personId } : {}),
+			country: member.country || 'THAILAND',
+			vulnerable_groups: member.vulnerable_groups || [],
+			special_needs: member.special_needs || [],
+			...(member.birth_year !== undefined ? { birth_year: member.birth_year } : {}),
+			...(member.age !== undefined ? { age: member.age } : {}),
 			household_id: householdId,
 			registered_via: 'web' as const
 		};
@@ -177,46 +300,57 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
  * the way into that schema is CR-010 phase 2 and has not happened yet, so it is
  * a documented spec value this feature must not widen unilaterally.
  */
-const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'bird', 'other']);
+const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 
 /**
  * Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one).
  *
- * `pet.species` is now a shelter-configured `pet_types` code (see
- * {@link publicBookingPetSpeciesSchema}), which can be anything the shelter's
- * master data offers — not necessarily one of the 4 literals the household
- * schema still accepts (CR-016, pre-dates the master-data engine). A code
- * outside that fixed set folds into `other` rather than failing `createHousehold`'s
- * validation outright; the actual configured code is preserved in `notes` so
- * staff are not left guessing what the citizen actually selected.
- *
- * `vehicles` needs no such folding — the public form offers exactly the closed
- * `car | motorcycle | other` set the household schema accepts.
+ * Supports CR-112 housing_type and homeless domicile address.
  */
 export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: string) {
+	const isHomeless = input.address.housing_type === 'homeless';
 	return {
 		label: householdLabelFrom(input.members[0] ?? { first_name: '', last_name: '' }),
 		head_evacuee_id: headEvacueeId,
 		status: 'pre_registered' as const,
+		housing_type: input.address.housing_type ?? null,
+		residence_landmark: input.address.residence_landmark ?? null,
 		pets: input.pets.map((pet) => {
+			const isBird = pet.species === 'bird';
 			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
-			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'bird' | 'other';
-			const notes = isKnownSpecies
-				? pet.notes
-				: [pet.notes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ');
+			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'other';
+			const rawNotes = [pet.name, pet.condition, pet.notes]
+				.map((s) => s?.trim())
+				.filter(Boolean)
+				.join(' | ');
+			const notes = isBird
+				? rawNotes || 'นก'
+				: isKnownSpecies
+					? rawNotes || undefined
+					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
 			return {
 				species,
-				count: 1,
+				count: pet.count || 1,
 				...(notes ? { notes } : {}),
 				has_cage: pet.has_cage
 			};
 		}),
+		assets: input.asset_description?.trim()
+			? { description: input.asset_description.trim(), image_url: null }
+			: null,
 		// `license_plate` is nullable in the household schema, and an empty string is
 		// not "no plate" — normalize the blank the form produces back to `null`.
 		vehicles: input.vehicles.map((vehicle) => ({
 			type: vehicle.type,
 			license_plate: vehicle.license_plate?.trim() || null
-		}))
+		})),
+		// Domicile address (CR-107 / CR-112). Clear address_no if homeless.
+		address_no: isHomeless ? null : input.address.address_no || null,
+		village_no: input.address.village_no || null,
+		subdistrict: input.address.subdistrict || null,
+		district: input.address.district || null,
+		province: input.address.province || null,
+		postal_code: input.address.postal_code || null
 	};
 }
 
@@ -282,8 +416,14 @@ export type PublicBookingErrorCode =
 	| 'CAPTCHA_FAILED'
 	| 'SHELTER_NOT_FOUND'
 	| 'SHELTER_CLOSED'
+	| 'CAPACITY_EXCEEDED'
+	| 'DUPLICATE_HOLD'
 	| 'BOOKING_NOT_FOUND'
-	| 'WRITE_FAILED';
+	| 'WRITE_FAILED'
+	| 'SHELTER_REQUIRED'
+	| 'EMPTY_PHOTO'
+	| 'PHOTO_TOO_LARGE'
+	| 'INVALID_INPUT';
 
 const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	RATE_LIMITED: 'มีการส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -291,8 +431,15 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	CAPTCHA_FAILED: 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก กรุณาเลือกใหม่',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับผู้เข้าพักแล้ว กรุณาเลือกศูนย์อื่น',
+	CAPACITY_EXCEEDED: 'ศูนย์พักพิงนี้เต็มตามจำนวนคาดการณ์แล้ว กรุณาเลือกศูนย์อื่น',
+	DUPLICATE_HOLD:
+		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
 	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
-	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
+	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
+	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',
+	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่'
 };
 
 export function publicBookingErrorMessage(code: unknown): string {

@@ -24,6 +24,8 @@ class M2PersonResidencyResponse(BaseModel):
         description="วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
     )
     status: Literal["CHECKED_IN", "CHECKED_OUT"] = Field(description="สถานะการเข้าพัก")
+    stay_status: str = Field(description="สถานะ stay ดิบจาก projection (CR-112 additive)")
+    in_zone: bool = Field(description="True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)")
 
 
 class M2ErrorDetail(BaseModel):

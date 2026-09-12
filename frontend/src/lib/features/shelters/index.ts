@@ -42,6 +42,9 @@ export {
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
+	DEFAULT_SHELTER_FEATURE_FLAGS,
+	shelterFeatureFlagsSchema,
+	type ShelterFeatureFlags,
 	type OperationStatus,
 	type SiteKind,
 	type ZoneType,
@@ -91,6 +94,17 @@ export {
 	petCategoryConditions,
 	petCategoryOrder
 } from './domain/policy-labels';
+
+export {
+	patchFeatureFlags,
+	applyAllowPets,
+	applyAllowAssets,
+	applyAllowVehicles,
+	applyPetPolicy,
+	applyLuggageLimitation,
+	applyParkingAvailability,
+	type PolicySyncSlice
+} from './domain/feature-flag-policy-sync';
 
 export {
 	sumZoneCapacities,

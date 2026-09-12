@@ -15,6 +15,7 @@ export {
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
+	publicBookingAddressSchema,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
@@ -26,9 +27,62 @@ export {
 	toHouseholdInput
 } from './domain/booking';
 
+export {
+	findDuplicateHold,
+	holdConflictsWithBooking,
+	isActiveHoldStatus,
+	isForecastCapacityExceeded,
+	ACTIVE_HOLD_STATUSES
+} from './domain/booking-gate';
+
 export type {
+	PublicBookingAddress,
 	PublicBookingErrorCode,
 	PublicBookingInput,
 	PublicBookingLookupInput,
 	PublicBookingMember
 } from './domain/booking';
+
+export {
+	toUnassignedRegistrationPayload,
+	unassignedRegistrationErrorMessage,
+	unassignedRegistrationInputSchema,
+	publicUnassignedRegistrationRequestSchema
+} from './domain/unassigned-registration';
+
+export type {
+	UnassignedRegistrationErrorCode,
+	UnassignedRegistrationInput,
+	UnassignedRegistrationPayload,
+	PublicUnassignedRegistrationRequest
+} from './domain/unassigned-registration';
+
+export {
+	executePublicFamilyRegistration,
+	PublicRegistrationWriteError
+} from './public-family-registration.server';
+
+export type {
+	ExecutePublicFamilyRegistrationOptions,
+	PublicFamilyRegistrationResult
+} from './public-family-registration.server';
+
+export {
+	executeUnassignedRegistration,
+	UnassignedRegistrationWriteError
+} from './execute-unassigned-registration.server';
+
+export type {
+	ExecuteUnassignedRegistrationOptions,
+	UnassignedRegistrationResult
+} from './execute-unassigned-registration.server';
+
+export {
+	savePublicBookingImage,
+	PublicBookingImageWriteError
+} from './save-public-booking-image.server';
+
+export type {
+	SavePublicBookingImageInput,
+	SavePublicBookingImageResult
+} from './save-public-booking-image.server';

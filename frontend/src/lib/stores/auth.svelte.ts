@@ -4,6 +4,18 @@ import { shelterStore } from '$lib/stores/shelter.svelte';
 
 const STORAGE_KEY = 'auth:user';
 
+async function withDisplayName(user: SessionUser): Promise<SessionUser> {
+	try {
+		const response = await fetch('/api/v1/me', { credentials: 'include' });
+		if (!response.ok) return user;
+		const profile = (await response.json()) as { name?: unknown; display_name?: unknown };
+		if (profile.name !== user.name || typeof profile.display_name !== 'string') return user;
+		return { ...user, display_name: profile.display_name.trim() || null };
+	} catch {
+		return user;
+	}
+}
+
 /** Cached identity, used so the app stays usable offline / across reloads. */
 function loadCachedUser(): SessionUser | null {
 	if (!browser) return null;
@@ -85,7 +97,8 @@ class AuthStore {
 
 	private async refreshSession(fetchFn?: typeof fetch, hadCachedUser = false): Promise<void> {
 		try {
-			const user = await getSession(fetchFn);
+			const sessionUser = await getSession(fetchFn);
+			const user = sessionUser ? await withDisplayName(sessionUser) : null;
 			if (user) {
 				this.state.user = user;
 				persistUser(user);
@@ -105,7 +118,7 @@ class AuthStore {
 	}
 
 	async login(input: { name: string; password: string }): Promise<SessionUser> {
-		const user = await sessionLogin(input);
+		const user = await withDisplayName(await sessionLogin(input));
 		this.state.user = user;
 		this.state.needsReauth = false;
 		shelterStore.selectedShelterCode = undefined;

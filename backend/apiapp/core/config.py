@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     DATABASE_URI: str = ""
     EXTERNAL_API_SECRET: str = ""
+    # Central CouchDB base URL for verifying staff AuthSession cookies (`/staff/v1/*`).
+    COUCHDB_URL: str = "http://localhost:5984"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # auth
@@ -37,6 +39,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 30 * 24 * 60
     OTP_INTERVAL: int = 30
+
+    # third-party OAuth2 client-credentials
+    THIRDPARTY_JWT_SECRET: str = "thirdparty_jwt_secret_change_me_in_env"
+    THIRDPARTY_JWT_EXPIRE_SECONDS: int = 3600
 
     API_PREFIX: str = ""
 

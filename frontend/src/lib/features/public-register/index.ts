@@ -10,6 +10,8 @@
 export { default as BookingForm } from './ui/booking-form.svelte';
 export { default as BookingModal } from './ui/booking-modal.svelte';
 export { default as BookingTicket } from './ui/booking-ticket.svelte';
+export { default as BookingTicketView } from './ui/booking-ticket.svelte';
+export { default as TicketHistory } from './ui/ticket-history.svelte';
 
 // application
 export {
@@ -21,19 +23,40 @@ export {
 } from './application/booking-store.svelte';
 export {
 	publicRegisterKeys,
+	useBookingDistricts,
 	useBookingLookup,
+	useBookingProvinces,
+	useBookingSubdistricts,
 	useCreateBooking,
+	useCreateUnassignedRegistration,
 	usePetTypes
 } from './application/queries';
 
 // data
 export {
 	createBooking,
+	createUnassignedRegistration,
+	fetchDistricts,
 	fetchPetTypes,
+	fetchProvinces,
+	fetchSubdistricts,
 	lookupBooking,
+	uploadShelterBookingPhoto,
+	uploadUnassignedPhoto,
 	type BookingTicketResponse,
-	type PetTypeOption
+	type PetTypeOption,
+	type PublicSubdistrict,
+	type ShelterBookingPhotoUploadResponse,
+	type UnassignedPhotoUploadResponse,
+	type UnassignedRegistrationResponse
 } from './data/public-register.api';
+export {
+	getStoredTickets,
+	getLatestStoredTicket,
+	saveTicketToStorage,
+	removeStoredTicket,
+	clearStoredTickets
+} from './data/ticket-storage';
 
 // domain
 export {
@@ -45,6 +68,7 @@ export {
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
+	publicBookingAddressSchema,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
@@ -58,8 +82,23 @@ export {
 } from './domain/booking';
 
 export type {
+	PublicBookingAddress,
 	PublicBookingErrorCode,
 	PublicBookingInput,
 	PublicBookingLookupInput,
 	PublicBookingMember
 } from './domain/booking';
+
+export {
+	toUnassignedRegistrationPayload,
+	unassignedRegistrationErrorMessage,
+	unassignedRegistrationInputSchema,
+	publicUnassignedRegistrationRequestSchema
+} from './domain/unassigned-registration';
+
+export type {
+	UnassignedRegistrationErrorCode,
+	UnassignedRegistrationInput,
+	UnassignedRegistrationPayload,
+	PublicUnassignedRegistrationRequest
+} from './domain/unassigned-registration';

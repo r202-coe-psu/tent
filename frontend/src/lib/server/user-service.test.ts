@@ -3,13 +3,15 @@ import * as couchAdmin from './couch-admin';
 import {
 	createUser,
 	resetUserPasswordByAdmin,
+	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
-	setupSecurityQuestionAndResetPassword,
-	type CouchUserDoc
+	setupSecurityQuestionAndResetPassword
 } from './user-service';
+import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 
+/** `_users` docs carry the password field that `CouchUserDoc` intentionally omits. */
 type FakeUserDoc = CouchUserDoc & { password?: string };
 
 describe('user-service', () => {
@@ -39,12 +41,12 @@ describe('user-service', () => {
 
 			if (method === 'PUT' && cleanPath.startsWith('/_users/org.couchdb.user:')) {
 				const id = cleanPath.slice('/_users/'.length);
-				const docBody = (body ?? {}) as FakeUserDoc;
+				const docBody = (body ?? {}) as Partial<FakeUserDoc>;
 				if (fakeUsersDb[id] && !docBody._rev) {
 					return { status: 409, data: { error: 'conflict', reason: 'Document update conflict.' } };
 				}
 				const rev = `1-${Date.now()}`;
-				fakeUsersDb[id] = { ...docBody, _id: id, _rev: rev };
+				fakeUsersDb[id] = { ...docBody, _id: id, _rev: rev } as FakeUserDoc;
 				return { status: 201, data: { ok: true, id, rev } };
 			}
 
@@ -94,6 +96,30 @@ describe('user-service', () => {
 		const saved = fakeUsersDb['org.couchdb.user:volunteer%40example.com'];
 		expect(saved.password).toBe('0812345678');
 		expect(saved.must_change_password).toBe(true);
+	});
+
+	it('getCurrentUserProfile returns display_name from _users when present', async () => {
+		fakeUsersDb['org.couchdb.user:staff1'] = {
+			_id: 'org.couchdb.user:staff1',
+			_rev: '1-abc',
+			name: 'staff1',
+			type: 'user',
+			roles: [],
+			display_name: 'Staff One'
+		};
+
+		await expect(getCurrentUserProfile('staff1')).resolves.toEqual({
+			name: 'staff1',
+			display_name: 'Staff One'
+		});
+	});
+
+	it('getCurrentUserProfile falls back to username when _users doc is missing', async () => {
+		// Bootstrap CouchDB admin often has a session but no app profile doc.
+		await expect(getCurrentUserProfile('admin')).resolves.toEqual({
+			name: 'admin',
+			display_name: 'admin'
+		});
 	});
 
 	it('resets user password by admin with memorable temporary passphrase', async () => {

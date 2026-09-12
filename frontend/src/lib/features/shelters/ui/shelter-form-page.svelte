@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { superForm, defaults } from 'sveltekit-superforms';
@@ -22,7 +23,8 @@
 		ParkingPolicySection,
 		EMPTY_ADMISSION_POLICY,
 		EMPTY_LUGGAGE_POLICY,
-		EMPTY_PARKING_POLICY
+		EMPTY_PARKING_POLICY,
+		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
 	import { UserManagementPage } from '$lib/features/users';
 	import {
@@ -79,7 +81,7 @@
 	let step = $state(0);
 	let showValidationSummary = $state(false);
 	/** View switch (not a wizard step): users for this shelter. */
-	let usersViewActive = $state(false);
+	let usersViewActive = $state(page.url.searchParams.get('view') === 'users');
 	const isLastStep = $derived(!usersViewActive && step === steps.length - 1);
 
 	function selectStep(i: number) {
@@ -139,6 +141,7 @@
 	if (!$formData.admission_policy) $formData.admission_policy = { ...EMPTY_ADMISSION_POLICY };
 	if (!$formData.luggage_policy) $formData.luggage_policy = { ...EMPTY_LUGGAGE_POLICY };
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
+	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
 
 	$effect(() => {
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
@@ -175,7 +178,11 @@
 				zones: d.zones ?? [],
 				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY }
+				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+				feature_flags: {
+					...DEFAULT_SHELTER_FEATURE_FLAGS,
+					...(d.feature_flags ?? {})
+				}
 			};
 		}
 	});

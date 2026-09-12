@@ -1,17 +1,34 @@
 import { createMutation, createQuery } from '@tanstack/svelte-query';
-import { createBooking, fetchPetTypes, lookupBooking } from '../data/public-register.api';
+import {
+	createBooking,
+	createUnassignedRegistration,
+	fetchDistricts,
+	fetchPetTypes,
+	fetchProvinces,
+	fetchShelterPolicy,
+	fetchSubdistricts,
+	lookupBooking,
+	type PublicUnifiedBookingPayload,
+	type PublicUnassignedRegistrationPayload
+} from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 
 export const publicRegisterKeys = {
 	all: ['public-register'] as const,
 	booking: (code: string) => [...publicRegisterKeys.all, 'booking', code] as const,
-	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const
+	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const,
+	shelterPolicy: (shelterCode: string) =>
+		[...publicRegisterKeys.all, 'shelter-policy', shelterCode] as const,
+	provinces: () => [...publicRegisterKeys.all, 'provinces'] as const,
+	districts: (province: string) => [...publicRegisterKeys.all, 'districts', province] as const,
+	subdistricts: (province: string, district: string) =>
+		[...publicRegisterKeys.all, 'subdistricts', province, district] as const
 };
 
 /** POST a new booking. Not a query — a booking must never be replayed from cache. */
 export function useCreateBooking() {
 	return createMutation(() => ({
-		mutationFn: (input: PublicBookingInput) => createBooking(input)
+		mutationFn: (input: PublicBookingInput | PublicUnifiedBookingPayload) => createBooking(input)
 	}));
 }
 
@@ -19,6 +36,15 @@ export function useCreateBooking() {
 export function useBookingLookup() {
 	return createMutation(() => ({
 		mutationFn: (input: PublicBookingLookupInput) => lookupBooking(input)
+	}));
+}
+
+/**
+ * Public Pre-registration without a shelter (CR-113 / #255). Mutation — never cache/replay create.
+ */
+export function useCreateUnassignedRegistration() {
+	return createMutation(() => ({
+		mutationFn: (input: PublicUnassignedRegistrationPayload) => createUnassignedRegistration(input)
 	}));
 }
 
@@ -37,5 +63,49 @@ export function usePetTypes(shelterCode: () => string) {
 		queryFn: () => fetchPetTypes(shelterCode()),
 		enabled: Boolean(shelterCode().trim()),
 		staleTime: 5 * 60 * 1000
+	}));
+}
+
+/**
+ * Feature flags and safety policies for the shelter currently selected in the booking form.
+ */
+export function useShelterPolicy(shelterCode: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.shelterPolicy(shelterCode()),
+		queryFn: () => fetchShelterPolicy(shelterCode()),
+		enabled: Boolean(shelterCode().trim()),
+		staleTime: 5 * 60 * 1000
+	}));
+}
+
+/**
+ * Domicile-address cascade for the booking form (CR-107). Reference data that
+ * never changes within a session, so each level is cached forever and only the
+ * level below the citizen's current choice is fetched — the same shape the staff
+ * address step uses, but over the public BFF.
+ */
+export function useBookingProvinces() {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.provinces(),
+		queryFn: fetchProvinces,
+		staleTime: Infinity
+	}));
+}
+
+export function useBookingDistricts(province: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.districts(province()),
+		queryFn: () => fetchDistricts(province()),
+		enabled: Boolean(province().trim()),
+		staleTime: Infinity
+	}));
+}
+
+export function useBookingSubdistricts(province: () => string, district: () => string) {
+	return createQuery(() => ({
+		queryKey: publicRegisterKeys.subdistricts(province(), district()),
+		queryFn: () => fetchSubdistricts(province(), district()),
+		enabled: Boolean(province().trim() && district().trim()),
+		staleTime: Infinity
 	}));
 }

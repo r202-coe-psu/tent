@@ -18,6 +18,7 @@ export const COUCH_URL = PUBLIC_COUCH_PROXY || PUBLIC_COUCHDB_URL;
 export interface SessionUser {
 	name: string;
 	roles: string[];
+	display_name?: string | null;
 }
 
 interface SessionResponse {

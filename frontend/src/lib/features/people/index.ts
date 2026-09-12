@@ -23,13 +23,31 @@ export type {
 	HouseholdStatus,
 	MovementAction,
 	CareTrack,
+	TriageLevel,
 	BloodGroup,
 	CardType,
-	CardSnapshot
+	CardSnapshot,
+	HousingType
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
 export {
+	CARD_NUMBER_MAX_LENGTH,
+	cardNumberMaxLength,
+	cardNumberEffectiveLength,
+	clampCardNumber,
+	mintAnonymousId,
+	isAnonymousId,
+	replacePersonId,
+	migrateVulnerableGroupCode,
+	migrateVulnerableGroupCodes,
+	admissionSupportsVulnerableGroup,
+	mergeVulnerableGroupsAndSpecialNeeds,
+	housingTypeSchema,
+	migrateHouseholdToV5,
+	migratePetGroup,
+	migratePetGroups,
+	isMeaningfulOtherPetNotes,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
@@ -37,6 +55,7 @@ export {
 	householdStatusSchema,
 	movementActionSchema,
 	careTrackSchema,
+	triageLevelSchema,
 	bloodGroupSchema,
 	cardSnapshotSchema,
 	evacueeInputSchema,
@@ -60,21 +79,31 @@ export {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canChangeEvacueeZone,
+	canConfirmRoom,
 	canCancelEvacueePreRegistration,
 	canCancelHouseholdPreRegistration,
+	isPendingZoneArrivalConfirmation,
+	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	CONFIRM_ROOM_ELIGIBLE_STATUSES,
+	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
 	HOUSEHOLD_STATUS_TRANSITIONS,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	isActiveHouseholdStatus,
 	checkEvacueeHouseholdConflict,
 	assertEvacueeHouseholdAssignment,
+	deriveHouseholdStatus,
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	applyMovementToStay,
 	resolveStatusChangeAction,
+	normalizeCheckoutRemark,
+	statusChangeHandlerKind,
 	maskNationalId,
+	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
 	evacueeAgeYears,
@@ -91,6 +120,103 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
+export {
+	nextQueueLabel,
+	classifyZoningQueueTab,
+	classifyScreeningQueueTab,
+	recommendZoneKind,
+	countPresentOccupantsByZone,
+	parseZoningQrCode,
+	buildZoningPath,
+	type NextQueueLabel,
+	type ZoningQueueTab,
+	type ScreeningQueueTab,
+	type ZoningRecommendKind
+} from './domain/intake-pipeline';
+
+export {
+	extractScanLookupToken,
+	toCouchEvacueeId,
+	mongoUnassignedSearchQueries,
+	pickUnassignedSearchHit
+} from './domain/scan-lookup';
+
+export {
+	REPORT_IN_CTA_LABEL,
+	NEW_REGISTRATION_CTA_LABEL,
+	INTAKE_SEARCH_PLACEHOLDER,
+	OVERRIDE_NEW_REG_TITLE,
+	OVERRIDE_NEW_REG_BODY,
+	OVERRIDE_NEW_REG_POOL_ERROR_BODY,
+	OVERRIDE_NEW_REG_CONFIRM,
+	OVERRIDE_NEW_REG_CANCEL,
+	POOL_VERIFY_ERROR_COPY,
+	NEW_REG_LOCKED_HINT,
+	NEW_REG_POOL_ERROR_LOCKED_HINT,
+	NEW_REG_OVERRIDE_TRIGGER_LABEL,
+	POOL_CLAIM_FORBIDDEN_HINT,
+	resolveShelterHitAction,
+	shelterHitStatusLabel,
+	hasFederatedIntakeHits,
+	isIntakeNewRegistrationLocked,
+	resolveNewRegistrationCta,
+	type ShelterHitAction,
+	type NewRegistrationCtaKind
+} from './domain/intake-search';
+
+export {
+	sectionEVisibility,
+	resolveHouseholdLeave,
+	autoHouseholdLabel,
+	hasMinimumResidence,
+	defaultHouseholdChoice,
+	isLeavingLinkedHousehold,
+	matchesResidenceAddress,
+	suggestHouseholdsByResidence,
+	filterJoinCandidatesByEvacueeQuery,
+	type SectionEFlags,
+	type SectionEExistingData,
+	type SectionEVisibility,
+	type HouseholdLeaveInput,
+	type HouseholdLeaveResult,
+	type HouseholdChoice,
+	type ResidenceFields,
+	type ResidenceMatchCandidate,
+	type JoinCandidateEvacuee
+} from './domain/registration-shell';
+
+export {
+	PRIMARY_CONTACT_LABEL,
+	blankUnifiedMember,
+	applyAnonymousIdToMember,
+	memberCardLabel,
+	parseUnifiedRegistration,
+	planFamilyRegistration,
+	togglePetSpecies,
+	householdToUnifiedInput,
+	evacueeToUnifiedMember,
+	unifiedRegistrationInputSchema,
+	unifiedMemberInputSchema,
+	unifiedHouseholdInputSchema,
+	type UnifiedRegistrationChannel,
+	type UnifiedMemberInput,
+	type UnifiedMemberWithMeta,
+	type UnifiedHouseholdInput,
+	type UnifiedRegistrationInput,
+	type FamilyRegistrationPlan,
+	type FamilyReportInPayload,
+	type MemberPhotoUploadMode
+} from './domain/unified-registration';
+
+export {
+	defaultBirthCalendar,
+	toDisplayBirthYear,
+	toPersistBirthYearBE,
+	ageFromBirthYearBE,
+	currentYearBE,
+	type BirthCalendar
+} from './domain/birth-calendar';
+
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
@@ -100,14 +226,27 @@ export {
 	peopleKeys,
 	useEvacuees,
 	useEvacuee,
+	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
 	useSearchEvacuees,
 	useCreateEvacuee,
+	useCreateFamilyRegistration,
+	useSubmitFamilyReportIn,
+	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
 	useCheckOutEvacuee,
+	useConfirmRoom,
+	useConfirmRoomForHousehold,
+	useChangeEvacueeZone,
 	useRecordMovement,
 	lookupEvacueeByScanCode,
+	lookupFederatedByScanCode,
+	lookupFederatedByScanCodeWithDeps,
+	type FederatedScanHit,
+	type FederatedScanCouchHit,
+	type FederatedScanUnassignedHit,
+	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
 	useHouseholdsPaginated,
@@ -120,6 +259,7 @@ export {
 	useCancelEvacueePreRegistration,
 	useCreateMedical,
 	useCreateScreening,
+	useRecordMedicalScreening,
 	useCreateEvacueeWithScreening,
 	useUpdateMedical,
 	usePatchMedical,
@@ -132,13 +272,25 @@ export {
 } from './application/queries';
 
 // UI — feature components
+export {
+	default as StayStatusBadge,
+	STAY_STATUS_BADGE_STYLES
+} from './ui/stay-status-badge.svelte';
+export { default as Station1IntakeSearch } from './ui/station1-intake-search.svelte';
 export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';
+export { default as RegistrationShell } from './ui/registration-shell.svelte';
 export { default as EvacueeList } from './ui/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
+export { default as FamilyBatchPrint } from './ui/family-batch-print.svelte';
+export { default as UnifiedRegistrationForm } from './ui/unified-registration-form.svelte';
+export {
+	default as EvacueeHandoverSlipModal,
+	buildScreeningDeepLink
+} from './ui/evacuee-handover-slip-modal.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
 export { default as EvacueeSearchEditPage } from './ui/evacuee-search-edit-page.svelte';
 export { default as EvacueeSearchResultsPage } from './ui/evacuee-search-results-page.svelte';
@@ -155,3 +307,20 @@ export {
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';
+
+// UI — shared sub-form components (Issue #205)
+export {
+	PersonalInfoFields,
+	SpecialNeedsFields,
+	SPECIAL_NEEDS_COMMON_TAGS,
+	VulnerableGroupsFields,
+	EmergencyContactFields,
+	EwarSymptomsFields,
+	HouseholdAddressFields,
+	PetAssetVehicleFields,
+	PetQuickSelect,
+	HealthMedicalFields,
+	ZoneSelectionFields,
+	type SpecialNeedTag,
+	type ZoneItem
+} from './ui/forms/index.js';

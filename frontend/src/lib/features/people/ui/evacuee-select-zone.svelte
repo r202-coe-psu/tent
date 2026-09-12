@@ -31,13 +31,29 @@
 	let selectedZone = $state('');
 	let showOtherZones = $state(false);
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
+
+	const shelterQuery = safeQuery(
+		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
+		{ data: undefined, isLoading: false, isError: false } as unknown as ReturnType<
+			typeof useShelter
+		>
+	);
 
 	let activeZones = $derived(
 		(shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed')
 	);
 
 	const recommendedZoneType = $derived.by(() => {
+		if (evacuee?.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
+			return 'vulnerable';
+		}
 		if (evacuee?.special_needs && evacuee.special_needs.length > 0) {
 			return 'vulnerable';
 		}

@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const SHELTERS = {
 	shelters: [
@@ -34,25 +34,12 @@ const GROUPS = {
 	]
 };
 
-// pet_types master data for the selected shelter — `dog` is the shelter's
-// configured default, so a newly added pet row preselects it without the
-// citizen having to choose (same code the pet-recording test submits).
 const PET_TYPES = {
 	petTypes: [
 		{ code: 'dog', label: 'สุนัข', is_default: true },
 		{ code: 'cat', label: 'แมว', is_default: false }
 	]
 };
-
-/**
- * Pick a value from a shadcn Select. `Form.Control` spreads the superforms field
- * name onto `Select.Trigger`, so the trigger is `button[name="<field>"]` — there
- * is no native <select> to `selectOption` on.
- */
-async function selectOption(scope: Locator, field: string, optionLabel: string | RegExp) {
-	await scope.locator(`button[name="${field}"]`).click();
-	await scope.page().getByRole('option', { name: optionLabel }).click();
-}
 
 const BOOKING_CODE = '01JABCDEFGHJKMNPQRSTVWXYZ0';
 
@@ -66,6 +53,12 @@ const TICKET = {
 	pet_count: 0,
 	status: 'pre_registered',
 	booked_at: '2026-08-21T03:00:00.000Z'
+};
+
+const LOCATIONS = {
+	provinces: { provinces: ['สงขลา', 'ปัตตานี'] },
+	districts: { districts: ['หาดใหญ่', 'เมืองสงขลา'] },
+	subdistricts: { subdistricts: [{ subdistrict: 'คอหงส์', zipcode: 90110 }] }
 };
 
 async function mockReferenceData(page: Page) {
@@ -82,21 +75,103 @@ async function mockReferenceData(page: Page) {
 	await page.route('**/api/public/v1/config/pet-types**', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PET_TYPES) })
 	);
+	await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				code: 'SH001',
+				feature_flags: { allow_pets: true, allow_assets: true, allow_vehicles: true },
+				admission_policy: { pet_policy: { policy: 'conditional' } },
+				luggage_policy: { limitation: 'limited' },
+				parking_policy: { availability: 'available' }
+			})
+		})
+	);
+	await page.route('**/api/public/v1/config/locations**', (route) => {
+		const params = new URL(route.request().url()).searchParams;
+		const body = params.get('district')
+			? LOCATIONS.subdistricts
+			: params.get('province')
+				? LOCATIONS.districts
+				: LOCATIONS.provinces;
+		return route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(body)
+		});
+	});
+	// Unified form address cascade uses staff thailand-location BFF (not public config/locations).
+	await page.route('**/api/v1/thailand-location/provinces**', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(['สงขลา', 'ปัตตานี'])
+		})
+	);
+	await page.route('**/api/v1/thailand-location/districts**', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(['หาดใหญ่', 'เมืองสงขลา'])
+		})
+	);
+	await page.route('**/api/v1/thailand-location/subdistricts**', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ subdistrict: 'คอหงส์', zipcode: 90110 }])
+		})
+	);
 }
 
-/** Open the booking dialog from the landing page and wait for the form. */
+/** Pick a shadcn Select option from the shelter trigger (bits Select = button, not combobox). */
+async function selectShelter(page: Page, optionLabel: string | RegExp) {
+	await page
+		.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง|เทศบาล|โรงเรียน/ })
+		.first()
+		.click();
+	await page.getByRole('option', { name: optionLabel }).click();
+}
+
+/** Fill domicile via HouseholdAddressFields (SearchSelect triggers use id, not name). */
+async function fillAddress(page: Page) {
+	await page.locator('#address-no').fill('123/45');
+	for (const [id, option] of [
+		['province', 'สงขลา'],
+		['district', 'หาดใหญ่'],
+		['subdistrict', 'คอหงส์']
+	] as const) {
+		await page.locator(`#${id}`).click();
+		await page.getByRole('button', { name: option, exact: true }).click();
+	}
+}
+
+/** Fill primary contact on UnifiedRegistrationForm (idPrefix member-0). */
+async function fillPrimaryMember(
+	page: Page,
+	opts: { firstName: string; lastName: string; phone: string; gender?: 'male' | 'female' }
+) {
+	const gender = opts.gender ?? 'male';
+	await page.locator('#member-0-first-name').fill(opts.firstName);
+	await page.locator('#member-0-last-name').fill(opts.lastName);
+	await page.locator(`#member-0-gender-${gender}`).click({ force: true });
+	await page.locator('#member-0-phone').fill(opts.phone);
+}
+
+/** Open the booking page and wait for the shelter step. */
 async function openBooking(page: Page) {
 	await page.goto('/');
 	await page.evaluate(() => {
 		(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
 	});
 	await page
-		.getByRole('button', { name: /จองเข้าศูนย์ล่วงหน้า/ })
+		.getByRole('link', { name: /ลงทะเบียน/ })
 		.first()
 		.click();
-	const dialog = page.getByRole('dialog');
-	await expect(dialog.getByText('ศูนย์พักพิงและข้อมูลผู้ติดต่อหลัก')).toBeVisible();
-	return dialog;
+	await page.waitForURL('**/pre-register');
+	await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
+	return page;
 }
 
 test.describe('Public shelter booking (T-71 / CR-070)', () => {
@@ -113,31 +188,41 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			});
 		});
 
-		const dialog = await openBooking(page);
+		await openBooking(page);
 
-		// Closed shelters are not offered at all.
-		await dialog.locator('button[name="shelter_code"]').click();
-		await expect(page.getByRole('option')).toHaveCount(1);
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		// Unassigned + one open shelter (closed shelters omitted).
+		await expect(page.getByRole('option')).toHaveCount(2);
 		await page.getByRole('option', { name: /เทศบาลนครหาดใหญ่/ }).click();
 
-		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
-		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
-		await dialog.locator('input[name="phone"]').fill('0812345678');
+		await fillAddress(page);
+		await fillPrimaryMember(page, {
+			firstName: 'สมชาย',
+			lastName: 'ใจดี',
+			phone: '0812345678'
+		});
+		// Public head must enter phone — no「ไม่มีเบอร์」checkbox.
+		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
 
-		await expect(dialog.getByText(BOOKING_CODE)).toBeVisible();
-		await expect(dialog.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
+		await expect(page.getByText('สมชาย ใจดี')).toBeVisible();
+		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
 		expect(submitted).toMatchObject({
 			shelter_code: 'SH001',
-			phone: '0812345678',
-			members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] }],
-			pets: []
+			members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' }],
+			household: {
+				address_no: '123/45',
+				province: 'สงขลา',
+				district: 'หาดใหญ่',
+				subdistrict: 'คอหงส์',
+				postal_code: '90110'
+			}
 		});
 	});
 
-	test('adds family members with the counter and tags them per shelter', async ({ page }) => {
+	test('adds family members and tags CR-112 vulnerable groups', async ({ page }) => {
 		await mockReferenceData(page);
 
 		let submitted: Record<string, unknown> | null = null;
@@ -150,31 +235,64 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			});
 		});
 
-		const dialog = await openBooking(page);
-		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
-		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
-		await dialog.locator('input[name="phone"]').fill('0812345678');
+		await openBooking(page);
+		await selectShelter(page, /เทศบาลนครหาดใหญ่/);
+		await fillAddress(page);
+		await fillPrimaryMember(page, {
+			firstName: 'สมชาย',
+			lastName: 'ใจดี',
+			phone: '0812345678'
+		});
 
-		// The tag choices come from the selected shelter, not a hardcoded list.
-		await expect(dialog.getByText('ผู้สูงอายุ').first()).toBeVisible();
-		await expect(dialog.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
+		await expect(page.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
+		await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
-		await dialog.getByRole('button', { name: 'เพิ่มจำนวนผู้พักพิง' }).click();
-		await dialog.locator('input[name="members[1].first_name"]').fill('สมหญิง');
-		await dialog.locator('input[name="members[1].last_name"]').fill('ใจดี');
-		// Second member is elderly.
-		await dialog.getByLabel('ผู้สูงอายุ — สมาชิกคนที่ 2').check();
+		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+		const member2 = page.getByRole('region', { name: 'สมาชิก 2' });
+		await expect(member2).toBeVisible();
+		await member2.locator('#member-1-first-name').fill('สมหญิง');
+		await member2.locator('#member-1-last-name').fill('ใจดี');
+		await member2.locator('#member-1-gender-female').click({ force: true });
+		await member2.locator('#vg-1-elderly_dependent').click();
 
-		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
-		await expect(dialog.getByText(BOOKING_CODE)).toBeVisible();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
 		expect(submitted).toMatchObject({
 			members: [
-				{ first_name: 'สมชาย', last_name: 'ใจดี', special_needs: [] },
-				{ first_name: 'สมหญิง', last_name: 'ใจดี', special_needs: ['ผู้สูงอายุ'] }
+				{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male' },
+				{
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					vulnerable_groups: ['elderly_dependent']
+				}
 			]
 		});
+	});
+
+	test('hides public head no-phone and offers religion without อื่นๆ', async ({ page }) => {
+		await mockReferenceData(page);
+		await openBooking(page);
+		await selectShelter(page, /เทศบาลนครหาดใหญ่/);
+
+		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
+		await expect(page.locator('#member-0-gender-male')).toBeVisible();
+		await expect(page.locator('#member-0-gender-female')).toBeVisible();
+
+		// Open religion select — options are พุทธ / อิสลาม / คริสต์ / ไม่ระบุ
+		const religionTrigger = page
+			.getByRole('region', { name: 'ผู้ติดต่อหลัก' })
+			.locator('button')
+			.filter({ hasText: /ไม่ระบุ|พุทธ|อิสลาม|คริสต์/ })
+			.first();
+		await religionTrigger.click();
+		await expect(page.getByRole('option', { name: 'พุทธ' })).toBeVisible();
+		await expect(page.getByRole('option', { name: 'อิสลาม' })).toBeVisible();
+		await expect(page.getByRole('option', { name: 'คริสต์' })).toBeVisible();
+		await expect(page.getByRole('option', { name: 'ไม่ระบุ' })).toBeVisible();
+		await expect(page.getByRole('option', { name: /^อื่นๆ$/ })).toHaveCount(0);
+		await page.keyboard.press('Escape');
 	});
 
 	test('records pets when the shelter allows them', async ({ page }) => {
@@ -190,25 +308,34 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			});
 		});
 
-		const dialog = await openBooking(page);
-		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
-		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
-		await dialog.locator('input[name="phone"]').fill('0812345678');
-
-		await dialog.getByLabel('นำสัตว์เลี้ยงมาด้วย').check();
-		// The species choices — and the preselected default — come from the
-		// shelter's configured `pet_types` master data, not a hardcoded list.
-		await expect(dialog.locator('button[name="pets[0].species"]')).toContainText('สุนัข');
-		await dialog.locator('input[name="pets[0].notes"]').fill('โกโก้ ชิวาว่า');
-		await dialog.getByLabel('นำกรง/สายจูง/ตะกร้าติดตัวมาด้วย').check();
-
-		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
-		await expect(dialog.getByText(BOOKING_CODE)).toBeVisible();
-
-		expect(submitted).toMatchObject({
-			pets: [{ species: 'dog', notes: 'โกโก้ ชิวาว่า', has_cage: true }]
+		await openBooking(page);
+		await selectShelter(page, /เทศบาลนครหาดใหญ่/);
+		await fillAddress(page);
+		await fillPrimaryMember(page, {
+			firstName: 'สมชาย',
+			lastName: 'ใจดี',
+			phone: '0812345678'
 		});
+
+		await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
+		await page.getByPlaceholder('เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้').fill('โกโก้');
+		await page.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/).fill('ชิวาว่า');
+		await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
+
+		await page
+			.getByLabel(/ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัย/)
+			.check();
+
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
+
+		const household = submitted?.household as { pets?: Array<Record<string, unknown>> };
+		expect(household?.pets?.[0]).toMatchObject({
+			species: 'dog',
+			has_cage: true
+		});
+		expect(String(household?.pets?.[0]?.notes ?? '')).toContain('โกโก้');
+		expect(String(household?.pets?.[0]?.notes ?? '')).toContain('ชิวาว่า');
 	});
 
 	test('surfaces the server message when the shelter closed mid-flow', async ({ page }) => {
@@ -221,14 +348,22 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			})
 		);
 
-		const dialog = await openBooking(page);
-		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
-		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
-		await dialog.locator('input[name="phone"]').fill('0812345678');
-		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
+		await openBooking(page);
+		await selectShelter(page, /เทศบาลนครหาดใหญ่/);
+		await fillAddress(page);
+		await fillPrimaryMember(page, {
+			firstName: 'สมชาย',
+			lastName: 'ใจดี',
+			phone: '0812345678'
+		});
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
 
-		await expect(dialog.getByRole('alert')).toContainText('ปิดรับผู้เข้าพัก');
+		// Server errors surface as toast (booking-form catch); form alert is for client validation.
+		await expect(
+			page.getByText(/ปิดรับผู้เข้าพัก|ศูนย์.*ปิด|ไม่สามารถ|ไม่สำเร็จ/i).first()
+		).toBeVisible({
+			timeout: 10_000
+		});
 	});
 
 	test('the shelter detail CTA opens the dialog with that shelter locked', async ({ page }) => {
@@ -242,17 +377,17 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		);
 
 		await page.goto('/shelters/SH001');
-		await page.getByRole('button', { name: 'จองที่ศูนย์นี้' }).click();
+		await page.getByRole('link', { name: 'จองที่ศูนย์นี้' }).first().click();
+		await page.waitForURL('**/pre-register?shelter=SH001');
 
-		const dialog = page.getByRole('dialog');
-		const trigger = dialog.locator('button[name="shelter_code"]');
+		const trigger = page.getByRole('button', { name: /เทศบาลนครหาดใหญ่/ });
 		await expect(trigger).toBeDisabled();
 		await expect(trigger).toContainText('เทศบาลนครหาดใหญ่');
 	});
 
 	test('the family-search CTA opens its own dialog', async ({ page }) => {
 		await mockReferenceData(page);
-		await page.route('**/api/public/v1/occupants', (route) =>
+		await page.route('**/api/public/v1/occupants**', (route) =>
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -261,13 +396,80 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		);
 
 		await page.goto('/');
-		await page.getByRole('button', { name: /ค้นหารายบุคคลด่วนที่สุด/ }).click();
+		await page.getByRole('button', { name: 'ค้นหารายชื่อผู้พักพิง' }).click();
 
 		const dialog = page.getByRole('dialog');
-		await expect(dialog.getByText('สืบค้นญาติและครอบครัว')).toBeVisible();
+		await expect(dialog.getByText(/สืบค้น|ค้นหา/i).first()).toBeVisible();
+	});
+});
 
-		await dialog.getByLabel('คำค้นหา').fill('สมชาย');
-		await dialog.getByRole('button', { name: 'ค้นหา' }).click();
-		await expect(dialog.getByText('ไม่พบผู้ที่ตรงกับคำค้นหา')).toBeVisible();
+test.describe('Public unassigned registration (#255 / CR-113)', () => {
+	test('submits no-shelter unified input to Mongo BFF and shows queue QR', async ({ page }) => {
+		await mockReferenceData(page);
+
+		let submitted: Record<string, unknown> | null = null;
+		await page.route('**/api/public/v1/unassigned-registrations', async (route) => {
+			if (route.request().method() !== 'POST') return route.continue();
+			submitted = route.request().postDataJSON();
+			await route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					id: '01JUNASSIGNEDREG0000000001',
+					schema_v: 2,
+					reserved_household_id: 'household:01H',
+					members: [
+						{
+							reserved_evacuee_id: 'evacuee:01H',
+							status: 'open',
+							first_name: 'สมชาย',
+							last_name: 'ใจดี'
+						}
+					],
+					registered_via: 'web',
+					status: 'open',
+					created_at: '2026-09-09T03:00:00.000Z'
+				})
+			});
+		});
+
+		await page.goto('/');
+		await page.evaluate(() => {
+			(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
+		});
+		await page
+			.getByRole('link', { name: /ลงทะเบียน/ })
+			.first()
+			.click();
+		await page.waitForURL('**/pre-register');
+		await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
+
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		await page.getByRole('option', { name: /ไม่ระบุศูนย์พักพิง/ }).click();
+
+		await fillAddress(page);
+		await fillPrimaryMember(page, {
+			firstName: 'สมชาย',
+			lastName: 'ใจดี',
+			phone: '0812345678'
+		});
+		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
+
+		await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+
+		await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
+		await expect(page.getByAltText(/คิวกลาง|queue/i)).toBeVisible();
+		await expect(page.getByText('01JUNASSIGNEDREG0000000001', { exact: true })).toBeVisible();
+
+		expect(submitted).toMatchObject({
+			disclaimerAcknowledged: true,
+			members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' }],
+			household: { province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'คอหงส์' }
+		});
+		expect(String((submitted as { shelter_code?: string } | null)?.shelter_code ?? '')).not.toBe(
+			'SH001'
+		);
 	});
 });

@@ -35,6 +35,7 @@ export {
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
+	DEFAULT_SHELTER_FEATURE_FLAGS,
 	type ShelterMaster,
 	type ShelterMasterV2,
 	type Zone

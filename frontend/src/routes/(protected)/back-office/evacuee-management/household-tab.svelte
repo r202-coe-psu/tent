@@ -54,9 +54,9 @@
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
 		},
 		checked_out: {
-			label: 'ย้ายออก / กลับภูมิลำเนา',
+			label: 'เช็คเอาต์',
 			colorClass:
-				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+				'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
 		},
 		cancelled: {
 			label: 'ยกเลิกการจอง',
@@ -393,13 +393,7 @@
 									{#if h.pets && h.pets.length > 0}
 										{#each h.pets as p, i (i)}
 											{@const petEmoji =
-												p.species === 'dog'
-													? '🐶'
-													: p.species === 'cat'
-														? '🐱'
-														: p.species === 'bird'
-															? '🐦'
-															: '🐾'}
+												p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : '🐾'}
 											<span
 												class="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold text-secondary-foreground"
 												>{petEmoji} {p.count}</span

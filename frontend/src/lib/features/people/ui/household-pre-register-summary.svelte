@@ -8,31 +8,45 @@
 	import { useSaveImage } from '$lib/features/images';
 	import {
 		maskNationalId,
+		formatPersonName,
 		type Evacuee,
 		type Household,
 		evacueeInputSchema,
 		currentBEYear,
 		minBirthYearBE,
-		MAX_AGE_YEARS
+		MAX_AGE_YEARS,
+		cardNumberMaxLength
 	} from '../domain/people';
 	import { z } from 'zod';
 
-	const specialNeedSchema = z.enum([
-		'elderly',
-		'disabled',
-		'pregnant',
+	const vulnerableGroupSchema = z.enum([
+		'bedridden',
+		'dialysis',
+		'wheelchair',
+		'psychiatric',
+		'elderly_dependent',
 		'infant',
-		'chronic_illness',
-		'bedridden'
+		'young_child',
+		'pregnant',
+		'vision_impaired',
+		'hearing_impaired',
+		'disability_other',
+		'chronic_illness'
 	]);
 
-	const SPECIAL_NEED_CHIPS: Record<string, { emoji: string; label: string }> = {
-		elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
-		disabled: { emoji: '♿', label: 'พิการ' },
+	const VULNERABLE_GROUP_CHIPS: Record<string, { emoji: string; label: string }> = {
+		bedridden: { emoji: '🛏️', label: 'ติดเตียง' },
+		dialysis: { emoji: '🩺', label: 'ฟอกไต' },
+		wheelchair: { emoji: '♿', label: 'วีลแชร์' },
+		psychiatric: { emoji: '🧠', label: 'จิตเวช' },
+		elderly_dependent: { emoji: '👴', label: 'ผู้สูงอายุพึ่งพิง' },
+		infant: { emoji: '👶', label: 'ทารก' },
+		young_child: { emoji: '🧒', label: 'เด็กเล็ก' },
 		pregnant: { emoji: '🤰', label: 'ครรภ์' },
-		infant: { emoji: '👶', label: 'เด็กเล็ก' },
-		chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
-		bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
+		vision_impaired: { emoji: '👁️', label: 'สายตา' },
+		hearing_impaired: { emoji: '👂', label: 'การได้ยิน' },
+		disability_other: { emoji: '♿', label: 'พิการอื่นๆ' },
+		chronic_illness: { emoji: '💊', label: 'โรคเรื้อรัง' }
 	};
 	import { toast } from 'svelte-sonner';
 	import Camera from '@lucide/svelte/icons/camera';
@@ -75,7 +89,8 @@
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
 		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
 		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' }
+		{ value: 'other', label: 'อื่นๆ (Other)' },
+		{ value: 'anonymous', label: 'บัตรไม่ระบุตัวตน (Anonymous ID)' }
 	];
 
 	const genderOptions = [
@@ -181,7 +196,7 @@
 					});
 				}
 
-				toast.success(`ลงทะเบียนสมาชิก "${f.data.first_name} ${f.data.last_name}" เรียบร้อยแล้ว`);
+				toast.success(`ลงทะเบียนสมาชิก "${formatPersonName(f.data)}" เรียบร้อยแล้ว`);
 
 				// Reset member form
 				memberForm.reset();
@@ -322,7 +337,7 @@
 				<div>
 					<span class="text-xs text-muted-foreground">หัวหน้าครัวเรือน</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
-						{createdHead ? `${createdHead.first_name} ${createdHead.last_name}` : '—'}
+						{createdHead ? formatPersonName(createdHead) : '—'}
 					</p>
 				</div>
 				<div class="col-span-2">
@@ -369,8 +384,7 @@
 							{@const isHead = m._id === createdHousehold.head_evacuee_id}
 							<tr class="border-b transition-colors last:border-0 hover:bg-muted/10">
 								<td class="p-3 font-bold text-slate-900 dark:text-slate-100">
-									{m.first_name}
-									{m.last_name}
+									{formatPersonName(m)}
 									{#if m.nickname}
 										<span class="text-xs font-normal text-muted-foreground">({m.nickname})</span>
 									{/if}
@@ -396,13 +410,13 @@
 								</td>
 								<td class="p-3">
 									<div class="flex flex-wrap gap-1">
-										{#if m.special_needs?.length > 0}
-											{#each m.special_needs as need (need)}
+										{#if m.vulnerable_groups?.length > 0}
+											{#each m.vulnerable_groups as need (need)}
 												<span
 													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
 												>
-													{SPECIAL_NEED_CHIPS[need]?.emoji}
-													{SPECIAL_NEED_CHIPS[need]?.label}
+													{VULNERABLE_GROUP_CHIPS[need]?.emoji}
+													{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
 												</span>
 											{/each}
 										{:else}
@@ -537,24 +551,30 @@
 											เลขที่พาสปอร์ต
 										{:else if $memberFormData.person_id.cardType === 'pink_card'}
 											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย
+										{:else if $memberFormData.person_id.cardType === 'anonymous'}
+											หมายเลข Anonymous ID
 										{:else}
 											เลขหมายบัตร
 										{/if}
 									</Form.Label>
-									<Input
-										{...props}
-										maxlength={$memberFormData.person_id.cardType === 'national_id'
-											? 13
-											: $memberFormData.person_id.cardType === 'passport'
-												? 9
-												: undefined}
-										placeholder={$memberFormData.person_id.cardType === 'national_id'
-											? 'X-XXXX-XXXXX-XX-X'
-											: $memberFormData.person_id.cardType === 'passport'
-												? 'Passport Number'
-												: 'หมายเลขบัตร'}
-										bind:value={$memberFormData.person_id.number}
-									/>
+									{#if $memberFormData.person_id.cardType === 'anonymous'}
+										<p
+											class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-xs text-muted-foreground"
+										>
+											ระบบจะออกหมายเลข ANON-… เมื่อบันทึก
+										</p>
+									{:else}
+										<Input
+											{...props}
+											maxlength={cardNumberMaxLength($memberFormData.person_id.cardType)}
+											placeholder={$memberFormData.person_id.cardType === 'national_id'
+												? 'X-XXXX-XXXXX-XX-X'
+												: $memberFormData.person_id.cardType === 'passport'
+													? 'Passport Number'
+													: 'หมายเลขบัตร'}
+											bind:value={$memberFormData.person_id.number}
+										/>
+									{/if}
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />
@@ -578,10 +598,12 @@
 						<Form.Field form={memberForm} name="last_name">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label
-										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
-									>
-									<Input {...props} placeholder="นามสกุล" bind:value={$memberFormData.last_name} />
+									<Form.Label>นามสกุล (Last Name)</Form.Label>
+									<Input
+										{...props}
+										placeholder="เว้นว่างได้ถ้าไม่มีนามสกุล"
+										bind:value={$memberFormData.last_name}
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />
@@ -734,19 +756,19 @@
 						</Form.Field>
 					</div>
 
-					<!-- Special Needs Chips -->
+					<!-- Vulnerable Groups (coded) — separate from free-form Special Needs -->
 					<div class="space-y-2 border-t pt-4">
-						<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+						<Label class="text-sm font-semibold">กลุ่มเปราะบาง (Vulnerable Groups)</Label>
 						<div class="flex flex-wrap gap-2 pt-1">
-							{#each specialNeedSchema.options as need (need)}
-								{@const chip = SPECIAL_NEED_CHIPS[need]}
-								{@const checked = ($memberFormData.special_needs ?? []).includes(need)}
+							{#each vulnerableGroupSchema.options as need (need)}
+								{@const chip = VULNERABLE_GROUP_CHIPS[need]}
+								{@const checked = ($memberFormData.vulnerable_groups ?? []).includes(need)}
 								<Button
 									type="button"
 									variant="outline"
 									onclick={() => {
-										const current = $memberFormData.special_needs ?? [];
-										$memberFormData.special_needs = checked
+										const current = $memberFormData.vulnerable_groups ?? [];
+										$memberFormData.vulnerable_groups = checked
 											? current.filter((n) => n !== need)
 											: [...current, need];
 									}}

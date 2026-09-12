@@ -32,7 +32,8 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		church: 'โบสถ์',
 		privateArea: 'พื้นที่เอกชน',
 		other: 'อื่นๆ',
-		unspecified: 'ไม่ระบุ'
+		unspecified: 'ไม่ระบุ',
+		selectedShelter: 'ศูนย์ที่เลือก'
 	},
 	en: {
 		districtPrefix: 'Dist.',
@@ -67,6 +68,7 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		church: 'Church',
 		privateArea: 'Private Area',
 		other: 'Other',
-		unspecified: 'Unspecified'
+		unspecified: 'Unspecified',
+		selectedShelter: 'Selected Shelter'
 	}
 } as const;

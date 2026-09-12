@@ -19,7 +19,11 @@ from worker.mongo import (
     apply_shift_assignment,
     apply_volunteer,
     delete_needs_for_shelter,
+    delete_occupants_for_shelter,
     delete_persons_for_shelter,
+    refresh_occupancy,
+    refresh_shelter_occupants,
+    refresh_shelter_stock,
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.donation import project_donation
@@ -61,6 +65,7 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                 if action == "delete" and payload and payload.get("_id"):
                     code = str(payload["_id"])
                     await delete_persons_for_shelter(code)
+                    await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
@@ -103,7 +108,9 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
             # campaigns that already existed never arrive as change events. Without
             # this the counters stay empty and reserve_quota falls open: the system
             # looks healthy while enforcing no ceiling at all.
-            await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+            await apply_need_counters(
+                plan_need_counters(doc, shelter_code=shelter_code)
+            )
         elif doc_type == "job":
             # Same reason as the counters below: a job posted before this worker first
             # ran never arrives as a change event, and an unseeded VolunteerJobSlot
@@ -115,7 +122,11 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
             await apply_job_application(action, payload)
         elif doc_type == "shift_assignment":
             volunteer_id = doc.get("volunteer_id")
-            volunteer = await couch.get_doc(database, str(volunteer_id)) if volunteer_id else None
+            volunteer = (
+                await couch.get_doc(database, str(volunteer_id))
+                if volunteer_id
+                else None
+            )
             action, payload = project_shift_assignment(
                 doc, shelter_code=shelter_code, volunteer=volunteer
             )
@@ -131,6 +142,10 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
     # bare target instead of what is genuinely still needed.
     await refresh_on_hand(couch, shelter_code)
+    # EXT-005/006/007: occupancy first — shelter_stocks' reorder_threshold calc reads it.
+    await refresh_occupancy(couch, shelter_code)
+    await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
+    await refresh_shelter_occupants(couch, shelter_code)  # EXT-007
 
     need_actions = await project_needs_for_shelter(couch, shelter_code)
     for action, payload in need_actions:

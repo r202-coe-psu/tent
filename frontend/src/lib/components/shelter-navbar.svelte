@@ -1,31 +1,39 @@
 <script lang="ts">
 	import * as Select from '$lib/components/ui/select';
 	import { useShelters } from '$lib/features/shelters';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterCodeFromRoles, isSystemAdmin } from '$lib/auth/roles';
+	import { shelterCodesFromRoles, isSystemAdmin } from '$lib/auth/roles';
 
 	const sheltersQuery = useShelters();
 
 	const selectedCode = $derived(shelterStore.selectedShelterCode);
 
-	const userShelterCode = $derived(shelterCodeFromRoles(authStore.user?.roles ?? []));
+	const userShelterCodes = $derived(shelterCodesFromRoles(authStore.user?.roles ?? []));
 	const isAdmin = $derived(isSystemAdmin(authStore.user?.roles ?? []));
 
 	const allowedShelters = $derived(
-		sheltersQuery.data?.filter((s) => isAdmin || s.code === userShelterCode) ?? []
+		sheltersQuery.data?.filter((s) => isAdmin || userShelterCodes.includes(s.code)) ?? []
 	);
 
 	$effect(() => {
-		if (!allowedShelters.length || shelterStore.selectedShelterCode) return;
-		const own = userShelterCode
-			? allowedShelters.find((s) => s.code === userShelterCode)
-			: undefined;
-		shelterStore.selectedShelterCode = (own ?? allowedShelters[0]).code;
+		if (!allowedShelters.length) return;
+		const current = shelterStore.selectedShelterCode;
+		if (current && allowedShelters.some((s) => s.code === current)) {
+			persistSelectedShelter(current);
+			return;
+		}
+		const preferred =
+			allowedShelters.find((s) => userShelterCodes.includes(s.code))?.code ??
+			allowedShelters[0].code;
+		shelterStore.selectedShelterCode = preferred;
+		persistSelectedShelter(preferred);
 	});
 
 	function onShelterChange(code: string | undefined) {
-		if (code) shelterStore.selectedShelterCode = code;
+		if (!code) return;
+		shelterStore.selectedShelterCode = code;
+		persistSelectedShelter(code);
 	}
 </script>
 
@@ -42,7 +50,7 @@
 				<Select.Trigger
 					class="w-auto min-w-[250px] border-none bg-transparent text-sm font-medium text-white shadow-none hover:bg-white/5 focus:ring-0 focus-visible:ring-0 [&_svg]:text-white/80"
 				>
-					{sheltersQuery.data.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'}
+					{allowedShelters.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'}
 				</Select.Trigger>
 				<Select.Content align="end" class="w-[350px]">
 					<Select.Group>

@@ -30,8 +30,14 @@ import type {
 	MovementAction,
 	ScreeningInput
 } from '../domain/people';
+import type {
+	FamilyReportInPayload,
+	UnifiedRegistrationChannel,
+	UnifiedRegistrationInput
+} from '../domain/unified-registration';
 import { canCancelHold } from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
+import { extractScanLookupToken, toCouchEvacueeId } from '../domain/scan-lookup';
 
 // Every key includes the active shelter code so switching the back-office
 // shelter selector (shelterStore.selectedShelterCode) invalidates and
@@ -66,8 +72,19 @@ export const peopleKeys = {
 		] as const,
 	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
 	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
-	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const
+	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const,
+	pendingScreening: (shelterCode = getShelterCode()) =>
+		[...peopleKeys.all, 'pending-screening', shelterCode] as const
 };
+
+export const usePendingScreeningEvacuees = (shelterCode?: () => string) =>
+	createQuery(() => {
+		const code = shelterCode ? shelterCode() : getShelterCode();
+		return {
+			queryKey: peopleKeys.pendingScreening(code),
+			queryFn: () => peopleRepository(code).getPendingScreeningEvacuees(code)
+		};
+	});
 
 export const useEvacuees = () =>
 	createQuery(() => ({
@@ -122,6 +139,19 @@ export const useCreateEvacuee = () => {
 	}));
 };
 
+/** Station 1 Report-in: promote `pre_registered` → `arriving` (no screening / zone). */
+export const usePromoteReportIn = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (evacueeId: string) => peopleRepository().promoteReportIn(evacueeId),
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
 export const useCreateEvacueeWithScreening = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -170,15 +200,8 @@ export const usePatchEvacuee = () => {
 export const useCheckInEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({
-			evacuee,
-			ctx,
-			zone
-		}: {
-			evacuee: Evacuee;
-			ctx: AuthorContext;
-			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
+			peopleRepository().checkInEvacuee(evacuee, ctx, zone),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
@@ -191,8 +214,67 @@ export const useCheckInEvacuee = () => {
 export const useCheckOutEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({
+		mutationFn: ({
+			evacuee,
+			ctx,
+			reason,
+			notes
+		}: {
+			evacuee: Evacuee;
+			ctx: AuthorContext;
+			reason?: string;
+			notes?: string;
+		}) => peopleRepository().checkOutEvacuee(evacuee, ctx, { reason, notes }),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
+export const useConfirmRoom = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx),
+			peopleRepository().confirmRoom(evacuee, ctx),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+export const useConfirmRoomForHousehold = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			householdId,
+			evacuees,
+			ctx
+		}: {
+			householdId: string;
+			evacuees: readonly Evacuee[];
+			ctx: AuthorContext;
+		}) => peopleRepository().confirmRoomForHousehold(householdId, evacuees, ctx),
+		onSuccess: (confirmed) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			for (const updated of confirmed) {
+				qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			}
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+export const useChangeEvacueeZone = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
+			peopleRepository().changeEvacueeZone(evacuee, ctx, zone),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
@@ -210,7 +292,7 @@ export const useRecordMovement = () => {
 			ctx
 		}: {
 			evacuee: Evacuee;
-			action: Exclude<MovementAction, 'check_in' | 'check_out'>;
+			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>;
 			ctx: AuthorContext;
 		}) => peopleRepository().recordMovement(evacuee, action, ctx),
 		onSuccess: (updated) => {
@@ -221,35 +303,49 @@ export const useRecordMovement = () => {
 	}));
 };
 
-/** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
+/**
+ * Couch-only one-shot lookup (shelter SoR). Prefer {@link lookupFederatedByScanCode}
+ * for scanners that must also resolve unassigned ticket QR codes.
+ * Always hits Couch (bypasses TanStack staleTime cache for scan misses).
+ */
 export async function lookupEvacueeByScanCode(
 	queryClient: QueryClient,
 	code: string
 ): Promise<Evacuee | null> {
-	const cleanCode = code.trim();
-	if (!cleanCode) return null;
+	const token = extractScanLookupToken(code);
+	if (!token) return null;
 
-	let lookupId = cleanCode;
-	if (!lookupId.startsWith('evacuee:')) {
-		lookupId = `evacuee:${cleanCode}`;
-	}
+	const lookupId = toCouchEvacueeId(token);
+	const repo = peopleRepository();
 
 	try {
-		const byId = await queryClient.fetchQuery({
-			queryKey: peopleKeys.evacuee(lookupId),
-			queryFn: () => peopleRepository().getEvacuee(lookupId)
-		});
-		if (byId) return byId;
+		const byId = await repo.getEvacuee(lookupId);
+		if (byId) {
+			queryClient.setQueryData(peopleKeys.evacuee(byId._id), byId);
+			void queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			return byId;
+		}
 	} catch {
 		// Ignore direct ID fetch errors and fall through to search.
 	}
 
-	const matches = await queryClient.fetchQuery({
-		queryKey: peopleKeys.evacueesSearch(cleanCode),
-		queryFn: () => peopleRepository().searchEvacuees(cleanCode)
-	});
-	return matches[0] ?? null;
+	const matches = await repo.searchEvacuees(token);
+	const hit = matches[0] ?? null;
+	if (hit) {
+		queryClient.setQueryData(peopleKeys.evacuee(hit._id), hit);
+		void queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+	}
+	return hit;
 }
+
+export {
+	lookupFederatedByScanCode,
+	lookupFederatedByScanCodeWithDeps,
+	type FederatedScanHit,
+	type FederatedScanCouchHit,
+	type FederatedScanUnassignedHit,
+	type FederatedScanLookupDeps
+} from './federated-scan-lookup';
 
 export const useHouseholds = () =>
 	createQuery(() => ({
@@ -305,6 +401,42 @@ export const useCreateHousehold = () => {
 			peopleRepository().createHousehold(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+/** Unified multi-person family registration (#249). */
+export const useCreateFamilyRegistration = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			input,
+			ctx,
+			channel = 'onsite'
+		}: {
+			input: UnifiedRegistrationInput;
+			ctx: AuthorContext;
+			channel?: UnifiedRegistrationChannel;
+		}) => peopleRepository().createFamilyRegistration(input, ctx, channel),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+/** Station 1 Unified Report-in: update household & members, promote arriving (#249). */
+export const useSubmitFamilyReportIn = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (payload: FamilyReportInPayload) =>
+			peopleRepository().submitFamilyReportIn(payload),
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(result.household._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
 		}
 	}));
 };
@@ -373,6 +505,43 @@ export const useCreateScreening = () => {
 			peopleRepository().createScreening(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.screenings() });
+			queryClient.invalidateQueries({ queryKey: [...peopleKeys.all, 'pending-screening'] });
+		}
+	}));
+};
+
+export const useRecordMedicalScreening = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			input,
+			ctx
+		}: {
+			input: {
+				screening: ScreeningInput;
+				zone?: string | null;
+				checkIn?: boolean;
+				medical?: MedicalInput;
+				vulnerable_groups?: string[];
+				special_needs?: string[];
+			};
+			ctx: AuthorContext;
+		}) => peopleRepository().recordMedicalScreening(input, ctx),
+		onSuccess: (_data, variables) => {
+			queryClient.invalidateQueries({ queryKey: [...peopleKeys.all, 'pending-screening'] });
+			queryClient.invalidateQueries({ queryKey: ['pendingScreening'] });
+			queryClient.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			queryClient.invalidateQueries({ queryKey: ['evacuees'] });
+			queryClient.invalidateQueries({
+				queryKey: peopleKeys.evacuee(variables.input.screening.evacuee_id)
+			});
+			queryClient.invalidateQueries({ queryKey: ['dashboard', 'occupancy'] });
+			queryClient.invalidateQueries({ queryKey: ['shelterOccupancy'] });
+			queryClient.invalidateQueries({ queryKey: [...peopleKeys.all, 'screenings'] });
+			queryClient.invalidateQueries({ queryKey: ['latest_screening'] });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.movements() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
 		}
 	}));
 };
@@ -440,7 +609,10 @@ export const useScreenings = () =>
 export function startPeopleLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		if (type === 'evacuee') {
-			return [[...peopleKeys.all, 'evacuees']];
+			return [
+				[...peopleKeys.all, 'evacuees'],
+				[...peopleKeys.all, 'pending-screening']
+			];
 		}
 		if (type === 'household') {
 			return [[...peopleKeys.all, 'households']];
@@ -449,10 +621,10 @@ export function startPeopleLiveQuery(queryClient: QueryClient): SubscribeDataCha
 			return [peopleKeys.medicals()];
 		}
 		if (type === 'movement') {
-			return [peopleKeys.movements()];
+			return [peopleKeys.movements(), [...peopleKeys.all, 'pending-screening']];
 		}
 		if (type === 'screening') {
-			return [peopleKeys.screenings()];
+			return [peopleKeys.screenings(), [...peopleKeys.all, 'pending-screening']];
 		}
 		return [];
 	});

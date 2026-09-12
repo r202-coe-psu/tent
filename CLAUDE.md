@@ -205,3 +205,13 @@ plugins. `pnpm lint` checks Prettier + ESLint; `pnpm format` rewrites.
   boundaries (domain + UI in the same feature is fine; reaching across feature barrels to make
   something work is not). PR description says what changed and how it was verified. See
   `frontend/CONVENTIONS.md` §1 and `frontend/CONTRIBUTING.md` §8.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues ใน repo นี้ (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.

@@ -5,6 +5,7 @@ import {
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
+	DEFAULT_SHELTER_FEATURE_FLAGS,
 	isShelterMasterDoc,
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
@@ -63,7 +64,8 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		zones: master.zones ?? [],
 		admission_policy: master.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 		luggage_policy: master.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY }
+		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+		feature_flags: master.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
 	};
 }
 

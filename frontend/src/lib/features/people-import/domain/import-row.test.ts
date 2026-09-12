@@ -222,11 +222,11 @@ describe('validateRow — members', () => {
 
 	it('points a member error at the member sheet and its row', () => {
 		const result = validateRow(minimalHead(), 1, emptyLookups(), [
-			memberRow({ [H.first_name]: 'สมหญิง', [H.gender]: 'หญิง' }, 4)
+			memberRow({ [H.last_name]: 'ใจดี', [H.gender]: 'หญิง' }, 4)
 		]);
 
 		expect(result.ok).toBe(false);
-		const error = result.errors.find((e) => e.column === H.last_name);
+		const error = result.errors.find((e) => e.column === H.first_name);
 		expect(error?.sheet).toBe('สมาชิก');
 		expect(error?.line).toBe(4);
 	});

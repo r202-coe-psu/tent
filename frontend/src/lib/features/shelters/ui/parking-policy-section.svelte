@@ -3,6 +3,7 @@
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, VehicleType, ParkingRule } from '../domain/schema';
 	import { parkingRuleLabels } from '../domain/policy-labels';
+	import { applyParkingAvailability } from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -37,18 +38,9 @@
 	}
 
 	function setAvailability(value: 'none' | 'available') {
-		ensurePolicy();
-		if (value === 'none') {
-			// FR-23-30 / D-A5 — clear sub-fields when parking is unavailable.
-			$formData.parking_policy = {
-				availability: 'none',
-				supported_vehicles: [],
-				rules: [],
-				rules_other: null
-			};
-		} else {
-			$formData.parking_policy!.availability = 'available';
-		}
+		const next = applyParkingAvailability($formData, value);
+		$formData.feature_flags = next.feature_flags;
+		$formData.parking_policy = next.parking_policy;
 	}
 
 	function vehicleEntry(type: VehicleType) {

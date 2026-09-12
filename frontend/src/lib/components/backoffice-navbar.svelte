@@ -13,6 +13,7 @@
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
@@ -25,7 +26,7 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const isManager = $derived(isSA || isShelterManager(roles));
+	const isManager = $derived(isSA || isShelterManager(roles, shelterStore.selectedShelterCode));
 
 	async function logout() {
 		mobileMenuOpen = false;
@@ -86,7 +87,7 @@
 </script>
 
 <aside
-	class="relative hidden min-h-0 shrink-0 flex-col border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
+	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >

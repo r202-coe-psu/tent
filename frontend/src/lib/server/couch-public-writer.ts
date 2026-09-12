@@ -109,6 +109,70 @@ export async function putAsPublicWriter(
 }
 
 /**
+ * PUT a binary attachment onto an existing doc as the public writer.
+ * Used by public shelter-booking face/pet photo upload (Couch `image` docs).
+ *
+ * Dev fallback uses `COUCHDB_ADMIN_URL` with a raw binary PUT (`adminRaw` always
+ * JSON-encodes and cannot carry attachment bytes).
+ */
+export async function putAttachmentAsPublicWriter(
+	dbName: string,
+	docId: string,
+	rev: string,
+	attachmentName: string,
+	body: Blob,
+	contentType: string
+): Promise<{ status: number; id: string; rev: string }> {
+	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+	const path = `/${dbName}/${encodeURIComponent(docId)}/${encodeURIComponent(attachmentName)}?rev=${encodeURIComponent(rev)}`;
+
+	let creds = writerUrl ? parseCouchCredentialUrl(writerUrl) : null;
+	if (writerUrl && !creds) {
+		throw new Error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
+	}
+	if (!creds) {
+		if (!dev) {
+			throw new Error('COUCHDB_PUBLIC_WRITER_URL is missing in production');
+		}
+		creds = parseCouchCredentialUrl(env.COUCHDB_ADMIN_URL ?? '');
+		if (!creds) {
+			throw new Error('COUCHDB_ADMIN_URL is not set or missing credentials');
+		}
+	}
+
+	const res = await fetch(`${creds.base}${path}`, {
+		method: 'PUT',
+		headers: {
+			Authorization: basicAuthHeader(creds.user, creds.password),
+			'Content-Type': contentType,
+			Accept: 'application/json'
+		},
+		body
+	});
+	const data = (await res.json().catch(() => null)) as {
+		id?: string;
+		rev?: string;
+		ok?: boolean;
+	} | null;
+	if (!res.ok || !data?.rev) {
+		throw new Error(`attachment PUT failed (${res.status})`);
+	}
+	return { status: res.status, id: data.id ?? docId, rev: data.rev };
+}
+
+/**
+ * Soft-delete a document as the public writer (best-effort cleanup after a
+ * failed attachment write on a freshly minted `image` doc).
+ */
+export async function deleteAsPublicWriter(
+	dbName: string,
+	docId: string,
+	rev: string
+): Promise<void> {
+	await putAsPublicWriter(dbName, docId, { _id: docId, _rev: rev, _deleted: true });
+}
+
+/**
  * Write several documents in one `_bulk_docs` request as the public writer.
  *
  * A booking is a `household` plus one `evacuee` per member; they cross-reference

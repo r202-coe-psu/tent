@@ -12,6 +12,7 @@ import {
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
+	DEFAULT_SHELTER_FEATURE_FLAGS,
 	type ShelterMaster
 } from '$lib/features/shelters/server';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
@@ -211,7 +212,8 @@ export const GET: RequestHandler = async ({ request }) => {
 					zones: migrated.zones ?? [],
 					admission_policy: migrated.admission_policy ?? EMPTY_ADMISSION_POLICY,
 					luggage_policy: migrated.luggage_policy ?? EMPTY_LUGGAGE_POLICY,
-					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY
+					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,
+					feature_flags: migrated.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
 				};
 			})
 		);

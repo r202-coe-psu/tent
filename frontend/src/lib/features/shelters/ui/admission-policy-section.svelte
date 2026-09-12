@@ -8,6 +8,7 @@
 		petConditionLabels,
 		petCategoryOrder
 	} from '../domain/policy-labels';
+	import { applyPetPolicy } from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { useMasterData } from '$lib/features/master-data';
@@ -75,13 +76,9 @@
 	}
 
 	function setPetPolicy(value: 'no_pets' | 'conditional') {
-		ensurePolicy();
-		$formData.admission_policy!.pet_policy = {
-			policy: value,
-			// no_pets clears all category detail (FR-23-21).
-			categories:
-				value === 'conditional' ? ($formData.admission_policy!.pet_policy?.categories ?? []) : []
-		};
+		const next = applyPetPolicy($formData, value);
+		$formData.feature_flags = next.feature_flags;
+		$formData.admission_policy = next.admission_policy;
 	}
 
 	function categoryEntry(cat: PetCategory) {
