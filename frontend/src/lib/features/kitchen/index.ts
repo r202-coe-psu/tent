@@ -7,7 +7,6 @@ export { default as RequisitionHistory } from './ui/requisition-history.svelte';
 export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 export { default as MealSessionList } from './ui/MealSessionList.svelte';
-export { default as KitchenRequisitionList } from './ui/KitchenRequisitionList.svelte';
 
 // Domain — meal calculation and requisition
 export {
@@ -17,7 +16,6 @@ export {
 	resolveItemMasterStock,
 	toRequisitionInput,
 	assessRequisition,
-	formatTicketNo,
 	expandTargetTags,
 	computeSessionGroupProgress,
 	toMealPlanMap,
@@ -166,8 +164,8 @@ export {
 	useKitchenRequisitions,
 	useKitchenRequisition,
 	useCreatePendingRequisition,
-	useApproveRequisitionTicket,
-	useRejectRequisitionTicket,
+	useApproveKitchenRequisition,
+	useRejectKitchenRequisition,
 	useIssueRequisition,
 	useMealServices,
 	useRecordMealService,

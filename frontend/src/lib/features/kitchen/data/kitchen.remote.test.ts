@@ -460,8 +460,7 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 	});
 });
 
-// The ticket's demo, as reproducible evidence: requisition (deduct stock) →
-// service record → variance summary. Bypasses the SOP-calc plan entrypoint
+// Requisition (deduct stock) → service record → variance summary. Bypasses the SOP-calc plan entrypoint
 // (createMealPlan directly with recipes) so it stays green regardless of
 // unrelated sop-ratios breakage elsewhere.
 describe('T-27 demo chain — requisition → service record → variance', () => {
@@ -786,7 +785,7 @@ describe('KitchenRemoteRepository — MealSession CRUD', () => {
 	});
 });
 
-describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
+describe('KitchenRemoteRepository — Requisition Workflow', () => {
 	let repo: KitchenRemoteRepository;
 
 	beforeEach(() => {
@@ -794,7 +793,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		repo = new KitchenRemoteRepository('shelter_sh001');
 	});
 
-	it('createPendingRequisition generates sequential ticket_no and commits meal_plan + requisition', async () => {
+	it('createPendingRequisition commits meal_plan + requisition', async () => {
 		const res1 = await repo.createPendingRequisition(
 			{
 				planInput: {
@@ -811,11 +810,9 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		);
 
 		expect(res1.plan).toBeDefined();
-		expect(res1.requisition.ticket_no).toBe('SH001-KITCHEN-0001');
 		expect(res1.requisition.status).toBe('pending');
 		expect(res1.requisition.meal_plan_id).toBe(res1.plan?._id);
 
-		// Second requisition should increment sequence to 0002
 		const res2 = await repo.createPendingRequisition(
 			{
 				requisitionInput: {
@@ -824,10 +821,10 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 			},
 			ctx
 		);
-		expect(res2.requisition.ticket_no).toBe('SH001-KITCHEN-0002');
+		expect(res2.requisition.status).toBe('pending');
 	});
 
-	it('approveRequisitionTicket cuts stock_ledger with reason=requisition and ref_id=requisition._id', async () => {
+	it('approveKitchenRequisition cuts stock_ledger with reason=requisition and ref_id=requisition._id', async () => {
 		await seedStock('item:pork', 100);
 
 		const { requisition } = await repo.createPendingRequisition(
@@ -839,7 +836,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 			ctx
 		);
 
-		const approved = await repo.approveRequisitionTicket(
+		const approved = await repo.approveKitchenRequisition(
 			requisition._id,
 			'warehouse_officer',
 			undefined,
@@ -857,7 +854,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		expect(reqLedger?.reason).toBe('requisition');
 	});
 
-	it('approveRequisitionTicket handles partial issue (D12) and gas cylinder switch (D15)', async () => {
+	it('approveKitchenRequisition handles partial issue (D12) and gas cylinder switch (D15)', async () => {
 		await seedStock('item:beef', 100);
 		const cyl1 = await repo.createGasCylinderType(
 			{ name: 'ถัง 1', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
@@ -879,7 +876,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		);
 
 		// Warehouse issues 15 instead of 20, and switches to cylinder 2
-		const approved = await repo.approveRequisitionTicket(
+		const approved = await repo.approveKitchenRequisition(
 			requisition._id,
 			'warehouse_officer',
 			{
@@ -898,7 +895,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		expect(beefLedger?.qty).toBe('-15');
 	});
 
-	it('rejectRequisitionTicket records rejection reason and blocks subsequent approval', async () => {
+	it('rejectKitchenRequisition records rejection reason and blocks subsequent approval', async () => {
 		const { requisition } = await repo.createPendingRequisition(
 			{
 				requisitionInput: {
@@ -908,7 +905,7 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 			ctx
 		);
 
-		const rejected = await repo.rejectRequisitionTicket(
+		const rejected = await repo.rejectKitchenRequisition(
 			requisition._id,
 			'วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้',
 			ctx
@@ -916,9 +913,9 @@ describe('KitchenRemoteRepository — TKT-KITCHEN Ticket Workflow', () => {
 		expect(rejected.status).toBe('rejected');
 		expect(rejected.reject_reason).toBe('วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้');
 
-		// Attempting to approve rejected ticket throws
+		// Attempting to approve rejected requisition throws
 		await expect(
-			repo.approveRequisitionTicket(requisition._id, 'warehouse_officer', undefined, ctx)
+			repo.approveKitchenRequisition(requisition._id, 'warehouse_officer', undefined, ctx)
 		).rejects.toThrow(/already rejected/);
 	});
 });

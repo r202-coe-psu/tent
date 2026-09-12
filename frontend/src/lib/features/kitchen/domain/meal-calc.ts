@@ -261,13 +261,7 @@ export function assessRequisition(
 	});
 }
 
-// ---- Ticket Formatting & Group Progress ----
-
-/** Formats ticket number: [ShelterCode]-KITCHEN-XXXX */
-export function formatTicketNo(shelterCode: string, seq: number): string {
-	const code = (shelterCode || 'SH001').toUpperCase();
-	return `${code}-KITCHEN-${String(seq).padStart(4, '0')}`;
-}
+// ---- Target Group Tags & Progress ----
 
 export const TARGET_GROUP_TAGS = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'] as const;
 export type TargetGroupTag = (typeof TARGET_GROUP_TAGS)[number];

@@ -19,8 +19,7 @@ import {
 	UtensilsCrossed,
 	Tent,
 	Home,
-	FlaskConical,
-	ClipboardCheck
+	FlaskConical
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -72,18 +71,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: resolve('/back-office/sop-simulation'),
 				icon: FlaskConical,
 				requiresManager: true
-			},
-			{
-				label: 'จัดการคำร้องเบิกจ่าย',
-				href: null,
-				icon: ClipboardCheck,
-				children: [
-					{
-						label: 'คำขอเบิกโรงครัว',
-						href: resolve('/back-office/kitchen-requisitions'),
-						icon: ClipboardList
-					}
-				]
 			},
 			{
 				label: 'คลังสิ่งของและบริจาค',

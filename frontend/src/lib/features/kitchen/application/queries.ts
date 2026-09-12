@@ -290,7 +290,7 @@ export const useCreatePendingRequisition = () =>
 			kitchenRepository().createPendingRequisition(params, ctx)
 	}));
 
-export const useApproveRequisitionTicket = () =>
+export const useApproveKitchenRequisition = () =>
 	createMutation(() => ({
 		mutationFn: ({
 			requisitionId,
@@ -302,10 +302,10 @@ export const useApproveRequisitionTicket = () =>
 			approver: string;
 			options?: ApproveRequisitionOptions;
 			ctx?: AuthorContext;
-		}) => kitchenRepository().approveRequisitionTicket(requisitionId, approver, options, ctx)
+		}) => kitchenRepository().approveKitchenRequisition(requisitionId, approver, options, ctx)
 	}));
 
-export const useRejectRequisitionTicket = () =>
+export const useRejectKitchenRequisition = () =>
 	createMutation(() => ({
 		mutationFn: ({
 			requisitionId,
@@ -315,7 +315,7 @@ export const useRejectRequisitionTicket = () =>
 			requisitionId: string;
 			reason: string;
 			ctx: AuthorContext;
-		}) => kitchenRepository().rejectRequisitionTicket(requisitionId, reason, ctx)
+		}) => kitchenRepository().rejectKitchenRequisition(requisitionId, reason, ctx)
 	}));
 
 export const useIssueRequisition = () =>

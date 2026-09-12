@@ -520,7 +520,7 @@
 															</span>
 														</div>
 
-														<!-- Requisition Ticket, Service Badges & Actions -->
+														<!-- Requisition, Service Badges & Actions -->
 														<div class="flex flex-wrap items-center gap-2">
 															{#if planReq}
 																<span
@@ -530,16 +530,18 @@
 																		: planReq.status === 'rejected'
 																			? 'bg-rose-100 text-rose-800'
 																			: 'bg-amber-100 text-amber-800'}"
-																	title="ตั๋วเบิกวัตถุดิบ"
+																	title="ใบเบิกวัตถุดิบ"
 																>
 																	{#if planReq.status === 'approved'}
 																		<Check class="h-3 w-3" />
+																		เบิกวัตถุดิบแล้ว
 																	{:else if planReq.status === 'rejected'}
 																		<XCircle class="h-3 w-3" />
+																		ปฏิเสธคำขอ
 																	{:else}
 																		<Clock class="h-3 w-3" />
+																		รออนุมัติวัตถุดิบ
 																	{/if}
-																	{planReq.ticket_no}
 																</span>
 															{/if}
 

@@ -10,6 +10,7 @@
 		useMealServices,
 		useKitchenRequisitions,
 		useCreatePendingRequisition,
+		useApproveKitchenRequisition,
 		useRecordMealService,
 		useDeleteMealPlanDraft,
 		useGasCylinderTypes,
@@ -51,6 +52,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import FastForward from '@lucide/svelte/icons/fast-forward';
 
 	const sessionId = $derived(page.params.session_id);
 	const planIdParam = $derived(page.url.searchParams.get('plan_id'));
@@ -70,6 +72,7 @@
 	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
 
 	const createRequisitionMutation = useCreatePendingRequisition();
+	const approveRequisitionMutation = useApproveKitchenRequisition();
 	const recordServiceMutation = useRecordMealService();
 	const deletePlanMutation = useDeleteMealPlanDraft();
 
@@ -82,6 +85,7 @@
 
 	// Current Active Batch State
 	let currentStage = $state<'A' | 'B' | 'C'>('A');
+	let isBypassed = $state(false);
 
 	// Plan & Requisition currently tracked in the wizard
 	let activePlanId = $state<string | null>(null);
@@ -575,8 +579,8 @@
 
 	const isGasInsufficient = $derived(gasRowsAnalysis.some((r) => r.isInsufficient));
 
-	// Submit Stage A ➔ Create Requisition Ticket
-	async function handleCreateRequisitionTicket() {
+	// Submit Stage A ➔ Create Requisition
+	async function handleCreateRequisition() {
 		if (!session) return;
 		if (allocatedTarget <= 0) {
 			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
@@ -662,11 +666,27 @@
 			activePlanId = res.plan?._id ?? null;
 			activeRequisitionId = res.requisition._id;
 			currentStage = 'B';
-			toast.success(`สร้างใบเบิก ${res.requisition.ticket_no} เรียบร้อยแล้ว (รอคลังอนุมัติ)`);
+			toast.success('สร้างรายการขอเบิกวัตถุดิบเรียบร้อยแล้ว');
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'ไม่สามารถสร้างใบเบิกได้';
 			toast.error(msg);
 		}
+	}
+
+	async function handleBypass() {
+		isBypassed = true;
+		if (activeRequisition && activeRequisition.status === 'pending') {
+			try {
+				await approveRequisitionMutation.mutateAsync({
+					requisitionId: activeRequisition._id,
+					approver: authStore.user?.name ?? 'kitchen_staff (Bypass)'
+				});
+			} catch (err) {
+				console.warn('Bypass auto-approval note:', err);
+			}
+		}
+		currentStage = 'C';
+		toast.info('ข้ามขั้นตอนการขอเบิกวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
 	}
 
 	function handleEditAndReRequest() {
@@ -823,7 +843,7 @@
 				<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-2xs"
 					>B</span
 				>
-				ตั๋วเบิก & อนุมัติ
+				ขอเบิก & อนุมัติ
 			</button>
 			<span class="text-muted-foreground/40">/</span>
 			<button
@@ -833,7 +853,10 @@
 					? 'bg-primary text-primary-foreground shadow-sm'
 					: 'text-muted-foreground'}"
 				disabled={!activePlanId ||
-					(!activeService && activeRequisition && activeRequisition.status !== 'approved')}
+					(!activeService &&
+						activeRequisition &&
+						activeRequisition.status !== 'approved' &&
+						!isBypassed)}
 				onclick={() => (currentStage = 'C')}
 			>
 				<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-2xs"
@@ -889,7 +912,7 @@
 
 	<!-- Stage Content -->
 	{#if currentStage === 'A'}
-		<!-- STAGE A: Plan, BOM & Requisition Ticket Creation -->
+		<!-- STAGE A: Plan, BOM & Requisition Creation -->
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
 			<!-- Column 1: Menu & Target Groups -->
 			<Card.Root class="border shadow-sm">
@@ -1434,11 +1457,7 @@
 					{#if activeRequisition}
 						<div class="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
 							<div class="flex items-center justify-between">
-								<span class="font-semibold text-foreground">ตั๋วคำขอเบิก:</span>
-								<span class="font-mono font-bold text-primary">{activeRequisition.ticket_no}</span>
-							</div>
-							<div class="flex items-center justify-between">
-								<span class="text-muted-foreground">สถานะตั๋ว:</span>
+								<span class="font-semibold text-foreground">สถานะคำขอเบิก:</span>
 								<span
 									class="font-semibold {activeRequisition.status === 'approved'
 										? 'text-green-700'
@@ -1447,18 +1466,18 @@
 											: 'text-amber-700'}"
 								>
 									{#if activeRequisition.status === 'approved'}
-										คลังอนุมัติแล้ว
+										อนุมัติแล้ว
 									{:else if activeRequisition.status === 'rejected'}
 										ถูกปฏิเสธ
 									{:else}
-										รอคลังสินค้าอนุมัติ
+										รอคลังอนุมัติ
 									{/if}
 								</span>
 							</div>
 						</div>
 
 						<div class="flex flex-col gap-2 pt-3">
-							{#if activeRequisition.status === 'approved'}
+							{#if activeRequisition.status === 'approved' || isBypassed}
 								<Button
 									class="w-full gap-2 bg-green-600 font-semibold text-white shadow-sm hover:bg-green-700"
 									onclick={() => (currentStage = 'C')}
@@ -1473,14 +1492,14 @@
 								onclick={() => (currentStage = 'B')}
 							>
 								<ArrowRight class="h-4 w-4" />
-								ไปยังตรวจสอบตั๋วเบิก (Stage B)
+								ไปยังตรวจสอบการเบิก (Stage B)
 							</Button>
 						</div>
 					{:else}
 						<div class="pt-4">
 							<Button
 								class="w-full gap-2 font-semibold shadow-sm"
-								onclick={handleCreateRequisitionTicket}
+								onclick={handleCreateRequisition}
 								disabled={createRequisitionMutation.isPending}
 							>
 								<Sparkles class="h-4 w-4" />
@@ -1494,13 +1513,13 @@
 			</Card.Root>
 		</div>
 	{:else if currentStage === 'B'}
-		<!-- STAGE B: Ticket & Warehouse Approval -->
+		<!-- STAGE B: Requisition & Warehouse Approval -->
 		<Card.Root class="mx-auto max-w-3xl border shadow-sm">
 			<Card.Header class="border-b bg-muted/20">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<Card.Title class="flex items-center gap-2 text-lg font-bold">
-							ตั๋วคำขอเบิก: {activeRequisition?.ticket_no ?? 'กำลังโหลด...'}
+							ใบขอเบิกวัตถุดิบ: {activePlan?.label ?? 'รายการวัตถุดิบ'}
 						</Card.Title>
 						<Card.Description class="text-xs">
 							ชุดการผลิต: {activePlan?.label ?? 'เมนูอาหาร'} · เป้าหมาย {activePlan?.allocated_target ??
@@ -1541,13 +1560,22 @@
 						class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800"
 					>
 						<Clock class="h-5 w-5 shrink-0 text-amber-600" />
-						<div>
+						<div class="flex-1">
 							<h4 class="font-bold">รอคลังสินค้าตรวจสอบและอนุมัติตัดจ่ายสต็อก</h4>
 							<p class="mt-1 text-xs text-amber-700">
-								ตั๋วคำขอเบิกถูกส่งไปยังระบบคลังเรียบร้อยแล้ว
-								เมื่อเจ้าหน้าที่คลังตรวจสอบสต็อกและกดยืนยันจ่ายของ
-								ระบบจะปลดล็อกขั้นตอนเริ่มปรุงอาหารทันที
+								คำขอเบิกถูกส่งไปยังระบบคลังเรียบร้อยแล้ว หรือท่านสามารถกดปุ่มข้ามขั้นตอน (Bypass)
+								เพื่อเริ่มปรุงอาหารได้ทันที
 							</p>
+							<div class="mt-2.5">
+								<Button
+									size="sm"
+									class="h-7 gap-1.5 bg-amber-600 text-xs font-semibold text-white shadow-xs hover:bg-amber-700"
+									onclick={handleBypass}
+								>
+									<FastForward class="h-3.5 w-3.5" />
+									ข้ามขั้นตอนนี้ชั่วคราว (Bypass to Cooking)
+								</Button>
+							</div>
 						</div>
 					</div>
 				{:else if activeRequisition?.status === 'approved'}
@@ -1597,7 +1625,7 @@
 				<!-- Requisition Items Review Table -->
 				<div class="rounded-lg border">
 					<div class="border-b bg-muted/40 px-3 py-2 font-semibold text-foreground">
-						รายการวัตถุดิบในตั๋วคำขอ
+						รายการวัตถุดิบที่ขอเบิก
 					</div>
 					<Table.Root>
 						<Table.Header class="text-2xs">
@@ -1650,20 +1678,33 @@
 				{/if}
 
 				<!-- Action Buttons -->
-				<div class="flex items-center justify-between pt-2">
+				<div class="flex flex-wrap items-center justify-between gap-2 pt-2">
 					<Button variant="outline" onclick={() => goto(resolve('/back-office/kitchen'))}>
 						กลับไปหน้ารวมมื้อ
 					</Button>
 
-					{#if activeRequisition?.status === 'approved'}
-						<Button
-							class="gap-1.5 bg-green-600 text-white shadow-sm hover:bg-green-700"
-							onclick={() => (currentStage = 'C')}
-						>
-							เริ่มปรุงและบันทึกผลผลิต (สู่ช่วง C)
-							<ArrowRight class="h-4 w-4" />
-						</Button>
-					{/if}
+					<div class="flex items-center gap-2">
+						{#if activeRequisition?.status !== 'approved'}
+							<Button
+								variant="outline"
+								class="gap-1.5 border-amber-500 bg-amber-50 font-semibold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200"
+								onclick={handleBypass}
+							>
+								<FastForward class="h-4 w-4 text-amber-600" />
+								ข้ามขั้นตอนนี้ชั่วคราว (Bypass)
+							</Button>
+						{/if}
+
+						{#if activeRequisition?.status === 'approved' || isBypassed}
+							<Button
+								class="gap-1.5 bg-green-600 text-white shadow-sm hover:bg-green-700"
+								onclick={() => (currentStage = 'C')}
+							>
+								เริ่มปรุงและบันทึกผลผลิต (สู่ช่วง C)
+								<ArrowRight class="h-4 w-4" />
+							</Button>
+						{/if}
+					</div>
 				</div>
 			</Card.Content>
 		</Card.Root>
@@ -1706,7 +1747,9 @@
 					</div>
 					{#if activeRequisition}
 						<span class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
-							ตั๋วเบิก: {activeRequisition.ticket_no} (อนุมัติแล้ว)
+							{activeRequisition.status === 'approved'
+								? 'ใบเบิก: อนุมัติแล้ว'
+								: 'ข้ามขั้นตอนใบเบิก (Bypassed)'}
 						</span>
 					{/if}
 				</div>

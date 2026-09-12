@@ -25,10 +25,8 @@ import {
 	type GasCylinderType,
 	type GasCylinderTypeInput,
 	type MealSession,
-	type MealSessionInput,
-	type KitchenCounter
+	type MealSessionInput
 } from '../domain/kitchen';
-import { formatTicketNo } from '../domain/meal-calc';
 import {
 	createGasLedgerEntry,
 	isGasLedgerEntry,
@@ -188,66 +186,26 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		params: CreatePendingRequisitionParams,
 		ctx: AuthorContext
 	): Promise<{ plan?: MealPlan; requisition: KitchenRequisition }> {
-		for (let attempt = 0; attempt < 5; attempt++) {
-			let counterDoc: KitchenCounter;
-			let nextSeq: number;
-			const existingCounter = await this.repo.get<KitchenCounter>('kitchen_counter:main');
-			if (existingCounter) {
-				nextSeq = existingCounter.seq + 1;
-				counterDoc = {
-					...existingCounter,
-					seq: nextSeq,
-					updated_at: now()
-				};
-			} else {
-				nextSeq = 1;
-				counterDoc = {
-					_id: 'kitchen_counter:main',
-					type: 'kitchen_counter',
-					schema_v: 1,
-					shelter_code: ctx.shelterCode,
-					seq: 1,
-					created_at: now(),
-					updated_at: now(),
-					created_by: ctx.createdBy ?? 'kitchen_staff'
-				};
-			}
-
-			const ticketNo = formatTicketNo(ctx.shelterCode, nextSeq);
-
-			let planDoc: MealPlan | undefined;
-			if (params.planInput) {
-				planDoc = createMealPlan(params.planInput, ctx);
-			}
-
-			const mealPlanId = planDoc ? planDoc._id : (params.requisitionInput.meal_plan_id ?? null);
-			const requisitionDoc = createPendingRequisition(
-				{
-					...params.requisitionInput,
-					meal_plan_id: mealPlanId,
-					ticket_no: ticketNo
-				},
-				ctx
-			);
-
-			const docsToWrite = [counterDoc, ...(planDoc ? [planDoc] : []), requisitionDoc];
-			try {
-				await bulkDocs(this.dbName, docsToWrite);
-				return { plan: planDoc, requisition: requisitionDoc };
-			} catch (err: unknown) {
-				const errorObj = err as { status?: number; message?: string } | null;
-				if (errorObj?.status === 409 || errorObj?.message?.includes('conflict')) {
-					continue;
-				}
-				throw err;
-			}
+		let planDoc: MealPlan | undefined;
+		if (params.planInput) {
+			planDoc = createMealPlan(params.planInput, ctx);
 		}
-		throw new Error(
-			'createPendingRequisition: failed to allocate ticket number after 5 retries due to MVCC conflict'
+
+		const mealPlanId = planDoc ? planDoc._id : (params.requisitionInput.meal_plan_id ?? null);
+		const requisitionDoc = createPendingRequisition(
+			{
+				...params.requisitionInput,
+				meal_plan_id: mealPlanId
+			},
+			ctx
 		);
+
+		const docsToWrite = [...(planDoc ? [planDoc] : []), requisitionDoc];
+		await bulkDocs(this.dbName, docsToWrite);
+		return { plan: planDoc, requisition: requisitionDoc };
 	}
 
-	async approveRequisitionTicket(
+	async approveKitchenRequisition(
 		requisitionId: string,
 		approver: string,
 		options?: ApproveRequisitionOptions,
@@ -259,11 +217,11 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		};
 		const requisition = await this.getKitchenRequisitionById(requisitionId);
 		if (!requisition) {
-			throw new Error(`approveRequisitionTicket: requisition ${requisitionId} not found`);
+			throw new Error(`approveKitchenRequisition: requisition ${requisitionId} not found`);
 		}
 		if (requisition.status !== 'pending') {
 			throw new Error(
-				`approveRequisitionTicket: ticket ${requisition.ticket_no} is already ${requisition.status}`
+				`approveKitchenRequisition: requisition ${requisition._id} is already ${requisition.status}`
 			);
 		}
 
@@ -295,7 +253,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				const onHand = balance.get(item.item_id) ?? '0';
 				if (qtyGt(item.qty_issued, onHand)) {
 					throw new Error(
-						`approveRequisitionTicket: cannot issue ${item.qty_issued} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
+						`approveKitchenRequisition: cannot issue ${item.qty_issued} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
 					);
 				}
 			}
@@ -310,12 +268,12 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			for (const g of updatedGas) {
 				const cyl = types.find((t) => t._id === g.cylinder_id);
 				if (!cyl) {
-					throw new Error(`approveRequisitionTicket: gas cylinder ${g.cylinder_id} not found`);
+					throw new Error(`approveKitchenRequisition: gas cylinder ${g.cylinder_id} not found`);
 				}
 				const remaining = gasCylinderBalance(gasLedger, g.cylinder_id, cyl.capacity_kg);
 				if (qtyGt(g.qty_kg, remaining)) {
 					throw new Error(
-						`approveRequisitionTicket: cannot draw ${g.qty_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
+						`approveKitchenRequisition: cannot draw ${g.qty_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
 					);
 				}
 			}
@@ -386,7 +344,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return approvedRequisition;
 	}
 
-	async rejectRequisitionTicket(
+	async rejectKitchenRequisition(
 		requisitionId: string,
 		reason: string,
 		ctx: AuthorContext
@@ -394,11 +352,11 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		void ctx;
 		const requisition = await this.getKitchenRequisitionById(requisitionId);
 		if (!requisition) {
-			throw new Error(`rejectRequisitionTicket: requisition ${requisitionId} not found`);
+			throw new Error(`rejectKitchenRequisition: requisition ${requisitionId} not found`);
 		}
 		if (requisition.status !== 'pending') {
 			throw new Error(
-				`rejectRequisitionTicket: ticket ${requisition.ticket_no} is already ${requisition.status}`
+				`rejectKitchenRequisition: requisition ${requisition._id} is already ${requisition.status}`
 			);
 		}
 		const rejectedRequisition: KitchenRequisition = {

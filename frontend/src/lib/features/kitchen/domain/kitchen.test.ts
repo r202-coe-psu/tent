@@ -10,7 +10,7 @@ import {
 	isMealService,
 	isMealSession
 } from './kitchen';
-import { formatTicketNo, expandTargetTags, computeSessionGroupProgress } from './meal-calc';
+import { expandTargetTags, computeSessionGroupProgress } from './meal-calc';
 import { deriveSessionHeadcountFromOccupancy } from './occupancy';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -354,10 +354,9 @@ describe('createMealSession', () => {
 });
 
 describe('createPendingRequisition & Migration Guard', () => {
-	it('creates pending ticket with ticket_no and gas_drawdown', () => {
+	it('creates pending requisition with gas_drawdown', () => {
 		const req = createPendingRequisition(
 			{
-				ticket_no: 'SH001-KITCHEN-0001',
 				meal_plan_id: 'meal_plan:01J',
 				meal_session_id: 'meal_session:01J',
 				items: [{ item_id: 'item:rice', qty_requested: '50', qty_issued: '0', unit: 'kg' }],
@@ -367,7 +366,6 @@ describe('createPendingRequisition & Migration Guard', () => {
 		);
 		expect(req.type).toBe('kitchen_requisition');
 		expect(req.schema_v).toBe(3);
-		expect(req.ticket_no).toBe('SH001-KITCHEN-0001');
 		expect(req.status).toBe('pending');
 		expect(req.ledger_ids).toEqual([]);
 		expect(req.gas_drawdown).toHaveLength(1);
@@ -392,18 +390,12 @@ describe('createPendingRequisition & Migration Guard', () => {
 		const legacy = legacyDoc as Record<string, unknown>;
 		expect(isKitchenRequisition(legacyDoc)).toBe(true);
 		expect(legacy.status).toBe('approved');
-		expect(legacy.ticket_no).toBe('LEGACY');
 		expect(legacy.requested_at).toBe('2026-08-01T08:00:00.000Z');
 		expect(legacy.approved_at).toBe('2026-08-01T08:00:00.000Z');
 	});
 });
 
-describe('Ticket formatting and 5-group progress calculation', () => {
-	it('formats ticket number using shelter code and 4-digit sequence (D2)', () => {
-		expect(formatTicketNo('CNX01', 1)).toBe('CNX01-KITCHEN-0001');
-		expect(formatTicketNo('sh001', 42)).toBe('SH001-KITCHEN-0042');
-	});
-
+describe('5-group progress calculation', () => {
 	it('expands everyone tag to all 5 groups (D4)', () => {
 		expect(expandTargetTags(['everyone'])).toEqual([
 			'halal',

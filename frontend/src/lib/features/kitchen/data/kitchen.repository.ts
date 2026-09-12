@@ -75,13 +75,13 @@ export interface KitchenRepository {
 		params: CreatePendingRequisitionParams,
 		ctx: AuthorContext
 	): Promise<{ plan?: MealPlan; requisition: KitchenRequisition }>;
-	approveRequisitionTicket(
+	approveKitchenRequisition(
 		requisitionId: string,
 		approver: string,
 		options?: ApproveRequisitionOptions,
 		ctx?: AuthorContext
 	): Promise<KitchenRequisition>;
-	rejectRequisitionTicket(
+	rejectKitchenRequisition(
 		requisitionId: string,
 		reason: string,
 		ctx: AuthorContext
