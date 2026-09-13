@@ -407,8 +407,11 @@ export const useResumeTransfer = () => {
 export const useUndoCancelTransfer = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => operationsRepository().undoCancelTransfer(id),
-		onSuccess: () => {
+		mutationFn: ({ id, expectedRev }: { id: string; expectedRev?: string }) =>
+			operationsRepository().undoCancelTransfer(id, expectedRev),
+		// Settled, not success: a refused undo (FR-11, 412) means the list the user is looking at
+		// is already stale, so it has to refetch either way.
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 		}
 	}));

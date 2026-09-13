@@ -152,6 +152,9 @@ export interface OperationsRepository {
 	 *
 	 * `disputed` has its own way back (`resumeTransfer`): CR-089 FR-07 gives that status one exit
 	 * only, so a held transfer must be resumed before it can be cancelled at all.
+	 *
+	 * CR-090 FR-11 — pass the `_rev` returned by the cancel as `expectedRev` so the undo refuses
+	 * (412) when the document changed in between, instead of walking back someone else's write.
 	 */
-	undoCancelTransfer(id: string): Promise<StockTransfer>;
+	undoCancelTransfer(id: string, expectedRev?: string): Promise<StockTransfer>;
 }

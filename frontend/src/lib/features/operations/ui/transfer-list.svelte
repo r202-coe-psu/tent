@@ -203,10 +203,10 @@
 			pending.catch((err: unknown) => toast.error(errorMessage(err)));
 		}
 		try {
-			await pending;
+			const updated = await pending;
 			reasonOpen = false;
 			reasonText = '';
-			if (reasonMode === 'cancel') offerUndoCancel(target._id);
+			if (reasonMode === 'cancel') offerUndoCancel(updated);
 		} catch {
 			// Keep the dialog open so the typed reason is not lost.
 		}
@@ -226,16 +226,27 @@
 	/**
 	 * CR-090 FR-02/FR-05 — after a cancellation lands, offer 5 seconds to walk it back.
 	 *
-	 * Nothing is captured in this closure: the document still exists at `cancelled`, so the undo
-	 * only needs its `_id`. Missing the window costs the user a click, not the record (FR-06).
+	 * The closure keeps the `_rev` the cancel wrote (FR-11): the undo only succeeds while the
+	 * document is still exactly that cancellation. If anyone wrote to it in between — even
+	 * another cancel, which leaves the status unchanged — the server refuses with 412 and the
+	 * list refetches. Missing the window costs the user a click, not the record (FR-06).
 	 */
-	function offerUndoCancel(id: string) {
+	function offerUndoCancel(cancelled: StockTransfer) {
+		let fired = false;
 		toast.success('ยกเลิกคำร้องแล้ว', {
 			duration: UNDO_WINDOW_MS,
 			action: {
 				label: 'เลิกทำ',
 				onClick: () => {
-					toast.promise(undoCancelMutation.mutateAsync(id), {
+					// One undo per cancellation: a second click would only earn a 412 for the
+					// revision the first click just replaced.
+					if (fired) return;
+					fired = true;
+					const undo = undoCancelMutation.mutateAsync({
+						id: cancelled._id,
+						expectedRev: cancelled._rev
+					});
+					toast.promise(undo, {
 						loading: 'กำลังเลิกทำการยกเลิก...',
 						success: 'คำร้องกลับมารอส่งมอบแล้ว',
 						error: errorMessage

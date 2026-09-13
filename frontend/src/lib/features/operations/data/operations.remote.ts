@@ -450,6 +450,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			vehicle_plate?: string;
 			cancel_reason?: string;
 			dispute_reason?: string;
+			expected_rev?: string;
 		}
 	): Promise<StockTransfer> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
@@ -509,8 +510,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	 * an ordinary transition, and the server picks the right domain function from the document's
 	 * current status (see `TransferServerRepository.transition`).
 	 */
-	async undoCancelTransfer(id: string): Promise<StockTransfer> {
-		return this.transitionTransfer(id, 'requested');
+	async undoCancelTransfer(id: string, expectedRev?: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'requested', { expected_rev: expectedRev });
 	}
 }
 

@@ -546,6 +546,77 @@ describe('TransferServerRepository', () => {
 		).rejects.toBeInstanceOf(TransferServerRepositoryError);
 	});
 
+	// --- Regression: transition(…, 'requested') picks its domain function from latest.status ---
+
+	describe("transition(…, 'requested') branches on latest.status (CR-089 FR-05 + CR-090 FR-02)", () => {
+		// Two backward transitions share the same target. The server must choose by where the
+		// document IS, not by what the caller asks for: collapsing the branch to either side makes
+		// one of these rows throw or keep the wrong `*_reason`.
+		function mockStoredWithPuts(doc: StockTransfer) {
+			const puts: StockTransfer[] = [];
+			adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: doc };
+				}
+				if (method === 'PUT') {
+					// Only the document write — `ensureCentralDb` PUTs `/central_ops` itself the first
+					// time it runs in a process, which would make the count depend on test order.
+					if (decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+						puts.push(body as StockTransfer);
+					}
+					return { status: 201, data: { ok: true, id: 'x', rev: '9-back' } };
+				}
+				return { status: 200, data: {} };
+			});
+			return puts;
+		}
+
+		it('cancelled → undoCancelTransfer: drops cancel_reason only', async () => {
+			const puts = mockStoredWithPuts(
+				requestedTransfer({ status: 'cancelled', cancel_reason: 'กรอกจำนวนผิด' })
+			);
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect(puts).toHaveLength(1);
+			expect(puts[0].status).toBe('requested');
+			expect(Object.keys(puts[0])).not.toContain('cancel_reason');
+		});
+
+		it('disputed → resumeTransfer: drops dispute_reason, keeps timeline.disputed', async () => {
+			const puts = mockStoredWithPuts(
+				requestedTransfer({
+					status: 'disputed',
+					dispute_reason: 'รอตรวจสอบยอด',
+					timeline: {
+						requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' },
+						disputed: { at: '2026-08-22T06:00:00.000Z', by: 'Staff A' }
+					}
+				})
+			);
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect(puts).toHaveLength(1);
+			expect(puts[0].status).toBe('requested');
+			expect(Object.keys(puts[0])).not.toContain('dispute_reason');
+			expect(puts[0].timeline.disputed?.at).toBe('2026-08-22T06:00:00.000Z');
+		});
+
+		it.each(['requested', 'shipped', 'received'] as const)(
+			'%s → requested is refused and nothing is written',
+			async (status) => {
+				const puts = mockStoredWithPuts(requestedTransfer({ status }));
+				const repo = new TransferServerRepository('central_ops', 'SH001');
+
+				await expect(
+					repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001')
+				).rejects.toThrow();
+				expect(puts).toHaveLength(0);
+			}
+		);
+	});
+
 	// --- CR-090 undo-cancel ---
 
 	describe('undo cancel (CR-090 FR-02/FR-04)', () => {
@@ -584,7 +655,7 @@ describe('TransferServerRepository', () => {
 				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
 					return { status: 200, data: cancelledDoc() };
 				}
-				if (method === 'PUT') {
+				if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
 					puts.push(body);
 					return { status: 201, data: { ok: true, id: 'x', rev: '4-undone' } };
 				}
@@ -617,6 +688,120 @@ describe('TransferServerRepository', () => {
 			await expect(
 				repo.transition(TRANSFER_ID, 'requested', 'Staff B', 'SH002')
 			).rejects.toMatchObject({ status: 403 });
+		});
+
+		it('sends the _rev it just read, so CouchDB can reject a stale write', async () => {
+			// The undo carries no _rev from the browser: the server reads the document first and
+			// writes on top of that revision. A background write in between makes the PUT a 409.
+			const puts: unknown[] = [];
+			adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: cancelledDoc() };
+				}
+				if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					puts.push(body);
+					return { status: 201, data: { ok: true, id: 'x', rev: '4-undone' } };
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			expect((puts[0] as { _rev?: string })._rev).toBe('3-current');
+			expect(result._rev).toBe('4-undone');
+		});
+
+		it('surfaces a 409 on the PUT as a 409 error and does not retry', async () => {
+			let putCount = 0;
+			adminRaw.mockImplementation(async (path: string, method: string) => {
+				if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					return { status: 200, data: cancelledDoc() };
+				}
+				if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+					putCount++;
+					return {
+						status: 409,
+						data: { error: 'conflict', reason: 'Document update conflict.' }
+					};
+				}
+				return { status: 200, data: {} };
+			});
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const pending = repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+			await expect(pending).rejects.toBeInstanceOf(TransferServerRepositoryError);
+			await expect(pending).rejects.toMatchObject({ status: 409 });
+			// A blind retry could overwrite whatever won the race, so the conflict goes back to
+			// the caller untouched.
+			expect(putCount).toBe(1);
+		});
+
+		describe('expected_rev precondition (FR-11)', () => {
+			function mockStoredCountingPuts(doc: unknown) {
+				const puts: unknown[] = [];
+				adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+					if (method === 'GET' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+						return { status: 200, data: doc };
+					}
+					if (method === 'PUT' && decodeURIComponent(path) === `/central_ops/${TRANSFER_ID}`) {
+						puts.push(body);
+						return { status: 201, data: { ok: true, id: 'x', rev: '4-undone' } };
+					}
+					return { status: 200, data: {} };
+				});
+				return puts;
+			}
+
+			it('undoes when the stored rev still matches the one the cancel wrote', async () => {
+				const puts = mockStoredCountingPuts(cancelledDoc());
+				const repo = new TransferServerRepository('central_ops', 'SH001');
+				const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001', {
+					expected_rev: '3-current'
+				});
+
+				expect(result.status).toBe('requested');
+				expect(puts).toHaveLength(1);
+			});
+
+			it('refuses with 412 and writes nothing when the document moved on', async () => {
+				// Cancel → undo → cancel again by someone else: status reads `cancelled` both times,
+				// only the rev shows it is no longer the cancellation this user made.
+				const puts = mockStoredCountingPuts(
+					requestedTransfer({ status: 'cancelled', cancel_reason: 'คนอื่นยกเลิก', _rev: '5-other' })
+				);
+				const repo = new TransferServerRepository('central_ops', 'SH001');
+				const pending = repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001', {
+					expected_rev: '3-current'
+				});
+
+				await expect(pending).rejects.toBeInstanceOf(TransferServerRepositoryError);
+				await expect(pending).rejects.toMatchObject({ status: 412 });
+				expect(puts).toHaveLength(0);
+			});
+
+			it('still refuses a foreign shelter with 403 before looking at the rev', async () => {
+				mockStoredCountingPuts(cancelledDoc());
+				const repo = new TransferServerRepository('central_ops', 'SH002');
+
+				await expect(
+					repo.transition(TRANSFER_ID, 'requested', 'Staff B', 'SH002', {
+						expected_rev: 'stale'
+					})
+				).rejects.toMatchObject({ status: 403 });
+			});
+
+			it('keeps the undo unconditional when no expected_rev is sent (FR-06.1)', async () => {
+				const puts = mockStoredCountingPuts(
+					requestedTransfer({ status: 'cancelled', cancel_reason: 'x', _rev: '9-later' })
+				);
+				const repo = new TransferServerRepository('central_ops', 'SH001');
+				const result = await repo.transition(TRANSFER_ID, 'requested', 'Staff A', 'SH001');
+
+				expect(result.status).toBe('requested');
+				expect(puts).toHaveLength(1);
+			});
 		});
 
 		it('refuses to move a cancelled transfer straight to shipped', async () => {
