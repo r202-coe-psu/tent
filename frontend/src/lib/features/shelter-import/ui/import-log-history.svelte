@@ -16,11 +16,15 @@
 	}
 
 	function createdRows(results: ImportRowResult[]): ImportRowResult[] {
-		return results.filter((r) => r.status === 'created');
+		return results.filter((r) => r.status === 'created' || r.status === 'updated');
 	}
 
 	function failedRows(results: ImportRowResult[]): ImportRowResult[] {
-		return results.filter((r) => r.status !== 'created');
+		return results.filter((r) => r.status === 'validation_error' || r.status === 'server_error');
+	}
+
+	function skippedRows(results: ImportRowResult[]): ImportRowResult[] {
+		return results.filter((r) => r.status === 'skipped_duplicate');
 	}
 </script>
 
@@ -50,7 +54,9 @@
 
 				{#if createdRows(log.results).length > 0}
 					<div class="mt-3 border-t border-border pt-3">
-						<p class="mb-2 text-xs font-medium text-muted-foreground">ศูนย์ที่นำเข้าสำเร็จ</p>
+						<p class="mb-2 text-xs font-medium text-muted-foreground">
+							ศูนย์ที่นำเข้าหรืออัปเดตสำเร็จ
+						</p>
 						<ul class="flex flex-wrap gap-2">
 							{#each createdRows(log.results) as row (row.row)}
 								<li>
@@ -62,6 +68,21 @@
 										{#if row.name}<span class="text-muted-foreground">· {row.name}</span>{/if}
 										<ExternalLink class="h-3.5 w-3.5 text-muted-foreground" />
 									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				{#if skippedRows(log.results).length > 0}
+					<div class="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
+						<p class="mb-2 text-xs font-medium">ศูนย์ที่ข้ามเพราะซ้ำ</p>
+						<ul class="space-y-1">
+							{#each skippedRows(log.results) as row (row.row)}
+								<li>
+									แถว {row.row}{row.name ? ` · ${row.name}` : ''}{row.existing_code
+										? ` · ${row.existing_code}`
+										: ''}
 								</li>
 							{/each}
 						</ul>

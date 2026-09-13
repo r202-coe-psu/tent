@@ -45,6 +45,7 @@ export {
 } from './domain/columns';
 export {
 	buildMasterLookup,
+	buildUpdatePayload,
 	emptyLookups,
 	orphanZoneRows,
 	validateRow,
@@ -60,6 +61,7 @@ export {
 	type RowValidation,
 	type ShelterInput
 } from './domain/import-row';
+export { normalizeShelterName } from './domain/duplicates';
 export {
 	createShelterImportLog,
 	isShelterImportLog,
@@ -81,8 +83,16 @@ export {
 	shelterImportKeys,
 	useImportLogs,
 	useImportShelters,
+	useImportJob,
+	useRetryImportJob,
+	isImportJobTerminal,
 	startShelterImportLiveQuery,
-	type ImportSheltersInput
+	type ImportSheltersInput,
+	type ImportJob,
+	type ImportJobItem,
+	type ImportJobSummary,
+	type ImportJobStatus,
+	type ImportItemStatus
 } from './application/queries';
 
 // UI

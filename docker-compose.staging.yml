@@ -107,6 +107,7 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN}
       # Roleless writer for anonymous public writes (CR-070 booking, CR-052
       # courier PATCH). putAsPublicWriter fails closed without it outside dev.
       COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@couchdb:5984
@@ -123,6 +124,18 @@ services:
         condition: service_completed_successfully
       fastapi:
         condition: service_started
+    restart: unless-stopped
+
+  import-worker:
+    container_name: tent-import-worker-staging
+    image: tent/frontend:latest
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      SHELTER_IMPORT_WORKER_URL: http://frontend:3000
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN}
+    command: ["pnpm", "import-worker"]
     restart: unless-stopped
 
   nginx:

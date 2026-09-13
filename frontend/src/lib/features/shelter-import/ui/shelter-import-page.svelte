@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import Download from '@lucide/svelte/icons/download';
 	import Upload from '@lucide/svelte/icons/upload';
 	import FileSpreadsheet from '@lucide/svelte/icons/file-spreadsheet';
@@ -8,7 +11,7 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useMasterData } from '$lib/features/master-data';
-	import { listShelters } from '$lib/features/shelters';
+	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
 		orphanZoneRows,
@@ -30,9 +33,16 @@
 	} from '../domain/duplicates';
 	import { buildShelterTemplateBlob, type TemplateMasters } from '../data/template';
 	import { parseShelterWorkbook } from '../data/parse';
-	import { useImportShelters, type DuplicateAction } from '../application/queries';
+	import {
+		useImportJob,
+		useImportShelters,
+		useRetryImportJob,
+		isImportJobTerminal,
+		type DuplicateAction
+	} from '../application/queries';
 	import ImportPreviewTable from './import-preview-table.svelte';
 	import ImportLogHistory from './import-log-history.svelte';
+	import ImportProgress from './import-progress.svelte';
 
 	let { basePath }: { basePath?: string } = $props();
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
@@ -75,6 +85,25 @@
 	let duplicateAction = $state<DuplicateAction>('skip');
 
 	const importMutation = useImportShelters();
+	const retryMutation = useRetryImportJob();
+	const queryClient = useQueryClient();
+	let activeJobId = $state<string | null>(null);
+	const activeJobQuery = useImportJob(() => activeJobId);
+	const activeJob = $derived(activeJobQuery.data);
+	const jobRunning = $derived(
+		Boolean(activeJob && !isImportJobTerminal(activeJob.job.status)) || importMutation.isPending
+	);
+
+	onMount(() => {
+		activeJobId = sessionStorage.getItem('shelter-import-active-job');
+	});
+
+	$effect(() => {
+		const job = activeJobQuery.data?.job;
+		if (!job || !isImportJobTerminal(job.status)) return;
+		queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+		queryClient.invalidateQueries({ queryKey: ['shelter-import', 'logs'] });
+	});
 
 	async function refreshExistingShelters(): Promise<ExistingShelter[] | null> {
 		duplicateCheckLoading = true;
@@ -148,6 +177,7 @@
 	const importDisabled = $derived(
 		!duplicateCheckReady ||
 			duplicateCheckLoading ||
+			jobRunning ||
 			(newCount === 0 && !(duplicateAction === 'update' && dupCount > 0))
 	);
 
@@ -169,9 +199,22 @@
 				rows: validations,
 				duplicateAction
 			},
-			{ onSuccess: () => clearFile() }
+			{
+				onSuccess: (result) => {
+					activeJobId = result.jobId;
+					sessionStorage.setItem('shelter-import-active-job', result.jobId);
+				}
+			}
 		);
 	}
+
+	function retryFailed() {
+		if (activeJobId) retryMutation.mutate(activeJobId);
+	}
+
+	const hasRetryableFailures = $derived(
+		Boolean(activeJob?.items.some((item) => item.status === 'failed'))
+	);
 </script>
 
 <div class="flex w-full flex-1 flex-col gap-6 p-6">
@@ -213,7 +256,7 @@
 							: ''}
 					</span>
 				</div>
-				<Button variant="ghost" size="sm" onclick={clearFile}>
+				<Button variant="ghost" size="sm" onclick={clearFile} disabled={jobRunning}>
 					<X class="mr-1 h-4 w-4" /> ล้างไฟล์
 				</Button>
 			</div>
@@ -234,7 +277,7 @@
 					type="file"
 					accept=".xlsx"
 					class="sr-only"
-					disabled={parsing}
+					disabled={parsing || jobRunning}
 					onchange={onFileChange}
 				/>
 			</label>
@@ -246,9 +289,9 @@
 		<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>
-				<Button onclick={runImport} disabled={importDisabled || importMutation.isPending}>
+				<Button onclick={runImport} disabled={importDisabled}>
 					<Upload class="mr-2 h-4 w-4" />
-					{importMutation.isPending ? 'กำลังนำเข้า...' : importLabel}
+					{importMutation.isPending ? 'กำลังสร้างงาน...' : importLabel}
 				</Button>
 			</div>
 			{#if errorCount > 0}
@@ -272,30 +315,22 @@
 							<li>{dup.name} → {dup.existingCode}</li>
 						{/each}
 					</ul>
-					<div class="mt-3 space-y-2">
-						<label class="flex items-center space-x-3 text-sm">
-							<input
-								type="radio"
-								name="duplicate-action"
-								value="skip"
-								checked={duplicateAction === 'skip'}
-								onchange={() => (duplicateAction = 'skip')}
-								class="h-4 w-4 accent-shelter-blue-text"
-							/>
+					<RadioGroup.Root
+						value={duplicateAction}
+						onValueChange={(value) => {
+							if (value === 'skip' || value === 'update') duplicateAction = value;
+						}}
+						class="mt-3 gap-2"
+					>
+						<label for="duplicate-action-skip" class="flex items-center gap-3 text-sm">
+							<RadioGroup.Item value="skip" id="duplicate-action-skip" />
 							<span>ข้ามศูนย์ที่ซ้ำ (ไม่แก้ไขข้อมูลเดิม)</span>
 						</label>
-						<label class="flex items-center space-x-3 text-sm">
-							<input
-								type="radio"
-								name="duplicate-action"
-								value="update"
-								checked={duplicateAction === 'update'}
-								onchange={() => (duplicateAction = 'update')}
-								class="h-4 w-4 accent-shelter-blue-text"
-							/>
+						<label for="duplicate-action-update" class="flex items-center gap-3 text-sm">
+							<RadioGroup.Item value="update" id="duplicate-action-update" />
 							<span>อัปเดตข้อมูลเดิมทับด้วยค่าจากไฟล์</span>
 						</label>
-					</div>
+					</RadioGroup.Root>
 					{#if duplicateAction === 'update'}
 						<p class="mt-2 text-sm text-amber-700">
 							คำเตือน: ข้อมูลศูนย์ที่มีอยู่เดิมจะถูกเขียนทับด้วยค่าจากไฟล์นี้ทั้งหมด
@@ -305,6 +340,14 @@
 			{/if}
 			<ImportPreviewTable {validations} {duplicates} {duplicateAction} />
 		</div>
+	{/if}
+
+	{#if activeJobId}
+		<ImportProgress
+			data={activeJob}
+			retrying={retryMutation.isPending}
+			onretry={hasRetryableFailures ? retryFailed : undefined}
+		/>
 	{/if}
 
 	<!-- History -->

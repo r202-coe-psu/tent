@@ -1,12 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import {
-	adminRaw,
-	requireAdmin,
-	requireShelterScopeOrSA,
-	serviceError
-} from '$lib/server/couch-admin';
-import { ulid } from '$lib/db/ulid';
+import { requireAdmin, requireShelterScopeOrSA, serviceError } from '$lib/server/couch-admin';
 import {
 	createShelterSchema,
 	EMPTY_ADMISSION_POLICY,
@@ -15,160 +9,18 @@ import {
 	DEFAULT_SHELTER_FEATURE_FLAGS,
 	type ShelterMaster
 } from '$lib/features/shelters/server';
-import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
-import {
-	SHELTER_REGISTRY_DB,
-	listShelterMasters,
-	migrate,
-	mergeShelterSecurity,
-	nowIso,
-	deployShelterViews,
-	deployReferralMangoIndexes,
-	deployTransferLedgerMangoIndexes,
-	deployRegistryDesign
-} from '$lib/server/shelters.admin';
-import { buildValidateDocUpdate, shelterDbName } from '$lib/server/shelter-access-design';
-import { publicWriterName } from '$lib/server/couch-public-writer';
+import { migrate, listShelterMasters } from '$lib/server/shelters.admin';
+import { shelterDbName } from '$lib/server/shelter-access-design';
+import { provisionShelter } from '$lib/features/shelters/server/provisioner';
 
 export const prerender = false;
-
-function seedEvacuee(
-	code: string,
-	first: string,
-	last: string,
-	gender: string,
-	phone: string | null
-) {
-	const ts = nowIso();
-	return {
-		_id: `evacuee:seed-${first.toLowerCase()}`,
-		type: 'evacuee',
-		schema_v: 1,
-		shelter_code: code,
-		created_at: ts,
-		updated_at: ts,
-		created_by: 'seed',
-		first_name: first,
-		last_name: last,
-		gender,
-		phone,
-		special_needs: [],
-		household_id: null,
-		current_stay: { status: 'pre_registered', zone: null, since: ts },
-		privacy: { search_excluded: false },
-		registered_via: 'import'
-	};
-}
-
-/** Auto-assign the shared shelter/host-house code sequence in the SHxxx format. */
-async function nextShelterCode(): Promise<string> {
-	const masters = await listShelterMasters();
-	let max = 0;
-	for (const m of masters) {
-		const match = m.code.match(/^SH(\d+)$/i);
-		if (match) {
-			const n = parseInt(match[1], 10);
-			if (n > max) max = n;
-		}
-	}
-	return `SH${String(max + 1).padStart(3, '0')}`;
-}
 
 /** POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned. */
 export const POST: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
-		const input = createShelterSchema.parse(body);
-		const code = await nextShelterCode();
-		const db = shelterDbName(code);
-
-		const steps: { step: string; status: number }[] = [];
-
-		// 1. Shelter database (412 = already exists → idempotent).
-		steps.push({ step: 'create-db', status: (await adminRaw(`/${db}`, 'PUT')).status });
-
-		// 2. _security — read-modify-write to avoid clobbering existing members
-		// (skill: couchdb-pouchdb-bestpractices §4). On first provision this is
-		// a no-op merge; on re-runs it preserves any staff added since.
-		// The public writer (CR-070 booking / CR-052 courier PATCH) joins as a plain
-		// member by name — it holds no role, so its writes still pass through
-		// `_design/access` validate_doc_update below.
-		const writerName = publicWriterName();
-		await mergeShelterSecurity(
-			db,
-			{ roles: ['system_admin'] },
-			{ names: writerName ? [writerName] : [], roles: [`shelter:${code}`] }
-		);
-		steps.push({ step: 'security', status: 200 });
-
-		// 3. validate_doc_update design doc (idempotent re-PUT with _rev).
-		const existing = await adminRaw(`/${db}/_design/access`, 'GET');
-		const rev = existing.status === 200 ? (existing.data as { _rev: string })._rev : undefined;
-		const design = await adminRaw(`/${db}/_design/access`, 'PUT', {
-			_id: '_design/access',
-			...(rev ? { _rev: rev } : {}),
-			validate_doc_update: buildValidateDocUpdate(code)
-		});
-		steps.push({ step: 'design', status: design.status });
-
-		// 3.5. Deploy Dashboard views (CR-051)
-		const dashboardStatus = await deployShelterViews(db);
-		steps.push({ step: 'design-dashboard', status: dashboardStatus });
-
-		// 3.6. Referral Mango indexes (CR-045 / T-34 list/find)
-		await deployReferralMangoIndexes(db);
-		steps.push({ step: 'referral-mango', status: 200 });
-
-		// 3.7. Transfer ledger Mango indexes (CR-059 T-13 balance/idempotency `_find` checks)
-		await deployTransferLedgerMangoIndexes(db);
-		steps.push({ step: 'transfer-ledger-mango', status: 200 });
-
-		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
-		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
-		// Ensure authenticated users (SM / staff) can sync the registry.
-		await mergeShelterSecurity(
-			SHELTER_REGISTRY_DB,
-			{ roles: ['system_admin'] },
-			{ roles: [...SHELTER_CAPABILITIES] }
-		);
-		// `_design/app/_view/by_code` — findMasterByCode + the public booking BFF
-		// look shelters up by code; without it both fall back to a full scan.
-		const registryDesign = await deployRegistryDesign();
-		steps.push({ step: 'registry-design', status: registryDesign.status });
-		const masters = await listShelterMasters();
-		if (!masters.some((m) => m.code === code)) {
-			const ts = nowIso();
-			const master = {
-				_id: `shelter:${ulid()}`,
-				type: 'shelter' as const,
-				schema_v: 5 as const,
-				code,
-				...input,
-				created_at: ts,
-				updated_at: ts
-			};
-			const res = await adminRaw(
-				`/${SHELTER_REGISTRY_DB}/${encodeURIComponent(master._id)}`,
-				'PUT',
-				master
-			);
-			steps.push({ step: 'registry-master', status: res.status });
-		} else {
-			steps.push({ step: 'registry-master', status: 200 });
-		}
-
-		// 5. Seed a couple of evacuees (409 = already there → fine).
-		const seeds = [
-			seedEvacuee(code, 'Somchai', 'Jaidee', 'male', '0811111111'),
-			seedEvacuee(code, 'Malee', 'Suksai', 'female', null)
-		];
-		for (const doc of seeds) {
-			const res = await adminRaw(`/${db}/${encodeURIComponent(doc._id)}`, 'PUT', doc);
-			steps.push({ step: `seed:${doc.first_name}`, status: res.status });
-		}
-
-		return json({ ok: true, code, db, steps });
+		return json(await provisionShelter(createShelterSchema.parse(body)));
 	} catch (e) {
 		return serviceError(e);
 	}
