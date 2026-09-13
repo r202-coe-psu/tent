@@ -78,7 +78,7 @@ affects:
 
 ### 3.2 Document Type ใหม่: `fuel_cylinder` (Shelter DB) — `docs/data/schema.md` §2.7.1 (ทดแทน `gas_cylinder_type`)
 
-เอกสารตัวแทนถังจริง 1 ใบในศูนย์อพยพ จัดเก็บในฐานข้อมูล `shelter_{shelter_code}`:
+เอกสารตัวแทนถังจริง 1 ใบในศูนย์อพยพ จัดเก็บในฐานข้อมูล `shelter_{shelter_code}` (สืบทอด `BaseDoc` โดยมี `shelter_code`, `created_at`, `updated_at`, `created_by`):
 **Pattern `_id`:** `fuel_cylinder:{ulid}` · **schema_v:** `1` · **Mutable (LWW)**
 
 | Field | Type | Req/Opt | รายละเอียด / ข้อกำหนด |
@@ -95,10 +95,10 @@ affects:
 | `deactivated` | `boolean` | Opt | Flag ระบุถังชำรุด เลิกใช้งาน หรือปลดระวาง (`true` = ซ่อนจากรายการเลือกในครัวและสต็อกพร้อมใช้) |
 
 #### สถานะถัง (Computed Lifecycle Status — ห้ามเก็บ running total):
-$$\text{remaining\_kg} = \text{capacity\_kg} + \sum_{e \in \text{gas\_ledger}} e\text{.qty\_kg (สำหรับ cylinder\_id นี้)}$$
+$$\text{remaining\_kg} = \sum_{e \in \text{gas\_ledger}} e\text{.qty\_kg (สำหรับ cylinder\_id นี้)}$$
 
 - **`deactivated` (ชำรุด/ปลดระวาง):** เมื่อ `deactivated === true`
-- **`unused` (ยังไม่ใช้ / ถังเต็ม):** เมื่อ `remaining_kg == capacity_kg`
+- **`unused` (ยังไม่ใช้ / ถังเต็ม):** เมื่อ `remaining_kg >= capacity_kg`
 - **`in_use` (กำลังใช้งาน):** เมื่อ `0 < remaining_kg < capacity_kg`
 - **`empty` (ถังเปล่า / หมดแล้ว):** เมื่อ `remaining_kg <= 0`
 

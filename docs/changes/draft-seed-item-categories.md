@@ -121,7 +121,7 @@ affects:
 ```typescript
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
-import { typeClassSchema, type TypeClass } from './catalog-types';
+import { type TypeClass } from './catalog'; // หรือใช้ typeClassSchema ที่ประกาศไว้ในไฟล์เดียวกัน
 
 // ================================================================
 // ItemCategory Schema & Types (schema_v: 2)

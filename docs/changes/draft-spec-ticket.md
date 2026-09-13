@@ -666,12 +666,12 @@ export interface MealService extends BaseDoc {
 ### หมวดที่ 4: ความปลอดภัยและการกำกับดูแล (Governance & Security)
 
 #### FR-SEC-01: การควบคุมสิทธิ์ตามบทบาท (Role-Based Access Control)
-- **คำสั่ง:** การเข้าถึงและปฏิบัติการในแต่ละขั้นตอนต้องถูกควบคุมด้วย RBAC:
-  - Step 1 (เปิดตั๋วจัดของ): `warehouse_staff`, `system_admin`, `shelter_manager`, `kitchen_staff`, `service_staff`
+- **คำสั่ง:** การเข้าถึงและปฏิบัติการในแต่ละขั้นตอนต้องถูกควบคุมด้วย 10 Canonical Roles ของระบบ:
+  - Step 1 (เปิดตั๋วจัดของ): `warehouse_staff`, `supply_coordinator`, `system_admin`, `shelter_manager`, `kitchen_staff`
   - Step 2 (ผจก. ตรวจสอบ): เฉพาะ `shelter_manager`, `system_admin`
-  - Step 3 (ปล่อยรถขนส่ง): เฉพาะ `warehouse_staff`, `shelter_manager`, `system_admin`
-  - Step 4–6 (จุดแจกรับเข้า, แจกจ่าย, ปิดรอบ, ส่งคืน): `registration_staff`, `service_staff`, `volunteer`, `shelter_manager`
-  - Step 7 (คลังตรวจรับคืน): เฉพาะ `warehouse_staff`, `shelter_manager`, `system_admin`
+  - Step 3 (ปล่อยรถขนส่ง): เฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`
+  - Step 4–6 (จุดแจกรับเข้า, แจกจ่าย, ปิดรอบ, ส่งคืน): `registration_staff`, `supply_coordinator`, `shelter_manager` *(หมายเหตุ: อาสาสมัครปฏิบัติการหน้างานไม่มีบัญชีใน CouchDB `_users` ตาม `role-permission-matrix.md §1.3` และ CR-116 แต่ปฏิบัติงานผ่าน Digital Shift Pass Token หรือใช้งานแท็บเล็ตร่วมกับ Staff ประจำจุด)*
+  - Step 7 (คลังตรวจรับคืน): เฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`
   - ด่าน Check-out Resolve: `registration_staff`, `shelter_manager`, `system_admin`
 - **AC-SEC-01.1:** UI ต้องซ่อนปุ่มดำเนินการสำหรับผู้ใช้ที่ไม่มีสิทธิ์ตามบทบาทที่กำหนด
 - **AC-SEC-01.2:** Endpoint Server ต้องตรวจสอบสิทธิ์และปฏิเสธคำขอด้วย HTTP 403 หากส่งคำขอข้ามบทบาท
@@ -687,23 +687,23 @@ export interface MealService extends BaseDoc {
 
 | โมดูลหลัก         | โมดูลย่อย           |  ลำดับ  | หน้าจอ (Page Name)            | URL Route                               | ผู้ใช้งานหลัก (Canonical Roles)                                               | หน้าที่หลัก                                                    |
 | :-------------- | :---------------- | :---: | :--------------------------- | :-------------------------------------- | :------------------------------------------------------------------------ | :--------------------------------------------------------- |
-| **Back-office** | **Ticket Center** |   1   | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets`                  | `warehouse_staff`, `shelter_manager`, `system_admin`                      | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ               |
-|                 |                   |   2   | ตั๋วเบิกวัตถุดิบเข้าครัว             | `/back-office/tickets/kitchen`          | `kitchen_staff`, `warehouse_staff`                                        | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO                  |
-|                 |                   |   3   | ตั๋วเบิกอาหารปรุงสุก              | `/back-office/tickets/food`             | `service_staff`, `registration_staff`, `kitchen_staff`, `shelter_manager` | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch       |
-|                 |                   |   4   | ตั๋วเบิกสิ่งของและของยืม           | `/back-office/tickets/supplies`         | `service_staff`, `warehouse_staff`, `shelter_manager`                     | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ                |
+| **Back-office** | **Ticket Center** |   1   | ศูนย์ควบคุม Ticket (Ticket Hub) | `/back-office/tickets`                  | `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | แดชบอร์ดสรุปยอดคำขอเบิก 4 ประเภทและ Badge รออนุมัติ               |
+|                 |                   |   2   | ตั๋วเบิกวัตถุดิบเข้าครัว             | `/back-office/tickets/kitchen`          | `kitchen_staff`, `warehouse_staff`, `supply_coordinator`                  | จัดการตั๋ววัตถุดิบครัว, ตรวจสอบ BOM, ตัดสต็อก FEFO                  |
+|                 |                   |   3   | ตั๋วเบิกอาหารปรุงสุก              | `/back-office/tickets/food`             | `kitchen_staff`, `registration_staff`, `supply_coordinator`, `shelter_manager` | จัดการตั๋วอาหารพร้อมทาน, คุมเวลา 4 ชม., จัดชุด Active Batch       |
+|                 |                   |   4   | ตั๋วเบิกสิ่งของและของยืม           | `/back-office/tickets/supplies`         | `warehouse_staff`, `supply_coordinator`, `shelter_manager`                 | จัดการตั๋วของใช้และของยืมคงทน, คุมยอดจัดสรรประจำโต๊ะ                |
 |                 |                   |   5   | ตั๋วโอนย้ายพัสดุข้ามศูนย์            | `/back-office/tickets/transfers`        | `warehouse_staff`, `supply_coordinator`                                   | จัดการตั๋วโอนย้ายข้ามศูนย์, บังคับข้อมูลคนขับ/ทะเบียนรถ (CR-089)        |
-|                 |                   |   6   | แบบฟอร์มสร้างตั๋วเบิก             | `/back-office/tickets/new`              | `warehouse_staff`, `kitchen_staff`, `service_staff`, `shelter_manager`    | ฟอร์มขอเบิกพัสดุและอาหาร                                       |
-|                 |                   |   7   | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ      | `/back-office/tickets/[id]`             | `shelter_manager`, `warehouse_staff`                                      | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment)           |
-|                 | **Warehouse**     |   8   | สต็อกการ์ด & ยอดคงเหลือ         | `/back-office/supply`                   | `warehouse_staff`, `system_admin`                                         | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit  |
-|                 |                   |   9   | ใบปล่อยของ & ชุดแจกจ่าย         | `/back-office/supply/batches`           | `warehouse_staff`                                                         | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch                |
-|                 |                   |  10   | ติดตามของยืมค้างส่ง & สูญหาย      | `/back-office/supply/loans`             | `warehouse_staff`, `shelter_manager`                                      | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy)            |
+|                 |                   |   6   | แบบฟอร์มสร้างตั๋วเบิก             | `/back-office/tickets/new`              | `warehouse_staff`, `supply_coordinator`, `kitchen_staff`, `shelter_manager` | ฟอร์มขอเบิกพัสดุและอาหาร                                       |
+|                 |                   |   7   | ตรวจสอบตั๋ว & จัดของ/ส่งมอบ      | `/back-office/tickets/[id]`             | `shelter_manager`, `warehouse_staff`, `supply_coordinator`                 | ตรวจของ, อนุมัติ, ปล่อยรถ, และแก้ตั๋วเติมของ (Amendment)           |
+|                 | **Warehouse**     |   8   | สต็อกการ์ด & ยอดคงเหลือ         | `/back-office/supply`                   | `warehouse_staff`, `supply_coordinator`, `system_admin`                   | เช็กยอดคงเหลือ, ตรวจรับของคืนเข้าคลัง (Step 7), Inbound Deposit  |
+|                 |                   |   9   | ใบปล่อยของ & ชุดแจกจ่าย         | `/back-office/supply/batches`           | `warehouse_staff`, `supply_coordinator`                                   | ตรวจสอบการปล่อยของและติดตามสถานะ Active Batch                |
+|                 |                   |  10   | ติดตามของยืมค้างส่ง & สูญหาย      | `/back-office/supply/loans`             | `warehouse_staff`, `supply_coordinator`, `shelter_manager`                 | สรุปยอดของยืมค้างส่งและรายงานของสูญหาย (Discrepancy)            |
 |                 | **Kitchen**       |  11   | วางแผนมื้อ & เปิดคำขอเบิก         | `/back-office/kitchen`                  | `kitchen_staff`                                                           | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ                 |
 |                 |                   |  12   | บันทึกผลผลิตอาหารปรุงสุก          | `/back-office/kitchen/production-board` | `kitchen_staff`                                                           | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.)         |
-| **Frontline**   | **Distribution**  |  13   | ตรวจรับเข้าจุด & เริ่มรอบแจก      | `/onsite/distribution`                  | `service_staff`, `registration_staff`, `volunteer`                        | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก               |
-|                 |                   |  14   | สแกน QR แจกจริง & ตรวจสิทธิ์     | `/onsite/distribution/scan`             | `service_staff`, `registration_staff`, `volunteer`                        | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
-|                 |                   |  15   | ปิดรอบขาด & สรุปส่งคืนคลัง        | `/onsite/distribution/reconcile`        | `service_staff`, `registration_staff`, `volunteer`                        | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6)               |
-|                 | **Loans & Gate**  |  16   | สแกนยืมพัสดุคงทน (Stepper)      | `/onsite/loans`                         | `service_staff`, `registration_staff`, `volunteer`                        | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด)          |
-|                 |                   |  17   | จุดรับคืน & กองรวมพัสดุ           | `/onsite/returns`                       | `warehouse_staff`, `service_staff`                                        | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม            |
+| **Frontline**   | **Distribution**  |  13   | ตรวจรับเข้าจุด & เริ่มรอบแจก      | `/onsite/distribution`                  | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก               |
+|                 |                   |  14   | สแกน QR แจกจริง & ตรวจสิทธิ์     | `/onsite/distribution/scan`             | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
+|                 |                   |  15   | ปิดรอบขาด & สรุปส่งคืนคลัง        | `/onsite/distribution/reconcile`        | `registration_staff`, `supply_coordinator`, `shelter_manager`             | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6)               |
+|                 | **Loans & Gate**  |  16   | สแกนยืมพัสดุคงทน (Stepper)      | `/onsite/loans`                         | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด)          |
+|                 |                   |  17   | จุดรับคืน & กองรวมพัสดุ           | `/onsite/returns`                       | `warehouse_staff`, `supply_coordinator`, `registration_staff`             | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม            |
 |                 |                   |  18   | ด่าน Check-out & ปลดภาระ      | `/onsite/scan-check-in-out`             | `registration_staff`, `shelter_manager`                                   | ตรวจจับของยืมค้างส่ง พร้อม 1-Click Resolve 3 ทางเลือก            |
 
 ---
