@@ -4,7 +4,6 @@ title: ระบบประเมินความพึงพอใจศู�
 status: proposed
 date: 2026-09-12
 requested_by: Field study / ผู้บริหารศูนย์พักพิง (ผ่าน Jk)
-decided_by: Jk (Project Owner)
 layer: volatile
 affects:
   - docs/data/schema.md (เพิ่ม doc_type: feedback_session, feedback_response ใน shelter database)
@@ -20,6 +19,13 @@ affects:
 1. **แก้ปัญหาช่องว่างการสื่อสารหน้างาน:** ผู้ประสบภัยในศูนย์พักพิงต้องการช่องทางสะท้อนปัญหาเฉพาะหน้า (ความสะอาดห้องน้ำ อาหาร ความปลอดภัย) โดยไม่ต้องเผชิญหน้าเจ้าหน้าที่โดยตรง
 2. **การวัดผลและปรับปรุงคุณภาพการบริการ:** ผู้บริหารศูนย์และจังหวัดต้องการตัวชี้วัดเชิงปริมาณ (Rubric Score 1-5 ดาว) ใน 4 มิติมาตรฐาน และมีระบบจัดการข้อความ (ยังไม่อ่าน / อ่านแล้ว) พร้อมการส่งออกรายงาน CSV
 
+## Single Source of Truth (SoT) & Requirements Contract
+- **เอกสารแม่บท (Single Source of Truth):** เอกสารข้อกำหนดความต้องการเชิงฟังก์ชัน (FR), ข้อกำหนดที่ไม่ใช่เชิงฟังก์ชัน (NFR), สเปกการเชื่อมต่อ API, เกณฑ์การตรวจรับ (Acceptance Criteria: AC) และ Definition of Done (DoD) ทั้งหมด ยึดถือ **[`docs/features/shelter-feedback-rubric-spec.md`](../features/shelter-feedback-rubric-spec.md)** เป็น **Single Source of Truth (SoT)** ฉบับสมบูรณ์
+- **หน้าที่ของ Change Record (CR ฉบับนี้):** ทำหน้าที่บันทึกการขออนุมัติและประเมินผลกระทบต่อระบบ (Change Management) ตามมาตรฐาน `docs/change-management.md` โดยสรุปสาระสำคัญตามสัญญา ดังนี้:
+  - **Back Office (FR-FB-01 – FR-FB-06):** สร้าง/ปิด Session, พิมพ์โปสเตอร์ A4 QR Code (`window.print()`), แดชบอร์ดสรุปคะแนนเฉลี่ย 4 มิติ, จัดการฟีดข้อความ (Unread/Read), และส่งออก CSV (UTF-8 with BOM)
+  - **Public Web Form (FR-FB-10 – FR-FB-13):** หน้าฟอร์มมือถือ Anonymous by default ไม่เก็บคุกกี้, ให้คะแนน 4 มิติ (Required) + ความคิดเห็นและข้อมูลติดต่อ (Optional), มี Rate limiting (5 reqs / 10 min / IP hash) และ Cooldown
+  - **เกณฑ์ตรวจรับ (AC-01 – AC-07 & DoD):** ทดสอบครบวงจรตามข้อกำหนด พร้อม Unit Tests สำหรับ Domain, Aggregation และ BFF API Endpoint
+
 ## Change
 - **Before:** ไม่มีระบบรับฟังความคิดเห็นหรือประเมินความพึงพอใจแบบดิจิทัลในศูนย์พักพิง หากมีการประเมินต้องใช้แบบสอบถามกระดาษ
 - **After:**
@@ -31,8 +37,8 @@ affects:
 
 ## Impact
 - **Database Schema:** เพิ่ม doc types ใหม่ 2 ตัวใน CouchDB `shelter_<code >` (Additive, ไม่กระทบเอกสารเดิม):
-  - `feedback_session` (schema_v: 1)
-  - `feedback_response` (schema_v: 1)
+  - `feedback_session` (schema_v: 1, `_id: "feedback_session:{ulid}"`)
+  - `feedback_response` (schema_v: 1, `_id: "feedback_response:{ulid}"`)
 - **Frontend Paths:**
   - `frontend/src/routes/(protected)/back-office/shelters/[code]/feedback/+page.svelte`
   - `frontend/src/routes/(public)/shelters/[code]/feedback/[sessionId]/+page.svelte`
@@ -41,6 +47,7 @@ affects:
 - **Security & Privacy:**
   - ข้อมูลเป็น Anonymous by default ไม่เก็บ Cookie ติดตามตัวตน
   - Rate limiting ป้องกันสแปมที่ BFF (5 reqs / 10 min / IP hash)
+  - Role-Based Access Control (RBAC): สิทธิ์จัดการสงวนไว้เฉพาะ `system_admin` (SA), `shelter_manager` (SM), และ `registration_staff` (RS)
 
 ## Migration
 - **N/A** (Purely additive doc types ในฐานข้อมูล CouchDB รายศูนย์ ไม่กระทบ existing schemas)

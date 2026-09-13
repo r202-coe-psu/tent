@@ -10,11 +10,12 @@
 | รายการ | รายละเอียด |
 | --- | --- |
 | **Status** | Draft for Review |
-| **Author** | Jk (Project Owner) |
+| **Author** | Soravit Sukkarn |
 | **Created** | 2026-09-12 |
-| **Updated** | 2026-09-12 |
+| **Updated** | 2026-09-13 |
 | **Classification** | Volatile Feature Spec |
-| **Related CR** | [`docs/changes/draft-shelter-feedback-system.md`](../changes/draft-shelter-feedback-system.md) |
+| **Authority / SoT** | **Single Source of Truth (SoT)** สำหรับ Functional Requirements (FR), Non-Functional Requirements (NFR), Acceptance Criteria (AC), Definition of Done (DoD) และ API Contract |
+| **Related CR** | [`docs/changes/draft-shelter-feedback-system.md`](../changes/draft-shelter-feedback-system.md) (สถานะ: proposed) |
 | **Target Audience** | Frontend & Fullstack Developers, QA Engineers, UX/UI Designers |
 
 ---
@@ -89,7 +90,7 @@ export interface FeedbackRubricDimension {
 }
 
 export interface FeedbackSessionDoc {
-  _id: string;             // feedback_session:<uuid_v4>
+  _id: string;             // feedback_session:{ulid}
   _rev?: string;
   doc_type: 'feedback_session';
   schema_v: 1;
@@ -113,12 +114,12 @@ export interface FeedbackSessionDoc {
 
 ```typescript
 export interface FeedbackResponseDoc {
-  _id: string;             // feedback_response:<uuid_v4>
+  _id: string;             // feedback_response:{ulid}
   _rev?: string;
   doc_type: 'feedback_response';
   schema_v: 1;
   shelter_id: string;      // รหัสศูนย์พักพิง
-  session_id: string;      // อ้างอิง _id ของ FeedbackSessionDoc
+  session_id: string;      // อ้างอิง _id ของ FeedbackSessionDoc (feedback_session:{ulid})
   scores: Record<string, number>; // เช่น { cleanliness: 4, food: 5, safety: 3, staff_service: 5 }
   overall_score: number;   // ค่าเฉลี่ยคำนวณระดับแถว (เช่น 4.25)
   comment?: string;        // ข้อความถึงเจ้าหน้าที่ (ไม่เกิน 1,000 ตัวอักษร)
@@ -244,7 +245,7 @@ export interface FeedbackResponseDoc {
   - ปฏิเสธ Request ที่มี Payload ผิดปกติ หรือส่งรัวแบบ Brute Force
 - **NFR-FB-03 [Role-Based Access Control (RBAC)]:**
   - สิทธิ์ในการสร้าง Session, ปิด Session, ดู Dashboard, และ Mark as Read สงวนไว้เฉพาะเจ้าหน้าที่ที่มีบทบาท:
-    - `super_admin` (SA)
+    - `system_admin` (SA)
     - `shelter_manager` (SM)
     - `registration_staff` (RS) / เจ้าหน้าที่ประจำศูนย์นั้นๆ
   - การเข้าถึงข้ามศูนย์พักพิงต้องเป็นไปตาม Shelter Scope Isolation ที่กำหนดในระบบ
@@ -275,7 +276,7 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
   }
   ```
 - **Validation Rules (Zod):**
-  - `sessionId`: string (UUID pattern, ต้องเป็น active session ของ shelter นั้น)
+  - `sessionId`: string (รูปแบบ `feedback_session:{ulid}`, ต้องเป็น active session ของ shelter นั้น)
   - `scores`: object key ตาม rubric snapshot, value เป็น integer ระหว่าง 1 - 5
   - `comment`: optional string, max 1,000 chars, sanitize HTML/Script tags
   - `contactInfo`: optional string, max 100 chars, sanitize HTML/Script tags
