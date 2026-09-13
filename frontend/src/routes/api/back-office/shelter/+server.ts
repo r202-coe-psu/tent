@@ -215,7 +215,8 @@ export const GET: RequestHandler = async ({ request }) => {
 					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,
 					feature_flags: migrated.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
 				};
-			})
+			}),
+			{ headers: { 'cache-control': 'no-store, max-age=0' } }
 		);
 	} catch (e) {
 		return serviceError(e);

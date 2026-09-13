@@ -9,11 +9,17 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { createShelter, getShelter, updateShelter, sheltersKeys } from '$lib/features/shelters';
+import {
+	createShelter,
+	getShelter,
+	listShelters,
+	updateShelter,
+	sheltersKeys
+} from '$lib/features/shelters';
 import { SHELTER_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createShelterImportLog, type ImportRowResult } from '../domain/import-log';
 import { buildUpdatePayload, type RowValidation } from '../domain/import-row';
-import type { DuplicateMatch } from '../domain/duplicates';
+import { findExistingDuplicates } from '../domain/duplicates';
 import { IMPORT_LOG_REGISTRY_DB, listImportLogs, writeImportLog } from '../data/import-log.remote';
 
 /**
@@ -33,7 +39,11 @@ export const shelterImportKeys = {
 export function useImportLogs() {
 	return createQuery(() => ({
 		queryKey: shelterImportKeys.logs(),
-		queryFn: () => listImportLogs()
+		queryFn: () => listImportLogs(),
+		// Import history is an audit view; do not keep a previous visit's list
+		// as the source of truth when the page is opened again.
+		staleTime: 0,
+		refetchOnMount: 'always'
 	}));
 }
 
@@ -43,8 +53,6 @@ export interface ImportSheltersInput {
 	filename: string;
 	importedBy: string;
 	rows: RowValidation[];
-	/** row number -> the existing shelter it duplicates */
-	duplicates: Map<number, DuplicateMatch>;
 	/** what to do with those rows */
 	duplicateAction: DuplicateAction;
 }
@@ -52,13 +60,15 @@ export interface ImportSheltersInput {
 export function useImportShelters() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: async ({
-			filename,
-			importedBy,
-			rows,
-			duplicates,
-			duplicateAction
-		}: ImportSheltersInput) => {
+		mutationFn: async ({ filename, importedBy, rows, duplicateAction }: ImportSheltersInput) => {
+			// Re-check against the live registry immediately before writing. The
+			// preview can be old if another operator changes shelters while the file
+			// is open, so the mutation must not trust a cached/query-time snapshot.
+			const liveShelters = await listShelters({ cache: 'no-store' });
+			const liveDuplicates = findExistingDuplicates(
+				rows,
+				liveShelters.map((s) => ({ code: s.code, name: s.name }))
+			);
 			const started_at = new Date().toISOString();
 			const results: ImportRowResult[] = [];
 			for (const r of rows) {
@@ -66,7 +76,7 @@ export function useImportShelters() {
 					results.push({ row: r.row, name: r.name, status: 'validation_error', errors: r.errors });
 					continue;
 				}
-				const duplicate = duplicates.get(r.row);
+				const duplicate = liveDuplicates.get(r.row);
 				try {
 					if (duplicate && duplicateAction === 'skip') {
 						results.push({

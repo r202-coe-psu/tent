@@ -8,7 +8,7 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useMasterData } from '$lib/features/master-data';
-	import { useShelters } from '$lib/features/shelters';
+	import { listShelters } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
 		orphanZoneRows,
@@ -23,7 +23,11 @@
 		type EnumChoice,
 		type MasterColumn
 	} from '../domain/columns';
-	import { findExistingDuplicates, type DuplicateMatch } from '../domain/duplicates';
+	import {
+		findExistingDuplicates,
+		type DuplicateMatch,
+		type ExistingShelter
+	} from '../domain/duplicates';
 	import { buildShelterTemplateBlob, type TemplateMasters } from '../data/template';
 	import { parseShelterWorkbook } from '../data/parse';
 	import { useImportShelters, type DuplicateAction } from '../application/queries';
@@ -57,10 +61,9 @@
 	const orphanZones = $derived(workbook.shelters.length ? orphanZoneRows(workbook) : []);
 	const zoneCount = $derived(workbook.zones.length);
 
-	const sheltersQuery = useShelters();
-	const existingShelters = $derived(
-		(sheltersQuery.data ?? []).map((s) => ({ code: s.code, name: s.name }))
-	);
+	let existingShelters = $state<ExistingShelter[]>([]);
+	let duplicateCheckReady = $state(false);
+	let duplicateCheckLoading = $state(false);
 	const duplicates = $derived(
 		workbook.shelters.length
 			? findExistingDuplicates(validations, existingShelters)
@@ -72,6 +75,23 @@
 	let duplicateAction = $state<DuplicateAction>('skip');
 
 	const importMutation = useImportShelters();
+
+	async function refreshExistingShelters(): Promise<ExistingShelter[] | null> {
+		duplicateCheckLoading = true;
+		duplicateCheckReady = false;
+		try {
+			const shelters = await listShelters({ cache: 'no-store' });
+			existingShelters = shelters.map((s) => ({ code: s.code, name: s.name }));
+			duplicateCheckReady = true;
+			return existingShelters;
+		} catch {
+			existingShelters = [];
+			toast.error('ตรวจสอบศูนย์พักพิงในระบบไม่สำเร็จ — กรุณาลองใหม่');
+			return null;
+		} finally {
+			duplicateCheckLoading = false;
+		}
+	}
 
 	async function downloadTemplate(withSample: boolean) {
 		try {
@@ -101,13 +121,17 @@
 		if (!file) return;
 		parsing = true;
 		try {
-			workbook = await parseShelterWorkbook(file);
+			const parsed = await parseShelterWorkbook(file);
+			workbook = parsed;
 			filename = file.name;
 			if (workbook.shelters.length === 0) toast.warning('ไม่พบข้อมูลในไฟล์');
+			else await refreshExistingShelters();
 		} catch {
 			toast.error('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง');
 			workbook = { shelters: [], zones: [] };
 			filename = '';
+			existingShelters = [];
+			duplicateCheckReady = false;
 		} finally {
 			parsing = false;
 			input.value = '';
@@ -117,10 +141,14 @@
 	function clearFile() {
 		workbook = { shelters: [], zones: [] };
 		filename = '';
+		existingShelters = [];
+		duplicateCheckReady = false;
 	}
 
 	const importDisabled = $derived(
-		newCount === 0 && !(duplicateAction === 'update' && dupCount > 0)
+		!duplicateCheckReady ||
+			duplicateCheckLoading ||
+			(newCount === 0 && !(duplicateAction === 'update' && dupCount > 0))
 	);
 
 	const importLabel = $derived(
@@ -131,14 +159,14 @@
 				: `นำเข้า ${newCount} ศูนย์ (ข้าม ${dupCount})`
 	);
 
-	function runImport() {
+	async function runImport() {
 		if (importDisabled) return;
+		if (!(await refreshExistingShelters())) return;
 		importMutation.mutate(
 			{
 				filename,
 				importedBy: authStore.user?.name ?? 'unknown',
 				rows: validations,
-				duplicates,
 				duplicateAction
 			},
 			{ onSuccess: () => clearFile() }
