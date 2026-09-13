@@ -91,3 +91,37 @@ export const donationPreDeclarationInputSchema = z.object({
 
 export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaration =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_pre_declaration';
+
+/**
+ * Catalog category (`supply_item.category` / `item_master.category`) → the vocabulary
+ * the donor form offers (`PUBLIC_DONATION_CATEGORIES`).
+ *
+ * The two lists are not the same and never were: the catalog splits `water` from
+ * `food` and carries `hygiene` / `bedding` / `equipment`, while the donor sees five
+ * coarse buckets. The needs card therefore cannot copy the catalog value straight
+ * into `items[].category` — and until this existed it fell back to `'food'` for
+ * everything, so a blanket booked from the needs board was filed as food (schema.md
+ * §2.3 `items[].category` is the label staff sort by at intake).
+ *
+ * Returns `undefined` for an unknown or missing category so the caller can leave the
+ * field empty rather than guess — an empty category is honest, a wrong one is not.
+ */
+export function donorCategoryFromCatalog(category?: string | null): string | undefined {
+	switch (category?.trim().toLowerCase()) {
+		case 'food':
+		case 'water':
+			return 'food';
+		case 'clothing':
+		case 'bedding':
+			return 'clothing';
+		case 'medicine':
+			return 'medicine';
+		case 'hygiene':
+		case 'equipment':
+			return 'supply';
+		case 'other':
+			return 'other';
+		default:
+			return undefined;
+	}
+}

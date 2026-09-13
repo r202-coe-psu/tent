@@ -6,6 +6,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Package from '@lucide/svelte/icons/package';
+	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Truck from '@lucide/svelte/icons/truck';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -54,8 +55,23 @@
 
 	const status = $derived(donation?.status ?? '');
 
-	// CR-052 §2.6: once the donation is approved the donor needs a scannable QR at drop-off.
-	const showQr = $derived(status === 'verifying' || status === 'received');
+	/**
+	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
+	 * อัตโนมัติทุกกรณี": a booking gets no check-in pass until staff have reviewed it.
+	 * So the QR appears at `verifying` (approved, goods still to come) and nowhere
+	 * earlier — which is exactly what the back-office button "อนุมัติรับ (Generate QR)"
+	 * promises, and what the wizard's ticket says while it waits.
+	 *
+	 * It is NOT shown at `received` either: the caption asks the donor to bring the
+	 * goods, which read as an outstanding instruction under a line saying staff had
+	 * already shelved them.
+	 *
+	 * (Briefly shown from `pending_review` on 2026-09-01 — reverted the same day: it
+	 * contradicts §1.4, and the wizard ticket only appeared to do the same because of a
+	 * client-side heuristic that was itself the violation.)
+	 */
+	const showQr = $derived(status === 'verifying');
+	const isReceived = $derived(status === 'received');
 	let qrCodeUrl = $state('');
 
 	$effect(() => {
@@ -182,6 +198,20 @@
 			</div>
 
 			<div class="space-y-8 p-6 md:p-8">
+				{#if isReceived}
+					<div
+						class="flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-50/60 p-6 text-center dark:bg-emerald-950/20"
+					>
+						<PackageCheck class="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+						<h4 class="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+							{t.receivedTitle}
+						</h4>
+						<p class="max-w-xs text-2xs text-emerald-800/80 dark:text-emerald-200/80">
+							{t.receivedBody}
+						</p>
+					</div>
+				{/if}
+
 				{#if showQr && qrCodeUrl}
 					<div
 						class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-muted/30 p-6 text-center"
@@ -459,6 +489,7 @@
 			<EditDonationItemsDialog
 				bind:open={editOpen}
 				{token}
+				shelterCode={donation.shelter_code}
 				items={donation.items}
 				onSaved={() => trackingQuery.refetch()}
 			/>

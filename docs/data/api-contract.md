@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-10
+updated: 2026-09-12
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214)
 ---
 
@@ -150,6 +150,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}` | token |
+| `PATCH /public/v1/donations/{tracking_token}/items` | token |
 | `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
 | `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
@@ -169,12 +170,24 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 > (เหมือน onsite CR-054). เส้น **ไม่ระบุศูนย์** ยังใช้ GridFS ผ่าน
 > `POST /api/public/v1/unassigned-registrations/photos` (§5.2).
 
-**`PATCH /public/v1/donations/{tracking_token}`** — donor แก้การจองของตัวเอง (CR-080).
-Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `items` อย่างใดอย่างหนึ่งหรือทั้งคู่:
+**donor แก้การจองของตัวเอง — สองเส้นแยกกัน** (DN-6 + CR-080)
+
+| Path | Body | ทำอะไร |
+| --- | --- | --- |
+| `PATCH /public/v1/donations/{tracking_token}` | `{ "courier_tracking_no": "TH123..." }` | เลข courier tracking (DN-6) — แตะแค่ intake buffer, ปฏิเสธเพราะโควตาไม่ได้ |
+| `PATCH /public/v1/donations/{tracking_token}/items` | `{ "items": [...] }` | แก้รายการ/จำนวน (CR-080) — ขยับ atomic counter จึงตอบ `409 NEED_FULL` ได้ |
+
+**แยกสองเส้นโดยเจตนา ไม่ใช่เส้นเดียวที่รับสองอย่าง** — เส้นล่างเป็นเส้นเดียวที่แตะโควตา
+(`router.py:106` / `router.py:124`)
 
 ```jsonc
+// PATCH /public/v1/donations/{tracking_token}/items
 { "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }] }
 ```
+
+> `items[].unit` ต้องเป็น `item_master.base_unit` (code เช่น `kg`) เมื่อส่ง `item_id` มาด้วย —
+> ป้ายภาษาไทยที่ผู้ใช้เห็นเป็นเรื่องของชั้น UI เท่านั้น (schema.md §2.1; ด่านตรวจรับตอบ
+> `CATALOG_MISMATCH` ถ้าไม่ตรง)
 
 `items` เป็น **ชุดเต็มที่ต้องการให้เป็น** ไม่ใช่ delta — ลบรายการ = ไม่ส่งมันมา. ระบบคิด
 ส่วนต่างกับที่จองไว้เดิมเอง แล้ว release ก่อน reserve เสมอ เพื่อให้การย้ายจำนวนระหว่าง item
@@ -183,7 +196,7 @@ Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `item
 | สถานะ | ความหมาย |
 | --- | --- |
 | `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
-| `400` | สถานะไม่ใช่ `declared` แล้ว (เจ้าหน้าที่เริ่มประเมิน) |
+| `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review}` แล้ว — เจ้าหน้าที่รับเรื่องไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-052 §1.4) |
 | `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
 | `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
 
