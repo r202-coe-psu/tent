@@ -56,7 +56,7 @@
 		});
 	});
 
-	const initialHousehold = $derived(householdToUnifiedInput(household));
+	const initialHousehold = $derived(householdToUnifiedInput(household, evacuee));
 	const initialMembers = $derived(
 		familyMembers.map((m) => evacueeToUnifiedMember(m, data.evacueeId))
 	);

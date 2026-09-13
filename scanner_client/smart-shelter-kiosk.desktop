@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SmartShelter Kiosk
+Comment=Start SmartShelter Card Scanner Kiosk in Fullscreen
+Exec=sh -c 'cd /PATH/TO/scanner_client && exec ./start_kiosk.sh'
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=5
+Categories=Utility;
