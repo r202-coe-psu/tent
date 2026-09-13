@@ -3,7 +3,7 @@ id: CR-090
 title: T-13 โอนย้ายข้ามศูนย์ — ยกเลิกคำร้อง + Undo การยกเลิก 5 วินาที
 status: approved
 date: 2026-08-25
-updated: 2026-09-09
+updated: 2026-09-13
 requested_by: CR-059 follow-up (§4.5 UI Safety Standards, Task #13) — spun out จาก CR-089 (2026-08-25, ไม่แตะ schema_v)
 decided_by: Project Owner
 layer: volatile
@@ -83,6 +83,18 @@ field/enum/`timeline` entry ใหม่) · กระทบ `operations` featur
   ผู้ใช้ต้องการรู้ว่าคำร้องถูกยกเลิกเพราะอะไร
   · **อ่านจาก `status` ไม่ใช่จากการมีอยู่ของ field** — `*_reason` ผูกกับสถานะเดียวเสมอ (FR-04)
   ค่าที่ค้างจาก build เก่าจึงไม่มีทางโผล่ใต้ป้ายสถานะผิด
+- **FR-11** — undo จาก toast ต้องย้อน **การยกเลิกครั้งที่ผู้ใช้เพิ่งทำเท่านั้น** (optimistic concurrency
+  ตาม CouchDB MVCC)
+  · UI เก็บ `_rev` ที่ได้จากการยกเลิก แล้วส่งเป็น `expected_rev` ไปกับ transition `cancelled → requested`
+  · server เทียบ `expected_rev` กับ `_rev` ของ doc ล่าสุด **ก่อนเขียน** — ถ้าไม่ตรง ตอบ **`412`**
+    และไม่เขียนอะไร
+  · `412` **ไม่เข้า** conflict retry (`409`, 3 ครั้ง) ของ route — อ่านซ้ำกี่ครั้ง rev ก็ไม่ตรง
+  · เมื่อ undo ไม่สำเร็จ (ทั้ง `412` และ error อื่น) UI โหลดรายการโอนย้ายใหม่ และกด "เลิกทำ" ได้ครั้งเดียว
+    ต่อหนึ่ง toast
+  · `expected_rev` **ไม่บังคับ** — ไม่ส่งมา server ทำ transition ตาม FR-02 เดิม (ไม่จำกัดเวลา, FR-06.1)
+  · เหตุผล: status อย่างเดียวแยกไม่ออกระหว่าง "การยกเลิกของฉัน" กับ "การยกเลิกครั้งใหม่ของคนอื่น"
+    (A ยกเลิก → B undo แล้วยกเลิกอีกครั้งภายใน 5 วินาที → A กด "เลิกทำ" จะย้อนการยกเลิกของ B) ·
+    ตอบ PR review #259 (2026-09-13)
 
 ---
 
@@ -106,6 +118,10 @@ field/enum/`timeline` entry ใหม่) · กระทบ `operations` featur
 - [x] แถว `cancelled` แสดง `cancel_reason` ใต้ป้ายสถานะ และแถว `disputed` แสดง `dispute_reason`
       เหมือนเดิม (FR-10)
 - [x] E2E: ยกเลิก → แถวหายจากมุมมองตั้งต้น → กด "เลิกทำ" → แถวกลับมาเป็น "รอส่งมอบ"
+- [x] undo ที่ส่ง `expected_rev` ไม่ตรงกับ doc ล่าสุด → server ตอบ `412`, ไม่มี `PUT`, route ไม่ retry
+      (FR-11 — unit test `transfer.server-repository.test.ts` + `transition/server.test.ts`)
+- [x] undo ที่ `expected_rev` ตรง หรือไม่ส่ง `expected_rev` → ย้อนกลับ `requested` ตามปกติ (FR-11, FR-06.1)
+- [x] PUT ตอบ `409` → repository ส่ง error `409` กลับโดยไม่เขียนทับ (FR-11)
 
 > DoD ทั้งหมดผ่านเมื่อ 2026-09-09 · `pnpm check` 0 errors · `pnpm lint` สะอาด · `pnpm test`
 > 2,221 passed / 2 skipped · e2e `transfer-cancel-undo.test.ts` 5 passed (ทั้ง `--workers=1` และ
@@ -186,6 +202,7 @@ storage layer ซึ่งกัน race ได้ดีกว่า read-then-c
   ตอนย้อนกลับ `requested` (FR-04)
 - **Data/server:** `transfer.server-repository.ts` — ไม่มี `remove()` / `restore()` / `couchDelete()`
 - **Route:** `routes/api/back-office/transfer/[id]/transition/+server.ts` รองรับ `from: cancelled`
+  · body รับ `expected_rev` (ไม่บังคับ) และส่งต่อให้ repository · `412` ไม่เข้า conflict retry (FR-11)
   · `routes/api/back-office/transfer/[id]/+server.ts` ไม่มี `DELETE`
   · `routes/api/back-office/transfer/+server.ts` ไม่มี branch `restore`
 - **Client:** `operations.remote.ts` + `application/queries.ts` — hook `useUndoCancelTransfer`
@@ -271,3 +288,12 @@ production ที่ถูกลบไปแล้ว และไม่ต้�
     · เป็นการเพิ่มการแสดงผลของ field ที่มีอยู่แล้ว ไม่แตะ field / rule / enum / scope
     ⇒ ไม่เข้าเงื่อนไข `docs/change-management.md` §2 ที่ต้องเปิด CR ใหม่
   · CR-089 กลับจาก `done` เป็น `approved` จนกว่าโค้ด resume จะแก้ตาม FR-05 ฉบับใหม่เสร็จ
+- 2026-09-13 — **amend: เพิ่ม FR-11 (`expected_rev` precondition บน undo)** (tracking = amend +
+  Decision log ตามที่ project owner เคาะ 2026-09-13) — ที่มา: PR review #259 ขอให้ undo 5 วินาที
+  รองรับ CouchDB MVCC · ตรวจโค้ดแล้วพบว่า server อ่าน doc ล่าสุดก่อน `PUT` ทุกครั้ง จึงไม่เขียนทับด้วย
+  `_rev` เก่า แต่ transition เช็คแค่ `status` ⇒ undo ย้อนการยกเลิกครั้งใหม่ของผู้อื่นได้ (ABA)
+  · แก้ด้วย `expected_rev` ไม่บังคับ + `412` — ไม่เพิ่ม endpoint, ไม่แตะ `schema_v` / enum /
+    state machine / role · FR-02 และ FR-06.1 (ไม่จำกัดเวลา) คงเดิมเมื่อไม่ส่ง `expected_rev`
+  · **ทางเลือกที่ไม่เลือก:** (ข) ใช้ `409` แทน `412` — route retry `409` อยู่แล้ว ต้องแยกประเภท error
+    เพิ่ม · (ค) บังคับ `expected_rev` ทุก transition — ขยาย scope ไป dispatch/receive/dispute ซึ่งไม่ได้
+    อยู่ใน CR นี้ และทำให้ CR-091 ต้องส่ง rev ตาม
