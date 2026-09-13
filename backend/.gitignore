@@ -5,12 +5,10 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
 .env
 .env.local
 .env.dev
-
-# Poetry
-.poetry/
 
 # FastAPI logs
 logs/

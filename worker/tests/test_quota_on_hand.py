@@ -42,7 +42,11 @@ async def _seed(qty_target: str = "500") -> None:
 
 def _reserve(qty: str, campaign: str = CAMPAIGN):
     return reserve_quota(
-        shelter_code=SHELTER, campaign_id=campaign, item_id=ITEM, qty=Decimal(qty), now=NOW
+        shelter_code=SHELTER,
+        campaign_id=campaign,
+        item_id=ITEM,
+        qty=Decimal(qty),
+        now=NOW,
     )
 
 
@@ -50,25 +54,25 @@ async def test_a_seeded_counter_starts_with_an_empty_warehouse(db: None) -> None
     await _seed()
     counter = await DonationNeedCounter.get(counter_id(SHELTER, CAMPAIGN, ITEM))
     assert counter is not None
-    assert counter.on_hand_qty == Decimal("0")
+    assert counter.on_hand_qty == Decimal(0)
 
 
 async def test_the_warehouse_lowers_the_ceiling(db: None) -> None:
     """The exact case from the two-tab test: 500 target, 270 on hand, 180 + 180."""
     await _seed()
-    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal("270"), now=NOW)
+    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal(270), now=NOW)
 
     assert await _reserve("180") is ReserveResult.RESERVED
     assert await _reserve("180") is ReserveResult.NEED_FULL
 
     counter = await DonationNeedCounter.get(counter_id(SHELTER, CAMPAIGN, ITEM))
     assert counter is not None
-    assert counter.reserved_qty == Decimal("180")
+    assert counter.reserved_qty == Decimal(180)
 
 
 async def test_the_ceiling_is_exactly_target_minus_on_hand(db: None) -> None:
     await _seed()
-    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal("270"), now=NOW)
+    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal(270), now=NOW)
 
     assert await _reserve("231") is ReserveResult.NEED_FULL
     assert await _reserve("230") is ReserveResult.RESERVED
@@ -76,7 +80,7 @@ async def test_the_ceiling_is_exactly_target_minus_on_hand(db: None) -> None:
 
 async def test_a_full_warehouse_takes_no_bookings_at_all(db: None) -> None:
     await _seed()
-    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal("500"), now=NOW)
+    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal(500), now=NOW)
 
     assert await _reserve("1") is ReserveResult.NEED_FULL
 
@@ -84,7 +88,7 @@ async def test_a_full_warehouse_takes_no_bookings_at_all(db: None) -> None:
 async def test_a_counter_predating_the_field_keeps_the_old_ceiling(db: None) -> None:
     """$ifNull: an unmigrated counter has no on_hand_qty and must not stop reserving."""
     await _seed()
-    await DonationNeedCounter.get_motor_collection().update_one(
+    await DonationNeedCounter.get_pymongo_collection().update_one(
         {"_id": counter_id(SHELTER, CAMPAIGN, ITEM)}, {"$unset": {"on_hand_qty": ""}}
     )
 
@@ -104,12 +108,12 @@ async def test_stock_reaches_every_campaign_asking_for_the_item(db: None) -> Non
         shelter_code=SHELTER,
         campaign_id=other,
         item_id=ITEM,
-        qty_target=Decimal("500"),
+        qty_target=Decimal(500),
         now=NOW,
     )
 
     changed = await set_on_hand_qty(
-        shelter_code=SHELTER, item_id=ITEM, qty=Decimal("450"), now=NOW
+        shelter_code=SHELTER, item_id=ITEM, qty=Decimal(450), now=NOW
     )
 
     assert changed == 2
@@ -123,15 +127,15 @@ async def test_another_shelter_is_left_alone(db: None) -> None:
         shelter_code="SH002",
         campaign_id=CAMPAIGN,
         item_id=ITEM,
-        qty_target=Decimal("500"),
+        qty_target=Decimal(500),
         now=NOW,
     )
 
-    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal("500"), now=NOW)
+    await set_on_hand_qty(shelter_code=SHELTER, item_id=ITEM, qty=Decimal(500), now=NOW)
 
     counter = await DonationNeedCounter.get(counter_id("SH002", CAMPAIGN, ITEM))
     assert counter is not None
-    assert counter.on_hand_qty == Decimal("0")
+    assert counter.on_hand_qty == Decimal(0)
 
 
 def test_on_hand_decimals_sums_a_ledger_without_float_drift() -> None:
@@ -144,18 +148,35 @@ def test_on_hand_decimals_sums_a_ledger_without_float_drift() -> None:
             {"item_id": None, "qty": "99"},
             {"item_id": "item:water", "qty": "not a number"},
         ]
-    ) == {ITEM: Decimal("0.3"), "item:water": Decimal("0")}
+    ) == {ITEM: Decimal("0.3"), "item:water": Decimal(0)}
 
 
-async def test_refresh_on_hand_reads_the_ledger_and_writes_the_counters(db: None) -> None:
+async def test_refresh_on_hand_reads_the_ledger_and_writes_the_counters(
+    db: None,
+) -> None:
     await _seed()
 
     async def _docs(_database: str):
         for doc in (
-            {"_id": "stock_ledger:1", "type": "stock_ledger", "item_id": ITEM, "qty": "200"},
-            {"_id": "stock_ledger:2", "type": "stock_ledger", "item_id": ITEM, "qty": "70"},
+            {
+                "_id": "stock_ledger:1",
+                "type": "stock_ledger",
+                "item_id": ITEM,
+                "qty": "200",
+            },
+            {
+                "_id": "stock_ledger:2",
+                "type": "stock_ledger",
+                "item_id": ITEM,
+                "qty": "70",
+            },
             # A distribution out of the warehouse is a negative entry.
-            {"_id": "stock_ledger:3", "type": "stock_ledger", "item_id": ITEM, "qty": "-20"},
+            {
+                "_id": "stock_ledger:3",
+                "type": "stock_ledger",
+                "item_id": ITEM,
+                "qty": "-20",
+            },
             {"_id": "donation:1", "type": "donation", "item_id": ITEM, "qty": "999"},
         ):
             yield doc
@@ -168,7 +189,7 @@ async def test_refresh_on_hand_reads_the_ledger_and_writes_the_counters(db: None
 
     counter = await DonationNeedCounter.get(counter_id(SHELTER, CAMPAIGN, ITEM))
     assert counter is not None
-    assert counter.on_hand_qty == Decimal("250")
+    assert counter.on_hand_qty == Decimal(250)
 
 
 async def test_refresh_on_hand_skips_a_shelter_with_no_database(db: None) -> None:

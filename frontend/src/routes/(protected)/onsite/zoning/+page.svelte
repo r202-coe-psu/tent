@@ -30,21 +30,32 @@
 		matchesEvacueeSearch,
 		formatPersonName,
 		classifyZoningQueueTab,
-		parseZoningQrCode,
 		buildZoningPath,
-		type ZoningQueueTab,
-		type TriageLevel
+		useConfirmRoom,
+		useConfirmRoomForHousehold,
+		listPendingZoneArrivalConfirmations,
+		lookupFederatedByScanCode,
+		type ZoningQueueTab
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { useMasterData } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const confirmRoomMutation = useConfirmRoom();
+	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
+	const queryClient = useQueryClient();
 
 	const enableMedical = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -53,29 +64,18 @@
 	const householdMap = $derived(new SvelteMap((householdsQuery.data ?? []).map((h) => [h._id, h])));
 	const screenings = $derived(screeningsQuery.data ?? []);
 	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
-	const triageByEvacuee = $derived.by(() => {
-		const map = new SvelteMap<string, TriageLevel>();
+	const ewarSymptomsByEvacuee = $derived.by(() => {
+		const map = new SvelteMap<string, string[]>();
 		const sorted = [...screenings].sort((a, b) =>
 			(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
 		);
 		for (const s of sorted) {
-			if (s.triage_level && !map.has(s.evacuee_id)) {
-				map.set(s.evacuee_id, s.triage_level);
+			if (s.symptoms && !map.has(s.evacuee_id)) {
+				map.set(s.evacuee_id, s.symptoms);
 			}
 		}
 		return map;
 	});
-
-	const TRIAGE_LABELS: Record<TriageLevel, string> = {
-		green: 'เขียว',
-		yellow: 'เหลือง',
-		red: 'แดง'
-	};
-	const TRIAGE_BADGE_CLASS: Record<TriageLevel, string> = {
-		green: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200',
-		yellow: 'border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200',
-		red: 'border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200'
-	};
 
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
@@ -102,6 +102,9 @@
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
 	let activeTab = $state<ZoningQueueTab>('pending');
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+	let lookupInFlight = $state(false);
 
 	const pendingEvacuees = $derived(
 		allEvacuees.filter(
@@ -110,6 +113,17 @@
 					enableMedicalScreening: enableMedical,
 					hasScreening: screenedIds.has(e._id)
 				}) === 'pending'
+		)
+	);
+	const awaitingConfirmEvacuees = $derived(
+		listPendingZoneArrivalConfirmations(
+			allEvacuees.filter(
+				(e) =>
+					classifyZoningQueueTab(e, {
+						enableMedicalScreening: enableMedical,
+						hasScreening: screenedIds.has(e._id)
+					}) === 'awaiting_confirm'
+			)
 		)
 	);
 	const assignedEvacuees = $derived(
@@ -122,7 +136,13 @@
 		)
 	);
 
-	const tabEvacuees = $derived(activeTab === 'pending' ? pendingEvacuees : assignedEvacuees);
+	const tabEvacuees = $derived(
+		activeTab === 'pending'
+			? pendingEvacuees
+			: activeTab === 'awaiting_confirm'
+				? awaitingConfirmEvacuees
+				: assignedEvacuees
+	);
 
 	const filteredQueue = $derived(
 		tabEvacuees.filter((evacuee) => {
@@ -146,23 +166,61 @@
 		goto(resolve(buildZoningPath(id) as `/onsite/zoning/${string}`));
 	}
 
-	function handleCodeInput(raw: string) {
-		const parsedId = parseZoningQrCode(raw);
-		if (!parsedId) {
-			toast.error('รหัส QR หรือข้อความที่สแกนไม่ถูกต้อง');
-			return;
-		}
+	function authorCtx() {
+		return {
+			shelterCode: getShelterCode(),
+			createdBy: authStore.user?.name ?? 'unknown'
+		};
+	}
 
-		const found = allEvacuees.find((e) => e._id === parsedId || e.person_id?.number === parsedId);
-		if (found) {
-			toast.success(`พบผู้ประสบภัย: ${formatPersonName(found)}`);
+	async function confirmOne(evacueeId: string) {
+		const target = allEvacuees.find((e) => e._id === evacueeId);
+		if (!target) return;
+		try {
+			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
+			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		}
+	}
+
+	async function confirmHousehold(householdId: string) {
+		try {
+			const confirmed = await confirmRoomHouseholdMutation.mutateAsync({
+				householdId,
+				evacuees: allEvacuees,
+				ctx: authorCtx()
+			});
+			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+		} catch (err: unknown) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+		}
+	}
+
+	async function handleCodeInput(raw: string) {
+		if (lookupInFlight) return;
+		lookupInFlight = true;
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, raw);
+			if (!result) {
+				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
-			openDetail(found._id);
-			return;
+			if (result.source === 'couch') {
+				toast.success(`พบผู้ประสบภัย: ${formatPersonName(result.evacuee)}`);
+				openDetail(result.evacuee._id);
+				return;
+			}
+			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนจัดโซน');
+			claimHit = result.hit;
+			claimOpen = true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+		} finally {
+			lookupInFlight = false;
 		}
-
-		toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -253,8 +311,7 @@
 					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					คิวพร้อมจัดโซน (Cleared for Zoning) และรายการที่จัดแล้ว — ค้นหาหรือสแกน Handover / Person
-					QR
+					คิวพร้อมจัดโซน · รอยืนยันถึงโซน · ยืนยันแล้ว — ค้นหาหรือสแกน Handover / Person QR
 				</p>
 			</div>
 		</div>
@@ -267,8 +324,15 @@
 				>
 			</Badge>
 			<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
+				<Clock class="size-3.5 text-emerald-600" />
+				<span>รอยืนยัน:</span>
+				<span class="font-bold text-emerald-700 dark:text-emerald-300"
+					>{awaitingConfirmEvacuees.length} คน</span
+				>
+			</Badge>
+			<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
 				<Check class="size-3.5 text-sky-600" />
-				<span>จัดแล้ว:</span>
+				<span>ยืนยันแล้ว:</span>
 				<span class="font-bold text-sky-700 dark:text-sky-300">{assignedEvacuees.length} คน</span>
 			</Badge>
 		</div>
@@ -341,12 +405,15 @@
 	<Tabs.Root
 		value={activeTab}
 		onValueChange={(v) => {
-			if (v === 'pending' || v === 'assigned') activeTab = v;
+			if (v === 'pending' || v === 'awaiting_confirm' || v === 'assigned') activeTab = v;
 		}}
 	>
-		<Tabs.List class="mb-3">
+		<Tabs.List class="mb-3 flex h-auto flex-wrap gap-1">
 			<Tabs.Trigger value="pending">พร้อมจัดโซน ({pendingEvacuees.length})</Tabs.Trigger>
-			<Tabs.Trigger value="assigned">จัดแล้ว ({assignedEvacuees.length})</Tabs.Trigger>
+			<Tabs.Trigger value="awaiting_confirm">
+				รอยืนยันถึงโซน ({awaitingConfirmEvacuees.length})
+			</Tabs.Trigger>
+			<Tabs.Trigger value="assigned">ยืนยันแล้ว ({assignedEvacuees.length})</Tabs.Trigger>
 		</Tabs.List>
 
 		<Tabs.Content value={activeTab}>
@@ -355,9 +422,13 @@
 					<div class="flex items-center gap-2">
 						<Users class="size-4 text-amber-600" />
 						<Card.Title class="text-base font-semibold">
-							{activeTab === 'pending'
-								? 'Cleared for Zoning — คิวพร้อมจัดสรรที่พัก'
-								: 'รายการที่จัดโซนแล้ว (ย้ายโซนได้)'}
+							{#if activeTab === 'pending'}
+								Cleared for Zoning — คิวพร้อมจัดสรรที่พัก
+							{:else if activeTab === 'awaiting_confirm'}
+								รอยืนยันถึงโซน (Zone Arrival Confirmation) — ไม่หมดอายุอัตโนมัติ
+							{:else}
+								รายการที่ยืนยันถึงโซนแล้ว (ย้ายโซนได้)
+							{/if}
 						</Card.Title>
 						<Badge variant="secondary" class="text-xs">{filteredQueue.length} ราย</Badge>
 					</div>
@@ -374,7 +445,13 @@
 						<div class="flex h-48 flex-col items-center justify-center gap-2 px-6 text-center">
 							<MapPin class="size-8 text-muted-foreground/50" />
 							<p class="text-sm font-medium text-muted-foreground">
-								{activeTab === 'pending' ? emptyPendingMessage : 'ยังไม่มีรายการที่จัดโซนแล้ว'}
+								{#if activeTab === 'pending'}
+									{emptyPendingMessage}
+								{:else if activeTab === 'awaiting_confirm'}
+									ไม่มีรายการรอยืนยันถึงโซน
+								{:else}
+									ยังไม่มีรายการที่ยืนยันถึงโซนแล้ว
+								{/if}
 							</p>
 						</div>
 					{:else}
@@ -384,7 +461,7 @@
 									<Table.Row class="bg-muted/30 hover:bg-muted/30">
 										<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
 										<Table.Head>บัตร</Table.Head>
-										<Table.Head>Triage</Table.Head>
+										<Table.Head>เฝ้าระวัง (EWAR)</Table.Head>
 										<Table.Head>ความต้องการพิเศษ</Table.Head>
 										<Table.Head>ครอบครัว</Table.Head>
 										<Table.Head>{activeTab === 'pending' ? 'อัปเดต' : 'โซน'}</Table.Head>
@@ -394,7 +471,7 @@
 								<Table.Body>
 									{#each filteredQueue as row (row._id)}
 										{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-										{@const triage = triageByEvacuee.get(row._id)}
+										{@const ewarSymptoms = ewarSymptomsByEvacuee.get(row._id)}
 										<Table.Row class="cursor-pointer" onclick={() => openDetail(row._id)}>
 											<Table.Cell class="pl-5 font-medium">
 												{formatPersonName(row)}
@@ -403,9 +480,12 @@
 												{maskNationalId(row.person_id?.number)}
 											</Table.Cell>
 											<Table.Cell>
-												{#if triage}
-													<Badge variant="outline" class={TRIAGE_BADGE_CLASS[triage]}>
-														{TRIAGE_LABELS[triage]}
+												{#if ewarSymptoms && ewarSymptoms.length > 0}
+													<Badge
+														variant="outline"
+														class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+													>
+														เฝ้าระวัง ({ewarSymptoms.length})
 													</Badge>
 												{:else}
 													<span class="text-xs text-muted-foreground">—</span>
@@ -431,23 +511,51 @@
 												{hh?.label ?? '—'}
 											</Table.Cell>
 											<Table.Cell class="text-xs text-muted-foreground">
-												{#if activeTab === 'assigned'}
-													{row.current_stay.zone ?? '—'}
-												{:else}
+												{#if activeTab === 'pending'}
 													{formatTimeOrDate(row.updated_at)}
+												{:else}
+													{row.current_stay.zone ?? '—'}
 												{/if}
 											</Table.Cell>
 											<Table.Cell class="pr-5 text-right">
-												<Button
-													size="sm"
-													variant="outline"
-													onclick={(e) => {
-														e.stopPropagation();
-														openDetail(row._id);
-													}}
-												>
-													{activeTab === 'pending' ? 'จัดโซน' : 'ย้ายโซน'}
-												</Button>
+												<div class="flex justify-end gap-1.5">
+													{#if activeTab === 'awaiting_confirm'}
+														<Button
+															size="sm"
+															onclick={(e) => {
+																e.stopPropagation();
+																void confirmOne(row._id);
+															}}
+															disabled={confirmRoomMutation.isPending}
+														>
+															ยืนยันถึงโซน
+														</Button>
+														{#if row.household_id}
+															<Button
+																size="sm"
+																variant="outline"
+																onclick={(e) => {
+																	e.stopPropagation();
+																	void confirmHousehold(row.household_id!);
+																}}
+																disabled={confirmRoomHouseholdMutation.isPending}
+															>
+																ทั้งครัวเรือน
+															</Button>
+														{/if}
+													{:else}
+														<Button
+															size="sm"
+															variant="outline"
+															onclick={(e) => {
+																e.stopPropagation();
+																openDetail(row._id);
+															}}
+														>
+															{activeTab === 'pending' ? 'จัดโซน' : 'ย้ายโซน'}
+														</Button>
+													{/if}
+												</div>
 											</Table.Cell>
 										</Table.Row>
 									{/each}
@@ -478,3 +586,9 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>

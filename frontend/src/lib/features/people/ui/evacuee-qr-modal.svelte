@@ -10,6 +10,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from './_constants/evacuee-qr-modal.i18n';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
 
@@ -35,6 +36,7 @@
 
 	const statusAccent: Record<StayStatus, string> = {
 		active: '#22c55e',
+		room_confirmed: '#059669',
 		pre_registered: '#3b82f6',
 		arriving: '#f59e0b',
 		temporary_leave: '#f59e0b',
@@ -92,6 +94,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} onEscape={onClose} />
 	<div
 		class={embedded
 			? 'flex min-h-[70vh] items-center justify-center py-6'

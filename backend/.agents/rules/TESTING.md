@@ -8,19 +8,14 @@ This project uses `pytest` and `pytest-asyncio` for unit and integration testing
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - MongoDB running locally on `localhost:27017` (or configured via `DATABASE_URI` environment variable for tests)
 
 ## Running Tests
 
-1. Ensure your virtual environment is activated:
+1. Ensure your virtual environment is activated or use `uv run`:
    ```bash
-   source venv/bin/activate
-   ```
-
-2. Run all tests with verbosity:
-   ```bash
-   pytest tests/ -v
+   uv run pytest tests/ -v
    ```
 
 ## Testing Strategy & Best Practices
@@ -37,6 +32,7 @@ from httpx import AsyncClient
 import pytest
 from fastapi_pagination import Page
 
+
 @pytest.fixture
 def mock_use_case():
     mock_case = AsyncMock()
@@ -44,17 +40,18 @@ def mock_use_case():
     mock_case.get_by_id.return_value = {...}
     return mock_case
 
+
 @pytest.mark.asyncio
 async def test_get_resource(client: AsyncClient, app, mock_use_case):
     # Override the dependency
     app.dependency_overrides[get_my_use_case] = lambda: mock_use_case
-    
+
     # Execute the request
     response = await client.get("/v1/my-resource/")
-    
+
     # Verify the results
     assert response.status_code == 200
-    
+
     # Clean up the override
     app.dependency_overrides.pop(get_my_use_case, None)
 ```

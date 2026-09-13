@@ -8,6 +8,7 @@
 	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 
 	const itemCategoriesQuery = useItemCategories();
 	const itemMastersQuery = useItemMasters();
@@ -27,6 +28,11 @@
 	});
 
 	const basePath = resolve('/portal/system-management/catalog');
+
+	function selectTab(tab: 'item_category' | 'item_master' | 'recipe') {
+		activeTab = tab;
+		goto(`${basePath}?tab=${tab}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 </script>
 
 <svelte:head>
@@ -47,7 +53,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'item_category' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'item_category')}
+					onclick={() => selectTab('item_category')}
 					class="w-full justify-between py-6"
 				>
 					<span>หมวดหมู่สิ่งของ (Item Category)</span>
@@ -56,7 +62,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'item_master' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'item_master')}
+					onclick={() => selectTab('item_master')}
 					class="w-full justify-between py-6"
 				>
 					<span>รายการสิ่งของ (Item Master)</span>
@@ -65,7 +71,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'recipe' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'recipe')}
+					onclick={() => selectTab('recipe')}
 					class="w-full justify-between py-6"
 				>
 					<span>สูตรอาหารมาตรฐาน</span>

@@ -12,13 +12,46 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Globe from '@lucide/svelte/icons/globe';
+	// import Globe from '@lucide/svelte/icons/globe';
 	import Bell from '@lucide/svelte/icons/bell';
 
-	import * as Select from '$lib/components/ui/select';
+	import { onMount } from 'svelte';
+	// import * as Select from '$lib/components/ui/select';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_NAVBAR_I18N, SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
+	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
+	// import { SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
+	import type { Announcement } from '$lib/features/announcements';
+	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
+
+	interface Props {
+		announcements?: Announcement[];
+	}
+
+	let { announcements: propAnnouncements = [] }: Props = $props();
+
+	let fetchedAnnouncements = $state<Announcement[]>([]);
+	let alertsModalOpen = $state(false);
+
+	const announcements = $derived(
+		propAnnouncements && propAnnouncements.length > 0 ? propAnnouncements : fetchedAnnouncements
+	);
+	const announcementsCount = $derived(announcements.length);
+	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
+
+	onMount(async () => {
+		if (propAnnouncements.length === 0) {
+			try {
+				const res = await fetch('/api/public/v1/announcements');
+				if (res.ok) {
+					const data = await res.json();
+					fetchedAnnouncements = (data.items as Announcement[]) || [];
+				}
+			} catch (e) {
+				console.error('Failed to fetch announcements in navbar', e);
+			}
+		}
+	});
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -49,6 +82,7 @@
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
 	let alertsMenuOpen = $state(false);
 	let alertsMenuEl: HTMLDivElement | undefined = $state();
+	let alertsButtonEl: HTMLButtonElement | undefined = $state();
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
 
@@ -88,8 +122,13 @@
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
-		if (alertsMenuOpen && alertsMenuEl && !alertsMenuEl.contains(target)) {
-			closeAlertsMenu();
+		if (alertsMenuOpen && alertsMenuEl) {
+			if (alertsButtonEl && alertsButtonEl.contains(target)) {
+				return;
+			}
+			if (!alertsMenuEl.contains(target)) {
+				closeAlertsMenu();
+			}
 		}
 	}
 
@@ -111,10 +150,10 @@
 <header
 	class="sticky top-0 z-50 w-full border-b border-border bg-card/95 px-6 py-3 shadow-xs backdrop-blur-md"
 >
-	<div class="mx-auto flex max-w-7xl items-center justify-between">
+	<div class="relative z-50 mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-3">
 		<!-- Logo and Title -->
-		<div class="flex items-center gap-3">
-			<a href={resolve('/')} class="flex items-center gap-2">
+		<div class="flex min-w-0 shrink items-center gap-3">
+			<a href={resolve('/')} class="flex min-w-0 items-center gap-2">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-muted text-primary"
 				>
@@ -129,25 +168,35 @@
 			</a>
 		</div>
 
-		<!-- Mobile Menu Button -->
-		<div class="flex items-center gap-1.5 sm:gap-2 md:hidden">
+		<!-- Compact controls: phone + tablet (hamburger through lg) -->
+		<div class="flex shrink-0 items-center gap-1.5 sm:gap-2 lg:hidden">
 			<!-- Notification Bell Button (Mobile) -->
 			<button
+				bind:this={alertsButtonEl}
 				type="button"
 				onclick={toggleAlertsMenu}
-				class="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#0284C7] focus-visible:outline-none"
-				aria-label="การแจ้งเตือนภัย (2)"
+				class="relative flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-[#0284C7] focus-visible:outline-none {alertsMenuOpen
+					? 'bg-sky-100 text-sky-800 ring-1 ring-sky-300'
+					: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+				aria-label="การแจ้งเตือนภัย {announcementsCount > 0 ? `(${announcementsCount})` : ''}"
 				aria-expanded={alertsMenuOpen}
 			>
 				<Bell class="h-4 w-4 text-sky-600" />
-				<span
-					class="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white tabular-nums shadow-2xs"
-				>
-					2
-				</span>
+				{#if announcementsCount > 0}
+					<span class="absolute top-1.5 right-1.5 flex h-2 w-2">
+						{#if hasEmergency}
+							<span
+								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"
+							></span>
+						{/if}
+						<span class="ring-1.5 relative inline-flex h-2 w-2 rounded-full bg-red-600 ring-white"
+						></span>
+					</span>
+				{/if}
 			</button>
 
-			<!-- Language Switcher (Mobile) -->
+			<!-- Language Switcher (Mobile) - temporarily commented out -->
+			<!--
 			<Select.Root
 				type="single"
 				value={langState.current}
@@ -170,6 +219,7 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			-->
 
 			<button
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
@@ -184,11 +234,11 @@
 			</button>
 		</div>
 
-		<!-- Navbar Links -->
-		<nav class="hidden items-center gap-1 md:flex">
+		<!-- Full horizontal nav: desktop lg+ only (avoids tablet wrap over form CTAs) -->
+		<nav class="hidden flex-nowrap items-center gap-1 lg:flex">
 			<a
 				href={resolve('/')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -198,7 +248,7 @@
 
 			<a
 				href={resolve('/shelters')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
@@ -210,7 +260,7 @@
 
 			<a
 				href={resolve('/search')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/search'
 				)
 					? 'bg-primary-muted text-primary'
@@ -222,14 +272,14 @@
 
 			<a
 				href={resolve('/pre-register')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/pre-register'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
 				<ClipboardCheck class="h-4 w-4" />
-				ลงทะเบียนล่วงหน้า
+				{t.preRegister}
 			</a>
 
 			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
@@ -240,7 +290,7 @@
 					aria-haspopup="menu"
 					aria-expanded={donationsMenuOpen}
 					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
-					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isDonationsSection() ||
 					donationsMenuOpen
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -287,7 +337,7 @@
 
 			<a
 				href={resolve('/login')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
 					'/login'
 				)
 					? 'bg-primary-muted text-primary'
@@ -297,7 +347,9 @@
 				{t.backoffice}
 			</a>
 
-			<div class="ml-2 flex items-center border-l border-border pl-3">
+			<!-- Language Switcher (Desktop) - temporarily commented out -->
+			<!--
+			<div class="ml-2 flex shrink-0 items-center border-l border-border pl-3">
 				<Globe class="mr-1 h-4 w-4 text-muted-foreground" />
 				<Select.Root
 					type="single"
@@ -323,16 +375,26 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
+			-->
 		</nav>
 	</div>
 
 	<!-- Alerts & Notifications Dropdown Panel -->
 	{#if alertsMenuOpen}
+		<!-- Mobile backdrop overlay to guarantee outside clicks close the menu -->
+		<button
+			type="button"
+			tabindex="-1"
+			aria-hidden="true"
+			class="fixed inset-0 z-40 cursor-default bg-slate-900/20 backdrop-blur-[1px] lg:hidden"
+			onclick={closeAlertsMenu}
+		></button>
+
 		<div
 			bind:this={alertsMenuEl}
 			role="dialog"
 			aria-label="การแจ้งเตือนภัยฉุกเฉิน"
-			class="absolute top-full right-4 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:right-6 md:right-28"
+			class="absolute top-full right-4 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xl sm:right-6"
 		>
 			<div class="flex items-center justify-between border-b border-slate-100 pb-3">
 				<div class="flex items-center gap-2">
@@ -344,70 +406,116 @@
 						<p class="text-2xs text-slate-500">ศูนย์บัญชาการสถานการณ์ (EOC)</p>
 					</div>
 				</div>
-				<span
-					class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-bold text-red-600 tabular-nums"
-				>
-					2 ประกาศใหม่
-				</span>
-			</div>
-
-			<div class="mt-3 space-y-2.5">
-				<div
-					class="rounded-xl border border-red-200 bg-white p-3 shadow-2xs transition-all hover:border-red-300"
-				>
-					<div class="flex items-center justify-between">
+				<div class="flex items-center gap-1.5">
+					{#if announcementsCount > 0}
 						<span
-							class="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-bold text-red-700"
+							class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold text-red-700"
 						>
 							<span class="h-1.5 w-1.5 rounded-full bg-red-600"></span>
-							วิกฤติ (Emergency)
+							ประกาศใหม่
 						</span>
-						<span class="text-2xs text-slate-400 tabular-nums">15 นาทีที่แล้ว</span>
-					</div>
-					<h4 class="mt-1.5 text-xs font-bold text-slate-900">
-						แจ้งเตือนระดับน้ำวิกฤติ — อ.แม่สาย
-					</h4>
-					<p class="mt-1 text-xs leading-relaxed text-slate-600">
-						เฝ้าระวังน้ำล้นตลิ่งตลอด 24 ชม.
-						เตรียมพร้อมอพยพผู้พักพิงกลุ่มเปราะบางสู่ศูนย์พักพิงที่ปลอดภัย
-					</p>
-				</div>
-
-				<div
-					class="rounded-xl border border-amber-200 bg-white p-3 shadow-2xs transition-all hover:border-amber-300"
-				>
-					<div class="flex items-center justify-between">
+					{:else}
 						<span
-							class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-800"
+							class="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-2xs font-medium text-slate-500"
 						>
-							<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-							เตือนภัย (Warning)
+							ไม่มีประกาศใหม่
 						</span>
-						<span class="text-2xs text-slate-400 tabular-nums">1 ชม. ที่แล้ว</span>
-					</div>
-					<h4 class="mt-1.5 text-xs font-bold text-slate-900">เปิดศูนย์พักพิงชั่วคราวเพิ่มเติม</h4>
-					<p class="mt-1 text-xs leading-relaxed text-slate-600">
-						เทศบาลตำบลเวียงพางคำ พร้อมรับผู้ประสบภัย มีเตียงว่าง 85 เตียง พร้อมทีมแพทย์ประจำการ
-					</p>
+					{/if}
+					<!-- Dedicated Close 'X' Button -->
+					<button
+						type="button"
+						onclick={closeAlertsMenu}
+						class="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-[#0284C7] focus-visible:outline-none"
+						aria-label="ปิดการแจ้งเตือน"
+						title="ปิดการแจ้งเตือน"
+					>
+						<X class="h-4 w-4" />
+					</button>
 				</div>
+			</div>
+
+			<div class="mt-3 max-h-[60vh] space-y-3 overflow-y-auto">
+				{#if announcements.length > 0}
+					{#each announcements as ann (ann._id)}
+						{@const isDanger = ann.severity === 'emergency'}
+						{@const isWarning = ann.severity === 'warning'}
+						<button
+							type="button"
+							onclick={() => {
+								closeAlertsMenu();
+								alertsModalOpen = true;
+							}}
+							class="w-full rounded-xl border p-3.5 text-left shadow-2xs transition-all {isDanger
+								? 'border-red-200 bg-red-50/40 hover:border-red-300 hover:bg-red-50/60'
+								: isWarning
+									? 'border-amber-200 bg-amber-50/40 hover:border-amber-300 hover:bg-amber-50/60'
+									: 'border-sky-200 bg-sky-50/40 hover:border-sky-300 hover:bg-sky-50/60'}"
+						>
+							<div class="flex items-center justify-between gap-2">
+								<span
+									class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-bold {isDanger
+										? 'border-red-200 bg-red-50 text-red-700'
+										: isWarning
+											? 'border-amber-200 bg-amber-50 text-amber-800'
+											: 'border-blue-200 bg-blue-50 text-blue-700'}"
+								>
+									<span
+										class="h-1.5 w-1.5 rounded-full {isDanger
+											? 'bg-red-600'
+											: isWarning
+												? 'bg-amber-500'
+												: 'bg-blue-500'}"
+									></span>
+									{isDanger
+										? 'วิกฤติ (Emergency)'
+										: isWarning
+											? 'เตือนภัย (Warning)'
+											: 'ข้อมูลทั่วไป (Info)'}
+								</span>
+								{#if ann.created_at}
+									<span class="text-2xs text-slate-400 tabular-nums">
+										{new Date(ann.created_at).toLocaleTimeString('th-TH', {
+											hour: '2-digit',
+											minute: '2-digit'
+										})} น.
+									</span>
+								{/if}
+							</div>
+							<h4 class="mt-2 text-xs font-bold text-slate-900">
+								{ann.title}
+							</h4>
+							<p class="mt-1 line-clamp-3 text-xs leading-relaxed text-slate-600">
+								{ann.description}
+							</p>
+						</button>
+					{/each}
+				{:else}
+					<div
+						class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-slate-500"
+					>
+						<p class="text-xs font-medium">ไม่มีประกาศแจ้งเตือนภัยในขณะนี้</p>
+						<p class="mt-0.5 text-2xs text-slate-400">
+							สถานการณ์ปกติ ทุกศูนย์พักพิงเปิดให้บริการตามปกติ
+						</p>
+					</div>
+				{/if}
 			</div>
 
 			<div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-				<a
-					href={resolve('/')}
+				<button
+					type="button"
 					onclick={() => {
 						closeAlertsMenu();
-						const el = document.getElementById('announcements');
-						if (el) el.scrollIntoView({ behavior: 'smooth' });
+						alertsModalOpen = true;
 					}}
-					class="text-xs font-bold text-[#0284C7] hover:underline"
+					class="cursor-pointer text-xs font-bold text-[#0284C7] hover:underline"
 				>
 					ดูรายละเอียดประกาศทั้งหมด →
-				</a>
+				</button>
 				<button
 					type="button"
 					onclick={closeAlertsMenu}
-					class="rounded-lg px-2 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+					class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900"
 				>
 					ปิด
 				</button>
@@ -415,9 +523,9 @@
 		</div>
 	{/if}
 
-	<!-- Mobile Menu Dropdown -->
+	<!-- Compact menu dropdown (phone + tablet) -->
 	{#if mobileMenuOpen}
-		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
+		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg lg:hidden">
 			<nav class="flex flex-col gap-2 p-4">
 				<button
 					type="button"
@@ -431,11 +539,11 @@
 						<Bell class="h-5 w-5 text-sky-600" />
 						<span>การแจ้งเตือนภัย</span>
 					</div>
-					<span
-						class="rounded-full bg-red-600 px-2 py-0.5 text-2xs font-bold text-white tabular-nums"
-					>
-						2
-					</span>
+					{#if announcementsCount > 0}
+						<span class="flex h-2.5 w-2.5 items-center justify-center">
+							<span class="h-2 w-2 rounded-full bg-red-600"></span>
+						</span>
+					{/if}
 				</button>
 				<a
 					href={resolve('/')}
@@ -484,7 +592,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<ClipboardCheck class="h-5 w-5" />
-					ลงทะเบียนล่วงหน้า
+					{t.preRegister}
 				</a>
 
 				<a
@@ -525,3 +633,5 @@
 		</div>
 	{/if}
 </header>
+
+<PublicEmergencyModal bind:open={alertsModalOpen} {announcements} />

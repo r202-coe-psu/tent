@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -14,6 +15,7 @@ from .schemas import (
     LocationDetailItem,
     LocationItem,
     LocationListEnvelope,
+    PaginationMeta,
 )
 
 
@@ -102,6 +104,8 @@ class ThirdPartyLocationsUseCase:
         status_filter: str | None,
         updated_since: datetime | None,
         include_inactive: bool,
+        page: int = 1,
+        limit: int = 50,
     ) -> LocationListEnvelope:
         query: dict[str, Any] = {}
         if status_filter:
@@ -111,9 +115,18 @@ class ThirdPartyLocationsUseCase:
         if updated_since:
             query["updated_at"] = {"$gte": updated_since}
 
-        docs = await PublicShelter.find(query).sort("+shelter_code").to_list()
+        cursor = PublicShelter.find(query)
+        total = await cursor.count()
+        total_pages = math.ceil(total / limit) if total > 0 else 0
+        docs = await cursor.sort("+shelter_code").skip((page - 1) * limit).limit(limit).to_list()
         items = [_to_item(doc) for doc in docs]
-        return LocationListEnvelope(result=items)
+        pagination = PaginationMeta(
+            page=page,
+            limit=limit,
+            total=total,
+            total_pages=total_pages,
+        )
+        return LocationListEnvelope(result=items, pagination=pagination)
 
     async def get_location(self, location_code: str) -> LocationDetailEnvelope:
         doc = await PublicShelter.find_one(PublicShelter.shelter_code == location_code)

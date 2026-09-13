@@ -11,6 +11,7 @@ export {
 	HOUSEHOLD_MASTER_TYPES,
 	SHELTER_MASTER_TYPES,
 	MASTER_DATA_TYPE_LABELS,
+	CR112_VULNERABLE_GROUP_ACTIVE,
 	masterDataScopeSchema,
 	masterTypeSchema,
 	masterDataSchema,

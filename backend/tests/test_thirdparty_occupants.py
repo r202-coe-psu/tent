@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from httpx import AsyncClient
 from tent_model.public_shelter import PublicShelter
+from tent_model.shelter_occupant import ShelterOccupant
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from apiapp.modules.thirdparty_auth.scopes import mint_access_token
@@ -98,11 +99,9 @@ async def test_get_occupants_missing_purpose_also_logs_the_attempt(
     assert rows[0].purpose == ""
 
 
-async def test_get_occupants_never_returns_pii_even_with_scope_granted(
+async def test_get_occupants_with_scope_returns_empty_when_no_occupants(
     client: AsyncClient, shelter: PublicShelter
 ) -> None:
-    """Out of Scope (CR-109/ext-spec.md): no real payload, even if a token somehow
-    carries `occupancy-pii-read` — the data source itself isn't built in this slice."""
     headers = _bearer(["occupancy-pii-read"])
     response = await client.get(
         "/api/thirdparty/locations/SH001/occupants",
@@ -110,7 +109,76 @@ async def test_get_occupants_never_returns_pii_even_with_scope_granted(
         params={"purpose": "medical-referral"},
     )
     assert response.status_code == 200
-    assert response.json()["result"] == []
+    body = response.json()
+    assert body["result"] == []
+    assert "pagination" in body
+    assert body["pagination"]["total"] == 0
 
     rows = await ThirdPartyAccessLog.find(ThirdPartyAccessLog.location_code == "SH001").to_list()
-    assert rows[0].status == "granted_no_data_source"
+    assert rows[0].status == "granted"
+    assert rows[0].result_count == 0
+
+
+async def test_get_occupants_with_scope_returns_real_data_and_pagination(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    now = datetime.now(UTC)
+    await ShelterOccupant(
+        id="SH001:occ1",
+        shelter_code="SH001",
+        occupant_ref="OCC-0001-0042",
+        name_masked="สมชาย ใ.",
+        age_range="60-69",
+        gender="male",
+        care_flags=["bedridden"],
+        checked_in_at=now,
+        updated_at=now,
+    ).insert()
+    await ShelterOccupant(
+        id="SH001:occ2",
+        shelter_code="SH001",
+        occupant_ref="OCC-0001-0043",
+        name_masked="มาลี ส.",
+        age_range="18-59",
+        gender="female",
+        care_flags=[],
+        checked_in_at=now,
+        updated_at=now,
+    ).insert()
+
+    headers = _bearer(["occupancy-pii-read"])
+    response = await client.get(
+        "/api/thirdparty/locations/SH001/occupants",
+        headers=headers,
+        params={"purpose": "medical-referral", "page": 1, "limit": 1},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["result"]) == 1
+    assert data["result"][0]["occupant_ref"] == "OCC-0001-0042"
+    assert data["result"][0]["name_masked"] == "สมชาย ใ."
+    assert data["result"][0]["age_range"] == "60-69"
+    assert data["result"][0]["gender"] == "male"
+    assert data["result"][0]["care_flags"] == ["bedridden"]
+    assert "pagination" in data
+    assert data["pagination"]["page"] == 1
+    assert data["pagination"]["limit"] == 1
+    assert data["pagination"]["total"] == 2
+    assert data["pagination"]["total_pages"] == 2
+
+    # Page 2
+    p2_resp = await client.get(
+        "/api/thirdparty/locations/SH001/occupants",
+        headers=headers,
+        params={"purpose": "medical-referral", "page": 2, "limit": 1},
+    )
+    assert p2_resp.status_code == 200
+    p2_data = p2_resp.json()
+    assert len(p2_data["result"]) == 1
+    assert p2_data["result"][0]["occupant_ref"] == "OCC-0001-0043"
+    assert p2_data["pagination"]["page"] == 2
+
+    rows = await ThirdPartyAccessLog.find(ThirdPartyAccessLog.location_code == "SH001").to_list()
+    assert len(rows) == 2
+    assert all(r.status == "granted" for r in rows)
+    assert rows[0].result_count == 1

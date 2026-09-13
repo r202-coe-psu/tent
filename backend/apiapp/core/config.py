@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     DATABASE_URI: str = ""
     EXTERNAL_API_SECRET: str = ""
+    # Central CouchDB base URL for verifying staff AuthSession cookies (`/staff/v1/*`).
+    COUCHDB_URL: str = "http://localhost:5984"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # auth

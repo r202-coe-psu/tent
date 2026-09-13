@@ -22,11 +22,17 @@
 	import User from '@lucide/svelte/icons/user';
 	import Phone from '@lucide/svelte/icons/phone';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
-	import { PersonalInfoFields, SpecialNeedsFields, EmergencyContactFields } from './forms/index.js';
+	import {
+		PersonalInfoFields,
+		SpecialNeedsFields,
+		VulnerableGroupsFields,
+		EmergencyContactFields
+	} from './forms/index.js';
 	import { collectFormErrorMessages } from './forms/form-errors.js';
 
 	const EMPTY_EMERGENCY_CONTACT = { name: '', phone: '', relation: '' };
@@ -138,6 +144,11 @@
 				age = String(initialInput.age);
 				birthYearBE = String(currentBEYear() - initialInput.age);
 			}
+			if (initialInput.vulnerable_groups && initialInput.vulnerable_groups.length > 0) {
+				if (!$formData.vulnerable_groups || $formData.vulnerable_groups.length === 0) {
+					$formData.vulnerable_groups = [...initialInput.vulnerable_groups];
+				}
+			}
 			if (initialInput.special_needs && initialInput.special_needs.length > 0) {
 				if (!$formData.special_needs || $formData.special_needs.length === 0) {
 					$formData.special_needs = [...initialInput.special_needs];
@@ -155,6 +166,7 @@
 		gender: initial?.gender ?? 'other',
 		phone: initial?.phone === null ? null : (initial?.phone ?? ''),
 		person_id: initial?.person_id ?? { cardType: 'national_id' as const, number: '' },
+		vulnerable_groups: initial?.vulnerable_groups ?? [],
 		special_needs: initial?.special_needs ?? [],
 		emergency_contact: initial?.emergency_contact ?? { ...EMPTY_EMERGENCY_CONTACT }
 	};
@@ -432,6 +444,19 @@
 					phone: $errors.emergency_contact?.phone?.[0],
 					relation: $errors.emergency_contact?.relation?.[0]
 				}}
+			/>
+		</section>
+
+		<section id="reg-section-vulnerable" class="form-section-card scroll-mt-24 space-y-4">
+			<div class="flex items-center gap-2 border-b border-border pb-3">
+				<ShieldAlert class="size-5 text-primary" />
+				<h3 class="text-base font-bold text-foreground">กลุ่มเปราะบาง (Vulnerable Groups)</h3>
+			</div>
+			<VulnerableGroupsFields
+				bind:vulnerable_groups={$formData.vulnerable_groups}
+				disabled={$submitting || pending}
+				idPrefix="reg-vg"
+				label=""
 			/>
 		</section>
 

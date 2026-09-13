@@ -23,6 +23,7 @@
 		shelter_zones,
 		evacuee = null,
 		triage_level = null,
+		ewar_symptoms = null,
 		occupant_counts,
 		onSelectZone,
 		disabled = false
@@ -31,6 +32,7 @@
 		shelter_zones?: ZoneItem[];
 		evacuee?: Evacuee | null;
 		triage_level?: TriageLevel | null;
+		ewar_symptoms?: readonly string[] | null;
 		occupant_counts?: Map<string, number> | Record<string, number>;
 		onSelectZone?: (zoneCode: string) => void;
 		disabled?: boolean;
@@ -57,7 +59,10 @@
 	});
 
 	const recommendedZoneType = $derived(
-		recommendZoneKind(evacuee ?? { special_needs: [] }, triage_level)
+		recommendZoneKind(
+			evacuee ?? { vulnerable_groups: [], special_needs: [] },
+			ewar_symptoms ?? triage_level
+		)
 	);
 
 	const recommendedZone = $derived.by(() => {
@@ -75,7 +80,7 @@
 	}
 
 	function recommendLabel(kind: string): string {
-		if (kind === 'quarantine') return 'แนะนำสำหรับ triage เหลือง/แดง (กักตัว)';
+		if (kind === 'quarantine') return 'แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)';
 		if (kind === 'vulnerable') return 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง';
 		return 'โซนที่พักทั่วไป';
 	}

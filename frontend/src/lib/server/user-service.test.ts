@@ -3,6 +3,7 @@ import * as couchAdmin from './couch-admin';
 import {
 	createUser,
 	resetUserPasswordByAdmin,
+	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
 	setupSecurityQuestionAndResetPassword
@@ -79,6 +80,30 @@ describe('user-service', () => {
 		expect(saved.organization).toBe('ปภ. เชียงใหม่');
 		expect(saved.roles).toEqual(['shelter:SH001', 'registration_staff', 'triage_staff']);
 		expect(saved.active).toBe(true);
+	});
+
+	it('getCurrentUserProfile returns display_name from _users when present', async () => {
+		fakeUsersDb['org.couchdb.user:staff1'] = {
+			_id: 'org.couchdb.user:staff1',
+			_rev: '1-abc',
+			name: 'staff1',
+			type: 'user',
+			roles: [],
+			display_name: 'Staff One'
+		};
+
+		await expect(getCurrentUserProfile('staff1')).resolves.toEqual({
+			name: 'staff1',
+			display_name: 'Staff One'
+		});
+	});
+
+	it('getCurrentUserProfile falls back to username when _users doc is missing', async () => {
+		// Bootstrap CouchDB admin often has a session but no app profile doc.
+		await expect(getCurrentUserProfile('admin')).resolves.toEqual({
+			name: 'admin',
+			display_name: 'admin'
+		});
 	});
 
 	it('resets user password by admin with memorable temporary passphrase', async () => {

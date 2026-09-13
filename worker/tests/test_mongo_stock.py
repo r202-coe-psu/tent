@@ -43,7 +43,7 @@ async def test_refresh_shelter_stock_writes_balances_and_type_code(db: None) -> 
                 "name": "ข้าวสาร",
                 "category": "food",
                 "base_unit": "กก.",
-                "SKU": "GEN-005",
+                "sku": "GEN-005",
             },
         ],
     )
@@ -109,6 +109,80 @@ async def test_refresh_shelter_stock_reads_occupancy_for_reorder_threshold(
     assert row is not None
     # 100 occupants * 3/day * 2 days = 600
     assert row.reorder_threshold == 600.0
+
+
+async def test_refresh_shelter_stock_uses_local_item_master_when_not_in_catalog(
+    db: None,
+) -> None:
+    """item_master created per-shelter (never in the central `catalog` DB) must still
+    resolve name/type/unit — mirrors frontend's central+local merge (catalog.remote.ts)."""
+    couch = _fake_couch(
+        shelter_docs=[
+            {
+                "_id": "stock_ledger:1",
+                "type": "stock_ledger",
+                "item_id": "item_master:01M2355XTPRRPJGP40225P4B5B",
+                "qty": "111",
+            },
+            {
+                "_id": "item_master:01M2355XTPRRPJGP40225P4B5B",
+                "type": "item_master",
+                "name": "จาน",
+                "category": "genaral",
+                "base_unit": "ชิ้น",
+                "shelter_code": "SH922",
+            },
+        ],
+        catalog_docs=[],
+    )
+
+    count = await refresh_shelter_stock(couch, "SH922")
+    assert count == 1
+
+    row = await ShelterStock.get("SH922:item_master:01M2355XTPRRPJGP40225P4B5B")
+    assert row is not None
+    assert row.name_th == "จาน"
+    assert row.unit_label == "ชิ้น"
+    assert row.quantity_on_hand == 111.0
+
+
+async def test_refresh_shelter_stock_local_item_master_overrides_central(
+    db: None,
+) -> None:
+    couch = _fake_couch(
+        shelter_docs=[
+            {
+                "_id": "stock_ledger:1",
+                "type": "stock_ledger",
+                "item_id": "item_master:rice",
+                "qty": "10",
+            },
+            {
+                "_id": "item_master:rice",
+                "type": "item_master",
+                "name": "ข้าวสาร (ศูนย์นี้)",
+                "category": "food",
+                "base_unit": "กก.",
+                "shelter_code": "SH923",
+            },
+        ],
+        catalog_docs=[
+            {
+                "_id": "item_master:rice",
+                "type": "item_master",
+                "name": "ข้าวสาร",
+                "category": "food",
+                "base_unit": "กก.",
+                "sku": "GEN-005",
+            },
+        ],
+    )
+
+    await refresh_shelter_stock(couch, "SH923")
+
+    row = await ShelterStock.get("SH923:item_master:rice")
+    assert row is not None
+    assert row.name_th == "ข้าวสาร (ศูนย์นี้)"
 
 
 async def test_refresh_shelter_stock_skips_a_shelter_with_no_database(db: None) -> None:

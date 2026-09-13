@@ -206,7 +206,6 @@
 							{@const speciesMap = {
 								dog: 'สุนัข',
 								cat: 'แมว',
-								bird: 'นก',
 								other: 'สัตว์เลี้ยงอื่นๆ'
 							}}
 							<span

@@ -46,3 +46,4 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
 - Sync Worker responsibilities expanded to aggregate stock balances and demographic groups.
 - `PublicShelter` schema expanded to embed real-time occupancy counts and operational metadata.
 - FastAPI gains a dedicated `/api/thirdparty` and `/api/auth` routing plane matching the partner contract exactly.
+- **As-built partner handover (2026-09-10):** [docs/reports/2026-09-10/partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) — delivery artifact that supersedes ODT framing for integration; source ODT in `docs/source/` remains an immutable archive (untouched). Indexed from [api-contract.md](../data/api-contract.md) §5.3; stable stub at [docs/data/partner-api.md](../data/partner-api.md).

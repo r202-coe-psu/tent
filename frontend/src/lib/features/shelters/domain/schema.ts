@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { migrateVulnerableGroupCodes } from '$lib/features/people/server';
 
 // ===== Enums (CR-008) =====
 
@@ -272,8 +273,13 @@ export const petPolicySchema = z.object({
 export type PetPolicy = z.infer<typeof petPolicySchema>;
 
 export const admissionPolicySchema = z.object({
-	// master_data:vulnerable_group codes (CR-023 FR-23-14, Option A)
-	supported_vulnerable_groups: z.array(z.string()).optional().default([]),
+	// master_data:vulnerable_group codes (CR-023 FR-23-14, Option A);
+	// CR-112 hard-migrates legacy elderly/disabled on parse.
+	supported_vulnerable_groups: z
+		.array(z.string())
+		.optional()
+		.default([])
+		.transform(migrateVulnerableGroupCodes),
 	pet_policy: petPolicySchema.optional().default({ policy: null, categories: [] })
 });
 export type AdmissionPolicy = z.infer<typeof admissionPolicySchema>;

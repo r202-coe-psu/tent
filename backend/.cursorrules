@@ -13,8 +13,8 @@ You are an expert AI assistant tasked with helping developers build features acc
 
 ## 🛠️ 2. Development Workflow (Crucial)
 
-- **Always use the CLI to generate modules**: `poetry run forge generate {feature_name}`. NEVER try to write `__init__.py`, `router.py`, `model.py`, `schemas.py`, and `use_case.py` from scratch. The CLI will handle everything.
-- **Run the app**: Activate the virtual environment (`source venv/bin/activate` or equivalent) and run the development script: `./scripts/run-dev`.
+- **Always use the CLI to generate modules**: `uv run forge generate {feature_name}`. NEVER try to write `__init__.py`, `router.py`, `model.py`, `schemas.py`, and `use_case.py` from scratch. The CLI will handle everything.
+- **Run the app**: Activate the virtual environment (`source .venv/bin/activate` or equivalent) and run the development script: `./scripts/run-dev`.
 
 ## 📂 3. File Constraints
 

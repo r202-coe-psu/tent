@@ -52,12 +52,12 @@ async def test_seeds_one_counter_per_need(db: None) -> None:
     rice = await _get("item:rice")
     water = await _get("item:water")
     assert rice is not None and water is not None
-    assert rice.qty_target == Decimal("10")
-    assert rice.reserved_qty == Decimal("0")
+    assert rice.qty_target == Decimal(10)
+    assert rice.reserved_qty == Decimal(0)
     assert rice.shelter_code == SHELTER
     assert rice.campaign_id == CAMPAIGN
     assert rice.item_id == "item:rice"
-    assert water.qty_target == Decimal("25")
+    assert water.qty_target == Decimal(25)
 
 
 async def test_replaying_campaign_does_not_move_qty_target(db: None) -> None:
@@ -69,7 +69,7 @@ async def test_replaying_campaign_does_not_move_qty_target(db: None) -> None:
 
     rice = await _get("item:rice")
     assert rice is not None
-    assert rice.qty_target == Decimal("10")
+    assert rice.qty_target == Decimal(10)
 
 
 async def test_replay_does_not_reset_reserved_qty(db: None) -> None:
@@ -79,7 +79,7 @@ async def test_replay_does_not_reset_reserved_qty(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("4"),
+        qty=Decimal(4),
         now=datetime.now(UTC),
     )
 
@@ -87,15 +87,17 @@ async def test_replay_does_not_reset_reserved_qty(db: None) -> None:
 
     rice = await _get("item:rice")
     assert rice is not None
-    assert rice.reserved_qty == Decimal("4")
-    assert rice.qty_target == Decimal("10")
+    assert rice.reserved_qty == Decimal(4)
+    assert rice.qty_target == Decimal(10)
 
 
 async def test_closing_campaign_keeps_existing_counters(db: None) -> None:
     """FR-4 — counters survive campaign close and items dropping out of needs[]."""
     await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
 
-    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}], status="closed"))
+    await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "10"}], status="closed")
+    )
     await _seed(_campaign([{"item_id": "item:water", "qty_target": "5"}]))
 
     assert await _get("item:rice") is not None
@@ -108,27 +110,31 @@ async def test_seed_and_concurrent_inc_do_not_clobber_each_other(db: None) -> No
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty_target=Decimal("10"),
+        qty_target=Decimal(10),
         now=now,
     )
 
-    collection = DonationNeedCounter.get_motor_collection()
+    collection = DonationNeedCounter.get_pymongo_collection()
     cid = counter_id(SHELTER, CAMPAIGN, "item:rice")
     # FastAPI's $inc lands between two worker seeds of the same campaign.
-    await collection.update_one({"_id": cid}, {"$inc": {"reserved_qty": bson.Decimal128("3")}})
+    await collection.update_one(
+        {"_id": cid}, {"$inc": {"reserved_qty": bson.Decimal128("3")}}
+    )
     await seed_counter(
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty_target=Decimal("10"),
+        qty_target=Decimal(10),
         now=now,
     )
-    await collection.update_one({"_id": cid}, {"$inc": {"reserved_qty": bson.Decimal128("2")}})
+    await collection.update_one(
+        {"_id": cid}, {"$inc": {"reserved_qty": bson.Decimal128("2")}}
+    )
 
     rice = await _get("item:rice")
     assert rice is not None
-    assert rice.qty_target == Decimal("10")
-    assert rice.reserved_qty == Decimal("5")
+    assert rice.qty_target == Decimal(10)
+    assert rice.reserved_qty == Decimal(5)
 
 
 async def test_reserve_quota_enforces_seeded_ceiling(db: None) -> None:
@@ -140,14 +146,14 @@ async def test_reserve_quota_enforces_seeded_ceiling(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("10"),
+        qty=Decimal(10),
         now=now,
     )
     second = await reserve_quota(
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("1"),
+        qty=Decimal(1),
         now=now,
     )
 
@@ -198,7 +204,7 @@ async def test_concurrent_reserves_never_exceed_the_ceiling(db: None) -> None:
 
     assert sum(r is ReserveResult.RESERVED for r in results) == 10
     assert sum(r is ReserveResult.NEED_FULL for r in results) == 10
-    assert await _reserved() == Decimal("10")
+    assert await _reserved() == Decimal(10)
 
 
 async def test_concurrent_reserves_stop_at_the_last_whole_fit(db: None) -> None:
@@ -209,7 +215,7 @@ async def test_concurrent_reserves_stop_at_the_last_whole_fit(db: None) -> None:
     results = await asyncio.gather(*[_reserve("3", now) for _ in range(8)])
 
     assert sum(r is ReserveResult.RESERVED for r in results) == 3
-    assert await _reserved() == Decimal("9")
+    assert await _reserved() == Decimal(9)
 
 
 async def test_concurrent_releases_never_underflow(db: None) -> None:
@@ -220,7 +226,7 @@ async def test_concurrent_releases_never_underflow(db: None) -> None:
 
     await asyncio.gather(*[_release("1", now) for _ in range(20)])
 
-    assert await _reserved() == Decimal("0")
+    assert await _reserved() == Decimal(0)
 
 
 async def test_concurrent_reserve_and_release_settle_consistently(db: None) -> None:
@@ -236,4 +242,4 @@ async def test_concurrent_reserve_and_release_settle_consistently(db: None) -> N
 
     # 10 held + 10 reserved - 10 released; every release has stock to take under any
     # interleaving, so the total is fixed regardless of ordering.
-    assert await _reserved() == Decimal("10")
+    assert await _reserved() == Decimal(10)

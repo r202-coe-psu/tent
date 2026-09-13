@@ -302,6 +302,8 @@
 					? { description: assetDescription.trim(), image_url: null }
 					: null,
 				notes: addressData.notes.trim() || undefined,
+				housing_type: addressData.housingType || null,
+				residence_landmark: addressData.residenceLandmark || null,
 				address_no: addressData.addressNo || null,
 				village_no: addressData.villageNo || null,
 				subdistrict: addressData.subdistrict || null,

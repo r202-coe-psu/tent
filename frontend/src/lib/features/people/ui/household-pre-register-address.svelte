@@ -5,6 +5,7 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -12,6 +13,7 @@
 		useDistricts,
 		useSubdistricts
 	} from '$lib/features/shelters/application/queries';
+	import { useMasterData } from '$lib/features/master-data';
 	import {
 		householdPreRegisterAddressFormSchema,
 		type HouseholdAddressForm
@@ -83,12 +85,22 @@
 		() => $formData.province || null,
 		() => $formData.district || null
 	);
+	const housingTypeQuery = useMasterData(() => 'housing_type');
 
 	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
 	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
 	const subdistrictItems = $derived(
 		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
 	);
+	const housingTypeItems = $derived(
+		(housingTypeQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: i.label }))
+	);
+	const isHomeless = $derived($formData.housingType === 'homeless');
+
+	const selectTriggerClass =
+		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
 	function selectProvince(value: string | null) {
 		$formData.province = value ?? '';
@@ -167,10 +179,59 @@
 				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
 			</h3>
 			<div class="grid grid-cols-2 gap-4">
+				<Form.Field {form} name="housingType">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>ประเภทที่อยู่อาศัย</Form.Label>
+							<Select.Root
+								type="single"
+								bind:value={
+									() => $formData.housingType ?? '', (v) => ($formData.housingType = v || null)
+								}
+							>
+								<Select.Trigger {...props} class={selectTriggerClass}>
+									{housingTypeItems.find((o) => o.value === $formData.housingType)?.label ??
+										'— เลือกประเภทที่อยู่อาศัย —'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each housingTypeItems as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="residenceLandmark">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>
+								จุดสังเกตที่อยู่
+								{#if isHomeless}
+									<span class="font-normal text-muted-foreground">(หรือบ้านเลขที่)</span>
+								{/if}
+							</Form.Label>
+							<Input
+								{...props}
+								placeholder={isHomeless ? 'เช่น ริมคลองข้างตลาด' : 'เช่น ใกล้สะพาน / ปากซอย'}
+								bind:value={$formData.residenceLandmark}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
 				<Form.Field {form} name="addressNo">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label>บ้านเลขที่ <span class="text-destructive">*</span></Form.Label>
+							<Form.Label>
+								บ้านเลขที่
+								{#if !isHomeless}<span class="text-destructive">*</span>{/if}
+								{#if isHomeless}
+									<span class="font-normal text-muted-foreground">(ไม่บังคับถ้ามีจุดสังเกต)</span>
+								{/if}
+							</Form.Label>
 							<Input {...props} placeholder="เช่น 12/3" bind:value={$formData.addressNo} />
 						{/snippet}
 					</Form.Control>

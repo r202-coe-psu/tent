@@ -2,6 +2,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Info from '@lucide/svelte/icons/info';
+	import Clock from '@lucide/svelte/icons/clock';
 	import type { Announcement } from '$lib/features/announcements';
 
 	import { getTranslation } from '$lib/utils/i18n';
@@ -10,10 +11,12 @@
 
 	let {
 		announcement,
-		alerts = []
+		alerts = [],
+		class: className = ''
 	}: {
 		announcement: Partial<Announcement>;
 		alerts?: { name: string; capacity: string; variant: string }[];
+		class?: string;
 	} = $props();
 
 	let isDanger = $derived(announcement?.severity === 'emergency');
@@ -67,7 +70,8 @@
 </script>
 
 <div
-	class="mb-8 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md md:relative md:z-auto {bannerClass}"
+	class="overflow-hidden rounded-xl border shadow-xs backdrop-blur-md md:relative md:z-auto {bannerClass} {className ||
+		'mb-8'}"
 >
 	<div class="flex flex-col border-l-4 p-5 md:flex-row md:items-start md:gap-4 {borderClass}">
 		<!-- Alert Icon -->
@@ -83,7 +87,7 @@
 			{/if}
 		</div>
 		<!-- Alert Content -->
-		<div class="flex min-w-0 flex-1 flex-col gap-1">
+		<div class="flex min-w-0 flex-1 flex-col gap-2">
 			<div class="flex items-center gap-2">
 				<span
 					class="inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-semibold shadow-sm md:text-xs {badgeColor}"
@@ -98,6 +102,12 @@
 			<p class="h-full text-sm leading-relaxed break-words {descClass}">
 				{displayDesc}
 			</p>
+			{#if announcement.created_at}
+				<div class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+					<Clock class="h-3.5 w-3.5 text-muted-foreground" />
+					<span>ประกาศเมื่อ {new Date(announcement.created_at).toLocaleString('th-TH')} น.</span>
+				</div>
+			{/if}
 			<!-- Shelter Badges (optional) -->
 			{#if alerts.length > 0}
 				<div class="mt-4 flex flex-wrap gap-3">

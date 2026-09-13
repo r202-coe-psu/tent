@@ -30,9 +30,11 @@
 
 <ConnectionBanner />
 
-<div class="flex h-[var(--app-shell-height)] flex-col overflow-hidden">
+<div class="flex min-h-[var(--app-shell-height)] flex-col pb-[var(--testing-banner-height)]">
 	{#if !page.url.pathname.startsWith('/back-office')}
-		<header class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
+		<header
+			class="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6"
+		>
 			<div class="flex items-center gap-6">
 				<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
 			</div>
@@ -47,7 +49,7 @@
 
 	<SessionExpiredBar />
 
-	<main class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+	<main class="flex flex-1 flex-col">
 		{@render children()}
 	</main>
 </div>

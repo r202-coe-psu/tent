@@ -17,8 +17,8 @@ You are an expert AI assistant tasked with helping developers build features acc
 
 ## 🛠️ 2. Development Workflow (Crucial)
 
-- **Always use the CLI to generate modules**: `poetry run forge generate {feature_name}`. NEVER try to write `__init__.py`, `router.py`, `model.py`, `schemas.py`, and `use_case.py` from scratch. The CLI will handle everything.
-- **Run the app**: Activate the virtual environment (`source venv/bin/activate` or equivalent) and run the development script: `./scripts/run-dev`.
+- **Always use the CLI to generate modules**: `uv run forge generate {feature_name}`. NEVER try to write `__init__.py`, `router.py`, `model.py`, `schemas.py`, and `use_case.py` from scratch. The CLI will handle everything.
+- **Run the app**: Activate the virtual environment (`source .venv/bin/activate` or equivalent) and run the development script: `./scripts/run-dev`.
 
 ## 📂 3. File Constraints
 
@@ -44,17 +44,17 @@ This project acts as an API provider. Ensure all API responses:
 
 ## 📦 6. Package Management & Dependencies
 
-- **Strictly Poetry:** Whenever a new Python library or dependency needs to be installed, you MUST use `poetry add <package_name>`. For development tools, use `poetry add --group dev <package_name>`.
-- **NO PIP:** Never instruct the user to use `pip install` or manually modify `requirements.txt`. The project strictly relies on `pyproject.toml` and `poetry.lock`.
+- **Strictly uv:** Whenever a new Python library or dependency needs to be installed, you MUST use `uv add --project backend <package_name>`. For development tools, use `uv add --project backend --dev <package_name>`.
+- **NO PIP / NO POETRY:** Never instruct the user to use `pip install` or `poetry add`. The project strictly relies on `pyproject.toml` and root `uv.lock`.
 
 ## 🚀 7. Running The App
 
 Always run the app using the provided scripts after activating your virtual environment.
 ```bash
-- 1. Activate Virtual Environment
-source venv/bin/activate
-- 2. Run in Development Mode
+# 1. Activate Virtual Environment
+source .venv/bin/activate
+# 2. Run in Development Mode
 ./scripts/run-dev
-
+```
 
 If you receive a request to alter or update something, strictly enforce the rules above.

@@ -11,6 +11,8 @@ export interface BookingTicket {
 	last_name: string;
 	status: string;
 	booked_at: string;
+	type?: 'shelter_booking' | 'unassigned_queue';
+	member_count?: number;
 }
 
 /**

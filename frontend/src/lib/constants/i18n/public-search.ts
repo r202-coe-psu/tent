@@ -1,7 +1,7 @@
 export const PUBLIC_SEARCH_I18N = {
 	th: {
-		pageTitle: 'ระบบสืบค้นญาติและครอบครัว - Smart Shelter',
-		heroTitle: 'ระบบสืบค้นญาติและครอบครัว',
+		pageTitle: 'ระบบค้นหาผู้พักพิงและครอบครัว - Smart Shelter',
+		heroTitle: 'ระบบค้นหาผู้พักพิงและครอบครัว',
 		heroDesc:
 			'สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)',
 		heroBadge: 'Restoring Family Links',
@@ -28,7 +28,7 @@ export const PUBLIC_SEARCH_I18N = {
 		origin: 'ภูมิลำเนาเดิม',
 		checkinTime: 'เวลาลงทะเบียนเข้าพัก',
 		notSpecifiedTime: 'ไม่ระบุเวลา',
-		careZone: 'สถานะความดูแล (โซน)',
+		careZone: 'โซน',
 		familyInfo: 'ข้อมูลสมาชิกในครอบครัว',
 		people: 'คน',
 		clickToView: 'คลิกเพื่อดู',
@@ -72,7 +72,7 @@ export const PUBLIC_SEARCH_I18N = {
 		origin: 'Origin Address',
 		checkinTime: 'Check-in Time',
 		notSpecifiedTime: 'Time not specified',
-		careZone: 'Care Zone',
+		careZone: 'Zone',
 		familyInfo: 'Family Members Info',
 		people: 'people',
 		clickToView: 'Click to view',

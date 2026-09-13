@@ -8,6 +8,13 @@
 	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
 	--testing-banner-height: 1.625rem;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
+	/*
+	 * Sticky offset for registration section headers (under app / shelter chrome).
+	 * Layouts override: public navbar ≈ 4rem; onsite app bar + shelter nav ≈ 6.75rem.
+	 * Unified form section jump actions live in the bottom chrome dock (not top).
+	 */
+	--registration-sticky-top: 4rem;
+	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -23,13 +30,13 @@
 	--primary-strong: oklch(0.45 0.12 255.6);
 	--secondary: oklch(0.97 0.001 106.424);
 	--secondary-foreground: oklch(0.216 0.006 56.043);
-	--muted: oklch(0.97 0.001 106.424);
+	--muted: oklch(0.968 0.007 247.9);
 	--muted-foreground: oklch(0.553 0.013 58.071);
 	--accent: oklch(0.97 0.001 106.424);
 	--accent-foreground: oklch(0.216 0.006 56.043);
 	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.923 0.003 48.717);
-	--input: oklch(0.923 0.003 48.717);
+	--border: oklch(0.929 0.013 255.5);
+	--input: oklch(0.88 0.015 255.5);
 	--ring: oklch(0.5 0.08 255.6);
 	--chart-1: oklch(0.646 0.222 41.116);
 	--chart-2: oklch(0.6 0.118 184.704);
@@ -428,13 +435,28 @@
 		@apply h-12 text-base sm:h-10 sm:text-sm;
 	}
 	.form-section-card {
-		@apply rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5;
+		@apply rounded-xl border border-border/60 bg-card p-4 shadow-xs sm:p-5;
 	}
 	.form-section-muted {
 		@apply rounded-xl border border-border bg-muted/30 p-4 sm:p-5;
 	}
+	.unified-reg-sticky {
+		top: var(--registration-sticky-top);
+	}
+	.unified-reg-scroll-mt {
+		scroll-margin-top: var(--registration-scroll-mt);
+	}
+	.unified-reg-section-header {
+		@apply sticky z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4;
+		top: var(--registration-sticky-top);
+	}
+	.unified-reg-bottom-chrome {
+		@apply sticky bottom-0 z-30 -mx-1 space-y-2 border-t border-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+	}
 	.sticky-section-nav {
-		@apply sticky top-0 z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-1 py-2 backdrop-blur-sm;
+		/* Top scroll-spy chips (registration-shell / ewar) — not used by unified form */
+		@apply sticky z-30 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background px-1 py-2;
+		top: var(--registration-sticky-top, 0px);
 		scrollbar-width: none;
 	}
 	.sticky-section-nav::-webkit-scrollbar {
@@ -514,4 +536,9 @@
 	.card-ops-inventory {
 		@apply border-2 border-teal-200 bg-white transition-all hover:border-teal-300 hover:bg-teal-50/20;
 	}
+}
+
+/* reCAPTCHA v3 — hide badge; branding text shown in booking/donations forms instead */
+.grecaptcha-badge {
+	visibility: hidden;
 }

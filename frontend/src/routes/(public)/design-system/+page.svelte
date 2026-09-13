@@ -285,9 +285,9 @@
 
 <!-- 4. Real-world Public Portal Application (4 Service Cards) -->
 <div class="border-2 border-red-200 bg-white">1. ค้นหาศูนย์พักพิง (#DC2626 Destructive)</div>
-<div class="border-2 border-sky-200 bg-white">2. ค้นหาญาติ / ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
-<div class="border-2 border-amber-200 bg-white">3. ผู้บริจาค / มอบเสบียง (#EA580C Kitchen & Food)</div>
-<div class="border-2 border-emerald-200 bg-white">4. จิตอาสา / อาสาสมัคร (#059669 Volunteers)</div>
+<div class="border-2 border-sky-200 bg-white">2. ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
+<div class="border-2 border-amber-200 bg-white">3. บริจาค (#EA580C Kitchen & Food)</div>
+<div class="border-2 border-emerald-200 bg-white">4. อาสาสมัคร (#059669 Volunteers)</div>
 
 <!-- 5. 360° Refined Status Borders -->
 <div class="border border-emerald-200 bg-white text-emerald-900">Operational Green #16A34A</div>
@@ -386,7 +386,7 @@
 <!-- 2. Domain Operations Badges (Mapped to Palette) -->
 <span class="badge-kitchen">ครัวกลาง & LPG</span>
 <span class="badge-family">แม่และเด็ก / นมผง</span>
-<span class="badge-donor">ของบริจาค & จิตอาสา</span>
+<span class="badge-donor">ของบริจาค & อาสาสมัคร</span>
 <span class="badge-inventory">คลัง SPHERE</span>
 
 <!-- 3. Functional Badges -->
@@ -2026,7 +2026,7 @@
 											<UserPlus class="h-4 w-4" />
 										</div>
 										<div>
-											<div class="text-xs font-bold text-slate-900">จิตอาสา & การแพทย์</div>
+											<div class="text-xs font-bold text-slate-900">อาสาสมัคร & การแพทย์</div>
 											<div class="text-xs text-slate-500">Volunteers & Care</div>
 										</div>
 									</div>
@@ -2206,7 +2206,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">2. ค้นหาญาติ / ผู้พักพิง</h4>
+									<h4 class="text-base font-bold text-slate-900">2. ผู้พักพิง</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ค้นหารายชื่อผู้พักพิง ตรวจสอบสถานะความปลอดภัย
 										และพิกัดศูนย์พักพิงที่คนในครอบครัวเข้าพักอยู่
@@ -2250,7 +2250,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">3. ผู้บริจาค / มอบเสบียง</h4>
+									<h4 class="text-base font-bold text-slate-900">3. บริจาค</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ประสานงานมอบอาหารปรุงสุก น้ำดื่ม สิ่งของจำเป็น หรือสมทบทุนช่วยเหลือผู้ประสบภัย
 									</p>
@@ -2293,7 +2293,7 @@
 									</span>
 								</div>
 								<div>
-									<h4 class="text-base font-bold text-slate-900">4. จิตอาสา / อาสาสมัคร</h4>
+									<h4 class="text-base font-bold text-slate-900">4. อาสาสมัคร</h4>
 									<p class="mt-1 text-xs leading-relaxed text-slate-500">
 										ลงทะเบียนร่วมช่วยเหลือ เลือกลงกะตามความถนัด เช่น ทีมแพทย์สนาม ครัวกลาง
 										และขนย้ายผู้ประสบภัย
@@ -2304,7 +2304,7 @@
 								<button
 									class="flex w-full items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-emerald-700"
 								>
-									<span>สมัครจิตอาสา (เลือกลงกะ)</span>
+									<span>สมัครอาสาสมัคร (เลือกลงกะ)</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<button
@@ -2409,7 +2409,7 @@
 									<div
 										class="border-t border-sky-50 px-3.5 pt-1 pb-3.5 text-xs leading-relaxed text-slate-600"
 									>
-										ระบบสืบค้นญาติจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
+										ระบบค้นหาผู้พักพิงจะ Mask เลขบัตรประชาชนและข้อมูลส่วนตัวที่ละเอียดอ่อน
 										จะแสดงเฉพาะชื่อ-นามสกุล, สถานะความปลอดภัย (Safe)
 										และชื่อศูนย์พักพิงที่ลงทะเบียนไว้เท่านั้น เพื่อความปลอดภัยสูงสุด
 									</div>
@@ -2558,19 +2558,19 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#0A2647]"></span>
-										ค้นหาญาติ / ผู้พักพิง (Card 2)
+										ผู้พักพิง (Card 2)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#013365 / #0284C7</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-sky-800"
 										>portalServices.tracing (#0A2647 / #0284C7)</td
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">14.2:1 (WCAG AAA)</td>
-									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับสืบค้นญาติ กรอบการ์ดสีฟ้าอ่อน</td>
+									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับค้นหาผู้พักพิง กรอบการ์ดสีฟ้าอ่อน</td>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#EA580C]"></span>
-										ผู้บริจาค / มอบเสบียง (Card 3)
+										บริจาค (Card 3)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#E17100</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-amber-700"
@@ -2584,7 +2584,7 @@
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
 										<span class="h-3 w-3 rounded-full bg-[#059669]"></span>
-										จิตอาสา / อาสาสมัคร (Card 4)
+										อาสาสมัคร (Card 4)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#009866</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-emerald-700"
@@ -2592,7 +2592,7 @@
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.6:1 (WCAG AA)</td>
 									<td class="px-4 py-2.5"
-										>ปุ่ม Emerald สำหรับงานจิตอาสา กรอบการ์ดสีเขียวมิ้นต์อ่อน</td
+										>ปุ่ม Emerald สำหรับงานอาสาสมัคร กรอบการ์ดสีเขียวมิ้นต์อ่อน</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">

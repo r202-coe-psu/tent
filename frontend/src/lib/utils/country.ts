@@ -259,7 +259,28 @@ export const COUNTRIES: Country[] = [
 	{ value: 'OTHER', label: 'อื่นๆ' }
 ];
 
-export function getCountryName(value: string): string {
-	const country = COUNTRIES.find((c) => c.value === value);
+export function getCountryName(value: string, language: string | undefined = 'th'): string {
+	const options = countriesForLanguage(language);
+	const country = options.find((c) => c.value === value);
 	return country ? country.label : value;
+}
+
+/** Title-case the stored English country code for EN UI (values are UPPERCASE names). */
+function titleCaseCountryValue(value: string): string {
+	return value
+		.toLowerCase()
+		.split(' ')
+		.map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+		.join(' ');
+}
+
+/** Locale-aware nationality options for selects. Thai keeps native labels; EN uses English names. */
+export function countriesForLanguage(language: string | undefined): Country[] {
+	if (language === 'en') {
+		return COUNTRIES.map((c) => ({
+			value: c.value,
+			label: c.value === 'OTHER' ? 'Other' : titleCaseCountryValue(c.value)
+		}));
+	}
+	return COUNTRIES;
 }

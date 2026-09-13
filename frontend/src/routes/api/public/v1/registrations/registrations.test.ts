@@ -3,6 +3,10 @@ import { POST } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
+import {
+	findConflictingHold,
+	readForecastOccupancy
+} from '$lib/features/public-register/booking-gate.server';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -28,6 +32,10 @@ vi.mock('$lib/server/couch-public-writer', () => ({
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	registerIpLimiter: { check: vi.fn(() => true) },
 	registerPhoneLimiter: { check: vi.fn(() => true) }
+}));
+vi.mock('$lib/features/public-register/booking-gate.server', () => ({
+	readForecastOccupancy: vi.fn(async () => 0),
+	findConflictingHold: vi.fn(async () => null)
 }));
 
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
@@ -97,6 +105,10 @@ describe('POST /api/public/v1/registrations', () => {
 		verifyToken.mockResolvedValue(true);
 		mockEnv.SECRET_RECAPTCHA_KEY = 'test-recaptcha-secret';
 		mockAppEnv.dev = false;
+		vi.mocked(readForecastOccupancy).mockReset();
+		vi.mocked(readForecastOccupancy).mockResolvedValue(0);
+		vi.mocked(findConflictingHold).mockReset();
+		vi.mocked(findConflictingHold).mockResolvedValue(null);
 	});
 
 	it('422 when the contact first name is blank', async () => {
@@ -210,7 +222,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(9);
+			expect(e.schema_v).toBe(10);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -446,5 +458,178 @@ describe('POST /api/public/v1/registrations', () => {
 		expect(serialized).not.toContain('0812345678');
 		expect(serialized).not.toContain('1234567890123');
 		expect(serialized).not.toContain('ใจดี'); // last name stays off the public ticket
+	});
+
+	describe('CR-112 Forecast gate + duplicate holds', () => {
+		it('409 CAPACITY_EXCEEDED when Forecast + party exceeds capacity', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				...OPEN_SHELTER,
+				capacity: 100
+			} as never);
+			vi.mocked(readForecastOccupancy).mockResolvedValue(99);
+
+			const res = await POST(event({ ...VALID_BODY, members: [CONTACT, { ...CONTACT }] }));
+			expect(res.status).toBe(409);
+			expect((await res.json()).error).toBe('CAPACITY_EXCEEDED');
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('still books when Forecast fits under capacity', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				...OPEN_SHELTER,
+				capacity: 100
+			} as never);
+			vi.mocked(readForecastOccupancy).mockResolvedValue(97);
+
+			const res = await POST(event({ ...VALID_BODY, members: [CONTACT, { ...CONTACT }] }));
+			expect(res.status).toBe(201);
+			expect(bulkAsPublicWriter).toHaveBeenCalled();
+		});
+
+		it('409 DUPLICATE_HOLD when a non-cancelled hold already matches phone/card', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+			vi.mocked(findConflictingHold).mockResolvedValue({
+				current_stay: { status: 'pre_registered' },
+				phone: '0812345678'
+			});
+
+			const res = await POST(event(VALID_BODY));
+			expect(res.status).toBe(409);
+			expect((await res.json()).error).toBe('DUPLICATE_HOLD');
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('Issue #254 unified multi-person registration payload', () => {
+		it('accepts shared unified payload and writes Couch Household + N Evacuees at pre_registered', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const unifiedPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: '0811112222',
+						person_id: { cardType: 'national_id', number: '1100000000001' }
+					},
+					{
+						first_name: 'สมศรี',
+						last_name: 'รักสงบ',
+						gender: 'female',
+						phone: null
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					residence_landmark: null,
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [{ species: 'dog', count: 1 }],
+					vehicles: [{ type: 'car', license_plate: '1กข 9999' }],
+					assets: { description: 'ทองคำแท่ง', image_url: null }
+				}
+			};
+
+			const res = await POST(event(unifiedPayload));
+			expect(res.status).toBe(201);
+			const jsonBody = await res.json();
+			expect(jsonBody.success).toBe(true);
+			expect(jsonBody.status).toBe('pre_registered');
+			expect(jsonBody.member_count).toBe(2);
+			expect(jsonBody.pet_count).toBe(1);
+
+			const { household, evacuees } = writtenDocs();
+			expect(household.type).toBe('household');
+			expect(household.status).toBe('pre_registered');
+			expect(household.label).toBe('ครอบครัวสมเกียรติ รักสงบ');
+			expect(evacuees).toHaveLength(2);
+			expect(evacuees[0].current_stay).toMatchObject({ status: 'pre_registered' });
+			expect(evacuees[0].registered_via).toBe('web');
+			expect(evacuees[1].current_stay).toMatchObject({ status: 'pre_registered' });
+			expect(evacuees[1].registered_via).toBe('web');
+		});
+
+		it('persists member face photo and pet image_url as Couch image refs', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const unifiedPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: '0811112222',
+						person_id: { cardType: 'national_id', number: '1100000000001' },
+						photo: 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [
+						{
+							species: 'dog',
+							count: 1,
+							image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+						}
+					],
+					vehicles: [],
+					assets: null
+				}
+			};
+
+			const res = await POST(event(unifiedPayload));
+			expect(res.status).toBe(201);
+
+			const { household, evacuees } = writtenDocs();
+			expect(evacuees[0].photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+			expect(household.pets).toEqual([
+				{
+					species: 'dog',
+					count: 1,
+					image_url: 'image:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+				}
+			]);
+		});
+
+		it('422 when primary contact phone is missing in unified payload', async () => {
+			const invalidPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: ''
+					}
+				],
+				household: {
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [],
+					vehicles: []
+				}
+			};
+
+			const res = await POST(event(invalidPayload));
+			expect(res.status).toBe(422);
+			expect((await res.json()).error).toBe('INVALID_INPUT');
+		});
 	});
 });

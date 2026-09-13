@@ -10,7 +10,11 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
-import { classifyScreeningQueueTab, classifyZoningQueueTab } from '../domain/intake-pipeline';
+import {
+	classifyScreeningQueueTab,
+	classifyZoningQueueTab,
+	recommendZoneKind
+} from '../domain/intake-pipeline';
 import type { EvacueeInput } from '../domain/people';
 
 const mockShelterDb = 'shelter_sh001';
@@ -112,7 +116,7 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 		expect(
 			classifyZoningQueueTab(checkedIn, {
 				enableMedicalScreening: true,
@@ -149,7 +153,7 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: true,
 				hasScreening: true
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 	});
 
 	it('3. screening disabled: registration → zoning check-in without screening doc', async () => {
@@ -172,10 +176,53 @@ describe('intake pipeline integration (#209)', () => {
 				enableMedicalScreening: false,
 				hasScreening: false
 			})
-		).toBe('assigned');
+		).toBe('awaiting_confirm');
 		expect(classifyScreeningQueueTab(checkedIn, new Set())).toBeNull();
 
 		const screenings = await repo.listScreenings();
 		expect(screenings.filter((s) => s.evacuee_id === registered._id)).toHaveLength(0);
+	});
+
+	it('4. Station 2 simplified medical screening (CR-106): records screening without triage or vitals, empty EWAR for asymptomatic, and updates zoning recommendation', async () => {
+		const registered = await repo.createEvacuee(evInput({ special_needs: [] }), ctx);
+
+		// Record simplified screening: care track, empty EWAR (asymptomatic), free-text notes, no triage/vitals
+		const { screening, evacuee: afterScreen } = await repo.recordMedicalScreening(
+			{
+				screening: {
+					evacuee_id: registered._id,
+					track: 'normal',
+					symptoms: [],
+					notes: 'ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี'
+				},
+				checkIn: false
+			},
+			ctx
+		);
+
+		// Verified absent triage and vitals
+		expect(screening.triage_level).toBeNull();
+		expect(screening.vital_signs).toBeUndefined();
+		expect(screening.symptoms).toEqual([]);
+		expect(screening.notes).toBe('ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี');
+		expect(afterScreen).toBeUndefined();
+
+		// Evacuee stay status remains arriving
+		const mid = await repo.getEvacuee(registered._id);
+		expect(mid?.current_stay.status).toBe('arriving');
+		expect(mid?.current_stay.zone).toBeNull();
+
+		// Now screened, qualifies for pending zoning queue
+		const screenedIds = new Set([registered._id]);
+		expect(classifyScreeningQueueTab(mid!, screenedIds)).toBe('screened');
+		expect(
+			classifyZoningQueueTab(mid!, {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).toBe('pending');
+
+		// Zoning recommendation based on EWAR symptoms (empty = general)
+		expect(recommendZoneKind(mid!, screening.symptoms)).toBe('general');
 	});
 });

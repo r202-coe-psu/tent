@@ -28,9 +28,11 @@ class SearchResult(BaseModel):
     national_id: str | None = None
     gender: str | None = None
     shelter_name: str
+    shelter_address: str | None = None
     origin_address: str | None = None
     checked_in_at: datetime | None = None
     care_zone: str | None = None
+    zone_name: str | None = None
     family_members: list[FamilyMember] = Field(default_factory=list)
 
 

@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	let {
 		name = $bindable(''),
@@ -25,6 +28,8 @@
 		};
 	} = $props();
 
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
 	const errClass =
 		'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20';
 
@@ -37,7 +42,8 @@
 <div class="space-y-4">
 	<div class="space-y-1.5">
 		<Label for="emergency-name" class="text-xs font-semibold text-foreground">
-			ชื่อผู้ติดต่อ {#if required}<span class="text-destructive">*</span>{/if}
+			{t.emergencyNameLabel}
+			{#if required}<span class="text-destructive">*</span>{/if}
 		</Label>
 		<Input
 			id="emergency-name"
@@ -45,7 +51,7 @@
 			{disabled}
 			form={formId}
 			autocomplete="name"
-			placeholder="ระบุชื่อ-นามสกุล ผู้ติดต่อฉุกเฉิน"
+			placeholder={t.emergencyNamePlaceholder}
 			aria-invalid={!!errors?.name}
 			aria-required={required || undefined}
 			class="h-9 {errors?.name ? errClass : ''}"
@@ -58,7 +64,8 @@
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
 			<Label for="emergency-phone" class="text-xs font-semibold text-foreground">
-				เบอร์โทรศัพท์ {#if required}<span class="text-destructive">*</span>{/if}
+				{t.phoneFieldLabel}
+				{#if required}<span class="text-destructive">*</span>{/if}
 			</Label>
 			<Input
 				id="emergency-phone"
@@ -69,7 +76,7 @@
 				inputmode="numeric"
 				maxlength={10}
 				autocomplete="tel"
-				placeholder="เบอร์โทรศัพท์ 10 หลัก"
+				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
 				aria-required={required || undefined}
 				class="h-9 {errors?.phone ? errClass : ''}"
@@ -81,14 +88,15 @@
 
 		<div class="space-y-1.5">
 			<Label for="emergency-relation" class="text-xs font-semibold text-foreground">
-				ความสัมพันธ์ {#if required}<span class="text-destructive">*</span>{/if}
+				{t.emergencyRelationLabel}
+				{#if required}<span class="text-destructive">*</span>{/if}
 			</Label>
 			<Input
 				id="emergency-relation"
 				bind:value={relation}
 				{disabled}
 				form={formId}
-				placeholder="เช่น บิดา มารดา คู่สมรส ญาติ"
+				placeholder={t.emergencyRelationPlaceholder}
 				aria-invalid={!!errors?.relation}
 				aria-required={required || undefined}
 				class="h-9 {errors?.relation ? errClass : ''}"

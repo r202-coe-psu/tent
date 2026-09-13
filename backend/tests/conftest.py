@@ -4,7 +4,7 @@ import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
 from apiapp.core.config import Settings, get_settings
@@ -29,18 +29,18 @@ def auth_headers(settings: Settings) -> dict[str, str]:
 
 
 @pytest.fixture
-async def db_client(settings: Settings) -> AsyncGenerator[AsyncIOMotorClient, None]:
+async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient]:
     """Create a MongoDB client bound to the current test event loop."""
-    client = AsyncIOMotorClient(
+    client = AsyncMongoClient(
         settings.DATABASE_URI,
         serverSelectionTimeoutMS=1000,
     )
     yield client
-    client.close()
+    await client.close()
 
 
 @pytest.fixture
-async def app(settings: Settings) -> AsyncGenerator[FastAPI, None]:
+async def app(settings: Settings) -> AsyncGenerator[FastAPI]:
     """Create a FastAPI application instance for a single test."""
     _app = create_app()
     async with LifespanManager(_app):
@@ -48,26 +48,42 @@ async def app(settings: Settings) -> AsyncGenerator[FastAPI, None]:
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+async def client(app: FastAPI) -> AsyncGenerator[AsyncClient]:
     """Create a test client for the FastAPI application."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
 @pytest.fixture(autouse=True)
-async def clean_db(settings: Settings, db_client: AsyncIOMotorClient):
-    """Clean the database before each test function."""
-    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
-    if "test" not in db_name and "test" not in settings.APP_ENV:
-        pytest.skip("Running against a non-test database! Aborting.")
+async def clean_db(request: pytest.FixtureRequest, settings: Settings):
+    """Clean the database before each test that touches Mongo.
 
-    db = db_client[db_name]
+    Pure unit tests (no `client` / `db_client` fixtures) skip the connection so
+    they can run when MongoDB is not up.
+    """
+    needs_db = {"client", "db_client", "app"} & set(request.fixturenames)
+    if not needs_db:
+        yield
+        return
+
+    client = AsyncMongoClient(
+        settings.DATABASE_URI,
+        serverSelectionTimeoutMS=1000,
+    )
     try:
-        collections = await db.list_collection_names()
-    except PyMongoError as exc:
-        pytest.skip(f"MongoDB test database is not reachable: {exc}")
+        db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+        if "test" not in db_name and "test" not in settings.APP_ENV:
+            pytest.skip("Running against a non-test database! Aborting.")
 
-    for collection in collections:
-        await db[collection].delete_many({})
+        db = client[db_name]
+        try:
+            collections = await db.list_collection_names()
+        except PyMongoError as exc:
+            pytest.skip(f"MongoDB test database is not reachable: {exc}")
 
-    yield
+        for collection in collections:
+            await db[collection].delete_many({})
+
+        yield
+    finally:
+        await client.close()

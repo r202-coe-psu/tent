@@ -51,6 +51,9 @@
 	);
 
 	const recommendedZoneType = $derived.by(() => {
+		if (evacuee?.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
+			return 'vulnerable';
+		}
 		if (evacuee?.special_needs && evacuee.special_needs.length > 0) {
 			return 'vulnerable';
 		}

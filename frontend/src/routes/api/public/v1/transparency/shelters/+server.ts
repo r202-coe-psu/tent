@@ -8,6 +8,7 @@ import {
 	countVulnerableFromBirthYearRows,
 	sumOccupancyFromStatusRows
 } from '$lib/features/public-portal/server';
+import { admissionSupportsVulnerableGroup } from '$lib/features/people/server';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
@@ -108,8 +109,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						occRes.data &&
 						(occRes.data as Record<string, unknown>).rows
 					) {
-						// active + pre_registered (CR-070 D-BOOK-OCC=C) — a web booking
-						// holds the seat immediately, so the public number must move too.
+						// CR-112: public occupancy = Forecast allow-list.
 						occupancy = sumOccupancyFromStatusRows((occRes.data as Record<string, unknown>).rows);
 					}
 
@@ -150,17 +150,30 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				// Advanced capabilities mapping
 				capabilities: {
 					vulnerable_bed:
-						(m.admission_policy?.supported_vulnerable_groups || []).includes('bedridden') ||
+						admissionSupportsVulnerableGroup(
+							m.admission_policy?.supported_vulnerable_groups,
+							'bedridden'
+						) ||
 						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
 					vulnerable_wheelchair:
 						(m.facilities?.toilets_accessible ?? 0) > 0 ||
-						(m.admission_policy?.supported_vulnerable_groups || []).includes('disabled'),
+						admissionSupportsVulnerableGroup(
+							m.admission_policy?.supported_vulnerable_groups,
+							'disability_other',
+							'wheelchair'
+						),
 					vulnerable_infant:
-						(m.admission_policy?.supported_vulnerable_groups || []).includes('infant') ||
-						(m.admission_policy?.supported_vulnerable_groups || []).includes('pregnant') ||
+						admissionSupportsVulnerableGroup(
+							m.admission_policy?.supported_vulnerable_groups,
+							'infant',
+							'pregnant'
+						) ||
 						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
 					vulnerable_elderly:
-						(m.admission_policy?.supported_vulnerable_groups || []).includes('elderly') ||
+						admissionSupportsVulnerableGroup(
+							m.admission_policy?.supported_vulnerable_groups,
+							'elderly_dependent'
+						) ||
 						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
 					vulnerable_isolation: m.zones?.some((z) => z.type === 'quarantine') ?? false,
 					facility_kitchen: m.common_areas?.central_kitchen ?? false,

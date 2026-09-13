@@ -21,17 +21,23 @@
 	import {
 		canCheckInEvacuee,
 		canCheckOutEvacuee,
-		lookupEvacueeByScanCode,
+		lookupFederatedByScanCode,
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useEvacuees,
 		formatPersonName,
+		normalizeCheckoutRemark,
 		STATUS_LABELS,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	let scanCode = $state('');
 	let isScanning = $state(false);
@@ -40,6 +46,8 @@
 		message: string;
 		evacuee?: Evacuee;
 	} | null>(null);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 
 	let showSearchModal = $state(false);
 
@@ -55,7 +63,8 @@
 	const checkOut = useCheckOutEvacuee();
 	const evacueesQuery = useEvacuees();
 
-	let selectedMemberIds = $state<string[]>([]);
+	let selectionOverrideIds = $state<string[] | null>(null);
+	let selectionOverrideForId = $state<string | null>(null);
 
 	const foundEvacuee = $derived(scanResult?.success ? scanResult.evacuee : null);
 	const allEvacuees = $derived(evacueesQuery.data ?? []);
@@ -79,13 +88,20 @@
 		return [];
 	});
 
-	$effect(() => {
-		if (foundEvacuee) {
-			selectedMemberIds = eligibleFamilyMembers.map((e) => e._id);
-		} else {
-			selectedMemberIds = [];
+	const selectedMemberIds = $derived.by(() => {
+		if (!foundEvacuee) return [];
+		const eligibleIds = eligibleFamilyMembers.map((e) => e._id);
+		if (selectionOverrideForId === foundEvacuee._id && selectionOverrideIds !== null) {
+			const eligible = new Set(eligibleIds);
+			return selectionOverrideIds.filter((id) => eligible.has(id));
 		}
+		return eligibleIds;
 	});
+
+	function setSelectedMemberIds(ids: string[]) {
+		selectionOverrideForId = foundEvacuee?._id ?? null;
+		selectionOverrideIds = ids;
+	}
 
 	function cameraAttachment(node: HTMLDivElement) {
 		const html5QrCode = new Html5Qrcode(node.id);
@@ -149,9 +165,9 @@
 		scanResult = null;
 
 		try {
-			const evacuee = await lookupEvacueeByScanCode(queryClient, cleanCode);
+			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
 
-			if (!evacuee) {
+			if (!result) {
 				scanResult = {
 					success: false,
 					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}" ในศูนย์ ${getShelterCode()}`
@@ -160,6 +176,19 @@
 				return;
 			}
 
+			if (result.source === 'unassigned') {
+				scanResult = {
+					success: false,
+					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาท์'
+				};
+				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				claimHit = result.hit;
+				claimOpen = true;
+				scanCode = '';
+				return;
+			}
+
+			const evacuee = result.evacuee;
 			scanResult = {
 				success: true,
 				message: 'พบข้อมูลผู้ประสบภัย',
@@ -182,8 +211,18 @@
 		if (selectedMemberIds.length === 0) return;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
+		let zone = foundEvacuee?.current_stay.zone?.trim() ?? '';
+		if (!zone) {
+			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
+			if (entered === null) return;
+			zone = entered.trim();
+		}
+		if (!zone) {
+			toast.error('การเช็คอินต้องระบุโซน');
+			return;
+		}
 		try {
-			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx }));
+			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx, zone }));
 			const results = await Promise.allSettled(promises);
 
 			const fulfilledResults = results
@@ -217,10 +256,19 @@
 
 	async function handleBulkCheckOut() {
 		if (selectedMemberIds.length === 0) return;
+		const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
+		if (entered === null) return;
+		let reason: string;
+		try {
+			reason = normalizeCheckoutRemark(entered);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาท์');
+			return;
+		}
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
-			const promises = targets.map((evacuee) => checkOut.mutateAsync({ evacuee, ctx }));
+			const promises = targets.map((evacuee) => checkOut.mutateAsync({ evacuee, ctx, reason }));
 			const results = await Promise.allSettled(promises);
 
 			const fulfilledResults = results
@@ -467,9 +515,9 @@
 												disabled={eligibleFamilyMembers.length === 0}
 												onchange={(e) => {
 													if (e.currentTarget.checked) {
-														selectedMemberIds = eligibleFamilyMembers.map((m) => m._id);
+														setSelectedMemberIds(eligibleFamilyMembers.map((m) => m._id));
 													} else {
-														selectedMemberIds = [];
+														setSelectedMemberIds([]);
 													}
 												}}
 												class="rounded-sm border-slate-300 dark:border-slate-700"
@@ -496,10 +544,10 @@
 														disabled={!isEligible}
 														onchange={(e) => {
 															if (e.currentTarget.checked) {
-																selectedMemberIds = [...selectedMemberIds, member._id];
+																setSelectedMemberIds([...selectedMemberIds, member._id]);
 															} else {
-																selectedMemberIds = selectedMemberIds.filter(
-																	(id) => id !== member._id
+																setSelectedMemberIds(
+																	selectedMemberIds.filter((id) => id !== member._id)
 																);
 															}
 														}}
@@ -613,6 +661,12 @@
 		scanCode = evacueeId;
 		handleScanSubmit(scanCode);
 	}}
+/>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
 />
 
 <style>

@@ -1,12 +1,15 @@
 import { createMutation, createQuery } from '@tanstack/svelte-query';
 import {
 	createBooking,
+	createUnassignedRegistration,
 	fetchDistricts,
 	fetchPetTypes,
 	fetchProvinces,
 	fetchShelterPolicy,
 	fetchSubdistricts,
-	lookupBooking
+	lookupBooking,
+	type PublicUnifiedBookingPayload,
+	type PublicUnassignedRegistrationPayload
 } from '../data/public-register.api';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 
@@ -25,7 +28,7 @@ export const publicRegisterKeys = {
 /** POST a new booking. Not a query — a booking must never be replayed from cache. */
 export function useCreateBooking() {
 	return createMutation(() => ({
-		mutationFn: (input: PublicBookingInput) => createBooking(input)
+		mutationFn: (input: PublicBookingInput | PublicUnifiedBookingPayload) => createBooking(input)
 	}));
 }
 
@@ -33,6 +36,15 @@ export function useCreateBooking() {
 export function useBookingLookup() {
 	return createMutation(() => ({
 		mutationFn: (input: PublicBookingLookupInput) => lookupBooking(input)
+	}));
+}
+
+/**
+ * Public Pre-registration without a shelter (CR-113 / #255). Mutation — never cache/replay create.
+ */
+export function useCreateUnassignedRegistration() {
+	return createMutation(() => ({
+		mutationFn: (input: PublicUnassignedRegistrationPayload) => createUnassignedRegistration(input)
 	}));
 }
 

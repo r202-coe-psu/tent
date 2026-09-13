@@ -50,3 +50,11 @@ export {
 	type FaqItem
 } from './domain/config';
 export { default as PublicPortalConfigForm } from './ui/public-portal-config-form.svelte';
+export {
+	requestUserPosition,
+	canRequestGeolocation,
+	geolocationBlockReason,
+	GeolocationUnavailableError,
+	type GeoPosition,
+	type GeoUnavailableReason
+} from './data/geolocation';

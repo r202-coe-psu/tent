@@ -12,6 +12,7 @@
 	} from '$lib/features/people';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import ModalEscapeListener from './modal-escape-listener.svelte';
 
 	export type EvacueeHouseholdEditData = {
 		householdId: string | null;
@@ -100,6 +101,7 @@
 </script>
 
 {#if show}
+	<ModalEscapeListener open={show} disabled={saving} onEscape={onClose} />
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-xs"
 	>

@@ -12,11 +12,12 @@ export const EVACUEE_PET_ASSET_VEHICLE_I18N = {
 			conditionLabel: 'สภาพ / หมายเหตุ',
 			conditionPlaceholder: 'เช่น ขาเจ็บ, ต้องให้ยา, กลัวเสียงดัง',
 			cageLabel: 'มีกรงหรือสายจูง',
+			otherNotesRequired: 'กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ',
+			otherNotesPlaceholder: 'ระบุชนิดสัตว์ เช่น กระต่าย',
 			petNumber: (n: number) => `ตัวที่ ${n}`,
 			options: {
 				dog: 'สุนัข',
 				cat: 'แมว',
-				bird: 'นก',
 				other: 'อื่นๆ'
 			}
 		},
@@ -63,11 +64,12 @@ export const EVACUEE_PET_ASSET_VEHICLE_I18N = {
 			conditionLabel: 'Condition / Notes',
 			conditionPlaceholder: 'e.g. injured leg, needs medication',
 			cageLabel: 'Has cage / leash',
+			otherNotesRequired: 'Please describe the species when Other is selected',
+			otherNotesPlaceholder: 'e.g. rabbit, hamster',
 			petNumber: (n: number) => `Animal ${n}`,
 			options: {
 				dog: 'Dog',
 				cat: 'Cat',
-				bird: 'Bird',
 				other: 'Other'
 			}
 		},

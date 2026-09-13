@@ -24,10 +24,16 @@ async def list_locations(
     include_inactive: bool = Query(
         default=False, description="Include soft-deleted (is_active=false) locations"
     ),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=50, ge=1, le=200, description="Items per page"),
     use_case: ThirdPartyLocationsUseCase = Depends(get_thirdparty_locations_use_case),  # noqa: B008
 ) -> LocationListEnvelope:
     return await use_case.list_locations(
-        status_filter=status, updated_since=updated_since, include_inactive=include_inactive
+        status_filter=status,
+        updated_since=updated_since,
+        include_inactive=include_inactive,
+        page=page,
+        limit=limit,
     )
 
 

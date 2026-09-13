@@ -66,7 +66,7 @@
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2 text-lg">
 				<Search class="h-5 w-5 text-primary" />
-				สืบค้นญาติและครอบครัว
+				ค้นหาผู้พักพิง
 			</Dialog.Title>
 			<Dialog.Description>
 				ค้นด้วยชื่อ นามสกุล หรือเบอร์โทรศัพท์ — ผลลัพธ์ถูกปกปิดข้อมูลบางส่วนตาม PDPA

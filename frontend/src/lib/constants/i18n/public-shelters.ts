@@ -14,7 +14,11 @@ export const PUBLIC_SHELTERS_I18N = {
 		statusOpen: 'เปิดใช้งาน',
 		statusFull: 'เต็มความจุ',
 		statusPrepare: 'กำลังเตรียมการ',
-		statusClosed: 'ปิดทำการ'
+		statusClosed: 'ปิดทำการ',
+		mapView: 'แผนที่',
+		listView: 'รายการ',
+		filterBtn: 'ตัวกรอง',
+		viewOnMap: 'ดูบนแผนที่'
 	},
 	en: {
 		pageTitle: 'Check Shelter Status - Smart Shelter',
@@ -31,6 +35,10 @@ export const PUBLIC_SHELTERS_I18N = {
 		statusOpen: 'Open',
 		statusFull: 'Full',
 		statusPrepare: 'Preparing',
-		statusClosed: 'Closed'
+		statusClosed: 'Closed',
+		mapView: 'Map',
+		listView: 'List',
+		filterBtn: 'Filters',
+		viewOnMap: 'View on Map'
 	}
 } as const;

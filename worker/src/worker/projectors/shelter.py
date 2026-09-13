@@ -73,18 +73,28 @@ def _parse_timestamp(raw: Any) -> datetime | None:
 def compose_address(doc: dict[str, Any]) -> str | None:
     """Compose a partner-facing address string from the structured Residence-style
     fields (schema §3.1, CR-023) — falls back to the legacy `location.address` string."""
+    if doc.get("address_no"):
+        parts = [
+            doc.get("address_no"),
+            doc.get("village_no"),
+            f"ต.{doc['subdistrict']}" if doc.get("subdistrict") else None,
+            f"อ.{doc['district']}" if doc.get("district") else None,
+            f"จ.{doc['province']}" if doc.get("province") else None,
+        ]
+        composed = " ".join(str(p) for p in parts if p)
+        if composed:
+            return composed
+    location_doc = doc.get("location") or {}
+    loc_addr = location_doc.get("address")
+    if loc_addr:
+        return loc_addr
     parts = [
-        doc.get("address_no"),
-        doc.get("village_no"),
         f"ต.{doc['subdistrict']}" if doc.get("subdistrict") else None,
         f"อ.{doc['district']}" if doc.get("district") else None,
         f"จ.{doc['province']}" if doc.get("province") else None,
     ]
     composed = " ".join(str(p) for p in parts if p)
-    if composed:
-        return composed
-    location_doc = doc.get("location") or {}
-    return location_doc.get("address")
+    return composed or None
 
 
 def project_shelter(

@@ -14,16 +14,14 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_EWAR_I18N } from './_constants/evacuee-ewar.i18n';
 	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
-	import { useMasterData } from '$lib/features/master-data';
-	import { useShelter } from '$lib/features/shelters';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { CR112_VULNERABLE_GROUP_ACTIVE, useMasterData } from '$lib/features/master-data';
 
 	export type ScreeningDraft = Pick<
 		EvacueeInput,
 		| 'medical_conditions'
 		| 'medical_medications'
 		| 'medical_allergies'
+		| 'vulnerable_groups'
 		| 'special_needs'
 		| 'medical_note'
 	>;
@@ -37,6 +35,7 @@
 			medical_conditions: [],
 			medical_medications: [],
 			medical_allergies: [],
+			vulnerable_groups: [],
 			special_needs: [],
 			medical_note: ''
 		})
@@ -51,20 +50,19 @@
 	const t = $derived(getTranslation(EVACUEE_EWAR_I18N, languageStore.current));
 	const regT = $derived(getTranslation(EVACUEE_REGISTRATION_I18N, languageStore.current));
 
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
+	/** CR-112 active master set — same source as Station 1 registration (not admission_policy). */
 	const specialNeedChipOptions = $derived.by(() => {
-		if (!vulnerableGroupQuery.isSuccess) return [];
-		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
 		const masterByCode = new Map(
-			vulnerableGroupQuery.data.items
+			(vulnerableGroupQuery.data?.items ?? [])
 				.filter((item) => item.status === 'active')
-				.map((item) => [item.code, item])
+				.map((item) => [item.code, item.label])
 		);
-		return supported
-			.filter((code) => masterByCode.has(code))
-			.map((code) => ({ code, label: masterByCode.get(code)!.label }));
+		return CR112_VULNERABLE_GROUP_ACTIVE.map((item) => ({
+			code: item.code,
+			label: masterByCode.get(item.code) ?? item.label
+		}));
 	});
 
 	let medicalConditionsStr = $state(screeningDraft.medical_conditions?.join(', ') ?? '');
@@ -82,7 +80,7 @@
 	);
 
 	const isVulnerableGroupComplete = $derived(
-		hasNoVulnerableGroup || (screeningDraft.special_needs?.length ?? 0) > 0
+		hasNoVulnerableGroup || (screeningDraft.vulnerable_groups?.length ?? 0) > 0
 	);
 
 	function parseMedicalList(value: string) {
@@ -137,15 +135,17 @@
 	function toggleNoVulnerableGroup() {
 		hasNoVulnerableGroup = !hasNoVulnerableGroup;
 		if (hasNoVulnerableGroup) {
-			screeningDraft.special_needs = [];
+			screeningDraft.vulnerable_groups = [];
 		}
 	}
 
-	function toggleSpecialNeed(need: NonNullable<EvacueeInput['special_needs']>[number]) {
+	function toggleVulnerableGroup(need: NonNullable<EvacueeInput['vulnerable_groups']>[number]) {
 		hasNoVulnerableGroup = false;
-		const current = screeningDraft.special_needs ?? [];
+		const current = screeningDraft.vulnerable_groups ?? [];
 		const checked = current.includes(need);
-		screeningDraft.special_needs = checked ? current.filter((n) => n !== need) : [...current, need];
+		screeningDraft.vulnerable_groups = checked
+			? current.filter((n) => n !== need)
+			: [...current, need];
 	}
 
 	function updateMedicalField(field: 'conditions' | 'medications' | 'allergies', value: string) {
@@ -492,14 +492,14 @@
 
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					{#each specialNeedChipOptions as chip (chip.code)}
-						{@const need = chip.code as NonNullable<EvacueeInput['special_needs']>[number]}
-						{@const checked = (screeningDraft.special_needs ?? []).includes(need)}
+						{@const need = chip.code as NonNullable<EvacueeInput['vulnerable_groups']>[number]}
+						{@const checked = (screeningDraft.vulnerable_groups ?? []).includes(need)}
 						<button
 							type="button"
 							role="checkbox"
 							aria-checked={checked}
 							disabled={hasNoVulnerableGroup}
-							onclick={() => toggleSpecialNeed(need)}
+							onclick={() => toggleVulnerableGroup(need)}
 							class="touch-target flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 {checked
 								? 'border-primary bg-primary/10 text-foreground'
 								: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"

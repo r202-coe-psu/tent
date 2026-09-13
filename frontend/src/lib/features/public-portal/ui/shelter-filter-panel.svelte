@@ -11,6 +11,8 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import X from '@lucide/svelte/icons/x';
 	import { getAllLocations } from '$lib/features/shelters';
 	import {
 		geolocationBlockReason,
@@ -58,13 +60,17 @@
 		availableTypes = [],
 		action = '/shelters',
 		userLat = $bindable(''),
-		userLng = $bindable('')
+		userLng = $bindable(''),
+		class: className = '',
+		onClose
 	}: {
 		filters?: Filters;
 		availableTypes?: string[];
 		action?: string;
 		userLat?: string;
 		userLng?: string;
+		class?: string;
+		onClose?: () => void;
 	} = $props();
 
 	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
@@ -296,11 +302,27 @@
 </script>
 
 <div
-	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
+	class={[
+		'flex flex-col rounded-2xl border border-border/80 bg-card/95 p-4 shadow-lg backdrop-blur-md sm:p-5',
+		className || 'h-[85vh] max-h-200'
+	]}
 >
-	<div class="mb-4 flex shrink-0 items-center gap-2">
-		<Filter class="h-4 w-4 text-primary" />
-		<h3 class="font-bold text-foreground">{t.title}</h3>
+	<div class="mb-4 flex shrink-0 items-center justify-between gap-2">
+		<div class="flex items-center gap-2">
+			<Filter class="h-4 w-4 text-primary" />
+			<h3 class="font-bold text-foreground">{t.title}</h3>
+		</div>
+		{#if onClose}
+			<button
+				type="button"
+				class="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={onClose}
+				aria-label="Close filter panel"
+			>
+				<ChevronLeft class="hidden h-4 w-4 lg:block" />
+				<X class="h-4 w-4 lg:hidden" />
+			</button>
+		{/if}
 	</div>
 
 	<form
