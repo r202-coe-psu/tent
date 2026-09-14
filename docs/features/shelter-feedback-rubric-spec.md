@@ -427,7 +427,7 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
   }
   ```
 - **Validation Rules (Zod):**
-  - `sessionId`: string (รูปแบบ `feedback_session:{ulid}`, ต้องเป็น active session ของ shelter นั้น)
+  - `sessionId`: string (รูปแบบ `feedback_session:{ulid}`, ต้องเป็น active session และ `session.shelter_code === id` ป้องกันการส่งข้ามศูนย์ หากไม่ตรงให้ตอบกลับ 404 SESSION_NOT_FOUND)
   - `scores`: object key ตาม rubric snapshot, value เป็น integer ระหว่าง 1 - 5
   - `comment`: optional string, max 1,000 chars, sanitize HTML/Script tags
   - `contactInfo`: optional string, max 100 chars, sanitize HTML/Script tags

@@ -24,7 +24,7 @@ affects:
 - **หน้าที่ของ Change Record (CR ฉบับนี้):** ทำหน้าที่บันทึกการขออนุมัติและประเมินผลกระทบต่อระบบ (Change Management) ตามมาตรฐาน `docs/change-management.md` โดยสรุปสาระสำคัญตามสัญญา ดังนี้:
   - **Back Office (FR-FB-01 – FR-FB-06):** สร้าง/ปิด Session, พิมพ์โปสเตอร์ A4 QR Code (`window.print()`), แดชบอร์ดสรุปคะแนนเฉลี่ย 4 มิติ, จัดการฟีดข้อความ (Unread/Read), และส่งออก CSV (UTF-8 with BOM) ผ่านหน้า `(protected)/back-office/feedback` (อ้างอิง active shelter จาก `shelterStore`)
   - **Public Web Form (FR-FB-10 – FR-FB-13):** หน้าฟอร์มมือถือ Anonymous by default ไม่เก็บคุกกี้, ให้คะแนน 4 มิติ (Required) + ความคิดเห็นและข้อมูลติดต่อ (Optional), มี Rate limiting (5 reqs / 10 min / IP hash ผ่าน `RateLimiter`) และ Cooldown
-  - **เกณฑ์ตรวจรับ (AC-01 – AC-08 & DoD):** ทดสอบครบวงจรตามข้อกำหนด พร้อม Unit Tests สำหรับ Domain, Aggregation, Anti-abuse, และ BFF API Endpoints
+  - **เกณฑ์ตรวจรับ (AC-01 – AC-11 & DoD):** ทดสอบครบวงจรตามข้อกำหนด พร้อม Unit Tests สำหรับ Domain, Aggregation, Anti-abuse, และ BFF API Endpoints
 
 ## Change
 - **Before:** ไม่มีระบบรับฟังความคิดเห็นหรือประเมินความพึงพอใจแบบดิจิทัลในศูนย์พักพิง หากมีการประเมินต้องใช้แบบสอบถามกระดาษ
