@@ -410,7 +410,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			credentials: 'include',
 			headers: { Accept: 'application/json' }
 		});
-		if (res.status === 404) return null;
+		// CR-091 D4 — a transfer of another shelter reads as "not found": the page never confirms
+		// the id exists, and a 403 is final, so resolving (not throwing) also skips query retries.
+		if (res.status === 404 || res.status === 403) return null;
 		if (!res.ok) {
 			throw new Error(`Failed to get transfer: ${res.statusText}`);
 		}

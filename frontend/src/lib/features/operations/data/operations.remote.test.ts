@@ -789,6 +789,21 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 		expect(await repo.getTransfer('stock_transfer:missing')).toBeNull();
 	});
 
+	it('returns null for a 403 getTransfer, same as 404 (CR-091 D4)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, json: async () => null });
+		expect(await repo.getTransfer('stock_transfer:other-shelter')).toBeNull();
+	});
+
+	it('still throws for other getTransfer failures', async () => {
+		fetchMock.mockResolvedValue({
+			ok: false,
+			status: 500,
+			statusText: 'Internal Server Error',
+			json: async () => null
+		});
+		await expect(repo.getTransfer('stock_transfer:x')).rejects.toThrow('Failed to get transfer');
+	});
+
 	it('dispatches via PATCH to the transition endpoint with status shipped', async () => {
 		fetchMock.mockResolvedValue({
 			ok: true,

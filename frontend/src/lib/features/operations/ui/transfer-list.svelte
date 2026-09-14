@@ -19,9 +19,10 @@
 		cancelInfoSchema,
 		disputeInfoSchema,
 		type StockTransfer,
-		type TransferStatus,
 		type DispatchInfoInput
 	} from '../domain/operations';
+	import { transferSide, transferStatusReason } from '../domain/transfer.view';
+	import { TRANSFER_STATUS_LABEL } from './transfer-labels';
 	import DispatchConfirmDialog from './dispatch-confirm-dialog.svelte';
 	import Truck from '@lucide/svelte/icons/truck';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
@@ -57,14 +58,6 @@
 	const cancelledCount = $derived(
 		(transfersQuery.data ?? []).filter((t) => t.status === 'cancelled').length
 	);
-
-	const STATUS_LABEL: Record<TransferStatus, string> = {
-		requested: 'รอส่งมอบ',
-		shipped: 'ระหว่างขนส่ง',
-		received: 'ส่งมอบสำเร็จ',
-		cancelled: 'ยกเลิกแล้ว',
-		disputed: 'ระงับไว้'
-	};
 
 	/** CR-089 FR-03/FR-04 — cancel and dispute both need a reason, so they share one prompt. */
 	type ReasonMode = 'cancel' | 'dispute';
@@ -113,21 +106,9 @@
 			undoCancelMutation.isPending
 	);
 
-	/**
-	 * CR-090 FR-10 — the reason a transfer stopped, shown next to the status that demands it.
-	 *
-	 * Reading it off the status rather than off the field is what keeps the row honest: a
-	 * `*_reason` only ever belongs to one status (FR-04), so a stale value left on a document by
-	 * an older build can never surface under the wrong label.
-	 */
-	function statusReason(t: StockTransfer): string | undefined {
-		if (t.status === 'disputed') return t.dispute_reason;
-		if (t.status === 'cancelled') return t.cancel_reason;
-		return undefined;
-	}
-
+	/** CR-091 FR-02 — the list is shelter-filtered, so a row is never `'none'`; two labels suffice. */
 	function isOutgoing(t: StockTransfer): boolean {
-		return t.from_shelter === ownShelter;
+		return transferSide(t, ownShelter) === 'source';
 	}
 
 	function errorMessage(err: unknown): string {
@@ -304,6 +285,7 @@
 			</Table.Header>
 			<Table.Body>
 				{#each visibleTransfers as t (t._id)}
+					{@const reason = transferStatusReason(t)}
 					<Table.Row>
 						<Table.Cell>
 							<span class="font-mono text-xs font-semibold">{t.from_shelter} → {t.to_shelter}</span>
@@ -319,10 +301,10 @@
 							{/each}
 						</Table.Cell>
 						<Table.Cell class="text-xs font-semibold">
-							{STATUS_LABEL[t.status]}
-							{#if statusReason(t)}
+							{TRANSFER_STATUS_LABEL[t.status]}
+							{#if reason}
 								<div class="mt-0.5 text-[11px] font-normal text-muted-foreground">
-									{statusReason(t)}
+									{reason}
 								</div>
 							{/if}
 						</Table.Cell>
