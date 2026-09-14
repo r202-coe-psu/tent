@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
@@ -31,6 +32,7 @@
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
+	import FileText from '@lucide/svelte/icons/file-text';
 
 	const transfersQuery = useTransfers();
 	const dispatchMutation = useDispatchTransfer();
@@ -310,6 +312,13 @@
 						</Table.Cell>
 						<Table.Cell>
 							<div class="flex flex-wrap justify-end gap-2">
+								<!-- CR-091 FR-05 — every row, every status (cancelled included) -->
+								<a
+									href={resolve(`/back-office/supply/transfer/${encodeURIComponent(t._id)}`)}
+									class={buttonVariants({ size: 'sm', variant: 'ghost' })}
+								>
+									<FileText class="mr-1 h-3.5 w-3.5" />ดูรายละเอียด
+								</a>
 								{#if isOutgoing(t) && t.status === 'requested'}
 									<button
 										onclick={() => openDispatch(t)}

@@ -158,3 +158,4 @@ export { default as PurchaseReceiptForm } from './ui/PurchaseReceiptForm.svelte'
 export { default as PurchaseTable } from './ui/PurchaseTable.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
+export { default as TransferDetail } from './ui/transfer-detail.svelte';
