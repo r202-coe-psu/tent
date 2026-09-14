@@ -1175,6 +1175,7 @@
 					photoUpload={memberPhotoUpload}
 					shelterCode={shelterCode.trim()}
 					{channel}
+					excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 					fieldErrors={memberFieldErrors[index]}
 					onRemove={() => removeMember(index)}
 				/>

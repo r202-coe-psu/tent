@@ -3,7 +3,7 @@ name = "scanner-client"
 version = "0.1.0"
 description = "Smart Card Scanner Client for SmartShelter (Tent)"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "pyscard>=2.2.0",
     "playwright>=1.40.0",
@@ -13,5 +13,5 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -2,21 +2,34 @@ import { allDocsByIds, allDocsByType, getDoc, putDoc, putDocStrict } from '$lib/
 import { getShelterDb } from '$lib/db/shelter';
 import { now, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-import { addQty, persistQty, qtyGt, qtyNeg, subQty } from '$lib/utils/qty';
+import { addQty, persistQty, qtyGt, qtyGte, qtyNeg, subQty } from '$lib/utils/qty';
 import {
 	hasStaffCapability,
 	isShelterManager,
 	isSystemAdmin,
-	isWarehouseStaff
+	isWarehouseStaff,
+	parseCompoundCapability,
+	WAREHOUSE_STAFF
 } from '$lib/auth/roles';
 import { ConflictError } from '$lib/utils/errors';
 import {
 	createDistributionBatch,
 	createDistributionRequest,
+	createDistributionIssue,
+	createDistributionIssueIdempotency,
+	createDistributionIssueCapacity,
+	createDistributionIssueGate,
+	createDistributionOneTimeGuard,
 	createStockLotReservation,
 	canTransitionDistributionRequest,
 	distributionBatchDocSchema,
 	distributionRequestDocSchema,
+	distributionIssueDocSchema,
+	distributionIssueIdempotencyDocSchema,
+	distributionIssueCapacityDocSchema,
+	distributionIssueGateDocSchema,
+	distributionOneTimeGuardDocSchema,
+	isDistributionIssue,
 	type DistributionAllocation,
 	type DistributionBatch,
 	type DistributionBatchItem,
@@ -24,8 +37,25 @@ import {
 	type DistributionRequest,
 	type DistributionRequestInput,
 	type DistributionRequestStatus,
-	type StockLotReservation
+	type StockLotReservation,
+	type DistributionIssue,
+	type DistributionIssueIdempotency,
+	type DistributionIssueCapacity,
+	type DistributionIssueGate,
+	type DistributionOneTimeGuard
 } from '../domain/distribution';
+import {
+	evaluateDistributionEligibility,
+	type EligibilityHistoryEntry
+} from '../domain/eligibility';
+import {
+	calculateReconciliation,
+	closeBatchInputSchema,
+	type CloseBatchInput,
+	type ReconciliationRow,
+	ReconciliationIntegrityError
+} from '../domain/reconciliation';
+import { isEvacuee, type Evacuee } from '$lib/features/people/domain/people';
 import {
 	createStockLedger,
 	isStockLedger,
@@ -36,17 +66,31 @@ import {
 } from '$lib/features/operations/domain/operations';
 import type {
 	DistributionAllocationInput,
-	DistributionRepository
+	DistributionRepository,
+	CreateDistributionIssueInput,
+	DistributionRecipient
 } from './distribution.repository';
 import {
 	ApprovalConflictError,
 	assertSemanticBatchMatch,
 	assertSemanticLedgerMatch,
 	assertSemanticReservationMatch,
+	assertSemanticIdempotencyMatch,
+	assertSemanticIssueMatch,
+	assertSemanticClosingMatch,
 	InsufficientStockError,
 	IntegrityError,
 	makeLotReservationDocId,
-	ValidationError
+	makeIssueIdempotencyDocId,
+	makeIssueCapacityDocId,
+	makeIssueGateDocId,
+	makeOneTimeGuardDocId,
+	ValidationError,
+	IssueConflictError,
+	IssueCapacityError,
+	IssueInFlightError,
+	RecipientNotActiveError,
+	DistributionEligibilityError
 } from './semantic-verify';
 
 function isDistributionRequest(d: unknown): d is DistributionRequest {
@@ -1013,5 +1057,1615 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		}
 
 		return batchDoc;
+	}
+	private assertAuthorizedCloseBatch(ctx: AuthorContext): void {
+		if (!ctx.roles) {
+			throw new Error(
+				'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+			);
+		}
+		if (isSystemAdmin(ctx.roles)) return;
+
+		const scopedRole = `${ctx.shelterCode}:${WAREHOUSE_STAFF}`;
+		const hasSameShelterCompound = ctx.roles.includes(scopedRole);
+		const hasCapability = hasStaffCapability(ctx.roles, WAREHOUSE_STAFF, ctx.shelterCode);
+		const hasFlatRole = ctx.roles.includes(WAREHOUSE_STAFF);
+
+		const hasCrossShelterOnly =
+			ctx.roles.some((r) => {
+				const parsed = parseCompoundCapability(r);
+				return parsed && parsed.capability === WAREHOUSE_STAFF && parsed.code !== ctx.shelterCode;
+			}) &&
+			!hasSameShelterCompound &&
+			!hasCapability &&
+			!hasFlatRole;
+
+		if (hasCrossShelterOnly) {
+			throw new Error(
+				'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+			);
+		}
+
+		if (hasCapability || hasSameShelterCompound || hasFlatRole) {
+			return;
+		}
+
+		throw new Error(
+			'Unauthorized: distribution closeBatch requires warehouse_staff or system_admin role'
+		);
+	}
+
+	private parseIssueGate(
+		doc: unknown,
+		docId: string,
+		batchId: string,
+		ctx: AuthorContext
+	): DistributionIssueGate {
+		const parsed = distributionIssueGateDocSchema.safeParse(doc);
+		if (!parsed.success || parsed.data._id !== docId || parsed.data.batch_id !== batchId) {
+			throw new IntegrityError(`Issue gate ${docId} is malformed`);
+		}
+		if (parsed.data.shelter_code !== ctx.shelterCode) {
+			throw new IntegrityError(`Issue gate ${docId} belongs to another shelter`);
+		}
+		return parsed.data as DistributionIssueGate;
+	}
+
+	private async acquireIssueGateClaimWithRetry(
+		batchId: string,
+		operationId: string,
+		issueId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		const hash = docId.slice('distribution_issue_gate:'.length);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) {
+					await putDocStrict<DistributionIssueGate>(
+						this.dbName,
+						createDistributionIssueGate(
+							{
+								batch_id: batchId,
+								state: 'open',
+								pending_claims: [
+									{ operation_id: operationId, issue_id: issueId, claimed_at: now() }
+								]
+							},
+							hash,
+							ctx
+						)
+					);
+					return;
+				}
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					throw new ValidationError(
+						`Distribution batch ${batchId} is closing and cannot accept new issues`
+					);
+				}
+				const mine = gate.pending_claims.find((claim) => claim.operation_id === operationId);
+				if (mine) {
+					if (mine.issue_id !== issueId)
+						throw new IssueConflictError(
+							'Existing issue gate claim does not match operation intent'
+						);
+					return;
+				}
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					pending_claims: [
+						...gate.pending_claims,
+						{ operation_id: operationId, issue_id: issueId, claimed_at: now() }
+					],
+					updated_at: now()
+				});
+				return;
+			} catch (err) {
+				if (!(err instanceof ConflictError)) throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async releaseIssueGateClaimWithRetry(
+		batchId: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) return;
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					if (gate.pending_claims.some((claim) => claim.operation_id === operationId)) {
+						throw new IntegrityError(`Sealed issue gate ${docId} retains an admitted issue claim`);
+					}
+					return;
+				}
+				if (!gate.pending_claims.some((claim) => claim.operation_id === operationId)) return;
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					pending_claims: gate.pending_claims.filter((claim) => claim.operation_id !== operationId),
+					updated_at: now()
+				});
+
+				const rawConfirmed = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!rawConfirmed) return;
+				const confirmed = this.parseIssueGate(rawConfirmed, docId, batchId, ctx);
+				if (!confirmed.pending_claims.some((claim) => claim.operation_id === operationId)) {
+					return;
+				}
+				if (attempt === maxRetries) {
+					throw new IntegrityError(
+						`Issue gate claim for ${operationId} remains after cleanup on ${batchId}`
+					);
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError)) throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async sealIssueGateWithRetry(
+		batchId: string,
+		closingOperationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<string> {
+		const docId = await makeIssueGateDocId(batchId);
+		const hash = docId.slice('distribution_issue_gate:'.length);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const raw = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!raw) {
+					await putDocStrict<DistributionIssueGate>(
+						this.dbName,
+						createDistributionIssueGate(
+							{ batch_id: batchId, state: 'open', pending_claims: [] },
+							hash,
+							ctx
+						)
+					);
+					continue;
+				}
+				const gate = this.parseIssueGate(raw, docId, batchId, ctx);
+				if (gate.state === 'sealed') {
+					return gate.closing_operation_id!;
+				}
+				if (gate.pending_claims.length > 0) {
+					throw new IssueInFlightError(
+						`Cannot close batch ${batchId}: ${gate.pending_claims.length} admitted issue operation(s) remain`
+					);
+				}
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					state: 'sealed',
+					pending_claims: [],
+					closing_operation_id: closingOperationId,
+					updated_at: now()
+				});
+				return closingOperationId;
+			} catch (err) {
+				if (!(err instanceof ConflictError)) throw err;
+				if (attempt === maxRetries) throw err;
+			}
+		}
+		throw new IntegrityError(`Issue gate for ${batchId} could not be sealed`);
+	}
+
+	private async reopenIssueGateBeforeForwardCommit(
+		batchId: string,
+		closingOperationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueGateDocId(batchId);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawBatch = await getDoc<DistributionBatch>(this.dbName, batchId);
+				if (!rawBatch) {
+					throw new IntegrityError(
+						`Distribution batch ${batchId} disappeared during gate recovery`
+					);
+				}
+				const parsedBatch = distributionBatchDocSchema.safeParse(rawBatch);
+				if (!parsedBatch.success || parsedBatch.data.shelter_code !== ctx.shelterCode) {
+					throw new IntegrityError(`Distribution batch ${batchId} is malformed or out of scope`);
+				}
+				// A successful-but-unacknowledged forward commit must keep the gate sealed.
+				if (parsedBatch.data.status !== 'active') return;
+
+				const rawGate = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!rawGate) {
+					throw new IntegrityError(`Issue gate ${docId} disappeared during close recovery`);
+				}
+				const gate = this.parseIssueGate(rawGate, docId, batchId, ctx);
+				if (gate.state === 'open' && !gate.closing_operation_id) return;
+				if (gate.state !== 'sealed' || gate.closing_operation_id !== closingOperationId) {
+					throw new IntegrityError(`Issue gate ${docId} no longer belongs to this close operation`);
+				}
+
+				await putDocStrict<DistributionIssueGate>(this.dbName, {
+					...gate,
+					state: 'open',
+					closing_operation_id: undefined,
+					updated_at: now()
+				});
+
+				const rawConfirmed = await getDoc<DistributionIssueGate>(this.dbName, docId);
+				if (!rawConfirmed) {
+					throw new IntegrityError(`Issue gate ${docId} disappeared after reopen`);
+				}
+				const confirmed = this.parseIssueGate(rawConfirmed, docId, batchId, ctx);
+				if (confirmed.state === 'open' && !confirmed.closing_operation_id) return;
+				if (attempt === maxRetries) {
+					throw new IntegrityError(`Issue gate ${docId} could not be confirmed open`);
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async listCommittedIssuesForBatch(
+		batchId: string,
+		ctx: AuthorContext
+	): Promise<DistributionIssue[]> {
+		const all = await allDocsByType<DistributionIssue>(
+			this.dbName,
+			'distribution_issue',
+			isDistributionIssue
+		);
+		const matching: DistributionIssue[] = [];
+		for (const rawIssue of all) {
+			const parsed = distributionIssueDocSchema.safeParse(rawIssue);
+			if (!parsed.success) {
+				throw new IntegrityError(
+					'Committed distribution issue history contains a malformed document'
+				);
+			}
+			const issue = parsed.data as DistributionIssue;
+			if (issue.batch_id !== batchId) continue;
+			if (issue.shelter_code !== ctx.shelterCode) {
+				throw new IntegrityError(
+					`Distribution issue ${issue._id} is outside the batch shelter scope`
+				);
+			}
+			matching.push(issue);
+		}
+		return matching;
+	}
+
+	private async verifyClosedReturnEffects(
+		batch: DistributionBatch,
+		ctx: AuthorContext
+	): Promise<void> {
+		if (!batch.closing_operation_id || !batch.reconciliation) {
+			throw new IntegrityError(`Closed batch ${batch._id} is missing close operation evidence`);
+		}
+		const expectedIds: string[] = [];
+		for (let index = 0; index < batch.reconciliation.length; index++) {
+			const row = batch.reconciliation[index];
+			if (!qtyGt(row.return_qty, 0)) continue;
+			const ledgerId = `stock_ledger:${batch.closing_operation_id}:${index}`;
+			const allocation = batch.allocations.find(
+				(candidate) => candidate.lot_ref === row.lot_ref && candidate.item_id === row.item_id
+			);
+			const item = batch.items.find((candidate) => candidate.item_id === row.item_id);
+			if (!allocation || !item) {
+				throw new IntegrityError(
+					`Closed batch reconciliation ${row.item_id}:${row.lot_ref} has no allocation snapshot`
+				);
+			}
+			const rawLedger = await getDoc<StockLedger>(this.dbName, ledgerId);
+			if (!rawLedger) {
+				throw new IntegrityError(`Closed batch ${batch._id} is missing return ledger ${ledgerId}`);
+			}
+			let ledger: StockLedger;
+			try {
+				ledger = parseStockLedger(rawLedger);
+			} catch {
+				throw new IntegrityError(`Return ledger ${ledgerId} is malformed`);
+			}
+			assertSemanticLedgerMatch(ledger, {
+				_id: ledgerId,
+				item_id: row.item_id,
+				qty: persistQty(row.return_qty),
+				unit: item.unit,
+				reason: 'distribution_return',
+				ref_id: batch._id,
+				lot_ref: row.lot_ref,
+				shelter_code: ctx.shelterCode,
+				...(allocation.lot ? { lot: allocation.lot } : {})
+			});
+			expectedIds.push(ledgerId);
+		}
+		if (JSON.stringify(batch.return_ledger_ids) !== JSON.stringify(expectedIds)) {
+			throw new IntegrityError(`Closed batch ${batch._id} has inconsistent return_ledger_ids`);
+		}
+	}
+
+	private async finalizeClosingBatchWithRetry(
+		batchId: string,
+		closingOperationId: string,
+		reconciliationRows: ReconciliationRow[],
+		returnLedgerIds: string[],
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<DistributionBatch> {
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawCurrent = await getDoc<DistributionBatch>(this.dbName, batchId);
+				if (!rawCurrent) {
+					throw new IntegrityError(`Closing batch ${batchId} not found during final close step`);
+				}
+				const parsedCurrent = distributionBatchDocSchema.safeParse(rawCurrent);
+				if (!parsedCurrent.success || parsedCurrent.data.shelter_code !== ctx.shelterCode) {
+					throw new IntegrityError(`Closing batch ${batchId} is malformed or out of scope`);
+				}
+				const current = parsedCurrent.data as DistributionBatch;
+				if (current.closing_operation_id !== closingOperationId) {
+					throw new IntegrityError(`Closing batch ${batchId} changed closing operation identity`);
+				}
+				assertSemanticClosingMatch(current.reconciliation, reconciliationRows);
+				if (JSON.stringify(current.return_ledger_ids) !== JSON.stringify(returnLedgerIds)) {
+					if (current.status === 'closed' || current.return_ledger_ids.length > 0) {
+						throw new IntegrityError(`Closing batch ${batchId} has inconsistent return_ledger_ids`);
+					}
+				}
+
+				if (current.status === 'closed') {
+					await this.verifyClosedReturnEffects(current, ctx);
+					return current;
+				}
+				if (current.status !== 'closing') {
+					throw new IntegrityError(`Batch ${batchId} is no longer in the closing operation`);
+				}
+
+				return await putDocStrict<DistributionBatch>(this.dbName, {
+					...current,
+					status: 'closed',
+					return_ledger_ids: returnLedgerIds,
+					reconciliation: reconciliationRows,
+					closed_by: ctx.createdBy,
+					closed_at: now(),
+					updated_at: now()
+				});
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+		throw new IntegrityError(`Closing batch ${batchId} could not be finalized`);
+	}
+
+	async closeBatch(
+		batchId: string,
+		rawInput: CloseBatchInput,
+		ctx: AuthorContext
+	): Promise<DistributionBatch> {
+		// 1. Authorize role: only warehouse_staff scoped to this shelter or system_admin
+		this.assertAuthorizedCloseBatch(ctx);
+
+		if (!batchId || !batchId.startsWith('distribution_batch:')) {
+			throw new ValidationError('Valid distribution_batch batch_id is required');
+		}
+
+		// 2. Parse client input (strictly operator-entered reconciliation facts)
+		const parsedInput = closeBatchInputSchema.parse(rawInput ?? {});
+
+		// 3. Load authoritative batch
+		const rawBatch = await getDoc<DistributionBatch>(this.dbName, batchId);
+		if (!rawBatch) {
+			throw new Error(`Distribution batch ${batchId} not found`);
+		}
+		const batchParse = distributionBatchDocSchema.safeParse(rawBatch);
+		if (!batchParse.success) {
+			throw new IntegrityError(`Distribution batch ${batchId} is malformed`);
+		}
+		const batch = batchParse.data as DistributionBatch;
+
+		if (batch.shelter_code !== ctx.shelterCode) {
+			throw new Error('Cross-shelter access denied');
+		}
+
+		// 4. Handle terminal and in-progress states
+		if (batch.status === 'closed') {
+			if (!batch.reconciliation || batch.reconciliation.length === 0) {
+				throw new IntegrityError(
+					`Closed batch ${batchId} is missing persisted reconciliation snapshot`
+				);
+			}
+			if (parsedInput.reconciliation.length > 0) {
+				assertSemanticClosingMatch(batch.reconciliation, parsedInput.reconciliation);
+			}
+			await this.verifyClosedReturnEffects(batch, ctx);
+			return batch;
+		}
+
+		if (batch.status === 'activating') {
+			throw new ValidationError(`Distribution batch ${batchId} is activating and cannot be closed`);
+		}
+
+		let closingOperationId: string;
+		let closingOccurredAt: string;
+		let reconciliationRows: ReconciliationRow[];
+		let forwardCommitted = false;
+
+		if (batch.status === 'closing') {
+			// Resume existing closing operation
+			if (!batch.closing_operation_id) {
+				throw new IntegrityError(`Closing batch ${batchId} is missing closing_operation_id`);
+			}
+			if (!batch.reconciliation || batch.reconciliation.length === 0) {
+				throw new IntegrityError(
+					`Closing batch ${batchId} is missing persisted reconciliation snapshot`
+				);
+			}
+			if (parsedInput.reconciliation.length > 0) {
+				assertSemanticClosingMatch(batch.reconciliation, parsedInput.reconciliation);
+			}
+			closingOperationId = batch.closing_operation_id;
+			closingOccurredAt = batch.updated_at;
+			reconciliationRows = batch.reconciliation;
+		} else if (batch.status === 'active') {
+			// 5. Seal the batch-wide Issue gate before reading the authoritative Issue snapshot.
+			// Gate admission and gate sealing CAS on the same `_rev`, so no Issue can cross this boundary.
+			closingOperationId = await this.sealIssueGateWithRetry(batch._id, ulid(), ctx);
+			try {
+				// Defense-in-depth: legacy capacity claims remain an in-flight close blocker.
+				for (const item of batch.items) {
+					const capDocId = await makeIssueCapacityDocId(batch._id, item.item_id);
+					const rawCapDoc = await getDoc<DistributionIssueCapacity>(this.dbName, capDocId);
+					if (rawCapDoc) {
+						const capDoc = this.parseCapacityDoc(rawCapDoc, capDocId, batch._id, item.item_id, ctx);
+						if (capDoc.pending_claims && capDoc.pending_claims.length > 0) {
+							throw new IssueInFlightError(
+								`Cannot close batch ${batch._id}: item ${item.item_id} has ${capDoc.pending_claims.length} issue claim(s) in flight`
+							);
+						}
+					}
+				}
+
+				// 6. Derive authoritative distributed quantity from committed persisted issues
+				const committedIssues = await this.listCommittedIssuesForBatch(batch._id, ctx);
+				const distributedByItem = new Map<string, string>();
+				for (const issue of committedIssues) {
+					const issueBatchItem = batch.items.find((item) => item.item_id === issue.item_id);
+					if (
+						!issueBatchItem ||
+						issue.unit !== issueBatchItem.unit ||
+						issue.distribution_type_snapshot !== issueBatchItem.distribution_type_snapshot
+					) {
+						throw new IntegrityError(
+							`Distribution issue ${issue._id} does not match the batch item snapshot`
+						);
+					}
+					distributedByItem.set(
+						issue.item_id,
+						addQty(distributedByItem.get(issue.item_id) ?? '0', issue.qty)
+					);
+				}
+
+				// 7. Map operator inputs and validate against authoritative allocations
+				type ParsedCloseBatchItem = (typeof parsedInput.reconciliation)[number];
+				const inputByLot = new Map<string, ParsedCloseBatchItem>();
+				const inputByItem = new Map<string, ParsedCloseBatchItem>();
+				const lotSpecificItems = new Set<string>();
+				for (const userRow of parsedInput.reconciliation) {
+					if (userRow.lot_ref) {
+						const allocMatch = batch.allocations.find((a) => a.lot_ref === userRow.lot_ref);
+						if (!allocMatch) {
+							throw new ValidationError(
+								`Reconciliation lot_ref ${userRow.lot_ref} is not allocated to batch ${batch._id}`
+							);
+						}
+						if (allocMatch.item_id !== userRow.item_id) {
+							throw new ValidationError(
+								`Reconciliation item_id ${userRow.item_id} does not match allocated item ${allocMatch.item_id} for lot ${userRow.lot_ref}`
+							);
+						}
+						if (inputByLot.has(userRow.lot_ref)) {
+							throw new ValidationError(
+								`Duplicate reconciliation input for lot_ref ${userRow.lot_ref}`
+							);
+						}
+						inputByLot.set(userRow.lot_ref, userRow);
+						lotSpecificItems.add(userRow.item_id);
+					} else {
+						const itemMatch = batch.items.find((i) => i.item_id === userRow.item_id);
+						if (!itemMatch) {
+							throw new ValidationError(
+								`Reconciliation item_id ${userRow.item_id} is not present in batch ${batch._id}`
+							);
+						}
+						if (inputByItem.has(userRow.item_id)) {
+							throw new ValidationError(
+								`Duplicate reconciliation input for item_id ${userRow.item_id}`
+							);
+						}
+						inputByItem.set(userRow.item_id, userRow);
+					}
+				}
+				for (const itemId of inputByItem.keys()) {
+					if (lotSpecificItems.has(itemId)) {
+						throw new ValidationError(
+							`Reconciliation for item ${itemId} cannot mix item-level and lot-level input`
+						);
+					}
+				}
+
+				// 8. Lot-level reconciliation calculation preserving Physical Lot identity & avoiding multi-lot duplication
+				reconciliationRows = [];
+				for (const item of batch.items) {
+					let remainingDistributed = distributedByItem.get(item.item_id) ?? '0';
+					const itemAllocations = batch.allocations.filter((a) => a.item_id === item.item_id);
+
+					const itemLevelInput = inputByItem.get(item.item_id);
+					let remainingDamaged = itemLevelInput ? itemLevelInput.damaged_qty : '0';
+					let remainingLost = itemLevelInput ? itemLevelInput.lost_qty : '0';
+
+					for (const alloc of itemAllocations) {
+						let distributedForAlloc: string;
+						if (qtyGte(remainingDistributed, alloc.qty)) {
+							distributedForAlloc = alloc.qty;
+							remainingDistributed = subQty(remainingDistributed, alloc.qty);
+						} else {
+							distributedForAlloc = remainingDistributed;
+							remainingDistributed = '0';
+						}
+
+						const lotSpecificInput = inputByLot.get(alloc.lot_ref);
+						let damagedQty = '0';
+						let lostQty = '0';
+						let damagedNote: string | undefined = undefined;
+						let lostNote: string | undefined = undefined;
+
+						if (lotSpecificInput) {
+							damagedQty = lotSpecificInput.damaged_qty;
+							lostQty = lotSpecificInput.lost_qty;
+							damagedNote = lotSpecificInput.damaged_note;
+							lostNote = lotSpecificInput.lost_note;
+						} else if (itemLevelInput) {
+							const availableUndistributed = subQty(alloc.qty, distributedForAlloc);
+							if (qtyGt(remainingDamaged, 0)) {
+								if (qtyGte(availableUndistributed, remainingDamaged)) {
+									damagedQty = remainingDamaged;
+									remainingDamaged = '0';
+								} else {
+									damagedQty = availableUndistributed;
+									remainingDamaged = subQty(remainingDamaged, availableUndistributed);
+								}
+								damagedNote = itemLevelInput.damaged_note;
+							}
+							const capacityAfterDamage = subQty(availableUndistributed, damagedQty);
+							if (qtyGt(remainingLost, 0)) {
+								if (qtyGte(capacityAfterDamage, remainingLost)) {
+									lostQty = remainingLost;
+									remainingLost = '0';
+								} else {
+									lostQty = capacityAfterDamage;
+									remainingLost = subQty(remainingLost, capacityAfterDamage);
+								}
+								lostNote = itemLevelInput.lost_note;
+							}
+						}
+
+						const reconRow = calculateReconciliation({
+							item_id: alloc.item_id,
+							lot_ref: alloc.lot_ref,
+							allocated_qty: alloc.qty,
+							distributed_qty: distributedForAlloc,
+							damaged_qty: damagedQty,
+							lost_qty: lostQty,
+							damaged_note: damagedNote,
+							lost_note: lostNote
+						});
+						reconciliationRows.push(reconRow);
+					}
+
+					if (qtyGt(remainingDistributed, 0)) {
+						throw new ReconciliationIntegrityError(
+							`Total distributed quantity for item ${item.item_id} exceeds total allocated quantity in batch ${batch._id}`
+						);
+					}
+					if (qtyGt(remainingDamaged, 0) || qtyGt(remainingLost, 0)) {
+						throw new ReconciliationIntegrityError(
+							`Reported damaged (${itemLevelInput?.damaged_qty}) or lost (${itemLevelInput?.lost_qty}) exceeds remaining undistributed stock for item ${item.item_id}`
+						);
+					}
+				}
+
+				// 9. CAS active -> closing with authoritative snapshot (closed_at and closed_by deferred to final closed state)
+				closingOccurredAt = now();
+				const closingBatch: DistributionBatch = {
+					...batch,
+					status: 'closing',
+					closing_operation_id: closingOperationId,
+					reconciliation: reconciliationRows,
+					closed_by: undefined,
+					closed_at: undefined,
+					updated_at: closingOccurredAt
+				};
+				await putDocStrict<DistributionBatch>(this.dbName, closingBatch);
+				forwardCommitted = true;
+			} catch (err) {
+				if (!forwardCommitted) {
+					try {
+						await this.reopenIssueGateBeforeForwardCommit(batch._id, closingOperationId, ctx);
+					} catch (reopenError) {
+						throw new IntegrityError(
+							`Close gate recovery could not be confirmed: ${String(reopenError)}`
+						);
+					}
+				}
+				throw err;
+			}
+		} else {
+			throw new ValidationError(`Distribution batch ${batchId} has invalid status ${batch.status}`);
+		}
+
+		// 10. Prepare return plan & write deterministic return stock ledgers (Step 3 compatible)
+		const returnLedgerIds: string[] = [];
+		for (let idx = 0; idx < reconciliationRows.length; idx++) {
+			const row = reconciliationRows[idx];
+			if (qtyGt(row.return_qty, 0)) {
+				const ledgerIdSuffix = `${closingOperationId}:${idx}`;
+				const ledgerId = `stock_ledger:${ledgerIdSuffix}`;
+				const alloc = batch.allocations.find((a) => a.lot_ref === row.lot_ref);
+				const batchItem = batch.items.find((i) => i.item_id === row.item_id);
+				if (!alloc || alloc.item_id !== row.item_id || !batchItem) {
+					throw new IntegrityError(
+						`Reconciliation row ${row.item_id}:${row.lot_ref} no longer matches the batch allocation snapshot`
+					);
+				}
+
+				const returnLedger = createStockLedger(
+					{
+						item_id: row.item_id,
+						qty: persistQty(row.return_qty),
+						unit: batchItem.unit,
+						reason: 'distribution_return',
+						ref_id: batch._id,
+						lot_ref: row.lot_ref,
+						...(alloc.lot ? { lot: alloc.lot } : {}),
+						occurred_at: closingOccurredAt
+					},
+					ctx,
+					ledgerIdSuffix
+				);
+
+				const writtenLedger = await putDoc(this.dbName, returnLedger, undefined, {
+					onConflict: 'return-existing'
+				});
+
+				assertSemanticLedgerMatch(writtenLedger, {
+					_id: ledgerId,
+					item_id: row.item_id,
+					qty: persistQty(row.return_qty),
+					unit: batchItem.unit,
+					reason: 'distribution_return',
+					ref_id: batch._id,
+					lot_ref: row.lot_ref,
+					shelter_code: ctx.shelterCode,
+					occurred_at: closingOccurredAt,
+					...(alloc.lot ? { lot: alloc.lot } : {})
+				});
+
+				returnLedgerIds.push(ledgerId);
+			}
+		}
+
+		// 11. CAS closing -> closed with bounded reload/revalidate/recompute on revision conflict.
+		return this.finalizeClosingBatchWithRetry(
+			batch._id,
+			closingOperationId,
+			reconciliationRows,
+			returnLedgerIds,
+			ctx
+		);
+	}
+
+	private assertAuthorizedIssueStaff(ctx: AuthorContext): void {
+		if (!ctx.roles) {
+			throw new Error(
+				'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
+			);
+		}
+		if (isSystemAdmin(ctx.roles)) return;
+		const hasRegistrationRole =
+			hasStaffCapability(ctx.roles, 'registration_staff', ctx.shelterCode) ||
+			ctx.roles.includes(`${ctx.shelterCode}:registration_staff`) ||
+			ctx.roles.includes('registration_staff');
+		const hasManagerRole =
+			isShelterManager(ctx.roles, ctx.shelterCode) ||
+			ctx.roles.includes(`${ctx.shelterCode}:shelter_manager`) ||
+			ctx.roles.includes('shelter_manager');
+		if (hasRegistrationRole || hasManagerRole) return;
+		throw new Error(
+			'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
+		);
+	}
+
+	private assertAuthorizedIssueView(ctx: AuthorContext): void {
+		if (!ctx.roles) throw new Error('Unauthorized: distribution issue view requires shelter staff');
+		const roles = ctx.roles;
+		if (isSystemAdmin(roles)) return;
+		const allowedCapabilities = ['registration_staff', 'warehouse_staff'] as const;
+		const hasScopedStaff = allowedCapabilities.some(
+			(capability) =>
+				hasStaffCapability(roles, capability, ctx.shelterCode) ||
+				roles.includes(`${ctx.shelterCode}:${capability}`) ||
+				roles.includes(capability)
+		);
+		const hasScopedManager =
+			isShelterManager(roles, ctx.shelterCode) ||
+			roles.includes(`${ctx.shelterCode}:shelter_manager`) ||
+			roles.includes('shelter_manager');
+		if (hasScopedStaff || hasScopedManager) return;
+		throw new Error('Unauthorized: distribution issue view requires shelter staff');
+	}
+
+	private parseCapacityDoc(
+		doc: unknown,
+		docId: string,
+		batchId: string,
+		itemId: string,
+		ctx: AuthorContext
+	): DistributionIssueCapacity {
+		const parsed = distributionIssueCapacityDocSchema.safeParse(doc);
+		if (
+			!parsed.success ||
+			parsed.data._id !== docId ||
+			parsed.data.batch_id !== batchId ||
+			parsed.data.item_id !== itemId ||
+			parsed.data.shelter_code !== ctx.shelterCode
+		) {
+			throw new IntegrityError(`Distribution issue capacity ${docId} is malformed or out of scope`);
+		}
+		return parsed.data as DistributionIssueCapacity;
+	}
+
+	private parseOneTimeGuard(
+		doc: unknown,
+		docId: string,
+		evacueeId: string,
+		itemId: string,
+		ctx: AuthorContext
+	): DistributionOneTimeGuard {
+		const parsed = distributionOneTimeGuardDocSchema.safeParse(doc);
+		if (
+			!parsed.success ||
+			parsed.data._id !== docId ||
+			parsed.data.evacuee_id !== evacueeId ||
+			parsed.data.item_id !== itemId ||
+			parsed.data.shelter_code !== ctx.shelterCode
+		) {
+			throw new IntegrityError(`One-time guard ${docId} is malformed or out of scope`);
+		}
+		return parsed.data as DistributionOneTimeGuard;
+	}
+
+	async listActiveRecipients(
+		ctx: AuthorContext,
+		search?: string
+	): Promise<DistributionRecipient[]> {
+		this.assertAuthorizedIssueStaff(ctx);
+		const all = await allDocsByType<Evacuee>(this.dbName, 'evacuee', isEvacuee);
+		let matched = all.filter(
+			(e) => e.shelter_code === ctx.shelterCode && e.current_stay?.status === 'active'
+		);
+		if (search?.trim()) {
+			const needle = search.trim().toLowerCase();
+			matched = matched.filter(
+				(e) =>
+					e.first_name.toLowerCase().includes(needle) ||
+					e.last_name.toLowerCase().includes(needle) ||
+					(e.nickname && e.nickname.toLowerCase().includes(needle))
+			);
+		}
+		return matched
+			.map((e) => ({
+				_id: e._id,
+				first_name: e.first_name,
+				last_name: e.last_name,
+				...(e.nickname ? { nickname: e.nickname } : {}),
+				current_stay: {
+					status: 'active' as const,
+					zone: e.current_stay.zone ?? null
+				}
+			}))
+			.sort((a, b) => a._id.localeCompare(b._id));
+	}
+
+	async getRecipient(id: string, ctx: AuthorContext): Promise<DistributionRecipient | null> {
+		this.assertAuthorizedIssueStaff(ctx);
+		const evacuee = await getDoc<Evacuee>(this.dbName, id);
+		if (
+			!evacuee ||
+			!isEvacuee(evacuee) ||
+			evacuee.shelter_code !== ctx.shelterCode ||
+			evacuee.current_stay?.status !== 'active'
+		) {
+			return null;
+		}
+		if (typeof evacuee.first_name !== 'string' || typeof evacuee.last_name !== 'string') {
+			throw new IntegrityError(`Recipient ${id} is malformed`);
+		}
+		return {
+			_id: evacuee._id,
+			first_name: evacuee.first_name,
+			last_name: evacuee.last_name,
+			...(evacuee.nickname ? { nickname: evacuee.nickname } : {}),
+			current_stay: {
+				status: 'active',
+				zone: evacuee.current_stay.zone ?? null
+			}
+		};
+	}
+
+	private async getPreviousReceipts(
+		evacueeId: string,
+		itemId: string,
+		ctx: AuthorContext
+	): Promise<EligibilityHistoryEntry[]> {
+		const allIssues = await allDocsByType<DistributionIssue>(
+			this.dbName,
+			'distribution_issue',
+			isDistributionIssue
+		);
+		const parsedIssues = allIssues.map((issue) => {
+			const parsed = distributionIssueDocSchema.safeParse(issue);
+			if (!parsed.success)
+				throw new IntegrityError(
+					'Committed distribution issue history contains a malformed document'
+				);
+			return parsed.data as DistributionIssue;
+		});
+		for (const issue of parsedIssues) {
+			if (issue.evacuee_id === evacueeId && issue.item_id === itemId) {
+				if (issue.shelter_code !== ctx.shelterCode) {
+					throw new IntegrityError(
+						`Distribution issue ${issue._id} is outside recipient shelter scope`
+					);
+				}
+			}
+		}
+		return parsedIssues
+			.filter((i) => i.evacuee_id === evacueeId && i.item_id === itemId)
+			.map((i) => ({ issue_id: i._id, distributed_at: i.distributed_at }))
+			.sort((a, b) => a.distributed_at.localeCompare(b.distributed_at));
+	}
+
+	private async getCommittedIssuedQty(
+		batchId: string,
+		itemId: string,
+		ctx: AuthorContext
+	): Promise<string> {
+		const allIssues = await allDocsByType<DistributionIssue>(
+			this.dbName,
+			'distribution_issue',
+			isDistributionIssue
+		);
+		const parsedIssues = allIssues.map((issue) => {
+			const parsed = distributionIssueDocSchema.safeParse(issue);
+			if (!parsed.success)
+				throw new IntegrityError(
+					'Committed distribution issue history contains a malformed document'
+				);
+			return parsed.data as DistributionIssue;
+		});
+		for (const issue of parsedIssues) {
+			if (issue.batch_id === batchId && issue.item_id === itemId) {
+				if (issue.shelter_code !== ctx.shelterCode) {
+					throw new IntegrityError(
+						`Distribution issue ${issue._id} is outside batch shelter scope`
+					);
+				}
+			}
+		}
+		return parsedIssues
+			.filter((i) => i.batch_id === batchId && i.item_id === itemId)
+			.reduce((sum, i) => addQty(sum, i.qty), '0');
+	}
+
+	private async acquireOneTimeGuardWithRetry(
+		evacueeId: string,
+		itemId: string,
+		operationId: string,
+		issueId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeOneTimeGuardDocId(evacueeId, itemId);
+		const hash = docId.slice('distribution_one_time_guard:'.length);
+
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawExisting = await getDoc<DistributionOneTimeGuard>(this.dbName, docId);
+				const existing = rawExisting
+					? this.parseOneTimeGuard(rawExisting, docId, evacueeId, itemId, ctx)
+					: null;
+				if (!existing) {
+					const newGuard = createDistributionOneTimeGuard(
+						{
+							evacuee_id: evacueeId,
+							item_id: itemId,
+							pending_claims: [
+								{
+									operation_id: operationId,
+									issue_id: issueId,
+									evacuee_id: evacueeId,
+									item_id: itemId,
+									claimed_at: now()
+								}
+							]
+						},
+						hash,
+						ctx
+					);
+					await putDocStrict<DistributionOneTimeGuard>(this.dbName, newGuard);
+					return;
+				}
+
+				const claim = existing.pending_claims[0];
+				if (claim) {
+					if (claim.operation_id === operationId) {
+						if (
+							claim.issue_id !== issueId ||
+							claim.evacuee_id !== evacueeId ||
+							claim.item_id !== itemId
+						) {
+							throw new IssueConflictError(
+								'Existing one-time claim does not match operation intent'
+							);
+						}
+						return;
+					}
+					const otherIssue = await getDoc<DistributionIssue>(this.dbName, claim.issue_id);
+					if (otherIssue) {
+						const parsedIssue = distributionIssueDocSchema.safeParse(otherIssue);
+						if (
+							!parsedIssue.success ||
+							parsedIssue.data.shelter_code !== ctx.shelterCode ||
+							parsedIssue.data.evacuee_id !== evacueeId ||
+							parsedIssue.data.item_id !== itemId
+						)
+							throw new IntegrityError('Foreign one-time claim references an invalid issue');
+						await this.releaseOneTimeClaimWithRetry(
+							evacueeId,
+							itemId,
+							claim.operation_id,
+							ctx,
+							maxRetries
+						);
+						continue;
+					}
+					throw new IssueConflictError('One-time guard is owned by another unresolved operation');
+				}
+
+				const updated: DistributionOneTimeGuard = {
+					...existing,
+					pending_claims: [
+						...existing.pending_claims,
+						{
+							operation_id: operationId,
+							issue_id: issueId,
+							evacuee_id: evacueeId,
+							item_id: itemId,
+							claimed_at: now()
+						}
+					],
+					updated_at: now()
+				};
+				await putDocStrict<DistributionOneTimeGuard>(this.dbName, updated);
+				return;
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async releaseOneTimeClaimWithRetry(
+		evacueeId: string,
+		itemId: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeOneTimeGuardDocId(evacueeId, itemId);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawGuardDoc = await getDoc<DistributionOneTimeGuard>(this.dbName, docId);
+				if (!rawGuardDoc) return;
+				const guardDoc = this.parseOneTimeGuard(rawGuardDoc, docId, evacueeId, itemId, ctx);
+				if (!guardDoc.pending_claims.some((c) => c.operation_id === operationId)) return;
+
+				const remaining = guardDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+				await putDocStrict<DistributionOneTimeGuard>(this.dbName, {
+					...guardDoc,
+					pending_claims: remaining,
+					updated_at: now()
+				});
+
+				const rawConfirmed = await getDoc<DistributionOneTimeGuard>(this.dbName, docId);
+				if (!rawConfirmed) return;
+				const confirmed = this.parseOneTimeGuard(rawConfirmed, docId, evacueeId, itemId, ctx);
+				if (!confirmed.pending_claims.some((c) => c.operation_id === operationId)) {
+					return;
+				}
+				if (attempt === maxRetries) {
+					throw new IntegrityError(
+						`One-time claim for ${operationId} remains after cleanup on ${evacueeId}:${itemId}`
+					);
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async acquireCapacityClaimWithRetry(
+		batchId: string,
+		itemId: string,
+		allocatedQty: string,
+		operationId: string,
+		issueId: string,
+		qty: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueCapacityDocId(batchId, itemId);
+		const hash = docId.slice('distribution_issue_capacity:'.length);
+
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				// Read the coordination revision before permanent Issue truth. This ordering
+				// closes the claim-to-Issue handoff gap: a concurrent claim release either
+				// remains conservatively visible here or changes `_rev` and forces a retry.
+				const rawCapacityDoc = await getDoc<DistributionIssueCapacity>(this.dbName, docId);
+				const capacityDoc = rawCapacityDoc
+					? this.parseCapacityDoc(rawCapacityDoc, docId, batchId, itemId, ctx)
+					: null;
+				const committedQty = await this.getCommittedIssuedQty(batchId, itemId, ctx);
+				const otherClaimsQty = capacityDoc
+					? capacityDoc.pending_claims
+							.filter((c) => c.operation_id !== operationId)
+							.reduce((sum, c) => addQty(sum, c.qty), '0')
+					: '0';
+
+				const totalUsed = addQty(committedQty, otherClaimsQty);
+				const remaining = subQty(allocatedQty, totalUsed);
+
+				if (qtyGt(qty, remaining)) {
+					throw new IssueCapacityError(
+						`Insufficient allocation capacity for item ${itemId}: requested ${qty}, available ${remaining}`
+					);
+				}
+
+				if (!capacityDoc) {
+					const newDoc = createDistributionIssueCapacity(
+						{
+							batch_id: batchId,
+							item_id: itemId,
+							pending_claims: [
+								{
+									operation_id: operationId,
+									issue_id: issueId,
+									batch_id: batchId,
+									item_id: itemId,
+									qty,
+									claimed_at: now()
+								}
+							]
+						},
+						hash,
+						ctx
+					);
+					await putDocStrict<DistributionIssueCapacity>(this.dbName, newDoc);
+					return;
+				}
+
+				const sameOperation = capacityDoc.pending_claims.find(
+					(c) => c.operation_id === operationId
+				);
+				if (sameOperation) {
+					if (
+						sameOperation.issue_id !== issueId ||
+						sameOperation.batch_id !== batchId ||
+						sameOperation.item_id !== itemId ||
+						sameOperation.qty !== qty
+					)
+						throw new IssueConflictError('Existing capacity claim does not match operation intent');
+					return;
+				}
+
+				const updated: DistributionIssueCapacity = {
+					...capacityDoc,
+					pending_claims: [
+						...capacityDoc.pending_claims,
+						{
+							operation_id: operationId,
+							issue_id: issueId,
+							batch_id: batchId,
+							item_id: itemId,
+							qty,
+							claimed_at: now()
+						}
+					],
+					updated_at: now()
+				};
+				await putDocStrict<DistributionIssueCapacity>(this.dbName, updated);
+				return;
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	private async releaseCapacityClaimWithRetry(
+		batchId: string,
+		itemId: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const docId = await makeIssueCapacityDocId(batchId, itemId);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawCapacityDoc = await getDoc<DistributionIssueCapacity>(this.dbName, docId);
+				if (!rawCapacityDoc) return;
+				const capacityDoc = this.parseCapacityDoc(rawCapacityDoc, docId, batchId, itemId, ctx);
+				if (!capacityDoc.pending_claims.some((c) => c.operation_id === operationId)) return;
+
+				const remaining = capacityDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+				await putDocStrict<DistributionIssueCapacity>(this.dbName, {
+					...capacityDoc,
+					pending_claims: remaining,
+					updated_at: now()
+				});
+
+				const rawConfirmed = await getDoc<DistributionIssueCapacity>(this.dbName, docId);
+				if (!rawConfirmed) return;
+				const confirmed = this.parseCapacityDoc(rawConfirmed, docId, batchId, itemId, ctx);
+				if (!confirmed.pending_claims.some((c) => c.operation_id === operationId)) {
+					return;
+				}
+				if (attempt === maxRetries) {
+					throw new IntegrityError(
+						`Capacity claim for ${operationId} remains after cleanup on ${batchId}:${itemId}`
+					);
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) throw err;
+			}
+		}
+	}
+
+	async createIssue(
+		input: CreateDistributionIssueInput,
+		ctx: AuthorContext
+	): Promise<DistributionIssue> {
+		// 1. Authorize issue role
+		this.assertAuthorizedIssueStaff(ctx);
+
+		// 2. Validate input and normalize quantity
+		if (!input.batch_id || !input.batch_id.startsWith('distribution_batch:')) {
+			throw new ValidationError('Valid distribution_batch batch_id is required');
+		}
+		if (!input.evacuee_id || !input.evacuee_id.startsWith('evacuee:')) {
+			throw new ValidationError('Valid evacuee_id is required');
+		}
+		if (!input.item_id || !input.item_id.trim()) {
+			throw new ValidationError('item_id is required');
+		}
+		if (!input.idempotency_key || !input.idempotency_key.trim()) {
+			throw new ValidationError('idempotency_key is required');
+		}
+		const normalizedIdempotencyKey = input.idempotency_key.trim();
+		const normalizedRepeatOverrideNote = input.repeat_override_note?.trim() || undefined;
+		if (input.repeat_override_reason && !normalizedRepeatOverrideNote) {
+			throw new ValidationError('repeat_override_note is required for a repeat override');
+		}
+		if (!input.repeat_override_reason && normalizedRepeatOverrideNote) {
+			throw new ValidationError('repeat_override_note requires repeat_override_reason');
+		}
+		const normalizedQty = persistQty(input.qty);
+		if (!qtyGt(normalizedQty, 0)) {
+			throw new ValidationError('Quantity must be greater than 0');
+		}
+
+		// 3. Load active batch & resolve authoritative batch item
+		const rawBatch = await getDoc<DistributionBatch>(this.dbName, input.batch_id);
+		if (!rawBatch) {
+			throw new ValidationError(`Distribution batch ${input.batch_id} not found`);
+		}
+		const batchParse = distributionBatchDocSchema.safeParse(rawBatch);
+		if (!batchParse.success)
+			throw new IntegrityError(`Distribution batch ${input.batch_id} is malformed`);
+		const batch = batchParse.data as DistributionBatch;
+		if (batch.shelter_code !== ctx.shelterCode) {
+			throw new IntegrityError(`Batch shelter_code does not match session shelter context`);
+		}
+		const batchItem = batch.items.find((item) => item.item_id === input.item_id);
+		if (!batchItem) {
+			throw new ValidationError(`Item ${input.item_id} is not present in distribution batch`);
+		}
+		const authoritativeUnit = batchItem.unit;
+		const authoritativeDistributionType = batchItem.distribution_type_snapshot;
+		const idempotencyDocId = await makeIssueIdempotencyDocId(
+			input.batch_id,
+			normalizedIdempotencyKey
+		);
+		const operationId = idempotencyDocId;
+
+		// A durable successful Issue replay remains valid even if the recipient or
+		// Batch changed state after the original commit. Check deterministic evidence
+		// before applying admission preconditions for a brand-new operation.
+		const priorIdempotencyRaw = await getDoc<DistributionIssueIdempotency>(
+			this.dbName,
+			idempotencyDocId
+		);
+		if (priorIdempotencyRaw) {
+			const priorIdempotencyParse =
+				distributionIssueIdempotencyDocSchema.safeParse(priorIdempotencyRaw);
+			if (!priorIdempotencyParse.success || priorIdempotencyParse.data._id !== idempotencyDocId) {
+				throw new IssueConflictError('Existing idempotency mapping is malformed');
+			}
+			const priorIdempotency = priorIdempotencyParse.data as DistributionIssueIdempotency;
+			assertSemanticIdempotencyMatch(priorIdempotency, {
+				batch_id: input.batch_id,
+				idempotency_key: normalizedIdempotencyKey,
+				evacuee_id: input.evacuee_id,
+				item_id: input.item_id,
+				qty: normalizedQty,
+				repeat_override_reason: input.repeat_override_reason,
+				repeat_override_note: normalizedRepeatOverrideNote,
+				shelter_code: ctx.shelterCode
+			});
+			const priorIssueRaw = await getDoc<DistributionIssue>(this.dbName, priorIdempotency.issue_id);
+			if (priorIssueRaw) {
+				const priorIssueParse = distributionIssueDocSchema.safeParse(priorIssueRaw);
+				if (!priorIssueParse.success) {
+					throw new IntegrityError(
+						`Existing distribution issue ${priorIdempotency.issue_id} is malformed`
+					);
+				}
+				const priorIssue = priorIssueParse.data as DistributionIssue;
+				assertSemanticIssueMatch(priorIssue, {
+					_id: priorIdempotency.issue_id,
+					batch_id: input.batch_id,
+					evacuee_id: input.evacuee_id,
+					item_id: input.item_id,
+					qty: normalizedQty,
+					unit: authoritativeUnit,
+					distribution_type_snapshot: authoritativeDistributionType,
+					repeat_override_reason: input.repeat_override_reason,
+					repeat_override_note: normalizedRepeatOverrideNote,
+					idempotency_key: normalizedIdempotencyKey,
+					shelter_code: ctx.shelterCode
+				});
+				await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
+				await this.releaseCapacityClaimWithRetry(
+					input.batch_id,
+					input.item_id,
+					operationId,
+					ctx,
+					3
+				);
+				if (authoritativeDistributionType === 'one_time') {
+					await this.releaseOneTimeClaimWithRetry(
+						input.evacuee_id,
+						input.item_id,
+						operationId,
+						ctx,
+						3
+					);
+				}
+				return priorIssue;
+			}
+		}
+
+		if (batch.status !== 'active') {
+			throw new ValidationError(
+				`Distribution batch ${input.batch_id} must be active to issue goods`
+			);
+		}
+
+		// 4. Load/verify active evacuee
+		const evacuee = await getDoc<Evacuee>(this.dbName, input.evacuee_id);
+		if (!evacuee || !isEvacuee(evacuee)) {
+			throw new RecipientNotActiveError(`Recipient ${input.evacuee_id} not found in shelter`);
+		}
+		if (evacuee.shelter_code !== ctx.shelterCode) {
+			throw new IntegrityError(`Recipient shelter_code does not match session shelter context`);
+		}
+		if (evacuee.current_stay?.status !== 'active') {
+			throw new RecipientNotActiveError(
+				`Recipient ${input.evacuee_id} is not active (status: ${evacuee.current_stay?.status})`
+			);
+		}
+
+		// 5. Idempotency coordination mapping
+		const idempotencyHash = idempotencyDocId.slice('distribution_issue_idempotency:'.length);
+		const proposedIssueUlid = ulid();
+		const proposedIssueId = `distribution_issue:${proposedIssueUlid}`;
+
+		const rawIdempotencyDoc = await putDoc<DistributionIssueIdempotency>(
+			this.dbName,
+			createDistributionIssueIdempotency(
+				{
+					batch_id: input.batch_id,
+					idempotency_key: normalizedIdempotencyKey,
+					issue_id: proposedIssueId,
+					evacuee_id: input.evacuee_id,
+					item_id: input.item_id,
+					qty: normalizedQty,
+					...(input.repeat_override_reason
+						? { repeat_override_reason: input.repeat_override_reason }
+						: {}),
+					...(normalizedRepeatOverrideNote
+						? { repeat_override_note: normalizedRepeatOverrideNote }
+						: {})
+				},
+				idempotencyHash,
+				ctx
+			),
+			undefined,
+			{ onConflict: 'return-existing' }
+		);
+		const idempotencyParse = distributionIssueIdempotencyDocSchema.safeParse(rawIdempotencyDoc);
+		if (!idempotencyParse.success || idempotencyParse.data._id !== idempotencyDocId) {
+			throw new IssueConflictError('Existing idempotency mapping is malformed');
+		}
+		const idempotencyDoc = idempotencyParse.data as DistributionIssueIdempotency;
+
+		assertSemanticIdempotencyMatch(idempotencyDoc, {
+			batch_id: input.batch_id,
+			idempotency_key: normalizedIdempotencyKey,
+			evacuee_id: input.evacuee_id,
+			item_id: input.item_id,
+			qty: normalizedQty,
+			repeat_override_reason: input.repeat_override_reason,
+			repeat_override_note: normalizedRepeatOverrideNote,
+			shelter_code: ctx.shelterCode
+		});
+
+		const effectiveIssueId = idempotencyDoc.issue_id;
+		const effectiveIssueUlid = effectiveIssueId.slice('distribution_issue:'.length);
+
+		// If issue already exists for this idempotency key, verify and return
+		const existingIssue = await getDoc<DistributionIssue>(this.dbName, effectiveIssueId);
+		if (existingIssue) {
+			const issueParse = distributionIssueDocSchema.safeParse(existingIssue);
+			if (!issueParse.success)
+				throw new IntegrityError(`Existing distribution issue ${effectiveIssueId} is malformed`);
+			const parsedIssue = issueParse.data as DistributionIssue;
+			assertSemanticIssueMatch(parsedIssue, {
+				_id: effectiveIssueId,
+				batch_id: input.batch_id,
+				evacuee_id: input.evacuee_id,
+				item_id: input.item_id,
+				qty: normalizedQty,
+				unit: authoritativeUnit,
+				distribution_type_snapshot: authoritativeDistributionType,
+				repeat_override_reason: input.repeat_override_reason,
+				repeat_override_note: normalizedRepeatOverrideNote,
+				idempotency_key: normalizedIdempotencyKey,
+				shelter_code: ctx.shelterCode
+			});
+			// Clean up any stale claims and return existing issue
+			await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
+			await this.releaseCapacityClaimWithRetry(input.batch_id, input.item_id, operationId, ctx, 3);
+			if (authoritativeDistributionType === 'one_time') {
+				await this.releaseOneTimeClaimWithRetry(
+					input.evacuee_id,
+					input.item_id,
+					operationId,
+					ctx,
+					3
+				);
+			}
+			return parsedIssue;
+		}
+
+		let gateClaimAcquired = false;
+		let oneTimeClaimAcquired = false;
+		let capacityClaimAcquired = false;
+
+		try {
+			// 6. Frozen order: BATCH GATE -> ONE-TIME GUARD -> CAPACITY GUARD.
+			// The gate claim is the shared admission barrier used by closeBatch.
+			await this.acquireIssueGateClaimWithRetry(input.batch_id, operationId, effectiveIssueId, ctx);
+			gateClaimAcquired = true;
+
+			if (authoritativeDistributionType === 'one_time') {
+				await this.acquireOneTimeGuardWithRetry(
+					input.evacuee_id,
+					input.item_id,
+					operationId,
+					effectiveIssueId,
+					ctx
+				);
+				oneTimeClaimAcquired = true;
+
+				const previousReceipts = await this.getPreviousReceipts(
+					input.evacuee_id,
+					input.item_id,
+					ctx
+				);
+				const eligibility = evaluateDistributionEligibility({
+					distribution_type: 'one_time',
+					previous_receipts: previousReceipts,
+					repeat_override_reason: input.repeat_override_reason
+				});
+
+				if (!eligibility.eligible) {
+					throw new DistributionEligibilityError(
+						`Recipient ${input.evacuee_id} is not eligible for one-time item ${input.item_id} (${eligibility.decision})`
+					);
+				}
+			}
+
+			// 7. Acquire Capacity Claim
+			await this.acquireCapacityClaimWithRetry(
+				input.batch_id,
+				input.item_id,
+				batchItem.allocated_qty,
+				operationId,
+				effectiveIssueId,
+				normalizedQty,
+				ctx
+			);
+			capacityClaimAcquired = true;
+
+			// 8. Re-evaluate eligibility for snapshot
+			const previousReceipts = await this.getPreviousReceipts(input.evacuee_id, input.item_id, ctx);
+			const eligibilitySnapshot = evaluateDistributionEligibility({
+				distribution_type: authoritativeDistributionType,
+				previous_receipts: previousReceipts,
+				repeat_override_reason: input.repeat_override_reason
+			});
+			if (!eligibilitySnapshot.eligible) {
+				throw new DistributionEligibilityError(
+					`Recipient ${input.evacuee_id} is not eligible for distribution (${eligibilitySnapshot.decision})`
+				);
+			}
+
+			// 9. Build and persist distribution_issue (Append-Only)
+			const newIssue = createDistributionIssue(
+				{
+					batch_id: input.batch_id,
+					evacuee_id: input.evacuee_id,
+					item_id: input.item_id,
+					qty: normalizedQty,
+					unit: authoritativeUnit,
+					distributed_at: input.distributed_at,
+					distribution_type_snapshot: authoritativeDistributionType,
+					eligibility_snapshot: eligibilitySnapshot,
+					repeat_override_reason: input.repeat_override_reason,
+					repeat_override_note: normalizedRepeatOverrideNote,
+					idempotency_key: normalizedIdempotencyKey
+				},
+				ctx,
+				effectiveIssueUlid
+			);
+
+			// Double-check batch status right before persist to prevent race with closeBatch
+			const latestBatch = await getDoc<DistributionBatch>(this.dbName, input.batch_id);
+			const latestBatchParse = distributionBatchDocSchema.safeParse(latestBatch);
+			if (
+				!latestBatchParse.success ||
+				latestBatchParse.data.shelter_code !== ctx.shelterCode ||
+				latestBatchParse.data.status !== 'active'
+			) {
+				throw new ValidationError(
+					`Distribution batch ${input.batch_id} must be active to issue goods`
+				);
+			}
+
+			const rawPersistedIssue = await putDoc<DistributionIssue>(this.dbName, newIssue, undefined, {
+				onConflict: 'return-existing'
+			});
+
+			const persistedParse = distributionIssueDocSchema.safeParse(rawPersistedIssue);
+			if (!persistedParse.success)
+				throw new IntegrityError(`Persisted distribution issue ${effectiveIssueId} is malformed`);
+			const persistedIssue = persistedParse.data as DistributionIssue;
+			assertSemanticIssueMatch(persistedIssue, {
+				_id: effectiveIssueId,
+				batch_id: input.batch_id,
+				evacuee_id: input.evacuee_id,
+				item_id: input.item_id,
+				qty: normalizedQty,
+				unit: authoritativeUnit,
+				distribution_type_snapshot: authoritativeDistributionType,
+				repeat_override_reason: input.repeat_override_reason,
+				repeat_override_note: normalizedRepeatOverrideNote,
+				idempotency_key: normalizedIdempotencyKey,
+				shelter_code: ctx.shelterCode,
+				eligibility_snapshot: eligibilitySnapshot
+			});
+
+			// 10. Release coordination claims
+			await this.releaseCapacityClaimWithRetry(input.batch_id, input.item_id, operationId, ctx, 3);
+			capacityClaimAcquired = false;
+			if (authoritativeDistributionType === 'one_time') {
+				await this.releaseOneTimeClaimWithRetry(
+					input.evacuee_id,
+					input.item_id,
+					operationId,
+					ctx,
+					3
+				);
+				oneTimeClaimAcquired = false;
+			}
+			await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
+			gateClaimAcquired = false;
+
+			return persistedIssue;
+		} catch (err) {
+			// Pre-commit failure cleanup
+			try {
+				if (capacityClaimAcquired)
+					await this.releaseCapacityClaimWithRetry(
+						input.batch_id,
+						input.item_id,
+						operationId,
+						ctx,
+						3
+					);
+				if (oneTimeClaimAcquired)
+					await this.releaseOneTimeClaimWithRetry(
+						input.evacuee_id,
+						input.item_id,
+						operationId,
+						ctx,
+						3
+					);
+				if (gateClaimAcquired)
+					await this.releaseIssueGateClaimWithRetry(input.batch_id, operationId, ctx, 3);
+			} catch (cleanupError) {
+				throw new IntegrityError(
+					`Issue pre-commit cleanup could not be confirmed: ${String(cleanupError)}`
+				);
+			}
+			throw err;
+		}
+	}
+
+	async getIssue(id: string, ctx: AuthorContext): Promise<DistributionIssue | null> {
+		this.assertAuthorizedIssueView(ctx);
+		const rawIssue = await getDoc<DistributionIssue>(this.dbName, id);
+		if (!rawIssue) return null;
+		const parsed = distributionIssueDocSchema.safeParse(rawIssue);
+		if (!parsed.success) throw new IntegrityError(`Distribution issue ${id} is malformed`);
+		return parsed.data.shelter_code === ctx.shelterCode ? (parsed.data as DistributionIssue) : null;
+	}
+
+	async listIssuesByBatch(batchId: string, ctx: AuthorContext): Promise<DistributionIssue[]> {
+		this.assertAuthorizedIssueView(ctx);
+		const all = await allDocsByType<DistributionIssue>(
+			this.dbName,
+			'distribution_issue',
+			isDistributionIssue
+		);
+		return all
+			.map((rawIssue) => {
+				const parsed = distributionIssueDocSchema.safeParse(rawIssue);
+				if (!parsed.success) {
+					throw new IntegrityError(
+						'Committed distribution issue history contains a malformed document'
+					);
+				}
+				return parsed.data as DistributionIssue;
+			})
+			.filter((i) => i.batch_id === batchId && i.shelter_code === ctx.shelterCode);
 	}
 }
