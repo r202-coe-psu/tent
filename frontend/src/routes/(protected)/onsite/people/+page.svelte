@@ -5,17 +5,16 @@
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
-	import Camera from '@lucide/svelte/icons/camera';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
+	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Globe from '@lucide/svelte/icons/globe';
 	import Home from '@lucide/svelte/icons/home';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
-	import X from '@lucide/svelte/icons/x';
 	import Zap from '@lucide/svelte/icons/zap';
 
 	import { Button } from '$lib/components/ui/button';
@@ -33,13 +32,12 @@
 		maskNationalId,
 		matchesEvacueeSearch,
 		nextQueueLabel,
-		STATUS_LABELS,
 		REPORT_IN_CTA_LABEL,
 		Station1IntakeSearch,
 		StayStatusBadge,
+		RegisteredViaBadge,
 		lookupFederatedByScanCode,
-		type Evacuee,
-		type StayStatus
+		type Evacuee
 	} from '$lib/features/people';
 	import {
 		ClaimDialog,
@@ -103,9 +101,11 @@
 
 	type WorkflowTab = 'pre_registered' | 'arriving' | 'all';
 	type ArrivingSubTab = 'all' | 'medical' | 'zoning';
+	type PreRegChannelFilter = 'all' | 'kiosk' | 'web' | 'other';
 
 	let activeTab = $state<WorkflowTab>('pre_registered');
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
+	let preRegChannelFilter = $state<PreRegChannelFilter>('all');
 	let allStatusFilter = $state<string>('all');
 	let allZoneFilter = $state<string>('all');
 
@@ -142,10 +142,31 @@
 		arrivingEvacuees.filter((e) => !enableMedical || screenedIds.has(e._id)).length
 	);
 
+	// Pre-registered channel counts
+	const kioskPreRegCount = $derived(
+		preRegisteredEvacuees.filter((e) => e.registered_via === 'kiosk' || !!e.card_snapshot).length
+	);
+	const webPreRegCount = $derived(
+		preRegisteredEvacuees.filter((e) => e.registered_via === 'web').length
+	);
+	const otherPreRegCount = $derived(
+		preRegisteredEvacuees.filter(
+			(e) => e.registered_via !== 'kiosk' && !e.card_snapshot && e.registered_via !== 'web'
+		).length
+	);
+
 	// Pre-registered tab list
 	const preRegisteredFiltered = $derived(
 		preRegisteredEvacuees
-			.filter((e) => matchesEvacueeSearch(e, searchQuery))
+			.filter((e) => {
+				if (!matchesEvacueeSearch(e, searchQuery)) return false;
+				const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
+				const isWeb = e.registered_via === 'web';
+				if (preRegChannelFilter === 'kiosk') return isKiosk;
+				if (preRegChannelFilter === 'web') return isWeb;
+				if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
+				return true;
+			})
 			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
 	);
 
@@ -364,7 +385,10 @@
 	</Card.Root>
 
 	<!-- 3. Queue Stat Summary Cards -->
-	<section aria-label="สรุปยอดคิวผู้ประสบภัย" class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+	<section
+		aria-label="สรุปยอดคิวผู้ประสบภัย"
+		class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
+	>
 		<!-- Card 1: Pre-registered -->
 		<button
 			type="button"
@@ -524,17 +548,56 @@
 
 		<!-- Tab 1: Pre-registered (รอรายงานตัว) -->
 		{#if activeTab === 'pre_registered'}
-			<Card.Root class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+			<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 				<div
-					class="flex flex-col gap-2 border-b border-border bg-slate-50/60 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+					class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 				>
-					<div>
-						<h2 class="text-sm font-semibold text-slate-900">
-							รายชื่อผู้ลงทะเบียนล่วงหน้า รอรับรายงานตัว (Station 1)
-						</h2>
-						<p class="text-xs text-slate-500">
-							กดยืนยันตัวตนเพื่อดึงข้อมูลครอบครัวเดิมมาตรวจและปรับปรุงข้อมูล ไม่ต้องกรอกใหม่
-						</p>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="text-xs font-semibold text-slate-700">กรองช่องทาง:</span>
+						<button
+							type="button"
+							onclick={() => (preRegChannelFilter = 'all')}
+							class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {preRegChannelFilter ===
+							'all'
+								? 'border-primary bg-primary/10 font-bold text-primary'
+								: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
+						>
+							ทั้งหมด ({preRegisteredEvacuees.length})
+						</button>
+						<button
+							type="button"
+							onclick={() => (preRegChannelFilter = 'kiosk')}
+							class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors {preRegChannelFilter ===
+							'kiosk'
+								? 'border-amber-400 bg-amber-100/90 font-bold text-amber-900 shadow-2xs'
+								: 'border-amber-200 bg-amber-50/60 text-amber-900 hover:bg-amber-100/60'}"
+						>
+							<CreditCard class="size-3.5 text-amber-700" />
+							<span>ตู้ Kiosk ({kioskPreRegCount})</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => (preRegChannelFilter = 'web')}
+							class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors {preRegChannelFilter ===
+							'web'
+								? 'border-sky-400 bg-sky-100/90 font-bold text-sky-900 shadow-2xs'
+								: 'border-sky-200 bg-sky-50/60 text-sky-900 hover:bg-sky-100/60'}"
+						>
+							<Globe class="size-3.5 text-sky-700" />
+							<span>ออนไลน์ Web ({webPreRegCount})</span>
+						</button>
+						{#if otherPreRegCount > 0}
+							<button
+								type="button"
+								onclick={() => (preRegChannelFilter = 'other')}
+								class="rounded-full border px-3 py-1 text-xs font-medium transition-colors {preRegChannelFilter ===
+								'other'
+									? 'border-primary bg-primary/10 font-bold text-primary'
+									: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
+							>
+								ช่องทางอื่น ({otherPreRegCount})
+							</button>
+						{/if}
 					</div>
 					<span class="text-xs text-slate-500">
 						แสดง {preRegisteredFiltered.length} จาก {preRegisteredEvacuees.length} รายการ
@@ -551,8 +614,8 @@
 					>
 						<p class="font-medium text-slate-700">ไม่มีรายการผู้ลงทะเบียนล่วงหน้าค้างรายงานตัว</p>
 						<p class="text-xs text-slate-500">
-							{searchQuery
-								? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา'
+							{searchQuery || preRegChannelFilter !== 'all'
+								? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหาหรือตัวกรอง'
 								: 'หากมีผู้ประสบภัย Walk-in สามารถกดลงทะเบียนใหม่ได้ทันที'}
 						</p>
 						<Button
@@ -567,15 +630,32 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<Table.Root>
-							<Table.Header>
-								<Table.Row class="bg-muted/30">
-									<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
-									<Table.Head>เลขที่เอกสาร</Table.Head>
-									<Table.Head>เบอร์โทร</Table.Head>
-									<Table.Head>ครอบครัว</Table.Head>
-									<Table.Head>ความต้องการพิเศษ</Table.Head>
-									<Table.Head>สถานะ</Table.Head>
-									<Table.Head class="pr-5 text-right">การจัดการ</Table.Head>
+							<Table.Header class="border-b border-slate-200/90 bg-slate-50">
+								<Table.Row class="border-b-0 hover:bg-transparent">
+									<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
+										>ชื่อ-นามสกุล</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>เลขที่เอกสาร</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ช่องทาง</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>เบอร์โทร</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ครอบครัว</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ความต้องการพิเศษ</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>สถานะ</Table.Head
+									>
+									<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
+										>การจัดการ</Table.Head
+									>
 								</Table.Row>
 							</Table.Header>
 							<Table.Body>
@@ -585,28 +665,35 @@
 										class="cursor-pointer hover:bg-slate-50/80"
 										onclick={() => openRow(row)}
 									>
-										<Table.Cell class="pl-5 font-semibold text-slate-900">
+										<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
 											{formatPersonName(row)}
 											{#if row.nickname}
 												<span class="text-xs font-normal text-slate-500">({row.nickname})</span>
 											{/if}
 										</Table.Cell>
-										<Table.Cell class="font-mono text-xs text-slate-600">
+										<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
 											{maskNationalId(row.person_id?.number)}
 										</Table.Cell>
-										<Table.Cell class="text-xs text-slate-600 tabular-nums">
+										<Table.Cell class="px-3 py-3">
+											<RegisteredViaBadge
+												via={row.registered_via}
+												hasCardSnapshot={!!row.card_snapshot}
+												size="sm"
+											/>
+										</Table.Cell>
+										<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 											{row.phone || '—'}
 										</Table.Cell>
-										<Table.Cell class="text-xs font-medium text-slate-700">
+										<Table.Cell class="px-3 py-3 text-xs font-medium text-slate-700">
 											{hh?.label ?? '—'}
 										</Table.Cell>
-										<Table.Cell class="max-w-[12rem] truncate text-xs text-slate-600">
+										<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
 											{specialNeedsShort(row.special_needs)}
 										</Table.Cell>
-										<Table.Cell>
+										<Table.Cell class="px-3 py-3">
 											<StayStatusBadge status="pre_registered" size="sm" />
 										</Table.Cell>
-										<Table.Cell class="pr-5 text-right">
+										<Table.Cell class="py-3 pr-5 text-right">
 											<Button
 												size="sm"
 												class="gap-1.5 rounded-lg bg-blue-600 px-3 font-semibold text-white shadow-2xs hover:bg-blue-700"
@@ -625,13 +712,13 @@
 						</Table.Root>
 					</div>
 				{/if}
-			</Card.Root>
+			</div>
 
 			<!-- Tab 2: Arriving (รอส่งต่อเข้าพัก) -->
 		{:else if activeTab === 'arriving'}
-			<Card.Root class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+			<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 				<div
-					class="flex flex-col gap-3 border-b border-border bg-slate-50/60 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+					class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 				>
 					<div class="flex flex-wrap items-center gap-2">
 						<span class="text-xs font-semibold text-slate-700">กรองขั้นตอน:</span>
@@ -678,21 +765,35 @@
 						class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
 					>
 						<p class="font-medium text-slate-700">ไม่มีรายการในหมวดนี้</p>
-						<p class="text-xs text-slate-500">ผู้ประสบภัยได้รับการตรวจและจัดสรรที่พักเรียบร้อยแล้ว</p>
+						<p class="text-xs text-slate-500">
+							ผู้ประสบภัยได้รับการตรวจและจัดสรรที่พักเรียบร้อยแล้ว
+						</p>
 					</div>
 				{:else}
 					<div class="overflow-x-auto">
 						<Table.Root>
-							<Table.Header>
-								<Table.Row class="bg-muted/30">
-									<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
-									<Table.Head>เลขที่เอกสาร</Table.Head>
-									<Table.Head>ครอบครัว</Table.Head>
+							<Table.Header class="border-b border-slate-200/90 bg-slate-50">
+								<Table.Row class="border-b-0 hover:bg-transparent">
+									<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
+										>ชื่อ-นามสกุล</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>เลขที่เอกสาร</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ครอบครัว</Table.Head
+									>
 									{#if enableMedical}
-										<Table.Head>การแพทย์</Table.Head>
+										<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+											>การแพทย์</Table.Head
+										>
 									{/if}
-									<Table.Head>คิวถัดไป</Table.Head>
-									<Table.Head class="pr-5 text-right">ส่งต่อ</Table.Head>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>คิวถัดไป</Table.Head
+									>
+									<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
+										>ส่งต่อ</Table.Head
+									>
 								</Table.Row>
 							</Table.Header>
 							<Table.Body>
@@ -707,34 +808,35 @@
 										class="cursor-pointer hover:bg-slate-50/80"
 										onclick={() => openRow(row)}
 									>
-										<Table.Cell class="pl-5 font-semibold text-slate-900">
+										<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
 											{formatPersonName(row)}
 										</Table.Cell>
-										<Table.Cell class="font-mono text-xs text-slate-600">
+										<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
 											{maskNationalId(row.person_id?.number)}
 										</Table.Cell>
-										<Table.Cell class="text-xs text-slate-700">
+										<Table.Cell class="px-3 py-3 text-xs text-slate-700">
 											{hh?.label ?? '—'}
 										</Table.Cell>
 										{#if enableMedical}
-											<Table.Cell class="text-xs">
+											<Table.Cell class="px-3 py-3 text-xs">
 												{#if screening}
 													<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
 														<CheckCircle2 class="size-3.5 text-emerald-600" />
 														ตรวจแล้ว{#if screening.triage_level}
-															({TRIAGE_LABELS[screening.triage_level] ?? screening.triage_level}){/if}
+															({TRIAGE_LABELS[screening.triage_level] ??
+																screening.triage_level}){/if}
 													</span>
 												{:else}
 													<span class="font-medium text-amber-700">รอตรวจคัดกรอง</span>
 												{/if}
 											</Table.Cell>
 										{/if}
-										<Table.Cell>
+										<Table.Cell class="px-3 py-3">
 											<Badge variant={nextQueueBadgeVariant(next)} class="font-semibold">
 												{next}
 											</Badge>
 										</Table.Cell>
-										<Table.Cell class="pr-5 text-right">
+										<Table.Cell class="py-3 pr-5 text-right">
 											<div class="flex justify-end gap-1.5">
 												{#if canMedical && next === 'รอแพทย์'}
 													<Button
@@ -754,7 +856,9 @@
 													<Button
 														size="sm"
 														class="gap-1 bg-[#0A2647] text-white hover:bg-[#051930]"
-														href={resolve(`/onsite/zoning/${row._id}` as `/onsite/zoning/${string}`)}
+														href={resolve(
+															`/onsite/zoning/${row._id}` as `/onsite/zoning/${string}`
+														)}
 														onclick={(e) => e.stopPropagation()}
 													>
 														<MapPin class="size-3.5" />
@@ -780,20 +884,20 @@
 						</Table.Root>
 					</div>
 				{/if}
-			</Card.Root>
+			</div>
 
 			<!-- Tab 3: All Evacuees (ผู้ประสบภัยทั้งหมด) -->
 		{:else}
-			<Card.Root class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+			<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 				<div
-					class="flex flex-col gap-3 border-b border-border bg-slate-50/60 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+					class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 				>
 					<div class="flex flex-wrap items-center gap-3">
 						<div class="flex items-center gap-1.5 text-xs text-slate-600">
 							<span class="font-medium">สถานะ:</span>
 							<select
 								bind:value={allStatusFilter}
-								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-primary"
+								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 							>
 								<option value="all">ทุกสถานะ</option>
 								<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
@@ -813,10 +917,10 @@
 								<span class="font-medium">โซน:</span>
 								<select
 									bind:value={allZoneFilter}
-									class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-primary"
+									class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 								>
 									<option value="all">ทุกโซน</option>
-									{#each availableZones as z}
+									{#each availableZones as z (z)}
 										<option value={z}>โซน {z}</option>
 									{/each}
 								</select>
@@ -837,15 +941,28 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<Table.Root>
-							<Table.Header>
-								<Table.Row class="bg-muted/30">
-									<Table.Head class="pl-5">ชื่อ-นามสกุล</Table.Head>
-									<Table.Head>สถานะ</Table.Head>
-									<Table.Head>โซน</Table.Head>
-									<Table.Head>ครอบครัว</Table.Head>
-									<Table.Head>ความต้องการพิเศษ</Table.Head>
-									<Table.Head>อัปเดตล่าสุด</Table.Head>
-									<Table.Head class="pr-5">คิวถัดไป</Table.Head>
+							<Table.Header class="border-b border-slate-200/90 bg-slate-50">
+								<Table.Row class="border-b-0 hover:bg-transparent">
+									<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
+										>ชื่อ-นามสกุล</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>สถานะ</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">โซน</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ครอบครัว</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>ความต้องการพิเศษ</Table.Head
+									>
+									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+										>อัปเดตล่าสุด</Table.Head
+									>
+									<Table.Head class="h-11 pr-5 text-xs font-semibold text-slate-600"
+										>คิวถัดไป</Table.Head
+									>
 								</Table.Row>
 							</Table.Header>
 							<Table.Body>
@@ -859,25 +976,25 @@
 										class="cursor-pointer hover:bg-slate-50/80"
 										onclick={() => openRow(row)}
 									>
-										<Table.Cell class="pl-5 font-semibold text-slate-900">
+										<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
 											{formatPersonName(row)}
 										</Table.Cell>
-										<Table.Cell>
+										<Table.Cell class="px-3 py-3">
 											<StayStatusBadge status={row.current_stay?.status} size="sm" />
 										</Table.Cell>
-										<Table.Cell class="text-xs font-medium">
+										<Table.Cell class="px-3 py-3 text-xs font-medium">
 											{row.current_stay?.zone ? `โซน ${row.current_stay.zone}` : '—'}
 										</Table.Cell>
-										<Table.Cell class="text-xs text-slate-600">
+										<Table.Cell class="px-3 py-3 text-xs text-slate-600">
 											{hh?.label ?? '—'}
 										</Table.Cell>
-										<Table.Cell class="max-w-[12rem] truncate text-xs text-slate-600">
+										<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
 											{specialNeedsShort(row.special_needs)}
 										</Table.Cell>
-										<Table.Cell class="text-xs text-slate-500 tabular-nums">
+										<Table.Cell class="px-3 py-3 text-xs text-slate-500 tabular-nums">
 											{formatUpdated(row.updated_at)}
 										</Table.Cell>
-										<Table.Cell class="pr-5">
+										<Table.Cell class="py-3 pr-5">
 											<Badge variant="secondary" class="text-xs">
 												{next}
 											</Badge>
@@ -888,7 +1005,7 @@
 						</Table.Root>
 					</div>
 				{/if}
-			</Card.Root>
+			</div>
 		{/if}
 	</section>
 </div>
@@ -917,6 +1034,11 @@
 				<Sheet.Description class="sr-only">รายละเอียดผู้ประสบภัยและสถานะคิว</Sheet.Description>
 				<div class="mt-2 flex flex-wrap items-center gap-1.5">
 					<StayStatusBadge status={stayStatus} size="sm" />
+					<RegisteredViaBadge
+						via={selected.registered_via}
+						hasCardSnapshot={!!selected.card_snapshot}
+						size="sm"
+					/>
 					<Badge variant={nextQueueBadgeVariant(next)}>คิวถัดไป: {next}</Badge>
 					{#if enableMedical}
 						{#if screening}
@@ -1004,6 +1126,16 @@
 							<p class="font-mono text-sm font-medium">
 								{maskNationalId(selected.person_id?.number)}
 							</p>
+						</div>
+						<div class="col-span-2">
+							<p class="text-xs text-muted-foreground">ช่องทางลงทะเบียน</p>
+							<div class="mt-1">
+								<RegisteredViaBadge
+									via={selected.registered_via}
+									hasCardSnapshot={!!selected.card_snapshot}
+									size="sm"
+								/>
+							</div>
 						</div>
 						<div class="col-span-2">
 							<p class="text-xs text-muted-foreground">ครอบครัว</p>

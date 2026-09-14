@@ -160,8 +160,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		petSpeciesCustomLabel: 'ชนิดสัตว์',
 		petSpeciesCustomPlaceholder: 'เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์',
 		petExtraLabel: 'อาการ / สายพันธุ์ / ข้อมูลเพิ่มเติม',
-		petExtraPlaceholder:
-			'เช่น มีโรคประจำตัว, สายพันธุ์บางแก้ว, ทานอาหารเปียก, ต้องทานยาทุกเช้า',
+		petExtraPlaceholder: 'เช่น มีโรคประจำตัว, สายพันธุ์บางแก้ว, ทานอาหารเปียก, ต้องทานยาทุกเช้า',
 		petHasCage: 'มีกรง / สายจูง / ตะกร้า',
 		petPhotoLabel: 'รูปสัตว์เลี้ยง (ถ้ามี)',
 		petPhotoChange: 'เปลี่ยนภาพ',
@@ -332,7 +331,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		lastNameLabel: 'Last Name',
 		lastNamePlaceholder: 'e.g. Meesuk',
 		lastNamePlaceholderOptional: 'Leave blank if no family name',
-		mononymHint: 'If you have no family name, put the full name in First Name and leave Last Name blank.',
+		mononymHint:
+			'If you have no family name, put the full name in First Name and leave Last Name blank.',
 		nicknameLabel: 'Nickname',
 		nicknamePlaceholder: 'Nickname (optional)',
 		cardTypeLabel: 'ID document type',

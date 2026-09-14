@@ -106,20 +106,16 @@
 >
 	<!-- Identity row: photo + name / status / zone -->
 	<div class="flex min-w-0 items-start gap-3">
-		<EvacueePhoto
-			photoId={evacuee.photo}
-			alt={displayName}
-			size={isCompact ? 'md' : 'lg'}
-		/>
+		<EvacueePhoto photoId={evacuee.photo} alt={displayName} size={isCompact ? 'md' : 'lg'} />
 
 		<div class="min-w-0 flex-1 space-y-1.5">
-			<h2 class="break-words text-base font-bold text-slate-900 lg:text-lg">
+			<h2 class="text-base font-bold break-words text-slate-900 lg:text-lg">
 				{displayName}
 				{#if evacuee.nickname}
 					<span class="text-sm font-medium text-slate-500">({evacuee.nickname})</span>
 				{/if}
 			</h2>
-			<p class="break-all font-mono text-xs tracking-wider text-slate-500">
+			<p class="font-mono text-xs tracking-wider break-all text-slate-500">
 				{maskNationalId(evacuee.person_id?.number)}
 			</p>
 
@@ -196,7 +192,7 @@
 					aria-label="แก้ไขข้อมูลติดต่อฉุกเฉิน"
 					title="แก้ไขข้อมูลติดต่อฉุกเฉิน"
 					onclick={onOpenEmergencyEdit}
-					class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-amber-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-amber-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<Pencil class="size-3.5" />
 				</button>
@@ -210,7 +206,7 @@
 			{#if !readonly}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
-						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						การดำเนินการ
 						<ChevronDown class="size-4 opacity-80" />
@@ -222,9 +218,7 @@
 							<DropdownMenu.Item onSelect={() => onOpenStatusModal()}>
 								เปลี่ยนสถานะ
 								{#if statusInfo}
-									<span class="ml-auto text-xs text-muted-foreground"
-										>{statusInfo.shortLabel}</span
-									>
+									<span class="ml-auto text-xs text-muted-foreground">{statusInfo.shortLabel}</span>
 								{/if}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onSelect={() => onOpenQrModal()}>
@@ -269,7 +263,7 @@
 					type="button"
 					onclick={() =>
 						goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
-					class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<ExternalLink class="size-4 opacity-75" />
 					ดูข้อมูลเต็ม
@@ -283,14 +277,14 @@
 					<button
 						type="button"
 						onclick={onOpenZoneModal}
-						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						ย้ายโซน
 					</button>
 					<button
 						type="button"
 						onclick={() => onOpenActions?.()}
-						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						การดำเนินการ
 					</button>
@@ -299,7 +293,7 @@
 				<button
 					type="button"
 					onclick={() => onOpenActions?.()}
-					class="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					การดำเนินการ
 				</button>

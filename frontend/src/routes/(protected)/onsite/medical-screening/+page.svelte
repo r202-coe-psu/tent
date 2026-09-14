@@ -107,9 +107,7 @@
 			barcodeInput = '';
 			showCameraModal = false;
 			if (result.source === 'couch') {
-				toast.success(
-					`พบผู้ประสบภัย: ${result.evacuee.first_name} ${result.evacuee.last_name}`
-				);
+				toast.success(`พบผู้ประสบภัย: ${result.evacuee.first_name} ${result.evacuee.last_name}`);
 				openScreeningForm(result.evacuee._id);
 				return;
 			}

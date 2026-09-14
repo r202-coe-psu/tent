@@ -133,11 +133,7 @@
 	const isCondo = $derived(housing_type === 'condo');
 
 	const addressNoLabel = $derived(
-		isApartmentDorm
-			? t.addressNoApartmentLabel
-			: isCondo
-				? t.addressNoCondoLabel
-				: t.addressNoLabel
+		isApartmentDorm ? t.addressNoApartmentLabel : isCondo ? t.addressNoCondoLabel : t.addressNoLabel
 	);
 	const addressNoPlaceholder = $derived(
 		isApartmentDorm
@@ -359,7 +355,8 @@
 						onclick={clearLocation}
 						class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
 					>
-						<MapPinX class="size-3" /> {t.clearArea}
+						<MapPinX class="size-3" />
+						{t.clearArea}
 					</button>
 				{/if}
 				<Button
@@ -386,8 +383,7 @@
 			<div class="space-y-1.5">
 				<Label for="province" class="text-xs font-semibold text-foreground">
 					{t.provinceLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="province"
@@ -410,8 +406,7 @@
 			<div class="space-y-1.5">
 				<Label for="district" class="text-xs font-semibold text-foreground">
 					{t.districtLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="district"
@@ -434,8 +429,7 @@
 			<div class="space-y-1.5">
 				<Label for="subdistrict" class="text-xs font-semibold text-foreground">
 					{t.subdistrictLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="subdistrict"
@@ -458,8 +452,7 @@
 			<div class="space-y-1.5">
 				<Label for="postal_code" class="text-xs font-semibold text-foreground">
 					{t.postalCodeLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<Input
 					id="postal_code"

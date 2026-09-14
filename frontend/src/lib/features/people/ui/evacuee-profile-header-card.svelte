@@ -50,7 +50,7 @@
 				.getThumbnailUrl(photoId)
 				.then((url) => {
 					if (cancelled) {
-						if (url) URL.revokeObjectURL(url);
+						if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
 						return;
 					}
 					objectUrl = url;
@@ -62,7 +62,7 @@
 
 		return () => {
 			cancelled = true;
-			if (objectUrl) URL.revokeObjectURL(objectUrl);
+			if (objectUrl?.startsWith('blob:')) URL.revokeObjectURL(objectUrl);
 		};
 	});
 </script>

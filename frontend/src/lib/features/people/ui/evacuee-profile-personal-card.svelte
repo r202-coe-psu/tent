@@ -52,7 +52,7 @@
 		<div class="min-w-0 border-b border-border/50 pb-3 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">ชื่อ - นามสกุล</span>
 			<span
-				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 			>
 				{formatPersonName(evacuee)}
 			</span>
@@ -60,7 +60,7 @@
 		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">ชื่อเล่น</span>
 			<span
-				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 			>
 				{evacuee.nickname || 'ไม่ระบุ'}
 			</span>
@@ -68,7 +68,7 @@
 		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">เอกสารยืนยันตัวตน</span>
 			<span
-				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 			>
 				{documentLabels[evacuee.person_id?.cardType ?? 'national_id'] ?? 'เอกสารอื่นๆ'}
 			</span>
@@ -76,7 +76,7 @@
 		<div class="min-w-0 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">เลขที่เอกสาร</span>
 			<span
-				class="mt-0.5 block break-all font-mono text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block font-mono text-sm font-semibold break-all text-slate-800 dark:text-slate-200"
 			>
 				{evacuee.person_id?.cardType === 'anonymous'
 					? (evacuee.person_id.number ?? '—')
@@ -104,7 +104,7 @@
 		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">สัญชาติ</span>
 			<span
-				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 			>
 				{countryLabel(evacuee.country)}
 			</span>
@@ -126,7 +126,7 @@
 		<div class="min-w-0 border-t border-border/50 pt-3 sm:col-span-2">
 			<span class="block text-xs font-medium text-muted-foreground">เบอร์โทรศัพท์</span>
 			<span
-				class="mt-0.5 block break-words text-sm font-semibold text-slate-800 dark:text-slate-200"
+				class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 			>
 				{evacuee.phone || 'ไม่มีเบอร์ติดต่อ'}
 			</span>

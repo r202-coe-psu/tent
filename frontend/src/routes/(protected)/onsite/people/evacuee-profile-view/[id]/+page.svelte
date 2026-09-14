@@ -12,7 +12,7 @@
 	<title>ข้อมูลผู้พักพิง · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto min-w-0 w-full max-w-7xl space-y-6 p-4 md:p-6">
+<div class="mx-auto w-full max-w-7xl min-w-0 space-y-6 p-4 md:p-6">
 	<button
 		onclick={() => {
 			const from = page.url.searchParams.get('from');
@@ -25,7 +25,7 @@
 	</button>
 
 	<h1
-		class="min-w-0 break-words text-2xl font-bold tracking-tight text-slate-900 md:text-3xl dark:text-slate-50"
+		class="min-w-0 text-2xl font-bold tracking-tight break-words text-slate-900 md:text-3xl dark:text-slate-50"
 	>
 		ข้อมูลผู้พักพิง
 	</h1>
