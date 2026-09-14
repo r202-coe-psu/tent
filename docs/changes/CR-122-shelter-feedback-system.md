@@ -1,9 +1,10 @@
 ---
-id: draft
+id: CR-122
 title: ระบบประเมินความพึงพอใจศูนย์พักพิงและรับข้อความถึงเจ้าหน้าที่ (Shelter Feedback & Rubric Assessment)
-status: proposed
-date: 2026-09-12
+status: approved
+date: 2026-09-12 (approved 2026-09-15)
 requested_by: Field study / ผู้บริหารศูนย์พักพิง (ผ่าน Jk)
+decided_by: Project Owner (Jk)
 layer: volatile
 affects:
   - docs/data/schema.md (เพิ่ม type: feedback_session, feedback_response ใน shelter database)
@@ -79,3 +80,4 @@ affects:
   - เคาะ Back Office มี Dashboard สรุปคะแนน + รายการข้อความพร้อมสถานะ อ่านแล้ว/ยังไม่อ่าน + Export CSV
 - 2026-09-14 — ปรับปรุง Impact Analysis:
   - เพิ่มข้อกำหนด CouchDB Whitelist ใน `shelter-access-design.ts` และการ redeploy `_design/access` ป้องกัน HTTP 403
+- 2026-09-15 — Approved โดย Project Owner (Jk); กำหนดรหัสเป็น CR-122
