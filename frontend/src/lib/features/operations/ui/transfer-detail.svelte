@@ -192,7 +192,10 @@
 						<Table.Body>
 							{#each lines as line (line.key)}
 								<Table.Row>
-									<Table.Cell class="text-sm">{line.item.item_id}</Table.Cell>
+									<!-- Let long item ids wrap so both qty columns stay on screen at phone width -->
+									<Table.Cell class="text-sm break-all whitespace-normal">
+										{line.item.item_id}
+									</Table.Cell>
 									<Table.Cell class="text-right text-sm tabular-nums">
 										{line.item.qty}
 										{line.item.unit}
