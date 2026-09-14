@@ -96,5 +96,18 @@ services:
       - ./backend/apiapp:/app/backend/apiapp
     restart: unless-stopped
 
+  import-worker:
+    image: tent/frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      SHELTER_IMPORT_WORKER_URL: ${SHELTER_IMPORT_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["pnpm", "import-worker"]
+    restart: unless-stopped
+
 networks:
   default:
