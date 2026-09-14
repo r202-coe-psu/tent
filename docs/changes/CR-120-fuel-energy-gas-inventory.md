@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-120
 title: ย้ายการจัดการแก๊สและเชื้อเพลิงมายังคลังพัสดุ (Supply) + ปรับฟอร์ม FUEL_ENERGY (LPG) + บริหารจัดการถังจริงรายใบ (fuel_cylinder)
-status: proposed
+status: approved
 date: 2026-09-13
+updated: 2026-09-14
 requested_by: Team Leader
-decided_by: project owner 
+decided_by: Project Owner 
 layer: stable
 affects:
   - docs/data/schema.md §2.7.1 (ทดแทน gas_cylinder_type ด้วย fuel_cylinder — schema_v 1)
@@ -23,7 +24,7 @@ affects:
   - frontend/scripts/seed.ts
 ---
 
-# ย้ายการจัดการแก๊สและเชื้อเพลิงมายังคลังพัสดุ (Supply) + ปรับฟอร์ม FUEL_ENERGY (LPG) + บริหารจัดการถังจริงรายใบ (fuel_cylinder)
+# CR-120: ย้ายการจัดการแก๊สและเชื้อเพลิงมายังคลังพัสดุ (Supply) + ปรับฟอร์ม FUEL_ENERGY (LPG) + บริหารจัดการถังจริงรายใบ (fuel_cylinder)
 
 > [!NOTE]
 > **สรุป (TL;DR):** ย้ายการจัดการถังแก๊สจากโรงครัวมาคลังพัสดุ (Supply) ให้ตรงหน้าที่ตรวจรับ-ส่งเติมจริง · ปรับ `ItemMaster` หมวด `FUEL_ENERGY` ล็อคหน่วย "ถัง" และแสดงสเปกพลังงาน (`capacity_kg`, `burn_rate_kg_per_hour`, `time_multiplier`) · เพิ่ม Stable CouchDB Doc Type `fuel_cylinder` (schema_v 1) จัดการถังจริงรายใบผูกกับ Master · dev ต้อง build: Catalog LPG Form, ตารางพัสดุคลังแสดง `X ถัง (Y กก.)`, Modal จัดการถัง, ปรับ VDU Guard ใน `shelter-access-design.ts`, และเพิ่ม Seed Data
@@ -286,7 +287,7 @@ $$\text{remaining\_kg} = \sum_{e \in \text{gas\_ledger}} e\text{.qty\_kg (สำ
 - **2026-09-13 (Decision 3 - Document Type Clean Naming):** เลือกแนวทางสร้าง Document Type ใหม่ `fuel_cylinder` (schema_v 1) แทนการต่อเติมบน `gas_cylinder_type` เดิม เพื่อความสะอาดของชื่อเอกสารและสถาปัตยกรรมระยะยาว
 - **2026-09-13 (Decision 4 - Table UX & Dual Display):** รวมการบริหารจัดการถังแก๊สเข้าในหน้า "รายการพัสดุในคลัง" (Inventory Tab) ของคลังสินค้า โดยคอลัมน์ยอดคงเหลือแสดงทั้งจำนวนถังและน้ำหนักรวม `X ถัง (Y กก.)`
 - **2026-09-13 (Decision 5 - Role Transition):** หน้าที่การลงทะเบียนถัง เติมแก๊ส และตัดเศษ ย้ายให้ฝ่ายคลังสินค้า (Supply) ดูแล 100% ส่วนโรงครัวคงไว้เฉพาะการเลือกถังที่พร้อมใช้ตอนวางแผนอาหาร (Meal Plan)
-- **2026-09-13 (Decision 6 - Tracking Method):** บันทึกการเปลี่ยนแปลงเป็น Change Record ฉบับเต็มที่ [`docs/changes/draft-fuel-energy-gas-inventory.md`](draft-fuel-energy-gas-inventory.md)
+- **2026-09-13 (Decision 6 - Tracking Method):** บันทึกการเปลี่ยนแปลงเป็น Change Record ฉบับเต็มที่ [`docs/changes/CR-120-fuel-energy-gas-inventory.md`](CR-120-fuel-energy-gas-inventory.md)
 - **2026-09-13 (Decision 7 - Drop Migration & Clean Reset):** ตัดสคริปต์ Database Migration ออกทั้งหมดตามข้อตกลง Grill-me เนื่องจากระบบยังเป็น Pre-production ทำการแทนที่ schema และ cleanup code เก่าโดยตรง
 - **2026-09-13 (Decision 8 - Dedicated Gas Ledger Retained):** คง `gas_ledger` แยกจาก `stock_ledger` เนื่องจากถังแก๊สเป็น Reusable Container Asset และการเบิกใช้ในครัวคำนวณลดทอนเป็นกิโลกรัมต่อเนื่อง
 - **2026-09-13 (Decision 9 - Hybrid Supply UX):** เลือกใช้ UI รูปแบบไฮบริด โดยมีปุ่มคลี่แถว (Expandable Row) ในตารางหลักเพื่อดูสรุปเร็ว และปุ่มเปิด Dedicated Dialog จัดการถังแบบเต็มจอ

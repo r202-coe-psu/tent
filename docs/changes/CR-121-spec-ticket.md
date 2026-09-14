@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
-status: proposed
+status: approved
 date: 2026-09-12
-updated: 2026-09-13
+updated: 2026-09-14
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
-decided_by: <รออนุมัติจาก Project Owner>
+decided_by: Project Owner
 layer: stable
 supersedes:
   - CR-059 Flow 2 (NFI Distribution Control & Active Batch — ยกเลิกโมเดล 3 ชั้น distribution_request/batch/issue ยุบรวมเป็น requisition_ticket และ distribution_log)
@@ -14,11 +14,11 @@ extends:
   - CR-059 Flow 1 & 3 (สืบทอดฟิลด์ทะเบียนรถ/คนขับจาก Transfer และขั้นตอนเบิกวัตถุดิบครัว)
   - CR-110 (ยึดถือสถาปัตยกรรม Online-only Remote-First หน้างาน 100% ตามมติ PO — ไม่มี Local Queue/PouchDB)
   - CR-038 (ปฏิบัติตามมาตรฐาน Decimal qty_str ทั่วทั้งระบบ)
-  - draft-seed-item-categories (อ้างอิง 10 หมวดหมู่ระบบมาตรฐาน — จำแนกอาหารปรุงเสร็จเป็น category: 'item_category:ready_meal' คลาส CONSUMABLE)
+  - CR-119 (อ้างอิง 10 หมวดหมู่ระบบมาตรฐาน — จำแนกอาหารปรุงเสร็จเป็น category: 'item_category:ready_meal' คลาส CONSUMABLE)
 affects:
   - docs/data/schema.md §2.1 (`stock_ledger` reason ↔ ref_id mapping: ขยาย `receive`, `requisition`, `distribute`, `transfer_out` ตาม CR-055)
   - docs/data/schema.md §2 (DB shelter_{shelter_code} — Operations) — doc types ใหม่: `requisition_ticket`, `distribution_log`
-  - docs/data/schema.md §4.2 (Catalog & Master Data — item_master) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
+  - docs/data/schema.md §4.2 (Catalog & Master Data — item_master) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม CR-119-seed-item-categories.md
   - docs/data/schema.md §2.7 (`meal_service`) — ขยายฟิลด์ `yield_items` สำหรับ Batch Yield
   - docs/task-breakdown/03-operations.md
   - docs/task-breakdown/05-D-kitchen.md
@@ -35,7 +35,7 @@ affects:
   - frontend/src/routes/(protected)/onsite/scan-check-in-out/
 ---
 
-# CR-draft: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
+# CR-121: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 
 > [!NOTE]
 > **สรุป (TL;DR):**  
@@ -91,7 +91,7 @@ affects:
 | :------------------------ | :---------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------- |
 | **1. ตั๋วเบิกจ่ายคลัง**        | แยก `kitchen_requisition` และ `stock_transfer` คนละ doc type; ไม่มีตั๋วอาหารและสิ่งของแจก | รวมเป็น `type: 'requisition_ticket'` ตัวเดียว แยกประเภทด้วย `requisition_type`                                                            | Single Repository, คลังมีแดชบอร์ดศูนย์กลางตัวเดียว                             |
 | **2. หน้าจอเบิกจ่าย**        | มีเฉพาะหน้าเบิกครัว และหน้าโอนย้ายข้ามศูนย์                                                  | เพิ่ม Ticket Hub (`/back-office/tickets`) + 4 หน้าจอเฉพาะทางตามประเภทตั๋ว                                                                  | หน้าจอไม่ซับซ้อน ฟิลด์ตรงกับหน้าที่ของแต่ละฝ่าย                                     |
-| **3. อาหารปรุงสำเร็จ**       | จัดเป็น `CONSUMABLE` ปะปนกับของแห้งโดยไม่มีหมวดหมู่มาตรฐาน                                  | บันทึกเป็น `item_master` รายชนิดอาหารจริง ภายใต้หมวดหมู่ `item_category:ready_meal` (`READY_MEAL`) คลาส `CONSUMABLE` ตาม draft-seed-item-categories.md | คัดกรองไอเทมที่ต้องคุมอายุ 4 ชม. ด้วย `category_id` ของหมวดหมู่ระบบ                    |
+| **3. อาหารปรุงสำเร็จ**       | จัดเป็น `CONSUMABLE` ปะปนกับของแห้งโดยไม่มีหมวดหมู่มาตรฐาน                                  | บันทึกเป็น `item_master` รายชนิดอาหารจริง ภายใต้หมวดหมู่ `item_category:ready_meal` (`READY_MEAL`) คลาส `CONSUMABLE` ตาม CR-119-seed-item-categories.md | คัดกรองไอเทมที่ต้องคุมอายุ 4 ชม. ด้วย `category_id` ของหมวดหมู่ระบบ                    |
 | **4. ผลผลิตโรงครัว**        | บันทึกยอดรวม `actual_yield` เดี่ยว                                                      | เพิ่ม embedded array `yield_items` ใน `MealService`                                                                                     | 1 มื้อบันทึกผลผลิตได้หลายเมนูใน 1 Transaction                                  |
 | **5. บันทึกแจกจ่ายหน้างาน**   | มีเฉพาะ `meal_distribution` (CR-109) แยกของยืม                                        | รวมเป็น `type: 'distribution_log'` ตัวเดียว (`is_returnable: boolean`)                                                                   | Query ประวัติรายคนและด่าน Check-out จบในคำสั่งเดียว                            |
 | **6. วงจรการจัดของ WMS**   | ตัดสต็อกลอยตอนสร้างตั๋ว                                                                  | ควบคุม 7 ขั้นตอน (WMS Outbound ➔ POS Distribution ➔ Shift Close ➔ 100% Return)                                                           | มีจุดตรวจสอบ (Gate Checks) โปร่งใสสองทิศทาง                                 |
@@ -232,7 +232,7 @@ flowchart TD
 ## 3. รายละเอียดเชิงเทคนิคและสถาปัตยกรรมข้อมูล (Technical Specifications)
 
 ### 3.1 การกำหนด Master Data อาหารปรุงสำเร็จตามหมวดหมู่ระบบ (`catalog.ts`)
-**คง `TypeClass` เป็น 3 คลาสมาตรฐาน** (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม และจำแนกอาหารปรุงสำเร็จด้วยหมวดหมู่ระบบมาตรฐานตาม [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md):
+**คง `TypeClass` เป็น 3 คลาสมาตรฐาน** (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม และจำแนกอาหารปรุงสำเร็จด้วยหมวดหมู่ระบบมาตรฐานตาม [`docs/changes/CR-119-seed-item-categories.md`](CR-119-seed-item-categories.md):
 - **วัตถุดิบประกอบอาหาร (Food Ingredients):** จัดเก็บในหมวดหมู่ `item_category:food` (`system_key: 'FOOD'`, `default_class: 'CONSUMABLE'`) สำหรับเบิกเข้าครัว (`TKT-KITCHEN`)
 - **อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals):** จัดเก็บในหมวดหมู่ `item_category:ready_meal` (`system_key: 'READY_MEAL'`, `default_class: 'CONSUMABLE'`) สำหรับเบิกไปแจกจ่าย (`TKT-DIST-FOOD`)
 
@@ -528,7 +528,7 @@ export interface DistributionLog extends BaseDoc {
 export interface KitchenYieldItem {
   item_id: string; // ItemMaster ID ของอาหารปรุงเสร็จ
   menu_name: string; // ชื่อเมนูอาหาร (ตรงกับ ItemMaster.name)
-  category: 'item_category:ready_meal' | string; // หมวดหมู่อาหารปรุงเสร็จตาม draft-seed-item-categories.md
+  category: 'item_category:ready_meal' | string; // หมวดหมู่อาหารปรุงเสร็จตาม CR-119-seed-item-categories.md
   type_class: 'CONSUMABLE';
   actual_yield: string; // qty_str (CR-038)
   unit: string;
@@ -620,7 +620,7 @@ export interface MealService extends BaseDoc {
 - **AC-TKT-04.2:** สำหรับตั๋วประเภท `transfer` ระบบต้องบล็อกการกดปล่อยของหากยังไม่ได้ระบุ `driver_name` หรือ `license_plate`
 
 #### FR-TKT-05: การบันทึกอาหารปรุงสำเร็จเป็น ItemMaster รายชนิดอาหาร (Per-Dish ItemMaster) ในหมวดหมู่ READY_MEAL
-- **คำสั่ง:** เมื่อโรงครัวประกอบอาหารชนิดใดเสร็จ จะถูกบันทึกเป็น `item_master` ของอาหารชนิดนั้นโดยตรง โดยกำหนดให้เป็น `type_class: 'CONSUMABLE'` และจัดหมวดหมู่อยู่ภายใต้ `category: 'item_category:ready_meal'` (`system_key: 'READY_MEAL'`) ตามข้อกำหนดใน [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md)
+- **คำสั่ง:** เมื่อโรงครัวประกอบอาหารชนิดใดเสร็จ จะถูกบันทึกเป็น `item_master` ของอาหารชนิดนั้นโดยตรง โดยกำหนดให้เป็น `type_class: 'CONSUMABLE'` และจัดหมวดหมู่อยู่ภายใต้ `category: 'item_category:ready_meal'` (`system_key: 'READY_MEAL'`) ตามข้อกำหนดใน [`docs/changes/CR-119-seed-item-categories.md`](CR-119-seed-item-categories.md)
 - **AC-TKT-05.1:** เอกสาร `item_master` ของอาหารปรุงเสร็จแต่ละชนิดต้องจัดเก็บในฐานข้อมูล `catalog` โดยระบุ `name` เป็นชื่อเมนูอาหารจริง, `category: 'item_category:ready_meal'` และ `type_class: 'CONSUMABLE'` พร้อมระบุแท็กพิเศษ (เช่น dietary: `['HALAL']`, `['VEGAN']` หรือ age_group: `'ELDERLY'`) ได้
 - **AC-TKT-05.2:** ในหน้าบันทึกผลผลิตโรงครัว เจ้าหน้าที่สามารถเลือกเมนูอาหารเดิมที่มีอยู่แล้วใน Catalog หรือสร้าง `item_master` ใหม่สำหรับเมนูนั้นได้ทันที (On-the-fly ItemMaster Creation)
 - **AC-TKT-05.3:** การระบุและคัดกรองพัสดุที่ต้องควบคุมอายุ 4 ชั่วโมง (Food Safety Countdown) ให้ใช้เงื่อนไข `category === 'item_category:ready_meal'`
@@ -777,7 +777,7 @@ export interface MealService extends BaseDoc {
 
 ### 7.1 ผลกระทบต่อเอกสาร (Documentation Impact)
 - `docs/data/schema.md` §2: เพิ่มหัวข้อย่อยสำหรับ `requisition_ticket` (§2.22) และ `distribution_log` (§2.23)
-- `docs/data/schema.md` §4.2: รองรับการจัดเก็บอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
+- `docs/data/schema.md` §4.2: รองรับการจัดเก็บอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม CR-119-seed-item-categories.md
 - `docs/data/schema.md` §2.7: เพิ่มฟิลด์ `yield_items` ใน `meal_service`
 - `docs/task-breakdown/03-operations.md` และ `05-D-kitchen.md`: เพิ่ม Task ครอบคลุมทั้ง 4 Tracks
 
@@ -804,7 +804,7 @@ export interface MealService extends BaseDoc {
   - ระบบงานใหม่นับจากนี้จะเปิดตั๋วเป็น `requisition_ticket` (`requisition_type: 'kitchen'`) ทั้งหมด
 - **การรวม Codebase และ UI:**
   - รวม mock components และ endpoints ของ `meal_distribution` เข้าสู่ `$lib/features/distribution/` ภายใต้โมดูลแบบ DDD เดียวกัน
-- **Seed Master Data:** สคริปต์ `seed.ts` Seed หมวดหมู่ระบบ `item_category:ready_meal` ตาม `draft-seed-item-categories.md` โดยไม่จำเป็นต้อง Pre-seed รายการอาหารล่วงหน้า อาหารแต่ละชนิดจะถูกสร้างเป็น `item_master` เมื่อมีการปรุงจริงหรือลงทะเบียนเมนู
+- **Seed Master Data:** สคริปต์ `seed.ts` Seed หมวดหมู่ระบบ `item_category:ready_meal` ตาม `CR-119-seed-item-categories.md` โดยไม่จำเป็นต้อง Pre-seed รายการอาหารล่วงหน้า อาหารแต่ละชนิดจะถูกสร้างเป็น `item_master` เมื่อมีการปรุงจริงหรือลงทะเบียนเมนู
 
 ---
 
@@ -827,7 +827,7 @@ export interface MealService extends BaseDoc {
 
 ## 9. บันทึกการตัดสินใจ (Decision Log)
 
-- **2026-09-12 (Decision 1):** คง `TypeClass` เป็น 3 คลาสมาตรฐาน (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม โดยจำแนกอาหารปรุงเสร็จเป็น `category: 'item_category:ready_meal'` (`READY_MEAL`, `default_class: 'CONSUMABLE'`) และวัตถุดิบครัวเป็น `category: 'item_category:food'` (`FOOD`, `default_class: 'CONSUMABLE'`) ตามมติใน [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md) เพื่อรักษามาตรฐาน Data Model และความเรียบง่ายของ TypeClass
+- **2026-09-12 (Decision 1):** คง `TypeClass` เป็น 3 คลาสมาตรฐาน (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม โดยจำแนกอาหารปรุงเสร็จเป็น `category: 'item_category:ready_meal'` (`READY_MEAL`, `default_class: 'CONSUMABLE'`) และวัตถุดิบครัวเป็น `category: 'item_category:food'` (`FOOD`, `default_class: 'CONSUMABLE'`) ตามมติใน [`docs/changes/CR-119-seed-item-categories.md`](CR-119-seed-item-categories.md) เพื่อรักษามาตรฐาน Data Model และความเรียบง่ายของ TypeClass
 - **2026-09-12 (Decision 2):** การคัดกรองพัสดุที่ต้องควบคุมอายุ 4 ชม. ด้วย Soft Warning ให้ตรวจสอบจาก `item.category === 'item_category:ready_meal'` แทนการตรวจสอบจาก `type_class`
 - **2026-09-13 (Decision 3):** ยกเลิกโมเดล 5 Standard Meal Archetypes โดยเปลี่ยนเป็นบันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารจริงโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวผัดฮาลาล) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`default_class: 'CONSUMABLE'`) เพื่อให้ชื่ออาหารใน Master Data, ตั๋วเบิกจ่าย, และสต็อกการ์ดตรงกับความเป็นจริงหน้างาน
 - **2026-09-14 (Decision 4):** ปรับปรุงข้อกำหนดบัญชีคลัง `stock_ledger` ให้สอดคล้องกับ Invariant CR-055 โดยคง enum `receive` สำหรับการรับเข้าทุกประเภท (ผลผลิตครัว, ของแจกเหลือส่งคืน, ของยืมส่งคืน) และขยาย `REF_PREFIX_BY_REASON` ใน `operations.ts` ให้ `receive` รับ Prefix ได้หลายชนิด (`['meal_service:', 'requisition_ticket:', 'distribution_log:']`) พร้อมกำหนดให้ตั๋วเบิกจ่ายตัดสต็อกด้วย `requisition` (ครัว) และ `distribute` (แจกจ่าย) โดยผูก `ref_id` กับ `'requisition_ticket:'`

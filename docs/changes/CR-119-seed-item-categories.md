@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-119
 title: ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog
-status: proposed
+status: approved
 date: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-14
 requested_by: "Project Owner (ระบบบริหารจัดการสิ่งของบรรเทาทุกข์และโรงครัวกลาง)"
-decided_by: <รออนุมัติจาก Project Owner>
+decided_by: Project Owner
 layer: stable
 affects:
   - docs/data/schema.md §4.1 (`item_category` schema_v 1 → 2)
@@ -20,7 +20,7 @@ affects:
   - frontend/scripts/seed.ts
 ---
 
-# Draft CR: ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog
+# CR-119: ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog
 
 > **สรุป (TL;DR):**  
 > **เปลี่ยนอะไร:** กำหนด 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) พร้อมขยาย Schema `item_category` (`schema_v 1 → 2`) เพิ่มฟิลด์ `system_key`, `default_class`, `description`, `is_protected` · ล็อคห้ามลบเด็ดขาด 3 ชั้น (UI, Repository, CouchDB VDU) · เชื่อมโยง `item_master.category` เก็บ `category_id` พร้อม Auto-fill `type_class` อัตโนมัติ · บรรจุ Seed อัตโนมัติแบบ Idempotent ใน `sync-central-db.ts` และ `seed.ts`  
@@ -393,4 +393,4 @@ export async function syncSystemItemCategories(dryRun: boolean): Promise<{ creat
 - **2026-09-12 (Decision 3):** บังคับใช้การห้ามลบ 3 ชั้นอย่างเด็ดขาด (UI, Repository, CouchDB VDU) โดยห้ามแก้ `system_key`/`default_class` แต่ยอมให้ SA แก้ชื่อภาษาไทยและคำอธิบายได้
 - **2026-09-12 (Decision 4):** กำหนดให้ `item_master.category` จัดเก็บเป็น `category_id` (เช่น `"item_category:food"`) เพื่อการอ้างอิงที่แม่นยำ พร้อมระบบ Auto-fill `type_class` ตาม `default_class` ของหมวดหมู่
 - **2026-09-12 (Decision 5):** บรรจุกระบวนการ Seed ใน `scripts/sync-central-db.ts` (รันอัตโนมัติใน CI/CD) และ `scripts/seed.ts`
-- **2026-09-12 (Decision 6):** เปิดบันทึกการเปลี่ยนแปลงเป็น Draft Change Record ฉบับเต็มที่ [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md)
+- **2026-09-12 (Decision 6):** บันทึกการเปลี่ยนแปลงเป็น Change Record ฉบับเต็มที่ [`docs/changes/CR-119-seed-item-categories.md`](CR-119-seed-item-categories.md)
