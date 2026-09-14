@@ -6,11 +6,11 @@ date: 2026-09-12
 requested_by: Field study / ผู้บริหารศูนย์พักพิง (ผ่าน Jk)
 layer: volatile
 affects:
-  - docs/data/schema.md (เพิ่ม doc_type: feedback_session, feedback_response ใน shelter database)
+  - docs/data/schema.md (เพิ่ม type: feedback_session, feedback_response ใน shelter database)
   - docs/features/shelter-feedback-rubric-spec.md
-  - frontend/src/routes/(protected)/back-office/shelters/[code]/feedback
-  - frontend/src/routes/(public)/shelters/[code]/feedback/[sessionId]
-  - frontend/src/routes/api/public/v1/shelters/[code]/feedback
+  - frontend/src/routes/(protected)/back-office/feedback
+  - frontend/src/routes/(public)/shelters/[id]/feedback/[sessionId]
+  - frontend/src/routes/api/public/v1/shelters/[id]/feedback
 ---
 
 # ระบบประเมินความพึงพอใจศูนย์พักพิงและรับข้อความถึงเจ้าหน้าที่ (Shelter Feedback & Rubric Assessment)
@@ -22,31 +22,32 @@ affects:
 ## Single Source of Truth (SoT) & Requirements Contract
 - **เอกสารแม่บท (Single Source of Truth):** เอกสารข้อกำหนดความต้องการเชิงฟังก์ชัน (FR), ข้อกำหนดที่ไม่ใช่เชิงฟังก์ชัน (NFR), สเปกการเชื่อมต่อ API, เกณฑ์การตรวจรับ (Acceptance Criteria: AC) และ Definition of Done (DoD) ทั้งหมด ยึดถือ **[`docs/features/shelter-feedback-rubric-spec.md`](../features/shelter-feedback-rubric-spec.md)** เป็น **Single Source of Truth (SoT)** ฉบับสมบูรณ์
 - **หน้าที่ของ Change Record (CR ฉบับนี้):** ทำหน้าที่บันทึกการขออนุมัติและประเมินผลกระทบต่อระบบ (Change Management) ตามมาตรฐาน `docs/change-management.md` โดยสรุปสาระสำคัญตามสัญญา ดังนี้:
-  - **Back Office (FR-FB-01 – FR-FB-06):** สร้าง/ปิด Session, พิมพ์โปสเตอร์ A4 QR Code (`window.print()`), แดชบอร์ดสรุปคะแนนเฉลี่ย 4 มิติ, จัดการฟีดข้อความ (Unread/Read), และส่งออก CSV (UTF-8 with BOM)
-  - **Public Web Form (FR-FB-10 – FR-FB-13):** หน้าฟอร์มมือถือ Anonymous by default ไม่เก็บคุกกี้, ให้คะแนน 4 มิติ (Required) + ความคิดเห็นและข้อมูลติดต่อ (Optional), มี Rate limiting (5 reqs / 10 min / IP hash) และ Cooldown
-  - **เกณฑ์ตรวจรับ (AC-01 – AC-07 & DoD):** ทดสอบครบวงจรตามข้อกำหนด พร้อม Unit Tests สำหรับ Domain, Aggregation และ BFF API Endpoint
+  - **Back Office (FR-FB-01 – FR-FB-06):** สร้าง/ปิด Session, พิมพ์โปสเตอร์ A4 QR Code (`window.print()`), แดชบอร์ดสรุปคะแนนเฉลี่ย 4 มิติ, จัดการฟีดข้อความ (Unread/Read), และส่งออก CSV (UTF-8 with BOM) ผ่านหน้า `(protected)/back-office/feedback` (อ้างอิง active shelter จาก `shelterStore`)
+  - **Public Web Form (FR-FB-10 – FR-FB-13):** หน้าฟอร์มมือถือ Anonymous by default ไม่เก็บคุกกี้, ให้คะแนน 4 มิติ (Required) + ความคิดเห็นและข้อมูลติดต่อ (Optional), มี Rate limiting (5 reqs / 10 min / IP hash ผ่าน `RateLimiter`) และ Cooldown
+  - **เกณฑ์ตรวจรับ (AC-01 – AC-08 & DoD):** ทดสอบครบวงจรตามข้อกำหนด พร้อม Unit Tests สำหรับ Domain, Aggregation, Anti-abuse, และ BFF API Endpoints
 
 ## Change
 - **Before:** ไม่มีระบบรับฟังความคิดเห็นหรือประเมินความพึงพอใจแบบดิจิทัลในศูนย์พักพิง หากมีการประเมินต้องใช้แบบสอบถามกระดาษ
 - **After:**
-  - เพิ่ม `doc_type: "feedback_session"` เพื่อให้ Back Office เปิดรอบการประเมินพร้อม Snapshot ของเกณฑ์ Rubric (`rubric_v1`)
-  - สร้างระบบพิมพ์โปสเตอร์ A4 QR Code คมชัดสูง ชี้ไปที่ URL เฉพาะของรอบประเมินนั้นๆ (`/shelters/[code]/feedback/[sessionId]`)
+  - เพิ่ม `type: "feedback_session"` เพื่อให้ Back Office เปิดรอบการประเมินพร้อม Snapshot ของเกณฑ์ Rubric (`rubric_v1`)
+  - สร้างระบบพิมพ์โปสเตอร์ A4 QR Code คมชัดสูง ชี้ไปที่ URL เฉพาะของรอบประเมินนั้นๆ (`/shelters/[id]/feedback/[sessionId]`)
   - พัฒนาหน้า Public Mobile Form (Anonymous by default) สำหรับให้คะแนน 4 มิติ (ความสะอาด, อาหารน้ำดื่ม, ความปลอดภัย, การดูแลของเจ้าหน้าที่) + ช่องข้อความ + ช่องข้อมูลติดต่อ optional
-  - พัฒนา SvelteKit BFF Endpoint สำหรับบันทึกข้อมูลอย่างปลอดภัย (Rate limit, Anti-spam, Zod validate) ลงใน CouchDB ประจำศูนย์ (`shelter_<code >`)
-  - เพิ่มแดชบอร์ดสรุปสถิติคะแนนเฉลี่ย, ฟีดข้อความพร้อมสถานะ "ยังไม่อ่าน / อ่านแล้ว", และฟังก์ชันส่งออก CSV
+  - พัฒนา SvelteKit BFF Endpoints สำหรับดึงข้อมูล Session และบันทึกข้อมูลอย่างปลอดภัย (Rate limit ด้วย `RateLimiter`, Anti-spam, Zod validate) ลงใน CouchDB ประจำศูนย์ (`shelter_{shelter_code}`)
+  - เพิ่มแดชบอร์ดสรุปสถิติคะแนนเฉลี่ย, ฟีดข้อความพร้อมสถานะ "ยังไม่อ่าน / อ่านแล้ว", และฟังก์ชันส่งออก CSV ในโมดูล Back Office (`/back-office/feedback`)
 
 ## Impact
-- **Database Schema:** เพิ่ม doc types ใหม่ 2 ตัวใน CouchDB `shelter_<code >` (Additive, ไม่กระทบเอกสารเดิม):
-  - `feedback_session` (schema_v: 1, `_id: "feedback_session:{ulid}"`)
-  - `feedback_response` (schema_v: 1, `_id: "feedback_response:{ulid}"`)
+- **Database Schema:** เพิ่ม doc types ใหม่ 2 ตัวใน CouchDB `shelter_{shelter_code}` (Additive, ไม่กระทบเอกสารเดิม):
+  - `feedback_session` (schema_v: 1, `_id: "feedback_session:{ulid}"`, `type: "feedback_session"`)
+  - `feedback_response` (schema_v: 1, `_id: "feedback_response:{ulid}"`, `type: "feedback_response"`)
 - **Frontend Paths:**
-  - `frontend/src/routes/(protected)/back-office/shelters/[code]/feedback/+page.svelte`
-  - `frontend/src/routes/(public)/shelters/[code]/feedback/[sessionId]/+page.svelte`
-  - `frontend/src/routes/api/public/v1/shelters/[code]/feedback/+server.ts`
+  - `frontend/src/routes/(protected)/back-office/feedback/+page.svelte` (เชื่อมต่อกับ active shelter ผ่าน `shelterStore`)
+  - `frontend/src/routes/(public)/shelters/[id]/feedback/[sessionId]/+page.svelte`
+  - `frontend/src/routes/api/public/v1/shelters/[id]/feedback/+server.ts`
+  - `frontend/src/routes/api/public/v1/shelters/[id]/feedback/[sessionId]/+server.ts`
   - `frontend/src/lib/features/shelter-feedback/` (domain, UI components, tests)
 - **Security & Privacy:**
   - ข้อมูลเป็น Anonymous by default ไม่เก็บ Cookie ติดตามตัวตน
-  - Rate limiting ป้องกันสแปมที่ BFF (5 reqs / 10 min / IP hash)
+  - Rate limiting ป้องกันสแปมที่ BFF (5 reqs / 10 min / IP hash โดยใช้ `RateLimiter` ที่มีอยู่แล้วใน codebase)
   - Role-Based Access Control (RBAC): สิทธิ์จัดการสงวนไว้เฉพาะ `system_admin` (SA), `shelter_manager` (SM), และ `registration_staff` (RS)
 
 ## Migration
