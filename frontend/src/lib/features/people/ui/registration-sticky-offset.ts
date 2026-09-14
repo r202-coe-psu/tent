@@ -20,9 +20,6 @@ function parseCssLengthPx(raw: string, rootFontPx: number): number | null {
 
 export function readRegistrationStickyTopPx(el: Element): number {
 	const style = getComputedStyle(el);
-	const rootFont =
-		Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-	return (
-		parseCssLengthPx(style.getPropertyValue('--registration-sticky-top'), rootFont) ?? 64
-	);
+	const rootFont = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+	return parseCssLengthPx(style.getPropertyValue('--registration-sticky-top'), rootFont) ?? 64;
 }

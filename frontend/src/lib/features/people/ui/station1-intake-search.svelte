@@ -39,8 +39,7 @@
 		hasFederatedIntakeHits,
 		isIntakeNewRegistrationLocked,
 		resolveNewRegistrationCta,
-		resolveShelterHitAction,
-		shelterHitStatusLabel
+		resolveShelterHitAction
 	} from '../domain/intake-search';
 	import { formatPersonName, maskNationalId } from '../domain/people';
 	import StayStatusBadge from './stay-status-badge.svelte';
@@ -225,7 +224,6 @@
 					<ul class="space-y-2.5">
 						{#each localHits as evacuee (evacuee._id)}
 							{@const action = resolveShelterHitAction(evacuee.current_stay.status)}
-							{@const statusLabel = shelterHitStatusLabel(evacuee.current_stay.status)}
 							<li
 								class="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between"
 							>
@@ -237,7 +235,9 @@
 										<span class="text-xs">สถานะ:</span>
 										<StayStatusBadge status={evacuee.current_stay.status} size="sm" />
 										{#if evacuee.current_stay.zone}
-											<span class="text-xs text-muted-foreground">· โซน {evacuee.current_stay.zone}</span>
+											<span class="text-xs text-muted-foreground"
+												>· โซน {evacuee.current_stay.zone}</span
+											>
 										{/if}
 										{#if evacuee.person_id?.number}
 											<span class="text-xs text-muted-foreground">

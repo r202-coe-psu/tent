@@ -24,7 +24,7 @@
 			<!-- Connecting Background Track Lines -->
 			<div class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 bg-slate-300 sm:top-6"></div>
 			<!-- Active Progress Line (Filled up to Step 2) -->
-			<div class="absolute top-5 left-10 h-1 w-1/2 -translate-y-1/2 bg-blue-600 sm:top-6"></div>
+			<div class="absolute top-5 right-1/2 left-10 h-1 -translate-y-1/2 bg-blue-600 sm:top-6"></div>
 
 			<!-- Step 1: Completed -->
 			<div class="relative z-10 flex flex-col items-center">

@@ -193,8 +193,7 @@
 					{t.unassignedNextStepsTitle}
 				</p>
 				<p class="mt-1 text-muted-foreground">
-					{t.unassignedNextStepsBody}
-					{' '}(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
+					{t.unassignedNextStepsBody} (รหัสอ้างอิง: <strong>{ticket.code}</strong>)
 				</p>
 			</div>
 		{/if}

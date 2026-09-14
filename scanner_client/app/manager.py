@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import shutil
 import urllib.parse
 from typing import Any, Dict, Optional, Tuple
 
@@ -21,12 +23,13 @@ class ScannerClientManager:
         self.device_id = config.get("DEVICE_ID", "SCAN-01")
         self.device_secret = config.get("DEVICE_SECRET", "")
         self.browser_type = config.get("BROWSER", "chromium").lower()
-        self.executable_path = config.get("BROWSER_EXECUTABLE_PATH") or None
+        self.executable_path = self._resolve_executable_path(config.get("BROWSER_EXECUTABLE_PATH"))
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.is_headless = str(config.get("HEADLESS", "false")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.window_width = int(config.get("WINDOW_WIDTH", "540"))
         self.window_height = int(config.get("WINDOW_HEIGHT", "960"))
+        self.device_scale_factor = str(config.get("DEVICE_SCALE_FACTOR") or config.get("SCALE_FACTOR") or config.get("ZOOM") or "").strip() or None
 
         # Kiosk Routes on Tent Server
         self.waiting_url = f"{self.tent_base_url}/kiosk/scanner/waiting"
@@ -39,6 +42,30 @@ class ScannerClientManager:
         self.page: Optional[Page] = None
         self.context: Optional[BrowserContext] = None
         self.running = True
+
+    def _resolve_executable_path(self, raw_path: Optional[str]) -> Optional[str]:
+        """Validate or auto-detect working browser executable path"""
+        if raw_path and os.path.exists(raw_path):
+            return raw_path
+
+        if raw_path:
+            logger.warning(f"⚠️  Specified BROWSER_EXECUTABLE_PATH not found: {raw_path}")
+
+        # Auto-detect common Linux Chromium paths
+        candidates = [
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            shutil.which("chromium"),
+            shutil.which("chromium-browser"),
+            "/snap/bin/chromium",
+        ]
+        for candidate in candidates:
+            if candidate and os.path.exists(candidate):
+                logger.info(f"🌐 Auto-detected system browser executable at: {candidate}")
+                return candidate
+
+        logger.info("ℹ️  No system Chromium binary detected. Falling back to Playwright bundled browser.")
+        return None
 
     async def init_reader(self) -> bool:
         """Attempt to initialize the Smart Card Reader driver"""
@@ -92,10 +119,21 @@ class ScannerClientManager:
             return
 
         logger.info(f"Navigating Kiosk display to: {self.waiting_url}")
-        try:
-            await self.page.goto(self.waiting_url)
-        except Exception as e:
-            logger.warning(f"Initial navigation warning: {e}")
+        # Startup connection retry loop in case network or server is still booting up
+        connected = False
+        retry_count = 0
+        while not connected and self.running:
+            if self.page.is_closed():
+                logger.info("Browser window closed during initial navigation.")
+                return
+            try:
+                await self.page.goto(self.waiting_url, timeout=10000)
+                connected = True
+                logger.info(f"Successfully loaded Kiosk display: {self.waiting_url}")
+            except Exception as e:
+                retry_count += 1
+                logger.warning(f"Waiting for Tent server at {self.waiting_url} (attempt {retry_count}): {e}. Retrying in 3s...")
+                await asyncio.sleep(3.0)
 
         await self.init_reader()
 
@@ -132,11 +170,11 @@ class ScannerClientManager:
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
                     elif status is not None:
-                        # 4b. Show Yellow Warning screen for all 409 notices (already active, pre_registered, leave, stayed, etc.)
+                        # 4b. Show Yellow Warning screen for existing records / notices (e.g. repeat scans, checked out, temporary leave)
                         encoded_msg = urllib.parse.quote(msg)
-                        await self.page.goto(f"{self.remove_card_url}?type=warning&message={encoded_msg}")
+                        await self.page.goto(f"{self.remove_card_url}?type=warning&status={status}&message={encoded_msg}")
                     else:
-                        # 4c. Show Red Error screen for HTTP 500 / server network failures
+                        # 4d. Show Red Error screen for HTTP 500 / server network failures
                         error_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.error_url}?error_msg={error_msg}")
 
@@ -159,20 +197,47 @@ class ScannerClientManager:
                 await asyncio.sleep(1.0)
 
     def _build_browser_args(self) -> list:
-        args = [
+        # Standard kiosk arguments optimized for Linux / Raspberry Pi OS (Labwc, Wayfire, X11)
+        base_args = [
             "--disable-infobars",
             "--disable-session-crashed-bubble",
-            "--disable-features=Translate",
+            "--disable-features=Translate,OverscrollHistoryNavigation",
             "--no-first-run",
-            f"--window-size={self.window_width},{self.window_height}",
+            "--noerrdialogs",
+            "--disable-pinch",
+            "--overscroll-history-navigation=0",
+            "--check-for-update-interval=31536000",
+            "--ozone-platform-hint=auto",   # Essential for Wayland (Labwc / Wayfire) on Raspberry Pi OS
+            "--disable-dev-shm-usage",     # Prevent shared memory crashes on Raspberry Pi ARM64
+            "--no-sandbox",                # Prevent sandbox privilege crashes in kiosk environments
+            "--touch-events=enabled",      # Enable touch screen event support
         ]
+
+        if self.device_scale_factor:
+            base_args.extend([
+                "--high-dpi-support=1",
+                f"--force-device-scale-factor={self.device_scale_factor}",
+            ])
+            logger.info(f"🔍 Applying browser scale factor: {self.device_scale_factor}")
+
         if not self.is_debug:
-            args.extend(["--kiosk", "--start-fullscreen"])
+            # Fullscreen Kiosk Mode (match ghosa: kiosk + start-maximized without conflicting start-fullscreen)
+            args = base_args + [
+                "--kiosk",
+                "--start-maximized",
+            ]
+        else:
+            # Windowed Debug Mode (e.g. for desktop development)
+            args = base_args + [
+                f"--window-size={self.window_width},{self.window_height}",
+                "--start-maximized",
+            ]
         return args
 
     async def run(self):
         """Launch Playwright browser context and start card reader loop"""
-        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Portrait: {self.window_width}x{self.window_height})...")
+        mode_str = f"Windowed ({self.window_width}x{self.window_height})" if self.is_debug else "Fullscreen Kiosk"
+        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Mode: {mode_str})...")
         args = self._build_browser_args()
 
         async with async_playwright() as p:
@@ -192,6 +257,12 @@ class ScannerClientManager:
 
             self.context = context
             self.page = context.pages[0] if context.pages else await context.new_page()
+
+            # Attach event listeners to catch crashes or closures
+            context.on("close", lambda: logger.warning("Browser context closed."))
+            self.page.on("crash", lambda p: logger.error("💥 Browser page crashed!"))
+            self.page.on("pageerror", lambda err: logger.error(f"💥 Browser runtime error: {err}"))
+            self.page.on("close", lambda p: logger.info("Browser page was closed."))
 
             try:
                 await self.card_reading_loop()

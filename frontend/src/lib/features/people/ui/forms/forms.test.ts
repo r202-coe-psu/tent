@@ -327,7 +327,9 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 		it('renders pet photo change and remove buttons when image_url exists', () => {
 			const result = render(PetAssetVehicleFields, {
 				props: {
-					pets: [{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }]
+					pets: [
+						{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }
+					]
 				}
 			});
 			expect(result.body).toContain('รูปสัตว์เลี้ยง');
