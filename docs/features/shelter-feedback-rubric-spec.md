@@ -1,7 +1,7 @@
 # Feature Specification: Shelter Feedback & Rubric Assessment System
 
 > **BLUF (สรุปภาพรวม):**  
-> เพิ่มระบบประเมินความพึงพอใจศูนย์พักพิงและส่งข้อความถึงเจ้าหน้าที่ประจำศูนย์ผ่านการสแกน QR Code (One QR per Session) · เพื่อให้ผู้ประสบภัยสะท้อนปัญหา/ความต้องการได้สะดวกรวดเร็ว และเจ้าหน้าที่ศูนย์ติดตามประเมินผลได้ทันท่วงที · ทีม dev ต้องพัฒนาฟังก์ชันสร้าง Session + พิมพ์โปสเตอร์ A4 QR Code ใน Back Office (`/back-office/feedback`), หน้า Public Form สำหรับมือถือ (Anonymous by default, `/shelters/[id]/feedback/[sessionId]`), BFF endpoints สำหรับดึงและบันทึกข้อมูล (`/api/public/v1/shelters/[id]/feedback`), และแดชบอร์ดสรุปผลพร้อมระบบจัดการข้อความ · กระทบ CouchDB schema เพิ่ม `type: "feedback_session"` และ `type: "feedback_response"` ในฐานข้อมูลรายศูนย์ (`shelter_{shelter_code}`).
+> เพิ่มระบบประเมินความพึงพอใจศูนย์พักพิงและส่งข้อความถึงเจ้าหน้าที่ประจำศูนย์ผ่านการสแกน QR Code (One QR per Session) · เพื่อให้ผู้ประสบภัยสะท้อนปัญหา/ความต้องการได้สะดวกรวดเร็ว และเจ้าหน้าที่ศูนย์ติดตามประเมินผลได้ทันท่วงที · ทีม dev ต้องพัฒนาฟังก์ชันสร้าง Session + พิมพ์โปสเตอร์ A4 QR Code ใน Back Office (`/back-office/feedback`), หน้า Public Form สำหรับมือถือ (Anonymous by default, `/shelters/[id]/feedback/[sessionId]`), BFF endpoints สำหรับดึงและบันทึกข้อมูล (`/api/public/v1/shelters/[id]/feedback`), และแดชบอร์ดสรุปผลพร้อมระบบจัดการข้อความ · กระทบ CouchDB schema เพิ่ม `type: "feedback_session"` และ `type: "feedback_response"` ในฐานข้อมูลรายศูนย์ (`shelter_{shelter_code}`), ต้องเพิ่ม doc types ใน whitelist ของ `buildValidateDocUpdate()` (`frontend/src/lib/server/shelter-access-design.ts`), และ redeploy `_design/access` บนฐานข้อมูลศูนย์.
 
 ---
 
@@ -234,6 +234,42 @@ export interface FeedbackResponseDoc {
      }
      ```
 
+### 4.6 การควบคุมความถูกต้องและการอนุญาตบันทึกใน CouchDB (CouchDB Whitelist & `_design/access`)
+
+เพื่อรักษาความมั่นคงปลอดภัยและความถูกต้องของข้อมูลตามสถาปัตยกรรม Remote-First ฐานข้อมูลรายศูนย์ (`shelter_{shelter_code}`) ทุกแห่งจะมี `_design/access` ทำหน้าที่รันฟังก์ชัน `validate_doc_update` เพื่อตรวจสอบความถูกต้องของเอกสารก่อนยินยอมให้บันทึก:
+
+1. **การเพิ่ม Allowed Types ใน `shelter-access-design.ts`:**
+   - ในฟังก์ชัน `buildValidateDocUpdate()` ที่ไฟล์ [`frontend/src/lib/server/shelter-access-design.ts`](../../frontend/src/lib/server/shelter-access-design.ts) จะต้องเพิ่ม `"feedback_session"` และ `"feedback_response"` เข้าไปในรายการอาร์เรย์ `allowed` types:
+     ```typescript
+     var allowed = [
+       'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
+       'people_import_log',
+       'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
+       'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
+       'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+       'item_category', 'item_master', 'recipe',
+       'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
+       'distribution_request', 'distribution_batch', 'stock_lot_reservation',
+       'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
+       'daily_sop_assessment',
+       'feedback_session', 'feedback_response' // CR: Shelter Feedback System
+     ];
+     ```
+2. **ผลกระทบสำคัญและสาเหตุที่ต้องระบุในแผน (Critical Impact):**
+   - หากไม่มีการเพิ่ม doc types ดังกล่าวในรายการ `allowed` types ฟังก์ชัน `validate_doc_update` จะปฏิเสธการบันทึกด้วยการ throw:
+     ```javascript
+     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
+     ```
+     ส่งผลให้ CouchDB ตอบกลับด้วย **HTTP 403 Forbidden** ทันทีเมื่อมีการบันทึกผ่านเซสชันของเจ้าหน้าที่ทั่วไป (Non-admin) หรือการเขียนผ่าน Public write proxy
+3. **การ Redeploy Design Document (`_design/access`):**
+   - สำหรับฐานข้อมูลศูนย์เดิม (`shelter_*`) ที่มีอยู่ในระบบแล้ว จะต้องสั่งรันสคริปต์ redeploy design doc:
+     ```bash
+     pnpm redeploy:access --write --confirm
+     ```
+   - สำหรับศูนย์ใหม่ที่ถูกสร้างขึ้น (Provisioning ผ่าน `POST /api/back-office/shelter`) หรือการ Seed (`pnpm seed`) จะได้รับ design doc ฉบับล่าสุดที่มี whitelist นี้โดยอัตโนมัติ
+4. **ชุดทดสอบเพื่อป้องกัน Regression:**
+   - ต้องเพิ่ม Test cases ใน [`frontend/src/lib/server/shelter-access-design.test.ts`](../../frontend/src/lib/server/shelter-access-design.test.ts) ยืนยันว่าเอกสาร `feedback_session` และ `feedback_response` ที่มีโครงสร้างตาม `BaseDoc` envelope สามารถผ่าน `validate_doc_update` ได้สำเร็จโดยไม่ติด HTTP 403
+
 ---
 
 ## 5. ฟังก์ชันการทำงานและข้อกำหนดทางเทคนิค (Functional Requirements)
@@ -321,6 +357,10 @@ export interface FeedbackResponseDoc {
 - **NFR-FB-04 [Mobile Responsiveness & Offline Graceful Degradation]:**
   - หน้า Public Form มีขนาด Payload รวมไม่เกิน 150 KB
   - หากสัญญาณอินเทอร์เน็ตขาดหายขณะกดส่ง ระบบต้องแจ้งเตือนข้อผิดพลาดชัดเจน และเก็บข้อมูลที่กรอกค้างไว้ในฟอร์ม ไม่ล้างข้อมูลทิ้ง
+- **NFR-FB-05 [CouchDB Write Guard & Whitelist Enforcement]:**
+  - เอกสาร `feedback_session` และ `feedback_response` ต้องผ่านการตรวจสอบความถูกต้องโดยฟังก์ชัน `validate_doc_update` ใน `_design/access` ของ CouchDB ประจำศูนย์
+  - ฝั่งเซิร์ฟเวอร์ต้องคงความปลอดภัยด้วยการไม่อนุญาตให้แก้ไขข้ามศูนย์ (`newDoc.shelter_code === '${code}'`) และต้องมี `BaseDoc` envelope ครบถ้วน
+  - Whitelist ใน `shelter-access-design.ts` ต้องรวมทั้ง 2 doc types และต้อง deploy `_design/access` บน CouchDB รายศูนย์ มิฉะนั้นการเขียนเอกสารจะถูกบล็อกด้วย HTTP 403
 
 ---
 
@@ -488,10 +528,13 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
 ### 8.2 Definition of Done (DoD)
 
 - [ ] เขียนโค้ดตามสถาปัตยกรรม Remote-First CouchDB และ DDD ตาม `CONVENTIONS.md`
+- [ ] เพิ่ม `feedback_session` และ `feedback_response` ใน `allowed` types ของ `buildValidateDocUpdate()` ใน `frontend/src/lib/server/shelter-access-design.ts`
+- [ ] มี Unit Tests สำหรับ CouchDB write validation ใน `frontend/src/lib/server/shelter-access-design.test.ts`
 - [ ] มี Unit Tests สำหรับ Domain Logic, Overall Score Calculation (§4.4), และ Score Aggregation
 - [ ] มี Unit Tests สำหรับ SvelteKit BFF Endpoints:
   - `GET /api/public/v1/shelters/[id]/feedback/[sessionId]` (Happy path, session closed, session not found)
   - `POST /api/public/v1/shelters/[id]/feedback` (Happy path, validation error, session closed, rate limit HTTP 429)
+- [ ] ดำเนินการ redeploy `_design/access` บนฐานข้อมูลรายศูนย์ (`pnpm redeploy:access --write --confirm`)
 - [ ] ผ่าน `pnpm check` (Type-check 0 errors)
 - [ ] ผ่าน `pnpm lint` และ `pnpm format`
 - [ ] ตรวจสอบความปลอดภัยตามแนวทาง OWASP (Sanitize text inputs, prevent XSS, rate-limit ผ่าน `RateLimiter`)
