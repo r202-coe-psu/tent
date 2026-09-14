@@ -32,7 +32,6 @@ const rowSchema = z.object({
 
 const bodySchema = z.object({
 	filename: z.string().trim().min(1).max(255),
-	imported_by: z.string().trim().min(1).max(200),
 	duplicate_action: z.enum(['skip', 'update']),
 	rows: z.array(rowSchema).min(1).max(MAX_IMPORT_ROWS)
 });
@@ -85,7 +84,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		const job = await createImportJob({
 			filename: body.filename,
-			importedBy: caller || body.imported_by,
+			importedBy: caller,
 			duplicateAction: body.duplicate_action,
 			rows
 		});

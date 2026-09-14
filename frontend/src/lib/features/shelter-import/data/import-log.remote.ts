@@ -19,6 +19,9 @@ function repo() {
 }
 
 export async function writeImportLog(doc: ShelterImportLog): Promise<ShelterImportLog> {
+	if (doc._rev) {
+		throw new Error('shelter_import_log is append-only and cannot be updated');
+	}
 	const saved = await repo().put(doc);
 	// Nudge the writer's own UI immediately (registry changes feed covers others).
 	emitDataChange(IMPORT_LOG_REGISTRY_DB, SHELTER_IMPORT_LOG_TYPE, doc._id);
