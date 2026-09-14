@@ -275,9 +275,10 @@ export interface FeedbackResponseDoc {
 
 ### 5.2 ระบบฝั่งผู้ประสบภัย (Public Mobile Web Form)
 
-- **FR-FB-10 [Public Access via URL]:**
+- **FR-FB-10 [Public Access via URL & Session ID Normalization]:**
   - เส้นทาง URL: `/shelters/[id]/feedback/[sessionId]` (ใช้พารามิเตอร์ `[id]` สอดคล้องกับ Public Routes เดิม เพื่อป้องกัน Route Parameter Collision ใน SvelteKit)
   - รองรับการเปิดผ่าน Mobile Browser ทุกค่าย (Chrome, Safari, LINE In-App Browser) โดยไม่ต้องล็อกอิน
+  - **Session ID Normalization:** ทั้งใน Page Load (`+page.ts` / `+page.server.ts`) ของหน้าสาธารณะและใน BFF ต้องรองรับทั้งรูปแบบรหัส ULID เปล่า (`01JABCD...`) และรูปแบบที่มี Prefix (`feedback_session:01JABCD...`) โดยทำการ Normalize อัตโนมัติ (เติม prefix หากไม่มี) เพื่อความยืดหยุ่นในกรณีที่ QR Code หรือ Short Link ถูกตัดทอน Prefix ออก
 - **FR-FB-11 [Form Layout & UX — Civic Light Design System]:**
   - ออกแบบตาม **Civic Light Design System** (โทนสีสว่าง สะอาด ฟอนต์ `IBM Plex Sans Thai` สบายตา เข้าถึงได้ง่าย)
   - หัวกระดาษแสดงชื่อศูนย์พักพิงและชื่อรอบประเมิน
@@ -326,7 +327,10 @@ Endpoint บน SvelteKit BFF สำหรับโหลดข้อมูล S
 
 - **Path Parameters:**
   - `id`: string — รหัสประจำศูนย์พักพิง (Shelter ID / Code เช่น `SH001`)
-  - `sessionId`: string — รหัสรอบการประเมิน (เช่น `feedback_session:01JABCD...` หรือ ULID)
+  - `sessionId`: string — รหัสรอบการประเมิน (รองรับทั้งรูปแบบรหัส ULID เปล่า เช่น `01JABCD...` และรูปแบบที่มี Prefix เช่น `feedback_session:01JABCD...`)
+- **Parameter Normalization & Scope Check:**
+  - BFF ทำการ Normalize `params.sessionId` ให้เป็นรูปแบบ `feedback_session:{ulid}` เสมอก่อนดึงข้อมูลจาก CouchDB (`shelter_{shelter_code}`) เพื่อความยืดหยุ่นในกรณีที่ URL หรือ Short Link ถูกตัดทอน Prefix
+  - ตรวจสอบ Shelter Scope Isolation: assert ว่า `session.shelter_code === id` หากไม่พบหรือไม่ตรงศูนย์ ให้ตอบกลับ `404 Not Found (SESSION_NOT_FOUND)`
 - **Data Privacy & Sanitization:**
   - BFF ทำการกรองข้อมูลที่ไม่จำเป็นสำหรับสาธารณะออก (ตัด `created_by`, `updated_at`, `closed_by`, internal notes ทิ้ง)
 - **Responses:**
@@ -427,7 +431,7 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
   }
   ```
 - **Validation Rules (Zod):**
-  - `sessionId`: string (รูปแบบ `feedback_session:{ulid}`, ต้องเป็น active session และ `session.shelter_code === id` ป้องกันการส่งข้ามศูนย์ หากไม่ตรงให้ตอบกลับ 404 SESSION_NOT_FOUND)
+  - `sessionId`: string (รูปแบบ `feedback_session:{ulid}` หรือ raw ULID ที่ถูก normalize ก่อน query, ต้องเป็น active session และ `session.shelter_code === id` ป้องกันการส่งข้ามศูนย์ หากไม่ตรงให้ตอบกลับ 404 SESSION_NOT_FOUND)
   - `scores`: object key ตาม rubric snapshot, value เป็น integer ระหว่าง 1 - 5
   - `comment`: optional string, max 1,000 chars, sanitize HTML/Script tags
   - `contactInfo`: optional string, max 100 chars, sanitize HTML/Script tags

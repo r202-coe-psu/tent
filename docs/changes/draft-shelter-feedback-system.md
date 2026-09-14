@@ -11,6 +11,7 @@ affects:
   - frontend/src/routes/(protected)/back-office/feedback
   - frontend/src/routes/(public)/shelters/[id]/feedback/[sessionId]
   - frontend/src/routes/api/public/v1/shelters/[id]/feedback
+  - frontend/src/routes/api/public/v1/shelters/[id]/feedback/[sessionId]
 ---
 
 # ระบบประเมินความพึงพอใจศูนย์พักพิงและรับข้อความถึงเจ้าหน้าที่ (Shelter Feedback & Rubric Assessment)
