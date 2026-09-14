@@ -8,7 +8,8 @@ layer: volatile
 affects:
   - docs/data/schema.md (เพิ่ม type: feedback_session, feedback_response ใน shelter database)
   - docs/features/shelter-feedback-rubric-spec.md
-  - frontend/src/lib/server/shelter-access-design.ts (เพิ่ม feedback_session, feedback_response ใน allowed types ของ buildValidateDocUpdate)
+  - frontend/src/lib/server/shelter-access-design.ts (อัปเดต whitelist ใน validate_doc_update และ mango indexes)
+  - frontend/src/lib/features/shelter-feedback/ (domain, data/repository, UI)
   - frontend/src/lib/server/shelter-access-design.test.ts
   - frontend/scripts/redeploy-access.ts (redeploy _design/access ไปยังฐานข้อมูลรายศูนย์)
   - frontend/src/routes/(protected)/back-office/feedback
