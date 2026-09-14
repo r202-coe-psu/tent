@@ -7,16 +7,16 @@
 
 ## 1. ข้อมูลเอกสารและการควบคุมการเปลี่ยนแปลง (Document Control)
 
-| รายการ | รายละเอียด |
-| --- | --- |
-| **Status** | Draft for Review |
-| **Author** | Soravit Sukkarn |
-| **Created** | 2026-09-12 |
-| **Updated** | 2026-09-14 |
-| **Classification** | Volatile Feature Spec |
+| รายการ              | รายละเอียด                                                                                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**          | Draft for Review                                                                                                                                                             |
+| **Author**          | Soravit Sukkarn                                                                                                                                                              |
+| **Created**         | 2026-09-12                                                                                                                                                                   |
+| **Updated**         | 2026-09-14                                                                                                                                                                   |
+| **Classification**  | Volatile Feature Spec                                                                                                                                                        |
 | **Authority / SoT** | **Single Source of Truth (SoT)** สำหรับ Functional Requirements (FR), Non-Functional Requirements (NFR), Acceptance Criteria (AC), Definition of Done (DoD) และ API Contract |
-| **Related CR** | [`docs/changes/draft-shelter-feedback-system.md`](../changes/draft-shelter-feedback-system.md) (สถานะ: proposed) |
-| **Target Audience** | Frontend & Fullstack Developers, QA Engineers, UX/UI Designers |
+| **Related CR**      | [`docs/changes/draft-shelter-feedback-system.md`](../changes/draft-shelter-feedback-system.md) (สถานะ: proposed)                                                             |
+| **Target Audience** | Frontend & Fullstack Developers, QA Engineers, UX/UI Designers                                                                                                               |
 
 ---
 
@@ -88,31 +88,31 @@ sequenceDiagram
 
 ```typescript
 export interface FeedbackRubricDimension {
-  id: string;              // เช่น "cleanliness", "food", "safety", "staff_service"
-  title: string;           // ภาษาไทย เช่น "ความสะอาดและสุขอนามัย"
-  description: string;     // คำอธิบายขอบเขต เช่น "ห้องน้ำ ที่ทิ้งขยะ พื้นที่ส่วนกลาง"
-  min_score: number;       // ค่าต่ำสุด (default: 1)
-  max_score: number;       // ค่าสูงสุด (default: 5)
-  weight?: number;         // ค่าน้ำหนักในการคำนวณคะแนนรวม (default: 1.0)
+  id: string; // เช่น "cleanliness", "food", "safety", "staff_service"
+  title: string; // ภาษาไทย เช่น "ความสะอาดและสุขอนามัย"
+  description: string; // คำอธิบายขอบเขต เช่น "ห้องน้ำ ที่ทิ้งขยะ พื้นที่ส่วนกลาง"
+  min_score: number; // ค่าต่ำสุด (default: 1)
+  max_score: number; // ค่าสูงสุด (default: 5)
+  weight?: number; // ค่าน้ำหนักในการคำนวณคะแนนรวม (default: 1.0)
 }
 
 export interface FeedbackSessionDoc {
-  _id: string;             // feedback_session:{ulid}
+  _id: string; // feedback_session:{ulid}
   _rev?: string;
-  type: 'feedback_session';
+  type: "feedback_session";
   schema_v: 1;
-  shelter_code: string;    // รหัสศูนย์ เช่น "SH001" (ตาม BaseDoc envelope)
-  title: string;           // เช่น "การประเมินสัปดาห์ที่ 1 (รอบน้ำหลาก)"
-  description?: string;    // รายละเอียดเพิ่มเติมหรือบันทึกภายใน
-  status: 'active' | 'closed';
-  rubric_version: 'rubric_v1';
+  shelter_code: string; // รหัสศูนย์ เช่น "SH001" (ตาม BaseDoc envelope)
+  title: string; // เช่น "การประเมินสัปดาห์ที่ 1 (รอบน้ำหลาก)"
+  description?: string; // รายละเอียดเพิ่มเติมหรือบันทึกภายใน
+  status: "active" | "closed";
+  rubric_version: "rubric_v1";
   rubric_snapshot: {
-    version: 'rubric_v1';
+    version: "rubric_v1";
     dimensions: FeedbackRubricDimension[];
   };
-  created_at: string;      // ISO 8601 UTC
-  updated_at: string;      // ISO 8601 UTC (อัปเดตเมื่อปิดรอบ closed)
-  created_by: string;      // username ของเจ้าหน้าที่ผู้สร้าง
+  created_at: string; // ISO 8601 UTC
+  updated_at: string; // ISO 8601 UTC (อัปเดตเมื่อปิดรอบ closed)
+  created_by: string; // username ของเจ้าหน้าที่ผู้สร้าง
   closed_at?: string | null;
   closed_by?: string | null;
 }
@@ -122,26 +122,26 @@ export interface FeedbackSessionDoc {
 
 ```typescript
 export interface FeedbackResponseDoc {
-  _id: string;             // feedback_response:{ulid}
+  _id: string; // feedback_response:{ulid}
   _rev?: string;
-  type: 'feedback_response';
+  type: "feedback_response";
   schema_v: 1;
-  shelter_code: string;    // รหัสศูนย์พักพิง เช่น "SH001" (ตาม BaseDoc envelope)
-  session_id: string;      // อ้างอิง _id ของ FeedbackSessionDoc (feedback_session:{ulid})
+  shelter_code: string; // รหัสศูนย์พักพิง เช่น "SH001" (ตาม BaseDoc envelope)
+  session_id: string; // อ้างอิง _id ของ FeedbackSessionDoc (feedback_session:{ulid})
   scores: Record<string, number>; // เช่น { cleanliness: 4, food: 5, safety: 3, staff_service: 5 }
-  overall_score: number;   // ค่าเฉลี่ยคำนวณระดับแถว ปัดเศษ 2 ตำแหน่ง (เช่น 4.25)
-  comment?: string;        // ข้อความถึงเจ้าหน้าที่ (ไม่เกิน 1,000 ตัวอักษร)
-  contact_info?: string;   // ข้อมูลติดต่อกลับ (เช่น "เตียง A12" หรือ "081-xxx-xxxx")
-  status: 'unread' | 'read';
+  overall_score: number; // ค่าเฉลี่ยคำนวณระดับแถว ปัดเศษ 2 ตำแหน่ง (เช่น 4.25)
+  comment?: string; // ข้อความถึงเจ้าหน้าที่ (ไม่เกิน 1,000 ตัวอักษร)
+  contact_info?: string; // ข้อมูลติดต่อกลับ (เช่น "เตียง A12" หรือ "081-xxx-xxxx")
+  status: "unread" | "read";
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   client_meta?: {
     user_agent_short?: string;
     submitted_ip_hash?: string; // SHA-256 ของ IP เพื่อวิเคราะห์สแปมโดยไม่เก็บ IP ดิบ
   };
-  created_at: string;      // ISO 8601 UTC
-  updated_at: string;      // ISO 8601 UTC (อัปเดตเมื่อเจ้าหน้าที่ทำเครื่องหมายว่าอ่านแล้ว)
-  created_by: string;      // ค่า "anonymous" ที่ BFF เติมให้ตาม BaseDoc envelope
+  created_at: string; // ISO 8601 UTC
+  updated_at: string; // ISO 8601 UTC (อัปเดตเมื่อเจ้าหน้าที่ทำเครื่องหมายว่าอ่านแล้ว)
+  created_by: string; // ค่า "anonymous" ที่ BFF เติมให้ตาม BaseDoc envelope
 }
 ```
 
@@ -226,7 +226,11 @@ export interface FeedbackResponseDoc {
          "type": "feedback_response",
          "session_id": "feedback_session:01JABCD..."
        },
-       "sort": [{ "type": "desc" }, { "session_id": "desc" }, { "created_at": "desc" }]
+       "sort": [
+         { "type": "desc" },
+         { "session_id": "desc" },
+         { "created_at": "desc" }
+       ]
      }
      ```
 
@@ -245,14 +249,14 @@ export interface FeedbackResponseDoc {
 - **FR-FB-02 [Session Lifecycle Management]:**
   - เจ้าหน้าที่สามารถกด **"ปิดรับการประเมิน" (Close Session)** เมื่อหมดรอบการประเมิน
   - ระบบจะบันทึก `closed_at`, `closed_by` และอัปเดต `updated_at`
-  - หาก Session ปิดแล้ว ผู้ที่สแกน QR Code จะเห็นหน้าจอแจ้งเตือนว่า *"รอบการประเมินนี้ปิดรับความคิดเห็นแล้ว"* และไม่อนุญาตให้ Submit ข้อมูล
+  - หาก Session ปิดแล้ว ผู้ที่สแกน QR Code จะเห็นหน้าจอแจ้งเตือนว่า _"รอบการประเมินนี้ปิดรับความคิดเห็นแล้ว"_ และไม่อนุญาตให้ Submit ข้อมูล
 - **FR-FB-03 [Printable A4 QR Poster]:**
   - ระบบต้องมีปุ่ม "พิมพ์โปสเตอร์ QR Code" (Print Poster) ในหน้า Session
   - แสดง Modal พรีวิวเอกสารขนาด A4 ที่จัด Layout สำหรับการพิมพ์โดยเฉพาะ (`@media print`):
     - หัวกระดาษ: โลโก้ SmartShelter + ชื่อศูนย์พักพิงขนาดใหญ่
     - ชื่อรอบการประเมินและวันที่
-    - ภาพ QR Code คมชัดสูง (SVG หรือ High-DPI Canvas) ขนาดไม่ต่ำกว่า 15x15 cm กึ่งกลางหน้ากระดาษ ชี้ไปที่ URL `/shelters/[id]/feedback/[sessionId]`
-    - ข้อความแนะนำภาษาไทยขนาดใหญ่: *"สแกน QR Code ด้วยกล้องมือถือ เพื่อประเมินความพึงพอใจและส่งข้อความถึงเจ้าหน้าที่"*
+    - ภาพ QR Code คมชัดสูง (SVG หรือ High-DPI Canvas) ขนาดไม่ต่ำกว่า 15x15 cm กึ่งกลางหน้ากระดาษ เข้ารหัสเป็น Absolute URL เต็มรูปแบบ (เช่น `${origin}/shelters/[id]/feedback/[sessionId]` โดยดึง origin จาก `$page.url.origin` หรือ config) เพื่อให้แอปกล้องมือถือสแกนแล้วเปิดเบราว์เซอร์ได้ทันที
+    - ข้อความแนะนำภาษาไทยขนาดใหญ่: _"สแกน QR Code ด้วยกล้องมือถือ เพื่อประเมินความพึงพอใจและส่งข้อความถึงเจ้าหน้าที่"_
     - Short URL แบบอ่านง่ายด้านล่าง QR Code (สำรองกรณีกล้องสแกนไม่ได้)
     - รองรับการสั่งพิมพ์ผ่าน Browser Print Dialog (`window.print()`)
 - **FR-FB-04 [Analytics Dashboard]:**
@@ -269,7 +273,7 @@ export interface FeedbackResponseDoc {
 - **FR-FB-06 [Data Export]:**
   - มีปุ่ม "ส่งออกข้อมูล (Export CSV/Excel)" สำหรับ Session นั้นๆ
   - ไฟล์ที่ดาวน์โหลดประกอบด้วยคอลัมน์: รหัสรายการ, วันเวลาที่ส่ง, คะแนนทั้ง 4 มิติ, คะแนนเฉลี่ย, ข้อความ, ข้อมูลติดต่อ, สถานะการเปิดอ่าน
-  - ข้อมูลข้อความรองรับ UTF-8 (มี BOM) เพื่อให้อ่านภาษาไทยใน Microsoft Excel ได้ถูกต้องโดยไม่เป็นภาษาต่างดาว
+  - ข้อมูลข้อความรองรับ UTF-8 (มี BOM) เพื่อให้อ่านภาษาไทยใน Microsoft Excel ได้ถูกต้องโดยไม่เป็นภาษาต่างดาว พร้อมทั้ง Sanitize ป้องกัน Formula Injection (หากข้อความขึ้นต้นด้วย `=`, `+`, `-`, `@` ให้เติม single quote `'` นำหน้า)
   - **มาตรฐานชื่อไฟล์ (File Naming Convention):** กำหนดชื่อไฟล์ใน Header `Content-Disposition: attachment; filename="feedback-{shelter_code}-{cleanSessionId}-{YYYYMMDD}.csv"` (โดย `{cleanSessionId}` ตัด prefix `feedback_session:` ออก และ `{YYYYMMDD}` คือวันที่ดาวน์โหลดตามเวลาท้องถิ่น) เพื่อความเป็นระเบียบในการจัดเก็บไฟล์ของเจ้าหน้าที่
 
 ---
@@ -285,7 +289,7 @@ export interface FeedbackResponseDoc {
   - หัวกระดาษแสดงชื่อศูนย์พักพิงและชื่อรอบประเมิน
   - ส่วนที่ 1: Rubric 4 มิติ — การให้คะแนนแบบ 5 ดาว หรือปุ่มกดตัวเลข 1-5 โดยมี **Touch Target ขนาดไม่น้อยกว่า 44x44px** เพื่อความสะดวกและแม่นยำบนหน้าจอมือถือตามเกณฑ์ Accessibility และใช้คลาส `tabular-nums` แสดงตัวเลขคะแนน ทุกมิติต้องตอบ (Required)
   - ส่วนที่ 2: กล่องข้อความ "ข้อเสนอแนะหรือข้อความฝากถึงเจ้าหน้าที่" (Optional, TextArea สูงพอประมาณ, ตัวนับตัวอักษร 0/1,000)
-  - ส่วนที่ 3: ช่องกรอก "ข้อมูลติดต่อกลับ (โซน/เตียง หรือเบอร์โทร)" (Optional, พร้อมคำอธิบาย: *ไม่ระบุก็ได้ แต่หากต้องการให้เจ้าหน้าที่ติดตามช่วยเหลือ กรุณาระบุ*)
+  - ส่วนที่ 3: ช่องกรอก "ข้อมูลติดต่อกลับ (โซน/เตียง หรือเบอร์โทร)" (Optional, พร้อมคำอธิบาย: _ไม่ระบุก็ได้ แต่หากต้องการให้เจ้าหน้าที่ติดตามช่วยเหลือ กรุณาระบุ_)
 - **FR-FB-12 [Validation & Feedback Submission]:**
   - ตรวจสอบความถูกต้องก่อนส่ง (ทุกมิติต้องมีคะแนนระหว่าง 1-5)
   - ส่งข้อมูลไปยัง BFF Endpoint `POST /api/public/v1/shelters/[id]/feedback`
@@ -396,7 +400,7 @@ Endpoint บน SvelteKit BFF สำหรับโหลดข้อมูล S
       }
     }
     ```
-    *(หมายเหตุ: UI ฝั่ง Client จะใช้ `status: "closed"` เพื่อแสดงหน้าแจ้งเตือนว่ารอบประเมินปิดแล้ว และซ่อนฟอร์มการส่ง)*
+    _(หมายเหตุ: UI ฝั่ง Client จะใช้ `status: "closed"` เพื่อแสดงหน้าแจ้งเตือนว่ารอบประเมินปิดแล้ว และซ่อนฟอร์มการส่ง)_
   - `404 Not Found`:
     ```json
     {
@@ -447,21 +451,21 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
 
 เพื่อรักษาแบบแผน JSON API มาตรฐาน (camelCase) ฝั่ง Web Client และความสอดคล้องกับ `BaseDoc` (snake_case) ใน CouchDB BFF มีหน้าที่แปลงฟิลด์ดังนี้:
 
-| API Request Body (camelCase) | CouchDB `FeedbackResponseDoc` (snake_case) | หมายเหตุ |
-| --- | --- | --- |
-| `sessionId` | `session_id` | อ้างอิง `_id` ของ Session |
-| `scores` | `scores` | บันทึกตรงกัน |
-| (คำนวณที่ BFF) | `overall_score` | คำนวณถ่วงน้ำหนักและปัดเศษ 2 ตำแหน่ง (§4.4) |
-| `comment` | `comment` | Sanitize ตัดแท็กอันตราย |
-| `contactInfo` | `contact_info` | Sanitize ตัดแท็กอันตราย |
-| (สร้างโดย BFF) | `_id` | `feedback_response:{ulid}` |
-| (สร้างโดย BFF) | `type` | `"feedback_response"` |
-| (สร้างโดย BFF) | `schema_v` | `1` |
-| (จาก Route param) | `shelter_code` | รหัสศูนย์ เช่น `"SH001"` |
-| (สร้างโดย BFF) | `created_at` / `updated_at` | ISO 8601 UTC timestamp ปัจจุบัน |
-| (กำหนดโดย BFF) | `created_by` | `"anonymous"` (ตามข้อกำหนด BaseDoc) |
-| (สร้างโดย BFF) | `status` | `"unread"` (สถานะเริ่มต้น) |
-| (จาก Request header/IP) | `client_meta` | `{ user_agent_short, submitted_ip_hash }` |
+| API Request Body (camelCase) | CouchDB `FeedbackResponseDoc` (snake_case) | หมายเหตุ                                   |
+| ---------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `sessionId`                  | `session_id`                               | อ้างอิง `_id` ของ Session                  |
+| `scores`                     | `scores`                                   | บันทึกตรงกัน                               |
+| (คำนวณที่ BFF)               | `overall_score`                            | คำนวณถ่วงน้ำหนักและปัดเศษ 2 ตำแหน่ง (§4.4) |
+| `comment`                    | `comment`                                  | Sanitize ตัดแท็กอันตราย                    |
+| `contactInfo`                | `contact_info`                             | Sanitize ตัดแท็กอันตราย                    |
+| (สร้างโดย BFF)               | `_id`                                      | `feedback_response:{ulid}`                 |
+| (สร้างโดย BFF)               | `type`                                     | `"feedback_response"`                      |
+| (สร้างโดย BFF)               | `schema_v`                                 | `1`                                        |
+| (จาก Route param)            | `shelter_code`                             | รหัสศูนย์ เช่น `"SH001"`                   |
+| (สร้างโดย BFF)               | `created_at` / `updated_at`                | ISO 8601 UTC timestamp ปัจจุบัน            |
+| (กำหนดโดย BFF)               | `created_by`                               | `"anonymous"` (ตามข้อกำหนด BaseDoc)        |
+| (สร้างโดย BFF)               | `status`                                   | `"unread"` (สถานะเริ่มต้น)                 |
+| (จาก Request header/IP)      | `client_meta`                              | `{ user_agent_short, submitted_ip_hash }`  |
 
 ---
 
