@@ -16,6 +16,7 @@ extends:
   - CR-038 (ปฏิบัติตามมาตรฐาน Decimal qty_str ทั่วทั้งระบบ)
   - draft-seed-item-categories (อ้างอิง 10 หมวดหมู่ระบบมาตรฐาน — จำแนกอาหารปรุงเสร็จเป็น category: 'item_category:ready_meal' คลาส CONSUMABLE)
 affects:
+  - docs/data/schema.md §2.1 (`stock_ledger` reason ↔ ref_id mapping: ขยาย `receive`, `requisition`, `distribute`, `transfer_out` ตาม CR-055)
   - docs/data/schema.md §2 (DB shelter_{shelter_code} — Operations) — doc types ใหม่: `requisition_ticket`, `distribution_log`
   - docs/data/schema.md §4.2 (Catalog & Master Data — item_master) — บันทึกอาหารปรุงสำเร็จเป็น `item_master` รายชนิดอาหาร (Per-dish ItemMaster) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md
   - docs/data/schema.md §2.7 (`meal_service`) — ขยายฟิลด์ `yield_items` สำหรับ Batch Yield
@@ -26,7 +27,7 @@ affects:
   - frontend/src/lib/features/distribution/ (CONSOLIDATE / REFACTOR: รวมโมเดลแจกจ่ายและของยืมจาก CR-059/CR-109 ให้เป็น Single Clean Module)
   - frontend/src/lib/features/catalog/domain/catalog.ts
   - frontend/src/lib/features/kitchen/domain/kitchen.ts
-  - frontend/src/lib/features/operations/domain/operations.ts
+  - frontend/src/lib/features/operations/domain/operations.ts (ปรับปรุง `REF_PREFIX_BY_REASON` และ `stockLedgerInputSchema` ตาม CR-055)
   - frontend/src/routes/(protected)/back-office/tickets/
   - frontend/src/routes/(protected)/onsite/distribution/
   - frontend/src/routes/(protected)/onsite/loans/
@@ -36,11 +37,12 @@ affects:
 
 # CR-draft: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 
+> [!NOTE]
 > **สรุป (TL;DR):**  
-> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109 และแทนที่โมเดล 3 ชั้นจาก CR-059 Flow 2) + จัดเก็บอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารโดยตรง ภายใต้หมวดหมู่ `item_category:ready_meal` (`type_class: 'CONSUMABLE'`) ตาม draft-seed-item-categories.md และขยาย `MealService` (`yield_items`)  
-> **เพื่อใคร/ทำไม:** ฝ่ายคลัง, โรงครัว, จุดแจกจ่ายหน้างาน และด่านลงทะเบียน เพื่อสร้างความโปร่งใส 2 ทิศทาง (Bidirectional Visibility) คุมอายุอาหาร 4 ชม. ด้วย Soft Warning, เติมของระหว่างแจกแบบ Reactive, และติดตามของยืมคงทนไม่ใช้บาร์โค้ดพร้อมเคลียร์ตอน Check-out  
-> **dev ต้อง build อะไร:** 4 เวิร์กสเปซหลังบ้าน (`/back-office/tickets/*`), ระบบตรวจรับ-สแกนแจกจ่าย POS (`/onsite/distribution/*`), ระบบยืม-คืนพัสดุ (`/onsite/loans`, `/onsite/returns`), และด่าน Check-out Clearance Gate  
-> **กระทบ schema/scope:** เพิ่ม doc types `requisition_ticket`, `distribution_log` ใน DB `shelter_{shelter_code}` §2, จัดเก็บอาหารปรุงสำเร็จใน `item_master` และขยาย `meal_service` (backward-compatible)
+> **เปลี่ยนอะไร:** รวมตั๋วเบิกจ่าย 4 ประเภทเป็น `RequisitionTicket` + รวมบันทึกแจกจ่ายและของยืมหน้างานเป็น `DistributionLog` (ผนวก `meal_distribution` จาก CR-109 และแทนที่โมเดล 3 ชั้นจาก CR-059 Flow 2) + บันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารใต้ `item_category:ready_meal` (`type_class: 'CONSUMABLE'`) + ปรับปรุง Invariant ของ `stock_ledger` รองรับตั๋วเบิกจ่ายและผลผลิตครัว + เพิ่มระบบควบคุมโควตากองรวม (Hybrid Auto-Pool) ด่าน Check-out  
+> **เพื่อใคร/ทำไม:** ฝ่ายคลัง, โรงครัว, จุดแจกจ่ายหน้างาน และด่านลงทะเบียน เพื่อสร้างความโปร่งใส 2 ทิศทาง คุมอายุอาหาร 4 ชม. ด้วย Soft Warning, เติมของระหว่างแจกแบบ Reactive, และติดตามของยืมคงทนไม่ใช้บาร์โค้ดพร้อมเคลียร์ตอน Check-out แบบมี Audit Trail  
+> **dev ต้อง build อะไร:** 4 เวิร์กสเปซหลังบ้าน (`/back-office/tickets/*`), ระบบตรวจรับ-สแกนแจกจ่าย POS (`/onsite/distribution/*`), ระบบยืม-คืนพัสดุ (`/onsite/loans`, `/onsite/returns`), ด่าน Check-out Clearance Gate พร้อม Hybrid Auto-Pool Guard, และปรับ Zod Schema ใน `operations.ts`  
+> **กระทบ schema/scope:** เพิ่ม doc types `requisition_ticket`, `distribution_log` ใน DB `shelter_{shelter_code}` §2, ปรับปรุง mapping `reason ↔ ref_id` ใน `stock_ledger` (§2.1), จัดเก็บอาหารปรุงสำเร็จใน `item_master` (§4.2) และขยาย `meal_service` (§2.7) โดยไม่กระทบข้อมูลเดิม (backward-compatible)
 
 ---
 
@@ -299,11 +301,14 @@ erDiagram
 
     REQUISITION_TICKET ||--|{ TICKET_ITEM : "items"
     REQUISITION_TICKET ||--o{ TICKET_AMENDMENT : "amendments (delta top-up)"
-    REQUISITION_TICKET ||--o{ STOCK_LEDGER : "ref_id (approve/dispatch/amend)"
+    REQUISITION_TICKET ||--o{ STOCK_LEDGER : "ref_id (requisition/distribute/transfer_out)"
+    REQUISITION_TICKET ||--o{ STOCK_LEDGER : "ref_id (receive on distribution return)"
     REQUISITION_TICKET ||--o{ DISTRIBUTION_LOG : "ticket_id (batch source)"
 
     MEAL_PLAN ||--o| MEAL_SERVICE : "meal_plan_id"
-    MEAL_SERVICE ||--o{ STOCK_LEDGER : "ref_id (reason: receive)"
+    MEAL_SERVICE ||--o{ STOCK_LEDGER : "ref_id (reason: receive on kitchen yield)"
+
+    DISTRIBUTION_LOG ||--o{ STOCK_LEDGER : "ref_id (reason: receive on counter loan return)"
 
     HOUSEHOLD ||--o{ EVACUEE : "household_id"
     EVACUEE ||--o{ DISTRIBUTION_LOG : "recipient_id (evacuee)"
@@ -344,8 +349,8 @@ erDiagram
         string requested_qty "ยอดขอเบิก (qty_str - CR-038)"
         string allocated_qty "ยอดจัดสรรสะสมจริง (qty_str)"
         string distributed_qty "ยอดแจกจริง (qty_str - สรุปตอนปิดรอบ)"
-        string returned_qty "ยอดส่งคืนคลัง (qty_str)"
-        string discrepancy_qty "ยอดสูญหาย/คลาดเคลื่อน (qty_str)"
+        string returned_qty "ยอดส่งคืนคลัง (qty_str - สรุปตอนปิดรอบ)"
+        string discrepancy_qty "ยอดสูญหาย/คลาดเคลื่อน (qty_str - สรุปตอนปิดรอบ)"
     }
 
     DISTRIBUTION_LOG {
@@ -365,6 +370,7 @@ erDiagram
         string qty_returned "จำนวนที่คืนแล้ว (qty_str)"
         enum condition_on_return "READY / MAINTENANCE / BROKEN"
         enum clear_reason "routine / bulk_dropoff / waived / lost"
+        string bulk_pool_id "FK bulk_return_pool opt (บันทึกเมื่อเคลียร์ด้วย bulk_dropoff)"
         boolean is_override "อนุมัติพิเศษ"
         string override_reason "สาเหตุ override"
         boolean is_expired_warning "แจ้งเตือนเกิน 4 ชม. opt (CR-109 / Soft Warning)"
@@ -427,9 +433,23 @@ export interface TicketItem {
   returnable?: boolean; // true = ของยืมต้องส่งคืน, false/undefined = ของแจกขาด
   requested_qty: string; // qty_str (CR-038)
   allocated_qty: string; // qty_str (รวมยอดเติมเพิ่ม)
-  distributed_qty?: string; // qty_str — คำนวณ Dynamic ใน Memory ระหว่างกะ และบันทึกสรุปลงตั๋วตอนปิดรอบ (reconcile) เท่านั้น (ห้ามเขียนทับตั๋วระหว่างสแกนแจก เพื่อป้องกัน CouchDB 409 Conflict)
-  returned_qty?: string; // qty_str — บันทึกตอนปิดรอบ
-  discrepancy_qty?: string; // qty_str — บันทึกตอนคลังกระทบยอดส่วนต่าง
+  distributed_qty?: string; // qty_str — สรุปบันทึกถาวรลงตั๋วตอนปิดรอบ (reconcile) เท่านั้น (ระหว่างกะคำนวณ In-Memory จาก distribution_log ห้ามเขียนทับตั๋วตอนสแกน เพื่อป้องกัน CouchDB 409 Conflict)
+  returned_qty?: string; // qty_str — สรุปบันทึกตอนปิดรอบ
+  discrepancy_qty?: string; // qty_str — สรุปบันทึกตอนคลังกระทบยอดส่วนต่าง
+}
+
+/**
+ * DTO สำหรับหน้าจอสรุปและปิดรอบการแจกจ่าย (/onsite/distribution/reconcile)
+ * ไม่ใช่ Persistent Document ระหว่างสแกน — แยกนิยามเพื่อความชัดเจนทางสถาปัตยกรรม
+ */
+export interface ReconciliationSummaryDTO {
+  ticket_id: string;
+  item_id: string;
+  allocated_qty: string;
+  distributed_qty: string; // Dynamic sum จาก distribution_log ในรอบกะ
+  returned_qty: string;    // ยอดตรวจนับของเหลือส่งคืนคลังจริง
+  discrepancy_qty: string; // allocated_qty - (distributed_qty + returned_qty)
+  notes?: string;
 }
 
 export interface TicketAmendment {
@@ -486,6 +506,7 @@ export interface DistributionLog extends BaseDoc {
   qty_returned?: string; // qty_str
   condition_on_return?: ItemCondition;
   clear_reason?: LoanClearReason;
+  bulk_pool_id?: string; // pool_id/batch_id ของการตรวจรับคืนกองรวม (บันทึกเมื่อ clear_reason = 'bulk_dropoff')
   returned_at?: Timestamp;
   returned_by?: string;
 
@@ -536,6 +557,30 @@ export interface MealService extends BaseDoc {
 
 ---
 
+### 3.8 การปรับปรุงข้อกำหนดบัญชีคลังและการตรวจสอบความถูกต้อง (Stock Ledger Reconciled Schema)
+
+เพื่อให้สอดคล้องกับ Invariant ใน [CR-055](../changes/CR-055-stock-ledger-refid-invariant.md) และสเปกบัญชีคลังใน [docs/data/schema.md §2.1](../data/schema.md#21-stock_ledger--stock_ledgerulid--append-only) ระบบกำหนดข้อบังคับการลงบัญชี `stock_ledger` และปรับปรุงตาราง `REF_PREFIX_BY_REASON` ใน `$lib/features/operations/domain/operations.ts` ดังนี้:
+
+#### ตาราง mapping `reason` ➔ `ref_id` ที่ปรับปรุง (Reconciled Mapping)
+
+| `reason` | `ref_id` prefix ที่ยอมรับ | คำอธิบายและที่มา |
+| --- | --- | --- |
+| `receive` | `['meal_service:', 'requisition_ticket:', 'distribution_log:']` | รับผลผลิตครัว (`meal_service:`), รับของแจกเหลือคืนคลัง (`requisition_ticket:`), รับของยืมคืนที่เคาน์เตอร์/ด่าน (`distribution_log:`) |
+| `requisition` | `['requisition_ticket:', 'kitchen_requisition:']` | ตัดสต็อกวัตถุดิบเข้าครัวตามตั๋วเบิกกลาง (และรองรับตั๋วครัวเดิมแบบ Backward-compatible) |
+| `distribute` | `'requisition_ticket:'` | ตัดสต็อกพัสดุและอาหารสำหรับนำไปแจกจ่ายหน้างานตามตั๋วเบิกกลาง |
+| `transfer_out` | `['stock_transfer:', 'requisition_ticket:']` | ตัดสต็อกโอนย้ายพัสดุข้ามศูนย์ตามตั๋วโอนย้าย |
+| `transfer_in` | `'stock_transfer:'` | รับเข้าจากการโอนย้ายพัสดุข้ามศูนย์ (T-13 / CR-059) |
+| `donation` | `'donation:'` | รับเข้าจากการรับบริจาค (CR-052 / CR-055) |
+| `purchase` | `'purchase:'` | รับเข้าจากการจัดซื้อจัดจ้าง (CR-032) |
+| `adjust` | `null` เสมอ | ปรับยอดสต็อกมือ ไม่มีเอกสารต้นทาง |
+
+#### กฎเหล็กของ Stock Ledger (Invariants)
+1. **ห้ามเพิ่มฟิลด์นอก Envelope:** ใน `stock_ledger` ไม่มีฟิลด์ `notes` ระดับบน หากต้องการบันทึกคำอธิบายประกอบ ให้บันทึกลงใน `lot.note` เท่านั้น
+2. **การตรวจจับผ่าน Zod SuperRefine:** ฟังก์ชัน `checkRefId` ใน `operations.ts` ต้องตรวจสอบว่า `ref_id` ขึ้นต้นด้วย Prefix ตัวใดตัวหนึ่งใน Array ที่กำหนดไว้ หากไม่ตรงจะถูกปฏิเสธด้วย Parse Error ทันที
+3. **ป้องกัน Double Count ของยืม:** การคืนของยืมที่หน้างานจะลงบัญชีคลังเพียงครั้งเดียว ณ จุดรับจริง (เคาน์เตอร์รับคืน หรือตอนคลังตรวจรับกองรวม) การปลดภาระที่ด่าน Check-out จะไม่บันทึก `stock_ledger` ซ้ำ
+
+---
+
 ## 4. ข้อกำหนดการทำงาน (Requirements & Acceptance Criteria)
 
 ### หมวดที่ 1: ระบบตั๋วเบิกจ่ายคลังและผลผลิตโรงครัว (Requisitions & Kitchen Yield Module — Track A & B)
@@ -566,12 +611,12 @@ export interface MealService extends BaseDoc {
 #### FR-TKT-04: การปล่อยรถและตัดสต็อกคลัง (Dispatch & Stock Deduction)
 - **คำสั่ง:** เมื่อผู้จัดการคลังหรือฝ่ายขนส่งกดยืนยันปล่อยของ `[ 🚚 เริ่มดำเนินการจัดส่ง ]` ระบบต้อง:
   1. บันทึกตัดสต็อกจริงออกจากคลังสินค้าใน `stock_ledger` ทันทีด้วย `qty: `-${allocated_qty}`` (Signed Decimal String ตาม CR-038) และผูก `ref_id: ticket._id`
-  2. กำหนด `reason` ใน `stock_ledger`:
-     - เบิกครัว ➔ `reason: 'requisition'`
-     - เบิกแจกอาหารหรือสิ่งของ ➔ `reason: 'distribute'`
-     - โอนย้ายข้ามศูนย์ ➔ `reason: 'transfer_out'`
+  2. กำหนด `reason` ใน `stock_ledger` ตามตาราง Reconciled Mapping (§3.8):
+     - เบิกครัว ➔ `reason: 'requisition'` (`ref_id: ticket._id`)
+     - เบิกแจกอาหารหรือสิ่งของ ➔ `reason: 'distribute'` (`ref_id: ticket._id`)
+     - โอนย้ายข้ามศูนย์ ➔ `reason: 'transfer_out'` (`ref_id: ticket._id`)
   3. ปรับสถานะตั๋วเป็น `IN_TRANSIT` พร้อมบันทึก `dispatched_by`
-- **AC-TKT-04.1:** การตัดสต็อกใน `stock_ledger` ต้องบันทึกแยกแถวตาม `item_id` และระบุจำนวนเป็นลบตรงกับ `allocated_qty`
+- **AC-TKT-04.1:** การตัดสต็อกใน `stock_ledger` ต้องบันทึกแยกแถวตาม `item_id` และระบุจำนวนเป็นลบตรงกับ `allocated_qty` โดยมี `ref_id` ขึ้นต้นด้วย `requisition_ticket:` เสมอ
 - **AC-TKT-04.2:** สำหรับตั๋วประเภท `transfer` ระบบต้องบล็อกการกดปล่อยของหากยังไม่ได้ระบุ `driver_name` หรือ `license_plate`
 
 #### FR-TKT-05: การบันทึกอาหารปรุงสำเร็จเป็น ItemMaster รายชนิดอาหาร (Per-Dish ItemMaster) ในหมวดหมู่ READY_MEAL
@@ -583,7 +628,7 @@ export interface MealService extends BaseDoc {
 #### FR-TKT-06: การบันทึกผลผลิตโรงครัวแบบชุดรายการ (Batch Yield Integration)
 - **คำสั่ง:** หน้าบันทึกผลผลิตโรงครัว (`/back-office/kitchen/production-board`) ต้องรองรับการส่งผลผลิตเป็น Array `yield_items` ผ่าน `MealServiceInput` โดยระบบต้องบันทึกเข้า `meal_service` และสร้าง `stock_ledger` รับเข้าสต็อกคลังใน Transaction เดียวกัน
 - **AC-TKT-06.1:** เอกสาร `meal_service` ต้องเก็บข้อมูล `yield_items: KitchenYieldItem[]` และคำนวณ `actual_yield = sum(yield_items.actual_yield)` ผ่าน `$lib/utils/qty.ts`
-- **AC-TKT-06.2:** ระบบต้องสร้าง `stock_ledger` รับเข้า (`qty: actual_yield`, `reason: 'receive'`, `ref_id: meal_service._id`) แยกตามแต่ละเมนูใน `yield_items`
+- **AC-TKT-06.2:** ระบบต้องสร้าง `stock_ledger` รับเข้า (`qty: actual_yield`, `reason: 'receive'`, `ref_id: meal_service._id`) แยกตามแต่ละเมนูใน `yield_items` โดย `ref_id` ขึ้นต้นด้วย `meal_service:` ตามตาราง Reconciled Mapping ใน §3.8
 - **AC-TKT-06.3:** ข้อมูลล็อตใน `stock_ledger.lot` ต้องมี `note: menu_name`, `lot_no`, และคำนวณ `expiry = cooking_completed_at + 4 ชั่วโมง`
 
 ---
@@ -622,7 +667,7 @@ export interface MealService extends BaseDoc {
 
 #### FR-DST-06: การตรวจรับคืนเข้าสต็อกคลังและกระทบยอดส่วนต่าง (WMS Discrepancy Reconciliation)
 - **คำสั่ง:** เจ้าหน้าที่คลังเปิดดูตั๋วสถานะ `RETURN_PENDING_RECEIPT` ที่ `/back-office/supply` ตรวจนับของจริงเทียบกับยอดที่หน้างานส่งมา หากพบยอดคลาดเคลื่อน/ของหาย ให้แก้ไขตัวเลขรับเข้าจริง และกดปุ่ม `[ 📦 ยืนยันตรวจรับของคืนเข้าคลัง ]`
-- **AC-DST-06.1:** ระบบต้องบันทึก `stock_ledger` รับของสภาพดีกลับเข้าคลัง (`qty: returned_qty`, `reason: 'receive'`, `ref_id: ticket._id`, `notes: 'distribution_return'`) ตาม enum `ledgerReasonSchema`
+- **AC-DST-06.1:** ระบบต้องบันทึก `stock_ledger` รับของสภาพดีกลับเข้าคลัง (`qty: returned_qty`, `reason: 'receive'`, `ref_id: ticket._id`, `lot: { note: 'distribution_return' }`) โดยระบุ `ref_id` ชี้ไปยัง `requisition_ticket` และห้ามมีฟิลด์ `notes` ระดับบนของ `stock_ledger`
 - **AC-DST-06.2:** ส่วนต่างที่หายไปต้องบันทึกลงใน `TicketItem.discrepancy_qty` และแจ้งเตือนไปยังผู้จัดการคลัง
 - **AC-DST-06.3:** ปรับสถานะตั๋วเป็น `RETURN_COMPLETED` จบวงจรการเบิกจ่ายสมบูรณ์ 100%
 
@@ -644,22 +689,27 @@ export interface MealService extends BaseDoc {
 #### FR-LON-02: ช่องทางการรับคืนพัสดุ 2 รูปแบบ (Dual Return Channels)
 - **คำสั่ง:** หน้าจอรับคืนพัสดุ (`/onsite/returns`) ต้องรองรับการรับคืน 2 ช่องทาง:
   1. คืนปกติที่เคาน์เตอร์: สแกน QR ผู้ยืม ดึงรายการที่ค้างส่ง (`status: 'active'`) ตรวจสภาพ (`READY` / `MAINTENANCE` / `BROKEN`) ปรับสถานะ log เป็น `returned` และบันทึก `stock_ledger` รับเข้าสต็อกทันที (`qty: returned_qty`, `reason: 'receive'`, `ref_id: log._id`)
-  2. คืนแบบกองรวม / กวาดเก็บหน้างาน (Bulk Drop-off): คลังตรวจนับยอดรวมของที่เก็บได้เข้าสต็อกคลังทันที (`reason: 'receive'`) โดยระเบียน `distribution_log` รายคนยังคงสถานะ `active` ไว้เพื่อไปคลี่คลายที่ด่าน Check-out
-- **AC-LON-02.1:** การคืนปกติที่เคาน์เตอร์ต้องปิดภาระของผู้ยืมทันที (`status: 'returned'`)
-- **AC-LON-02.2:** การตรวจรับคืนกองรวมต้องลงบัญชีสต็อกคลังได้ทันทีโดยไม่บังคับให้ระบุชื่อผู้คืน
+  2. คืนแบบกองรวม / กวาดเก็บหน้างาน (Bulk Drop-off): คลังตรวจนับยอดรวมของที่เก็บได้เข้าสต็อกคลังทันที (`qty: collected_qty`, `reason: 'receive'`, `ref_id: ticket._id` หรือ `bulk_pool_id`) พร้อมสร้าง/อัปเดต **Bulk Return Pool** ประจำกะนั้น (`bulk_pool_id`, `item_id`, `unclaimed_quota = collected_qty`) โดยระเบียน `distribution_log` รายคนยังคงสถานะ `active` ไว้เพื่อไปคลี่คลายที่ด่าน Check-out
+- **AC-LON-02.1:** การคืนปกติที่เคาน์เตอร์ต้องปิดภาระของผู้ยืมทันที (`status: 'returned'`) และลงบัญชี `stock_ledger` ด้วย `reason: 'receive'` ผูก `ref_id: log._id` (ตามตาราง Reconciled Mapping §3.8)
+- **AC-LON-02.2:** การตรวจรับคืนกองรวมต้องลงบัญชีสต็อกคลังได้ทันทีโดยไม่ต้องระบุชื่อผู้คืน และระบบต้องเปิด Pool โควตาการรับคืนกองรวม (`unclaimed_quota`) ประจำกะนั้นสำหรับรองรับการคลี่คลายที่ด่าน Check-out
 
 #### FR-LON-03: การคืนของย้อนหลังหลังปิดรอบ (Warehouse Inbound Deposit Flow)
 - **คำสั่ง:** หากมีผู้พักพิงนำสิ่งของยืมมาคืนหลังจากที่จุดแจกกดปิดรอบขาดไปแล้ว (`SHIFT_CLOSED`) เจ้าหน้าที่คลังสินค้าสามารถเปิดหน้า `/back-office/supply` เพื่อใช้ **"Flow ฝากของ/รับเข้าใหม่ (Inbound Deposit Flow)"** รับของเข้าสต็อกคลัง และค้นหาชื่อผู้พักพิงเพื่อปิดสถานะ `distribution_log` เป็น `returned` ได้
 - **AC-LON-03.1:** ระบบต้องไม่อนุญาตให้เปิดตั๋วเดิมที่ปิดรอบแล้วกลับมารับของคืน
-- **AC-LON-03.2:** การรับของเข้าผ่าน Inbound Deposit Flow ต้องลงบัญชี `stock_ledger` ด้วย `reason: 'receive'` หรือ `'adjust'` พร้อมผูกกับรหัสผู้คืน
+- **AC-LON-03.2:** การรับของเข้าผ่าน Inbound Deposit Flow ต้องลงบัญชี `stock_ledger` ด้วย `reason: 'receive'` พร้อมผูกกับ `ref_id: log._id` ของผู้คืน (ตามตาราง Reconciled Mapping §3.8)
 
-#### FR-LON-04: ด่านตรวจและปลดภาระตอน Check-out (Check-out Gate Clearance)
-- **คำสั่ง:** เมื่อผู้พักพิงหรืออาสาสมัครมาทำการ Check-out ออกจากศูนย์ที่ `/onsite/scan-check-in-out` หากระบบตรวจพบ `distribution_log` ของยืมที่ยังมีสถานะ `active` หรือ `partially_returned` ระบบต้องแสดงกล่องแจ้งเตือน Hard Warning สีส้มเด่นชัด พร้อมปุ่ม **1-Click Resolve 3 ทางเลือก** ที่เจ้าหน้าที่ประจำด่านสามารถกดผ่านได้ทันที:
-  - **`[ 📦 รับคืนที่ด่าน ]`:** บันทึกรับของเข้าสต็อกด่าน (`qty: returned_qty`, `reason: 'receive'`) และปรับสถานะ log เป็น `returned`
-  - **`[ 🤝 ยืนยันว่าคืนแล้วในกองรวม ]`:** ปรับสถานะ log เป็น `returned` (`clear_reason: 'bulk_dropoff'`) โดยไม่เพิ่มสต็อกคลังซ้ำ
+#### FR-LON-04: ด่านตรวจและปลดภาระตอน Check-out (Check-out Gate Clearance & Hybrid Auto-Pool Guard)
+- **คำสั่ง:** เมื่อผู้พักพิงหรืออาสาสมัครมาทำการ Check-out ออกจากศูนย์ที่ `/onsite/scan-check-in-out` หากระบบตรวจพบ `distribution_log` ของยืมที่ยังมีสถานะ `active` หรือ `partially_returned` ระบบต้องแสดงกล่องแจ้งเตือน Hard Warning สีส้มเด่นชัด พร้อมปุ่ม **1-Click Resolve 3 ทางเลือก** ภายใต้การควบคุมโควตากองรวม (Hybrid Auto-Pool Guard):
+  - **`[ 📦 รับคืนที่ด่าน ]`:** บันทึกรับของเข้าสต็อกด่าน (`qty: returned_qty`, `reason: 'receive'`, `ref_id: log._id`) และปรับสถานะ log เป็น `returned`
+  - **`[ 🤝 ยืนยันว่าคืนแล้วในกองรวม ]` (Auto-Pool Quota Controlled):**
+    - ระบบตรวจสอบโควตาคงเหลือของ Bulk Return Pool ของไอเทมนั้นในกะ (`unclaimed_quota > 0`)
+    - หากยังมีโควตาเหลือ: อนุญาตให้กดผ่าน ปรับสถานะ log เป็น `returned` (`clear_reason: 'bulk_dropoff'`), บันทึก `bulk_pool_id` ลงใน log, และตัดลดยอดโควตาของ Pool ลง 1 (`unclaimed_quota - 1`) โดย **ไม่สร้างแถวใหม่ใน `stock_ledger`** เพื่อป้องกันการบันทึกสต็อกซ้ำซ้อน
+    - หากโควตาหมดลง (`unclaimed_quota <= 0`): ระบบจะล็อกปุ่มนี้สำหรับเจ้าหน้าที่ทั่วไป ป้องกันไม่ให้มีการอ้างยอดลอย และบังคับให้เลือกรายการ "สูญหาย (Lost)" หรือต้องให้ผู้จัดการศูนย์ (`shelter_manager`) สแกนบัตร/กดยืนยัน Override พร้อมระบุเหตุผลประกอบ
   - **`[ ⚠️ ยกให้ / สูญหาย (Waived/Lost) ]`:** ปรับสถานะเป็น `waived` หรือ `lost` บันทึกหมายเหตุ และอนุญาตให้ Check-out ได้ทันทีโดยไม่กักตัวผู้พักพิง
 - **AC-LON-04.1:** การกดปุ่ม 1-Click Resolve ตัวใดตัวหนึ่งต้องปิดภาระของยืม (`status != 'active'`) และปลดล็อกให้ขั้นตอน Check-out ดำเนินการต่อไปได้ทันที
-- **AC-LON-04.2:** กรณีเลือก "คืนแล้วในกองรวม" ระบบต้องไม่สร้างแถวใหม่ใน `stock_ledger` เพื่อป้องกันการบันทึกสต็อกซ้ำซ้อน
+- **AC-LON-04.2:** การเลือก "คืนแล้วในกองรวม" ต้องตรวจสอบและตัดทอนโควตาของ Pool จริง และบันทึก `bulk_pool_id` ลงใน `distribution_log` ทุกครั้ง
+- **AC-LON-04.3:** หน้าจอรายงานของยืมค้างส่ง (`/back-office/supply/loans`) และหน้าปิดกะ ต้องแสดงส่วนสรุปกระทบยอดส่วนต่าง (Reconciliation Summary):
+  `ส่วนต่างสูญหาย = ยอดของที่คลังตรวจรับกองรวมจริง - จำนวนรายการที่กดเคลียร์ด้วย bulk_dropoff` เพื่อเป็น Audit Trail ให้ผู้จัดการตรวจสอบ
 
 ---
 
@@ -763,11 +813,13 @@ export interface MealService extends BaseDoc {
 - [ ] Zod schema `requisitionTicketSchema` และ `distributionLogSchema` ถูกประกาศครบถ้วนพร้อม Type Export
 - [ ] วงจรสถานะ 7 ขั้นตอน (WMS Outbound ➔ POS Distribution ➔ Shift Close ➔ 100% Return ➔ Discrepancy) ทำงานถูกต้องตาม State Machine
 - [ ] หน้า Ticket Hub และ 4 เวิร์กสเปซเฉพาะทางแสดงผลและตัดสต็อกคลังได้ถูกต้อง
+- [ ] `stock_ledger` reason ↔ ref_id mapping สอดคล้องกับ CR-055 โดย Zod validation ตรวจสอบ prefix ครอบคลุม `receive`, `requisition`, `distribute`, `transfer_out` ตามตาราง Reconciled Mapping (§3.8)
 - [ ] หน้าบันทึกผลผลิตโรงครัวบันทึก `yield_items` แบบชุดรายการและคำนวณอายุ 4 ชม. ลง `stock_ledger` ได้ใน Transaction เดียว
 - [ ] หน้าจอจุดสแกนแจกจ่ายหน้างาน POS แสดงตัวนับถอยหลัง 4 ชม. พร้อม Soft Warning และบันทึก `distribution_log` ถูกต้อง
 - [ ] การแก้ไขตั๋วเดิมเพื่อเติมของระหว่างแจก (In-flight Amendment) บันทึก Delta StockLedger และอัปเดตหน้าจอจุดแจกจ่ายแบบ Reactive
 - [ ] การปิดรอบหน้างานปิดขาด 100% (No Rollover) และคลังกระทบยอดส่วนต่างได้ถูกต้อง
 - [ ] ระบบยืมพัสดุคงทนสแกนจ่ายด้วย Stepper ผูกกับบุคคลโดยไม่ใช้บาร์โค้ด
+- [ ] ระบบ Hybrid Auto-Pool สำหรับการคืนของยืมแบบกองรวม (Bulk Drop-off) ตรวจสอบโควตาคงเหลือและบันทึก `bulk_pool_id` ลงใน `distribution_log` ทุกครั้ง พร้อมหน้าสรุปกระทบยอดส่วนต่าง
 - [ ] ด่าน Check-out Clearance Gate ตรวจจับของค้างส่งและปลดภาระด้วย 1-Click Resolve 3 ทางเลือกได้สำเร็จโดยไม่กักตัวผู้พักพิง
 - [ ] ผ่านการทดสอบ Unit Tests และ End-to-End Integration Tests ครบทั้ง 18 หน้าจอ
 
@@ -778,4 +830,6 @@ export interface MealService extends BaseDoc {
 - **2026-09-12 (Decision 1):** คง `TypeClass` เป็น 3 คลาสมาตรฐาน (`'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT'`) ตามระบบเดิม โดยจำแนกอาหารปรุงเสร็จเป็น `category: 'item_category:ready_meal'` (`READY_MEAL`, `default_class: 'CONSUMABLE'`) และวัตถุดิบครัวเป็น `category: 'item_category:food'` (`FOOD`, `default_class: 'CONSUMABLE'`) ตามมติใน [`docs/changes/draft-seed-item-categories.md`](draft-seed-item-categories.md) เพื่อรักษามาตรฐาน Data Model และความเรียบง่ายของ TypeClass
 - **2026-09-12 (Decision 2):** การคัดกรองพัสดุที่ต้องควบคุมอายุ 4 ชม. ด้วย Soft Warning ให้ตรวจสอบจาก `item.category === 'item_category:ready_meal'` แทนการตรวจสอบจาก `type_class`
 - **2026-09-13 (Decision 3):** ยกเลิกโมเดล 5 Standard Meal Archetypes โดยเปลี่ยนเป็นบันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารจริงโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวผัดฮาลาล) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`default_class: 'CONSUMABLE'`) เพื่อให้ชื่ออาหารใน Master Data, ตั๋วเบิกจ่าย, และสต็อกการ์ดตรงกับความเป็นจริงหน้างาน
+- **2026-09-14 (Decision 4):** ปรับปรุงข้อกำหนดบัญชีคลัง `stock_ledger` ให้สอดคล้องกับ Invariant CR-055 โดยคง enum `receive` สำหรับการรับเข้าทุกประเภท (ผลผลิตครัว, ของแจกเหลือส่งคืน, ของยืมส่งคืน) และขยาย `REF_PREFIX_BY_REASON` ใน `operations.ts` ให้ `receive` รับ Prefix ได้หลายชนิด (`['meal_service:', 'requisition_ticket:', 'distribution_log:']`) พร้อมกำหนดให้ตั๋วเบิกจ่ายตัดสต็อกด้วย `requisition` (ครัว) และ `distribute` (แจกจ่าย) โดยผูก `ref_id` กับ `'requisition_ticket:'`
+- **2026-09-14 (Decision 5):** อุดช่องโหว่การปลดภาระของยืมคืนแบบกองรวม (Bulk Drop-off Unbounded Resolve) ที่ด่าน Check-out ด้วยระบบ **Hybrid Auto-Pool**: คลังตรวจรับกองรวมสร้าง Pool ยอดรับจริงประจำกะ (`unclaimed_quota`) โดยด่าน Check-out จะกดปุ่ม [ 🤝 ยืนยันว่าคืนแล้วในกองรวม ] ได้เฉพาะเมื่อยังมีโควตาเหลือใน Pool หากโควตาหมดจะล็อกปุ่มและบังคับให้เลือก Lost หรือต้องใช้สิทธิ์ `shelter_manager` Override พร้อมบันทึก `bulk_pool_id` และรายงานส่วนต่างตอนปิดรอบ
 

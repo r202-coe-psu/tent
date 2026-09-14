@@ -5,7 +5,7 @@ status: proposed
 date: 2026-09-13
 requested_by: Team Leader
 decided_by: project owner 
-layer: volatile
+layer: stable
 affects:
   - docs/data/schema.md §2.7.1 (ทดแทน gas_cylinder_type ด้วย fuel_cylinder — schema_v 1)
   - docs/data/schema.md §2.7.2 (gas_ledger อ้างอิง fuel_cylinder._id)
@@ -25,7 +25,8 @@ affects:
 
 # ย้ายการจัดการแก๊สและเชื้อเพลิงมายังคลังพัสดุ (Supply) + ปรับฟอร์ม FUEL_ENERGY (LPG) + บริหารจัดการถังจริงรายใบ (fuel_cylinder)
 
-> **สรุป (TL;DR):** ย้ายความรับผิดชอบการจัดการแก๊สจากโรงครัวมาที่คลังพัสดุ (Supply) · ปรับฟอร์ม `ItemMaster` เมื่อเลือกหมวด `item_category:fuel_energy` ให้ล็อคเฉพาะแก๊ส LPG พร้อมแสดงฟิลด์สเปกพลังงาน (`capacity_kg`, `burn_rate_kg_per_hour`, `time_multiplier`) และล็อคหน่วยฐานเป็น "ถัง" · ใช้โมเดล 2 ระดับ: Catalog เป็นสเปกชนิดแก๊ส + สร้าง Document Type ใหม่ `fuel_cylinder` จัดการถังจริงรายใบในคลัง (ผูก `item_master_id`) · แสดงผลในตารางพัสดุคลังด้วยยอด `X ถัง (Y กก.)` แบบไฮบริด (Inline Expand สรุปเร็ว + Dedicated Modal จัดการเต็มรูปแบบ) · ระบบ Dev/Test ใช้ Clean Replacement และเพิ่มข้อมูลเริ่มต้นใน `seed.ts` โดยไม่ทำสคริปต์ Database Migration
+> [!NOTE]
+> **สรุป (TL;DR):** ย้ายการจัดการถังแก๊สจากโรงครัวมาคลังพัสดุ (Supply) ให้ตรงหน้าที่ตรวจรับ-ส่งเติมจริง · ปรับ `ItemMaster` หมวด `FUEL_ENERGY` ล็อคหน่วย "ถัง" และแสดงสเปกพลังงาน (`capacity_kg`, `burn_rate_kg_per_hour`, `time_multiplier`) · เพิ่ม Stable CouchDB Doc Type `fuel_cylinder` (schema_v 1) จัดการถังจริงรายใบผูกกับ Master · dev ต้อง build: Catalog LPG Form, ตารางพัสดุคลังแสดง `X ถัง (Y กก.)`, Modal จัดการถัง, ปรับ VDU Guard ใน `shelter-access-design.ts`, และเพิ่ม Seed Data
 
 ---
 
