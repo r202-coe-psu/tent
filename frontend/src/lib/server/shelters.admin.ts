@@ -17,7 +17,12 @@ import {
 	REFERRAL_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
-import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID, registryByCodePath } from './registry-design';
+import {
+	buildRegistryDesignDoc,
+	REGISTRY_DESIGN_ID,
+	registryByCodePath,
+	registryHighestByCodePath
+} from './registry-design';
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
@@ -74,6 +79,24 @@ export async function findMasterByCode(code: string): Promise<ShelterMaster | nu
 	throw new ServiceError('INTERNAL', 'Could not read registry');
 }
 
+/**
+ * Read the highest numeric shelter-code suffix from the registry view. This is
+ * used only to initialize the allocator and avoids an O(registry) scan on the
+ * provisioning request path.
+ */
+export async function findHighestShelterCodeNumber(): Promise<number> {
+	const res = await adminRaw(registryHighestByCodePath(), 'GET');
+	if (res.status === 200) {
+		const rows = (res.data as { rows?: { key?: unknown }[] })?.rows ?? [];
+		const key = rows[0]?.key;
+		return typeof key === 'number' && Number.isSafeInteger(key) && key > 0 ? key : 0;
+	}
+	if (res.status === 404) {
+		throw new ServiceError('INTERNAL', 'Registry code index is not available');
+	}
+	throw new ServiceError('INTERNAL', 'Could not read highest shelter code');
+}
+
 /** Pre-view fallback for {@link findMasterByCode}; O(registry) — avoid on hot paths. */
 async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null> {
 	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
@@ -92,28 +115,50 @@ async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null>
  */
 export async function deployRegistryDesign(): Promise<{ status: number; updated: boolean }> {
 	const desired = buildRegistryDesignDoc();
-	const existing = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'GET');
-	const current =
-		existing.status === 200
-			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
-			: null;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const existing = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'GET');
+		if (existing.status !== 200 && existing.status !== 404) {
+			throw new ServiceError(
+				'INTERNAL',
+				`Could not read registry _design/app (${existing.status})`
+			);
+		}
+		const current =
+			existing.status === 200
+				? (existing.data as {
+						_rev?: string;
+						version?: number;
+						views?: Record<string, { map: string }>;
+					})
+				: null;
 
-	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
-		return { status: 304, updated: false };
-	}
+		const matchesDesired =
+			current?.version === desired.version &&
+			Object.entries(desired.views).every(
+				([name, view]) => current.views?.[name]?.map === view.map
+			);
+		if (matchesDesired) {
+			return { status: 304, updated: false };
+		}
 
-	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'PUT', {
-		...desired,
-		...(current?._rev ? { _rev: current._rev } : {})
-	});
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new ServiceError(
-			'INTERNAL',
-			`registry _design/app write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
+		const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'PUT', {
+			...desired,
+			...(current?._rev ? { _rev: current._rev } : {})
+		});
+		if (res.status === 409) continue;
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`registry _design/app write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+		return { status: res.status, updated: true };
 	}
-	return { status: res.status, updated: true };
+	throw new ServiceError(
+		'CONFLICT',
+		'Could not deploy registry _design/app after concurrent retries'
+	);
 }
 
 /** Idempotent legacy → current migration wrapper. */

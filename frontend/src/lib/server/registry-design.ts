@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view's map function changes so deployers can tell a stale design
  * doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 1;
+export const REGISTRY_DESIGN_VERSION = 2;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -30,6 +30,9 @@ export interface RegistryDesignDoc {
 /**
  * `by_code` — one row per shelter master, keyed by `shelter.code` (`SH001`).
  * Query with `?key="SH001"&include_docs=true&limit=1`.
+ * `by_code_number` — the same masters keyed by their numeric suffix. Query
+ * descending with `limit=1` to bootstrap the shelter-code sequence without a
+ * full registry scan.
  */
 export function buildRegistryDesignDoc(): RegistryDesignDoc {
 	return {
@@ -43,6 +46,13 @@ export function buildRegistryDesignDoc(): RegistryDesignDoc {
     emit(doc.code, null);
   }
 }`
+			},
+			by_code_number: {
+				map: `function (doc) {
+  if (doc.type === 'shelter' && /^SH\\d+$/i.test(doc.code || '')) {
+    emit(parseInt(doc.code.slice(2), 10), null);
+  }
+}`
 			}
 		}
 	};
@@ -53,4 +63,9 @@ export function registryByCodePath(code: string): string {
 	return `/${REGISTRY_DB}/${REGISTRY_DESIGN_ID}/_view/by_code?key=${encodeURIComponent(
 		JSON.stringify(code)
 	)}&include_docs=true&limit=1`;
+}
+
+/** Path for the highest numeric shelter-code suffix. */
+export function registryHighestByCodePath(): string {
+	return `/${REGISTRY_DB}/${REGISTRY_DESIGN_ID}/_view/by_code_number?descending=true&include_docs=true&limit=1`;
 }
