@@ -1345,12 +1345,12 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `default_issue_uom` | str | opt | หน่วยเริ่มต้นตอนเบิกจ่าย |
 | `distribution_type` | enum(`recurring`,`one_time`) | opt | `recurring` = แจกซ้ำได้ตามรอบ; `one_time` = แจกครั้งเดียวต่อคน |
 | `type_class` | enum(`CONSUMABLE`,`DURABLE`,`EQUIPMENT`) | req | ชั้นสินค้า; ใช้ `default_class` จาก category เป็นค่าเริ่มต้นแต่ override ได้ |
-| `shelf_life_days` | num | opt | อายุการจัดเก็บ (ไม่ใช้กับ FUEL_ENERGY) |
-| `storage_type` | enum(`DRY`,`CHILLED`,`FROZEN`,`CONTROLLED_MED`) | opt | สภาพการจัดเก็บ (ไม่ใช้กับ FUEL_ENERGY) |
-| `allergens` | [str] | req | รายการสารก่อภูมิแพ้; default `[]` |
+| `shelf_life_days` | num | opt | อายุการจัดเก็บ |
+| `storage_type` | enum(`DRY`,`CHILLED`,`FROZEN`,`CONTROLLED_MED`) | opt | สภาพการจัดเก็บ |
+| `allergens` | [str] | conditional req | รายการสารก่อภูมิแพ้; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
 | `target_gender` | enum(`ALL`,`FEMALE`,`MALE`) | opt | กลุ่มเพศเป้าหมาย |
 | `age_group` | enum(`ALL`,`INFANT`,`CHILD`,`ELDERLY`) | opt | กลุ่มอายุเป้าหมาย |
-| `dietary` | [enum(`HALAL`,`VEGAN`)] | req | ข้อจำกัดด้านอาหาร; default `[]` |
+| `dietary` | [enum(`HALAL`,`VEGAN`)] | conditional req | ข้อจำกัดด้านอาหาร; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
 | `qty_per_person` | qty_str | opt | ปริมาณต่อคนสำหรับสินค้าคงทน/อุปกรณ์ |
 | `returnable` | bool | opt | สินค้าคงทนที่ต้องส่งคืน |
 | `asset_status` | enum(`READY`,`IN_USE`,`MAINTENANCE`,`BROKEN`) | opt | สถานะสินค้าคงทน/อุปกรณ์ |
