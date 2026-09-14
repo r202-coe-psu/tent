@@ -270,6 +270,7 @@ export interface FeedbackResponseDoc {
   - มีปุ่ม "ส่งออกข้อมูล (Export CSV/Excel)" สำหรับ Session นั้นๆ
   - ไฟล์ที่ดาวน์โหลดประกอบด้วยคอลัมน์: รหัสรายการ, วันเวลาที่ส่ง, คะแนนทั้ง 4 มิติ, คะแนนเฉลี่ย, ข้อความ, ข้อมูลติดต่อ, สถานะการเปิดอ่าน
   - ข้อมูลข้อความรองรับ UTF-8 (มี BOM) เพื่อให้อ่านภาษาไทยใน Microsoft Excel ได้ถูกต้องโดยไม่เป็นภาษาต่างดาว
+  - **มาตรฐานชื่อไฟล์ (File Naming Convention):** กำหนดชื่อไฟล์ใน Header `Content-Disposition: attachment; filename="feedback-{shelter_code}-{cleanSessionId}-{YYYYMMDD}.csv"` (โดย `{cleanSessionId}` ตัด prefix `feedback_session:` ออก และ `{YYYYMMDD}` คือวันที่ดาวน์โหลดตามเวลาท้องถิ่น) เพื่อความเป็นระเบียบในการจัดเก็บไฟล์ของเจ้าหน้าที่
 
 ---
 
@@ -478,7 +479,7 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
 - [ ] **AC-08 (Anti-Abuse & Rate Limiting):** เมื่อมีการส่งข้อมูลจาก IP เดียวกันเกิน 5 ครั้งภายใน 10 นาที ระบบ BFF จะปฏิเสธด้วย HTTP 429 Too Many Requests
 - [ ] **AC-09 (Client Cooldown):** หลังส่งแบบประเมินสำเร็จ หน้าเว็บจะบันทึกสถานะลงใน `localStorage` และล็อกปุ่มส่งเป็นเวลา 10 นาที เพื่อป้องกันการกดส่งซ้ำ
 - [ ] **AC-10 (Mobile Accessibility & Touch Target):** ปุ่มตัวเลือกให้คะแนน 1-5 ดาว บนหน้าจอมือถือมีขนาด Touch Target ไม่ต่ำกว่า 44x44px และใช้ฟอนต์ `IBM Plex Sans Thai` พร้อม `tabular-nums` ตาม Civic Light Design System
-- [ ] **AC-11 (CSV Export):** สามารถดาวน์โหลดไฟล์ CSV สรุปผลของ Session ได้ ข้อมูลภาษาไทยแสดงผลถูกต้องครบถ้วน (UTF-8 with BOM)
+- [ ] **AC-11 (CSV Export):** สามารถดาวน์โหลดไฟล์ CSV สรุปผลของ Session ได้ ข้อมูลภาษาไทยแสดงผลถูกต้องครบถ้วน (UTF-8 with BOM) และตั้งชื่อไฟล์ตามมาตรฐาน `feedback-{shelter_code}-{cleanSessionId}-{YYYYMMDD}.csv` ใน Header `Content-Disposition`
 
 ### 8.2 Definition of Done (DoD)
 
