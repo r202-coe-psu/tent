@@ -127,5 +127,8 @@ export const SM_SH001_ROLES = ['shelter:SH001', 'shelter_manager'];
 /** Roles for a Shelter Manager of SH002. */
 export const SM_SH002_ROLES = ['shelter:SH002', 'shelter_manager'];
 
+/** Roles for a Shelter Manager of SH003. */
+export const SM_SH003_ROLES = ['shelter:SH003', 'shelter_manager'];
+
 /** Roles for a Registration Staff member of SH001. */
 export const STAFF_SH001_ROLES = ['shelter:SH001', 'registration_staff'];
