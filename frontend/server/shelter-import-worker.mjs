@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 
 const baseUrl = (process.env.SHELTER_IMPORT_WORKER_URL || 'http://frontend:3000').replace(
@@ -5,9 +6,10 @@ const baseUrl = (process.env.SHELTER_IMPORT_WORKER_URL || 'http://frontend:3000'
 	''
 );
 const token = process.env.SHELTER_IMPORT_WORKER_TOKEN;
-const workerId = process.env.SHELTER_IMPORT_WORKER_ID || `import-worker-${process.pid}`;
+const workerId =
+	process.env.SHELTER_IMPORT_WORKER_ID || `import-worker-${process.pid}-${randomUUID()}`;
 const endpoint = `${baseUrl}/api/back-office/shelter-import/worker/next`;
-const pollMs = Math.max(250, Number(process.env.SHELTER_IMPORT_WORKER_POLL_MS || 1000));
+const pollMs = Math.max(3000, Number(process.env.SHELTER_IMPORT_WORKER_POLL_MS || 3000));
 const timeoutMs = Math.max(10_000, Number(process.env.SHELTER_IMPORT_WORKER_TIMEOUT_MS || 120_000));
 
 if (!token) {
@@ -16,10 +18,18 @@ if (!token) {
 }
 
 let stopping = false;
+let activeController = null;
+let shutdownTimer = null;
 for (const signal of ['SIGINT', 'SIGTERM']) {
 	process.on(signal, () => {
 		stopping = true;
 		console.info(`[shelter-import-worker] received ${signal}; stopping after current item`);
+		if (activeController && !shutdownTimer) {
+			shutdownTimer = setTimeout(() => {
+				console.warn('[shelter-import-worker] shutdown grace period expired; aborting item');
+				activeController?.abort();
+			}, 30_000);
+		}
 	});
 }
 
@@ -27,12 +37,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function processOne() {
 	const controller = new AbortController();
+	activeController = controller;
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		const response = await fetch(endpoint, {
 			method: 'POST',
 			headers: {
-				'x-shelter-import-worker-token': token,
+				Authorization: `Bearer ${token}`,
 				'x-shelter-import-worker-id': workerId
 			},
 			signal: controller.signal
@@ -50,16 +61,24 @@ async function processOne() {
 		return true;
 	} finally {
 		clearTimeout(timer);
+		activeController = null;
+		if (shutdownTimer) {
+			clearTimeout(shutdownTimer);
+			shutdownTimer = null;
+		}
 	}
 }
 
 console.info(`[shelter-import-worker] polling ${endpoint} as ${workerId}`);
+let errorBackoffMs = 1000;
 while (!stopping) {
 	try {
 		await processOne();
+		errorBackoffMs = 1000;
 	} catch (error) {
 		console.error('[shelter-import-worker] poll failed', error);
-		await sleep(Math.min(pollMs * 5, 5000));
+		await sleep(errorBackoffMs);
+		errorBackoffMs = Math.min(errorBackoffMs * 2, 5000);
 		continue;
 	}
 	if (!stopping) await sleep(pollMs);
