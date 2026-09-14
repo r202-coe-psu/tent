@@ -12,7 +12,7 @@
 | **Status**          | Draft for Review                                                                                                                                                             |
 | **Author**          | Soravit Sukkarn                                                                                                                                                              |
 | **Created**         | 2026-09-12                                                                                                                                                                   |
-| **Updated**         | 2026-09-14                                                                                                                                                                   |
+| **Updated**         | 2026-09-15                                                                                                                                                                   |
 | **Classification**  | Volatile Feature Spec                                                                                                                                                        |
 | **Authority / SoT** | **Single Source of Truth (SoT)** สำหรับ Functional Requirements (FR), Non-Functional Requirements (NFR), Acceptance Criteria (AC), Definition of Done (DoD) และ API Contract |
 | **Related CR**      | [`docs/changes/draft-shelter-feedback-system.md`](../changes/draft-shelter-feedback-system.md) (สถานะ: proposed)                                                             |
@@ -194,11 +194,18 @@ export interface FeedbackResponseDoc {
      $$\text{overall\_score} = \frac{\text{weighted\_sum}}{\text{total\_weight}}$$
    - **การปัดเศษทศนิยม (Rounding Rule):** ปัดเศษทศนิยม 2 ตำแหน่งตามหลักคณิตศาสตร์มาตรฐาน (Half-up / Standard Rounding):
      ```typescript
-     const overallScore = Math.round((weightedSum / totalWeight) * 100) / 100;
+     const overallScore =
+       totalWeight > 0
+         ? Math.round((weightedSum / totalWeight) * 100) / 100
+         : 0;
      ```
 2. **การคำนวณคะแนนสรุปบนแดชบอร์ด (Session-Level Aggregation):**
-   - **คะแนนเฉลี่ยรวมของ Session (Session Overall Score):** ค่าเฉลี่ยเลขคณิตของ `overall_score` จากทุก response ในรอบนั้น ๆ แสดงผลทศนิยม 2 ตำแหน่ง
-   - **คะแนนเฉลี่ยรายมิติ (Dimension Average Score):** ค่าเฉลี่ยเลขคณิตของคะแนนในแต่ละมิติ แสดงผลบน Progress Bar ปัดเศษทศนิยม 1 ตำแหน่งสำหรับ UI (และ 2 ตำแหน่งเมื่อ Hover / ใน Tooltip) พร้อมคลาส `tabular-nums`
+   - **กรณีมีข้อมูลคำตอบ (`total_responses > 0`):**
+     - **คะแนนเฉลี่ยรวมของ Session (Session Overall Score):** ค่าเฉลี่ยเลขคณิตของ `overall_score` จากทุก response ในรอบนั้น ๆ ปัดเศษทศนิยม 2 ตำแหน่ง
+     - **คะแนนเฉลี่ยรายมิติ (Dimension Average Score):** ค่าเฉลี่ยเลขคณิตของคะแนนในแต่ละมิติ แสดงผลบน Progress Bar ปัดเศษทศนิยม 1 ตำแหน่งสำหรับ UI (และ 2 ตำแหน่งเมื่อ Hover / ใน Tooltip) พร้อมคลาส `tabular-nums`
+   - **กรณีไม่มีข้อมูลคำตอบ (`total_responses === 0` - Empty State Rule):**
+     - ใน Data Model / Aggregate Response ให้กำหนดค่าคะแนนเฉลี่ยเป็น `null` (`overall_average: null`, รายมิติ `average: null`) **ห้ามกำหนดค่าเป็น `0` หรือ `0.00`** เพื่อป้องกันความผิดพลาดทางสถิติและป้องกันไม่ให้ระบบภายนอกหรือ UI เข้าใจผิดว่าเป็นคะแนนต่ำสุด (0 ดาว)
+     - UI จะนำค่า `null` ไปแสดงผลเป็นสถานะ Empty State (`"—"` หรือ `"ยังไม่มีการประเมิน"`) ตามข้อกำหนดใน §5.1 (FR-FB-04)
 
 ### 4.5 การออกแบบดัชนีและการสืบค้น CouchDB (CouchDB Index & Query Design)
 
@@ -242,23 +249,52 @@ export interface FeedbackResponseDoc {
    - ในฟังก์ชัน `buildValidateDocUpdate()` ที่ไฟล์ [`frontend/src/lib/server/shelter-access-design.ts`](../../frontend/src/lib/server/shelter-access-design.ts) จะต้องเพิ่ม `"feedback_session"` และ `"feedback_response"` เข้าไปในรายการอาร์เรย์ `allowed` types:
      ```typescript
      var allowed = [
-       'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
-       'people_import_log',
-       'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
-       'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
-       'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
-       'item_category', 'item_master', 'recipe',
-       'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
-       'distribution_request', 'distribution_batch', 'stock_lot_reservation',
-       'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
-       'daily_sop_assessment',
-       'feedback_session', 'feedback_response' // CR: Shelter Feedback System
+       "evacuee",
+       "household",
+       "medical",
+       "screening",
+       "movement",
+       "image",
+       "people_import_log",
+       "donation",
+       "donation_campaign",
+       "stock_ledger",
+       "donation_slot",
+       "donation_redirect",
+       "audit",
+       "daily_calc",
+       "simulation",
+       "purchase",
+       "referral",
+       "meal_plan",
+       "kitchen_requisition",
+       "meal_service",
+       "gas_cylinder_type",
+       "gas_ledger",
+       "item_category",
+       "item_master",
+       "recipe",
+       "requirement_group",
+       "food_sphere_standard",
+       "replenishment_policy",
+       "sop_override",
+       "distribution_request",
+       "distribution_batch",
+       "stock_lot_reservation",
+       "distribution_issue",
+       "distribution_issue_idempotency",
+       "distribution_issue_capacity",
+       "distribution_one_time_guard",
+       "distribution_issue_gate",
+       "daily_sop_assessment",
+       "feedback_session",
+       "feedback_response", // CR: Shelter Feedback System
      ];
      ```
 2. **ผลกระทบสำคัญและสาเหตุที่ต้องระบุในแผน (Critical Impact):**
    - หากไม่มีการเพิ่ม doc types ดังกล่าวในรายการ `allowed` types ฟังก์ชัน `validate_doc_update` จะปฏิเสธการบันทึกด้วยการ throw:
      ```javascript
-     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
+     throw { forbidden: "doc type not allowed yet: " + newDoc.type };
      ```
      ส่งผลให้ CouchDB ตอบกลับด้วย **HTTP 403 Forbidden** ทันทีเมื่อมีการบันทึกผ่านเซสชันของเจ้าหน้าที่ทั่วไป (Non-admin) หรือการเขียนผ่าน Public write proxy
 3. **การ Redeploy Design Document (`_design/access`):**
@@ -295,17 +331,23 @@ export interface FeedbackResponseDoc {
     - ข้อความแนะนำภาษาไทยขนาดใหญ่: _"สแกน QR Code ด้วยกล้องมือถือ เพื่อประเมินความพึงพอใจและส่งข้อความถึงเจ้าหน้าที่"_
     - Short URL แบบอ่านง่ายด้านล่าง QR Code (สำรองกรณีกล้องสแกนไม่ได้)
     - รองรับการสั่งพิมพ์ผ่าน Browser Print Dialog (`window.print()`)
-- **FR-FB-04 [Analytics Dashboard]:**
+- **FR-FB-04 [Analytics Dashboard & Empty State]:**
   - แสดงสถิติภาพรวมของ Session:
-    - จำนวนผู้ตอบแบบประเมินทั้งหมด (Total Responses)
+    - จำนวนผู้ตอบแบบประเมินทั้งหมด (Total Responses, ตัวเลขพร้อมคลาส `tabular-nums`)
     - คะแนนเฉลี่ยภาพรวม (Overall Average Score, เต็ม 5.0) คำนวณแบบถ่วงน้ำหนักตาม §4.4
     - แถบคะแนนเฉลี่ยแยกตาม 4 มิติ (Progress bar พร้อมตัวเลขเฉลี่ยทศนิยม 1 ตำแหน่ง ใช้คลาส `tabular-nums`)
     - กราฟหรือตารางแจกแจงระดับคะแนน (1 ถึง 5 ดาว)
+  - **ข้อกำหนด Empty State (เมื่อ `total_responses === 0`):**
+    - ในกรณีที่เพิ่งสร้าง Session และยังไม่มีผู้ส่งคำตอบ ระบบต้อง**ไม่แสดงคะแนนเป็น `0.00` หรือ `0.0`** (เนื่องจากเกณฑ์ Rubric มีสเกล 1–5 ดาว การแสดง 0.00 จะทำให้เกิดความเข้าใจผิดว่าศูนย์ได้คะแนนแย่มากหรือประเมินตกเกณฑ์)
+    - **การ์ดคะแนนเฉลี่ยภาพรวม (Overall Score Card):** แสดงค่าเป็นเครื่องหมายยัติภังค์ยาว `—` (Em dash) พร้อม Badge หรือข้อความกำกับสถานะ _"ยังไม่มีการประเมิน"_ (No evaluations yet) โดยใช้สไตล์สี Neutral/Muted ตาม Civic Light Design System
+    - **แถบคะแนนราย 4 มิติ (Dimension Progress Bars):** แถบ Progress bar แสดงค่า 0% (แถบสีเทา Neutral) และช่องตัวเลขแสดง `—` (Em dash)
+    - **ส่วนแจกแจงระดับคะแนน (Score Distribution):** แสดงกล่องข้อความชี้แจงสถานะ พร้อมคำแนะนำและทางลัด Action เช่น _"ยังไม่มีข้อมูลการประเมินในรอบนี้ — พิมพ์โปสเตอร์ QR Code เพื่อเริ่มเปิดรับฟังความคิดเห็น"_ พร้อมปุ่มลัดพิมพ์โปสเตอร์ (Print Poster)
 - **FR-FB-05 [Feedback Messages Feed & Triage]:**
   - แสดงรายการข้อความที่ผู้ประสบภัยส่งเข้ามา เรียงลำดับจากล่าสุดไปเก่าสุด
   - แสดงข้อมูล: วัน-เวลา, คะแนนที่ให้แต่ละมิติ, ข้อความแสดงความคิดเห็น, ข้อมูลติดต่อกลับ (ถ้ามี)
   - มี Badge แสดงสถานะ: `ยังไม่อ่าน` (Unread - สีเตือนเด่นชัด) และ `อ่านแล้ว` (Read)
   - เจ้าหน้าที่สามารถคลิกปุ่ม **"ทำเครื่องหมายว่าอ่านแล้ว" (Mark as Read)** เพื่อเปลี่ยนสถานะข้อความ (บันทึก `reviewed_by`, `reviewed_at` และ `updated_at`)
+  - **Empty State:** ในกรณีที่ไม่มีข้อความส่งเข้ามา แสดง Empty State Card พร้อมข้อความ _"ยังไม่มีข้อความข้อเสนอแนะในรอบนี้"_ อย่างชัดเจน สะอาดตา ไม่ปล่อยให้เป็นพื้นที่ว่างเปล่า
 - **FR-FB-06 [Data Export]:**
   - มีปุ่ม "ส่งออกข้อมูล (Export CSV/Excel)" สำหรับ Session นั้นๆ
   - ไฟล์ที่ดาวน์โหลดประกอบด้วยคอลัมน์: รหัสรายการ, วันเวลาที่ส่ง, คะแนนทั้ง 4 มิติ, คะแนนเฉลี่ย, ข้อความ, ข้อมูลติดต่อ, สถานะการเปิดอ่าน
@@ -331,7 +373,7 @@ export interface FeedbackResponseDoc {
   - ส่งข้อมูลไปยัง BFF Endpoint `POST /api/public/v1/shelters/[id]/feedback`
 - **FR-FB-13 [Success Screen & Cooldown]:**
   - หลังส่งสำเร็จ แสดงหน้าจอขอบคุณและไอคอนยืนยันชัดเจน
-  - บันทึก Cooldown ใน Browser `localStorage` (ระยะเวลา 10 นาที) และปิดการใช้งานปุ่มส่ง เพื่อป้องกันการกดส่งซ้ำซ้อน
+  - บันทึก Cooldown ใน Browser `localStorage` โดยใช้คีย์เฉพาะของรอบประเมิน (`feedback_cooldown:${sessionId}` ระยะเวลา 10 นาที) และปิดการใช้งานปุ่มส่ง เพื่อป้องกันการกดส่งซ้ำซ้อน
 
 ---
 
@@ -518,7 +560,7 @@ Endpoint บน SvelteKit BFF สำหรับการส่งประเ�
 - [ ] **AC-03 (Public Session Loading & Form):** เมื่อเปิดหน้าฟอร์มสาธารณะ ระบบเรียก `GET /api/public/v1/shelters/[id]/feedback/[sessionId]` และแสดงเกณฑ์ประเมิน 4 มิติตาม Rubric Snapshot ได้ครบถ้วน
 - [ ] **AC-04 (Public Feedback Submission):** ผู้ใช้งานสาธารณะสามารถให้คะแนนครบ 4 มิติ กรอกข้อความ และกดยืนยันส่งผ่าน `POST /api/public/v1/shelters/[id]/feedback` ได้รับ HTTP 201 ข้อมูลบันทึกลงฐานข้อมูลศูนย์พร้อมคำนวณ `overall_score` ถูกต้อง
 - [ ] **AC-05 (Session Close Enforcement):** เมื่อเจ้าหน้าที่กดปิด Session ใน Back Office แล้ว ผู้ที่เปิดหน้าฟอร์มจะเห็นข้อความแจ้งเตือนว่ารอบนี้ปิดแล้ว และหากมีการส่ง POST เข้ามา BFF จะปฏิเสธด้วย HTTP 409 Conflict
-- [ ] **AC-06 (Dashboard Metrics):** เมื่อมีผู้ส่งผลประเมิน ข้อมูลสรุปจำนวนคน, คะแนนเฉลี่ยรวม, และคะแนนแยกตาม 4 มิติ ใน Back Office แสดงผลถูกต้องตามการคำนวณถ่วงน้ำหนักและทศนิยมตาม §4.4
+- [ ] **AC-06 (Dashboard Metrics & Empty State):** เมื่อมีผู้ส่งผลประเมิน ข้อมูลสรุปจำนวนคน, คะแนนเฉลี่ยรวม, และคะแนนแยกตาม 4 มิติ ใน Back Office แสดงผลถูกต้องตามการคำนวณถ่วงน้ำหนักและทศนิยมตาม §4.4; ในกรณีที่เพิ่งสร้าง Session และยังไม่มีผู้ตอบ (`total_responses === 0`) ระบบต้องไม่แสดงคะแนนเป็น `0.00` หรือ `0.0` แต่ต้องแสดงสถานะ Empty State เป็น `"—"` (Em dash) พร้อม Badge/ป้าย _"ยังไม่มีการประเมิน"_ เพื่อป้องกันความเข้าใจผิดว่าเป็นคะแนนต่ำวิกฤต
 - [ ] **AC-07 (Comments Feed & Mark as Read):** เจ้าหน้าที่สามารถอ่านข้อความที่ฝากไว้ และกดเปลี่ยนสถานะจาก "ยังไม่อ่าน" เป็น "อ่านแล้ว" ได้ โดยระบบจะอัปเดต `status: "read"` และ `updated_at` ใน CouchDB
 - [ ] **AC-08 (Anti-Abuse & Rate Limiting):** เมื่อมีการส่งข้อมูลจาก IP เดียวกันเกิน 5 ครั้งภายใน 10 นาที ระบบ BFF จะปฏิเสธด้วย HTTP 429 Too Many Requests
 - [ ] **AC-09 (Client Cooldown):** หลังส่งแบบประเมินสำเร็จ หน้าเว็บจะบันทึกสถานะลงใน `localStorage` และล็อกปุ่มส่งเป็นเวลา 10 นาที เพื่อป้องกันการกดส่งซ้ำ
