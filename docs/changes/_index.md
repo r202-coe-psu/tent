@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-11 # CR-097 marked done with as-built kiosk registration updates
+updated: 2026-09-14 # Ratified CR-119, CR-120, CR-121
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -136,3 +136,6 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-116](CR-116-volunteer-shift-checkout-actor-reason.md) | Volunteer Shift Check-Out — Record Actor and Manual-Override Reason (check_out_by, check_out_method, check_out_reason) | approved | volatile | 2026-09-09 (approved 2026-09-11) | docs/data/schema.md §2.9 (shift_assignment 3→4), frontend/src/lib/features/volunteers/** |
 | [CR-117](CR-117-master-data-volunteer-skills.md) | Master Data — เพิ่ม volunteer_skills (master_type ที่ 9) + schema items category & description + หน้าตั้งค่าทักษะอาสาสมัคร | approved | volatile | 2026-08-31 (approved 2026-09-12) | docs/data/schema.md §3.3, frontend/src/lib/features/master-data/** |
 | [CR-118](CR-118-t13-transfer-lot-metadata.md) | T-13 โอนย้ายข้ามศูนย์ — Lot ต้นทาง/ปลายทาง + Split Allocation (advisory per-lot); ปิด backlog CR-059 Flow 1 กลุ่ม Lot; stock_transfer schema_v 3 → 4 | approved | volatile | 2026-09-02 (approved 2026-09-06) | docs/data/schema.md §5.5, features/operations/**, routes/api/back-office/transfer/**, CR-059, CR-088, CR-089 |
+| [CR-119](CR-119-seed-item-categories.md) | ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog | approved | stable | 2026-09-12 (approved 2026-09-14) | docs/data/schema.md §4.1/§4.2, frontend/src/lib/features/catalog/**, frontend/scripts/sync-central-db.ts, frontend/scripts/seed.ts |
+| [CR-120](CR-120-fuel-energy-gas-inventory.md) | ย้ายการจัดการแก๊สและเชื้อเพลิงมายังคลังพัสดุ (Supply) + ปรับฟอร์ม FUEL_ENERGY (LPG) + บริหารจัดการถังจริงรายใบ (fuel_cylinder) | approved | stable | 2026-09-13 (approved 2026-09-14) | docs/data/schema.md §2.7.1/§2.7.2/§4.2, docs/task-breakdown/05-D-kitchen.md, frontend/src/lib/features/catalog/**, operations/**, kitchen/** |
+| [CR-121](CR-121-spec-ticket.md) | ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog) | approved | stable | 2026-09-12 (approved 2026-09-14) | docs/data/schema.md §2.1/§2.7/§4.2, frontend/src/lib/features/tickets/**, distribution/**, kitchen/**, operations/**, server/shelter-access-design.ts |
