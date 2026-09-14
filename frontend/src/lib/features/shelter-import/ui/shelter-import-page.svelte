@@ -4,12 +4,13 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Download from '@lucide/svelte/icons/download';
 	import Upload from '@lucide/svelte/icons/upload';
 	import FileSpreadsheet from '@lucide/svelte/icons/file-spreadsheet';
+	import Activity from '@lucide/svelte/icons/activity';
 	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
@@ -93,9 +94,19 @@
 	const jobRunning = $derived(
 		Boolean(activeJob && !isImportJobTerminal(activeJob.job.status)) || importMutation.isPending
 	);
+	let progressDialogOpen = $state(false);
+	let restoreDialogHandled = $state(false);
 
 	onMount(() => {
 		activeJobId = sessionStorage.getItem('shelter-import-active-job');
+		if (!activeJobId) restoreDialogHandled = true;
+	});
+
+	$effect(() => {
+		const job = activeJobQuery.data?.job;
+		if (!job || restoreDialogHandled) return;
+		restoreDialogHandled = true;
+		if (!isImportJobTerminal(job.status)) progressDialogOpen = true;
 	});
 
 	$effect(() => {
@@ -195,7 +206,6 @@
 		importMutation.mutate(
 			{
 				filename,
-				importedBy: authStore.user?.name ?? 'unknown',
 				rows: validations,
 				duplicateAction
 			},
@@ -203,6 +213,7 @@
 				onSuccess: (result) => {
 					activeJobId = result.jobId;
 					sessionStorage.setItem('shelter-import-active-job', result.jobId);
+					progressDialogOpen = true;
 				}
 			}
 		);
@@ -213,22 +224,34 @@
 	}
 
 	const hasRetryableFailures = $derived(
-		Boolean(activeJob?.items.some((item) => item.status === 'failed'))
+		Boolean(
+			activeJob?.items.some(
+				(item) => item.status === 'failed' && item.attempts < (item.max_attempts ?? 3)
+			)
+		)
 	);
 </script>
 
-<div class="flex w-full flex-1 flex-col gap-6 p-6">
+<div class="flex w-full flex-1 flex-col gap-6 bg-[#F8FAFC] p-4 sm:p-6">
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>
-			<h2 class="text-2xl font-bold tracking-tight text-foreground">นำเข้าศูนย์พักพิงจาก Excel</h2>
-			<p class="mt-1 text-sm text-muted-foreground">
+			<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647]">
+				นำเข้าศูนย์พักพิงจาก Excel
+			</h1>
+			<p class="mt-2 text-base text-slate-700">
 				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน
 			</p>
-			<p class="mt-1 text-xs text-muted-foreground">
+			<p class="mt-1 text-sm text-slate-500">
 				{APP_ONLY_FIELDS.join(' · ')} ไม่มีในไฟล์ — ตั้งค่าในหน้าแก้ไขศูนย์พักพิงหลังนำเข้าเสร็จ
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
+			{#if activeJobId}
+				<Button variant="outline" onclick={() => (progressDialogOpen = true)}>
+					<Activity class="mr-2 h-4 w-4" aria-hidden="true" />
+					ดูความคืบหน้างานล่าสุด
+				</Button>
+			{/if}
 			<Button
 				variant="outline"
 				onclick={() => downloadTemplate(false)}
@@ -243,7 +266,7 @@
 	</div>
 
 	<!-- Upload -->
-	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
 		{#if filename}
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div class="flex items-center gap-2 text-sm">
@@ -286,7 +309,7 @@
 
 	<!-- Preview + commit -->
 	{#if validations.length > 0}
-		<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+		<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>
 				<Button onclick={runImport} disabled={importDisabled}>
@@ -342,17 +365,56 @@
 		</div>
 	{/if}
 
-	{#if activeJobId}
-		<ImportProgress
-			data={activeJob}
-			retrying={retryMutation.isPending}
-			onretry={hasRetryableFailures ? retryFailed : undefined}
-		/>
-	{/if}
-
 	<!-- History -->
-	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
-		<h3 class="mb-4 text-lg font-semibold text-foreground">ประวัติการนำเข้า</h3>
-		<ImportLogHistory basePath={resolvedBasePath} />
+	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
+		<div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+			<div>
+				<h2 class="text-2xl font-bold tracking-tight text-slate-900">ประวัติการนำเข้า</h2>
+				<p class="mt-1 text-sm text-slate-500">ติดตามสถานะงานและเปิดดูผลลัพธ์รายศูนย์เมื่อจำเป็น</p>
+			</div>
+		</div>
+		<ImportLogHistory
+			basePath={resolvedBasePath}
+			{activeJob}
+			onprogress={() => (progressDialogOpen = true)}
+		/>
 	</div>
+
+	{#if activeJobId}
+		<Dialog.Root bind:open={progressDialogOpen}>
+			<Dialog.Content class="max-h-[90vh] overflow-y-auto shadow-md sm:max-w-5xl">
+				<Dialog.Header>
+					<Dialog.Title class="text-xl font-bold text-slate-900">ความคืบหน้าการนำเข้า</Dialog.Title>
+					<Dialog.Description>
+						ติดตามการประมวลผลทีละศูนย์และส่งรายการที่ล้มเหลวกลับเข้าคิวได้จากหน้านี้
+					</Dialog.Description>
+				</Dialog.Header>
+
+				{#if activeJob}
+					<ImportProgress
+						data={activeJob}
+						retrying={retryMutation.isPending}
+						onretry={hasRetryableFailures ? retryFailed : undefined}
+					/>
+				{:else if activeJobQuery.isLoading}
+					<div
+						class="rounded-xl border border-slate-200/80 bg-slate-50 p-8 text-center text-sm text-slate-600"
+					>
+						กำลังโหลดสถานะงานล่าสุด...
+					</div>
+				{:else}
+					<div
+						class="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center text-sm text-amber-900"
+					>
+						ไม่พบข้อมูลงานนำเข้านี้แล้ว
+					</div>
+				{/if}
+
+				<Dialog.Footer>
+					<Button variant="outline" onclick={() => (progressDialogOpen = false)}>ปิดหน้าต่าง</Button
+					>
+				</Dialog.Footer>
+			</Dialog.Content>
+		</Dialog.Root>
+	{/if}
 </div>

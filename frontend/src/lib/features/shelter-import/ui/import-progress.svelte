@@ -27,7 +27,7 @@
 	}
 
 	function isRetryable(item: ImportJobItem): boolean {
-		return item.status === 'failed';
+		return item.status === 'failed' && item.attempts < (item.max_attempts ?? 3);
 	}
 
 	function statusLabel(status: ImportItemStatus): string {
@@ -71,7 +71,10 @@
 	>
 		<div class="flex flex-wrap items-start justify-between gap-3">
 			<div>
-				<h3 class="text-base font-semibold text-slate-900">กำลังประมวลผล {data.job.filename}</h3>
+				<h3 class="text-base font-semibold text-slate-900">
+					{running ? 'กำลังประมวลผล' : 'สรุปผลการนำเข้า'}
+					{data.job.filename}
+				</h3>
 				<p class="mt-1 text-sm text-slate-600" aria-live="polite">
 					ดำเนินการแล้ว {completedCount.toLocaleString('th-TH')} จาก {total.toLocaleString('th-TH')} ศูนย์
 				</p>
@@ -92,6 +95,16 @@
 					>
 				{/if}
 			</div>
+		</div>
+
+		<div
+			class="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"
+		>
+			<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" aria-hidden="true" />
+			<p>
+				ระบบทำงานต่อทีละศูนย์ หากศูนย์ใดล้มเหลวจะบันทึกเฉพาะรายการนั้นและประมวลผลรายการถัดไปต่อ
+				จึงไม่ยกเลิกทั้งงาน โดยสามารถลองใหม่เฉพาะรายการที่ล้มเหลวได้
+			</p>
 		</div>
 
 		<div
