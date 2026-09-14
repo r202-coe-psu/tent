@@ -389,7 +389,7 @@
 								>
 									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
 									{#if itemCategoriesQuery.data}
-										{#each itemCategoriesQuery.data as cat (cat._id)}
+										{#each (itemCategoriesQuery.data ?? []).filter((cat) => !cat.deactivated || cat.name === $formData.category) as cat (cat._id)}
 											<option value={cat.name}>{cat.name}</option>
 										{/each}
 									{/if}

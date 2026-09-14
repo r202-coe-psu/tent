@@ -79,16 +79,19 @@
 	function confirmDelete() {
 		if (!pendingDeleteItem) return;
 		const { id, name } = pendingDeleteItem;
+		const targetItem = filteredAll.find((i) => i._id === id);
+		const isOverride = !!targetItem?.override;
+
 		deleteMutation.mutate(
 			{ id, shelterCode },
 			{
 				onSuccess: (wasDeleted) => {
-					if (wasDeleted) {
-						toast.success(`ลบรายการ "${name}" สำเร็จ`);
+					if (isOverride) {
+						toast.success(`คืนค่ามาตรฐานรายการ "${name}" สำเร็จ`);
+					} else if (!wasDeleted) {
+						toast.info(`เปลี่ยนสถานะรายการ "${name}" เป็นปิดการใช้งาน (Deactivated) เรียบร้อยแล้ว`);
 					} else {
-						toast.success(
-							`เปลี่ยนสถานะรายการ "${name}" เป็นปิดใช้งาน (Deactivated) เนื่องจากรายการนี้มีการบันทึกธุรกรรมในคลังแล้ว`
-						);
+						toast.success(`ลบรายการ "${name}" ถาวรสำเร็จ`);
 					}
 					deleteConfirmOpen = false;
 					pendingDeleteItem = null;
@@ -390,7 +393,8 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากรายการนี้มีประวัติการบันทึกคลังสินค้า (Stock Ledger) อยู่ในระบบแล้ว
-							รายการจะถูกเปลี่ยนสถานะเป็นปิดใช้งาน (Deactivated) แทนการลบถาวร
+							หรือเป็นรายการมาตรฐานส่วนกลาง ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated)
+							แทนการลบถาวร เพื่อรักษาความสมบูรณ์ของข้อมูลอ้างอิง
 						</span>
 					{/if}
 				{/if}
