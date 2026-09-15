@@ -5,20 +5,11 @@ export interface TicketTranslations {
 	findOtherTicket: string;
 	offlineCached: string;
 	digitalPassBadge: string;
-	statusConfirmed: string;
-	statusPendingReview: string;
-	statusCancelled: string;
 	tokenLabel: string;
 	appliedAtLabel: string;
 	defaultJobTitle: string;
 	shelterDefault: string;
 	appliedAtPrefix: string;
-	pendingReviewAlertTitle: string;
-	pendingReviewAlertDesc: string;
-	confirmedAlertTitle: string;
-	confirmedAlertDesc: string;
-	cancelledAlertTitle: string;
-	cancelledAlertDesc: string;
 	onSiteVerificationBadge: string;
 	onSiteVerificationTitle: string;
 	onSiteVerificationSubtitle: string;
@@ -60,22 +51,11 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		findOtherTicket: 'ค้นหาตั๋วใบอื่น',
 		offlineCached: 'แคชออฟไลน์พร้อมใช้',
 		digitalPassBadge: 'บัตรประจำตัวจิตอาสาดิจิทัล (Digital Pass)',
-		statusConfirmed: 'ยืนยันแล้ว (Confirmed)',
-		statusPendingReview: 'รอการพิจารณา (Pending Review)',
-		statusCancelled: 'ยกเลิกแล้ว (Cancelled)',
 		tokenLabel: 'Token :',
 		appliedAtLabel: 'สมัครเมื่อ :',
 		defaultJobTitle: 'งานอาสาสมัคร',
 		shelterDefault: 'ศูนย์พักพิงหลัก',
 		appliedAtPrefix: 'สมัครเมื่อ',
-		pendingReviewAlertTitle: 'อยู่ระหว่างการพิจารณาคุณสมบัติ (Pending Review)',
-		pendingReviewAlertDesc:
-			'เนื่องจากงานนี้เป็นงานควบคุมหรือเกี่ยวข้องกับความปลอดภัย เจ้าหน้าที่ศูนย์กำลังตรวจสอบคุณสมบัติ กรุณาบันทึกหรือคัดลอกลิงก์ตั๋วนี้เพื่อกลับมาตรวจสอบสถานะก่อนถึงเวลานัด',
-		confirmedAlertTitle: 'ยืนยันสิทธิ์เข้าร่วมปฏิบัติงานแล้ว (Confirmed)',
-		confirmedAlertDesc:
-			'คุณได้รับการยืนยันเข้าร่วมกะปฏิบัติงานแล้ว กรุณาเดินทางมาถึงศูนย์พักพิงตามวันเวลาที่นัดหมาย พร้อมแสดง QR Code นี้เพื่อเช็คอิน',
-		cancelledAlertTitle: 'การสมัครถูกยกเลิกแล้ว (Cancelled)',
-		cancelledAlertDesc: 'ตั๋วใบนี้ถูกยกเลิกแล้ว หากต้องการสมัครใหม่ กรุณาเลือกกะงานอื่นจากงาน',
 		onSiteVerificationBadge: 'ON-SITE VERIFICATION QR',
 		onSiteVerificationTitle: 'สแกนรายงานตัวและเช็คอินหน้างาน',
 		onSiteVerificationSubtitle:
@@ -118,23 +98,11 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		findOtherTicket: 'Find Another Ticket',
 		offlineCached: 'Offline Ready',
 		digitalPassBadge: 'Volunteer Digital Pass',
-		statusConfirmed: 'Confirmed',
-		statusPendingReview: 'Pending Review',
-		statusCancelled: 'Cancelled',
 		tokenLabel: 'Token:',
 		appliedAtLabel: 'Applied on:',
 		defaultJobTitle: 'Volunteer Mission',
 		shelterDefault: 'Main Evacuation Shelter',
 		appliedAtPrefix: 'Applied on',
-		pendingReviewAlertTitle: 'Under Qualification Review (Pending Review)',
-		pendingReviewAlertDesc:
-			'Because this role is controlled or related to safety, shelter staff are verifying qualifications. Please save or copy this ticket link to check your status before the shift.',
-		confirmedAlertTitle: 'Participation Confirmed (Confirmed)',
-		confirmedAlertDesc:
-			'Your shift participation has been confirmed. Please arrive at the shelter at the scheduled date and time with this QR Code ready for check-in.',
-		cancelledAlertTitle: 'Application Cancelled (Cancelled)',
-		cancelledAlertDesc:
-			'This ticket has been cancelled. If you wish to volunteer, please apply for an available shift from the job board.',
 		onSiteVerificationBadge: 'ON-SITE VERIFICATION QR',
 		onSiteVerificationTitle: 'Scan for On-site Check-in',
 		onSiteVerificationSubtitle:

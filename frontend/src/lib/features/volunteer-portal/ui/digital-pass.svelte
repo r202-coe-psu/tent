@@ -2,7 +2,6 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
-	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Download from '@lucide/svelte/icons/download';
@@ -11,7 +10,6 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import Search from '@lucide/svelte/icons/search';
 	import User from '@lucide/svelte/icons/user';
-	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
@@ -87,39 +85,6 @@
 			ticket.selected_shift.end_time,
 			currentLang
 		);
-	});
-
-	const headerStyle = $derived.by(() => {
-		if (ticket?.status === 'confirmed') {
-			return {
-				bgClass: 'bg-[#047857]',
-				badgeClass: 'bg-emerald-400 text-emerald-950',
-				emoji: '✅',
-				label: t.statusConfirmed
-			};
-		}
-		if (ticket?.status === 'cancelled') {
-			return {
-				bgClass: 'bg-slate-700',
-				badgeClass: 'bg-slate-400 text-slate-900',
-				emoji: '⚪',
-				label: t.statusCancelled
-			};
-		}
-		if (ticket?.status === 'pending_review') {
-			return {
-				bgClass: 'bg-[#b45309]',
-				badgeClass: 'bg-[#f59e0b] text-amber-950',
-				emoji: '⏱️',
-				label: t.statusPendingReview
-			};
-		}
-		return {
-			bgClass: 'bg-[#0b2447]',
-			badgeClass: 'bg-sky-400 text-sky-950',
-			emoji: 'ℹ️',
-			label: ticket?.status ?? ''
-		};
 	});
 
 	const renderedSkills = $derived.by(() => {
@@ -209,19 +174,13 @@
 		<!-- Ticket Pass Card -->
 		<div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
 			<!-- Card Header -->
-			<div class="{headerStyle.bgClass} relative p-6 text-white transition-colors duration-200">
-				<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+			<div class="relative bg-[#0b2447] p-6 text-white">
+				<div class="mb-4 flex flex-wrap items-center gap-2">
 					<div
 						class="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur"
 					>
 						<span>🛡️</span>
 						{t.digitalPassBadge}
-					</div>
-					<div
-						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold {headerStyle.badgeClass}"
-					>
-						<span>{headerStyle.emoji}</span>
-						{headerStyle.label}
 					</div>
 				</div>
 
@@ -251,51 +210,6 @@
 
 			<!-- Card Body Content -->
 			<div class="space-y-4 p-5">
-				<!-- Conditional Status Alert Box -->
-				{#if ticket.status === 'pending_review'}
-					<div class="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs">
-						<div
-							class="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600"
-						>
-							<Clock class="size-4" aria-hidden="true" />
-						</div>
-						<div>
-							<div class="mb-0.5 font-bold text-amber-900">{t.pendingReviewAlertTitle}</div>
-							<p class="leading-relaxed text-amber-800/90">
-								{t.pendingReviewAlertDesc}
-							</p>
-						</div>
-					</div>
-				{:else if ticket.status === 'confirmed'}
-					<div class="flex gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs">
-						<div
-							class="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"
-						>
-							<CheckCircle2 class="size-4" aria-hidden="true" />
-						</div>
-						<div>
-							<div class="mb-0.5 font-bold text-emerald-900">{t.confirmedAlertTitle}</div>
-							<p class="leading-relaxed text-emerald-800/90">
-								{t.confirmedAlertDesc}
-							</p>
-						</div>
-					</div>
-				{:else if ticket.status === 'cancelled'}
-					<div class="flex gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-xs">
-						<div
-							class="flex size-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600"
-						>
-							<X class="size-4" aria-hidden="true" />
-						</div>
-						<div>
-							<div class="mb-0.5 font-bold text-slate-900">{t.cancelledAlertTitle}</div>
-							<p class="leading-relaxed text-slate-700">
-								{t.cancelledAlertDesc}
-							</p>
-						</div>
-					</div>
-				{/if}
-
 				<!-- QR Code Ticket Section (not needed when opened from the volunteer portal) -->
 				{#if !hideQr}
 					<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 text-center">
