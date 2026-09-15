@@ -68,7 +68,7 @@
 </script>
 
 <div
-	class="overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg"
+	class="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg"
 >
 	<!-- Header w/ Tags -->
 	<div class="border-b border-border/70 bg-muted/20 p-5 sm:p-6">
@@ -123,7 +123,7 @@
 	</div>
 
 	<!-- Shifts & Quota Section -->
-	<div class="p-5 sm:p-6">
+	<div class="flex flex-1 flex-col p-5 sm:p-6">
 		<div
 			class="mb-4 flex flex-col justify-between gap-2 border-b border-border/50 pb-4 sm:flex-row sm:items-center"
 		>

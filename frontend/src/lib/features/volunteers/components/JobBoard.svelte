@@ -708,7 +708,9 @@
 
 	<!-- Job Cards List -->
 	<div
-		class="grid min-h-0 gap-4 sm:gap-5 {paginatedJobs.length > 0 ? 'xl:grid-cols-2' : ''}"
+		class="grid min-h-0 items-stretch gap-4 sm:gap-5 {paginatedJobs.length > 0
+			? 'xl:grid-cols-2'
+			: ''}"
 		class:flex-1={!isLoading && paginatedJobs.length === 0}
 	>
 		{#if isLoading}
