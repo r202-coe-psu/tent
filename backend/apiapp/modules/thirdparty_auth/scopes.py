@@ -35,7 +35,7 @@ def mint_access_token(client_id: str, module_name: str, scopes: list[str]) -> tu
         "iat": now,
         "exp": now + timedelta(seconds=expires_in),
     }
-    token = jwt.encode(payload, settings.THIRDPARTY_JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload, settings.THIRDPARTY_JWT_SIGNING_KEY, algorithm=JWT_ALGORITHM)
     return token, expires_in
 
 
@@ -57,7 +57,7 @@ async def verify_thirdparty_token(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.THIRDPARTY_JWT_SECRET,
+            settings.THIRDPARTY_JWT_SIGNING_KEY,
             algorithms=[JWT_ALGORITHM],
         )
     except jwt.ExpiredSignatureError as exc:
