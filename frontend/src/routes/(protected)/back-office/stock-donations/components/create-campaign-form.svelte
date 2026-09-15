@@ -47,23 +47,6 @@
 	// themselves, so changing the item cannot undo their choice.
 	let categoryChoice = $state<string | null>(null);
 	let targetQty = $state('');
-	const STANDARD_UNITS = [
-		'ชิ้น',
-		'กล่อง',
-		'แพ็ค',
-		'ขวด',
-		'กระป๋อง',
-		'กิโลกรัม',
-		'ถุง',
-		'ผืน',
-		'ชุด',
-		'ก้อน',
-		'ลัง',
-		'ม้วน',
-		'คู่',
-		'แผง',
-		'ซอง'
-	];
 
 	const CATEGORY_OPTIONS = [
 		{ value: 'อาหารและเครื่องดื่ม', label: 'อาหารและเครื่องดื่ม (Food & Beverage)' },
@@ -81,10 +64,7 @@
 		{ value: 'normal', label: 'ปกติ (Normal)' }
 	] as const;
 
-	let unitChoice = $state<string | null>(null);
-	let customUnit = $state('');
 	let urgency = $state<'critical' | 'important' | 'normal'>('critical');
-	let imageUrl = $state('');
 	let description = $state('');
 
 	// Same two sources the scan station and the hint below read, so all three agree on
@@ -130,23 +110,25 @@
 			CATALOG_CATEGORY_TO_FORM[selectedItem?.category ?? ''] ??
 			'อาหารและเครื่องดื่ม'
 	);
-	// Default to the catalog's own unit — that is the one donors are shown, so
-	// matching it is what keeps the mismatch warning below quiet.
+	/**
+	 * The unit is the CATALOG's, never one staff picked for this campaign.
+	 *
+	 * `qty_target` below is compared against `stock_ledger.qty` to decide when the need
+	 * closes (`deriveNeedAvailability`, and its Python twin `compute_needs`), and §2.1
+	 * pins every ledger row to `item_master.base_unit`. A campaign carrying its own unit
+	 * put the two sides of that subtraction in different units: a 500 "ถุง" target against
+	 * a 540 kg shelf read as −40 and shut intake before a single donation arrived. The
+	 * donor board never showed the typed unit either — the projection names the card from
+	 * the catalog (`needs.py`) — so the two screens disagreed on top of the arithmetic.
+	 *
+	 * Same call CR-030 made for the kitchen requisition: `base_unit` is the single source
+	 * of truth and the code conforms to it. Receiving in bulk units stays a catalog
+	 * concern (`item_master.conversions[]`), not something a campaign redefines.
+	 */
 	const catalogUnit = $derived(selectedItem?.unit?.trim() ?? '');
-	const selectedUnitOption = $derived(
-		unitChoice ??
-			(catalogUnit ? (STANDARD_UNITS.includes(catalogUnit) ? catalogUnit : 'custom') : 'ชิ้น')
-	);
-	const finalUnit = $derived(
-		selectedUnitOption === 'custom'
-			? customUnit.trim() || (STANDARD_UNITS.includes(catalogUnit) ? '' : catalogUnit)
-			: selectedUnitOption
-	);
+	const finalUnit = $derived(catalogUnit);
 	const categoryLabel = $derived(
 		CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
-	);
-	const unitLabel = $derived(
-		selectedUnitOption === 'custom' ? 'ระบุหน่วยเอง (Custom)...' : selectedUnitOption
 	);
 	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
 
@@ -173,7 +155,6 @@
 			category: category.trim() || 'ของใช้ทั่วไป',
 			unit: finalUnit || 'ชิ้น',
 			urgency,
-			...(imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
 			description: description.trim()
 		});
 	}
@@ -268,82 +249,50 @@
 				</div>
 
 				<div>
-					<Label for="campaign-item-unit" class="mb-1.5 text-xs font-bold text-foreground">
+					<span class="mb-1.5 block text-xs font-bold text-foreground">
 						หน่วยนับ (Unit of Measure)
-					</Label>
-					<div class="space-y-2">
-						<Select.Root
-							type="single"
-							value={selectedUnitOption}
-							onValueChange={(v) => (unitChoice = v)}
-						>
-							<Select.Trigger
-								id="campaign-item-unit"
-								class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
-							>
-								{unitLabel}
-							</Select.Trigger>
-							<Select.Content>
-								{#each STANDARD_UNITS as option (option)}
-									<Select.Item value={option} label={option} />
-								{/each}
-								<Select.Item value="custom" label="ระบุหน่วยเอง (Custom)..." />
-							</Select.Content>
-						</Select.Root>
-						{#if selectedUnitOption === 'custom'}
-							<!-- Left blank, the campaign takes the catalog's own unit (see `finalUnit`),
-							     which is the one donors are shown — so the placeholder states it rather
-							     than looking like an unfilled required box. -->
-							<Input
-								type="text"
-								placeholder={catalogUnit
-									? `ใช้หน่วยจากแคตตาล็อก: ${catalogUnit}`
-									: 'พิมพ์ระบุหน่วยนับ...'}
-								bind:value={customUnit}
-								class="h-10 rounded-xl text-xs"
-							/>
-						{/if}
+					</span>
+					<div
+						class="flex h-10 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-muted-foreground"
+						title="หน่วยฐานจากแคตตาล็อก — แก้ที่นี่ไม่ได้ เพราะยอดคงคลังนับด้วยหน่วยนี้"
+					>
+						{catalogUnit || (selectedItemId ? 'แคตตาล็อกไม่ได้ระบุหน่วย' : 'เลือกรายการพัสดุก่อน')}
 					</div>
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						มาจากหน่วยฐานของรายการในแคตตาล็อก — ต้องแก้ที่แคตตาล็อกถ้าไม่ถูกต้อง
+					</p>
 				</div>
 			</div>
 
 			{#if mappedItemId}
-				<PublicDisplayHint itemId={mappedItemId} typedUnit={finalUnit} />
+				<PublicDisplayHint itemId={mappedItemId} />
 			{/if}
 
-			<!-- Urgency Level and Image URL (2 columns) -->
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-				<div>
-					<Label for="campaign-urgency" class="mb-1.5 text-xs font-bold text-foreground">
-						ความเร่งด่วน (Urgency Level)
-					</Label>
-					<Select.Root type="single" bind:value={urgency}>
-						<Select.Trigger
-							id="campaign-urgency"
-							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
-						>
-							{urgencyLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each URGENCY_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-
-				<div>
-					<Label for="campaign-image-url" class="mb-1.5 text-xs font-bold text-foreground">
-						ภาพประกอบสิ่งของ (Image URL - Optional)
-					</Label>
-					<Input
-						id="campaign-image-url"
-						type="url"
-						placeholder="https://example.com/image.png"
-						bind:value={imageUrl}
-						class="h-10 rounded-xl text-xs"
-					/>
-				</div>
+			<!--
+				Urgency only. The "ภาพประกอบสิ่งของ (Image URL)" field that sat beside it is
+				HIDDEN, not finished: `buildCampaignNotes` still encodes an `imageUrl` into
+				`campaign.notes` and `parseCampaignNotes` still reads it back, but NOTHING
+				renders it — not the back-office board, not the donor board — so staff were
+				filling in a URL that went nowhere. Restore this field together with the
+				surface that displays it (and put the grid back to `md:grid-cols-2`).
+			-->
+			<div>
+				<Label for="campaign-urgency" class="mb-1.5 text-xs font-bold text-foreground">
+					ความเร่งด่วน (Urgency Level)
+				</Label>
+				<Select.Root type="single" bind:value={urgency}>
+					<Select.Trigger
+						id="campaign-urgency"
+						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+					>
+						{urgencyLabel}
+					</Select.Trigger>
+					<Select.Content>
+						{#each URGENCY_OPTIONS as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 
 			<!-- Reason / Details -->

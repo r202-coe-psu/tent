@@ -14,6 +14,9 @@
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
 	import { persistQty, qtyGt, roundQty } from '$lib/utils/qty';
 	import PublicDisplayHint from './public-display-hint.svelte';
+	import { useSupplyItems } from '$lib/features/supply';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	interface Props {
 		item: NeedItem;
@@ -32,24 +35,6 @@
 	}
 
 	let { item, itemId, onclose, onsubmit }: Props = $props();
-
-	const STANDARD_UNITS = [
-		'ชิ้น',
-		'กล่อง',
-		'แพ็ค',
-		'ขวด',
-		'กระป๋อง',
-		'กิโลกรัม',
-		'ถุง',
-		'ผืน',
-		'ชุด',
-		'ก้อน',
-		'ลัง',
-		'ม้วน',
-		'คู่',
-		'แผง',
-		'ซอง'
-	];
 
 	const CATEGORY_OPTIONS = [
 		'อาหารและเครื่องดื่ม',
@@ -79,12 +64,6 @@
 		seed.notes.category && CATEGORY_OPTIONS.includes(seed.notes.category)
 			? seed.notes.category
 			: 'อื่นๆ'
-	);
-	let selectedUnitOption = $state(
-		STANDARD_UNITS.includes(editedNeed?.unit ?? '') ? (editedNeed?.unit as string) : 'custom'
-	);
-	let customUnit = $state(
-		STANDARD_UNITS.includes(editedNeed?.unit ?? '') ? '' : (editedNeed?.unit ?? 'ชิ้น')
 	);
 	let targetQty = $state(editedNeed?.target ?? '0');
 	/**
@@ -117,12 +96,37 @@
 		{ value: 'critical', label: 'วิกฤต (Critical)' }
 	] as const;
 
-	const finalUnit = $derived(
-		selectedUnitOption === 'custom' ? customUnit.trim() : selectedUnitOption
-	);
-	const unitLabel = $derived(
-		selectedUnitOption === 'custom' ? 'ระบุหน่วยเอง (Custom)...' : selectedUnitOption
-	);
+	/**
+	 * The unit is the CATALOG's, never one staff picked for this campaign — the same
+	 * rule the create form states at length. `qty_target` is subtracted from
+	 * `stock_ledger.qty`, which §2.1 pins to `item_master.base_unit`, so a campaign
+	 * that carried its own unit made that subtraction meaningless and disagreed with
+	 * the donor board, which names the card from the catalog regardless.
+	 *
+	 * Editing an existing need re-reads the catalog rather than trusting `needs[].unit`
+	 * as stored: campaigns written before this was enforced carry whatever staff typed,
+	 * and saving one of those forms is what corrects it.
+	 */
+	const supplyItemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	/**
+	 * Looked up by EXACT id across both generations, never through
+	 * `mergeCatalogGenerations` — that de-duplicates by NAME and drops the losing
+	 * generation's row (`LEGACY_WINS`, `catalog.ts`), so a need bound to
+	 * `item_master:rice` while `item:rice` also exists would find nothing and keep the
+	 * wrong stored unit. Same reason `useDonationNeedsBoard` keys its name map by id.
+	 */
+	const catalogUnit = $derived.by(() => {
+		const supply = (supplyItemsQuery.data ?? []).find((i) => i._id === itemId);
+		if (supply?.unit) return supply.unit.trim();
+		const master = (itemMastersQuery.data ?? []).find((m) => m._id === itemId);
+		if (master && !master.deactivated) return itemMasterUnit(master).trim();
+		return '';
+	});
+	// While the catalog is still loading — or when the need points at an id no catalog
+	// row claims — keep the stored unit rather than blanking the field and failing the
+	// submit guard below on a save the user did not mean to change.
+	const finalUnit = $derived(catalogUnit || (editedNeed?.unit ?? ''));
 	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
 
 	function handleSubmit(e: Event) {
@@ -225,33 +229,16 @@
 			</div>
 
 			<div>
-				<Label for="edit-item-unit" class="mb-1.5 text-xs font-bold text-foreground">
-					หน่วย (Unit)
-				</Label>
-				<div class="space-y-2">
-					<Select.Root type="single" bind:value={selectedUnitOption}>
-						<Select.Trigger
-							id="edit-item-unit"
-							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
-						>
-							{unitLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each STANDARD_UNITS as option (option)}
-								<Select.Item value={option} label={option} />
-							{/each}
-							<Select.Item value="custom" label="ระบุหน่วยเอง (Custom)..." />
-						</Select.Content>
-					</Select.Root>
-					{#if selectedUnitOption === 'custom'}
-						<Input
-							type="text"
-							placeholder="พิมพ์ระบุหน่วย..."
-							bind:value={customUnit}
-							class="h-10 rounded-xl text-xs"
-						/>
-					{/if}
+				<span class="mb-1.5 block text-xs font-bold text-foreground">หน่วย (Unit)</span>
+				<div
+					class="flex h-10 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-muted-foreground"
+					title="หน่วยฐานจากแคตตาล็อก — แก้ที่นี่ไม่ได้ เพราะยอดคงคลังนับด้วยหน่วยนี้"
+				>
+					{finalUnit || '—'}
 				</div>
+				<p class="mt-1.5 text-3xs text-muted-foreground">
+					มาจากหน่วยฐานของรายการในแคตตาล็อก — ต้องแก้ที่แคตตาล็อกถ้าไม่ถูกต้อง
+				</p>
 			</div>
 
 			<div>
@@ -267,7 +254,7 @@
 				/>
 				<p class="mt-1.5 text-3xs text-muted-foreground">
 					ผู้บริจาคจองไว้แล้ว {pledged}
-					{finalUnit || editedNeed?.unit || ''} — ตั้งเป้าต่ำกว่ายอดจองจะทำให้รายการนี้ปิดรับทันที
+					{finalUnit} — ตั้งเป้าต่ำกว่ายอดจองจะทำให้รายการนี้ปิดรับทันที
 				</p>
 			</div>
 		</div>
@@ -292,7 +279,7 @@
 			</Alert.Root>
 		{/if}
 
-		<PublicDisplayHint {itemId} typedUnit={finalUnit} />
+		<PublicDisplayHint {itemId} />
 
 		<!-- Row 3: Urgency Level & Image URL -->
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">

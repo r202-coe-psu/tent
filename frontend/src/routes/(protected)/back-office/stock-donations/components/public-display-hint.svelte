@@ -9,20 +9,21 @@
 	 *
 	 * The public board is an aggregate PER ITEM (schema.md §2.4 / T-60): the worker
 	 * projects `{shelter}:{item_id}` and names it from the catalog, so the campaign
-	 * title, unit, category and urgency typed here never reach it. Staff kept filling
-	 * those in and then reporting the campaign "missing" from `/donate`, because it had
+	 * title, category and urgency typed here never reach it. Staff kept filling those
+	 * in and then reporting the campaign "missing" from `/donate`, because it had
 	 * silently merged into the existing card for the same item.
 	 *
 	 * This says so at the point of entry rather than leaving it to be discovered.
+	 *
+	 * The unit used to be in that list and carried a mismatch warning of its own. It is
+	 * not any more: both forms now show the catalog's `base_unit` read-only, so there is
+	 * no typed unit left to differ from it (§2.1 — the same unit the ledger counts in).
 	 */
 	let {
-		itemId,
-		typedUnit = ''
+		itemId
 	}: {
 		/** Catalog id the need is bound to (`item:` or `item_master:`). */
 		itemId: string;
-		/** Unit the form currently has, so a mismatch with the catalog can be named. */
-		typedUnit?: string;
 	} = $props();
 
 	const supplyItemsQuery = useSupplyItems();
@@ -36,10 +37,6 @@
 			return { name: master.name, unit: itemMasterUnit(master) || '', category: master.category };
 		return null;
 	});
-
-	const unitDiffers = $derived(
-		!!catalogItem?.unit && !!typedUnit.trim() && catalogItem.unit !== typedUnit.trim()
-	);
 </script>
 
 <div
@@ -56,12 +53,6 @@
 				{/if}
 				(ตามแคตตาล็อก) — ชื่อประกาศ ความเร่งด่วน และหมวดหมู่ที่กรอกที่นี่ ใช้ในหลังบ้านเท่านั้น
 			</p>
-			{#if unitDiffers}
-				<p class="font-bold">
-					หน่วยที่เลือก "{typedUnit.trim()}" ต่างจากแคตตาล็อก "{catalogItem.unit}" —
-					ผู้บริจาคจะเห็นหน่วยของแคตตาล็อก
-				</p>
-			{/if}
 		{:else}
 			<p>
 				ยังจับคู่รายการนี้กับแคตตาล็อกไม่ได้ ({itemId}) — หน้าบริจาคสาธารณะจะแสดงรหัสนี้แทนชื่อ

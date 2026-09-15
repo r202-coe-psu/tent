@@ -2,7 +2,7 @@ import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { supplyRepository, useSupplyItems } from '$lib/features/supply';
-import { useItemMasters } from '$lib/features/catalog';
+import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 import { useQueryClient } from '@tanstack/svelte-query';
 import {
 	operationsKeys,
@@ -78,6 +78,36 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 	}
 
 	/**
+	 * Exact-id → stock-keeping unit, keyed and read exactly like `catalogNames` above.
+	 *
+	 * The board labels `onHand`/`reserved`/`target` — all three read out of
+	 * `stock_ledger`, which §2.1 pins to `item_master.base_unit`. Labelling them with
+	 * `needs[].unit` instead put whatever staff had typed — "ถุง" — next to a kilogram
+	 * figure, while the donor board, which names its card from the catalog
+	 * (`worker/projectors/needs.py`), said "kg" for that same number. The
+	 * campaign forms no longer accept a unit of their own, but campaigns written before
+	 * that still carry one, so the board resolves rather than trusts what is stored.
+	 *
+	 * `deactivated` masters are skipped like they are for names: a deactivated item
+	 * cannot be received or issued, so it has no unit to announce.
+	 */
+	const catalogUnits = $derived.by(() => {
+		const units: Record<string, string> = {};
+		for (const item of supplyItemsQuery.data ?? []) {
+			if (item.unit) units[item._id] = item.unit;
+		}
+		for (const master of itemMastersQuery.data ?? []) {
+			if (!master.deactivated) units[master._id] = itemMasterUnit(master);
+		}
+		return units;
+	});
+
+	/** The catalog's unit for the id, or `''` when no catalog row claims it. */
+	function itemDisplayUnit(itemId: string): string {
+		return catalogUnits[itemId] ?? '';
+	}
+
+	/**
 	 * The board's three inputs all move without this page doing anything: a donor books
 	 * or edits from the public plane, another shelter's staff receive stock. With the
 	 * app's 60s `staleTime` and no focus event to trigger a refetch, staff watching the
@@ -135,7 +165,9 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					reserved: avail.qty_reserved,
 					onHand: avail.qty_on_hand,
 					target: avail.qty_target,
-					unit: avail.unit,
+					// Catalog first, stored second: `avail.unit` only answers while the
+					// catalog query is still loading or for an id it no longer carries.
+					unit: itemDisplayUnit(avail.item_id) || avail.unit,
 					isCutOff: avail.is_cut_off,
 					isManualClosed: avail.status === 'closed'
 				});
