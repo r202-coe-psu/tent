@@ -38,8 +38,13 @@
 </script>
 
 <nav
-	class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm"
+	class="flex h-[52px] w-full items-center justify-between bg-[#0A2647] px-6 text-white shadow-sm"
 >
+	<div class="flex items-center gap-2.5">
+		<img src="/logo.png" alt="PSU Smart Shelter" class="h-8 w-8 shrink-0" />
+		<span class="text-sm font-medium text-white">PSU Smart Shelter</span>
+	</div>
+
 	<div class="flex items-center">
 		{#if sheltersQuery.isPending}
 			<span class="pr-4 text-sm font-medium text-white/80">กำลังโหลด...</span>
