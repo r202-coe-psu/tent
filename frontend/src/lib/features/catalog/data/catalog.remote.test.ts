@@ -23,6 +23,7 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { CatalogRemoteRepository } from './catalog.remote';
 import type { AuthorContext } from '$lib/db/model';
+import type { TypeClass } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -367,6 +368,163 @@ describe('CatalogRemoteRepository', () => {
 
 			const removed = await repo.getItemCategory(category._id, 'SH001');
 			expect(removed).toBeNull();
+		});
+
+		it('CR-119: should reject deletion of system protected categories', async () => {
+			// Seed a system protected category doc
+			await getDb('catalog').put({
+				_id: 'item_category:food',
+				type: 'item_category',
+				schema_v: 2,
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			});
+
+			await expect(repo.deleteItemCategory('item_category:food')).rejects.toThrow(
+				'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน'
+			);
+		});
+
+		it('CR-119: should reject local override on protected categories', async () => {
+			await getDb('catalog').put({
+				_id: 'item_category:water',
+				type: 'item_category',
+				schema_v: 2,
+				name: 'น้ำดื่มสะอาด (Drinking Water)',
+				system_key: 'WATER',
+				default_class: 'CONSUMABLE',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			});
+
+			// Attempting override in shelter
+			await expect(
+				repo.updateItemCategory({
+					_id: 'item_category:water',
+					type: 'item_category',
+					schema_v: 2,
+					name: 'น้ำดื่มเฉพาะศูนย์',
+					shelter_code: 'SH001',
+					override: true,
+					created_at: '2026-09-15T00:00:00.000Z',
+					updated_at: '2026-09-15T00:00:00.000Z',
+					created_by: 'tester'
+				})
+			).rejects.toThrow('ไม่อนุญาตให้สร้าง local override บนหมวดหมู่ระบบมาตรฐาน');
+		});
+
+		it('CR-119: should preserve immutable fields on protected category updates', async () => {
+			await getDb('catalog').put({
+				_id: 'item_category:bedding',
+				type: 'item_category',
+				schema_v: 2,
+				name: 'เครื่องนอนและที่พักพิง (Shelter & Bedding)',
+				system_key: 'BEDDING',
+				default_class: 'DURABLE',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			});
+
+			// System Admin updates name and description, but tries to change default_class to CONSUMABLE
+			const updated = await repo.updateItemCategory({
+				_id: 'item_category:bedding',
+				type: 'item_category',
+				schema_v: 2,
+				name: 'เครื่องนอนและเต็นท์',
+				description: 'คำอธิบายใหม่',
+				system_key: 'BEDDING',
+				default_class: 'CONSUMABLE' as unknown as TypeClass, // Attempted change
+				is_protected: false as unknown as boolean, // Attempted unprotect
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system_admin'
+			});
+
+			expect(updated.name).toBe('เครื่องนอนและเต็นท์');
+			expect(updated.description).toBe('คำอธิบายใหม่');
+			// Invariant fields must remain restored
+			expect(updated.default_class).toBe('DURABLE');
+			expect(updated.is_protected).toBe(true);
+			expect(updated.system_key).toBe('BEDDING');
+		});
+
+		it('CR-119: should canonicalize item_master.category to canonical _id on create and update', async () => {
+			// 1. Create with system category name
+			const item1 = await repo.createItemMaster(
+				{
+					name: 'ปลากระป๋อง',
+					base_unit: 'กระป๋อง',
+					category: 'อาหารและวัตถุดิบ (Food Ingredients)',
+					distribution_type: 'recurring',
+					type_class: 'CONSUMABLE',
+					dietary: []
+				},
+				ctx
+			);
+			expect(item1.category).toBe('item_category:food');
+
+			// 2. Create with system key string
+			const item2 = await repo.createItemMaster(
+				{
+					name: 'ถังแก๊ส LPG 15kg',
+					base_unit: 'ถัง',
+					category: 'FUEL_ENERGY',
+					distribution_type: 'recurring',
+					type_class: 'CONSUMABLE',
+					dietary: []
+				},
+				ctx
+			);
+			expect(item2.category).toBe('item_category:fuel_energy');
+
+			// 3. Update legacy item master where category was name
+			item2.category = 'อาหารและวัตถุดิบ (Food Ingredients)';
+			const updatedItem = await repo.updateItemMaster(item2);
+			expect(updatedItem.category).toBe('item_category:food');
+		});
+
+		it('CR-119: should reject unknown or ambiguous category references', async () => {
+			// 1. Unknown category reference
+			await expect(
+				repo.createItemMaster(
+					{
+						name: 'ของเล่นเด็ก',
+						base_unit: 'ชิ้น',
+						category: 'หมวดหมู่ที่ไม่มีอยู่จริง',
+						distribution_type: 'recurring',
+						type_class: 'CONSUMABLE',
+						dietary: []
+					},
+					ctx
+				)
+			).rejects.toThrow(/ไม่พบหมวดหมู่/);
+
+			// 2. Ambiguous category reference (multiple matching categories)
+			await repo.createItemCategory({ name: 'อุปกรณ์ซ่อมบำรุง' }, ctx);
+			await repo.createItemCategory({ name: 'อุปกรณ์ซ่อมบำรุง' }, ctx);
+
+			await expect(
+				repo.createItemMaster(
+					{
+						name: 'ค้อน',
+						base_unit: 'อัน',
+						category: 'อุปกรณ์ซ่อมบำรุง',
+						distribution_type: 'recurring',
+						type_class: 'CONSUMABLE',
+						dietary: []
+					},
+					ctx
+				)
+			).rejects.toThrow(/ข้อมูลซ้ำซ้อน/);
 		});
 	});
 });

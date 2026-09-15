@@ -22,6 +22,10 @@ import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
 import { ITEM, masterCode, type MasterLookup } from './types';
+import {
+	SYSTEM_CATEGORY_DEFINITIONS,
+	type ItemCategory
+} from '$lib/features/catalog/domain/catalog';
 
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
@@ -180,6 +184,76 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 	);
 }
 
+export async function seedSystemItemCategories(): Promise<{
+	created: number;
+	updated: number;
+	skipped: number;
+}> {
+	let created = 0;
+	let updated = 0;
+	let skipped = 0;
+
+	for (const cat of SYSTEM_CATEGORY_DEFINITIONS) {
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(cat.id)}`);
+		if (status === 404) {
+			const doc: ItemCategory = {
+				_id: cat.id,
+				type: 'item_category',
+				schema_v: 2,
+				system_key: cat.key,
+				name: cat.name,
+				default_class: cat.default_class,
+				description: cat.description,
+				is_protected: true,
+				is_default: false,
+				deactivated: false,
+				created_at: now(),
+				updated_at: now(),
+				created_by: 'seed'
+			};
+			await putDoc('catalog', doc);
+			created++;
+		} else if (status === 200) {
+			const existing = data as ItemCategory;
+			if (existing.type && existing.type !== 'item_category') {
+				throw new Error(
+					`Deterministic ID ${cat.id} is occupied by unexpected document type: ${existing.type}`
+				);
+			}
+			const needsRepair =
+				existing.schema_v !== 2 ||
+				existing.system_key !== cat.key ||
+				existing.default_class !== cat.default_class ||
+				!existing.is_protected;
+
+			if (needsRepair) {
+				const patched: ItemCategory = {
+					...existing,
+					schema_v: 2,
+					system_key: cat.key,
+					default_class: cat.default_class,
+					description: existing.description || cat.description,
+					is_protected: true,
+					updated_at: now()
+				};
+				const putRes = await couchReq('PUT', `/catalog/${encodeURIComponent(cat.id)}`, patched);
+				if (putRes.status >= 400) {
+					const detail = (putRes.data as { reason?: string; error?: string } | null) ?? {};
+					throw new Error(
+						`Cannot repair system category ${cat.id} (${putRes.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+					);
+				}
+				updated++;
+			} else {
+				skipped++;
+			}
+		} else {
+			throw new Error(`Unexpected status ${status} checking ${cat.id}`);
+		}
+	}
+	return { created, updated, skipped };
+}
+
 export async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
@@ -197,7 +271,24 @@ export async function seedCatalog(): Promise<void> {
 	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+  if (userCtx.roles.indexOf('_admin') !== -1) {
+    return;
+  }
+  if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+    if (newDoc._deleted === true) {
+      throw({ forbidden: 'Cannot delete system protected category: ' + oldDoc._id });
+    }
+    if (newDoc.system_key !== oldDoc.system_key) {
+      throw({ forbidden: 'system_key is immutable on protected categories' });
+    }
+    if (newDoc.default_class !== oldDoc.default_class) {
+      throw({ forbidden: 'default_class is immutable on protected categories' });
+    }
+    if (newDoc.is_protected !== true) {
+      throw({ forbidden: 'is_protected flag cannot be removed' });
+    }
+  }
+  if (userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
@@ -277,29 +368,30 @@ export async function seedCatalog(): Promise<void> {
 		type_class: 'CONSUMABLE',
 		dietary: []
 	} as const;
+
 	const itemMasters = [
 		catalogDoc(
 			'item_master:rice',
 			'item_master',
-			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
+			{ name: 'ข้าวสาร', category: 'item_category:food', base_unit: 'kg', ...itemMasterBase },
 			4
 		),
 		catalogDoc(
 			'item_master:egg',
 			'item_master',
-			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
+			{ name: 'ไข่ไก่', category: 'item_category:food', base_unit: 'piece', ...itemMasterBase },
 			4
 		),
 		catalogDoc(
 			'item_master:vegetable',
 			'item_master',
-			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
+			{ name: 'ผักรวม', category: 'item_category:food', base_unit: 'kg', ...itemMasterBase },
 			4
 		),
 		catalogDoc(
 			'item_master:canned-fish',
 			'item_master',
-			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
+			{ name: 'ปลากระป๋อง', category: 'item_category:food', base_unit: 'can', ...itemMasterBase },
 			4
 		)
 	];
@@ -345,9 +437,11 @@ export async function seedCatalog(): Promise<void> {
 		)
 	];
 
+	const catStats = await seedSystemItemCategories();
+
 	for (const doc of [...items, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: 10 system categories (${catStats.created} created, ${catStats.updated} updated, ${catStats.skipped} skipped), ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

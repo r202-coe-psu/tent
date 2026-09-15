@@ -8,7 +8,14 @@ import {
 	itemCategoryInputSchema,
 	createRecipe,
 	isRecipe,
-	recipeInputSchema
+	recipeInputSchema,
+	SYSTEM_CATEGORY_KEYS,
+	SYSTEM_CATEGORY_DEFINITIONS,
+	systemCategoryDocId,
+	isSystemCategoryDocId,
+	categoryReferenceMatches,
+	type ItemCategory,
+	type TypeClass
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -286,5 +293,84 @@ describe('catalog domain', () => {
 				type_class: 'EQUIPMENT' as const
 			})
 		).toThrow();
+	});
+
+	describe('CR-119: System Item Categories', () => {
+		it('should have exactly 10 system category definitions with valid keys, IDs, and default classes', () => {
+			expect(SYSTEM_CATEGORY_DEFINITIONS).toHaveLength(10);
+			expect(SYSTEM_CATEGORY_KEYS).toHaveLength(10);
+
+			const keys = SYSTEM_CATEGORY_DEFINITIONS.map((d) => d.key);
+			const ids = SYSTEM_CATEGORY_DEFINITIONS.map((d) => d.id);
+			expect(new Set(keys).size).toBe(10);
+			expect(new Set(ids).size).toBe(10);
+
+			for (const def of SYSTEM_CATEGORY_DEFINITIONS) {
+				expect(SYSTEM_CATEGORY_KEYS).toContain(def.key);
+				expect(def.id).toBe(`item_category:${def.key.toLowerCase()}`);
+				expect(systemCategoryDocId(def.key)).toBe(def.id);
+				expect(isSystemCategoryDocId(def.id)).toBe(true);
+				expect(['CONSUMABLE', 'DURABLE', 'EQUIPMENT']).toContain(def.default_class);
+				expect(def.name.trim().length).toBeGreaterThan(0);
+				expect(def.description.trim().length).toBeGreaterThan(0);
+			}
+
+			expect(isSystemCategoryDocId('item_category:custom_123')).toBe(false);
+		});
+
+		it('should validate schema v2 item category input and custom creation invariants', () => {
+			const validCustom = itemCategoryInputSchema.parse({
+				name: 'เต็นท์ขนาดพิเศษ',
+				default_class: 'DURABLE',
+				description: 'เต็นท์พักแรมขนาด 6 คน'
+			});
+			expect(validCustom.default_class).toBe('DURABLE');
+			expect(validCustom.description).toBe('เต็นท์พักแรมขนาด 6 คน');
+
+			const doc = createItemCategory(validCustom, ctx);
+			expect(doc.schema_v).toBe(2);
+			expect(doc.is_protected).toBe(false);
+			expect(doc.default_class).toBe('DURABLE');
+			expect(doc.description).toBe('เต็นท์พักแรมขนาด 6 คน');
+		});
+
+		it('should reject invalid default_class in itemCategoryInputSchema', () => {
+			expect(() =>
+				itemCategoryInputSchema.parse({
+					name: 'หมวดหมู่ทดสอบ',
+					default_class: 'INVALID_CLASS' as unknown as TypeClass
+				})
+			).toThrow();
+		});
+
+		it('should match category references via categoryReferenceMatches helper', () => {
+			const foodCat: ItemCategory = {
+				_id: 'item_category:food',
+				type: 'item_category',
+				schema_v: 2,
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			};
+
+			// Direct ID match
+			expect(categoryReferenceMatches('item_category:food', foodCat)).toBe(true);
+			// Direct name match
+			expect(categoryReferenceMatches('อาหารและวัตถุดิบ (Food Ingredients)', foodCat)).toBe(true);
+			// System key match
+			expect(categoryReferenceMatches('FOOD', foodCat)).toBe(true);
+			expect(categoryReferenceMatches('food', foodCat)).toBe(true);
+			// Suffix slug match
+			expect(categoryReferenceMatches('food', foodCat)).toBe(true);
+
+			// Negative cases
+			expect(categoryReferenceMatches('WATER', foodCat)).toBe(false);
+			expect(categoryReferenceMatches('item_category:water', foodCat)).toBe(false);
+			expect(categoryReferenceMatches('', foodCat)).toBe(false);
+		});
 	});
 });

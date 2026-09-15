@@ -37,9 +37,128 @@ export interface UomConversion {
 	barcode?: string;
 }
 
+export const SYSTEM_CATEGORY_KEYS = [
+	'FOOD',
+	'WATER',
+	'WASH',
+	'MEDICAL',
+	'SPECIAL_CARE',
+	'VOLUNTEER_PPE',
+	'READY_MEAL',
+	'BEDDING',
+	'FUEL_ENERGY',
+	'KITS'
+] as const;
+
+export type SystemCategoryKey = (typeof SYSTEM_CATEGORY_KEYS)[number];
+
+export interface SystemCategoryDefinition {
+	key: SystemCategoryKey;
+	id: string;
+	name: string;
+	default_class: TypeClass;
+	description: string;
+}
+
+export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = [
+	{
+		key: 'FOOD',
+		id: 'item_category:food',
+		name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+		default_class: 'CONSUMABLE',
+		description: 'วัตถุดิบประกอบอาหารสดและแห้งสำหรับโรงครัวกลาง'
+	},
+	{
+		key: 'WATER',
+		id: 'item_category:water',
+		name: 'น้ำดื่มสะอาด (Drinking Water)',
+		default_class: 'CONSUMABLE',
+		description: 'น้ำดื่มบรรจุขวด ถังน้ำดื่มสะอาดสำหรับบริโภค'
+	},
+	{
+		key: 'WASH',
+		id: 'item_category:wash',
+		name: 'สุขอนามัยและของใช้ส่วนตัว (WASH & Hygiene)',
+		default_class: 'CONSUMABLE',
+		description: 'สบู่ ยาสระผม แปรงสีฟัน ยาสีฟัน ผ้าอนามัย ผงซักฟอก'
+	},
+	{
+		key: 'MEDICAL',
+		id: 'item_category:medical',
+		name: 'เวชภัณฑ์และการปฐมพยาบาล (Medical & First Aid)',
+		default_class: 'CONSUMABLE',
+		description: 'ยาสามัญประจำบ้าน ยาประจำตัว ชุดทำแผล แอลกอฮอล์ อุปกรณ์การแพทย์'
+	},
+	{
+		key: 'SPECIAL_CARE',
+		id: 'item_category:special_care',
+		name: 'ของใช้กลุ่มเปราะบาง (Special Care & Vulnerable)',
+		default_class: 'CONSUMABLE',
+		description: 'ผ้าอ้อมผู้ใหญ่/เด็ก นมผงทารก แผ่นรองซับ สำหรับกลุ่มเฉพาะ'
+	},
+	{
+		key: 'VOLUNTEER_PPE',
+		id: 'item_category:volunteer_ppe',
+		name: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร (PPE & Operations)',
+		default_class: 'EQUIPMENT',
+		description: 'ถุงมือ เสื้อกั๊กสะท้อนแสง รองเท้าบูท อุปกรณ์คุ้มครองความปลอดภัย'
+	},
+	{
+		key: 'READY_MEAL',
+		id: 'item_category:ready_meal',
+		name: 'อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals)',
+		default_class: 'CONSUMABLE',
+		description: 'อาหารปรุงสุกพร้อมรับประทาน ข้าวกล่อง นม สำหรับแจกจ่ายหน้างาน'
+	},
+	{
+		key: 'BEDDING',
+		id: 'item_category:bedding',
+		name: 'เครื่องนอนและที่พักพิง (Shelter & Bedding)',
+		default_class: 'DURABLE',
+		description: 'เสื่อปูนอน มุ้ง ผ้าห่ม หมอน เต็นท์ครอบครัว พัสดุหมุนเวียนยืม-คืน'
+	},
+	{
+		key: 'FUEL_ENERGY',
+		id: 'item_category:fuel_energy',
+		name: 'เชื้อเพลิงและพลังงาน (Fuel & Energy)',
+		default_class: 'CONSUMABLE',
+		description: 'แก๊สหุงต้ม LPG (15kg/4kg) น้ำมันดีเซลเครื่องปั่นไฟ ถ่านไม้ วัตถุไวไฟ'
+	},
+	{
+		key: 'KITS',
+		id: 'item_category:kits',
+		name: 'ชุดพัสดุยังชีพรวม (Relief Kits & Packages)',
+		default_class: 'CONSUMABLE',
+		description: 'ถุงยังชีพพระราชทาน ชุดธารน้ำใจ ชุดสุขอนามัยครอบครัว'
+	}
+];
+
+export function systemCategoryDocId(key: SystemCategoryKey): string {
+	return `item_category:${key.toLowerCase()}`;
+}
+
+export function isSystemCategoryDocId(id: string): boolean {
+	return SYSTEM_CATEGORY_DEFINITIONS.some((def) => def.id === id);
+}
+
+export function categoryReferenceMatches(reference: string, category: ItemCategory): boolean {
+	if (!reference) return false;
+	if (reference === category._id) return true;
+	if (reference === category.name) return true;
+	if (category.system_key && reference.toUpperCase() === category.system_key.toUpperCase())
+		return true;
+	if (reference.toLowerCase() === category._id.replace(/^item_category:/, '')) return true;
+	return false;
+}
+
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
+	system_key?: SystemCategoryKey | string;
+	default_class?: TypeClass;
+	description?: string;
+	is_protected?: boolean;
+	is_default?: boolean;
 	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
@@ -108,6 +227,9 @@ export function itemMasterUnit(item: { base_unit?: string; unit?: string }): str
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),
+	default_class: typeClassSchema.optional(),
+	description: z.string().trim().optional(),
+	is_default: z.boolean().optional(),
 	deactivated: z.boolean().optional(),
 	override: z.boolean().optional()
 });
@@ -210,6 +332,10 @@ export function createItemCategory(
 		2,
 		{
 			name: d.name,
+			default_class: d.default_class,
+			description: d.description,
+			is_protected: false,
+			is_default: d.is_default ?? false,
 			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {})

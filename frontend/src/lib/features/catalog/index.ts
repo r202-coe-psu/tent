@@ -19,6 +19,13 @@ export {
 // Domain — input schemas + factories + transitions + guards
 export {
 	// Item Category
+	SYSTEM_CATEGORY_KEYS,
+	type SystemCategoryKey,
+	type SystemCategoryDefinition,
+	SYSTEM_CATEGORY_DEFINITIONS,
+	systemCategoryDocId,
+	isSystemCategoryDocId,
+	categoryReferenceMatches,
 	itemCategoryInputSchema,
 	type ItemCategoryInput,
 	createItemCategory,

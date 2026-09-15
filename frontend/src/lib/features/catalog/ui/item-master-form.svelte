@@ -6,7 +6,12 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { itemMasterInputSchema, type ItemMaster, type ItemMasterInput } from '../domain/catalog';
+	import {
+		itemMasterInputSchema,
+		categoryReferenceMatches,
+		type ItemMaster,
+		type ItemMasterInput
+	} from '../domain/catalog';
 
 	import {
 		useItemMaster,
@@ -205,7 +210,15 @@
 		if (isEdit && itemMasterQuery.data) {
 			const item = itemMasterQuery.data;
 			$formData.name = item.name || '';
-			$formData.category = item.category || '';
+
+			if (item.category) {
+				const categories = itemCategoriesQuery.data ?? [];
+				const matchedCat = categories.find((c) => categoryReferenceMatches(item.category!, c));
+				$formData.category = matchedCat ? matchedCat._id : item.category;
+			} else {
+				$formData.category = '';
+			}
+
 			$formData.sku = item.sku || '';
 			$formData.description = item.description || '';
 			$formData.base_unit = item.base_unit || '';
@@ -229,6 +242,17 @@
 			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
+
+	function handleCategoryChange(e: Event) {
+		const select = e.currentTarget as HTMLSelectElement;
+		const selectedId = select.value;
+		if (!selectedId) return;
+
+		const selectedCat = itemCategoriesQuery.data?.find((c) => c._id === selectedId);
+		if (selectedCat?.default_class) {
+			$formData.type_class = selectedCat.default_class;
+		}
+	}
 
 	const isLoading = $derived(isEdit ? itemMasterQuery.isLoading : false);
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
@@ -385,12 +409,13 @@
 								<select
 									{...props}
 									bind:value={$formData.category}
+									onchange={handleCategoryChange}
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
 									{#if itemCategoriesQuery.data}
 										{#each itemCategoriesQuery.data as cat (cat._id)}
-											<option value={cat.name}>{cat.name}</option>
+											<option value={cat._id}>{cat.name}</option>
 										{/each}
 									{/if}
 								</select>

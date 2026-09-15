@@ -1791,5 +1791,72 @@ describe('buildValidateDocUpdate', () => {
 				/Cannot change evacuee_id on one-time guard/
 			);
 		});
+
+		it('CR-119: rejects delete and immutable field mutations on protected item_category', () => {
+			const protectedCategory: Doc = {
+				_id: 'item_category:food',
+				type: 'item_category',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				description: 'คำอธิบายเดิม',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			};
+
+			const sysAdmin: UserCtx = { name: 'sa', roles: ['system_admin'] };
+
+			// 1. Delete rejection
+			expectForbidden(
+				() => compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, sysAdmin),
+				/Cannot delete system protected category/
+			);
+
+			// 2. system_key immutable
+			expectForbidden(
+				() => compile()({ ...protectedCategory, system_key: 'WATER' }, protectedCategory, sysAdmin),
+				/system_key is immutable on protected categories/
+			);
+
+			// 3. default_class immutable
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...protectedCategory, default_class: 'DURABLE' },
+						protectedCategory,
+						sysAdmin
+					),
+				/default_class is immutable on protected categories/
+			);
+
+			// 4. is_protected flag removal rejected
+			expectForbidden(
+				() => compile()({ ...protectedCategory, is_protected: false }, protectedCategory, sysAdmin),
+				/is_protected flag cannot be removed/
+			);
+
+			// 5. Updating name or description is permitted
+			expect(() =>
+				compile()(
+					{
+						...protectedCategory,
+						name: 'อาหารและวัตถุดิบสด',
+						description: 'คำอธิบายปรับปรุงใหม่'
+					},
+					protectedCategory,
+					sysAdmin
+				)
+			).not.toThrow();
+
+			// 6. _admin bypass
+			const adminCtx: UserCtx = { name: 'admin', roles: ['_admin'] };
+			expect(() =>
+				compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, adminCtx)
+			).not.toThrow();
+		});
 	});
 });

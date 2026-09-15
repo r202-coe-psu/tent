@@ -143,6 +143,9 @@ export function buildValidateDocUpdate(code: string): string {
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
+    if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+      throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
+    }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
@@ -171,6 +174,17 @@ export function buildValidateDocUpdate(code: string): string {
   }
   if (oldDoc && newDoc.type !== oldDoc.type) {
     throw { forbidden: 'Cannot change type of ' + oldDoc.type + ' document' };
+  }
+  if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+    if (newDoc.system_key !== oldDoc.system_key) {
+      throw { forbidden: 'system_key is immutable on protected categories' };
+    }
+    if (newDoc.default_class !== oldDoc.default_class) {
+      throw { forbidden: 'default_class is immutable on protected categories' };
+    }
+    if (newDoc.is_protected !== true) {
+      throw { forbidden: 'is_protected flag cannot be removed' };
+    }
   }
   function require(field) {
     if (typeof newDoc[field] === 'undefined' || newDoc[field] === null) {

@@ -12,7 +12,10 @@ import {
 	createRecipe,
 	type Recipe,
 	type RecipeInput,
-	isRecipe
+	isRecipe,
+	isSystemCategoryDocId,
+	categoryReferenceMatches,
+	SYSTEM_CATEGORY_DEFINITIONS
 } from '../domain/catalog';
 import {
 	evaluateCategoryDeletion,
@@ -91,18 +94,72 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<ItemCategory>(id);
 	}
 
-	updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
+	async updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
+		if (itemCategory.is_protected || isSystemCategoryDocId(itemCategory._id)) {
+			if (itemCategory.override || itemCategory.shelter_code) {
+				throw new Error('ไม่อนุญาตให้สร้าง local override บนหมวดหมู่ระบบมาตรฐาน');
+			}
+			const existing = await this.repo.get<ItemCategory>(itemCategory._id);
+			if (existing) {
+				itemCategory.system_key = existing.system_key;
+				itemCategory.default_class = existing.default_class;
+				itemCategory.is_protected = true;
+			}
+		}
 		const repo = this.getWriteRepo(itemCategory.shelter_code);
 		return repo.put(touch(itemCategory));
 	}
 
-	createItemMaster(
+	private async canonicalizeItemMasterCategory(
+		category?: string,
+		shelterCode?: string | null
+	): Promise<string | undefined> {
+		if (!category) return undefined;
+		if (isSystemCategoryDocId(category)) return category;
+
+		const categories = await this.listItemCategories(shelterCode);
+		const matched = categories.filter((cat) => categoryReferenceMatches(category, cat));
+
+		if (matched.length > 1) {
+			throw new Error(`หมวดหมู่ '${category}' มีข้อมูลซ้ำซ้อน ไม่สามารถระบุหมวดหมู่ที่แน่นอนได้`);
+		}
+		if (matched.length === 1) {
+			return matched[0]._id;
+		}
+
+		const systemMatches = SYSTEM_CATEGORY_DEFINITIONS.filter(
+			(def) =>
+				def.id === category ||
+				def.name === category ||
+				def.key.toUpperCase() === category.toUpperCase() ||
+				def.id === `item_category:${category.toLowerCase()}`
+		);
+		if (systemMatches.length > 1) {
+			throw new Error(`หมวดหมู่ '${category}' มีข้อมูลซ้ำซ้อน ไม่สามารถระบุหมวดหมู่ที่แน่นอนได้`);
+		}
+		if (systemMatches.length === 1) {
+			return systemMatches[0].id;
+		}
+
+		if (category.startsWith('item_category:')) {
+			return category;
+		}
+
+		throw new Error(`ไม่พบหมวดหมู่ '${category}' ในระบบ`);
+	}
+
+	async createItemMaster(
 		input: ItemMasterInput,
 		ctx: AuthorContext,
 		shelterCode?: string
 	): Promise<ItemMaster> {
+		const canonicalCategory = await this.canonicalizeItemMasterCategory(
+			input.category,
+			shelterCode
+		);
+		const normalizedInput = { ...input, category: canonicalCategory };
 		const repo = this.getWriteRepo(shelterCode);
-		return repo.put(createItemMaster(input, ctx, shelterCode));
+		return repo.put(createItemMaster(normalizedInput, ctx, shelterCode));
 	}
 
 	async listItemMasters(shelterCode?: string | null): Promise<ItemMaster[]> {
@@ -137,9 +194,14 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<ItemMaster>(id);
 	}
 
-	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+		const canonicalCategory = await this.canonicalizeItemMasterCategory(
+			itemMaster.category,
+			itemMaster.shelter_code
+		);
+		const normalizedDoc = { ...itemMaster, category: canonicalCategory };
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
-		return repo.put(touch(itemMaster));
+		return repo.put(touch(normalizedDoc));
 	}
 
 	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe> {
@@ -238,7 +300,13 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (shelterCode) {
 			const itemMasters = await this.listItemMasters(shelterCode);
 			const localItems = itemMasters
-				.filter((item) => item.category === categoryName)
+				.filter(
+					(item) =>
+						item.category &&
+						(item.category === id ||
+							item.category === category._id ||
+							item.category === categoryName)
+				)
 				.map((item) => item.name);
 
 			return {
@@ -262,7 +330,12 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		// Central scope (System Management)
 		const centralItems = await this.repo.allByType('item_master', isItemMaster);
 		const centralMatching = centralItems
-			.filter((item) => !item.shelter_code && item.category === categoryName)
+			.filter(
+				(item) =>
+					!item.shelter_code &&
+					item.category &&
+					(item.category === id || item.category === category._id || item.category === categoryName)
+			)
 			.map((item) => item.name);
 
 		return {
@@ -281,6 +354,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		const category = await this.getItemCategory(id, shelterCode);
 		if (!category) {
 			throw new Error(`ไม่พบข้อมูลหมวดหมู่ ${id}`);
+		}
+
+		if (category.is_protected || isSystemCategoryDocId(id) || isSystemCategoryDocId(category._id)) {
+			throw new Error('ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน');
 		}
 
 		const usage = await this.inspectCategoryUsage(id, shelterCode);
