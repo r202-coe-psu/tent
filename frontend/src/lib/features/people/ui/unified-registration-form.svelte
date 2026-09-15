@@ -759,6 +759,7 @@
 					household.postal_code = v;
 				}
 			}
+			loadMasterHousingTypes={channel !== 'public'}
 			required={true}
 			disabled={pending}
 		/>
