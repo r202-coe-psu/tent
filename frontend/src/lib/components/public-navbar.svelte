@@ -153,18 +153,11 @@
 	<div class="relative z-50 mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-3">
 		<!-- Logo and Title -->
 		<div class="flex min-w-0 shrink items-center gap-3">
-			<a href={resolve('/')} class="flex min-w-0 items-center gap-2">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-muted text-primary"
+			<a href={resolve('/')} class="flex min-w-0 items-center gap-2.5">
+				<img src="/logo.png" alt="PSU Smart Shelter" class="h-9 w-9 shrink-0 rounded-lg" />
+				<span class="truncate text-base font-bold tracking-tight text-foreground"
+					>PSU Smart Shelter</span
 				>
-					<Compass class="h-5 w-5" />
-				</div>
-				<div class="flex flex-col">
-					<span class="text-base font-bold tracking-tight text-foreground">{t.appTitle}</span>
-					<span class="text-2xs font-semibold tracking-wider text-primary uppercase"
-						>{t.appSubtitle}</span
-					>
-				</div>
 			</a>
 		</div>
 

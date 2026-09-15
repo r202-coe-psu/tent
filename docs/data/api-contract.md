@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-10
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214)
+updated: 2026-09-15
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA
 ---
 
 # Smart Shelter — API Contract v1
@@ -45,6 +45,24 @@ DELETE /couch/_session          → logout
   `_security` + `validate_doc_update` (UI เป็นแค่ความสะดวก)
 - เมื่อ central กลับมา app ตรวจ/ขอ central session แล้ว fail back active endpoint ไป central
 - ถ้า cookie หมดอายุและไม่มี central/edge session ที่ใช้ได้ ให้หยุด mutation และบังคับ re-auth ก่อนส่งคำขอใหม่
+
+**Staff Google step-up MFA (CR-124 Phase 1)** — อยู่บน `AuthSession` ไม่แทนที่ password:
+
+- Factor 1 = username/password → `POST /couch/_session` ตามเดิม
+- หลัง login: ถ้า `_users.mfa.providers` มี `type:"google"` → สถานะแอป `pending_mfa` จนกว่า BFF
+  จะยืนยัน Google OIDC `sub` ตรงกับที่ผูกไว้ แล้วตั้ง `mfa_ok` สำหรับรอบ session นั้น
+- ถ้ายังไม่ enroll Google → ไม่บังคับ step-up (opt-in link); ลำดับ gate = force-setup (CR-105) ก่อน แล้วจึง MFA
+- BFF (central เท่านั้น; secrets ฝั่งเซิร์ฟเวอร์):
+  ```
+  GET/POST /api/v1/auth/oauth/google/start      → redirect ไป Google authorize (mode: link | stepup)
+  GET      /api/v1/auth/oauth/google/callback   → แลก code, อ่าน sub/email, link หรือจบ step-up
+  POST     /api/v1/auth/oauth/google/unlink     → ถอดการผูก (self หรือ admin ตามสิทธิ์)
+  GET      /api/v1/auth/me                      → รวมสถานะ mfa_enrolled / pending_mfa (ขยายจาก CR-105)
+  ```
+- `AuthSession` อาจเกิดก่อน MFA เสร็จ — แอป/BFF ต้อง enforce `pending_mfa` จริงก่อนเข้า `(protected)`
+- Step-up ต้องมี central + Google reachable; ช่วง edge-only ถ้า enrolled แล้วแต่ทำ step-up ไม่ได้ → บล็อกเข้าแอป
+  (ไม่ข้าม MFA อัตโนมัติ)
+- แยกจาก Partner OAuth2 `EXT-001` / ADR 0002 ทั้งหมด
 
 ### 1.2 Databases ที่ app sync
 
