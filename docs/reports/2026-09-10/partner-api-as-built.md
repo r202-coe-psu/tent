@@ -1,9 +1,9 @@
 ---
 title: Partner Data API — As-Built (EXT-001–EXT-007)
 status: as-built
-version: 1.2
+version: 1.5
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-16
 audience: M6 Resource Logistics / M7 Command Center (EOC) partners
 note: Self-contained as-built for partner integration; email this file alone.
 ---
@@ -12,7 +12,7 @@ note: Self-contained as-built for partner integration; email this file alone.
 
 เอกสารนี้อธิบาย **พฤติกรรมจริงของ API** ที่ Smart Shelter เปิดให้ระบบพันธมิตร (M6 / M7) เรียกใช้ และเป็น **สัญญา as-built ที่ใช้ผูก integration สำหรับ M6/M7** — พอส่งไฟล์นี้ฉบับเดียวโดยไม่ต้องอ้างเอกสารภายในอื่น
 
-**วันที่เอกสาร:** 2026-09-11 · **เวอร์ชัน:** 1.2
+**วันที่เอกสาร:** 2026-09-16 · **เวอร์ชัน:** 1.5
 
 ---
 
@@ -35,7 +35,7 @@ note: Self-contained as-built for partner integration; email this file alone.
 
 | | |
 | --- | --- |
-| Method / Path | `POST /api/auth/token-third-party` |
+| Method / Path | `POST /public-api/external/token` |
 | Auth | ไม่ต้องมี Bearer — ส่ง credentials ใน body |
 | Headers | `Content-Type: application/json` |
 | Grant | `grant_type` = `"client_credentials"` เท่านั้น |
@@ -43,7 +43,7 @@ note: Self-contained as-built for partner integration; email this file alone.
 ### Request
 
 ```bash
-curl -sS -X POST 'https://shelter.importstar.dev/api/auth/token-third-party' \
+curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/token' \
   -H 'Content-Type: application/json' \
   -d '{
     "grant_type": "client_credentials",
@@ -111,7 +111,7 @@ endpoint อ่านข้อมูล (EXT-002–007) คืนรูป:
 
 ### 4.2 Error envelope — ให้ดูที่ `code` เป็นหลัก
 
-สำหรับ path ภายใต้ `/api/auth/token-third-party` และ `/api/thirdparty/*` ร่างกาย error เป็น:
+สำหรับ path ภายใต้ `/public-api/external/token` และ `/public-api/external/*` ร่างกาย error เป็น:
 
 ```json
 {
@@ -199,7 +199,7 @@ Partner ควร treat เป็น optional และไม่ fail เมื�
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/locations` |
+| Method / Path | `GET /public-api/external/locations` |
 | Scope | `location-read` |
 
 ### Query parameters
@@ -215,7 +215,7 @@ Partner ควร treat เป็น optional และไม่ fail เมื�
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?page=1&limit=50&updated_since=2026-08-11T00:00:00%2B07:00' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/locations?page=1&limit=50&updated_since=2026-08-11T00:00:00%2B07:00' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -290,7 +290,7 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?page=1&limit=5
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/locations/{location_code}` |
+| Method / Path | `GET /public-api/external/locations/{location_code}` |
 | Scope | `location-read` |
 
 `result` = ฟิลด์เดียวกับ EXT-002 **บวก** `facilities: string[]`
@@ -298,7 +298,7 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations?page=1&limit=5
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -345,13 +345,13 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001' \
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/locations/{location_code}/stock` |
+| Method / Path | `GET /public-api/external/locations/{location_code}/stock` |
 | Scope | `location-stock-read` |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/stock' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001/stock' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -409,13 +409,13 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/stock' \
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/locations/{location_code}/occupancy` |
+| Method / Path | `GET /public-api/external/locations/{location_code}/occupancy` |
 | Scope | `occupancy-read` |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupancy' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001/occupancy' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -454,13 +454,13 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupanc
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/summary` |
+| Method / Path | `GET /public-api/external/summary` |
 | Scope | `location-read` **บังคับ**; `occupancy-read` **ถ้ามี** จะเติมยอดรวม |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/summary' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/summary' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -519,14 +519,14 @@ Alert คำนวณ **ฝั่งเซิร์ฟเวอร์** จา�
 
 | | |
 | --- | --- |
-| Method / Path | `GET /api/thirdparty/locations/{location_code}/occupants` |
+| Method / Path | `GET /public-api/external/locations/{location_code}/occupants` |
 | Scope | `occupancy-pii-read` |
 | Query | `purpose` (**บังคับ**) — เหตุผลการเข้าถึง (PDPA)<br>`page` (int, default `1`)<br>`limit` (int, default `50`, สูงสุด `200`) |
 
 ### Example
 
 ```bash
-curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupants?purpose=eoc-ops-check&page=1&limit=50' \
+curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001/occupants?purpose=eoc-ops-check&page=1&limit=50' \
   -H 'Authorization: Bearer <access_token>'
 ```
 
@@ -597,23 +597,25 @@ curl -sS 'https://shelter.importstar.dev/api/thirdparty/locations/SH001/occupant
 
 ---
 
-## 13. แยกจาก External plane เดิม (`/external/v1`)
+## 13. แยกจาก Legacy External plane (`/external/v1`) — soft-deprecated สำหรับงานใหม่
+
+`/external/v1` ยังมีในระบบ (API-key mirror สำหรับ M2 และ SA API Keys UI) แต่เป็น **legacy / do-not-use-for-new-integrations**. งาน partner ใหม่ใช้ plane `/external` (OAuth2) ตามเอกสารนี้ — ไม่ใช่ `/external/v1`.
 
 | | Partner Data API (เอกสารนี้) | Legacy External (`/external/v1`) |
 | --- | --- | --- |
-| ผู้ใช้หลัก | M6 / M7 ตามสัญญา EXT-* | หน่วยงานอื่น (เช่น M2) |
+| สถานะ | **ใช้สำหรับงานใหม่** (M6 / M7 ตามสัญญา EXT-*) | **Legacy** — คงไว้; อย่าใช้สำหรับ integration ใหม่ |
 | Auth | OAuth2 client_credentials → Bearer JWT | `X-API-Key` หรือ Bearer อื่น |
-| Prefix | `/api/auth/token-third-party`, `/api/thirdparty/*` | `/external/v1/*` |
+| Prefix | `/public-api/external/token`, `/public-api/external/*` (เช่น `/locations`, `/summary`) | `/public-api/external/v1/*` |
 | Error shape | `{ status, message, code?, … }` | `{ error: { code, message } }` |
 
-อย่าสลับ credentials / path ระหว่างสอง plane
+อย่าสลับ credentials / path ระหว่างสอง plane — `/external/v1/...` ≠ `/external/token` / `/external/locations`
 
 ---
 
 ## 14. Checklist ฝั่ง Partner
 
 1. ขอ `client_id` / `client_secret` + scopes จากทีม Shelter (ออกแยกจากเอกสารนี้)
-2. `POST /api/auth/token-third-party` (`Content-Type: application/json`) แล้วเก็บ `access_token` จนใกล้หมดอายุ
+2. `POST /public-api/external/token` (`Content-Type: application/json`) แล้วเก็บ `access_token` จนใกล้หมดอายุ
 3. เรียก EXT-002…006 ด้วย `Authorization: Bearer …`
 4. แยก logic ตาม `code` ไม่ใช่ตามข้อความ `message`
 5. รองรับ `null` ในฟิลด์ภูมิศาสตร์/ติดต่อ/DOPA/stock M6 ids

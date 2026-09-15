@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-15
+updated: 2026-09-16
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users
 ---
 
@@ -1868,7 +1868,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
 
-Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /api/thirdparty/locations/{code}/stock`
+Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /external/locations/{code}/stock`
 (scope `location-stock-read`) และ `critical_items` ใน EXT-006 summary. Worker คำนวณใหม่ทั้งชุดทุกครั้งที่
 `stock_ledger`/`stock_threshold_override` ในศูนย์นั้นเปลี่ยน (`worker/mongo/stock.py::refresh_shelter_stock`
 — full-rescan pattern เดียวกับ `refresh_on_hand`, CR-032/T-22). ไม่มี read path จาก CouchDB สำหรับ partner

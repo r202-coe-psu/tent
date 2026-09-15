@@ -90,7 +90,7 @@ async def deactivated_shelter() -> PublicShelter:
 
 
 async def test_list_locations_requires_bearer_token(client: AsyncClient) -> None:
-    response = await client.get("/api/thirdparty/locations")
+    response = await client.get("/external/locations")
     assert response.status_code == 401
     body = response.json()
     assert body["status"] == 401
@@ -99,7 +99,7 @@ async def test_list_locations_requires_bearer_token(client: AsyncClient) -> None
 
 async def test_list_locations_rejects_insufficient_scope(client: AsyncClient) -> None:
     headers = _bearer(["occupancy-read"])
-    response = await client.get("/api/thirdparty/locations", headers=headers)
+    response = await client.get("/external/locations", headers=headers)
     assert response.status_code == 403
     body = response.json()
     assert body["status"] == 403
@@ -113,7 +113,7 @@ async def test_list_locations_excludes_inactive_by_default(
     closed_shelter: PublicShelter,
     deactivated_shelter: PublicShelter,
 ) -> None:
-    response = await client.get("/api/thirdparty/locations", headers=location_read_headers)
+    response = await client.get("/external/locations", headers=location_read_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == 200
@@ -130,7 +130,7 @@ async def test_list_locations_include_inactive_true_includes_deactivated(
     deactivated_shelter: PublicShelter,
 ) -> None:
     response = await client.get(
-        "/api/thirdparty/locations",
+        "/external/locations",
         headers=location_read_headers,
         params={"include_inactive": "true"},
     )
@@ -146,7 +146,7 @@ async def test_list_locations_filters_by_status(
     closed_shelter: PublicShelter,
 ) -> None:
     response = await client.get(
-        "/api/thirdparty/locations",
+        "/external/locations",
         headers=location_read_headers,
         params={"status": "closed"},
     )
@@ -162,7 +162,7 @@ async def test_list_locations_filters_by_updated_since(
 ) -> None:
     future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
     response = await client.get(
-        "/api/thirdparty/locations",
+        "/external/locations",
         headers=location_read_headers,
         params={"updated_since": future},
     )
@@ -175,7 +175,7 @@ async def test_get_location_returns_full_fields_and_dopa_codes(
     location_read_headers: dict[str, str],
     open_hatyai_shelter: PublicShelter,
 ) -> None:
-    response = await client.get("/api/thirdparty/locations/SH001", headers=location_read_headers)
+    response = await client.get("/external/locations/SH001", headers=location_read_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == 200
@@ -204,7 +204,7 @@ async def test_get_location_returns_full_fields_and_dopa_codes(
 async def test_get_location_returns_null_dopa_codes_when_unmapped(
     client: AsyncClient, location_read_headers: dict[str, str], closed_shelter: PublicShelter
 ) -> None:
-    response = await client.get("/api/thirdparty/locations/SH002", headers=location_read_headers)
+    response = await client.get("/external/locations/SH002", headers=location_read_headers)
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["province_code"] is None
@@ -216,7 +216,7 @@ async def test_get_location_returns_null_dopa_codes_when_unmapped(
 async def test_get_location_unknown_code_returns_location_not_found(
     client: AsyncClient, location_read_headers: dict[str, str]
 ) -> None:
-    response = await client.get("/api/thirdparty/locations/NOPE", headers=location_read_headers)
+    response = await client.get("/external/locations/NOPE", headers=location_read_headers)
     assert response.status_code == 404
     body = response.json()
     assert body["status"] == 404
@@ -328,7 +328,7 @@ async def test_list_locations_pagination(
     closed_shelter: PublicShelter,
 ) -> None:
     # Default page 1, limit 50
-    resp = await client.get("/api/thirdparty/locations", headers=location_read_headers)
+    resp = await client.get("/external/locations", headers=location_read_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert "pagination" in body
@@ -338,9 +338,7 @@ async def test_list_locations_pagination(
     assert len(body["result"]) >= 2
 
     # Limit 1, page 1
-    p1_resp = await client.get(
-        "/api/thirdparty/locations?page=1&limit=1", headers=location_read_headers
-    )
+    p1_resp = await client.get("/external/locations?page=1&limit=1", headers=location_read_headers)
     assert p1_resp.status_code == 200
     p1 = p1_resp.json()
     assert len(p1["result"]) == 1
@@ -349,9 +347,7 @@ async def test_list_locations_pagination(
     assert p1["pagination"]["total_pages"] >= 2
 
     # Limit 1, page 2
-    p2_resp = await client.get(
-        "/api/thirdparty/locations?page=2&limit=1", headers=location_read_headers
-    )
+    p2_resp = await client.get("/external/locations?page=2&limit=1", headers=location_read_headers)
     assert p2_resp.status_code == 200
     p2 = p2_resp.json()
     assert len(p2["result"]) == 1

@@ -34,7 +34,7 @@ async def shelter() -> PublicShelter:
 
 async def test_get_occupants_requires_bearer_token(client: AsyncClient) -> None:
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupants", params={"purpose": "medical-referral"}
+        "/external/locations/SH001/occupants", params={"purpose": "medical-referral"}
     )
     assert response.status_code == 401
 
@@ -43,7 +43,7 @@ async def test_get_occupants_missing_purpose_returns_400(
     client: AsyncClient, shelter: PublicShelter
 ) -> None:
     headers = _bearer([])
-    response = await client.get("/api/thirdparty/locations/SH001/occupants", headers=headers)
+    response = await client.get("/external/locations/SH001/occupants", headers=headers)
     assert response.status_code == 400
     body = response.json()
     assert body["status"] == 400
@@ -54,7 +54,7 @@ async def test_get_occupants_denied_by_default(client: AsyncClient, shelter: Pub
     """ODT: every module defaults to no `occupancy-pii-read` — always 403 today."""
     headers = _bearer(["location-read", "occupancy-read"])  # no occupancy-pii-read
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupants",
+        "/external/locations/SH001/occupants",
         headers=headers,
         params={"purpose": "medical-referral"},
     )
@@ -70,7 +70,7 @@ async def test_get_occupants_denial_persists_access_log_row(
 ) -> None:
     headers = _bearer([])
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupants",
+        "/external/locations/SH001/occupants",
         headers=headers,
         params={"purpose": "medical-referral"},
     )
@@ -91,7 +91,7 @@ async def test_get_occupants_missing_purpose_also_logs_the_attempt(
     client: AsyncClient, shelter: PublicShelter
 ) -> None:
     headers = _bearer([])
-    await client.get("/api/thirdparty/locations/SH001/occupants", headers=headers)
+    await client.get("/external/locations/SH001/occupants", headers=headers)
 
     rows = await ThirdPartyAccessLog.find(ThirdPartyAccessLog.location_code == "SH001").to_list()
     assert len(rows) == 1
@@ -104,7 +104,7 @@ async def test_get_occupants_with_scope_returns_empty_when_no_occupants(
 ) -> None:
     headers = _bearer(["occupancy-pii-read"])
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupants",
+        "/external/locations/SH001/occupants",
         headers=headers,
         params={"purpose": "medical-referral"},
     )
@@ -148,7 +148,7 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
 
     headers = _bearer(["occupancy-pii-read"])
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupants",
+        "/external/locations/SH001/occupants",
         headers=headers,
         params={"purpose": "medical-referral", "page": 1, "limit": 1},
     )
@@ -168,7 +168,7 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
 
     # Page 2
     p2_resp = await client.get(
-        "/api/thirdparty/locations/SH001/occupants",
+        "/external/locations/SH001/occupants",
         headers=headers,
         params={"purpose": "medical-referral", "page": 2, "limit": 1},
     )

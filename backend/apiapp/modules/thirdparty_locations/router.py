@@ -11,8 +11,8 @@ from .schemas import LocationDetailEnvelope, LocationErrorResponse, LocationList
 from .use_case import ThirdPartyLocationsUseCase, get_thirdparty_locations_use_case
 
 router = APIRouter(
-    prefix="/api/thirdparty",
-    tags=["Third-party Locations"],
+    prefix="/external",
+    tags=["External"],
     dependencies=[Depends(require_scope("location-read"))],
 )
 
