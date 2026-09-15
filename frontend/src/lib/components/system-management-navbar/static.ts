@@ -13,7 +13,9 @@ import {
 	Building,
 	UserCog,
 	Warehouse,
-	Cpu
+	Cpu,
+	LayoutDashboard,
+	ClipboardList
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -36,12 +38,24 @@ export type SystemManagementNavbarGroup = {
 	items: SystemManagementNavbarNode[];
 };
 
-const base = '/portal/system-management';
+const base = '/system-management';
 
 export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 	{
 		title: 'ศูนย์สั่งการและภาพรวม',
 		items: [
+			{
+				label: 'ภาพรวมระบบ',
+				href: resolve(`${base}/overview`),
+				icon: LayoutDashboard,
+				requiresAdmin: true
+			},
+			{
+				label: 'ลงทะเบียนล่วงหน้า',
+				href: resolve(`${base}/pre-registrations`),
+				icon: ClipboardList,
+				requiresAdmin: true
+			},
 			{
 				label: 'การจัดการประกาศด่วน',
 				href: resolve(`${base}/announcements`),
@@ -125,6 +139,6 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 	}
 ];
 
-export const systemManagementHomePath: ResolvedPathname = resolve('/portal/system-management');
+export const systemManagementHomePath: ResolvedPathname = resolve('/system-management');
 
 export { isGroup };

@@ -8,11 +8,9 @@ import {
 
 describe('usersListBaseFromPathname', () => {
 	it('uses the portal list under system management', () => {
-		expect(usersListBaseFromPathname('/portal/system-management/users')).toBe(
-			'/portal/system-management/users'
-		);
-		expect(usersListBaseFromPathname('/portal/system-management/shelters/edit/SH001')).toBe(
-			'/portal/system-management/users'
+		expect(usersListBaseFromPathname('/system-management/users')).toBe('/system-management/users');
+		expect(usersListBaseFromPathname('/system-management/shelters/edit/SH001')).toBe(
+			'/system-management/users'
 		);
 	});
 

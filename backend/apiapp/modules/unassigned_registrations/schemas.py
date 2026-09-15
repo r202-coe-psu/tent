@@ -226,6 +226,54 @@ class UnassignedRegistrationSearchResponse(BaseModel):
     results: list[UnassignedRegistrationSearchHit]
 
 
+class HouseholdOut(BaseModel):
+    housing_type: str | None = None
+    residence_landmark: str | None = None
+    address_no: str | None = None
+    village_no: str | None = None
+    subdistrict: str | None = None
+    district: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    geo: GeoPoint | None = None
+    label: str | None = None
+
+
+class UnassignedRegistrationListItem(BaseModel):
+    id: str
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    household: HouseholdOut
+    open_members: list[OpenMemberHit]
+    open_member_count: int
+
+
+class UnassignedRegistrationListResponse(BaseModel):
+    items: list[UnassignedRegistrationListItem]
+    total: int
+    open_member_count: int
+    limit: int
+    offset: int
+
+
+class UnassignedRegistrationDetailResponse(BaseModel):
+    id: str
+    schema_v: int
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    household: HouseholdOut
+    members: list[MemberCreated]
+
+
+class UnassignedRegistrationStatsResponse(BaseModel):
+    open_registrations: int
+    open_members: int
+
+
 class UnassignedRegistrationClaimRequest(BaseModel):
     """Staff claim — body selects open member reserved ids (CR-113 / #247)."""
 
