@@ -38,12 +38,12 @@
 	const faqList = $derived(data.faqs ?? []);
 	const defaultOpenFaq = $derived(faqList.length > 0 ? `faq-${faqList[0].id ?? 1}` : undefined);
 
-	// Dynamic calculations with sensible fallbacks for Telemetry
-	const totalCapacity = 3080;
-	const currentOccupancy = $derived(data.summary?.occupancy_total ?? 639);
+	// Prefer live summary; fall back to 0 when Mongo/API has no data (empty env).
+	const totalCapacity = 0;
+	const currentOccupancy = $derived(data.summary?.occupancy_total ?? 0);
 	const remainingCapacity = $derived(Math.max(0, totalCapacity - currentOccupancy));
-	const sheltersOpen = $derived(data.summary?.shelters_open ?? 6);
-	const sheltersTotal = $derived(data.summary?.shelters_total ?? 6);
+	const sheltersOpen = $derived(data.summary?.shelters_open ?? 0);
+	const sheltersTotal = $derived(data.summary?.shelters_total ?? 0);
 </script>
 
 <svelte:head>
@@ -345,7 +345,7 @@
 						</div>
 					</div>
 					<div class="mt-2 flex items-baseline gap-1">
-						<span class="text-3xl font-bold text-slate-900 tabular-nums">5</span>
+						<span class="text-3xl font-bold text-slate-900 tabular-nums">0</span>
 						<span class="text-xs font-normal text-slate-400">คน</span>
 					</div>
 					<div class="mt-2 text-xs text-slate-400">ครัวกลาง ขนย้าย</div>

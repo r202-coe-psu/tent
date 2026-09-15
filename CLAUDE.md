@@ -75,7 +75,7 @@ touched run through **`svelte-autofixer`** (Svelte MCP) until clean.
 
 ```
 docker compose up -d          # CouchDB + MongoDB + sync worker
-# frontend/: pnpm seed        # optional — populate CouchDB for projections
+# frontend/: pnpm seed        # optional — staging profile (~1k people); or pnpm seed:master for platform init only
 uv run --project worker sync-worker [--bootstrap]   # if debugging worker locally
 cd backend && ./scripts/run-dev                     # FastAPI :9000
 cd frontend && pnpm dev                             # Vite :5173 + proxies
