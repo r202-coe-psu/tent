@@ -12,7 +12,12 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
-	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
+	import {
+		isSystemAdmin,
+		isShelterManager,
+		formatRoleList,
+		hasCapabilityInShelter
+	} from '$lib/auth/roles';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		backofficeNavbarGroups,
@@ -82,6 +87,10 @@
 	function canSee(node: BackofficeNavbarNode): boolean {
 		if ('requiresAdmin' in node && node.requiresAdmin) return isSA;
 		if ('requiresManager' in node && node.requiresManager) return isManager;
+		if ('visibleToRoles' in node && node.visibleToRoles) {
+			const shelterCode = shelterStore.selectedShelterCode;
+			return node.visibleToRoles.some((role) => hasCapabilityInShelter(roles, shelterCode, role));
+		}
 		return true;
 	}
 </script>

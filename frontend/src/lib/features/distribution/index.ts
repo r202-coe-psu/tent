@@ -115,6 +115,54 @@ export {
 export { DistributionRemoteRepository } from './data/distribution.remote';
 
 export {
+	distributionKeys,
+	useDistributionRequests,
+	useDistributionBatches,
+	useDistributionRequest,
+	useDistributionBatch,
+	useCreateDistributionRequest,
+	useApproveDistributionRequest,
+	useRejectDistributionRequest,
+	useCancelDistributionRequest
+} from './application/queries';
+
+export { default as DistributionPage } from './ui/distribution-page.svelte';
+export { default as CreateRequestDialog } from './ui/create-request-dialog.svelte';
+export { default as RequestItemEditor } from './ui/request-item-editor.svelte';
+export { default as NfiTemplatePicker } from './ui/nfi-template-picker.svelte';
+export { default as ApprovalDialog } from './ui/approval-dialog.svelte';
+export { default as PhysicalLotSelector } from './ui/physical-lot-selector.svelte';
+export { default as RequestDetailDialog } from './ui/request-detail-dialog.svelte';
+export { default as RejectRequestDialog } from './ui/reject-request-dialog.svelte';
+export { default as ActiveBatchSummary } from './ui/active-batch-summary.svelte';
+export {
+	getLotInputKey,
+	filterLotsForItem,
+	calculateItemAllocation,
+	buildApprovalPlan,
+	validateApprovalPlan,
+	buildApprovalAllocations,
+	type AllocationItemStatus,
+	type LotAllocationEntry,
+	type ItemAllocationPlan,
+	type ApprovalPlanValidation
+} from './ui/approval-allocation-form';
+export {
+	ALLOWED_BUFFER_PERCENTS,
+	DEFAULT_BUFFER_PERCENT,
+	NFI_TEMPLATE_PRESETS,
+	catalogDistributionTypeToSnapshot,
+	createInitialFormItem,
+	createInitialFormState,
+	validateCreateRequestForm,
+	type AllowedBufferPercent,
+	type CreateRequestFormItem,
+	type CreateRequestFormState,
+	type NfiTemplatePreset,
+	type FormValidationResult
+} from './ui/create-request-form';
+
+export {
 	IntegrityError,
 	ApprovalConflictError,
 	InsufficientStockError,
