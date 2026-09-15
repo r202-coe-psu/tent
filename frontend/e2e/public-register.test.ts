@@ -127,7 +127,10 @@ async function mockReferenceData(page: Page) {
 
 /** Pick a shadcn Select option from the shelter trigger (bits Select = button, not combobox). */
 async function selectShelter(page: Page, optionLabel: string | RegExp) {
-	await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง|เทศบาล|โรงเรียน/ }).first().click();
+	await page
+		.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง|เทศบาล|โรงเรียน/ })
+		.first()
+		.click();
 	await page.getByRole('option', { name: optionLabel }).click();
 }
 
@@ -167,9 +170,7 @@ async function openBooking(page: Page) {
 		.first()
 		.click();
 	await page.waitForURL('**/pre-register');
-	await expect(
-		page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })
-	).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
 	return page;
 }
 
@@ -318,9 +319,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
 		await page.getByPlaceholder('เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้').fill('โกโก้');
-		await page
-			.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/)
-			.fill('ชิวาว่า');
+		await page.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/).fill('ชิวาว่า');
 		await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
 
 		await page
@@ -360,7 +359,9 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
 
 		// Server errors surface as toast (booking-form catch); form alert is for client validation.
-		await expect(page.getByText(/ปิดรับผู้เข้าพัก|ศูนย์.*ปิด|ไม่สามารถ|ไม่สำเร็จ/i).first()).toBeVisible({
+		await expect(
+			page.getByText(/ปิดรับผู้เข้าพัก|ศูนย์.*ปิด|ไม่สามารถ|ไม่สำเร็จ/i).first()
+		).toBeVisible({
 			timeout: 10_000
 		});
 	});
@@ -442,9 +443,7 @@ test.describe('Public unassigned registration (#255 / CR-113)', () => {
 			.first()
 			.click();
 		await page.waitForURL('**/pre-register');
-		await expect(
-			page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
 
 		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
 		await page.getByRole('option', { name: /ไม่ระบุศูนย์พักพิง/ }).click();

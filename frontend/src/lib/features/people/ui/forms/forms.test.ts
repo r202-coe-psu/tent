@@ -305,6 +305,35 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toContain('id="address-no"');
 			expect(result.body).not.toContain('บ้านเลขที่');
 		});
+
+		it('uses DEFAULT_HOUSING_TYPES when loadMasterHousingTypes is false', () => {
+			// SSR Select is closed — assert selected labels from DEFAULT_HOUSING_TYPES
+			// (i18n), proving the public path does not need master-data to render.
+			const owned = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'owned_house',
+					loadMasterHousingTypes: false
+				}
+			});
+			expect(owned.body).toContain('ประเภทที่อยู่อาศัย');
+			expect(owned.body).toContain('บ้านตนเอง');
+
+			const rented = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'rented_house',
+					loadMasterHousingTypes: false
+				}
+			});
+			expect(rented.body).toContain('บ้านเช่า');
+
+			const homeless = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'homeless',
+					loadMasterHousingTypes: false
+				}
+			});
+			expect(homeless.body).toContain('ไร้ที่อยู่อาศัยเป็นหลักแหล่ง');
+		});
 	});
 
 	describe('Pet Asset Vehicle Fields (pet-asset-vehicle-fields.svelte)', () => {
@@ -327,7 +356,9 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 		it('renders pet photo change and remove buttons when image_url exists', () => {
 			const result = render(PetAssetVehicleFields, {
 				props: {
-					pets: [{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }]
+					pets: [
+						{ species: 'cat', count: 1, notes: 'เหมียว', has_cage: false, image_url: 'img_pet_123' }
+					]
 				}
 			});
 			expect(result.body).toContain('รูปสัตว์เลี้ยง');

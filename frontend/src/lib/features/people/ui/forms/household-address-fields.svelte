@@ -2,6 +2,7 @@
 	import MapPinX from '@lucide/svelte/icons/map-pin-x';
 	import LocateFixed from '@lucide/svelte/icons/locate-fixed';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -26,6 +27,7 @@
 		postal_code = $bindable(''),
 		disabled = false,
 		required = false,
+		loadMasterHousingTypes = true,
 		errors
 	}: {
 		housing_type?: string | null;
@@ -38,6 +40,8 @@
 		postal_code?: string;
 		disabled?: boolean;
 		required?: boolean;
+		/** When false (e.g. public channel), skip back-office master-data and use defaults. */
+		loadMasterHousingTypes?: boolean;
 		errors?: {
 			housing_type?: string;
 			residence_landmark?: string;
@@ -62,10 +66,16 @@
 
 	const fallbackQueryResult = { data: undefined, isLoading: false, isError: false };
 
-	const housingTypeQuery = safeQuery(
-		() => useMasterData(() => 'housing_type'),
-		fallbackQueryResult as unknown as ReturnType<typeof useMasterData>
-	);
+	// Channel (public vs staff) is fixed for the component lifetime — untrack avoids
+	// state_referenced_locally when gating whether to subscribe to master-data.
+	const shouldLoadMasterHousingTypes = untrack(() => loadMasterHousingTypes);
+
+	const housingTypeQuery = shouldLoadMasterHousingTypes
+		? safeQuery(
+				() => useMasterData(() => 'housing_type'),
+				fallbackQueryResult as unknown as ReturnType<typeof useMasterData>
+			)
+		: (fallbackQueryResult as unknown as ReturnType<typeof useMasterData>);
 	const provincesQuery = safeQuery(
 		() => useProvinces(),
 		fallbackQueryResult as unknown as ReturnType<typeof useProvinces>
@@ -109,6 +119,7 @@
 	]);
 
 	const housingTypeItems = $derived.by(() => {
+		if (!shouldLoadMasterHousingTypes) return DEFAULT_HOUSING_TYPES;
 		const masterItems = (housingTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
 			.map((i) => ({ value: i.code, label: housingLabelForCode(i.code, i.label) }));
@@ -133,11 +144,7 @@
 	const isCondo = $derived(housing_type === 'condo');
 
 	const addressNoLabel = $derived(
-		isApartmentDorm
-			? t.addressNoApartmentLabel
-			: isCondo
-				? t.addressNoCondoLabel
-				: t.addressNoLabel
+		isApartmentDorm ? t.addressNoApartmentLabel : isCondo ? t.addressNoCondoLabel : t.addressNoLabel
 	);
 	const addressNoPlaceholder = $derived(
 		isApartmentDorm
@@ -359,7 +366,8 @@
 						onclick={clearLocation}
 						class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
 					>
-						<MapPinX class="size-3" /> {t.clearArea}
+						<MapPinX class="size-3" />
+						{t.clearArea}
 					</button>
 				{/if}
 				<Button
@@ -386,8 +394,7 @@
 			<div class="space-y-1.5">
 				<Label for="province" class="text-xs font-semibold text-foreground">
 					{t.provinceLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="province"
@@ -410,8 +417,7 @@
 			<div class="space-y-1.5">
 				<Label for="district" class="text-xs font-semibold text-foreground">
 					{t.districtLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="district"
@@ -434,8 +440,7 @@
 			<div class="space-y-1.5">
 				<Label for="subdistrict" class="text-xs font-semibold text-foreground">
 					{t.subdistrictLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<SearchSelect
 					name="subdistrict"
@@ -458,8 +463,7 @@
 			<div class="space-y-1.5">
 				<Label for="postal_code" class="text-xs font-semibold text-foreground">
 					{t.postalCodeLabel}
-					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span
-						>{/if}
+					{#if (required && !isHomeless) || hasLocation}<span class="text-destructive">*</span>{/if}
 				</Label>
 				<Input
 					id="postal_code"

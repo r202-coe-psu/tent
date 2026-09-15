@@ -23,7 +23,7 @@
 			<div class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 bg-slate-300 sm:top-6"></div>
 			<!-- Active Progress Line (from Step 1 to half) -->
 			<div
-				class="absolute top-5 left-10 h-1 w-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-slate-300 sm:top-6"
+				class="absolute top-5 right-1/2 left-10 h-1 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-slate-300 sm:top-6"
 			></div>
 
 			<!-- Step 1: Current / Active -->
