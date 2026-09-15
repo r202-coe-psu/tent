@@ -79,7 +79,7 @@
 	function confirmDelete() {
 		if (!pendingDeleteItem) return;
 		const { id, name } = pendingDeleteItem;
-		const targetItem = filteredAll.find((i) => i._id === id);
+		const targetItem = query.data?.find((i) => i._id === id);
 		const isOverride = !!targetItem?.override;
 
 		deleteMutation.mutate(
@@ -89,7 +89,7 @@
 					if (isOverride) {
 						toast.success(`คืนค่ามาตรฐานรายการ "${name}" สำเร็จ`);
 					} else if (!wasDeleted) {
-						toast.info(`เปลี่ยนสถานะรายการ "${name}" เป็นปิดการใช้งาน (Deactivated) เรียบร้อยแล้ว`);
+						toast.info(`เปลี่ยนสถานะรายการ "${name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`);
 					} else {
 						toast.success(`ลบรายการ "${name}" ถาวรสำเร็จ`);
 					}

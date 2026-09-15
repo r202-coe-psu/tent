@@ -90,9 +90,7 @@
 					if (isOverride) {
 						toast.success(`คืนค่ามาตรฐานสูตรอาหาร "${label}" สำเร็จ`);
 					} else if (!wasDeleted) {
-						toast.info(
-							`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดการใช้งาน (Deactivated) เรียบร้อยแล้ว`
-						);
+						toast.info(`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดการใช้งาน (Deactivated) แล้ว`);
 					} else {
 						toast.success(`ลบสูตรอาหาร "${label}" ถาวรสำเร็จ`);
 					}

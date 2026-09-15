@@ -237,6 +237,12 @@
 	const uomOptions = $derived(
 		[$formData.base_unit, ...$formData.conversions.map((c) => c.uom_name)].filter(Boolean)
 	);
+
+	const availableCategories = $derived.by(() => {
+		return (itemCategoriesQuery.data ?? []).filter(
+			(cat) => !cat.deactivated || cat.name === $formData.category
+		);
+	});
 </script>
 
 {#if isLoading}
@@ -388,11 +394,11 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
-									{#if itemCategoriesQuery.data}
-										{#each (itemCategoriesQuery.data ?? []).filter((cat) => !cat.deactivated || cat.name === $formData.category) as cat (cat._id)}
-											<option value={cat.name}>{cat.name}</option>
-										{/each}
-									{/if}
+									{#each availableCategories as cat (cat._id)}
+										<option value={cat.name}>
+											{cat.name}{cat.deactivated ? ' (ปิดการใช้งาน)' : ''}
+										</option>
+									{/each}
 								</select>
 							{/snippet}
 						</Form.Control>
