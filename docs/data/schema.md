@@ -299,7 +299,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
-| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id`; legacy อาจไม่มี field |
+| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
 | `occurred_at` | ts | req | — |
 
@@ -1055,7 +1055,7 @@ ledger ซ้ำ. `bulk_pool_id` จำกัดการ clear ตาม `uncla
 **Concurrency & Invariants:**
 1. **Optimistic Concurrency Control (OCC):** การตัดโควตาที่ด่าน Check-out (`unclaimed_quota - 1`, `claimed_qty + 1`) ต้องส่ง `_rev` ล่าสุดของเอกสาร. หากเกิด HTTP 409 Conflict Client ต้องดึงเอกสารล่าสุดมาตรวจสอบว่า `unclaimed_quota > 0` ก่อน retry เสมอ
 2. **Hard-quota Guard:** ห้ามตัดโควตาเมื่อ `unclaimed_quota <= 0`; ระบบล็อกปุ่มสำหรับเจ้าหน้าที่ทั่วไป ต้องใช้ `shelter_manager` Override หรือปรับเป็น `lost`/`waived`
-3. **Status Lifecycle:** `ACTIVE` → `EXHAUSTED` (เมื่อ `unclaimed_quota == 0`); เปลี่ยนเป็น `CLOSED` เมื่อปิดกะและกระทบยอดเสร็จสิ้น
+3. **Status Lifecycle:** `ACTIVE` → `EXHAUSTED` (เมื่อ `unclaimed_quota == 0`); หรือเปลี่ยนเป็น `CLOSED` โดยตรงเมื่อปิดกะและกระทบยอดเสร็จสิ้น (รองรับทั้ง `ACTIVE → CLOSED` และ `ACTIVE → EXHAUSTED → CLOSED`)
 4. **Audit Reconciliation:** ยอดสูญหายของกะ = `total_received_qty - claimed_qty` ณ เวลาปิด Pool
 
 ### Stock source of truth
@@ -1306,7 +1306,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 > **Current catalog versions:** `item_category` v2 (CR-119), `item_master` v4 (CR-082/084/120),
 > `recipe` v4 (CR-038/084); `sop_profile` ย้ายออกจาก catalog ไปอยู่ใน `sop-ratios` feature แยกต่างหาก.
 
-### 4.1 `item_category` — `item_category:{ulid}` หรือ `item_category:{system_key}` · **schema_v 2** (CR-119)
+### 4.1 `item_category` — `item_category:{ulid}` หรือ `item_category:{system_key.toLowerCase()}` · **schema_v 2** (CR-119)
 
 หมวดหมู่ระบบมาตรฐาน 10 รายการใช้ deterministic ID รูปแบบ
 `item_category:${system_key.toLowerCase()}` และ `is_protected: true`; หมวดหมู่ที่ผู้ใช้สร้างเอง
@@ -1761,7 +1761,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
@@ -1785,7 +1785,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 11. `item_category` ที่ `is_protected=true` ห้ามลบ; `system_key`, `default_class` และ `is_protected` immutable และแก้ `name`/`description` ได้เฉพาะ `system_admin` ตาม CR-119
 12. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
 13. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
-14. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `EXHAUSTED` → `CLOSED` เท่านั้น; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
+14. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
 
 ---
 
