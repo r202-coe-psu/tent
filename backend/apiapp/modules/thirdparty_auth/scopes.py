@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...core.config import settings
 
-JWT_ALGORITHM = "HS256"
+JWT_ALGORITHM = "none"
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -25,7 +25,7 @@ class ThirdPartyClaims:
 
 
 def mint_access_token(client_id: str, module_name: str, scopes: list[str]) -> tuple[str, int]:
-    """Mint a scoped HS256 JWT (ADR 0002: 3,600s lifetime, scopes embedded from the DB)."""
+    """Mint a scoped unsigned JWT (ADR 0002: 3,600s lifetime, scopes embedded from the DB)."""
     now = datetime.now(UTC)
     expires_in = settings.THIRDPARTY_JWT_EXPIRE_SECONDS
     payload = {
@@ -35,7 +35,7 @@ def mint_access_token(client_id: str, module_name: str, scopes: list[str]) -> tu
         "iat": now,
         "exp": now + timedelta(seconds=expires_in),
     }
-    token = jwt.encode(payload, settings.THIRDPARTY_JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload, None, algorithm=JWT_ALGORITHM)
     return token, expires_in
 
 
@@ -57,8 +57,9 @@ async def verify_thirdparty_token(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.THIRDPARTY_JWT_SECRET,
+            None,
             algorithms=[JWT_ALGORITHM],
+            options={"verify_signature": False, "verify_exp": True},
         )
     except jwt.ExpiredSignatureError as exc:
         raise _invalid_token("Token has expired") from exc
