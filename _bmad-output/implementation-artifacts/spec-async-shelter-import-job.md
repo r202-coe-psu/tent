@@ -2,7 +2,7 @@
 title: 'Async shelter Excel import job with worker progress'
 type: 'feature'
 created: '2026-09-14'
-status: 'done'
+status: 'in-progress'
 baseline_commit: '25eae6fd8625d05ab47712ac32aae5e95bd0908d'
 review_loop_iteration: 0
 context:
@@ -91,7 +91,7 @@ Use separate `shelter_import_job` and `shelter_import_item` documents so progres
 **One-at-a-time worker and provisioning safety**
 
 - Private worker endpoint claims exactly one item and serializes same-name imports.
-  [`+server.ts:46`](../../frontend/src/routes/api/back-office/shelter-import/worker/next/+server.ts#L46)
+  [`+server.ts:46`](../../frontend/src/routes/api/internal/shelter-import/worker/next/+server.ts#L46)
 
 - Shared provisioning enforces CouchDB responses and persists collision-safe shelter codes.
   [`provisioner.ts:46`](../../frontend/src/lib/features/shelters/server/provisioner.ts#L46)
@@ -117,3 +117,21 @@ Use separate `shelter_import_job` and `shelter_import_item` documents so progres
 
 - Focused import tests cover the existing domain contracts; build/check/lint were run for integration.
   [`package.json:6`](../../frontend/package.json#L6)
+
+### Review Findings
+
+- [ ] [Review][Patch] [High] Fence every provisioning side effect against lease loss; stale workers can continue after a claim is reclaimed [frontend/src/routes/api/internal/shelter-import/worker/next/+server.ts:209]
+- [ ] [Review][Patch] [High] Make registry `_security` merge updates serialized or compare-and-swap protected so concurrent provisioning cannot lose roles or members [frontend/src/lib/server/shelters.admin.ts:245]
+- [ ] [Review][Patch] [High] Rebuild duplicate-update payloads from the fresh document inside the `updateMaster` mutator instead of reusing a stale policy snapshot [frontend/src/routes/api/internal/shelter-import/worker/next/+server.ts:150]
+- [ ] [Review][Patch] [High] Add actor-bound idempotency for job creation so lost responses and browser retries cannot create duplicate import jobs [frontend/src/lib/features/shelter-import/application/queries.ts:153]
+- [ ] [Review][Patch] [High] Keep raw import item payloads out of the broadly readable `registry` database, or expose only redacted status documents [frontend/src/lib/features/shelter-import/server/job-store.ts:293]
+- [ ] [Review][Patch] [High] Replace per-item full-registry scans with bounded shelter indexes or a separate queue database to avoid quadratic imports and timeouts [frontend/src/lib/server/shelters.admin.ts:52]
+- [ ] [Review][Patch] [Medium] Derive item name and validation errors server-side; do not persist client-controlled metadata that can falsify audit results [frontend/src/routes/api/back-office/shelter-import/jobs/+server.ts:65]
+- [ ] [Review][Patch] [Medium] Return a validation response for malformed JSON/envelopes instead of collapsing `JSON.parse`/Zod failures into HTTP 500 [frontend/src/routes/api/back-office/shelter-import/jobs/+server.ts:64]
+- [ ] [Review][Patch] [Medium] Verify the existing audit document after a CouchDB 409 before marking the job as audited [frontend/src/lib/features/shelter-import/server/job-store.ts:205]
+- [ ] [Review][Patch] [Medium] Include item revisions/status in polling freshness or atomically update the job revision with item progress so ETags cannot return stale results [frontend/src/routes/api/back-office/shelter-import/jobs/[jobId]/+server.ts:17]
+- [ ] [Review][Patch] [Medium] Enable the retry action only when the job is `completed_with_errors`, matching the API precondition [frontend/src/lib/features/shelter-import/ui/import-progress.svelte:147]
+- [ ] [Review][Patch] [Medium] Parse worker timing environment variables with finite-number validation and documented fallbacks to prevent zero-delay loops [frontend/server/shelter-import-worker.mjs:12]
+- [ ] [Review][Patch] [Medium] Compare registry design version and every desired view before skipping deployment, including `by_code_number` [frontend/scripts/redeploy-access.ts:201]
+- [ ] [Review][Patch] [Medium] Fail production configuration validation when `SHELTER_IMPORT_WORKER_TOKEN` is missing instead of allowing a restart loop [docker-compose.production.yml:137]
+- [ ] [Review][Patch] [Medium] Add real API/worker route tests for auth, one-item processing, concurrent claims, lease expiry, retries, and partial provisioning [frontend/src/routes/api/internal/shelter-import/worker/next/+server.ts:63]

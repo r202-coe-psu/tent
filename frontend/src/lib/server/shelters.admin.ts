@@ -19,6 +19,7 @@ import {
 } from './shelter-access-design';
 import {
 	buildRegistryDesignDoc,
+	buildRegistryValidateDocUpdate,
 	REGISTRY_DESIGN_ID,
 	registryByCodePath,
 	registryHighestByCodePath
@@ -129,11 +130,13 @@ export async function deployRegistryDesign(): Promise<{ status: number; updated:
 						_rev?: string;
 						version?: number;
 						views?: Record<string, { map: string }>;
+						validate_doc_update?: string;
 					})
 				: null;
 
 		const matchesDesired =
 			current?.version === desired.version &&
+			current?.validate_doc_update === buildRegistryValidateDocUpdate() &&
 			Object.entries(desired.views).every(
 				([name, view]) => current.views?.[name]?.map === view.map
 			);

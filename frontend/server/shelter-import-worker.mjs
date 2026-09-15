@@ -8,7 +8,7 @@ const baseUrl = (process.env.SHELTER_IMPORT_WORKER_URL || 'http://frontend:3000'
 const token = process.env.SHELTER_IMPORT_WORKER_TOKEN;
 const workerId =
 	process.env.SHELTER_IMPORT_WORKER_ID || `import-worker-${process.pid}-${randomUUID()}`;
-const endpoint = `${baseUrl}/api/back-office/shelter-import/worker/next`;
+const endpoint = `${baseUrl}/api/internal/shelter-import/worker/next`;
 const pollMs = Math.max(3000, Number(process.env.SHELTER_IMPORT_WORKER_POLL_MS || 3000));
 const timeoutMs = Math.max(10_000, Number(process.env.SHELTER_IMPORT_WORKER_TIMEOUT_MS || 120_000));
 

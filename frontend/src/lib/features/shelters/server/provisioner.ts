@@ -97,6 +97,32 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Move the persisted counter forward when the indexed shelter-code view finds
+ * a legacy code beyond the counter. The counter write itself is CAS-protected
+ * so a concurrent allocator can only move it farther forward, never backward.
+ */
+async function advanceShelterCounterTo(counterPath: string, minimum: number): Promise<void> {
+	for (let attempt = 0; attempt < 4; attempt++) {
+		const current = await adminRaw(counterPath, 'GET');
+		if (current.status === 404) return;
+		assertStatus(current.status, 'shelter counter reconciliation read', current.data);
+		const doc = current.data as ShelterCounterDoc;
+		const value = Number.isSafeInteger(doc.value) && doc.value >= 0 ? doc.value : 0;
+		if (value >= minimum) return;
+		const put = await adminRaw(counterPath, 'PUT', {
+			...doc,
+			_id: SHELTER_COUNTER_ID,
+			type: 'shelter_counter',
+			value: minimum
+		});
+		if (put.status === 409) continue;
+		assertStatus(put.status, 'shelter counter reconciliation write', put.data);
+		return;
+	}
+	throw new ServiceError('CONFLICT', 'Could not reconcile the shelter code counter');
+}
+
+/**
  * Allocate the next SH code using a CouchDB MVCC sequence document. The first
  * allocation bootstraps from the existing maximum, while subsequent
  * allocations advance the document with an `_rev` compare-and-swap.
@@ -133,7 +159,11 @@ export async function allocateShelterCode(): Promise<string> {
 			});
 			if (put.status === 409) continue;
 			assertStatus(put.status, 'shelter counter write', put.data);
-			if (await findMasterByCode(code)) continue;
+			if (await findMasterByCode(code)) {
+				const highest = await findHighestShelterCodeNumber();
+				if (highest >= next) await advanceShelterCounterTo(counterPath, highest);
+				continue;
+			}
 			return code;
 		}
 
@@ -177,6 +207,8 @@ export async function allocateShelterCode(): Promise<string> {
 			if (put.status === 409) continue;
 			assertStatus(put.status, 'shelter counter bootstrap', put.data);
 			if (await findMasterByCode(code)) {
+				const highest = await findHighestShelterCodeNumber();
+				if (highest >= next) await advanceShelterCounterTo(counterPath, highest);
 				continue;
 			}
 			return code;

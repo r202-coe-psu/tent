@@ -724,10 +724,18 @@ async function deployRegistryDesign(): Promise<void> {
 	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
 	const current =
 		existing.status === 200
-			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
+			? (existing.data as {
+					_rev?: string;
+					views?: Record<string, { map: string }>;
+					validate_doc_update?: string;
+				})
 			: null;
 
-	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+	if (
+		current &&
+		current.views?.by_code?.map === desired.views.by_code.map &&
+		current.validate_doc_update === desired.validate_doc_update
+	) {
 		console.log('  ✓ registry: _design/app already current');
 		return;
 	}
@@ -1947,9 +1955,9 @@ async function seedShelter(master: MasterLookup): Promise<void> {
 		{ item_id: ITEM.soap, qty: '150', unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.egg, qty: '2000', unit: 'piece', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.vegetable, qty: '150', unit: 'kg', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
-		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
+		// Outbound entries are seeded by the distribution flow, which creates the
+		// distribution_batch and physical-lot references required by the ledger schema.
+		{ item_id: ITEM.vegetable, qty: '150', unit: 'kg', reason: 'receive', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 

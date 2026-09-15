@@ -191,10 +191,18 @@ async function deployRegistryDesign(dryRun: boolean): Promise<'current' | 'deplo
 	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
 	const current =
 		existing.status === 200
-			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> } | null)
+			? (existing.data as {
+					_rev?: string;
+					views?: Record<string, { map: string }>;
+					validate_doc_update?: string;
+				} | null)
 			: null;
 
-	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+	if (
+		current &&
+		current.views?.by_code?.map === desired.views.by_code.map &&
+		current.validate_doc_update === desired.validate_doc_update
+	) {
 		return 'current';
 	}
 	if (dryRun) return 'deployed';

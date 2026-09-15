@@ -95,7 +95,9 @@
 		Boolean(activeJob && !isImportJobTerminal(activeJob.job.status)) || importMutation.isPending
 	);
 	let progressDialogOpen = $state(false);
+	let importSubmitted = $state(false);
 	let restoreDialogHandled = $state(false);
+	let invalidatedJobId = $state<string | null>(null);
 
 	onMount(() => {
 		activeJobId = sessionStorage.getItem('shelter-import-active-job');
@@ -111,7 +113,8 @@
 
 	$effect(() => {
 		const job = activeJobQuery.data?.job;
-		if (!job || !isImportJobTerminal(job.status)) return;
+		if (!job || !isImportJobTerminal(job.status) || invalidatedJobId === job._id) return;
+		invalidatedJobId = job._id;
 		queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
 		queryClient.invalidateQueries({ queryKey: ['shelter-import', 'logs'] });
 	});
@@ -164,6 +167,7 @@
 			const parsed = await parseShelterWorkbook(file);
 			workbook = parsed;
 			filename = file.name;
+			importSubmitted = false;
 			if (workbook.shelters.length === 0) toast.warning('ไม่พบข้อมูลในไฟล์');
 			else await refreshExistingShelters();
 		} catch {
@@ -172,6 +176,7 @@
 			filename = '';
 			existingShelters = [];
 			duplicateCheckReady = false;
+			importSubmitted = false;
 		} finally {
 			parsing = false;
 			input.value = '';
@@ -183,6 +188,7 @@
 		filename = '';
 		existingShelters = [];
 		duplicateCheckReady = false;
+		importSubmitted = false;
 	}
 
 	const importDisabled = $derived(
@@ -203,6 +209,7 @@
 	async function runImport() {
 		if (importDisabled) return;
 		if (!(await refreshExistingShelters())) return;
+		importSubmitted = true;
 		importMutation.mutate(
 			{
 				filename,
@@ -214,6 +221,9 @@
 					activeJobId = result.jobId;
 					sessionStorage.setItem('shelter-import-active-job', result.jobId);
 					progressDialogOpen = true;
+				},
+				onError: () => {
+					importSubmitted = false;
 				}
 			}
 		);
@@ -308,7 +318,7 @@
 	</div>
 
 	<!-- Preview + commit -->
-	{#if validations.length > 0}
+	{#if validations.length > 0 && !importMutation.isPending && !importSubmitted}
 		<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>

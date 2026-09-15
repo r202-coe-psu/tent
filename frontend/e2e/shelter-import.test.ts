@@ -263,6 +263,7 @@ test('imports valid spreadsheet rows, skips invalid rows, and records the outcom
 
 	await page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' }).click();
 
+	await expect(page.getByRole('heading', { name: 'ตรวจสอบข้อมูลก่อนนำเข้า' })).not.toBeVisible();
 	await expect(page.getByRole('main').getByText('เสร็จพร้อมข้อผิดพลาด')).toBeVisible();
 	expect(created.bodies).toHaveLength(1);
 	expect(created.bodies[0].rows).toEqual([

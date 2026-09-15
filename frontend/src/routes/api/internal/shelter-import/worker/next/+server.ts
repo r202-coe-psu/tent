@@ -160,34 +160,64 @@ export const POST: RequestHandler = async ({ request }) => {
 						claim_token: undefined
 					});
 				} else {
-					// Persist the code before touching the shelter DB. If the worker is
-					// restarted after a partial provision, the retry must reuse this code.
-					const allocatedCode = item.code ?? (await allocateShelterCode());
-					if (item.code !== allocatedCode) {
-						item = await updateImportItem(item, { code: allocatedCode });
-						if (
-							item.status !== 'running' ||
-							item.worker_id !== workerId ||
-							item.claim_token !== claimToken
-						) {
-							const updatedJob = await recomputeImportJob(jobId);
-							return json(
-								{ jobId, itemId: item._id, job: updatedJob },
-								{ headers: { 'cache-control': 'no-store, max-age=0' } }
-							);
+					// Re-read under the name lock immediately before allocating or
+					// provisioning. A shelter may have been created after the first
+					// duplicate scan while this item was being claimed.
+					await assertActiveClaim();
+					const duplicateBeforeProvision = (await listShelterMasters()).find(
+						(master) => normalizeShelterName(master.name) === normalizeShelterName(input.name)
+					);
+					if (duplicateBeforeProvision && job.duplicate_action === 'skip') {
+						await updateImportItem(item, {
+							status: 'skipped',
+							code: duplicateBeforeProvision.code,
+							lease_until: undefined,
+							worker_id: undefined,
+							claim_token: undefined
+						});
+					} else if (duplicateBeforeProvision && job.duplicate_action === 'update') {
+						const existing = await findMasterByCode(duplicateBeforeProvision.code);
+						const payload = buildUpdatePayload(input, existing);
+						await updateMaster(duplicateBeforeProvision.code, () => ({
+							patch: { ...payload, updated_at: nowIso() }
+						}));
+						await updateImportItem(item, {
+							status: 'updated',
+							code: duplicateBeforeProvision.code,
+							lease_until: undefined,
+							worker_id: undefined,
+							claim_token: undefined
+						});
+					} else {
+						// Persist the code before touching the shelter DB. If the worker is
+						// restarted after a partial provision, the retry must reuse this code.
+						const allocatedCode = item.code ?? (await allocateShelterCode());
+						if (item.code !== allocatedCode) {
+							item = await updateImportItem(item, { code: allocatedCode });
+							if (
+								item.status !== 'running' ||
+								item.worker_id !== workerId ||
+								item.claim_token !== claimToken
+							) {
+								const updatedJob = await recomputeImportJob(jobId);
+								return json(
+									{ jobId, itemId: item._id, job: updatedJob },
+									{ headers: { 'cache-control': 'no-store, max-age=0' } }
+								);
+							}
 						}
+						const result = await provisionShelter(input, allocatedCode, {
+							lockOwnerId,
+							assertActive: assertActiveClaim
+						});
+						await updateImportItem(item, {
+							status: 'created',
+							code: result.code,
+							lease_until: undefined,
+							worker_id: undefined,
+							claim_token: undefined
+						});
 					}
-					const result = await provisionShelter(input, allocatedCode, {
-						lockOwnerId,
-						assertActive: assertActiveClaim
-					});
-					await updateImportItem(item, {
-						status: 'created',
-						code: result.code,
-						lease_until: undefined,
-						worker_id: undefined,
-						claim_token: undefined
-					});
 				}
 			} catch (error) {
 				const terminalAttempt = item.attempts >= (item.max_attempts ?? MAX_IMPORT_ATTEMPTS);

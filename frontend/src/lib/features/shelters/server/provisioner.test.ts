@@ -59,4 +59,33 @@ describe('allocateShelterCode', () => {
 			value: 1
 		});
 	});
+
+	it('reconciles a stale counter when a legacy code is far ahead', async () => {
+		let counter = { _id: 'counter:shelter', _rev: '1-counter', type: 'shelter_counter', value: 1 };
+		adminRawMock.mockImplementation(
+			async (path: string, method: string, body?: Record<string, unknown>) => {
+				if (path === '/registry' && method === 'PUT') return { status: 201, data: { ok: true } };
+				if (path === '/registry/counter%3Ashelter' && method === 'GET') {
+					return { status: 200, data: counter };
+				}
+				if (path === '/registry/counter%3Ashelter' && method === 'PUT') {
+					if (body?._rev !== counter._rev) return { status: 409, data: { reason: 'conflict' } };
+					counter = {
+						...counter,
+						value: Number(body.value),
+						_rev: `${Number(counter._rev[0]) + 1}-counter`
+					};
+					return { status: 201, data: { ok: true } };
+				}
+				return { status: 404, data: { reason: 'missing' } };
+			}
+		);
+		findHighestShelterCodeNumberMock.mockResolvedValue(10);
+		findMasterByCodeMock.mockImplementation(async (code: string) =>
+			code === 'SH002' ? { code } : null
+		);
+
+		await expect(allocateShelterCode()).resolves.toBe('SH011');
+		expect(counter.value).toBe(11);
+	});
 });

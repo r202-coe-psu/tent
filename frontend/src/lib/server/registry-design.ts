@@ -15,16 +15,31 @@ export const REGISTRY_DB = 'registry';
 export const REGISTRY_DESIGN_ID = '_design/app';
 
 /**
- * Bump when a view's map function changes so deployers can tell a stale design
- * doc from a current one without diffing every function body.
+ * Bump when a view or the registry write policy changes so deployers can tell a
+ * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 2;
+export const REGISTRY_DESIGN_VERSION = 3;
 
 export interface RegistryDesignDoc {
 	_id: string;
 	version: number;
 	language: 'javascript';
 	views: Record<string, { map: string }>;
+	validate_doc_update: string;
+}
+
+/**
+ * Registry is readable by scoped staff, but all registry writes are central
+ * administration operations. In particular, import jobs/items/locks/counters
+ * must not be forgeable through a browser-authenticated CouchDB session.
+ */
+export function buildRegistryValidateDocUpdate(): string {
+	return `function (newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    return;
+  }
+  throw({ forbidden: 'Only system administrators can write registry documents' });
+}`;
 }
 
 /**
@@ -54,7 +69,8 @@ export function buildRegistryDesignDoc(): RegistryDesignDoc {
   }
 }`
 			}
-		}
+		},
+		validate_doc_update: buildRegistryValidateDocUpdate()
 	};
 }
 
