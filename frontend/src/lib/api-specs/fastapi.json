@@ -3688,6 +3688,21 @@
 						"type": "string",
 						"title": "Qty Needed"
 					},
+					"qty_target": {
+						"type": "string",
+						"title": "Qty Target",
+						"default": "0"
+					},
+					"on_hand": {
+						"type": "string",
+						"title": "On Hand",
+						"default": "0"
+					},
+					"reserved": {
+						"type": "string",
+						"title": "Reserved",
+						"default": "0"
+					},
 					"unit": {
 						"type": "string",
 						"title": "Unit"
@@ -3695,6 +3710,10 @@
 					"status": {
 						"type": "string",
 						"title": "Status"
+					},
+					"category": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Category"
 					}
 				},
 				"type": "object",

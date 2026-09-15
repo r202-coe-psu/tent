@@ -30,6 +30,8 @@ export {
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
+	mergeCatalogGenerations,
+	type CatalogEntry,
 	// Recipe
 	recipeInputSchema,
 	type RecipeInput,

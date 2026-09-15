@@ -1384,10 +1384,27 @@ export interface components {
 			name: string;
 			/** Qty Needed */
 			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
 			/** Unit */
 			unit: string;
 			/** Status */
 			status: string;
+			/** Category */
+			category?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {

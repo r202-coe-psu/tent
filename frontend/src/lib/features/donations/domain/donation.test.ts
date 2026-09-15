@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { donationPreDeclarationInputSchema, isDonationPreDeclaration } from './donation';
+import {
+	donationPreDeclarationInputSchema,
+	donorCategoryFromCatalog,
+	isDonationPreDeclaration,
+	PUBLIC_DONATION_CATEGORIES
+} from './donation';
 import { publicDonationErrorMessage, receiveDonationInputSchema } from './public-donation';
 
 describe('donationPreDeclarationInputSchema', () => {
@@ -135,5 +140,51 @@ describe('receiveDonationInputSchema', () => {
 	it('rejects non-received status values', () => {
 		const result = receiveDonationInputSchema.safeParse({ status: 'cancelled' });
 		expect(result.success).toBe(false);
+	});
+});
+
+/**
+ * The needs card used to copy the catalog category straight into the booking, with
+ * `|| 'food'` behind it — and the public needs API never sent one at all, so EVERY
+ * item booked from the board was filed as food. A donation for `item:blanket` with
+ * `category: "food"` is what showed up in CouchDB.
+ */
+describe('donorCategoryFromCatalog', () => {
+	it('folds the catalog split back into what the donor form offers', () => {
+		expect(donorCategoryFromCatalog('food')).toBe('food');
+		expect(donorCategoryFromCatalog('water')).toBe('food');
+		expect(donorCategoryFromCatalog('bedding')).toBe('clothing');
+		expect(donorCategoryFromCatalog('clothing')).toBe('clothing');
+		expect(donorCategoryFromCatalog('medicine')).toBe('medicine');
+		expect(donorCategoryFromCatalog('hygiene')).toBe('supply');
+		expect(donorCategoryFromCatalog('equipment')).toBe('supply');
+		expect(donorCategoryFromCatalog('other')).toBe('other');
+	});
+
+	it('only ever returns a value the form can actually show', () => {
+		const allowed = PUBLIC_DONATION_CATEGORIES.map((c) => c.value as string);
+		for (const catalog of [
+			'food',
+			'water',
+			'clothing',
+			'bedding',
+			'medicine',
+			'hygiene',
+			'equipment',
+			'other'
+		]) {
+			expect(allowed).toContain(donorCategoryFromCatalog(catalog));
+		}
+	});
+
+	it('says nothing rather than guessing when the category is missing or unknown', () => {
+		expect(donorCategoryFromCatalog(undefined)).toBeUndefined();
+		expect(donorCategoryFromCatalog(null)).toBeUndefined();
+		expect(donorCategoryFromCatalog('')).toBeUndefined();
+		expect(donorCategoryFromCatalog('ของแปลก')).toBeUndefined();
+	});
+
+	it('tolerates case and padding from hand-maintained catalog rows', () => {
+		expect(donorCategoryFromCatalog(' Bedding ')).toBe('clothing');
 	});
 });
