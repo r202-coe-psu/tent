@@ -142,8 +142,8 @@
 		const next = buildFilterParams();
 		if (serializeParams(next) === serializeParams(page.url.searchParams)) return;
 		const qs = next.toString();
-		const href = qs ? `${action}?${qs}` : action;
-		void goto(resolve(href as `/${string}`), {
+		const href = (qs ? `${action}?${qs}` : action) as '/shelters';
+		void goto(resolve(href), {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: true
