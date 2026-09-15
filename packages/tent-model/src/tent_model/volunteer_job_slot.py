@@ -94,7 +94,7 @@ async def seed_job_shift_slot(
     confirmed_qty: int = 0,
     dispatched_qty: int = 0,
 ) -> None:
-    await VolunteerJobShiftSlot.get_motor_collection().update_one(
+    await VolunteerJobShiftSlot.get_pymongo_collection().update_one(
         {"_id": shift_slot_id(job_id, shift_id)},
         {
             "$setOnInsert": {
@@ -115,7 +115,7 @@ async def seed_job_shift_slot(
 
 
 async def reserve_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> SlotResult:
-    collection = VolunteerJobShiftSlot.get_motor_collection()
+    collection = VolunteerJobShiftSlot.get_pymongo_collection()
     if await collection.find_one({"_id": shift_slot_id(job_id, shift_id)}, {"_id": 1}) is None:
         return SlotResult.NOT_SEEDED
     updated = await collection.find_one_and_update(
@@ -134,7 +134,7 @@ async def reserve_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -
 
 
 async def release_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
-    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobShiftSlot.get_pymongo_collection().find_one_and_update(
         {"_id": shift_slot_id(job_id, shift_id), "confirmed_qty": {"$gt": 0}},
         {"$inc": {"confirmed_qty": -1}, "$set": {"updated_at": now}},
     )
@@ -142,7 +142,7 @@ async def release_job_shift_slot(*, job_id: str, shift_id: str, now: datetime) -
 
 
 async def accept_dispatched_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
-    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobShiftSlot.get_pymongo_collection().find_one_and_update(
         {"_id": shift_slot_id(job_id, shift_id), "dispatched_qty": {"$gt": 0}},
         {"$inc": {"confirmed_qty": 1, "dispatched_qty": -1}, "$set": {"updated_at": now}},
     )
@@ -150,7 +150,7 @@ async def accept_dispatched_shift_slot(*, job_id: str, shift_id: str, now: datet
 
 
 async def decline_dispatched_shift_slot(*, job_id: str, shift_id: str, now: datetime) -> bool:
-    updated = await VolunteerJobShiftSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobShiftSlot.get_pymongo_collection().find_one_and_update(
         {"_id": shift_slot_id(job_id, shift_id), "dispatched_qty": {"$gt": 0}},
         {"$inc": {"dispatched_qty": -1}, "$set": {"updated_at": now}},
     )
@@ -159,7 +159,7 @@ async def decline_dispatched_shift_slot(*, job_id: str, shift_id: str, now: date
 
 async def seed_job_slot(*, job_id: str, shelter_code: str, quota: int, now: datetime) -> None:
     """Create or re-ceiling the counter for one job — worker projector side."""
-    await VolunteerJobSlot.get_motor_collection().update_one(
+    await VolunteerJobSlot.get_pymongo_collection().update_one(
         {"_id": job_id},
         {
             "$setOnInsert": {"confirmed_qty": 0, "dispatched_qty": 0, "created_at": now},
@@ -174,7 +174,7 @@ async def reserve_job_slot(*, job_id: str, now: datetime) -> SlotResult:
     if await VolunteerJobSlot.get(job_id) is None:
         return SlotResult.NOT_SEEDED
 
-    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobSlot.get_pymongo_collection().find_one_and_update(
         {
             "_id": job_id,
             "$expr": {
@@ -201,7 +201,7 @@ async def release_job_slot(*, job_id: str, now: datetime) -> bool:
     Floored at zero by the filter rather than by a read: a double release must leave the
     counter alone instead of driving it negative and handing out a slot twice.
     """
-    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobSlot.get_pymongo_collection().find_one_and_update(
         {"_id": job_id, "confirmed_qty": {"$gt": 0}},
         {"$inc": {"confirmed_qty": -1}, "$set": {"updated_at": now}},
     )
@@ -218,7 +218,7 @@ async def accept_dispatched_slot(*, job_id: str, now: datetime) -> bool:
     ``dispatched_qty > 0`` is the filter rather than a prior read, so replaying the same
     answer cannot manufacture a confirmed head out of nothing.
     """
-    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobSlot.get_pymongo_collection().find_one_and_update(
         {"_id": job_id, "dispatched_qty": {"$gt": 0}},
         {"$inc": {"confirmed_qty": 1, "dispatched_qty": -1}, "$set": {"updated_at": now}},
     )
@@ -231,7 +231,7 @@ async def decline_dispatched_slot(*, job_id: str, now: datetime) -> bool:
     Nothing to add: ``slots_remaining`` is derived as ``quota − confirmed − dispatched``,
     so releasing the dispatched count is what makes the seat available again.
     """
-    updated = await VolunteerJobSlot.get_motor_collection().find_one_and_update(
+    updated = await VolunteerJobSlot.get_pymongo_collection().find_one_and_update(
         {"_id": job_id, "dispatched_qty": {"$gt": 0}},
         {"$inc": {"dispatched_qty": -1}, "$set": {"updated_at": now}},
     )
