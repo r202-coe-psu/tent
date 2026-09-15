@@ -116,11 +116,9 @@
 			<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
 				<p class="text-sm text-muted-foreground">
 					จัดการ OAuth2 client credentials สำหรับ M6/M7 ที่เรียก
-					<code class="rounded bg-muted px-1.5 py-0.5 text-sm">/api/thirdparty/*</code>
+					<code class="rounded bg-muted px-1.5 py-0.5 text-sm">/external/*</code>
 					ผ่าน
-					<code class="rounded bg-muted px-1.5 py-0.5 text-sm"
-						>POST /api/auth/token-third-party</code
-					>
+					<code class="rounded bg-muted px-1.5 py-0.5 text-sm">POST /external/token</code>
 					— secret เต็มแสดงครั้งเดียวตอนสร้างเท่านั้น
 				</p>
 				<Button

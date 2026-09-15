@@ -13,7 +13,7 @@ from ..thirdparty_auth.scopes import ThirdPartyClaims, verify_thirdparty_token
 from .schemas import OccupantsEnvelope, OccupantsErrorResponse
 from .use_case import ThirdPartyOccupantsUseCase, get_thirdparty_occupants_use_case
 
-router = APIRouter(prefix="/api/thirdparty", tags=["Third-party Occupants"])
+router = APIRouter(prefix="/external", tags=["External"])
 
 
 @router.get(

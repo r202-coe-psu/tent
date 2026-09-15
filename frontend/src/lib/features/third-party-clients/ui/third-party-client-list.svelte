@@ -34,7 +34,7 @@
 		</div>
 		<div class="text-center">
 			<h3 class="text-lg font-semibold text-foreground">ยังไม่มี Partner Client</h3>
-			<p class="mt-1 text-sm">สร้าง OAuth2 client สำหรับ M6/M7 ที่เรียก /api/thirdparty/*</p>
+			<p class="mt-1 text-sm">สร้าง OAuth2 client สำหรับ M6/M7 ที่เรียก /external/*</p>
 		</div>
 	</div>
 {:else}

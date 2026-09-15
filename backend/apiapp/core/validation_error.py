@@ -27,7 +27,8 @@ async def http422_error_handler(
             },
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    if path.startswith(("/api/auth/token-third-party", "/api/thirdparty")):
+    # Partner OAuth plane under /external — exclude legacy M2 /external/v1
+    if path.startswith("/external") and not path.startswith("/external/v1"):
         messages = [
             f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg', '')}"
             for err in exc.errors()
