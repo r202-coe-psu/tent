@@ -80,16 +80,19 @@
 	function confirmDelete() {
 		if (!pendingDeleteRecipe) return;
 		const { id, label } = pendingDeleteRecipe;
+		const targetRecipe = query.data?.find((i) => i._id === id);
+		const isOverride = !!targetRecipe?.override;
+
 		deleteMutation.mutate(
 			{ id, shelterCode },
 			{
 				onSuccess: (wasDeleted) => {
-					if (wasDeleted) {
-						toast.success(`ลบสูตรอาหาร "${label}" สำเร็จ`);
+					if (isOverride) {
+						toast.success(`คืนค่ามาตรฐานสูตรอาหาร "${label}" สำเร็จ`);
+					} else if (!wasDeleted) {
+						toast.info(`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดการใช้งาน (Deactivated) แล้ว`);
 					} else {
-						toast.success(
-							`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดใช้งาน (Deactivated) เนื่องจากสูตรนี้ถูกใช้งานในระบบแล้ว`
-						);
+						toast.success(`ลบสูตรอาหาร "${label}" ถาวรสำเร็จ`);
 					}
 					deleteConfirmOpen = false;
 					pendingDeleteRecipe = null;
@@ -345,7 +348,8 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากสูตรอาหารนี้ถูกใช้ในแผนเตรียมอาหาร (Meal Plan) อยู่ในระบบแล้ว
-							รายการจะถูกเปลี่ยนสถานะเป็นปิดใช้งาน (Deactivated) แทนการลบถาวร
+							หรือเป็นสูตรอาหารมาตรฐานส่วนกลาง ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated)
+							แทนการลบถาวร เพื่อรักษาความสมบูรณ์ของข้อมูลอ้างอิง
 						</span>
 					{/if}
 				{/if}
