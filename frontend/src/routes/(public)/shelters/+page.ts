@@ -135,6 +135,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	}
 
 	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
+	const evacCenterCount = shelters.filter((s) => s.site_kind === 'evacuation_center').length;
+	const hostHouseCount = shelters.filter((s) => s.site_kind === 'host_house').length;
 
 	const available_types = Array.from(
 		new Set(
@@ -150,7 +152,9 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		as_of: data?.as_of ?? new Date().toISOString(),
 		summary: {
 			shelters_total: shelters.length,
-			shelters_open: openCount
+			shelters_open: openCount,
+			evac_centers: evacCenterCount,
+			host_houses: hostHouseCount
 		},
 		filters: {
 			search,

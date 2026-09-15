@@ -49,7 +49,8 @@ export const PUBLIC_FILTER_PANEL_I18N = {
 		facKitchen: '🍲 มีโรงครัวกลาง (อาหาร)',
 		facWomen: '🛡️ มีพื้นที่ปลอดภัยสำหรับเด็กและสตรี',
 		clearBtn: 'ล้างค่า',
-		submitBtn: 'ค้นหาและกรองข้อมูล'
+		submitBtn: 'ค้นหาและกรองข้อมูล',
+		liveSyncHint: 'ตัวกรองอัปเดตทันทีเมื่อเปลี่ยนค่า'
 	},
 	en: {
 		title: 'Search & Filters',
@@ -101,6 +102,7 @@ export const PUBLIC_FILTER_PANEL_I18N = {
 		facKitchen: '🍲 Central kitchen (food)',
 		facWomen: '🛡️ Safe space for women and children',
 		clearBtn: 'Clear',
-		submitBtn: 'Search and Filter'
+		submitBtn: 'Search and Filter',
+		liveSyncHint: 'Filters update as you change them'
 	}
 } as const;
