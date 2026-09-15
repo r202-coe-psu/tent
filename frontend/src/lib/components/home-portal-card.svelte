@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Component, Snippet } from 'svelte';
 
-	type Accent = 'brand' | 'neutral' | 'accent-purple' | 'muted' | 'danger';
+	type Accent = 'brand' | 'neutral' | 'accent-purple' | 'muted' | 'danger' | 'success';
 
 	interface Props {
 		icon: Component<{ class?: string; size?: number }>;
@@ -9,6 +9,7 @@
 		description: string;
 		accent?: Accent;
 		badge?: string;
+		badgeVariant?: 'primary' | 'success' | 'neutral';
 		actions?: Snippet;
 		href?: string;
 		disabled?: boolean;
@@ -21,6 +22,7 @@
 		description,
 		accent = 'neutral',
 		badge,
+		badgeVariant,
 		actions,
 		href,
 		disabled = false,
@@ -33,8 +35,17 @@
 			neutral: 'bg-muted text-muted-foreground',
 			'accent-purple': 'bg-accent-purple-muted text-accent-purple',
 			muted: 'bg-muted text-foreground',
-			danger: 'bg-danger-muted text-danger'
+			danger: 'bg-danger-muted text-danger',
+			success: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400'
 		}[accent]
+	);
+
+	const badgeClass = $derived(
+		{
+			primary: 'bg-primary-muted text-primary-strong',
+			success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+			neutral: 'bg-muted text-muted-foreground'
+		}[badgeVariant ?? (accent === 'success' ? 'success' : 'primary')]
 	);
 
 	const cardBorderClass = $derived(
@@ -49,7 +60,7 @@
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl {badgeClass} px-3 py-1 text-2xs font-bold"
 			>
 				{badge}
 			</div>
@@ -81,7 +92,7 @@
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl {badgeClass} px-3 py-1 text-2xs font-bold"
 			>
 				{badge}
 			</div>

@@ -12,7 +12,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -49,7 +49,7 @@
 	$effect(() => {
 		const token = donationStore.trackingToken || donationStore.bookingRef;
 		if (!token) return;
-		QRCode.toDataURL(token, { margin: 1, width: 256 })
+		generateQrDataUrl(token, { margin: 1, width: 256 })
 			.then((url) => (qrCodeUrl = url))
 			.catch(() => toast.error(t.qrError));
 	});

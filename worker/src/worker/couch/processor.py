@@ -10,11 +10,15 @@ from worker.couch.checkpoint import save_checkpoint
 from worker.masking import shelter_code_from_db_name
 from worker.mongo import (
     apply_donation,
+    apply_job,
+    apply_job_application,
     apply_need,
     apply_need_counters,
     apply_person,
     apply_shelter,
     apply_shelter_deactivate,
+    apply_shift_assignment,
+    apply_volunteer,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
@@ -29,8 +33,11 @@ from worker.projectors.announcement import project_announcement
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
+from worker.projectors.shift_assignment import project_shift_assignment
+from worker.projectors.volunteer import project_volunteer
 from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
 
 logger = logging.getLogger(__name__)
@@ -58,6 +65,17 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         if database == REGISTRY_DB:
             if doc_id.startswith("announcement:"):
                 await apply_announcement("delete", {"_id": doc_id})
+            elif doc_id.startswith("master_data:volunteer_skills"):
+                # `master_data:volunteer_skills[:SHELTER]` → its projected config id.
+                # Without this the public gate would keep enforcing a list that staff
+                # deleted (CR-100).
+                from worker.mongo.config import apply_config
+                from worker.projectors.master_data import volunteer_skills_config_id
+
+                suffix = doc_id.split("master_data:volunteer_skills", 1)[1].lstrip(":")
+                await apply_config(
+                    "delete", {"_id": volunteer_skills_config_id(suffix or None)}
+                )
             else:
                 deleted_doc = change.get("doc")
                 shelter_code = await resolve_shelter_code_for_registry_delete(
@@ -79,6 +97,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
                     await _reproject_needs(couch, shelter_code)
+                elif doc_id.startswith("job:"):
+                    await apply_job("delete", {"_id": doc_id})
+                elif doc_id.startswith("job_application:"):
+                    await apply_job_application("delete", {"_id": doc_id})
+                elif doc_id.startswith("shift_assignment:"):
+                    await apply_shift_assignment("delete", {"_id": doc_id})
                 elif doc_id.startswith("stock_ledger:"):
                     # A deleted entry raises the shortfall again, so the ceiling has to
                     # go back up with it — a delete row carries no doc to read a type
@@ -114,6 +138,14 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             from worker.projectors.config import project_config
 
             action, payload = project_config(doc)
+            await apply_config(action, payload)
+        elif doc_type == "master_data":
+            # Only the controlled-skill list crosses over (CR-100) — see the
+            # projector's own doc for why it is an allow-list, not a copy.
+            from worker.mongo.config import apply_config
+            from worker.projectors.master_data import project_master_data
+
+            action, payload = project_master_data(doc)
             await apply_config(action, payload)
     else:
         shelter_code = shelter_code_from_db_name(database)
@@ -168,6 +200,28 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await refresh_on_hand(couch, shelter_code)
                 await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
                 await _reproject_needs(couch, shelter_code)
+            elif doc_type == "job":
+                action, payload = project_job(doc, shelter_code=shelter_code)
+                await apply_job(action, payload)
+            elif doc_type == "job_application":
+                action, payload = project_job_application(
+                    doc, shelter_code=shelter_code
+                )
+                await apply_job_application(action, payload)
+            elif doc_type == "shift_assignment":
+                # The assignee's profile is the only source of the phone hash the
+                # portal looks a schedule up by, so it has to be read alongside.
+                volunteer = None
+                volunteer_id = doc.get("volunteer_id")
+                if volunteer_id:
+                    volunteer = await couch.get_doc(database, str(volunteer_id))
+                action, payload = project_shift_assignment(
+                    doc, shelter_code=shelter_code, volunteer=volunteer
+                )
+                await apply_shift_assignment(action, payload)
+            elif doc_type == "volunteer":
+                action, payload = project_volunteer(doc, shelter_code=shelter_code)
+                await apply_volunteer(action, payload)
             elif doc_type == "stock_threshold_override":
                 await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
             elif doc_type == "supply_item":

@@ -278,7 +278,7 @@
 			"post": {
 				"tags": ["Donations"],
 				"summary": "Track Search Donation",
-				"description": "Resolve booking_ref (DN-\u2026) + phone \u2192 tracking_token (CR-052 \u00a72.6).",
+				"description": "Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6).",
 				"operationId": "track_search_donation_public_v1_donations_track_search_post",
 				"requestBody": {
 					"content": {
@@ -576,8 +576,8 @@
 		"/external/v1/shelters": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (get-list-shelter)",
-				"description": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e23\u0e30\u0e1a\u0e1a\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01 (M2).",
+				"summary": "ดึงรายการศูนย์พักพิง (get-list-shelter)",
+				"description": "ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).",
 				"operationId": "list_shelters_external_v1_shelters_get",
 				"security": [
 					{
@@ -601,10 +601,10 @@
 									"type": "null"
 								}
 							],
-							"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open",
+							"description": "กรองสถานะ เช่น open",
 							"title": "Status"
 						},
-						"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open"
+						"description": "กรองสถานะ เช่น open"
 					}
 				],
 				"responses": {
@@ -668,8 +668,8 @@
 		"/external/v1/persons/shelter-residency": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01 (get-person-shelter-residency)",
-				"description": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e02\u0e2d\u0e07\u0e1c\u0e39\u0e49\u0e1b\u0e23\u0e30\u0e2a\u0e1a\u0e20\u0e31\u0e22\u0e08\u0e32\u0e01\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 (CID).",
+				"summary": "ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)",
+				"description": "ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).",
 				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
 				"security": [
 					{
@@ -686,10 +686,10 @@
 						"required": true,
 						"schema": {
 							"type": "string",
-							"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01",
+							"description": "เลขประจำตัวประชาชน 13 หลัก",
 							"title": "Cid"
 						},
-						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+						"description": "เลขประจำตัวประชาชน 13 หลัก"
 					}
 				],
 				"responses": {
@@ -1248,6 +1248,468 @@
 				}
 			}
 		},
+		"/public/v1/transparency/summary": {
+			"get": {
+				"tags": ["Transparency"],
+				"summary": "Get Transparency Summary",
+				"description": "System-wide public metrics from public_shelters + public_persons.",
+				"operationId": "get_transparency_summary_public_v1_transparency_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TransparencySummaryResponse"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/jobs": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "List Jobs",
+				"operationId": "list_jobs_public_v1_jobs_get",
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "shelter_code",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Shelter Code"
+						}
+					},
+					{
+						"name": "skill",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Skill"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicJobListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/jobs/{job_id}/apply": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Apply To Job",
+				"operationId": "apply_to_job_public_v1_jobs__job_id__apply_post",
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "job_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Job Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VolunteerApplyRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerApplyResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/ticket/{token}": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "Get Ticket",
+				"operationId": "get_ticket_public_v1_volunteer_ticket__token__get",
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Token"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerTicketResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/ticket/find": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Find Tickets",
+				"operationId": "find_tickets_public_v1_volunteer_ticket_find_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TicketFindRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TicketFindResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/volunteer/ticket/{token}/cancel": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Cancel Ticket",
+				"operationId": "cancel_ticket_public_v1_volunteer_ticket__token__cancel_post",
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Token"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerCancelResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/schedule": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Schedule",
+				"description": "ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).",
+				"operationId": "volunteer_schedule_public_v1_volunteer_schedule_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ScheduleLookupRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerScheduleResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/volunteer/schedule/respond": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Respond To Dispatch",
+				"description": "Accept or decline an offered shift with the code a manager read out.",
+				"operationId": "respond_to_dispatch_public_v1_volunteer_schedule_respond_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DispatchRespondRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DispatchRespondResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/volunteer/profile": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Profile",
+				"description": "The volunteer's own profile, for the Access Portal's edit screen.",
+				"operationId": "volunteer_profile_public_v1_volunteer_profile_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ScheduleLookupRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerProfileResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/volunteer/profile/update": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Update Volunteer Profile",
+				"description": "Change the parts of the profile the volunteer owns (skills, for now).",
+				"operationId": "update_volunteer_profile_public_v1_volunteer_profile_update_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VolunteerProfileUpdateRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VolunteerProfileUpdateResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
 		"/api/auth/token-third-party": {
 			"post": {
 				"tags": ["Third-party Auth"],
@@ -1781,36 +2243,11 @@
 				]
 			}
 		},
-		"/public/v1/transparency/summary": {
-			"get": {
-				"tags": ["Transparency"],
-				"summary": "Get Transparency Summary",
-				"description": "System-wide public metrics from public_shelters + public_persons.",
-				"operationId": "get_transparency_summary_public_v1_transparency_summary_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/TransparencySummaryResponse"
-								}
-							}
-						}
-					}
-				},
-				"security": [
-					{
-						"HTTPBearer": []
-					}
-				]
-			}
-		},
 		"/public/v1/unassigned-registrations": {
 			"post": {
 				"tags": ["Unassigned Registrations"],
 				"summary": "Create Unassigned Registration",
-				"description": "Public pre-registration without a shelter \u2014 writes Mongo only (FR-UR-01).",
+				"description": "Public pre-registration without a shelter — writes Mongo only (FR-UR-01).",
 				"operationId": "create_unassigned_registration_public_v1_unassigned_registrations_post",
 				"requestBody": {
 					"content": {
@@ -1980,7 +2417,7 @@
 					"api_key"
 				],
 				"title": "ApiKeyCreateResponse",
-				"description": "Create response \u2014 plaintext ``api_key`` is returned once."
+				"description": "Create response — plaintext ``api_key`` is returned once."
 			},
 			"ApiKeyListResponse": {
 				"properties": {
@@ -2124,28 +2561,76 @@
 				"type": "object",
 				"title": "ConfigResponse"
 			},
-			"CriticalItem": {
+			"DispatchRespondRequest": {
 				"properties": {
-					"name_th": {
-						"type": "string",
-						"title": "Name Th"
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 30,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
 					},
-					"quantity_on_hand": {
-						"type": "number",
-						"title": "Quantity On Hand"
+					"token": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Token"
 					},
-					"unit_label": {
+					"assignment_id": {
 						"type": "string",
-						"title": "Unit Label"
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Assignment Id"
 					},
-					"level": {
+					"code": {
 						"type": "string",
-						"title": "Level"
+						"maxLength": 20,
+						"minLength": 4,
+						"title": "Code"
+					},
+					"action": {
+						"type": "string",
+						"enum": ["accepted", "declined"],
+						"title": "Action"
 					}
 				},
 				"type": "object",
-				"required": ["name_th", "quantity_on_hand", "unit_label", "level"],
-				"title": "CriticalItem"
+				"required": ["assignment_id", "code", "action"],
+				"title": "DispatchRespondRequest",
+				"description": "Answering an offered shift — two factors, neither enough alone.\n\nThe credential is whatever the portal signed in with and must resolve to the\nassignment's own volunteer; ``code`` is the short code a manager read out. A\nsix-character code is only safe because the caller has to know whose shift it is\nas well."
+			},
+			"DispatchRespondResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"assignment_id": {
+						"type": "string",
+						"title": "Assignment Id"
+					},
+					"dispatch_status": {
+						"type": "string",
+						"title": "Dispatch Status"
+					}
+				},
+				"type": "object",
+				"required": ["assignment_id", "dispatch_status"],
+				"title": "DispatchRespondResponse"
 			},
 			"DonationCancelResponse": {
 				"properties": {
@@ -2414,7 +2899,7 @@
 				"type": "object",
 				"required": ["booking_ref", "phone"],
 				"title": "DonationTrackSearchRequest",
-				"description": "CR-052 \u00a72.6 \u2014 human booking_ref + phone exact match (not token alone)."
+				"description": "CR-052 §2.6 — human booking_ref + phone exact match (not token alone)."
 			},
 			"DonationTrackSearchResponse": {
 				"properties": {
@@ -2624,6 +3109,1934 @@
 				"type": "object",
 				"required": ["status"],
 				"title": "HealthCheckResponse"
+			},
+			"JobShiftTemplate": {
+				"properties": {
+					"shift_name": {
+						"type": "string",
+						"title": "Shift Name",
+						"default": ""
+					},
+					"start_time": {
+						"type": "string",
+						"title": "Start Time",
+						"default": ""
+					},
+					"end_time": {
+						"type": "string",
+						"title": "End Time",
+						"default": ""
+					},
+					"days": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Days"
+					}
+				},
+				"type": "object",
+				"title": "JobShiftTemplate"
+			},
+			"M2ErrorDetail": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"title": "Code"
+					},
+					"message": {
+						"type": "string",
+						"title": "Message"
+					}
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "M2ErrorDetail"
+			},
+			"M2ErrorResponse": {
+				"properties": {
+					"error": {
+						"$ref": "#/components/schemas/M2ErrorDetail"
+					}
+				},
+				"type": "object",
+				"required": ["error"],
+				"title": "M2ErrorResponse"
+			},
+			"M2PersonResidencyResponse": {
+				"properties": {
+					"shelter_id": {
+						"type": "string",
+						"title": "Shelter Id",
+						"description": "รหัสศูนย์พักพิง"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"description": "ชื่อศูนย์พักพิง"
+					},
+					"checkin_datetime": {
+						"type": "string",
+						"title": "Checkin Datetime",
+						"description": "วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["CHECKED_IN", "CHECKED_OUT"],
+						"title": "Status",
+						"description": "สถานะการเข้าพัก"
+					},
+					"stay_status": {
+						"type": "string",
+						"title": "Stay Status",
+						"description": "สถานะ stay ดิบจาก projection (CR-112 additive)"
+					},
+					"in_zone": {
+						"type": "boolean",
+						"title": "In Zone",
+						"description": "True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)"
+					}
+				},
+				"type": "object",
+				"required": [
+					"shelter_id",
+					"shelter_name",
+					"checkin_datetime",
+					"status",
+					"stay_status",
+					"in_zone"
+				],
+				"title": "M2PersonResidencyResponse"
+			},
+			"M2ShelterItem": {
+				"properties": {
+					"shelter_id": {
+						"type": "string",
+						"title": "Shelter Id",
+						"description": "รหัสศูนย์พักพิง เช่น SH001"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"description": "ชื่อศูนย์พักพิง"
+					},
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"description": "ชนิดสถานที่",
+						"default": "evacuation_center"
+					},
+					"lat": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lat",
+						"description": "พิกัดละติจูด (WGS 84)"
+					},
+					"long": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Long",
+						"description": "พิกัดลองจิจูด (WGS 84)"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_id", "shelter_name"],
+				"title": "M2ShelterItem"
+			},
+			"NeedItemResponse": {
+				"properties": {
+					"item_id": {
+						"type": "string",
+						"title": "Item Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"qty_needed": {
+						"type": "string",
+						"title": "Qty Needed"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["item_id", "name", "qty_needed", "unit", "status"],
+				"title": "NeedItemResponse"
+			},
+			"NeedsListResponse": {
+				"properties": {
+					"shelters": {
+						"items": {
+							"$ref": "#/components/schemas/ShelterNeedsResponse"
+						},
+						"type": "array",
+						"title": "Shelters"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date-time",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["shelters", "as_of"],
+				"title": "NeedsListResponse"
+			},
+			"PaginatedAnnouncements": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/PublicAnnouncement"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"page": {
+						"type": "integer",
+						"title": "Page"
+					},
+					"size": {
+						"type": "integer",
+						"title": "Size"
+					},
+					"total_pages": {
+						"type": "integer",
+						"title": "Total Pages"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "page", "size", "total_pages"],
+				"title": "PaginatedAnnouncements"
+			},
+			"PublicAnnouncement": {
+				"properties": {
+					"_id": {
+						"type": "string",
+						"title": "Id",
+						"description": "The CouchDB announcement document ID"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description"
+					},
+					"title_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title En"
+					},
+					"description_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description En"
+					},
+					"severity": {
+						"type": "string",
+						"enum": ["info", "warning", "emergency"],
+						"title": "Severity"
+					},
+					"is_active": {
+						"type": "boolean",
+						"title": "Is Active"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["_id", "title", "description", "severity", "is_active", "updated_at"],
+				"title": "PublicAnnouncement",
+				"description": "Public snapshot of a system announcement, stored in MongoDB `public_announcements`.\nSourced from `announcement` docs in CouchDB `registry`."
+			},
+			"PublicJobShift": {
+				"properties": {
+					"shift_id": {
+						"type": "string",
+						"title": "Shift Id"
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"end_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Date"
+					},
+					"start_time": {
+						"type": "string",
+						"title": "Start Time",
+						"default": ""
+					},
+					"end_time": {
+						"type": "string",
+						"title": "End Time",
+						"default": ""
+					},
+					"station": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Station"
+					},
+					"quota": {
+						"type": "integer",
+						"title": "Quota",
+						"default": 0
+					},
+					"slots_confirmed": {
+						"type": "integer",
+						"title": "Slots Confirmed",
+						"default": 0
+					},
+					"slots_dispatched": {
+						"type": "integer",
+						"title": "Slots Dispatched",
+						"default": 0
+					},
+					"slots_remaining": {
+						"type": "integer",
+						"title": "Slots Remaining",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"required": ["shift_id"],
+				"title": "PublicJobShift"
+			},
+			"PublicJobItem": {
+				"properties": {
+					"job_id": {
+						"type": "string",
+						"title": "Job Id"
+					},
+					"shelter_code": {
+						"type": "string",
+						"title": "Shelter Code"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"default": ""
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description"
+					},
+					"tier": {
+						"type": "string",
+						"title": "Tier"
+					},
+					"skills_required": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Skills Required"
+					},
+					"shift_template": {
+						"$ref": "#/components/schemas/JobShiftTemplate"
+					},
+					"shifts": {
+						"items": {
+							"$ref": "#/components/schemas/PublicJobShift"
+						},
+						"type": "array",
+						"title": "Shifts"
+					},
+					"quota": {
+						"type": "integer",
+						"title": "Quota"
+					},
+					"slots_confirmed": {
+						"type": "integer",
+						"title": "Slots Confirmed"
+					},
+					"slots_remaining": {
+						"type": "integer",
+						"title": "Slots Remaining"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"requires_review": {
+						"type": "boolean",
+						"title": "Requires Review",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": [
+					"job_id",
+					"shelter_code",
+					"title",
+					"description",
+					"tier",
+					"quota",
+					"slots_confirmed",
+					"slots_remaining",
+					"status"
+				],
+				"title": "PublicJobItem",
+				"description": "One card on the board (CR-092 screen 1).\n\nCarries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,\n``dispatched``, is a back-office state and is folded into \"not available\" here\nrather than shown to the public."
+			},
+			"PublicJobListResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"jobs": {
+						"items": {
+							"$ref": "#/components/schemas/PublicJobItem"
+						},
+						"type": "array",
+						"title": "Jobs"
+					}
+				},
+				"type": "object",
+				"title": "PublicJobListResponse"
+			},
+			"ScheduleLookupRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 30,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Token"
+					}
+				},
+				"type": "object",
+				"title": "ScheduleLookupRequest",
+				"description": "Same key as the ticket lookup — the portal signs in by phone or by token."
+			},
+			"ScheduleShift": {
+				"properties": {
+					"assignment_id": {
+						"type": "string",
+						"title": "Assignment Id"
+					},
+					"job_id": {
+						"type": "string",
+						"title": "Job Id"
+					},
+					"shift_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shift Id"
+					},
+					"job_title": {
+						"type": "string",
+						"title": "Job Title",
+						"default": ""
+					},
+					"shelter_code": {
+						"type": "string",
+						"title": "Shelter Code"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"default": ""
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"shift": {
+						"type": "string",
+						"title": "Shift",
+						"default": ""
+					},
+					"station": {
+						"type": "string",
+						"title": "Station",
+						"default": ""
+					},
+					"start_ts": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Start Ts"
+					},
+					"end_ts": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Ts"
+					},
+					"check_in_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Check In At"
+					},
+					"check_out_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Check Out At"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"dispatch_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dispatch Status"
+					}
+				},
+				"type": "object",
+				"required": ["assignment_id", "job_id", "shelter_code", "status"],
+				"title": "ScheduleShift",
+				"description": "One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).\n\nDistinct from a ticket: a ticket is the application they filed, this is the roster\nentry a manager put them on, with the duty window the Time-Bound access guard reads\nand the check-in stamps the tablet station writes."
+			},
+			"SearchRequest": {
+				"properties": {
+					"search": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Search"
+					}
+				},
+				"type": "object",
+				"required": ["search"],
+				"title": "SearchRequest"
+			},
+			"SearchResponse": {
+				"properties": {
+					"results": {
+						"items": {
+							"$ref": "#/components/schemas/SearchResult"
+						},
+						"type": "array",
+						"title": "Results"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date-time",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["results", "count", "as_of"],
+				"title": "SearchResponse"
+			},
+			"SearchResult": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"national_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "National Id"
+					},
+					"gender": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gender"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name"
+					},
+					"origin_address": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Checked In At"
+					},
+					"care_zone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Care Zone"
+					},
+					"family_members": {
+						"items": {
+							"$ref": "#/components/schemas/FamilyMember"
+						},
+						"type": "array",
+						"title": "Family Members"
+					},
+					"shelter_address": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shelter Address"
+					},
+					"zone_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Zone Name"
+					}
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "SearchResult"
+			},
+			"ShelterAdmissionPolicyDetail": {
+				"properties": {
+					"pets": {
+						"type": "string",
+						"title": "Pets"
+					},
+					"vulnerable_groups": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Vulnerable Groups"
+					}
+				},
+				"type": "object",
+				"required": ["pets", "vulnerable_groups"],
+				"title": "ShelterAdmissionPolicyDetail"
+			},
+			"ShelterCapacityDetail": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"available": {
+						"type": "integer",
+						"title": "Available"
+					}
+				},
+				"type": "object",
+				"required": ["total", "available"],
+				"title": "ShelterCapacityDetail"
+			},
+			"ShelterContactDetail": {
+				"properties": {
+					"manager": {
+						"type": "string",
+						"title": "Manager"
+					},
+					"phone": {
+						"type": "string",
+						"title": "Phone"
+					}
+				},
+				"type": "object",
+				"required": ["manager", "phone"],
+				"title": "ShelterContactDetail"
+			},
+			"ShelterDetail": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"default": "evacuation_center"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"admin_type": {
+						"type": "string",
+						"title": "Admin Type"
+					},
+					"address": {
+						"type": "string",
+						"title": "Address"
+					},
+					"capacity": {
+						"$ref": "#/components/schemas/ShelterCapacityDetail"
+					},
+					"occupancy_rate": {
+						"type": "integer",
+						"title": "Occupancy Rate"
+					},
+					"building_status": {
+						"type": "string",
+						"title": "Building Status"
+					},
+					"geo": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoPoint"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"location": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoJsonPoint"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"admission_policy": {
+						"$ref": "#/components/schemas/ShelterAdmissionPolicyDetail"
+					},
+					"travel": {
+						"$ref": "#/components/schemas/ShelterTravelDetail"
+					},
+					"facilities": {
+						"$ref": "#/components/schemas/ShelterFacilitiesDetail"
+					},
+					"zones": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/ShelterZoneDetail"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Zones"
+					},
+					"contact": {
+						"$ref": "#/components/schemas/ShelterContactDetail"
+					},
+					"faq": {
+						"items": {
+							"$ref": "#/components/schemas/ShelterFaqDetail"
+						},
+						"type": "array",
+						"title": "Faq"
+					},
+					"occupancy": {
+						"type": "integer",
+						"title": "Occupancy",
+						"description": "Forecast Occupancy headcount"
+					},
+					"present": {
+						"type": "integer",
+						"title": "Present",
+						"description": "Present Occupancy headcount"
+					},
+					"in_zone": {
+						"type": "integer",
+						"title": "In Zone",
+						"description": "In-zone Occupancy headcount (room_confirmed)"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"status",
+					"admin_type",
+					"address",
+					"capacity",
+					"occupancy",
+					"present",
+					"in_zone",
+					"occupancy_rate",
+					"building_status",
+					"admission_policy",
+					"travel",
+					"facilities",
+					"contact",
+					"faq"
+				],
+				"title": "ShelterDetail"
+			},
+			"ShelterDetailResponse": {
+				"properties": {
+					"shelter": {
+						"$ref": "#/components/schemas/ShelterDetail"
+					}
+				},
+				"type": "object",
+				"required": ["shelter"],
+				"title": "ShelterDetailResponse"
+			},
+			"ShelterFacilitiesDetail": {
+				"properties": {
+					"hygiene": {
+						"$ref": "#/components/schemas/ShelterHygieneDetail"
+					},
+					"power": {
+						"type": "string",
+						"title": "Power"
+					},
+					"water": {
+						"type": "string",
+						"title": "Water"
+					},
+					"comms": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Comms"
+					},
+					"kitchen": {
+						"type": "string",
+						"title": "Kitchen"
+					},
+					"parking": {
+						"type": "string",
+						"title": "Parking"
+					}
+				},
+				"type": "object",
+				"required": ["hygiene", "power", "water", "comms", "kitchen", "parking"],
+				"title": "ShelterFacilitiesDetail"
+			},
+			"ShelterFaqDetail": {
+				"properties": {
+					"q": {
+						"type": "string",
+						"title": "Q"
+					},
+					"a": {
+						"type": "string",
+						"title": "A"
+					}
+				},
+				"type": "object",
+				"required": ["q", "a"],
+				"title": "ShelterFaqDetail"
+			},
+			"ShelterHygieneDetail": {
+				"properties": {
+					"male": {
+						"type": "integer",
+						"title": "Male"
+					},
+					"female": {
+						"type": "integer",
+						"title": "Female"
+					},
+					"accessible": {
+						"type": "integer",
+						"title": "Accessible"
+					},
+					"shower": {
+						"type": "integer",
+						"title": "Shower"
+					},
+					"mobile_toilet": {
+						"type": "integer",
+						"title": "Mobile Toilet"
+					}
+				},
+				"type": "object",
+				"required": ["male", "female", "accessible", "shower", "mobile_toilet"],
+				"title": "ShelterHygieneDetail"
+			},
+			"ShelterItem": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"title": "Code",
+						"description": "Shelter code, e.g. SH001"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"default": "evacuation_center"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"capacity": {
+						"type": "integer",
+						"title": "Capacity",
+						"default": 0
+					},
+					"geo": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoPoint"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"location": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoJsonPoint"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"province": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Province"
+					},
+					"district": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "District"
+					},
+					"subdistrict": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subdistrict"
+					},
+					"pet_policy": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Pet Policy"
+					},
+					"vulnerable_groups": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Vulnerable Groups"
+					},
+					"admin_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Admin Type"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "status", "updated_at"],
+				"title": "ShelterItem"
+			},
+			"ShelterListResponse": {
+				"properties": {
+					"shelters": {
+						"items": {
+							"$ref": "#/components/schemas/ShelterItem"
+						},
+						"type": "array",
+						"title": "Shelters"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date-time",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["shelters", "count", "as_of"],
+				"title": "ShelterListResponse"
+			},
+			"ShelterNeedsResponse": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"title": "Code"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"needs": {
+						"items": {
+							"$ref": "#/components/schemas/NeedItemResponse"
+						},
+						"type": "array",
+						"title": "Needs"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "needs"],
+				"title": "ShelterNeedsResponse"
+			},
+			"ShelterTravelDetail": {
+				"properties": {
+					"route": {
+						"type": "string",
+						"title": "Route"
+					},
+					"altitude": {
+						"type": "string",
+						"title": "Altitude"
+					},
+					"flood_warning": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Flood Warning"
+					}
+				},
+				"type": "object",
+				"required": ["route", "altitude"],
+				"title": "ShelterTravelDetail"
+			},
+			"ShelterZoneDetail": {
+				"properties": {
+					"name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"type": {
+						"type": "string",
+						"title": "Type"
+					},
+					"capacity": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Capacity"
+					},
+					"area_m2": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area M2"
+					}
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "ShelterZoneDetail"
+			},
+			"TicketFindItem": {
+				"properties": {
+					"view_token": {
+						"type": "string",
+						"title": "View Token"
+					},
+					"applicant_name": {
+						"type": "string",
+						"title": "Applicant Name",
+						"default": ""
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"job_title": {
+						"type": "string",
+						"title": "Job Title",
+						"default": ""
+					},
+					"shelter_code": {
+						"type": "string",
+						"title": "Shelter Code"
+					},
+					"shift_date": {
+						"type": "string",
+						"title": "Shift Date",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": ["view_token", "status", "shelter_code"],
+				"title": "TicketFindItem"
+			},
+			"TicketFindRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 30,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Token"
+					}
+				},
+				"type": "object",
+				"title": "TicketFindRequest",
+				"description": "Tab 2 — \"ค้นหาตั๋วของฉัน\", by phone or by a token already in hand."
+			},
+			"TicketFindResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"tickets": {
+						"items": {
+							"$ref": "#/components/schemas/TicketFindItem"
+						},
+						"type": "array",
+						"title": "Tickets"
+					},
+					"phone_masked": {
+						"type": "string",
+						"title": "Phone Masked",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"title": "TicketFindResponse"
+			},
+			"TicketShift": {
+				"properties": {
+					"shift_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shift Id"
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"start_time": {
+						"type": "string",
+						"title": "Start Time",
+						"default": ""
+					},
+					"end_time": {
+						"type": "string",
+						"title": "End Time",
+						"default": ""
+					},
+					"station": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Station"
+					}
+				},
+				"type": "object",
+				"title": "TicketShift"
+			},
+			"TransparencySummary": {
+				"properties": {
+					"shelters_total": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Shelters Total"
+					},
+					"shelters_open": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Shelters Open",
+						"description": "status in {open, full}"
+					},
+					"occupancy_total": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Occupancy Total",
+						"description": "active + pre_registered across projected shelters (CR-070)"
+					},
+					"vulnerable_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Vulnerable Count",
+						"description": "Not projected in public_persons yet — always null until schema adds age"
+					}
+				},
+				"type": "object",
+				"required": ["shelters_total", "shelters_open"],
+				"title": "TransparencySummary"
+			},
+			"TransparencySummaryResponse": {
+				"properties": {
+					"summary": {
+						"$ref": "#/components/schemas/TransparencySummary"
+					},
+					"last_updated": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Last Updated"
+					},
+					"is_stale": {
+						"type": "boolean",
+						"title": "Is Stale",
+						"default": false
+					},
+					"flags": {
+						"additionalProperties": {
+							"type": "boolean"
+						},
+						"type": "object",
+						"title": "Flags"
+					}
+				},
+				"type": "object",
+				"required": ["summary", "last_updated"],
+				"title": "TransparencySummaryResponse"
+			},
+			"ValidationError": {
+				"properties": {
+					"loc": {
+						"items": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "integer"
+								}
+							]
+						},
+						"type": "array",
+						"title": "Location"
+					},
+					"msg": {
+						"type": "string",
+						"title": "Message"
+					},
+					"type": {
+						"type": "string",
+						"title": "Error Type"
+					},
+					"input": {
+						"title": "Input"
+					},
+					"ctx": {
+						"type": "object",
+						"title": "Context"
+					}
+				},
+				"type": "object",
+				"required": ["loc", "msg", "type"],
+				"title": "ValidationError"
+			},
+			"VerifyResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status",
+						"default": "ok"
+					}
+				},
+				"type": "object",
+				"title": "VerifyResponse"
+			},
+			"VolunteerApplyRequest": {
+				"properties": {
+					"first_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "Last Name"
+					},
+					"phone": {
+						"type": "string",
+						"maxLength": 30,
+						"minLength": 6,
+						"title": "Phone"
+					},
+					"national_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 20
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "National Id"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"skills": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Skills"
+					},
+					"shift_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shift Id"
+					},
+					"shift_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shift Date"
+					},
+					"station": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Station"
+					}
+				},
+				"type": "object",
+				"required": ["first_name", "last_name", "phone"],
+				"title": "VolunteerApplyRequest",
+				"description": "The 4-field quick-apply form (FR-VOL-02.2).\n\n``national_id`` is optional here even though CR-092 lists it as a main field: a\nvolunteer with a passport or a pink card has no 13-digit number, and refusing them\nat the form would be a worse failure than a profile that dedupes on phone alone."
+			},
+			"VolunteerApplyResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"tracking_token": {
+						"type": "string",
+						"title": "Tracking Token"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"job_id": {
+						"type": "string",
+						"title": "Job Id"
+					},
+					"shift_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Shift Id"
+					}
+				},
+				"type": "object",
+				"required": ["tracking_token", "status", "job_id"],
+				"title": "VolunteerApplyResponse"
+			},
+			"VolunteerCancelResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"message": {
+						"type": "string",
+						"title": "Message",
+						"default": "Application cancelled"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerCancelResponse"
+			},
+			"VolunteerProfile": {
+				"properties": {
+					"first_name": {
+						"type": "string",
+						"title": "First Name",
+						"default": ""
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name",
+						"default": ""
+					},
+					"nickname": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nickname"
+					},
+					"phone_masked": {
+						"type": "string",
+						"title": "Phone Masked",
+						"default": ""
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"volunteer_code": {
+						"type": "string",
+						"title": "Volunteer Code",
+						"default": ""
+					},
+					"skills": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Skills"
+					},
+					"organization": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization"
+					},
+					"identity_verified": {
+						"type": "boolean",
+						"title": "Identity Verified",
+						"default": false
+					},
+					"personnel_type": {
+						"type": "string",
+						"title": "Personnel Type",
+						"default": "volunteer"
+					},
+					"shelter_codes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Shelter Codes"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfile",
+				"description": "The volunteer's own profile, merged across every shelter they hold one at.\n\n``volunteer`` is a per-shelter document, so someone who has helped at two centres has\ntwo of them. The portal shows one person, so the newest document supplies the\nidentity and the shelters are listed alongside — and an edit made here is applied to\nall of them (see ``VolunteerProfileUpdateBuffer``).\n\nNo ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4)."
+			},
+			"VolunteerProfileResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"profile": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/VolunteerProfile"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileResponse"
+			},
+			"VolunteerProfileUpdateRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 30,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 200,
+								"minLength": 6
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Token"
+					},
+					"skills": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 30,
+						"title": "Skills"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateRequest",
+				"description": "What a volunteer may change about themselves.\n\nSkills only, for now. They are self-declared and carry no authority on their own: a\ncontrolled job still routes to review, and ``identity_verified`` stays a staff badge\n— so this cannot be used to unlock work the shelter has not approved."
+			},
+			"VolunteerProfileUpdateResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"updated": {
+						"type": "integer",
+						"title": "Updated",
+						"default": 0
+					},
+					"profile": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/VolunteerProfile"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateResponse"
+			},
+			"VolunteerScheduleResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"shifts": {
+						"items": {
+							"$ref": "#/components/schemas/ScheduleShift"
+						},
+						"type": "array",
+						"title": "Shifts"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerScheduleResponse"
+			},
+			"VolunteerTicket": {
+				"properties": {
+					"token": {
+						"type": "string",
+						"title": "Token"
+					},
+					"can_cancel": {
+						"type": "boolean",
+						"title": "Can Cancel",
+						"default": true
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"job_id": {
+						"type": "string",
+						"title": "Job Id"
+					},
+					"job_title": {
+						"type": "string",
+						"title": "Job Title",
+						"default": ""
+					},
+					"shelter_code": {
+						"type": "string",
+						"title": "Shelter Code"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"default": ""
+					},
+					"applicant_name": {
+						"type": "string",
+						"title": "Applicant Name"
+					},
+					"phone_masked": {
+						"type": "string",
+						"title": "Phone Masked"
+					},
+					"skills": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Skills"
+					},
+					"selected_shift": {
+						"$ref": "#/components/schemas/TicketShift"
+					},
+					"applied_at": {
+						"type": "string",
+						"title": "Applied At"
+					},
+					"qr_payload": {
+						"type": "string",
+						"title": "Qr Payload"
+					}
+				},
+				"type": "object",
+				"required": [
+					"token",
+					"status",
+					"job_id",
+					"shelter_code",
+					"applicant_name",
+					"phone_masked",
+					"applied_at",
+					"qr_payload"
+				],
+				"title": "VolunteerTicket",
+				"description": "What the Digital Pass may show.\n\nNo ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed\nbecause the pass displays it as the human-readable ticket id."
+			},
+			"VolunteerTicketResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success",
+						"default": true
+					},
+					"ticket": {
+						"$ref": "#/components/schemas/VolunteerTicket"
+					}
+				},
+				"type": "object",
+				"required": ["ticket"],
+				"title": "VolunteerTicketResponse"
+			},
+			"CriticalItem": {
+				"properties": {
+					"name_th": {
+						"type": "string",
+						"title": "Name Th"
+					},
+					"quantity_on_hand": {
+						"type": "number",
+						"title": "Quantity On Hand"
+					},
+					"unit_label": {
+						"type": "string",
+						"title": "Unit Label"
+					},
+					"level": {
+						"type": "string",
+						"title": "Level"
+					}
+				},
+				"type": "object",
+				"required": ["name_th", "quantity_on_hand", "unit_label", "level"],
+				"title": "CriticalItem"
 			},
 			"HouseholdInput": {
 				"properties": {
@@ -3375,124 +5788,6 @@
 				"required": ["location_code", "updated_at", "items"],
 				"title": "LocationStockResult"
 			},
-			"M2ErrorDetail": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"message": {
-						"type": "string",
-						"title": "Message"
-					}
-				},
-				"type": "object",
-				"required": ["code", "message"],
-				"title": "M2ErrorDetail"
-			},
-			"M2ErrorResponse": {
-				"properties": {
-					"error": {
-						"$ref": "#/components/schemas/M2ErrorDetail"
-					}
-				},
-				"type": "object",
-				"required": ["error"],
-				"title": "M2ErrorResponse"
-			},
-			"M2PersonResidencyResponse": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
-					},
-					"checkin_datetime": {
-						"type": "string",
-						"title": "Checkin Datetime",
-						"description": "\u0e27\u0e31\u0e19\u0e40\u0e27\u0e25\u0e32\u0e17\u0e35\u0e48\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (ISO 8601 \u0e1e\u0e23\u0e49\u0e2d\u0e21 timezone \u0e40\u0e0a\u0e48\u0e19 2026-08-20T14:30:00+07:00)"
-					},
-					"status": {
-						"type": "string",
-						"enum": ["CHECKED_IN", "CHECKED_OUT"],
-						"title": "Status",
-						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01"
-					},
-					"stay_status": {
-						"type": "string",
-						"title": "Stay Status",
-						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30 stay \u0e14\u0e34\u0e1a\u0e08\u0e32\u0e01 projection (CR-112 additive)"
-					},
-					"in_zone": {
-						"type": "boolean",
-						"title": "In Zone",
-						"description": "True \u0e40\u0e21\u0e37\u0e48\u0e2d\u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e16\u0e36\u0e07\u0e42\u0e0b\u0e19\u0e41\u0e25\u0e49\u0e27 (room_confirmed)"
-					}
-				},
-				"type": "object",
-				"required": [
-					"shelter_id",
-					"shelter_name",
-					"checkin_datetime",
-					"status",
-					"stay_status",
-					"in_zone"
-				],
-				"title": "M2PersonResidencyResponse"
-			},
-			"M2ShelterItem": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 \u0e40\u0e0a\u0e48\u0e19 SH001"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
-					},
-					"site_kind": {
-						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
-						"title": "Site Kind",
-						"description": "\u0e0a\u0e19\u0e34\u0e14\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48",
-						"default": "evacuation_center"
-					},
-					"lat": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Lat",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e30\u0e15\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
-					},
-					"long": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Long",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e2d\u0e07\u0e08\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
-					}
-				},
-				"type": "object",
-				"required": ["shelter_id", "shelter_name"],
-				"title": "M2ShelterItem"
-			},
 			"MemberCreated": {
 				"properties": {
 					"reserved_evacuee_id": {
@@ -3668,57 +5963,22 @@
 							}
 						],
 						"title": "Religion"
+					},
+					"emergency_contact": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/EmergencyContactInput"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Emergency Contact"
 					}
 				},
 				"type": "object",
 				"required": ["first_name", "gender"],
 				"title": "MemberInput"
-			},
-			"NeedItemResponse": {
-				"properties": {
-					"item_id": {
-						"type": "string",
-						"title": "Item Id"
-					},
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"qty_needed": {
-						"type": "string",
-						"title": "Qty Needed"
-					},
-					"unit": {
-						"type": "string",
-						"title": "Unit"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					}
-				},
-				"type": "object",
-				"required": ["item_id", "name", "qty_needed", "unit", "status"],
-				"title": "NeedItemResponse"
-			},
-			"NeedsListResponse": {
-				"properties": {
-					"shelters": {
-						"items": {
-							"$ref": "#/components/schemas/ShelterNeedsResponse"
-						},
-						"type": "array",
-						"title": "Shelters"
-					},
-					"as_of": {
-						"type": "string",
-						"format": "date-time",
-						"title": "As Of"
-					}
-				},
-				"type": "object",
-				"required": ["shelters", "as_of"],
-				"title": "NeedsListResponse"
 			},
 			"OccupancyBreakdownItem": {
 				"properties": {
@@ -3888,36 +6148,6 @@
 				"required": ["status", "message"],
 				"title": "OccupantsErrorResponse"
 			},
-			"PaginatedAnnouncements": {
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/PublicAnnouncement"
-						},
-						"type": "array",
-						"title": "Items"
-					},
-					"total": {
-						"type": "integer",
-						"title": "Total"
-					},
-					"page": {
-						"type": "integer",
-						"title": "Page"
-					},
-					"size": {
-						"type": "integer",
-						"title": "Size"
-					},
-					"total_pages": {
-						"type": "integer",
-						"title": "Total Pages"
-					}
-				},
-				"type": "object",
-				"required": ["items", "total", "page", "size", "total_pages"],
-				"title": "PaginatedAnnouncements"
-			},
 			"PersonIdInput": {
 				"properties": {
 					"cardType": {
@@ -3949,7 +6179,14 @@
 						"title": "Cardtype"
 					},
 					"number": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
 						"title": "Number"
 					}
 				},
@@ -3991,683 +6228,6 @@
 				"type": "object",
 				"required": ["species"],
 				"title": "PetInput"
-			},
-			"PublicAnnouncement": {
-				"properties": {
-					"_id": {
-						"type": "string",
-						"title": "Id",
-						"description": "The CouchDB announcement document ID"
-					},
-					"title": {
-						"type": "string",
-						"title": "Title"
-					},
-					"description": {
-						"type": "string",
-						"title": "Description"
-					},
-					"title_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Title En"
-					},
-					"description_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Description En"
-					},
-					"severity": {
-						"type": "string",
-						"enum": ["info", "warning", "emergency"],
-						"title": "Severity"
-					},
-					"is_active": {
-						"type": "boolean",
-						"title": "Is Active"
-					},
-					"updated_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updated At"
-					}
-				},
-				"type": "object",
-				"required": ["_id", "title", "description", "severity", "is_active", "updated_at"],
-				"title": "PublicAnnouncement",
-				"description": "Public snapshot of a system announcement, stored in MongoDB `public_announcements`.\nSourced from `announcement` docs in CouchDB `registry`."
-			},
-			"SearchRequest": {
-				"properties": {
-					"search": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Search"
-					}
-				},
-				"type": "object",
-				"required": ["search"],
-				"title": "SearchRequest"
-			},
-			"SearchResponse": {
-				"properties": {
-					"results": {
-						"items": {
-							"$ref": "#/components/schemas/SearchResult"
-						},
-						"type": "array",
-						"title": "Results"
-					},
-					"count": {
-						"type": "integer",
-						"title": "Count"
-					},
-					"as_of": {
-						"type": "string",
-						"format": "date-time",
-						"title": "As Of"
-					}
-				},
-				"type": "object",
-				"required": ["results", "count", "as_of"],
-				"title": "SearchResponse"
-			},
-			"SearchResult": {
-				"properties": {
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
-					"national_id": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "National Id"
-					},
-					"gender": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Gender"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name"
-					},
-					"origin_address": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Origin Address"
-					},
-					"checked_in_at": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Checked In At"
-					},
-					"care_zone": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Care Zone"
-					},
-					"family_members": {
-						"items": {
-							"$ref": "#/components/schemas/FamilyMember"
-						},
-						"type": "array",
-						"title": "Family Members"
-					}
-				},
-				"type": "object",
-				"required": ["name", "status", "shelter_name"],
-				"title": "SearchResult"
-			},
-			"ShelterAdmissionPolicyDetail": {
-				"properties": {
-					"pets": {
-						"type": "string",
-						"title": "Pets"
-					},
-					"vulnerable_groups": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Vulnerable Groups"
-					}
-				},
-				"type": "object",
-				"required": ["pets", "vulnerable_groups"],
-				"title": "ShelterAdmissionPolicyDetail"
-			},
-			"ShelterCapacityDetail": {
-				"properties": {
-					"total": {
-						"type": "integer",
-						"title": "Total"
-					},
-					"available": {
-						"type": "integer",
-						"title": "Available"
-					}
-				},
-				"type": "object",
-				"required": ["total", "available"],
-				"title": "ShelterCapacityDetail"
-			},
-			"ShelterContactDetail": {
-				"properties": {
-					"manager": {
-						"type": "string",
-						"title": "Manager"
-					},
-					"phone": {
-						"type": "string",
-						"title": "Phone"
-					}
-				},
-				"type": "object",
-				"required": ["manager", "phone"],
-				"title": "ShelterContactDetail"
-			},
-			"ShelterDetail": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"site_kind": {
-						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
-						"title": "Site Kind",
-						"default": "evacuation_center"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
-					"admin_type": {
-						"type": "string",
-						"title": "Admin Type"
-					},
-					"address": {
-						"type": "string",
-						"title": "Address"
-					},
-					"capacity": {
-						"$ref": "#/components/schemas/ShelterCapacityDetail"
-					},
-					"occupancy": {
-						"type": "integer",
-						"title": "Occupancy",
-						"description": "Forecast Occupancy headcount"
-					},
-					"present": {
-						"type": "integer",
-						"title": "Present",
-						"description": "Present Occupancy headcount"
-					},
-					"in_zone": {
-						"type": "integer",
-						"title": "In Zone",
-						"description": "In-zone Occupancy headcount (room_confirmed)"
-					},
-					"occupancy_rate": {
-						"type": "integer",
-						"title": "Occupancy Rate"
-					},
-					"building_status": {
-						"type": "string",
-						"title": "Building Status"
-					},
-					"geo": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GeoPoint"
-							},
-							{
-								"type": "null"
-							}
-						]
-					},
-					"location": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GeoJsonPoint"
-							},
-							{
-								"type": "null"
-							}
-						]
-					},
-					"admission_policy": {
-						"$ref": "#/components/schemas/ShelterAdmissionPolicyDetail"
-					},
-					"travel": {
-						"$ref": "#/components/schemas/ShelterTravelDetail"
-					},
-					"facilities": {
-						"$ref": "#/components/schemas/ShelterFacilitiesDetail"
-					},
-					"zones": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/ShelterZoneDetail"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Zones"
-					},
-					"contact": {
-						"$ref": "#/components/schemas/ShelterContactDetail"
-					},
-					"faq": {
-						"items": {
-							"$ref": "#/components/schemas/ShelterFaqDetail"
-						},
-						"type": "array",
-						"title": "Faq"
-					}
-				},
-				"type": "object",
-				"required": [
-					"id",
-					"name",
-					"status",
-					"admin_type",
-					"address",
-					"capacity",
-					"occupancy",
-					"present",
-					"in_zone",
-					"occupancy_rate",
-					"building_status",
-					"admission_policy",
-					"travel",
-					"facilities",
-					"contact",
-					"faq"
-				],
-				"title": "ShelterDetail"
-			},
-			"ShelterDetailResponse": {
-				"properties": {
-					"shelter": {
-						"$ref": "#/components/schemas/ShelterDetail"
-					}
-				},
-				"type": "object",
-				"required": ["shelter"],
-				"title": "ShelterDetailResponse"
-			},
-			"ShelterFacilitiesDetail": {
-				"properties": {
-					"hygiene": {
-						"$ref": "#/components/schemas/ShelterHygieneDetail"
-					},
-					"power": {
-						"type": "string",
-						"title": "Power"
-					},
-					"water": {
-						"type": "string",
-						"title": "Water"
-					},
-					"comms": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Comms"
-					},
-					"kitchen": {
-						"type": "string",
-						"title": "Kitchen"
-					},
-					"parking": {
-						"type": "string",
-						"title": "Parking"
-					}
-				},
-				"type": "object",
-				"required": ["hygiene", "power", "water", "comms", "kitchen", "parking"],
-				"title": "ShelterFacilitiesDetail"
-			},
-			"ShelterFaqDetail": {
-				"properties": {
-					"q": {
-						"type": "string",
-						"title": "Q"
-					},
-					"a": {
-						"type": "string",
-						"title": "A"
-					}
-				},
-				"type": "object",
-				"required": ["q", "a"],
-				"title": "ShelterFaqDetail"
-			},
-			"ShelterHygieneDetail": {
-				"properties": {
-					"male": {
-						"type": "integer",
-						"title": "Male"
-					},
-					"female": {
-						"type": "integer",
-						"title": "Female"
-					},
-					"accessible": {
-						"type": "integer",
-						"title": "Accessible"
-					},
-					"shower": {
-						"type": "integer",
-						"title": "Shower"
-					},
-					"mobile_toilet": {
-						"type": "integer",
-						"title": "Mobile Toilet"
-					}
-				},
-				"type": "object",
-				"required": ["male", "female", "accessible", "shower", "mobile_toilet"],
-				"title": "ShelterHygieneDetail"
-			},
-			"ShelterItem": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code",
-						"description": "Shelter code, e.g. SH001"
-					},
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"site_kind": {
-						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
-						"title": "Site Kind",
-						"default": "evacuation_center"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
-					"capacity": {
-						"type": "integer",
-						"title": "Capacity",
-						"default": 0
-					},
-					"geo": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GeoPoint"
-							},
-							{
-								"type": "null"
-							}
-						]
-					},
-					"location": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GeoJsonPoint"
-							},
-							{
-								"type": "null"
-							}
-						]
-					},
-					"province": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Province"
-					},
-					"district": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "District"
-					},
-					"subdistrict": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Subdistrict"
-					},
-					"pet_policy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Pet Policy"
-					},
-					"vulnerable_groups": {
-						"anyOf": [
-							{
-								"items": {
-									"type": "string"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Vulnerable Groups"
-					},
-					"admin_type": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Admin Type"
-					},
-					"updated_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updated At"
-					}
-				},
-				"type": "object",
-				"required": ["code", "name", "status", "updated_at"],
-				"title": "ShelterItem"
-			},
-			"ShelterListResponse": {
-				"properties": {
-					"shelters": {
-						"items": {
-							"$ref": "#/components/schemas/ShelterItem"
-						},
-						"type": "array",
-						"title": "Shelters"
-					},
-					"count": {
-						"type": "integer",
-						"title": "Count"
-					},
-					"as_of": {
-						"type": "string",
-						"format": "date-time",
-						"title": "As Of"
-					}
-				},
-				"type": "object",
-				"required": ["shelters", "count", "as_of"],
-				"title": "ShelterListResponse"
-			},
-			"ShelterNeedsResponse": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"needs": {
-						"items": {
-							"$ref": "#/components/schemas/NeedItemResponse"
-						},
-						"type": "array",
-						"title": "Needs"
-					}
-				},
-				"type": "object",
-				"required": ["code", "name", "needs"],
-				"title": "ShelterNeedsResponse"
-			},
-			"ShelterTravelDetail": {
-				"properties": {
-					"route": {
-						"type": "string",
-						"title": "Route"
-					},
-					"altitude": {
-						"type": "string",
-						"title": "Altitude"
-					},
-					"flood_warning": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Flood Warning"
-					}
-				},
-				"type": "object",
-				"required": ["route", "altitude"],
-				"title": "ShelterTravelDetail"
-			},
-			"ShelterZoneDetail": {
-				"properties": {
-					"name": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Name"
-					},
-					"type": {
-						"type": "string",
-						"title": "Type"
-					},
-					"capacity": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Capacity"
-					},
-					"area_m2": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Area M2"
-					}
-				},
-				"type": "object",
-				"required": ["type"],
-				"title": "ShelterZoneDetail"
 			},
 			"StockErrorDetail": {
 				"properties": {
@@ -4962,7 +6522,7 @@
 					"client_secret"
 				],
 				"title": "ThirdPartyClientCreateResponse",
-				"description": "Create response \u2014 plaintext ``client_secret`` is returned once."
+				"description": "Create response — plaintext ``client_secret`` is returned once."
 			},
 			"ThirdPartyClientListResponse": {
 				"properties": {
@@ -5126,75 +6686,6 @@
 				"required": ["access_token", "expires_in", "module_name", "scopes"],
 				"title": "TokenResponse"
 			},
-			"TransparencySummary": {
-				"properties": {
-					"shelters_total": {
-						"type": "integer",
-						"minimum": 0.0,
-						"title": "Shelters Total"
-					},
-					"shelters_open": {
-						"type": "integer",
-						"minimum": 0.0,
-						"title": "Shelters Open",
-						"description": "status in {open, full}"
-					},
-					"occupancy_total": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Occupancy Total",
-						"description": "active + pre_registered across projected shelters (CR-070)"
-					},
-					"vulnerable_count": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Vulnerable Count",
-						"description": "Not projected in public_persons yet \u2014 always null until schema adds age"
-					}
-				},
-				"type": "object",
-				"required": ["shelters_total", "shelters_open"],
-				"title": "TransparencySummary"
-			},
-			"TransparencySummaryResponse": {
-				"properties": {
-					"summary": {
-						"$ref": "#/components/schemas/TransparencySummary"
-					},
-					"last_updated": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Last Updated"
-					},
-					"is_stale": {
-						"type": "boolean",
-						"title": "Is Stale",
-						"default": false
-					},
-					"flags": {
-						"additionalProperties": {
-							"type": "boolean"
-						},
-						"type": "object",
-						"title": "Flags"
-					}
-				},
-				"type": "object",
-				"required": ["summary", "last_updated"],
-				"title": "TransparencySummaryResponse"
-			},
 			"UnassignedRegistrationCreateRequest": {
 				"properties": {
 					"members": {
@@ -5272,52 +6763,26 @@
 				],
 				"title": "UnassignedRegistrationCreateResponse"
 			},
-			"ValidationError": {
+			"EmergencyContactInput": {
 				"properties": {
-					"loc": {
-						"items": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "integer"
-								}
-							]
-						},
-						"type": "array",
-						"title": "Location"
-					},
-					"msg": {
+					"name": {
 						"type": "string",
-						"title": "Message"
+						"title": "Name",
+						"default": ""
 					},
-					"type": {
+					"phone": {
 						"type": "string",
-						"title": "Error Type"
+						"title": "Phone",
+						"default": ""
 					},
-					"input": {
-						"title": "Input"
-					},
-					"ctx": {
-						"type": "object",
-						"title": "Context"
+					"relation": {
+						"type": "string",
+						"title": "Relation",
+						"default": ""
 					}
 				},
 				"type": "object",
-				"required": ["loc", "msg", "type"],
-				"title": "ValidationError"
-			},
-			"VerifyResponse": {
-				"properties": {
-					"status": {
-						"type": "string",
-						"title": "Status",
-						"default": "ok"
-					}
-				},
-				"type": "object",
-				"title": "VerifyResponse"
+				"title": "EmergencyContactInput"
 			}
 		},
 		"securitySchemes": {

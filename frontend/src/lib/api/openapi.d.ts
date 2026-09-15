@@ -408,6 +408,191 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/transparency/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Transparency Summary
+		 * @description System-wide public metrics from public_shelters + public_persons.
+		 */
+		get: operations['get_transparency_summary_public_v1_transparency_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Jobs */
+		get: operations['list_jobs_public_v1_jobs_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs/{job_id}/apply': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Apply To Job */
+		post: operations['apply_to_job_public_v1_jobs__job_id__apply_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Ticket */
+		get: operations['get_ticket_public_v1_volunteer_ticket__token__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/find': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Find Tickets */
+		post: operations['find_tickets_public_v1_volunteer_ticket_find_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Cancel Ticket */
+		post: operations['cancel_ticket_public_v1_volunteer_ticket__token__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule
+		 * @description ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).
+		 */
+		post: operations['volunteer_schedule_public_v1_volunteer_schedule_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule/respond': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Respond To Dispatch
+		 * @description Accept or decline an offered shift with the code a manager read out.
+		 */
+		post: operations['respond_to_dispatch_public_v1_volunteer_schedule_respond_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/profile': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Profile
+		 * @description The volunteer's own profile, for the Access Portal's edit screen.
+		 */
+		post: operations['volunteer_profile_public_v1_volunteer_profile_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/profile/update': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Update Volunteer Profile
+		 * @description Change the parts of the profile the volunteer owns (skills, for now).
+		 */
+		post: operations['update_volunteer_profile_public_v1_volunteer_profile_update_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/auth/token-third-party': {
 		parameters: {
 			query?: never;
@@ -562,26 +747,6 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/public/v1/transparency/summary': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/**
-		 * Get Transparency Summary
-		 * @description System-wide public metrics from public_shelters + public_persons.
-		 */
-		get: operations['get_transparency_summary_public_v1_transparency_summary_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
 	'/public/v1/unassigned-registrations': {
 		parameters: {
 			query?: never;
@@ -596,26 +761,6 @@ export interface paths {
 		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
 		 */
 		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/public/v1/unassigned-registrations/photos': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/**
-		 * Upload Unassigned Photo
-		 * @description Store a compressed face photo in Mongo GridFS (#255).
-		 */
-		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -746,16 +891,41 @@ export interface components {
 			/** Phone Number */
 			phone_number?: string | null;
 		};
-		/** CriticalItem */
-		CriticalItem: {
-			/** Name Th */
-			name_th: string;
-			/** Quantity On Hand */
-			quantity_on_hand: number;
-			/** Unit Label */
-			unit_label: string;
-			/** Level */
-			level: string;
+		/**
+		 * DispatchRespondRequest
+		 * @description Answering an offered shift — two factors, neither enough alone.
+		 *
+		 *     The credential is whatever the portal signed in with and must resolve to the
+		 *     assignment's own volunteer; ``code`` is the short code a manager read out. A
+		 *     six-character code is only safe because the caller has to know whose shift it is
+		 *     as well.
+		 */
+		DispatchRespondRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Code */
+			code: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'accepted' | 'declined';
+		};
+		/** DispatchRespondResponse */
+		DispatchRespondResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Dispatch Status */
+			dispatch_status: string;
 		};
 		/** DonationCancelResponse */
 		DonationCancelResponse: {
@@ -967,6 +1137,916 @@ export interface components {
 		HealthCheckResponse: {
 			/** Status */
 			status: string;
+		};
+		/** JobShiftTemplate */
+		JobShiftTemplate: {
+			/**
+			 * Shift Name
+			 * @default
+			 */
+			shift_name: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Days */
+			days?: string[];
+		};
+		/** M2ErrorDetail */
+		M2ErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** M2ErrorResponse */
+		M2ErrorResponse: {
+			error: components['schemas']['M2ErrorDetail'];
+		};
+		/** M2PersonResidencyResponse */
+		M2PersonResidencyResponse: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Checkin Datetime
+			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
+			 */
+			checkin_datetime: string;
+			/**
+			 * Status
+			 * @description สถานะการเข้าพัก
+			 * @enum {string}
+			 */
+			status: 'CHECKED_IN' | 'CHECKED_OUT';
+			/**
+			 * Stay Status
+			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
+			 */
+			stay_status: string;
+			/**
+			 * In Zone
+			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
+			 */
+			in_zone: boolean;
+		};
+		/** M2ShelterItem */
+		M2ShelterItem: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง เช่น SH001
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Site Kind
+			 * @description ชนิดสถานที่
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/**
+			 * Lat
+			 * @description พิกัดละติจูด (WGS 84)
+			 */
+			lat?: number | null;
+			/**
+			 * Long
+			 * @description พิกัดลองจิจูด (WGS 84)
+			 */
+			long?: number | null;
+		};
+		/** NeedItemResponse */
+		NeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+		};
+		/** NeedsListResponse */
+		NeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** PaginatedAnnouncements */
+		PaginatedAnnouncements: {
+			/** Items */
+			items: components['schemas']['PublicAnnouncement'][];
+			/** Total */
+			total: number;
+			/** Page */
+			page: number;
+			/** Size */
+			size: number;
+			/** Total Pages */
+			total_pages: number;
+		};
+		/**
+		 * PublicAnnouncement
+		 * @description Public snapshot of a system announcement, stored in MongoDB `public_announcements`.
+		 *     Sourced from `announcement` docs in CouchDB `registry`.
+		 */
+		PublicAnnouncement: {
+			/**
+			 * Id
+			 * @description The CouchDB announcement document ID
+			 */
+			_id: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Title En */
+			title_en?: string | null;
+			/** Description En */
+			description_en?: string | null;
+			/**
+			 * Severity
+			 * @enum {string}
+			 */
+			severity: 'info' | 'warning' | 'emergency';
+			/** Is Active */
+			is_active: boolean;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** PublicJobShift */
+		PublicJobShift: {
+			/** Shift Id */
+			shift_id: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/** End Date */
+			end_date?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+			/**
+			 * Quota
+			 * @default 0
+			 */
+			quota: number;
+			/**
+			 * Slots Confirmed
+			 * @default 0
+			 */
+			slots_confirmed: number;
+			/**
+			 * Slots Dispatched
+			 * @default 0
+			 */
+			slots_dispatched: number;
+			/**
+			 * Slots Remaining
+			 * @default 0
+			 */
+			slots_remaining: number;
+		};
+		/**
+		 * PublicJobItem
+		 * @description One card on the board (CR-092 screen 1).
+		 *
+		 *     Carries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,
+		 *     ``dispatched``, is a back-office state and is folded into "not available" here
+		 *     rather than shown to the public.
+		 */
+		PublicJobItem: {
+			/** Job Id */
+			job_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Tier */
+			tier: string;
+			/** Skills Required */
+			skills_required?: string[];
+			shift_template?: components['schemas']['JobShiftTemplate'];
+			/** Shifts */
+			shifts?: components['schemas']['PublicJobShift'][];
+			/** Quota */
+			quota: number;
+			/** Slots Confirmed */
+			slots_confirmed: number;
+			/** Slots Remaining */
+			slots_remaining: number;
+			/** Status */
+			status: string;
+			/**
+			 * Requires Review
+			 * @default false
+			 */
+			requires_review: boolean;
+		};
+		/** PublicJobListResponse */
+		PublicJobListResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Jobs */
+			jobs?: components['schemas']['PublicJobItem'][];
+		};
+		/**
+		 * ScheduleLookupRequest
+		 * @description Same key as the ticket lookup — the portal signs in by phone or by token.
+		 */
+		ScheduleLookupRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+		};
+		/**
+		 * ScheduleShift
+		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
+		 *
+		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
+		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
+		 *     and the check-in stamps the tablet station writes.
+		 */
+		ScheduleShift: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Shift
+			 * @default
+			 */
+			shift: string;
+			/**
+			 * Station
+			 * @default
+			 */
+			station: string;
+			/** Start Ts */
+			start_ts?: string | null;
+			/** End Ts */
+			end_ts?: string | null;
+			/** Check In At */
+			check_in_at?: string | null;
+			/** Check Out At */
+			check_out_at?: string | null;
+			/** Status */
+			status: string;
+			/** Dispatch Status */
+			dispatch_status?: string | null;
+		};
+		/** SearchRequest */
+		SearchRequest: {
+			/** Search */
+			search: string;
+		};
+		/** SearchResponse */
+		SearchResponse: {
+			/** Results */
+			results: components['schemas']['SearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** SearchResult */
+		SearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
+		/** ShelterAdmissionPolicyDetail */
+		ShelterAdmissionPolicyDetail: {
+			/** Pets */
+			pets: string;
+			/** Vulnerable Groups */
+			vulnerable_groups: string[];
+		};
+		/** ShelterCapacityDetail */
+		ShelterCapacityDetail: {
+			/** Total */
+			total: number;
+			/** Available */
+			available: number;
+		};
+		/** ShelterContactDetail */
+		ShelterContactDetail: {
+			/** Manager */
+			manager: string;
+			/** Phone */
+			phone: string;
+		};
+		/** ShelterDetail */
+		ShelterDetail: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/** Status */
+			status: string;
+			/** Admin Type */
+			admin_type: string;
+			/** Address */
+			address: string;
+			capacity: components['schemas']['ShelterCapacityDetail'];
+			/** Occupancy Rate */
+			occupancy_rate: number;
+			/** Building Status */
+			building_status: string;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
+			travel: components['schemas']['ShelterTravelDetail'];
+			facilities: components['schemas']['ShelterFacilitiesDetail'];
+			/** Zones */
+			zones?: components['schemas']['ShelterZoneDetail'][] | null;
+			contact: components['schemas']['ShelterContactDetail'];
+			/** Faq */
+			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
+		};
+		/** ShelterDetailResponse */
+		ShelterDetailResponse: {
+			shelter: components['schemas']['ShelterDetail'];
+		};
+		/** ShelterFacilitiesDetail */
+		ShelterFacilitiesDetail: {
+			hygiene: components['schemas']['ShelterHygieneDetail'];
+			/** Power */
+			power: string;
+			/** Water */
+			water: string;
+			/** Comms */
+			comms: string[];
+			/** Kitchen */
+			kitchen: string;
+			/** Parking */
+			parking: string;
+		};
+		/** ShelterFaqDetail */
+		ShelterFaqDetail: {
+			/** Q */
+			q: string;
+			/** A */
+			a: string;
+		};
+		/** ShelterHygieneDetail */
+		ShelterHygieneDetail: {
+			/** Male */
+			male: number;
+			/** Female */
+			female: number;
+			/** Accessible */
+			accessible: number;
+			/** Shower */
+			shower: number;
+			/** Mobile Toilet */
+			mobile_toilet: number;
+		};
+		/** ShelterItem */
+		ShelterItem: {
+			/**
+			 * Code
+			 * @description Shelter code, e.g. SH001
+			 */
+			code: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/** Status */
+			status: string;
+			/**
+			 * Capacity
+			 * @default 0
+			 */
+			capacity: number;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			/** Province */
+			province?: string | null;
+			/** District */
+			district?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** Pet Policy */
+			pet_policy?: string | null;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[] | null;
+			/** Admin Type */
+			admin_type?: string | null;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** ShelterListResponse */
+		ShelterListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ShelterItem'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** ShelterNeedsResponse */
+		ShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['NeedItemResponse'][];
+		};
+		/** ShelterTravelDetail */
+		ShelterTravelDetail: {
+			/** Route */
+			route: string;
+			/** Altitude */
+			altitude: string;
+			/** Flood Warning */
+			flood_warning?: string | null;
+		};
+		/** ShelterZoneDetail */
+		ShelterZoneDetail: {
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/** Area M2 */
+			area_m2?: number | null;
+		};
+		/** TicketFindItem */
+		TicketFindItem: {
+			/** View Token */
+			view_token: string;
+			/**
+			 * Applicant Name
+			 * @default
+			 */
+			applicant_name: string;
+			/** Status */
+			status: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shift Date
+			 * @default
+			 */
+			shift_date: string;
+		};
+		/**
+		 * TicketFindRequest
+		 * @description Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand.
+		 */
+		TicketFindRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+		};
+		/** TicketFindResponse */
+		TicketFindResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tickets */
+			tickets?: components['schemas']['TicketFindItem'][];
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+		};
+		/** TicketShift */
+		TicketShift: {
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+		};
+		/** TransparencySummary */
+		TransparencySummary: {
+			/** Shelters Total */
+			shelters_total: number;
+			/**
+			 * Shelters Open
+			 * @description status in {open, full}
+			 */
+			shelters_open: number;
+			/**
+			 * Occupancy Total
+			 * @description active + pre_registered across projected shelters (CR-070)
+			 */
+			occupancy_total?: number | null;
+			/**
+			 * Vulnerable Count
+			 * @description Not projected in public_persons yet — always null until schema adds age
+			 */
+			vulnerable_count?: number | null;
+		};
+		/** TransparencySummaryResponse */
+		TransparencySummaryResponse: {
+			summary: components['schemas']['TransparencySummary'];
+			/**
+			 * Last Updated
+			 * Format: date-time
+			 */
+			last_updated: string;
+			/**
+			 * Is Stale
+			 * @default false
+			 */
+			is_stale: boolean;
+			/** Flags */
+			flags?: {
+				[key: string]: boolean;
+			};
+		};
+		/** ValidationError */
+		ValidationError: {
+			/** Location */
+			loc: (string | number)[];
+			/** Message */
+			msg: string;
+			/** Error Type */
+			type: string;
+			/** Input */
+			input?: unknown;
+			/** Context */
+			ctx?: Record<string, never>;
+		};
+		/** VerifyResponse */
+		VerifyResponse: {
+			/**
+			 * Status
+			 * @default ok
+			 */
+			status: string;
+		};
+		/**
+		 * VolunteerApplyRequest
+		 * @description The 4-field quick-apply form (FR-VOL-02.2).
+		 *
+		 *     ``national_id`` is optional here even though CR-092 lists it as a main field: a
+		 *     volunteer with a passport or a pink card has no 13-digit number, and refusing them
+		 *     at the form would be a worse failure than a profile that dedupes on phone alone.
+		 */
+		VolunteerApplyRequest: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Phone */
+			phone: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Email */
+			email?: string | null;
+			/** Skills */
+			skills?: string[];
+			/** Shift Id */
+			shift_id?: string | null;
+			/** Shift Date */
+			shift_date?: string | null;
+			/** Station */
+			station?: string | null;
+		};
+		/** VolunteerApplyResponse */
+		VolunteerApplyResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+		};
+		/** VolunteerCancelResponse */
+		VolunteerCancelResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Application cancelled
+			 */
+			message: string;
+		};
+		/**
+		 * VolunteerProfile
+		 * @description The volunteer's own profile, merged across every shelter they hold one at.
+		 *
+		 *     ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
+		 *     two of them. The portal shows one person, so the newest document supplies the
+		 *     identity and the shelters are listed alongside — and an edit made here is applied to
+		 *     all of them (see ``VolunteerProfileUpdateBuffer``).
+		 *
+		 *     No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
+		 */
+		VolunteerProfile: {
+			/**
+			 * First Name
+			 * @default
+			 */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/** Nickname */
+			nickname?: string | null;
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+			/** Email */
+			email?: string | null;
+			/**
+			 * Volunteer Code
+			 * @default
+			 */
+			volunteer_code: string;
+			/** Skills */
+			skills?: string[];
+			/** Organization */
+			organization?: string | null;
+			/**
+			 * Identity Verified
+			 * @default false
+			 */
+			identity_verified: boolean;
+			/**
+			 * Personnel Type
+			 * @default volunteer
+			 */
+			personnel_type: string;
+			/** Shelter Codes */
+			shelter_codes?: string[];
+		};
+		/** VolunteerProfileResponse */
+		VolunteerProfileResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/**
+		 * VolunteerProfileUpdateRequest
+		 * @description What a volunteer may change about themselves.
+		 *
+		 *     Skills only, for now. They are self-declared and carry no authority on their own: a
+		 *     controlled job still routes to review, and ``identity_verified`` stays a staff badge
+		 *     — so this cannot be used to unlock work the shelter has not approved.
+		 */
+		VolunteerProfileUpdateRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerProfileUpdateResponse */
+		VolunteerProfileUpdateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Updated
+			 * @default 0
+			 */
+			updated: number;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/** VolunteerScheduleResponse */
+		VolunteerScheduleResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Shifts */
+			shifts?: components['schemas']['ScheduleShift'][];
+		};
+		/**
+		 * VolunteerTicket
+		 * @description What the Digital Pass may show.
+		 *
+		 *     No ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed
+		 *     because the pass displays it as the human-readable ticket id.
+		 */
+		VolunteerTicket: {
+			/** Token */
+			token: string;
+			/**
+			 * Can Cancel
+			 * @default true
+			 */
+			can_cancel: boolean;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Applicant Name */
+			applicant_name: string;
+			/** Phone Masked */
+			phone_masked: string;
+			/** Skills */
+			skills?: string[];
+			selected_shift?: components['schemas']['TicketShift'];
+			/** Applied At */
+			applied_at: string;
+			/** Qr Payload */
+			qr_payload: string;
+		};
+		/** VolunteerTicketResponse */
+		VolunteerTicketResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			ticket: components['schemas']['VolunteerTicket'];
+		};
+		/** CriticalItem */
+		CriticalItem: {
+			/** Name Th */
+			name_th: string;
+			/** Quantity On Hand */
+			quantity_on_hand: number;
+			/** Unit Label */
+			unit_label: string;
+			/** Level */
+			level: string;
 		};
 		/** HouseholdInput */
 		HouseholdInput: {
@@ -1197,81 +2277,6 @@ export interface components {
 			/** Items */
 			items: components['schemas']['StockItem'][];
 		};
-		/** M2ErrorDetail */
-		M2ErrorDetail: {
-			/** Code */
-			code: string;
-			/** Message */
-			message: string;
-		};
-		/** M2ErrorResponse */
-		M2ErrorResponse: {
-			error: components['schemas']['M2ErrorDetail'];
-		};
-		/** M2PersonResidencyResponse */
-		M2PersonResidencyResponse: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Checkin Datetime
-			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
-			 */
-			checkin_datetime: string;
-			/**
-			 * Status
-			 * @description สถานะการเข้าพัก
-			 * @enum {string}
-			 */
-			status: 'CHECKED_IN' | 'CHECKED_OUT';
-			/**
-			 * Stay Status
-			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
-			 */
-			stay_status: string;
-			/**
-			 * In Zone
-			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
-			 */
-			in_zone: boolean;
-		};
-		/** M2ShelterItem */
-		M2ShelterItem: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง เช่น SH001
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Site Kind
-			 * @description ชนิดสถานที่
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/**
-			 * Lat
-			 * @description พิกัดละติจูด (WGS 84)
-			 */
-			lat?: number | null;
-			/**
-			 * Long
-			 * @description พิกัดลองจิจูด (WGS 84)
-			 */
-			long?: number | null;
-		};
 		/** MemberCreated */
 		MemberCreated: {
 			/** Reserved Evacuee Id */
@@ -1296,17 +2301,6 @@ export interface components {
 			vulnerable_groups?: string[];
 			/** Special Needs */
 			special_needs?: string[];
-			/** Birth Year */
-			birth_year?: number | null;
-			/** Age */
-			age?: number | null;
-			/** Nickname */
-			nickname?: string | null;
-			/** Religion */
-			religion?: string | null;
-			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
-			/** Photo */
-			photo?: string | null;
 		};
 		/** MemberInput */
 		MemberInput: {
@@ -1342,62 +2336,8 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Emergency Contact */
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
-			/**
-			 * Photo
-			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255)
-			 */
-			photo?: string | null;
-		};
-		/** EmergencyContactInput */
-		EmergencyContactInput: {
-			/**
-			 * Name
-			 * @default
-			 */
-			name: string;
-			/**
-			 * Phone
-			 * @default
-			 */
-			phone: string;
-			/**
-			 * Relation
-			 * @default
-			 */
-			relation: string;
-		};
-		/** EmergencyContactOut */
-		EmergencyContactOut: {
-			/** Name */
-			name: string;
-			/** Phone */
-			phone: string;
-			/** Relation */
-			relation: string;
-		};
-		/** NeedItemResponse */
-		NeedItemResponse: {
-			/** Item Id */
-			item_id: string;
-			/** Name */
-			name: string;
-			/** Qty Needed */
-			qty_needed: string;
-			/** Unit */
-			unit: string;
-			/** Status */
-			status: string;
-		};
-		/** NeedsListResponse */
-		NeedsListResponse: {
-			/** Shelters */
-			shelters: components['schemas']['ShelterNeedsResponse'][];
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
 		};
 		/** OccupancyBreakdownItem */
 		OccupancyBreakdownItem: {
@@ -1472,19 +2412,6 @@ export interface components {
 			/** Detail */
 			detail?: string | null;
 		};
-		/** PaginatedAnnouncements */
-		PaginatedAnnouncements: {
-			/** Items */
-			items: components['schemas']['PublicAnnouncement'][];
-			/** Total */
-			total: number;
-			/** Page */
-			page: number;
-			/** Size */
-			size: number;
-			/** Total Pages */
-			total_pages: number;
-		};
 		/** PersonIdInput */
 		PersonIdInput: {
 			/**
@@ -1525,276 +2452,6 @@ export interface components {
 			 * @default false
 			 */
 			has_cage: boolean;
-			/**
-			 * Image Url
-			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255 pet photo)
-			 */
-			image_url?: string | null;
-		};
-		/**
-		 * PublicAnnouncement
-		 * @description Public snapshot of a system announcement, stored in MongoDB `public_announcements`.
-		 *     Sourced from `announcement` docs in CouchDB `registry`.
-		 */
-		PublicAnnouncement: {
-			/**
-			 * Id
-			 * @description The CouchDB announcement document ID
-			 */
-			_id: string;
-			/** Title */
-			title: string;
-			/** Description */
-			description: string;
-			/** Title En */
-			title_en?: string | null;
-			/** Description En */
-			description_en?: string | null;
-			/**
-			 * Severity
-			 * @enum {string}
-			 */
-			severity: 'info' | 'warning' | 'emergency';
-			/** Is Active */
-			is_active: boolean;
-			/**
-			 * Updated At
-			 * Format: date-time
-			 */
-			updated_at: string;
-		};
-		/** SearchRequest */
-		SearchRequest: {
-			/** Search */
-			search: string;
-		};
-		/** SearchResponse */
-		SearchResponse: {
-			/** Results */
-			results: components['schemas']['SearchResult'][];
-			/** Count */
-			count: number;
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
-		};
-		/** SearchResult */
-		SearchResult: {
-			/** Name */
-			name: string;
-			/** Status */
-			status: string;
-			/** National Id */
-			national_id?: string | null;
-			/** Gender */
-			gender?: string | null;
-			/** Shelter Name */
-			shelter_name: string;
-			/** Shelter Address */
-			shelter_address?: string | null;
-			/** Origin Address */
-			origin_address?: string | null;
-			/** Checked In At */
-			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
-			/** Family Members */
-			family_members?: components['schemas']['FamilyMember'][];
-		};
-		/** ShelterAdmissionPolicyDetail */
-		ShelterAdmissionPolicyDetail: {
-			/** Pets */
-			pets: string;
-			/** Vulnerable Groups */
-			vulnerable_groups: string[];
-		};
-		/** ShelterCapacityDetail */
-		ShelterCapacityDetail: {
-			/** Total */
-			total: number;
-			/** Available */
-			available: number;
-		};
-		/** ShelterContactDetail */
-		ShelterContactDetail: {
-			/** Manager */
-			manager: string;
-			/** Phone */
-			phone: string;
-		};
-		/** ShelterDetail */
-		ShelterDetail: {
-			/** Id */
-			id: string;
-			/** Name */
-			name: string;
-			/**
-			 * Site Kind
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/** Status */
-			status: string;
-			/** Admin Type */
-			admin_type: string;
-			/** Address */
-			address: string;
-			capacity: components['schemas']['ShelterCapacityDetail'];
-			/**
-			 * Occupancy
-			 * @description Forecast Occupancy headcount
-			 */
-			occupancy: number;
-			/**
-			 * Present
-			 * @description Present Occupancy headcount
-			 */
-			present: number;
-			/**
-			 * In Zone
-			 * @description In-zone Occupancy headcount (room_confirmed)
-			 */
-			in_zone: number;
-			/** Occupancy Rate */
-			occupancy_rate: number;
-			/** Building Status */
-			building_status: string;
-			geo?: components['schemas']['GeoPoint'] | null;
-			location?: components['schemas']['GeoJsonPoint'] | null;
-			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
-			travel: components['schemas']['ShelterTravelDetail'];
-			facilities: components['schemas']['ShelterFacilitiesDetail'];
-			/** Zones */
-			zones?: components['schemas']['ShelterZoneDetail'][] | null;
-			contact: components['schemas']['ShelterContactDetail'];
-			/** Faq */
-			faq: components['schemas']['ShelterFaqDetail'][];
-		};
-		/** ShelterDetailResponse */
-		ShelterDetailResponse: {
-			shelter: components['schemas']['ShelterDetail'];
-		};
-		/** ShelterFacilitiesDetail */
-		ShelterFacilitiesDetail: {
-			hygiene: components['schemas']['ShelterHygieneDetail'];
-			/** Power */
-			power: string;
-			/** Water */
-			water: string;
-			/** Comms */
-			comms: string[];
-			/** Kitchen */
-			kitchen: string;
-			/** Parking */
-			parking: string;
-		};
-		/** ShelterFaqDetail */
-		ShelterFaqDetail: {
-			/** Q */
-			q: string;
-			/** A */
-			a: string;
-		};
-		/** ShelterHygieneDetail */
-		ShelterHygieneDetail: {
-			/** Male */
-			male: number;
-			/** Female */
-			female: number;
-			/** Accessible */
-			accessible: number;
-			/** Shower */
-			shower: number;
-			/** Mobile Toilet */
-			mobile_toilet: number;
-		};
-		/** ShelterItem */
-		ShelterItem: {
-			/**
-			 * Code
-			 * @description Shelter code, e.g. SH001
-			 */
-			code: string;
-			/** Name */
-			name: string;
-			/**
-			 * Site Kind
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/** Status */
-			status: string;
-			/**
-			 * Capacity
-			 * @default 0
-			 */
-			capacity: number;
-			geo?: components['schemas']['GeoPoint'] | null;
-			location?: components['schemas']['GeoJsonPoint'] | null;
-			/** Province */
-			province?: string | null;
-			/** District */
-			district?: string | null;
-			/** Subdistrict */
-			subdistrict?: string | null;
-			/** Pet Policy */
-			pet_policy?: string | null;
-			/** Vulnerable Groups */
-			vulnerable_groups?: string[] | null;
-			/** Admin Type */
-			admin_type?: string | null;
-			/**
-			 * Updated At
-			 * Format: date-time
-			 */
-			updated_at: string;
-		};
-		/** ShelterListResponse */
-		ShelterListResponse: {
-			/** Shelters */
-			shelters: components['schemas']['ShelterItem'][];
-			/** Count */
-			count: number;
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
-		};
-		/** ShelterNeedsResponse */
-		ShelterNeedsResponse: {
-			/** Code */
-			code: string;
-			/** Name */
-			name: string;
-			/** Needs */
-			needs: components['schemas']['NeedItemResponse'][];
-		};
-		/** ShelterTravelDetail */
-		ShelterTravelDetail: {
-			/** Route */
-			route: string;
-			/** Altitude */
-			altitude: string;
-			/** Flood Warning */
-			flood_warning?: string | null;
-		};
-		/** ShelterZoneDetail */
-		ShelterZoneDetail: {
-			/** Name */
-			name?: string | null;
-			/** Type */
-			type: string;
-			/** Capacity */
-			capacity?: number | null;
-			/** Area M2 */
-			area_m2?: number | null;
 		};
 		/** StockErrorDetail */
 		StockErrorDetail: {
@@ -1996,44 +2653,6 @@ export interface components {
 			/** Scopes */
 			scopes: string[];
 		};
-		/** TransparencySummary */
-		TransparencySummary: {
-			/** Shelters Total */
-			shelters_total: number;
-			/**
-			 * Shelters Open
-			 * @description status in {open, full}
-			 */
-			shelters_open: number;
-			/**
-			 * Occupancy Total
-			 * @description active + pre_registered across projected shelters (CR-070)
-			 */
-			occupancy_total?: number | null;
-			/**
-			 * Vulnerable Count
-			 * @description Not projected in public_persons yet — always null until schema adds age
-			 */
-			vulnerable_count?: number | null;
-		};
-		/** TransparencySummaryResponse */
-		TransparencySummaryResponse: {
-			summary: components['schemas']['TransparencySummary'];
-			/**
-			 * Last Updated
-			 * Format: date-time
-			 */
-			last_updated: string;
-			/**
-			 * Is Stale
-			 * @default false
-			 */
-			is_stale: boolean;
-			/** Flags */
-			flags?: {
-				[key: string]: boolean;
-			};
-		};
 		/** UnassignedRegistrationCreateRequest */
 		UnassignedRegistrationCreateRequest: {
 			/** Members */
@@ -2071,50 +2690,23 @@ export interface components {
 			/** Created At */
 			created_at: string;
 		};
-		/** UnassignedPhotoUploadResponse */
-		UnassignedPhotoUploadResponse: {
+		/** EmergencyContactInput */
+		EmergencyContactInput: {
 			/**
-			 * Success
-			 * @default true
+			 * Name
+			 * @default
 			 */
-			success: boolean;
-			/** Photo Id */
-			photo_id: string;
-			/** Content Type */
-			content_type: string;
-			/** Filename */
-			filename: string;
-			/** Width */
-			width?: number | null;
-			/** Height */
-			height?: number | null;
-			/** Original Size */
-			original_size?: number | null;
-			/** Compressed Size */
-			compressed_size?: number | null;
-			/** Thumbnail Size */
-			thumbnail_size?: number | null;
-		};
-		/** ValidationError */
-		ValidationError: {
-			/** Location */
-			loc: (string | number)[];
-			/** Message */
-			msg: string;
-			/** Error Type */
-			type: string;
-			/** Input */
-			input?: unknown;
-			/** Context */
-			ctx?: Record<string, never>;
-		};
-		/** VerifyResponse */
-		VerifyResponse: {
+			name: string;
 			/**
-			 * Status
-			 * @default ok
+			 * Phone
+			 * @default
 			 */
-			status: string;
+			phone: string;
+			/**
+			 * Relation
+			 * @default
+			 */
+			relation: string;
 		};
 	};
 	responses: never;
@@ -2909,6 +3501,320 @@ export interface operations {
 			};
 		};
 	};
+	get_transparency_summary_public_v1_transparency_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TransparencySummaryResponse'];
+				};
+			};
+		};
+	};
+	list_jobs_public_v1_jobs_get: {
+		parameters: {
+			query?: {
+				shelter_code?: string | null;
+				skill?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PublicJobListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	apply_to_job_public_v1_jobs__job_id__apply_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				job_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerApplyRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerApplyResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_ticket_public_v1_volunteer_ticket__token__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerTicketResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	find_tickets_public_v1_volunteer_ticket_find_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TicketFindRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TicketFindResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	cancel_ticket_public_v1_volunteer_ticket__token__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerCancelResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_schedule_public_v1_volunteer_schedule_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerScheduleResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	respond_to_dispatch_public_v1_volunteer_schedule_respond_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DispatchRespondRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DispatchRespondResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_profile_public_v1_volunteer_profile_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_volunteer_profile_public_v1_volunteer_profile_update_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerProfileUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileUpdateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	issue_token_api_auth_token_third_party_post: {
 		parameters: {
 			query?: never;
@@ -3279,26 +4185,6 @@ export interface operations {
 			};
 		};
 	};
-	get_transparency_summary_public_v1_transparency_summary_get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TransparencySummaryResponse'];
-				};
-			};
-		};
-	};
 	create_unassigned_registration_public_v1_unassigned_registrations_post: {
 		parameters: {
 			query?: never;
@@ -3319,49 +4205,6 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: {
-			content: {
-				'multipart/form-data': {
-					full: string;
-					thumb?: string;
-					filename?: string;
-					content_type?: string;
-					width?: number;
-					height?: number;
-					original_size?: number;
-					compressed_size?: number;
-					thumbnail_size?: number;
-				};
-			};
-		};
-		responses: {
-			/** @description Successful Response */
-			201: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
 				};
 			};
 			/** @description Validation Error */

@@ -128,6 +128,25 @@ export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Volunteer on-site check-in guard — requires system_admin, shelter_manager,
+ * `volunteer_coordinator`, or `registration_staff` (CR-104 route table:
+ * `/back-office/volunteers/checkin` — "หน้าจอแท็บเล็ตจุดรับรายงานตัวและเช็คอินหน้าศูนย์").
+ * This is a UX gate; the data layer remains the real authorization boundary.
+ */
+export async function requireVolunteerCheckIn(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles) &&
+		!hasStaffCapability(roles, 'volunteer_coordinator') &&
+		!hasStaffCapability(roles, 'registration_staff')
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Medical screening guard — requires system_admin, shelter_manager,
  * medical_staff, or triage_staff. Used for Station 2 medical screening.
  */

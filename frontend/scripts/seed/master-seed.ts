@@ -91,7 +91,11 @@ export async function seedMasterData(): Promise<MasterLookup> {
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',
-				...(d.parent_key ? { parent_code: masterCode(master, def.parent_type!, d.parent_key) } : {})
+				...(d.parent_key
+					? { parent_code: masterCode(master, def.parent_type!, d.parent_key) }
+					: {}),
+				...(d.category ? { category: d.category } : {}),
+				...(d.description ? { description: d.description } : {})
 			};
 			resolved[d.key] = item;
 			return item;
