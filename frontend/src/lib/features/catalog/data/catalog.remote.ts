@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { touch, now, type AuthorContext } from '$lib/db/model';
 import {
 	createItemCategory,
 	isItemCategory,
@@ -8,6 +8,8 @@ import {
 	createItemMaster,
 	type ItemMaster,
 	type ItemMasterInput,
+	itemMasterInputSchema,
+	normalizeItemMasterFields,
 	isItemMaster,
 	createRecipe,
 	type Recipe,
@@ -199,9 +201,33 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			itemMaster.category,
 			itemMaster.shelter_code
 		);
-		const normalizedDoc = { ...itemMaster, category: canonicalCategory };
+
+		const parsedInput = itemMasterInputSchema.parse({
+			...itemMaster,
+			category: canonicalCategory
+		});
+
+		const normalizedFields = normalizeItemMasterFields(parsedInput, {
+			shelterCode: itemMaster.shelter_code,
+			override: itemMaster.override
+		});
+
+		const docToSave: ItemMaster = {
+			_id: itemMaster._id,
+			...(itemMaster._rev ? { _rev: itemMaster._rev } : {}),
+			type: 'item_master',
+			schema_v: itemMaster.schema_v ?? 4,
+			created_at: itemMaster.created_at ?? now(),
+			created_by: itemMaster.created_by ?? 'system',
+			updated_at: now(),
+			...normalizedFields,
+			category: canonicalCategory
+		};
+		if (itemMaster.shelter_code) docToSave.shelter_code = itemMaster.shelter_code;
+		if (itemMaster.override) docToSave.override = itemMaster.override;
+
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
-		return repo.put(touch(normalizedDoc));
+		return repo.put(docToSave);
 	}
 
 	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe> {

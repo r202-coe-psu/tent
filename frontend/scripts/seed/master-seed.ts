@@ -393,6 +393,23 @@ export async function seedCatalog(): Promise<void> {
 			'item_master',
 			{ name: 'ปลากระป๋อง', category: 'item_category:food', base_unit: 'can', ...itemMasterBase },
 			4
+		),
+		catalogDoc(
+			'item_master:lpg_15kg',
+			'item_master',
+			{
+				name: 'แก๊สหุงต้ม LPG 15 กิโลกรัม',
+				category: 'item_category:fuel_energy',
+				base_unit: 'ถัง',
+				fuel_type: 'LPG',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1',
+				conversions: [],
+				distribution_type: 'recurring',
+				type_class: 'CONSUMABLE'
+			},
+			4
 		)
 	];
 	const recipes = [

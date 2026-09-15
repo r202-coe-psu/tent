@@ -327,21 +327,24 @@
 	>
 		<div class="flex items-start justify-between gap-4">
 			<div class="flex flex-col gap-1.5">
-				<span
-					class="text-2xs font-semibold tracking-wider text-[#002f6c] uppercase dark:text-blue-400"
+				<h1
+					class="flex items-center gap-2 text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100"
 				>
-					ฐานข้อมูลมาสเตอร์ส่วนกลาง (MASTER DATA ENGINE)
-				</span>
-
-				<h1 class="text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100">
-					{viewMode === 'create'
-						? '➕ บันทึกรายการสิ่งของ (Item Master) ใหม่'
-						: '🛠️ แก้ไขรายการสิ่งของ (Item Master)'}
+					{#if viewMode === 'edit'}
+						<span>แก้ไขรายการสิ่งของ</span>
+					{:else}
+						<span>บันทึกรายการสิ่งของใหม่</span>
+					{/if}
 				</h1>
 			</div>
 
 			<div class="flex items-center">
-				<button onclick={backToList} class="rounded-lg p-2 transition hover:bg-muted/50">
+				<button
+					type="button"
+					onclick={backToList}
+					class="rounded-lg p-2 transition hover:bg-muted/50"
+					aria-label="ปิดฟอร์ม"
+				>
 					<X class="h-5 w-5 text-muted-foreground" />
 				</button>
 			</div>
@@ -353,6 +356,7 @@
 				isEdit={viewMode === 'edit'}
 				{basePath}
 				onsuccess={backToList}
+				oncancel={backToList}
 			/>
 		{:else}
 			<div class="py-12 text-center text-sm font-bold text-destructive">

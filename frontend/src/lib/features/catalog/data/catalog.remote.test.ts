@@ -478,6 +478,8 @@ describe('CatalogRemoteRepository', () => {
 					name: 'ถังแก๊ส LPG 15kg',
 					base_unit: 'ถัง',
 					category: 'FUEL_ENERGY',
+					capacity_kg: '15',
+					burn_rate_kg_per_hour: '0.5',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
 					dietary: []
@@ -485,11 +487,15 @@ describe('CatalogRemoteRepository', () => {
 				ctx
 			);
 			expect(item2.category).toBe('item_category:fuel_energy');
+			expect(item2.fuel_type).toBe('LPG');
+			expect(item2.capacity_kg).toBe('15');
 
 			// 3. Update legacy item master where category was name
 			item2.category = 'อาหารและวัตถุดิบ (Food Ingredients)';
 			const updatedItem = await repo.updateItemMaster(item2);
 			expect(updatedItem.category).toBe('item_category:food');
+			expect(updatedItem.fuel_type).toBeUndefined();
+			expect(updatedItem.capacity_kg).toBeUndefined();
 		});
 
 		it('CR-119: should reject unknown or ambiguous category references', async () => {
@@ -525,6 +531,81 @@ describe('CatalogRemoteRepository', () => {
 					ctx
 				)
 			).rejects.toThrow(/ข้อมูลซ้ำซ้อน/);
+		});
+
+		it('CR-120: should enforce LPG invariant on repository create, direct update, and shelter override', async () => {
+			// 1. Create LPG Item Master via repository
+			const lpgDoc = await repo.createItemMaster(
+				{
+					name: 'แก๊สหุงต้ม LPG 15 กิโลกรัม',
+					category: 'item_category:fuel_energy',
+					base_unit: 'กล่อง', // Client sends invalid unit
+					capacity_kg: '15',
+					burn_rate_kg_per_hour: '0.5',
+					type_class: 'CONSUMABLE' as const
+				},
+				ctx
+			);
+
+			expect(lpgDoc.category).toBe('item_category:fuel_energy');
+			expect(lpgDoc.base_unit).toBe('ถัง'); // Must be overridden to ถัง
+			expect(lpgDoc.fuel_type).toBe('LPG'); // Must be set to LPG
+			expect(lpgDoc.capacity_kg).toBe('15');
+			expect(lpgDoc.burn_rate_kg_per_hour).toBe('0.5');
+			expect(lpgDoc.time_multiplier).toBe('1'); // Defaulted
+			expect(lpgDoc.type_class).toBe('CONSUMABLE');
+
+			// 2. Reject invalid direct update
+			const invalidUpdate = {
+				...lpgDoc,
+				capacity_kg: '0' // Zero capacity is invalid
+			};
+			await expect(repo.updateItemMaster(invalidUpdate)).rejects.toThrow();
+
+			// 3. Direct update with stale hidden fields (food fields must be stripped)
+			const updateWithStale = {
+				...lpgDoc,
+				burn_rate_kg_per_hour: '0.6',
+				shelf_life_days: 90, // Stale food field
+				allergens: 'ถั่ว', // Stale food field
+				dietary: ['HALAL' as const] // Stale food field
+			};
+			const updated = await repo.updateItemMaster(updateWithStale);
+			expect(updated.burn_rate_kg_per_hour).toBe('0.6');
+			expect(updated.shelf_life_days).toBeUndefined();
+			expect(updated.allergens).toBeUndefined();
+			expect(updated.dietary).toBeUndefined();
+
+			// 4. Create shelter override from central LPG
+			const centralItem = await repo.getItemMaster(lpgDoc._id);
+			expect(centralItem).not.toBeNull();
+
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { _rev, ...itemWithoutRev } = centralItem!;
+			const overridePayload = {
+				...itemWithoutRev,
+				shelter_code: 'SH001',
+				override: true,
+				burn_rate_kg_per_hour: '0.45'
+			};
+
+			const overrideDoc = await repo.updateItemMaster(overridePayload);
+			expect(overrideDoc._id).toBe(centralItem!._id);
+			expect(overrideDoc.shelter_code).toBe('SH001');
+			expect(overrideDoc.override).toBe(true);
+			expect(overrideDoc.base_unit).toBe('ถัง');
+			expect(overrideDoc.fuel_type).toBe('LPG');
+			expect(overrideDoc.capacity_kg).toBe('15');
+			expect(overrideDoc.burn_rate_kg_per_hour).toBe('0.45');
+
+			// Verify shelter DB contains the override and central DB retains original
+			const localItem = await repo.getItemMaster(lpgDoc._id, 'SH001');
+			expect(localItem?.burn_rate_kg_per_hour).toBe('0.45');
+			expect(localItem?.shelter_code).toBe('SH001');
+
+			const centralItemStillIntact = await repo.getItemMaster(lpgDoc._id);
+			expect(centralItemStillIntact?.burn_rate_kg_per_hour).toBe('0.6');
+			expect(centralItemStillIntact?.shelter_code).toBeUndefined();
 		});
 	});
 });

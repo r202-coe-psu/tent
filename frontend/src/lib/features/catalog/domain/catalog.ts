@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
-import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { persistQty, qtyStrCoercePositiveSchema, type QtyValue } from '$lib/utils/qty';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['recurring', 'one_time']);
@@ -23,6 +23,9 @@ export type Dietary = z.infer<typeof dietarySchema>;
 
 export const assetStatusSchema = z.enum(['READY', 'IN_USE', 'MAINTENANCE', 'BROKEN']);
 export type AssetStatus = z.infer<typeof assetStatusSchema>;
+
+export const fuelTypeSchema = z.literal('LPG');
+export type FuelType = z.infer<typeof fuelTypeSchema>;
 
 // ---------------------------------------------------------------- documents
 export interface Ingredient {
@@ -151,6 +154,29 @@ export function categoryReferenceMatches(reference: string, category: ItemCatego
 	return false;
 }
 
+export function isFuelEnergyCategory(category?: string, categories?: ItemCategory[]): boolean {
+	if (!category) return false;
+	const trimmed = category.trim();
+	if (
+		trimmed === 'item_category:fuel_energy' ||
+		trimmed.toLowerCase() === 'item_category:fuel_energy'
+	)
+		return true;
+	if (trimmed.toUpperCase() === 'FUEL_ENERGY') return true;
+	const fuelDef = SYSTEM_CATEGORY_DEFINITIONS.find((def) => def.key === 'FUEL_ENERGY');
+	if (fuelDef && (trimmed === fuelDef.name || trimmed === fuelDef.id)) return true;
+	if (categories && categories.length > 0) {
+		const matched = categories.find((c) => categoryReferenceMatches(trimmed, c));
+		if (
+			matched &&
+			(matched._id === 'item_category:fuel_energy' || matched.system_key === 'FUEL_ENERGY')
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
@@ -180,13 +206,19 @@ export interface ItemMaster extends CatalogDoc {
 	shelter_code?: string;
 	override?: boolean;
 
+	// CR-120: FUEL_ENERGY (LPG) fields
+	fuel_type?: FuelType;
+	capacity_kg?: string; // qty_str
+	burn_rate_kg_per_hour?: string; // qty_str
+	time_multiplier?: string; // qty_str
+
 	// New fields
 	shelf_life_days?: number;
 	storage_type?: StorageType;
 	allergens?: string;
 	target_gender?: TargetGender;
 	age_group?: AgeGroup;
-	dietary: Dietary[];
+	dietary?: Dietary[];
 
 	// Durable & Equipment specific fields
 	qty_per_person?: number;
@@ -258,6 +290,21 @@ export const itemMasterInputSchema = z
 		type_class: typeClassSchema,
 		deactivated: z.boolean().optional(),
 
+		// CR-120: FUEL_ENERGY (LPG) fields
+		fuel_type: fuelTypeSchema.optional(),
+		capacity_kg: z.preprocess(
+			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+			qtyStrCoercePositiveSchema.optional()
+		),
+		burn_rate_kg_per_hour: z.preprocess(
+			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+			qtyStrCoercePositiveSchema.optional()
+		),
+		time_multiplier: z.preprocess(
+			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+			qtyStrCoercePositiveSchema.optional()
+		),
+
 		// New fields
 		shelf_life_days: z.number().optional(),
 		storage_type: storageTypeSchema.optional(),
@@ -273,15 +320,42 @@ export const itemMasterInputSchema = z
 		override: z.boolean().optional()
 	})
 	.superRefine((data, ctx) => {
+		if (isFuelEnergyCategory(data.category)) {
+			if (data.type_class !== 'CONSUMABLE') {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Item in FUEL_ENERGY category must be CONSUMABLE',
+					path: ['type_class']
+				});
+			}
+			if (!data.capacity_kg) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Capacity (kg) is required for FUEL_ENERGY',
+					path: ['capacity_kg']
+				});
+			}
+			if (!data.burn_rate_kg_per_hour) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Burn rate (kg/hour) is required for FUEL_ENERGY',
+					path: ['burn_rate_kg_per_hour']
+				});
+			}
+		}
+
 		if (data.type_class !== 'EQUIPMENT') {
-			if (!data.base_unit || data.base_unit.trim() === '') {
+			if (
+				!isFuelEnergyCategory(data.category) &&
+				(!data.base_unit || data.base_unit.trim() === '')
+			) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
 					message: 'Unit is required',
 					path: ['base_unit']
 				});
 			}
-			if (!data.distribution_type) {
+			if (!isFuelEnergyCategory(data.category) && !data.distribution_type) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
 					message: 'Distribution type is required',
@@ -319,7 +393,102 @@ export const recipeInputSchema = z.object({
 
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
 
-// ---------------------------------------------------------------- factories
+// ---------------------------------------------------------------- factories & normalizers
+
+export type NormalizedItemMasterFields = Omit<
+	ItemMaster,
+	'_id' | '_rev' | 'type' | 'schema_v' | 'created_at' | 'created_by' | 'updated_at'
+>;
+
+export function normalizeItemMasterFields(
+	input: ItemMasterInput,
+	options?: { shelterCode?: string; override?: boolean }
+): NormalizedItemMasterFields {
+	const isLpg = isFuelEnergyCategory(input.category);
+
+	const base = {
+		name: input.name.trim(),
+		category: input.category?.trim() || undefined,
+		sku: input.sku?.trim() || undefined,
+		description: input.description?.trim() || undefined,
+		deactivated: input.deactivated ?? false,
+		...(options?.shelterCode ? { shelter_code: options.shelterCode } : {}),
+		...(options?.override !== undefined
+			? { override: options.override }
+			: input.override !== undefined
+				? { override: input.override }
+				: {})
+	};
+
+	if (isLpg) {
+		return {
+			...base,
+			type_class: 'CONSUMABLE',
+			base_unit: 'ถัง',
+			fuel_type: 'LPG',
+			capacity_kg: persistQty(input.capacity_kg as QtyValue),
+			burn_rate_kg_per_hour: persistQty(input.burn_rate_kg_per_hour as QtyValue),
+			time_multiplier: input.time_multiplier ? persistQty(input.time_multiplier as QtyValue) : '1',
+			conversions: (input.conversions || []).map((c) => ({
+				...c,
+				multiplier: persistQty(c.multiplier)
+			})),
+			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
+			default_issue_uom: input.default_issue_uom?.trim() || undefined,
+			distribution_type: input.distribution_type || 'recurring'
+		};
+	}
+
+	if (input.type_class === 'CONSUMABLE') {
+		return {
+			...base,
+			type_class: 'CONSUMABLE',
+			base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
+			conversions: (input.conversions || []).map((c) => ({
+				...c,
+				multiplier: persistQty(c.multiplier)
+			})),
+			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
+			default_issue_uom: input.default_issue_uom?.trim() || undefined,
+			distribution_type: input.distribution_type || 'recurring',
+			shelf_life_days: input.shelf_life_days,
+			storage_type: input.storage_type,
+			allergens: input.allergens?.trim() || undefined,
+			target_gender: input.target_gender,
+			age_group: input.age_group,
+			dietary: input.dietary || []
+		};
+	}
+
+	if (input.type_class === 'DURABLE') {
+		return {
+			...base,
+			type_class: 'DURABLE',
+			base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
+			conversions: (input.conversions || []).map((c) => ({
+				...c,
+				multiplier: persistQty(c.multiplier)
+			})),
+			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
+			default_issue_uom: input.default_issue_uom?.trim() || undefined,
+			distribution_type: input.distribution_type || 'recurring',
+			qty_per_person: input.qty_per_person,
+			returnable: input.returnable ?? false,
+			target_gender: input.target_gender,
+			age_group: input.age_group,
+			dietary: []
+		};
+	}
+
+	// EQUIPMENT
+	return {
+		...base,
+		type_class: 'EQUIPMENT',
+		base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
+		conversions: [],
+		asset_status: input.asset_status || 'READY'
+	};
+}
 
 export function createItemCategory(
 	input: ItemCategoryInput,
@@ -351,44 +520,11 @@ export function createItemMaster(
 	shelterCode?: string
 ): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
-	const doc = catalogDoc(
-		'item_master',
-		4,
-		{
-			name: d.name,
-			category: d.category,
-			sku: d.sku,
-			description: d.description,
-			base_unit: d.base_unit || 'ชิ้น',
-			conversions: d.conversions.map((c) => ({
-				...c,
-				multiplier: persistQty(c.multiplier)
-			})),
-			default_inventory_uom: d.default_inventory_uom,
-			default_issue_uom: d.default_issue_uom,
-			distribution_type:
-				d.distribution_type || (d.type_class === 'EQUIPMENT' ? undefined : 'recurring'),
-			type_class: d.type_class,
-			deactivated: d.deactivated ?? false,
-			...(shelterCode ? { shelter_code: shelterCode } : {}),
-			...(d.override ? { override: d.override } : {}),
-
-			// New fields
-			shelf_life_days: d.shelf_life_days,
-			storage_type: d.storage_type,
-			allergens: d.allergens,
-			target_gender: d.target_gender,
-			age_group: d.age_group,
-			dietary: d.dietary,
-
-			// Durable & Equipment specific fields
-			qty_per_person: d.qty_per_person,
-			returnable: d.returnable,
-			asset_status: d.asset_status
-		},
-		ctx.createdBy
-	);
-	return doc;
+	const fields = normalizeItemMasterFields(d, {
+		shelterCode,
+		override: d.override
+	});
+	return catalogDoc('item_master', 4, fields, ctx.createdBy);
 }
 
 export function createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Recipe {

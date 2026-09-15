@@ -31,6 +31,11 @@ export {
 	createItemCategory,
 	isItemCategory,
 	// Item Master
+	fuelTypeSchema,
+	type FuelType,
+	isFuelEnergyCategory,
+	normalizeItemMasterFields,
+	type NormalizedItemMasterFields,
 	itemMasterInputSchema,
 	type ItemMasterInput,
 	createItemMaster,
