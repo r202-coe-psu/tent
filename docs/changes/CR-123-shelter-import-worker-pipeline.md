@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-123
 title: Shelter Excel Import — เปลี่ยนจาก browser loop เป็น Durable Worker Job Pipeline
-status: proposed
+status: approved
 date: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 requested_by: Dev Team B
-decided_by: Project Owner (pending formal approval)
+decided_by: Project Owner
 layer: stable
 why: >-
   ลดความเสี่ยงที่ browser/proxy timeout ทำให้ import หลาย shelter หายบางแถว และทำให้มีสถานะรายแถว
@@ -14,12 +14,12 @@ migration: >-
   เพิ่ม registry job/item schema_v 1 และขยาย shelter_import_log schema_v 2 → 3 แบบ additive;
   ต้อง deploy schema/read compatibility ก่อนเปิด worker และ drain/reclaim งานค้างตามแผน migration ด้านล่าง
 affects:
-  - docs/changes/CR-039-shelter-excel-import.md (proposed amendment ของ browser commit flow; template/mapping/validation ยังคงใช้)
+  - docs/changes/CR-039-shelter-excel-import.md (amendment ของ browser commit flow; template/mapping/validation ยังคงใช้)
   - docs/changes/CR-077-shelter-import-full-schema-coverage.md (ผล log และ caps ของ results[])
-  - docs/data/schema.md §3.7 (shelter_import_log schema_v 2 → 3, proposed)
-  - docs/data/schema.md §3.9 (proposed shelter_import_job, schema_v 1)
-  - docs/data/schema.md §3.10 (proposed shelter_import_item, schema_v 1)
-  - docs/data/schema.md §3.11 (proposed shelter_code_sequence, schema_v 1)
+  - docs/data/schema.md §3.7 (shelter_import_log schema_v 2 → 3)
+  - docs/data/schema.md §3.9 (shelter_import_job, schema_v 1)
+  - docs/data/schema.md §3.10 (shelter_import_item, schema_v 1)
+  - docs/data/schema.md §3.11 (shelter_code_sequence, schema_v 1)
   - schema_v shelter_import_log 2 → 3 (additive; ไม่เปลี่ยน shelter schema_v)
   - schema_v shelter_code_sequence 1 (new atomic allocator state)
   - frontend/src/lib/features/shelter-import/
@@ -32,7 +32,7 @@ affects:
   - docker-compose.production*.yml, docker-compose.staging*.yml
 ---
 
-# Draft — Shelter Excel Import: Durable Worker Job Pipeline
+# CR-123 — Shelter Excel Import: Durable Worker Job Pipeline
 
 ## สรุป (TL;DR)
 
@@ -358,3 +358,4 @@ docker compose -f docker-compose.production.yml config --quiet
 - 2026-09-14 — Accepted bounded active-job polling with ETag/backoff; history remains changes-feed driven, rather than polling all logs.
 - 2026-09-14 — Preserved append-only audit invariant; retries create a new log ULID instead of mutating a prior log.
 - 2026-09-14 — Generic runtime retained as a design note, not a verifiable requirement, because this change has one domain handler.
+- 2026-09-15 — Project Owner approved and assigned number as CR-123.
