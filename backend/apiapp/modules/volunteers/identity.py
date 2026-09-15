@@ -29,7 +29,7 @@ async def resolve_public_identity(phone: str, shelter_code: str) -> IdentityReso
     """Look up a phone only inside one shelter's projected volunteer collection."""
     normalized = normalize_phone(phone)
     hashed = phone_hash(normalized)
-    collection = PublicVolunteer.get_motor_collection()
+    collection = PublicVolunteer.get_pymongo_collection()
     rows = await collection.find(
         {"shelter_code": shelter_code.upper(), "phone_hash": hashed},
         {

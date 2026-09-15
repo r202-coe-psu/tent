@@ -154,7 +154,7 @@ async def controlled_skills(shelter_code: str | None = None) -> frozenset[str]:
     ``volunteer.skills`` (and every application written before it) still holds labels.
     """
     try:
-        collection = PublicJob.get_motor_collection().database[_PUBLIC_CONFIG_COLLECTION]
+        collection = PublicJob.get_pymongo_collection().database[_PUBLIC_CONFIG_COLLECTION]
         ids = [_VOLUNTEER_SKILLS_CONFIG_ID]
         if shelter_code:
             ids.append(f"{_VOLUNTEER_SKILLS_CONFIG_ID}:{shelter_code.upper()}")
@@ -318,7 +318,7 @@ def _wall_clock_window(
                 start.date() + timedelta(days=1) if end_time <= start_time else start.date()
             ).isoformat()
         end = datetime.fromisoformat(f"{resolved_end_date}T{end_time}").replace(tzinfo=_BANGKOK)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     start_utc = start.astimezone(UTC)
     end_utc = end.astimezone(UTC)

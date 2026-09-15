@@ -288,7 +288,7 @@ async def _project_volunteer_skills(
     shelter_code: str | None = None,
 ) -> None:
     """Stand in for the worker: write the ``config:volunteer_skills`` doc it projects."""
-    collection = PublicJob.get_motor_collection().database["public_config"]
+    collection = PublicJob.get_pymongo_collection().database["public_config"]
     doc_id = (
         f"config:volunteer_skills:{shelter_code.upper()}"
         if shelter_code
@@ -913,7 +913,7 @@ async def _offer(
     dispatched: int = 1,
 ) -> PublicShiftAssignment:
     """A shift a manager has offered, with the counter holding its dispatched head."""
-    await VolunteerJobSlot.get_motor_collection().update_one(
+    await VolunteerJobSlot.get_pymongo_collection().update_one(
         {"_id": JOB_ID}, {"$set": {"dispatched_qty": dispatched}}
     )
     now = datetime.now(UTC)
