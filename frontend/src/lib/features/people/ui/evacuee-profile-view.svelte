@@ -239,6 +239,19 @@
 			);
 			return;
 		}
+		if (pathname.includes('/system-management/pre-registrations/evacuee/')) {
+			const shelterCode =
+				page.params.shelter ??
+				pathname.match(/\/system-management\/pre-registrations\/evacuee\/([^/]+)\//)?.[1] ??
+				shelterStore.selectedShelterCode ??
+				getShelterCode();
+			goto(
+				resolve(
+					`/system-management/pre-registrations/evacuee/${shelterCode}/${id}` as `/system-management/pre-registrations/evacuee/${string}/${string}`
+				)
+			);
+			return;
+		}
 		goto(resolve(`/back-office/evacuee-management/edit/evacuee/${id}`));
 	}
 
@@ -715,7 +728,14 @@
 		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
 		<button
 			class="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
-			onclick={() => goto(resolve('/back-office/evacuee-management'))}
+			onclick={() => {
+				const pathname = page.url.pathname;
+				if (pathname.includes('/system-management/pre-registrations')) {
+					goto(resolve('/system-management/pre-registrations'));
+					return;
+				}
+				goto(resolve('/back-office/evacuee-management'));
+			}}
 		>
 			กลับหน้าหลัก
 		</button>
