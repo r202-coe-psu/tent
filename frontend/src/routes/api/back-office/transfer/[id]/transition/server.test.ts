@@ -181,6 +181,54 @@ describe('PATCH /api/back-office/transfer/[id]/transition', () => {
 		expect(mockTransition).toHaveBeenCalledTimes(3);
 	});
 
+	describe('CR-090 FR-11 — expected_rev on undo-cancel', () => {
+		it('forwards expected_rev to the repository', async () => {
+			mockTransition.mockResolvedValueOnce({
+				_id: 'stock_transfer:1',
+				type: 'stock_transfer',
+				status: 'requested'
+			} as unknown as StockTransfer);
+
+			const event = createMockEvent('stock_transfer:1', {
+				to: 'requested',
+				expected_rev: '3-cancelled'
+			});
+			const res = await PATCH(event);
+
+			expect(res.status).toBe(200);
+			expect(mockTransition).toHaveBeenCalledWith(
+				'stock_transfer:1',
+				'requested',
+				'ws_user',
+				'SH001',
+				{ expected_rev: '3-cancelled' }
+			);
+		});
+
+		it('returns 412 on a stale rev without entering the 409 retry loop', async () => {
+			mockTransition.mockRejectedValue(
+				new TransferServerRepositoryError('คำร้องนี้ถูกเปลี่ยนแปลงไปแล้ว', 412)
+			);
+
+			const event = createMockEvent('stock_transfer:1', {
+				to: 'requested',
+				expected_rev: '3-cancelled'
+			});
+			const res = await PATCH(event);
+
+			expect(res.status).toBe(412);
+			expect(mockTransition).toHaveBeenCalledTimes(1);
+		});
+
+		it('rejects an empty expected_rev with 422', async () => {
+			const event = createMockEvent('stock_transfer:1', { to: 'requested', expected_rev: '' });
+			const res = await PATCH(event);
+
+			expect(res.status).toBe(422);
+			expect(mockTransition).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('CR-089 — driver/plate + dispute', () => {
 		it('forwards trimmed driver_name and vehicle_plate on a dispatch (FR-01)', async () => {
 			mockTransition.mockResolvedValueOnce({

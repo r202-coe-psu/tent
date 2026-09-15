@@ -18,10 +18,12 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 
 const mockGet = vi.fn();
+const mockRemove = vi.fn();
 
 vi.mock('$lib/features/operations/data/transfer.server-repository', () => {
 	class MockTransferServerRepository {
 		get = mockGet;
+		remove = mockRemove;
 	}
 	return {
 		TransferServerRepository: MockTransferServerRepository

@@ -450,6 +450,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			vehicle_plate?: string;
 			cancel_reason?: string;
 			dispute_reason?: string;
+			expected_rev?: string;
 		}
 	): Promise<StockTransfer> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
@@ -502,6 +503,15 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async resumeTransfer(id: string): Promise<StockTransfer> {
 		// Resume is the one transition that walks the state machine backwards (CR-089 FR-05/FR-07).
 		return this.transitionTransfer(id, 'requested');
+	}
+
+	/**
+	 * CR-090 FR-02 — undo of a cancellation. Not a route of its own: `cancelled` → `requested` is
+	 * an ordinary transition, and the server picks the right domain function from the document's
+	 * current status (see `TransferServerRepository.transition`).
+	 */
+	async undoCancelTransfer(id: string, expectedRev?: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'requested', { expected_rev: expectedRev });
 	}
 }
 

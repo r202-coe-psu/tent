@@ -21,7 +21,10 @@ const transitionBodySchema = z.object({
 	driver_name: z.string().trim().max(200).optional(),
 	vehicle_plate: z.string().trim().max(50).optional(),
 	cancel_reason: z.string().trim().max(2000).optional(),
-	dispute_reason: z.string().trim().max(2000).optional()
+	dispute_reason: z.string().trim().max(2000).optional(),
+	// CR-090 FR-11 — optional precondition: the `_rev` the caller acted on. A mismatch is a 412
+	// from the repository, which the conflict retry below deliberately does not catch.
+	expected_rev: z.string().min(1).max(100).optional()
 });
 
 /**
@@ -46,8 +49,16 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 422 });
 		}
 
-		const { to, receivedItems, notes, driver_name, vehicle_plate, cancel_reason, dispute_reason } =
-			parsed.data;
+		const {
+			to,
+			receivedItems,
+			notes,
+			driver_name,
+			vehicle_plate,
+			cancel_reason,
+			dispute_reason,
+			expected_rev
+		} = parsed.data;
 
 		const repo = new TransferServerRepository('central_ops', shelterCode);
 
@@ -62,7 +73,8 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 					driver_name,
 					vehicle_plate,
 					cancel_reason,
-					dispute_reason
+					dispute_reason,
+					expected_rev
 				});
 				return json(updated);
 			} catch (e: unknown) {

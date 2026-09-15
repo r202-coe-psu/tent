@@ -19,9 +19,9 @@ from tent_model.unassigned_registration import (
 )
 
 from ...core.staff_session import StaffSession
+from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
 from ...utils.masking import normalize_national_id, normalize_phone
 from ...utils.ulid import new_ulid
-from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
 from .couch_birth import (
     CouchBirthError,
     CouchBirthPort,
@@ -501,18 +501,14 @@ class UnassignedRegistrationsUseCase:
         for member in claim_targets:
             if not member.photo:
                 continue
-            image_id = await _append_gridfs_image(
-                member.photo, label=member.reserved_evacuee_id
-            )
+            image_id = await _append_gridfs_image(member.photo, label=member.reserved_evacuee_id)
             if image_id:
                 photo_by_member[member.reserved_evacuee_id] = image_id
 
         for index, pet in enumerate(doc.household.pets):
             if not pet.image_url:
                 continue
-            image_id = await _append_gridfs_image(
-                pet.image_url, label=f"pet[{index}]"
-            )
+            image_id = await _append_gridfs_image(pet.image_url, label=f"pet[{index}]")
             if image_id:
                 pet_image_urls[index] = image_id
 
@@ -578,7 +574,7 @@ class UnassignedRegistrationsUseCase:
                 if refreshed is not None:
                     await refreshed.delete()
                 deleted = True
-            except (PyMongoError, ConnectionError, TimeoutError, OSError):
+            except PyMongoError, ConnectionError, TimeoutError, OSError:
                 logger.exception(
                     "Unassigned Registration %s claim succeeded but Mongo delete failed",
                     registration_id,

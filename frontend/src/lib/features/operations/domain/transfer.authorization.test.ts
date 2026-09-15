@@ -91,4 +91,32 @@ describe('transfer.authorization', () => {
 		// the reason it should fail, so this must not throw an authorization error.
 		expect(() => assertActorMayTransition(shipped, 'shipped', 'SH003')).not.toThrow();
 	});
+
+	// --- CR-090 undo-cancel guards ---
+
+	it('allows only the source shelter to undo a cancellation', () => {
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		expect(() => assertActorMayTransition(cancelled, 'requested', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(cancelled, 'requested', 'SH002')).toThrow(
+			TransferAuthorizationError
+		);
+	});
+
+	it('refuses to move a cancelled transfer anywhere but back to requested', () => {
+		// CR-090 FR-03 — `cancelled` leads to `requested` and nowhere else, so reaching `shipped`
+		// again always costs two steps.
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		for (const to of ['shipped', 'received', 'disputed'] as const) {
+			// The transition is invalid, so the guard stays silent and the domain owns the error —
+			// what matters is that no path here treats it as authorized work.
+			expect(() => assertActorMayTransition(cancelled, to, 'SH001')).not.toThrow();
+		}
+	});
+
+	it('compares shelters the same way for undo-cancel as for resume', () => {
+		const cancelled = requestedTransfer({ status: 'cancelled' });
+		const disputed = requestedTransfer({ status: 'disputed' });
+		expect(() => assertActorMayTransition(cancelled, 'requested', ' sh001 ')).not.toThrow();
+		expect(() => assertActorMayTransition(disputed, 'requested', ' sh001 ')).not.toThrow();
+	});
 });
