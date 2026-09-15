@@ -38,8 +38,7 @@ const MANAGER = {
 	display_name: 'Intake Manager E2E'
 };
 
-const INTAKE_SEARCH_PLACEHOLDER =
-	'เลขบัตรประชาชน / หนังสือเดินทาง / ชื่อ-นามสกุล / เบอร์โทร';
+const INTAKE_SEARCH_PLACEHOLDER = 'เลขบัตรประชาชน / หนังสือเดินทาง / ชื่อ-นามสกุล / เบอร์โทร';
 
 const EXISTING_EVACUEE = {
 	_id: 'evacuee:01INTAKEANTI000000000001',
@@ -414,8 +413,6 @@ test.describe('Phase 2 intake pipeline (#252)', () => {
 			timeout: 15_000
 		});
 		await expect(page.getByText('สมศักดิ์ มีอยู่แล้ว')).toBeVisible({ timeout: 10_000 });
-		await expect(
-			page.getByText(/ต้องผ่านคัดกรองแพทย์ก่อน/)
-		).toHaveCount(0);
+		await expect(page.getByText(/ต้องผ่านคัดกรองแพทย์ก่อน/)).toHaveCount(0);
 	});
 });

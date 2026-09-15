@@ -108,7 +108,7 @@
 				aria-label="แก้ไขสังกัดครัวเรือน"
 				title="แก้ไขสังกัดครัวเรือน"
 				onclick={onOpenHouseholdModal}
-				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
 				<Pencil class="size-4" />
 			</button>
@@ -116,9 +116,7 @@
 	</div>
 
 	{#if !household}
-		<div
-			class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center"
-		>
+		<div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
 			<p class="text-sm font-medium text-slate-700">ยังไม่สังกัดครัวเรือน</p>
 			<p class="mt-1 text-sm text-slate-500">
 				ผู้พักพิงคนนี้ยังไม่ได้เชื่อมกับเอกสารครัวเรือนในระบบ
@@ -190,13 +188,15 @@
 						<button
 							type="button"
 							onclick={onOpenAddressModal}
-							class="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0284C7] transition-colors hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+							class="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0284C7] transition-colors hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 						>
 							<Pencil class="size-3.5" /> แก้ไขที่อยู่
 						</button>
 					{/if}
 				</div>
-				<div class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium break-words text-slate-800">
+				<div
+					class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium break-words text-slate-800"
+				>
 					{#if addressLine}
 						{addressLine}
 					{:else}
@@ -208,7 +208,7 @@
 			{#if household.notes}
 				<div>
 					<span class="block text-sm font-semibold text-slate-700">หมายเหตุครัวเรือน</span>
-					<p class="mt-0.5 break-words text-sm text-slate-700">{household.notes}</p>
+					<p class="mt-0.5 text-sm break-words text-slate-700">{household.notes}</p>
 				</div>
 			{/if}
 

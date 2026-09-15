@@ -296,7 +296,9 @@
 					<div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3.5">
 						<div class="flex items-center justify-between border-b border-border/60 pb-2">
 							<span class="text-xs font-semibold text-foreground">
-								สัตว์เลี้ยงตัวที่ {index + 1} ({petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'สัตว์เลี้ยง'})
+								สัตว์เลี้ยงตัวที่ {index + 1} ({petSpeciesOptions.find(
+									(o) => o.value === pet.species
+								)?.label ?? 'สัตว์เลี้ยง'})
 							</span>
 							{#if !disabled}
 								<Button
@@ -366,13 +368,17 @@
 									onCheckedChange={(checked) => (pet.has_cage = !!checked)}
 									{disabled}
 								/>
-								<Label for={`pet-cage-${index}`} class="cursor-pointer text-xs">มีกรง / สายจูง</Label>
+								<Label for={`pet-cage-${index}`} class="cursor-pointer text-xs"
+									>มีกรง / สายจูง</Label
+								>
 							</div>
 						</div>
 
 						<!-- Photo Section -->
 						<div class="space-y-1.5 border-t border-border/60 pt-2.5">
-							<Label class="text-2xs font-medium text-muted-foreground">รูปสัตว์เลี้ยง (ถ้ามี)</Label>
+							<Label class="text-2xs font-medium text-muted-foreground"
+								>รูปสัตว์เลี้ยง (ถ้ามี)</Label
+							>
 							<div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
 								{#if uploadingPetIndex === index}
 									<div

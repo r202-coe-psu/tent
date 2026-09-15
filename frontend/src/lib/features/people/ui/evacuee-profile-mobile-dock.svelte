@@ -28,14 +28,14 @@
 				<button
 					type="button"
 					onclick={onOpenZoneModal}
-					class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					ย้ายโซน
 				</button>
 				<button
 					type="button"
 					onclick={onOpenActions}
-					class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					การดำเนินการ
 					<ChevronUp class="size-4" />
@@ -45,7 +45,7 @@
 			<button
 				type="button"
 				onclick={onOpenActions}
-				class="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+				class="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
 				การดำเนินการ
 				<ChevronUp class="size-4" />

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -38,74 +39,90 @@
 	const createMutation = useCreateItemCategory();
 	const updateMutation = useUpdateItemCategory();
 
-	const form = superForm(defaults(zod4(itemCategoryInputSchema)), {
-		SPA: true,
-		validators: zod4(itemCategoryInputSchema),
-		resetForm: false,
-		onUpdate: async ({ form: validated }) => {
-			if (!validated.valid) return;
+	const form = superForm(
+		defaults(
+			{
+				name: '',
+				deactivated: false
+			},
+			zod4(itemCategoryInputSchema)
+		),
+		{
+			SPA: true,
+			validators: zod4(itemCategoryInputSchema),
+			resetForm: false,
+			invalidateAll: false,
+			onUpdate: async ({ form: validated }) => {
+				if (!validated.valid) return;
 
-			const ctx = {
-				shelterCode: getShelterCode(),
-				createdBy: authStore.user?.name ?? 'unknown'
-			};
+				const ctx = {
+					shelterCode: getShelterCode(),
+					createdBy: authStore.user?.name ?? 'unknown'
+				};
 
-			if (isEdit) {
-				if (!categoryQuery.data) {
-					toast.error('ไม่พบข้อมูลหมวดหมู่ต้นทาง');
-					return;
-				}
-				if (basePath.includes('back-office') && !categoryQuery.data.shelter_code) {
-					// eslint-disable-next-line @typescript-eslint/no-unused-vars
-					const { _rev, ...catData } = categoryQuery.data;
-					const overrideDoc = {
-						...catData,
-						name: validated.data.name,
-						shelter_code: shelterCode,
-						override: true
-					};
-					updateMutation.mutate(overrideDoc, {
-						onSuccess: () => {
-							toast.success(`ปรับแต่งหมวดหมู่ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
-					});
-				} else {
-					const updatedDoc = {
-						...categoryQuery.data,
-						name: validated.data.name
-					};
-					updateMutation.mutate(updatedDoc, {
-						onSuccess: () => {
-							toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
-					});
-				}
-			} else {
-				createMutation.mutate(
-					{ input: validated.data, ctx, shelterCode },
-					{
-						onSuccess: () => {
-							toast.success(`เพิ่มหมวดหมู่ ${validated.data.name} สำเร็จ`);
-							reset();
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
+				if (isEdit) {
+					if (!categoryQuery.data) {
+						toast.error('ไม่พบข้อมูลหมวดหมู่ต้นทาง');
+						return;
 					}
-				);
+					if (basePath.includes('back-office') && !categoryQuery.data.shelter_code) {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						const { _rev, ...catData } = categoryQuery.data;
+						const overrideDoc = {
+							...catData,
+							name: validated.data.name,
+							deactivated: validated.data.deactivated ?? false,
+							shelter_code: shelterCode,
+							override: true
+						};
+						updateMutation.mutate(overrideDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับแต่งหมวดหมู่ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					} else {
+						const updatedDoc = {
+							...categoryQuery.data,
+							name: validated.data.name,
+							deactivated: validated.data.deactivated ?? false
+						};
+						updateMutation.mutate(updatedDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					}
+				} else {
+					createMutation.mutate(
+						{ input: validated.data, ctx, shelterCode },
+						{
+							onSuccess: () => {
+								toast.success(`เพิ่มหมวดหมู่ ${validated.data.name} สำเร็จ`);
+								reset();
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						}
+					);
+				}
 			}
 		}
-	});
+	);
 
 	const { form: formData, submitting, reset } = form;
 
+	let populatedId = $state<string | null>(null);
+
 	// 2. Populate form fields when data loads in edit mode
 	$effect(() => {
-		if (isEdit && categoryQuery.data) {
+		if (isEdit && categoryQuery.data && populatedId !== categoryQuery.data._id) {
+			populatedId = categoryQuery.data._id;
 			$formData.name = categoryQuery.data.name;
+			$formData.deactivated = categoryQuery.data.deactivated ?? false;
 		}
 	});
 
@@ -148,6 +165,35 @@
 				<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 			</Form.Field>
 		</div>
+
+		{#if isEdit}
+			<!-- SECTION: สถานะการใช้งาน (Status) -->
+			<section
+				class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div class="flex items-center justify-between">
+					<div class="space-y-0.5">
+						<label
+							for="category-deactivated-toggle"
+							class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
+						>
+							สถานะปิดการใช้งาน (Deactivated)
+						</label>
+						<p class="text-xs text-muted-foreground">
+							หากปิดการใช้งาน หมวดหมู่นี้จะไม่แสดงให้เลือกในการสร้างสิ่งของใหม่
+							แต่สิ่งของเดิมที่อยู่ในหมวดนี้จะยังคงอยู่
+						</p>
+					</div>
+					<Checkbox
+						id="category-deactivated-toggle"
+						checked={$formData.deactivated}
+						onCheckedChange={(val) => {
+							$formData.deactivated = !!val;
+						}}
+					/>
+				</div>
+			</section>
+		{/if}
 
 		<div class="flex items-center gap-3 pt-2">
 			<Button

@@ -1625,6 +1625,228 @@ describe('submitFamilyReportIn', () => {
 		const updatedHh = await repo.getHousehold(reg.household._id);
 		expect(updatedHh?.status).toBe('arriving');
 	});
+
+	it('reassigns evacuee from pre-registered web household to target household and cancels the empty old household', async () => {
+		// Evacuee 1 pre-registered on web individually
+		const webReg1 = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'วิชัย',
+						last_name: 'กล้าหาญ',
+						gender: 'male',
+						phone: '0811111111',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '55/1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		// Evacuee 2 pre-registered on web individually
+		const webReg2 = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'วิภา',
+						last_name: 'กล้าหาญ',
+						gender: 'female',
+						phone: '0822222222',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '55/1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		const oldHh1Id = webReg1.household._id;
+		const oldHh2Id = webReg2.household._id;
+		const member2Id = webReg2.members[0]!._id;
+
+		// Now, at Station 1 / Kiosk, they report in together under household 1
+		await repo.submitFamilyReportIn({
+			householdId: oldHh1Id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '55/1',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					_id: webReg1.members[0]!._id,
+					first_name: 'วิชัย',
+					last_name: 'กล้าหาญ',
+					gender: 'male',
+					phone: null,
+					reporting_in: true
+				},
+				{
+					_id: member2Id,
+					first_name: 'วิภา',
+					last_name: 'กล้าหาญ',
+					gender: 'female',
+					phone: null,
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		// Check member 2's household_id is updated to oldHh1Id
+		const updatedMember2 = await repo.getEvacuee(member2Id);
+		expect(updatedMember2?.household_id).toBe(oldHh1Id);
+
+		// Check old household 2 is now cancelled because it has no members
+		const oldHh2 = await repo.getHousehold(oldHh2Id);
+		expect(oldHh2?.status).toBe('cancelled');
+	});
+
+	it('auto-reassigns head of old household when the head is moved away and other members remain', async () => {
+		// Household 1 has Mr A (head, age 40) and Mr B (member, age 25)
+		const reg1 = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'นายเอ',
+						last_name: 'หัวหน้า',
+						gender: 'male',
+						phone: '0811111111',
+						country: 'THAILAND',
+						age: 40
+					},
+					{
+						first_name: 'นายบี',
+						last_name: 'ลูกบ้าน',
+						gender: 'male',
+						phone: '0822222222',
+						country: 'THAILAND',
+						age: 25
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '100/1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		// Household 2 has Mr C (solo, age 30)
+		const reg2 = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'นายซี',
+						last_name: 'เดี่ยว',
+						gender: 'male',
+						phone: '0833333333',
+						country: 'THAILAND',
+						age: 30
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '200/1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		const hh1Id = reg1.household._id;
+		const hh2Id = reg2.household._id;
+		const mrAId = reg1.members[0]!._id;
+		const mrBId = reg1.members[1]!._id;
+		const mrCId = reg2.members[0]!._id;
+
+		expect(reg1.household.head_evacuee_id).toBe(mrAId);
+
+		// At Station 1, Mr A is pulled into Household 2 (Mr C's household) leaving Mr B behind in Household 1
+		await repo.submitFamilyReportIn({
+			householdId: hh2Id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '200/1',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					_id: mrCId,
+					first_name: 'นายซี',
+					last_name: 'เดี่ยว',
+					gender: 'male',
+					phone: null,
+					reporting_in: true
+				},
+				{
+					_id: mrAId,
+					first_name: 'นายเอ',
+					last_name: 'หัวหน้า',
+					gender: 'male',
+					phone: null,
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		// 1. Mr A is now in Household 2
+		const updatedMrA = await repo.getEvacuee(mrAId);
+		expect(updatedMrA?.household_id).toBe(hh2Id);
+
+		// 2. Household 1 is NOT cancelled because Mr B is still there
+		const updatedHh1 = await repo.getHousehold(hh1Id);
+		expect(updatedHh1?.status).not.toBe('cancelled');
+
+		// 3. Household 1's head has been auto-reassigned to Mr B
+		expect(updatedHh1?.head_evacuee_id).toBe(mrBId);
+		expect(updatedHh1?.label).toBe('ครอบครัวนายบี ลูกบ้าน');
+	});
 });
 
 describe('peopleRepository singleton', () => {
