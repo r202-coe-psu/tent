@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
 import { shelterStore } from '$lib/stores/shelter.svelte';
+import { clearMfaOk } from '$lib/features/users';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -124,11 +125,22 @@ class AuthStore {
 		shelterStore.selectedShelterCode = undefined;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
+		// Each new AuthSession round must re-do Google step-up when enrolled.
+		try {
+			await clearMfaOk();
+		} catch {
+			/* BFF unreachable — cookie may linger; /auth/me + guards still enforce */
+		}
 		return user;
 	}
 
 	async logout(): Promise<void> {
 		try {
+			try {
+				await clearMfaOk();
+			} catch {
+				/* ignore */
+			}
 			await sessionLogout();
 		} finally {
 			this.state.user = null;
@@ -137,6 +149,15 @@ class AuthStore {
 			persistUser(null);
 			this.initPromise = null;
 		}
+	}
+
+	/** Sync cached session display name after self-profile save (header / portal). */
+	setDisplayName(displayName: string): void {
+		if (!this.state.user) return;
+		const trimmed = displayName.trim();
+		const next = { ...this.state.user, display_name: trimmed || null };
+		this.state.user = next;
+		persistUser(next);
 	}
 }
 

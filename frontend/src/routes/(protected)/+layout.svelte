@@ -39,7 +39,13 @@
 				<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
 			</div>
 			<div class="flex items-center gap-4">
-				<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
+				<a
+					href={resolve('/me')}
+					class="text-sm text-muted-foreground hover:underline"
+					title="บัญชีของฉัน"
+				>
+					{authStore.user?.name}
+				</a>
 				<LanguageSwitcher />
 				<Separator orientation="vertical" class="h-4" />
 				<Button variant="outline" size="sm" onclick={logout}>Logout</Button>

@@ -6,7 +6,7 @@
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { LANDING_ROUTE } from '$lib/guards/auth';
+	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
 	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
@@ -73,7 +73,14 @@
 			}
 
 			toast.success('บันทึกการตั้งค่าความปลอดภัยเรียบร้อยแล้ว!');
-			await goto(resolve(LANDING_ROUTE));
+			let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
+			try {
+				const status = await fetchAuthStatus();
+				dest = resolvePostLoginDestination(status);
+			} catch {
+				/* fall through to portal */
+			}
+			await goto(resolve(dest));
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการตั้งค่าได้');
 		} finally {

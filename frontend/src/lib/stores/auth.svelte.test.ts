@@ -18,6 +18,10 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 	shelterStore: { selectedShelterCode: undefined }
 }));
 
+vi.mock('$lib/features/users', () => ({
+	clearMfaOk: vi.fn().mockResolvedValue({ ok: true })
+}));
+
 describe('authStore.ensureInitialized', () => {
 	beforeEach(() => {
 		vi.resetModules();

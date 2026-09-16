@@ -32,6 +32,23 @@ import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 
 const USER_PREFIX = 'org.couchdb.user:';
 
+/** Phase 1 MFA IdP — Google OIDC step-up only (CR-124). */
+export type MfaProviderType = 'google';
+
+export interface MfaProvider {
+	type: MfaProviderType;
+	/** Google OIDC `sub` — stable identity; never use email as primary. */
+	subject: string;
+	/** Display-only. */
+	email?: string | null;
+	linked_at: string;
+	verified_at?: string | null;
+}
+
+export interface UserMfa {
+	providers: MfaProvider[];
+}
+
 export interface UserSummary {
 	name: string;
 	roles: string[];
@@ -52,6 +69,10 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
+	/** CR-124 — true when a Google MFA provider is linked. */
+	mfa_enrolled?: boolean;
+	/** CR-124 — linked Google email for display (admin / me). */
+	mfa_google_email?: string | null;
 }
 
 export async function getCurrentUserProfile(
@@ -98,13 +119,25 @@ export interface CouchUserDoc {
 		set_at: string;
 	} | null;
 	affiliation_tags?: string[];
+	/** CR-124 — null / missing = not enrolled for Google step-up. */
+	mfa?: UserMfa | null;
+	/** CouchDB password salt — required to mint AuthSession (Phase 2). */
+	salt?: string;
 }
 
 function userDocId(name: string): string {
 	return `${USER_PREFIX}${encodeURIComponent(name)}`;
 }
 
+/** Return the Google MFA provider on a `_users` doc, or null. */
+export function getGoogleMfa(doc: CouchUserDoc): MfaProvider | null {
+	const providers = doc.mfa?.providers;
+	if (!providers?.length) return null;
+	return providers.find((p) => p.type === 'google') ?? null;
+}
+
 function toSummary(doc: CouchUserDoc): UserSummary {
+	const google = getGoogleMfa(doc);
 	return {
 		name: doc.name,
 		roles: doc.roles ?? [],
@@ -121,7 +154,9 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		active: doc.active ?? true,
 		must_change_password: doc.must_change_password ?? false,
 		has_security_question: Boolean(doc.security_question?.answer_hash),
-		affiliation_tags: doc.affiliation_tags ?? []
+		affiliation_tags: doc.affiliation_tags ?? [],
+		mfa_enrolled: Boolean(google),
+		mfa_google_email: google?.email ?? null
 	};
 }
 
@@ -424,6 +459,89 @@ export async function updateUser(
 	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
 }
 
+/** Fields a logged-in staff member may change on their own `_users` doc (no roles/password/MFA). */
+export type OwnProfileFields = {
+	display_name?: string;
+	phone?: string | null;
+	email?: string | null;
+	organization?: string | null;
+	position?: string | null;
+};
+
+const OWN_PROFILE_KEYS = new Set<string>([
+	'display_name',
+	'phone',
+	'email',
+	'organization',
+	'position'
+]);
+
+function normalizeOptionalText(value: unknown): string | null {
+	if (value === null || value === undefined) return null;
+	if (typeof value !== 'string') {
+		throw new ServiceError('VALIDATION', 'Profile fields must be strings or null');
+	}
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Self-service profile update for the session user only.
+ * Does not call {@link updateUser} / manager authorization — any authenticated staff may
+ * update these soft fields on their own doc. Rejects unknown keys and empty display_name.
+ */
+export async function updateOwnProfile(
+	name: string,
+	fields: OwnProfileFields & Record<string, unknown>
+): Promise<UserSummary> {
+	const keys = Object.keys(fields);
+	const rejected = keys.filter((k) => !OWN_PROFILE_KEYS.has(k));
+	if (rejected.length > 0) {
+		throw new ServiceError('VALIDATION', `Cannot update restricted fields: ${rejected.join(', ')}`);
+	}
+	if (keys.length === 0) {
+		throw new ServiceError('VALIDATION', 'No profile fields to update');
+	}
+
+	const doc = await readUserDoc(name, 'read own profile');
+
+	const patch: Partial<CouchUserDoc> = {};
+
+	if ('display_name' in fields) {
+		const displayName = normalizeOptionalText(fields.display_name);
+		if (!displayName) {
+			throw new ServiceError('VALIDATION', 'ชื่อที่แสดงต้องไม่ว่าง');
+		}
+		patch.display_name = displayName;
+	}
+	if ('phone' in fields) {
+		patch.phone = normalizeOptionalText(fields.phone);
+	}
+	if ('email' in fields) {
+		patch.email = normalizeOptionalText(fields.email);
+	}
+	if ('organization' in fields) {
+		patch.organization = normalizeOptionalText(fields.organization);
+	}
+	if ('position' in fields) {
+		patch.position = normalizeOptionalText(fields.position);
+	}
+
+	const updatedDoc = { ...doc, ...patch };
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw serviceErrorFromCouch('update own profile', res.status, res.data);
+
+	const summary = toSummary(updatedDoc);
+	// Do not fall back phone→username for self-profile (admin list still uses toSummary).
+	return {
+		...summary,
+		phone: updatedDoc.phone ?? null,
+		email: updatedDoc.email ?? null,
+		organization: updatedDoc.organization ?? null,
+		position: updatedDoc.position ?? null
+	};
+}
+
 /** Admin resets user password to a memorable temporary passphrase. */
 export async function resetUserPasswordByAdmin(
 	name: string,
@@ -556,4 +674,119 @@ export async function setupSecurityQuestionAndResetPassword(input: {
 
 	const res = await adminRaw(`/_users/${userDocId(username)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) throw serviceErrorFromCouch('force setup', res.status, res.data);
+}
+
+/**
+ * Find the single `_users` doc with a Google MFA provider matching `subject` (CR-124 Phase 2).
+ * Returns null when not enrolled / unknown. Uniqueness is enforced at link time.
+ */
+export async function findUserByGoogleSubject(subject: string): Promise<CouchUserDoc | null> {
+	const trimmed = subject.trim();
+	if (!trimmed) return null;
+
+	const all = await fetchAllUserDocs();
+	for (const doc of all) {
+		const linked = getGoogleMfa(doc);
+		if (linked && linked.subject === trimmed) {
+			return doc;
+		}
+	}
+	return null;
+}
+
+/**
+ * Link a Google OIDC identity as step-up MFA (CR-124).
+ * Enforces one Google per user and global uniqueness of `subject`.
+ */
+export async function linkGoogleMfa(
+	name: string,
+	input: { subject: string; email?: string | null }
+): Promise<void> {
+	const subject = input.subject.trim();
+	if (!subject) {
+		throw new ServiceError('VALIDATION', 'Google subject is required');
+	}
+
+	const all = await fetchAllUserDocs();
+	for (const other of all) {
+		const linked = getGoogleMfa(other);
+		if (linked && linked.subject === subject && other.name !== name) {
+			throw new ServiceError('CONFLICT', 'Google account is already linked to another user');
+		}
+	}
+
+	const doc = await readUserDoc(name, 'link google mfa');
+	if (getGoogleMfa(doc)) {
+		throw new ServiceError('CONFLICT', 'User already has a Google MFA provider linked');
+	}
+
+	const now = new Date().toISOString();
+	const provider: MfaProvider = {
+		type: 'google',
+		subject,
+		email: input.email ?? null,
+		linked_at: now,
+		verified_at: now
+	};
+
+	const updatedDoc: CouchUserDoc = {
+		...doc,
+		mfa: { providers: [...(doc.mfa?.providers ?? []).filter((p) => p.type !== 'google'), provider] }
+	};
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw serviceErrorFromCouch('link google mfa', res.status, res.data);
+}
+
+/** Clear Google MFA link. Pass `caller` for admin/manager authz; omit for self-service. */
+export async function unlinkGoogleMfa(name: string, caller?: Caller): Promise<void> {
+	const doc = await readUserDoc(name, 'unlink google mfa');
+
+	if (caller) {
+		if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
+			rejectBootstrapMutation(caller, name, 'unlink google mfa');
+		}
+		if (!caller.isSA) {
+			const code = managerMayMutateTarget(caller, doc.roles ?? []);
+			if (!hasShelterScope(doc.roles ?? [], code)) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'A manager may only unlink MFA for users in their own shelter'
+				);
+			}
+		}
+	}
+
+	if (!getGoogleMfa(doc)) {
+		return;
+	}
+
+	const remaining = (doc.mfa?.providers ?? []).filter((p) => p.type !== 'google');
+	const updatedDoc: CouchUserDoc = {
+		...doc,
+		mfa: remaining.length > 0 ? { providers: remaining } : null
+	};
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw serviceErrorFromCouch('unlink google mfa', res.status, res.data);
+}
+
+/** Update `verified_at` on the linked Google provider after a successful step-up. */
+export async function touchGoogleMfaVerified(name: string): Promise<void> {
+	const doc = await readUserDoc(name, 'touch google mfa verified');
+	const google = getGoogleMfa(doc);
+	if (!google) {
+		throw new ServiceError('VALIDATION', 'User is not enrolled in Google MFA');
+	}
+
+	const now = new Date().toISOString();
+	const providers = (doc.mfa?.providers ?? []).map((p) =>
+		p.type === 'google' ? { ...p, verified_at: now } : p
+	);
+	const updatedDoc: CouchUserDoc = { ...doc, mfa: { providers } };
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) {
+		throw serviceErrorFromCouch('touch google mfa verified', res.status, res.data);
+	}
 }

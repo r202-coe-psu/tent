@@ -6,6 +6,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import UserCircle from '@lucide/svelte/icons/user-circle';
 	import { slide } from 'svelte/transition';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
@@ -369,17 +370,17 @@
 					<Tooltip.Root>
 						<Tooltip.Trigger>
 							{#snippet child({ props })}
-								<div
+								<a
 									{...props}
-									class="flex h-9 w-9 cursor-default items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
+									href={resolve('/me')}
+									class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+									aria-label="บัญชีของฉัน"
 								>
 									{authStore.user?.name?.substring(0, 2).toUpperCase() || 'US'}
-								</div>
+								</a>
 							{/snippet}
 						</Tooltip.Trigger>
-						<Tooltip.Content side="right" sideOffset={8}>
-							{authStore.user?.name} ({formatRoleList(roles)})
-						</Tooltip.Content>
+						<Tooltip.Content side="right" sideOffset={8}>บัญชีของฉัน</Tooltip.Content>
 					</Tooltip.Root>
 
 					<Tooltip.Root>
@@ -413,9 +414,17 @@
 							{formatRoleList(roles)}
 						</span>
 					</div>
+					<a
+						href={resolve('/me')}
+						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-sidebar-border px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-muted active:scale-95"
+						title="บัญชีของฉัน"
+					>
+						<UserCircle class="h-4 w-4" />
+						<span>บัญชีของฉัน</span>
+					</a>
 					<button
 						type="button"
-						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
+						class="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
 						onclick={logout}
 					>
 						<LogOut class="h-4 w-4" />
@@ -560,9 +569,18 @@
 							{formatRoleList(roles)}
 						</span>
 					</div>
+					<a
+						href={resolve('/me')}
+						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-sidebar-border px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-muted active:scale-95"
+						onclick={() => (mobileMenuOpen = false)}
+						title="บัญชีของฉัน"
+					>
+						<UserCircle class="h-4 w-4" />
+						<span>บัญชีของฉัน</span>
+					</a>
 					<button
 						type="button"
-						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
+						class="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
 						onclick={logout}
 					>
 						<LogOut class="h-4 w-4" />
