@@ -79,9 +79,11 @@ describe('volunteerSchema', () => {
 		);
 	});
 
-	it('requires schema_v to be the literal 3', () => {
+	it('accepts schema_v 3 or 4, rejects anything else', () => {
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 2 }).success).toBe(false);
-		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 4 }).success).toBe(false);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 3 }).success).toBe(true);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 4 }).success).toBe(true);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 5 }).success).toBe(false);
 	});
 
 	it('national_id is optional (F13) — a document without the key at all is still valid', () => {
@@ -94,6 +96,21 @@ describe('volunteerSchema', () => {
 		const doc = validVolunteerDoc() as Record<string, unknown>;
 		delete doc.current_shelter_code;
 		expect(volunteerSchema.safeParse(doc).success).toBe(true);
+	});
+
+	it('tracking_token_hash is optional — additive, pre-existing documents carry no such field', () => {
+		const doc = validVolunteerDoc() as Record<string, unknown>;
+		delete doc.tracking_token_hash;
+		expect(volunteerSchema.safeParse(doc).success).toBe(true);
+	});
+
+	it('accepts tracking_token_hash as a string or null', () => {
+		expect(
+			volunteerSchema.safeParse({ ...validVolunteerDoc(), tracking_token_hash: 'abc123' }).success
+		).toBe(true);
+		expect(
+			volunteerSchema.safeParse({ ...validVolunteerDoc(), tracking_token_hash: null }).success
+		).toBe(true);
 	});
 
 	it('rejects a malformed national_id even when present', () => {
@@ -151,11 +168,11 @@ describe('isVolunteer', () => {
 });
 
 describe('makeVolunteer', () => {
-	it('stamps volunteer: id prefix, schema_v 3, and CR-094 §6 migration defaults', () => {
+	it('stamps volunteer: id prefix, schema_v 4, and CR-094 §6 migration defaults', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-001' });
 		expect(v._id).toMatch(/^volunteer:/);
 		expect(v.type).toBe('volunteer');
-		expect(v.schema_v).toBe(3);
+		expect(v.schema_v).toBe(4);
 		expect(v.checked_in).toBe(false);
 		expect(v.identity_verified).toBe(false);
 		expect(v.current_shelter_code).toBeNull();
@@ -183,6 +200,11 @@ describe('makeVolunteer', () => {
 	it('produces a document that itself satisfies volunteerSchema', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-003' });
 		expect(volunteerSchema.safeParse(v).success).toBe(true);
+	});
+
+	it('defaults tracking_token_hash to null — minted later, on first job application', () => {
+		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-008' });
+		expect(v.tracking_token_hash).toBeNull();
 	});
 
 	it('rejects a missing first_name at the input boundary', () => {

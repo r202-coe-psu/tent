@@ -54,6 +54,20 @@ def test_a_profile_written_before_phone_hash_existed_still_resolves():
     assert payload["phone_hash"]
 
 
+def test_tracking_token_hash_is_projected_for_the_access_portal():
+    # Minted at apply time on the direct-CouchDB write path; the projector must carry
+    # it across so the public plane can resolve a per-volunteer sign-in token.
+    _, payload = project_volunteer(
+        _doc(tracking_token_hash="deadbeef"), shelter_code="SH001"
+    )
+    assert payload["tracking_token_hash"] == "deadbeef"
+
+
+def test_a_profile_written_before_tracking_token_hash_existed_has_no_hash():
+    _, payload = project_volunteer(_doc(), shelter_code="SH001")
+    assert payload["tracking_token_hash"] is None
+
+
 def test_a_stood_down_profile_is_removed_from_the_public_plane():
     action, payload = project_volunteer(_doc(status="inactive"), shelter_code="SH001")
     assert action == "delete"

@@ -17,7 +17,7 @@ def _ts(value: Any) -> datetime.datetime | None:
         return None
     try:
         return isoparse(str(value))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -51,6 +51,7 @@ def project_volunteer(
         # Prefer the hash the document already carries; fall back to hashing the number
         # so a profile written before `phone_hash` existed still resolves.
         "phone_hash": doc.get("phone_hash") or phone_hash(doc.get("phone")),
+        "tracking_token_hash": doc.get("tracking_token_hash"),
         "first_name": str(doc.get("first_name") or ""),
         "last_name": str(doc.get("last_name") or ""),
         "nickname": doc.get("nickname"),

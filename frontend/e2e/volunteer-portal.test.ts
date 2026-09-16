@@ -4,13 +4,14 @@ import { test, expect, type Page } from '@playwright/test';
  * Volunteer Access Portal + ตารางทำงานจิตอาสา (CR-092 หน้าจอ 2 + 6).
  *
  * A volunteer has no account: they sign in with the phone number they applied with, or
- * with a ticket code. These tests cover that entry point, the schedule it opens, and the
- * read-only rule option C settled — a phone lookup may read a pass but never cancel one.
+ * with their tracking token. These tests cover that entry point, the schedule it opens,
+ * and the Digital Pass it can open (docs/changes/draft-volunteer-role-card-checkin.md —
+ * the old `VIEW-` read-only phone-lookup reference has been removed entirely; on-site
+ * check-in resolves the volunteer's own permanent tracking token directly).
  */
 
 const PHONE = '0891112222';
 const TRACKING_TOKEN = 'TKT-VOL-1234567890ABCDEF1234567890ABCDEF';
-const VIEW_TOKEN = 'VIEW-am9iX2FwcGxpY2F0aW9uOjAxQQ.c2lnbmF0dXJl';
 
 /** Two shifts ahead and one behind, so the split into upcoming / history is exercised. */
 const SCHEDULE = {
@@ -72,7 +73,7 @@ const TICKETS = {
 	success: true,
 	tickets: [
 		{
-			view_token: VIEW_TOKEN,
+			job_id: 'job:01JOB',
 			status: 'confirmed',
 			job_title: 'ผู้ช่วยครัวจัดเตรียมอาหาร',
 			shelter_code: 'SH001',
@@ -281,7 +282,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		expect(asked).toEqual({ token: TRACKING_TOKEN, portal_id: '01PORTALVOLUNTEER' });
 	});
 
-	test('refuses a code that is neither a ticket token nor a view reference', async ({ page }) => {
+	test('refuses a code that is not a tracking token', async ({ page }) => {
 		await mockPortalApi(page);
 		await openPortalTab(page);
 		await signInWithToken(page, 'V-1001');
@@ -309,18 +310,8 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 });
 
 test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
-	test('a booking lands the volunteer on their own schedule, already signed in', async ({
-		page
-	}) => {
-		// The board calls it จอง, and what a volunteer wants next is their roster — not the
-		// pass they can reach from it. The token comes back in the booking response, so the
-		// portal opens signed in rather than asking for the number just typed.
-		let scheduleAskedWith: unknown = null;
-		await mockPortalApi(page);
-		await page.route('**/api/public/v1/volunteer/schedule', async (route) => {
-			scheduleAskedWith = route.request().postDataJSON();
-			await route.fulfill(json({ success: true, shifts: [] }));
-		});
+	/** One open job with an implicit today shift (from the empty `shift_template.days`). */
+	async function mockJobBoard(page: Page, applyResponse: Record<string, unknown>) {
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -350,35 +341,87 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 				})
 			)
 		);
-		await page.route('**/api/public/v1/volunteer/jobs/*/apply', (route) =>
+		// The preflight check the modal runs before it books — a fresh phone number, so
+		// the flow goes straight through instead of stopping at the update-profile prompt.
+		await page.route('**/api/public/v1/volunteer/apply/preflight', (route) =>
 			route.fulfill(
 				json({
 					success: true,
-					tracking_token: TRACKING_TOKEN,
-					status: 'confirmed',
-					job_id: 'job:01BOARD'
+					match: 'no_match',
+					message: 'ไม่พบ Volunteer profile เดิม สามารถสมัครใหม่ได้'
 				})
 			)
 		);
+		await page.route('**/api/public/v1/volunteer/jobs/*/apply', (route) =>
+			route.fulfill(json(applyResponse))
+		);
+	}
 
+	/** Fill and submit the Job Board's own quick-apply form (not the portal's). */
+	async function bookAMission(page: Page) {
 		await page.goto('/volunteers/jobs');
-		// The BFF verifies whatever token it receives; this only stands in for Google's
-		// script, which cannot run in the harness (same hook the booking form uses).
-		await page.evaluate(() => {
-			(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
-		});
-		await page.getByRole('button', { name: 'จองภารกิจนี้' }).click();
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).click();
 
-		await page.getByLabel('ชื่อ', { exact: false }).first().fill('เก่งกล้า');
-		await page.locator('#apply-last-name').fill('งานอาสา');
-		await page.locator('#apply-phone').fill('0891112222');
-		await page.getByRole('checkbox').check();
-		await page.getByRole('button', { name: /ยืนยันการจอง/ }).click();
+		// Scoped to the modal's own form — the board's skill filter chips behind it share
+		// the same label text, and stay mounted (just covered) while the modal is open.
+		const form = page.locator('form');
+		await form.locator('#firstName').fill('เก่งกล้า');
+		await form.locator('#lastName').fill('งานอาสา');
+		await form.locator('#phone').fill('0891112222');
+		// At least one skill is required before the form will submit.
+		await form.getByRole('button', { name: 'ประกอบอาหาร / ครัวสนาม' }).click();
+		await form.getByRole('checkbox').check();
+		await form.getByRole('button', { name: /ยืนยันการสมัคร/ }).click();
+	}
+
+	test('a first-ever booking lands the volunteer straight on their Digital Pass', async ({
+		page
+	}) => {
+		// First-ever application for this phone number: apply mints a permanent
+		// per-volunteer token and returns it as `volunteer_token`, so the board routes
+		// straight to the pass with it — no portal sign-in round trip needed.
+		const freshToken = 'TKT-VOL-FRESHVOLUNTEERTOKEN00000000001';
+		await mockPortalApi(page);
+		await page.route(`**/api/public/v1/volunteer/ticket/${freshToken}`, (route) =>
+			route.fulfill(json(ticket({ token: freshToken })))
+		);
+		await mockJobBoard(page, {
+			success: true,
+			tracking_token: TRACKING_TOKEN,
+			volunteer_token: freshToken,
+			status: 'confirmed',
+			job_id: 'job:01BOARD'
+		});
+
+		await bookAMission(page);
+
+		await expect(page).toHaveURL(new RegExp(`/volunteer/ticket/${freshToken}`));
+		await expect(page.getByRole('img', { name: 'QR Code สำหรับรายงานตัวหน้างาน' })).toBeVisible();
+	});
+
+	test('a returning volunteer (no fresh token) is signed into the portal by phone instead', async ({
+		page
+	}) => {
+		// Returning volunteer: the apply response carries no `volunteer_token` (only its
+		// hash is stored server-side, so the plaintext can't be handed back) — the board
+		// falls back to signing them into the portal with the phone they just typed.
+		let resolveAskedWith: unknown = null;
+		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/access/resolve', async (route) => {
+			resolveAskedWith = route.request().postDataJSON();
+			await route.fulfill(json({ success: true, profile: PROFILE }));
+		});
+		await mockJobBoard(page, {
+			success: true,
+			tracking_token: TRACKING_TOKEN,
+			status: 'confirmed',
+			job_id: 'job:01BOARD'
+		});
+
+		await bookAMission(page);
 
 		await expect(page).toHaveURL(/\/volunteers\/portal\/volunteer\/01PORTALVOLUNTEER\/dashboard/);
-		await expect(signOutButton(page)).toBeVisible();
-		// Signed in with the booking's own token, never with a phone the page kept around.
-		expect(scheduleAskedWith).toEqual({ token: TRACKING_TOKEN, portal_id: '01PORTALVOLUNTEER' });
+		expect(resolveAskedWith).toEqual({ phone: '0891112222' });
 	});
 });
 
@@ -469,16 +512,6 @@ test.describe('Digital Pass (CR-092 หน้าจอ 2)', () => {
 		await page.goto(`/volunteer/ticket/${TRACKING_TOKEN}`);
 
 		await expect(page.getByRole('button', { name: /ขอยกเลิกการสมัครล่วงหน้า/ })).toBeVisible();
-	});
-
-	test('hides cancelling when opened through a phone lookup — option C', async ({ page }) => {
-		await page.route(`**/api/public/v1/volunteer/ticket/${VIEW_TOKEN}`, (route) =>
-			route.fulfill(json(ticket({ token: VIEW_TOKEN, can_cancel: false })))
-		);
-		await page.goto(`/volunteer/ticket/${VIEW_TOKEN}`);
-
-		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toBeVisible();
-		await expect(page.getByRole('button', { name: /ขอยกเลิกการสมัครล่วงหน้า/ })).toHaveCount(0);
 	});
 
 	test('says so when the token does not resolve', async ({ page }) => {

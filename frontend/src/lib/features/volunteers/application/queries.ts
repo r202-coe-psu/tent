@@ -31,11 +31,7 @@ import {
 	type SkillOption
 } from '../domain/skill-catalog';
 import type { Job, JobInput } from '../domain/job.schema';
-import type {
-	JobApplication,
-	JobApplicationInput,
-	JobApplicationStatus
-} from '../domain/job-application.schema';
+import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
 import type { VerificationStatus } from '../domain/verification';
@@ -156,15 +152,16 @@ export const useJobApplicationByToken = (
 	}));
 
 /**
- * Imperative counterpart to `useJobApplicationByToken`, for the on-site
- * check-in scanner: a scan is a discrete action, not something to bind a
- * reactive query to. Resolves a digital-pass ticket token to its
- * `job_application` doc — `tracking_token`/`tracking_token_hash` live there
- * (schema.md §2.18), never as a matchable plaintext field on `volunteer`
- * itself (§2.8), so the caller must go through `job_application.volunteer_id`.
+ * Imperative counterpart to the on-site check-in scanner's local-match pass: a
+ * scan is a discrete action, not something to bind a reactive query to.
+ * Resolves the volunteer's permanent role-card token (`TKT-VOL-{...}`,
+ * `volunteer.tracking_token_hash`, schema.md §2.8 — minted once per volunteer,
+ * never per application) straight against the `volunteer` doc via a plain
+ * CouchDB Mango lookup (`VolunteerRepository#getByTrackingToken`). No FastAPI
+ * BFF hop — check-in is staff-plane, same as every other query here.
  */
-export const findJobApplicationByToken = (token: string): Promise<JobApplication | null> =>
-	jobApplicationRepository().getByTrackingToken(token);
+export const findVolunteerByTrackingToken = (token: string): Promise<Volunteer | null> =>
+	volunteerRepository().getByTrackingToken(token);
 
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 	createQuery(() => ({

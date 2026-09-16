@@ -21,7 +21,11 @@ from tent_model.volunteer_application_buffer import (
     SelectedShiftBuffer,
     VolunteerApplicationBuffer,
 )
-from tent_model.volunteer_identity import has_verified_skill, identity_status, merge_skills
+from tent_model.volunteer_identity import (
+    has_verified_skill,
+    identity_status,
+    merge_skills,
+)
 from tent_model.volunteer_job_slot import (
     SlotResult,
     VolunteerJobShiftSlot,
@@ -50,8 +54,11 @@ from ...utils.masking import (
 )
 from ...utils.response_code import normalize_response_code
 from ...utils.ulid import new_ulid
-from ...utils.view_token import is_view_token, mint_view_token, resolve_view_token
-from .identity import IdentityResolution, masked_profile_summary, resolve_public_identity
+from .identity import (
+    IdentityResolution,
+    masked_profile_summary,
+    resolve_public_identity,
+)
 from .schemas import (
     DispatchRespondResponse,
     JobShiftTemplate,
@@ -477,7 +484,10 @@ class VolunteersUseCase:
         by_shift_id = {(slot.job_id, slot.shift_id): slot for slot in shift_slot_rows}
 
         applications = await PublicJobApplication.find(
-            {"job_id": {"$in": [job.id for job in jobs]}, "status": {"$ne": "cancelled"}}
+            {
+                "job_id": {"$in": [job.id for job in jobs]},
+                "status": {"$ne": "cancelled"},
+            }
         ).to_list()
         applicants_by_job: dict[str, int] = {}
         applicants_by_shift: dict[tuple[str, str], int] = {}
@@ -668,7 +678,10 @@ class VolunteersUseCase:
             if result is full_result:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail={"success": False, "error": "SHIFT_FULL" if selected else "JOB_FULL"},
+                    detail={
+                        "success": False,
+                        "error": "SHIFT_FULL" if selected else "JOB_FULL",
+                    },
                 )
             if result is SlotResult.NOT_SEEDED:
                 # Fail closed, unlike donations. There the counter guards a quantity and
@@ -694,7 +707,7 @@ class VolunteersUseCase:
                 last_name=payload.last_name.strip(),
                 phone=payload.phone.strip(),
                 phone_hash=sha256_hex(normalize_phone(payload.phone)),
-                national_id=payload.national_id.strip() if payload.national_id else None,
+                national_id=(payload.national_id.strip() if payload.national_id else None),
                 national_id_hash=(
                     national_id_hash(payload.national_id) if payload.national_id else None
                 ),
@@ -706,9 +719,11 @@ class VolunteersUseCase:
                 date=selected.date if selected else (payload.shift_date or ""),
                 start_time=template.start_time,
                 end_time=template.end_time,
-                station=payload.station
-                if payload.station is not None
-                else getattr(template, "station", None),
+                station=(
+                    payload.station
+                    if payload.station is not None
+                    else getattr(template, "station", None)
+                ),
             ),
             controlled_skills=[
                 skill.strip()
@@ -778,18 +793,6 @@ class VolunteersUseCase:
         if not token:
             return None
 
-        if is_view_token(token):
-            application_id = resolve_view_token(token)
-            if not application_id:
-                return None
-            projected = await PublicJobApplication.get(application_id)
-            # The projection keeps the hash at the root (it is the indexed lookup key);
-            # only the buffer carries it inside the applicant snapshot.
-            if projected is not None and projected.phone_hash:
-                return projected.phone_hash
-            buffer = await VolunteerApplicationBuffer.get(application_id)
-            return buffer.applicant.phone_hash if buffer else None
-
         token_hash = sha256_hex(token)
         projected = await PublicJobApplication.find_one(
             PublicJobApplication.tracking_token_hash == token_hash
@@ -799,7 +802,12 @@ class VolunteersUseCase:
         buffer = await VolunteerApplicationBuffer.find_one(
             VolunteerApplicationBuffer.tracking_token_hash == token_hash
         )
-        return buffer.applicant.phone_hash if buffer else None
+        if buffer is not None:
+            return buffer.applicant.phone_hash
+        volunteer = await PublicVolunteer.find_one(
+            PublicVolunteer.tracking_token_hash == token_hash
+        )
+        return volunteer.phone_hash if volunteer else None
 
     async def _portal_id_matches(self, *, phone_hash_value: str, portal_id: str | None) -> bool:
         """Bind a URL session to one of the public volunteer records it resolved."""
@@ -808,31 +816,57 @@ class VolunteersUseCase:
         rows = await PublicVolunteer.find(PublicVolunteer.phone_hash == phone_hash_value).to_list()
         return any(row.id == portal_id for row in rows)
 
-    async def get_ticket(self, token: str) -> VolunteerTicketResponse:
-        """Open one pass, by the applicant's tracking token or a phone-lookup reference.
+    async def _most_recent_application(
+        self, phone_hash_value: str
+    ) -> tuple[PublicJobApplication | None, VolunteerApplicationBuffer | None]:
+        """This volunteer's newest application, in whichever shape currently holds it."""
+        projected_rows = await PublicJobApplication.find(
+            PublicJobApplication.phone_hash == phone_hash_value
+        ).to_list()
+        buffer_rows = await VolunteerApplicationBuffer.find(
+            {"applicant.phone_hash": phone_hash_value}
+        ).to_list()
+        by_id: dict[str, PublicJobApplication | VolunteerApplicationBuffer] = {
+            row.id: row for row in buffer_rows
+        }
+        by_id.update({row.id: row for row in projected_rows})
+        if not by_id:
+            return None, None
 
-        Both routes render the same card; only the reference route drops the ability to
-        cancel, because it is reachable by anyone who knows the phone number.
+        def _sort_key(
+            row: PublicJobApplication | VolunteerApplicationBuffer,
+        ) -> datetime:
+            created = row.created_at
+            if created is None and isinstance(row, PublicJobApplication):
+                created = row.updated_at
+            if created is None:
+                return datetime.min.replace(tzinfo=UTC)
+            return created if created.tzinfo else created.replace(tzinfo=UTC)
+
+        newest = max(by_id.values(), key=_sort_key)
+        if isinstance(newest, PublicJobApplication):
+            return newest, None
+        return None, newest
+
+    async def get_ticket(self, token: str) -> VolunteerTicketResponse:
+        """Open one pass, by the applicant's tracking token (per-application or the
+        permanent per-volunteer one minted at first apply) — always matched by hash,
+        the raw value is never compared against stored data.
         """
-        # A view reference names its application directly; a tracking token is only ever
-        # matched by hash, so the raw value is never compared against stored data.
-        can_cancel = not is_view_token(token)
-        if can_cancel:
-            token_hash = sha256_hex(token)
-            projected = await PublicJobApplication.find_one(
-                PublicJobApplication.tracking_token_hash == token_hash
+        can_cancel = True
+        token_hash = sha256_hex(token)
+        projected = await PublicJobApplication.find_one(
+            PublicJobApplication.tracking_token_hash == token_hash
+        )
+        buffer = await VolunteerApplicationBuffer.find_one(
+            VolunteerApplicationBuffer.tracking_token_hash == token_hash
+        )
+        if projected is None and buffer is None:
+            volunteer = await PublicVolunteer.find_one(
+                PublicVolunteer.tracking_token_hash == token_hash
             )
-            buffer = await VolunteerApplicationBuffer.find_one(
-                VolunteerApplicationBuffer.tracking_token_hash == token_hash
-            )
-        else:
-            application_id = resolve_view_token(token)
-            # Forged, malformed and expired all land here and all answer 404 below, so a
-            # probe cannot learn which of the three it hit.
-            projected = await PublicJobApplication.get(application_id) if application_id else None
-            buffer = (
-                await VolunteerApplicationBuffer.get(application_id) if application_id else None
-            )
+            if volunteer is not None and volunteer.phone_hash:
+                projected, buffer = await self._most_recent_application(volunteer.phone_hash)
         if projected is None and buffer is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -881,9 +915,9 @@ class VolunteersUseCase:
                 can_cancel=can_cancel,
                 status=ticket_status,
                 job_id=job_id,
-                shift_id=_application_shift_id(projected)
-                if projected
-                else _application_shift_id(buffer),
+                shift_id=(
+                    _application_shift_id(projected) if projected else _application_shift_id(buffer)
+                ),
                 job_title=job.title if job else "",
                 shelter_code=shelter_code,
                 shelter_name=shelter.name if shelter else "",
@@ -905,22 +939,18 @@ class VolunteersUseCase:
     ) -> TicketFindResponse:
         """Resolve a phone number — or a token already in hand — to that person's tickets.
 
-        This is how a volunteer gets back into the Access Portal (CR-092 §2.1.1 — a
-        volunteer signs in with the phone number they applied with, or a ticket code;
-        they have no ``_users`` account). It therefore has to return a usable token,
-        not just a list of things they cannot open.
+        Read-only summary list (CR-092 §2.1.1, "ค้นหาตั๋วของฉัน") — signing into the
+        Access Portal itself is a separate call (``profile``/``access/resolve``) that
+        the caller makes with the same phone number, not with anything from here.
 
         Two collections are merged because neither is complete on its own:
 
         * the **projection** carries the live status — once a manager reviews an
           application, CouchDB is the system of record and the buffer is stale;
-        * the **buffer** is the only place the raw token exists. The projection stores
-          a hash, deliberately: a staff read of the shelter's own documents must not
-          hand out someone's bearer credential.
+        * the **buffer** is the only place some fields (e.g. an unreviewed applicant
+          snapshot) still live before the projector catches up.
 
-        Joined on the application id, which both share. A ticket whose buffer has been
-        cleared by retention comes back with an empty token — the applicant keeps their
-        URL, we no longer hold a way to re-issue it.
+        Joined on the application id, which both share.
 
         Returns an empty list rather than a 404 on a miss, and the response shape is
         identical either way, so this cannot be used to probe whether a number is known.
@@ -944,7 +974,6 @@ class VolunteersUseCase:
 
         for b in buffers:
             merged[b.id] = TicketFindItem(
-                view_token=mint_view_token(b.id),
                 job_id=b.job_id,
                 applicant_name=f"{b.applicant.first_name} {b.applicant.last_name}".strip(),
                 status=b.status,
@@ -957,7 +986,6 @@ class VolunteersUseCase:
             )
         for a in projected:
             merged[a.id] = TicketFindItem(
-                view_token=mint_view_token(a.id),
                 job_id=a.job_id,
                 applicant_name=f"{a.applicant.first_name} {a.applicant.last_name}".strip(),
                 # The projection wins on status: a manager may have confirmed or
@@ -1005,7 +1033,8 @@ class VolunteersUseCase:
         # Soonest shift first — this list is the volunteer's schedule, and the shift
         # they need to be reminded of is the next one. Undated entries sort last.
         tickets = sorted(
-            merged.values(), key=lambda t: (t.shift_date == "", t.shift_date, t.shelter_code)
+            merged.values(),
+            key=lambda t: (t.shift_date == "", t.shift_date, t.shelter_code),
         )
         # Masked, never raw: this is echoed to a browser that may have signed in with a
         # token and therefore does not hold the number (FR-VOL-03.4 / AC-VOL-03).
@@ -1116,15 +1145,6 @@ class VolunteersUseCase:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"success": False, "error": "INVALID_ACTION"},
-            )
-
-        # Phone lookup references are intentionally read-only.  A VIEW token may be
-        # shown to anyone who knows the phone number, so it must never be enough to
-        # mark somebody else present or withdraw their shift.
-        if token and is_view_token(token):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"success": False, "error": "SHIFT_NOT_FOUND"},
             )
 
         not_found = HTTPException(
@@ -1372,7 +1392,9 @@ class VolunteersUseCase:
             # The counter holds no dispatched head for this job, so this offer has
             # already been spent — or was never counted, which staff must reconcile.
             logger.warning(
-                "No dispatched slot to move for %s on %s", assignment_id, assignment.job_id
+                "No dispatched slot to move for %s on %s",
+                assignment_id,
+                assignment.job_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1417,18 +1439,7 @@ class VolunteersUseCase:
         return DispatchRespondResponse(assignment_id=assignment_id, dispatch_status=action)
 
     async def cancel(self, token: str) -> VolunteerCancelResponse:
-        """Withdraw an application. The applicant's own tracking token only.
-
-        A phone-lookup reference is refused here even though it opens the same pass:
-        anyone who knows the number can mint one, and a cancelled shift cannot be taken
-        back by the volunteer. 404 rather than 403 — saying "that is the wrong kind of
-        token" would confirm the ticket exists.
-        """
-        if is_view_token(token):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"success": False, "error": "TICKET_NOT_FOUND"},
-            )
+        """Withdraw an application. The applicant's own tracking token only."""
         token_hash = sha256_hex(token)
         buffer = await VolunteerApplicationBuffer.find_one(
             VolunteerApplicationBuffer.tracking_token_hash == token_hash

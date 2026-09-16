@@ -2,12 +2,19 @@
 	/**
 	 * On-Site Check-In — "ค้นหาด่วน (Search Fallback)" card. Free-text search over
 	 * the already-loaded volunteer list (same "fetch once, filter client-side"
-	 * convention as `people-tab.svelte`/`roster-attendance-tab.svelte`) —
-	 * matches name/nickname, `volunteer_code`, phone, or `tracking_token`.
+	 * convention as `people-tab.svelte`/`roster-attendance-tab.svelte`) — matches
+	 * name/nickname, `volunteer_code`, or phone, all synchronously.
+	 *
+	 * A permanent role-card token is never stored in plaintext (only its hash, see
+	 * `volunteer.tracking_token_hash` / schema.md §2.8), so it can never be matched
+	 * against the already-loaded list the way name/code/phone are — typing or
+	 * pasting one here falls back to the same hashed CouchDB lookup the QR scanner
+	 * uses (`findVolunteerByTrackingToken`), once nothing local matches.
 	 */
 	import Search from '@lucide/svelte/icons/search';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { findVolunteerByTrackingToken } from '../application/queries';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
 	let { volunteers, onselect }: { volunteers: Volunteer[]; onselect: (v: Volunteer) => void } =
@@ -18,8 +25,9 @@
 	}
 
 	let searchQuery = $state('');
+	let tokenMatch = $state<Volunteer | null>(null);
 
-	const searchResults = $derived.by(() => {
+	const localResults = $derived.by(() => {
 		const q = searchQuery.trim().toLowerCase();
 		if (!q) return [];
 		return volunteers
@@ -28,15 +36,46 @@
 				return (
 					name.includes(q) ||
 					v.volunteer_code.toLowerCase().includes(q) ||
-					(v.phone ?? '').includes(q) ||
-					(v.tracking_token ?? '').toLowerCase() === q
+					(v.phone ?? '').includes(q)
 				);
 			})
 			.slice(0, 8);
 	});
 
+	// Only worth a network round-trip once the local list has already missed and
+	// the query is long enough to plausibly be a token rather than a partial name —
+	// short queries would otherwise fire a lookup on every keystroke of a typo.
+	$effect(() => {
+		const q = searchQuery.trim();
+		if (!q || localResults.length > 0 || q.length < 8) {
+			tokenMatch = null;
+			return;
+		}
+		let cancelled = false;
+		const timer = setTimeout(() => {
+			findVolunteerByTrackingToken(q)
+				.then((v) => {
+					if (!cancelled) tokenMatch = v;
+				})
+				.catch(() => {
+					if (!cancelled) tokenMatch = null;
+				});
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	});
+
+	const searchResults = $derived(
+		tokenMatch && !localResults.some((v) => v._id === tokenMatch!._id)
+			? [tokenMatch, ...localResults]
+			: localResults
+	);
+
 	function select(v: Volunteer) {
 		searchQuery = '';
+		tokenMatch = null;
 		onselect(v);
 	}
 </script>

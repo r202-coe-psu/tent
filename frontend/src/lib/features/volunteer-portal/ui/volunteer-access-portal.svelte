@@ -39,7 +39,9 @@
 	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
+		buildStoredPortalSession,
 		isJobApplicable,
+		isStoredPortalSessionExpired,
 		normalizeTicketToken,
 		portalCredentialSchema,
 		PORTAL_SESSION_KEY,
@@ -91,6 +93,12 @@
 	 * What this session signed in with — a phone number or a ticket token. `null` =
 	 * signed out. Both doors resolve to the same volunteer server-side, so everything
 	 * below is written against the credential, never against "the phone".
+	 *
+	 * A token sign-in also gets an explicit 30-minute clock in `sessionStorage` (see
+	 * `PORTAL_TOKEN_SESSION_TTL_MS`) — the permanent `TKT-VOL-` token behind it no longer
+	 * expires on its own, so this portal enforces its own session timeout for that door.
+	 * Phone sign-ins are unaffected: they stay unbounded for the life of the tab, same as
+	 * today, because re-entering a phone number is cheap.
 	 */
 	let session = $state<PortalCredential | null>(null);
 	let restoring = $state(true);
@@ -98,8 +106,14 @@
 
 	function persistSession(credential: PortalCredential | null) {
 		try {
-			if (credential) sessionStorage.setItem(PORTAL_SESSION_KEY, JSON.stringify(credential));
-			else sessionStorage.removeItem(PORTAL_SESSION_KEY);
+			if (credential) {
+				sessionStorage.setItem(
+					PORTAL_SESSION_KEY,
+					JSON.stringify(buildStoredPortalSession(credential))
+				);
+			} else {
+				sessionStorage.removeItem(PORTAL_SESSION_KEY);
+			}
 		} catch {
 			// Storage can be unavailable in private mode; the current page still works.
 		}
@@ -173,8 +187,9 @@
 			return;
 		}
 		try {
-			const parsed = portalCredentialSchema.safeParse(JSON.parse(stored));
-			if (parsed.success && parsed.data.portal_id) {
+			const rawStored: unknown = JSON.parse(stored);
+			const parsed = portalCredentialSchema.safeParse(rawStored);
+			if (parsed.success && parsed.data.portal_id && !isStoredPortalSessionExpired(rawStored)) {
 				if (mode !== 'entry' && portalId !== parsed.data.portal_id) {
 					clearPortalSession();
 					void goto('/volunteers/portal');
@@ -184,6 +199,8 @@
 				session = parsed.data;
 				if (mode === 'entry') void goto(portalPath(parsed.data.portal_id));
 			} else {
+				// Covers a malformed record and an expired token session alike: both land the
+				// volunteer back on the sign-in screen rather than a stale dashboard.
 				clearPortalSession();
 				if (mode !== 'entry') void goto('/volunteers/portal');
 			}
@@ -468,8 +485,8 @@
 	 * reduce to the same token, and anything else is left for `submitToken` to reject
 	 * rather than guessed at here.
 	 *
-	 * Normalised through `ticketTokenFromScan`, never `toUpperCase()`: a `VIEW-`
-	 * reference is base64url and upper-casing it destroys the signature.
+	 * Normalised through `ticketTokenFromScan`, which only ever recognizes a
+	 * `TKT-VOL-` tracking token now.
 	 */
 	function handleScanToken(scanned: string) {
 		const token = ticketTokenFromScan(scanned);
@@ -484,14 +501,17 @@
 	let qrDataUrl = $state<string>('');
 	let qrGeneration = 0;
 
-	// The role card must carry a resolvable token, never the internal volunteer id. A
-	// token-login session already has the applicant's tracking token. Phone login receives
-	// a short-lived read-only VIEW token for the first booking, which still gives the
-	// onsite scanner a token-shaped payload without exposing a cancellable ticket token.
+	// On-site check-in resolves a scan with a direct CouchDB lookup against the
+	// volunteer's own `tracking_token_hash` (docs/changes/draft-volunteer-role-card-checkin.md)
+	// — a staff-plane query, not FastAPI, so there is nothing left to decode a `VIEW-`
+	// reference into (that whole mechanism has been removed). A phone-login session
+	// never carries a `.token` of its own, and there is no other stable identifier to
+	// fall back to that would actually resolve at check-in, so phone sign-in gets no
+	// scannable role card at all rather than a QR that looks fine but silently fails
+	// every scan — see `hasScannableToken`.
+	const hasScannableToken = $derived(Boolean(session?.token));
 	$effect(() => {
-		const payload =
-			session?.token ??
-			currentVolunteer?.activities.find((activity) => activity.ticketToken)?.ticketToken;
+		const payload = session?.token;
 		const generation = ++qrGeneration;
 		if (!payload) {
 			qrDataUrl = '';
@@ -547,7 +567,7 @@
 		}
 		const token = normalizeTicketToken(value);
 		if (!token) {
-			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL- หรือ VIEW-';
+			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL-';
 			return;
 		}
 		await resolveAndEnter({ token });
@@ -795,12 +815,18 @@
 					<div class="flex flex-wrap items-center gap-2">
 						<h2 class="text-lg font-black text-foreground md:text-xl">{currentVolunteer.name}</h2>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.verified
+								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+								: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
 						>
-							<CircleCheck class="size-3" /> ยืนยันตัวตนแล้ว
+							<CircleCheck class="size-3" />
+							{currentVolunteer.verified ? 'ยืนยันตัวตนแล้ว' : 'ยังไม่ยืนยันตัวตน'}
 						</span>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
+							'active'
+								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+								: 'border-border bg-muted text-muted-foreground'}"
 						>
 							{currentVolunteer.statusText}
 						</span>
@@ -1229,6 +1255,15 @@
 									alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
 									class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
 								/>
+							{:else if !hasScannableToken}
+								<div
+									class="mx-auto flex size-28 flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-muted-foreground"
+								>
+									<QrCode class="size-8" />
+									<p class="text-3xs leading-tight">
+										เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน
+									</p>
+								</div>
 							{:else}
 								<div
 									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
@@ -1242,16 +1277,28 @@
 							</p>
 							<div class="mt-2 flex justify-center gap-1">
 								<span
-									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+									class="rounded px-1.5 py-0.5 text-3xs font-bold {currentVolunteer.verified
+										? 'bg-emerald-50 text-emerald-700'
+										: 'bg-amber-50 text-amber-800'}"
 								>
-									🟢 ยืนยันตัวตนแล้ว
+									{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
 								</span>
 								<span
-									class="rounded bg-emerald-50 px-1.5 py-0.5 text-3xs font-bold text-emerald-700"
+									class="rounded px-1.5 py-0.5 text-3xs font-bold {currentVolunteer.statusType ===
+									'active'
+										? 'bg-emerald-50 text-emerald-700'
+										: 'bg-muted text-muted-foreground'}"
 								>
-									🟢 ปฏิบัติหน้าที่อยู่
+									{currentVolunteer.statusType === 'active'
+										? '🟢 ปฏิบัติหน้าที่อยู่'
+										: '⚪ ยังไม่ปฏิบัติหน้าที่'}
 								</span>
 							</div>
+							{#if !hasScannableToken}
+								<p class="mt-2.5 text-3xs text-muted-foreground">
+									ใช้ QR หรือรหัส Token ที่ได้รับตอนสมัครเพื่อเปิดบัตรที่เช็คอินได้
+								</p>
+							{/if}
 						</div>
 					</div>
 
@@ -1364,14 +1411,34 @@
 						alt="QR Code Pass"
 						class="mx-auto size-48 rounded-2xl border-2 border-primary/20 bg-white p-2 shadow-md"
 					/>
+				{:else if !hasScannableToken}
+					<div
+						class="mx-auto flex size-48 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-muted/20 p-4 text-center text-muted-foreground"
+					>
+						<QrCode class="size-10" />
+						<p class="text-xs leading-snug">
+							เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน — ใช้ QR/รหัส Token ที่ได้รับตอนสมัคร
+						</p>
+					</div>
 				{/if}
 
 				<div class="flex justify-center gap-1.5 pt-1">
-					<span class="rounded-md bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700">
-						🟢 ยืนยันตัวตนแล้ว
+					<span
+						class="rounded-md px-2 py-0.5 text-2xs font-bold {currentVolunteer.verified
+							? 'bg-emerald-50 text-emerald-700'
+							: 'bg-amber-50 text-amber-800'}"
+					>
+						{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
 					</span>
-					<span class="rounded-md bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700">
-						🟢 ปฏิบัติหน้าที่อยู่
+					<span
+						class="rounded-md px-2 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
+						'active'
+							? 'bg-emerald-50 text-emerald-700'
+							: 'bg-muted text-muted-foreground'}"
+					>
+						{currentVolunteer.statusType === 'active'
+							? '🟢 ปฏิบัติหน้าที่อยู่'
+							: '⚪ ยังไม่ปฏิบัติหน้าที่'}
 					</span>
 				</div>
 

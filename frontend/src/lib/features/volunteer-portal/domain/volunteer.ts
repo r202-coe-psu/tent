@@ -122,8 +122,6 @@ export type ScheduleShift = {
 };
 
 export type TicketSummary = {
-	/** Read-only and expiring — never the applicant's tracking token. */
-	view_token: string;
 	job_id: string;
 	/** The name on the application, so the portal can greet the right person. */
 	applicant_name: string;
@@ -301,25 +299,56 @@ export const PORTAL_TOKEN_HANDOFF_KEY = 'volunteer-portal-handoff-token';
 /** Short-lived browser handoff between the public login screen and dashboard route. */
 export const PORTAL_SESSION_KEY = 'volunteer-portal-session';
 
-const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
-const VIEW_TOKEN_PREFIX = 'VIEW-';
+/**
+ * How long a token-based portal session is trusted before it must sign in again.
+ *
+ */
+export const PORTAL_TOKEN_SESSION_TTL_MS = 30 * 60 * 1000;
 
 /**
- * Clean up a code that was typed, pasted or scanned, or `null` if it is neither shape.
+ * What actually lands in `sessionStorage` for a portal session — the credential plus,
+ * for a token sign-in only, when it stops being trusted. See
+ * `PORTAL_TOKEN_SESSION_TTL_MS`.
+ */
+export type StoredPortalSession = PortalCredential & { expires_at?: number };
+
+/** Attach the 30-minute clock to a token sign-in before it is persisted; pass a phone
+ * credential through unchanged. */
+export function buildStoredPortalSession(
+	credential: PortalCredential,
+	now: number = Date.now()
+): StoredPortalSession {
+	return credential.token
+		? { ...credential, expires_at: now + PORTAL_TOKEN_SESSION_TTL_MS }
+		: credential;
+}
+
+/**
+ * Whether a record just read back out of `sessionStorage` has aged past its clock.
  *
- * Case matters for only one of the two: a tracking token is uppercase hex and people
- * type it off a printed pass in whatever case they like, while a `VIEW-` reference is
- * base64url and upper-casing it destroys the signature. So the prefix is matched
- * case-insensitively and only the tracking token's body is normalised.
+ * `raw` is the untyped, parsed JSON — not the schema-validated credential — because
+ * `portalCredentialSchema` strips `expires_at` as an unrecognised field. A phone session
+ * never carries the field and so is never considered expired here.
+ */
+export function isStoredPortalSessionExpired(raw: unknown, now: number = Date.now()): boolean {
+	if (!raw || typeof raw !== 'object') return false;
+	const expiresAt = (raw as { expires_at?: unknown }).expires_at;
+	return typeof expiresAt === 'number' && now > expiresAt;
+}
+
+const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
+
+/**
+ * Clean up a code that was typed, pasted or scanned, or `null` if it is not a tracking
+ * token. A tracking token is uppercase hex and people type it off a printed pass in
+ * whatever case they like, so the prefix is matched case-insensitively and the whole
+ * thing is normalised to uppercase.
  */
 export function normalizeTicketToken(raw: string): string | null {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
 	if (trimmed.toUpperCase().startsWith(TRACKING_TOKEN_PREFIX)) {
 		return trimmed.toUpperCase();
-	}
-	if (trimmed.toUpperCase().startsWith(VIEW_TOKEN_PREFIX)) {
-		return VIEW_TOKEN_PREFIX + trimmed.slice(VIEW_TOKEN_PREFIX.length);
 	}
 	return null;
 }

@@ -35,6 +35,8 @@
 		assignment,
 		job,
 		blockedByIdentity,
+		blockedByDispatch,
+		blockedByLateness,
 		notYetOnShift,
 		isEarly,
 		earlyByLabel,
@@ -49,6 +51,13 @@
 		assignment: ShiftAssignment | undefined;
 		job: Job | undefined;
 		blockedByIdentity: boolean;
+		/** The volunteer hasn't accepted this dispatched offer yet — not a real
+		 * commitment, so it must block check-in the same way an unverified identity
+		 * does (see `volunteer-check-in.svelte`'s `isPendingDispatch`). */
+		blockedByDispatch: boolean;
+		/** The shift's duty window (+ grace) is already over — check-IN only, never
+		 * check-out (see `volunteer-check-in.svelte`'s `blockedByLateness`). */
+		blockedByLateness: boolean;
 		notYetOnShift: boolean;
 		isEarly: boolean;
 		earlyByLabel: string;
@@ -162,6 +171,14 @@
 				{:else if !assignment}
 					<Badge variant="outline" class="shrink-0 gap-1 text-muted-foreground">ไม่มีกะวันนี้</Badge
 					>
+				{:else if blockedByDispatch}
+					<Badge
+						class="shrink-0 gap-1 border-amber-300 bg-amber-50 text-amber-700"
+						variant="outline"
+					>
+						<Lock class="size-3" />
+						รอยืนยันการมอบหมาย
+					</Badge>
 				{:else if blockedByIdentity}
 					<Badge
 						class="shrink-0 gap-1 border-amber-300 bg-amber-50 text-amber-700"
@@ -169,6 +186,11 @@
 					>
 						<Lock class="size-3" />
 						รอยืนยันตัวตน
+					</Badge>
+				{:else if blockedByLateness}
+					<Badge class="shrink-0 gap-1 border-rose-300 bg-rose-50 text-rose-700" variant="outline">
+						<AlertCircle class="size-3" />
+						เลยเวลาปฏิบัติงานแล้ว
 					</Badge>
 				{:else if isEarly}
 					<Badge
@@ -256,11 +278,26 @@
 								: `ดำเนินการโดย ${assignment.check_out_by ?? 'ไม่ระบุ'}`}
 						</p>
 					</div>
+				{:else if blockedByDispatch}
+					<div class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+						<Lock class="mt-0.5 size-4 shrink-0 text-amber-700" />
+						<p class="text-xs text-amber-900">
+							อาสาสมัครยังไม่ได้ตอบรับการมอบหมายกะนี้ — รอยืนยันการมอบหมายก่อน จึงจะเช็คอินได้
+						</p>
+					</div>
 				{:else if blockedByIdentity}
 					<div class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
 						<Lock class="mt-0.5 size-4 shrink-0 text-amber-700" />
 						<p class="text-xs text-amber-900">
 							ต้องให้เจ้าหน้าที่ตรวจบัตรประชาชนและยืนยันตัวตนก่อน จึงจะเช็คอินเข้ากะได้
+						</p>
+					</div>
+				{:else if blockedByLateness}
+					<div class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
+						<AlertCircle class="mt-0.5 size-4 shrink-0 text-rose-700" />
+						<p class="text-xs text-rose-900">
+							กะนี้สิ้นสุดไปแล้ว (สิ้นสุด {formatTime(assignment.duty_window.end_ts)} น.) — เช็คอินไม่ได้อีกต่อไป
+							กรุณาตรวจสอบว่าเลือกกะถูกต้อง หรือติดต่อเจ้าหน้าที่หากต้องบันทึกย้อนหลัง
 						</p>
 					</div>
 				{:else if isEarly}
@@ -306,10 +343,23 @@
 						{/if}
 						กดยืนยันเช็คเอาต์ออกงาน (Check-Out)
 					</Button>
+				{:else if blockedByDispatch}
+					<Button disabled class="h-11 flex-1 rounded-xl text-sm font-bold">
+						<Lock class="mr-1.5 size-4" />
+						รอยืนยันการมอบหมายก่อนเช็คอิน
+					</Button>
 				{:else if blockedByIdentity}
 					<Button disabled class="h-11 flex-1 rounded-xl text-sm font-bold">
 						<Lock class="mr-1.5 size-4" />
 						รอยืนยันตัวตนก่อนเช็คอิน
+					</Button>
+				{:else if blockedByLateness}
+					<Button
+						disabled
+						class="h-11 flex-1 rounded-xl bg-rose-100 text-sm font-bold text-rose-700"
+					>
+						<AlertCircle class="mr-1.5 size-4" />
+						เลยเวลากะแล้ว เช็คอินไม่ได้
 					</Button>
 				{:else if notYetOnShift && isEarly}
 					<Button

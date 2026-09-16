@@ -1,6 +1,8 @@
 /**
  * Volunteer domain schema — CR-094 §3.1 (schema.md §2.8, `volunteer` schema_v 1 → 2)
  * and CR-095 (schema.md §2.8, `volunteer` schema_v 2 → 3 — `personnel_type`).
+ * schema_v 3 → 4 (draft-volunteer-role-card-checkin.md) adds `tracking_token_hash`,
+ * additive — existing schema_v 3 rows stay valid and read the field as absent.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -36,7 +38,7 @@ export const nationalIdSchema = z
 
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 3;
+	schema_v: 3 | 4;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
@@ -46,6 +48,16 @@ export interface Volunteer extends BaseDoc {
 	skills: string[];
 	organization?: string | null;
 	tracking_token?: string | null;
+	/**
+	 * SHA-256 of a permanent `TKT-VOL-{...}` role-card token, minted once per
+	 * volunteer (not per application) the first time they apply and reused for
+	 * every later application, the public digital pass, portal login, and
+	 * on-site check-in (schema.md §2.8, additive — see
+	 * `server/public-application.ts` for the mint and
+	 * `data/volunteer.remote.ts#getByTrackingToken` for the check-in lookup).
+	 * Plaintext is never persisted to CouchDB.
+	 */
+	tracking_token_hash?: string | null;
 	status: VolunteerStatus;
 	user_name?: string | null;
 	central_profile_id?: string | null;
@@ -72,7 +84,7 @@ export const volunteerSchema = z.object({
 	_id: z.string().startsWith('volunteer:'),
 	_rev: z.string().optional(),
 	type: z.literal('volunteer'),
-	schema_v: z.literal(3),
+	schema_v: z.union([z.literal(3), z.literal(4)]),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
@@ -86,6 +98,7 @@ export const volunteerSchema = z.object({
 	skills: z.array(z.string()).default([]),
 	organization: z.string().nullable().optional(),
 	tracking_token: z.string().nullable().optional(),
+	tracking_token_hash: z.string().nullable().optional(),
 	status: volunteerStatusSchema,
 	user_name: z.string().nullable().optional(),
 	central_profile_id: z.string().nullable().optional(),
@@ -154,7 +167,7 @@ export function makeVolunteer(
 	const d = volunteerInputSchema.parse(input);
 	return makeDoc(
 		'volunteer',
-		3,
+		4,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -164,6 +177,7 @@ export function makeVolunteer(
 			skills: d.skills,
 			organization: d.organization ?? null,
 			tracking_token: null,
+			tracking_token_hash: null,
 			status: fields.status ?? 'active',
 			user_name: null,
 			central_profile_id: null,

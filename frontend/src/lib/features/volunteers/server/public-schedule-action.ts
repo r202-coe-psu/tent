@@ -75,10 +75,6 @@ function normalizePhone(value: string): string {
 	return digits;
 }
 
-function isViewToken(value: string): boolean {
-	return value.trim().toUpperCase().startsWith('VIEW-');
-}
-
 function tokenHash(value: string): Promise<string> {
 	return sha256Hex(value.trim().toUpperCase());
 }
@@ -115,10 +111,6 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 }
 
 async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
-	if (credential.token && isViewToken(credential.token)) {
-		throw new PublicScheduleError('SHIFT_NOT_FOUND', 404);
-	}
-
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
 	const phoneHash = credential.phone ? await sha256Hex(normalizePhone(credential.phone)) : null;

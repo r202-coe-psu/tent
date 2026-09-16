@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
@@ -516,7 +517,13 @@ export async function preflightPublicVolunteerApplication(
 export async function applyPublicVolunteerApplication(
 	jobIdInput: string,
 	input: DirectApplicationInput
-): Promise<{ tracking_token: string; status: string; job_id: string; shift_id?: string }> {
+): Promise<{
+	tracking_token: string;
+	status: string;
+	job_id: string;
+	shift_id?: string;
+	volunteer_token?: string;
+}> {
 	const jobId = normalizedJobId(jobIdInput);
 	const shelterCode = await findShelterCodeForJob(jobId, input.shelter_code);
 	if (!shelterCode) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
@@ -601,8 +608,24 @@ export async function applyPublicVolunteerApplication(
 		throw new PublicApplicationError('TIME_CONFLICT', 409);
 	}
 	const now = new Date().toISOString();
-	const trackingToken = `TKT-VOL-${ulid().slice(-16)}`;
+	// 16 random bytes, hex-encoded (32 hex chars) — same convention as the backend's
+	// `secrets.token_hex(16)` for this prefix, not a ULID: this is a bearer secret, not an
+	// identifier, so it must come from a CSPRNG rather than something with a time component.
+	const trackingToken = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
 	const trackingTokenHash = await sha256Hex(trackingToken);
+
+	// Per-volunteer token (separate from the per-application `trackingToken` above): minted
+	// once the first time this volunteer applies, then reused for every later application,
+	// the public pass, portal login, and on-site check-in. An existing volunteer keeps
+	// whatever hash it already has — the plaintext can never be recovered from a hash, so a
+	// volunteer that already has one must never have it silently replaced.
+	const existingVolunteerToken = existing?.tracking_token_hash;
+	const mintedVolunteerToken = existingVolunteerToken
+		? null
+		: `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+	const volunteerTokenHash = mintedVolunteerToken
+		? await sha256Hex(mintedVolunteerToken)
+		: existingVolunteerToken;
 	const codesRes = await findAsPublicWriter(
 		dbName,
 		{ type: 'volunteer' },
@@ -645,13 +668,14 @@ export async function applyPublicVolunteerApplication(
 					notes: null
 				},
 				skill_verifications: mergedSkillVerifications,
+				tracking_token_hash: volunteerTokenHash,
 				updated_at: now,
 				updated_by: 'public'
 			}
 		: {
 				_id: volunteerId,
 				type: 'volunteer',
-				schema_v: 3,
+				schema_v: 4,
 				shelter_code: shelterCode,
 				created_at: now,
 				updated_at: now,
@@ -664,7 +688,7 @@ export async function applyPublicVolunteerApplication(
 				national_id_hash: input.national_id ? await sha256Hex(input.national_id) : null,
 				email: input.email || null,
 				skills,
-				tracking_token_hash: trackingTokenHash,
+				tracking_token_hash: volunteerTokenHash,
 				status: 'active',
 				checked_in: false,
 				current_shelter_code: null,
@@ -755,5 +779,11 @@ export async function applyPublicVolunteerApplication(
 		throw new PublicApplicationError('WRITE_FAILED', 502);
 	}
 
-	return { tracking_token: trackingToken, status, job_id: jobId, shift_id: verifiedShiftId };
+	return {
+		tracking_token: trackingToken,
+		status,
+		job_id: jobId,
+		shift_id: verifiedShiftId,
+		...(mintedVolunteerToken ? { volunteer_token: mintedVolunteerToken } : {})
+	};
 }

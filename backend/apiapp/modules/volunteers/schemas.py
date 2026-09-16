@@ -160,15 +160,15 @@ class PortalCredential(BaseModel):
     """How a caller identifies the volunteer whose data it is asking for.
 
     Exactly one of the two, and they are equally powerful because both resolve to the
-    same ``phone_hash``: the phone the application was made with, or a ticket token —
-    the applicant's own ``TKT-VOL-…`` or a read-only ``VIEW-…`` minted by a phone
-    lookup. CR-092 หน้าจอ 6 lists both as sign-in routes for a volunteer who has no
-    account, so refusing one of them here would leave the QR on their pass unusable.
+    same ``phone_hash``: the phone the application was made with, or a ``TKT-VOL-…``
+    tracking token — either the applicant's own per-application one, or the permanent
+    per-volunteer one minted at first apply (docs/changes/draft-volunteer-role-card-checkin.md).
+    CR-092 หน้าจอ 6 lists both as sign-in routes for a volunteer who has no account, so
+    refusing one of them here would leave the QR on their pass unusable.
 
-    Neither is a secret a stranger cannot reach — a phone number is guessable and a
-    ``VIEW-`` token is handed out to anyone who knows one — which is why every route
-    that takes this is rate limited and why answering a dispatched shift still needs
-    the separate code a manager reads out.
+    Neither is a secret a stranger cannot reach on its own — a phone number is
+    guessable — which is why every route that takes this is rate limited and why
+    answering a dispatched shift still needs the separate code a manager reads out.
 
     "Exactly one" is enforced in the use case rather than by a validator here, so the
     refusal comes back in this module's own ``{"success": false, "error": …}`` envelope
@@ -187,10 +187,6 @@ class TicketFindRequest(PortalCredential):
 
 
 class TicketFindItem(BaseModel):
-    #: A read-only, expiring reference — not the applicant's tracking token. Anyone who
-    #: knows the phone number can reach this list, so what it hands out must not be able
-    #: to cancel a shift.
-    view_token: str
     job_id: str
     #: The name on the application, so the portal can greet the person who signed in
     #: rather than invent one. Already shown on the pass this reference opens, so it

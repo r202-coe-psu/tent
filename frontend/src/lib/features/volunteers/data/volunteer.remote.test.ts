@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 import type { AuthorContext } from '$lib/db/model';
+import { sha256Hex } from '$lib/db/hash';
 
 let memoryRepo = createInMemoryRepository();
 vi.mock('$lib/db/repository', async (importOriginal) => {
@@ -42,7 +43,7 @@ describe('VolunteerRemoteRepository', () => {
 		const volunteer = await repo.create(baseInput, ctx);
 
 		expect(volunteer._id).toMatch(/^volunteer:/);
-		expect(volunteer.schema_v).toBe(3);
+		expect(volunteer.schema_v).toBe(4);
 		expect(volunteer.checked_in).toBe(false);
 		expect(volunteer.identity_verified).toBe(false);
 		expect(volunteer.current_shelter_code).toBeNull();
@@ -108,6 +109,23 @@ describe('VolunteerRemoteRepository', () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		expect(await repo.getByTrackingToken('missing')).toBeNull();
 		expect(await repo.getByPhoneHash('missing')).toBeNull();
+	});
+
+	it('getByTrackingToken queries by the hashed, normalized token (trimmed + upper-cased before hashing), with a legacy plaintext fallback — mirrors job-application.remote.ts#getByTrackingToken', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+		const findSpy = vi.spyOn(memoryRepo, 'find');
+		const rawToken = '  tkt-vol-abc123  ';
+
+		await repo.getByTrackingToken(rawToken);
+
+		const expectedHash = await sha256Hex('TKT-VOL-ABC123');
+		expect(findSpy).toHaveBeenCalledWith({
+			selector: {
+				type: 'volunteer',
+				$or: [{ tracking_token_hash: expectedHash }, { tracking_token: rawToken }]
+			},
+			limit: 1
+		});
 	});
 
 	it('update() throws for a document that does not exist', async () => {

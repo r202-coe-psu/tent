@@ -1698,8 +1698,6 @@ export interface components {
 		};
 		/** TicketFindItem */
 		TicketFindItem: {
-			/** View Token */
-			view_token: string;
 			/**
 			 * Applicant Name
 			 * @default

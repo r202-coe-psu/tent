@@ -172,6 +172,7 @@ export type ApplyResult = {
 	status: string;
 	job_id: string;
 	shift_id?: string | null;
+	volunteer_token?: string;
 };
 
 /**

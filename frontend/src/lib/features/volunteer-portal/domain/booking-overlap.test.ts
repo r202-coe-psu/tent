@@ -7,7 +7,6 @@ const baseActivity: PortalActivity = {
 	jobId: 'job:existing',
 	shiftId: 'shift:existing',
 	assignmentId: null,
-	ticketToken: 'VIEW-1',
 	title: 'ผู้จัดหมวดหมู่กล่องยังชีพ',
 	description: '',
 	location: 'ศูนย์พักพิง',

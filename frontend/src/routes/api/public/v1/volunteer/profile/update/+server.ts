@@ -13,10 +13,10 @@ export const prerender = false;
  * Change the parts of the profile the volunteer owns.
  *
  * A write, so it gets its own budget rather than the shared read one — and a tighter
- * one, because the credential that reaches it (a phone number, or a `VIEW-` token handed
- * out by a phone lookup) is guessable. What it can express is the whole defence beyond
- * that: only `skills` crosses to FastAPI, so nothing here can touch `identity_verified`,
- * `status`, `volunteer_code` or `personnel_type`, which are staff decisions.
+ * one, because the credential that reaches it (a phone number, or a tracking token) is
+ * guessable. What it can express is the whole defence beyond that: only `skills`
+ * crosses to FastAPI, so nothing here can touch `identity_verified`, `status`,
+ * `volunteer_code` or `personnel_type`, which are staff decisions.
  */
 export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
 	if (!volunteerProfileUpdateLimiter.check(getClientAddress())) {

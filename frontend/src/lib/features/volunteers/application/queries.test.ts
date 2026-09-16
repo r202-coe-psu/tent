@@ -126,7 +126,8 @@ import {
 	useCheckOut,
 	useCreateWalkInVolunteer,
 	useSetVolunteerAccountLink,
-	startVolunteersLiveQuery
+	startVolunteersLiveQuery,
+	findVolunteerByTrackingToken
 } from './queries';
 
 function fakeQueryClient(): QueryClient {
@@ -381,6 +382,22 @@ describe('mutation invalidation map', () => {
 		expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
+	});
+});
+
+describe('findVolunteerByTrackingToken', () => {
+	it('delegates straight to VolunteerRepository#getByTrackingToken — no FastAPI/BFF hop', async () => {
+		const volunteer = { _id: 'volunteer:1' };
+		volunteerRepo.getByTrackingToken.mockResolvedValue(volunteer);
+
+		await expect(findVolunteerByTrackingToken('TKT-VOL-ABC123')).resolves.toBe(volunteer);
+		expect(volunteerRepo.getByTrackingToken).toHaveBeenCalledWith('TKT-VOL-ABC123');
+	});
+
+	it('resolves null when the token matches no volunteer', async () => {
+		volunteerRepo.getByTrackingToken.mockResolvedValue(null);
+
+		await expect(findVolunteerByTrackingToken('missing')).resolves.toBeNull();
 	});
 });
 

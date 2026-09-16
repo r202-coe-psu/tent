@@ -22,7 +22,6 @@ const shift = (overrides: Partial<ScheduleShift> = {}): ScheduleShift => ({
 });
 
 const ticket = (overrides: Partial<TicketSummary> = {}): TicketSummary => ({
-	view_token: 'VIEW-1',
 	job_id: 'job:1',
 	applicant_name: 'อาสา',
 	status: 'confirmed',
@@ -38,7 +37,6 @@ describe('portal schedule view', () => {
 		const activities = mergePortalActivities([shift()], [ticket()]);
 		expect(activities).toHaveLength(1);
 		expect(activities[0]?.assignmentId).toBe('shift_assignment:1');
-		expect(activities[0]?.ticketToken).toBe('VIEW-1');
 		expect(activities[0]?.shiftPeriod).toBe('กะเช้า');
 	});
 

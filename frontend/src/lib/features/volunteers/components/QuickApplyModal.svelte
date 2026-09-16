@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -18,7 +19,11 @@
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '../i18n/jobs.i18n';
-	import { applyToJob } from '$lib/features/volunteer-portal/data/volunteer-api';
+	import {
+		applyToJob,
+		resolvePortalAccess
+	} from '$lib/features/volunteer-portal/data/volunteer-api';
+	import { PORTAL_SESSION_KEY } from '$lib/features/volunteer-portal/domain/volunteer';
 	import type {
 		PortalCredential,
 		VolunteerProfile
@@ -298,6 +303,7 @@
 				...(recaptchaToken ? { captchaToken: recaptchaToken } : {})
 			});
 			const trackingToken = result.tracking_token;
+			const applicantPhone = cleanApplicantPhone();
 			toast.success(t.toastApplySuccess);
 			onSubmit?.({
 				firstName,
@@ -320,9 +326,39 @@
 				skills: [],
 				consentPdpa: false
 			};
-			if (trackingToken) {
-				const ticketPath = `/volunteer/ticket/${encodeURIComponent(trackingToken)}`;
+
+			if (result.volunteer_token) {
+				// First application ever for this phone number — the permanent per-volunteer
+				// digital-pass token was just minted, so go straight to the pass.
+				const ticketPath = `/volunteer/ticket/${encodeURIComponent(result.volunteer_token)}`;
 				await goto(`${ticketPath}${isPortalApplicant ? '?from=portal' : ''}`);
+			} else if (isPortalApplicant) {
+				if (applicantCredential?.portal_id) {
+					await goto(
+						resolve(
+							`/volunteers/portal/volunteer/${encodeURIComponent(applicantCredential.portal_id)}/dashboard`
+						)
+					);
+				}
+			} else {
+				try {
+					const profile = await resolvePortalAccess({ phone: applicantPhone });
+					if (profile?.portal_id) {
+						try {
+							sessionStorage.setItem(
+								PORTAL_SESSION_KEY,
+								JSON.stringify({ phone: applicantPhone, portal_id: profile.portal_id })
+							);
+						} catch {
+							// Private mode, or storage disabled — the portal opens signed out and
+							// the volunteer can sign in again with the number they just typed.
+						}
+					}
+				} catch {
+					// Resolve failed (network hiccup, phone not found, …) — same fallback: land
+					// on the entry screen, they can sign in by hand.
+				}
+				await goto(resolve('/volunteers/portal'));
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : t.errApplyGeneric;

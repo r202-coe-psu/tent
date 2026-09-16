@@ -4348,10 +4348,6 @@
 			},
 			"TicketFindItem": {
 				"properties": {
-					"view_token": {
-						"type": "string",
-						"title": "View Token"
-					},
 					"applicant_name": {
 						"type": "string",
 						"title": "Applicant Name",
@@ -4377,7 +4373,7 @@
 					}
 				},
 				"type": "object",
-				"required": ["view_token", "status", "shelter_code"],
+				"required": ["status", "shelter_code"],
 				"title": "TicketFindItem"
 			},
 			"TicketFindRequest": {

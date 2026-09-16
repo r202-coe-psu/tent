@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildStoredPortalSession,
 	dispatchRespondSchema,
 	isJobApplicable,
+	isStoredPortalSessionExpired,
 	isUpcomingShift,
 	normalizeTicketToken,
+	PORTAL_TOKEN_SESSION_TTL_MS,
 	ticketTokenFromScan,
 	isValidThaiNationalId,
 	needsDispatchResponse,
@@ -226,15 +229,14 @@ describe('normalizeTicketToken', () => {
 		expect(normalizeTicketToken('  tkt-vol-abc123  ')).toBe('TKT-VOL-ABC123');
 	});
 
-	it('leaves a view reference exactly as it was — it is base64url and case matters', () => {
-		// Upper-casing one destroys the HMAC signature, which is how the old sign-in
-		// silently rejected every reference minted by a phone lookup.
-		const view = 'VIEW-am9iOjE.aBcD_eF-';
-		expect(normalizeTicketToken(` ${view} `)).toBe(view);
-		expect(normalizeTicketToken('view-am9iOjE.aBcD_eF-')).toBe('VIEW-am9iOjE.aBcD_eF-');
+	it('refuses a VIEW- reference — that whole mechanism has been removed', () => {
+		// On-site check-in resolves a scan with a direct CouchDB lookup against the
+		// volunteer's own tracking_token_hash; it never understood a VIEW- reference in
+		// the first place, so signing in with one is no longer supported either.
+		expect(normalizeTicketToken('VIEW-am9iOjE.aBcD_eF-')).toBeNull();
 	});
 
-	it('refuses anything that is not one of the two shapes', () => {
+	it('refuses anything that is not a tracking token', () => {
 		// The placeholder on the login form used to advertise this one; it never worked.
 		expect(normalizeTicketToken('V-1001')).toBeNull();
 		expect(normalizeTicketToken('0812345678')).toBeNull();
@@ -259,6 +261,50 @@ describe('ticketTokenFromScan', () => {
 
 	it('returns null for a QR that is not a pass at all', () => {
 		expect(ticketTokenFromScan('https://example.com/menu')).toBeNull();
+	});
+});
+
+describe('buildStoredPortalSession', () => {
+	const now = new Date('2026-09-01T00:00:00Z').getTime();
+
+	it('attaches a 30-minute expiry to a token sign-in', () => {
+		const stored = buildStoredPortalSession({ token: 'TKT-VOL-ABC123' }, now);
+		expect(stored).toEqual({
+			token: 'TKT-VOL-ABC123',
+			expires_at: now + PORTAL_TOKEN_SESSION_TTL_MS
+		});
+	});
+
+	it('leaves a phone sign-in unchanged, with no expiry', () => {
+		const stored = buildStoredPortalSession({ phone: '0812345678' }, now);
+		expect(stored).toEqual({ phone: '0812345678' });
+		expect(stored).not.toHaveProperty('expires_at');
+	});
+});
+
+describe('isStoredPortalSessionExpired', () => {
+	const now = new Date('2026-09-01T00:30:00Z').getTime();
+
+	it('discards a token session whose clock has run out', () => {
+		expect(isStoredPortalSessionExpired({ token: 'TKT-VOL-X', expires_at: now - 1 }, now)).toBe(
+			true
+		);
+	});
+
+	it('keeps a token session still inside its 30-minute window', () => {
+		expect(isStoredPortalSessionExpired({ token: 'TKT-VOL-X', expires_at: now + 1 }, now)).toBe(
+			false
+		);
+	});
+
+	it('never expires a phone session, which carries no expires_at at all', () => {
+		expect(isStoredPortalSessionExpired({ phone: '0812345678' }, now)).toBe(false);
+	});
+
+	it('treats a missing or malformed record as not expired, not a crash', () => {
+		expect(isStoredPortalSessionExpired(null, now)).toBe(false);
+		expect(isStoredPortalSessionExpired('not-an-object', now)).toBe(false);
+		expect(isStoredPortalSessionExpired({ expires_at: 'soon' }, now)).toBe(false);
 	});
 });
 

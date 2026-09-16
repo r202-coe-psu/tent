@@ -23,14 +23,14 @@
 	 *     feature) — by `_id`, `volunteer_code` (the "V-xxx" badge every profile
 	 *     carries), or an exact full 10-digit phone match (not last-4, so two
 	 *     volunteers sharing a last-4 never collide on a scan/type match — the
-	 *     "ค้นหาด่วน" fallback still lists every partial name/phone match).
-	 *     `volunteer` itself never carries a matchable plaintext ticket token
-	 *     (schema.md §2.8 has no such field; `tracking_token`/`tracking_token_hash`
-	 *     live on `job_application`, §2.18, generated + hashed once at apply time
-	 *     and never copied back) — a digital-pass scan that misses the local list
-	 *     falls through to `findJobApplicationByToken`, which hashes the code and
-	 *     queries `job_application` by `tracking_token_hash` (or legacy plaintext
-	 *     `tracking_token`), then resolves the volunteer via its `volunteer_id`.
+	 *     "ค้นหาด่วน" fallback still lists every partial name/phone match). A
+	 *     digital-pass scan that misses the local list falls through to
+	 *     `findVolunteerByTrackingToken`, which resolves the volunteer's
+	 *     PERMANENT role-card token directly against `volunteer.tracking_token_hash`
+	 *     (schema.md §2.8 — minted once per volunteer at first apply in
+	 *     `server/public-application.ts`, reused forever after, never expires).
+	 *     Same as everything else on this staff-plane screen, that lookup is a
+	 *     direct CouchDB Mango query — no FastAPI/BFF hop, no expiry to check.
 	 *   - The matched volunteer's TODAY `shift_assignment` (from
 	 *     `useTodayAttendance()`) drives check-in/out, reusing `roster-row.svelte`'s
 	 *     identity-verification gate verbatim (FR-VOL-11 "ต้องตรวจบัตร ปชช.
@@ -63,7 +63,7 @@
 		useTodayAttendance,
 		useVolunteers,
 		useJobs,
-		findJobApplicationByToken
+		findVolunteerByTrackingToken
 	} from '../application/queries';
 	import { DEFAULT_GRACE_MINUTES } from '../domain/duty-window';
 	import { extractScanCode } from '../domain/scan-code';
@@ -97,9 +97,25 @@
 	let matchedVolunteer = $state<Volunteer | null>(null);
 	let notFoundCode = $state<string | null>(null);
 	let showWalkIn = $state(false);
+	// Explicit staff pick among today's several assignments for one volunteer — reset
+	// whenever the matched volunteer changes, so a stale pick from a previous scan can
+	// never silently drive the wrong job's check-in/out.
+	let selectedAssignmentId = $state<string | null>(null);
 
 	function fullName(v: Volunteer): string {
 		return `${v.first_name} ${v.last_name}`.trim();
+	}
+
+	function formatTime(ts: string): string {
+		return new Date(ts).toLocaleTimeString('th-TH', {
+			hour: '2-digit',
+			minute: '2-digit',
+			timeZone: 'Asia/Bangkok'
+		});
+	}
+
+	function isPendingDispatch(assignment: ShiftAssignment): boolean {
+		return assignment.dispatch_status === 'dispatched';
 	}
 
 	function findVolunteerByCode(clean: string): Volunteer | undefined {
@@ -118,11 +134,13 @@
 	function selectVolunteer(v: Volunteer) {
 		matchedVolunteer = v;
 		notFoundCode = null;
+		selectedAssignmentId = null;
 	}
 
 	function reportNotFound(code: string) {
 		matchedVolunteer = null;
 		notFoundCode = code;
+		selectedAssignmentId = null;
 		toast.error(`ไม่พบรหัส "${code}" — โปรดตรวจสอบอีกครั้งหรือค้นหาด้วยชื่อ/เบอร์โทร`);
 	}
 
@@ -142,15 +160,11 @@
 				return;
 			}
 
-			// Not a volunteer_code/_id/phone match — the scan may be a public
-			// digital-pass ticket QR. Its token only exists on `job_application`
-			// (tracking_token/tracking_token_hash), never as a matchable plaintext
-			// field on `volunteer` itself, so resolve it via the application's
-			// volunteer_id before giving up.
-			const application = await findJobApplicationByToken(clean).catch(() => null);
-			const viaTicket = application?.volunteer_id
-				? volunteersById.get(application.volunteer_id)
-				: undefined;
+			// Not a volunteer_code/_id/phone match — the scan may be the
+			// volunteer's permanent digital-pass role-card token. Resolve it
+			// directly against `volunteer.tracking_token_hash` (no expiry, no
+			// FastAPI/BFF hop — see the header comment).
+			const viaTicket = await findVolunteerByTrackingToken(clean).catch(() => null);
 
 			if (!viaTicket) {
 				reportNotFound(code);
@@ -166,23 +180,47 @@
 	function clearScreen() {
 		matchedVolunteer = null;
 		notFoundCode = null;
+		selectedAssignmentId = null;
+	}
+
+	function selectAssignment(assignment: ShiftAssignment) {
+		if (isPendingDispatch(assignment)) return;
+		selectedAssignmentId = assignment._id;
 	}
 
 	// ---------------------------------------------------------------------------
 	// Today's assignment resolution + early-check-in advisory
 	// ---------------------------------------------------------------------------
 
-	const currentAssignment = $derived.by<ShiftAssignment | undefined>(() => {
-		if (!matchedVolunteer) return undefined;
-		const mine = todayAssignments.filter((a) => a.volunteer_id === matchedVolunteer!._id);
+	const eligibleAssignments = $derived.by<ShiftAssignment[]>(() => {
+		if (!matchedVolunteer) return [];
+		return todayAssignments.filter((a) => a.volunteer_id === matchedVolunteer!._id);
+	});
+
+	function pickDefaultAssignment(mine: ShiftAssignment[]): ShiftAssignment | undefined {
+		// A dispatched-but-unaccepted offer is never worth auto-picking over a real
+		// assignment — only fall back to one if it's genuinely the only job today.
+		const confirmable = mine.filter((a) => !isPendingDispatch(a));
+		if (confirmable.length === 0) return mine[0];
 		return (
-			mine.find((a) => a.status === 'checked_in') ??
-			[...mine]
+			confirmable.find((a) => a.status === 'checked_in') ??
+			[...confirmable]
 				.filter((a) => a.status === 'assigned' || a.status === 'standby')
 				.sort((a, b) => a.duty_window.start_ts.localeCompare(b.duty_window.start_ts))[0] ??
-			mine.find((a) => a.status === 'completed') ??
-			mine[0]
+			confirmable.find((a) => a.status === 'completed') ??
+			confirmable[0]
 		);
+	}
+
+	// Whatever staff explicitly picked, when there's more than one job today; otherwise
+	// the same single-assignment auto-pick as before (checked-in, then the soonest
+	// upcoming one, then completed, then whatever's left).
+	const currentAssignment = $derived.by<ShiftAssignment | undefined>(() => {
+		if (selectedAssignmentId) {
+			const picked = eligibleAssignments.find((a) => a._id === selectedAssignmentId);
+			if (picked) return picked;
+		}
+		return pickDefaultAssignment(eligibleAssignments);
 	});
 
 	const currentJob = $derived(
@@ -195,6 +233,7 @@
 	const blockedByIdentity = $derived(
 		!!matchedVolunteer && !matchedVolunteer.identity_verified && notYetOnShift
 	);
+	const blockedByDispatch = $derived(!!currentAssignment && isPendingDispatch(currentAssignment));
 
 	const isEarly = $derived.by(() => {
 		if (!currentAssignment || !notYetOnShift) return false;
@@ -211,8 +250,19 @@
 		return hours > 0 ? `${hours} ชม. ${minutes} นาที` : `${minutes} นาที`;
 	});
 
+	// Symmetric to `isEarly`, but for CHECK-IN only: a shift that already ended more
+	// than the grace period ago is not something staff should be able to check
+	// someone into by scanning — that almost always means the wrong shift got
+	// picked. Check-OUT is never blocked by lateness; recording a late departure is
+	// still a real, useful action.
+	const blockedByLateness = $derived.by(() => {
+		if (!currentAssignment || !notYetOnShift) return false;
+		const endMs = new Date(currentAssignment.duty_window.end_ts).getTime();
+		return nowMs > endMs + DEFAULT_GRACE_MINUTES * 60_000;
+	});
+
 	async function confirmCheckIn() {
-		if (!currentAssignment || !matchedVolunteer) return;
+		if (!currentAssignment || !matchedVolunteer || blockedByLateness) return;
 		try {
 			await checkIn.mutateAsync({ id: currentAssignment._id });
 			toast.success(`เช็คอินเข้างาน ${fullName(matchedVolunteer)} แล้ว`);
@@ -309,12 +359,50 @@
 
 		<!-- Right column: scan result / placeholder + recent feed -->
 		<div class="space-y-4">
+			{#if matchedVolunteer && eligibleAssignments.length > 1}
+				<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
+					<p class="mb-3 text-xs font-bold text-foreground">
+						{fullName(matchedVolunteer)} มีงานวันนี้ {eligibleAssignments.length} งาน — เลือกงานที่จะเช็คอิน/เช็คเอาต์
+					</p>
+					<div class="space-y-2">
+						{#each eligibleAssignments as assignment (assignment._id)}
+							{@const job = jobsById.get(assignment.job_id)}
+							{@const isSelected = currentAssignment?._id === assignment._id}
+							{@const isPending = isPendingDispatch(assignment)}
+							<button
+								type="button"
+								disabled={isPending}
+								onclick={() => selectAssignment(assignment)}
+								class="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs transition-colors {isPending
+									? 'cursor-not-allowed border-border bg-muted/30 opacity-70'
+									: isSelected
+										? 'border-primary bg-primary/5'
+										: 'border-border bg-background hover:bg-muted/40'}"
+							>
+								<span class="font-semibold text-foreground">{job?.title ?? assignment.job_id}</span>
+								<span class="flex items-center gap-2 text-muted-foreground">
+									<span
+										>{formatTime(assignment.duty_window.start_ts)}–{formatTime(
+											assignment.duty_window.end_ts
+										)} น.</span
+									>
+									<span class={isPending ? 'font-semibold text-amber-700' : ''}>
+										{isPending ? 'รอยืนยันการมอบหมาย' : assignment.status}
+									</span>
+								</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 			<VolunteerResultCard
 				volunteer={matchedVolunteer}
 				{notFoundCode}
 				assignment={currentAssignment}
 				job={currentJob}
 				{blockedByIdentity}
+				{blockedByDispatch}
+				{blockedByLateness}
 				{notYetOnShift}
 				{isEarly}
 				{earlyByLabel}

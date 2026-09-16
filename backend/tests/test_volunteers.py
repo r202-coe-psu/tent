@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import UTC, datetime
 
 import pytest
@@ -18,7 +17,11 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.public_shift_assignment import DutyWindow, PublicShiftAssignment
 from tent_model.public_volunteer import PublicVolunteer
 from tent_model.shift_response_buffer import ShiftResponseBuffer
-from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
+from tent_model.volunteer_application_buffer import (
+    ApplicantBuffer,
+    SelectedShiftBuffer,
+    VolunteerApplicationBuffer,
+)
 from tent_model.volunteer_job_slot import VolunteerJobSlot, seed_job_slot
 from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuffer
 from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
@@ -27,7 +30,6 @@ from apiapp.core.config import Settings
 from apiapp.modules.volunteers import router as volunteer_router
 from apiapp.utils.masking import normalize_phone, sha256_hex
 from apiapp.utils.response_code import normalize_response_code
-from apiapp.utils.view_token import VIEW_TOKEN_TTL_SECONDS, mint_view_token
 
 JOB_ID = "job:01JOBTEST0000000000000001"
 
@@ -145,7 +147,10 @@ async def test_list_jobs_reports_non_cancelled_applicant_counts(
         tracking_token_hash="token-hash",
         phone_hash="phone-hash",
         selected_shift=SelectedShift(
-            shift_id="shift:morning", date="2026-09-04", start_time="08:00", end_time="12:00"
+            shift_id="shift:morning",
+            date="2026-09-04",
+            start_time="08:00",
+            end_time="12:00",
         ),
         status="pending_review",
         updated_at=datetime.now(UTC),
@@ -158,7 +163,10 @@ async def test_list_jobs_reports_non_cancelled_applicant_counts(
         tracking_token_hash="cancelled-hash",
         phone_hash="cancelled-phone-hash",
         selected_shift=SelectedShift(
-            shift_id="shift:morning", date="2026-09-04", start_time="08:00", end_time="12:00"
+            shift_id="shift:morning",
+            date="2026-09-04",
+            start_time="08:00",
+            end_time="12:00",
         ),
         status="cancelled",
         updated_at=datetime.now(UTC),
@@ -509,13 +517,17 @@ async def test_find_tickets_by_phone_does_not_confirm_an_unknown_number(
     await client.post(f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers)
 
     hit = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "081-234-5678"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "081-234-5678"},
+        headers=auth_headers,
     )
     assert hit.status_code == 200
     assert len(hit.json()["tickets"]) == 1
 
     miss = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "0899999999"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "0899999999"},
+        headers=auth_headers,
     )
     assert miss.status_code == 200
     assert miss.json()["tickets"] == []
@@ -545,13 +557,13 @@ async def test_phone_lookup_still_returns_the_token_after_couch_sync(
     await buffer.save()
 
     found = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     tickets = found.json()["tickets"]
     assert len(tickets) == 1
     assert tickets[0]["job_title"] == "ผู้ช่วยครัว"
-    # A reference, not the applicant's own token — see test_phone_lookup_* below.
-    assert tickets[0]["view_token"].startswith("VIEW-")
 
 
 async def test_phone_lookup_does_not_double_count_during_the_sync_window(
@@ -577,7 +589,10 @@ async def test_phone_lookup_does_not_double_count_during_the_sync_window(
         tracking_token_hash=buffer.tracking_token_hash,
         phone_hash=buffer.applicant.phone_hash,
         applicant=ApplicantSnapshot(
-            first_name="สมชาย", last_name="ใจดี", phone_masked="xxx-xxx-5678", skills=["ครัว"]
+            first_name="สมชาย",
+            last_name="ใจดี",
+            phone_masked="xxx-xxx-5678",
+            skills=["ครัว"],
         ),
         selected_shift=SelectedShift(date="2026-09-01", start_time="08:00", end_time="12:00"),
         status="pending_review",
@@ -585,7 +600,9 @@ async def test_phone_lookup_does_not_double_count_during_the_sync_window(
     ).insert()
 
     found = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     tickets = found.json()["tickets"]
     assert len(tickets) == 1
@@ -609,19 +626,21 @@ async def test_phone_lookup_sorts_the_schedule_by_next_shift(
         )
 
     found = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     dates = [t["shift_date"] for t in found.json()["tickets"]]
     assert dates == ["2026-09-02", "2026-10-05"]
 
 
-# ── Option C: a phone lookup may read a pass, but may not cancel one ───────────
-
-
 async def _apply_and_lookup(
     client: AsyncClient, auth_headers: dict[str, str], phone: str = "0812345678"
-) -> tuple[str, str]:
-    """Apply, then find the same ticket by phone. Returns (tracking token, view token)."""
+) -> tuple[str, None]:
+    """Apply for a job. Returns `(tracking_token, None)` — the second slot is legacy
+    (used to carry a since-removed `VIEW-` reference) and every call site still
+    unpacks it as a pair, so it stays shaped that way rather than touching every
+    caller."""
     token = (
         await client.post(
             f"/public/v1/jobs/{JOB_ID}/apply",
@@ -629,35 +648,7 @@ async def _apply_and_lookup(
             headers=auth_headers,
         )
     ).json()["tracking_token"]
-    found = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": phone}, headers=auth_headers
-    )
-    return token, found.json()["tickets"][0]["view_token"]
-
-
-async def test_phone_lookup_never_hands_back_the_tracking_token(
-    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    """Knowing a phone number must not yield the credential that cancels a shift."""
-    await _make_job()
-    token, view_token = await _apply_and_lookup(client, auth_headers)
-    assert view_token != token
-    assert token not in view_token
-
-
-async def test_view_token_opens_the_pass_read_only(
-    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    await _make_job()
-    _, view_token = await _apply_and_lookup(client, auth_headers)
-
-    response = await client.get(f"/public/v1/volunteer/ticket/{view_token}", headers=auth_headers)
-    assert response.status_code == 200
-    ticket = response.json()["ticket"]
-    assert ticket["can_cancel"] is False
-    # Still the whole card — read access is what the portal is for.
-    assert ticket["job_title"] == "ผู้ช่วยครัว"
-    assert ticket["phone_masked"] == "xxx-xxx-5678"
+    return token, None
 
 
 async def test_the_applicants_own_token_still_allows_cancelling(
@@ -677,62 +668,70 @@ async def test_the_applicants_own_token_still_allows_cancelling(
     assert cancelled.status_code == 200
 
 
-async def test_a_view_token_cannot_cancel(
+async def test_get_ticket_falls_back_to_the_volunteers_most_recent_application(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """The whole point of option C."""
-    await _make_job()
-    _, view_token = await _apply_and_lookup(client, auth_headers)
+    older_job = await _make_job(job_id="job:01JOBTEST0000000000000002", quota=5)
+    newer_job = await _make_job(quota=5)
+    phone_hash_value = sha256_hex(normalize_phone("0812345678"))
+    volunteer_id = "volunteer:01VOL0000000000000000001"
 
-    response = await client.post(
-        f"/public/v1/volunteer/ticket/{view_token}/cancel", headers=auth_headers
+    async def _buffer(*, job_id: str, created_at: datetime, suffix: str) -> None:
+        await VolunteerApplicationBuffer(
+            id=f"job_application:{suffix}",
+            shelter_code="SH001",
+            job_id=job_id,
+            volunteer_id=volunteer_id,
+            applicant=ApplicantBuffer(
+                first_name="สมชาย",
+                last_name="ใจดี",
+                phone="0812345678",
+                phone_hash=phone_hash_value,
+            ),
+            selected_shift=SelectedShiftBuffer(
+                date="2026-09-01", start_time="08:00", end_time="12:00"
+            ),
+            tracking_token=f"TKT-VOL-{suffix}",
+            tracking_token_hash=sha256_hex(f"TKT-VOL-{suffix}"),
+            status="confirmed",
+            created_at=created_at,
+        ).insert()
+
+    await _buffer(
+        job_id=older_job.id,
+        created_at=datetime(2026, 9, 1, tzinfo=UTC),
+        suffix="OLD00000000000000000000000000000",
     )
-    # 404, not 403 — "wrong kind of token" would confirm the ticket is real.
-    assert response.status_code == 404
+    await _buffer(
+        job_id=newer_job.id,
+        created_at=datetime(2026, 9, 5, tzinfo=UTC),
+        suffix="NEW00000000000000000000000000000",
+    )
 
-    slot = await VolunteerJobSlot.get(JOB_ID)
-    assert slot is not None
-    assert slot.confirmed_qty == 1
+    volunteer_token = f"TKT-VOL-{'V' * 32}"
+    await _profile_row(volunteer_id=volunteer_id, tracking_token_hash=sha256_hex(volunteer_token))
+
+    response = await client.get(
+        f"/public/v1/volunteer/ticket/{volunteer_token}", headers=auth_headers
+    )
+    assert response.status_code == 200
+    ticket = response.json()["ticket"]
+    assert ticket["job_id"] == newer_job.id
 
 
-async def test_an_expired_view_token_is_not_accepted(
+async def test_get_ticket_prefers_a_per_application_token_when_both_match(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
+    """The existing per-application ticket lookup keeps working unchanged: it is tried
+    first, and a `PublicVolunteer` fallback never overrides an application the token
+    already names directly."""
     await _make_job()
-    token = (
-        await client.post(
-            f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers
-        )
-    ).json()["tracking_token"]
-    buffer = await VolunteerApplicationBuffer.find_one(
-        VolunteerApplicationBuffer.tracking_token_hash == sha256_hex(token)
-    )
-    assert buffer is not None
+    token, _ = await _apply_and_lookup(client, auth_headers)
+    await _profile_row(tracking_token_hash=sha256_hex(f"TKT-VOL-{'B' * 32}"))
 
-    stale = mint_view_token(buffer.id, now=time.time() - VIEW_TOKEN_TTL_SECONDS - 60)
-    response = await client.get(f"/public/v1/volunteer/ticket/{stale}", headers=auth_headers)
-    assert response.status_code == 404
-
-
-async def test_a_forged_view_token_is_not_accepted(
-    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    """Signed with the server secret — an attacker who guesses an id still gets nothing."""
-    await _make_job()
-    token = (
-        await client.post(
-            f"/public/v1/jobs/{JOB_ID}/apply", json=_apply_body(), headers=auth_headers
-        )
-    ).json()["tracking_token"]
-    buffer = await VolunteerApplicationBuffer.find_one(
-        VolunteerApplicationBuffer.tracking_token_hash == sha256_hex(token)
-    )
-    assert buffer is not None
-
-    genuine = mint_view_token(buffer.id)
-    forged = f"{genuine.rsplit('.', 1)[0]}.{'A' * 43}"
-    response = await client.get(f"/public/v1/volunteer/ticket/{forged}", headers=auth_headers)
-    assert response.status_code == 404
+    response = await client.get(f"/public/v1/volunteer/ticket/{token}", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["ticket"]["job_id"] == JOB_ID
 
 
 # ── ตารางทำงานจิตอาสา — the roster, not the applications ──────────────────────
@@ -774,7 +773,9 @@ async def test_schedule_returns_shifts_the_volunteer_is_rostered_on(
     await _assign(assignment_id="shift_assignment:01A", dispatch_status="dispatched")
 
     response = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "081-234-5678"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "081-234-5678"},
+        headers=auth_headers,
     )
     assert response.status_code == 200
     shifts = response.json()["shifts"]
@@ -797,12 +798,16 @@ async def test_schedule_is_independent_of_whether_an_application_exists(
     await _assign(assignment_id="shift_assignment:01B", phone="0899990000")
 
     tickets = await client.post(
-        "/public/v1/volunteer/ticket/find", json={"phone": "0899990000"}, headers=auth_headers
+        "/public/v1/volunteer/ticket/find",
+        json={"phone": "0899990000"},
+        headers=auth_headers,
     )
     assert tickets.json()["tickets"] == []
 
     schedule = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "0899990000"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0899990000"},
+        headers=auth_headers,
     )
     assert len(schedule.json()["shifts"]) == 1
 
@@ -823,7 +828,9 @@ async def test_schedule_puts_the_next_shift_first(
     )
 
     response = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     assert [s["assignment_id"] for s in response.json()["shifts"]] == [
         "shift_assignment:01SOON",
@@ -835,7 +842,9 @@ async def test_schedule_of_an_unknown_number_is_an_empty_list_not_a_404(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     response = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "0899999999"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0899999999"},
+        headers=auth_headers,
     )
     assert response.status_code == 200
     assert response.json()["shifts"] == []
@@ -1084,7 +1093,9 @@ async def test_the_schedule_stops_asking_once_answered(
     await _respond(client, auth_headers)
 
     schedule = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     shift = schedule.json()["shifts"][0]
     assert shift["dispatch_status"] == "accepted"
@@ -1110,7 +1121,9 @@ async def test_schedule_by_tracking_token_matches_the_phone_sign_in(
     await _assign(assignment_id="shift_assignment:01A", dispatch_status="dispatched")
 
     by_phone = await client.post(
-        "/public/v1/volunteer/schedule", json={"phone": "0812345678"}, headers=auth_headers
+        "/public/v1/volunteer/schedule",
+        json={"phone": "0812345678"},
+        headers=auth_headers,
     )
     by_token = await client.post(
         "/public/v1/volunteer/schedule", json={"token": token}, headers=auth_headers
@@ -1118,22 +1131,6 @@ async def test_schedule_by_tracking_token_matches_the_phone_sign_in(
     assert by_token.status_code == 200
     assert by_token.json()["shifts"] == by_phone.json()["shifts"]
     assert len(by_token.json()["shifts"]) == 1
-
-
-async def test_schedule_by_view_token_works_too(
-    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    """A `VIEW-` reference is no weaker a key here: whoever holds one already reached it
-    with the phone number, which opens the same roster."""
-    await _make_job()
-    _, view_token = await _apply_and_lookup(client, auth_headers)
-    await _assign(assignment_id="shift_assignment:01A")
-
-    response = await client.post(
-        "/public/v1/volunteer/schedule", json={"token": view_token}, headers=auth_headers
-    )
-    assert response.status_code == 200
-    assert len(response.json()["shifts"]) == 1
 
 
 async def test_schedule_of_an_unknown_token_is_an_empty_list_not_a_404(
@@ -1238,7 +1235,10 @@ async def test_token_sign_in_still_resolves_once_the_projection_exists(
         tracking_token_hash=buffer.tracking_token_hash,
         phone_hash=buffer.applicant.phone_hash,
         applicant=ApplicantSnapshot(
-            first_name="สมชาย", last_name="ใจดี", phone_masked="xxx-xxx-5678", skills=["ครัว"]
+            first_name="สมชาย",
+            last_name="ใจดี",
+            phone_masked="xxx-xxx-5678",
+            skills=["ครัว"],
         ),
         selected_shift=SelectedShift(date="2026-09-01", start_time="08:00", end_time="12:00"),
         status="confirmed",
@@ -1266,11 +1266,13 @@ async def _profile_row(
     skills: list[str] | None = None,
     identity_verified: bool = False,
     updated_at: datetime | None = None,
+    tracking_token_hash: str | None = None,
 ) -> PublicVolunteer:
     row = PublicVolunteer(
         id=volunteer_id,
         shelter_code=shelter_code,
         phone_hash=sha256_hex(normalize_phone(phone)),
+        tracking_token_hash=tracking_token_hash,
         first_name="สมชาย",
         last_name="ใจดี",
         phone_masked="xxx-xxx-5678",
@@ -1359,7 +1361,10 @@ async def test_updating_skills_queues_one_write_per_profile_and_shows_it_at_once
     queued = await VolunteerProfileUpdateBuffer.find_all().to_list()
     assert len(queued) == 1
     assert queued[0].synced_to_couch is False
-    assert sorted(t.volunteer_id for t in queued[0].targets) == ["volunteer:01A", "volunteer:01B"]
+    assert sorted(t.volunteer_id for t in queued[0].targets) == [
+        "volunteer:01A",
+        "volunteer:01B",
+    ]
 
 
 async def test_updating_normalises_the_skills_it_stores(
@@ -1368,7 +1373,10 @@ async def test_updating_normalises_the_skills_it_stores(
     await _profile_row()
     body = (
         await _update_profile(
-            client, auth_headers, phone="0812345678", skills=[" ครัว ", "ครัว", "", "ขับรถ"]
+            client,
+            auth_headers,
+            phone="0812345678",
+            skills=[" ครัว ", "ครัว", "", "ขับรถ"],
         )
     ).json()
     assert body["profile"]["skills"] == ["ครัว", "ขับรถ"]
@@ -1418,3 +1426,42 @@ async def test_a_token_sign_in_can_read_and_edit_the_same_profile(
     updated = await _update_profile(client, auth_headers, token=token, skills=["ขับรถ"])
     assert updated.status_code == 200
     assert updated.json()["profile"]["skills"] == ["ขับรถ"]
+
+
+async def test_access_resolve_falls_back_to_a_per_volunteer_token(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A per-volunteer token — minted on the direct-CouchDB check-in write path and
+    projected onto `PublicVolunteer.tracking_token_hash` — signs the volunteer in even
+    though no `job_application`/buffer carries a matching per-application token."""
+    volunteer_token = f"TKT-VOL-{'A' * 32}"
+    await _profile_row(tracking_token_hash=sha256_hex(volunteer_token))
+
+    response = await client.post(
+        "/public/v1/volunteer/access/resolve",
+        json={"token": volunteer_token},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    profile = response.json()["profile"]
+    assert profile is not None
+    assert profile["volunteer_code"] == "V-001"
+
+
+async def test_access_resolve_prefers_a_per_application_token_when_both_match(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The existing per-application match keeps working unchanged — no migration is
+    being done, so an already-issued application token must still resolve first."""
+    await _make_job()
+    token, _ = await _apply_and_lookup(client, auth_headers)
+    # A `PublicVolunteer` row for the same phone also carries an (unrelated) token.
+    await _profile_row(tracking_token_hash=sha256_hex(f"TKT-VOL-{'B' * 32}"))
+
+    response = await client.post(
+        "/public/v1/volunteer/access/resolve",
+        json={"token": token},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["profile"] is not None

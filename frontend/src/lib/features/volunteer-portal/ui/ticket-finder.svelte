@@ -1,16 +1,20 @@
 <script lang="ts">
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input';
 	import { useFindTicketsMutation } from '../application/queries';
-	import { ticketFindSchema, ticketStatusLabel } from '../domain/volunteer';
+	import { resolvePortalAccess } from '../data/volunteer-api';
+	import { ticketFindSchema, ticketStatusLabel, PORTAL_SESSION_KEY } from '../domain/volunteer';
 
 	let phone = $state('');
 	let error = $state('');
 	let searched = $state(false);
+	let isEnteringPortal = $state(false);
 
 	const find = useFindTicketsMutation();
 	const tickets = $derived(find.data?.tickets ?? []);
@@ -28,6 +32,32 @@
 			searched = true;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'ค้นหาตั๋วไม่สำเร็จ';
+		}
+	}
+
+	async function signIntoPortal() {
+		error = '';
+		isEnteringPortal = true;
+		try {
+			const profile = await resolvePortalAccess({ phone });
+			if (!profile?.portal_id) {
+				error = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				return;
+			}
+			try {
+				sessionStorage.setItem(
+					PORTAL_SESSION_KEY,
+					JSON.stringify({ phone, portal_id: profile.portal_id })
+				);
+			} catch {
+				// Private mode, or storage disabled — the portal opens signed out and the
+				// volunteer can sign in again with the number they just typed.
+			}
+			await goto(resolve('/volunteers/portal'));
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'ไม่สามารถเข้าสู่ระบบได้';
+		} finally {
+			isEnteringPortal = false;
 		}
 	}
 </script>
@@ -62,7 +92,7 @@
 		</Card.Root>
 	{/if}
 
-	{#each tickets as ticket (ticket.view_token)}
+	{#each tickets as ticket (`${ticket.job_id}:${ticket.shift_id ?? ticket.shift_date}`)}
 		<Card.Root>
 			<Card.Header>
 				<div class="flex items-start justify-between gap-2">
@@ -76,11 +106,19 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Footer class="flex-col items-stretch gap-2">
-				<Button href="/volunteer/ticket/{ticket.view_token}" variant="outline" class="w-full">
-					เปิดตั๋วดิจิทัล
+				<Button
+					onclick={signIntoPortal}
+					disabled={isEnteringPortal}
+					variant="outline"
+					class="w-full"
+				>
+					{#if isEnteringPortal}
+						<Loader2 class="size-4 animate-spin" aria-hidden="true" />
+					{/if}
+					เข้าสู่ตารางงานจิตอาสา
 				</Button>
 				<!--
-					Reached by phone number, so this opens the pass read-only. Cancelling needs the
+					Reached by phone number, so this signs in read-only. Cancelling needs the
 					ticket link the applicant was given when they applied — a phone number is
 					guessable and a withdrawn shift cannot be taken back.
 				-->

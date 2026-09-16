@@ -1,6 +1,7 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
+import { sha256Hex } from '$lib/db/hash';
 import {
 	isVolunteer,
 	volunteerSchema,
@@ -60,8 +61,12 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 	}
 
 	async getByTrackingToken(token: string): Promise<Volunteer | null> {
+		const normalized = token.trim().toUpperCase();
 		const docs = await this.repo.find<Volunteer>({
-			selector: { type: 'volunteer', tracking_token: token },
+			selector: {
+				type: 'volunteer',
+				$or: [{ tracking_token_hash: await sha256Hex(normalized) }, { tracking_token: token }]
+			},
 			limit: 1
 		});
 		return docs.filter(isVolunteer)[0] ?? null;

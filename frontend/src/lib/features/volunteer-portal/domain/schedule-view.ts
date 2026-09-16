@@ -8,7 +8,6 @@ export type PortalActivity = {
 	jobId: string;
 	shiftId: string | null;
 	assignmentId: string | null;
-	ticketToken: string | null;
 	title: string;
 	description: string;
 	location: string;
@@ -147,7 +146,6 @@ export function mergePortalActivities(
 		jobId: shift.job_id,
 		shiftId: shift.shift_id ?? null,
 		assignmentId: shift.assignment_id,
-		ticketToken: null,
 		title: shift.job_title || 'งานอาสาสมัคร',
 		description: shift.station ? `จุดปฏิบัติงาน: ${shift.station}` : '',
 		location: shift.shelter_name || shift.shelter_code,
@@ -161,27 +159,16 @@ export function mergePortalActivities(
 		status: shift.status,
 		dispatchStatus: shift.dispatch_status
 	}));
-	const activityByAssignment = new Map(
-		activities
-			.filter((activity) => activity.assignmentId)
-			.map((activity) => [activity.assignmentId as string, activity])
-	);
-
 	for (const ticket of tickets) {
 		if (ticket.status === 'cancelled') continue;
 		const matchingShift = shifts.find((shift) => sameShift(ticket, shift));
-		if (matchingShift) {
-			const activity = activityByAssignment.get(matchingShift.assignment_id);
-			if (activity) activity.ticketToken ??= ticket.view_token;
-			continue;
-		}
+		if (matchingShift) continue;
 		const window = ticketWindow(ticket);
 		activities.push({
-			id: `ticket:${ticket.view_token}`,
+			id: `ticket:${ticket.job_id}:${ticket.shift_id ?? ticket.shift_date}`,
 			jobId: ticket.job_id,
 			shiftId: ticket.shift_id ?? null,
 			assignmentId: null,
-			ticketToken: ticket.view_token,
 			title: ticket.job_title || 'ภารกิจอาสาสมัคร',
 			description: 'การสมัครของคุณอยู่ระหว่างรอเจ้าหน้าที่จัดกะให้',
 			location: ticket.shelter_code,
