@@ -39,6 +39,7 @@ from tent_model import (
 from worker.couch.client import CouchClient
 from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
+from worker.quota_target_rules import TargetDecision, decide_target_change
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class ShelterReconcileReport:
 def _to_decimal(value: Any) -> Decimal | None:
     try:
         return Decimal(str(value))
-    except (InvalidOperation, TypeError):
+    except InvalidOperation, TypeError:
         return None
 
 
@@ -199,7 +200,7 @@ async def _campaign_targets(
                 continue
             try:
                 qty_target = Decimal(str(need.get("qty_target")))
-            except (InvalidOperation, TypeError):
+            except InvalidOperation, TypeError:
                 continue
             if qty_target < 0:
                 continue
@@ -237,13 +238,18 @@ async def _realign_target(
 
     stored_raw = counter["qty_target"]
     stored = stored_raw.to_decimal()
+    # `TargetDecision.UNCHANGED` says the same thing; answered early here so an
+    # untouched counter costs no reserve lookup.
     if stored == wanted:
         return
 
     reserved = max(
         counter["reserved_qty"].to_decimal(), report.computed.get(key, Decimal(0))
     )
-    if wanted < reserved:
+    if (
+        decide_target_change(stored=stored, wanted=wanted, reserved=reserved)
+        is TargetDecision.REFUSED_BELOW_RESERVED
+    ):
         report.target_refused.append((key, stored, wanted))
         logger.error(
             "refusing to lower qty_target for %s/%s/%s to %s — %s already reserved",

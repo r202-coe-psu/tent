@@ -66,20 +66,6 @@
 			: 'อื่นๆ'
 	);
 	let targetQty = $state(editedNeed?.target ?? '0');
-	/**
-	 * The target this need was opened with. The donor-facing quota ceiling
-	 * (`donation_need_counter.qty_target` in Mongo) is written with `$setOnInsert`
-	 * and is DELIBERATELY frozen at seed time — CR-060 FR-2 — so editing this field
-	 * moves the board and the public card but NOT the gate donors are checked
-	 * against. They then hit "รับบริจาคครบแล้ว" at the old ceiling with nothing on
-	 * screen explaining why. Saying so here is the only warning staff get.
-	 */
-	const originalTarget = untrack(() => editedNeed?.target ?? '0');
-	const targetChanged = $derived(
-		!!targetQty.trim() &&
-			qtyGt(targetQty, 0) &&
-			persistQty(targetQty) !== persistQty(originalTarget)
-	);
 	let urgency = $state<'critical' | 'important' | 'normal'>(seed.notes.urgency);
 	// Seeded like every other note-borne field: the save below rebuilds the whole
 	// notes string, so a value this form does not read back is dropped on save.
@@ -89,6 +75,23 @@
 	// What donors already pledged against this need. Read-only: it is derived from
 	// donation docs, and lowering the target below it is what Force Cut-off is for.
 	const pledged = roundQty(editedNeed?.reserved ?? '0');
+
+	/**
+	 * A target below what donors already pledged is refused HERE, at the point of entry.
+	 *
+	 * The donor-facing ceiling (`donation_need_counter.qty_target` in Mongo) now follows
+	 * this field — the worker realigns it on the campaign's CDC event — but it will not
+	 * follow it below `reserved_qty`: those bookings were accepted at the old ceiling and
+	 * are still owed, so a lower target would make `reserved_qty <= qty_target` false for
+	 * reservations that already exist. The worker refuses that write and logs it, which
+	 * is invisible from here; saying no in the form is what makes the rule legible.
+	 *
+	 * Lowering to EXACTLY the pledged figure is allowed — the need goes full rather than
+	 * over-full. Closing a need that is still short is what Force Cut-off is for.
+	 */
+	const belowPledged = $derived(
+		!!targetQty.trim() && qtyGt(targetQty, 0) && qtyGt(pledged, targetQty)
+	);
 
 	const URGENCY_OPTIONS = [
 		{ value: 'normal', label: 'ปกติ (Normal)' },
@@ -141,6 +144,12 @@
 		}
 		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
 			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
+			return;
+		}
+		if (belowPledged) {
+			toast.error(
+				`ตั้งเป้าต่ำกว่ายอดที่ผู้บริจาคจองไว้แล้ว (${pledged} ${finalUnit}) ไม่ได้ — ใช้ Force Cut-off เพื่อปิดรับแทน`
+			);
 			return;
 		}
 
@@ -254,27 +263,20 @@
 				/>
 				<p class="mt-1.5 text-3xs text-muted-foreground">
 					ผู้บริจาคจองไว้แล้ว {pledged}
-					{finalUnit} — ตั้งเป้าต่ำกว่ายอดจองจะทำให้รายการนี้ปิดรับทันที
+					{finalUnit} — ตั้งเป้าเท่ากับยอดนี้จะทำให้รายการปิดรับทันที และตั้งต่ำกว่านี้ไม่ได้
 				</p>
 			</div>
 		</div>
 
-		{#if targetChanged}
-			<Alert.Root
-				variant="destructive"
-				class="rounded-2xl border-amber-300/70 bg-amber-50/70 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
-			>
-				<TriangleAlert class="text-amber-600 dark:text-amber-400" />
-				<Alert.Title class="text-xs font-bold">
-					เปลี่ยนเป้าหมายแล้ว แต่โควตาฝั่งผู้บริจาคจะยังไม่ขยับ
-				</Alert.Title>
+		{#if belowPledged}
+			<Alert.Root variant="destructive" class="rounded-2xl border-destructive/40 bg-destructive/5">
+				<TriangleAlert />
+				<Alert.Title class="text-xs font-bold">ตั้งเป้าต่ำกว่ายอดที่จองไว้แล้วไม่ได้</Alert.Title>
 				<Alert.Description class="text-2xs leading-relaxed">
-					เพดานโควตาที่หน้าบริจาคใช้ตรวจถูกตรึงไว้ตั้งแต่ตอนสร้างประกาศ (CR-060 FR-2) —
-					กระดานหลังบ้าน และการ์ดหน้าสาธารณะจะขึ้นเป้าใหม่ ({persistQty(targetQty)}) ทันที
-					แต่ผู้บริจาคจะยังถูกปฏิเสธด้วย "รายการนี้รับบริจาคครบแล้ว" ที่เพดานเดิม ({persistQty(
-						originalTarget
-					)}) จนกว่าผู้ดูแลระบบจะปรับ
-					<code class="font-mono">donation_need_counter</code> ให้ตรงกัน
+					ผู้บริจาคจองไว้แล้ว {pledged}
+					{finalUnit} ซึ่งเป็นคำสัญญาที่ให้ไปแล้วและยังต้องรับของ — ตั้งเป้าต่ำกว่านี้จะทำให้ยอดจองเกินเป้า
+					ระบบจึงไม่ลดเพดานฝั่งผู้บริจาคตาม ถ้าต้องการหยุดรับบริจาครายการนี้ ให้ใช้
+					<span class="font-bold">Force Cut-off</span> แทนการลดเป้า
 				</Alert.Description>
 			</Alert.Root>
 		{/if}
