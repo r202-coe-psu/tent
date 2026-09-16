@@ -70,13 +70,17 @@
 		const injected = (window as unknown as { __captchaToken?: string }).__captchaToken || '';
 		if (injected) return injected;
 		if (!captchaEnabled) return '';
-		const win = window as unknown as {
-			grecaptcha?: { execute: (key: string, opts: { action: string }) => Promise<string> };
-		};
+		const win = window;
 		if (win.grecaptcha) {
 			try {
 				const action = isUnassigned ? 'unassigned_register' : 'register';
-				return await win.grecaptcha.execute(siteKey, { action });
+				if (win.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
+					return await win.grecaptcha.enterprise.execute(siteKey, { action });
+				}
+				if (win.grecaptcha.execute) {
+					return await win.grecaptcha.execute(siteKey, { action });
+				}
 			} catch {
 				return null;
 			}
@@ -175,7 +179,11 @@
 
 <svelte:head>
 	{#if captchaEnabled}
-		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
 	{/if}
 </svelte:head>
 

@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import {
 	donationPreDeclarationInputSchema,
@@ -6,6 +7,7 @@ import {
 	pickCampaignForItems
 } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
+import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { adminRaw } from '$lib/server/couch-admin';
@@ -15,7 +17,9 @@ import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/
 import { isDonationOutstanding } from '$lib/features/operations';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
@@ -41,17 +45,24 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// 3. CAPTCHA Check (always — including dev — so local testing matches prod)
-		if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
-			console.error('SECRET_RECAPTCHA_KEY is missing or invalid!');
-			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-		}
-		if (!parsed.data.captchaToken) {
-			return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
-		}
-		const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
-		if (!isHuman) {
-			return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
+		// 3. CAPTCHA Check
+		const captchaConfigured =
+			isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID) ||
+			isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
+		if (!captchaConfigured) {
+			if (!dev) {
+				console.error('reCAPTCHA configuration is missing or is a placeholder!');
+				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+			}
+			console.warn('[dev] reCAPTCHA not configured — skipping CAPTCHA verification');
+		} else {
+			if (!parsed.data.captchaToken) {
+				return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
+			}
+			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
+			if (!isHuman) {
+				return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
+			}
 		}
 
 		// 3.1 shelter_code is validated by FastAPI against `public_shelters`

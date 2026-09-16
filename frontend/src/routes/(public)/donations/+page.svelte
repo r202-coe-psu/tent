@@ -49,7 +49,11 @@
 <svelte:head>
 	<title>{t.pageTitle}</title>
 	{#if siteKey}
-		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
 	{/if}
 </svelte:head>
 

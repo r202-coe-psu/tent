@@ -384,6 +384,7 @@ export function evacueeIdFromBookingCode(code: string): string {
  */
 const CAPTCHA_PLACEHOLDER_KEYS = new Set([
 	'dummy-secret',
+	'dummy-project-id',
 	'google_site_key',
 	'google_secret_key',
 	'change-me-in-staging'
@@ -393,8 +394,8 @@ const CAPTCHA_PLACEHOLDER_KEYS = new Set([
  * Is a real reCAPTCHA key configured?
  *
  * Used on both planes — the browser checks `PUBLIC_RECAPTCHA_SITE_KEY` before
- * loading Google's script, the BFF checks `SECRET_RECAPTCHA_KEY` before
- * verifying. `false` means "captcha cannot run here", which the BFF only honours
+ * loading Google's script, the BFF checks `RECAPTCHA_PROJECT_ID` (or legacy `SECRET_RECAPTCHA_KEY`)
+ * before verifying. `false` means "captcha cannot run here", which the BFF only honours
  * in dev; production fails closed instead.
  */
 export function isCaptchaKeyConfigured(key: string | undefined | null): boolean {

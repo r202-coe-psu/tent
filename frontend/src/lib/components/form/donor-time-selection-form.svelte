@@ -100,7 +100,14 @@
 
 		if (siteKey && window.grecaptcha) {
 			try {
-				token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
+				if (window.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) =>
+						window.grecaptcha!.enterprise!.ready(() => resolve())
+					);
+					token = await window.grecaptcha.enterprise.execute(siteKey, { action: 'donate' });
+				} else if (window.grecaptcha.execute) {
+					token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
+				}
 			} catch {
 				donationStore.errorMessage = t.errRecaptchaFailed;
 				toast.error(donationStore.errorMessage);
