@@ -3,6 +3,7 @@ export {
 	PUBLIC_HOME_I18N,
 	PUBLIC_HERO_I18N,
 	PUBLIC_EMERGENCY_I18N,
+	PUBLIC_ALERTS_PANEL_I18N,
 	PUBLIC_PORTAL_HOME_I18N
 } from './i18n/public-home';
 export { PUBLIC_SHELTERS_I18N } from './i18n/public-shelters';

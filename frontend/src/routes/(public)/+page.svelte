@@ -9,12 +9,10 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Home from '@lucide/svelte/icons/home';
-	import Bell from '@lucide/svelte/icons/bell';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
 
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
-	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
@@ -29,20 +27,9 @@
 
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
-	let alertsOpen = $state(false);
 
 	let donationScrollContainer = $state<HTMLElement | null>(null);
 	let volunteerScrollContainer = $state<HTMLElement | null>(null);
-
-	const announcements = $derived(data.announcements ?? []);
-	const announcementsCount = $derived(announcements.length);
-	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
-
-	$effect(() => {
-		if (typeof window !== 'undefined' && window.location.hash === '#announcements') {
-			alertsOpen = true;
-		}
-	});
 
 	function handleSearch() {
 		const q = searchQuery.trim();
@@ -661,31 +648,6 @@
 			</div>
 		</section>
 	</main>
-
-	<!-- Floating Emergency Action Pills -->
-	<div class="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2.5 md:right-6 md:bottom-6">
-		<button
-			type="button"
-			onclick={() => (alertsOpen = true)}
-			aria-label={t.emergencyAlertsBtn}
-			class="relative hidden items-center justify-center rounded-full bg-[#0284C7] whitespace-nowrap text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex md:h-auto md:w-full md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
-		>
-			<Bell class="h-4 w-4 shrink-0 text-amber-300" />
-			<span>{t.emergencyAlertsBtn}</span>
-			{#if announcementsCount > 0}
-				<span class="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-					{#if hasEmergency}
-						<span
-							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"
-						></span>
-					{/if}
-					<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
-					></span>
-				</span>
-			{/if}
-		</button>
-	</div>
 </div>
 
-<PublicEmergencyModal bind:open={alertsOpen} {announcements} />
 <FamilySearchModal bind:open={searchOpen} />

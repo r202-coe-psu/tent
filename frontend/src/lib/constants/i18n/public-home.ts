@@ -142,6 +142,41 @@ export const PUBLIC_EMERGENCY_I18N = {
 	}
 } as const;
 
+export const PUBLIC_ALERTS_PANEL_I18N = {
+	th: {
+		title: 'การแจ้งเตือนภัยฉุกเฉิน',
+		subtitle: 'ศูนย์บัญชาการสถานการณ์ (EOC)',
+		newAnnouncements: 'ประกาศใหม่',
+		noNewAnnouncements: 'ไม่มีประกาศใหม่',
+		close: 'ปิด',
+		closeAlerts: 'ปิดการแจ้งเตือน',
+		viewAll: 'ดูรายละเอียดประกาศทั้งหมด →',
+		emptyTitle: 'ไม่มีประกาศแจ้งเตือนภัยในขณะนี้',
+		emptySubtitle: 'สถานการณ์ปกติ ทุกศูนย์พักพิงเปิดให้บริการตามปกติ',
+		emergencyBadge: 'วิกฤติ (Emergency)',
+		warningBadge: 'เตือนภัย (Warning)',
+		infoBadge: 'ข้อมูลทั่วไป (Info)',
+		alertsAriaLabel: 'การแจ้งเตือนภัย',
+		emergencyAlertsBtn: 'แจ้งเตือนภัย'
+	},
+	en: {
+		title: 'Emergency Alerts',
+		subtitle: 'Emergency Operations Center (EOC)',
+		newAnnouncements: 'New Alerts',
+		noNewAnnouncements: 'No New Alerts',
+		close: 'Close',
+		closeAlerts: 'Close alerts',
+		viewAll: 'View All Announcements →',
+		emptyTitle: 'No emergency alerts at this time',
+		emptySubtitle: 'Normal situation. All shelters operating as standard.',
+		emergencyBadge: 'Critical (Emergency)',
+		warningBadge: 'Warning',
+		infoBadge: 'General Info',
+		alertsAriaLabel: 'Emergency Alerts',
+		emergencyAlertsBtn: 'Emergency Alerts'
+	}
+} as const;
+
 export const PUBLIC_PORTAL_HOME_I18N = {
 	th: {
 		pageTitle: 'Smart Shelter — แพลตฟอร์มช่วยเหลือผู้ประสบภัย',

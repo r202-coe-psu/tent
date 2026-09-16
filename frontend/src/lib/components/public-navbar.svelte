@@ -3,24 +3,24 @@
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Home from '@lucide/svelte/icons/home';
-	import Compass from '@lucide/svelte/icons/compass';
+	import Building from '@lucide/svelte/icons/building';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
-	import PackageSearch from '@lucide/svelte/icons/package-search';
-	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import Package from '@lucide/svelte/icons/package';
+	import ClipboardPenLine from '@lucide/svelte/icons/clipboard-pen-line';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Bell from '@lucide/svelte/icons/bell';
-	import Users from '@lucide/svelte/icons/users';
+	// import Users from '@lucide/svelte/icons/users'; // Volunteer link temporarily disabled
 
 	import { onMount } from 'svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import type { Announcement } from '$lib/features/announcements';
-	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
+	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 
 	interface Props {
 		announcements?: Announcement[];
@@ -29,13 +29,11 @@
 	let { announcements: propAnnouncements = [] }: Props = $props();
 
 	let fetchedAnnouncements = $state<Announcement[]>([]);
-	let alertsModalOpen = $state(false);
 
 	const announcements = $derived(
 		propAnnouncements && propAnnouncements.length > 0 ? propAnnouncements : fetchedAnnouncements
 	);
 	const announcementsCount = $derived(announcements.length);
-	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
 
 	onMount(async () => {
 		if (propAnnouncements.length === 0) {
@@ -79,8 +77,7 @@
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
 	let alertsMenuOpen = $state(false);
-	let alertsMenuEl: HTMLDivElement | undefined = $state();
-	let alertsButtonEl: HTMLButtonElement | undefined = $state();
+	let desktopAlertsOpen = $state(false);
 	let headerHeight = $state(64);
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
@@ -89,6 +86,7 @@
 		mobileMenuOpen = !mobileMenuOpen;
 		if (mobileMenuOpen) {
 			alertsMenuOpen = false;
+			desktopAlertsOpen = false;
 			donationsMenuOpen = false;
 		}
 	}
@@ -97,23 +95,12 @@
 		donationsMenuOpen = !donationsMenuOpen;
 		if (donationsMenuOpen) {
 			alertsMenuOpen = false;
+			desktopAlertsOpen = false;
 		}
 	}
 
 	function closeDonationsMenu() {
 		donationsMenuOpen = false;
-	}
-
-	function toggleAlertsMenu() {
-		alertsMenuOpen = !alertsMenuOpen;
-		if (alertsMenuOpen) {
-			donationsMenuOpen = false;
-			mobileMenuOpen = false;
-		}
-	}
-
-	function closeAlertsMenu() {
-		alertsMenuOpen = false;
 	}
 
 	function toggleLanguage() {
@@ -125,26 +112,18 @@
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
-		if (alertsMenuOpen && alertsMenuEl) {
-			if (alertsButtonEl && alertsButtonEl.contains(target)) {
-				return;
-			}
-			if (!alertsMenuEl.contains(target)) {
-				closeAlertsMenu();
-			}
-		}
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		closeDonationsMenu();
-		closeAlertsMenu();
 	}
 
 	afterNavigate(() => {
 		donationsMenuOpen = false;
 		mobileMenuOpen = false;
 		alertsMenuOpen = false;
+		desktopAlertsOpen = false;
 	});
 </script>
 
@@ -174,29 +153,7 @@
 		<!-- Compact controls: phone + tablet (hamburger through lg) -->
 		<div class="flex shrink-0 items-center gap-1 sm:gap-2 lg:hidden">
 			<!-- Notification Bell Button (Mobile) -->
-			<button
-				bind:this={alertsButtonEl}
-				type="button"
-				onclick={toggleAlertsMenu}
-				class="relative flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-[#0284C7] focus-visible:outline-none {alertsMenuOpen
-					? 'bg-sky-100 text-sky-800 ring-1 ring-sky-300'
-					: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-				aria-label="การแจ้งเตือนภัย {announcementsCount > 0 ? `(${announcementsCount})` : ''}"
-				aria-expanded={alertsMenuOpen}
-			>
-				<Bell class="h-4 w-4 text-sky-600" />
-				{#if announcementsCount > 0}
-					<span class="absolute top-1.5 right-1.5 flex h-2 w-2">
-						{#if hasEmergency}
-							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"
-							></span>
-						{/if}
-						<span class="ring-1.5 relative inline-flex h-2 w-2 rounded-full bg-red-600 ring-white"
-						></span>
-					</span>
-				{/if}
-			</button>
+			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
 
 			<!-- Language Switcher (Mobile) -->
 			<div class="flex shrink-0 items-center border-l border-slate-200 pl-1.5 sm:pl-2">
@@ -243,7 +200,7 @@
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
-				<Compass class="h-4 w-4" />
+				<Building class="h-4 w-4" />
 				{t.shelters}
 			</a>
 
@@ -255,7 +212,7 @@
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
-				<ClipboardCheck class="h-4 w-4" />
+				<ClipboardPenLine class="h-4 w-4" />
 				{t.preRegister}
 			</a>
 
@@ -296,13 +253,13 @@
 					<div
 						id="donations-menu"
 						role="menu"
-						class="absolute right-0 mt-1 w-52 rounded-xl border border-border bg-card p-1 shadow-sm"
+						class="absolute right-0 mt-1 min-w-[14rem] rounded-xl border border-border bg-card p-1 shadow-sm"
 					>
 						<a
 							role="menuitem"
 							href={resolve('/donations')}
 							onclick={closeDonationsMenu}
-							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
@@ -313,17 +270,19 @@
 							role="menuitem"
 							href={resolve('/donations/track')}
 							onclick={closeDonationsMenu}
-							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
-							<PackageSearch class="h-3.5 w-3.5" />
+							<Package class="h-3.5 w-3.5" />
 							{t.trackDonation}
 						</a>
 					</div>
 				{/if}
 			</div>
 
+			<!-- Volunteers (Access temporarily disabled per user request) -->
+			<!--
 			<a
 				href={resolve('/volunteers')}
 				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
@@ -335,6 +294,7 @@
 				<Users class="h-4 w-4" />
 				{t.volunteer}
 			</a>
+			-->
 
 			<a
 				href={resolve('/login')}
@@ -347,6 +307,15 @@
 				<Building2 class="h-4 w-4" />
 				{t.backoffice}
 			</a>
+
+			<!-- Notification Bell Button (Desktop) -->
+			<div class="ml-1 flex shrink-0 items-center">
+				<PublicNotificationMenu
+					variant="navbar"
+					{announcements}
+					bind:menuOpen={desktopAlertsOpen}
+				/>
+			</div>
 
 			<!-- Language Switcher (Desktop) -->
 			<div class="ml-2 flex shrink-0 items-center border-l border-slate-200 pl-3">
@@ -362,150 +331,6 @@
 		</nav>
 	</div>
 
-	<!-- Alerts & Notifications Dropdown Panel -->
-	{#if alertsMenuOpen}
-		<!-- Mobile backdrop overlay to guarantee outside clicks close the menu -->
-		<button
-			type="button"
-			tabindex="-1"
-			aria-hidden="true"
-			class="fixed inset-0 z-40 cursor-default bg-slate-900/20 backdrop-blur-[1px] lg:hidden"
-			onclick={closeAlertsMenu}
-		></button>
-
-		<div
-			bind:this={alertsMenuEl}
-			role="dialog"
-			aria-label="การแจ้งเตือนภัยฉุกเฉิน"
-			class="absolute top-full right-4 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xl sm:right-6"
-		>
-			<div class="flex items-center justify-between border-b border-slate-100 pb-3">
-				<div class="flex items-center gap-2">
-					<div class="flex h-7 w-7 items-center justify-center rounded-full bg-sky-50 text-sky-600">
-						<Bell class="h-4 w-4" />
-					</div>
-					<div>
-						<h3 class="text-sm font-bold text-slate-900">การแจ้งเตือนภัยฉุกเฉิน</h3>
-						<p class="text-2xs text-slate-500">ศูนย์บัญชาการสถานการณ์ (EOC)</p>
-					</div>
-				</div>
-				<div class="flex items-center gap-1.5">
-					{#if announcementsCount > 0}
-						<span
-							class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold text-red-700"
-						>
-							<span class="h-1.5 w-1.5 rounded-full bg-red-600"></span>
-							ประกาศใหม่
-						</span>
-					{:else}
-						<span
-							class="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-2xs font-medium text-slate-500"
-						>
-							ไม่มีประกาศใหม่
-						</span>
-					{/if}
-					<!-- Dedicated Close 'X' Button -->
-					<button
-						type="button"
-						onclick={closeAlertsMenu}
-						class="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-[#0284C7] focus-visible:outline-none"
-						aria-label="ปิดการแจ้งเตือน"
-						title="ปิดการแจ้งเตือน"
-					>
-						<X class="h-4 w-4" />
-					</button>
-				</div>
-			</div>
-
-			<div class="mt-3 max-h-[60vh] space-y-3 overflow-y-auto">
-				{#if announcements.length > 0}
-					{#each announcements as ann (ann._id)}
-						{@const isDanger = ann.severity === 'emergency'}
-						{@const isWarning = ann.severity === 'warning'}
-						<button
-							type="button"
-							onclick={() => {
-								closeAlertsMenu();
-								alertsModalOpen = true;
-							}}
-							class="w-full rounded-xl border p-3.5 text-left shadow-2xs transition-all {isDanger
-								? 'border-red-200 bg-red-50/40 hover:border-red-300 hover:bg-red-50/60'
-								: isWarning
-									? 'border-amber-200 bg-amber-50/40 hover:border-amber-300 hover:bg-amber-50/60'
-									: 'border-sky-200 bg-sky-50/40 hover:border-sky-300 hover:bg-sky-50/60'}"
-						>
-							<div class="flex items-center justify-between gap-2">
-								<span
-									class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-bold {isDanger
-										? 'border-red-200 bg-red-50 text-red-700'
-										: isWarning
-											? 'border-amber-200 bg-amber-50 text-amber-800'
-											: 'border-blue-200 bg-blue-50 text-blue-700'}"
-								>
-									<span
-										class="h-1.5 w-1.5 rounded-full {isDanger
-											? 'bg-red-600'
-											: isWarning
-												? 'bg-amber-500'
-												: 'bg-blue-500'}"
-									></span>
-									{isDanger
-										? 'วิกฤติ (Emergency)'
-										: isWarning
-											? 'เตือนภัย (Warning)'
-											: 'ข้อมูลทั่วไป (Info)'}
-								</span>
-								{#if ann.created_at}
-									<span class="text-2xs text-slate-400 tabular-nums">
-										{new Date(ann.created_at).toLocaleTimeString('th-TH', {
-											hour: '2-digit',
-											minute: '2-digit'
-										})} น.
-									</span>
-								{/if}
-							</div>
-							<h4 class="mt-2 text-xs font-bold text-slate-900">
-								{ann.title}
-							</h4>
-							<p class="mt-1 line-clamp-3 text-xs leading-relaxed text-slate-600">
-								{ann.description}
-							</p>
-						</button>
-					{/each}
-				{:else}
-					<div
-						class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-slate-500"
-					>
-						<p class="text-xs font-medium">ไม่มีประกาศแจ้งเตือนภัยในขณะนี้</p>
-						<p class="mt-0.5 text-2xs text-slate-400">
-							สถานการณ์ปกติ ทุกศูนย์พักพิงเปิดให้บริการตามปกติ
-						</p>
-					</div>
-				{/if}
-			</div>
-
-			<div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-				<button
-					type="button"
-					onclick={() => {
-						closeAlertsMenu();
-						alertsModalOpen = true;
-					}}
-					class="cursor-pointer text-xs font-bold text-[#0284C7] hover:underline"
-				>
-					ดูรายละเอียดประกาศทั้งหมด →
-				</button>
-				<button
-					type="button"
-					onclick={closeAlertsMenu}
-					class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900"
-				>
-					ปิด
-				</button>
-			</div>
-		</div>
-	{/if}
-
 	<!-- Compact menu dropdown (phone + tablet) -->
 	{#if mobileMenuOpen}
 		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg lg:hidden">
@@ -520,7 +345,7 @@
 				>
 					<div class="flex items-center gap-3">
 						<Bell class="h-5 w-5 text-sky-600" />
-						<span>การแจ้งเตือนภัย</span>
+						<span>{t.alerts}</span>
 					</div>
 					{#if announcementsCount > 0}
 						<span class="flex h-2.5 w-2.5 items-center justify-center">
@@ -548,7 +373,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Compass class="h-5 w-5" />
+					<Building class="h-5 w-5" />
 					{t.shelters}
 				</a>
 
@@ -574,7 +399,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<ClipboardCheck class="h-5 w-5" />
+					<ClipboardPenLine class="h-5 w-5" />
 					{t.preRegister}
 				</a>
 
@@ -596,10 +421,12 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<PackageSearch class="h-5 w-5" />
+					<Package class="h-5 w-5" />
 					{t.trackDonationLong}
 				</a>
 
+				<!-- Volunteers (Access temporarily disabled per user request) -->
+				<!--
 				<a
 					href={resolve('/volunteers')}
 					onclick={() => (mobileMenuOpen = false)}
@@ -612,6 +439,7 @@
 					<Users class="h-5 w-5" />
 					{t.volunteer}
 				</a>
+				-->
 
 				<a
 					href={resolve('/login')}
@@ -636,7 +464,7 @@
 						class="flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
 					>
 						<span class="text-sm font-medium text-slate-700">
-							{langState.current === 'th' ? 'เปลี่ยนภาษา (Language)' : 'Switch Language'}
+							{t.switchLanguage}
 						</span>
 						<span
 							class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs"
@@ -656,5 +484,3 @@
 	class="pointer-events-none w-full shrink-0"
 	aria-hidden="true"
 ></div>
-
-<PublicEmergencyModal bind:open={alertsModalOpen} {announcements} />

@@ -14,15 +14,17 @@ export const PUBLIC_NAVBAR_I18N = {
 		appTitle: 'Smart Shelter',
 		appSubtitle: 'Public & RFL Portal',
 		home: 'หน้าแรก',
-		shelters: 'ตรวจสอบศูนย์พักพิง',
+		shelters: 'ค้นหาศูนย์พักพิง',
 		search: 'ค้นหาผู้พักพิง',
 		preRegister: 'ลงทะเบียนล่วงหน้า',
 		donate: 'บริจาค',
-		donateAndBook: 'บริจาคและจองคิว',
-		trackDonation: 'ตรวจสอบสถานะ',
-		trackDonationLong: 'ตรวจสอบสถานะบริจาค',
+		donateAndBook: 'แจ้งบริจาคสิ่งของ',
+		trackDonation: 'ตรวจสอบสถานะการบริจาค',
+		trackDonationLong: 'ตรวจสอบสถานะการบริจาค',
 		volunteer: 'จิตอาสา',
-		backoffice: 'ระบบหลังบ้าน'
+		backoffice: 'สำหรับเจ้าหน้าที่',
+		alerts: 'การแจ้งเตือนภัย',
+		switchLanguage: 'เปลี่ยนภาษา (Language)'
 	},
 	en: {
 		appTitle: 'Smart Shelter',
@@ -32,10 +34,12 @@ export const PUBLIC_NAVBAR_I18N = {
 		search: 'Search Evacuees',
 		preRegister: 'Pre-Registration',
 		donate: 'Donate',
-		donateAndBook: 'Donate & Queue',
-		trackDonation: 'Track Status',
-		trackDonationLong: 'Track Donation Status',
+		donateAndBook: 'Donate Supplies',
+		trackDonation: 'Track Donation',
+		trackDonationLong: 'Track Donation',
 		volunteer: 'Volunteer',
-		backoffice: 'Backoffice'
+		backoffice: 'Staff Portal',
+		alerts: 'Emergency Alerts',
+		switchLanguage: 'Switch Language'
 	}
 } as const;
