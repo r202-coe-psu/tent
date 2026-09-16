@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { formatRoleList } from '$lib/auth/roles';
+	import { formatRoleList, COUCH_ADMIN } from '$lib/auth/roles';
 	import {
 		fetchAuthStatus,
 		updateOwnProfile,
@@ -46,6 +46,7 @@
 	const initials = $derived(computeInitials(displayTitle, profile?.name));
 	const roleBadges = $derived(roleLines(profile?.roles));
 	const personnelLabel = $derived(personnelTypeLabel(profile?.personnel_type));
+	const isImmutable = $derived(Boolean(profile?.roles?.includes(COUCH_ADMIN)));
 
 	function computeInitials(title: string, username?: string | null): string {
 		const source = title !== '—' ? title : (username ?? '');
@@ -217,7 +218,7 @@
 							</div>
 						</div>
 					</div>
-					{#if !editing}
+					{#if !editing && !isImmutable}
 						<Button
 							class="min-h-11 w-full gap-2 bg-[#0A2647] text-white hover:bg-[#051930] sm:w-auto"
 							onclick={startEdit}
@@ -430,6 +431,11 @@
 									</div>
 								</Dialog.Content>
 							</Dialog.Root>
+						{:else if isImmutable}
+							<p class="text-base text-slate-500">
+								บัญชีผู้ดูแลระบบเซิร์ฟเวอร์ (CouchDB Admin)
+								ได้รับการจัดการผ่านไฟล์การตั้งค่าเซิร์ฟเวอร์ และไม่รองรับ Google MFA
+							</p>
 						{:else}
 							<p class="text-base text-slate-500">ยังไม่ได้ผูกบัญชี Google</p>
 							<Button

@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	isProtectedBootstrapAdmin,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import { getSession } from '$lib/db/couch';
 import { computeMfaFlags, verifyMfaOkCookie, MFA_OK_COOKIE } from '$lib/server/google-oauth';
 import {
@@ -19,12 +24,13 @@ function profilePayload(
 	mfa: { mfa_enrolled: boolean; pending_mfa: boolean },
 	mfaProviderEmail: string | null
 ) {
+	const isBootstrap = isProtectedBootstrapAdmin({ name, roles });
 	return {
 		name,
 		display_name: doc?.display_name ?? name,
 		roles: doc?.roles ?? roles,
-		must_change_password: Boolean(doc?.must_change_password),
-		has_security_question: Boolean(doc?.security_question?.answer_hash),
+		must_change_password: isBootstrap ? false : Boolean(doc?.must_change_password),
+		has_security_question: isBootstrap ? true : Boolean(doc?.security_question?.answer_hash),
 		mfa_enrolled: mfa.mfa_enrolled,
 		pending_mfa: mfa.pending_mfa,
 		mfa_provider_email: mfaProviderEmail,
@@ -80,6 +86,10 @@ export const PATCH: RequestHandler = async ({ request, fetch }) => {
 		const session = await getSession(fetch);
 		if (!session?.name) {
 			throw new ServiceError('UNAUTHENTICATED', 'Not logged in');
+		}
+
+		if (isProtectedBootstrapAdmin({ name: session.name, roles: session.roles })) {
+			throw new ServiceError('FORBIDDEN', 'Cannot modify the bootstrap admin user');
 		}
 
 		const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

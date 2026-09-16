@@ -6,7 +6,7 @@
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import { FORCE_SETUP_ROUTE, LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
 	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
@@ -26,6 +26,11 @@
 	onMount(async () => {
 		try {
 			const status = await fetchAuthStatus();
+			const dest = resolvePostLoginDestination(status);
+			if (dest !== FORCE_SETUP_ROUTE) {
+				await goto(resolve(dest));
+				return;
+			}
 			currentUsername = status.name;
 			mustChangePassword = status.must_change_password;
 		} catch {

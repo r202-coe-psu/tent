@@ -4,6 +4,7 @@ import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
 import {
+	COUCH_ADMIN,
 	hasStaffCapability,
 	isShelterManager,
 	isWarehouseStaff,
@@ -37,8 +38,13 @@ export type PostLoginDestination =
  * force-setup → MFA challenge → portal.
  */
 export function resolvePostLoginDestination(
-	status: Pick<AuthStatus, 'must_change_password' | 'has_security_question' | 'pending_mfa'>
+	status: Pick<AuthStatus, 'must_change_password' | 'has_security_question' | 'pending_mfa'> & {
+		roles?: readonly string[];
+	}
 ): PostLoginDestination {
+	if (status.roles?.includes(COUCH_ADMIN)) {
+		return LANDING_ROUTE;
+	}
 	if (status.must_change_password || !status.has_security_question) {
 		return FORCE_SETUP_ROUTE;
 	}

@@ -4,14 +4,10 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Menu from '@lucide/svelte/icons/menu';
-	import LogOut from '@lucide/svelte/icons/log-out';
-	import UserCircle from '@lucide/svelte/icons/user-circle';
 	import * as Sheet from '$lib/components/ui/sheet';
+	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { toast } from 'svelte-sonner';
-	import { LOGOUT_ROUTE } from '$lib/guards/auth';
+	import { afterNavigate } from '$app/navigation';
 	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
@@ -32,12 +28,9 @@
 		mobileMenuOpen = false;
 	}
 
-	async function logout() {
-		closeMobileMenu();
-		await authStore.logout();
-		toast.success('Logged out successfully');
-		await goto(resolve(LOGOUT_ROUTE));
-	}
+	afterNavigate(() => {
+		mobileMenuOpen = false;
+	});
 
 	function normalize(path: string): string {
 		return path.replace(/\/$/, '');
@@ -91,7 +84,7 @@
 </script>
 
 <aside
-	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
+	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 lg:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >
@@ -256,63 +249,28 @@
 		</div>
 	</div>
 
-	<!-- Desktop Sidebar Footer (User Profile & Logout) -->
+	<!-- Desktop Sidebar Footer -->
 	<div class="mt-auto border-t border-sidebar-border bg-card p-4">
 		{#if collapsed}
-			<div class="flex flex-col items-center gap-4">
-				<a
-					href={resolve('/me')}
-					class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
-					title="บัญชีของฉัน"
-				>
-					{authStore.user?.name?.substring(0, 2).toUpperCase() || 'US'}
-				</a>
-				<button
-					type="button"
-					class="flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/20 text-destructive transition-colors hover:bg-destructive/10 active:scale-95"
-					onclick={logout}
-					title="ออกจากระบบ"
-				>
-					<LogOut class="h-4 w-4" />
-				</button>
+			<div class="flex justify-center">
+				<StaffAccountMenu compact side="right" align="end" />
 			</div>
 		{:else}
-			<div class="flex flex-col gap-3">
-				<div class="flex flex-col gap-0.5">
-					<span class="text-xs font-normal text-muted-foreground">เข้าสู่ระบบโดย</span>
-					<span class="truncate text-sm font-bold text-foreground" title={authStore.user?.name}
-						>{authStore.user?.name}</span
-					>
-					<span
-						class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
-						title={formatRoleList(roles)}
-					>
-						{formatRoleList(roles)}
-					</span>
-				</div>
-				<a
-					href={resolve('/me')}
-					class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-sidebar-border px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-muted active:scale-95"
-					title="บัญชีของฉัน"
+			<div class="flex flex-col gap-2">
+				<span
+					class="max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
+					title={formatRoleList(roles)}
 				>
-					<UserCircle class="h-4 w-4" />
-					<span>บัญชีของฉัน</span>
-				</a>
-				<button
-					type="button"
-					class="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
-					onclick={logout}
-				>
-					<LogOut class="h-4 w-4" />
-					<span>ออกจากระบบ</span>
-				</button>
+					{formatRoleList(roles)}
+				</span>
+				<StaffAccountMenu class="w-full" side="top" align="start" />
 			</div>
 		{/if}
 	</div>
 </aside>
 
 <!-- Mobile Navigation -->
-<div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card md:hidden">
+<div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card lg:hidden">
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a href={backofficeHomePath} class="flex min-h-11 items-center gap-3" onclick={closeMobileMenu}>
 			<div
@@ -474,35 +432,15 @@
 			</div>
 
 			<Sheet.Footer class="border-t border-sidebar-border bg-card p-4">
-				<div class="flex flex-col gap-1">
-					<span class="text-xs font-normal text-muted-foreground">เข้าสู่ระบบโดย</span>
-					<span class="truncate text-sm font-bold text-foreground" title={authStore.user?.name}
-						>{authStore.user?.name}</span
-					>
+				<div class="flex flex-col gap-2">
 					<span
-						class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
+						class="max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
 						title={formatRoleList(roles)}
 					>
 						{formatRoleList(roles)}
 					</span>
+					<StaffAccountMenu class="w-full" side="top" align="start" onNavigate={closeMobileMenu} />
 				</div>
-				<a
-					href={resolve('/me')}
-					class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-sidebar-border px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-					onclick={closeMobileMenu}
-					title="บัญชีของฉัน"
-				>
-					<UserCircle class="h-4 w-4" />
-					<span>บัญชีของฉัน</span>
-				</a>
-				<button
-					type="button"
-					class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-					onclick={logout}
-				>
-					<LogOut class="h-4 w-4" />
-					<span>ออกจากระบบ</span>
-				</button>
 			</Sheet.Footer>
 		</Sheet.Content>
 	</Sheet.Root>

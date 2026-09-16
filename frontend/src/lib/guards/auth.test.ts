@@ -39,4 +39,24 @@ describe('resolvePostLoginDestination (CR-124)', () => {
 			})
 		).toBe(LANDING_ROUTE);
 	});
+
+	it('routes CouchDB server admin (_admin) directly to portal regardless of force-setup flags', () => {
+		expect(
+			resolvePostLoginDestination({
+				roles: ['_admin'],
+				must_change_password: false,
+				has_security_question: false,
+				pending_mfa: false
+			})
+		).toBe(LANDING_ROUTE);
+
+		expect(
+			resolvePostLoginDestination({
+				roles: ['_admin'],
+				must_change_password: true,
+				has_security_question: false,
+				pending_mfa: true
+			})
+		).toBe(LANDING_ROUTE);
+	});
 });
