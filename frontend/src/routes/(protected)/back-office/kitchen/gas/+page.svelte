@@ -1,4 +1,7 @@
 <script lang="ts">
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Flame from '@lucide/svelte/icons/flame';
+	import { resolve } from '$app/paths';
 	import { GasManagement } from '$lib/features/kitchen';
 </script>
 
