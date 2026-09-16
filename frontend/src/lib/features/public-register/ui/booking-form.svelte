@@ -51,6 +51,8 @@
 	const selected = $derived(shelters.find((s) => s.code === selectedShelterCode) ?? null);
 	const hasShelter = $derived(selected !== null);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
+	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
+	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
 
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
@@ -299,9 +301,7 @@
 					<div>
 						<p class="font-bold text-primary">กรณีไม่ระบุศูนย์พักพิง</p>
 						<p class="mt-0.5 text-muted-foreground">
-							ท่านสามารถลงทะเบียนข้อมูลล่วงหน้าไว้ในคิวกลางได้ เมื่อเดินทางถึงศูนย์พักพิง
-							แจ้งเบอร์โทรศัพท์หรือแสดง QR รหัสลงทะเบียนนี้ให้เจ้าหน้าที่ลงทะเบียนประจำศูนย์
-							(ยังไม่ใช่ QR ประตูศูนย์ / Station 1 จนกว่าเจ้าหน้าที่จะรับเข้าศูนย์)
+							การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์
 						</p>
 					</div>
 				</div>
@@ -329,6 +329,7 @@
 			channel="public"
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
+			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
 			onsubmit={handleUnifiedSubmit}

@@ -49,6 +49,7 @@
 		initialHousehold = null,
 		initialMembers = null,
 		pending = false,
+		submitDisabled = false,
 		submitLabel,
 		submitAlign = 'right',
 		stickyTopOffset,
@@ -64,6 +65,8 @@
 		initialHousehold?: UnifiedHouseholdInput | null;
 		initialMembers?: UnifiedMemberWithMeta[] | null;
 		pending?: boolean;
+		/** Disable the confirm button without locking fields or showing submit spinner. */
+		submitDisabled?: boolean;
 		submitLabel?: string;
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
@@ -562,6 +565,7 @@
 		/>
 		<UnifiedRegistrationSubmitBar
 			{pending}
+			{submitDisabled}
 			label={effectiveSubmitLabel}
 			submittingLabel={t.submitting}
 			align={submitAlign}
