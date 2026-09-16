@@ -13,7 +13,6 @@
 	import { toast } from 'svelte-sonner';
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
 	import { persistQty, qtyGt, roundQty } from '$lib/utils/qty';
-	import PublicDisplayHint from './public-display-hint.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -69,6 +68,9 @@
 	let urgency = $state<'critical' | 'important' | 'normal'>(seed.notes.urgency);
 	// Seeded like every other note-borne field: the save below rebuilds the whole
 	// notes string, so a value this form does not read back is dropped on save.
+	// No input any more (see the urgency row below) but still seeded and written back:
+	// `buildCampaignNotes` rebuilds the WHOLE notes string on save, so dropping this
+	// would silently erase an `imageUrl` an existing campaign already carries.
 	let imageUrl = $state(seed.notes.imageUrl ?? '');
 	let description = $state(seed.notes.description ?? '');
 
@@ -281,41 +283,30 @@
 			</Alert.Root>
 		{/if}
 
-		<PublicDisplayHint {itemId} />
-
-		<!-- Row 3: Urgency Level & Image URL -->
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<div>
-				<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
-					ความเร่งด่วน (Urgency Level)
-				</Label>
-				<Select.Root type="single" bind:value={urgency}>
-					<Select.Trigger
-						id="edit-item-urgency"
-						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
-					>
-						{urgencyLabel}
-					</Select.Trigger>
-					<Select.Content>
-						{#each URGENCY_OPTIONS as option (option.value)}
-							<Select.Item value={option.value} label={option.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-			<div>
-				<Label for="edit-item-image-url" class="mb-1.5 text-xs font-bold text-foreground">
-					ภาพประกอบสิ่งของ (Image URL - Optional)
-				</Label>
-				<Input
-					id="edit-item-image-url"
-					type="url"
-					placeholder="https://example.com/image.png"
-					bind:value={imageUrl}
-					class="h-10 rounded-xl text-xs"
-				/>
-			</div>
+		<!--
+			Urgency only. The "ภาพประกอบสิ่งของ (Image URL)" field that sat beside it is
+			HIDDEN, not finished — same as the create form: `buildCampaignNotes` still
+			encodes an `imageUrl` into `campaign.notes` and `parseCampaignNotes` still
+			reads it back, but NOTHING renders it. Restore this field together with the
+			surface that displays it (and put the grid back to `md:grid-cols-2`).
+		-->
+		<div>
+			<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
+				ความเร่งด่วน (Urgency Level)
+			</Label>
+			<Select.Root type="single" bind:value={urgency}>
+				<Select.Trigger
+					id="edit-item-urgency"
+					class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+				>
+					{urgencyLabel}
+				</Select.Trigger>
+				<Select.Content>
+					{#each URGENCY_OPTIONS as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		</div>
 
 		<!-- Row 4: Reason / Details -->

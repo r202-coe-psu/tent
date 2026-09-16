@@ -1282,7 +1282,7 @@
 						</div>
 						ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)
 					</h2>
-					<p class="mt-1 text-2xs text-muted-foreground">
+					<p class="mt-1 text-sm leading-relaxed text-muted-foreground">
 						สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที
 						(Real-time Sync)
 					</p>
@@ -1291,17 +1291,17 @@
 
 			<!-- Scan Body -->
 			<div
-				class="flex min-h-[440px] flex-col items-center justify-center gap-6 bg-slate-50/40 p-6 md:p-10 dark:bg-muted/10"
+				class="flex min-h-[440px] flex-col items-center justify-center gap-6 bg-slate-50/40 p-4 sm:p-6 md:p-10 dark:bg-muted/10"
 			>
 				{#if cameraOpen}
 					<!-- Live viewfinder. Same html5-qrcode wiring as the people check-in
 					     scanner; closing the block stops the camera (see cameraAttachment). -->
 					<div
-						class="flex w-full max-w-md animate-in flex-col items-center gap-4 rounded-3xl border border-border/80 bg-card p-6 text-center shadow-xs duration-200 fade-in"
+						class="flex w-full max-w-xl animate-in flex-col items-center gap-5 rounded-2xl border border-border/80 bg-card p-5 text-center shadow-xs duration-200 fade-in sm:p-8"
 					>
-						<h3 class="text-sm font-bold text-foreground">หันกล้องไปที่ QR Code บนใบจอง</h3>
+						<h3 class="text-lg font-bold text-foreground">หันกล้องไปที่ QR Code บนใบจอง</h3>
 						<div
-							class="relative flex aspect-square w-full max-w-[280px] items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-950"
+							class="relative flex aspect-square w-full max-w-[280px] items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-950 sm:max-w-[340px]"
 							style="isolation: isolate; transform: translateZ(0);"
 						>
 							<div
@@ -1325,42 +1325,49 @@
 								></div>
 							</div>
 						</div>
-						<p class="text-2xs text-muted-foreground">
-							ระบบจะเปิดใบจองให้อัตโนมัติเมื่ออ่าน QR ได้
-						</p>
+						<p class="text-sm text-muted-foreground">ระบบจะเปิดใบจองให้อัตโนมัติเมื่ออ่าน QR ได้</p>
 						<Button
 							variant="outline"
-							size="sm"
 							onclick={() => (cameraOpen = false)}
-							class="h-9 rounded-xl px-4 text-xs font-bold"
+							class="min-h-12 w-full rounded-xl px-6 text-sm font-bold sm:w-auto"
 						>
 							ปิดกล้อง
 						</Button>
 					</div>
 				{:else if scanState === 'idle'}
 					<!-- Idle Station Card -->
+					<!--
+						Counter screen, used on a tablet and often with gloves, so everything here is
+						sized for a real finger: 48px minimum on every control (the design system's
+						field-tablet target) and no type below `text-xs`. It used to be capped at
+						`max-w-md` with `text-2xs`/`text-3xs` copy — 10px and 8px — which is what
+						made it read as cramped and hard to hit.
+					-->
 					<div
-						class="flex w-full max-w-md animate-in flex-col items-center justify-center rounded-3xl border border-dashed border-border/80 bg-card p-8 text-center shadow-xs duration-200 fade-in"
+						class="flex w-full max-w-xl animate-in flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-card p-5 text-center shadow-xs duration-200 fade-in sm:p-8"
 					>
 						<div
-							class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+							class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600 sm:h-20 sm:w-20 dark:bg-blue-950/40 dark:text-blue-400"
 						>
-							<Camera class="h-8 w-8" />
+							<Camera class="h-8 w-8 sm:h-10 sm:w-10" />
 						</div>
 
-						<h3 class="mb-1 text-sm font-bold text-foreground">สแกน QR Code เพื่อตรวจรับพัสดุ</h3>
-						<p class="mb-6 text-2xs text-muted-foreground">
+						<h3 class="mb-2 text-lg font-bold text-foreground sm:text-xl">
+							สแกน QR Code เพื่อตรวจรับพัสดุ
+						</h3>
+						<p class="mb-6 max-w-sm text-sm leading-relaxed text-muted-foreground">
 							เปิดกล้องเพื่อสแกน QR Code ใบจองจากมือถือผู้บริจาค หรือค้นหาด้วยรหัสคำขอ
 						</p>
 
-						<!-- Primary Action buttons -->
-						<div class="grid w-full grid-cols-2 gap-3">
+						<!-- Primary actions. Stacked on a phone: side by side, the Thai labels wrap
+						     to three lines inside a 44px-tall button and the tap area collapses. -->
+						<div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
 							<Button
 								type="button"
 								onclick={openCamera}
-								class="h-11 gap-2 rounded-xl bg-[#002D5B] text-xs font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+								class="min-h-12 gap-2 rounded-xl bg-[#002D5B] text-sm font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 							>
-								<Camera class="h-4 w-4" />
+								<Camera class="h-5 w-5" />
 								เปิดกล้องสแกน QR
 							</Button>
 
@@ -1368,27 +1375,31 @@
 								variant="outline"
 								type="button"
 								onclick={() => (activeView = 'walkin')}
-								class="h-11 gap-2 rounded-xl bg-card text-xs font-bold shadow-xs"
+								class="min-h-12 gap-2 rounded-xl bg-card text-sm font-bold shadow-xs"
 							>
-								<User class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+								<User class="h-5 w-5 text-blue-600 dark:text-blue-400" />
 								ลงทะเบียน Walk-in
 							</Button>
 						</div>
 
-						<!-- Manual search input fallback -->
-						<div class="mt-6 flex w-full items-center gap-2 border-t border-border/60 pt-4">
+						<!-- Manual fallback. Also stacked on a phone — a 3-character-wide "ค้นหา"
+						     button next to an input is the smallest target on the screen. -->
+						<div
+							class="mt-6 flex w-full flex-col gap-2 border-t border-border/60 pt-5 sm:flex-row sm:items-center"
+						>
+							<Label for="scan-booking-ref" class="sr-only">รหัสการจอง</Label>
 							<Input
+								id="scan-booking-ref"
 								type="text"
 								placeholder="หรือกรอกรหัสการจอง (เช่น DN-123456)"
 								bind:value={searchQuery}
 								onkeydown={(e) => e.key === 'Enter' && lookupTyped()}
-								class="h-9 rounded-xl text-xs"
+								class="min-h-12 rounded-xl text-sm"
 							/>
 							<Button
-								size="sm"
 								onclick={lookupTyped}
 								disabled={!searchQuery.trim()}
-								class="h-9 shrink-0 rounded-xl px-3 text-xs font-bold"
+								class="min-h-12 shrink-0 rounded-xl px-6 text-sm font-bold"
 							>
 								ค้นหา
 							</Button>
@@ -1396,9 +1407,9 @@
 
 						{#if cameraError}
 							<div
-								class="mt-4 flex w-full items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50/70 p-3 text-left text-2xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
+								class="mt-4 flex w-full items-start gap-2.5 rounded-xl border border-amber-300/60 bg-amber-50/70 p-3.5 text-left text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
 							>
-								<CameraOff class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+								<CameraOff class="mt-0.5 h-4 w-4 shrink-0" />
 								<span>{cameraError}</span>
 							</div>
 						{/if}
@@ -1407,13 +1418,15 @@
 						     open whatever sat at the top of this list, which looked like a scan
 						     that had happened; picking a booking is now an explicit act. -->
 						{#if awaitingBookings.length}
-							<div class="mt-4 w-full border-t border-border/60 pt-4 text-left">
+							<div class="mt-5 w-full border-t border-border/60 pt-5 text-left">
 								<p
-									class="mb-2 text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
+									class="mb-3 text-xs font-extrabold tracking-wider text-muted-foreground uppercase"
 								>
 									รอตรวจรับที่ศูนย์ ({awaitingBookings.length})
 								</p>
-								<ul class="max-h-40 space-y-1.5 overflow-y-auto">
+								<!-- Taller than it looks: each row is a tap target for someone holding a
+								     parcel, so it gets the same 48px floor as the buttons above. -->
+								<ul class="max-h-64 space-y-2 overflow-y-auto">
 									{#each awaitingBookings as booking (donationActionRef(booking))}
 										{@const ref = donationActionRef(booking)}
 										<li>
@@ -1421,17 +1434,17 @@
 												variant="outline"
 												type="button"
 												onclick={() => ref && performLookup(ref)}
-												class="h-auto w-full justify-between gap-2 rounded-xl border-border/70 bg-card px-3 py-2 text-left"
+												class="h-auto min-h-12 w-full justify-between gap-3 rounded-xl border-border/70 bg-card px-4 py-3 text-left"
 											>
 												<span class="min-w-0">
-													<span class="block truncate text-2xs font-bold text-foreground">
+													<span class="block truncate text-sm font-bold text-foreground">
 														{donationRefLabel(booking)}
 													</span>
-													<span class="block truncate text-3xs text-muted-foreground">
+													<span class="block truncate text-xs text-muted-foreground">
 														{booking.donor_name || 'ไม่ระบุชื่อ'} · {booking.item_count} รายการ
 													</span>
 												</span>
-												<Badge variant="secondary" class="shrink-0 text-3xs font-bold">
+												<Badge variant="secondary" class="shrink-0 text-xs font-bold">
 													{booking.status}
 												</Badge>
 											</Button>

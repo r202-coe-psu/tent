@@ -9,7 +9,6 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { toast } from 'svelte-sonner';
-	import PublicDisplayHint from './public-display-hint.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { mergeCatalogGenerations, useItemMasters } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -104,7 +103,6 @@
 		tools: 'อุปกรณ์และเครื่องมือช่าง'
 	};
 
-	const mappedItemId = $derived(selectedItemId);
 	const category = $derived(
 		categoryChoice ??
 			CATALOG_CATEGORY_TO_FORM[selectedItem?.category ?? ''] ??
@@ -263,10 +261,6 @@
 					</p>
 				</div>
 			</div>
-
-			{#if mappedItemId}
-				<PublicDisplayHint itemId={mappedItemId} />
-			{/if}
 
 			<!--
 				Urgency only. The "ภาพประกอบสิ่งของ (Image URL)" field that sat beside it is

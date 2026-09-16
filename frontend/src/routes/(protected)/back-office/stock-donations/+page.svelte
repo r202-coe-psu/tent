@@ -199,27 +199,46 @@
 	</div>
 
 	<Tabs.Root value={activeSubTab} onValueChange={switchTab} class="gap-4 md:gap-6">
-		<Tabs.List class="h-auto max-w-full scrollbar-none justify-start overflow-x-auto">
-			<Tabs.Trigger value="scan" class="gap-2 px-3 py-2 text-xs font-bold">
-				<Scan class="h-3.5 w-3.5" />
-				สแกนรับของเข้าคลัง
-			</Tabs.Trigger>
+		<!-- Segmented pills, matching /back-office/supply so the two halves of the stock
+		     domain read as one control. Built on the Tabs primitive rather than supply's
+		     bare <button>s: identical geometry, but the list keeps its tablist role and
+		     arrow-key navigation. -->
+		<div class="flex w-full scrollbar-none overflow-x-auto pb-1 sm:pb-0">
+			<Tabs.List
+				class="inline-flex h-auto min-w-max justify-start rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm"
+			>
+				<Tabs.Trigger
+					value="scan"
+					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+				>
+					<Scan class="h-4 w-4" />
+					สแกนรับของเข้าคลัง
+				</Tabs.Trigger>
 
-			<Tabs.Trigger value="pending" class="gap-2 px-3 py-2 text-xs font-bold">
-				<ClipboardList class="h-3.5 w-3.5" />
-				รอการประเมิน
-				{#if pendingRequests.length > 0}
-					<Badge class="h-4 min-w-4 bg-amber-500 px-1.5 text-2xs leading-none font-bold text-white">
-						{pendingRequests.length}
-					</Badge>
-				{/if}
-			</Tabs.Trigger>
+				<Tabs.Trigger
+					value="pending"
+					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+				>
+					<ClipboardList class="h-4 w-4" />
+					รอการประเมิน
+					{#if pendingRequests.length > 0}
+						<Badge
+							class="h-4 min-w-4 bg-amber-500 px-1.5 text-2xs leading-none font-bold text-white"
+						>
+							{pendingRequests.length}
+						</Badge>
+					{/if}
+				</Tabs.Trigger>
 
-			<Tabs.Trigger value="needs" class="gap-2 px-3 py-2 text-xs font-bold">
-				<Megaphone class="h-3.5 w-3.5" />
-				จัดการความต้องการ
-			</Tabs.Trigger>
-		</Tabs.List>
+				<Tabs.Trigger
+					value="needs"
+					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+				>
+					<Megaphone class="h-4 w-4" />
+					จัดการความต้องการ
+				</Tabs.Trigger>
+			</Tabs.List>
+		</div>
 
 		<Tabs.Content value="scan">
 			<ScanStation />
