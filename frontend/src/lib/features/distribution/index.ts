@@ -78,6 +78,52 @@ export {
 	type NfiTargetInput
 } from './domain/distribution';
 
+/** Ticket-era Flow 2 domain contracts (CR-121). Legacy Flow 2 exports above remain read-compatible. */
+export {
+	requisitionTypeSchema,
+	flow2RequisitionTypeSchema,
+	requisitionTicketStatusSchema,
+	mealPeriodSchema,
+	ticketItemSchema,
+	ticketAmendmentSchema,
+	requisitionTicketInputSchema,
+	requisitionTicketDocSchema,
+	createFlow2RequisitionTicket,
+	isFlow2RequisitionTicket,
+	assertFlow2RequisitionTicket,
+	canTransitionRequisitionTicket,
+	assertRequisitionTicketTransition,
+	assertRequisitionTicketMutation,
+	distributionRecipientTypeSchema,
+	distributionLogStatusSchema,
+	returnConditionSchema,
+	loanClearReasonSchema,
+	distributionLogInputSchema,
+	distributionLogDocSchema,
+	createDistributionLog,
+	assertDistributionLogIssuanceImmutable,
+	bulkReturnPoolStatusSchema,
+	bulkReturnPoolInputSchema,
+	bulkReturnPoolDocSchema,
+	createBulkReturnPool,
+	type RequisitionType,
+	type Flow2RequisitionType,
+	type RequisitionTicketStatus,
+	type MealPeriod,
+	type TicketItem,
+	type TicketAmendment,
+	type RequisitionTicketInput,
+	type RequisitionTicket,
+	type Flow2RequisitionTicket,
+	type DistributionRecipientType,
+	type DistributionLogStatus,
+	type DistributionLogInput,
+	type DistributionLog,
+	type BulkReturnPoolStatus,
+	type BulkReturnPoolInput,
+	type BulkReturnPool
+} from './domain/food-supplies';
+
 export {
 	distributionTypeSnapshotSchema,
 	repeatOverrideReasonSchema,
