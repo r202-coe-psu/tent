@@ -23,6 +23,11 @@ IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
 OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
 
 
+def _accepts_pre_registration(raw: dict) -> bool:
+    flags = raw.get("feature_flags") or {}
+    return flags.get("accepts_pre_registration") is True
+
+
 class ShelterUseCase:
     """Read-only queries against the public_shelters projection."""
 
@@ -116,6 +121,7 @@ class ShelterUseCase:
                     pet_policy=pet_status,
                     vulnerable_groups=vul_groups,
                     admin_type=admin_type,
+                    accepts_pre_registration=_accepts_pre_registration(m),
                     updated_at=doc.updated_at,
                 )
             )
@@ -262,6 +268,7 @@ class ShelterUseCase:
                 },
                 "zones": mapped_zones,
                 "contact": {"manager": manager_name, "phone": manager_phone},
+                "accepts_pre_registration": _accepts_pre_registration(m),
                 "faq": m.get("faq")
                 or [
                     {

@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
@@ -7,16 +6,16 @@ import {
 	executeUnassignedRegistration,
 	UnassignedRegistrationWriteError
 } from '$lib/features/public-register/execute-unassigned-registration.server';
-import {
-	isCaptchaKeyConfigured,
-	publicUnassignedRegistrationRequestSchema
-} from '$lib/features/public-register/server';
+import { publicUnassignedRegistrationRequestSchema } from '$lib/features/public-register/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 const noStore = { 'Cache-Control': 'no-store' };
 
 /**
@@ -51,22 +50,14 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 
-	if (!isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY)) {
-		if (!dev) {
-			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
-			return json(
-				{ success: false, error: 'SERVER_MISCONFIGURED' },
-				{ status: 500, headers: noStore }
-			);
-		}
-		console.warn('[dev] SECRET_RECAPTCHA_KEY not configured — skipping CAPTCHA verification');
-	} else {
-		if (!input.captchaToken) {
-			return json({ success: false, error: 'CAPTCHA_REQUIRED' }, { status: 400, headers: noStore });
-		}
-		if (!(await captchaProvider.verifyToken(input.captchaToken, ip, 'unassigned_register'))) {
-			return json({ success: false, error: 'CAPTCHA_FAILED' }, { status: 403, headers: noStore });
-		}
+	const captcha = await verifyRecaptchaOrSkip({
+		token: input.captchaToken ?? '',
+		ip,
+		action: 'unassigned_register',
+		provider: captchaProvider
+	});
+	if (!captcha.ok) {
+		return json({ success: false, error: captcha.error }, { status: captcha.status, headers: noStore });
 	}
 
 	try {

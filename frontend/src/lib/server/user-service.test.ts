@@ -6,10 +6,18 @@ import {
 	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndResetPassword,
-	setupSecurityQuestionAndResetPassword
+	setupSecurityQuestionAndResetPassword,
+	linkGoogleMfa,
+	unlinkGoogleMfa,
+	getGoogleMfa,
+	listUsers,
+	touchGoogleMfaVerified,
+	findUserByGoogleSubject,
+	updateOwnProfile
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
+import { ServiceError } from './couch-admin';
 
 /** `_users` docs carry the password field that `CouchUserDoc` intentionally omits. */
 type FakeUserDoc = CouchUserDoc & { password?: string };
@@ -201,5 +209,200 @@ describe('user-service', () => {
 		expect(updated.must_change_password).toBe(false);
 		expect(updated.security_question).toBeDefined();
 		expect(updated.security_question?.question_id).toBe('birth_province');
+	});
+
+	describe('Google MFA (CR-124)', () => {
+		async function seedUser(name: string) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'staff',
+				phone: name,
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+		}
+
+		it('links Google MFA and exposes summary flags', async () => {
+			await seedUser('0810000001');
+			await linkGoogleMfa('0810000001', {
+				subject: 'google-sub-aaa',
+				email: 'alice@example.com'
+			});
+
+			const doc = fakeUsersDb['org.couchdb.user:0810000001'];
+			const google = getGoogleMfa(doc);
+			expect(google?.type).toBe('google');
+			expect(google?.subject).toBe('google-sub-aaa');
+			expect(google?.email).toBe('alice@example.com');
+			expect(google?.linked_at).toBeTruthy();
+			expect(google?.verified_at).toBeTruthy();
+
+			const caller = {
+				name: 'sa01',
+				roles: ['system_admin'],
+				isSA: true,
+				shelterCode: null
+			};
+			const listed = await listUsers(caller);
+			const row = listed.find((u) => u.name === '0810000001');
+			expect(row?.mfa_enrolled).toBe(true);
+			expect(row?.mfa_google_email).toBe('alice@example.com');
+		});
+
+		it('rejects linking the same Google subject to another user (CONFLICT)', async () => {
+			await seedUser('0810000002');
+			await seedUser('0810000003');
+			await linkGoogleMfa('0810000002', { subject: 'shared-sub', email: 'a@x.com' });
+
+			await expect(
+				linkGoogleMfa('0810000003', { subject: 'shared-sub', email: 'b@x.com' })
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+		});
+
+		it('rejects a second Google provider on the same user (CONFLICT)', async () => {
+			await seedUser('0810000004');
+			await linkGoogleMfa('0810000004', { subject: 'first-sub', email: 'one@x.com' });
+
+			await expect(
+				linkGoogleMfa('0810000004', { subject: 'second-sub', email: 'two@x.com' })
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+		});
+
+		it('unlinks Google MFA and clears summary enrollment', async () => {
+			await seedUser('0810000005');
+			await linkGoogleMfa('0810000005', { subject: 'unlink-sub', email: 'u@x.com' });
+			await unlinkGoogleMfa('0810000005');
+
+			const doc = fakeUsersDb['org.couchdb.user:0810000005'];
+			expect(getGoogleMfa(doc)).toBeNull();
+			expect(doc.mfa).toBeNull();
+
+			const caller = {
+				name: 'sa01',
+				roles: ['system_admin'],
+				isSA: true,
+				shelterCode: null
+			};
+			const listed = await listUsers(caller);
+			const row = listed.find((u) => u.name === '0810000005');
+			expect(row?.mfa_enrolled).toBe(false);
+			expect(row?.mfa_google_email).toBeNull();
+		});
+
+		it('updates verified_at on successful step-up touch', async () => {
+			await seedUser('0810000006');
+			await linkGoogleMfa('0810000006', { subject: 'touch-sub', email: 't@x.com' });
+			const before = getGoogleMfa(fakeUsersDb['org.couchdb.user:0810000006'])!.verified_at;
+			await new Promise((r) => setTimeout(r, 5));
+			await touchGoogleMfaVerified('0810000006');
+			const after = getGoogleMfa(fakeUsersDb['org.couchdb.user:0810000006'])!.verified_at;
+			expect(after).toBeTruthy();
+			expect(after! >= before!).toBe(true);
+		});
+
+		it('findUserByGoogleSubject returns the enrolled user or null', async () => {
+			await seedUser('0810000007');
+			await seedUser('0810000008');
+			await linkGoogleMfa('0810000007', { subject: 'lookup-sub', email: 'l@x.com' });
+			fakeUsersDb['org.couchdb.user:0810000008'].mfa = { providers: [] };
+
+			const found = await findUserByGoogleSubject('lookup-sub');
+			expect(found?.name).toBe('0810000007');
+			expect(await findUserByGoogleSubject('unknown-sub')).toBeNull();
+			expect(await findUserByGoogleSubject('')).toBeNull();
+		});
+
+		it('findUserByGoogleSubject ignores docs without a google provider', async () => {
+			await seedUser('0810000009');
+			fakeUsersDb['org.couchdb.user:0810000009'].mfa = { providers: [] };
+			expect(await findUserByGoogleSubject('nope')).toBeNull();
+		});
+	});
+
+	describe('updateOwnProfile', () => {
+		function seedProfileUser(name: string) {
+			fakeUsersDb[`org.couchdb.user:${name}`] = {
+				_id: `org.couchdb.user:${name}`,
+				_rev: '1-abc',
+				name,
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				display_name: 'เดิม',
+				phone: '0811111111',
+				email: 'old@example.com',
+				organization: 'ปภ. เดิม',
+				position: 'เจ้าหน้าที่',
+				personnel_type: 'staff'
+			};
+		}
+
+		it('updates allowed soft fields and trims values', async () => {
+			seedProfileUser('0812222222');
+			const summary = await updateOwnProfile('0812222222', {
+				display_name: '  สมชาย ใจดี  ',
+				phone: ' 0899999999 ',
+				email: ' new@example.com ',
+				organization: ' ปภ. ใหม่ ',
+				position: ' หัวหน้ากะ '
+			});
+
+			const saved = fakeUsersDb['org.couchdb.user:0812222222'];
+			expect(saved.display_name).toBe('สมชาย ใจดี');
+			expect(saved.phone).toBe('0899999999');
+			expect(saved.email).toBe('new@example.com');
+			expect(saved.organization).toBe('ปภ. ใหม่');
+			expect(saved.position).toBe('หัวหน้ากะ');
+			expect(saved.roles).toEqual(['shelter:SH001', 'registration_staff']);
+			expect(summary.display_name).toBe('สมชาย ใจดี');
+		});
+
+		it('rejects restricted keys such as roles and password', async () => {
+			seedProfileUser('0813333333');
+			await expect(
+				updateOwnProfile('0813333333', {
+					display_name: 'ok',
+					roles: ['system_admin']
+				} as never)
+			).rejects.toMatchObject({
+				code: 'VALIDATION',
+				message: expect.stringContaining('roles')
+			} satisfies Partial<ServiceError>);
+
+			expect(fakeUsersDb['org.couchdb.user:0813333333'].roles).toEqual([
+				'shelter:SH001',
+				'registration_staff'
+			]);
+		});
+
+		it('rejects empty display_name after trim', async () => {
+			seedProfileUser('0814444444');
+			await expect(updateOwnProfile('0814444444', { display_name: '   ' })).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+		});
+
+		it('clears optional fields when empty string is sent', async () => {
+			seedProfileUser('0815555555');
+			const summary = await updateOwnProfile('0815555555', {
+				email: '',
+				organization: null,
+				position: '  ',
+				phone: ''
+			});
+			const saved = fakeUsersDb['org.couchdb.user:0815555555'];
+			expect(saved.email).toBeNull();
+			expect(saved.organization).toBeNull();
+			expect(saved.position).toBeNull();
+			expect(saved.phone).toBeNull();
+			expect(summary.phone).toBeNull();
+			expect(summary.email).toBeNull();
+		});
+
+		it('throws when user doc is missing', async () => {
+			await expect(updateOwnProfile('missing-user', { display_name: 'x' })).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+		});
 	});
 });

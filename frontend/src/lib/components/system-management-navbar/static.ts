@@ -8,6 +8,7 @@ import {
 	MapPin,
 	Megaphone,
 	Settings,
+	Shield,
 	Tent,
 	Users,
 	Building,
@@ -129,6 +130,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						label: 'คำถามที่พบบ่อย (FAQ)',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
+						requiresAdmin: true
+					},
+					{
+						label: 'ความปลอดภัย / reCAPTCHA',
+						href: resolve(`${base}/security`),
+						icon: Shield,
 						requiresAdmin: true
 					},
 					{ label: 'งานอาสาสมัคร', href: null, icon: Users },

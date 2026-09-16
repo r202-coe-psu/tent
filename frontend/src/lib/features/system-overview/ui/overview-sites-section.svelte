@@ -50,7 +50,8 @@
 	<Card.Header class="space-y-4">
 		<div>
 			<Card.Title class="text-lg font-bold text-slate-900">ศูนย์ / ไซต์</Card.Title>
-			<Card.Description class="text-sm text-slate-500">เรียงตาม คาดการณ์ % จาก API</Card.Description>
+			<Card.Description class="text-sm text-slate-500">เรียงตาม คาดการณ์ % จาก API</Card.Description
+			>
 		</div>
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="min-w-0 space-y-1.5">

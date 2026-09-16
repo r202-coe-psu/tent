@@ -27,6 +27,12 @@ describe('donationPreDeclarationInputSchema', () => {
 		expect(result.success).toBe(false);
 	});
 
+	it('passes validation without captchaToken (BFF enforces when enabled)', () => {
+		const { captchaToken: _omit, ...noCaptcha } = baseValid;
+		const result = donationPreDeclarationInputSchema.safeParse(noCaptcha);
+		expect(result.success).toBe(true);
+	});
+
 	// 1. Valid Case
 	it('passes validation with valid donor declaration data', () => {
 		const result = donationPreDeclarationInputSchema.safeParse(baseValid);

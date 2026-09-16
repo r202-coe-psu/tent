@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { env } from '$env/dynamic/public';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -11,8 +14,10 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { LANDING_ROUTE } from '$lib/guards/auth';
-	import { fetchAuthStatus } from '$lib/features/users/data/users.api';
+	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -28,6 +33,58 @@
 
 	let showPassword = $state(false);
 
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	/** Stay false until GET /api/public/v1/recaptcha confirms ON — avoids injecting enterprise.js early. */
+	let captchaEnabled = $state(false);
+
+	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
+	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
+
+	async function captchaToken(): Promise<string | null> {
+		const injected = window.__captchaToken || '';
+		if (injected) return injected;
+		if (!captchaEnabled) return '';
+		const win = window;
+		if (win.grecaptcha) {
+			try {
+				const action = 'login';
+				if (win.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
+					return await win.grecaptcha.enterprise.execute(siteKey, { action });
+				}
+				if (win.grecaptcha.execute) {
+					return await win.grecaptcha.execute(siteKey, { action });
+				}
+			} catch {
+				return null;
+			}
+		}
+		return '';
+	}
+
+	onMount(() => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+
+		const err = page.url.searchParams.get('error');
+		if (!err) return;
+
+		if (err === 'google_not_linked') {
+			toast.error(
+				'บัญชี Google นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก Google ใน Settings'
+			);
+		} else if (err === 'invalid_state' || err === 'google_login_failed') {
+			toast.error('ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง');
+		} else if (err.startsWith('oauth_')) {
+			toast.error('ไม่สามารถเชื่อมต่อ Google ได้ กรุณาลองอีกครั้ง');
+		}
+
+		const next = new URL(page.url);
+		next.searchParams.delete('error');
+		void goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, noScroll: true });
+	});
+
 	const form = superForm(defaults(zod4(loginSchema)), {
 		SPA: true,
 		validators: zod4(loginSchema),
@@ -40,23 +97,41 @@
 
 			toast.promise(
 				(async () => {
+					const enabled = await fetchRecaptchaEnabled();
+					captchaEnabled = enabled;
+					if (enabled) {
+						const token = await captchaToken();
+						if (!token) {
+							toast.error(RECAPTCHA_ERROR);
+							throw new Error(RECAPTCHA_ERROR);
+						}
+
+						const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ captchaToken: token })
+						});
+						if (!captchaRes.ok) {
+							throw new Error(CAPTCHA_FAILED);
+						}
+					}
+
 					await authStore.login({
 						name: form.data.username,
 						password: form.data.password
 					});
 					reset();
 					onSuccess?.();
-					if (navigateOnSuccess) {
-						try {
-							const status = await fetchAuthStatus();
-							if (status.must_change_password || !status.has_security_question) {
-								await goto(resolve('/force-setup'));
-								return;
-							}
-						} catch {
-							// Fallback if status fetch fails
-						}
-						await goto(resolve(LANDING_ROUTE));
+					let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
+					try {
+						const status = await fetchAuthStatus();
+						dest = resolvePostLoginDestination(status);
+					} catch {
+						// Fallback if status fetch fails
+					}
+					// Always honor force-setup / MFA gates; only skip portal when reauth.
+					if (navigateOnSuccess || dest !== LANDING_ROUTE) {
+						await goto(resolve(dest));
 					}
 				})(),
 				{
@@ -69,6 +144,16 @@
 	});
 	const { form: formData, submitting, reset } = form;
 </script>
+
+<svelte:head>
+	{#if captchaEnabled}
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
+	{/if}
+</svelte:head>
 
 {#snippet fields()}
 	<form method="POST" use:form.enhance>
@@ -134,6 +219,23 @@
 			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
+
+			{#if captchaEnabled}
+				<p class="text-center text-2xs text-muted-foreground">
+					เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
+				</p>
+			{/if}
+
+			<div class="relative py-1">
+				<div class="absolute inset-0 flex items-center" aria-hidden="true">
+					<div class="w-full border-t border-slate-200"></div>
+				</div>
+				<div class="relative flex justify-center text-xs">
+					<span class="bg-white px-2 text-slate-500">หรือ</span>
+				</div>
+			</div>
+
+			<GoogleSignInButton href={googleOAuthStartHref('login')} />
 		</Field.FieldGroup>
 	</form>
 {/snippet}

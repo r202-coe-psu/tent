@@ -621,9 +621,13 @@ describe('POST /api/public/v1/donations', () => {
 				getClientAddress: () => '127.0.0.1'
 			} as unknown as PostEvent);
 
+			// config:app is allowed (reCAPTCHA operator flag); shelter master docs are not.
 			const registryReads = vi
 				.mocked(adminRaw)
-				.mock.calls.filter((c) => String(c[0]).includes('/registry'));
+				.mock.calls.filter(
+					(c) =>
+						String(c[0]).includes('/registry') && !String(c[0]).includes('config%3Aapp')
+				);
 			expect(registryReads).toHaveLength(0);
 		});
 	});

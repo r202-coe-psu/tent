@@ -314,10 +314,10 @@
 		</div>
 	</div>
 
-	<!-- Birth Year, Age, Gender -->
+	<!-- Birth Year, Age, Gender — equal label-row height so controls share one baseline -->
 	<div class="grid gap-3 sm:grid-cols-3">
-		<div class="space-y-1.5">
-			<div class="flex items-center justify-between gap-2">
+		<div class="flex flex-col gap-1.5">
+			<div class="flex min-h-7 items-center justify-between gap-2">
 				<Label for={fid('birth-year')} class="text-xs font-semibold text-foreground">
 					{calendar === 'BE' ? t.birthYearLabelBE : t.birthYearLabelCE}
 				</Label>
@@ -365,8 +365,10 @@
 			{/if}
 		</div>
 
-		<div class="space-y-1.5">
-			<Label for={fid('age')} class="text-xs font-semibold text-foreground">{t.ageLabel}</Label>
+		<div class="flex flex-col gap-1.5">
+			<div class="flex min-h-7 items-center">
+				<Label for={fid('age')} class="text-xs font-semibold text-foreground">{t.ageLabel}</Label>
+			</div>
 			<Input
 				id={fid('age')}
 				value={age ?? ''}
@@ -382,10 +384,12 @@
 			{/if}
 		</div>
 
-		<div class="space-y-1.5">
-			<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
-				{t.genderLabel} <span class="text-destructive">*</span>
-			</Label>
+		<div class="flex flex-col gap-1.5">
+			<div class="flex min-h-7 items-center">
+				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
+					{t.genderLabel} <span class="text-destructive">*</span>
+				</Label>
+			</div>
 			<RadioGroup.Root
 				value={genderRadioValue}
 				onValueChange={(val) => {
@@ -396,7 +400,7 @@
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
-				class="flex flex-wrap gap-3 pt-1"
+				class="flex flex-wrap gap-3"
 			>
 				<label
 					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs {genderRadioValue ===
