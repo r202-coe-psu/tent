@@ -23,9 +23,10 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
-	import { UNASSIGNED_SHELTER_CODE, isCaptchaKeyConfigured } from '../domain/booking';
+	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import type { ShelterSummary } from '$lib/features/shelters/index.js';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -41,7 +42,7 @@
 	const createBooking = useCreateBooking();
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
-	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+	let captchaEnabled = $state(false);
 
 	let selectedShelterCode = $state(untrack(() => lockedShelterCode));
 	let disclaimerAcknowledged = $state(false);
@@ -60,6 +61,9 @@
 	let latestExistingTicket = $state<BookingTicket | null>(null);
 	onMount(() => {
 		latestExistingTicket = getLatestStoredTicket();
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
 	});
 
 	function capacityLabel(s: { capacity: number; available: number | null }): string {
@@ -115,8 +119,10 @@
 
 		isSubmitting = true;
 		try {
+			const enabled = await fetchRecaptchaEnabled();
+			captchaEnabled = enabled;
 			const token = await captchaToken();
-			if (token === null) {
+			if (enabled && !token) {
 				toast.error(t.recaptchaError);
 				throw new Error(t.recaptchaError);
 			}

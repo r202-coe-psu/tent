@@ -12,16 +12,24 @@ type PostEvent = Parameters<typeof POST>[0];
 
 // vi.mock factories are hoisted above module scope — the mutable state they close
 // over has to be hoisted with them.
-const { mockEnv, mockAppEnv } = vi.hoisted(() => ({
+const { mockEnv, mockAppEnv, adminRaw } = vi.hoisted(() => ({
 	mockEnv: { SECRET_RECAPTCHA_KEY: 'test-recaptcha-secret' },
-	mockAppEnv: { dev: false }
+	mockAppEnv: { dev: false },
+	adminRaw: vi.fn()
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$app/environment', () => ({
+	get browser() {
+		return false;
+	},
 	get dev() {
 		return mockAppEnv.dev;
 	}
+}));
+
+vi.mock('$lib/server/couch-admin', () => ({
+	adminRaw
 }));
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
@@ -103,6 +111,11 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
+		adminRaw.mockReset();
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
+		});
 		mockEnv.SECRET_RECAPTCHA_KEY = 'test-recaptcha-secret';
 		mockAppEnv.dev = false;
 		vi.mocked(readForecastOccupancy).mockReset();

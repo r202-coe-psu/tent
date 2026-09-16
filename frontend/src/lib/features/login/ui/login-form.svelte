@@ -16,7 +16,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
-	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
@@ -34,7 +34,8 @@
 	let showPassword = $state(false);
 
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
-	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+	/** Stay false until GET /api/public/v1/recaptcha confirms ON — avoids injecting enterprise.js early. */
+	let captchaEnabled = $state(false);
 
 	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
 	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
@@ -62,6 +63,10 @@
 	}
 
 	onMount(() => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+
 		const err = page.url.searchParams.get('error');
 		if (!err) return;
 
@@ -92,7 +97,9 @@
 
 			toast.promise(
 				(async () => {
-					if (captchaEnabled) {
+					const enabled = await fetchRecaptchaEnabled();
+					captchaEnabled = enabled;
+					if (enabled) {
 						const token = await captchaToken();
 						if (!token) {
 							toast.error(RECAPTCHA_ERROR);

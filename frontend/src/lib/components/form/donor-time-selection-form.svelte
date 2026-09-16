@@ -20,9 +20,11 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	const donationStore = getDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	let captchaEnabled = $state(false);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
@@ -30,6 +32,9 @@
 	let isItemsModalOpen = $state(false);
 
 	onMount(async () => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
 		try {
 			const res = await fetch('/api/public/v1/needs');
 			if (res.ok) {
@@ -95,30 +100,35 @@
 	async function submitDonation() {
 		donationStore.errorMessage = '';
 		donationStore.isSubmitting = true;
-		// E2E may inject a token; otherwise require real reCAPTCHA (no silent skip in dev).
+		// E2E may inject a token; otherwise require real reCAPTCHA when enabled.
 		let token = window.__captchaToken || '';
 
-		if (siteKey && window.grecaptcha) {
-			try {
-				if (window.grecaptcha.enterprise) {
-					await new Promise<void>((resolve) =>
-						window.grecaptcha!.enterprise!.ready(() => resolve())
-					);
-					token = await window.grecaptcha.enterprise.execute(siteKey, { action: 'donate' });
-				} else if (window.grecaptcha.execute) {
-					token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
+		const enabled = await fetchRecaptchaEnabled();
+		captchaEnabled = enabled;
+
+		if (enabled) {
+			if (siteKey && window.grecaptcha) {
+				try {
+					if (window.grecaptcha.enterprise) {
+						await new Promise<void>((resolve) =>
+							window.grecaptcha!.enterprise!.ready(() => resolve())
+						);
+						token = await window.grecaptcha.enterprise.execute(siteKey, { action: 'donate' });
+					} else if (window.grecaptcha.execute) {
+						token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
+					}
+				} catch {
+					donationStore.errorMessage = t.errRecaptchaFailed;
+					toast.error(donationStore.errorMessage);
+					donationStore.isSubmitting = false;
+					return;
 				}
-			} catch {
-				donationStore.errorMessage = t.errRecaptchaFailed;
+			} else if (!token) {
+				donationStore.errorMessage = t.errRecaptchaNotConfigured;
 				toast.error(donationStore.errorMessage);
 				donationStore.isSubmitting = false;
 				return;
 			}
-		} else if (!token) {
-			donationStore.errorMessage = t.errRecaptchaNotConfigured;
-			toast.error(donationStore.errorMessage);
-			donationStore.isSubmitting = false;
-			return;
 		}
 
 		let slotDateStr = selectedDate
@@ -169,7 +179,7 @@
 								}))
 							: [{ free_text: t.generalItemsFallback, qty: 1, unit: t.defaultItemUnit }],
 					logistics: logistics,
-					captchaToken: token
+					...(token ? { captchaToken: token } : {})
 				})
 			});
 			const data = await res.json();

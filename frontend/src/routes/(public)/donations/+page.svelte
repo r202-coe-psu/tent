@@ -11,13 +11,22 @@
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
 	import { env } from '$env/dynamic/public';
+	import { onMount } from 'svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	const donationStore = setDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	let captchaEnabled = $state(false);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
+
+	onMount(() => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+	});
 
 	const steps = $derived([
 		{ id: 'needs', icon: AlertTriangle, label: t.step1 },
@@ -48,7 +57,7 @@
 
 <svelte:head>
 	<title>{t.pageTitle}</title>
-	{#if siteKey}
+	{#if captchaEnabled && siteKey}
 		<script
 			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
 			async
