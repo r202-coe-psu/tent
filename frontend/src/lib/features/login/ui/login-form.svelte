@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { env } from '$env/dynamic/public';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -15,6 +16,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
@@ -30,6 +32,34 @@
 	} = $props();
 
 	let showPassword = $state(false);
+
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+
+	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
+	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
+
+	async function captchaToken(): Promise<string | null> {
+		const injected = window.__captchaToken || '';
+		if (injected) return injected;
+		if (!captchaEnabled) return '';
+		const win = window;
+		if (win.grecaptcha) {
+			try {
+				const action = 'login';
+				if (win.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
+					return await win.grecaptcha.enterprise.execute(siteKey, { action });
+				}
+				if (win.grecaptcha.execute) {
+					return await win.grecaptcha.execute(siteKey, { action });
+				}
+			} catch {
+				return null;
+			}
+		}
+		return '';
+	}
 
 	onMount(() => {
 		const err = page.url.searchParams.get('error');
@@ -62,6 +92,23 @@
 
 			toast.promise(
 				(async () => {
+					if (captchaEnabled) {
+						const token = await captchaToken();
+						if (!token) {
+							toast.error(RECAPTCHA_ERROR);
+							throw new Error(RECAPTCHA_ERROR);
+						}
+
+						const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ captchaToken: token })
+						});
+						if (!captchaRes.ok) {
+							throw new Error(CAPTCHA_FAILED);
+						}
+					}
+
 					await authStore.login({
 						name: form.data.username,
 						password: form.data.password
@@ -90,6 +137,16 @@
 	});
 	const { form: formData, submitting, reset } = form;
 </script>
+
+<svelte:head>
+	{#if captchaEnabled}
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
+	{/if}
+</svelte:head>
 
 {#snippet fields()}
 	<form method="POST" use:form.enhance>
@@ -155,6 +212,12 @@
 			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
+
+			{#if captchaEnabled}
+				<p class="text-center text-2xs text-muted-foreground">
+					เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
+				</p>
+			{/if}
 
 			<div class="relative py-1">
 				<div class="absolute inset-0 flex items-center" aria-hidden="true">
