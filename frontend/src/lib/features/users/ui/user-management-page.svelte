@@ -113,8 +113,8 @@
 		const listBase = usersListBaseFromPathname(page.url.pathname);
 		const from = withUsersView(page.url.pathname, page.url.search);
 		const path =
-			listBase === '/portal/system-management/users'
-				? resolve(`/portal/system-management/users/${encodeURIComponent(user.name)}`)
+			listBase === '/system-management/users'
+				? resolve(`/system-management/users/${encodeURIComponent(user.name)}`)
 				: resolve(`/back-office/users/${encodeURIComponent(user.name)}`);
 		return `${path}?from=${encodeURIComponent(from)}`;
 	}

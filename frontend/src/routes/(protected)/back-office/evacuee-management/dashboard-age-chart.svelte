@@ -2,7 +2,7 @@
 	import * as Chart from '$lib/components/ui/chart/index.js';
 	import { BarChart } from 'layerchart';
 	import { scaleBand } from 'd3-scale';
-	import type { AgeGroups } from '$lib/features/dashboard';
+	import { AGE_BUCKETS, AGE_BUCKET_LABELS, type AgeGroups } from '$lib/features/dashboard';
 
 	let { data }: { data: AgeGroups } = $props();
 
@@ -11,9 +11,9 @@
 	} satisfies Chart.ChartConfig;
 
 	const ageData = $derived(
-		['0-4', '5-11', '12-17', '18-59', '60+', 'unknown'].map((bucket) => ({
-			bucket: bucket === 'unknown' ? 'ไม่ระบุ' : bucket,
-			count: data[bucket as keyof AgeGroups] ?? 0
+		AGE_BUCKETS.map((bucket) => ({
+			bucket: AGE_BUCKET_LABELS[bucket],
+			count: data[bucket] ?? 0
 		}))
 	);
 </script>
@@ -41,7 +41,8 @@
 	>
 		{#snippet tooltip()}
 			<Chart.Tooltip
-				labelFormatter={(value) => (value === 'ไม่ระบุ' ? 'อายุ ไม่ระบุ' : `อายุ ${value} ปี`)}
+				labelFormatter={(value) =>
+					value === AGE_BUCKET_LABELS.unknown ? 'อายุ ไม่ระบุ' : value}
 			>
 				{#snippet formatter({ value })}
 					<div

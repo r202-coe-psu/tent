@@ -7,7 +7,7 @@ External partner systems (M6 Resource Logistics and M7 Command Center / EOC) req
 To maintain high throughput, sub-second latency for command dashboards, strict PDPA compliance, and protect our operational CouchDB database from N+1 query storms during disaster operations, we established the following architectural decisions:
 
 1. **OAuth2 Scoped Client Credentials (`EXT-001`)**:
-   - Implement `POST /api/auth/token-third-party` using `grant_type: "client_credentials"`.
+   - Implement `POST /external/token` using `grant_type: "client_credentials"`.
    - Store machine credentials in a dedicated MongoDB collection `third_party_clients` (storing `client_id`, `client_secret_hash`, `module_name`, `allowed_scopes`, and `is_active`).
    - Issue short-lived, cryptographically signed JWT access tokens (lifetime 3,600s) embedding specific scopes (`location-read`, `location-stock-read`, `occupancy-read`, `occupancy-pii-read`).
    - Reject arbitrary access without valid scopes; audit token issuances.
@@ -45,5 +45,5 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
 - New MongoDB collections: `third_party_clients`, `shelter_stocks`, and `third_party_access_logs`.
 - Sync Worker responsibilities expanded to aggregate stock balances and demographic groups.
 - `PublicShelter` schema expanded to embed real-time occupancy counts and operational metadata.
-- FastAPI gains a dedicated `/api/thirdparty` and `/api/auth` routing plane matching the partner contract exactly.
+- FastAPI gains a dedicated `/external` routing plane matching the partner contract exactly.
 - **As-built partner handover (2026-09-10):** [docs/reports/2026-09-10/partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) — delivery artifact that supersedes ODT framing for integration; source ODT in `docs/source/` remains an immutable archive (untouched). Indexed from [api-contract.md](../data/api-contract.md) §5.3; stable stub at [docs/data/partner-api.md](../data/partner-api.md).

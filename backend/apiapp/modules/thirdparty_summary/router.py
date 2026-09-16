@@ -8,7 +8,7 @@ from ..thirdparty_auth.scopes import ThirdPartyClaims, require_scope
 from .schemas import SummaryEnvelope
 from .use_case import ThirdPartySummaryUseCase, get_thirdparty_summary_use_case
 
-router = APIRouter(prefix="/api/thirdparty", tags=["Third-party Summary"])
+router = APIRouter(prefix="/external", tags=["External"])
 
 
 @router.get("/summary", response_model=SummaryEnvelope)

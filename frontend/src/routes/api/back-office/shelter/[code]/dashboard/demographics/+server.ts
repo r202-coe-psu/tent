@@ -19,6 +19,7 @@ import {
 } from '$lib/server/couch-admin';
 import {
 	DemographicsPayloadSchema,
+	ageBucketForBirthYear,
 	rowsToAgeGroups,
 	rowsToCountries
 } from '$lib/features/dashboard';
@@ -42,16 +43,6 @@ async function queryGroupedView(
 	}
 
 	return ((res.data as { rows?: GroupedDemographicRow[] }).rows ?? []) as GroupedDemographicRow[];
-}
-
-function ageBucketForBirthYear(birthYear: number | null, currentYear: number): string {
-	if (birthYear === null || !Number.isFinite(birthYear)) return 'unknown';
-	const age = currentYear - (birthYear - 543);
-	if (age <= 4) return '0-4';
-	if (age <= 11) return '5-11';
-	if (age <= 17) return '12-17';
-	if (age <= 59) return '18-59';
-	return '60+';
 }
 
 function ageRowsToBuckets(rows: GroupedDemographicRow[]) {

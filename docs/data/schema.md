@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-15
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts
+updated: 2026-09-16
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users
 ---
 
 # Database Schema v5 — field-level
@@ -1728,7 +1728,7 @@ closed   → (terminal)
 ## 6. DB `_users` (CouchDB system DB — central-managed)
 
 CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — ไม่มี common envelope; managed ผ่าน `/api/v1/users`
-(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)**
+(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)** และ **CR-124 (Staff Google step-up MFA)**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -1745,9 +1745,25 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |
 | `duty_window` | object\|null | opt | `{ start_ts: ISO, end_ts: ISO }` ช่วงเวลากะงานสำหรับตัดสิทธิ์อัตโนมัตินอกเวลา |
 | `security_question` | object\|null | opt | `{ question_id: enum, answer_hash: str, salt: str, set_at: ISO }` สำหรับกู้คืนรหัสผ่านด้วยตนเอง (6 คำถามมาตรฐาน, Salted SHA-256) |
+| `mfa` | object\|null | opt | CR-124 — `null` / ขาด field = ไม่ enrolled Google step-up MFA; ดูฟิลด์ย่อยด้านล่าง |
 | `active` | bool | req | default `true` (เปิด/ปิดการเข้าใช้งานระบบ) |
 | `must_change_password` | bool | opt | default `false` (บังคับเปลี่ยนรหัสผ่านและตั้งคำถามความปลอดภัยเมื่อเข้าสู่ระบบ) |
 | `affiliation_tags` | [str] | opt | แท็กสังกัดหรือกลุ่มสังกัดเพิ่มเติม |
+
+**`mfa` (CR-124 Phase 1 — Google step-up เท่านั้น):**
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `mfa.providers` | array | req เมื่อมี `mfa` | รายการ IdP ที่ผูกแล้ว |
+| `mfa.providers[].type` | enum | req | Phase 1 อนุญาตเฉพาะ `"google"` |
+| `mfa.providers[].subject` | str | req | Google OIDC `sub` (stable) — ห้ามใช้ email เป็น identity หลัก |
+| `mfa.providers[].email` | str\|null | opt | สำหรับแสดงผลเท่านั้น |
+| `mfa.providers[].linked_at` | ISO ts | req | เวลาที่ผูกสำเร็จ |
+| `mfa.providers[].verified_at` | ISO ts\|null | opt | เวลา verify ล่าสุด (ถ้าเก็บ) |
+
+- Google `subject` (`sub`) หนึ่งค่าผูกได้กับ `_users` เพียงหนึ่งเอกสาร
+- แต่ละ user มี `type:"google"` ได้ไม่เกินหนึ่งรายการใน `mfa.providers` (Phase 1)
+- ไม่เก็บ raw Google userinfo / metadata ทั้งก้อน — เก็บเฉพาะฟิลด์ในตารางนี้
 
 **กฎความปลอดภัยของ Compound Roles (CR-093 / CR-104):**
 - กุญแจผ่านประตูฐานข้อมูล (`shelter:{code}`): กำหนดใน `_security.members.roles` ของฐานข้อมูล `shelter_{code}`
@@ -1852,7 +1868,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
 
-Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /api/thirdparty/locations/{code}/stock`
+Read model per ศูนย์+รายการสินค้า สำหรับ Partner API `GET /external/locations/{code}/stock`
 (scope `location-stock-read`) และ `critical_items` ใน EXT-006 summary. Worker คำนวณใหม่ทั้งชุดทุกครั้งที่
 `stock_ledger`/`stock_threshold_override` ในศูนย์นั้นเปลี่ยน (`worker/mongo/stock.py::refresh_shelter_stock`
 — full-rescan pattern เดียวกับ `refresh_on_hand`, CR-032/T-22). ไม่มี read path จาก CouchDB สำหรับ partner

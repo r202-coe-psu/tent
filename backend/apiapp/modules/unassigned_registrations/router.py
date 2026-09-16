@@ -37,7 +37,10 @@ from .schemas import (
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
     UnassignedRegistrationCreateResponse,
+    UnassignedRegistrationDetailResponse,
+    UnassignedRegistrationListResponse,
     UnassignedRegistrationSearchResponse,
+    UnassignedRegistrationStatsResponse,
 )
 from .use_case import UnassignedRegistrationsUseCase
 
@@ -186,6 +189,68 @@ async def search_unassigned_registrations(
     """
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(q)
+
+
+@staff_router.get(
+    "/stats",
+    response_model=UnassignedRegistrationStatsResponse,
+)
+async def unassigned_registration_stats(
+    response: Response,
+    _session: StaffSession = Depends(require_system_admin),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationStatsResponse:
+    """SA-only open-queue counts for system overview KPIs."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.stats()
+
+
+@staff_router.get(
+    "",
+    response_model=UnassignedRegistrationListResponse,
+)
+async def list_unassigned_registrations(
+    response: Response,
+    q: str = Query(default=""),
+    province: str | None = Query(default=None),
+    district: str | None = Query(default=None),
+    subdistrict: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _session: StaffSession = Depends(require_system_admin),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationListResponse:
+    """SA-only paginated open Unassigned Registrations (system overview PII)."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.list_open(
+        q=q,
+        province=province,
+        district=district,
+        subdistrict=subdistrict,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@staff_router.get(
+    "/{registration_id}",
+    response_model=UnassignedRegistrationDetailResponse,
+)
+async def get_unassigned_registration(
+    registration_id: str,
+    response: Response,
+    _session: StaffSession = Depends(require_system_admin),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationDetailResponse:
+    """SA-only Unassigned Registration detail (read-only profile)."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.get_detail(registration_id)
 
 
 @staff_router.post(

@@ -77,13 +77,13 @@ async def two_shelters() -> None:
 
 
 async def test_get_summary_requires_bearer_token(client: AsyncClient) -> None:
-    response = await client.get("/api/thirdparty/summary")
+    response = await client.get("/external/summary")
     assert response.status_code == 401
 
 
 async def test_get_summary_rejects_insufficient_scope(client: AsyncClient) -> None:
     headers = _bearer(["occupancy-read"])  # missing location-read
-    response = await client.get("/api/thirdparty/summary", headers=headers)
+    response = await client.get("/external/summary", headers=headers)
     assert response.status_code == 403
     assert response.json()["code"] == "insufficient_scope"
 
@@ -92,7 +92,7 @@ async def test_get_summary_omits_occupancy_total_without_occupancy_scope(
     client: AsyncClient, two_shelters: None
 ) -> None:
     headers = _bearer(["location-read"])
-    response = await client.get("/api/thirdparty/summary", headers=headers)
+    response = await client.get("/external/summary", headers=headers)
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["location_count"] == 2
@@ -104,7 +104,7 @@ async def test_get_summary_includes_occupancy_total_with_occupancy_scope(
     client: AsyncClient, two_shelters: None
 ) -> None:
     headers = _bearer(["location-read", "occupancy-read"])
-    response = await client.get("/api/thirdparty/summary", headers=headers)
+    response = await client.get("/external/summary", headers=headers)
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["occupancy_total"] == 312
@@ -114,7 +114,7 @@ async def test_get_summary_critical_items_only_lists_low_and_critical(
     client: AsyncClient, two_shelters: None
 ) -> None:
     headers = _bearer(["location-read"])
-    response = await client.get("/api/thirdparty/summary", headers=headers)
+    response = await client.get("/external/summary", headers=headers)
     assert response.status_code == 200
     locations = {loc["location_code"]: loc for loc in response.json()["result"]["locations"]}
     critical = {item["name_th"]: item["level"] for item in locations["SH001"]["critical_items"]}

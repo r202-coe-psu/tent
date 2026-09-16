@@ -112,8 +112,8 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		const data = await res.json();
 
 		expect(data.shelter_code).toBe('SH001');
-		expect(data.age_groups['18-59']).toBe(1);
-		expect(data.age_groups['0-4']).toBe(1);
+		expect(data.age_groups['20-59']).toBe(1);
+		expect(data.age_groups['1-5']).toBe(1);
 		expect(data.countries['THAILAND']).toBe(2);
 		expect(data.countries['LAOS']).toBeUndefined();
 

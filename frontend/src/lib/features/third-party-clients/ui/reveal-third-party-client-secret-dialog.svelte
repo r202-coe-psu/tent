@@ -61,7 +61,7 @@
 				<p class="text-xs text-muted-foreground">
 					Exchange <code class="rounded bg-muted px-1">client_id</code> +
 					<code class="rounded bg-muted px-1">client_secret</code> at
-					<code class="rounded bg-muted px-1">POST /api/auth/token-third-party</code>
+					<code class="rounded bg-muted px-1">POST /external/token</code>
 					(<code class="rounded bg-muted px-1">grant_type=client_credentials</code>).
 				</p>
 			</div>

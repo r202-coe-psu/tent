@@ -152,7 +152,8 @@
 		};
 		if (demographics?.age_groups) {
 			headcounts.ELDERLY = demographics.age_groups['60+'] ?? 0;
-			headcounts.CHILD_2_5 = demographics.age_groups['0-4'] ?? 0;
+			headcounts.CHILD_2_5 =
+				(demographics.age_groups['<1'] ?? 0) + (demographics.age_groups['1-5'] ?? 0);
 		}
 
 		return buildFoodSphereTable({
