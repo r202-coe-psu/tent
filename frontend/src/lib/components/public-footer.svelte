@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import FileText from '@lucide/svelte/icons/file-text';
+	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
-	import Ambulance from '@lucide/svelte/icons/ambulance';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import Mail from '@lucide/svelte/icons/mail';
 
 	export interface PublicFooterConfig {
 		line_oa_url?: string;
@@ -61,41 +60,49 @@
 			<!-- Column 1: Platform Branding -->
 			<div class="space-y-3 {hasOnlineChannels ? 'md:col-span-5' : 'md:col-span-7'}">
 				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sky-300">
-						<FileText class="h-4 w-4" />
+					<div
+						class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm"
+					>
+						<Building class="h-4 w-4" />
 					</div>
 					<h3 class="text-sm font-bold text-white">Smart Shelter Platform</h3>
 				</div>
-				<p class="text-xs font-medium text-white/90">
-					ศูนย์อำนวยการร่วม EOC (ศูนย์ประสานงานช่วยเหลือผู้ประสบภัย)
-				</p>
-				<p class="text-xs text-white/60">
-					ระบบพัฒนาเพื่อช่วยเหลือและจัดการศูนย์พักพิงในสถานการณ์อุทกภัยอย่างโปร่งใสและรวดเร็ว
-				</p>
+				<div class="flex items-center gap-2 text-xs text-white/80">
+					<Mail class="h-3.5 w-3.5 shrink-0 text-white/60" />
+					<a
+						href="mailto:Thamathep.l@psu.ac.th"
+						class="transition-colors hover:text-white hover:underline"
+					>
+						Thamathep.l@psu.ac.th
+					</a>
+				</div>
+				<p class="text-xs text-white/60">ระบบประสานงานและข้อมูลสาธารณะเพื่อการบรรเทาทุกข์</p>
 			</div>
 
-			<!-- Column 2: Emergency Numbers (Only 1669 and 1784) -->
+			<!-- Column 2: Emergency Numbers -->
 			<div class="space-y-3 {hasOnlineChannels ? 'md:col-span-4' : 'md:col-span-5'}">
 				<h4 class="text-xs font-semibold text-white/80">เบอร์ติดต่อฉุกเฉิน</h4>
 				<div class="space-y-2 text-xs">
-					<div class="flex items-center justify-between text-white/90">
+					<div
+						class="flex items-center justify-between border-b border-white/10 pb-2 text-white/90"
+					>
 						<div class="flex items-center gap-2">
-							<Ambulance class="h-3.5 w-3.5 text-red-400" />
-							<span>สายด่วนกู้ชีพ</span>
-						</div>
-						<a href="tel:1669" class="font-mono font-bold text-red-300 hover:underline">1669</a>
-					</div>
-					<div class="flex items-center justify-between text-white/90">
-						<div class="flex items-center gap-2">
-							<ShieldAlert class="h-3.5 w-3.5 text-amber-400" />
+							<span class="text-xs select-none">🚨</span>
 							<span>ศูนย์เตือนภัย ปภ.</span>
 						</div>
-						<a href="tel:1784" class="font-mono font-bold text-amber-300 hover:underline">1784</a>
+						<a href="tel:1784" class="font-mono font-bold text-white hover:underline">1784</a>
+					</div>
+					<div class="flex items-center justify-between pt-0.5 text-white/90">
+						<div class="flex items-center gap-2">
+							<span class="text-xs select-none">🚑</span>
+							<span>สายด่วนกู้ชีพ</span>
+						</div>
+						<a href="tel:1669" class="font-mono font-bold text-white hover:underline">1669</a>
 					</div>
 				</div>
 			</div>
 
-			<!-- Column 3: Fast Online Channels (Show only if configured) -->
+			<!-- Column 3: Fast Online Channels -->
 			{#if hasOnlineChannels}
 				<div class="space-y-3 md:col-span-3">
 					<h4 class="text-xs font-semibold text-white/80">ช่องทางออนไลน์ด่วน</h4>
@@ -105,7 +112,7 @@
 								href={effectiveConfig.line_oa_url}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="flex items-center justify-between rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/15"
+								class="flex items-center justify-between rounded-lg border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-white/15"
 							>
 								<div class="flex items-center gap-2">
 									<span class="h-2 w-2 rounded-full bg-emerald-400"></span>
@@ -134,12 +141,11 @@
 		</div>
 
 		<!-- Bottom Copyright Bar -->
-		<div class="mt-8 space-y-1 border-t border-white/10 pt-6 text-center text-xs text-white/60">
+		<div class="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/60">
 			<p>
-				© 2026 Smart Shelter Project — มหาวิทยาลัยสงขลานครินทร์ • กรอบแผนงาน "น้ำมั่นคง ไม่ท่วม
-				ไม่แล้ง" (ววน.)
+				© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA •
+				ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย
 			</p>
-			<p>คุ้มครองข้อมูลตาม พ.ร.บ. PDPA • ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย</p>
 		</div>
 	</div>
 </footer>
