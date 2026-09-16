@@ -134,11 +134,11 @@ export function buildValidateDocUpdate(code: string): string {
       userCtx.roles.indexOf('${code}:' + cap) !== -1 ||
       userCtx.roles.indexOf(cap) !== -1;
   }
-  // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
+  // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log,
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
     'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
-    'kitchen_requisition', 'meal_service', 'gas_ledger', 'distribution_issue',
+    'meal_service', 'gas_ledger', 'distribution_issue',
     'distribution_issue_idempotency'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
@@ -162,7 +162,7 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
-    if (wasAppendOnly || protectedCoordinationDelete) {
+    if (wasAppendOnly || protectedCoordinationDelete || (oldDoc && oldDoc.type === 'kitchen_requisition')) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
     }
     return;
