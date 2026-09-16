@@ -246,14 +246,14 @@
 		<!-- 2 Quick Action Cards Inside Hero Area -->
 		<div class="mx-auto mt-7 grid max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
 			<!-- Left Card: ค้นหาศูนย์พักพิง -->
-			<div>
+			<div class="flex flex-col">
 				<div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/95 sm:text-sm">
 					<Building class="h-4 w-4" />
 					<span>{t.findSheltersTag}</span>
 				</div>
 				<a
 					href="/shelters"
-					class="group flex min-h-[76px] items-center justify-between rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all hover:bg-slate-50/90 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
+					class="group flex min-h-[76px] flex-1 items-center justify-between rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all hover:bg-slate-50/90 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-4">
 						<div
@@ -279,7 +279,7 @@
 			</div>
 
 			<!-- Right Card: ค้นหาผู้พักพิง / ตามหาญาติ -->
-			<div>
+			<div class="flex flex-col">
 				<div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/95 sm:text-sm">
 					<Search class="h-4 w-4" />
 					<span>{t.searchEvacueesTag}</span>
@@ -289,7 +289,7 @@
 						e.preventDefault();
 						handleSearch();
 					}}
-					class="flex min-h-[76px] items-center rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all focus-within:ring-2 focus-within:ring-sky-400 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
+					class="flex min-h-[76px] flex-1 items-center rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all focus-within:ring-2 focus-within:ring-sky-400 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
 				>
 					<Search class="mr-2.5 h-4 w-4 shrink-0 text-slate-400 sm:mr-3 sm:h-5 sm:w-5" />
 					<input
