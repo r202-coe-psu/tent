@@ -40,6 +40,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
 	import { qtyGt } from '$lib/utils/qty';
+	import { formatThaiTime } from '$lib/utils/date';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
@@ -180,10 +181,7 @@
 			);
 			return;
 		}
-		// Same fail-fast for gas (CR-085) — a plan whose planned draw already
-		// exceeds a cylinder's remaining balance can never actually be
-		// withdrawn (requisition-dialog hard-blocks it), so don't let it move
-		// past draft looking "ready".
+		// Block confirming if gas balance is insufficient.
 		if (gasShortfalls(plan).length > 0) {
 			toast.error(
 				'ยืนยันไม่ได้ — ถังแก๊สบางใบเหลือไม่พอตามที่แผนนี้คำนวณไว้ เติมแก๊สหรือแก้แผนก่อนแล้วค่อยยืนยัน'
@@ -198,16 +196,12 @@
 		}
 	}
 
-	// _id is a ulid now (multiple plans may share a date+meal) — show the plan's
-	// own date+meal fields directly instead of parsing them back out of the id.
+	// Formats date and meal period reference string.
 	function planRef(plan: MealPlan): string {
 		return `${plan.date}:${plan.meal}`;
 	}
 
-	// Display label + unit for a recipe row: fixed SOP ids first, then a
-	// supply_item lookup (custom mode, or a resolved/linked BOM ingredient),
-	// then an item_master lookup (an unresolved BOM ingredient — still shows a
-	// real name even though it can't be withdrawn yet), else the raw id.
+	// Resolves label and unit for recipe items.
 	function recipeLabel(recipeId: string): { label: string; unit: string } {
 		if (RECIPE_LABELS[recipeId]) return RECIPE_LABELS[recipeId];
 		const supplyItem = supplyItems.data?.find((i) => i._id === recipeId);
@@ -217,15 +211,7 @@
 		return { label: recipeId, unit: '' };
 	}
 
-	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-	}
-
-	// How much more than the shelter's current on-hand stock this recipe row
-	// needs (0 = fully covered) — in the same display unit as planned_qty/meta.unit
-	// (converted back from the stock unit when a static mapping applies, e.g.
-	// rice: on-hand kg × 1000 → g). BOM rows (item_master:*) are skipped — they
-	// already show their own "ยังเบิกไม่ได้จริง" note regardless of qty.
+	// Calculates required stock shortfall for a planned recipe item.
 	function stockShortfall(recipe: MealPlanRecipe): number {
 		if (recipe.recipe_id.startsWith('item_master:')) return 0;
 		const stock = RECIPE_TO_STOCK_ITEM[recipe.recipe_id];
@@ -234,10 +220,7 @@
 		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
 	}
 
-	// Gas cylinders (CR-085) this plan would draw short of — same "flag it in
-	// the table" treatment as stockShortfall above, so a gas shortfall is
-	// visible before staff even open the requisition dialog where it's a hard
-	// block.
+	// Identifies gas cylinders with shortfalls for the plan.
 	function gasShortfalls(
 		plan: MealPlan
 	): { name: string; remaining: string; consumption_kg: string }[] {
@@ -255,7 +238,7 @@
 </script>
 
 <div class="flex flex-col gap-4 p-4">
-	<!-- SOP setup notice — master profiles are seeded by system_admin, not from here (CR-006) -->
+	<!-- SOP setup notice -->
 	{#if !sopProfile.isPending && !sopProfile.data}
 		<Card.Root class="border-amber-300 bg-amber-50">
 			<Card.Content class="pt-4">
@@ -324,7 +307,7 @@
 												month: '2-digit',
 												year: 'numeric'
 											})}
-											· {formatTime(plan.created_at)} น.
+											· {formatThaiTime(plan.created_at)} น.
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">

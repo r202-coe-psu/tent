@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
 	calculateGasConsumptionKg,
 	cookingHoursFromConsumptionKg,
-	cylindersNeeded
+	cylindersNeeded,
+	calculateMaxCookingHours,
+	calculateCookingHoursFromPortions
 } from './gas-calc';
 
 const cylinder = (burn_rate_kg_per_hour: string, time_multiplier: string) => ({
@@ -106,5 +108,53 @@ describe('cookingHoursFromConsumptionKg (inverse of calculateGasConsumptionKg)',
 		expect(() => cookingHoursFromConsumptionKg('3', cylinder('1.5', '0'))).toThrow(
 			/time_multiplier must be positive/
 		);
+	});
+});
+
+describe('calculateMaxCookingHours', () => {
+	it('calculates max cooking hours floored to 1 decimal place', () => {
+		// 15 kg remaining, burn rate 0.5 kg/h, multiplier 1.0 -> 30.0 hours
+		expect(calculateMaxCookingHours('15', cylinder('0.5', '1'))).toBe('30.0');
+		// 15.35 kg remaining, burn rate 0.5 kg/h -> 30.7 hours
+		expect(calculateMaxCookingHours('15.35', cylinder('0.5', '1'))).toBe('30.7');
+	});
+
+	it('returns 0.0 when remaining is 0 or negative', () => {
+		expect(calculateMaxCookingHours('0', cylinder('0.5', '1'))).toBe('0.0');
+		expect(calculateMaxCookingHours('-5', cylinder('0.5', '1'))).toBe('0.0');
+	});
+
+	it('returns fallback 999.0 when cylinder is null or undefined', () => {
+		expect(calculateMaxCookingHours('15', null)).toBe('999.0');
+		expect(calculateMaxCookingHours('15', undefined)).toBe('999.0');
+	});
+});
+
+describe('calculateCookingHoursFromPortions', () => {
+	const recipe = { standard_portions: '100', standard_duration_hours: '1' };
+
+	it('calculates hours scaled by portions and rounded to 1 decimal place', () => {
+		// 100 portions = 1 hr -> 50 portions = 0.5 hr
+		expect(calculateCookingHoursFromPortions(recipe, 50)).toBe('0.5');
+		// 38 portions -> 0.4 hr (38 / 100 = 0.38 -> 0.4)
+		expect(calculateCookingHoursFromPortions(recipe, 38)).toBe('0.4');
+		// 380 portions -> 3.8 hr
+		expect(calculateCookingHoursFromPortions(recipe, 380)).toBe('3.8');
+	});
+
+	it('enforces minimum 0.1 hours', () => {
+		expect(calculateCookingHoursFromPortions(recipe, 1)).toBe('0.1');
+	});
+
+	it('returns null on invalid recipe or missing portions', () => {
+		expect(calculateCookingHoursFromPortions(null, 50)).toBeNull();
+		expect(calculateCookingHoursFromPortions(recipe, 0)).toBeNull();
+		expect(calculateCookingHoursFromPortions(recipe, null)).toBeNull();
+		expect(
+			calculateCookingHoursFromPortions(
+				{ standard_portions: '0', standard_duration_hours: '1' },
+				50
+			)
+		).toBeNull();
 	});
 });

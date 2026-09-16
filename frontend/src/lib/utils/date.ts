@@ -62,7 +62,7 @@ export function formatThaiWeekRange(start: string, end: string): string {
 }
 
 /** แปลง ISO timestamp string → ข้อความวันเวลาภาษาไทย (เช่น "4 ก.ค. 2569, 14:30") */
-export function formatThaiDateTime(iso: string): string {
+export function formatThaiDateTime(iso?: string | null): string {
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
@@ -70,6 +70,17 @@ export function formatThaiDateTime(iso: string): string {
 		year: 'numeric',
 		month: 'short',
 		day: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit'
+	});
+}
+
+/** แปลง ISO timestamp string → ข้อความเวลาภาษาไทย (เช่น "14:30") */
+export function formatThaiTime(iso?: string | null): string {
+	if (!iso) return '';
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return iso;
+	return date.toLocaleTimeString('th-TH', {
 		hour: '2-digit',
 		minute: '2-digit'
 	});

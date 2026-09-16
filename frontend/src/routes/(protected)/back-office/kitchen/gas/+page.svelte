@@ -1,12 +1,9 @@
 <script lang="ts">
-	import Flame from '@lucide/svelte/icons/flame';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { resolve } from '$app/paths';
 	import { GasManagement } from '$lib/features/kitchen';
 </script>
 
 <svelte:head>
-	<title>จัดการทรัพยากรแก๊ส · SmartShelter</title>
+	<title>จัดการทรัพยากรแก๊สสำหรับโรงครัว · SmartShelter</title>
 </svelte:head>
 
 <div class="flex-1">

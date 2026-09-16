@@ -20,6 +20,8 @@
 		type RequisitionLineAssessment
 	} from '$lib/features/kitchen';
 	import { useStockBalance } from '$lib/features/operations';
+	import { useItemMasters, getItemDisplayName } from '$lib/features/catalog';
+	import { useSupplyItems } from '$lib/features/supply';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGte, qtyGt, qtyIsZero, qtyLte } from '$lib/utils/qty';
 
@@ -30,13 +32,12 @@
 	const issue = useIssueRequisition();
 	const gasTypes = useGasCylinderTypes();
 	const gasLedger = useGasLedger();
+	const itemMasters = useItemMasters(() => getShelterCode());
+	const supplyItems = useSupplyItems();
 
-	// Pre-check the plan's gas draw (CR-085) the same way food is pre-checked
-	// below — so a shortfall is visible and blocks the submit button here,
-	// instead of surfacing only as a raw throw from issueRequisition at the
-	// moment of submit. issueRequisition still re-checks server-side (the real
-	// balance can shift between opening this dialog and actually submitting);
-	// this is the UI half of that same guard.
+	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
+
+	// Check gas availability against cylinder ledger balance.
 	const gasRows = $derived.by(() => {
 		if (!plan?.gas_usage?.length) return [];
 		return plan.gas_usage.map((g) => {
@@ -54,8 +55,7 @@
 	});
 	const hasGasShortfall = $derived(gasRows.some((g) => g.insufficient));
 
-	// Requested lines from the plan (pure). toRequisitionInput throws when a
-	// recipe has no stock mapping — surface that instead of letting it bubble.
+	// Convert plan to requisition items; captures errors if mapping fails.
 	const requested = $derived.by(() => {
 		if (!plan) return null;
 		try {
@@ -70,14 +70,10 @@
 		return assessRequisition(requested.items, balance.data ?? new Map<string, string>());
 	});
 
-	// User-entered overrides of the issued qty, keyed by plan + item. Absent key
-	// ⇒ fall back to the stock-covered default, so switching plans or reopening
-	// starts fresh with no carryover — no $effect/seed needed. Cleared on close.
+	// User overrides for issued quantity, keyed by plan and item ID.
 	let edits = $state<Record<string, string>>({});
 
-	// Effective issued qty per line: the user override when present, else the
-	// stock-covered default; always clamped to [0, qty_issuable] so a requisition
-	// never over-issues.
+	// Calculate effective issued quantities clamped to issuable limits.
 	const rows = $derived(
 		assessment.map((a) => {
 			const key = `${plan?._id ?? ''}::${a.item_id}`;
@@ -95,9 +91,7 @@
 	);
 
 	const hasShortfall = $derived(assessment.some((a) => qtyGt(a.shortfall, 0)));
-	// Gas is a hard block, not a partial-issue like food — there's no meaningful
-	// "issue less gas than the plan needs" fallback, so any shortfall here keeps
-	// the submit button disabled entirely rather than clamping a quantity.
+	// Gas shortfalls strictly disable issuance.
 	const canIssue = $derived(rows.some((r) => qtyGt(r.qty, 0)) && !hasGasShortfall);
 
 	const STATUS: Record<string, { label: string; class: string }> = {
@@ -106,8 +100,7 @@
 		out: { label: 'ไม่มีสต็อก', class: 'bg-red-100 text-red-700' }
 	};
 
-	// Close + discard any pending overrides. Covers the button paths; the
-	// escape/overlay close is handled by onOpenChange on Dialog.Root.
+	// Close dialog and reset edits.
 	function close() {
 		edits = {};
 		open = false;
@@ -143,7 +136,7 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
-	<Dialog.Content class="sm:max-w-xl">
+	<Dialog.Content class="sm:max-w-2xl">
 		<Dialog.Header class="min-w-0">
 			<Dialog.Title>เบิกวัตถุดิบจากคลัง</Dialog.Title>
 			<Dialog.Description class="break-words">
@@ -174,8 +167,14 @@
 						</Table.Header>
 						<Table.Body>
 							{#each rows as r (r.a.item_id)}
+								{@const itemName = getItemName(r.a.item_id)}
 								<Table.Row>
-									<Table.Cell class="px-3 font-mono text-xs">{r.a.item_id}</Table.Cell>
+									<Table.Cell class="px-3">
+										<div class="font-medium text-foreground">{itemName}</div>
+										{#if itemName !== r.a.item_id}
+											<div class="font-mono text-2xs text-muted-foreground">{r.a.item_id}</div>
+										{/if}
+									</Table.Cell>
 									<Table.Cell class="px-3 text-right text-sm">
 										{r.a.qty_requested}
 										<span class="text-xs text-muted-foreground">{r.a.unit}</span>

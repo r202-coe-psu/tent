@@ -7,26 +7,21 @@
 		useRequisitions,
 		useMealPlans,
 		MEAL_PERIOD_LABELS,
-		type KitchenRequisition,
-		type MealPlan
+		toMealPlanMap,
+		type KitchenRequisition
 	} from '$lib/features/kitchen';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import { qtyGte } from '$lib/utils/qty';
 
 	const requisitions = useRequisitions();
 	const plans = useMealPlans();
+	const planById = $derived(toMealPlanMap(plans.data));
 
-	// meal_plan_id is a ulid _id (not a deterministic date:meal string) — look
-	// the plan up directly by id instead of parsing it out of the id, same
-	// display convention as meal-service-summary's "แผนต้นทาง" column.
-	const planById = $derived.by(() => {
-		const m: Record<string, MealPlan> = {};
-		for (const p of plans.data ?? []) m[p._id] = p;
-		return m;
-	});
-
-	// Newest first — issued_at is the audit timestamp of the withdrawal.
+	// Newest first — issued_at or created_at is the audit timestamp of the withdrawal.
 	const rows = $derived(
-		[...(requisitions.data ?? [])].sort((a, b) => b.issued_at.localeCompare(a.issued_at))
+		[...(requisitions.data ?? [])].sort((a, b) =>
+			(b.issued_at ?? b.created_at).localeCompare(a.issued_at ?? a.created_at)
+		)
 	);
 
 	const PAGE_SIZE = 10;
@@ -40,15 +35,6 @@
 	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
 	function isComplete(req: KitchenRequisition): boolean {
 		return req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
-	}
-
-	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleString('th-TH', {
-			day: '2-digit',
-			month: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
 	}
 </script>
 
@@ -89,7 +75,7 @@
 							{@const plan = req.meal_plan_id ? (planById[req.meal_plan_id] ?? null) : null}
 							<Table.Row>
 								<Table.Cell class="px-6 text-xs text-muted-foreground">
-									{formatTime(req.issued_at)}
+									{formatThaiDateTime(req.issued_at ?? req.created_at)}
 								</Table.Cell>
 								<Table.Cell class="px-6 text-sm">{req.created_by}</Table.Cell>
 								<Table.Cell class="px-6">

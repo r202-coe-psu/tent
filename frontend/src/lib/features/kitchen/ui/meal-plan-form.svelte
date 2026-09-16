@@ -41,10 +41,7 @@
 	import { useStockBalance } from '$lib/features/operations';
 	import { addQty, qtyGt } from '$lib/utils/qty';
 
-	// `plan` present ⇒ edit an existing draft in place (date/meal/_id stay fixed
-	// because the doc is patched in place, not re-created); absent ⇒ create a new one.
-	// `defaultMode` only applies the first time the dialog opens in create mode —
-	// after that the toggle below is the user's to change.
+	// Edit draft if plan present; create if absent.
 	let {
 		open = $bindable(false),
 		plan = null,
@@ -61,10 +58,7 @@
 	let sourceMode = $state<'sop' | 'recipe' | 'custom'>('sop');
 	let recipeId = $state<string | null>(null);
 	let customLabel = $state('');
-	// `unit` is carried on the row itself (set when picking an item, or preloaded
-	// verbatim when locked-editing an existing plan) so recomputing ingredients
-	// never needs a supply_item lookup — that lookup fails for a still-unresolved
-	// BOM ingredient (item_master:* id) and would silently drop the row.
+	// Custom ingredient rows with unit and quantity per person.
 	let customRows = $state<{ itemId: string | null; unit: string; qtyPerPerson: number }[]>([
 		{ itemId: null, unit: '', qtyPerPerson: 0 }
 	]);
@@ -78,18 +72,14 @@
 	const occupancy = useOccupancyHeadcount();
 	const createCalc = useCreateMealPlanCalc();
 	const updateCalc = useUpdateMealPlanCalc();
-	const recipes = useRecipes();
+	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	const gasTypes = useGasCylinderTypes();
 	const gasLedger = useGasLedger();
 
-	// Kitchen LPG gas consumption (CR-058 §2.2) — display-only this round: not
-	// saved onto `meal_plan`, no requisition line, no stock_ledger write. Real
-	// gas drawdown belongs to the TKT-KITCHEN ticket flow, which is out of scope.
-	// Multiple tanks/stoves in one meal, same add/remove-row shape as the custom
-	// ingredient rows below — each row has its own cylinder type + cooking time.
+	// Gas usage rows: cylinder type and cooking hours input.
 	let gasRows = $state<{ gasTypeId: string | null; cookingHoursInput: string }[]>([
 		{ gasTypeId: null, cookingHoursInput: '' }
 	]);
@@ -103,28 +93,20 @@
 		gasRows.splice(i, 1);
 	}
 
-	// Kitchen only cooks with food supply — hide water/medicine/clothing/etc.
-	// from the ingredient picker so staff can't accidentally build a menu out
-	// of non-food stock.
+	// Filter supply items in "food" category.
 	const foodSupplyItems = $derived((supplyItems.data ?? []).filter((i) => i.category === 'food'));
 
-	// Only schema_v-3 recipes (label + positive standard_portions) can drive the
-	// BOM calc — a legacy/half-written recipe would render as "undefined (undefined
-	// ที่)" and throw on select. Filter them out of the dropdown so BOM never lists
-	// a broken option; if that leaves nothing, the empty-state CTA shows instead.
+	// Filter active recipes with positive portions.
 	const validRecipes = $derived(
 		(recipes.data ?? []).filter(
 			(r) => r.label && Number(r.standard_portions) > 0 && (!r.deactivated || r._id === recipeId)
 		)
 	);
 
-	// Same resolveItemMasterStock() as application/queries.ts's resolveMealPlanCalc,
-	// so the live preview here matches what actually gets saved.
+	// Resolve stock item mappings for recipe preview.
 	const itemInfo = $derived(resolveItemMasterStock(itemMasters.data ?? [], supplyItems.data ?? []));
 
-	// A resolved BOM row's recipe_id is a real supply_item id (linked via the
-	// item_master), not the item_master_id — check both so the label is right
-	// either way.
+	// Resolves display name for an item master or supply item id.
 	function itemLabel(id: string): string {
 		return (
 			itemMasters.data?.find((im) => im._id === id)?.name ??
@@ -149,17 +131,13 @@
 		customRows = customRows.filter((_, i) => i !== index);
 	}
 
-	// Sets a row's unit from the picked supply_item (locked-edit rows already
-	// have their unit preloaded and never show this dropdown, so this only
-	// fires for a genuine new/free custom row).
+	// Set row unit based on picked supply item.
 	function onCustomItemPick(row: { itemId: string | null; unit: string }) {
 		const item = foodSupplyItems.find((i) => i._id === row.itemId);
 		row.unit = item?.unit ?? '';
 	}
 
-	// Only rows with both a picked item and a positive qty become real
-	// ingredients — an unfinished row (item not yet picked) is silently dropped
-	// rather than blocking the whole form.
+	// Filter valid custom ingredient rows with item and positive quantity.
 	const customIngredients = $derived.by((): CustomIngredientInput[] => {
 		return customRows.flatMap((row) => {
 			if (!row.itemId || row.qtyPerPerson <= 0) return [];
@@ -167,9 +145,7 @@
 		});
 	});
 
-	// Auto-fill headcount from live occupancy once per open (T-06 source, create
-	// mode only). After that the fields are the user's to edit; the "ใช้ยอดล่าสุด"
-	// button re-syncs. Edit mode prefills from the plan being edited instead.
+	// Auto-fill headcount from live occupancy snapshot.
 	let applied = $state(false);
 	let appliedMode = $state(false);
 	let editedPlanId = $state<string | null>(null);
@@ -181,22 +157,13 @@
 		infant = h.infant;
 	}
 
-	// Detects which mode actually produced a stored plan's recipes, so editing
-	// opens on the matching section instead of always falling back to SOP.
-	// BOM recipe_ids are catalog `item_master:*`; custom recipe_ids are real
-	// `item:*` supply_items and carry `unit`; SOP (rice/egg/vegetable) recipes
-	// have neither.
+	// Determines recipe source mode of a plan.
 	function planSourceMode(p: MealPlan): 'sop' | 'recipe' | 'custom' {
 		if (p.recipes.some((r) => r.recipe_id.startsWith('item_master:'))) return 'recipe';
 		if (p.recipes.some((r) => r.unit != null)) return 'custom';
 		return 'sop';
 	}
 
-	// Editing a BOM plan can't re-run calculateMealIngredientsFromRecipe (the
-	// catalog Recipe id isn't stored) — so a BOM plan being edited reuses the
-	// exact same free-form row editor as sourceMode 'custom' (pick item, qty,
-	// add/remove), prefilled from its existing recipes. Only affects which
-	// calc/submit path runs (custom-style), not which UI controls render.
 	const isLockedEdit = $derived(isEdit && sourceMode === 'recipe');
 
 	$effect(() => {
@@ -212,11 +179,6 @@
 				date = plan.date;
 				meal = plan.meal;
 				sourceMode = planSourceMode(plan);
-				// Which catalog Recipe produced a BOM plan isn't stored, so its
-				// ingredient *set* is locked on edit (isLockedEdit below) — but
-				// every row IS fully reconstructable the same way custom rows are
-				// (qty_per_person = planned_qty ÷ headcount.total), so both origins
-				// reuse the same custom-row editor instead of forcing a re-pick.
 				recipeId = null;
 				customLabel = plan.label ?? '';
 				customRows =
@@ -229,11 +191,7 @@
 						: [{ itemId: null, unit: '', qtyPerPerson: 0 }];
 				fillFromOccupancy(plan.headcount);
 				overrideReason = plan.override_reason ?? '';
-				// Cooking hours aren't stored separately from the resulting
-				// consumption_kg (CR-085) — reconstruct them from the cylinder's own
-				// coefficients (inverse of calculateGasConsumptionKg) so the field
-				// shows the hours instead of coming back blank. Falls back to blank
-				// only if the cylinder type itself can no longer be found (deleted).
+				// Reconstruct cooking hours from persisted consumption_kg.
 				gasRows = plan.gas_usage?.length
 					? plan.gas_usage.map((g) => {
 							const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
@@ -273,10 +231,10 @@
 		infant
 	});
 
-	// Each sub-count is bounded by total independently (orthogonal dimensions).
+	// Validate sub-counts do not exceed total.
 	const subCountsValid = $derived(halal <= total && softFood <= total && infant <= total);
 
-	// Overridden = final headcount differs from the live occupancy snapshot.
+	// Overridden when headcount differs from occupancy snapshot.
 	const isOverridden = $derived.by(() => {
 		const o = occupancy.data;
 		if (!o) return false;
@@ -296,10 +254,7 @@
 
 	const selectedRecipe = $derived(validRecipes.find((r) => r._id === recipeId) ?? null);
 
-	// Gas types not already picked by ANOTHER row — same one-of-a-kind-per-row
-	// rule as the custom ingredient picker's `foodSupplyItems`, but enforced by
-	// filtering the dropdown instead of just displaying, since two rows on the
-	// same tank type would double-count consumption against the same physical tank.
+	// Filter out gas types already selected in other rows.
 	function availableGasTypes(rowIndex: number) {
 		const usedByOthers = new Set(
 			gasRows
@@ -310,8 +265,7 @@
 		return (gasTypes.data ?? []).filter((g) => !usedByOthers.has(g._id));
 	}
 
-	// Recipe cooking time is the default per row; a typed value overrides it.
-	// Derived (no prefill $effect) so it stays in sync as the recipe selection changes.
+	// Calculate gas consumption and cylinder count per row.
 	const gasRowResults = $derived.by(() =>
 		gasRows.map((row) => {
 			const cyl = (gasTypes.data ?? []).find((g) => g._id === row.gasTypeId) ?? null;
@@ -334,10 +288,10 @@
 		})
 	);
 
-	// Total across all rows — summed with addQty (CR-038), never native `+`.
+	// Total gas consumption across all rows.
 	const gasTotal = $derived.by(() => {
 		const solved = gasRowResults.filter((r) => r.result !== null);
-		if (solved.length < 2) return null; // a single row already shows its own total
+		if (solved.length < 2) return null;
 		let totalKg = '0';
 		let totalCylinders = 0;
 		for (const r of solved) {
@@ -347,19 +301,14 @@
 		return { totalKg, totalCylinders };
 	});
 
-	// Real remaining stock for one cylinder (CR-085) — computed from its ledger,
-	// never stored. Used only to warn if this plan's draw would come up short;
-	// the hard block is at issueRequisition time, since the real balance can
-	// shift between drafting a plan and actually requisitioning it.
+	// Remaining gas balance from ledger.
 	function remainingGasOf(cylinderId: string): string {
 		const cyl = (gasTypes.data ?? []).find((g) => g._id === cylinderId);
 		if (!cyl) return '0';
 		return gasCylinderBalance(gasLedger.data ?? [], cylinderId, cyl.capacity_kg);
 	}
 
-	// What actually gets persisted onto the plan (CR-085) — only rows with a
-	// picked cylinder AND a resolvable consumption figure; a half-filled row is
-	// silently dropped rather than blocking the whole plan submission.
+	// Persisted gas usage payload for plan.
 	const validGasUsage = $derived.by((): MealPlanGasUsage[] =>
 		gasRowResults
 			.filter((r) => r.cyl !== null && r.result !== null)
@@ -705,14 +654,7 @@
 				</div>
 			{/if}
 
-			<!--
-				Kitchen LPG gas consumption (CR-058 §2.2) — a top-level block, not nested
-				inside {#if preview}, because gas applies to every source mode
-				(sop/recipe/custom) and must not vanish when the ingredient preview is
-				null. Display-only this round: not saved onto `meal_plan`, no
-				requisition line, no stock_ledger write — real gas drawdown belongs to
-				the out-of-scope TKT-KITCHEN ticket flow.
-			-->
+			<!-- Kitchen LPG gas consumption block -->
 			<div class="space-y-2 rounded-md border bg-muted/50 p-3">
 				<p class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
 					<Flame class="h-3.5 w-3.5 text-orange-500" />

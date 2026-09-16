@@ -8,6 +8,7 @@
 		MealPlanList,
 		RequisitionHistory,
 		MealServiceSummary,
+		MealSessionList,
 		useMealPlans,
 		useOccupancyHeadcount,
 		useGasCylinderTypes,
@@ -120,12 +121,16 @@
 			<p class="text-xs text-muted-foreground">ครั้ง</p>
 		</div>
 	</div>
-	<Tabs.Root value="plan" class="gap-0">
+	<Tabs.Root value="sessions" class="gap-0">
 		<Tabs.List class="mx-4 mt-4">
-			<Tabs.Trigger value="plan">แผนอาหาร</Tabs.Trigger>
+			<Tabs.Trigger value="sessions">รอบมื้ออาหาร (Sessions)</Tabs.Trigger>
+			<Tabs.Trigger value="plan">แผนอาหารทั้งหมด</Tabs.Trigger>
 			<Tabs.Trigger value="requisition">ประวัติเบิก</Tabs.Trigger>
 			<Tabs.Trigger value="service">สรุปบริการ</Tabs.Trigger>
 		</Tabs.List>
+		<Tabs.Content value="sessions">
+			<MealSessionList />
+		</Tabs.Content>
 		<Tabs.Content value="plan">
 			<MealPlanList />
 		</Tabs.Content>

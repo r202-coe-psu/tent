@@ -8,12 +8,7 @@ export type GasBurnCoefficients = Pick<
 >;
 
 /**
- * Gas Consumption (kg) = Cooking Time (hrs) × Burn Rate (kg/hr) × Multiplier — CR-058 §2.2.
- * All three factors are qty_str; multiplied as Decimal and rounded ONCE at the end
- * (`persistQty`) so a 4dp × 4dp × 4dp product never carries IEEE noise.
- *
- * Persisted on `meal_plan.gas_usage[].consumption_kg` (CR-085) and drawn down via
- * `gas_ledger` at requisition time.
+ * Calculates gas consumption: Cooking Time (hrs) × Burn Rate (kg/hr) × Multiplier.
  */
 export function calculateGasConsumptionKg(
 	cookingHours: QtyValue,
@@ -34,8 +29,7 @@ export function calculateGasConsumptionKg(
 }
 
 /**
- * Full cylinders needed to cover `consumptionKg` (ceil). A plain count (not qty_str) —
- * the same class as `headcount`/`served`, never a stock-ledger quantity itself.
+ * Calculates ceiling count of full gas cylinders needed for a given consumption.
  */
 export function cylindersNeeded(consumptionKg: QtyValue, capacityKg: QtyValue): number {
 	if (!qtyGt(capacityKg, 0)) {
@@ -45,14 +39,7 @@ export function cylindersNeeded(consumptionKg: QtyValue, capacityKg: QtyValue): 
 }
 
 /**
- * Inverse of {@link calculateGasConsumptionKg} — recovers the cooking-hours input
- * from a persisted `consumption_kg` + the cylinder's own coefficients. Only
- * `consumption_kg` is stored on `meal_plan.gas_usage` (CR-085 didn't add a
- * separate hours field), so re-opening a plan for edit needs this to show the
- * hours field pre-filled instead of blank — the result reproduces the exact same
- * `consumption_kg` if fed back into calculateGasConsumptionKg, even if it isn't
- * bit-for-bit the original typed value (immaterial since only consumption_kg is
- * ever persisted or compared).
+ * Inversely calculates estimated cooking hours from consumption and cylinder burn coefficients.
  */
 export function cookingHoursFromConsumptionKg(
 	consumptionKg: QtyValue,
@@ -67,4 +54,35 @@ export function cookingHoursFromConsumptionKg(
 	return persistQty(
 		parseQty(consumptionKg).div(cylinder.burn_rate_kg_per_hour).div(cylinder.time_multiplier)
 	);
+}
+
+/** ชม. ทำอาหารสูงสุดที่แก๊สคงเหลือรองรับได้ (ปัดลง 1 ตำแหน่งทศนิยม) */
+export function calculateMaxCookingHours(
+	remainingKg: QtyValue,
+	cylinder?: GasBurnCoefficients | null
+): string {
+	if (!cylinder) return '999.0';
+	const rem = parseQty(remainingKg);
+	if (rem.isNegative() || rem.isZero()) return '0.0';
+	const hours = cookingHoursFromConsumptionKg(rem, cylinder);
+	const val = parseFloat(hours);
+	return (Math.floor(val * 10) / 10).toFixed(1);
+}
+
+/** ชม. ทำอาหารจากจำนวน portions ตามสูตรมาตรฐาน (ปัดเศษ 1 ตำแหน่ง) */
+export function calculateCookingHoursFromPortions(
+	recipe?: {
+		standard_portions?: string | number;
+		standard_duration_hours?: string | number;
+	} | null,
+	portions?: number | null
+): string | null {
+	if (!recipe || portions == null || portions <= 0) return null;
+	const stdPortions = parseFloat(String(recipe.standard_portions)) || 0;
+	const stdHours = parseFloat(String(recipe.standard_duration_hours)) || 0;
+	if (stdPortions <= 0 || stdHours <= 0) return null;
+
+	const hours = (portions * stdHours) / stdPortions;
+	const rounded = Math.max(0.1, Math.round(hours * 10) / 10);
+	return rounded.toFixed(1);
 }
