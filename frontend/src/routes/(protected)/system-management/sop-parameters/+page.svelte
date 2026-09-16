@@ -12,7 +12,6 @@
 		SopTypeList,
 		SopRatioTab,
 		SopEditForm,
-		AlertThresholdEditor,
 		VersionHistoryDrawer,
 		FoodSphereStandardTab,
 		RequirementGroupTab,
@@ -132,7 +131,6 @@
 			reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
 			replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
 			sphereCount={20}
-			alertCount={8}
 		/>
 
 		{#if activeTab === 'food_sphere_standard'}
@@ -197,8 +195,6 @@
 					/>
 				</div>
 			{/if}
-		{:else if activeTab === 'alert_threshold'}
-			<AlertThresholdEditor />
 		{/if}
 	</div>
 </main>
