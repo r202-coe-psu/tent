@@ -5,8 +5,8 @@
 </script>
 
 <!--
-	--registration-sticky-top: protected app bar (3.5rem / top-14) + ShelterNavbar (52px)
-	so UnifiedRegistrationForm sticky chrome clears both bars identically on every onsite page.
+	--registration-sticky-top: protected app bar (h-14 / 3.5rem) + ShelterNavbar (h-[52px])
+	= 6.75rem. StaffAccountMenu does not change header height. Keep in sync if either bar changes.
 -->
 <div
 	class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground"

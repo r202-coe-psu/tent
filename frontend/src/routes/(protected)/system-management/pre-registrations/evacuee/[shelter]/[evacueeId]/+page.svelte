@@ -10,8 +10,7 @@
 	const evacueeId = $derived(page.params.evacueeId ?? '');
 
 	const shelterReady = $derived(
-		!!shelter &&
-			(shelterStore.selectedShelterCode ?? '').toUpperCase() === shelter.toUpperCase()
+		!!shelter && (shelterStore.selectedShelterCode ?? '').toUpperCase() === shelter.toUpperCase()
 	);
 
 	// Sync workspace shelter from the URL before EvacueeProfileView queries CouchDB,

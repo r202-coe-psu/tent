@@ -182,13 +182,13 @@ class SmokeTestRunner:
             )
             return False
 
-        # 1.2 Mint Access Token via POST /api/auth/token-third-party
+        # 1.2 Mint Access Token via POST /external/token
         token_payload = {
             "grant_type": "client_credentials",
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", "/api/auth/token-third-party", body=token_payload)
+        status, data = self.http_request("POST", "/external/token", body=token_payload)
 
         token = data.get("access_token")
         expires_in = data.get("expires_in")
@@ -216,7 +216,7 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": "wrong-secret",
         }
-        status, data = self.http_request("POST", "/api/auth/token-third-party", body=bad_token_payload)
+        status, data = self.http_request("POST", "/external/token", body=bad_token_payload)
         err_code = get_error_code(data)
         if status == 401 and err_code == "invalid_client":
             self.record_result(
@@ -238,7 +238,7 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", "/api/auth/token-third-party", body=bad_grant_payload)
+        status, data = self.http_request("POST", "/external/token", body=bad_grant_payload)
         err_code = get_error_code(data)
         if status == 400 and err_code == "unsupported_grant_type":
             self.record_result(
@@ -271,20 +271,20 @@ class SmokeTestRunner:
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
         # 2.1 List Locations (EXT-002)
-        status, data = self.http_request("GET", "/api/thirdparty/locations", headers=headers)
+        status, data = self.http_request("GET", "/external/locations", headers=headers)
         result = data.get("result", [])
 
         if status == 200 and data.get("status") == 200 and isinstance(result, list):
             self.record_result(
                 "#216",
-                "GET /api/thirdparty/locations returns ODT envelope list",
+                "GET /external/locations returns ODT envelope list",
                 True,
                 f"total={len(result)} locations, message='{data.get('message')}'",
             )
         else:
             self.record_result(
                 "#216",
-                "GET /api/thirdparty/locations returns ODT envelope list",
+                "GET /external/locations returns ODT envelope list",
                 False,
                 f"HTTP {status} - {data}",
             )
@@ -328,28 +328,28 @@ class SmokeTestRunner:
         # 2.3 Single Location Detail (EXT-003)
         target_code = self.shelter_code or "SH001"
         status, data = self.http_request(
-            "GET", f"/api/thirdparty/locations/{target_code}", headers=headers
+            "GET", f"/external/locations/{target_code}", headers=headers
         )
         if status == 200 and data.get("result", {}).get("location_code") == target_code:
             loc_data = data["result"]
             facilities = loc_data.get("facilities", [])
             self.record_result(
                 "#216",
-                f"GET /api/thirdparty/locations/{target_code} returns detail & facilities",
+                f"GET /external/locations/{target_code} returns detail & facilities",
                 True,
                 f"name='{loc_data.get('name_th')}', facilities={len(facilities)} items",
             )
         else:
             self.record_result(
                 "#216",
-                f"GET /api/thirdparty/locations/{target_code} returns detail",
+                f"GET /external/locations/{target_code} returns detail",
                 False,
                 f"HTTP {status} - {data}",
             )
 
         # 2.4 Negative: Unknown location returns 404
         status, data = self.http_request(
-            "GET", "/api/thirdparty/locations/NON_EXISTENT_999", headers=headers
+            "GET", "/external/locations/NON_EXISTENT_999", headers=headers
         )
         err_code = get_error_code(data)
         if status == 404 and err_code == "location_not_found":
@@ -367,7 +367,7 @@ class SmokeTestRunner:
             )
 
         # 2.5 Scope Protection: Request without token returns 401/403
-        status, _ = self.http_request("GET", "/api/thirdparty/locations")
+        status, _ = self.http_request("GET", "/external/locations")
         if status in (401, 403):
             self.record_result("#216", "Unauthenticated request rejected with 401/403", True)
         else:
@@ -396,7 +396,7 @@ class SmokeTestRunner:
         target_code = self.shelter_code or "SH001"
 
         status, data = self.http_request(
-            "GET", f"/api/thirdparty/locations/{target_code}/occupancy", headers=headers
+            "GET", f"/external/locations/{target_code}/occupancy", headers=headers
         )
 
         res = data.get("result", {})
@@ -450,7 +450,7 @@ class SmokeTestRunner:
         target_code = self.shelter_code or "SH001"
 
         status, data = self.http_request(
-            "GET", f"/api/thirdparty/locations/{target_code}/stock", headers=headers
+            "GET", f"/external/locations/{target_code}/stock", headers=headers
         )
 
         res = data.get("result", {})
@@ -509,7 +509,7 @@ class SmokeTestRunner:
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        status, data = self.http_request("GET", "/api/thirdparty/summary", headers=headers)
+        status, data = self.http_request("GET", "/external/summary", headers=headers)
 
         res = data.get("result", {})
         locs = res.get("locations", [])
@@ -529,14 +529,14 @@ class SmokeTestRunner:
 
             self.record_result(
                 "#219",
-                "GET /api/thirdparty/summary returns aggregated metrics & critical items",
+                "GET /external/summary returns aggregated metrics & critical items",
                 has_valid_critical_rules,
                 f"locations={res.get('location_count')}, capacity={res.get('capacity_total')}, occupancy={res.get('occupancy_total')}",
             )
         else:
             self.record_result(
                 "#219",
-                "GET /api/thirdparty/summary returns aggregated metrics",
+                "GET /external/summary returns aggregated metrics",
                 False,
                 f"HTTP {status} - {data}",
             )
@@ -560,7 +560,7 @@ class SmokeTestRunner:
 
         # 6.1 Missing purpose rejected with 400
         status, data = self.http_request(
-            "GET", f"/api/thirdparty/locations/{target_code}/occupants", headers=headers
+            "GET", f"/external/locations/{target_code}/occupants", headers=headers
         )
         err_code = get_error_code(data)
         if status == 400 and err_code == "missing_purpose":
@@ -580,7 +580,7 @@ class SmokeTestRunner:
         # 6.2 Default PII lock: Returns 403 Forbidden
         status, data = self.http_request(
             "GET",
-            f"/api/thirdparty/locations/{target_code}/occupants?purpose=emergency_rationing",
+            f"/external/locations/{target_code}/occupants?purpose=emergency_rationing",
             headers=headers,
         )
         err_code = get_error_code(data)
@@ -649,7 +649,7 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", "/api/auth/token-third-party", body=token_payload)
+        status, data = self.http_request("POST", "/external/token", body=token_payload)
         err_code = get_error_code(data)
         if status == 401 and err_code == "invalid_client":
             self.record_result(
@@ -755,7 +755,7 @@ def main():
     parser.add_argument(
         "--shelter-code",
         default=None,
-        help="Specific shelter_code to test (default: auto-detected from /api/thirdparty/locations)",
+        help="Specific shelter_code to test (default: auto-detected from /external/locations)",
     )
     parser.add_argument(
         "--keep-client",

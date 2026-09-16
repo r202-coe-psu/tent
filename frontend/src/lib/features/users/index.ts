@@ -18,9 +18,15 @@ export {
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
 	fetchAuthStatus,
+	updateOwnProfile,
 	submitForceSetup,
+	clearMfaOk,
+	unlinkGoogleMfa,
+	googleOAuthStartHref,
 	type UserSummary,
-	type AuthStatus
+	type AuthStatus,
+	type OwnProfileUpdateInput,
+	type OwnProfileUpdateResult
 } from './data/users.api';
 export { useUsers, useCreateUser, useDeleteUser, useUpdateUser } from './application/queries';
 export { default as UserForm } from './ui/user-form.svelte';

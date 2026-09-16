@@ -31,6 +31,10 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
+	/** CR-124 — Google MFA enrolled. */
+	mfa_enrolled?: boolean;
+	/** CR-124 — linked Google email (display). */
+	mfa_google_email?: string | null;
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -126,6 +130,36 @@ export interface AuthStatus {
 	roles: string[];
 	must_change_password: boolean;
 	has_security_question: boolean;
+	/** CR-124 — `_users` has a Google MFA provider. */
+	mfa_enrolled: boolean;
+	/** CR-124 — enrolled and no valid session `mfa_ok` cookie. */
+	pending_mfa: boolean;
+	mfa_provider_email?: string | null;
+	phone?: string | null;
+	email?: string | null;
+	organization?: string | null;
+	position?: string | null;
+	personnel_type?: 'staff' | 'volunteer' | null;
+}
+
+export interface OwnProfileUpdateInput {
+	display_name?: string;
+	phone?: string | null;
+	email?: string | null;
+	organization?: string | null;
+	position?: string | null;
+}
+
+export interface OwnProfileUpdateResult {
+	ok: true;
+	name: string;
+	display_name: string;
+	phone: string | null;
+	email: string | null;
+	organization: string | null;
+	position: string | null;
+	personnel_type: 'staff' | 'volunteer' | null;
+	roles: string[];
 }
 
 /** Complete first-time or forced security setup */
@@ -139,4 +173,32 @@ export function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> 
 /** Check security setup status of currently authenticated user */
 export function fetchAuthStatus(): Promise<AuthStatus> {
 	return serviceFetch<AuthStatus>('/api/v1/auth/me');
+}
+
+/** Self-service PATCH for soft profile fields on `/api/v1/auth/me`. */
+export function updateOwnProfile(input: OwnProfileUpdateInput): Promise<OwnProfileUpdateResult> {
+	return serviceFetch<OwnProfileUpdateResult>('/api/v1/auth/me', {
+		method: 'PATCH',
+		body: JSON.stringify(input)
+	});
+}
+
+/** Clear BFF `mfa_ok` cookie (after password login / logout). */
+export function clearMfaOk(): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/mfa/clear', { method: 'POST', body: '{}' });
+}
+
+/**
+ * Unlink Google MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
+ */
+export function unlinkGoogleMfa(name?: string): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/oauth/google/unlink', {
+		method: 'POST',
+		body: JSON.stringify(name ? { name } : {})
+	});
+}
+
+/** Browser navigation target for Google OAuth start (BFF redirects to Google). */
+export function googleOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string {
+	return `/api/v1/auth/oauth/google/start?mode=${mode}`;
 }

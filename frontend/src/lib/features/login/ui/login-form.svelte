@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -11,8 +13,9 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { LANDING_ROUTE } from '$lib/guards/auth';
-	import { fetchAuthStatus } from '$lib/features/users/data/users.api';
+	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -27,6 +30,25 @@
 	} = $props();
 
 	let showPassword = $state(false);
+
+	onMount(() => {
+		const err = page.url.searchParams.get('error');
+		if (!err) return;
+
+		if (err === 'google_not_linked') {
+			toast.error(
+				'บัญชี Google นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก Google ใน Settings'
+			);
+		} else if (err === 'invalid_state' || err === 'google_login_failed') {
+			toast.error('ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง');
+		} else if (err.startsWith('oauth_')) {
+			toast.error('ไม่สามารถเชื่อมต่อ Google ได้ กรุณาลองอีกครั้ง');
+		}
+
+		const next = new URL(page.url);
+		next.searchParams.delete('error');
+		void goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, noScroll: true });
+	});
 
 	const form = superForm(defaults(zod4(loginSchema)), {
 		SPA: true,
@@ -46,17 +68,16 @@
 					});
 					reset();
 					onSuccess?.();
-					if (navigateOnSuccess) {
-						try {
-							const status = await fetchAuthStatus();
-							if (status.must_change_password || !status.has_security_question) {
-								await goto(resolve('/force-setup'));
-								return;
-							}
-						} catch {
-							// Fallback if status fetch fails
-						}
-						await goto(resolve(LANDING_ROUTE));
+					let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
+					try {
+						const status = await fetchAuthStatus();
+						dest = resolvePostLoginDestination(status);
+					} catch {
+						// Fallback if status fetch fails
+					}
+					// Always honor force-setup / MFA gates; only skip portal when reauth.
+					if (navigateOnSuccess || dest !== LANDING_ROUTE) {
+						await goto(resolve(dest));
 					}
 				})(),
 				{
@@ -134,6 +155,17 @@
 			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
+
+			<div class="relative py-1">
+				<div class="absolute inset-0 flex items-center" aria-hidden="true">
+					<div class="w-full border-t border-slate-200"></div>
+				</div>
+				<div class="relative flex justify-center text-xs">
+					<span class="bg-white px-2 text-slate-500">หรือ</span>
+				</div>
+			</div>
+
+			<GoogleSignInButton href={googleOAuthStartHref('login')} />
 		</Field.FieldGroup>
 	</form>
 {/snippet}

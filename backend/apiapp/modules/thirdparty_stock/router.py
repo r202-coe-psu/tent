@@ -9,8 +9,8 @@ from .schemas import LocationStockEnvelope, StockErrorResponse
 from .use_case import ThirdPartyStockUseCase, get_thirdparty_stock_use_case
 
 router = APIRouter(
-    prefix="/api/thirdparty",
-    tags=["Third-party Stock"],
+    prefix="/external",
+    tags=["External"],
     dependencies=[Depends(require_scope("location-stock-read"))],
 )
 
