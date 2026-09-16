@@ -67,12 +67,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: ClipboardList
 			},
 			{
-				label: 'คำนวณความต้องการทรัพยากร',
-				href: resolve('/back-office/resource-dashboard'),
-				icon: Calculator,
-				requiresManager: true
-			},
-			{
 				label: 'จำลองสถานการณ์ SOP',
 				href: resolve('/back-office/sop-simulation'),
 				icon: FlaskConical,
