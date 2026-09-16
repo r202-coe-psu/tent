@@ -6,6 +6,7 @@ import {
 	canTransitionDonation,
 	keyDonationReceipt,
 	createStockLedger,
+	createLegacyFlow2StockLedger,
 	stockLedgerInputSchema,
 	parseStockLedger,
 	ledgerReasonSchema,
@@ -129,7 +130,16 @@ describe('keyDonationReceipt — the only donation→stock path', () => {
 describe('stockBalance', () => {
 	it('sums signed deltas per item', () => {
 		const legacyDistribution = {
-			...createStockLedger({ item_id: 'item:rice', qty: 3, unit: 'kg', reason: 'receive' }, ctx),
+			...createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 3,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
 			_id: 'stock_ledger:legacy-distribution',
 			qty: '-3',
 			reason: 'distribute' as const,
@@ -137,9 +147,27 @@ describe('stockBalance', () => {
 			lot_ref: undefined
 		};
 		const ledger = [
-			createStockLedger({ item_id: 'item:rice', qty: 10, unit: 'kg', reason: 'receive' }, ctx),
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
 			legacyDistribution,
-			createStockLedger({ item_id: 'item:water', qty: 5, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 5,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 		const balance = stockBalance(ledger);
 		expect(balance.get('item:rice')).toBe('7');
@@ -148,8 +176,26 @@ describe('stockBalance', () => {
 
 	it('rounds float residue so 0.1 + 0.2 balances to 0.3', () => {
 		const ledger = [
-			createStockLedger({ item_id: 'item:rice', qty: 0.1, unit: 'kg', reason: 'receive' }, ctx),
-			createStockLedger({ item_id: 'item:rice', qty: 0.2, unit: 'kg', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 0.1,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 0.2,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 		expect(stockBalance(ledger).get('item:rice')).toBe('0.3');
 	});
@@ -166,7 +212,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 	// remains current and every writer continues through `createStockLedger`.
 	it('keeps schema_v 4 for the backward-compatible optional lot_ref field', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 		expect(entry.schema_v).toBe(4);
@@ -193,7 +245,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 
 	it('rejects malformed persisted ledger documents at a signed-sum boundary', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 
@@ -205,7 +263,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 
 	it('reads compatible schema_v 2 ledgers but reserves purchase for schema_v 3', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 
@@ -242,9 +306,9 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		transfer_in: { valid: 'stock_transfer:01J', invalid: 'transfer:01J' },
 		transfer_out: { valid: 'stock_transfer:01J', invalid: null },
 		adjust: { valid: null, invalid: 'donation:01J' },
-		distribute: { valid: 'distribution_batch:01J', invalid: null },
+		distribute: { valid: 'requisition_ticket:01J', invalid: 'distribution_batch:01J' },
 		distribution_return: { valid: 'distribution_batch:01J', invalid: 'donation:01J' },
-		receive: { valid: null, invalid: 'donation:01J' }
+		receive: { valid: 'distribution_log:01J', invalid: null }
 	};
 
 	for (const [reason, { valid, invalid }] of Object.entries(cases) as [
@@ -270,10 +334,68 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		expect(result.error?.issues[0].path).toEqual(['ref_id']);
 	});
 
+	it('enforces Ticket-era references on normal writes and isolates legacy Flow 2 compatibility', () => {
+		const ticketRef = 'requisition_ticket:01J00000000000000000000000';
+		const logRef = 'distribution_log:01J00000000000000000000000';
+
+		expect(() =>
+			createStockLedger({ ...base, reason: 'requisition', ref_id: ticketRef }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'distribution_batch:LEGACY',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).toThrow();
+		expect(() =>
+			createLegacyFlow2StockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'distribution_batch:LEGACY',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: logRef }, ctx)
+		).not.toThrow();
+		expect(() => createStockLedger({ ...base, reason: 'receive', ref_id: null }, ctx)).toThrow();
+		expect(() =>
+			createStockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: 'distribution_log:' }, ctx)
+		).toThrow();
+		expect(() =>
+			createLegacyFlow2StockLedger({ ...base, reason: 'receive', ref_id: null }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'transfer_out', ref_id: ticketRef }, ctx)
+		).not.toThrow();
+	});
+
 	// R5 — the guard is write-only. Rows written before it existed still have to
 	// flow through the read paths untouched.
 	it('still sums a pre-existing row that violates the invariant', () => {
-		const legal = write('receive', null);
+		const legal = write('receive', 'distribution_log:01J');
 		const illegal = {
 			...legal,
 			_id: 'stock_ledger:legacy',
@@ -293,7 +415,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
 		};
 		const malformed = {
-			...write('receive', null),
+			...write('receive', 'distribution_log:fixture'),
 			reason: 'donation' as const,
 			ref_id: 'don:legacy-A'
 		};
@@ -536,7 +658,16 @@ describe('openNeeds', () => {
 		);
 
 		const stockLedgers = [
-			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 30,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 
 		const donations: Donation[] = [
@@ -598,7 +729,7 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 				qty: '10',
 				unit: 'kg',
 				reason: 'receive' as LedgerReason,
-				ref_id: null
+				ref_id: 'distribution_log:fixture'
 			},
 			ctx
 		),
@@ -835,7 +966,16 @@ describe('deriveNeedAvailability', () => {
 		);
 
 		const stockLedgers = [
-			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 30,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 
 		const donations: Donation[] = [
@@ -983,7 +1123,7 @@ describe('createDistributeEntry', () => {
 				item_id: 'item:water',
 				qty: 5,
 				unit: 'ขวด',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: 'stock_ledger:LOT1',
 				note: 'Zone B'
 			},
@@ -994,7 +1134,7 @@ describe('createDistributeEntry', () => {
 		expect(entry.item_id).toBe('item:water');
 		expect(entry.qty).toBe('-5'); // Must be negative
 		expect(entry.reason).toBe('distribute');
-		expect(entry.ref_id).toBe('distribution_batch:BATCH1');
+		expect(entry.ref_id).toBe('requisition_ticket:TICKET1');
 		expect(entry.lot_ref).toBe('stock_ledger:LOT1');
 		expect(entry.lot).toEqual({ note: 'Zone B' });
 		expect(entry.shelter_code).toBe(ctx.shelterCode);
@@ -1006,7 +1146,7 @@ describe('createDistributeEntry', () => {
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: 'stock_ledger:LOT1'
 			},
 			ctx,
@@ -1025,7 +1165,7 @@ describe('createDistributeEntry', () => {
 					item_id: 'item:water',
 					qty: 0,
 					unit: 'ขวด',
-					ref_id: 'distribution_batch:BATCH1',
+					ref_id: 'requisition_ticket:TICKET1',
 					lot_ref: 'stock_ledger:LOT1'
 				},
 				ctx
@@ -1038,7 +1178,7 @@ describe('createDistributeEntry', () => {
 					item_id: 'item:water',
 					qty: -5,
 					unit: 'ขวด',
-					ref_id: 'distribution_batch:BATCH1',
+					ref_id: 'requisition_ticket:TICKET1',
 					lot_ref: 'stock_ledger:LOT1'
 				},
 				ctx
@@ -1684,7 +1824,13 @@ describe('new inbound physical-lot identity (CR-059)', () => {
 
 	it('continues parsing a legacy ledger without lot_ref', () => {
 		const modern = createStockLedger(
-			{ item_id: 'item:rice', qty: '5', unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: '5',
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 		const legacy = { ...modern };
@@ -1707,6 +1853,7 @@ describe('projectStockLotBalances', () => {
 				qty,
 				unit: 'kg',
 				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
 				lot,
 				occurred_at: occurredAt
 			},
@@ -1786,7 +1933,7 @@ describe('projectStockLotBalances', () => {
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: b.lot_ref!
 			},
 			ctx,
@@ -1804,7 +1951,7 @@ describe('projectStockLotBalances', () => {
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: source.lot_ref!,
 				occurred_at: '2026-02-01T00:00:00Z'
 			},
