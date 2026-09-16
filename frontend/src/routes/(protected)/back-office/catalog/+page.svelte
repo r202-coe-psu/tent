@@ -3,8 +3,6 @@
 	import ItemCategoryTab from './components/item-category-tab.svelte';
 	import ItemMasterTab from './components/item-master-tab.svelte';
 	import RecipeTab from './components/recipe-tab.svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -36,46 +34,89 @@
 	}
 </script>
 
-<main class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<svelte:head>
+	<title>หมวดคลังสินค้าและทรัพยากร — SmartShelter</title>
+	<meta
+		name="description"
+		content="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
+	/>
+</svelte:head>
+
+<main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner
 		title="4. หมวดคลังสินค้าและทรัพยากร (Inventory & Resource)"
 		description="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
 	/>
-	<div class="item-start mt-4 grid w-full grid-cols-1 gap-6 lg:grid-cols-3">
-		<div class="border-md flex h-fit flex-col rounded-xl border p-4 shadow-md">
-			<span>ประเภทพารามิเตอร์มาสเตอร์</span>
-			<Separator class="my-3 bg-black" />
-			<div class="flex flex-col gap-2">
-				<Button
-					size="lg"
-					variant={activeTab === 'item_category' ? 'default' : 'outline'}
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+		<aside class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
+			<h2 class="mb-3 text-sm font-semibold text-muted-foreground">ประเภทพารามิเตอร์มาสเตอร์</h2>
+			<nav class="flex flex-col gap-2">
+				<button
+					type="button"
 					onclick={() => selectTab('item_category')}
-					class="w-full justify-between py-6"
+					aria-current={activeTab === 'item_category' ? 'page' : undefined}
+					class="group flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left transition {activeTab ===
+					'item_category'
+						? 'border-transparent bg-primary text-primary-foreground shadow-xs'
+						: 'border-input bg-background hover:bg-accent'}"
 				>
-					<span>หมวดหมู่สิ่งของ (Item Category)</span>
-					<span class=" rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalItemCategories}</span>
-				</Button>
-				<Button
-					size="lg"
-					variant={activeTab === 'item_master' ? 'default' : 'outline'}
+					<div class="flex-1">
+						<div class="text-sm leading-tight font-semibold">หมวดหมู่สิ่งของ (Item Category)</div>
+					</div>
+					<span
+						class="flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold {activeTab ===
+						'item_category'
+							? 'bg-primary-foreground/20 text-primary-foreground'
+							: 'bg-muted text-foreground'}"
+					>
+						{totalItemCategories}
+					</span>
+				</button>
+				<button
+					type="button"
 					onclick={() => selectTab('item_master')}
-					class="w-full justify-between py-6"
+					aria-current={activeTab === 'item_master' ? 'page' : undefined}
+					class="group flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left transition {activeTab ===
+					'item_master'
+						? 'border-transparent bg-primary text-primary-foreground shadow-xs'
+						: 'border-input bg-background hover:bg-accent'}"
 				>
-					<span>รายการสิ่งของ (Item Master)</span>
-					<span class=" rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalItemMasters}</span>
-				</Button>
-				<Button
-					size="lg"
-					variant={activeTab === 'recipe' ? 'default' : 'outline'}
+					<div class="flex-1">
+						<div class="text-sm leading-tight font-semibold">รายการสิ่งของ (Item Master)</div>
+					</div>
+					<span
+						class="flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold {activeTab ===
+						'item_master'
+							? 'bg-primary-foreground/20 text-primary-foreground'
+							: 'bg-muted text-foreground'}"
+					>
+						{totalItemMasters}
+					</span>
+				</button>
+				<button
+					type="button"
 					onclick={() => selectTab('recipe')}
-					class="w-full justify-between py-6"
+					aria-current={activeTab === 'recipe' ? 'page' : undefined}
+					class="group flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left transition {activeTab ===
+					'recipe'
+						? 'border-transparent bg-primary text-primary-foreground shadow-xs'
+						: 'border-input bg-background hover:bg-accent'}"
 				>
-					<span>สูตรอาหารมาตรฐาน </span>
-					<span class=" rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalRecipes}</span>
-				</Button>
-			</div>
-		</div>
-		<div class="col-span-1 flex lg:col-span-2">
+					<div class="flex-1">
+						<div class="text-sm leading-tight font-semibold">สูตรอาหารมาตรฐาน (BOM)</div>
+					</div>
+					<span
+						class="flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold {activeTab ===
+						'recipe'
+							? 'bg-primary-foreground/20 text-primary-foreground'
+							: 'bg-muted text-foreground'}"
+					>
+						{totalRecipes}
+					</span>
+				</button>
+			</nav>
+		</aside>
+		<div class="min-w-0">
 			{#if activeTab === 'item_category'}
 				<ItemCategoryTab />
 			{:else if activeTab === 'item_master'}
