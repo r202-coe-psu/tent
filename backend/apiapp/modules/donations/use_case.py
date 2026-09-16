@@ -87,7 +87,7 @@ async def configured_ttl_hours() -> int | None:
     behind, and a shelter with no config document is the normal starting state.
     """
     try:
-        collection = DonationBuffer.get_motor_collection().database[_PUBLIC_CONFIG_COLLECTION]
+        collection = DonationBuffer.get_pymongo_collection().database[_PUBLIC_CONFIG_COLLECTION]
         doc = await collection.find_one({"_id": _APP_CONFIG_ID})
     except Exception:
         logger.warning("Could not read %s — using the default TTL", _APP_CONFIG_ID, exc_info=True)
@@ -107,7 +107,7 @@ async def configured_ttl_hours() -> int | None:
 def _qty(value: Any) -> Decimal | None:
     try:
         parsed = Decimal(str(value))
-    except (InvalidOperation, TypeError):
+    except InvalidOperation, TypeError:
         return None
     return parsed if parsed > 0 else None
 

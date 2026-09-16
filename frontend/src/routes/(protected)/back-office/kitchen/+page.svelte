@@ -53,7 +53,7 @@
 	<title>ครัวกลางและอาหาร · SmartShelter</title>
 </svelte:head>
 
-<div class="flex-1 overflow-auto">
+<div class="flex-1">
 	<div class="p-4 pb-0">
 		<Card.Root class="border-0 shadow-sm">
 			<Card.Content class="flex flex-wrap items-start justify-between gap-4 pt-4">

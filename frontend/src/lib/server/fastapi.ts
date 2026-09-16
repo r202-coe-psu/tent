@@ -17,3 +17,19 @@ export function fastapiServiceHeaders(extra: Record<string, string> = {}): Recor
 	}
 	return headers;
 }
+
+/**
+ * Flatten FastAPI's `{ errors: [detail] }` envelope (see `apiapp/core/http_error.py`)
+ * into the shape public BFF callers spread into `{ success: false, … }`.
+ */
+export function unwrapFastapiError(
+	body: unknown,
+	fallbackError = 'WRITE_FAILED'
+): Record<string, unknown> {
+	if (typeof body !== 'object' || body === null) return { error: fallbackError };
+	const envelope = body as { errors?: unknown[] };
+	const detail = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
+	if (typeof detail === 'object' && detail !== null) return detail as Record<string, unknown>;
+	if (typeof detail === 'string') return { error: detail };
+	return body as Record<string, unknown>;
+}

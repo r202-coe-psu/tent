@@ -3,6 +3,8 @@ export {
 	operationStatusSchema,
 	siteKindSchema,
 	SITE_KIND_LABELS,
+	resolveOperationStatus,
+	isShelterBookable,
 	zoneTypeSchema,
 	zoneStatusSchema,
 	powerSourceSchema,

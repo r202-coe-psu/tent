@@ -24,6 +24,7 @@ export const MASTER_DATA_TYPES = [
 	'health_condition',
 	'dietary_restrictions',
 	'pet_types',
+	'housing_type',
 	'house_damage',
 	'municipality_zone',
 	'community',
@@ -63,6 +64,7 @@ export const REGISTRATION_MASTER_TYPES = [
 
 /** Types shown on the Household Master Data page. */
 export const HOUSEHOLD_MASTER_TYPES = [
+	'housing_type',
 	'municipality_zone',
 	'community'
 ] as const satisfies readonly MasterDataType[];
@@ -76,11 +78,31 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	health_condition: 'โรคประจำตัวและอาการแพ้ (Health Condition)',
 	dietary_restrictions: 'ศาสนาและข้อจำกัดอาหาร (Dietary Restrictions)',
 	pet_types: 'ประเภทสัตว์เลี้ยง (Pet Types)',
+	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
 	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)',
 	municipality_zone: 'เขตเทศบาล (Municipality Zone)',
 	community: 'ชุมชน (Community)',
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
 };
+
+/**
+ * CR-112 Vulnerable Group active seed set (stable codes = keys).
+ * Legacy hard-migrate: `elderly` → `elderly_dependent`; `disabled` → `disability_other`.
+ */
+export const CR112_VULNERABLE_GROUP_ACTIVE = [
+	{ code: 'bedridden', label: 'ผู้ป่วยติดเตียง', is_default: false },
+	{ code: 'dialysis', label: 'ผู้ป่วยฟอกไต', is_default: false },
+	{ code: 'wheelchair', label: 'ผู้ใช้วีลแชร์', is_default: false },
+	{ code: 'psychiatric', label: 'ผู้ป่วยจิตเวช', is_default: false },
+	{ code: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: true },
+	{ code: 'infant', label: 'ทารก', is_default: false },
+	{ code: 'young_child', label: 'เด็กเล็ก', is_default: false },
+	{ code: 'pregnant', label: 'สตรีมีครรภ์', is_default: false },
+	{ code: 'vision_impaired', label: 'ผู้พิการทางการมองเห็น', is_default: false },
+	{ code: 'hearing_impaired', label: 'ผู้พิการทางการได้ยิน', is_default: false },
+	{ code: 'disability_other', label: 'ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด)', is_default: false },
+	{ code: 'chronic_illness', label: 'ผู้มีโรคประจำตัว/เรื้อรัง', is_default: false }
+] as const;
 
 /** Stable id: global docs use `master_data:{type}`, local docs append the shelter code. */
 export function masterDocId(type: MasterDataType, shelterCode?: string | null): string {

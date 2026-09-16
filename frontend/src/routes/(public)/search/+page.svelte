@@ -11,7 +11,6 @@
 	import {
 		familySearch,
 		searchResultKey,
-		PublicHeroMetrics,
 		PublicPageShell,
 		StayStatusChip,
 		type FamilySearchResult
@@ -76,11 +75,11 @@
 		);
 	}
 
-	function genderLabel(gender: string | null | undefined) {
-		if (gender === 'male') return t.genderMale;
-		if (gender === 'female') return t.genderFemale;
-		return t.genderOther;
-	}
+	// function genderLabel(gender: string | null | undefined) {
+	// 	if (gender === 'male') return t.genderMale;
+	// 	if (gender === 'female') return t.genderFemale;
+	// 	return t.genderOther;
+	// }
 </script>
 
 <svelte:head>
@@ -88,7 +87,7 @@
 </svelte:head>
 
 <PublicPageShell class="space-y-8">
-	<PublicHeroMetrics
+	<!-- <PublicHeroMetrics
 		title={t.heroTitle}
 		description={t.heroDesc}
 		badgeText={t.heroBadge}
@@ -96,7 +95,7 @@
 		showLivePing={false}
 		bgClass="bg-primary-dark"
 		showSearch={false}
-	/>
+	/> -->
 
 	<!-- Search Box -->
 	<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -174,10 +173,10 @@
 											>
 										{/if}
 									</div>
-									<div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
+									<!-- <div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
 										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
 										<p>{t.genderPrefix} {genderLabel(person.gender)}</p>
-									</div>
+									</div> -->
 								</div>
 
 								<!-- Real stay status, labelled exactly as the backoffice labels it (CR-080). -->
@@ -191,13 +190,20 @@
 									<div>
 										<div class="text-xs text-muted-foreground">{t.stayingAt}</div>
 										<div class="font-medium text-foreground">{person.shelter_name || '-'}</div>
+										{#if person.shelter_address}
+											<div class="mt-0.5 text-xs text-muted-foreground">
+												{person.shelter_address}
+											</div>
+										{/if}
 									</div>
 								</div>
 								<div class="flex gap-3">
-									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
+									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">{t.origin}</div>
-										<div class="font-medium text-foreground">{person.origin_address || '-'}</div>
+										<div class="text-xs text-muted-foreground">{t.careZone}</div>
+										<div class="font-medium text-foreground">
+											{person.zone_name || person.care_zone || '-'}
+										</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
@@ -207,13 +213,6 @@
 										<div class="font-medium text-foreground">
 											{person.checked_in_at ? formatDateTime(person.checked_in_at) : '-'}
 										</div>
-									</div>
-								</div>
-								<div class="flex gap-3">
-									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
-									<div>
-										<div class="text-xs text-muted-foreground">{t.careZone}</div>
-										<div class="font-medium text-foreground">{person.care_zone || '-'}</div>
 									</div>
 								</div>
 							</div>

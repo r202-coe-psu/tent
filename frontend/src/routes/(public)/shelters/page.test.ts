@@ -24,6 +24,8 @@ type LoadResult = {
 	summary: {
 		shelters_total: number;
 		shelters_open: number;
+		evac_centers: number;
+		host_houses: number;
 	};
 	filters: Record<string, string>;
 	available_types: string[];

@@ -10,14 +10,15 @@ export const EVACUEE_SEARCH_I18N = {
 		foundTitle: (count: number) => `พบข้อมูลในระบบ ${count} ราย`,
 		statusLabel: 'สถานะ:',
 		statusLabels: {
-			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
-			arriving: 'อยู่ระหว่างรอเข้าพัก (รอตรวจ/รอจัดโซน)',
-			active: 'เช็คอินเข้าพักแล้ว',
+			pre_registered: 'ลงทะเบียนล่วงหน้า',
+			arriving: 'รอเข้าพัก',
+			active: 'เข้าพักแล้ว',
+			room_confirmed: 'ยืนยันถึงโซนแล้ว',
 			temporary_leave: 'ออกชั่วคราว',
-			transferred: 'ย้ายศูนย์พักพิงแล้ว',
-			checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
+			transferred: 'ย้ายศูนย์',
+			checked_out: 'เช็คเอาต์',
 			deceased: 'เสียชีวิต',
-			cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
+			cancelled: 'ยกเลิก'
 		},
 		btnViewEdit: 'ดู / แก้ไข',
 		notFoundTitle: 'ไม่พบข้อมูลในระบบ',
@@ -34,12 +35,13 @@ export const EVACUEE_SEARCH_I18N = {
 		foundTitle: (count: number) => `Found ${count} record(s) in system`,
 		statusLabel: 'Status:',
 		statusLabels: {
-			pre_registered: 'Pre-registered (Not Checked In)',
-			arriving: 'Arriving / Pending Triage & Zone',
+			pre_registered: 'Pre-registered',
+			arriving: 'Arriving / Waiting',
 			active: 'Checked In',
+			room_confirmed: 'Zone Arrival Confirmed',
 			temporary_leave: 'Temporary Leave',
 			transferred: 'Transferred',
-			checked_out: 'Checked Out / Returned Home',
+			checked_out: 'Checked Out',
 			deceased: 'Deceased',
 			cancelled: 'Cancelled'
 		},

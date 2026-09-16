@@ -23,7 +23,10 @@ import type {
 	CountedItem,
 	TransferInput,
 	TransferFilter,
-	WalkInDonationInput
+	WalkInDonationInput,
+	DispatchInfoInput,
+	CancelInfoInput,
+	DisputeInfoInput
 } from '../domain/operations';
 
 export const operationsKeys = {
@@ -315,11 +318,16 @@ export const useCreateTransfer = () => {
 	}));
 };
 
-/** Mutation hook to dispatch a transfer (source shelter, `requested` → `shipped`). */
+/**
+ * Mutation hook to dispatch a transfer (source shelter, `requested` → `shipped`).
+ * CR-089 FR-01 — the driver and plate ride along with the transition; the server rejects
+ * a dispatch that arrives without them, before any stock is deducted.
+ */
 export const useDispatchTransfer = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => operationsRepository().dispatchTransfer(id),
+		mutationFn: ({ id, info }: { id: string; info: DispatchInfoInput }) =>
+			operationsRepository().dispatchTransfer(id, info),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
@@ -347,11 +355,44 @@ export const useReceiveTransfer = () => {
 	}));
 };
 
-/** Mutation hook to cancel a transfer before dispatch (source shelter, `requested` → `cancelled`). */
+/**
+ * Mutation hook to cancel a transfer before dispatch (source shelter, `requested` → `cancelled`).
+ * CR-089 FR-03 — cancelling must say why.
+ */
 export const useCancelTransfer = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => operationsRepository().cancelTransfer(id),
+		mutationFn: ({ id, info }: { id: string; info: CancelInfoInput }) =>
+			operationsRepository().cancelTransfer(id, info),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+		}
+	}));
+};
+
+/**
+ * Mutation hook to dispute — hold — a transfer (source shelter, `requested` → `disputed`).
+ * CR-089 FR-04. No stock moves, so only the transfer list needs invalidating.
+ */
+export const useDisputeTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ id, info }: { id: string; info: DisputeInfoInput }) =>
+			operationsRepository().disputeTransfer(id, info),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
+		}
+	}));
+};
+
+/**
+ * Mutation hook to release the hold (source shelter, `disputed` → `requested`).
+ * CR-089 FR-05 — no extra field; `dispute_reason` and `timeline.disputed` keep their last value.
+ */
+export const useResumeTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => operationsRepository().resumeTransfer(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 		}

@@ -19,9 +19,7 @@ fastapi-beanie-starter/
 ├── .env                      # ตัวแปรสิ่งแวดล้อม (Database URL, Secret Keys)
 ├── .env.sample              # ตัวอย่างไฟล์ Environment Variables
 ├── .gitignore               # ไฟล์ที่ไม่ต้องเก็บใน Git
-├── pyproject.toml           # การจัดการ Dependencies ด้วย Poetry
-├── poetry.lock              # Lock file สำหรับ Dependencies
-├── poetry.toml              # การตั้งค่า Poetry
+├── pyproject.toml           # การจัดการ Dependencies และ Workspace (PEP 621 / uv)
 ├── README.md                # คู่มือการใช้งาน (ไฟล์นี้)
 │
 ├── .github/                 # GitHub Configuration
@@ -137,8 +135,8 @@ modules/{feature}/
 
 ### 📋 ความต้องการของระบบ
 
-- Python 3.12+
-- Poetry (สำหรับจัดการ dependencies)
+- Python 3.14+
+- uv (สำหรับจัดการ workspace และ dependencies)
 - MongoDB (Local หรือ Cloud)
 
 ### ⚙️ การติดตั้ง
@@ -147,26 +145,17 @@ modules/{feature}/
 
    ```bash
    git clone <project-url>
-   cd fastapi-beanie-starter
+   cd tent
    ```
 
-2. **ติดตั้ง Dependencies ด้วย Poetry**
+2. **ติดตั้ง Dependencies ด้วย uv**
 
    ```bash
-   # สร้าง Virtual Environment
-   python -m venv venv
-   
-   # Activate Virtual Environment
-   # สำหรับ Linux/Mac:
-   source venv/bin/activate
-   # สำหรับ Windows:
-   # venv\Scripts\activate
+   # ติดตั้ง uv (ถ้ายังไม่มี)
+   curl -LsSf https://astral.sh/uv/install.sh | sh
 
-   # ติดตั้ง Poetry (ถ้ายังไม่มี)
-   curl -sSL https://install.python-poetry.org | python3 -
-
-   # ติดตั้ง dependencies
-   poetry install
+   # ติดตั้ง dependencies ทั้งหมดใน workspace
+   uv sync
    ```
 
 3. **ตั้งค่า Environment Variables**
@@ -216,10 +205,10 @@ modules/{feature}/
 
    ```bash
    # สร้าง products module แบบ interactive
-   poetry run forge generate products
+   uv run forge generate products
 
    # หรือสร้างโดยระบุชื่อ
-   poetry run forge generate products
+   uv run forge generate products
    ```
 
 2. **ไฟล์ที่สร้างขึ้น**
@@ -237,19 +226,12 @@ modules/{feature}/
 
 ```python
 # เข้าสู่ระบบ
-POST /v1/auth/login
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
+POST / v1 / auth / login
+{"email": "user@example.com", "password": "password123"}
 
 # สมัครสมาชิก
-POST /v1/auth/register
-{
-  "email": "newuser@example.com",
-  "password": "password123",
-  "full_name": "ชื่อผู้ใช้"
-}
+POST / v1 / auth / register
+{"email": "newuser@example.com", "password": "password123", "full_name": "ชื่อผู้ใช้"}
 ```
 
 ### 👤 User Management
@@ -271,7 +253,7 @@ PUT /v1/users/me
 
 ```python
 # ตรวจสอบสถานะระบบ
-GET /v1/health
+GET / v1 / health
 ```
 
 ## 🛠️ Development Tools
@@ -282,13 +264,13 @@ GET /v1/health
 
 ```bash
 # สร้าง module ใหม่ 
-poetry run forge generate products
+uv run forge generate products
 
 # สร้างแบบ force overwrite
-poetry run forge generate products --overwrite
+uv run forge generate products --overwrite
 
 # ดู help
-poetry run forge --help
+uv run forge --help
 ```
 
 **คุณสมบัติของ CLI:**
@@ -306,7 +288,7 @@ poetry run forge --help
 
 ```bash
 # ต้องมั่นใจว่า Activate venv แล้ว
-# source venv/bin/activate
+# source .venv/bin/activate
 
 # รันในโหมด Development (auto-reload)
 ./scripts/run-dev
@@ -318,7 +300,7 @@ poetry run forge --help
 ./scripts/init-admin
 ```
 
-> 💡 **แนะนำ**: ใช้ Shell Scripts (`./scripts/run-dev`) เป็นหลักในการรันระบบ แทนการกระโดดผ่าน `poetry` รัน เพื่อความเสถียรของ Environment
+> 💡 **แนะนำ**: ใช้ Shell Scripts (`./scripts/run-dev`) เป็นหลักในการรันระบบ เพื่อความเสถียรของ Environment
 
 ## 📚 คู่มือการพัฒนา
 
@@ -332,7 +314,7 @@ poetry run forge --help
    message = "Welcome to our API"
 
    # ❌ หลีกเลี่ยง
-   name = 'John Doe'
+   name = "John Doe"
    ```
 
 2. **ใช้ Type Hints ทุกที่**
@@ -345,9 +327,7 @@ poetry run forge --help
 3. **ใช้ Dependency Injection**
    ```python
    @router.get("/users/me")
-   async def get_current_user(
-       current_user: User = Depends(get_current_active_user)
-   ):
+   async def get_current_user(current_user: User = Depends(get_current_active_user)):
        return current_user
    ```
 
@@ -358,6 +338,7 @@ poetry run forge --help
    ```python
    # ❌ ไม่ถูกต้อง
    from apiapp.models.user_model import User
+
    user = await User.find_one({"email": email})
 
    # ✅ ถูกต้อง
@@ -373,12 +354,10 @@ poetry run forge --help
        if len(data.password) < 8:
            raise HTTPException(400, "Password too short")
 
+
    # ✅ ถูกต้อง - ใส่ logic ใน use_case
    @router.post("/users")
-   async def create_user(
-       data: UserRequest,
-       user_use_case: UserUseCase = Depends(get_user_use_case)
-   ):
+   async def create_user(data: UserRequest, user_use_case: UserUseCase = Depends(get_user_use_case)):
        return await user_use_case.create_user(data)
    ```
 
@@ -386,13 +365,10 @@ poetry run forge --help
 
 ```bash
 # รัน unit tests
-poetry run pytest
+uv run pytest
 
 # รัน tests พร้อม coverage
-poetry run pytest --cov=apiapp
-
-# รัน tests ในโหมด watch
-poetry run pytest-watch
+uv run pytest --cov=apiapp
 ```
 
 ## 📝 การ Deploy

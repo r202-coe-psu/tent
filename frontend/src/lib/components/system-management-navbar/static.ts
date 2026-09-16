@@ -13,7 +13,9 @@ import {
 	Building,
 	UserCog,
 	Warehouse,
-	Cpu
+	Cpu,
+	LayoutDashboard,
+	ClipboardList
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -36,12 +38,24 @@ export type SystemManagementNavbarGroup = {
 	items: SystemManagementNavbarNode[];
 };
 
-const base = '/portal/system-management';
+const base = '/system-management';
 
 export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 	{
-		title: '1. ศูนย์สั่งการและภาพรวม',
+		title: 'ศูนย์สั่งการและภาพรวม',
 		items: [
+			{
+				label: 'ภาพรวมระบบ',
+				href: resolve(`${base}/overview`),
+				icon: LayoutDashboard,
+				requiresAdmin: true
+			},
+			{
+				label: 'ลงทะเบียนล่วงหน้า',
+				href: resolve(`${base}/pre-registrations`),
+				icon: ClipboardList,
+				requiresAdmin: true
+			},
 			{
 				label: 'การจัดการประกาศด่วน',
 				href: resolve(`${base}/announcements`),
@@ -74,7 +88,7 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 		]
 	},
 	{
-		title: '2. ตั้งค่าระบบส่วนกลาง',
+		title: 'การตั้งค่าระบบส่วนกลาง',
 		items: [
 			{
 				label: 'ตั้งค่าระบบ',
@@ -82,49 +96,49 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				icon: Settings,
 				children: [
 					{
-						label: '1. ข้อมูลหลักบุคคล',
+						label: 'ข้อมูลหลักบุคคล',
 						href: resolve(`${base}/registration-config`),
 						icon: Users,
 						requiresAdmin: true
 					},
 					{
-						label: '2. ตั้งค่าศูนย์พักพิง',
+						label: 'การตั้งค่าศูนย์พักพิง',
 						href: resolve(`${base}/shelter-config`),
 						icon: Tent,
 						requiresAdmin: true
 					},
 					{
-						label: '3. ตั้งค่าครัวเรือน',
+						label: 'ข้อมูลครัวเรือน',
 						href: resolve(`${base}/household-master-data`),
 						icon: Home,
 						requiresAdmin: true
 					},
 					{
-						label: '4. คลังสินค้า',
+						label: 'คลังพัสดุและสิ่งของ',
 						href: resolve(`${base}/catalog`),
 						icon: Warehouse,
 						requiresAdmin: true
 					},
 					{
-						label: '5. พารามิเตอร์มาตรฐาน',
+						label: 'พารามิเตอร์มาตรฐาน SOP',
 						href: resolve(`${base}/sop-parameters`),
 						icon: Calculator,
 						requiresAdmin: true
 					},
 					{
-						label: '6. FAQ Public Portal',
+						label: 'คำถามที่พบบ่อย (FAQ)',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
 						requiresAdmin: true
 					},
-					{ label: '7. อาสาสมัคร', href: null, icon: Users },
-					{ label: '8. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: 'งานอาสาสมัคร', href: null, icon: Users },
+					{ label: 'โลจิสติกส์และผังพิกัด (GIS)', href: null, icon: MapPin }
 				]
 			}
 		]
 	}
 ];
 
-export const systemManagementHomePath: ResolvedPathname = resolve('/portal/system-management');
+export const systemManagementHomePath: ResolvedPathname = resolve('/system-management');
 
 export { isGroup };

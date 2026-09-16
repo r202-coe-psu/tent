@@ -22,6 +22,7 @@ describe('EvacueeHandoverSlipModal (Station 1 Handover QR Slip)', () => {
 			number: '1100200300401'
 		},
 		country: 'THAILAND',
+		vulnerable_groups: [],
 		special_needs: ['ใช้วีลแชร์', 'ผู้ป่วยติดเตียง'],
 		current_stay: {
 			status: 'arriving',

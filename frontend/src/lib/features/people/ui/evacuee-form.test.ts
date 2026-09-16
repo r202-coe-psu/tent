@@ -44,7 +44,7 @@ describe('EvacueeForm legacy wizard (compat)', () => {
 		});
 
 		expect(result.body).toContain('ความต้องการพิเศษ');
-		expect(result.body).not.toContain('กลุ่มเปราะบาง');
+		expect(result.body).toContain('กลุ่มเปราะบาง');
 		expect(result.body).toContain('ใช้วีลแชร์');
 	});
 

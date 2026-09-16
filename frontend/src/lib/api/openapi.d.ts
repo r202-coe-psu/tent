@@ -408,6 +408,327 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/token': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Issue Token */
+		post: operations['issue_token_third_party_token_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Clients */
+		get: operations['list_clients_v1_admin_thirdparty_clients_get'];
+		put?: never;
+		/** Create Client */
+		post: operations['create_client_v1_admin_thirdparty_clients_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/revoke': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Revoke Client */
+		post: operations['revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Locations */
+		get: operations['list_locations_third_party_locations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location */
+		get: operations['get_location_third_party_locations__location_code__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/occupancy': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Occupancy */
+		get: operations['get_location_occupancy_third_party_locations__location_code__occupancy_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/occupants': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Occupants */
+		get: operations['get_location_occupants_third_party_locations__location_code__occupants_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/stock': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Stock */
+		get: operations['get_location_stock_third_party_locations__location_code__stock_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Summary */
+		get: operations['get_summary_third_party_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/transparency/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Transparency Summary
+		 * @description System-wide public metrics from public_shelters + public_persons.
+		 */
+		get: operations['get_transparency_summary_public_v1_transparency_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/photos': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Upload Unassigned Photo
+		 * @description Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255).
+		 */
+		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Create Unassigned Registration
+		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
+		 */
+		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Search Unassigned Registrations
+		 * @description Staff online search of open Unassigned Registrations (FR-UR-02 / #245 / #251).
+		 *
+		 *     Auth is shelter-scoped staff or SA (matches BFF) so Station 1 can federate
+		 *     anti-dupe for non-claim roles; claim remains ``require_registration_staff``.
+		 */
+		get: operations['search_unassigned_registrations_staff_v1_unassigned_registrations_search_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/stats': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Unassigned Registration Stats
+		 * @description SA-only open-queue counts for system overview KPIs.
+		 */
+		get: operations['unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * List Unassigned Registrations
+		 * @description SA-only paginated open Unassigned Registrations (system overview PII).
+		 */
+		get: operations['list_unassigned_registrations_staff_v1_unassigned_registrations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration
+		 * @description SA-only Unassigned Registration detail (read-only profile).
+		 */
+		get: operations['get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get'];
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Unassigned Registration
+		 * @description system_admin hard-delete of a central-queue document (FR-UR-04 / #246).
+		 */
+		delete: operations['delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}/claim': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Claim Unassigned Registration
+		 * @description Claim open members into this shelter — Couch birth at pre_registered (#247).
+		 */
+		post: operations['claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -518,6 +839,48 @@ export interface components {
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
 		};
+		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
+		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+			/** Full */
+			full: string;
+			/** Thumb */
+			thumb?: string | null;
+			/**
+			 * Filename
+			 * @default face.webp
+			 */
+			filename: string;
+			/**
+			 * Content Type
+			 * @default image/webp
+			 */
+			content_type: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/** ClaimedMemberOut */
+		ClaimedMemberOut: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default claimed
+			 * @constant
+			 */
+			status: 'claimed';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+		};
 		/** ConfigResponse */
 		ConfigResponse: {
 			/**
@@ -531,6 +894,17 @@ export interface components {
 			facebook_url?: string | null;
 			/** Phone Number */
 			phone_number?: string | null;
+		};
+		/** CriticalItem */
+		CriticalItem: {
+			/** Name Th */
+			name_th: string;
+			/** Quantity On Hand */
+			quantity_on_hand: number;
+			/** Unit Label */
+			unit_label: string;
+			/** Level */
+			level: string;
 		};
 		/** DonationCancelResponse */
 		DonationCancelResponse: {
@@ -684,6 +1058,33 @@ export interface components {
 			/** Email */
 			email?: string | null;
 		};
+		/** EmergencyContactInput */
+		EmergencyContactInput: {
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
+			/**
+			 * Phone
+			 * @default
+			 */
+			phone: string;
+			/**
+			 * Relation
+			 * @default
+			 */
+			relation: string;
+		};
+		/** EmergencyContactOut */
+		EmergencyContactOut: {
+			/** Name */
+			name: string;
+			/** Phone */
+			phone: string;
+			/** Relation */
+			relation: string;
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -701,6 +1102,10 @@ export interface components {
 			question: string;
 			/** Answer */
 			answer: string;
+			/** Question En */
+			question_en?: string | null;
+			/** Answer En */
+			answer_en?: string | null;
 			/**
 			 * Is Published
 			 * @default true
@@ -739,6 +1144,257 @@ export interface components {
 			/** Status */
 			status: string;
 		};
+		/** HouseholdInput */
+		HouseholdInput: {
+			/** Housing Type */
+			housing_type?:
+				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			geo?: components['schemas']['GeoPoint'] | null;
+			/** Pets */
+			pets?: components['schemas']['PetInput'][];
+			/** Label */
+			label?: string | null;
+		};
+		/** HouseholdOut */
+		HouseholdOut: {
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			geo?: components['schemas']['GeoPoint'] | null;
+			/** Label */
+			label?: string | null;
+		};
+		/** LocationDetailEnvelope */
+		LocationDetailEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['LocationDetailItem'];
+		};
+		/** LocationDetailItem */
+		LocationDetailItem: {
+			/** Location Code */
+			location_code: string;
+			/** Name Th */
+			name_th: string;
+			/** Name Short */
+			name_short: string | null;
+			/** Location Type */
+			location_type: string;
+			/** Location Subtype */
+			location_subtype: string | null;
+			/** Location Status */
+			location_status: string;
+			/** Latitude */
+			latitude: number | null;
+			/** Longitude */
+			longitude: number | null;
+			/** Address */
+			address: string | null;
+			/** Subdistrict Code */
+			subdistrict_code: string | null;
+			/** District Code */
+			district_code: string | null;
+			/** Province Code */
+			province_code: string | null;
+			/** Capacity */
+			capacity: number;
+			/** Contact Phone */
+			contact_phone: string | null;
+			/** Contact Name */
+			contact_name: string | null;
+			/** Operating Org */
+			operating_org: string | null;
+			/** Accepts Delivery */
+			accepts_delivery: boolean;
+			/** Delivery Note */
+			delivery_note: string | null;
+			/** Opened At */
+			opened_at: string | null;
+			/** Closed At */
+			closed_at: string | null;
+			/** Is Active */
+			is_active: boolean;
+			/** Occupancy Total */
+			occupancy_total: number;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+			/** Facilities */
+			facilities: string[];
+		};
+		/** LocationErrorDetail */
+		LocationErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** LocationErrorResponse */
+		LocationErrorResponse: {
+			error: components['schemas']['LocationErrorDetail'];
+		};
+		/** LocationItem */
+		LocationItem: {
+			/** Location Code */
+			location_code: string;
+			/** Name Th */
+			name_th: string;
+			/** Name Short */
+			name_short: string | null;
+			/** Location Type */
+			location_type: string;
+			/** Location Subtype */
+			location_subtype: string | null;
+			/** Location Status */
+			location_status: string;
+			/** Latitude */
+			latitude: number | null;
+			/** Longitude */
+			longitude: number | null;
+			/** Address */
+			address: string | null;
+			/** Subdistrict Code */
+			subdistrict_code: string | null;
+			/** District Code */
+			district_code: string | null;
+			/** Province Code */
+			province_code: string | null;
+			/** Capacity */
+			capacity: number;
+			/** Contact Phone */
+			contact_phone: string | null;
+			/** Contact Name */
+			contact_name: string | null;
+			/** Operating Org */
+			operating_org: string | null;
+			/** Accepts Delivery */
+			accepts_delivery: boolean;
+			/** Delivery Note */
+			delivery_note: string | null;
+			/** Opened At */
+			opened_at: string | null;
+			/** Closed At */
+			closed_at: string | null;
+			/** Is Active */
+			is_active: boolean;
+			/** Occupancy Total */
+			occupancy_total: number;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** LocationListEnvelope */
+		LocationListEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			/** Result */
+			result: components['schemas']['LocationItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
+		};
+		/** LocationOccupancyEnvelope */
+		LocationOccupancyEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['LocationOccupancyResult'];
+		};
+		/** LocationOccupancyResult */
+		LocationOccupancyResult: {
+			/** Location Code */
+			location_code: string;
+			/** Capacity */
+			capacity: number;
+			/** Occupancy Total */
+			occupancy_total: number;
+			breakdown: components['schemas']['OccupancyBreakdownItem'];
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+			/** Updated By Role */
+			updated_by_role: string;
+		};
+		/** LocationStockEnvelope */
+		LocationStockEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['LocationStockResult'];
+		};
+		/** LocationStockResult */
+		LocationStockResult: {
+			/** Location Code */
+			location_code: string;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+			/** Items */
+			items: components['schemas']['StockItem'][];
+		};
 		/** M2ErrorDetail */
 		M2ErrorDetail: {
 			/** Code */
@@ -773,6 +1429,16 @@ export interface components {
 			 * @enum {string}
 			 */
 			status: 'CHECKED_IN' | 'CHECKED_OUT';
+			/**
+			 * Stay Status
+			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
+			 */
+			stay_status: string;
+			/**
+			 * In Zone
+			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
+			 */
+			in_zone: boolean;
 		};
 		/** M2ShelterItem */
 		M2ShelterItem: {
@@ -804,6 +1470,80 @@ export interface components {
 			 */
 			long?: number | null;
 		};
+		/** MemberCreated */
+		MemberCreated: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @enum {string}
+			 */
+			status: 'open' | 'claimed' | 'cancelled';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: string;
+			/** Phone */
+			phone?: string | null;
+			person_id?: components['schemas']['PersonIdOut'] | null;
+			/** Country */
+			country: string;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[];
+			/** Special Needs */
+			special_needs?: string[];
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
+		};
+		/** MemberInput */
+		MemberInput: {
+			/** First Name */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/**
+			 * Gender
+			 * @enum {string}
+			 */
+			gender: 'male' | 'female' | 'other';
+			/** Phone */
+			phone?: string | null;
+			person_id?: components['schemas']['PersonIdInput'] | null;
+			/**
+			 * Country
+			 * @default THAILAND
+			 */
+			country: string;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[];
+			/** Special Needs */
+			special_needs?: string[];
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
+			/** Photo */
+			photo?: string | null;
+		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
 			/** Item Id */
@@ -827,6 +1567,120 @@ export interface components {
 			 */
 			as_of: string;
 		};
+		/** OccupancyBreakdownItem */
+		OccupancyBreakdownItem: {
+			/** Male */
+			male: number;
+			/** Female */
+			female: number;
+			/** Child Under 5 */
+			child_under_5: number;
+			/** Elderly Over 60 */
+			elderly_over_60: number;
+			/** Pregnant */
+			pregnant: number;
+			/** Bedridden */
+			bedridden: number;
+			/** Disabled */
+			disabled: number;
+		};
+		/** OccupancyErrorDetail */
+		OccupancyErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** OccupancyErrorResponse */
+		OccupancyErrorResponse: {
+			error: components['schemas']['OccupancyErrorDetail'];
+		};
+		/** OccupantItem */
+		OccupantItem: {
+			/** Occupant Ref */
+			occupant_ref: string;
+			/** Name Masked */
+			name_masked: string;
+			/** Age Range */
+			age_range: string;
+			/** Gender */
+			gender?: string | null;
+			/**
+			 * Care Flags
+			 * @default []
+			 */
+			care_flags: string[];
+			/** Checked In At */
+			checked_in_at?: string | null;
+		};
+		/** OccupantsEnvelope */
+		OccupantsEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			/**
+			 * Result
+			 * @default []
+			 */
+			result: components['schemas']['OccupantItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
+		};
+		/** OccupantsErrorResponse */
+		OccupantsErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Detail */
+			detail?: string | null;
+		};
+		/**
+		 * OpenMemberHit
+		 * @description Open member surfaced by staff search — claimable (not claimed/cancelled).
+		 */
+		OpenMemberHit: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default open
+			 * @constant
+			 */
+			status: 'open';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: string;
+			/** Phone */
+			phone?: string | null;
+			person_id?: components['schemas']['PersonIdOut'] | null;
+			/** Country */
+			country: string;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[];
+			/** Special Needs */
+			special_needs?: string[];
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+		};
 		/** PaginatedAnnouncements */
 		PaginatedAnnouncements: {
 			/** Items */
@@ -839,6 +1693,63 @@ export interface components {
 			size: number;
 			/** Total Pages */
 			total_pages: number;
+		};
+		/** PaginationMeta */
+		PaginationMeta: {
+			/** Page */
+			page: number;
+			/** Limit */
+			limit: number;
+			/** Total */
+			total: number;
+			/** Total Pages */
+			total_pages: number;
+		};
+		/** PersonIdInput */
+		PersonIdInput: {
+			/**
+			 * Cardtype
+			 * @default national_id
+			 * @enum {string}
+			 */
+			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
+			/** Number */
+			number?: string | null;
+		};
+		/**
+		 * PersonIdOut
+		 * @description Person id on create responses — distinct from request PersonIdInput.
+		 */
+		PersonIdOut: {
+			/**
+			 * Cardtype
+			 * @enum {string}
+			 */
+			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
+			/** Number */
+			number?: string | null;
+		};
+		/** PetInput */
+		PetInput: {
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+			/** Notes */
+			notes?: string | null;
+			/**
+			 * Has Cage
+			 * @default false
+			 */
+			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
 		};
 		/**
 		 * PublicAnnouncement
@@ -855,6 +1766,10 @@ export interface components {
 			title: string;
 			/** Description */
 			description: string;
+			/** Title En */
+			title_en?: string | null;
+			/** Description En */
+			description_en?: string | null;
 			/**
 			 * Severity
 			 * @enum {string}
@@ -897,12 +1812,16 @@ export interface components {
 			gender?: string | null;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
 			/** Origin Address */
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
 			/** Care Zone */
 			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
@@ -946,6 +1865,21 @@ export interface components {
 			/** Address */
 			address: string;
 			capacity: components['schemas']['ShelterCapacityDetail'];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
 			/** Occupancy Rate */
 			occupancy_rate: number;
 			/** Building Status */
@@ -1081,6 +2015,425 @@ export interface components {
 			capacity?: number | null;
 			/** Area M2 */
 			area_m2?: number | null;
+		};
+		/** StockErrorDetail */
+		StockErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** StockErrorResponse */
+		StockErrorResponse: {
+			error: components['schemas']['StockErrorDetail'];
+		};
+		/** StockItem */
+		StockItem: {
+			/** M6 Reference Id */
+			m6_reference_id: number | null;
+			/** M6 Item Code */
+			m6_item_code: string | null;
+			/** Name Th */
+			name_th: string;
+			/** Type Code */
+			type_code: string;
+			/** Unit Label */
+			unit_label: string;
+			/** Unit Ratio */
+			unit_ratio: number;
+			/** Quantity On Hand */
+			quantity_on_hand: number;
+			/** Source */
+			source: string;
+		};
+		/** SummaryEnvelope */
+		SummaryEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['SummaryResult'];
+		};
+		/** SummaryLocationItem */
+		SummaryLocationItem: {
+			/** Location Code */
+			location_code: string;
+			/** Name Th */
+			name_th: string;
+			/** Location Status */
+			location_status: string;
+			/** Latitude */
+			latitude: number | null;
+			/** Longitude */
+			longitude: number | null;
+			/** Capacity */
+			capacity: number;
+			/** Occupancy Total */
+			occupancy_total: number;
+			/** Critical Items */
+			critical_items: components['schemas']['CriticalItem'][];
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** SummaryResult */
+		SummaryResult: {
+			/**
+			 * Generated At
+			 * Format: date-time
+			 */
+			generated_at: string;
+			/** Location Count */
+			location_count: number;
+			/** Occupancy Total */
+			occupancy_total?: number | null;
+			/** Capacity Total */
+			capacity_total: number;
+			/** Locations */
+			locations: components['schemas']['SummaryLocationItem'][];
+		};
+		/** ThirdPartyClientCreateRequest */
+		ThirdPartyClientCreateRequest: {
+			/** Client Id */
+			client_id: string;
+			/** Module Name */
+			module_name: string;
+			/** Allowed Scopes */
+			allowed_scopes: string[];
+		};
+		/**
+		 * ThirdPartyClientCreateResponse
+		 * @description Create response — plaintext ``client_secret`` is returned once.
+		 */
+		ThirdPartyClientCreateResponse: {
+			/** Id */
+			id: string;
+			/** Client Id */
+			client_id: string;
+			/** Module Name */
+			module_name: string;
+			/** Allowed Scopes */
+			allowed_scopes: string[];
+			/** Is Active */
+			is_active: boolean;
+			/**
+			 * Created At
+			 * Format: date-time
+			 */
+			created_at: string;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+			/** Client Secret */
+			client_secret: string;
+		};
+		/** ThirdPartyClientListResponse */
+		ThirdPartyClientListResponse: {
+			/** Clients */
+			clients: components['schemas']['ThirdPartyClientPublic'][];
+			/** Count */
+			count: number;
+		};
+		/**
+		 * ThirdPartyClientPublic
+		 * @description Client metadata without the secret hash.
+		 */
+		ThirdPartyClientPublic: {
+			/** Id */
+			id: string;
+			/** Client Id */
+			client_id: string;
+			/** Module Name */
+			module_name: string;
+			/** Allowed Scopes */
+			allowed_scopes: string[];
+			/** Is Active */
+			is_active: boolean;
+			/**
+			 * Created At
+			 * Format: date-time
+			 */
+			created_at: string;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** ThirdPartyClientRevokeResponse */
+		ThirdPartyClientRevokeResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			client: components['schemas']['ThirdPartyClientPublic'];
+		};
+		/** TokenErrorDetail */
+		TokenErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** TokenErrorResponse */
+		TokenErrorResponse: {
+			error: components['schemas']['TokenErrorDetail'];
+		};
+		/** TokenRequest */
+		TokenRequest: {
+			/** Grant Type */
+			grant_type: string;
+			/** Client Id */
+			client_id: string;
+			/** Client Secret */
+			client_secret: string;
+		};
+		/** TokenResponse */
+		TokenResponse: {
+			/** Access Token */
+			access_token: string;
+			/**
+			 * Token Type
+			 * @default Bearer
+			 * @constant
+			 */
+			token_type: 'Bearer';
+			/** Expires In */
+			expires_in: number;
+			/** Module Name */
+			module_name: string;
+			/** Scopes */
+			scopes: string[];
+		};
+		/** TransparencySummary */
+		TransparencySummary: {
+			/** Shelters Total */
+			shelters_total: number;
+			/**
+			 * Shelters Open
+			 * @description status in {open, full}
+			 */
+			shelters_open: number;
+			/**
+			 * Occupancy Total
+			 * @description active + pre_registered across projected shelters (CR-070)
+			 */
+			occupancy_total?: number | null;
+			/**
+			 * Vulnerable Count
+			 * @description Not projected in public_persons yet — always null until schema adds age
+			 */
+			vulnerable_count?: number | null;
+		};
+		/** TransparencySummaryResponse */
+		TransparencySummaryResponse: {
+			summary: components['schemas']['TransparencySummary'];
+			/**
+			 * Last Updated
+			 * Format: date-time
+			 */
+			last_updated: string;
+			/**
+			 * Is Stale
+			 * @default false
+			 */
+			is_stale: boolean;
+			/** Flags */
+			flags?: {
+				[key: string]: boolean;
+			};
+		};
+		/**
+		 * UnassignedPhotoUploadResponse
+		 * @description Response from POST /public/v1/unassigned-registrations/photos.
+		 */
+		UnassignedPhotoUploadResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Photo Id */
+			photo_id: string;
+			/** Content Type */
+			content_type: string;
+			/** Filename */
+			filename: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/**
+		 * UnassignedRegistrationClaimRequest
+		 * @description Staff claim — body selects open member reserved ids (CR-113 / #247).
+		 */
+		UnassignedRegistrationClaimRequest: {
+			/** Member Ids */
+			member_ids: string[];
+			/** Shelter Code */
+			shelter_code?: string | null;
+		};
+		/** UnassignedRegistrationClaimResponse */
+		UnassignedRegistrationClaimResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Id */
+			id: string | null;
+			/** Deleted */
+			deleted: boolean;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Household Id */
+			household_id: string;
+			/** Evacuee Ids */
+			evacuee_ids: string[];
+			/** Claimed */
+			claimed: components['schemas']['ClaimedMemberOut'][];
+			/** Remaining Open */
+			remaining_open: components['schemas']['OpenMemberHit'][];
+		};
+		/** UnassignedRegistrationCreateRequest */
+		UnassignedRegistrationCreateRequest: {
+			/** Members */
+			members: components['schemas']['MemberInput'][];
+			household: components['schemas']['HouseholdInput'];
+			/**
+			 * Registered Via
+			 * @default web
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+		};
+		/** UnassignedRegistrationCreateResponse */
+		UnassignedRegistrationCreateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Id */
+			id: string;
+			/** Schema V */
+			schema_v: number;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/** Members */
+			members: components['schemas']['MemberCreated'][];
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+		};
+		/** UnassignedRegistrationDetailResponse */
+		UnassignedRegistrationDetailResponse: {
+			/** Id */
+			id: string;
+			/** Schema V */
+			schema_v: number;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Members */
+			members: components['schemas']['MemberCreated'][];
+		};
+		/** UnassignedRegistrationListItem */
+		UnassignedRegistrationListItem: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Member Count */
+			open_member_count: number;
+		};
+		/** UnassignedRegistrationListResponse */
+		UnassignedRegistrationListResponse: {
+			/** Items */
+			items: components['schemas']['UnassignedRegistrationListItem'][];
+			/** Total */
+			total: number;
+			/** Open Member Count */
+			open_member_count: number;
+			/** Limit */
+			limit: number;
+			/** Offset */
+			offset: number;
+		};
+		/** UnassignedRegistrationSearchHit */
+		UnassignedRegistrationSearchHit: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+		};
+		/** UnassignedRegistrationSearchResponse */
+		UnassignedRegistrationSearchResponse: {
+			/** Results */
+			results: components['schemas']['UnassignedRegistrationSearchHit'][];
+		};
+		/** UnassignedRegistrationStatsResponse */
+		UnassignedRegistrationStatsResponse: {
+			/** Open Registrations */
+			open_registrations: number;
+			/** Open Members */
+			open_members: number;
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -1883,6 +3236,686 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ShelterDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	issue_token_third_party_token_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TokenRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenResponse'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_clients_v1_admin_thirdparty_clients_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientListResponse'];
+				};
+			};
+		};
+	};
+	create_client_v1_admin_thirdparty_clients_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ThirdPartyClientCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientRevokeResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_locations_third_party_locations_get: {
+		parameters: {
+			query?: {
+				/** @description Filter by location_status */
+				status?: string | null;
+				updated_since?: string | null;
+				/** @description Include soft-deleted (is_active=false) locations */
+				include_inactive?: boolean;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationListEnvelope'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_third_party_locations__location_code__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationDetailEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_occupancy_third_party_locations__location_code__occupancy_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationOccupancyEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupancyErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_occupants_third_party_locations__location_code__occupants_get: {
+		parameters: {
+			query?: {
+				purpose?: string | null;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
+			};
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_stock_third_party_locations__location_code__stock_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationStockEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['StockErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_summary_third_party_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SummaryEnvelope'];
+				};
+			};
+		};
+	};
+	get_transparency_summary_public_v1_transparency_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TransparencySummaryResponse'];
+				};
+			};
+		};
+	};
+	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'multipart/form-data': components['schemas']['Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	create_unassigned_registration_public_v1_unassigned_registrations_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedRegistrationCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_unassigned_registrations_staff_v1_unassigned_registrations_search_get: {
+		parameters: {
+			query?: {
+				/** @description Name, phone, or person id of an open member */
+				q?: string;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationStatsResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_unassigned_registrations_staff_v1_unassigned_registrations_get: {
+		parameters: {
+			query?: {
+				q?: string;
+				province?: string | null;
+				district?: string | null;
+				subdistrict?: string | null;
+				limit?: number;
+				offset?: number;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedRegistrationClaimRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationClaimResponse'];
 				};
 			};
 			/** @description Validation Error */

@@ -67,7 +67,8 @@
 				dietary: [],
 				qty_per_person: undefined,
 				returnable: false,
-				asset_status: 'READY'
+				asset_status: 'READY',
+				deactivated: false
 			},
 			zod4(itemMasterInputSchema)
 		),
@@ -225,6 +226,7 @@
 			$formData.qty_per_person = item.qty_per_person;
 			$formData.returnable = item.returnable ?? false;
 			$formData.asset_status = item.asset_status || 'READY';
+			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
 
@@ -459,7 +461,7 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
 								>
 									<option value="" disabled selected>-- เลือกหน่วยฐาน --</option>
-									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร'] as unit (unit)}
+									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'อัน', 'ชุด', 'ผืน', 'ตัว', 'คู่', 'แผ่น', 'หลอด', 'ม้วน', 'ก้อน', 'ห่อ', 'ฟอง', 'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร', 'เมตร'] as unit (unit)}
 										<option value={unit}>{unit}</option>
 									{/each}
 								</select>
@@ -488,7 +490,6 @@
 
 					<div class="space-y-3">
 						{#if $formData.conversions && $formData.conversions.length > 0}
-							{@const conv = $formData.conversions[0]}
 							<div
 								class="grid grid-cols-1 items-end gap-6 rounded-2xl border border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950/20"
 							>
@@ -498,7 +499,7 @@
 									</span>
 									<Input
 										type="text"
-										bind:value={conv.uom_name}
+										bind:value={$formData.conversions[0].uom_name}
 										placeholder="เช่น กล่อง, ลัง, แผง"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
@@ -511,10 +512,10 @@
 										type="number"
 										step="any"
 										min={0}
-										value={conv.multiplier}
+										value={$formData.conversions[0].multiplier}
 										oninput={(e) => {
 											const val = e.currentTarget.value;
-											conv.multiplier = val === '' ? '1' : val;
+											$formData.conversions[0].multiplier = val === '' ? '1' : val;
 										}}
 										placeholder="1"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
@@ -526,7 +527,7 @@
 									</span>
 									<Input
 										type="text"
-										bind:value={conv.barcode}
+										bind:value={$formData.conversions[0].barcode}
 										placeholder="สแกนหรือพิมพ์"
 										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
@@ -951,6 +952,32 @@
 						</Form.Control>
 						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 					</Form.Field>
+				</section>
+			{/if}
+
+			{#if isEdit}
+				<!-- SECTION: สถานะการใช้งาน (Status) -->
+				<section
+					class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+				>
+					<div class="flex items-center justify-between">
+						<div class="space-y-0.5">
+							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+								สถานะปิดการใช้งาน (Deactivated)
+							</Form.Label>
+							<p class="text-xs text-muted-foreground">
+								หากปิดการใช้งาน รายการนี้จะไม่แสดงให้เลือกในธุรกรรมคลังและการเบิกจ่ายใหม่
+								แต่ประวัติเก่ายังคงอยู่
+							</p>
+						</div>
+						<Checkbox
+							id="deactivated-toggle"
+							checked={$formData.deactivated}
+							onCheckedChange={(val) => {
+								$formData.deactivated = !!val;
+							}}
+						/>
+					</div>
 				</section>
 			{/if}
 

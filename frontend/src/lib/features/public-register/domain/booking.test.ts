@@ -238,7 +238,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 
 		expect(evacuees).toHaveLength(3);
 		for (const e of evacuees) {
-			expect(e.schema_v).toBe(9);
+			expect(e.schema_v).toBe(10);
 			expect(e.registered_via).toBe('web');
 
 			expect(e.current_stay.status).toBe('pre_registered');
@@ -509,5 +509,95 @@ describe('publicBookingErrorMessage', () => {
 
 	it('falls back for anything unrecognised', () => {
 		expect(publicBookingErrorMessage('WAT')).toBe('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+	});
+});
+
+describe('CR-112 / CR-113 alignment', () => {
+	it('accepts unassigned shelter code for central queue', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			shelter_code: 'unassigned'
+		});
+		expect(parsed.shelter_code).toBe('unassigned');
+	});
+
+	it('accepts homeless residence without address_no if landmark is provided', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			address: {
+				housing_type: 'homeless',
+				residence_landmark: 'ใต้สะพานลอยแยกควนลัง',
+				address_no: '',
+				village_no: '',
+				subdistrict: '',
+				district: '',
+				province: '',
+				postal_code: ''
+			}
+		});
+		expect(parsed.address.housing_type).toBe('homeless');
+		expect(parsed.address.residence_landmark).toBe('ใต้สะพานลอยแยกควนลัง');
+
+		const household = toHouseholdInput(parsed, 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ0');
+		expect(household.housing_type).toBe('homeless');
+		expect(household.residence_landmark).toBe('ใต้สะพานลอยแยกควนลัง');
+		expect(household.address_no).toBeNull();
+	});
+
+	it('rejects homeless residence without landmark and without complete province/district/subdistrict', () => {
+		expect(
+			publicBookingInputSchema.safeParse({
+				...VALID,
+				address: {
+					housing_type: 'homeless',
+					residence_landmark: '  ',
+					address_no: '',
+					subdistrict: '',
+					district: '',
+					province: ''
+				}
+			}).success
+		).toBe(false);
+	});
+
+	it('maps member person_id, phone, vulnerable_groups and special_needs to evacuee inputs', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			members: [
+				{
+					...CONTACT,
+					phone: '0899999999',
+					person_id: { cardType: 'national_id', number: '1234567890123' },
+					vulnerable_groups: ['elderly', 'pwd'],
+					special_needs: ['ต้องการวีลแชร์']
+				},
+				{
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					phone: null,
+					person_id: { cardType: 'anonymous', number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0' },
+					vulnerable_groups: ['child'],
+					special_needs: []
+				}
+			]
+		});
+
+		const evacuees = toEvacueeInputs(input, 'household:01JABCDEFGHJKMNPQRSTVWXYZ0');
+		expect(evacuees).toHaveLength(2);
+		expect(evacuees[0].phone).toBe('0899999999');
+		expect(evacuees[0].person_id).toEqual({
+			cardType: 'national_id',
+			number: '1234567890123'
+		});
+		expect(evacuees[0].vulnerable_groups).toEqual(['elderly', 'pwd']);
+		expect(evacuees[0].special_needs).toEqual(['ต้องการวีลแชร์']);
+
+		expect(evacuees[1].phone).toBeNull();
+		expect(evacuees[1].person_id).toEqual({
+			cardType: 'anonymous',
+			number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0'
+		});
+		expect(evacuees[1].vulnerable_groups).toEqual(['child']);
 	});
 });

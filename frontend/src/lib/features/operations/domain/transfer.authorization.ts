@@ -18,15 +18,22 @@ function sameShelter(a: string, b: string): boolean {
 }
 
 function isValidTransition(from: TransferStatus, to: TransferStatus): boolean {
-	if (from === 'requested') return to === 'shipped' || to === 'cancelled';
+	if (from === 'requested') return to === 'shipped' || to === 'cancelled' || to === 'disputed';
+	// CR-089 FR-07 — `disputed` leads back to `requested` and nowhere else, so a held transfer
+	// can never reach `shipped`/`received`/`cancelled` without being resumed first.
+	if (from === 'disputed') return to === 'requested';
 	if (from === 'shipped') return to === 'received';
 	return false;
 }
 
 /**
  * Whether the actor's shelter may perform `to` on this transfer.
- * Dispatch/cancel (`requested` → `shipped`/`cancelled`) → source (`from_shelter`) only.
+ * Dispatch/cancel/dispute (`requested` → `shipped`/`cancelled`/`disputed`) and resume
+ * (`disputed` → `requested`) → source (`from_shelter`) only.
  * Receive (`shipped` → `received`) → destination (`to_shelter`) only.
+ *
+ * CR-089 FR-06 — the destination is read-only while a transfer is `disputed`: every transition
+ * out of `disputed` is source-only, so no extra branch is needed to hold that rule.
  */
 export function assertActorMayTransition(
 	transfer: StockTransfer,
@@ -39,10 +46,10 @@ export function assertActorMayTransition(
 		return;
 	}
 
-	if (to === 'shipped' || to === 'cancelled') {
+	if (to === 'shipped' || to === 'cancelled' || to === 'disputed' || to === 'requested') {
 		if (!sameShelter(transfer.from_shelter, actorShelter)) {
 			throw new TransferAuthorizationError(
-				'Only the source shelter can dispatch or cancel this transfer'
+				'Only the source shelter can dispatch, cancel, dispute or resume this transfer'
 			);
 		}
 		return;

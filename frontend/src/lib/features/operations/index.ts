@@ -22,10 +22,14 @@ export type {
 	DonationChannel,
 	DonationSlot,
 	NeedAvailability,
+	StockLotBalance,
 	StockTransfer,
 	StockTransferItem,
 	TransferInput,
-	TransferFilter
+	TransferFilter,
+	DispatchInfoInput,
+	CancelInfoInput,
+	DisputeInfoInput
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -84,6 +88,12 @@ export {
 	distributeInputSchema,
 	createDistributeEntry,
 	type DistributeInput,
+	distributionReturnInputSchema,
+	createDistributionReturnEntry,
+	type DistributionReturnInput,
+	projectStockLotBalances,
+	sortStockLotsByConsumptionOrder,
+	StockLotIntegrityError,
 	adjustInputSchema,
 	createAdjustEntry,
 	type AdjustInput,
@@ -127,6 +137,8 @@ export {
 	useDispatchTransfer,
 	useReceiveTransfer,
 	useCancelTransfer,
+	useDisputeTransfer,
+	useResumeTransfer,
 	useCrossShelterStockBalances,
 	useCrossShelterLedger,
 	startOperationsLiveQuery

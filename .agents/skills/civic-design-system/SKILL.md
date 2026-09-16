@@ -4,6 +4,7 @@ description: Mandatory Civic Light Design System guidelines, negative constraint
 ---
 
 # SmartShelter Thailand Civic Light Design System (v2.4)
+
 ### Minimal, Modern & Clean Architecture Guide for AI Agents & Developers
 
 This skill establishes the non-negotiable frontend design and engineering standards for the **SmartShelter Thailand** application. All Svelte 5 components, layouts, forms, and dialogs MUST adhere to these rules.
@@ -42,12 +43,14 @@ This skill establishes the non-negotiable frontend design and engineering standa
 ## 🎨 DESIGN TOKENS (TypeScript Import: `$lib/tokens`)
 
 You can import all tokens directly in TypeScript:
+
 ```typescript
-import { tokens } from '$lib/tokens';
+import { tokens } from "$lib/tokens";
 // tokens.colors, tokens.typography, tokens.spatial, tokens.responsive, tokens.motion
 ```
 
 ### 1. Color Tokens & Specialized Operations Mapping
+
 - **Brand Navy (Primary)**: `#0A2647` (`bg-[#0A2647]`, `text-[#0A2647]`) — Hover: `#051930`
 - **GovTech Cerulean (Secondary)**: `#0284C7` (`.btn-secondary-brand`, active filters, map points, export actions)
 - **Destructive Red**: `#DC2626` (`.btn-destructive-brand`, delete, emergency cancel, close admissions)
@@ -60,6 +63,7 @@ import { tokens } from '$lib/tokens';
 - **Text Muted**: `#64748B` (`text-slate-500`) | **Borders**: `#E2E8F0` (`border-slate-200/80`)
 
 #### Specialized Operations (Strictly Mapped to Palette)
+
 - **Kitchen & LPG Energy**: Warm Orange `#EA580C` (`.badge-kitchen`, `.card-ops-kitchen`, `border-orange-200 bg-orange-50 text-orange-900`)
 - **Family Care (Maternal & Infant)**: Soft Rose `#E11D48` (`.badge-family`, `.card-ops-family`, `border-rose-200 bg-rose-50 text-rose-900`)
 - **Donors & Public Portal**: Civic Cerulean `#0284C7` (`.badge-donor`, `.card-ops-donor`, `border-sky-200 bg-sky-50 text-sky-900` — inherits from Secondary)
@@ -70,23 +74,26 @@ import { tokens } from '$lib/tokens';
 > **Single Source of Truth Architecture**: All downstream tokens (Semantic, Domain, Status, Portal Services) inherit directly from `baseBrand`, `baseSecondary`, `baseDestructive`, etc. in `$lib/tokens/colors.ts` and CSS variables (`--brand-primary`, `--brand-secondary`, etc.) in `app.css`. Any change to a base token propagates across the entire application.
 
 #### Public Portal Essential Services Mapping (Adaptive Semantic Palette)
+
 - **1. ค้นหาที่พักพิง (Shelters)**: Red `#DC2626` (`portalServices.shelter`: border-red-200, bg-red-50 icon container, primary btn-destructive)
-- **2. ค้นหาญาติ / ผู้พักพิง (Family Tracing)**: Navy `#0A2647` & Cerulean `#0284C7` (`portalServices.tracing`: border-sky-200, bg-sky-50 icon container, primary btn-primary)
-- **3. ผู้บริจาค / มอบเสบียง (Donations)**: Warm Amber `#EA580C` (`portalServices.donation`: border-amber-200, bg-amber-50 icon container, primary amber button)
-- **4. จิตอาสา / อาสาสมัคร (Volunteers)**: Civic Emerald `#059669` (`portalServices.volunteer`: border-emerald-200, bg-emerald-50 icon container, primary emerald button)
+- **2. ผู้พักพิง (Family Tracing)**: Navy `#0A2647` & Cerulean `#0284C7` (`portalServices.tracing`: border-sky-200, bg-sky-50 icon container, primary btn-primary)
+- **3. บริจาค (Donations)**: Warm Amber `#EA580C` (`portalServices.donation`: border-amber-200, bg-amber-50 icon container, primary amber button)
+- **4. อาสาสมัคร (Volunteers)**: Civic Emerald `#059669` (`portalServices.volunteer`: border-emerald-200, bg-emerald-50 icon container, primary emerald button)
 - **Emergency FAQ**: Active border `border-sky-300`, active badge `bg-[#0A2647] text-white`
 - **Floating Emergency Controls**: 1669 Hotline pill (`bg-red-600` Destructive), Alert bell pill (`bg-[#0284C7]` Secondary Cerulean)
 
 ### 2. 360° Refined Status Matrix
-| Status Category | Hex | Complete Card Framing | Badge Classes |
-| :--- | :--- | :--- | :--- |
-| **Operational (Green)** | `#16A34A` | `border border-emerald-200 bg-white shadow-2xs` | `border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold` |
-| **Warning (Amber)** | `#F59E0B` | `border border-amber-200 bg-white shadow-2xs` | `border border-amber-200 bg-amber-50 text-amber-900 font-semibold` |
-| **Critical (Red)** | `#DC2626` | `border border-red-200 bg-white shadow-2xs` | `border border-red-200 bg-red-50 text-red-900 font-semibold` |
-| **Logistics (Sky)** | `#0284C7` | `border border-sky-200 bg-white shadow-2xs` | `border border-sky-200 bg-sky-50 text-sky-900 font-semibold` |
-| **EOC Command (Purple)** | `#9333EA` | `border border-purple-200 bg-white shadow-2xs` | `border border-purple-200 bg-purple-50 text-purple-900 font-semibold` |
+
+| Status Category          | Hex       | Complete Card Framing                           | Badge Classes                                                            |
+| :----------------------- | :-------- | :---------------------------------------------- | :----------------------------------------------------------------------- |
+| **Operational (Green)**  | `#16A34A` | `border border-emerald-200 bg-white shadow-2xs` | `border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold` |
+| **Warning (Amber)**      | `#F59E0B` | `border border-amber-200 bg-white shadow-2xs`   | `border border-amber-200 bg-amber-50 text-amber-900 font-semibold`       |
+| **Critical (Red)**       | `#DC2626` | `border border-red-200 bg-white shadow-2xs`     | `border border-red-200 bg-red-50 text-red-900 font-semibold`             |
+| **Logistics (Sky)**      | `#0284C7` | `border border-sky-200 bg-white shadow-2xs`     | `border border-sky-200 bg-sky-50 text-sky-900 font-semibold`             |
+| **EOC Command (Purple)** | `#9333EA` | `border border-purple-200 bg-white shadow-2xs`  | `border border-purple-200 bg-purple-50 text-purple-900 font-semibold`    |
 
 ### 3. Typography Hierarchy
+
 - `h1`: `text-3xl sm:text-4xl font-extrabold text-[#0A2647] tracking-tight` (36px-40px)
 - `h2`: `text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight` (24px-28px)
 - `h3`: `text-lg sm:text-xl font-bold text-slate-900` (18px-20px)
@@ -99,6 +106,7 @@ import { tokens } from '$lib/tokens';
 - `.metric-lg`: `text-3xl sm:text-4xl font-bold text-slate-900 tabular-nums` (36px-44px)
 
 ### 4. 1-Page Spatial Geometry & Radii
+
 - **Page Container**: `mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12 sm:space-y-16`
 - **Section Box**: `rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-10 shadow-2xs space-y-6`
 - **Card Padding**: `p-4 sm:p-5` | **Grid Gutters**: `gap-4 sm:gap-6`
@@ -134,7 +142,10 @@ import { tokens } from '$lib/tokens';
 - Global `⌘K` (Mac) / `Ctrl+K` (Win) opens `<CivicCommandPalette bind:open={isOpen} />`.
 - Use standard `<kbd>` styling:
   ```html
-  <kbd class="px-2 py-0.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md shadow-2xs">⌘K</kbd>
+  <kbd
+    class="px-2 py-0.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md shadow-2xs"
+    >⌘K</kbd
+  >
   ```
 - Shortcut Standard: `⌘K` (Search/Command), `⌘N` (New Intake), `⌘D` (Distribute Supplies), `⌘E` (Broadcast Alert), `⌘O` (Offline Mode), `Esc` (Close).
 
@@ -144,25 +155,40 @@ import { tokens } from '$lib/tokens';
 
 1. **Online (Synced)**:
    ```html
-   <div class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900">
+   <div
+     class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900"
+   >
      <span class="relative flex h-2 w-2">
-       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-       <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+       <span
+         class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+       ></span>
+       <span
+         class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
+       ></span>
      </span>
      <span>ออนไลน์ • ซิงก์สมบูรณ์</span>
    </div>
    ```
 2. **Offline Disaster Banner**:
    ```html
-   <div class="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-800 flex items-center justify-between shadow-2xs">
+   <div
+     class="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-800 flex items-center justify-between shadow-2xs"
+   >
      <div class="flex items-center gap-3">
        <WifiOff class="h-5 w-5 text-slate-500" />
        <div>
-         <div class="text-xs font-bold text-slate-900">กำลังทำงานในโหมดออฟไลน์ (Local CouchDB)</div>
-         <div class="text-xs text-slate-500">ข้อมูลจะถูกจัดเก็บบนเครื่องและซิงก์อัตโนมัติเมื่อมีสัญญาณ</div>
+         <div class="text-xs font-bold text-slate-900">
+           กำลังทำงานในโหมดออฟไลน์ (Local CouchDB)
+         </div>
+         <div class="text-xs text-slate-500">
+           ข้อมูลจะถูกจัดเก็บบนเครื่องและซิงก์อัตโนมัติเมื่อมีสัญญาณ
+         </div>
        </div>
      </div>
-     <span class="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 tabular-nums">3 รายการรอซิงก์</span>
+     <span
+       class="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 tabular-nums"
+       >3 รายการรอซิงก์</span
+     >
    </div>
    ```
 
@@ -171,10 +197,11 @@ import { tokens } from '$lib/tokens';
 ## 🧩 SVELTE 5 & SHADCN-SVELTE PRODUCTION TEMPLATES
 
 ### 1. Telemetry KPI Card with 360° Framing
+
 ```svelte
 <script lang="ts">
   import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
-  
+
   interface Props {
     title: string;
     value: number;
@@ -203,6 +230,7 @@ import { tokens } from '$lib/tokens';
 ```
 
 ### 2. Tablet-Optimized Master-Detail Split View with shadcn-svelte Input
+
 ```svelte
 <script lang="ts">
   import { Input } from '$lib/components/ui/input/index.js';
@@ -242,6 +270,7 @@ import { tokens } from '$lib/tokens';
 ```
 
 ### 3. Accessible Form Input with shadcn-svelte & Svelte 5 Runes
+
 ```svelte
 <script lang="ts">
   import { Label } from '$lib/components/ui/label/index.js';
@@ -266,6 +295,7 @@ import { tokens } from '$lib/tokens';
 ```
 
 ### 4. Compound Field with Validation (shadcn-svelte Field)
+
 ```svelte
 <script lang="ts">
   import * as Field from '$lib/components/ui/field/index.js';
@@ -291,6 +321,7 @@ import { tokens } from '$lib/tokens';
 ## 📋 PRE-FLIGHT COMPONENT REVIEW CHECKLIST FOR AI AGENTS
 
 Before completing any UI change in this workspace, verify:
+
 - [ ] **Canvas Theme**: Is the background `#F8FAFC` or `#FFFFFF` (no dark canvas)?
 - [ ] **Status Borders**: Are all status cards bordered on all 4 sides with 360° tint (`border border-emerald-200` etc.)?
 - [ ] **Shadows**: Are shadows subtle (`shadow-2xs` or `shadow-xs`), never heavy (`shadow-lg`/`xl`)?

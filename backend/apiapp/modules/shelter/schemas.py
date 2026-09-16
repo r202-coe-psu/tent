@@ -97,6 +97,10 @@ class ShelterDetail(BaseModel):
     admin_type: str
     address: str
     capacity: ShelterCapacityDetail
+    # CR-112 occupancy triple: occupancy = Forecast; present / in_zone additive.
+    occupancy: int = Field(description="Forecast Occupancy headcount")
+    present: int = Field(description="Present Occupancy headcount")
+    in_zone: int = Field(description="In-zone Occupancy headcount (room_confirmed)")
     occupancy_rate: int
     building_status: str
     geo: GeoPoint | None = None

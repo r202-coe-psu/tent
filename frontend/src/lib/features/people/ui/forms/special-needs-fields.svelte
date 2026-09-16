@@ -20,12 +20,15 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	let {
 		special_needs = $bindable<string[]>([]),
 		disabled = false,
-		label = 'ความต้องการเพิ่มเติม',
-		description = 'เลือกความต้องการเพิ่มเติมเพื่อการจัดสรรที่พักและการดูแลอย่างเหมาะสม'
+		label,
+		description
 	}: {
 		special_needs?: string[];
 		disabled?: boolean;
@@ -33,12 +36,33 @@
 		description?: string;
 	} = $props();
 
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const resolvedLabel = $derived(label === undefined ? t.specialNeedsExtraLabel : label);
+	const resolvedDescription = $derived(
+		description === undefined ? t.specialNeedsExtraDesc : description
+	);
+
+	const tagLabels = $derived({
+		ใช้วีลแชร์: t.specialNeedWheelchair,
+		ผู้ป่วยติดเตียง: t.specialNeedBedridden,
+		ใช้ออกซิเจน: t.specialNeedOxygen,
+		หญิงตั้งครรภ์: t.specialNeedPregnant,
+		'ทารก/เด็กเล็ก': t.specialNeedInfant,
+		ผู้พิการทางการมองเห็น: t.specialNeedVision,
+		ผู้พิการทางการได้ยิน: t.specialNeedHearing,
+		มีภาวะพึ่งพิงสูง: t.specialNeedHighDependency
+	} as Record<string, string>);
+
+	function displayTag(tag: string): string {
+		return tagLabels[tag] ?? tag;
+	}
+
 	let customTag = $state('');
 
 	function toggleTag(tag: string) {
 		if (disabled) return;
 		if (special_needs.includes(tag)) {
-			special_needs = special_needs.filter((t) => t !== tag);
+			special_needs = special_needs.filter((need) => need !== tag);
 		} else {
 			special_needs = [...special_needs, tag];
 		}
@@ -62,7 +86,7 @@
 
 	function removeTag(tag: string) {
 		if (disabled) return;
-		special_needs = special_needs.filter((t) => t !== tag);
+		special_needs = special_needs.filter((need) => need !== tag);
 	}
 
 	const customTagsInUse = $derived(
@@ -71,11 +95,11 @@
 </script>
 
 <div class="space-y-3">
-	{#if label}
+	{#if resolvedLabel}
 		<div class="space-y-0.5">
-			<Label class="text-sm font-semibold text-foreground">{label}</Label>
-			{#if description}
-				<p class="text-xs text-muted-foreground">{description}</p>
+			<Label class="text-sm font-semibold text-foreground">{resolvedLabel}</Label>
+			{#if resolvedDescription}
+				<p class="text-xs text-muted-foreground">{resolvedDescription}</p>
 			{/if}
 		</div>
 	{/if}
@@ -101,7 +125,7 @@
 				>
 					{#if checked}<Check class="size-3" aria-hidden="true" />{/if}
 				</span>
-				<span>{tag}</span>
+				<span>{displayTag(tag)}</span>
 			</button>
 		{/each}
 	</div>
@@ -120,7 +144,7 @@
 								type="button"
 								onclick={() => removeTag(tag)}
 								class="rounded-full p-0.5 hover:bg-amber-200 dark:hover:bg-amber-800"
-								aria-label={`ลบ ${tag}`}
+								aria-label={`${t.specialNeedsRemoveAria} ${tag}`}
 							>
 								<X class="size-3" />
 							</button>
@@ -136,7 +160,7 @@
 		<div class="flex gap-2 pt-1">
 			<Input
 				bind:value={customTag}
-				placeholder="ระบุความต้องการอื่นๆ (ถ้ามี)"
+				placeholder={t.specialNeedsCustomPlaceholder}
 				onkeydown={handleKeydown}
 				class="h-9 text-xs"
 			/>
@@ -149,7 +173,7 @@
 				class="h-9 shrink-0 gap-1 text-xs"
 			>
 				<Plus class="size-3.5" />
-				เพิ่ม
+				{t.specialNeedsAdd}
 			</Button>
 		</div>
 	{/if}

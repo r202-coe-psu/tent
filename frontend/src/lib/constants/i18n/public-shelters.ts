@@ -7,6 +7,8 @@ export const PUBLIC_SHELTERS_I18N = {
 		heroBadge: 'Public Shelter Dashboard',
 		totalShelters: 'ศูนย์พักพิงทั้งหมด',
 		openShelters: 'ศูนย์พักพิงที่เปิดใช้งาน',
+		evacCenters: 'ศูนย์อพยพ',
+		hostHouses: 'บ้านพี่เลี้ยง',
 		locationsUnit: 'แห่ง',
 		listTitle: 'รายชื่อศูนย์พักพิง',
 		noShelters: 'ไม่พบข้อมูลศูนย์พักพิง',
@@ -14,7 +16,11 @@ export const PUBLIC_SHELTERS_I18N = {
 		statusOpen: 'เปิดใช้งาน',
 		statusFull: 'เต็มความจุ',
 		statusPrepare: 'กำลังเตรียมการ',
-		statusClosed: 'ปิดทำการ'
+		statusClosed: 'ปิดทำการ',
+		mapView: 'แผนที่',
+		listView: 'รายการ',
+		filterBtn: 'ตัวกรอง',
+		viewOnMap: 'ดูบนแผนที่'
 	},
 	en: {
 		pageTitle: 'Check Shelter Status - Smart Shelter',
@@ -24,6 +30,8 @@ export const PUBLIC_SHELTERS_I18N = {
 		heroBadge: 'Public Shelter Dashboard',
 		totalShelters: 'Total Shelters',
 		openShelters: 'Open Shelters',
+		evacCenters: 'Evacuation Centers',
+		hostHouses: 'Host Houses',
 		locationsUnit: 'Locations',
 		listTitle: 'Shelter List',
 		noShelters: 'No shelter data found',
@@ -31,6 +39,10 @@ export const PUBLIC_SHELTERS_I18N = {
 		statusOpen: 'Open',
 		statusFull: 'Full',
 		statusPrepare: 'Preparing',
-		statusClosed: 'Closed'
+		statusClosed: 'Closed',
+		mapView: 'Map',
+		listView: 'List',
+		filterBtn: 'Filters',
+		viewOnMap: 'View on Map'
 	}
 } as const;

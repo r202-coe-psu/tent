@@ -9,7 +9,7 @@
 	<title>จัดการทรัพยากรแก๊ส · SmartShelter</title>
 </svelte:head>
 
-<div class="flex-1 overflow-auto">
+<div class="flex-1">
 	<!-- Header card -->
 	<div class="px-6 pt-5 pb-2">
 		<div class="mx-auto max-w-3xl">

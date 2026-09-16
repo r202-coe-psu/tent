@@ -41,10 +41,18 @@ class LocationDetailItem(LocationItem):
     facilities: list[str]
 
 
+class PaginationMeta(BaseModel):
+    page: int
+    limit: int
+    total: int
+    total_pages: int
+
+
 class LocationListEnvelope(BaseModel):
     status: int = 200
     message: str = "Found Data."
     result: list[LocationItem]
+    pagination: PaginationMeta | None = None
 
 
 class LocationDetailEnvelope(BaseModel):

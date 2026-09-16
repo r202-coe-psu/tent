@@ -112,7 +112,7 @@ async def test_seed_and_concurrent_inc_do_not_clobber_each_other(db: None) -> No
         now=now,
     )
 
-    collection = DonationNeedCounter.get_motor_collection()
+    collection = DonationNeedCounter.get_pymongo_collection()
     cid = counter_id(SHELTER, CAMPAIGN, "item:rice")
     # FastAPI's $inc lands between two worker seeds of the same campaign.
     await collection.update_one({"_id": cid}, {"$inc": {"reserved_qty": bson.Decimal128("3")}})

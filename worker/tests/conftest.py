@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 import pytest
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 from tent_model import close_db, init_db
 from tent_model.db import ALL_DOCUMENTS
@@ -20,11 +20,11 @@ async def db() -> AsyncGenerator[None, None]:
 	if "test" not in db_name:
 		pytest.skip("Refusing to run against a non-test database name.")
 
-	client = AsyncIOMotorClient(TEST_DATABASE_URI, serverSelectionTimeoutMS=1000)
+	client = AsyncMongoClient(TEST_DATABASE_URI, serverSelectionTimeoutMS=1000)
 	try:
 		await client.admin.command("ping")
 	except PyMongoError as exc:
-		client.close()
+		await client.close()
 		pytest.skip(f"MongoDB test database is not reachable: {exc}")
 
 	await init_db(TEST_DATABASE_URI)
@@ -33,5 +33,5 @@ async def db() -> AsyncGenerator[None, None]:
 	finally:
 		for model in ALL_DOCUMENTS:
 			await client[db_name][model.Settings.name].delete_many({})
-		client.close()
+		await client.close()
 		await close_db()

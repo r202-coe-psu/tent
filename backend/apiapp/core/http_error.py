@@ -3,7 +3,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 _M2_PREFIX = "/external/v1"
-_PARTNER_PREFIXES = ("/api/auth/token-third-party", "/api/thirdparty")
+
+
+def _is_partner_path(path: str) -> bool:
+    """Partner OAuth plane under /external — exclude legacy M2 /external/v1."""
+    return path.startswith("/external") and not path.startswith(_M2_PREFIX)
 
 
 def _partner_error_body(exc: HTTPException) -> dict:
@@ -30,6 +34,6 @@ async def http_error_handler(request: Request, exc: HTTPException) -> JSONRespon
             {"error": {"code": "error", "message": str(exc.detail)}},
             status_code=exc.status_code,
         )
-    if path.startswith(_PARTNER_PREFIXES):
+    if _is_partner_path(path):
         return JSONResponse(_partner_error_body(exc), status_code=exc.status_code)
     return JSONResponse({"errors": [exc.detail]}, status_code=exc.status_code)

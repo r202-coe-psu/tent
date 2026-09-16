@@ -170,50 +170,22 @@
               "ตรวจสอบศูนย์พักพิง" active)
             </li>
             <li>
-              <strong>Page Hero</strong> — dark navy card: badge "PUBLIC SHELTER
-              DASHBOARD" + heading "ตรวจสอบสถานะศูนย์พักพิง" + คำบรรยาย
-            </li>
-            <li>
               <strong>Metric Cards Row</strong> — 4 cards: ศูนย์พักพิงทั้งหมด /
               เปิดใช้งาน / ผู้พักพิงปัจจุบัน / กลุ่มเปราะบาง
             </li>
             <li>
-              <strong>Main 3-column Panel</strong> — ซ้าย: search + filter; กลาง:
-              map; ขวา: shelter list
+              <strong>Main Full Map Canvas with Overlaid UI</strong> — แผนที่แบบ
+              Full Map เต็มพื้นที่ โดยมี Floating UI วางซ้อนบนแผนที่ (ซ้าย: ค้นหาและตัวกรอง, ขวา: รายชื่อศูนย์พักพิง) สามารถพับ/ขยายได้ พร้อมระบบเปิด Popup ข้อมูลศูนย์พักพิงบนแผนที่ทันที
             </li>
             <li><strong>Footer</strong> — เครดิตระบบ (เหมือน landing)</li>
           </ol>
         </div>
       </section>
 
-      <!-- SECTION 1: HERO -->
+      <!-- SECTION 1: METRIC CARDS -->
       <section class="card bg-base-100 border border-base-300">
         <div class="card-body prose max-w-none">
-          <h2 class="card-title">1 · Page Hero</h2>
-          <ul>
-            <li>
-              Background: dark navy gradient, text ขาว (เหมือน landing hero)
-            </li>
-            <li>
-              Badge บนสุด: building icon +
-              <strong>"PUBLIC SHELTER DASHBOARD"</strong>
-            </li>
-            <li>
-              Heading: <strong>"ตรวจสอบสถานะศูนย์พักพิง"</strong>
-            </li>
-            <li>
-              Description: "ข้อมูลรวมศูนย์พักพิง สถานะความจุ
-              และเปอร์เซ็นต์ความหนาแน่นของผู้ประสบภัยตามเวลาจริง
-              เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- SECTION 2: METRIC CARDS -->
-      <section class="card bg-base-100 border border-base-300">
-        <div class="card-body prose max-w-none">
-          <h2 class="card-title">2 · Metric Cards Row</h2>
+          <h2 class="card-title">1 · Metric Cards Row</h2>
           <p>
             4 cards (4 คอลัมน์ desktop, 2×2 หรือ stack mobile). แต่ละ card: icon
             (ซ้าย) + label + ตัวเลขเด่น + หน่วย. ข้อมูล aggregate ระดับระบบ.
@@ -295,10 +267,10 @@
         </div>
       </section>
 
-      <!-- SECTION 3: SEARCH + FILTER -->
+      <!-- SECTION 2: SEARCH + FILTER -->
       <section class="card bg-base-100 border border-base-300">
         <div class="card-body prose max-w-none">
-          <h2 class="card-title">3 · Search &amp; Filter Panel (ซ้าย)</h2>
+          <h2 class="card-title">2 · Search &amp; Filter Panel (ซ้าย)</h2>
           <p>
             Panel "ค้นหา" — desktop คอลัมน์ซ้าย; mobile = collapsible ด้านบน list.
             ทุก filter เป็น <strong>client-side query param</strong> เท่านั้น —
@@ -373,10 +345,10 @@
         </div>
       </section>
 
-      <!-- SECTION 4: MAP -->
+      <!-- SECTION 3: MAP -->
       <section class="card bg-base-100 border border-base-300">
         <div class="card-body prose max-w-none">
-          <h2 class="card-title">4 · Map (กลาง)</h2>
+          <h2 class="card-title">3 · Map (กลาง)</h2>
           <ul>
             <li>
               แสดงหมุดศูนย์พักพิงตาม <code>geo</code> ของแต่ละศูนย์ (lat/lng) +
@@ -407,10 +379,10 @@
         </div>
       </section>
 
-      <!-- SECTION 5: SHELTER LIST -->
+      <!-- SECTION 4: SHELTER LIST -->
       <section class="card bg-base-100 border border-base-300">
         <div class="card-body prose max-w-none">
-          <h2 class="card-title">5 · Shelter List (ขวา)</h2>
+          <h2 class="card-title">4 · Shelter List (ขวา)</h2>
           <p>
             Header: "รายชื่อศูนย์พักพิง <strong>N แห่ง</strong>" + ปุ่ม
             "ดูรายการทั้งหมด". การ์ดต่อศูนย์ (scrollable):
@@ -488,10 +460,10 @@
         </div>
       </section>
 
-      <!-- SECTION 6: DATA EXPOSURE -->
+      <!-- SECTION 5: DATA EXPOSURE -->
       <section id="exposure" class="card bg-base-100 border border-base-300">
         <div class="card-body prose max-w-none">
-          <h2 class="card-title">6 · Data Exposure &amp; Privacy (PUB tier)</h2>
+          <h2 class="card-title">5 · Data Exposure &amp; Privacy (PUB tier)</h2>
           <div class="alert alert-info mb-2">
             <span
               >หลักการ PUB: aggregate ต่อศูนย์เท่านั้น · ไม่มีรายบุคคล · ไม่ drill
@@ -685,8 +657,8 @@
           </h2>
           <ul>
             <li>
-              <strong>WCAG 2.1 AA</strong> — contrast ≥ 4.5:1; metric บน dark
-              hero และ progress bar labels ต้องอ่านได้
+              <strong>WCAG 2.1 AA</strong> — contrast ≥ 4.5:1; metric และ
+              progress bar labels ต้องอ่านได้
             </li>
             <li>
               Search input + filter selects ต้องมี <code>aria-label</code> /
@@ -718,7 +690,7 @@
           <h2 class="card-title">UAT Checklist</h2>
           <ul>
             <li>
-              ☐ เปิด <code>/shelters</code> โดยไม่ login → เห็น hero + metric
+              ☐ เปิด <code>/shelters</code> โดยไม่ login → เห็น metric
               cards + filter + map + list
             </li>
             <li>

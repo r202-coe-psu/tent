@@ -27,11 +27,16 @@ def _discover_routers() -> list[tuple[str, APIRouter]]:
 
             try:
                 router_module = importlib.import_module(f"{module_name}.router")
+                name = module_name.split(".")[-1]
                 if hasattr(router_module, "router"):
                     router = router_module.router
                     if isinstance(router, APIRouter):
-                        name = module_name.split(".")[-1]
                         routers.append((name, router))
+                # Optional second surface (e.g. `/staff/v1/*` alongside `/public/v1/*`).
+                if hasattr(router_module, "staff_router"):
+                    staff_router = router_module.staff_router
+                    if isinstance(staff_router, APIRouter):
+                        routers.append((f"{name}_staff", staff_router))
             except ImportError:
                 continue
 

@@ -10,29 +10,12 @@ import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/ra
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 import { isDonationOutstanding } from '$lib/features/operations';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
-
-/**
- * Flatten FastAPI's error envelope into the shape the donor UI reads.
- *
- * `apiapp/core/http_error.py` wraps every `HTTPException` as `{ errors: [detail] }`,
- * but the wizard reads `data.error` and maps the code to Thai copy via
- * `publicDonationErrorMessage()`. Spreading the raw envelope would bury the code one
- * level down and silently downgrade every message to the generic fallback.
- */
-function unwrapFastapiError(body: unknown): Record<string, unknown> {
-	if (typeof body !== 'object' || body === null) return { error: 'Database save failed' };
-	const envelope = body as { errors?: unknown[] };
-	const detail = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
-	if (typeof detail === 'object' && detail !== null) return detail as Record<string, unknown>;
-	if (typeof detail === 'string') return { error: detail };
-	return body as Record<string, unknown>;
-}
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
@@ -149,7 +132,10 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		if (!apiRes.ok) {
 			const errBody = await apiRes.json().catch(() => ({}));
-			return json({ success: false, ...unwrapFastapiError(errBody) }, { status: apiRes.status });
+			return json(
+				{ success: false, ...unwrapFastapiError(errBody, 'Database save failed') },
+				{ status: apiRes.status }
+			);
 		}
 
 		const created = (await apiRes.json()) as {

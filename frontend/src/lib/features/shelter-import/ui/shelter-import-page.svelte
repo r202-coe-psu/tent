@@ -31,7 +31,7 @@
 	import ImportLogHistory from './import-log-history.svelte';
 
 	let { basePath }: { basePath?: string } = $props();
-	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/system-management/shelters'));
 
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
 

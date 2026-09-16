@@ -1,8 +1,8 @@
 from urllib.parse import urlparse
 
 import beanie
-import motor.motor_asyncio
 from loguru import logger
+from pymongo import AsyncMongoClient
 from tent_model import ALL_DOCUMENTS
 
 
@@ -29,9 +29,7 @@ class BeanieClient:
             # Log db name only — URI may embed credentials.
             logger.info(f"Connecting to MongoDB database: {db_name}")
 
-            self.client = motor.motor_asyncio.AsyncIOMotorClient(
-                settings.DATABASE_URI, connect=True
-            )
+            self.client = AsyncMongoClient(settings.DATABASE_URI)
 
             self.database = self.client[db_name]
             logger.debug(f"Using database: {self.database.name}")
@@ -53,7 +51,9 @@ class BeanieClient:
     async def close(self):
         """Close MongoDB connection"""
         if self.client:
-            self.client.close()
+            await self.client.close()
+            self.client = None
+            self.database = None
             logger.info("MongoDB connection closed")
 
     async def ping(self) -> bool:

@@ -1,31 +1,36 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
 	PYTHONUNBUFFERED=1 \
-	POETRY_VERSION=2.1.1 \
-	POETRY_NO_INTERACTION=1 \
-	POETRY_VIRTUALENVS_IN_PROJECT=true \
+	UV_COMPILE_BYTECODE=1 \
+	UV_LINK_MODE=copy \
 	APP_ENV=prod
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir "poetry==$POETRY_VERSION" \
-	&& groupadd --system --gid 1000 app \
+RUN groupadd --system --gid 1000 app \
 	&& useradd --system --uid 1000 --gid app --home /app --shell /usr/sbin/nologin app
 
-# Path dep must exist before poetry install (relative from backend = ../packages/tent-model).
-# Build context is the repo root (see docker-compose fastapi.build).
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy workspace configs for fast caching
+COPY pyproject.toml uv.lock /app/
 COPY packages/tent-model /app/packages/tent-model
-COPY backend/pyproject.toml backend/poetry.lock /app/backend/
+COPY backend/pyproject.toml /app/backend/pyproject.toml
 
-WORKDIR /app/backend
-RUN poetry install --no-root --without dev
+# Install dependencies without installing application package
+RUN uv sync --project backend --no-dev --no-install-project
 
+# Copy application code
 COPY backend/ /app/backend/
 
-RUN chown -R app:app /app
+# Install the application package
+RUN uv sync --project backend --no-dev \
+	&& chown -R app:app /app
 
-ENV PATH="/app/backend/.venv/bin:$PATH"
+WORKDIR /app/backend
+
+ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 9000
 
 USER app

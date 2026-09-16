@@ -212,7 +212,7 @@
 			"post": {
 				"tags": ["Donations"],
 				"summary": "Track Search Donation",
-				"description": "Resolve booking_ref (DN-\u2026) + phone \u2192 tracking_token (CR-052 \u00a72.6).",
+				"description": "Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6).",
 				"operationId": "track_search_donation_public_v1_donations_track_search_post",
 				"requestBody": {
 					"content": {
@@ -432,8 +432,8 @@
 		"/external/v1/shelters": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (get-list-shelter)",
-				"description": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e23\u0e30\u0e1a\u0e1a\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01 (M2).",
+				"summary": "ดึงรายการศูนย์พักพิง (get-list-shelter)",
+				"description": "ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).",
 				"operationId": "list_shelters_external_v1_shelters_get",
 				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
 				"parameters": [
@@ -443,10 +443,10 @@
 						"required": false,
 						"schema": {
 							"anyOf": [{ "type": "string" }, { "type": "null" }],
-							"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open",
+							"description": "กรองสถานะ เช่น open",
 							"title": "Status"
 						},
-						"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open"
+						"description": "กรองสถานะ เช่น open"
 					}
 				],
 				"responses": {
@@ -494,8 +494,8 @@
 		"/external/v1/persons/shelter-residency": {
 			"get": {
 				"tags": ["External"],
-				"summary": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01 (get-person-shelter-residency)",
-				"description": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e02\u0e2d\u0e07\u0e1c\u0e39\u0e49\u0e1b\u0e23\u0e30\u0e2a\u0e1a\u0e20\u0e31\u0e22\u0e08\u0e32\u0e01\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 (CID).",
+				"summary": "ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)",
+				"description": "ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).",
 				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
 				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
 				"parameters": [
@@ -505,10 +505,10 @@
 						"required": true,
 						"schema": {
 							"type": "string",
-							"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01",
+							"description": "เลขประจำตัวประชาชน 13 หลัก",
 							"title": "Cid"
 						},
-						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+						"description": "เลขประจำตัวประชาชน 13 หลัก"
 					}
 				],
 				"responses": {
@@ -883,6 +883,876 @@
 					}
 				}
 			}
+		},
+		"/external/token": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Issue Token",
+				"operationId": "issue_token_third_party_token_post",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/TokenResponse" } }
+						}
+					},
+					"400": {
+						"description": "Bad Request",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/TokenErrorResponse" }
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/TokenErrorResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients": {
+			"get": {
+				"tags": ["External"],
+				"summary": "List Clients",
+				"operationId": "list_clients_v1_admin_thirdparty_clients_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientListResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			},
+			"post": {
+				"tags": ["External"],
+				"summary": "Create Client",
+				"operationId": "create_client_v1_admin_thirdparty_clients_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ThirdPartyClientCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/revoke": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Revoke Client",
+				"operationId": "revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientRevokeResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/locations": {
+			"get": {
+				"tags": ["External"],
+				"summary": "List Locations",
+				"operationId": "list_locations_third_party_locations_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "Filter by location_status",
+							"title": "Status"
+						},
+						"description": "Filter by location_status"
+					},
+					{
+						"name": "updated_since",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+							"title": "Updated Since"
+						}
+					},
+					{
+						"name": "include_inactive",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Include soft-deleted (is_active=false) locations",
+							"default": false,
+							"title": "Include Inactive"
+						},
+						"description": "Include soft-deleted (is_active=false) locations"
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"description": "Page number",
+							"default": 1,
+							"title": "Page"
+						},
+						"description": "Page number"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"description": "Items per page",
+							"default": 50,
+							"title": "Limit"
+						},
+						"description": "Items per page"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LocationListEnvelope" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/locations/{location_code}": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Location",
+				"operationId": "get_location_third_party_locations__location_code__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "location_code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Location Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LocationDetailEnvelope" }
+							}
+						}
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LocationErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/locations/{location_code}/occupancy": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Location Occupancy",
+				"operationId": "get_location_occupancy_third_party_locations__location_code__occupancy_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "location_code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Location Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LocationOccupancyEnvelope" }
+							}
+						}
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/OccupancyErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/locations/{location_code}/occupants": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Location Occupants",
+				"operationId": "get_location_occupants_third_party_locations__location_code__occupants_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "location_code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Location Code" }
+					},
+					{
+						"name": "purpose",
+						"in": "query",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Purpose" }
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"description": "Page number",
+							"default": 1,
+							"title": "Page"
+						},
+						"description": "Page number"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"description": "Items per page",
+							"default": 50,
+							"title": "Limit"
+						},
+						"description": "Items per page"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/OccupantsEnvelope" } }
+						}
+					},
+					"400": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/OccupantsErrorResponse" }
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/OccupantsErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/OccupantsErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/locations/{location_code}/stock": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Location Stock",
+				"operationId": "get_location_stock_third_party_locations__location_code__stock_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "location_code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Location Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LocationStockEnvelope" }
+							}
+						}
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/StockErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/summary": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Summary",
+				"operationId": "get_summary_third_party_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/SummaryEnvelope" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/transparency/summary": {
+			"get": {
+				"tags": ["Transparency"],
+				"summary": "Get Transparency Summary",
+				"description": "System-wide public metrics from public_shelters + public_persons.",
+				"operationId": "get_transparency_summary_public_v1_transparency_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/TransparencySummaryResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/unassigned-registrations/photos": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Upload Unassigned Photo",
+				"description": "Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255).",
+				"operationId": "upload_unassigned_photo_public_v1_unassigned_registrations_photos_post",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedPhotoUploadResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/unassigned-registrations": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Create Unassigned Registration",
+				"description": "Public pre-registration without a shelter — writes Mongo only (FR-UR-01).",
+				"operationId": "create_unassigned_registration_public_v1_unassigned_registrations_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedRegistrationCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/staff/v1/unassigned-registrations/search": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Search Unassigned Registrations",
+				"description": "Staff online search of open Unassigned Registrations (FR-UR-02 / #245 / #251).\n\nAuth is shelter-scoped staff or SA (matches BFF) so Station 1 can federate\nanti-dupe for non-claim roles; claim remains ``require_registration_staff``.",
+				"operationId": "search_unassigned_registrations_staff_v1_unassigned_registrations_search_get",
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Name, phone, or person id of an open member",
+							"default": "",
+							"title": "Q"
+						},
+						"description": "Name, phone, or person id of an open member"
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationSearchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/stats": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Unassigned Registration Stats",
+				"description": "SA-only open-queue counts for system overview KPIs.",
+				"operationId": "unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get",
+				"parameters": [
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationStatsResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "List Unassigned Registrations",
+				"description": "SA-only paginated open Unassigned Registrations (system overview PII).",
+				"operationId": "list_unassigned_registrations_staff_v1_unassigned_registrations_get",
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": { "type": "string", "default": "", "title": "Q" }
+					},
+					{
+						"name": "province",
+						"in": "query",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" }
+					},
+					{
+						"name": "district",
+						"in": "query",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" }
+					},
+					{
+						"name": "subdistrict",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Subdistrict"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": { "type": "integer", "minimum": 0, "default": 0, "title": "Offset" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/{registration_id}": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Get Unassigned Registration",
+				"description": "SA-only Unassigned Registration detail (read-only profile).",
+				"operationId": "get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationDetailResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Delete Unassigned Registration",
+				"description": "system_admin hard-delete of a central-queue document (FR-UR-04 / #246).",
+				"operationId": "delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"204": { "description": "Successful Response" },
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/{registration_id}/claim": {
+			"post": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Claim Unassigned Registration",
+				"description": "Claim open members into this shelter — Couch birth at pre_registered (#247).",
+				"operationId": "claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedRegistrationClaimRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationClaimResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"components": {
@@ -949,7 +1819,7 @@
 					"api_key"
 				],
 				"title": "ApiKeyCreateResponse",
-				"description": "Create response \u2014 plaintext ``api_key`` is returned once."
+				"description": "Create response — plaintext ``api_key`` is returned once."
 			},
 			"ApiKeyListResponse": {
 				"properties": {
@@ -996,6 +1866,57 @@
 				"required": ["key"],
 				"title": "ApiKeyRevokeResponse"
 			},
+			"Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post": {
+				"properties": {
+					"full": {
+						"type": "string",
+						"contentMediaType": "application/octet-stream",
+						"title": "Full"
+					},
+					"thumb": {
+						"anyOf": [
+							{ "type": "string", "contentMediaType": "application/octet-stream" },
+							{ "type": "null" }
+						],
+						"title": "Thumb"
+					},
+					"filename": { "type": "string", "title": "Filename", "default": "face.webp" },
+					"content_type": { "type": "string", "title": "Content Type", "default": "image/webp" },
+					"width": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Width" },
+					"height": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Height" },
+					"original_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Original Size"
+					},
+					"compressed_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Compressed Size"
+					},
+					"thumbnail_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Thumbnail Size"
+					}
+				},
+				"type": "object",
+				"required": ["full"],
+				"title": "Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post"
+			},
+			"ClaimedMemberOut": {
+				"properties": {
+					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
+					"status": {
+						"type": "string",
+						"const": "claimed",
+						"title": "Status",
+						"default": "claimed"
+					},
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": { "type": "string", "title": "Last Name" }
+				},
+				"type": "object",
+				"required": ["reserved_evacuee_id", "first_name", "last_name"],
+				"title": "ClaimedMemberOut"
+			},
 			"ConfigResponse": {
 				"properties": {
 					"faqs": {
@@ -1019,6 +1940,17 @@
 				},
 				"type": "object",
 				"title": "ConfigResponse"
+			},
+			"CriticalItem": {
+				"properties": {
+					"name_th": { "type": "string", "title": "Name Th" },
+					"quantity_on_hand": { "type": "number", "title": "Quantity On Hand" },
+					"unit_label": { "type": "string", "title": "Unit Label" },
+					"level": { "type": "string", "title": "Level" }
+				},
+				"type": "object",
+				"required": ["name_th", "quantity_on_hand", "unit_label", "level"],
+				"title": "CriticalItem"
 			},
 			"DonationCancelResponse": {
 				"properties": {
@@ -1146,7 +2078,7 @@
 				"type": "object",
 				"required": ["booking_ref", "phone"],
 				"title": "DonationTrackSearchRequest",
-				"description": "CR-052 \u00a72.6 \u2014 human booking_ref + phone exact match (not token alone)."
+				"description": "CR-052 §2.6 — human booking_ref + phone exact match (not token alone)."
 			},
 			"DonationTrackSearchResponse": {
 				"properties": {
@@ -1178,6 +2110,25 @@
 				"required": ["name", "phone"],
 				"title": "DonorInput"
 			},
+			"EmergencyContactInput": {
+				"properties": {
+					"name": { "type": "string", "title": "Name", "default": "" },
+					"phone": { "type": "string", "title": "Phone", "default": "" },
+					"relation": { "type": "string", "title": "Relation", "default": "" }
+				},
+				"type": "object",
+				"title": "EmergencyContactInput"
+			},
+			"EmergencyContactOut": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"phone": { "type": "string", "title": "Phone" },
+					"relation": { "type": "string", "title": "Relation" }
+				},
+				"type": "object",
+				"required": ["name", "phone", "relation"],
+				"title": "EmergencyContactOut"
+			},
 			"FamilyMember": {
 				"properties": {
 					"name": { "type": "string", "title": "Name" },
@@ -1193,6 +2144,14 @@
 					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
 					"question": { "type": "string", "title": "Question" },
 					"answer": { "type": "string", "title": "Answer" },
+					"question_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Question En"
+					},
+					"answer_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Answer En"
+					},
 					"is_published": { "type": "boolean", "title": "Is Published", "default": true },
 					"order": { "type": "integer", "title": "Order", "default": 0 }
 				},
@@ -1235,6 +2194,363 @@
 				"required": ["status"],
 				"title": "HealthCheckResponse"
 			},
+			"HouseholdInput": {
+				"properties": {
+					"housing_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"]
+							},
+							{ "type": "null" }
+						],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"pets": {
+						"items": { "$ref": "#/components/schemas/PetInput" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" }
+				},
+				"type": "object",
+				"title": "HouseholdInput"
+			},
+			"HouseholdOut": {
+				"properties": {
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" }
+				},
+				"type": "object",
+				"title": "HouseholdOut"
+			},
+			"LocationDetailEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/LocationDetailItem" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "LocationDetailEnvelope"
+			},
+			"LocationDetailItem": {
+				"properties": {
+					"location_code": { "type": "string", "title": "Location Code" },
+					"name_th": { "type": "string", "title": "Name Th" },
+					"name_short": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Name Short"
+					},
+					"location_type": { "type": "string", "title": "Location Type" },
+					"location_subtype": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Subtype"
+					},
+					"location_status": { "type": "string", "title": "Location Status" },
+					"latitude": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Latitude" },
+					"longitude": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Longitude"
+					},
+					"address": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Address" },
+					"subdistrict_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict Code"
+					},
+					"district_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "District Code"
+					},
+					"province_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Province Code"
+					},
+					"capacity": { "type": "integer", "title": "Capacity" },
+					"contact_phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Phone"
+					},
+					"contact_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Name"
+					},
+					"operating_org": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Operating Org"
+					},
+					"accepts_delivery": { "type": "boolean", "title": "Accepts Delivery" },
+					"delivery_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Delivery Note"
+					},
+					"opened_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Opened At"
+					},
+					"closed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Closed At"
+					},
+					"is_active": { "type": "boolean", "title": "Is Active" },
+					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
+					"facilities": { "items": { "type": "string" }, "type": "array", "title": "Facilities" }
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"name_th",
+					"name_short",
+					"location_type",
+					"location_subtype",
+					"location_status",
+					"latitude",
+					"longitude",
+					"address",
+					"subdistrict_code",
+					"district_code",
+					"province_code",
+					"capacity",
+					"contact_phone",
+					"contact_name",
+					"operating_org",
+					"accepts_delivery",
+					"delivery_note",
+					"opened_at",
+					"closed_at",
+					"is_active",
+					"occupancy_total",
+					"updated_at",
+					"facilities"
+				],
+				"title": "LocationDetailItem"
+			},
+			"LocationErrorDetail": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "LocationErrorDetail"
+			},
+			"LocationErrorResponse": {
+				"properties": { "error": { "$ref": "#/components/schemas/LocationErrorDetail" } },
+				"type": "object",
+				"required": ["error"],
+				"title": "LocationErrorResponse"
+			},
+			"LocationItem": {
+				"properties": {
+					"location_code": { "type": "string", "title": "Location Code" },
+					"name_th": { "type": "string", "title": "Name Th" },
+					"name_short": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Name Short"
+					},
+					"location_type": { "type": "string", "title": "Location Type" },
+					"location_subtype": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Subtype"
+					},
+					"location_status": { "type": "string", "title": "Location Status" },
+					"latitude": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Latitude" },
+					"longitude": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Longitude"
+					},
+					"address": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Address" },
+					"subdistrict_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict Code"
+					},
+					"district_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "District Code"
+					},
+					"province_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Province Code"
+					},
+					"capacity": { "type": "integer", "title": "Capacity" },
+					"contact_phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Phone"
+					},
+					"contact_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Name"
+					},
+					"operating_org": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Operating Org"
+					},
+					"accepts_delivery": { "type": "boolean", "title": "Accepts Delivery" },
+					"delivery_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Delivery Note"
+					},
+					"opened_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Opened At"
+					},
+					"closed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Closed At"
+					},
+					"is_active": { "type": "boolean", "title": "Is Active" },
+					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"name_th",
+					"name_short",
+					"location_type",
+					"location_subtype",
+					"location_status",
+					"latitude",
+					"longitude",
+					"address",
+					"subdistrict_code",
+					"district_code",
+					"province_code",
+					"capacity",
+					"contact_phone",
+					"contact_name",
+					"operating_org",
+					"accepts_delivery",
+					"delivery_note",
+					"opened_at",
+					"closed_at",
+					"is_active",
+					"occupancy_total",
+					"updated_at"
+				],
+				"title": "LocationItem"
+			},
+			"LocationListEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": {
+						"items": { "$ref": "#/components/schemas/LocationItem" },
+						"type": "array",
+						"title": "Result"
+					},
+					"pagination": {
+						"anyOf": [{ "$ref": "#/components/schemas/PaginationMeta" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "LocationListEnvelope"
+			},
+			"LocationOccupancyEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/LocationOccupancyResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "LocationOccupancyEnvelope"
+			},
+			"LocationOccupancyResult": {
+				"properties": {
+					"location_code": { "type": "string", "title": "Location Code" },
+					"capacity": { "type": "integer", "title": "Capacity" },
+					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
+					"breakdown": { "$ref": "#/components/schemas/OccupancyBreakdownItem" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
+					"updated_by_role": { "type": "string", "title": "Updated By Role" }
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"capacity",
+					"occupancy_total",
+					"breakdown",
+					"updated_at",
+					"updated_by_role"
+				],
+				"title": "LocationOccupancyResult"
+			},
+			"LocationStockEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/LocationStockResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "LocationStockEnvelope"
+			},
+			"LocationStockResult": {
+				"properties": {
+					"location_code": { "type": "string", "title": "Location Code" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
+					"items": {
+						"items": { "$ref": "#/components/schemas/StockItem" },
+						"type": "array",
+						"title": "Items"
+					}
+				},
+				"type": "object",
+				"required": ["location_code", "updated_at", "items"],
+				"title": "LocationStockResult"
+			},
 			"M2ErrorDetail": {
 				"properties": {
 					"code": { "type": "string", "title": "Code" },
@@ -1255,27 +2571,44 @@
 					"shelter_id": {
 						"type": "string",
 						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "รหัสศูนย์พักพิง"
 					},
 					"shelter_name": {
 						"type": "string",
 						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "ชื่อศูนย์พักพิง"
 					},
 					"checkin_datetime": {
 						"type": "string",
 						"title": "Checkin Datetime",
-						"description": "\u0e27\u0e31\u0e19\u0e40\u0e27\u0e25\u0e32\u0e17\u0e35\u0e48\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (ISO 8601 \u0e1e\u0e23\u0e49\u0e2d\u0e21 timezone \u0e40\u0e0a\u0e48\u0e19 2026-08-20T14:30:00+07:00)"
+						"description": "วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
 					},
 					"status": {
 						"type": "string",
 						"enum": ["CHECKED_IN", "CHECKED_OUT"],
 						"title": "Status",
-						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01"
+						"description": "สถานะการเข้าพัก"
+					},
+					"stay_status": {
+						"type": "string",
+						"title": "Stay Status",
+						"description": "สถานะ stay ดิบจาก projection (CR-112 additive)"
+					},
+					"in_zone": {
+						"type": "boolean",
+						"title": "In Zone",
+						"description": "True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)"
 					}
 				},
 				"type": "object",
-				"required": ["shelter_id", "shelter_name", "checkin_datetime", "status"],
+				"required": [
+					"shelter_id",
+					"shelter_name",
+					"checkin_datetime",
+					"status",
+					"stay_status",
+					"in_zone"
+				],
 				"title": "M2PersonResidencyResponse"
 			},
 			"M2ShelterItem": {
@@ -1283,34 +2616,124 @@
 					"shelter_id": {
 						"type": "string",
 						"title": "Shelter Id",
-						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 \u0e40\u0e0a\u0e48\u0e19 SH001"
+						"description": "รหัสศูนย์พักพิง เช่น SH001"
 					},
 					"shelter_name": {
 						"type": "string",
 						"title": "Shelter Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+						"description": "ชื่อศูนย์พักพิง"
 					},
 					"site_kind": {
 						"type": "string",
 						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
-						"description": "\u0e0a\u0e19\u0e34\u0e14\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48",
+						"description": "ชนิดสถานที่",
 						"default": "evacuation_center"
 					},
 					"lat": {
 						"anyOf": [{ "type": "number" }, { "type": "null" }],
 						"title": "Lat",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e30\u0e15\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+						"description": "พิกัดละติจูด (WGS 84)"
 					},
 					"long": {
 						"anyOf": [{ "type": "number" }, { "type": "null" }],
 						"title": "Long",
-						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e2d\u0e07\u0e08\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+						"description": "พิกัดลองจิจูด (WGS 84)"
 					}
 				},
 				"type": "object",
 				"required": ["shelter_id", "shelter_name"],
 				"title": "M2ShelterItem"
+			},
+			"MemberCreated": {
+				"properties": {
+					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
+					"status": {
+						"type": "string",
+						"enum": ["open", "claimed", "cancelled"],
+						"title": "Status"
+					},
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": { "type": "string", "title": "Last Name" },
+					"gender": { "type": "string", "title": "Gender" },
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
+					"person_id": {
+						"anyOf": [{ "$ref": "#/components/schemas/PersonIdOut" }, { "type": "null" }]
+					},
+					"country": { "type": "string", "title": "Country" },
+					"vulnerable_groups": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Vulnerable Groups"
+					},
+					"special_needs": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Special Needs"
+					},
+					"birth_year": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Birth Year"
+					},
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
+					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
+					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"emergency_contact": {
+						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
+					},
+					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" }
+				},
+				"type": "object",
+				"required": [
+					"reserved_evacuee_id",
+					"status",
+					"first_name",
+					"last_name",
+					"gender",
+					"country"
+				],
+				"title": "MemberCreated"
+			},
+			"MemberInput": {
+				"properties": {
+					"first_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "First Name"
+					},
+					"last_name": { "type": "string", "title": "Last Name", "default": "" },
+					"gender": { "type": "string", "enum": ["male", "female", "other"], "title": "Gender" },
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
+					"person_id": {
+						"anyOf": [{ "$ref": "#/components/schemas/PersonIdInput" }, { "type": "null" }]
+					},
+					"country": { "type": "string", "title": "Country", "default": "THAILAND" },
+					"vulnerable_groups": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Vulnerable Groups"
+					},
+					"special_needs": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Special Needs"
+					},
+					"birth_year": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Birth Year"
+					},
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
+					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
+					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"emergency_contact": {
+						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactInput" }, { "type": "null" }]
+					},
+					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" }
+				},
+				"type": "object",
+				"required": ["first_name", "gender"],
+				"title": "MemberInput"
 			},
 			"NeedItemResponse": {
 				"properties": {
@@ -1337,6 +2760,130 @@
 				"required": ["shelters", "as_of"],
 				"title": "NeedsListResponse"
 			},
+			"OccupancyBreakdownItem": {
+				"properties": {
+					"male": { "type": "integer", "title": "Male" },
+					"female": { "type": "integer", "title": "Female" },
+					"child_under_5": { "type": "integer", "title": "Child Under 5" },
+					"elderly_over_60": { "type": "integer", "title": "Elderly Over 60" },
+					"pregnant": { "type": "integer", "title": "Pregnant" },
+					"bedridden": { "type": "integer", "title": "Bedridden" },
+					"disabled": { "type": "integer", "title": "Disabled" }
+				},
+				"type": "object",
+				"required": [
+					"male",
+					"female",
+					"child_under_5",
+					"elderly_over_60",
+					"pregnant",
+					"bedridden",
+					"disabled"
+				],
+				"title": "OccupancyBreakdownItem"
+			},
+			"OccupancyErrorDetail": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "OccupancyErrorDetail"
+			},
+			"OccupancyErrorResponse": {
+				"properties": { "error": { "$ref": "#/components/schemas/OccupancyErrorDetail" } },
+				"type": "object",
+				"required": ["error"],
+				"title": "OccupancyErrorResponse"
+			},
+			"OccupantItem": {
+				"properties": {
+					"occupant_ref": { "type": "string", "title": "Occupant Ref" },
+					"name_masked": { "type": "string", "title": "Name Masked" },
+					"age_range": { "type": "string", "title": "Age Range" },
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"care_flags": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Care Flags",
+						"default": []
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked In At"
+					}
+				},
+				"type": "object",
+				"required": ["occupant_ref", "name_masked", "age_range"],
+				"title": "OccupantItem"
+			},
+			"OccupantsEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": {
+						"items": { "$ref": "#/components/schemas/OccupantItem" },
+						"type": "array",
+						"title": "Result",
+						"default": []
+					},
+					"pagination": {
+						"anyOf": [{ "$ref": "#/components/schemas/PaginationMeta" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"title": "OccupantsEnvelope"
+			},
+			"OccupantsErrorResponse": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status" },
+					"message": { "type": "string", "title": "Message" },
+					"detail": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Detail" }
+				},
+				"type": "object",
+				"required": ["status", "message"],
+				"title": "OccupantsErrorResponse"
+			},
+			"OpenMemberHit": {
+				"properties": {
+					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
+					"status": { "type": "string", "const": "open", "title": "Status", "default": "open" },
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": { "type": "string", "title": "Last Name" },
+					"gender": { "type": "string", "title": "Gender" },
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
+					"person_id": {
+						"anyOf": [{ "$ref": "#/components/schemas/PersonIdOut" }, { "type": "null" }]
+					},
+					"country": { "type": "string", "title": "Country" },
+					"vulnerable_groups": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Vulnerable Groups"
+					},
+					"special_needs": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Special Needs"
+					},
+					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
+					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"emergency_contact": {
+						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
+					},
+					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" },
+					"birth_year": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Birth Year"
+					},
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" }
+				},
+				"type": "object",
+				"required": ["reserved_evacuee_id", "first_name", "last_name", "gender", "country"],
+				"title": "OpenMemberHit",
+				"description": "Open member surfaced by staff search — claimable (not claimed/cancelled)."
+			},
 			"PaginatedAnnouncements": {
 				"properties": {
 					"items": {
@@ -1353,6 +2900,62 @@
 				"required": ["items", "total", "page", "size", "total_pages"],
 				"title": "PaginatedAnnouncements"
 			},
+			"PaginationMeta": {
+				"properties": {
+					"page": { "type": "integer", "title": "Page" },
+					"limit": { "type": "integer", "title": "Limit" },
+					"total": { "type": "integer", "title": "Total" },
+					"total_pages": { "type": "integer", "title": "Total Pages" }
+				},
+				"type": "object",
+				"required": ["page", "limit", "total", "total_pages"],
+				"title": "PaginationMeta"
+			},
+			"PersonIdInput": {
+				"properties": {
+					"cardType": {
+						"type": "string",
+						"enum": ["national_id", "passport", "pink_card", "other", "anonymous"],
+						"title": "Cardtype",
+						"default": "national_id"
+					},
+					"number": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Number" }
+				},
+				"type": "object",
+				"title": "PersonIdInput"
+			},
+			"PersonIdOut": {
+				"properties": {
+					"cardType": {
+						"type": "string",
+						"enum": ["national_id", "passport", "pink_card", "other", "anonymous"],
+						"title": "Cardtype"
+					},
+					"number": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Number" }
+				},
+				"type": "object",
+				"required": ["cardType"],
+				"title": "PersonIdOut",
+				"description": "Person id on create responses — distinct from request PersonIdInput."
+			},
+			"PetInput": {
+				"properties": {
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": {
+						"type": "integer",
+						"maximum": 50.0,
+						"minimum": 1.0,
+						"title": "Count",
+						"default": 1
+					},
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Image Url" }
+				},
+				"type": "object",
+				"required": ["species"],
+				"title": "PetInput"
+			},
 			"PublicAnnouncement": {
 				"properties": {
 					"_id": {
@@ -1362,6 +2965,11 @@
 					},
 					"title": { "type": "string", "title": "Title" },
 					"description": { "type": "string", "title": "Description" },
+					"title_en": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Title En" },
+					"description_en": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description En"
+					},
 					"severity": {
 						"type": "string",
 						"enum": ["info", "warning", "emergency"],
@@ -1407,6 +3015,10 @@
 					},
 					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
 					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Address"
+					},
 					"origin_address": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Origin Address"
@@ -1418,6 +3030,10 @@
 					"care_zone": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Care Zone"
+					},
+					"zone_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Zone Name"
 					},
 					"family_members": {
 						"items": { "$ref": "#/components/schemas/FamilyMember" },
@@ -1474,6 +3090,21 @@
 					"admin_type": { "type": "string", "title": "Admin Type" },
 					"address": { "type": "string", "title": "Address" },
 					"capacity": { "$ref": "#/components/schemas/ShelterCapacityDetail" },
+					"occupancy": {
+						"type": "integer",
+						"title": "Occupancy",
+						"description": "Forecast Occupancy headcount"
+					},
+					"present": {
+						"type": "integer",
+						"title": "Present",
+						"description": "Present Occupancy headcount"
+					},
+					"in_zone": {
+						"type": "integer",
+						"title": "In Zone",
+						"description": "In-zone Occupancy headcount (room_confirmed)"
+					},
 					"occupancy_rate": { "type": "integer", "title": "Occupancy Rate" },
 					"building_status": { "type": "string", "title": "Building Status" },
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
@@ -1505,6 +3136,9 @@
 					"admin_type",
 					"address",
 					"capacity",
+					"occupancy",
+					"present",
+					"in_zone",
 					"occupancy_rate",
 					"building_status",
 					"admission_policy",
@@ -1646,6 +3280,549 @@
 				"type": "object",
 				"required": ["type"],
 				"title": "ShelterZoneDetail"
+			},
+			"StockErrorDetail": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "StockErrorDetail"
+			},
+			"StockErrorResponse": {
+				"properties": { "error": { "$ref": "#/components/schemas/StockErrorDetail" } },
+				"type": "object",
+				"required": ["error"],
+				"title": "StockErrorResponse"
+			},
+			"StockItem": {
+				"properties": {
+					"m6_reference_id": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "M6 Reference Id"
+					},
+					"m6_item_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "M6 Item Code"
+					},
+					"name_th": { "type": "string", "title": "Name Th" },
+					"type_code": { "type": "string", "title": "Type Code" },
+					"unit_label": { "type": "string", "title": "Unit Label" },
+					"unit_ratio": { "type": "number", "title": "Unit Ratio" },
+					"quantity_on_hand": { "type": "number", "title": "Quantity On Hand" },
+					"source": { "type": "string", "title": "Source" }
+				},
+				"type": "object",
+				"required": [
+					"m6_reference_id",
+					"m6_item_code",
+					"name_th",
+					"type_code",
+					"unit_label",
+					"unit_ratio",
+					"quantity_on_hand",
+					"source"
+				],
+				"title": "StockItem"
+			},
+			"SummaryEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/SummaryResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "SummaryEnvelope"
+			},
+			"SummaryLocationItem": {
+				"properties": {
+					"location_code": { "type": "string", "title": "Location Code" },
+					"name_th": { "type": "string", "title": "Name Th" },
+					"location_status": { "type": "string", "title": "Location Status" },
+					"latitude": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Latitude" },
+					"longitude": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Longitude"
+					},
+					"capacity": { "type": "integer", "title": "Capacity" },
+					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
+					"critical_items": {
+						"items": { "$ref": "#/components/schemas/CriticalItem" },
+						"type": "array",
+						"title": "Critical Items"
+					},
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"name_th",
+					"location_status",
+					"latitude",
+					"longitude",
+					"capacity",
+					"occupancy_total",
+					"critical_items",
+					"updated_at"
+				],
+				"title": "SummaryLocationItem"
+			},
+			"SummaryResult": {
+				"properties": {
+					"generated_at": { "type": "string", "format": "date-time", "title": "Generated At" },
+					"location_count": { "type": "integer", "title": "Location Count" },
+					"occupancy_total": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Occupancy Total"
+					},
+					"capacity_total": { "type": "integer", "title": "Capacity Total" },
+					"locations": {
+						"items": { "$ref": "#/components/schemas/SummaryLocationItem" },
+						"type": "array",
+						"title": "Locations"
+					}
+				},
+				"type": "object",
+				"required": ["generated_at", "location_count", "capacity_total", "locations"],
+				"title": "SummaryResult"
+			},
+			"ThirdPartyClientCreateRequest": {
+				"properties": {
+					"client_id": { "type": "string", "minLength": 1, "title": "Client Id" },
+					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Allowed Scopes"
+					}
+				},
+				"type": "object",
+				"required": ["client_id", "module_name", "allowed_scopes"],
+				"title": "ThirdPartyClientCreateRequest"
+			},
+			"ThirdPartyClientCreateResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"client_id": { "type": "string", "title": "Client Id" },
+					"module_name": { "type": "string", "title": "Module Name" },
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Allowed Scopes"
+					},
+					"is_active": { "type": "boolean", "title": "Is Active" },
+					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
+					"client_secret": { "type": "string", "title": "Client Secret" }
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"client_id",
+					"module_name",
+					"allowed_scopes",
+					"is_active",
+					"created_at",
+					"updated_at",
+					"client_secret"
+				],
+				"title": "ThirdPartyClientCreateResponse",
+				"description": "Create response — plaintext ``client_secret`` is returned once."
+			},
+			"ThirdPartyClientListResponse": {
+				"properties": {
+					"clients": {
+						"items": { "$ref": "#/components/schemas/ThirdPartyClientPublic" },
+						"type": "array",
+						"title": "Clients"
+					},
+					"count": { "type": "integer", "title": "Count" }
+				},
+				"type": "object",
+				"required": ["clients", "count"],
+				"title": "ThirdPartyClientListResponse"
+			},
+			"ThirdPartyClientPublic": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"client_id": { "type": "string", "title": "Client Id" },
+					"module_name": { "type": "string", "title": "Module Name" },
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Allowed Scopes"
+					},
+					"is_active": { "type": "boolean", "title": "Is Active" },
+					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"client_id",
+					"module_name",
+					"allowed_scopes",
+					"is_active",
+					"created_at",
+					"updated_at"
+				],
+				"title": "ThirdPartyClientPublic",
+				"description": "Client metadata without the secret hash."
+			},
+			"ThirdPartyClientRevokeResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"client": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+				},
+				"type": "object",
+				"required": ["client"],
+				"title": "ThirdPartyClientRevokeResponse"
+			},
+			"TokenErrorDetail": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "TokenErrorDetail"
+			},
+			"TokenErrorResponse": {
+				"properties": { "error": { "$ref": "#/components/schemas/TokenErrorDetail" } },
+				"type": "object",
+				"required": ["error"],
+				"title": "TokenErrorResponse"
+			},
+			"TokenRequest": {
+				"properties": {
+					"grant_type": { "type": "string", "title": "Grant Type" },
+					"client_id": { "type": "string", "maxLength": 64, "minLength": 1, "title": "Client Id" },
+					"client_secret": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Client Secret"
+					}
+				},
+				"type": "object",
+				"required": ["grant_type", "client_id", "client_secret"],
+				"title": "TokenRequest"
+			},
+			"TokenResponse": {
+				"properties": {
+					"access_token": { "type": "string", "title": "Access Token" },
+					"token_type": {
+						"type": "string",
+						"const": "Bearer",
+						"title": "Token Type",
+						"default": "Bearer"
+					},
+					"expires_in": { "type": "integer", "title": "Expires In" },
+					"module_name": { "type": "string", "title": "Module Name" },
+					"scopes": { "items": { "type": "string" }, "type": "array", "title": "Scopes" }
+				},
+				"type": "object",
+				"required": ["access_token", "expires_in", "module_name", "scopes"],
+				"title": "TokenResponse"
+			},
+			"TransparencySummary": {
+				"properties": {
+					"shelters_total": { "type": "integer", "minimum": 0.0, "title": "Shelters Total" },
+					"shelters_open": {
+						"type": "integer",
+						"minimum": 0.0,
+						"title": "Shelters Open",
+						"description": "status in {open, full}"
+					},
+					"occupancy_total": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Occupancy Total",
+						"description": "active + pre_registered across projected shelters (CR-070)"
+					},
+					"vulnerable_count": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Vulnerable Count",
+						"description": "Not projected in public_persons yet — always null until schema adds age"
+					}
+				},
+				"type": "object",
+				"required": ["shelters_total", "shelters_open"],
+				"title": "TransparencySummary"
+			},
+			"TransparencySummaryResponse": {
+				"properties": {
+					"summary": { "$ref": "#/components/schemas/TransparencySummary" },
+					"last_updated": { "type": "string", "format": "date-time", "title": "Last Updated" },
+					"is_stale": { "type": "boolean", "title": "Is Stale", "default": false },
+					"flags": {
+						"additionalProperties": { "type": "boolean" },
+						"type": "object",
+						"title": "Flags"
+					}
+				},
+				"type": "object",
+				"required": ["summary", "last_updated"],
+				"title": "TransparencySummaryResponse"
+			},
+			"UnassignedPhotoUploadResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"photo_id": { "type": "string", "title": "Photo Id" },
+					"content_type": { "type": "string", "title": "Content Type" },
+					"filename": { "type": "string", "title": "Filename" },
+					"width": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Width" },
+					"height": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Height" },
+					"original_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Original Size"
+					},
+					"compressed_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Compressed Size"
+					},
+					"thumbnail_size": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Thumbnail Size"
+					}
+				},
+				"type": "object",
+				"required": ["photo_id", "content_type", "filename"],
+				"title": "UnassignedPhotoUploadResponse",
+				"description": "Response from POST /public/v1/unassigned-registrations/photos."
+			},
+			"UnassignedRegistrationClaimRequest": {
+				"properties": {
+					"member_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 20,
+						"minItems": 1,
+						"title": "Member Ids"
+					},
+					"shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Code"
+					}
+				},
+				"type": "object",
+				"required": ["member_ids"],
+				"title": "UnassignedRegistrationClaimRequest",
+				"description": "Staff claim — body selects open member reserved ids (CR-113 / #247)."
+			},
+			"UnassignedRegistrationClaimResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
+					"deleted": { "type": "boolean", "title": "Deleted" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"household_id": { "type": "string", "title": "Household Id" },
+					"evacuee_ids": { "items": { "type": "string" }, "type": "array", "title": "Evacuee Ids" },
+					"claimed": {
+						"items": { "$ref": "#/components/schemas/ClaimedMemberOut" },
+						"type": "array",
+						"title": "Claimed"
+					},
+					"remaining_open": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Remaining Open"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"deleted",
+					"shelter_code",
+					"household_id",
+					"evacuee_ids",
+					"claimed",
+					"remaining_open"
+				],
+				"title": "UnassignedRegistrationClaimResponse"
+			},
+			"UnassignedRegistrationCreateRequest": {
+				"properties": {
+					"members": {
+						"items": { "$ref": "#/components/schemas/MemberInput" },
+						"type": "array",
+						"maxItems": 20,
+						"minItems": 1,
+						"title": "Members"
+					},
+					"household": { "$ref": "#/components/schemas/HouseholdInput" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via",
+						"default": "web"
+					}
+				},
+				"type": "object",
+				"required": ["members", "household"],
+				"title": "UnassignedRegistrationCreateRequest"
+			},
+			"UnassignedRegistrationCreateResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"id": { "type": "string", "title": "Id" },
+					"schema_v": { "type": "integer", "title": "Schema V" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"members": {
+						"items": { "$ref": "#/components/schemas/MemberCreated" },
+						"type": "array",
+						"title": "Members"
+					},
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" }
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"schema_v",
+					"reserved_household_id",
+					"members",
+					"registered_via",
+					"status",
+					"created_at"
+				],
+				"title": "UnassignedRegistrationCreateResponse"
+			},
+			"UnassignedRegistrationDetailResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"schema_v": { "type": "integer", "title": "Schema V" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"household": { "$ref": "#/components/schemas/HouseholdOut" },
+					"members": {
+						"items": { "$ref": "#/components/schemas/MemberCreated" },
+						"type": "array",
+						"title": "Members"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"schema_v",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"household",
+					"members"
+				],
+				"title": "UnassignedRegistrationDetailResponse"
+			},
+			"UnassignedRegistrationListItem": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"household": { "$ref": "#/components/schemas/HouseholdOut" },
+					"open_members": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Open Members"
+					},
+					"open_member_count": { "type": "integer", "title": "Open Member Count" }
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"household",
+					"open_members",
+					"open_member_count"
+				],
+				"title": "UnassignedRegistrationListItem"
+			},
+			"UnassignedRegistrationListResponse": {
+				"properties": {
+					"items": {
+						"items": { "$ref": "#/components/schemas/UnassignedRegistrationListItem" },
+						"type": "array",
+						"title": "Items"
+					},
+					"total": { "type": "integer", "title": "Total" },
+					"open_member_count": { "type": "integer", "title": "Open Member Count" },
+					"limit": { "type": "integer", "title": "Limit" },
+					"offset": { "type": "integer", "title": "Offset" }
+				},
+				"type": "object",
+				"required": ["items", "total", "open_member_count", "limit", "offset"],
+				"title": "UnassignedRegistrationListResponse"
+			},
+			"UnassignedRegistrationSearchHit": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"open_members": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Open Members"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"open_members"
+				],
+				"title": "UnassignedRegistrationSearchHit"
+			},
+			"UnassignedRegistrationSearchResponse": {
+				"properties": {
+					"results": {
+						"items": { "$ref": "#/components/schemas/UnassignedRegistrationSearchHit" },
+						"type": "array",
+						"title": "Results"
+					}
+				},
+				"type": "object",
+				"required": ["results"],
+				"title": "UnassignedRegistrationSearchResponse"
+			},
+			"UnassignedRegistrationStatsResponse": {
+				"properties": {
+					"open_registrations": { "type": "integer", "title": "Open Registrations" },
+					"open_members": { "type": "integer", "title": "Open Members" }
+				},
+				"type": "object",
+				"required": ["open_registrations", "open_members"],
+				"title": "UnassignedRegistrationStatsResponse"
 			},
 			"ValidationError": {
 				"properties": {

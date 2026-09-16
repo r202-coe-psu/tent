@@ -7,7 +7,7 @@ Forge is a command-line tool for generating FastAPI modules with CRUD operations
 The tool is included in the project dependencies. Make sure to install dependencies:
 
 ```bash
-poetry install
+uv sync
 ```
 
 ## Usage

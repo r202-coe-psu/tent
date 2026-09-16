@@ -1,16 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { donationIpLimiter } from '$lib/server/security/rate-limiter';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-
-/** Flatten FastAPI `{ errors: [detail] }` into `{ error }` for the donor UI. */
-function unwrapFastapiError(body: unknown): Record<string, unknown> {
-	if (typeof body !== 'object' || body === null) return { error: 'Search failed' };
-	const envelope = body as { errors?: unknown[] };
-	const detail = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
-	if (typeof detail === 'object' && detail !== null) return detail as Record<string, unknown>;
-	if (typeof detail === 'string') return { error: detail };
-	return body as Record<string, unknown>;
-}
+import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 /**
  * POST /api/public/v1/donations/track-search
@@ -38,7 +28,7 @@ export const POST = async ({ request, getClientAddress }) => {
 		});
 		const body = await res.json().catch(() => ({}));
 		if (!res.ok) {
-			return json(unwrapFastapiError(body), { status: res.status });
+			return json(unwrapFastapiError(body, 'Search failed'), { status: res.status });
 		}
 
 		return json({

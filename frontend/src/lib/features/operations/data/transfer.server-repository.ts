@@ -6,6 +6,8 @@ import {
 	dispatchTransfer,
 	receiveTransfer,
 	cancelTransfer,
+	disputeTransfer,
+	resumeTransfer,
 	isStockTransfer,
 	isStockLedger,
 	stockBalance,
@@ -249,7 +251,14 @@ export class TransferServerRepository {
 		to: TransferStatus,
 		actor: string,
 		actorShelter: string,
-		opts?: { receivedItems?: { item_id: string; qty: string | number }[]; notes?: string }
+		opts?: {
+			receivedItems?: { item_id: string; qty: string | number }[];
+			notes?: string;
+			driver_name?: string;
+			vehicle_plate?: string;
+			cancel_reason?: string;
+			dispute_reason?: string;
+		}
 	): Promise<StockTransfer> {
 		const latest = await this.get(id);
 		if (!latest) {
@@ -271,7 +280,12 @@ export class TransferServerRepository {
 		let ledgers: StockLedger[] = [];
 
 		if (to === 'shipped') {
-			({ transfer, ledgers } = dispatchTransfer(latest, ctx));
+			// The domain schema rejects a missing driver/plate before any ledger row is built —
+			// passing the raw values through keeps that the single enforcement point (CR-089 FR-01).
+			({ transfer, ledgers } = dispatchTransfer(latest, ctx, {
+				driver_name: opts?.driver_name ?? '',
+				vehicle_plate: opts?.vehicle_plate ?? ''
+			}));
 		} else if (to === 'received') {
 			({ transfer, ledgers } = receiveTransfer(
 				latest,
@@ -280,7 +294,13 @@ export class TransferServerRepository {
 				opts?.notes
 			));
 		} else if (to === 'cancelled') {
-			({ transfer } = cancelTransfer(latest));
+			({ transfer } = cancelTransfer(latest, { cancel_reason: opts?.cancel_reason ?? '' }));
+		} else if (to === 'disputed') {
+			({ transfer } = disputeTransfer(latest, ctx, {
+				dispute_reason: opts?.dispute_reason ?? ''
+			}));
+		} else if (to === 'requested') {
+			({ transfer } = resumeTransfer(latest));
 		} else {
 			throw new TransferServerRepositoryError(
 				`Unsupported transition to "${to}"`,
