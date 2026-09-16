@@ -15,6 +15,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -164,14 +165,7 @@
 				</div>
 			</div>
 
-			<Button
-				type="button"
-				variant="outline"
-				class="h-11 w-full border-slate-300 font-bold text-slate-800 hover:bg-slate-50"
-				href={googleOAuthStartHref('login')}
-			>
-				เข้าสู่ระบบด้วย Google
-			</Button>
+			<GoogleSignInButton href={googleOAuthStartHref('login')} />
 		</Field.FieldGroup>
 	</form>
 {/snippet}

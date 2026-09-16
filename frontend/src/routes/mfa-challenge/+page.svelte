@@ -5,7 +5,6 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		LANDING_ROUTE,
@@ -14,6 +13,7 @@
 		resolvePostLoginDestination
 	} from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import { GoogleSignInButton } from '$lib/features/login';
 	import { ShieldCheck } from '@lucide/svelte';
 
 	let loading = $state(true);
@@ -77,12 +77,7 @@
 			{#if loading}
 				<p class="text-center text-sm text-muted-foreground">กำลังตรวจสอบสถานะ...</p>
 			{:else}
-				<Button
-					href={googleOAuthStartHref('stepup')}
-					class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
-				>
-					ยืนยันด้วย Google
-				</Button>
+				<GoogleSignInButton href={googleOAuthStartHref('stepup')} />
 				<p class="text-center text-xs text-muted-foreground">
 					หาก Google หรือเซิร์ฟเวอร์กลางเข้าไม่ถึง จะไม่สามารถข้ามขั้นตอนนี้ได้
 				</p>
