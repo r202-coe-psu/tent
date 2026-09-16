@@ -7,6 +7,7 @@
 		type SopOverride,
 		type SopRatioKey,
 		RATIO_LABELS,
+		isVisibleSopRatioKey,
 		createProfileSlug,
 		useSetMasterActive
 	} from '$lib/features/sop-ratios';
@@ -138,7 +139,7 @@
 
 							<!-- Ratios snapshot -->
 							<div class="mt-2 grid grid-cols-3 gap-2">
-								{#each Object.entries(version.ratios) as [k, v] (k)}
+								{#each Object.entries(version.ratios).filter( ([k]) => isVisibleSopRatioKey(k) ) as [k, v] (k)}
 									{@const isDifferent = activeMaster && v !== activeMaster.ratios[k as SopRatioKey]}
 									<div
 										class="rounded-lg px-2 py-1.5 text-center transition-all {isDifferent

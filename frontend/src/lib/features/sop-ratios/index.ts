@@ -20,6 +20,8 @@ export {
 	verifyMasterPointerMatch,
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
+	VISIBLE_SOP_RATIO_KEYS,
+	isVisibleSopRatioKey,
 	sopMasterSchema,
 	sopProfileFormSchema,
 	sopProfileInputSchema,

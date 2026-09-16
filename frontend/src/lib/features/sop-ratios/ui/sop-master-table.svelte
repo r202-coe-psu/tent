@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SopMaster } from '$lib/features/sop-ratios';
-	import { SOP_RATIO_KEYS, RATIO_LABELS } from '$lib/features/sop-ratios';
+	import { VISIBLE_SOP_RATIO_KEYS, RATIO_LABELS } from '$lib/features/sop-ratios';
 	import History from '@lucide/svelte/icons/history';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -47,7 +47,7 @@
 			<!-- Grid of Ratios with Scroll (max-h-96) -->
 			<div class="max-h-96 overflow-y-auto p-5">
 				<div class="grid grid-cols-2 gap-4 md:grid-cols-3">
-					{#each SOP_RATIO_KEYS as key (key)}
+					{#each VISIBLE_SOP_RATIO_KEYS as key (key)}
 						<div
 							class="rounded-xl border border-black/5 bg-slate-50/50 p-3 shadow-sm transition-colors hover:bg-slate-50"
 						>
