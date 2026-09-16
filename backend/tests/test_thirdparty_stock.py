@@ -66,13 +66,13 @@ async def shelter_with_stock() -> PublicShelter:
 
 
 async def test_get_stock_requires_bearer_token(client: AsyncClient) -> None:
-    response = await client.get("/api/thirdparty/locations/SH001/stock")
+    response = await client.get("/external/locations/SH001/stock")
     assert response.status_code == 401
 
 
 async def test_get_stock_rejects_insufficient_scope(client: AsyncClient) -> None:
     headers = _bearer(["location-read"])
-    response = await client.get("/api/thirdparty/locations/SH001/stock", headers=headers)
+    response = await client.get("/external/locations/SH001/stock", headers=headers)
     assert response.status_code == 403
     assert response.json()["code"] == "insufficient_scope"
 
@@ -82,7 +82,7 @@ async def test_get_stock_returns_items(
     stock_read_headers: dict[str, str],
     shelter_with_stock: PublicShelter,
 ) -> None:
-    response = await client.get("/api/thirdparty/locations/SH001/stock", headers=stock_read_headers)
+    response = await client.get("/external/locations/SH001/stock", headers=stock_read_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == 200
@@ -99,7 +99,7 @@ async def test_get_stock_returns_items(
 async def test_get_stock_unknown_location_returns_location_not_found(
     client: AsyncClient, stock_read_headers: dict[str, str]
 ) -> None:
-    response = await client.get("/api/thirdparty/locations/NOPE/stock", headers=stock_read_headers)
+    response = await client.get("/external/locations/NOPE/stock", headers=stock_read_headers)
     assert response.status_code == 404
     body = response.json()
     assert body["code"] == "location_not_found"

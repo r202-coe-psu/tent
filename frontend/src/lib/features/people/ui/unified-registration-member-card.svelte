@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Camera from '@lucide/svelte/icons/camera';
+	import Check from '@lucide/svelte/icons/check';
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Phone from '@lucide/svelte/icons/phone';
@@ -20,6 +21,7 @@
 	import { compressImage } from '$lib/utils/image-compress';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { cn } from '$lib/utils/shadcn.js';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import {
 		PersonalInfoFields,
@@ -29,13 +31,18 @@
 	} from './forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { STATUS_LABELS } from '../domain/people';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import UserSearch from '@lucide/svelte/icons/user-search';
 	import {
 		applyAnonymousIdToMember,
+		evacueeToUnifiedMember,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberInput,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel
 	} from '../domain/unified-registration';
+	import type { Evacuee } from '../domain/people';
+	import PullPreRegisteredDialog from './pull-pre-registered-dialog.svelte';
 	import {
 		forgetPhotoPreview,
 		rememberPhotoPreview,
@@ -51,6 +58,7 @@
 		shelterCode = '',
 		channel = 'onsite',
 		mode = 'create',
+		excludeIds = [],
 		fieldErrors,
 		onRemove,
 		onReportingInChange
@@ -63,6 +71,7 @@
 		shelterCode?: string;
 		channel?: UnifiedRegistrationChannel;
 		mode?: 'create' | 'report-in';
+		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
@@ -70,12 +79,37 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const isPrimary = $derived(index === 0);
-	const title = $derived(
-		isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`
-	);
+	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	const hideNoPhone = $derived(channel === 'public' && index === 0);
+
+	const isReportIn = $derived(mode === 'report-in');
+	const isAlreadyReported = $derived(
+		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
+	);
+	const alreadyReportedStatusLabel = $derived(
+		member.stay_status ? (STATUS_LABELS[member.stay_status] ?? member.stay_status) : ''
+	);
+	const isNewReportInMember = $derived(isReportIn && !member._id);
+	const isToggleableReportIn = $derived(
+		isReportIn && !!member._id && (!member.stay_status || member.stay_status === 'pre_registered')
+	);
+	const isReportingInSelected = $derived(member.reporting_in ?? true);
+	const cardClass = $derived(
+		cn(
+			'rounded-xl p-4 shadow-xs sm:p-5 space-y-5',
+			isToggleableReportIn
+				? isReportingInSelected
+					? 'border-2 border-primary/50 bg-sky-100/5 ring-1 ring-primary/30'
+					: 'border-2 border-dashed border-border bg-white text-muted-foreground opacity-70'
+				: isAlreadyReported
+					? 'border border-border bg-muted/40 text-muted-foreground'
+					: isNewReportInMember
+						? 'border border-emerald-300 bg-emerald-50/50'
+						: 'border border-border/60 bg-card'
+		)
+	);
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -124,6 +158,61 @@
 	});
 	let photoPreviewUrl = $state<string | null>(null);
 	let uploadingPhoto = $state(false);
+	let pullDialogOpen = $state(false);
+	let wasPulled = $state(false);
+
+	function handlePopulateFromQueue(ev: Evacuee) {
+		const converted = evacueeToUnifiedMember(ev);
+		member = {
+			...member,
+			...converted,
+			reporting_in: true
+		};
+		birthYear = converted.birth_year as string | number | undefined;
+		age = converted.age as string | number | undefined;
+		noPhone = converted.phone == null;
+		emergency.name = converted.emergency_contact?.name ?? '';
+		emergency.phone = converted.emergency_contact?.phone ?? '';
+		emergency.relation = converted.emergency_contact?.relation ?? '';
+		wasPulled = true;
+		onReportingInChange?.(true);
+		toast.success(`ดึงข้อมูลคุณ ${converted.first_name} จากคิวสำเร็จ`);
+	}
+
+	function handleUnlinkQueue() {
+		member = {
+			...member,
+			_id: undefined,
+			_rev: undefined,
+			stay_status: undefined,
+			first_name: '',
+			last_name: '',
+			gender: '' as UnifiedMemberInput['gender'],
+			birth_year: undefined,
+			age: undefined,
+			person_id: { cardType: 'national_id', number: '' },
+			phone: '',
+			nickname: '',
+			emergency_contact: { name: '', phone: '', relation: '' },
+			vulnerable_groups: [],
+			special_needs: [],
+			medical_conditions: [],
+			medical_allergies: [],
+			medical_medications: [],
+			medical_note: undefined,
+			photo: null,
+			reporting_in: true
+		};
+		birthYear = undefined;
+		age = undefined;
+		noPhone = false;
+		emergency.name = '';
+		emergency.phone = '';
+		emergency.relation = '';
+		wasPulled = false;
+		onReportingInChange?.(true);
+		toast.info('ล้างข้อมูลและยกเลิกการเชื่อมโยงเรียบร้อยแล้ว');
+	}
 
 	$effect(() => {
 		if (hideNoPhone) {
@@ -273,24 +362,31 @@
 	}
 </script>
 
-<section
-	id="unified-member-{index}"
-	class="form-section-card space-y-5"
-	aria-labelledby="member-card-title-{index}"
->
+<section id="unified-member-{index}" class={cardClass} aria-labelledby="member-card-title-{index}">
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
-				<h3 id="member-card-title-{index}" class="text-base font-bold text-foreground">
+				<h3
+					id="member-card-title-{index}"
+					class={cn(
+						'text-base font-bold',
+						isToggleableReportIn && !isReportingInSelected
+							? 'text-muted-foreground'
+							: 'text-foreground'
+					)}
+				>
 					{title}
 				</h3>
-				{#if mode === 'report-in'}
-					{#if member.stay_status && member.stay_status !== 'pre_registered'}
+				{#if isReportIn}
+					{#if isAlreadyReported}
 						<Badge variant="secondary" class="text-2xs">
-							รายงานตัวแล้ว ({STATUS_LABELS[member.stay_status] ?? member.stay_status})
+							รายงานตัวแล้ว ({alreadyReportedStatusLabel})
 						</Badge>
 					{:else if member._id}
-						<Badge variant="outline" class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400">
+						<Badge
+							variant="outline"
+							class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400"
+						>
 							ลงทะเบียนล่วงหน้า
 						</Badge>
 					{:else}
@@ -305,23 +401,68 @@
 			{/if}
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			{#if mode === 'report-in'}
-				{#if member.stay_status && member.stay_status !== 'pre_registered'}
-					<span class="text-xs font-medium text-muted-foreground">เข้ารายงานตัวแล้ว</span>
-				{:else if !member._id}
-					<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ รายงานตัวรอบนี้</span>
+			{#if isReportIn}
+				{#if isAlreadyReported}
+					<span
+						class="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-500"
+					>
+						เข้ารายงานตัวแล้ว
+					</span>
+				{:else if isNewReportInMember}
+					<span
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800"
+					>
+						<Check class="size-4 shrink-0" aria-hidden="true" />
+						รายงานตัวรอบนี้
+					</span>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						{disabled}
+						onclick={() => (pullDialogOpen = true)}
+						class="h-11 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
+					>
+						<UserSearch class="size-4 text-blue-600" />
+						<span>ดึงข้อมูลจากคิว</span>
+					</Button>
 				{:else}
-					<label class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-semibold select-none transition-colors {member.reporting_in ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-muted/40 text-muted-foreground'}">
+					<label
+						class={cn(
+							'flex min-h-12 cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-sm font-semibold transition-colors select-none',
+							isReportingInSelected
+								? 'border-primary/50 bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/30'
+								: 'border-dashed border-border bg-muted/50 text-muted-foreground'
+						)}
+					>
 						<Checkbox
-							checked={member.reporting_in ?? true}
+							checked={isReportingInSelected}
 							{disabled}
 							onCheckedChange={(checked) => {
 								member.reporting_in = checked === true;
 								onReportingInChange?.(checked === true);
 							}}
 						/>
-						<span>เช็กชื่อรายงานตัว</span>
+						{#if isReportingInSelected}
+							<Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
+							<span>เลือกแล้ว — รายงานตัวรอบนี้</span>
+						{:else}
+							<span>ยังไม่เลือก — ไม่มาในรอบนี้</span>
+						{/if}
 					</label>
+					{#if wasPulled}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							{disabled}
+							onclick={handleUnlinkQueue}
+							class="h-11 gap-1 text-xs text-muted-foreground hover:text-destructive"
+						>
+							<RotateCcw class="size-3.5" />
+							<span>ยกเลิกการดึง</span>
+						</Button>
+					{/if}
 				{/if}
 			{/if}
 
@@ -382,9 +523,7 @@
 								: ''}"
 						>
 							<Camera class="size-4 text-primary" />
-							<span
-								>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span
-							>
+							<span>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span>
 						</label>
 						<input
 							id={photoInputId}
@@ -478,3 +617,9 @@
 		<SpecialNeedsFields bind:special_needs={member.special_needs} {disabled} label="" />
 	</div>
 </section>
+
+<PullPreRegisteredDialog
+	bind:open={pullDialogOpen}
+	{excludeIds}
+	onselect={handlePopulateFromQueue}
+/>

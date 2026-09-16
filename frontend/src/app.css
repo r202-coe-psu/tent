@@ -9,11 +9,12 @@
 	--testing-banner-height: 1.625rem;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
 	/*
-	 * Sticky offset for shared registration form chrome (section headers + spy nav).
+	 * Sticky offset for registration section headers (under app / shelter chrome).
 	 * Layouts override: public navbar ≈ 4rem; onsite app bar + shelter nav ≈ 6.75rem.
+	 * Unified form section jump actions live in the bottom chrome dock (not top).
 	 */
 	--registration-sticky-top: 4rem;
-	--registration-scroll-mt: calc(var(--registration-sticky-top) + 1.5rem);
+	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -449,8 +450,12 @@
 		@apply sticky z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4;
 		top: var(--registration-sticky-top);
 	}
+	.unified-reg-bottom-chrome {
+		@apply sticky bottom-0 z-30 -mx-1 space-y-2 border-t border-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+	}
 	.sticky-section-nav {
-		@apply sticky z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-1 py-2 backdrop-blur-sm;
+		/* Top scroll-spy chips (registration-shell / ewar) — not used by unified form */
+		@apply sticky z-30 -mx-1 mb-4 flex gap-2 overflow-x-auto border-b border-border bg-background px-1 py-2;
 		top: var(--registration-sticky-top, 0px);
 		scrollbar-width: none;
 	}

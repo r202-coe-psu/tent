@@ -45,7 +45,11 @@
 		type UnifiedRegistrationInput,
 		type UnifiedHouseholdInput
 	} from '../domain/unified-registration';
-	import { isMeaningfulOtherPetNotes, type HouseholdVehicle, type PetGroup } from '../domain/people';
+	import {
+		isMeaningfulOtherPetNotes,
+		type HouseholdVehicle,
+		type PetGroup
+	} from '../domain/people';
 	import {
 		forgetPhotoPreview,
 		rememberPhotoPreview,
@@ -151,7 +155,9 @@
 	}
 
 	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
-	let household = $state<UnifiedRegistrationInput['household']>(untrack(() => buildInitialHousehold()));
+	let household = $state<UnifiedRegistrationInput['household']>(
+		untrack(() => buildInitialHousehold())
+	);
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
 	let formError = $state<string | null>(null);
 	let validationMessages = $state<string[]>([]);
@@ -271,7 +277,9 @@
 		return result;
 	}
 
-	let petItems = $state<PetCardItem[]>(untrack(() => parseInitialPets(household.pets as PetGroup[])));
+	let petItems = $state<PetCardItem[]>(
+		untrack(() => parseInitialPets(household.pets as PetGroup[]))
+	);
 	const totalPetCount = $derived(petItems.length);
 
 	function revokePetPreview(pet: PetCardItem) {
@@ -677,13 +685,6 @@
 	oninput={markDirty}
 	{@attach createScrollSpy()}
 >
-	<UnifiedRegistrationStickyNav
-		sections={formSectionNav}
-		{activeSection}
-		ariaLabel={t.sectionNavAria}
-		onNavigate={(id) => scrollToSection(id as FormSectionId)}
-	/>
-
 	{#if formError}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
 			<CircleAlert class="size-4" />
@@ -758,6 +759,7 @@
 					household.postal_code = v;
 				}
 			}
+			loadMasterHousingTypes={channel !== 'public'}
 			required={true}
 			disabled={pending}
 		/>
@@ -782,7 +784,8 @@
 				onclick={() => addPet('dog')}
 				class="h-8 gap-1 text-xs"
 			>
-				<Plus class="size-3.5" /> {t.addDog}
+				<Plus class="size-3.5" />
+				{t.addDog}
 			</Button>
 			<Button
 				type="button"
@@ -792,7 +795,8 @@
 				onclick={() => addPet('cat')}
 				class="h-8 gap-1 text-xs"
 			>
-				<Plus class="size-3.5" /> {t.addCat}
+				<Plus class="size-3.5" />
+				{t.addCat}
 			</Button>
 			<Button
 				type="button"
@@ -802,7 +806,8 @@
 				onclick={() => addPet('other')}
 				class="h-8 gap-1 text-xs"
 			>
-				<Plus class="size-3.5" /> {t.addOtherPet}
+				<Plus class="size-3.5" />
+				{t.addOtherPet}
 			</Button>
 		{/snippet}
 
@@ -822,7 +827,8 @@
 						onclick={() => addPet('dog')}
 						class="h-8 gap-1 text-xs"
 					>
-						<Plus class="size-3.5" /> {t.addDogFull}
+						<Plus class="size-3.5" />
+						{t.addDogFull}
 					</Button>
 					<Button
 						type="button"
@@ -832,7 +838,8 @@
 						onclick={() => addPet('cat')}
 						class="h-8 gap-1 text-xs"
 					>
-						<Plus class="size-3.5" /> {t.addCatFull}
+						<Plus class="size-3.5" />
+						{t.addCatFull}
 					</Button>
 					<Button
 						type="button"
@@ -842,7 +849,8 @@
 						onclick={() => addPet('other')}
 						class="h-8 gap-1 text-xs"
 					>
-						<Plus class="size-3.5" /> {t.addOtherPetFull}
+						<Plus class="size-3.5" />
+						{t.addOtherPetFull}
 					</Button>
 				</div>
 			</div>
@@ -980,9 +988,7 @@
 											>
 												<Camera class="size-3.5 text-primary" />
 												<span>
-													{pet.previewUrl || pet.image_url
-														? t.petPhotoChange
-														: t.petPhotoPick}
+													{pet.previewUrl || pet.image_url ? t.petPhotoChange : t.petPhotoPick}
 												</span>
 											</label>
 											<input
@@ -1038,7 +1044,8 @@
 					onclick={addVehicle}
 					class="h-8 gap-1 text-xs"
 				>
-					<Plus class="size-3.5" /> {t.addVehicle}
+					<Plus class="size-3.5" />
+					{t.addVehicle}
 				</Button>
 			{/snippet}
 
@@ -1169,6 +1176,7 @@
 					photoUpload={memberPhotoUpload}
 					shelterCode={shelterCode.trim()}
 					{channel}
+					excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 					fieldErrors={memberFieldErrors[index]}
 					onRemove={() => removeMember(index)}
 				/>
@@ -1191,10 +1199,19 @@
 		</div>
 	{/if}
 
-	<UnifiedRegistrationSubmitBar
-		{pending}
-		label={effectiveSubmitLabel}
-		submittingLabel={t.submitting}
-		align={submitAlign}
-	/>
+	<div class="unified-reg-bottom-chrome">
+		<UnifiedRegistrationStickyNav
+			sections={formSectionNav}
+			{activeSection}
+			ariaLabel={t.sectionNavAria}
+			onNavigate={(id) => scrollToSection(id as FormSectionId)}
+		/>
+		<UnifiedRegistrationSubmitBar
+			{pending}
+			label={effectiveSubmitLabel}
+			submittingLabel={t.submitting}
+			align={submitAlign}
+			sticky={false}
+		/>
+	</div>
 </form>

@@ -357,10 +357,14 @@ async def test_process_evacuee_change_refreshes_occupancy():
         patch(
             "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
         ) as refresh,
+        patch(
+            "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
+        ) as refresh_occ,
     ):
         await process_change(couch, "shelter_sh001", change)
 
     refresh.assert_awaited_once_with(couch, "SH001")
+    refresh_occ.assert_awaited_once_with(couch, "SH001")
 
 
 @pytest.mark.asyncio
@@ -374,10 +378,14 @@ async def test_process_deleted_evacuee_refreshes_occupancy():
         patch(
             "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
         ) as refresh,
+        patch(
+            "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
+        ) as refresh_occ,
     ):
         await process_change(couch, "shelter_sh001", change)
 
     refresh.assert_awaited_once_with(couch, "SH001")
+    refresh_occ.assert_awaited_once_with(couch, "SH001")
 
 
 @pytest.mark.asyncio

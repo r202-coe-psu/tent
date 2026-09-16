@@ -31,8 +31,6 @@ describe('birth-calendar', () => {
 		const be = 2535;
 		const displayCe = toDisplayBirthYear(be, 'CE');
 		expect(toPersistBirthYearBE(displayCe, 'CE')).toBe(be);
-		expect(ageFromBirthYearBE(toPersistBirthYearBE(displayCe, 'CE'))).toBe(
-			ageFromBirthYearBE(be)
-		);
+		expect(ageFromBirthYearBE(toPersistBirthYearBE(displayCe, 'CE'))).toBe(ageFromBirthYearBE(be));
 	});
 });

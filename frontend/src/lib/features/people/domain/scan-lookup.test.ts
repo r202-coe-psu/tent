@@ -11,9 +11,7 @@ describe('extractScanLookupToken', () => {
 		expect(extractScanLookupToken('/onsite/zoning/evacuee:ABC')).toBe('evacuee:ABC');
 		expect(extractScanLookupToken('/onsite/medical-screening/evacuee:XYZ')).toBe('evacuee:XYZ');
 		expect(extractScanLookupToken('evacuee:BARE')).toBe('evacuee:BARE');
-		expect(extractScanLookupToken('01JABCDEFGHJKMNPQRSTVWXYZ0')).toBe(
-			'01JABCDEFGHJKMNPQRSTVWXYZ0'
-		);
+		expect(extractScanLookupToken('01JABCDEFGHJKMNPQRSTVWXYZ0')).toBe('01JABCDEFGHJKMNPQRSTVWXYZ0');
 	});
 
 	it('rejects bare station roots', () => {

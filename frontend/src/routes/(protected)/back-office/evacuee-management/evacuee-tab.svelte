@@ -21,6 +21,8 @@
 		canCancelEvacueePreRegistration,
 		stayStatusSchema,
 		zoneLabel,
+		StayStatusBadge,
+		STATUS_LABELS,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
@@ -45,57 +47,9 @@
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
 
-	const statusConfig = {
-		pre_registered: {
-			label: 'ลงทะเบียนล่วงหน้า',
-			colorClass:
-				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-		},
-		arriving: {
-			label: 'รอตรวจ/จัดโซน',
-			colorClass:
-				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-		},
-		active: {
-			label: 'อยู่ในศูนย์',
-			colorClass:
-				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
-		},
-		room_confirmed: {
-			label: 'ยืนยันถึงโซนแล้ว',
-			colorClass:
-				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
-		},
-		temporary_leave: {
-			label: 'ออกชั่วคราว',
-			colorClass:
-				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-		},
-		transferred: {
-			label: 'ย้ายศูนย์',
-			colorClass:
-				'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-		},
-		checked_out: {
-			label: 'ย้ายออก/กลับภูมิลำเนา',
-			colorClass:
-				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
-		},
-		deceased: {
-			label: 'เสียชีวิต',
-			colorClass:
-				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700'
-		},
-		cancelled: {
-			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
-			colorClass:
-				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
-		}
-	} satisfies Record<StayStatus, { label: string; colorClass: string }>;
-
 	const statusOptions = stayStatusSchema.options.map((value) => ({
 		value,
-		label: statusConfig[value].label
+		label: STATUS_LABELS[value] ?? value
 	}));
 
 	const vulnerableTypeOptions = $derived.by(() => {
@@ -489,13 +443,7 @@
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
-								{@const config = statusConfig[e.current_stay.status]}
-								<span
-									class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-medium {config?.colorClass ??
-										'border-border bg-muted text-muted-foreground'}"
-								>
-									{config?.label ?? e.current_stay.status}
-								</span>
+								<StayStatusBadge status={e.current_stay.status} size="sm" />
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">

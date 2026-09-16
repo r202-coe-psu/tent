@@ -16,10 +16,18 @@ class OccupantItem(BaseModel):
     checked_in_at: datetime | None = None
 
 
+class PaginationMeta(BaseModel):
+    page: int
+    limit: int
+    total: int
+    total_pages: int
+
+
 class OccupantsEnvelope(BaseModel):
     status: int = 200
     message: str = "Found Data."
     result: list[OccupantItem] = []
+    pagination: PaginationMeta | None = None
 
 
 class OccupantsErrorResponse(BaseModel):

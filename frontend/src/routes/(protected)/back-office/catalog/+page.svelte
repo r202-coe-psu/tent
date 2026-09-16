@@ -7,6 +7,8 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { getShelterCode } from '$lib/db/shelter';
 
 	const itemCategoriesQuery = useItemCategories(() => getShelterCode());
@@ -25,6 +27,13 @@
 			activeTab = tabParam;
 		}
 	});
+
+	const basePath = resolve('/back-office/catalog');
+
+	function selectTab(tab: 'item_category' | 'item_master' | 'recipe') {
+		activeTab = tab;
+		goto(`${basePath}?tab=${tab}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 </script>
 
 <main class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
@@ -40,7 +49,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'item_category' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'item_category')}
+					onclick={() => selectTab('item_category')}
 					class="w-full justify-between py-6"
 				>
 					<span>หมวดหมู่สิ่งของ (Item Category)</span>
@@ -49,7 +58,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'item_master' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'item_master')}
+					onclick={() => selectTab('item_master')}
 					class="w-full justify-between py-6"
 				>
 					<span>รายการสิ่งของ (Item Master)</span>
@@ -58,7 +67,7 @@
 				<Button
 					size="lg"
 					variant={activeTab === 'recipe' ? 'default' : 'outline'}
-					onclick={() => (activeTab = 'recipe')}
+					onclick={() => selectTab('recipe')}
 					class="w-full justify-between py-6"
 				>
 					<span>สูตรอาหารมาตรฐาน </span>

@@ -286,7 +286,7 @@
 					title="ระบบส่วนกลาง"
 					badge="เฉพาะผู้ดูแลระบบ"
 					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
-					href={resolve('/portal/system-management')}
+					href={resolve('/system-management')}
 				/>
 			{/if}
 

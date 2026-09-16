@@ -75,7 +75,8 @@
 		};
 		if (win.grecaptcha) {
 			try {
-				return await win.grecaptcha.execute(siteKey, { action: 'register' });
+				const action = isUnassigned ? 'unassigned_register' : 'register';
+				return await win.grecaptcha.execute(siteKey, { action });
 			} catch {
 				return null;
 			}

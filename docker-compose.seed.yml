@@ -1,7 +1,10 @@
 # Seed / reset helpers — merge with a base compose that provides `couchdb` (+ `mongodb` for wipe/bootstrap).
 #
-# Seed only (CouchDB):
+# Staging seed (CouchDB — ~1k people + ops):
 #   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed
+#
+# Master only (platform init — no people/shelters):
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile master run --rm seed-master
 #
 # One-shots:
 #   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed
@@ -93,7 +96,17 @@ services:
       couchdb-init:
         condition: service_completed_successfully
     restart: "no"
-    command: sh -c "corepack enable && pnpm seed"
+    command: sh -c "corepack enable && pnpm seed:staging"
+
+  seed-master:
+    <<: *node-seed
+    profiles: ["master"]
+    container_name: tent-seed-master
+    depends_on:
+      couchdb-init:
+        condition: service_completed_successfully
+    restart: "no"
+    command: sh -c "corepack enable && pnpm seed:master"
 
   # Project current CouchDB docs into Mongo, then exit (no continuous sync).
   bootstrap:
@@ -119,7 +132,7 @@ services:
       mongo-wipe:
         condition: service_completed_successfully
     restart: "no"
-    command: sh -c "corepack enable && pnpm seed"
+    command: sh -c "corepack enable && pnpm seed:staging"
 
   reset-bootstrap:
     <<: *worker-bootstrap

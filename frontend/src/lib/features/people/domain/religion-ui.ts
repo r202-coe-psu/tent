@@ -6,9 +6,7 @@ export const RELIGION_UI_VALUES = ['buddhist', 'muslim', 'christian', 'unknown']
 
 export type ReligionUiValue = (typeof RELIGION_UI_VALUES)[number];
 
-export function normalizeReligionForUi(
-	religion: string | null | undefined
-): ReligionUiValue {
+export function normalizeReligionForUi(religion: string | null | undefined): ReligionUiValue {
 	if (
 		religion === 'buddhist' ||
 		religion === 'muslim' ||

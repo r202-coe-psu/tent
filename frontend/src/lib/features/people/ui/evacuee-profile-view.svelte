@@ -91,10 +91,7 @@
 	const profileReadonly = $derived(readonly || !canEditProfile);
 
 	const statusConfig: Partial<
-		Record<
-			StayStatus,
-			{ label: string; shortLabel: string; colorClass: string; dotClass: string }
-		>
+		Record<StayStatus, { label: string; shortLabel: string; colorClass: string; dotClass: string }>
 	> = {
 		active: {
 			label: 'พักพิงในศูนย์ (Active)',
@@ -139,11 +136,11 @@
 			dotClass: 'bg-purple-500'
 		},
 		checked_out: {
-			label: 'ย้ายออก / กลับภูมิลำเนา (Checked-out)',
-			shortLabel: 'ย้ายออก',
+			label: 'เช็คเอาต์ (Checked-out)',
+			shortLabel: 'เช็คเอาต์',
 			colorClass:
-				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
-			dotClass: 'bg-red-500'
+				'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+			dotClass: 'bg-slate-400'
 		},
 		deceased: {
 			label: 'เสียชีวิต (Deceased)',
@@ -238,6 +235,19 @@
 			goto(
 				resolve(
 					`/onsite/people/evacuee-profile-view/${id}?from=${encodeURIComponent(from)}` as `/onsite/people/evacuee-profile-view/${string}`
+				)
+			);
+			return;
+		}
+		if (pathname.includes('/system-management/pre-registrations/evacuee/')) {
+			const shelterCode =
+				page.params.shelter ??
+				pathname.match(/\/system-management\/pre-registrations\/evacuee\/([^/]+)\//)?.[1] ??
+				shelterStore.selectedShelterCode ??
+				getShelterCode();
+			goto(
+				resolve(
+					`/system-management/pre-registrations/evacuee/${shelterCode}/${id}` as `/system-management/pre-registrations/evacuee/${string}/${string}`
 				)
 			);
 			return;
@@ -575,9 +585,7 @@
 			screening.track !== data.careTrack ||
 			currentNotes !== nextNotes;
 		const screeningHasValues =
-			nextSymptoms.length > 0 ||
-			nextNotes.length > 0 ||
-			data.careTrack === 'fast_track';
+			nextSymptoms.length > 0 || nextNotes.length > 0 || data.careTrack === 'fast_track';
 
 		let patchedEvacuee = false;
 		let patchedMedical = false;
@@ -720,7 +728,14 @@
 		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
 		<button
 			class="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
-			onclick={() => goto(resolve('/back-office/evacuee-management'))}
+			onclick={() => {
+				const pathname = page.url.pathname;
+				if (pathname.includes('/system-management/pre-registrations')) {
+					goto(resolve('/system-management/pre-registrations'));
+					return;
+				}
+				goto(resolve('/back-office/evacuee-management'));
+			}}
 		>
 			กลับหน้าหลัก
 		</button>
@@ -750,9 +765,7 @@
 			/>
 		</div>
 
-		<div
-			class="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
-		>
+		<div class="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
 			<!-- Desktop sticky identity rail — cell must stretch (no items-start) so sticky has room -->
 			<div class="hidden min-w-0 lg:block">
 				<EvacueeProfileIdentityRail
@@ -805,7 +818,7 @@
 				<section class="min-w-0 space-y-3 rounded-lg border border-border bg-card p-5">
 					<div class="flex items-center gap-2.5 border-b border-border pb-2">
 						<Clock class="size-4.5 shrink-0 text-primary" />
-						<h3 class="min-w-0 break-words text-sm font-bold text-slate-900 dark:text-slate-50">
+						<h3 class="min-w-0 text-sm font-bold break-words text-slate-900 dark:text-slate-50">
 							บันทึกการตรวจสอบ (Audit Log)
 						</h3>
 					</div>
@@ -814,7 +827,7 @@
 							<li class="flex items-start gap-3 text-xs">
 								<FilePenLine class="mt-0.5 size-4 shrink-0 text-blue-600" />
 								<div class="min-w-0 flex-1 space-y-0.5">
-									<div class="break-words font-semibold text-foreground">
+									<div class="font-semibold break-words text-foreground">
 										แก้ไขข้อมูลล่าสุด (Updated)
 									</div>
 									<div class="text-muted-foreground">{formatDateTime(evacuee.updated_at)}</div>
@@ -825,7 +838,7 @@
 							<li class="flex items-start gap-3 text-xs">
 								<Circle class="mt-1 size-3 shrink-0 {movementLabels[m.action].dotClass}" />
 								<div class="min-w-0 flex-1 space-y-0.5">
-									<div class="break-words font-semibold text-foreground">
+									<div class="font-semibold break-words text-foreground">
 										{movementLabels[m.action].label}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
@@ -856,7 +869,7 @@
 						<li class="flex items-start gap-3 text-xs">
 							<UserPlus class="mt-0.5 size-4 shrink-0 text-emerald-600" />
 							<div class="min-w-0 flex-1 space-y-0.5">
-								<div class="break-words font-semibold text-foreground">
+								<div class="font-semibold break-words text-foreground">
 									ลงทะเบียนข้อมูล (Registered)
 								</div>
 								<div class="break-words text-muted-foreground">
