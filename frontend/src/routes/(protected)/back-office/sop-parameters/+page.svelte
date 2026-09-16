@@ -97,7 +97,7 @@
 
 	async function createInitialOverride() {
 		if (!activeMaster || !shelterCode) {
-			toast.error('ไม่สามารถสร้างค่าปรับแต่งได้ เนื่องจากยังโหลดค่ามาตรฐาน EOC ไม่สำเร็จ');
+			toast.error('ไม่สามารถสร้างค่าปรับแต่งได้ เนื่องจากยังโหลดตัวแปรมาตรฐาน Sphere ไม่สำเร็จ');
 			return;
 		}
 		await initialOverrideMutation.mutateAsync({

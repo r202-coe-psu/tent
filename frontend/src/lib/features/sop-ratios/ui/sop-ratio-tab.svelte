@@ -42,7 +42,7 @@
 		<!-- Row 1: Title + Search -->
 		<div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
 			<h1 class="text-xl font-semibold">
-				{activeContext === 'master' ? 'EOC มาตรฐาน' : 'ค่าปรับแต่งเฉพาะศูนย์'}
+				{activeContext === 'master' ? 'ตัวแปรมาตรฐาน Sphere' : 'ค่าปรับแต่งเฉพาะศูนย์'}
 			</h1>
 
 			<div class="relative w-full sm:w-64">
@@ -83,7 +83,7 @@
 						activeContext = 'master';
 					}}
 				>
-					EOC มาตรฐาน
+					ตัวแปรมาตรฐาน Sphere
 				</button>
 				<button
 					type="button"

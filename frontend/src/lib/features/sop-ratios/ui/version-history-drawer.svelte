@@ -90,7 +90,7 @@
 				<div>
 					<p class="font-bold">เปรียบเทียบค่ามาตรฐานไม่ได้</p>
 					<p class="mt-0.5 text-amber-700/95">
-						ไม่สามารถดึงข้อมูลค่ามาตรฐาน EOC มาเปรียบเทียบได้ในขณะนี้
+						ไม่สามารถดึงข้อมูลตัวแปรมาตรฐาน Sphere มาเปรียบเทียบได้ในขณะนี้
 					</p>
 				</div>
 			</div>
@@ -145,7 +145,7 @@
 											? 'bg-amber-500 text-white shadow-sm'
 											: 'bg-slate-50 text-slate-900'}"
 										title={isDifferent
-											? `ค่ามาตรฐาน EOC: ${activeMaster.ratios[k as SopRatioKey]}`
+											? `ตัวแปรมาตรฐาน Sphere: ${activeMaster.ratios[k as SopRatioKey]}`
 											: ''}
 									>
 										<p
