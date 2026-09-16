@@ -4,19 +4,25 @@ extends: CR-123
 title: ป้องกัน CouchDB ค้างเมื่อนำเข้าศูนย์พักพิงจำนวนมาก
 status: proposed
 date: 2026-09-16
+updated: 2026-09-17
 requested_by: Dev Team B
 decided_by: รอเจ้าของโครงการอนุมัติ
 layer: volatile
 scope:
   in_scope:
-    - ระยะที่ 1: แก้ query และการคำนวณสถานะให้ไม่อ่านข้อมูลทั้งชุดซ้ำ ๆ
-    - ระยะที่ 2: แยกเอกสาร job/item ออกจากฐานข้อมูล registry
-    - migration, security, rollback และการทดสอบของสองระยะนี้
+    - ระยะที่ 0: ตั้ง file descriptor limit ของ CouchDB container ใน compose ทุก variant
   out_of_scope:
+    - ระยะที่ 1: แก้ query และการคำนวณสถานะ — เลื่อนออก; วิเคราะห์ไว้ในเอกสารนี้แล้วแต่ยังไม่ implement
+    - ระยะที่ 2: แยกเอกสาร job/item ออกจาก registry — เลื่อนออก; วิเคราะห์ไว้ในเอกสารนี้แล้วแต่ยังไม่ implement
+    - migration, security boundary, rollback และ test ของระยะที่ 1–2
+    - การแก้ไขโค้ดทุกไฟล์ใน §ไฟล์ที่ต้องแก้ (ระยะที่ 1–2)
     - ระยะที่ 3: generic worker runtime, autoscaling และ distributed scheduler
     - การเพิ่ม Redis/PostgreSQL
     - การยกเลิกหรือลบศูนย์พักพิงที่สร้างสำเร็จแล้ว
 affects:
+  # แก้จริงใน change นี้ (ระยะที่ 0)
+  - docker-compose.yml, docker-compose.staging*.yml, docker-compose.production*.yml — ulimits.nofile ของ service couchdb
+  # อ้างอิงไว้สำหรับระยะที่ 1-2 ซึ่งเลื่อนออก — ยังไม่แก้ในรอบนี้
   - docs/changes/CR-123-shelter-import-worker-pipeline.md — amendment เรื่อง query, queue storage และ migration
   - docs/data/schema.md — เพิ่ม contract ของ queue database และ index/view
   - docs/data/data-model.md — เพิ่ม topology และ ownership ของ shelter_import_queue
@@ -47,20 +53,26 @@ affects:
 
 # ป้องกัน CouchDB ค้างเมื่อนำเข้าศูนย์พักพิงจำนวนมาก
 
-> **สรุปสั้น ๆ:** ปัญหาเกิดจาก worker อ่านเอกสารจำนวนมากซ้ำทุกครั้งที่หยิบงานและเปลี่ยนสถานะ ไม่ใช่เพราะต้องเพิ่มเวลารอให้ CouchDB นานขึ้น
+> **สรุป (TL;DR)**
 >
-> รอบนี้จะแก้สองส่วนพร้อมกัน: ใช้ query ที่อ่านเฉพาะรายการที่ต้องทำ และแยก job/item ไปฐานข้อมูล `shelter_import_queue` ส่วนข้อมูลหลักของศูนย์พักพิง audit log, name lock และ code allocator ยังอยู่ใน `registry`
+> - **สาเหตุของอาการค้างยืนยันแล้ว:** CouchDB container ใช้ `ulimit -n` ค่า default ของ Docker คือ `1024` เมื่อนำเข้าถึงศูนย์ที่ ~50 file descriptor เต็ม CouchDB ตอบ `EMFILE` และหยุดรับ connection — **ไม่ใช่** ผลจาก query pattern
+> - **แก้แล้ว (ระยะที่ 0):** ตั้ง `ulimits.nofile = 65536` ให้ service `couchdb` ใน compose ทุก variant ตาม [CouchDB performance docs](https://docs.couchdb.org/en/stable/maintenance/performance.html)
+> - **ไม่ทำในรอบนี้:** ระยะที่ 1–2 (แก้ query O(N²) และแยก job/item ไป `shelter_import_queue`) **เลื่อนออกทั้งหมด** — ยังเป็นปัญหา scalability จริงแต่คนละเรื่องกับ file descriptor; บทวิเคราะห์คงไว้ในเอกสารนี้เพื่อใช้เป็นฐานของ change ถัดไป
+> - **dev ต้อง build อะไร:** แก้เฉพาะไฟล์ compose ตาม FR-0-1..FR-0-5 — **ไม่มีการแก้โค้ด**
+> - **กระทบ:** compose ทุก variant; ไม่กระทบ `schema_v`, field ของ doc ใด หรือ API contract
 
 ## ความสัมพันธ์กับ CR-123 และขอบเขต
 
 เอกสารนี้เป็น amendment ของ [CR-123](CR-123-shelter-import-worker-pipeline.md) เฉพาะเรื่องความสามารถในการรองรับข้อมูลจำนวนมากและการแยกพื้นที่เก็บคิว โดย CR-123 ยังเป็นแหล่งอ้างอิงหลักของ template, column mapping, validation, duplicate policy, worker lifecycle และ audit log schema หากข้อความใดขัดกัน ให้ใช้กติกาต่อไปนี้:
 
-- **ทำใน change นี้:** ระยะที่ 1 และระยะที่ 2, migration, security boundary, query contract, counter recovery และ test ที่ระบุในเอกสารนี้
-- **เป็น design ไว้ก่อน:** ระยะที่ 3 เรื่อง generic runtime, backpressure แบบกระจาย, autoscaling และ scheduler กลาง
+- **ทำใน change นี้:** ระยะที่ 0 เท่านั้น — `ulimits.nofile` ของ CouchDB container ใน compose ทุก variant
+- **เป็น design ไว้ก่อน (ยังไม่ implement):** ระยะที่ 1 และระยะที่ 2, migration, security boundary, query contract, counter recovery และ test ที่ระบุในเอกสารนี้ รวมถึงระยะที่ 3 เรื่อง generic runtime, backpressure แบบกระจาย, autoscaling และ scheduler กลาง
 - **ไม่ทำ:** เพิ่ม Redis/PostgreSQL หรือเปลี่ยน Python `worker` ที่ทำ CouchDB → MongoDB projection ให้เป็น import worker
 - เมื่อเจ้าของโครงการอนุมัติ ต้องปรับ `CR-123` และเอกสาร canonical ให้ไม่เหลือข้อความที่บอกว่า job/item อยู่ใน `registry` อย่างเดียว รวมถึงแก้ route worker จาก path เดิมเป็น `/api/internal/shelter-import/worker/next` ให้ตรงกับโค้ดปัจจุบัน
 
 ## เป้าหมายที่วัดผลได้
+
+> **สถานะ: เลื่อนออก — เป็นเป้าหมายของระยะที่ 1–2.** ไม่ใช้ตัดสิน change นี้ ซึ่งวัดผลด้วย §เกณฑ์ยอมรับ › ของ change นี้ (ระยะที่ 0) เท่านั้น
 
 ค่าตั้งต้นที่ใช้ใน implementation และ test:
 
@@ -91,7 +103,31 @@ Benchmark ขั้นต่ำต้องใช้ข้อมูล 1,000 แ
 
 เมื่อนำเข้าศูนย์พักพิงหลายร้อยถึง 1,000 แถวใน dev/local โปรแกรม worker จะทำงานช้าลงมาก CouchDB ใช้ CPU/RAM สูง คำขอใช้เวลานานจนหมดเวลา และงานนำเข้าดูเหมือนค้าง แม้ข้อมูลบางแถวจะเขียนสำเร็จแล้ว
 
-### สาเหตุหลัก
+### สาเหตุที่ยืนยันแล้ว — file descriptor limit ของ CouchDB container
+
+อาการ "ค้างกลางทางที่ประมาณแถวที่ 50" เกิดจาก CouchDB ใช้ file descriptor จนหมดโควตาของ OS ไม่ใช่จาก query pattern
+
+หลักฐานจากการตรวจสอบ 2026-09-17:
+
+| หลักฐาน | ค่าที่วัดได้ |
+|---|---|
+| `ulimit -n` ใน container `couchdb` | `1024` (ค่า default ของ Docker; ไม่มี compose variant ใดตั้งค่าไว้) |
+| file descriptor ที่ `beam.smp` เปิดอยู่ขณะพัง | `1022 / 1024` |
+| CouchDB log | `application: mochiweb, "Accept failed error", "{error,emfile}"` |
+| error ที่ worker ได้รับ | `_security write failed (500): No DB shards could be opened.` ที่ `mergeShelterSecurity` |
+| ผลของงานนำเข้า 56 แถว | สำเร็จ 49 แถว; แถว 49, 51–56 ล้มพร้อมกันหลังชนเพดาน |
+
+กลไก: สถาปัตยกรรมนี้ใช้ **1 ศูนย์ = 1 database** แต่ละ shelter database กินไฟล์ `18` ไฟล์ (shard `2` + view index `16` ซึ่งมาจาก Mango index ของ referral `7` ตัว × `2` shard) ดังนั้นที่ ~50 ศูนย์จะใช้ ~900 ไฟล์ บวก database พื้นฐานและ socket แล้วทะลุ `1024`
+
+ปัจจัยที่ทำให้ descriptor ไม่ถูกคืน: Python sync worker เปิด `_changes` แบบ `continuous` ค้างไว้ต่อ database (`worker/src/worker/couch/client.py`) ทุก shelter database จึงถูกนับเป็น recently-used ตลอดเวลา LRU ของ CouchDB จึงไม่ปิดและไม่คืน descriptor
+
+คอนฟิกสองค่านี้ขัดกันเอง: `max_dbs_open` ของ image `couchdb:3.5.2` คือ `500` แต่ `ulimit -n` ที่ `1024` รองรับได้จริงเพียง ~56 database (ที่ `18` descriptor ต่อ database) CouchDB จึงเปิด database ต่อไปตามที่คอนฟิกอนุญาตจนกระทั่ง kernel ปฏิเสธ
+
+> **หมายเหตุ:** ขณะเกิดเหตุ error ระดับ item ถูกแทนที่ด้วยข้อความคงที่ `'ประมวลผลศูนย์พักพิงไม่สำเร็จ'` โดยไม่มี log ฝั่ง server ทำให้สาเหตุนี้มองไม่เห็นจนกว่าจะเพิ่ม log — ดู FR-0-4
+
+### สาเหตุรองที่ยังไม่ถูกแก้ — query และการจัดเก็บคิว
+
+ข้อนี้ยังเป็นปัญหาจริงและ **ไม่ถูกลบล้าง** ด้วยการแก้ file descriptor แต่ไม่ใช่สาเหตุของอาการค้างที่พบในงาน 56 แถว
 
 ปัจจุบันฐานข้อมูล `registry` ถูกใช้รวมกันทั้งข้อมูลหลักของศูนย์พักพิง งาน/รายการนำเข้า lock ตัวนับ และประวัติการทำงาน แล้วมีการอ่านข้อมูลทั้งหมดซ้ำในขั้นตอนที่ถูกเรียกบ่อย:
 
@@ -102,9 +138,33 @@ Benchmark ขั้นต่ำต้องใช้ข้อมูล 1,000 แ
 5. การเตรียมรายการนำเข้าเขียนทีละเอกสาร ทำให้มี network round-trip จำนวนมาก
 6. การเก็บข้อมูลคิวปนกับข้อมูลหลักทำให้ query ที่ควรอ่านเฉพาะ shelter master ต้องผ่านเอกสารที่ไม่เกี่ยวข้อง และควบคุมสิทธิ์ได้ยากขึ้น
 
-ดังนั้นปัญหาไม่ได้อยู่ที่การตั้งค่า CouchDB อย่างเดียว แต่เกิดจากรูปแบบการค้นหาและการจัดเก็บคิวที่ทำให้ปริมาณงานเพิ่มขึ้นแบบกำลังสองเมื่อจำนวนแถวเพิ่มขึ้น
+ปัญหาข้อนี้ทำให้ปริมาณงานเพิ่มขึ้นแบบกำลังสองเมื่อจำนวนแถวเพิ่มขึ้น และจะปรากฏชัดที่ระดับ 1,000 แถวตามเป้าหมายของ change นี้ แต่ต้องแยกจากสาเหตุ file descriptor ข้างต้น: การแก้ query อย่างเดียวจะไม่ทำให้งานนำเข้าผ่าน ~50 ศูนย์ได้ และการแก้ file descriptor อย่างเดียวก็ไม่ทำให้ query ที่เป็น O(N²) เร็วขึ้น — ต้องแก้ทั้งสองส่วน
+
+## ระยะที่ 0 — file descriptor limit ของ CouchDB
+
+### ข้อกำหนด
+
+- **FR-0-1** — service `couchdb` ใน compose ทุก variant (`docker-compose.yml`, `docker-compose.staging*.yml`, `docker-compose.production*.yml`) ต้องกำหนด `ulimits.nofile` ทั้ง `soft` และ `hard` เป็น `65536`
+- **FR-0-2** — ค่า `ulimits` ต้องอยู่ในไฟล์ compose ไม่ใช่ตั้งผ่าน `docker run` หรือ host config เพราะ container ไม่สืบทอด `/etc/security/limits.conf` ของ host
+- **FR-0-3** — ถ้าภายหลังปรับ `nofile` เกิน `65536` ต้องตั้ง Erlang port limit `+Q` ใน `vm.args` ให้สูงกว่าค่านั้นด้วย มิฉะนั้นเพดานใหม่จะไม่มีผล (ค่าปัจจุบันไม่ได้ตั้ง `+Q` จึงอยู่ที่ default `65536`)
+- **FR-0-4** — ความล้มเหลวระดับ item ต้องถูกบันทึกฝั่ง server พร้อม `job_id`, `row`, `item_id`, `code` และ error ต้นทาง; ข้อความที่ส่งให้ browser ยังคงเป็นข้อความทั่วไปตาม §Response projection
+- **FR-0-5** — `deployment/` runbook ต้องระบุว่าการเพิ่มจำนวนศูนย์พักพิงทำให้ descriptor เพิ่มแบบเชิงเส้น และระบุวิธีตรวจ (`ulimit -n` ใน container เทียบกับจำนวน descriptor ที่เปิดอยู่)
+
+### อ้างอิง
+
+[CouchDB — Maintenance › Performance › System Resource Limits](https://docs.couchdb.org/en/stable/maintenance/performance.html) ระบุตรงกับกรณีนี้:
+
+> "On a system with many databases or many views, CouchDB can very rapidly hit this limit."
+
+ค่าที่เอกสารกำหนดสำหรับแต่ละกลไก — systemd `LimitNOFILE=65536`, PAM `couchdb hard nofile 65536` / `couchdb soft nofile 65536`, shell `ulimit -n 65536` — โดย `ulimits.nofile` ใน compose คือกลไกเทียบเท่าสำหรับ container เอกสารยังระบุว่าระบบ UNIX สมัยใหม่รองรับ descriptor ระดับ `100000` ต่อ process ได้ ค่า `65536` จึงไม่ถือว่าสูงเกิน
+
+### ข้อจำกัดที่ทราบ
+
+`65536` แก้เพดานเฉพาะหน้า แต่ต้นทุนยังโตเชิงเส้นตามจำนวนศูนย์ (`18` descriptor + `1` continuous connection ต่อศูนย์) ที่ระดับ 1,000 ศูนย์ `max_dbs_open = 500` จะกลายเป็นคอขวดถัดไปแทน การลดจำนวน Mango index ที่สร้างซ้ำในทุก shelter database เป็นแนวทางที่ให้ผลมากที่สุด แต่อยู่นอก scope ของ change นี้
 
 ## โครงสร้างข้อมูลและเจ้าของข้อมูล
+
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
 
 การแยก queue จะย้ายเฉพาะ job/item ไม่ย้ายเอกสารที่ใช้ร่วมกับ single-shelter API:
 
@@ -135,6 +195,8 @@ Benchmark ขั้นต่ำต้องใช้ข้อมูล 1,000 แ
 - `results[]` ใน audit log นับ counters จากทุกแถว แต่เก็บรายละเอียดได้ไม่เกิน 200 แถว และข้อความไม่เกิน 200 ตัวอักษรตาม `docs/data/schema.md`
 
 ## Query และ index contract
+
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
 
 ### Design doc ของ queue
 
@@ -188,6 +250,8 @@ GET /shelter_import_queue/_design/import/_view/running_items_by_lease
 
 ## การเปลี่ยนสถานะและความถูกต้องของ counter
 
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+
 Item status เป็น source of truth ส่วน counter ใน job เป็น snapshot ที่สร้างจาก item status:
 
 | การเปลี่ยนสถานะ | ผลต่อ counter |
@@ -214,6 +278,8 @@ Item status เป็น source of truth ส่วน counter ใน job เป�
 
 ## Security และขอบเขตการเข้าถึง
 
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+
 ### การแบ่งสิทธิ์
 
 - Create/status/retry API ใช้ `requireAdmin` บน server เท่านั้น
@@ -236,6 +302,8 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 
 ## การเขียนข้อมูลแบบชุดและการจัดการข้อผิดพลาด
 
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+
 - stage item ด้วย `_bulk_docs` ไม่เกิน 100 รายการหรือ 512 KiB ต่อ batch แล้วอ่านผลลัพธ์รายเอกสารทุกตัว
 - `_bulk_docs` ไม่ใช่ transaction: ถ้าบางเอกสารล้ม ให้ retry เฉพาะเอกสารที่ยังไม่ยืนยันผลด้วย deterministic ID; ถ้า response หาย ให้ตรวจ ID เดิมก่อนเขียนซ้ำ
 - สร้าง job ที่ `queued` หลัง item valid/invalid ถูก stage ครบเท่านั้น ถ้า stage ไม่ครบ ห้ามให้ worker เห็น job
@@ -244,6 +312,8 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - ถ้า queue database หรือ design deployment ล้มตอนสร้างงาน ให้ตอบ `503`/`409` ตามสาเหตุ และห้ามสร้าง job บางส่วนที่ worker มองเห็นได้
 
 ## การย้ายข้อมูลและ rollback
+
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
 
 ### ลำดับ deploy และ cutover
 
@@ -265,7 +335,17 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 
 ## ไฟล์ที่ต้องแก้
 
-### ไฟล์ระบบหลัก
+### ไฟล์ที่แก้ใน change นี้ (ระยะที่ 0)
+
+- `docker-compose.yml`, `docker-compose.staging.yml`, `docker-compose.staging.no-nginx.yml`, `docker-compose.production.yml`, `docker-compose.production.no-nginx.yml` — `ulimits.nofile` ของ service `couchdb`
+
+ไม่มีการแก้ไฟล์โค้ดใน change นี้
+
+### ไฟล์ของระยะที่ 1–2 — เลื่อนออก ยังไม่แก้
+
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** รายการด้านล่างเป็น design ไว้สำหรับ change ถัดไป
+
+#### ไฟล์ระบบหลัก
 
 - `frontend/src/lib/server/shelter-import-queue-design.ts` — design doc, views, version และ validation ของ queue
 - `frontend/src/lib/server/registry-design.ts` — `by_normalized_name` และคง shelter/code views
@@ -276,7 +356,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - `frontend/src/lib/features/shelters/server/provisioner.ts` — ใช้ indexed duplicate lookup โดยยังใช้ name lock/code allocator จาก `registry`
 - `frontend/src/lib/server/shelter-name-lock.ts` — ตรวจและทดสอบว่า lock ไม่ถูกย้ายไป queue จนทำให้ single-shelter API ใช้คนละ lock
 
-### Routes และ worker
+#### Routes และ worker
 
 - `frontend/src/routes/api/back-office/shelter-import/jobs/+server.ts` — admin auth, body limit, server validation และสร้าง job แบบ stage-then-publish
 - `frontend/src/routes/api/back-office/shelter-import/jobs/[jobId]/+server.ts` — อ่าน queue status, ETag และ response projection
@@ -285,7 +365,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - `frontend/server/shelter-import-worker.mjs` — polling/backoff, timeout, worker ID และ graceful shutdown
 - `nginx/nginx.conf` หรือ ingress policy ของ deployment — deny internal worker route จาก public plane หาก catch-all ยังส่งทุก path ไป frontend
 
-### Database, deployment และเอกสาร
+#### Database, deployment และเอกสาร
 
 - `frontend/scripts/seed.ts` และ `frontend/scripts/redeploy-access.ts` — สร้าง queue database, deploy design/security แบบ idempotent และตรวจ version
 - `frontend/scripts/migrate-shelter-import-queue.ts` — migration, verification, marker และ repair command
@@ -297,12 +377,25 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 
 ## อายุข้อมูลและการล้างข้อมูล
 
+> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+
 - job/item ที่ terminal แล้วล้างหลัง 30 วัน โดย cleanup ต้องตรวจ `finished_at`, database ที่ถูกต้อง และไม่ลบงาน `queued/running`
 - audit log อยู่ `registry` และเก็บตาม audit-retention policy ของโครงการ อย่างน้อย 365 วันจนกว่าจะมี policy กลางที่อนุมัติตัวเลขอื่น
 - cleanup ใช้ server-side credential ที่ได้รับอนุญาตเท่านั้น ทำงานแบบ idempotent และบันทึกจำนวนเอกสารที่ลบ/ล้มเหลว
 - ห้ามลบ audit log เพื่อแก้ counter และห้าม cleanup เอกสารที่มี migration marker แต่ยังตรวจสอบไม่เสร็จ
 
 ## เกณฑ์ยอมรับ
+
+### ของ change นี้ (ระยะที่ 0)
+
+- [ ] compose ทุก variant ตั้ง `ulimits.nofile` เป็น `65536` และ `docker compose config --quiet` ผ่านทุกไฟล์
+- [ ] `docker exec <couchdb> sh -c 'ulimit -n'` คืนค่า `65536` หลัง recreate container
+- [ ] นำเข้า 1,000 แถวไม่เกิด `EMFILE` หรือ `No DB shards could be opened` และจำนวน descriptor ที่เปิดอยู่ไม่ถึงเพดานตลอดงาน
+- [ ] ความล้มเหลวระดับ item ปรากฏใน server log พร้อม `job_id`, `row`, `item_id` และ error ต้นทาง โดย response ที่ส่งให้ browser ไม่มีรายละเอียดภายใน
+
+### ของระยะที่ 1–2 — เลื่อนออก ยังไม่ใช้ตัดสิน change นี้
+
+> **สถานะ: เลื่อนออก.** รายการด้านล่างเก็บไว้เป็นฐานของ change ถัดไป
 
 - [ ] งาน 1,000 แถวตอบ `202 + jobId` หลัง stage ครบ โดยไม่รอ provisioning ทั้งงาน และปฏิเสธ request ที่เกิน 1,000 แถวหรือ 5 MiB
 - [ ] worker poll ไม่อ่าน job ทั้งฐานข้อมูล; query ใช้ `jobs_by_runnable`, `limit` และ keyset pagination
@@ -322,6 +415,21 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - [ ] benchmark fixture ผ่าน query/request/latency target และบันทึก CPU/memory ก่อนอนุมัติ
 
 ## แผนการทดสอบ
+
+### ของ change นี้ (ระยะที่ 0)
+
+```bash
+docker compose -f docker-compose.yml config --quiet
+docker compose -f docker-compose.staging.yml config --quiet
+docker compose -f docker-compose.staging.no-nginx.yml config --quiet
+docker compose -f docker-compose.production.yml config --quiet
+docker compose -f docker-compose.production.no-nginx.yml config --quiet
+docker compose up -d couchdb && docker exec couchdb sh -c 'ulimit -n'   # ต้องได้ 65536
+```
+
+### ของระยะที่ 1–2 — เลื่อนออก
+
+> **สถานะ: เลื่อนออก.** ไม่ใช้ตัดสิน change นี้
 
 - unit: key builder, normalized name, query URL, response projection, transition matrix, counter reduce mapping และ error classification
 - server/API: admin RBAC, actor spoofing, client error spoofing, body limit, 409/429/5xx, ETag/304 และ missing design fail-closed
@@ -356,3 +464,9 @@ Redis ไม่อยู่ใน change นี้ เพราะไม่แ�
 - 2026-09-16 — proposed: ใช้ item status และ reduce view เป็น source of truth ของ counter; job counter เป็น snapshot ที่ต้องซ่อมได้
 - 2026-09-16 — proposed: worker ไม่มี CouchDB credential; SvelteKit server เป็นผู้เรียก CouchDB และ internal route ต้องไม่เข้าจาก public plane
 - 2026-09-16 — proposed: ไม่เพิ่ม Redis/PostgreSQL และไม่นำ Python sync worker มารวมกับ import worker
+- 2026-09-17 — proposed: ยืนยันสาเหตุของอาการค้างเป็น file descriptor limit (`EMFILE` ที่ `ulimit -n = 1024`) ไม่ใช่ query pattern; แก้ข้อความเดิมที่ระบุว่าปัญหาไม่ได้อยู่ที่การตั้งค่า CouchDB
+- 2026-09-17 — proposed: เพิ่มระยะที่ 0 ตั้ง `ulimits.nofile = 65536` ใน compose ทุก variant ตาม CouchDB performance docs; ใช้ compose แทน host limit เพราะ container ไม่สืบทอด `limits.conf` ของ host
+- 2026-09-17 — proposed: คงระยะที่ 1–2 ไว้ตามเดิม เพราะ query O(N²) เป็นปัญหาคนละตัวที่ยังไม่ถูกแก้ด้วยระยะที่ 0
+- 2026-09-17 — proposed: บันทึกว่า `max_dbs_open = 500` จะเป็นคอขวดถัดไปที่ระดับ 1,000 ศูนย์; การลด Mango index ต่อ shelter database อยู่นอก scope
+- 2026-09-17 — proposed: **ลด scope เหลือระยะที่ 0 เท่านั้น** ระยะที่ 1–2 เลื่อนออกและไม่แก้โค้ดใด ๆ ใน change นี้; เหตุผลคือระยะที่ 0 แก้สาเหตุที่ยืนยันแล้วของอาการค้าง ส่วนระยะที่ 1–2 เป็นงาน scalability ที่ยังไม่มีหลักฐานว่าเป็นสาเหตุของอาการที่รายงาน จึงควรแยกประเมินและอนุมัติต่างหาก
+- 2026-09-17 — proposed: คงบทวิเคราะห์ของระยะที่ 1–2 ไว้ในเอกสารนี้ทั้งหมด (ติดป้าย "เลื่อนออก") แทนการลบ เพื่อไม่ให้ต้องวิเคราะห์ซ้ำใน change ถัดไป
