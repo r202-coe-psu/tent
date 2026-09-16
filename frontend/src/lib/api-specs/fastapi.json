@@ -888,7 +888,7 @@
 			"post": {
 				"tags": ["External"],
 				"summary": "Issue Token",
-				"operationId": "issue_token_third_party_token_post",
+				"operationId": "issue_token_external_token_post",
 				"requestBody": {
 					"content": {
 						"application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } }
@@ -1017,7 +1017,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "List Locations",
-				"operationId": "list_locations_third_party_locations_get",
+				"operationId": "list_locations_external_locations_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1104,7 +1104,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location",
-				"operationId": "get_location_third_party_locations__location_code__get",
+				"operationId": "get_location_external_locations__location_code__get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1146,7 +1146,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Occupancy",
-				"operationId": "get_location_occupancy_third_party_locations__location_code__occupancy_get",
+				"operationId": "get_location_occupancy_external_locations__location_code__occupancy_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1188,7 +1188,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Occupants",
-				"operationId": "get_location_occupants_third_party_locations__location_code__occupants_get",
+				"operationId": "get_location_occupants_external_locations__location_code__occupants_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1277,7 +1277,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Stock",
-				"operationId": "get_location_stock_third_party_locations__location_code__stock_get",
+				"operationId": "get_location_stock_external_locations__location_code__stock_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1319,7 +1319,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Summary",
-				"operationId": "get_summary_third_party_summary_get",
+				"operationId": "get_summary_external_summary_get",
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -2740,8 +2740,12 @@
 					"item_id": { "type": "string", "title": "Item Id" },
 					"name": { "type": "string", "title": "Name" },
 					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
 					"unit": { "type": "string", "title": "Unit" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
