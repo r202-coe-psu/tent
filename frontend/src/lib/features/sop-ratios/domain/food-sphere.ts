@@ -3,23 +3,23 @@ import type { CatalogDoc } from '$lib/db/model';
 
 export const targetSegmentSchema = z.enum([
 	'ALL',
-	'INFANT_0_6',
-	'INFANT_6_23',
-	'CHILD_2_5',
-	'PREGNANT',
-	'LACTATING',
+	'INFANT',
+	'YOUNG_CHILD',
+	'OLDER_CHILD',
+	'TEEN',
+	'ADULT',
 	'ELDERLY'
 ]);
 export type TargetSegment = z.infer<typeof targetSegmentSchema>;
 
 export const TARGET_SEGMENT_LABELS: Record<TargetSegment, string> = {
 	ALL: 'ทุกคน',
-	INFANT_0_6: 'ทารก 0-6 เดือน',
-	INFANT_6_23: 'ทารก 6-23 เดือน',
-	CHILD_2_5: 'เด็กเล็ก 2-5 ขวบ',
-	PREGNANT: 'สตรีมีครรภ์',
-	LACTATING: 'สตรีให้นมบุตร',
-	ELDERLY: 'ผู้สูงอายุ'
+	INFANT: 'ทารก (< 1 ปี)',
+	YOUNG_CHILD: 'เด็กเล็ก (1–5 ปี)',
+	OLDER_CHILD: 'เด็กโต (6–11 ปี)',
+	TEEN: 'วัยรุ่น (12–19 ปี)',
+	ADULT: 'ผู้ใหญ่ (20–59 ปี)',
+	ELDERLY: 'ผู้สูงอายุ (60 ปีขึ้นไป)'
 };
 
 import { sourceSchema, SOURCE_LABELS, SOURCE_OPTIONS, type Source } from '$lib/utils/source';
