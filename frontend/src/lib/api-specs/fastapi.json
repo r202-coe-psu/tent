@@ -888,7 +888,7 @@
 			"post": {
 				"tags": ["External"],
 				"summary": "Issue Token",
-				"operationId": "issue_token_third_party_token_post",
+				"operationId": "issue_token_external_token_post",
 				"requestBody": {
 					"content": {
 						"application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } }
@@ -1017,7 +1017,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "List Locations",
-				"operationId": "list_locations_third_party_locations_get",
+				"operationId": "list_locations_external_locations_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1104,7 +1104,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location",
-				"operationId": "get_location_third_party_locations__location_code__get",
+				"operationId": "get_location_external_locations__location_code__get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1146,7 +1146,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Occupancy",
-				"operationId": "get_location_occupancy_third_party_locations__location_code__occupancy_get",
+				"operationId": "get_location_occupancy_external_locations__location_code__occupancy_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1188,7 +1188,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Occupants",
-				"operationId": "get_location_occupants_third_party_locations__location_code__occupants_get",
+				"operationId": "get_location_occupants_external_locations__location_code__occupants_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1277,7 +1277,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Location Stock",
-				"operationId": "get_location_stock_third_party_locations__location_code__stock_get",
+				"operationId": "get_location_stock_external_locations__location_code__stock_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -1319,7 +1319,7 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Get Summary",
-				"operationId": "get_summary_third_party_summary_get",
+				"operationId": "get_summary_external_summary_get",
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -3126,6 +3126,11 @@
 						"items": { "$ref": "#/components/schemas/ShelterFaqDetail" },
 						"type": "array",
 						"title": "Faq"
+					},
+					"accepts_pre_registration": {
+						"type": "boolean",
+						"title": "Accepts Pre Registration",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -3222,6 +3227,11 @@
 					"admin_type": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Admin Type"
+					},
+					"accepts_pre_registration": {
+						"type": "boolean",
+						"title": "Accepts Pre Registration",
+						"default": false
 					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},

@@ -48,9 +48,14 @@
 	let disclaimerAcknowledged = $state(false);
 
 	const isUnassigned = $derived(selectedShelterCode === UNASSIGNED_SHELTER_CODE);
-	const bookable = $derived(shelters.filter((s) => s.status !== 'CLOSED'));
+	const bookable = $derived(
+		shelters.filter((s) => s.status !== 'CLOSED' && s.accepts_pre_registration === true)
+	);
 	const selected = $derived(shelters.find((s) => s.code === selectedShelterCode) ?? null);
-	const hasShelter = $derived(selected !== null);
+	const selectedIsBookable = $derived(
+		isUnassigned || bookable.some((s) => s.code === selectedShelterCode)
+	);
+	const hasShelter = $derived(selected !== null && selectedIsBookable);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
 	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
 	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
@@ -97,6 +102,11 @@
 	let isSubmitting = $state(false);
 
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
+		if (!isUnassigned && !selectedIsBookable) {
+			const err = 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ';
+			toast.error(err);
+			throw new Error(err);
+		}
 		if (isUnassigned) {
 			if (!disclaimerAcknowledged) {
 				const err = t.unassignedDisclaimerRequired;
@@ -311,6 +321,13 @@
 						</p>
 					</div>
 				</div>
+			{:else if selected && !selectedIsBookable}
+				<p
+					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
+				>
+					<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+					<span>ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ</span>
+				</p>
 			{:else if selected}
 				<p class="flex items-start gap-1 text-xs text-muted-foreground">
 					<MapPin class="mt-0.5 h-3 w-3 shrink-0" />

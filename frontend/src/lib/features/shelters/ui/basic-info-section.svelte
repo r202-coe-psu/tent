@@ -163,6 +163,13 @@
 		});
 	}
 
+	function setAcceptsPreRegistration(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			accepts_pre_registration: checked
+		});
+	}
+
 	/** Registration toggles — also mirror the related policy sections (pets / luggage / parking). */
 	function setAllowPets(checked: boolean) {
 		const next = applyAllowPets($formData, checked);
@@ -308,6 +315,27 @@
 	</h3>
 
 	<div class="space-y-3">
+		<div
+			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="accepts-pre-registration" class="text-sm font-medium text-card-foreground">
+					รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด: ศูนย์ยังปรากฏในรายการ
+					แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
+				</p>
+			</div>
+			<Switch
+				id="accepts-pre-registration"
+				checked={$formData.feature_flags?.accepts_pre_registration ?? false}
+				onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
+				{disabled}
+				aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
+			/>
+		</div>
+
 		<div
 			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
 		>

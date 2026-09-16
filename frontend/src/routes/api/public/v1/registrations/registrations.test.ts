@@ -55,7 +55,12 @@ vi.mock('$lib/server/security/captcha', () => ({
 	}
 }));
 
-const OPEN_SHELTER = { code: 'SH001', name: 'ศูนย์ทดสอบ', operation_status: 'active' };
+const OPEN_SHELTER = {
+	code: 'SH001',
+	name: 'ศูนย์ทดสอบ',
+	operation_status: 'active',
+	feature_flags: { accepts_pre_registration: true }
+};
 
 const CONTACT = { first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] };
 
@@ -191,6 +196,29 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(findMasterByCode).mockResolvedValue({
 			...OPEN_SHELTER,
 			operation_status: 'closed'
+		} as never);
+		const res = await POST(event(VALID_BODY));
+		expect(res.status).toBe(409);
+		expect((await res.json()).error).toBe('SHELTER_CLOSED');
+		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('409 when accepts_pre_registration is off', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue({
+			...OPEN_SHELTER,
+			feature_flags: { accepts_pre_registration: false }
+		} as never);
+		const res = await POST(event(VALID_BODY));
+		expect(res.status).toBe(409);
+		expect((await res.json()).error).toBe('SHELTER_CLOSED');
+		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('409 when accepts_pre_registration is missing (default off)', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue({
+			code: 'SH001',
+			name: 'ศูนย์ทดสอบ',
+			operation_status: 'active'
 		} as never);
 		const res = await POST(event(VALID_BODY));
 		expect(res.status).toBe(409);

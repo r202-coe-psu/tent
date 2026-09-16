@@ -418,7 +418,7 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/** Issue Token */
-		post: operations['issue_token_third_party_token_post'];
+		post: operations['issue_token_external_token_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -468,7 +468,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** List Locations */
-		get: operations['list_locations_third_party_locations_get'];
+		get: operations['list_locations_external_locations_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -485,7 +485,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location */
-		get: operations['get_location_third_party_locations__location_code__get'];
+		get: operations['get_location_external_locations__location_code__get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -502,7 +502,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupancy */
-		get: operations['get_location_occupancy_third_party_locations__location_code__occupancy_get'];
+		get: operations['get_location_occupancy_external_locations__location_code__occupancy_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -519,7 +519,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupants */
-		get: operations['get_location_occupants_third_party_locations__location_code__occupants_get'];
+		get: operations['get_location_occupants_external_locations__location_code__occupants_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -536,7 +536,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Stock */
-		get: operations['get_location_stock_third_party_locations__location_code__stock_get'];
+		get: operations['get_location_stock_external_locations__location_code__stock_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -553,7 +553,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Summary */
-		get: operations['get_summary_third_party_summary_get'];
+		get: operations['get_summary_external_summary_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -1894,6 +1894,11 @@ export interface components {
 			contact: components['schemas']['ShelterContactDetail'];
 			/** Faq */
 			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -1969,6 +1974,11 @@ export interface components {
 			vulnerable_groups?: string[] | null;
 			/** Admin Type */
 			admin_type?: string | null;
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -3249,7 +3259,7 @@ export interface operations {
 			};
 		};
 	};
-	issue_token_third_party_token_post: {
+	issue_token_external_token_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3384,7 +3394,7 @@ export interface operations {
 			};
 		};
 	};
-	list_locations_third_party_locations_get: {
+	list_locations_external_locations_get: {
 		parameters: {
 			query?: {
 				/** @description Filter by location_status */
@@ -3423,7 +3433,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_third_party_locations__location_code__get: {
+	get_location_external_locations__location_code__get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3463,7 +3473,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupancy_third_party_locations__location_code__occupancy_get: {
+	get_location_occupancy_external_locations__location_code__occupancy_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3503,7 +3513,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupants_third_party_locations__location_code__occupants_get: {
+	get_location_occupants_external_locations__location_code__occupants_get: {
 		parameters: {
 			query?: {
 				purpose?: string | null;
@@ -3567,7 +3577,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_stock_third_party_locations__location_code__stock_get: {
+	get_location_stock_external_locations__location_code__stock_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3607,7 +3617,7 @@ export interface operations {
 			};
 		};
 	};
-	get_summary_third_party_summary_get: {
+	get_summary_external_summary_get: {
 		parameters: {
 			query?: never;
 			header?: never;

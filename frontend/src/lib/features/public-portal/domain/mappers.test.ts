@@ -38,6 +38,18 @@ describe('toPublicShelterCard', () => {
 		expect(card.site_kind).toBe('evacuation_center');
 		expect(card.distance).toBe(3.2);
 		expect(card.geo).toEqual({ lat: 7, lng: 100 });
+		expect(card.accepts_pre_registration).toBe(false);
+	});
+
+	it('maps accepts_pre_registration when the API sends true', () => {
+		const card = toPublicShelterCard({
+			code: 'SH001',
+			name: 'ศูนย์ทดสอบ',
+			status: 'open',
+			capacity: 100,
+			accepts_pre_registration: true
+		});
+		expect(card.accepts_pre_registration).toBe(true);
 	});
 
 	it('preserves host house site kind', () => {
@@ -60,6 +72,7 @@ describe('toPublicShelterCard', () => {
 		expect(emptyCard.geo).toBeNull();
 		expect(emptyCard.site_kind).toBe('evacuation_center');
 		expect(emptyCard.vulnerable_groups).toBeNull();
+		expect(emptyCard.accepts_pre_registration).toBe(false);
 
 		const undefinedCard = toPublicShelterCard(undefined);
 		expect(undefinedCard.id).toBe('ศูนย์พักพิง');
