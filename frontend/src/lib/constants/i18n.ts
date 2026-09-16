@@ -1,5 +1,10 @@
 export { SUPPORTED_LANGUAGES, PUBLIC_NAVBAR_I18N } from './i18n/common';
-export { PUBLIC_HOME_I18N, PUBLIC_HERO_I18N, PUBLIC_EMERGENCY_I18N } from './i18n/public-home';
+export {
+	PUBLIC_HOME_I18N,
+	PUBLIC_HERO_I18N,
+	PUBLIC_EMERGENCY_I18N,
+	PUBLIC_PORTAL_HOME_I18N
+} from './i18n/public-home';
 export { PUBLIC_SHELTERS_I18N } from './i18n/public-shelters';
 export { PUBLIC_SEARCH_I18N } from './i18n/public-search';
 export { PUBLIC_SHELTER_CARD_I18N } from './i18n/public-shelter-card';

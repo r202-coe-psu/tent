@@ -21,19 +21,21 @@ export const PUBLIC_NAVBAR_I18N = {
 		donateAndBook: 'บริจาคและจองคิว',
 		trackDonation: 'ตรวจสอบสถานะ',
 		trackDonationLong: 'ตรวจสอบสถานะบริจาค',
+		volunteer: 'จิตอาสา',
 		backoffice: 'ระบบหลังบ้าน'
 	},
 	en: {
 		appTitle: 'Smart Shelter',
-		appSubtitle: 'Public & RFL Portal',
+		appSubtitle: 'PUBLIC PORTAL',
 		home: 'Home',
-		shelters: 'Check Shelters',
-		search: 'Find Relatives',
-		preRegister: 'Pre-register',
+		shelters: 'Shelters',
+		search: 'Search Evacuees',
+		preRegister: 'Pre-Registration',
 		donate: 'Donate',
 		donateAndBook: 'Donate & Queue',
 		trackDonation: 'Track Status',
 		trackDonationLong: 'Track Donation Status',
+		volunteer: 'Volunteer',
 		backoffice: 'Backoffice'
 	}
 } as const;

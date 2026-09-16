@@ -73,7 +73,7 @@
 						href="mailto:Thamathep.l@psu.ac.th"
 						class="transition-colors hover:text-white hover:underline"
 					>
-						Thamathep.l@psu.ac.th
+						Thamathip.l@psu.ac.th
 					</a>
 				</div>
 				<p class="text-xs text-white/60">ระบบประสานงานและข้อมูลสาธารณะเพื่อการบรรเทาทุกข์</p>

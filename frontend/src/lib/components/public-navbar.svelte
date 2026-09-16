@@ -12,14 +12,12 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	// import Globe from '@lucide/svelte/icons/globe';
 	import Bell from '@lucide/svelte/icons/bell';
+	import Users from '@lucide/svelte/icons/users';
 
 	import { onMount } from 'svelte';
-	// import * as Select from '$lib/components/ui/select';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
-	// import { SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import type { Announcement } from '$lib/features/announcements';
 	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
@@ -83,6 +81,7 @@
 	let alertsMenuOpen = $state(false);
 	let alertsMenuEl: HTMLDivElement | undefined = $state();
 	let alertsButtonEl: HTMLButtonElement | undefined = $state();
+	let headerHeight = $state(64);
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
 
@@ -117,6 +116,10 @@
 		alertsMenuOpen = false;
 	}
 
+	function toggleLanguage() {
+		langState.current = langState.current === 'th' ? 'en' : 'th';
+	}
+
 	function handleWindowPointerDown(event: PointerEvent) {
 		const target = event.target as Node;
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
@@ -148,21 +151,28 @@
 <svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeydown} />
 
 <header
-	class="sticky top-0 z-50 w-full border-b border-border bg-card/95 px-6 py-3 shadow-xs backdrop-blur-md"
+	bind:clientHeight={headerHeight}
+	class="fixed top-0 right-0 left-0 z-50 w-full border-b border-border bg-card/95 px-3 py-2.5 shadow-xs backdrop-blur-md sm:px-6 sm:py-3"
 >
-	<div class="relative z-50 mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-3">
+	<div
+		class="relative z-50 mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-2 sm:gap-3"
+	>
 		<!-- Logo and Title -->
-		<div class="flex min-w-0 shrink items-center gap-3">
-			<a href={resolve('/')} class="flex min-w-0 items-center gap-2.5">
-				<img src="/logo.png" alt="PSU Smart Shelter" class="h-9 w-9 shrink-0 rounded-lg" />
-				<span class="truncate text-base font-bold tracking-tight text-foreground"
+		<div class="flex min-w-0 shrink items-center gap-2">
+			<a href={resolve('/')} class="flex min-w-0 items-center gap-2 sm:gap-2.5">
+				<img
+					src="/logo.png"
+					alt="PSU Smart Shelter"
+					class="h-8 w-8 shrink-0 rounded-lg sm:h-9 sm:w-9"
+				/>
+				<span class="truncate text-sm font-bold tracking-tight text-foreground sm:text-base"
 					>PSU Smart Shelter</span
 				>
 			</a>
 		</div>
 
 		<!-- Compact controls: phone + tablet (hamburger through lg) -->
-		<div class="flex shrink-0 items-center gap-1.5 sm:gap-2 lg:hidden">
+		<div class="flex shrink-0 items-center gap-1 sm:gap-2 lg:hidden">
 			<!-- Notification Bell Button (Mobile) -->
 			<button
 				bind:this={alertsButtonEl}
@@ -188,31 +198,17 @@
 				{/if}
 			</button>
 
-			<!-- Language Switcher (Mobile) - temporarily commented out -->
-			<!--
-			<Select.Root
-				type="single"
-				value={langState.current}
-				onValueChange={(v) => {
-					if (v) langState.current = v;
-				}}
-			>
-				<Select.Trigger
-					class="h-8 w-[60px] border-none bg-transparent px-2 text-xs shadow-none focus:ring-0"
+			<!-- Language Switcher (Mobile) -->
+			<div class="flex shrink-0 items-center border-l border-slate-200 pl-1.5 sm:pl-2">
+				<button
+					type="button"
+					onclick={toggleLanguage}
+					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
+					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
 				>
-					{langState.current.toUpperCase()}
-				</Select.Trigger>
-				<Select.Content>
-					{#each SUPPORTED_LANGUAGES as lang (lang.code)}
-						<Select.Item value={lang.code} label={lang.name}>
-							<div class="flex items-center gap-2">
-								<span class="text-sm">{lang.name}</span>
-							</div>
-						</Select.Item>
-					{/each}
-				</Select.Content>
-			</Select.Root>
-			-->
+					{langState.current === 'th' ? 'EN' : 'TH'}
+				</button>
+			</div>
 
 			<button
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
@@ -252,18 +248,6 @@
 			</a>
 
 			<a
-				href={resolve('/search')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
-					'/search'
-				)
-					? 'bg-primary-muted text-primary'
-					: 'text-muted-foreground'}"
-			>
-				<Search class="h-4 w-4" />
-				{t.search}
-			</a>
-
-			<a
 				href={resolve('/pre-register')}
 				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
 					'/pre-register'
@@ -273,6 +257,18 @@
 			>
 				<ClipboardCheck class="h-4 w-4" />
 				{t.preRegister}
+			</a>
+
+			<a
+				href={resolve('/search')}
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+					'/search'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
+			>
+				<Search class="h-4 w-4" />
+				{t.search}
 			</a>
 
 			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
@@ -329,6 +325,18 @@
 			</div>
 
 			<a
+				href={resolve('/volunteers')}
+				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+					'/volunteers'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
+			>
+				<Users class="h-4 w-4" />
+				{t.volunteer}
+			</a>
+
+			<a
 				href={resolve('/login')}
 				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
 					'/login'
@@ -340,35 +348,17 @@
 				{t.backoffice}
 			</a>
 
-			<!-- Language Switcher (Desktop) - temporarily commented out -->
-			<!--
-			<div class="ml-2 flex shrink-0 items-center border-l border-border pl-3">
-				<Globe class="mr-1 h-4 w-4 text-muted-foreground" />
-				<Select.Root
-					type="single"
-					value={langState.current}
-					onValueChange={(v) => {
-						if (v) langState.current = v;
-					}}
+			<!-- Language Switcher (Desktop) -->
+			<div class="ml-2 flex shrink-0 items-center border-l border-slate-200 pl-3">
+				<button
+					type="button"
+					onclick={toggleLanguage}
+					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3.5 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
+					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
 				>
-					<Select.Trigger
-						class="h-8 w-[80px] border-none bg-transparent px-2 text-sm shadow-none focus:ring-0"
-					>
-						{SUPPORTED_LANGUAGES.find((l) => l.code === langState.current)?.name ||
-							langState.current.toUpperCase()}
-					</Select.Trigger>
-					<Select.Content>
-						{#each SUPPORTED_LANGUAGES as lang (lang.code)}
-							<Select.Item value={lang.code} label={lang.name}>
-								<div class="flex items-center gap-2">
-									<span class="text-sm">{lang.name}</span>
-								</div>
-							</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
+					{langState.current === 'th' ? 'EN' : 'TH'}
+				</button>
 			</div>
-			-->
 		</nav>
 	</div>
 
@@ -611,6 +601,19 @@
 				</a>
 
 				<a
+					href={resolve('/volunteers')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/volunteers'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Users class="h-5 w-5" />
+					{t.volunteer}
+				</a>
+
+				<a
 					href={resolve('/login')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
@@ -622,9 +625,36 @@
 					<Building2 class="h-5 w-5" />
 					{t.backoffice}
 				</a>
+
+				<div class="mt-1 border-t border-border/60 pt-2">
+					<button
+						type="button"
+						onclick={() => {
+							toggleLanguage();
+							mobileMenuOpen = false;
+						}}
+						class="flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+					>
+						<span class="text-sm font-medium text-slate-700">
+							{langState.current === 'th' ? 'เปลี่ยนภาษา (Language)' : 'Switch Language'}
+						</span>
+						<span
+							class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs"
+						>
+							{langState.current === 'th' ? 'EN' : 'TH'}
+						</span>
+					</button>
+				</div>
 			</nav>
 		</div>
 	{/if}
 </header>
+
+<!-- Spacer preserving header height in document flow so content is never covered -->
+<div
+	style="height: {headerHeight}px;"
+	class="pointer-events-none w-full shrink-0"
+	aria-hidden="true"
+></div>
 
 <PublicEmergencyModal bind:open={alertsModalOpen} {announcements} />

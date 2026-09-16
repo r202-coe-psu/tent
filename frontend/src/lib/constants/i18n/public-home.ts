@@ -141,3 +141,149 @@ export const PUBLIC_EMERGENCY_I18N = {
 		urgent: 'Urgent Announcement'
 	}
 } as const;
+
+export const PUBLIC_PORTAL_HOME_I18N = {
+	th: {
+		pageTitle: 'Smart Shelter — แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
+		heroTitle: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
+		heroSubtitle: 'ศูนย์พักพิง • ค้นหาผู้พักพิง • บริจาคและจิตอาสา',
+		findSheltersTag: 'ค้นหาศูนย์พักพิง',
+		searchSheltersTitle: 'ค้นหาศูนย์พักพิง',
+		searchSheltersSubtitle: 'เช็คพิกัดและศูนย์พักพิงที่เปิดรับ',
+		searchEvacueesTag: 'ค้นหาผู้พักพิง / ตามหาญาติ',
+		searchPlaceholder: 'พิมพ์ชื่อ-นามสกุล, เลขประจำตัว...',
+		searchBtn: 'ค้นหา',
+
+		// KPI Stats
+		sheltersUnit: 'ศูนย์',
+		sheltersDesc: 'ศูนย์พักพิงที่เปิดรับความช่วยเหลือ',
+		itemsUnit: 'รายการ',
+		itemsDeficitPrefix: 'ขาดอีก',
+		itemsDeficitSuffix: 'ชิ้น',
+		itemsNone: 'ไม่มีสิ่งของขาดแคลน',
+		itemsDesc: 'สิ่งของจำเป็นที่ยังขาดแคลน',
+		volunteersNeededPrefix: 'ต้องการอีก',
+		volunteersNeededSuffix: 'คน',
+		volunteersActivePrefix: 'มีแล้ว',
+		volunteersActiveSuffix: 'คน',
+		volunteersNeededText: (count: number) => `ต้องการอีก ${count.toLocaleString()} คน`,
+		volunteersActiveText: (count: number) => `มีแล้ว ${count.toLocaleString()} คน`,
+		volunteersDesc: 'จิตอาสาในภารกิจเร่งด่วน',
+
+		// Urgent Donations
+		urgentDonationsTitle: 'ความต้องการบริจาคด่วน',
+		urgentDonationsSubtitle: 'รายการที่ต้องการเร่งด่วนในขณะนี้',
+		allNeedsBtn: 'รายการทั้งหมด',
+		trackStatusBtn: 'ตรวจสอบสถานะ',
+		prevAriaLabel: 'ก่อนหน้า',
+		nextAriaLabel: 'ถัดไป',
+		urgentItemsNeededLabel: 'สิ่งของจำเป็นที่ขาดแคลน:',
+		criticalBadge: 'วิกฤติ',
+		donateBtn: 'ร่วมบริจาค',
+		receivedLabel: 'ได้รับแล้ว',
+		moreItemsPrefix: '+',
+		moreItemsSuffix: 'รายการ',
+		donationsEmptyTitle: 'ขณะนี้ยังไม่มีรายการความต้องการสิ่งของบริจาคด่วน',
+		donationsEmptyDesc:
+			'ศูนย์พักพิงทุกแห่งได้รับการสนับสนุนสิ่งของจำเป็นเพียงพอ หรืออยู่ระหว่างการสำรวจความต้องการเพิ่มเติมจากเจ้าหน้าที่ภาคสนาม',
+		allDonationsLink: 'ดูรายการรับบริจาคทั้งหมด',
+		trackDonationLink: 'ติดตามสถานะการบริจาค',
+
+		// Volunteers
+		volunteersTitle: 'จิตอาสา',
+		volunteersSubtitle: 'ร่วมเป็นกำลังสำคัญช่วยเหลือผู้ประสบภัย',
+		allMissionsBtn: 'ดูภารกิจทั้งหมด',
+		hostHouseBtn: 'สมัครเป็นบ้านพี่เลี้ยง',
+		urgentRolesNeededLabel: 'ภารกิจจิตอาสาที่เปิดรับ:',
+		enrolledLabel: 'มีอาสาแล้ว',
+		needMorePrefix: 'ต้องการอีก',
+		needMoreMiddle: 'จาก',
+		needMoreSuffix: 'คน',
+		volunteerBtn: 'ร่วมเป็นจิตอาสา',
+		volunteersEmptyTitle: 'ขณะนี้ยังไม่มีภารกิจจิตอาสาที่เปิดรับสมัครเร่งด่วน',
+		volunteersEmptyDesc:
+			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีภารกิจใหม่',
+		preRegisterVolunteerBtn: 'ลงทะเบียนจิตอาสาล่วงหน้า',
+		hostHouseInfoBtn: 'ข้อมูลบ้านพี่เลี้ยง',
+
+		// FAQ
+		faqSectionTitle: 'คำถามที่พบบ่อย',
+		faqEmptyTitle: 'ขณะนี้ยังไม่มีข้อมูลคำถามที่พบบ่อย',
+		faqEmptyDesc:
+			'เจ้าหน้าที่กำลังอยู่ระหว่างการรวบรวมและเผยแพร่ข้อมูลคำถาม-คำตอบเพื่ออำนวยความสะดวกแก่ประชาชน',
+
+		// Floating button
+		emergencyAlertsBtn: 'แจ้งเตือนภัย'
+	},
+	en: {
+		pageTitle: 'Smart Shelter — Disaster Relief & Assistance Platform',
+		heroTitle: 'Disaster Relief & Assistance Platform',
+		heroSubtitle: 'Shelters • Search Evacuees • Donate & Volunteer',
+		findSheltersTag: 'Find Shelters',
+		searchSheltersTitle: 'Search Shelters',
+		searchSheltersSubtitle: 'Check GPS & view currently available shelters',
+		searchEvacueesTag: 'Search Evacuees',
+		searchPlaceholder: 'Type full name, ID number, or phone number...',
+		searchBtn: 'Search',
+
+		// KPI Stats
+		sheltersUnit: 'Shelters',
+		sheltersDesc: 'Shelters open for assistance',
+		itemsUnit: 'Items',
+		itemsDeficitPrefix: '',
+		itemsDeficitSuffix: 'pcs lacking',
+		itemsNone: 'No items lacking',
+		itemsDesc: 'Essential items still needed',
+		volunteersNeededPrefix: '',
+		volunteersNeededSuffix: 'Needed',
+		volunteersActivePrefix: '',
+		volunteersActiveSuffix: 'enrolled',
+		volunteersNeededText: (count: number) => `${count.toLocaleString()} Needed`,
+		volunteersActiveText: (count: number) => `${count.toLocaleString()} enrolled`,
+		volunteersDesc: 'Urgent mission volunteers',
+
+		// Urgent Donations
+		urgentDonationsTitle: 'Urgent Donation Needs',
+		urgentDonationsSubtitle: 'Items urgently needed at this time.',
+		allNeedsBtn: 'All Needs',
+		trackStatusBtn: 'Track Status',
+		prevAriaLabel: 'Previous',
+		nextAriaLabel: 'Next',
+		urgentItemsNeededLabel: 'Urgent items needed:',
+		criticalBadge: 'Critical',
+		donateBtn: 'Donate',
+		receivedLabel: 'Received',
+		moreItemsPrefix: '+',
+		moreItemsSuffix: 'more',
+		donationsEmptyTitle: 'No urgent donation needs at this time',
+		donationsEmptyDesc:
+			'All shelters currently have sufficient supplies or field assessments are underway.',
+		allDonationsLink: 'View All Donation Needs',
+		trackDonationLink: 'Track Donation Status',
+
+		// Volunteers
+		volunteersTitle: 'Volunteers',
+		volunteersSubtitle: 'Be a vital force in disaster relief.',
+		allMissionsBtn: 'All Missions',
+		hostHouseBtn: 'Sign Up as Host House',
+		urgentRolesNeededLabel: 'Urgent volunteer roles needed:',
+		enrolledLabel: 'Enrolled',
+		needMorePrefix: 'Need',
+		needMoreMiddle: 'more of',
+		needMoreSuffix: 'volunteers',
+		volunteerBtn: 'Volunteer',
+		volunteersEmptyTitle: 'No urgent volunteer missions at this time',
+		volunteersEmptyDesc:
+			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new missions open.',
+		preRegisterVolunteerBtn: 'Pre-register as Volunteer',
+		hostHouseInfoBtn: 'Host House Information',
+
+		// FAQ
+		faqSectionTitle: 'Frequently Asked Questions (FAQ)',
+		faqEmptyTitle: 'No frequently asked questions available',
+		faqEmptyDesc: 'Staff are compiling frequently asked questions to assist the public.',
+
+		// Floating button
+		emergencyAlertsBtn: 'Emergency Alerts'
+	}
+} as const;
