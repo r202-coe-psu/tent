@@ -169,10 +169,10 @@
 	}
 
 	function openBooking(shelterCode: string) {
-		const path = shelterCode
-			? `/pre-register?shelter=${encodeURIComponent(shelterCode)}`
-			: '/pre-register';
-		void goto(resolve(path));
+		const target = shelterCode
+			? `${resolve('/pre-register')}?shelter=${encodeURIComponent(shelterCode)}`
+			: resolve('/pre-register');
+		void goto(target);
 	}
 
 	/** Map pin / GPS origin → sync filter panel + reload list with radius. */
@@ -483,9 +483,7 @@
 
 					<!-- Actions row -->
 					<div class="mt-2.5 flex gap-1.5">
-						{#if selectedShelter.status !== 'CLOSED' &&
-							selectedShelter.accepts_pre_registration &&
-							selectedShelter.code}
+						{#if selectedShelter.status !== 'CLOSED' && selectedShelter.accepts_pre_registration && selectedShelter.code}
 							<Button
 								type="button"
 								size="sm"
