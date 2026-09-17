@@ -2,7 +2,7 @@
  * Platform master seed: master_data + config:app + catalog/SOP/food-sphere.
  */
 import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared/domain/app-config';
-import { DEFAULT_PUBLIC_PORTAL_CONFIG } from '$lib/features/public-portal';
+import { DEFAULT_PUBLIC_PORTAL_CONFIG } from '$lib/features/public-portal/domain/config.fixture';
 import {
 	enforceOneDefault,
 	masterDocId,
