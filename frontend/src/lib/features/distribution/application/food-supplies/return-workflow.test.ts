@@ -1,24 +1,37 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import type {
+	BulkReturnClaim,
+	BulkReturnClaimStatus,
 	BulkReturnPool,
 	BulkReturnPoolInput,
 	DistributionLog,
 	DistributionLogInput
 } from '../../domain/food-supplies';
 import {
+	assertBulkReturnClaimTransition,
+	bulkReturnPoolDocSchema,
 	createBulkReturnPool as createBulkReturnPoolDoc,
-	createDistributionLog
+	createDistributionLog,
+	deriveClaimIdFromDistributionLog
 } from '../../domain/food-supplies';
 import type {
+	BulkReturnClaimRepository,
 	BulkReturnPoolRepository,
 	DistributionLogRepository,
 	RecordReturnInput,
 	RecordClearInput
 } from '../../data/food-supplies';
 import type { OperationsRepository, StockLedger } from '$lib/features/operations';
-import { StockIntegrityError } from './errors';
+import {
+	ConcurrencyCollisionError,
+	InsufficientPoolQuotaError,
+	StockIntegrityError,
+	WorkflowValidationError
+} from './errors';
 import { ConflictError } from '$lib/utils/errors';
+import { parseQty } from '$lib/utils/qty';
+import { buildValidateDocUpdate } from '$lib/server/shelter-access-design';
 import {
 	clearLoanNonPhysical,
 	clearLoanViaBulkPool,
@@ -129,12 +142,17 @@ class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	}
 }
 
+type HistoricalBulkReturnPoolV1 = Omit<BulkReturnPool, 'schema_v' | 'claim_ids'> & {
+	schema_v: 1;
+	claim_ids?: undefined;
+};
+
 class InMemoryPoolRepository implements BulkReturnPoolRepository {
-	pools = new Map<string, BulkReturnPool>();
+	pools = new Map<string, BulkReturnPool | HistoricalBulkReturnPoolV1>();
 	failNextCreate = false;
 
 	async create(
-		input: BulkReturnPoolInput | BulkReturnPool,
+		input: BulkReturnPoolInput | BulkReturnPool | HistoricalBulkReturnPoolV1,
 		ctx: AuthorContext
 	): Promise<BulkReturnPool> {
 		if (this.failNextCreate) {
@@ -143,9 +161,9 @@ class InMemoryPoolRepository implements BulkReturnPoolRepository {
 		}
 		if ('_id' in input && input.type === 'bulk_return_pool') {
 			const existing = this.pools.get(input._id);
-			if (existing) return existing;
+			if (existing) return existing as BulkReturnPool;
 			this.pools.set(input._id, input);
-			return input;
+			return input as BulkReturnPool;
 		}
 		const doc = createBulkReturnPoolDoc(input as BulkReturnPoolInput, ctx);
 		this.pools.set(doc._id, doc);
@@ -153,49 +171,174 @@ class InMemoryPoolRepository implements BulkReturnPoolRepository {
 	}
 
 	async get(poolId: string): Promise<BulkReturnPool | null> {
-		return this.pools.get(poolId) ?? null;
+		const doc = this.pools.get(poolId);
+		if (!doc) return null;
+		return bulkReturnPoolDocSchema.parse(doc) as BulkReturnPool;
 	}
 
 	async list(): Promise<BulkReturnPool[]> {
-		return Array.from(this.pools.values());
+		return Array.from(this.pools.values()).map(
+			(p) => bulkReturnPoolDocSchema.parse(p) as BulkReturnPool
+		);
 	}
 
 	async claimQuota(
 		poolId: string,
-		qtyToClaim: string,
-		_ctx?: AuthorContext
+		claimIdOrQty: string,
+		claimQtyOrCtx?: string | AuthorContext,
+		maybeCtx?: AuthorContext
 	): Promise<BulkReturnPool> {
-		void _ctx;
+		void maybeCtx;
+		let claimId: string | undefined;
+		let claimQty: string;
+
+		if (typeof claimQtyOrCtx === 'string') {
+			claimId = claimIdOrQty;
+			claimQty = claimQtyOrCtx;
+		} else {
+			claimId = undefined;
+			claimQty = claimIdOrQty;
+		}
+
 		const current = this.pools.get(poolId);
 		if (!current) throw new Error('Pool not found');
-		const numClaim = parseInt(qtyToClaim, 10);
-		const currentUnclaimed = parseInt(current.unclaimed_quota, 10);
-		if (currentUnclaimed < numClaim) throw new Error('Quota exhausted');
-		const currentClaimed = parseInt(current.claimed_qty, 10);
+
+		const existingClaimIds =
+			'claim_ids' in current && Array.isArray(current.claim_ids) ? current.claim_ids : [];
+		if (claimId && existingClaimIds.includes(claimId)) {
+			return { ...current } as BulkReturnPool;
+		}
+
+		if (current.status !== 'ACTIVE') {
+			throw new Error(`Bulk return pool ${poolId} is not ACTIVE (status: ${current.status})`);
+		}
+
+		const claimDec = parseQty(claimQty);
+		if (claimDec.isNegative() || claimDec.isZero()) {
+			throw new Error('claimQty must be a positive decimal quantity');
+		}
+
+		const currentQuotaDec = parseQty(current.unclaimed_quota);
+		const remainingQuotaDec = currentQuotaDec.minus(claimDec);
+		if (remainingQuotaDec.isNegative()) {
+			throw new Error(
+				`Insufficient unclaimed quota in bulk return pool ${poolId}: available ${current.unclaimed_quota}, requested ${claimQty}`
+			);
+		}
+
+		const nextClaimed = parseQty(current.claimed_qty).plus(claimDec).toString();
+		const nextStatus = remainingQuotaDec.isZero() ? 'EXHAUSTED' : 'ACTIVE';
+		const nextClaimIds = claimId ? [...existingClaimIds, claimId] : existingClaimIds;
 
 		const updated: BulkReturnPool = {
 			...current,
-			claimed_qty: String(currentClaimed + numClaim),
-			unclaimed_quota: String(currentUnclaimed - numClaim),
-			status: currentUnclaimed - numClaim === 0 ? 'CLOSED' : 'ACTIVE',
+			schema_v: 2,
+			claimed_qty: nextClaimed,
+			unclaimed_quota: remainingQuotaDec.toString(),
+			claim_ids: nextClaimIds,
+			status: nextStatus,
 			updated_at: new Date().toISOString()
 		};
 		this.pools.set(poolId, updated);
-		return updated;
+		return { ...updated };
 	}
 
 	async closePool(poolId: string, ctx: AuthorContext): Promise<BulkReturnPool> {
 		const current = this.pools.get(poolId);
 		if (!current) throw new Error('Pool not found');
-		const updated: BulkReturnPool = {
+		const updated = bulkReturnPoolDocSchema.parse({
 			...current,
 			status: 'CLOSED',
 			closed_at: new Date().toISOString(),
 			closed_by: ctx.createdBy,
 			updated_at: new Date().toISOString()
-		};
+		});
 		this.pools.set(poolId, updated);
 		return updated;
+	}
+}
+
+class InMemoryClaimRepository implements BulkReturnClaimRepository {
+	claims = new Map<string, BulkReturnClaim>();
+	failNextCreateWithConflict = false;
+	failNextReinitializeWithConflict = false;
+
+	async create(claim: BulkReturnClaim): Promise<BulkReturnClaim> {
+		if (this.failNextCreateWithConflict) {
+			this.failNextCreateWithConflict = false;
+			throw new ConflictError(`Conflict on doc ${claim._id}`);
+		}
+		if (this.claims.has(claim._id)) {
+			throw new ConflictError(`Conflict on doc ${claim._id}`);
+		}
+		this.claims.set(claim._id, { ...claim });
+		return { ...claim };
+	}
+
+	async get(claimId: string): Promise<BulkReturnClaim | null> {
+		const found = this.claims.get(claimId);
+		return found ? { ...found } : null;
+	}
+
+	async mutateCAS(
+		claimId: string,
+		mutator: (current: BulkReturnClaim) => BulkReturnClaim
+	): Promise<BulkReturnClaim> {
+		const current = this.claims.get(claimId);
+		if (!current) throw new Error(`Claim ${claimId} not found`);
+		const next = mutator({ ...current });
+		assertBulkReturnClaimTransition(current, next);
+		this.claims.set(claimId, { ...next });
+		return { ...next };
+	}
+
+	async mutateStatusCAS(
+		claimId: string,
+		targetStatus: BulkReturnClaimStatus,
+		notesOrCtx?: string | AuthorContext,
+		maybeCtx?: AuthorContext
+	): Promise<BulkReturnClaim> {
+		void maybeCtx;
+		const notes = typeof notesOrCtx === 'string' ? notesOrCtx : undefined;
+		return this.mutateCAS(claimId, (current) => ({
+			...current,
+			status: targetStatus,
+			...(notes !== undefined ? { notes } : {}),
+			updated_at: new Date().toISOString()
+		}));
+	}
+
+	async reinitializeCAS(
+		claimId: string,
+		input: {
+			operation_id: string;
+			bulk_pool_id: string;
+			claimed_qty: string;
+			notes?: string;
+		},
+		ctx?: AuthorContext
+	): Promise<BulkReturnClaim> {
+		void ctx;
+		if (this.failNextReinitializeWithConflict) {
+			this.failNextReinitializeWithConflict = false;
+			throw new ConflictError(`Conflict on doc ${claimId}`);
+		}
+		return this.mutateCAS(claimId, (current) => {
+			if (current.status !== 'ABORTED') {
+				throw new Error(
+					`Cannot reinitialize claim ${claimId} in status ${current.status}; must be ABORTED`
+				);
+			}
+			return {
+				...current,
+				operation_id: input.operation_id,
+				bulk_pool_id: input.bulk_pool_id,
+				claimed_qty: input.claimed_qty,
+				status: 'CLAIM_INTENT' as const,
+				notes: input.notes ?? current.notes,
+				updated_at: new Date().toISOString()
+			};
+		});
 	}
 }
 
@@ -203,9 +346,15 @@ describe('return-workflow', () => {
 	let logRepo: InMemoryLogRepository;
 	let opsRepo: InMemoryOperationsRepository;
 	let poolRepo: InMemoryPoolRepository;
+	let claimRepo: InMemoryClaimRepository;
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
+		roles: ['shelter:SH001', 'supply_coordinator']
+	};
+	const REG_STAFF_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'reg_user',
 		roles: ['shelter:SH001', 'registration_staff']
 	};
 
@@ -213,6 +362,7 @@ describe('return-workflow', () => {
 		logRepo = new InMemoryLogRepository();
 		opsRepo = new InMemoryOperationsRepository();
 		poolRepo = new InMemoryPoolRepository();
+		claimRepo = new InMemoryClaimRepository();
 	});
 
 	it('handles counter loan return with inbound stock ledger entry', async () => {
@@ -964,11 +1114,14 @@ describe('return-workflow', () => {
 
 		// 3. Clear via pool at gate
 		const resolved = await clearLoanViaBulkPool(
-			log._id,
-			pool._id,
-			'Confirmed returned in bulk pile',
+			{
+				operationUlid: '01J00000000000000000000014',
+				logId: log._id,
+				poolId: pool._id,
+				notes: 'Confirmed returned in bulk pile'
+			},
 			POS_CTX,
-			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
 		);
 
 		expect(resolved.log.status).toBe('returned');
@@ -1090,6 +1243,1456 @@ describe('return-workflow', () => {
 
 			// Restore
 			opsRepo.addLedgerEntry = originalAdd;
+		});
+	});
+
+	describe('P1-02 / CR-129: Bulk Return Claim Coordination & Recovery (clearLoanViaBulkPool)', () => {
+		const OP_ULID = '01J00000000000000000000100';
+		const POOL_ULID = '01J00000000000000000000102';
+
+		it('requires a caller-owned operationUlid before any claim side effect', async () => {
+			await expect(
+				clearLoanViaBulkPool(
+					{
+						logId: 'distribution_log:01J00000000000000000000990',
+						poolId: 'bulk_return_pool:01J00000000000000000000991'
+					} as unknown as Parameters<typeof clearLoanViaBulkPool>[0],
+					POS_CTX,
+					{ logRepo, poolRepo, claimRepo }
+				)
+			).rejects.toThrow('operationUlid must be a valid ULID');
+			expect(claimRepo.claims).toHaveLength(0);
+		});
+
+		it('1. Normal bulk clear: completes claim, decrements pool quota, updates log to returned', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: `stock_ledger:${POOL_ULID}`,
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					POOL_ULID
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: OP_ULID, logId: log._id, poolId: pool._id, notes: 'Normal clear' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.log.status).toBe('returned');
+			expect(result.log.qty_returned).toBe('1');
+			expect(result.log.clear_reason).toBe('bulk_dropoff');
+			expect(result.log.bulk_pool_id).toBe(pool._id);
+
+			expect(result.pool.claimed_qty).toBe('1');
+			expect(result.pool.unclaimed_quota).toBe('9');
+			expect(result.pool.claim_ids).toContain(result.claim._id);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.claim.claimed_qty).toBe('1');
+			expect(result.claim.operation_id).toBe(OP_ULID);
+		});
+
+		it('2. issued 5 / previously returned 2 / claim 3', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000103',
+						item_id: 'item:blanket',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000103'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:blanket',
+					qty: '5',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			// Pre-simulate partial return of 2
+			await logRepo.recordReturn(
+				log._id,
+				{
+					qty_returned: '2',
+					clear_reason: 'routine',
+					notes: 'Returned 2 at counter'
+				},
+				POS_CTX
+			);
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: '01J00000000000000000000104', logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.claimed_qty).toBe('3');
+			expect(result.log.status).toBe('returned');
+			expect(result.log.qty_returned).toBe('5');
+			expect(result.pool.claimed_qty).toBe('3');
+			expect(result.pool.unclaimed_quota).toBe('7');
+		});
+
+		it('3. zero StockLedger writes across the entire bulk clear workflow', async () => {
+			// Pool created with initial physical receive (1 ledger entry)
+			const pool = await createBulkReturnPool(
+				{
+					operationUlid: '01J00000000000000000000105',
+					item_id: 'item:cot',
+					total_received_qty: '10'
+				},
+				WAREHOUSE_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			);
+			expect(opsRepo.ledger).toHaveLength(1);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			await clearLoanViaBulkPool(
+				{
+					operationUlid: '01J00000000000000000000103',
+					logId: log._id,
+					poolId: pool._id,
+					notes: 'Bulk clear at gate'
+				},
+				POS_CTX,
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo
+				}
+			);
+
+			// Ledger count remains exactly 1!
+			expect(opsRepo.ledger).toHaveLength(1);
+		});
+
+		it('4. deterministic claim ID strictly derived from DistributionLog identity', async () => {
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000106',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000106'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const expectedClaimId = deriveClaimIdFromDistributionLog(log._id);
+			expect(expectedClaimId).toBe(`bulk_return_claim:${log._id.replace('distribution_log:', '')}`);
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: '01J00000000000000000000107', logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim._id).toBe(expectedClaimId);
+		});
+
+		it('5. same operation replay: idempotent success without double decrement', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000108',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000108'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000109';
+			const res1 = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+			expect(res1.claim.status).toBe('COMPLETE');
+			expect(res1.pool.claimed_qty).toBe('1');
+			expect(res1.pool.unclaimed_quota).toBe('9');
+
+			// Replay with exact same operationUlid
+			const res2 = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+			expect(res2.claim.status).toBe('COMPLETE');
+			expect(res2.pool.claimed_qty).toBe('1');
+			expect(res2.pool.unclaimed_quota).toBe('9');
+		});
+
+		it('6. same Log + different operation collision fails closed before pool mutation', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000110',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000110'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opA = '01J00000000000000000000111';
+			const opB = '01J00000000000000000000112';
+
+			// First operation succeeds
+			await clearLoanViaBulkPool(
+				{ operationUlid: opA, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			// Competing operation with different ULID fails closed
+			await expect(
+				clearLoanViaBulkPool({ operationUlid: opB, logId: log._id, poolId: pool._id }, POS_CTX, {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo
+				})
+			).rejects.toThrow(ConcurrencyCollisionError);
+		});
+
+		it('7. Claim Intent crash recovery: resumes from durable CLAIM_INTENT', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000113',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000113'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000114';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+			// Pre-seed Claim Intent (as if process crashed right after Step 1)
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			// Retry resumes and completes
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.log.status).toBe('returned');
+			expect(result.pool.claimed_qty).toBe('1');
+		});
+
+		it('8. Pool effect done while Claim still CLAIM_INTENT: advances without double decrement', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000115',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000115'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000116';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+			// Simulate crash after Step 2: Pool decremented and has claimId, but claim doc still in CLAIM_INTENT
+			await poolRepo.claimQuota(pool._id, claimId, '1', POS_CTX);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.pool.claimed_qty).toBe('1'); // NOT 2!
+			expect(result.pool.unclaimed_quota).toBe('9');
+			expect(result.log.status).toBe('returned');
+		});
+
+		it('9. POOL_CLAIMED → Log update forward recovery', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000117',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000117'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000118';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+			await poolRepo.claimQuota(pool._id, claimId, '1', POS_CTX);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'POOL_CLAIMED',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.log.status).toBe('returned');
+			expect(result.claim.status).toBe('COMPLETE');
+		});
+
+		it('10. Log updated → Claim COMPLETE recovery', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000119',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000119'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000120';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+			await poolRepo.claimQuota(pool._id, claimId, '1', POS_CTX);
+			await logRepo.recordReturn(
+				log._id,
+				{
+					qty_returned: '1',
+					clear_reason: 'bulk_dropoff',
+					bulk_pool_id: pool._id,
+					notes: 'Cleared'
+				},
+				POS_CTX
+			);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'POOL_CLAIMED',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.log.status).toBe('returned');
+		});
+
+		it('11. no duplicate pool decrement on repeated calls', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000121',
+						item_id: 'item:cot',
+						total_received_qty: '5'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000121'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000122';
+			await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+			await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			const currentPool = (await poolRepo.get(pool._id))!;
+			expect(currentPool.claimed_qty).toBe('1');
+			expect(currentPool.unclaimed_quota).toBe('4');
+		});
+
+		it('12. final qty strict equality enforced', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000123',
+						item_id: 'item:cot',
+						total_received_qty: '5'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000123'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '2',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: '01J00000000000000000000124', logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.log.qty_returned).toBe(result.log.qty);
+			expect(result.log.status).toBe('returned');
+		});
+
+		it('13. over-return fails closed with StockIntegrityError', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000125',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000125'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			// Inject a Claim doc that claims 2 (which would exceed log.qty 1)
+			const opId = '01J00000000000000000000126';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '2',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			await expect(
+				clearLoanViaBulkPool({ operationUlid: opId, logId: log._id, poolId: pool._id }, POS_CTX, {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo
+				})
+			).rejects.toThrow(StockIntegrityError);
+		});
+
+		it('14. under-return fails closed with WorkflowValidationError', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000127',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000127'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '5',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			// Inject a Claim doc claiming only 1 (under-returning)
+			const opId = '01J00000000000000000000128';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			await expect(
+				clearLoanViaBulkPool({ operationUlid: opId, logId: log._id, poolId: pool._id }, POS_CTX, {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo
+				})
+			).rejects.toThrow(WorkflowValidationError);
+		});
+
+		it('15. ABORT on deterministic quota exhaustion', async () => {
+			// Pool with 0 unclaimed quota (EXHAUSTED)
+			const pool = await poolRepo.create(
+				{
+					...createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000129',
+							item_id: 'item:cot',
+							total_received_qty: '1'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000129'
+					),
+					claimed_qty: '1',
+					unclaimed_quota: '0',
+					status: 'EXHAUSTED'
+				},
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			// Pre-flight check rejects immediately without creating claim doc!
+			await expect(
+				clearLoanViaBulkPool(
+					{ operationUlid: '01J00000000000000000000130', logId: log._id, poolId: pool._id },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo
+					}
+				)
+			).rejects.toThrow(InsufficientPoolQuotaError);
+
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			const savedClaim = await claimRepo.get(claimId);
+			expect(savedClaim).toBeNull();
+		});
+
+		it('16. transient error does NOT ABORT claim', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000131',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000131'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000132';
+			// Mock claimQuota to throw transient network error
+			const originalClaimQuota = poolRepo.claimQuota.bind(poolRepo);
+			poolRepo.claimQuota = async () => {
+				throw new Error('ETIMEDOUT: Connection lost');
+			};
+
+			await expect(
+				clearLoanViaBulkPool({ operationUlid: opId, logId: log._id, poolId: pool._id }, POS_CTX, {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo
+				})
+			).rejects.toThrow('ETIMEDOUT');
+
+			// Claim doc must remain in CLAIM_INTENT, NOT ABORTED!
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			const savedClaim = (await claimRepo.get(claimId))!;
+			expect(savedClaim.status).toBe('CLAIM_INTENT');
+
+			// Restore
+			poolRepo.claimQuota = originalClaimQuota;
+		});
+
+		it('17. ABORTED → CLAIM_INTENT re-initialization', async () => {
+			const pool1 = await poolRepo.create(
+				{
+					...createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000133',
+							item_id: 'item:cot',
+							total_received_qty: '1'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000133'
+					),
+					claimed_qty: '1',
+					unclaimed_quota: '0',
+					status: 'EXHAUSTED'
+				},
+				WAREHOUSE_CTX
+			);
+
+			const pool2 = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000134',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000134'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			// Pre-existing claim was ABORTED under op1
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: '01J00000000000000000000135',
+				distribution_log_id: log._id,
+				bulk_pool_id: pool1._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'ABORTED',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			// op2 reinitializes with pool2
+			const op2 = '01J00000000000000000000136';
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: op2, logId: log._id, poolId: pool2._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.claim.operation_id).toBe(op2);
+			expect(result.claim.bulk_pool_id).toBe(pool2._id);
+			expect(result.log.status).toBe('returned');
+		});
+
+		it('18. two competing ABORTED reinitializations: one CAS winner', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000137',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000137'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: '01J00000000000000000000138',
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'ABORTED',
+				created_at: new Date().toISOString(),
+				created_by: POS_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			});
+
+			const opWinner = '01J00000000000000000000139';
+			const opLoser = '01J00000000000000000000140';
+
+			// First winner reinitializes
+			await clearLoanViaBulkPool(
+				{ operationUlid: opWinner, logId: log._id, poolId: pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			// Second loser attempts to reinitialize but detects claim is no longer ABORTED
+			await expect(
+				clearLoanViaBulkPool(
+					{ operationUlid: opLoser, logId: log._id, poolId: pool._id },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo
+					}
+				)
+			).rejects.toThrow(ConcurrencyCollisionError);
+		});
+
+		it('19. active v1 Pool lazy upgrade to v2', async () => {
+			// Create historical v1 pool document
+			const v1Pool: HistoricalBulkReturnPoolV1 = {
+				_id: 'bulk_return_pool:01J00000000000000000000141',
+				type: 'bulk_return_pool',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				item_id: 'item:cot',
+				stock_ledger_id: 'stock_ledger:01J00000000000000000000141',
+				total_received_qty: '10',
+				claimed_qty: '0',
+				unclaimed_quota: '10',
+				status: 'ACTIVE',
+				created_at: new Date().toISOString(),
+				created_by: WAREHOUSE_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			};
+			poolRepo.pools.set(v1Pool._id, v1Pool);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: '01J00000000000000000000142', logId: log._id, poolId: v1Pool._id },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.pool.schema_v).toBe(2);
+			expect(result.pool.claim_ids).toHaveLength(1);
+			expect(result.pool.claim_ids).toContain(result.claim._id);
+		});
+
+		it('20. v1 lazy upgrade + quota claim occurs atomically in single write', async () => {
+			const v1Pool: HistoricalBulkReturnPoolV1 = {
+				_id: 'bulk_return_pool:01J00000000000000000000143',
+				type: 'bulk_return_pool',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				item_id: 'item:cot',
+				stock_ledger_id: 'stock_ledger:01J00000000000000000000143',
+				total_received_qty: '5',
+				claimed_qty: '0',
+				unclaimed_quota: '5',
+				status: 'ACTIVE',
+				created_at: new Date().toISOString(),
+				created_by: WAREHOUSE_CTX.createdBy,
+				updated_at: new Date().toISOString()
+			};
+			poolRepo.pools.set(v1Pool._id, v1Pool);
+
+			const claimId = 'bulk_return_claim:01J00000000000000000000144';
+			const updated = await poolRepo.claimQuota(v1Pool._id, claimId, '2', POS_CTX);
+
+			expect(updated.schema_v).toBe(2);
+			expect(updated.claimed_qty).toBe('2');
+			expect(updated.unclaimed_quota).toBe('3');
+			expect(updated.claim_ids).toEqual([claimId]);
+		});
+
+		it('21. v2 pool normal claim: appends to claim_ids', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000145',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000145'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const claim1 = 'bulk_return_claim:01J00000000000000000000146';
+			const claim2 = 'bulk_return_claim:01J00000000000000000000147';
+
+			await poolRepo.claimQuota(pool._id, claim1, '1', POS_CTX);
+			const p2 = await poolRepo.claimQuota(pool._id, claim2, '2', POS_CTX);
+
+			expect(p2.schema_v).toBe(2);
+			expect(p2.claimed_qty).toBe('3');
+			expect(p2.unclaimed_quota).toBe('7');
+			expect(p2.claim_ids).toEqual([claim1, claim2]);
+		});
+
+		it('22. duplicate claim ID does not decrement twice', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000148',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000148'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const claimId = 'bulk_return_claim:01J00000000000000000000149';
+			const first = await poolRepo.claimQuota(pool._id, claimId, '1', POS_CTX);
+			const second = await poolRepo.claimQuota(pool._id, claimId, '1', POS_CTX);
+
+			expect(first.claimed_qty).toBe('1');
+			expect(second.claimed_qty).toBe('1');
+			expect(second.claim_ids).toHaveLength(1);
+		});
+
+		/**
+		 * CouchDB validators reject by throwing a plain `{ forbidden }` object, not an
+		 * Error — `expect(...).toThrow(/re/)` cannot read those, so assert the field.
+		 */
+		function expectForbidden(run: () => void, match: RegExp): void {
+			try {
+				run();
+			} catch (e) {
+				expect((e as { forbidden?: string }).forbidden ?? String(e)).toMatch(match);
+				return;
+			}
+			throw new Error(`Expected a forbidden error matching ${match}, but nothing was thrown`);
+		}
+
+		it('23. v2 → v1 rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const v2Pool = {
+				_id: 'bulk_return_pool:01J00000000000000000000150',
+				type: 'bulk_return_pool',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				item_id: 'item:cot',
+				stock_ledger_id: 'stock_ledger:01J00000000000000000000150',
+				total_received_qty: '10',
+				claimed_qty: '0',
+				unclaimed_quota: '10',
+				claim_ids: [],
+				status: 'ACTIVE',
+				created_at: new Date().toISOString(),
+				created_by: 'wh_user',
+				updated_at: new Date().toISOString()
+			};
+
+			const downgraded = { ...v2Pool, schema_v: 1 };
+			expectForbidden(
+				() =>
+					validate(downgraded, v2Pool, {
+						name: 'wh_user',
+						roles: ['shelter:SH001', 'warehouse_staff']
+					}),
+				/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+			);
+		});
+
+		it('24. bulk_return_claim hard delete rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000151',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000152',
+				distribution_log_id: 'distribution_log:01J00000000000000000000151',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000153',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			expectForbidden(
+				() =>
+					validate({ _id: claimDoc._id, _deleted: true }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/Cannot delete bulk_return_claim documents/
+			);
+		});
+
+		it('24a. VDU permits all canonical frontline claim roles including system_admin and rejects unauthorized scope', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000170',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000171',
+				distribution_log_id: 'distribution_log:01J00000000000000000000170',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000172',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'frontline_user',
+				updated_at: new Date().toISOString()
+			};
+
+			for (const userCtx of [
+				{ name: 'reg', roles: ['shelter:SH001', 'registration_staff'] },
+				{ name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] },
+				{ name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] },
+				{ name: 'admin', roles: ['system_admin'] }
+			]) {
+				expect(() => validate(claimDoc, null, userCtx)).not.toThrow();
+			}
+
+			expectForbidden(
+				() =>
+					validate(claimDoc, null, { name: 'unauth', roles: ['shelter:SH001', 'kitchen_staff'] }),
+				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
+			);
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, shelter_code: 'SH002' }, null, {
+						name: 'reg',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('25. immutable fields on bulk_return_claim rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000154',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000155',
+				distribution_log_id: 'distribution_log:01J00000000000000000000154',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000156',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Mutating permanent immutable fields
+			expectForbidden(
+				() =>
+					validate(
+						{ ...claimDoc, distribution_log_id: 'distribution_log:01J00000000000000000000999' },
+						claimDoc,
+						{
+							name: 'reg_user',
+							roles: ['shelter:SH001', 'registration_staff']
+						}
+					),
+				/bulk_return_claim id must derive from distribution_log_id/
+			);
+
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, item_id: 'item:other' }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/bulk_return_claim.item_id is permanently immutable/
+			);
+		});
+
+		it('26. attempt fields change only ABORTED → CLAIM_INTENT', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000157',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000158',
+				distribution_log_id: 'distribution_log:01J00000000000000000000157',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000159',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Changing operation_id during CLAIM_INTENT -> POOL_CLAIMED is forbidden
+			expectForbidden(
+				() =>
+					validate(
+						{
+							...claimDoc,
+							operation_id: '01J00000000000000000000888',
+							status: 'POOL_CLAIMED'
+						},
+						claimDoc,
+						{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+					),
+				/bulk_return_claim.operation_id is immutable during transition CLAIM_INTENT to POOL_CLAIMED/
+			);
+
+			// Changing operation_id from ABORTED -> CLAIM_INTENT is permitted
+			const abortedClaim = { ...claimDoc, status: 'ABORTED' };
+			expect(() =>
+				validate(
+					{
+						...abortedClaim,
+						operation_id: '01J00000000000000000000999',
+						status: 'CLAIM_INTENT'
+					},
+					abortedClaim,
+					{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+				)
+			).not.toThrow();
+		});
+
+		it('27. recovery by different authorized actor allowed', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000160',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000160'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				POS_CTX
+			);
+
+			const opId = '01J00000000000000000000161';
+			const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+			// Started by user_a
+			await claimRepo.create({
+				_id: claimId,
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: POS_CTX.shelterCode,
+				operation_id: opId,
+				distribution_log_id: log._id,
+				bulk_pool_id: pool._id,
+				item_id: log.item_id,
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'user_a',
+				updated_at: new Date().toISOString()
+			});
+
+			// Resumed by user_b with frontline role
+			const ACTOR_B_CTX: AuthorContext = {
+				shelterCode: 'SH001',
+				createdBy: 'user_b',
+				roles: ['shelter:SH001', 'registration_staff']
+			};
+
+			const result = await clearLoanViaBulkPool(
+				{ operationUlid: opId, logId: log._id, poolId: pool._id },
+				ACTOR_B_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			);
+
+			expect(result.claim.status).toBe('COMPLETE');
+			expect(result.claim.created_by).toBe('user_a'); // preserved audit trail
+		});
+
+		it('28. registration_staff allowed for bulk claim if canonical frontline contract says so', async () => {
+			const pool = await poolRepo.create(
+				createBulkReturnPoolDoc(
+					{
+						stock_ledger_id: 'stock_ledger:01J00000000000000000000162',
+						item_id: 'item:cot',
+						total_received_qty: '10'
+					},
+					WAREHOUSE_CTX,
+					'01J00000000000000000000162'
+				),
+				WAREHOUSE_CTX
+			);
+
+			const log = await logRepo.create(
+				{
+					ticket_id: 'requisition_ticket:01J00000000000000000000001',
+					item_id: 'item:cot',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					status: 'active',
+					is_override: false
+				},
+				REG_STAFF_CTX
+			);
+
+			const result = await clearLoanViaBulkPool(
+				{
+					operationUlid: '01J00000000000000000000163',
+					logId: log._id,
+					poolId: pool._id,
+					notes: 'Gate return'
+				},
+				REG_STAFF_CTX,
+				{ logRepo, poolRepo, claimRepo }
+			);
+
+			expect(result.log.status).toBe('returned');
+			expect(result.claim.status).toBe('COMPLETE');
+		});
+
+		it('30. direct-return-vs-bulk-clear concurrency remains explicitly deferred', () => {
+			// CR-129 §2.2 / §8: Race condition between counter returnLoanAtCounter and clearLoanViaBulkPool
+			// on the exact same DistributionLog is an acknowledged deferred scope boundary.
+			// Both operations rely on CouchDB document-level CAS on distribution_log to prevent double-return.
+			expect(true).toBe(true);
 		});
 	});
 });

@@ -43,3 +43,17 @@ export class StockIntegrityError extends WorkflowError {
 		this.name = 'StockIntegrityError';
 	}
 }
+
+export class InsufficientPoolQuotaError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'InsufficientPoolQuotaError';
+	}
+}
+
+export class ConcurrencyCollisionError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ConcurrencyCollisionError';
+	}
+}

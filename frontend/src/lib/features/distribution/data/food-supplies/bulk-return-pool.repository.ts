@@ -19,7 +19,12 @@ export interface BulkReturnPoolRepository {
 	create(input: BulkReturnPoolInput | BulkReturnPool, ctx: AuthorContext): Promise<BulkReturnPool>;
 	get(poolId: string): Promise<BulkReturnPool | null>;
 	list(filter?: BulkReturnPoolListFilter): Promise<BulkReturnPool[]>;
-	claimQuota(poolId: string, claimQty: string, ctx: AuthorContext): Promise<BulkReturnPool>;
+	claimQuota(
+		poolId: string,
+		claimIdOrQty: string,
+		claimQtyOrCtx?: string | AuthorContext,
+		ctx?: AuthorContext
+	): Promise<BulkReturnPool>;
 	closePool(poolId: string, ctx: AuthorContext, notes?: string): Promise<BulkReturnPool>;
 }
 
@@ -66,13 +71,36 @@ export class BulkReturnPoolRemoteRepository implements BulkReturnPoolRepository 
 		});
 	}
 
-	async claimQuota(poolId: string, claimQty: string, ctx: AuthorContext): Promise<BulkReturnPool> {
-		void ctx;
+	async claimQuota(
+		poolId: string,
+		claimIdOrQty: string,
+		claimQtyOrCtx?: string | AuthorContext,
+		maybeCtx?: AuthorContext
+	): Promise<BulkReturnPool> {
+		void maybeCtx;
+		let claimId: string | undefined;
+		let claimQty: string;
+
+		if (typeof claimQtyOrCtx === 'string') {
+			claimId = claimIdOrQty;
+			claimQty = claimQtyOrCtx;
+		} else {
+			claimId = undefined;
+			claimQty = claimIdOrQty;
+		}
+
 		return retryCas(async () => {
 			const current = await this.get(poolId);
 			if (!current) {
 				throw new NotFoundError(`Bulk return pool ${poolId} not found`);
 			}
+
+			// If claimId already recorded in claim_ids, quota effect already exists (idempotent replay)
+			const existingClaimIds = current.claim_ids ?? [];
+			if (claimId && existingClaimIds.includes(claimId)) {
+				return current;
+			}
+
 			if (current.status !== 'ACTIVE') {
 				throw new Error(`Bulk return pool ${poolId} is not ACTIVE (status: ${current.status})`);
 			}
@@ -92,14 +120,18 @@ export class BulkReturnPoolRemoteRepository implements BulkReturnPoolRepository 
 
 			const nextClaimed = parseQty(current.claimed_qty).plus(claimDec).toString();
 			const nextStatus: BulkReturnPoolStatus = remainingQuotaDec.isZero() ? 'EXHAUSTED' : 'ACTIVE';
+			const nextClaimIds = claimId ? [...existingClaimIds, claimId] : existingClaimIds;
 
+			// Atomic Lazy Upgrade (schema_v: 1 -> 2) + Quota claim under single CouchDB CAS write
 			const next = bulkReturnPoolDocSchema.parse({
 				...current,
 				_id: current._id,
 				_rev: current._rev,
+				schema_v: 2,
 				shelter_code: current.shelter_code,
 				claimed_qty: nextClaimed,
 				unclaimed_quota: remainingQuotaDec.toString(),
+				claim_ids: nextClaimIds,
 				status: nextStatus,
 				updated_at: now()
 			});

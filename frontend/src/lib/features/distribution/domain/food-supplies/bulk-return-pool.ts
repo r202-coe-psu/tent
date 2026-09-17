@@ -11,11 +11,14 @@ import {
 	bulkReturnPoolIdSchema,
 	foodSuppliesBaseDocShape,
 	requisitionTicketIdSchema,
-	stockLedgerIdSchema
+	stockLedgerIdSchema,
+	ULID_PATTERN
 } from './shared';
 
 export const bulkReturnPoolStatusSchema = z.enum(['ACTIVE', 'EXHAUSTED', 'CLOSED']);
 export type BulkReturnPoolStatus = z.infer<typeof bulkReturnPoolStatusSchema>;
+
+export const bulkReturnClaimIdPattern = new RegExp(`^bulk_return_claim:${ULID_PATTERN}$`);
 
 const bulkReturnPoolFields = {
 	item_id: z.string().min(1),
@@ -25,6 +28,7 @@ const bulkReturnPoolFields = {
 	total_received_qty: qtyStrPositiveSchema,
 	claimed_qty: qtyStrNonNegativeSchema,
 	unclaimed_quota: qtyStrNonNegativeSchema,
+	claim_ids: z.array(z.string().regex(bulkReturnClaimIdPattern)).default([]),
 	status: bulkReturnPoolStatusSchema,
 	closed_at: z.string().datetime().optional(),
 	closed_by: z.string().min(1).optional(),
@@ -32,7 +36,7 @@ const bulkReturnPoolFields = {
 };
 
 function validateBulkReturnPool(
-	pool: z.infer<z.ZodObject<typeof bulkReturnPoolFields>>,
+	pool: z.infer<z.ZodObject<typeof bulkReturnPoolFields>> & { schema_v: number },
 	ctx: z.RefinementCtx
 ): void {
 	if (!parseQty(pool.claimed_qty).plus(pool.unclaimed_quota).eq(pool.total_received_qty)) {
@@ -63,6 +67,13 @@ function validateBulkReturnPool(
 			message: 'CLOSED pool requires close audit fields'
 		});
 	}
+	if (pool.claim_ids && new Set(pool.claim_ids).size !== pool.claim_ids.length) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['claim_ids'],
+			message: 'claim_ids must not contain duplicate claim IDs'
+		});
+	}
 }
 
 export const bulkReturnPoolDocSchema = z
@@ -70,6 +81,7 @@ export const bulkReturnPoolDocSchema = z
 		_id: bulkReturnPoolIdSchema,
 		type: z.literal('bulk_return_pool'),
 		...foodSuppliesBaseDocShape,
+		schema_v: z.union([z.literal(1), z.literal(2)]),
 		...bulkReturnPoolFields
 	})
 	.superRefine(validateBulkReturnPool);
@@ -94,11 +106,12 @@ export function createBulkReturnPool(
 	return bulkReturnPoolDocSchema.parse(
 		makeDoc(
 			'bulk_return_pool',
-			1,
+			2,
 			{
 				...parsed,
 				claimed_qty: '0',
 				unclaimed_quota: parsed.total_received_qty,
+				claim_ids: [],
 				status: 'ACTIVE' as const
 			},
 			ctx,

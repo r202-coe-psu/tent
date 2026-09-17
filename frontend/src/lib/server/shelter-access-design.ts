@@ -202,8 +202,8 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
-    if (oldDoc && oldDoc.type === 'distribution_log') {
-      throw { forbidden: 'Cannot delete distribution_log documents' };
+    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool')) {
+      throw { forbidden: 'Cannot delete ' + oldDoc.type + ' documents' };
     }
     if (wasAppendOnly || protectedCoordinationDelete) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
@@ -250,7 +250,7 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment',
-    'requisition_ticket', 'distribution_log', 'bulk_return_pool'
+    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -1240,17 +1240,23 @@ export function buildValidateDocUpdate(code: string): string {
       }
     }
   }
-  // 14. CR-121: bulk_return_pool validation (Rule 14)
+  // 14. CR-121 / CR-129: bulk_return_pool validation (Rule 14)
   if (newDoc.type === 'bulk_return_pool') {
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported bulk_return_pool schema version' };
     }
     if (!/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'bulk_return_pool id must be bulk_return_pool:{ulid}' };
     }
     if (oldDoc) {
+      if (oldDoc.schema_v === 2 && newDoc.schema_v === 1) {
+        throw { forbidden: 'Cannot downgrade bulk_return_pool from schema_v 2 to 1' };
+      }
+      if (oldDoc.schema_v === 1 && newDoc.schema_v === 2 && oldDoc.status !== 'ACTIVE') {
+        throw { forbidden: 'Only ACTIVE bulk_return_pool can be upgraded to schema_v 2' };
+      }
       var immutablePoolFields = [
-        '_id', 'type', 'schema_v', 'shelter_code', 'item_id', 'stock_ledger_id', 'total_received_qty', 'created_at', 'created_by'
+        '_id', 'type', 'shelter_code', 'item_id', 'stock_ledger_id', 'total_received_qty', 'created_at', 'created_by'
       ];
       for (var pf = 0; pf < immutablePoolFields.length; pf++) {
         var pfName = immutablePoolFields[pf];
@@ -1274,6 +1280,29 @@ export function buildValidateDocUpdate(code: string): string {
     if (claimed + unclaimed !== totalRec) {
       throw { forbidden: 'claimed_qty + unclaimed_quota must equal total_received_qty' };
     }
+    if (newDoc.schema_v === 2) {
+      if (!Array.isArray(newDoc.claim_ids)) {
+        throw { forbidden: 'bulk_return_pool schema_v 2 requires claim_ids array' };
+      }
+      var seenClaimIds = {};
+      for (var ci = 0; ci < newDoc.claim_ids.length; ci++) {
+        var cid = newDoc.claim_ids[ci];
+        if (typeof cid !== 'string' || !/^bulk_return_claim:[0-9A-HJKMNP-TV-Z]{26}$/.test(cid)) {
+          throw { forbidden: 'Invalid claim_id format in bulk_return_pool: ' + cid };
+        }
+        if (seenClaimIds[cid]) {
+          throw { forbidden: 'Duplicate claim_id in bulk_return_pool: ' + cid };
+        }
+        seenClaimIds[cid] = true;
+      }
+      if (oldDoc && oldDoc.schema_v === 2 && Array.isArray(oldDoc.claim_ids)) {
+        for (var oci = 0; oci < oldDoc.claim_ids.length; oci++) {
+          if (!seenClaimIds[oldDoc.claim_ids[oci]]) {
+            throw { forbidden: 'Cannot remove claim_ids from bulk_return_pool' };
+          }
+        }
+      }
+    }
     if (oldDoc) {
       var oldUnclaimed = parseDecimal4(oldDoc.unclaimed_quota);
       if (unclaimed < 0 || (oldUnclaimed <= 0 && unclaimed < oldUnclaimed)) {
@@ -1294,6 +1323,97 @@ export function buildValidateDocUpdate(code: string): string {
     } else {
       if (newDoc.status !== 'ACTIVE') {
         throw { forbidden: 'Initial bulk_return_pool status must be ACTIVE' };
+      }
+    }
+  }
+  // 15. CR-129: bulk_return_claim validation (Rule 15)
+  if (newDoc.type === 'bulk_return_claim') {
+    var canManageClaim =
+      isRole('registration_staff') ||
+      isRole('supply_coordinator') ||
+      isRole('shelter_manager');
+    if (!canManageClaim) {
+      throw { forbidden: 'Only registration staff, supply coordinator, or shelter manager can manage bulk return claims' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported bulk_return_claim schema version' };
+    }
+    if (!/^bulk_return_claim:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'bulk_return_claim id must be bulk_return_claim:{ulid}' };
+    }
+    if (typeof newDoc.operation_id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.operation_id)) {
+      throw { forbidden: 'bulk_return_claim requires operation_id ULID' };
+    }
+    if (typeof newDoc.distribution_log_id !== 'string' || !/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.distribution_log_id)) {
+      throw { forbidden: 'bulk_return_claim requires distribution_log_id' };
+    }
+    if (newDoc._id !== 'bulk_return_claim:' + newDoc.distribution_log_id.replace('distribution_log:', '')) {
+      throw { forbidden: 'bulk_return_claim id must derive from distribution_log_id' };
+    }
+    if (typeof newDoc.bulk_pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id)) {
+      throw { forbidden: 'bulk_return_claim requires bulk_pool_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'bulk_return_claim requires item_id' };
+    }
+    var claimedQty = parseDecimal4(newDoc.claimed_qty);
+    if (isNaN(claimedQty) || claimedQty <= 0) {
+      throw { forbidden: 'bulk_return_claim claimed_qty must be a positive decimal string' };
+    }
+    var validStatuses = ['CLAIM_INTENT', 'POOL_CLAIMED', 'COMPLETE', 'ABORTED'];
+    if (validStatuses.indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Invalid bulk_return_claim status: ' + newDoc.status };
+    }
+
+    if (oldDoc) {
+      var permImmutable = [
+        '_id', 'type', 'schema_v', 'shelter_code', 'distribution_log_id', 'item_id', 'created_at', 'created_by'
+      ];
+      for (var pi = 0; pi < permImmutable.length; pi++) {
+        var piName = permImmutable[pi];
+        if (newDoc[piName] !== oldDoc[piName]) {
+          throw { forbidden: 'bulk_return_claim.' + piName + ' is permanently immutable' };
+        }
+      }
+
+      var oldStatus = oldDoc.status;
+      var newStatus = newDoc.status;
+
+      if (oldStatus === newStatus) {
+        if (newDoc.operation_id !== oldDoc.operation_id ||
+            newDoc.bulk_pool_id !== oldDoc.bulk_pool_id ||
+            newDoc.claimed_qty !== oldDoc.claimed_qty) {
+          throw { forbidden: 'Attempt-scoped fields cannot change within the same status' };
+        }
+      } else {
+        var validClaimTransitions = {
+          CLAIM_INTENT: ['POOL_CLAIMED', 'ABORTED'],
+          POOL_CLAIMED: ['COMPLETE'],
+          COMPLETE: [],
+          ABORTED: ['CLAIM_INTENT']
+        };
+        var allowedNext = validClaimTransitions[oldStatus] || [];
+        if (allowedNext.indexOf(newStatus) === -1) {
+          throw { forbidden: 'Invalid bulk_return_claim transition from ' + oldStatus + ' to ' + newStatus };
+        }
+
+        if (oldStatus === 'ABORTED' && newStatus === 'CLAIM_INTENT') {
+          // Allowed: new attempt resets operation_id, bulk_pool_id, claimed_qty, notes, updated_at
+        } else {
+          if (newDoc.operation_id !== oldDoc.operation_id) {
+            throw { forbidden: 'bulk_return_claim.operation_id is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+          if (newDoc.bulk_pool_id !== oldDoc.bulk_pool_id) {
+            throw { forbidden: 'bulk_return_claim.bulk_pool_id is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+          if (newDoc.claimed_qty !== oldDoc.claimed_qty) {
+            throw { forbidden: 'bulk_return_claim.claimed_qty is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+        }
+      }
+    } else {
+      if (newDoc.status !== 'CLAIM_INTENT') {
+        throw { forbidden: 'Initial bulk_return_claim status must be CLAIM_INTENT' };
       }
     }
   }

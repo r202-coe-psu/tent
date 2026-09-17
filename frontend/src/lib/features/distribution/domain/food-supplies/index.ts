@@ -50,3 +50,17 @@ export {
 	type BulkReturnPoolInput,
 	type BulkReturnPool
 } from './bulk-return-pool';
+
+export {
+	bulkReturnClaimStatusSchema,
+	bulkReturnClaimIdSchema,
+	bulkReturnClaimDocSchema,
+	createBulkReturnClaimInputSchema,
+	createBulkReturnClaim,
+	deriveClaimIdFromDistributionLog,
+	assertBulkReturnClaimPermanentImmutability,
+	assertBulkReturnClaimTransition,
+	type BulkReturnClaimStatus,
+	type BulkReturnClaim,
+	type CreateBulkReturnClaimInput
+} from './bulk-return-claim';

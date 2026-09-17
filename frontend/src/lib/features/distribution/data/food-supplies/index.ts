@@ -21,4 +21,9 @@ export {
 	type BulkReturnPoolListFilter
 } from './bulk-return-pool.repository';
 
+export {
+	BulkReturnClaimRemoteRepository,
+	type BulkReturnClaimRepository
+} from './bulk-return-claim.repository';
+
 export { resolveShelterDbName, retryCas, isCouchConflictError, MAX_CAS_RETRIES } from './shared';
