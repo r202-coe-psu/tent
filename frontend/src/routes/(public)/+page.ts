@@ -18,11 +18,42 @@ type TransparencySummaryPayload = {
 	isStale?: boolean;
 };
 
+export type PublicNeedItem = {
+	item_id: string;
+	name: string;
+	qty_needed: string | number;
+	unit: string;
+	status?: string;
+	category?: string;
+	urgency?: string;
+	target?: number;
+	received?: number;
+};
+
+export type PublicShelterNeeds = {
+	code: string;
+	name: string;
+	needs: PublicNeedItem[];
+};
+
+export type PublicShelterItem = {
+	code: string;
+	name: string;
+	province?: string;
+	district?: string;
+	subdistrict?: string;
+	site_kind?: string;
+	status?: string;
+	capacity?: number;
+};
+
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];
 	let announcements: Announcement[] = [];
 	let configData: Record<string, unknown> = {};
 	let metrics: TransparencySummaryPayload | undefined;
+	let donationNeeds: PublicShelterNeeds[] = [];
+	let sheltersList: PublicShelterItem[] = [];
 
 	try {
 		const configRes = await fetch('/api/public/v1/config/faqs?category=public');
@@ -42,6 +73,24 @@ export const load: PageLoad = async ({ fetch }) => {
 		}
 	} catch (e) {
 		console.error('Failed to fetch announcements', e);
+	}
+
+	try {
+		const [needsRes, sheltersRes] = await Promise.all([
+			fetch('/api/public/v1/needs').catch(() => null),
+			fetch('/api/public/v1/shelters').catch(() => null)
+		]);
+		if (needsRes?.ok) {
+			donationNeeds = (await needsRes.json().catch(() => [])) || [];
+		}
+		if (sheltersRes?.ok) {
+			const sBody = (await sheltersRes.json().catch(() => ({}))) as {
+				shelters?: PublicShelterItem[];
+			};
+			sheltersList = sBody.shelters || [];
+		}
+	} catch (e) {
+		console.error('[public-home] failed to fetch donation needs/shelters', e);
 	}
 
 	try {
@@ -76,6 +125,8 @@ export const load: PageLoad = async ({ fetch }) => {
 		configData,
 		announcements,
 		faqs,
+		donationNeeds,
+		sheltersList,
 		...metrics
 	};
 };
