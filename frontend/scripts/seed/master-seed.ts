@@ -185,7 +185,7 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 	);
 }
 
-export async function seedCatalog(): Promise<void> {
+export async function seedCatalog(): Promise<Map<string, string>> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
@@ -344,7 +344,9 @@ export async function seedCatalog(): Promise<void> {
 	const itemMasterBase = {
 		conversions: [],
 		distribution_type: 'recurring',
-		dietary: []
+		dietary: [],
+		target_gender: 'ALL',
+		age_group: 'ALL'
 	} as const;
 
 	const itemMastersDef: Array<{
@@ -352,7 +354,6 @@ export async function seedCatalog(): Promise<void> {
 		category: string;
 		base_unit: string;
 		type_class: 'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT';
-		fallbackId?: string;
 		extra?: Record<string, unknown>;
 	}> = [
 		{
@@ -360,196 +361,385 @@ export async function seedCatalog(): Promise<void> {
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'kg',
 			type_class: 'CONSUMABLE',
-			fallbackId: 'item_master:rice'
+			extra: {
+				conversions: [
+					{ uom_name: 'ถุง 5 กก.', multiplier: '5' },
+					{ uom_name: 'กระสอบ 50 กก.', multiplier: '50' }
+				],
+				default_inventory_uom: 'กระสอบ 50 กก.',
+				default_issue_uom: 'kg',
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
 		},
 		{
 			name: 'ไข่ไก่',
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
-			fallbackId: 'item_master:egg'
+			extra: {
+				conversions: [{ uom_name: 'แผง 30 ฟอง', multiplier: '30' }],
+				default_inventory_uom: 'แผง 30 ฟอง',
+				default_issue_uom: 'piece',
+				storage_type: 'DRY',
+				shelf_life_days: 21
+			}
 		},
 		{
 			name: 'ผักรวม',
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'kg',
 			type_class: 'CONSUMABLE',
-			fallbackId: 'item_master:vegetable'
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 5
+			}
 		},
 		{
 			name: 'ปลากระป๋อง',
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'can',
 			type_class: 'CONSUMABLE',
-			fallbackId: 'item_master:canned-fish'
+			extra: {
+				conversions: [
+					{ uom_name: 'แพ็ค 10 กระป๋อง', multiplier: '10' },
+					{ uom_name: 'ลัง 100 กระป๋อง', multiplier: '100' }
+				],
+				default_inventory_uom: 'ลัง 100 กระป๋อง',
+				default_issue_uom: 'can',
+				storage_type: 'DRY',
+				shelf_life_days: 730,
+				dietary: ['HALAL']
+			}
 		},
 		{
 			name: 'เนื้อไก่สด',
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'kg',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 3,
+				dietary: ['HALAL']
+			}
 		},
 		{
 			name: 'น้ำมันพืช',
 			category: 'อาหารและวัตถุดิบ',
 			base_unit: 'bottle',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'ลัง 12 ขวด', multiplier: '12' }],
+				default_inventory_uom: 'ลัง 12 ขวด',
+				default_issue_uom: 'bottle',
+				storage_type: 'DRY',
+				shelf_life_days: 365,
+				dietary: ['HALAL']
+			}
 		},
 		{
 			name: 'น้ำดื่ม 600 มล.',
 			category: 'น้ำดื่มสะอาด',
 			base_unit: 'bottle',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'แพ็ค 12 ขวด', multiplier: '12' }],
+				default_inventory_uom: 'แพ็ค 12 ขวด',
+				default_issue_uom: 'bottle',
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
 		},
 		{
 			name: 'น้ำดื่มถัง 5 ลิตร',
 			category: 'น้ำดื่มสะอาด',
 			base_unit: 'bottle',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'แพ็ค 4 ถัง', multiplier: '4' }],
+				default_inventory_uom: 'แพ็ค 4 ถัง',
+				default_issue_uom: 'bottle',
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
 		},
 		{
 			name: 'สบู่ก้อน',
 			category: 'สุขอนามัยและของใช้ส่วนตัว',
 			base_unit: 'bar',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'แพ็ค 4 ก้อน', multiplier: '4' }],
+				default_inventory_uom: 'แพ็ค 4 ก้อน',
+				default_issue_uom: 'bar',
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'ยาสีฟัน',
 			category: 'สุขอนามัยและของใช้ส่วนตัว',
 			base_unit: 'tube',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'แพ็ค 6 หลอด', multiplier: '6' }],
+				default_inventory_uom: 'แพ็ค 6 หลอด',
+				default_issue_uom: 'tube',
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'แปรงสีฟัน',
 			category: 'สุขอนามัยและของใช้ส่วนตัว',
 			base_unit: 'piece',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'แพ็ค 12 ด้าม', multiplier: '12' }],
+				default_inventory_uom: 'แพ็ค 12 ด้าม',
+				default_issue_uom: 'piece',
+				storage_type: 'DRY'
+			}
 		},
 		{
 			name: 'ผ้าอนามัย',
 			category: 'สุขอนามัยและของใช้ส่วนตัว',
 			base_unit: 'pack',
 			type_class: 'CONSUMABLE',
-			extra: { target_gender: 'female' }
+			extra: {
+				conversions: [{ uom_name: 'ลัง 24 ห่อ', multiplier: '24' }],
+				default_inventory_uom: 'ลัง 24 ห่อ',
+				default_issue_uom: 'pack',
+				storage_type: 'DRY',
+				shelf_life_days: 1095,
+				target_gender: 'FEMALE'
+			}
 		},
 		{
 			name: 'ผงซักฟอก',
 			category: 'สุขอนามัยและของใช้ส่วนตัว',
 			base_unit: 'bag',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'ลัง 12 ถุง', multiplier: '12' }],
+				default_inventory_uom: 'ลัง 12 ถุง',
+				default_issue_uom: 'bag',
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'ยาพาราเซตามอล 500 มก.',
 			category: 'เวชภัณฑ์และการปฐมพยาบาล',
 			base_unit: 'tablet',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [
+					{ uom_name: 'แผง 10 เม็ด', multiplier: '10' },
+					{ uom_name: 'กระปุก 100 เม็ด', multiplier: '100' }
+				],
+				default_inventory_uom: 'กระปุก 100 เม็ด',
+				default_issue_uom: 'tablet',
+				storage_type: 'CONTROLLED_MED',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'ชุดทำแผลปฐมพยาบาล',
 			category: 'เวชภัณฑ์และการปฐมพยาบาล',
 			base_unit: 'kit',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'กล่อง 10 ชุด', multiplier: '10' }],
+				default_inventory_uom: 'กล่อง 10 ชุด',
+				default_issue_uom: 'kit',
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'แอลกอฮอล์ล้างแผล 70%',
 			category: 'เวชภัณฑ์และการปฐมพยาบาล',
 			base_unit: 'bottle',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'ลัง 24 ขวด', multiplier: '24' }],
+				default_inventory_uom: 'ลัง 24 ขวด',
+				default_issue_uom: 'bottle',
+				storage_type: 'DRY',
+				shelf_life_days: 1095
+			}
 		},
 		{
 			name: 'ผงเกลือแร่ ORS',
 			category: 'เวชภัณฑ์และการปฐมพยาบาล',
 			base_unit: 'sachet',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [{ uom_name: 'กล่อง 50 ซอง', multiplier: '50' }],
+				default_inventory_uom: 'กล่อง 50 ซอง',
+				default_issue_uom: 'sachet',
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
 		},
 		{
 			name: 'ผ้าอ้อมผู้ใหญ่ ไซส์ L',
 			category: 'ของใช้กลุ่มเปราะบาง',
 			base_unit: 'piece',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: {
+				conversions: [
+					{ uom_name: 'แพ็ค 10 ชิ้น', multiplier: '10' },
+					{ uom_name: 'ลัง 8 แพ็ค', multiplier: '80' }
+				],
+				default_inventory_uom: 'ลัง 8 แพ็ค',
+				default_issue_uom: 'piece',
+				storage_type: 'DRY',
+				shelf_life_days: 1095,
+				age_group: 'ELDERLY'
+			}
 		},
 		{
 			name: 'ผ้าอ้อมเด็ก ไซส์ M',
 			category: 'ของใช้กลุ่มเปราะบาง',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
-			extra: { age_group: 'CHILD' }
+			extra: {
+				conversions: [
+					{ uom_name: 'แพ็ค 20 ชิ้น', multiplier: '20' },
+					{ uom_name: 'ลัง 6 แพ็ค', multiplier: '120' }
+				],
+				default_inventory_uom: 'ลัง 6 แพ็ค',
+				default_issue_uom: 'piece',
+				storage_type: 'DRY',
+				shelf_life_days: 1095,
+				age_group: 'CHILD'
+			}
 		},
 		{
 			name: 'นมผงสำหรับทารก',
 			category: 'ของใช้กลุ่มเปราะบาง',
 			base_unit: 'can',
 			type_class: 'CONSUMABLE',
-			extra: { age_group: 'INFANT' }
+			extra: {
+				conversions: [{ uom_name: 'ลัง 12 กระป๋อง', multiplier: '12' }],
+				default_inventory_uom: 'ลัง 12 กระป๋อง',
+				default_issue_uom: 'can',
+				storage_type: 'DRY',
+				shelf_life_days: 365,
+				age_group: 'INFANT'
+			}
 		},
 		{
 			name: 'เสื้อกั๊กสะท้อนแสง',
 			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
 			base_unit: 'piece',
 			type_class: 'EQUIPMENT',
-			extra: { returnable: true }
+			extra: { returnable: true, asset_status: 'READY' }
 		},
 		{
 			name: 'รองเท้าบูทยางกันน้ำ',
 			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
 			base_unit: 'pair',
 			type_class: 'EQUIPMENT',
-			extra: { returnable: true }
+			extra: { returnable: true, asset_status: 'READY' }
 		},
 		{
 			name: 'ข้าวกล่องทั่วไป',
 			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
 			base_unit: 'box',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: { storage_type: 'DRY', shelf_life_days: 1, distribution_type: 'recurring' }
 		},
 		{
 			name: 'ข้าวกล่องฮาลาล',
 			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
 			base_unit: 'box',
 			type_class: 'CONSUMABLE',
-			extra: { dietary: ['halal'] }
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 1,
+				distribution_type: 'recurring',
+				dietary: ['HALAL']
+			}
 		},
 		{
 			name: 'ผ้าห่มกันหนาว',
 			category: 'เครื่องนอนและที่พักพิง',
 			base_unit: 'piece',
 			type_class: 'DURABLE',
-			extra: { returnable: true }
+			extra: {
+				conversions: [{ uom_name: 'มัด 10 ผืน', multiplier: '10' }],
+				default_inventory_uom: 'มัด 10 ผืน',
+				default_issue_uom: 'piece',
+				returnable: true,
+				qty_per_person: 1,
+				distribution_type: 'one_time'
+			}
 		},
 		{
 			name: 'เสื่อปูนอน',
 			category: 'เครื่องนอนและที่พักพิง',
 			base_unit: 'piece',
 			type_class: 'DURABLE',
-			extra: { returnable: true }
+			extra: {
+				conversions: [{ uom_name: 'มัด 10 ผืน', multiplier: '10' }],
+				default_inventory_uom: 'มัด 10 ผืน',
+				default_issue_uom: 'piece',
+				returnable: true,
+				qty_per_person: 1,
+				distribution_type: 'one_time'
+			}
 		},
 		{
 			name: 'เต็นท์ครอบครัว',
 			category: 'เครื่องนอนและที่พักพิง',
 			base_unit: 'tent',
 			type_class: 'DURABLE',
-			extra: { returnable: true }
+			extra: { returnable: true, qty_per_person: 1, distribution_type: 'one_time' }
 		},
 		{
 			name: 'ถังแก๊สหุงต้ม LPG 15 กก.',
 			category: 'เชื้อเพลิงและพลังงาน',
 			base_unit: 'cylinder',
 			type_class: 'CONSUMABLE',
-			extra: { fuel_type: 'LPG', capacity_kg: '15', burn_rate_kg_per_hour: '0.35' }
+			extra: {
+				fuel_type: 'LPG',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.35',
+				time_multiplier: '1'
+			}
 		},
 		{
 			name: 'ถุงยังชีพธารน้ำใจ',
 			category: 'ชุดพัสดุยังชีพรวม',
 			base_unit: 'kit',
-			type_class: 'CONSUMABLE'
+			type_class: 'CONSUMABLE',
+			extra: { storage_type: 'DRY', shelf_life_days: 180, distribution_type: 'one_time' }
 		}
 	];
 
 	const itemMasterIdByName = new Map<string, string>();
+	const isUlidMasterId = (id?: string) =>
+		Boolean(id && /^item_master:[0-9A-HJKMNP-TV-Z]{26}$/.test(id));
+	const legacyItemMasterDocsToDelete: Array<{ _id: string; _rev: string }> = [];
 
 	const itemMasters = itemMastersDef.map((def) => {
 		const existing = existingItemMastersByName.get(def.name);
-		const id = existing?._id ?? def.fallbackId ?? `item_master:${ulid()}`;
+		let id: string;
+		let rev: string | undefined;
+
+		if (existing && isUlidMasterId(existing._id)) {
+			id = existing._id;
+			rev = existing._rev;
+		} else {
+			id = `item_master:${ulid()}`;
+			if (existing && existing._rev) {
+				legacyItemMasterDocsToDelete.push({ _id: existing._id, _rev: existing._rev });
+			}
+		}
+
 		itemMasterIdByName.set(def.name, id);
 		return catalogDoc(
 			id,
@@ -561,7 +751,7 @@ export async function seedCatalog(): Promise<void> {
 				type_class: def.type_class,
 				...itemMasterBase,
 				...(def.extra ?? {}),
-				...(existing?._rev ? { _rev: existing._rev } : {})
+				...(rev ? { _rev: rev } : {})
 			},
 			4
 		);
@@ -570,7 +760,6 @@ export async function seedCatalog(): Promise<void> {
 	const recipesDef = [
 		{
 			label: 'ข้าวไข่เจียว',
-			fallbackId: 'recipe:fried-egg-rice',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' }
@@ -578,7 +767,6 @@ export async function seedCatalog(): Promise<void> {
 		},
 		{
 			label: 'ข้าวต้มไก่สับ',
-			fallbackId: 'recipe:congee-chicken',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.15', uom: 'kg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' }
@@ -586,7 +774,6 @@ export async function seedCatalog(): Promise<void> {
 		},
 		{
 			label: 'ข้าวกะเพราไก่สับ',
-			fallbackId: 'recipe:basil-chicken-rice',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
@@ -594,7 +781,6 @@ export async function seedCatalog(): Promise<void> {
 		},
 		{
 			label: 'ข้าวไก่ผัดกระเทียม',
-			fallbackId: 'recipe:garlic-chicken-rice',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
@@ -602,7 +788,6 @@ export async function seedCatalog(): Promise<void> {
 		},
 		{
 			label: 'ข้าวไข่พะโล้ไก่',
-			fallbackId: 'recipe:stewed-egg-chicken',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
@@ -611,7 +796,6 @@ export async function seedCatalog(): Promise<void> {
 		},
 		{
 			label: 'ข้าวปลากระป๋องทรงเครื่อง',
-			fallbackId: 'recipe:canned-fish-rice',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'ปลากระป๋อง', quantity: '0.5', uom: 'can' }
@@ -619,9 +803,24 @@ export async function seedCatalog(): Promise<void> {
 		}
 	];
 
+	const isUlidRecipeId = (id?: string) => Boolean(id && /^recipe:[0-9A-HJKMNP-TV-Z]{26}$/.test(id));
+	const legacyRecipeDocsToDelete: Array<{ _id: string; _rev: string }> = [];
+
 	const recipes = recipesDef.map((r) => {
 		const existing = existingRecipesByLabel.get(r.label);
-		const id = existing?._id ?? r.fallbackId ?? `recipe:${ulid()}`;
+		let id: string;
+		let rev: string | undefined;
+
+		if (existing && isUlidRecipeId(existing._id)) {
+			id = existing._id;
+			rev = existing._rev;
+		} else {
+			id = `recipe:${ulid()}`;
+			if (existing && existing._rev) {
+				legacyRecipeDocsToDelete.push({ _id: existing._id, _rev: existing._rev });
+			}
+		}
+
 		return catalogDoc(
 			id,
 			'recipe',
@@ -634,11 +833,18 @@ export async function seedCatalog(): Promise<void> {
 					quantity: ing.quantity,
 					uom: ing.uom
 				})),
-				...(existing?._rev ? { _rev: existing._rev } : {})
+				...(rev ? { _rev: rev } : {})
 			},
 			4
 		);
 	});
+
+	for (const legacy of [...legacyItemMasterDocsToDelete, ...legacyRecipeDocsToDelete]) {
+		await couchReq(
+			'DELETE',
+			`/catalog/${encodeURIComponent(legacy._id)}?rev=${encodeURIComponent(legacy._rev)}`
+		);
+	}
 
 	for (const doc of [...items, ...itemCategories, ...itemMasters, ...recipes])
 		await putDoc('catalog', doc);
@@ -647,6 +853,7 @@ export async function seedCatalog(): Promise<void> {
 	);
 
 	await deployCatalogMangoIndexes('catalog');
+	return itemMasterIdByName;
 }
 
 export async function seedCatalogSopRatios(): Promise<void> {
@@ -710,10 +917,61 @@ export async function seedCatalogSopRatios(): Promise<void> {
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
-export async function seedCatalogFoodSphereParameters(): Promise<void> {
+export async function seedCatalogFoodSphereParameters(
+	itemMasterIdByName?: Map<string, string>
+): Promise<void> {
 	await ensureDb('catalog');
 
-	for (const doc of DEFAULT_REQUIREMENT_GROUPS) {
+	let idByName = itemMasterIdByName;
+	if (!idByName) {
+		idByName = new Map<string, string>();
+		const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
+		if (status === 200 && data && typeof data === 'object' && 'rows' in data) {
+			for (const row of (
+				data as {
+					rows: Array<{ doc?: { type?: string; name?: string; _id?: string } }>;
+				}
+			).rows) {
+				if (row.doc?.type === 'item_master' && row.doc.name && row.doc._id) {
+					idByName.set(row.doc.name, row.doc._id);
+				}
+			}
+		}
+	}
+
+	const itemNameToId: Record<string, string> = {
+		ข้าวสาร: idByName.get('ข้าวสาร') ?? 'item_master:rice',
+		ไข่ไก่: idByName.get('ไข่ไก่') ?? 'item_master:egg',
+		ปลากระป๋อง: idByName.get('ปลากระป๋อง') ?? 'item_master:canned-fish',
+		เนื้อไก่สด: idByName.get('เนื้อไก่สด') ?? 'item_master:chicken',
+		น้ำมันพืช: idByName.get('น้ำมันพืช') ?? 'item_master:oil',
+		'น้ำดื่ม 600 มล.': idByName.get('น้ำดื่ม 600 มล.') ?? 'item_master:water-600ml',
+		'น้ำดื่มถัง 5 ลิตร': idByName.get('น้ำดื่มถัง 5 ลิตร') ?? 'item_master:water-5l'
+	};
+
+	const requirementGroups = DEFAULT_REQUIREMENT_GROUPS.map((rg) => {
+		const itemMaps = rg.item_maps?.map((m) => {
+			let resolvedId = m.item_id;
+			if (m.item_id === 'item_master:rice' && itemNameToId['ข้าวสาร'])
+				resolvedId = itemNameToId['ข้าวสาร'];
+			else if (m.item_id === 'item_master:egg' && itemNameToId['ไข่ไก่'])
+				resolvedId = itemNameToId['ไข่ไก่'];
+			else if (m.item_id === 'item_master:canned-fish' && itemNameToId['ปลากระป๋อง'])
+				resolvedId = itemNameToId['ปลากระป๋อง'];
+			else if (m.item_id === 'item_master:chicken' && itemNameToId['เนื้อไก่สด'])
+				resolvedId = itemNameToId['เนื้อไก่สด'];
+			else if (m.item_id === 'item_master:oil' && itemNameToId['น้ำมันพืช'])
+				resolvedId = itemNameToId['น้ำมันพืช'];
+			else if (m.item_id === 'item_master:water-600ml' && itemNameToId['น้ำดื่ม 600 มล.'])
+				resolvedId = itemNameToId['น้ำดื่ม 600 มล.'];
+			else if (m.item_id === 'item_master:water-5l' && itemNameToId['น้ำดื่มถัง 5 ลิตร'])
+				resolvedId = itemNameToId['น้ำดื่มถัง 5 ลิตร'];
+			return { ...m, item_id: resolvedId };
+		});
+		return { ...rg, item_maps: itemMaps };
+	});
+
+	for (const doc of requirementGroups) {
 		await putDoc('catalog', doc);
 	}
 	for (const doc of DEFAULT_FOOD_SPHERE_STANDARDS) {
@@ -724,7 +982,7 @@ export async function seedCatalogFoodSphereParameters(): Promise<void> {
 	}
 
 	console.log(
-		`  ✓ catalog: ${DEFAULT_REQUIREMENT_GROUPS.length} requirement groups, ` +
+		`  ✓ catalog: ${requirementGroups.length} requirement groups, ` +
 			`${DEFAULT_FOOD_SPHERE_STANDARDS.length} food sphere standards, ` +
 			`${DEFAULT_REPLENISHMENT_POLICIES.length} replenishment policies seeded`
 	);
@@ -734,8 +992,8 @@ export async function seedCatalogFoodSphereParameters(): Promise<void> {
 export async function runMasterSeed(): Promise<MasterLookup> {
 	const master = await seedMasterData();
 	await seedAppConfig();
-	await seedCatalog();
+	const itemMasterIdByName = await seedCatalog();
 	await seedCatalogSopRatios();
-	await seedCatalogFoodSphereParameters();
+	await seedCatalogFoodSphereParameters(itemMasterIdByName);
 	return master;
 }

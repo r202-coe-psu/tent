@@ -21,7 +21,7 @@ language: th
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                     |
 | `catalog`  | `item_category` 10, `item_master` 29, `recipe` 6 และ `supply_item` 7          |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                   |
-| `catalog`  | `requirement_group` 3, `food_sphere_standard` 14 และ `replenishment_policy` 3 |
+| `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5 |
 
 ข้อมูล shelter, users, evacuees, operations และ daily snapshots ที่สร้างโดย `pnpm seed` อยู่ใน staging seed และไม่รวมอยู่ใน SSoT ฉบับนี้
 
@@ -232,50 +232,50 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 รายการสิ่งของหลัก 29 รายการ ใช้ `schema_v: 4`, สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
 
-| `_id`                | name                    | category                       | base_unit  | type_class   |
-| -------------------- | ----------------------- | ------------------------------ | ---------- | ------------ |
-| `item_master:{ulid}` | ข้าวสาร                 | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
-| `item_master:{ulid}` | ไข่ไก่                  | อาหารและวัตถุดิบ               | `piece`    | `CONSUMABLE` |
-| `item_master:{ulid}` | ผักรวม                  | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
-| `item_master:{ulid}` | ปลากระป๋อง              | อาหารและวัตถุดิบ               | `can`      | `CONSUMABLE` |
-| `item_master:{ulid}` | เนื้อไก่สด              | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
-| `item_master:{ulid}` | น้ำมันพืช               | อาหารและวัตถุดิบ               | `bottle`   | `CONSUMABLE` |
-| `item_master:{ulid}` | น้ำดื่ม 600 มล.         | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` |
-| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร       | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` |
-| `item_master:{ulid}` | สบู่ก้อน                | สุขอนามัยและของใช้ส่วนตัว      | `bar`      | `CONSUMABLE` |
-| `item_master:{ulid}` | ยาสีฟัน                 | สุขอนามัยและของใช้ส่วนตัว      | `tube`     | `CONSUMABLE` |
-| `item_master:{ulid}` | แปรงสีฟัน               | สุขอนามัยและของใช้ส่วนตัว      | `piece`    | `CONSUMABLE` |
-| `item_master:{ulid}` | ผ้าอนามัย               | สุขอนามัยและของใช้ส่วนตัว      | `pack`     | `CONSUMABLE` |
-| `item_master:{ulid}` | ผงซักฟอก                | สุขอนามัยและของใช้ส่วนตัว      | `bag`      | `CONSUMABLE` |
-| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก.   | เวชภัณฑ์และการปฐมพยาบาล        | `tablet`   | `CONSUMABLE` |
-| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล       | เวชภัณฑ์และการปฐมพยาบาล        | `kit`      | `CONSUMABLE` |
-| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70%    | เวชภัณฑ์และการปฐมพยาบาล        | `bottle`   | `CONSUMABLE` |
-| `item_master:{ulid}` | ผงเกลือแร่ ORS          | เวชภัณฑ์และการปฐมพยาบาล        | `sachet`   | `CONSUMABLE` |
-| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L   | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` |
-| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M      | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` |
-| `item_master:{ulid}` | นมผงสำหรับทารก          | ของใช้กลุ่มเปราะบาง            | `can`      | `CONSUMABLE` |
-| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง      | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `piece`    | `EQUIPMENT`  |
-| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ     | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `pair`     | `EQUIPMENT`  |
-| `item_master:{ulid}` | ข้าวกล่องทั่วไป         | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` |
-| `item_master:{ulid}` | ข้าวกล่องฮาลาล          | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` |
-| `item_master:{ulid}` | ผ้าห่มกันหนาว           | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    |
-| `item_master:{ulid}` | เสื่อปูนอน              | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    |
-| `item_master:{ulid}` | เต็นท์ครอบครัว          | เครื่องนอนและที่พักพิง         | `tent`     | `DURABLE`    |
-| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก.| เชื้อเพลิงและพลังงาน           | `cylinder` | `CONSUMABLE` |
-| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ       | ชุดพัสดุยังชีพรวม              | `kit`      | `CONSUMABLE` |
+| `_id` | name | category | base_unit | type_class | conversions | inventory / issue uom | storage / shelf life | properties / flags |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `item_master:{ulid}` | ข้าวสาร | อาหารและวัตถุดิบ | `kg` | `CONSUMABLE` | ถุง 5 กก. (x5), กระสอบ 50 กก. (x50) | กระสอบ 50 กก. / kg | DRY / 365 วัน | ผูก `FOOD_ENERGY` |
+| `item_master:{ulid}` | ไข่ไก่ | อาหารและวัตถุดิบ | `piece` | `CONSUMABLE` | แผง 30 ฟอง (x30) | แผง 30 ฟอง / piece | DRY / 21 วัน | ผูก `FOOD_PROTEIN` |
+| `item_master:{ulid}` | ผักรวม | อาหารและวัตถุดิบ | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 5 วัน | — |
+| `item_master:{ulid}` | ปลากระป๋อง | อาหารและวัตถุดิบ | `can` | `CONSUMABLE` | แพ็ค 10 กป. (x10), ลัง 100 กป. (x100) | ลัง 100 กป. / can | DRY / 730 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | เนื้อไก่สด | อาหารและวัตถุดิบ | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 3 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | น้ำมันพืช | อาหารและวัตถุดิบ | `bottle` | `CONSUMABLE` | ลัง 12 ขวด (x12) | ลัง 12 ขวด / bottle | DRY / 365 วัน | `dietary: ['HALAL']`, ผูก `FOOD_FAT` |
+| `item_master:{ulid}` | น้ำดื่ม 600 มล. | น้ำดื่มสะอาด | `bottle` | `CONSUMABLE` | แพ็ค 12 ขวด (x12) | แพ็ค 12 ขวด / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร | น้ำดื่มสะอาด | `bottle` | `CONSUMABLE` | แพ็ค 4 ถัง (x4) | แพ็ค 4 ถัง / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | สบู่ก้อน | สุขอนามัยและของใช้ส่วนตัว | `bar` | `CONSUMABLE` | แพ็ค 4 ก้อน (x4) | แพ็ค 4 ก้อน / bar | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาสีฟัน | สุขอนามัยและของใช้ส่วนตัว | `tube` | `CONSUMABLE` | แพ็ค 6 หลอด (x6) | แพ็ค 6 หลอด / tube | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แปรงสีฟัน | สุขอนามัยและของใช้ส่วนตัว | `piece` | `CONSUMABLE` | แพ็ค 12 ด้าม (x12) | แพ็ค 12 ด้าม / piece | DRY / — | — |
+| `item_master:{ulid}` | ผ้าอนามัย | สุขอนามัยและของใช้ส่วนตัว | `pack` | `CONSUMABLE` | ลัง 24 ห่อ (x24) | ลัง 24 ห่อ / pack | DRY / 1095 วัน | `target_gender: 'FEMALE'` |
+| `item_master:{ulid}` | ผงซักฟอก | สุขอนามัยและของใช้ส่วนตัว | `bag` | `CONSUMABLE` | ลัง 12 ถุง (x12) | ลัง 12 ถุง / bag | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก. | เวชภัณฑ์และการปฐมพยาบาล | `tablet` | `CONSUMABLE` | แผง 10 เม็ด (x10), กระปุก 100 เม็ด (x100) | กระปุก 100 เม็ด / tablet | CONTROLLED_MED / 730 วัน | — |
+| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล | เวชภัณฑ์และการปฐมพยาบาล | `kit` | `CONSUMABLE` | กล่อง 10 ชุด (x10) | กล่อง 10 ชุด / kit | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70% | เวชภัณฑ์และการปฐมพยาบาล | `bottle` | `CONSUMABLE` | ลัง 24 ขวด (x24) | ลัง 24 ขวด / bottle | DRY / 1095 วัน | — |
+| `item_master:{ulid}` | ผงเกลือแร่ ORS | เวชภัณฑ์และการปฐมพยาบาล | `sachet` | `CONSUMABLE` | กล่อง 50 ซอง (x50) | กล่อง 50 ซอง / sachet | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L | ของใช้กลุ่มเปราะบาง | `piece` | `CONSUMABLE` | แพ็ค 10 ชิ้น (x10), ลัง 8 แพ็ค (x80) | ลัง 8 แพ็ค / piece | DRY / 1095 วัน | `age_group: 'ELDERLY'` |
+| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M | ของใช้กลุ่มเปราะบาง | `piece` | `CONSUMABLE` | แพ็ค 20 ชิ้น (x20), ลัง 6 แพ็ค (x120) | ลัง 6 แพ็ค / piece | DRY / 1095 วัน | `age_group: 'CHILD'` |
+| `item_master:{ulid}` | นมผงสำหรับทารก | ของใช้กลุ่มเปราะบาง | `can` | `CONSUMABLE` | ลัง 12 กระป๋อง (x12) | ลัง 12 กระป๋อง / can | DRY / 365 วัน | `age_group: 'INFANT'` |
+| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `piece` | `EQUIPMENT` | — | piece / piece | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `pair` | `EQUIPMENT` | — | pair / pair | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | ข้าวกล่องทั่วไป | อาหารปรุงเสร็จและเครื่องดื่ม | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'` |
+| `item_master:{ulid}` | ข้าวกล่องฮาลาล | อาหารปรุงเสร็จและเครื่องดื่ม | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'`, `dietary: ['HALAL']` |
+| `item_master:{ulid}` | ผ้าห่มกันหนาว | เครื่องนอนและที่พักพิง | `piece` | `DURABLE` | มัด 10 ผืน (x10) | มัด 10 ผืน / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เสื่อปูนอน | เครื่องนอนและที่พักพิง | `piece` | `DURABLE` | มัด 10 ผืน (x10) | มัด 10 ผืน / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เต็นท์ครอบครัว | เครื่องนอนและที่พักพิง | `tent` | `DURABLE` | — | tent / tent | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | เชื้อเพลิงและพลังงาน | `cylinder` | `CONSUMABLE` | — | cylinder / cylinder | — | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
+| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ | ชุดพัสดุยังชีพรวม | `kit` | `CONSUMABLE` | — | kit / kit | DRY / 180 วัน | `distribution_type: 'one_time'` |
 
 ### 2.3 `recipe`
 
-สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิง 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"`:
+สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิง 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"`, สร้างด้วย `_id` รูปแบบ `recipe:{ulid}`:
 
-| `_id`                       | label                    | ingredients                                                  |
-| --------------------------- | ------------------------ | ------------------------------------------------------------ |
-| `recipe:fried-egg-rice`     | ข้าวไข่เจียว             | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece                               |
-| `recipe:congee-chicken`     | ข้าวต้มไก่สับ            | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg                           |
-| `recipe:basil-chicken-rice` | ข้าวกะเพราไก่สับ         | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
-| `recipe:garlic-chicken-rice`| ข้าวไก่ผัดกระเทียม       | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
-| `recipe:stewed-egg-chicken` | ข้าวไข่พะโล้ไก่          | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg           |
-| `recipe:canned-fish-rice`   | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can                           |
+| `_id`          | label                    | ingredients                                                  |
+| -------------- | ------------------------ | ------------------------------------------------------------ |
+| `recipe:{ulid}` | ข้าวไข่เจียว             | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece                               |
+| `recipe:{ulid}` | ข้าวต้มไก่สับ            | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg                           |
+| `recipe:{ulid}` | ข้าวกะเพราไก่สับ         | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
+| `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม       | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
+| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่          | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg           |
+| `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can                           |
 
 ### 2.4 `supply_item`
 
@@ -339,42 +339,58 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ทุกเอกสารมี `schema_v: 1`, `status: active`, `source: SPHERE_BASELINE`, `created_by: system` และวันที่ `2026-07-16`
 
-| `_id`                            | name         | standard_uom | item map                                               |
-| -------------------------------- | ------------ | ------------ | ------------------------------------------------------ |
-| `requirement_group:FOOD_ENERGY`  | พลังงานอาหาร | `kcal`       | `item_master:rice`, `kg`, factor `3600`, share `100%`  |
-| `requirement_group:FOOD_PROTEIN` | โปรตีน       | `gram`       | `item_master:egg`, `piece`, factor `6.3`, share `100%` |
-| `requirement_group:FOOD_FAT`     | ไขมัน        | `gram`       | ไม่มี item map                                         |
+| `_id` | name | standard_uom | item map |
+| --- | --- | --- | --- |
+| `requirement_group:FOOD_ENERGY` | กลุ่มแป้งและพลังงานหลัก | `kcal` | ข้าวสาร (`kg`), factor `3600`, share `100%` |
+| `requirement_group:FOOD_PROTEIN` | กลุ่มโปรตีนและเนื้อสัตว์ | `gram` | ไข่ไก่ (`piece`), factor `6.3`, share `50%`<br/>ปลากระป๋อง (`can`), factor `17`, share `50%` |
+| `requirement_group:FOOD_PROTEIN_HALAL` | กลุ่มโปรตีนและเนื้อสัตว์ (ฮาลาล) | `gram` | เนื้อไก่สด (`kg`), factor `200`, share `70%`<br/>ไข่ไก่ (`piece`), factor `6.3`, share `30%` |
+| `requirement_group:FOOD_FAT` | กลุ่มน้ำมันและไขมัน | `gram` | น้ำมันพืช (`bottle`), factor `900`, share `100%` |
+| `requirement_group:DRINKING_WATER` | กลุ่มน้ำดื่มสะอาด | `liter` | น้ำดื่ม 600 มล. (`bottle`), factor `0.6`, share `70%`<br/>น้ำดื่มถัง 5 ลิตร (`bottle`), factor `5.0`, share `30%` |
+
+> **หมายเหตุ:** ในฐานข้อมูลจริง `item_maps[].item_id` ถูก resolve เป็น `item_master:{ulid}` จริงอัตโนมัติขณะรัน seed ตามชื่อสิ่งของภาษาไทย
 
 ### 4.2 `food_sphere_standard`
 
-ทุกเอกสารมี `schema_v: 1`, `effective_date: 2026-07-16`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system`
+ทุกเอกสารมี `schema_v: 1`, `effective_date: 2026-07-16`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` (รวม 24 รายการ)
 
-| `_id`                                          | target segment | requirement group | daily demand | unit |
-| ---------------------------------------------- | -------------- | ----------------- | -----------: | ---- |
-| `food_sphere_standard:ALL:FOOD_ENERGY`         | `ALL`          | `FOOD_ENERGY`     |         2100 | kcal |
-| `food_sphere_standard:ALL:FOOD_FAT`            | `ALL`          | `FOOD_FAT`        |           40 | gram |
-| `food_sphere_standard:ALL:FOOD_PROTEIN`        | `ALL`          | `FOOD_PROTEIN`    |           53 | gram |
-| `food_sphere_standard:INFANT_0_6:FOOD_ENERGY`  | `INFANT_0_6`   | `FOOD_ENERGY`     |          550 | kcal |
-| `food_sphere_standard:INFANT_6_23:FOOD_ENERGY` | `INFANT_6_23`  | `FOOD_ENERGY`     |          850 | kcal |
-| `food_sphere_standard:CHILD_2_5:FOOD_ENERGY`   | `CHILD_2_5`    | `FOOD_ENERGY`     |         1250 | kcal |
-| `food_sphere_standard:CHILD_2_5:FOOD_PROTEIN`  | `CHILD_2_5`    | `FOOD_PROTEIN`    |           25 | gram |
-| `food_sphere_standard:PREGNANT:FOOD_ENERGY`    | `PREGNANT`     | `FOOD_ENERGY`     |         2400 | kcal |
-| `food_sphere_standard:PREGNANT:FOOD_PROTEIN`   | `PREGNANT`     | `FOOD_PROTEIN`    |           70 | gram |
-| `food_sphere_standard:PREGNANT:FOOD_FAT`       | `PREGNANT`     | `FOOD_FAT`        |           45 | gram |
-| `food_sphere_standard:LACTATING:FOOD_ENERGY`   | `LACTATING`    | `FOOD_ENERGY`     |         2600 | kcal |
-| `food_sphere_standard:LACTATING:FOOD_PROTEIN`  | `LACTATING`    | `FOOD_PROTEIN`    |           75 | gram |
-| `food_sphere_standard:ELDERLY:FOOD_ENERGY`     | `ELDERLY`      | `FOOD_ENERGY`     |         1900 | kcal |
-| `food_sphere_standard:ELDERLY:FOOD_PROTEIN`    | `ELDERLY`      | `FOOD_PROTEIN`    |           60 | gram |
+| `_id` | target segment | requirement group | daily demand | unit |
+| --- | --- | --- | ---: | --- |
+| `food_sphere_standard:ALL:FOOD_ENERGY` | `ALL` | `FOOD_ENERGY` | 2100 | kcal |
+| `food_sphere_standard:ALL:FOOD_FAT` | `ALL` | `FOOD_FAT` | 40 | gram |
+| `food_sphere_standard:ALL:FOOD_PROTEIN` | `ALL` | `FOOD_PROTEIN` | 53 | gram |
+| `food_sphere_standard:ALL:FOOD_PROTEIN_HALAL` | `ALL` | `FOOD_PROTEIN_HALAL` | 53 | gram |
+| `food_sphere_standard:ALL:DRINKING_WATER` | `ALL` | `DRINKING_WATER` | 3 | liter |
+| `food_sphere_standard:INFANT_0_6:FOOD_ENERGY` | `INFANT_0_6` | `FOOD_ENERGY` | 550 | kcal |
+| `food_sphere_standard:INFANT_6_23:FOOD_ENERGY` | `INFANT_6_23` | `FOOD_ENERGY` | 850 | kcal |
+| `food_sphere_standard:CHILD_2_5:FOOD_ENERGY` | `CHILD_2_5` | `FOOD_ENERGY` | 1250 | kcal |
+| `food_sphere_standard:CHILD_2_5:FOOD_PROTEIN` | `CHILD_2_5` | `FOOD_PROTEIN` | 25 | gram |
+| `food_sphere_standard:CHILD_2_5:FOOD_PROTEIN_HALAL` | `CHILD_2_5` | `FOOD_PROTEIN_HALAL` | 25 | gram |
+| `food_sphere_standard:CHILD_2_5:DRINKING_WATER` | `CHILD_2_5` | `DRINKING_WATER` | 1.5 | liter |
+| `food_sphere_standard:PREGNANT:FOOD_ENERGY` | `PREGNANT` | `FOOD_ENERGY` | 2400 | kcal |
+| `food_sphere_standard:PREGNANT:FOOD_PROTEIN` | `PREGNANT` | `FOOD_PROTEIN` | 70 | gram |
+| `food_sphere_standard:PREGNANT:FOOD_PROTEIN_HALAL` | `PREGNANT` | `FOOD_PROTEIN_HALAL` | 70 | gram |
+| `food_sphere_standard:PREGNANT:FOOD_FAT` | `PREGNANT` | `FOOD_FAT` | 45 | gram |
+| `food_sphere_standard:PREGNANT:DRINKING_WATER` | `PREGNANT` | `DRINKING_WATER` | 3.5 | liter |
+| `food_sphere_standard:LACTATING:FOOD_ENERGY` | `LACTATING` | `FOOD_ENERGY` | 2600 | kcal |
+| `food_sphere_standard:LACTATING:FOOD_PROTEIN` | `LACTATING` | `FOOD_PROTEIN` | 75 | gram |
+| `food_sphere_standard:LACTATING:FOOD_PROTEIN_HALAL` | `LACTATING` | `FOOD_PROTEIN_HALAL` | 75 | gram |
+| `food_sphere_standard:LACTATING:DRINKING_WATER` | `LACTATING` | `DRINKING_WATER` | 4 | liter |
+| `food_sphere_standard:ELDERLY:FOOD_ENERGY` | `ELDERLY` | `FOOD_ENERGY` | 1900 | kcal |
+| `food_sphere_standard:ELDERLY:FOOD_PROTEIN` | `ELDERLY` | `FOOD_PROTEIN` | 60 | gram |
+| `food_sphere_standard:ELDERLY:FOOD_PROTEIN_HALAL` | `ELDERLY` | `FOOD_PROTEIN_HALAL` | 60 | gram |
+| `food_sphere_standard:ELDERLY:DRINKING_WATER` | `ELDERLY` | `DRINKING_WATER` | 2.5 | liter |
 
 ### 4.3 `replenishment_policy`
 
-ทุกเอกสารมี `schema_v: 1`, `scope_type: REQUIREMENT_GROUP`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system`
+ทุกเอกสารมี `schema_v: 1`, `scope_type: REQUIREMENT_GROUP`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` (รวม 5 รายการ)
 
-| `_id`                                                 | target         | lead time (วัน) | review period (วัน) | safety (วัน) | min days | max days |
-| ----------------------------------------------------- | -------------- | --------------: | ------------------: | -----------: | -------: | -------: |
-| `replenishment_policy:REQUIREMENT_GROUP:FOOD_ENERGY`  | `FOOD_ENERGY`  |               3 |                   4 |            3 |        3 |       45 |
-| `replenishment_policy:REQUIREMENT_GROUP:FOOD_PROTEIN` | `FOOD_PROTEIN` |               2 |                   2 |            2 |        2 |       20 |
-| `replenishment_policy:REQUIREMENT_GROUP:FOOD_FAT`     | `FOOD_FAT`     |               2 |                   3 |            2 |        2 |       30 |
+| `_id` | target | lead time (วัน) | review period (วัน) | safety (วัน) | min days | max days |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `replenishment_policy:REQUIREMENT_GROUP:FOOD_ENERGY` | `FOOD_ENERGY` | 3 | 4 | 3 | 3 | 45 |
+| `replenishment_policy:REQUIREMENT_GROUP:FOOD_PROTEIN` | `FOOD_PROTEIN` | 2 | 2 | 2 | 2 | 20 |
+| `replenishment_policy:REQUIREMENT_GROUP:FOOD_PROTEIN_HALAL` | `FOOD_PROTEIN_HALAL` | 2 | 2 | 2 | 2 | 20 |
+| `replenishment_policy:REQUIREMENT_GROUP:FOOD_FAT` | `FOOD_FAT` | 2 | 3 | 2 | 2 | 30 |
+| `replenishment_policy:REQUIREMENT_GROUP:DRINKING_WATER` | `DRINKING_WATER` | 1 | 2 | 2 | 2 | 14 |
 
 ## 5. App config seed
 

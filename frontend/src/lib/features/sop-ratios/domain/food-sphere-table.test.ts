@@ -154,14 +154,14 @@ describe('Food Sphere Table Domain Logic', () => {
 
 			// Group 2: FOOD_PROTEIN
 			// FOOD_PROTEIN baseline for ALL = 53 g -> totalGroupDemand = 530 g
-			// Egg: conversionFactor = 6.3 g/piece, share = 100% -> itemDemand = 530 / 6.3 = 84.127 pieces/day
+			// Egg: conversionFactor = 6.3 g/piece, share = 50% -> itemDemand = 265 / 6.3 = 42.063 pieces/day
 			// Stock = 0 -> DoC = 0 days <= lead_time (2) -> CRITICAL
 			const proteinGroup = result.groups.find((g) => g.id === 'FOOD_PROTEIN');
 			expect(proteinGroup).toBeDefined();
 			expect(proteinGroup?.totalGroupDemand).toBe(530);
 			const egg = proteinGroup?.items[0];
 			expect(egg?.name).toBe('ไข่ไก่สด เบอร์ 2');
-			expect(egg?.itemDailyDemand).toBeCloseTo(84.127, 2);
+			expect(egg?.itemDailyDemand).toBeCloseTo(42.063, 2);
 			expect(egg?.docDays).toBe(0);
 			expect(egg?.status).toBe('CRITICAL');
 
@@ -176,8 +176,8 @@ describe('Food Sphere Table Domain Logic', () => {
 			expect(blanket?.status).toBe('UNCONFIGURED');
 
 			// Summary stats
-			expect(result.summary.totalItems).toBe(3);
-			expect(result.summary.criticalCount).toBe(1);
+			expect(result.summary.totalItems).toBe(9);
+			expect(result.summary.criticalCount).toBe(7);
 			expect(result.summary.warningCount).toBe(1);
 			expect(result.summary.unconfiguredCount).toBe(1);
 			expect(result.summary.adequateCount).toBe(0);
