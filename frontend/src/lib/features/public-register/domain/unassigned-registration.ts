@@ -18,9 +18,11 @@ import {
 	type UnifiedRegistrationParsed
 } from '$lib/features/people/server';
 
-/** FastAPI create body — derived from OpenAPI (CONVENTIONS §12). */
+/** FastAPI create body — derived from OpenAPI (CONVENTIONS §12) + optional join. */
 export type UnassignedRegistrationPayload =
-	components['schemas']['UnassignedRegistrationCreateRequest'];
+	components['schemas']['UnassignedRegistrationCreateRequest'] & {
+		join_registration_id?: string;
+	};
 
 /**
  * BFF request body for POST /api/public/v1/unassigned-registrations.
@@ -30,6 +32,7 @@ export const publicUnassignedRegistrationRequestSchema = z
 	.object({
 		members: unifiedRegistrationInputSchema.shape.members,
 		household: unifiedRegistrationInputSchema.shape.household,
+		join_match_token: z.string().trim().min(1).nullable().optional(),
 		captchaToken: z.string().trim().optional(),
 		disclaimerAcknowledged: z.boolean().optional()
 	})
@@ -67,9 +70,11 @@ function omitBlankEmergency(
  * Map shared UnifiedRegistrationInput → FastAPI create body.
  * Public channel: vehicles/assets are not collected (cleared by the form).
  * Medical fields are out of scope for the Mongo queue (#255).
+ * Optional `join_registration_id` appends into an existing open reserved household.
  */
 export function toUnassignedRegistrationPayload(
-	input: UnifiedRegistrationInput | UnifiedRegistrationParsed
+	input: UnifiedRegistrationInput | UnifiedRegistrationParsed,
+	options?: { joinRegistrationId?: string | null }
 ): UnassignedRegistrationPayload {
 	const parsed =
 		'pets' in (input.household ?? {})
@@ -115,6 +120,7 @@ export function toUnassignedRegistrationPayload(
 	});
 
 	const hh = parsed.household;
+	const joinId = options?.joinRegistrationId?.trim();
 	return {
 		members,
 		household: {
@@ -140,7 +146,8 @@ export function toUnassignedRegistrationPayload(
 				};
 			})
 		},
-		registered_via: 'web'
+		registered_via: 'web',
+		...(joinId ? { join_registration_id: joinId } : {})
 	};
 }
 

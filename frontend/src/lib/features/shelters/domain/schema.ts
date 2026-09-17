@@ -33,15 +33,18 @@ export function resolveOperationStatus(doc: unknown): string | null {
 /**
  * Can the public book a place here? (CR-070 FR-72 / T-71 validation.)
  *
- * `closed` is the only hard block. `full_capacity` and a dark-red occupancy
- * health stay bookable and surface a warning instead — matching the
- * warning-only occupancy guardrail of T-51. A master with no status at all is
- * treated as not bookable (fail closed).
+ * Hard blocks: missing status, `closed`, or `feature_flags.accepts_pre_registration`
+ * not explicitly true (missing/undefined fails closed — default off).
+ * `full_capacity` and a dark-red occupancy health stay bookable and surface a
+ * warning instead — matching the warning-only occupancy guardrail of T-51.
  */
 export function isShelterBookable(doc: unknown): boolean {
 	const status = resolveOperationStatus(doc);
 	if (status === null) return false;
-	return status !== 'closed';
+	if (status === 'closed') return false;
+	if (!doc || typeof doc !== 'object') return false;
+	const flags = (doc as { feature_flags?: { accepts_pre_registration?: unknown } }).feature_flags;
+	return flags?.accepts_pre_registration === true;
 }
 
 export const zoneTypeSchema = z.enum([
@@ -341,7 +344,8 @@ export const shelterFeatureFlagsSchema = z.object({
 	allow_vehicles: z.boolean().default(false),
 	allow_assets: z.boolean().default(false),
 	public_donations_enabled: z.boolean().default(true),
-	enable_medical_screening: z.boolean().default(false)
+	enable_medical_screening: z.boolean().default(false),
+	accepts_pre_registration: z.boolean().default(false)
 });
 export type ShelterFeatureFlags = z.infer<typeof shelterFeatureFlagsSchema>;
 
@@ -350,7 +354,8 @@ export const DEFAULT_SHELTER_FEATURE_FLAGS: ShelterFeatureFlags = {
 	allow_vehicles: false,
 	allow_assets: false,
 	public_donations_enabled: true,
-	enable_medical_screening: false
+	enable_medical_screening: false,
+	accepts_pre_registration: false
 };
 
 // ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====

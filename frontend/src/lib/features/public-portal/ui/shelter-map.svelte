@@ -43,6 +43,7 @@
 		type?: string;
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
+		accepts_pre_registration?: boolean;
 	}
 
 	type ShelterMarkerItem = {
@@ -430,7 +431,10 @@
 				const pinSvg = getShelterPinSvg(shelter.site_kind, color);
 				const shelterId = shelter.id || shelter.code || '';
 				const shelterCode = shelter.code || shelter.id || '';
-				const canBook = Boolean(shelterCode) && shelter.status !== 'CLOSED';
+				const canBook =
+					Boolean(shelterCode) &&
+					shelter.status !== 'CLOSED' &&
+					shelter.accepts_pre_registration === true;
 
 				const el = document.createElement('div');
 				// Do not apply position: relative to the root element,

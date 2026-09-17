@@ -68,8 +68,27 @@ test.describe('Login', () => {
 		});
 	}
 
+	/** Bypass reCAPTCHA Enterprise when PUBLIC_RECAPTCHA_SITE_KEY is set. */
+	async function mockLoginCaptcha(page: Page) {
+		await page.addInitScript(() => {
+			(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
+		});
+		await page.route('**/api/v1/auth/captcha/verify', async (route) => {
+			if (route.request().method() === 'POST') {
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ ok: true })
+				});
+				return;
+			}
+			await route.continue();
+		});
+	}
+
 	test('redirects to /portal on valid credentials', async ({ page }) => {
 		await mockProxy(page);
+		await mockLoginCaptcha(page);
 		await page.goto('/login');
 		await page.getByLabel('Username').fill(VALID.username);
 		await page.getByLabel('Password').fill(VALID.password);
@@ -81,6 +100,7 @@ test.describe('Login', () => {
 
 	test('shows error toast on invalid credentials', async ({ page }) => {
 		await mockProxy(page);
+		await mockLoginCaptcha(page);
 		await page.goto('/login');
 		await page.getByLabel('Username').fill(INVALID.username);
 		await page.getByLabel('Password').fill(INVALID.password);
