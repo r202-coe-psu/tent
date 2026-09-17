@@ -3,7 +3,7 @@ id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: approved
 date: 2026-09-12
-updated: 2026-09-14
+updated: 2026-09-17
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: Project Owner
 layer: stable
@@ -833,3 +833,4 @@ export interface MealService extends BaseDoc {
 - **2026-09-13 (Decision 3):** ยกเลิกโมเดล 5 Standard Meal Archetypes โดยเปลี่ยนเป็นบันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารจริงโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวผัดฮาลาล) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`default_class: 'CONSUMABLE'`) เพื่อให้ชื่ออาหารใน Master Data, ตั๋วเบิกจ่าย, และสต็อกการ์ดตรงกับความเป็นจริงหน้างาน
 - **2026-09-14 (Decision 4):** ปรับปรุงข้อกำหนดบัญชีคลัง `stock_ledger` ให้สอดคล้องกับ Invariant CR-055 โดยคง enum `receive` สำหรับการรับเข้าทุกประเภท (ผลผลิตครัว, ของแจกเหลือส่งคืน, ของยืมส่งคืน) และขยาย `REF_PREFIX_BY_REASON` ใน `operations.ts` ให้ `receive` รับ Prefix ได้หลายชนิด (`['meal_service:', 'requisition_ticket:', 'distribution_log:']`) พร้อมกำหนดให้ตั๋วเบิกจ่ายตัดสต็อกด้วย `requisition` (ครัว) และ `distribute` (แจกจ่าย) โดยผูก `ref_id` กับ `'requisition_ticket:'`
 - **2026-09-14 (Decision 5):** อุดช่องโหว่การปลดภาระของยืมคืนแบบกองรวม (Bulk Drop-off Unbounded Resolve) ที่ด่าน Check-out ด้วยระบบ **Hybrid Auto-Pool**: คลังตรวจรับกองรวมสร้าง Pool ยอดรับจริงประจำกะ (`unclaimed_quota`) โดยด่าน Check-out จะกดปุ่ม [ 🤝 ยืนยันว่าคืนแล้วในกองรวม ] ได้เฉพาะเมื่อยังมีโควตาเหลือใน Pool หากโควตาหมดจะล็อกปุ่มและบังคับให้เลือก Lost หรือต้องใช้สิทธิ์ `shelter_manager` Override พร้อมบันทึก `bulk_pool_id` และรายงานส่วนต่างตอนปิดรอบ
+- **2026-09-17 (Amendment via CR-129):** ขยายกลไกการปลดภาระของยืมแบบกองรวม (Bulk Drop-off) ด้วยเอกสารประสานงาน `bulk_return_claim` (schema_v 1) และยกระดับ `bulk_return_pool` สู่ schema_v 2 (เพิ่ม `claim_ids`) เพื่อแก้ปัญหา Crash Recovery / Idempotency ตาม [CR-129](CR-129-bulk-return-claim-recovery.md).
