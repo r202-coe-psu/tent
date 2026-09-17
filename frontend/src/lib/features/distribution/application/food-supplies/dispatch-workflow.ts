@@ -1,10 +1,12 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { ulid } from '$lib/db/ulid';
+import { isUlid, ulid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyNeg } from '$lib/utils/qty';
+import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
 	type OperationsRepository,
+	type StockLedger,
 	operationsRepository
 } from '$lib/features/operations';
 import type { RequisitionTicket, TicketAmendment } from '../../domain/food-supplies';
@@ -13,7 +15,7 @@ import {
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanDispatchTicket } from './auth';
-import { TicketStateError, WorkflowValidationError } from './errors';
+import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 
 export interface DispatchWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -27,10 +29,47 @@ export interface DispatchTicketOptions {
 }
 
 export interface InFlightAmendmentInput {
+	/**
+	 * Stable caller-supplied ULID representing the durable amendment identity.
+	 * Callers MUST reuse this ID across sequential retries to prevent double-debit.
+	 */
+	amendmentId: string;
 	item_id: string;
 	added_qty: string;
 	reason?: string;
 	lot_ref?: string;
+}
+
+function assertAmendmentLedgerReplay(
+	actual: StockLedger,
+	expected: StockLedger,
+	ctx: AuthorContext
+): void {
+	if (
+		actual._id !== expected._id ||
+		actual.type !== 'stock_ledger' ||
+		actual.schema_v !== expected.schema_v ||
+		actual.shelter_code !== ctx.shelterCode ||
+		actual.reason !== 'distribute' ||
+		actual.ref_id !== expected.ref_id ||
+		actual.item_id !== expected.item_id ||
+		actual.unit !== expected.unit ||
+		!parseQty(actual.qty).eq(expected.qty) ||
+		actual.lot_ref !== expected.lot_ref
+	) {
+		throw new StockIntegrityError(`Amendment ledger replay mismatch for ${expected._id}`);
+	}
+}
+
+function assertAmendmentReplay(actual: TicketAmendment, expected: TicketAmendment): void {
+	if (
+		actual.amendment_id !== expected.amendment_id ||
+		actual.item_id !== expected.item_id ||
+		!parseQty(actual.added_qty).eq(expected.added_qty) ||
+		(actual.reason || '') !== (expected.reason || '')
+	) {
+		throw new StockIntegrityError(`Ticket amendment replay mismatch for ${expected.amendment_id}`);
+	}
 }
 
 function resolveDependencies(
@@ -124,6 +163,8 @@ export async function dispatchTicket(
 
 /**
  * Top-up amendment for an active ticket during frontline distribution (In-flight Amendment).
+ * Uses caller-supplied or pre-write generated amendment_id to guarantee deterministic
+ * outbound StockLedger identity and retry-safety across network or CAS failures.
  */
 export async function amendActiveTicket(
 	ticketId: string,
@@ -136,6 +177,11 @@ export async function amendActiveTicket(
 	const addedDec = parseQty(input.added_qty);
 	if (addedDec.isNegative() || addedDec.isZero()) {
 		throw new WorkflowValidationError('Amendment added_qty must be a positive decimal string');
+	}
+
+	const amendmentId = input.amendmentId;
+	if (!isUlid(amendmentId)) {
+		throw new WorkflowValidationError('amendmentId must be a valid ULID');
 	}
 
 	const { ticketRepo, operationsRepo } = resolveDependencies(deps, ctx);
@@ -157,9 +203,9 @@ export async function amendActiveTicket(
 	const lotRef =
 		input.lot_ref && input.lot_ref.startsWith('stock_ledger:')
 			? input.lot_ref
-			: `stock_ledger:${ulid()}`;
+			: `stock_ledger:${amendmentId}`;
 
-	// Write outbound deduction for top-up
+	// Write outbound deduction for top-up with deterministic ledger identity
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: input.item_id,
@@ -170,22 +216,63 @@ export async function amendActiveTicket(
 			lot_ref: lotRef,
 			occurred_at: now()
 		},
-		ctx
+		ctx,
+		amendmentId
 	);
-	await operationsRepo.addLedgerEntry(ledgerEntry);
+	const ledgerId = ledgerEntry._id;
+
+	const intendedAmendment: TicketAmendment = {
+		amendment_id: amendmentId,
+		item_id: input.item_id,
+		added_qty: input.added_qty,
+		amended_at: now(),
+		amended_by: ctx.createdBy,
+		reason: input.reason || 'Frontline radio top-up request'
+	};
+
+	// Check if ticket already contains this amendment (COMPLETE or AMENDMENT_ONLY state)
+	const existingAmendment = current.amendments?.find((a) => a.amendment_id === amendmentId);
+	if (existingAmendment) {
+		assertAmendmentReplay(existingAmendment, intendedAmendment);
+
+		const existingLedger = await operationsRepo.getLedgerEntry(ledgerId);
+		if (!existingLedger) {
+			// AMENDMENT_ONLY: amendment exists on ticket but outbound ledger is missing (fail closed)
+			throw new StockIntegrityError(
+				`Ticket amendment ${amendmentId} exists on ticket ${ticketId} without its deterministic outbound ledger ${ledgerId}`
+			);
+		}
+		assertAmendmentLedgerReplay(existingLedger, ledgerEntry, ctx);
+		return current;
+	}
+
+	// NONE or LEDGER_ONLY state: attempt to write ledger; recover on ConflictError
+	try {
+		const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+		assertAmendmentLedgerReplay(persistedLedger, ledgerEntry, ctx);
+	} catch (error) {
+		if (!(error instanceof ConflictError)) {
+			throw error;
+		}
+		// LEDGER_ONLY recovery: deterministic ledger already written — fetch and verify
+		const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+		if (!recoveredLedger) {
+			throw new StockIntegrityError(
+				`ConflictError on ${ledgerId} but existing ledger could not be fetched — unrecoverable state`
+			);
+		}
+		assertAmendmentLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+	}
 
 	// Update ticket with amendment
 	return ticketRepo.mutateTicketCAS(
 		ticketId,
 		(ticket) => {
-			const amendment: TicketAmendment = {
-				amendment_id: ulid(),
-				item_id: input.item_id,
-				added_qty: input.added_qty,
-				amended_at: now(),
-				amended_by: ctx.createdBy,
-				reason: input.reason || 'Frontline radio top-up request'
-			};
+			const existing = ticket.amendments?.find((a) => a.amendment_id === amendmentId);
+			if (existing) {
+				assertAmendmentReplay(existing, intendedAmendment);
+				return ticket;
+			}
 
 			const updatedItems = ticket.items.map((i) => {
 				if (i.item_id !== input.item_id) return i;
@@ -198,7 +285,7 @@ export async function amendActiveTicket(
 			return {
 				...ticket,
 				items: updatedItems,
-				amendments: [...(ticket.amendments || []), amendment]
+				amendments: [...(ticket.amendments || []), intendedAmendment]
 			};
 		},
 		ctx

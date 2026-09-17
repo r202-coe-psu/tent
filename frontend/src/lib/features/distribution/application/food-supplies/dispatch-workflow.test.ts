@@ -1,17 +1,25 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ulid } from '$lib/db/ulid';
 import type { AuthorContext } from '$lib/db/model';
+import { ConflictError } from '$lib/utils/errors';
+import { qtyNeg } from '$lib/utils/qty';
 import type {
 	Flow2RequisitionTicket,
 	RequisitionTicket,
 	RequisitionTicketInput
 } from '../../domain/food-supplies';
 import type { RequisitionTicketRepository } from '../../data/food-supplies';
-import type { OperationsRepository, StockLedger } from '$lib/features/operations';
+import {
+	createStockLedger,
+	type OperationsRepository,
+	type StockLedger
+} from '$lib/features/operations';
 import { amendActiveTicket, dispatchTicket } from './dispatch-workflow';
+import { StockIntegrityError, WorkflowValidationError } from './errors';
 
 class InMemoryTicketRepository implements RequisitionTicketRepository {
 	tickets = new Map<string, RequisitionTicket>();
+	casConflictCount = 0;
 
 	async create(
 		input: RequisitionTicketInput | Flow2RequisitionTicket,
@@ -62,6 +70,10 @@ class InMemoryTicketRepository implements RequisitionTicketRepository {
 		void _ctx;
 		const current = this.tickets.get(ticketId);
 		if (!current) throw new Error('Not found');
+		if (this.casConflictCount > 0) {
+			this.casConflictCount--;
+			mutator(current);
+		}
 		const updated = mutator(current);
 		this.tickets.set(ticketId, updated);
 		return updated;
@@ -89,10 +101,29 @@ class InMemoryTicketRepository implements RequisitionTicketRepository {
 
 class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	ledger: StockLedger[] = [];
+	throwConflictOnNext = false;
+	throwNonConflictErrorOnNext: Error | null = null;
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
+		if (this.throwNonConflictErrorOnNext) {
+			const err = this.throwNonConflictErrorOnNext;
+			this.throwNonConflictErrorOnNext = null;
+			throw err;
+		}
+		if (this.throwConflictOnNext) {
+			this.throwConflictOnNext = false;
+			throw new ConflictError();
+		}
+		const existing = this.ledger.find((candidate) => candidate._id === entry._id);
+		if (existing) {
+			throw new ConflictError();
+		}
 		this.ledger.push(entry);
 		return entry;
+	}
+
+	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		return this.ledger.find((entry) => entry._id === id) ?? null;
 	}
 
 	async listLedger(): Promise<StockLedger[]> {
@@ -320,7 +351,12 @@ describe('dispatch-workflow', () => {
 
 		const amended = await amendActiveTicket(
 			ticket._id,
-			{ item_id: 'item:soup', added_qty: '20', reason: 'Emergency bus arrived' },
+			{
+				amendmentId: ulid(),
+				item_id: 'item:soup',
+				added_qty: '20',
+				reason: 'Emergency bus arrived'
+			},
 			WH_CTX,
 			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
 		);
@@ -335,5 +371,261 @@ describe('dispatch-workflow', () => {
 		expect(amendmentLedger.reason).toBe('distribute');
 		expect(amendmentLedger.qty).toBe('-20');
 		expect(amendmentLedger.ref_id).toBe(ticket._id);
+	});
+
+	describe('P1-04 amendActiveTicket retry-safety', () => {
+		async function createDistributingTicket(initialAllocated = '30'): Promise<RequisitionTicket> {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: 'TKT-FOOD-0004',
+					requisition_type: 'food',
+					meal: 'lunch',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:soup',
+							item_name: 'Soup',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: initialAllocated,
+							allocated_qty: initialAllocated
+						}
+					]
+				},
+				WH_CTX
+			);
+			ticketRepo.tickets.get(ticket._id)!.status = 'DISTRIBUTING';
+			return ticketRepo.tickets.get(ticket._id)!;
+		}
+
+		it('A. Normal amendment: creates one outbound ledger, one amendment, increments allocated_qty once', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			const amended = await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Normal top-up' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+
+			expect(amended.items[0].allocated_qty).toBe('50');
+			expect(amended.amendments).toHaveLength(1);
+			expect(amended.amendments![0].amendment_id).toBe(amendmentId);
+			expect(amended.amendments![0].added_qty).toBe('20');
+			expect(amended.amendments![0].reason).toBe('Normal top-up');
+
+			// Outbound ledger entry created with deterministic _id
+			expect(opsRepo.ledger).toHaveLength(1);
+			expect(opsRepo.ledger[0]._id).toBe(`stock_ledger:${amendmentId}`);
+			expect(opsRepo.ledger[0].reason).toBe('distribute');
+			expect(opsRepo.ledger[0].qty).toBe('-20');
+			expect(opsRepo.ledger[0].ref_id).toBe(ticket._id);
+		});
+
+		it('B. LEDGER_ONLY recovery: recovers when ledger exists (409 Conflict), exact-ID fetches it, appends amendment without second debit', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// Pre-existing deterministic ledger already persisted on a previous attempt
+			const existingLedger = createStockLedger(
+				{
+					item_id: 'item:soup',
+					qty: qtyNeg('20'),
+					unit: 'ชิ้น',
+					reason: 'distribute',
+					ref_id: ticket._id,
+					lot_ref: `stock_ledger:${amendmentId}`,
+					occurred_at: '2026-09-17T12:00:00.000Z'
+				},
+				WH_CTX,
+				amendmentId
+			);
+			opsRepo.ledger.push(existingLedger);
+
+			// Calling amendActiveTicket with same amendmentId hits conflict and recovers
+			const amended = await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Top-up retry' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+
+			expect(amended.items[0].allocated_qty).toBe('50');
+			expect(amended.amendments).toHaveLength(1);
+			expect(amended.amendments![0].amendment_id).toBe(amendmentId);
+			// No duplicate ledger entry created!
+			expect(opsRepo.ledger).toHaveLength(1);
+		});
+
+		it('C. COMPLETE replay: returns idempotent success without new ledger or second allocated_qty increment', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// First execution completes fully
+			const first = await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Top-up first' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+			expect(first.items[0].allocated_qty).toBe('50');
+			expect(opsRepo.ledger).toHaveLength(1);
+
+			// Second execution (sequential retry with same amendmentId)
+			const second = await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Top-up first' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+
+			expect(second.items[0].allocated_qty).toBe('50');
+			expect(second.amendments).toHaveLength(1);
+			expect(opsRepo.ledger).toHaveLength(1); // No second debit
+		});
+
+		it('D. Ledger replay mismatch: fails closed if existing deterministic ledger has different semantics', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// Pre-existing ledger has conflicting item_id
+			const conflictingLedger = createStockLedger(
+				{
+					item_id: 'item:other',
+					qty: qtyNeg('20'),
+					unit: 'ชิ้น',
+					reason: 'distribute',
+					ref_id: ticket._id,
+					lot_ref: `stock_ledger:${amendmentId}`,
+					occurred_at: '2026-09-17T12:00:00.000Z'
+				},
+				WH_CTX,
+				amendmentId
+			);
+			opsRepo.ledger.push(conflictingLedger);
+
+			await expect(
+				amendActiveTicket(
+					ticket._id,
+					{ amendmentId, item_id: 'item:soup', added_qty: '20' },
+					WH_CTX,
+					{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+				)
+			).rejects.toThrow(StockIntegrityError);
+
+			// Ticket remains unmutated
+			const freshTicket = await ticketRepo.get(ticket._id);
+			expect(freshTicket?.items[0].allocated_qty).toBe('30');
+			expect(freshTicket?.amendments ?? []).toHaveLength(0);
+		});
+
+		it('E. Amendment replay mismatch: fails closed if same amendment_id exists with different semantics', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// First execution
+			await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Reason 1' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+
+			// Caller tries same amendmentId with different added_qty
+			await expect(
+				amendActiveTicket(
+					ticket._id,
+					{ amendmentId, item_id: 'item:soup', added_qty: '40', reason: 'Reason 1' },
+					WH_CTX,
+					{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+				)
+			).rejects.toThrow(StockIntegrityError);
+		});
+
+		it('F. Ordinary non-ConflictError: propagates error and does not mutate ticket', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			opsRepo.throwNonConflictErrorOnNext = new Error('Database disk full');
+
+			await expect(
+				amendActiveTicket(
+					ticket._id,
+					{ amendmentId, item_id: 'item:soup', added_qty: '20' },
+					WH_CTX,
+					{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+				)
+			).rejects.toThrow('Database disk full');
+
+			// Ticket not mutated
+			const freshTicket = await ticketRepo.get(ticket._id);
+			expect(freshTicket?.items[0].allocated_qty).toBe('30');
+			expect(freshTicket?.amendments ?? []).toHaveLength(0);
+		});
+
+		it('G. CAS retry: ticket CAS retry reuses same amendmentId without duplicate amendment or allocated_qty', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// Instruct mock ticket repo to retry CAS once
+			ticketRepo.casConflictCount = 1;
+
+			const amended = await amendActiveTicket(
+				ticket._id,
+				{ amendmentId, item_id: 'item:soup', added_qty: '20' },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			);
+
+			expect(amended.items[0].allocated_qty).toBe('50');
+			expect(amended.amendments).toHaveLength(1);
+			expect(amended.amendments![0].amendment_id).toBe(amendmentId);
+			expect(opsRepo.ledger).toHaveLength(1);
+		});
+
+		it('AMENDMENT_ONLY recovery: fails closed if amendment exists on ticket but ledger is missing', async () => {
+			const ticket = await createDistributingTicket('30');
+			const amendmentId = ulid();
+
+			// Manually inject amendment on ticket without corresponding ledger entry
+			ticketRepo.tickets.get(ticket._id)!.amendments = [
+				{
+					amendment_id: amendmentId,
+					item_id: 'item:soup',
+					added_qty: '20',
+					amended_at: '2026-09-17T12:00:00.000Z',
+					amended_by: WH_CTX.createdBy,
+					reason: 'Orphan amendment'
+				}
+			];
+
+			await expect(
+				amendActiveTicket(
+					ticket._id,
+					{ amendmentId, item_id: 'item:soup', added_qty: '20', reason: 'Orphan amendment' },
+					WH_CTX,
+					{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+				)
+			).rejects.toThrow(StockIntegrityError);
+		});
+
+		it('rejects an untyped caller that omits the required stable amendmentId before writing', async () => {
+			const ticket = await createDistributingTicket('30');
+
+			await expect(
+				amendActiveTicket(
+					ticket._id,
+					{ item_id: 'item:soup', added_qty: '20' } as unknown as Parameters<
+						typeof amendActiveTicket
+					>[1],
+					WH_CTX,
+					{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+				)
+			).rejects.toBeInstanceOf(WorkflowValidationError);
+			expect(opsRepo.ledger).toHaveLength(0);
+			expect(ticketRepo.tickets.get(ticket._id)?.amendments ?? []).toHaveLength(0);
+		});
 	});
 });
