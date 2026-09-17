@@ -7,7 +7,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { recipeInputSchema, type Recipe, type ItemMaster } from '../domain/catalog';
+	import { recipeInputSchema, type Recipe } from '../domain/catalog';
 	import {
 		useRecipe,
 		useCreateRecipe,
@@ -26,6 +26,7 @@
 		totalQuantityForPotions
 	} from '../domain/recipe-quantity';
 	import { qtyGt } from '$lib/utils/qty';
+	import CatalogFormSection from './catalog-form-section.svelte';
 
 	let {
 		id = '',
@@ -206,8 +207,8 @@
 		}
 	}
 
-	function addIngredient(itemToAdd?: ItemMaster) {
-		const targetId = itemToAdd?._id ?? newIngredient.item_master_id;
+	function addIngredient() {
+		const targetId = newIngredient.item_master_id;
 		if (!targetId) return;
 
 		if ($formData.ingredients.some((ingredient) => ingredient.item_master_id === targetId)) {
@@ -215,16 +216,9 @@
 			return;
 		}
 
-		const item =
-			itemToAdd ?? itemMastersQuery.data?.find((candidate) => candidate._id === targetId);
+		const item = itemMastersQuery.data?.find((candidate) => candidate._id === targetId);
 
-		const quantity = itemToAdd
-			? isPositiveQuantity(newIngredient.quantity)
-				? newIngredient.quantity
-				: '1'
-			: newIngredient.quantity;
-
-		if (!isPositiveQuantity(quantity)) {
+		if (!isPositiveQuantity(newIngredient.quantity)) {
 			toast.error('กรุณาระบุจำนวนที่ถูกต้อง');
 			return;
 		}
@@ -233,7 +227,7 @@
 			...$formData.ingredients,
 			{
 				item_master_id: targetId,
-				quantity,
+				quantity: newIngredient.quantity,
 				uom: item?.base_unit ?? newIngredient.uom ?? 'ชิ้น'
 			}
 		];
@@ -241,11 +235,15 @@
 		newIngredient = { item_master_id: '', quantity: '1', uom: '' };
 	}
 
+	// Selecting an ingredient only stages it (fills the row + previews its unit) — it does NOT
+	// add it to the recipe. The user still has to review/adjust quantity and press "เพิ่ม".
 	function handleItemSelect(selectedId: string) {
-		if (!selectedId) return;
+		if (!selectedId) {
+			newIngredient.uom = '';
+			return;
+		}
 		const item = itemMastersQuery.data?.find((candidate) => candidate._id === selectedId);
-		if (!item) return;
-		addIngredient(item);
+		newIngredient.uom = item?.base_unit ?? '';
 	}
 
 	function removeIngredient(itemMasterId: string) {
@@ -271,14 +269,11 @@
 	<form method="POST" use:form.enhance class="space-y-6">
 		<div class="space-y-5">
 			<!-- Card 1: ข้อมูลสูตรอาหาร (Recipe Details) -->
-			<div class="space-y-5 rounded-2xl border border-border/60 bg-muted/20 p-5 sm:p-6">
-				<div class="space-y-1 border-b border-border/40 pb-3">
-					<h3 class="text-sm font-semibold text-foreground">ข้อมูลสูตรอาหาร (Recipe Details)</h3>
-					<p class="text-xs text-muted-foreground">
-						กำหนดชื่อสูตรอาหารสำหรับแสดงในระบบและแผนเตรียมอาหาร
-					</p>
-				</div>
-
+			<CatalogFormSection
+				number={1}
+				title="ข้อมูลสูตรอาหาร (Recipe Details)"
+				description="กำหนดชื่อสูตรอาหารสำหรับแสดงในระบบและแผนเตรียมอาหาร"
+			>
 				<Field.Field>
 					<Field.Label for="form-label">
 						ชื่อสูตรอาหาร (Recipe Name) <span class="font-bold text-destructive">*</span>
@@ -294,20 +289,15 @@
 						<Field.Error>{$errors.label}</Field.Error>
 					{/if}
 				</Field.Field>
-			</div>
+			</CatalogFormSection>
 
 			<!-- Card 2: รายการส่วนประกอบ (Ingredients / BOM) -->
-			<div class="space-y-5 rounded-2xl border border-border/60 bg-muted/20 p-5 sm:p-6">
-				<div class="space-y-1 border-b border-border/40 pb-3">
-					<h3 class="text-sm font-semibold text-foreground">
-						รายการส่วนประกอบ (Ingredients / BOM)
-					</h3>
-					<p class="text-xs text-muted-foreground">
-						กำหนดวัตถุดิบและปริมาณต่อ 1 potion ระบบจะคำนวณยอดรวมมาตรฐานตามกำลังผลิต ({$formData.standard_portions ||
-							'0'} potion) ให้อัตโนมัติ
-					</p>
-				</div>
-
+			<CatalogFormSection
+				number={2}
+				title="รายการส่วนประกอบ (Ingredients / BOM)"
+				description="กำหนดวัตถุดิบและปริมาณต่อ 1 potion ระบบจะคำนวณยอดรวมมาตรฐานตามกำลังผลิต ({$formData.standard_portions ||
+					'0'} potion) ให้อัตโนมัติ"
+			>
 				{#if $errors.ingredients}
 					<Field.Error>{$errors.ingredients}</Field.Error>
 				{/if}
@@ -358,15 +348,15 @@
 											min="0.0001"
 											value={ingredient.quantity}
 											oninput={(event) => (ingredient.quantity = event.currentTarget.value)}
-											class="h-8 w-full rounded-md border-input bg-background text-right font-mono text-xs tabular-nums focus-visible:ring-1 focus-visible:ring-ring"
+											class="h-8 w-full rounded-md border-input bg-background text-right text-xs tabular-nums focus-visible:ring-1 focus-visible:ring-ring"
 										/>
 									</Table.Cell>
 									<Table.Cell
-										class="py-2 text-right font-mono text-xs font-medium text-foreground tabular-nums"
+										class="py-2 text-right text-xs font-medium text-foreground tabular-nums"
 									>
 										{ingredientTotals[ingredient.item_master_id] ?? '—'}
 									</Table.Cell>
-									<Table.Cell class="py-2 text-center font-mono text-xs text-muted-foreground">
+									<Table.Cell class="py-2 text-center text-xs text-muted-foreground">
 										{itemUnit(ingredient.item_master_id, ingredient.uom)}
 									</Table.Cell>
 									<Table.Cell class="py-2 pr-4 text-center">
@@ -410,7 +400,7 @@
 														>{item.label}</span
 													>
 													{#if item.sku}
-														<span class="truncate font-mono text-[10px] text-muted-foreground">
+														<span class="truncate text-2xs text-muted-foreground">
 															{item.sku}
 														</span>
 													{/if}
@@ -435,17 +425,15 @@
 										min="0.0001"
 										value={newIngredient.quantity}
 										oninput={(event) => (newIngredient.quantity = event.currentTarget.value)}
-										class="h-8 w-full rounded-md border-input bg-background text-right font-mono text-xs tabular-nums focus-visible:ring-1 focus-visible:ring-ring"
+										class="h-8 w-full rounded-md border-input bg-background text-right text-xs tabular-nums focus-visible:ring-1 focus-visible:ring-ring"
 									/>
 								</Table.Cell>
-								<Table.Cell
-									class="py-2.5 text-right font-mono text-xs text-muted-foreground tabular-nums"
-								>
+								<Table.Cell class="py-2.5 text-right text-xs text-muted-foreground tabular-nums">
 									{standardPortionsAreValid && newIngredientQuantityIsValid
 										? totalQuantityForPotions(newIngredient.quantity, $formData.standard_portions)
 										: '—'}
 								</Table.Cell>
-								<Table.Cell class="py-2.5 text-center font-mono text-xs text-muted-foreground">
+								<Table.Cell class="py-2.5 text-center text-xs text-muted-foreground">
 									{newIngredient.uom || '—'}
 								</Table.Cell>
 								<Table.Cell class="py-2.5 pr-4 text-center">
@@ -483,7 +471,7 @@
 									const val = e.currentTarget.value;
 									$formData.standard_portions = val;
 								}}
-								class="h-9 w-full rounded-md border-input bg-background font-mono text-sm"
+								class="h-9 w-full rounded-md border-input bg-background text-sm"
 							/>
 							<p class="text-xs text-muted-foreground">
 								จำนวน potion มาตรฐานสำหรับคำนวณสัดส่วนวัตถุดิบรวมในสูตร (ค่าเริ่มต้นคือ 100)
@@ -508,7 +496,7 @@
 									const val = e.currentTarget.value;
 									$formData.standard_duration_hours = val === '' ? '0' : val;
 								}}
-								class="h-9 w-full rounded-md border-input bg-background font-mono text-sm"
+								class="h-9 w-full rounded-md border-input bg-background text-sm"
 							/>
 							<p class="text-xs text-muted-foreground">
 								ระยะเวลาเฉลี่ยที่ใช้ในการปรุงอาหารตามสูตรนี้
@@ -519,11 +507,11 @@
 						</Field.Field>
 					</Field.FieldGroup>
 				</div>
-			</div>
+			</CatalogFormSection>
 
 			{#if isEdit}
 				<!-- Card 3: สถานะการใช้งาน (Status) -->
-				<div class="rounded-2xl border border-border/60 bg-muted/20 p-5 sm:p-6">
+				<CatalogFormSection number={3} title="สถานะปิดการใช้งาน (Deactivated)">
 					<div class="flex items-center justify-between">
 						<div class="space-y-0.5">
 							<label
@@ -543,10 +531,10 @@
 							onCheckedChange={(val) => {
 								$formData.deactivated = !!val;
 							}}
-							class="data-[state=checked]:border-[#002f6c] data-[state=checked]:bg-[#002f6c]"
+							class="data-[state=checked]:border-[var(--brand-primary)] data-[state=checked]:bg-[var(--brand-primary)]"
 						/>
 					</div>
-				</div>
+				</CatalogFormSection>
 			{/if}
 
 			<!-- Action Buttons -->
@@ -555,7 +543,7 @@
 					variant="outline"
 					type="button"
 					onclick={() => (oncancel ?? onsuccess)?.()}
-					class="rounded-xl border border-slate-200 px-6 py-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
+					class="h-11 rounded-xl border border-slate-200 px-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
 				>
 					ยกเลิกและย้อนกลับ
 				</Button>
@@ -563,7 +551,7 @@
 				<Button
 					type="submit"
 					disabled={$submitting || isPending || !standardPortionsAreValid}
-					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
+					class="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-7 text-sm font-bold text-white shadow-2xs hover:bg-[var(--brand-primary-hover)] dark:shadow-none"
 				>
 					{#if $submitting || isPending}
 						กำลังบันทึกข้อมูล...

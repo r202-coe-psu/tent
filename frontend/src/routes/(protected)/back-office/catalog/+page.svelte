@@ -118,11 +118,11 @@
 		</aside>
 		<div class="min-w-0">
 			{#if activeTab === 'item_category'}
-				<ItemCategoryTab />
+				<ItemCategoryTab {basePath} />
 			{:else if activeTab === 'item_master'}
-				<ItemMasterTab />
+				<ItemMasterTab {basePath} />
 			{:else if activeTab === 'recipe'}
-				<RecipeTab />
+				<RecipeTab {basePath} />
 			{/if}
 		</div>
 	</div>

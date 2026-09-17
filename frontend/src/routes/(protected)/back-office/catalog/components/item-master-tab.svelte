@@ -2,20 +2,25 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	// Component
-	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	// Icon
-	import Search from '@lucide/svelte/icons/search';
-	import Plus from '@lucide/svelte/icons/plus';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import PackageOpen from '@lucide/svelte/icons/package-open';
+	import Boxes from '@lucide/svelte/icons/boxes';
+	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
+	import Leaf from '@lucide/svelte/icons/leaf';
+	import Tag from '@lucide/svelte/icons/tag';
 	import X from '@lucide/svelte/icons/x';
-	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
 	// Navigation / Routing
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -23,10 +28,18 @@
 	// Feature
 	import {
 		useItemMasters,
+		useItemCategories,
 		ItemMasterForm,
 		useDeleteItemMaster,
 		useUpdateItemMaster,
-		type ItemMaster
+		CatalogListToolbar,
+		CatalogFormShell,
+		CatalogScopeBadge,
+		TypeClassBadge,
+		categoryReferenceMatches,
+		itemMasterUnit,
+		type ItemMaster,
+		type ItemCategory
 	} from '$lib/features/catalog';
 
 	let {
@@ -53,8 +66,22 @@
 	}
 
 	const query = useItemMasters(() => shelterCode);
+	const categoriesQuery = useItemCategories(() => shelterCode);
 	const deleteMutation = useDeleteItemMaster();
 	const updateItemMutation = useUpdateItemMaster();
+
+	const categoryById = $derived.by(() => {
+		const map = new SvelteMap<string, ItemCategory>();
+		for (const c of categoriesQuery.data ?? []) map.set(c._id, c);
+		return map;
+	});
+
+	function categoryNameOf(item: ItemMaster): string {
+		if (!item.category) return '—';
+		const cats = categoriesQuery.data ?? [];
+		const matched = cats.find((c) => categoryReferenceMatches(item.category!, c));
+		return matched?.name ?? '—';
+	}
 
 	let deleteConfirmOpen = $state(false);
 	let pendingDeleteItem = $state<{ id: string; name: string } | null>(null);
@@ -104,24 +131,36 @@
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let q = $state('');
+	let categoryFilter = $state('ALL');
 
 	// Data Queries
 	const filteredAll = $derived.by(() => {
-		const items = query.data ?? [];
+		let items = query.data ?? [];
+		if (categoryFilter !== 'ALL') {
+			const cat = categoryById.get(categoryFilter);
+			items = cat
+				? items.filter((i) => i.category && categoryReferenceMatches(i.category, cat))
+				: [];
+		}
 		const needle = q.trim().toLowerCase();
 		if (!needle) return items;
-		return items.filter((e) => e.name.toLowerCase().includes(needle));
+		return items.filter(
+			(e) => e.name.toLowerCase().includes(needle) || (e.sku ?? '').toLowerCase().includes(needle)
+		);
 	});
 	const total = $derived(filteredAll.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const safePage = $derived(Math.min(currentPage, totalPages));
 
 	const paginatedItems = $derived.by(() => {
-		const start = (currentPage - 1) * PAGE_SIZE;
+		const start = (safePage - 1) * PAGE_SIZE;
 		return filteredAll.slice(start, start + PAGE_SIZE);
 	});
 
 	$effect(() => {
-		if (q) currentPage = 1;
+		void q;
+		void categoryFilter;
+		currentPage = 1;
 	});
 
 	// Form Page
@@ -134,6 +173,23 @@
 			viewMode = 'create';
 		}
 	});
+
+	let appliedCategoryParam = $state<string | null>(null);
+	$effect(() => {
+		const p = page.url.searchParams.get('category');
+		if (p && p !== appliedCategoryParam) {
+			appliedCategoryParam = p;
+			categoryFilter = p;
+		}
+	});
+
+	function clearCategoryFilter() {
+		categoryFilter = 'ALL';
+		appliedCategoryParam = null;
+		const url = new URL(page.url);
+		url.searchParams.delete('category');
+		goto(`${url.pathname}${url.search}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 
 	function showCreateForm() {
 		selectedId = undefined;
@@ -148,116 +204,145 @@
 	function backToList() {
 		viewMode = 'list';
 		selectedId = undefined;
-		goto(resolve(`${basePath}?tab=item_master` as '/back-office/catalog?tab=item_master'), {
-			replaceState: true
-		});
+		const suffix =
+			categoryFilter !== 'ALL' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
+		goto(
+			resolve(`${basePath}?tab=item_master` as '/back-office/catalog?tab=item_master') + suffix,
+			{ replaceState: true }
+		);
 	}
-
-	const typeClassMap = {
-		CONSUMABLE: {
-			label: 'วัสดุสิ้นเปลือง',
-			class:
-				'bg-blue-50 text-blue-700 ring-blue-600/10 dark:bg-blue-950/40 dark:text-blue-400 dark:ring-blue-500/20'
-		},
-		DURABLE: {
-			label: 'สิ่งของคงทน',
-			class:
-				'bg-amber-50 text-amber-700 ring-amber-600/10 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-500/20'
-		},
-		EQUIPMENT: {
-			label: 'อุปกรณ์/ครุภัณฑ์',
-			class:
-				'bg-purple-50 text-purple-700 ring-purple-600/10 dark:bg-purple-950/40 dark:text-purple-400 dark:ring-purple-500/20'
-		}
-	};
 </script>
 
 {#if viewMode === 'list'}
 	<div class="flex w-full flex-col gap-4">
-		<div class="flex items-center justify-between gap-4">
-			<span class="text-md font-bold">รายการข้อมูล ({total})</span>
-			<div class="item-center flex gap-2">
-				<div class="relative w-72">
-					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
-					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
-				</div>
-				{#if canWrite}
-					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
-						<Plus class="h-4 w-4" />
-						เพิ่มข้อมูล
-					</Button>
-				{/if}
+		<CatalogListToolbar {total} bind:search={q} {canWrite} onadd={showCreateForm}>
+			{#snippet filters()}
+				<Select.Root type="single" bind:value={categoryFilter}>
+					<Select.Trigger class="h-11 w-full sm:h-10 sm:w-64" aria-label="กรองตามหมวดหมู่">
+						{categoryFilter === 'ALL'
+							? 'ทุกหมวดหมู่ (All Categories)'
+							: (categoryById.get(categoryFilter)?.name ?? '—')}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Item value="ALL" label="ทุกหมวดหมู่ (All Categories)">
+							ทุกหมวดหมู่ (All Categories)
+						</Select.Item>
+						{#each categoriesQuery.data ?? [] as c (c._id)}
+							<Select.Item value={c._id} label={c.name}>{c.name}</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			{/snippet}
+		</CatalogListToolbar>
+
+		{#if categoryFilter !== 'ALL'}
+			<div
+				class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm dark:border-teal-900/40 dark:bg-teal-950/20"
+			>
+				<span class="flex flex-wrap items-center gap-1.5">
+					<Tag class="size-4 text-teal-700 dark:text-teal-400" />
+					<span class="font-semibold text-teal-900 dark:text-teal-300">
+						{categoryById.get(categoryFilter)?.name ?? categoryFilter}
+					</span>
+					<span class="text-teal-700 dark:text-teal-400">
+						(พบ <span class="tabular-nums">{total}</span> รายการสิ่งของ)
+					</span>
+				</span>
+				<button
+					type="button"
+					onclick={clearCategoryFilter}
+					class="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-teal-800 hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none dark:text-teal-300 dark:hover:bg-teal-900/40"
+				>
+					<X class="size-3.5" />
+					ล้างตัวกรองหมวดหมู่
+				</button>
 			</div>
-		</div>
+		{/if}
 
 		<!-- Table -->
 		<div class="overflow-x-auto rounded-xl border border-border bg-card">
-			<Table.Root>
+			<Table.Root class="min-w-[880px]">
 				<Table.Header>
 					<Table.Row>
-						<Table.Head class="font-bold">ชื่อรายการสิ่งของ</Table.Head>
-						<Table.Head class="w-24 text-center font-bold">จัดการ</Table.Head>
+						<Table.Head class="hidden font-bold md:table-cell">รหัส SKU</Table.Head>
+						<Table.Head class="font-bold">ชื่อสินค้าทางการ</Table.Head>
+						<Table.Head class="font-bold">หมวดหมู่</Table.Head>
+						<Table.Head class="font-bold">ประเภท (CLASS)</Table.Head>
+						<Table.Head class="hidden font-bold lg:table-cell">หน่วยนับ</Table.Head>
+						<Table.Head class="hidden font-bold lg:table-cell">สถานะโภชนาการ</Table.Head>
+						<Table.Head class="text-center font-bold whitespace-nowrap">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
 					{#if query.isLoading}
 						<Table.Row>
-							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
+							<Table.Cell colspan={7} class="py-6 text-center text-muted-foreground"
 								>กำลังโหลดข้อมูล...</Table.Cell
 							>
 						</Table.Row>
 					{:else if filteredAll.length === 0}
 						<Table.Row>
-							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
-								>📭 ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้</Table.Cell
-							>
+							<Table.Cell colspan={7} class="py-10 text-center text-muted-foreground">
+								<div class="flex flex-col items-center gap-2">
+									<PackageOpen class="size-8 text-slate-300" />
+									ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้
+								</div>
+							</Table.Cell>
 						</Table.Row>
 					{:else}
 						{#each paginatedItems as e (e._id)}
-							{@const tc = typeClassMap[e.type_class || 'CONSUMABLE']}
 							<Table.Row>
+								<Table.Cell
+									class="hidden tracking-wider text-muted-foreground uppercase md:table-cell"
+								>
+									{e.sku || '—'}
+								</Table.Cell>
 								<Table.Cell class="font-bold text-foreground">
-									{e.name}
-									<span
-										class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset {tc.class}"
-									>
-										{tc.label}
-									</span>
-									{#if !e.shelter_code}
-										<span
-											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
-										>
-											ส่วนกลาง
-										</span>
-									{:else if e.override}
-										<span
-											class="ml-2 inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-600/10 ring-inset dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-500/20"
-										>
-											ปรับแต่งแล้ว
-										</span>
+									<div class="flex flex-wrap items-center gap-2">
+										{e.name}
+										<CatalogScopeBadge doc={e} />
+									</div>
+									<p class="mt-0.5 text-xs text-muted-foreground md:hidden">
+										{e.sku || '—'} · {categoryNameOf(e)} · {itemMasterUnit(e)}
+									</p>
+								</Table.Cell>
+								<Table.Cell class="text-muted-foreground">{categoryNameOf(e)}</Table.Cell>
+								<Table.Cell><TypeClassBadge value={e.type_class} variant="compact" /></Table.Cell>
+								<Table.Cell class="hidden text-muted-foreground lg:table-cell"
+									>{itemMasterUnit(e)}</Table.Cell
+								>
+								<Table.Cell class="hidden lg:table-cell">
+									{#if e.dietary && e.dietary.length > 0}
+										<div class="flex flex-wrap gap-1.5">
+											{#if e.dietary.includes('HALAL')}
+												<span
+													class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300"
+												>
+													<CircleCheckBig class="size-3.5" />
+													ฮาลาล
+												</span>
+											{/if}
+											{#if e.dietary.includes('VEGAN')}
+												<span
+													class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300"
+												>
+													<Leaf class="size-3.5" />
+													วีแกน
+												</span>
+											{/if}
+										</div>
 									{:else}
-										<span
-											class="ml-2 inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-600/10 ring-inset dark:bg-teal-950/40 dark:text-teal-400 dark:ring-teal-500/20"
-										>
-											เฉพาะศูนย์
-										</span>
-									{/if}
-									{#if e.deactivated}
-										<span
-											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/10 ring-inset"
-										>
-											ปิดใช้งาน (Deactivated)
-										</span>
+										<span class="text-muted-foreground" aria-label="ไม่ระบุ">—</span>
 									{/if}
 								</Table.Cell>
 								<Table.Cell class="text-center">
 									{#if canModifyItem(e)}
-										<div class="inline-flex gap-2">
+										<div class="inline-flex flex-nowrap justify-center gap-2">
 											<Button
 												variant="outline"
 												size="sm"
 												onclick={() => showEditForm(e._id)}
-												class="border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+												class="min-h-11 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
 											>
 												<Settings2 class="h-4 w-4" />
 												จัดการ
@@ -269,7 +354,7 @@
 														size="sm"
 														onclick={() => activateItem(e)}
 														disabled={updateItemMutation.isPending}
-														class="border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
+														class="min-h-11 border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
 													>
 														<RotateCcw class="h-4 w-4" />
 														นำกลับมาใช้
@@ -280,9 +365,9 @@
 														size="sm"
 														onclick={() => showDeleteConfirm(e._id, e.name)}
 														disabled={deleteMutation.isPending}
-														class={e.override
+														class="min-h-11 {e.override
 															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
-															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
+															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}"
 													>
 														<Trash2 class="h-4 w-4" />
 														{e.override ? 'รีเซ็ต' : 'ลบ'}
@@ -308,7 +393,7 @@
 							{#each pages as p, i (i)}
 								<Pagination.Item>
 									{#if p.type === 'page'}
-										<Pagination.Link page={p} isActive={p.value === currentPage} />
+										<Pagination.Link page={p} isActive={p.value === safePage} />
 									{:else}
 										<Pagination.Ellipsis />
 									{/if}
@@ -322,48 +407,22 @@
 		{/if}
 	</div>
 {:else}
-	<div
-		class="w-full rounded-2xl border border-slate-100 bg-card p-6 shadow-sm md:p-8 dark:border-zinc-800"
+	<CatalogFormShell
+		title={viewMode === 'edit'
+			? 'แก้ไขรายการสิ่งของ (Item Master)'
+			: 'เพิ่มรายการสิ่งของ (Item Master)'}
+		icon={Boxes}
+		{canWrite}
+		onclose={backToList}
 	>
-		<div class="flex items-start justify-between gap-4">
-			<div class="flex flex-col gap-1.5">
-				<h1
-					class="flex items-center gap-2 text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100"
-				>
-					{#if viewMode === 'edit'}
-						<span>แก้ไขรายการสิ่งของ</span>
-					{:else}
-						<span>บันทึกรายการสิ่งของใหม่</span>
-					{/if}
-				</h1>
-			</div>
-
-			<div class="flex items-center">
-				<button
-					type="button"
-					onclick={backToList}
-					class="rounded-lg p-2 transition hover:bg-muted/50"
-					aria-label="ปิดฟอร์ม"
-				>
-					<X class="h-5 w-5 text-muted-foreground" />
-				</button>
-			</div>
-		</div>
-		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
-		{#if canWrite}
-			<ItemMasterForm
-				id={selectedId}
-				isEdit={viewMode === 'edit'}
-				{basePath}
-				onsuccess={backToList}
-				oncancel={backToList}
-			/>
-		{:else}
-			<div class="py-12 text-center text-sm font-bold text-destructive">
-				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)
-			</div>
-		{/if}
-	</div>
+		<ItemMasterForm
+			id={selectedId}
+			isEdit={viewMode === 'edit'}
+			{basePath}
+			onsuccess={backToList}
+			oncancel={backToList}
+		/>
+	</CatalogFormShell>
 {/if}
 
 <Dialog.Root bind:open={deleteConfirmOpen}>

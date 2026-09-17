@@ -1,7 +1,7 @@
 /**
  * Staging ops: stock, campaigns, donations, purchases for SH001–SH003.
  */
-import type { AuthorContext } from '$lib/db/model';
+import { now, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
 	createPurchase,
@@ -195,15 +195,42 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `stock_ledger:seed-st:${code.toLowerCase()}:pr-${i}`
 		}));
 
+		// Demo scenario for the catalog "ปรับแต่งแล้ว" (override) flow: SH001 customizes the
+		// central item_master:rice by adding a shelter-specific bulk-sack conversion unit.
+		const itemMasterOverrides =
+			code === SH001_CODE
+				? [
+						{
+							_id: 'item_master:rice',
+							type: 'item_master',
+							schema_v: 4,
+							created_at: now(),
+							updated_at: now(),
+							created_by: 'seed',
+							name: 'ข้าวสาร',
+							category: 'item_category:food',
+							base_unit: 'kg',
+							sku: 'SKU-RICE-01',
+							dietary: ['HALAL'],
+							conversions: [{ uom_name: 'กระสอบ', multiplier: '50', barcode: '' }],
+							distribution_type: 'recurring',
+							type_class: 'CONSUMABLE',
+							shelter_code: code,
+							override: true
+						}
+					]
+				: [];
+
 		await bulkDocs(db, [
 			...stockEntries,
 			...campaigns,
 			...donations,
 			...purchases,
-			...purchaseReceipts
+			...purchaseReceipts,
+			...itemMasterOverrides
 		]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}`
 		);
 	}
 }

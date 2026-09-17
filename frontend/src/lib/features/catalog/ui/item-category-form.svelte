@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
@@ -15,6 +16,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import CatalogFormSection from './catalog-form-section.svelte';
 
 	let {
 		id = '',
@@ -96,10 +98,12 @@
 					}
 
 					if (isProtected) {
-						// Protected categories cannot alter invariant fields or create local overrides
+						// Protected categories cannot alter system_key/is_protected or create local
+						// overrides — default_class is editable here per CR-125 (amends CR-119 FR-04).
 						const updatedDoc = {
 							...categoryQuery.data,
 							name: validated.data.name,
+							default_class: validated.data.default_class,
 							description: validated.data.description || undefined
 						};
 						updateMutation.mutate(updatedDoc, {
@@ -196,18 +200,17 @@
 					<div class="space-y-1">
 						<p class="font-bold">หมวดหมู่มาตรฐานของระบบ (System Protected Category)</p>
 						<p class="text-blue-700/90 dark:text-blue-300/80">
-							หมวดหมู่นี้เป็นโครงสร้างหลักของระบบ
-							ผู้ดูแลระบบส่วนกลางสามารถปรับปรุงชื่อแสดงผลและคำอธิบายได้ แต่ระบบจะคง System Key และ
-							Default Class ไว้ตามมาตรฐาน
+							หมวดหมู่นี้เป็นโครงสร้างหลักของระบบ ผู้ดูแลระบบส่วนกลางสามารถปรับปรุงชื่อแสดงผล
+							คำอธิบาย และประเภทสิ่งของเริ่มต้นได้ แต่ระบบจะคง System Key ไว้ตามมาตรฐานเสมอ
 						</p>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Field Group Card -->
-			<div class="space-y-5 rounded-2xl border border-border/60 bg-muted/20 p-5 sm:p-6">
-				<!-- Row 1: ชื่อหมวดหมู่ & รหัสหมวดหมู่/ประเภทข้อมูล -->
-				<div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+			<CatalogFormSection number={1} title="ข้อมูลหมวดหมู่ (Category Details)">
+				<!-- Row 1: ชื่อหมวดหมู่ & รหัสระบบ (เฉพาะหมวดหมู่ระบบ) -->
+				<div class="grid grid-cols-1 gap-5 {isProtected ? 'md:grid-cols-2' : ''}">
 					<Form.Field {form} name="name" class="space-y-2">
 						<Form.Control>
 							{#snippet children({ props })}
@@ -225,52 +228,33 @@
 						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 					</Form.Field>
 
-					<div class="space-y-2">
-						<span class="text-sm font-semibold text-foreground">
-							{isProtected ? 'รหัสระบบ (System Key)' : 'ประเภทข้อมูล (Type)'}
-						</span>
-						{#if isProtected && categoryQuery.data}
+					{#if isProtected && categoryQuery.data}
+						<div class="space-y-2">
+							<span class="text-sm font-semibold text-foreground">รหัสระบบ (System Key)</span>
 							<Input
 								disabled
 								value={categoryQuery.data.system_key || '-'}
-								class="w-full rounded-md border-input bg-muted/50 font-mono font-bold text-blue-700 uppercase dark:text-blue-300"
+								class="w-full rounded-md border-input bg-muted/50 font-bold tracking-wider text-blue-700 uppercase dark:text-blue-300"
 							/>
-						{:else}
-							<Input
-								disabled
-								value="หมวดหมู่สิ่งของ (Item Category)"
-								class="w-full rounded-md border-input bg-muted/50 text-muted-foreground"
-							/>
-						{/if}
-					</div>
+						</div>
+					{/if}
 				</div>
 
 				<!-- Row 2: ประเภทสิ่งของเริ่มต้น (Default Class) -->
 				<div class="space-y-2 border-t border-border/40 pt-4">
-					<div class="flex items-center justify-between">
-						<span class="text-sm font-semibold text-foreground">
-							ประเภทสิ่งของเริ่มต้น (Default Class) <span class="font-bold text-destructive">*</span
-							>
-						</span>
-						{#if isProtected}
-							<span class="text-xs text-muted-foreground">
-								🔒 หมวดหมู่มาตรฐานระบบถูกกำหนดประเภทเริ่มต้นไว้ตายตัว
-							</span>
-						{/if}
-					</div>
+					<span class="text-sm font-semibold text-foreground">
+						ประเภทสิ่งของเริ่มต้น (Default Class) <span class="font-bold text-destructive">*</span>
+					</span>
 					<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 						{#each CLASS_OPTIONS as opt (opt.value)}
 							<button
 								type="button"
-								disabled={isProtected}
 								onclick={() => {
-									if (!isProtected) $formData.default_class = opt.value;
+									$formData.default_class = opt.value;
 								}}
-								class="relative flex flex-col items-start rounded-xl border p-4 text-left transition-all {isProtected
-									? 'cursor-not-allowed opacity-80'
-									: 'cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700'} {$formData.default_class ===
+								class="relative flex cursor-pointer flex-col items-start rounded-xl border p-4 text-left transition-all hover:border-slate-300 dark:hover:border-zinc-700 {$formData.default_class ===
 								opt.value
-									? 'border-[#002f6c] bg-blue-50/40 ring-1 ring-[#002f6c]/30 dark:border-blue-500 dark:bg-blue-950/20'
+									? 'border-[var(--brand-primary)] bg-blue-50/40 ring-1 ring-[var(--brand-primary)]/30 dark:border-blue-500 dark:bg-blue-950/20'
 									: 'border-border/60 bg-background/80 dark:border-zinc-800'}"
 							>
 								<div class="flex w-full items-center justify-between">
@@ -280,7 +264,7 @@
 									<div
 										class="flex h-4 w-4 items-center justify-center rounded-full border {$formData.default_class ===
 										opt.value
-											? 'border-[#002f6c] bg-[#002f6c] dark:border-blue-500 dark:bg-blue-500'
+											? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] dark:border-blue-500 dark:bg-blue-500'
 											: 'border-slate-300 dark:border-zinc-600'}"
 									>
 										{#if $formData.default_class === opt.value}
@@ -305,13 +289,13 @@
 									class="text-xs font-normal text-muted-foreground">(ไม่บังคับ)</span
 								>
 							</Form.Label>
-							<textarea
+							<Textarea
 								{...props}
 								bind:value={$formData.description}
 								rows={3}
 								placeholder="คำอธิบายเพิ่มเติมเพื่อช่วยแยกประเภทและค้นหารายการสิ่งของ"
-								class="w-full rounded-md border border-input bg-background p-3 text-sm placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800"
-							></textarea>
+								class="w-full"
+							/>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
@@ -343,7 +327,7 @@
 						</div>
 					</div>
 				{/if}
-			</div>
+			</CatalogFormSection>
 		</div>
 
 		<!-- Action Buttons -->
@@ -355,7 +339,7 @@
 					if (oncancel) oncancel();
 					else onsuccess?.();
 				}}
-				class="rounded-xl border border-slate-200 px-6 py-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
+				class="h-11 rounded-xl border border-slate-200 px-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
 			>
 				ยกเลิกและย้อนกลับ
 			</Button>
@@ -363,7 +347,7 @@
 			<Button
 				type="submit"
 				disabled={$submitting || isPending}
-				class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
+				class="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-7 text-sm font-bold text-white shadow-2xs hover:bg-[var(--brand-primary-hover)] dark:shadow-none"
 			>
 				{#if $submitting || isPending}
 					กำลังบันทึกข้อมูล...
