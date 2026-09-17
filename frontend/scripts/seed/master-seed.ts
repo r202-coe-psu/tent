@@ -107,6 +107,11 @@ export async function seedMasterData(): Promise<MasterLookup> {
 				if (migrated) return false;
 			}
 			if (def.type === 'pet_types' && (i.code === 'bird' || i.label === 'นก')) return false;
+			if (
+				def.type === 'dietary_restrictions' &&
+				(i.label === 'มังสวิรัติ' || i.label === 'อาหารอ่อน')
+			)
+				return false;
 			return true;
 		});
 		const items = enforceOneDefault([...seeded, ...extras]);
@@ -271,83 +276,374 @@ export async function seedCatalog(): Promise<void> {
 		})
 	];
 
+	const { status: catQueryStatus, data: catAllDocs } = await couchReq(
+		'GET',
+		'/catalog/_all_docs?include_docs=true'
+	);
+	const allDocs =
+		catQueryStatus === 200 && catAllDocs && typeof catAllDocs === 'object' && 'rows' in catAllDocs
+			? (
+					catAllDocs as {
+						rows: Array<{
+							id: string;
+							doc?: {
+								_id: string;
+								_rev?: string;
+								type?: string;
+								name?: string;
+								label?: string;
+							};
+						}>;
+					}
+				).rows
+			: [];
+	const existingCategoriesByName = new Map<string, { _id: string; _rev?: string }>();
+	const existingItemMastersByName = new Map<string, { _id: string; _rev?: string }>();
+	const existingRecipesByLabel = new Map<string, { _id: string; _rev?: string }>();
+
+	for (const row of allDocs) {
+		const doc = row.doc;
+		if (!doc) continue;
+		if (doc.type === 'item_category' && doc.name) {
+			existingCategoriesByName.set(doc.name, { _id: doc._id, _rev: doc._rev });
+		} else if (doc.type === 'item_master' && doc.name) {
+			existingItemMastersByName.set(doc.name, { _id: doc._id, _rev: doc._rev });
+		} else if (doc.type === 'recipe' && doc.label) {
+			existingRecipesByLabel.set(doc.label, { _id: doc._id, _rev: doc._rev });
+		}
+	}
+
+	const categoryNames = [
+		'อาหารและวัตถุดิบ',
+		'น้ำดื่มสะอาด',
+		'สุขอนามัยและของใช้ส่วนตัว',
+		'เวชภัณฑ์และการปฐมพยาบาล',
+		'ของใช้กลุ่มเปราะบาง',
+		'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
+		'อาหารปรุงเสร็จและเครื่องดื่ม',
+		'เครื่องนอนและที่พักพิง',
+		'เชื้อเพลิงและพลังงาน',
+		'ชุดพัสดุยังชีพรวม'
+	];
+
+	const itemCategories = categoryNames.map((name) => {
+		const existing = existingCategoriesByName.get(name);
+		const id = existing?._id ?? `item_category:${ulid()}`;
+		return catalogDoc(
+			id,
+			'item_category',
+			{
+				name,
+				deactivated: false,
+				...(existing?._rev ? { _rev: existing._rev } : {})
+			},
+			2
+		);
+	});
+
 	const itemMasterBase = {
 		conversions: [],
 		distribution_type: 'recurring',
-		type_class: 'CONSUMABLE',
 		dietary: []
 	} as const;
-	const itemMasters = [
-		catalogDoc(
-			'item_master:rice',
-			'item_master',
-			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			4
-		),
-		catalogDoc(
-			'item_master:egg',
-			'item_master',
-			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
-			4
-		),
-		catalogDoc(
-			'item_master:vegetable',
-			'item_master',
-			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			4
-		),
-		catalogDoc(
-			'item_master:canned-fish',
-			'item_master',
-			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
-			4
-		)
-	];
-	const recipes = [
-		catalogDoc(
-			'recipe:fried-egg-rice',
-			'recipe',
-			{
-				label: 'ข้าวไข่เจียว',
-				standard_portions: '1',
-				standard_duration_hours: '1',
-				ingredients: [
-					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
-					{ item_master_id: 'item_master:egg', quantity: '2', uom: 'piece' }
-				]
-			},
-			4
-		),
-		catalogDoc(
-			'recipe:congee',
-			'recipe',
-			{
-				label: 'ข้าวต้ม',
-				standard_portions: '1',
-				standard_duration_hours: '1',
-				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }]
-			},
-			4
-		),
-		catalogDoc(
-			'recipe:canned-fish-rice',
-			'recipe',
-			{
-				label: 'ข้าวปลากระป๋อง',
-				standard_portions: '1',
-				standard_duration_hours: '1',
-				ingredients: [
-					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
-					{ item_master_id: 'item_master:canned-fish', quantity: '0.5', uom: 'can' }
-				]
-			},
-			4
-		)
+
+	const itemMastersDef: Array<{
+		name: string;
+		category: string;
+		base_unit: string;
+		type_class: 'CONSUMABLE' | 'DURABLE' | 'EQUIPMENT';
+		fallbackId?: string;
+		extra?: Record<string, unknown>;
+	}> = [
+		{
+			name: 'ข้าวสาร',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'kg',
+			type_class: 'CONSUMABLE',
+			fallbackId: 'item_master:rice'
+		},
+		{
+			name: 'ไข่ไก่',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			fallbackId: 'item_master:egg'
+		},
+		{
+			name: 'ผักรวม',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'kg',
+			type_class: 'CONSUMABLE',
+			fallbackId: 'item_master:vegetable'
+		},
+		{
+			name: 'ปลากระป๋อง',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'can',
+			type_class: 'CONSUMABLE',
+			fallbackId: 'item_master:canned-fish'
+		},
+		{
+			name: 'เนื้อไก่สด',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'kg',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'น้ำมันพืช',
+			category: 'อาหารและวัตถุดิบ',
+			base_unit: 'bottle',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'น้ำดื่ม 600 มล.',
+			category: 'น้ำดื่มสะอาด',
+			base_unit: 'bottle',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'น้ำดื่มถัง 5 ลิตร',
+			category: 'น้ำดื่มสะอาด',
+			base_unit: 'bottle',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'สบู่ก้อน',
+			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			base_unit: 'bar',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ยาสีฟัน',
+			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			base_unit: 'tube',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'แปรงสีฟัน',
+			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ผ้าอนามัย',
+			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			base_unit: 'pack',
+			type_class: 'CONSUMABLE',
+			extra: { target_gender: 'female' }
+		},
+		{
+			name: 'ผงซักฟอก',
+			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			base_unit: 'bag',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ยาพาราเซตามอล 500 มก.',
+			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			base_unit: 'tablet',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ชุดทำแผลปฐมพยาบาล',
+			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			base_unit: 'kit',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'แอลกอฮอล์ล้างแผล 70%',
+			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			base_unit: 'bottle',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ผงเกลือแร่ ORS',
+			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			base_unit: 'sachet',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ผ้าอ้อมผู้ใหญ่ ไซส์ L',
+			category: 'ของใช้กลุ่มเปราะบาง',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ผ้าอ้อมเด็ก ไซส์ M',
+			category: 'ของใช้กลุ่มเปราะบาง',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: { age_group: 'CHILD' }
+		},
+		{
+			name: 'นมผงสำหรับทารก',
+			category: 'ของใช้กลุ่มเปราะบาง',
+			base_unit: 'can',
+			type_class: 'CONSUMABLE',
+			extra: { age_group: 'INFANT' }
+		},
+		{
+			name: 'เสื้อกั๊กสะท้อนแสง',
+			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
+			base_unit: 'piece',
+			type_class: 'EQUIPMENT',
+			extra: { returnable: true }
+		},
+		{
+			name: 'รองเท้าบูทยางกันน้ำ',
+			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
+			base_unit: 'pair',
+			type_class: 'EQUIPMENT',
+			extra: { returnable: true }
+		},
+		{
+			name: 'ข้าวกล่องทั่วไป',
+			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
+			base_unit: 'box',
+			type_class: 'CONSUMABLE'
+		},
+		{
+			name: 'ข้าวกล่องฮาลาล',
+			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
+			base_unit: 'box',
+			type_class: 'CONSUMABLE',
+			extra: { dietary: ['halal'] }
+		},
+		{
+			name: 'ผ้าห่มกันหนาว',
+			category: 'เครื่องนอนและที่พักพิง',
+			base_unit: 'piece',
+			type_class: 'DURABLE',
+			extra: { returnable: true }
+		},
+		{
+			name: 'เสื่อปูนอน',
+			category: 'เครื่องนอนและที่พักพิง',
+			base_unit: 'piece',
+			type_class: 'DURABLE',
+			extra: { returnable: true }
+		},
+		{
+			name: 'เต็นท์ครอบครัว',
+			category: 'เครื่องนอนและที่พักพิง',
+			base_unit: 'tent',
+			type_class: 'DURABLE',
+			extra: { returnable: true }
+		},
+		{
+			name: 'ถังแก๊สหุงต้ม LPG 15 กก.',
+			category: 'เชื้อเพลิงและพลังงาน',
+			base_unit: 'cylinder',
+			type_class: 'CONSUMABLE',
+			extra: { fuel_type: 'LPG', capacity_kg: '15', burn_rate_kg_per_hour: '0.35' }
+		},
+		{
+			name: 'ถุงยังชีพธารน้ำใจ',
+			category: 'ชุดพัสดุยังชีพรวม',
+			base_unit: 'kit',
+			type_class: 'CONSUMABLE'
+		}
 	];
 
-	for (const doc of [...items, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
+	const itemMasterIdByName = new Map<string, string>();
+
+	const itemMasters = itemMastersDef.map((def) => {
+		const existing = existingItemMastersByName.get(def.name);
+		const id = existing?._id ?? def.fallbackId ?? `item_master:${ulid()}`;
+		itemMasterIdByName.set(def.name, id);
+		return catalogDoc(
+			id,
+			'item_master',
+			{
+				name: def.name,
+				category: def.category,
+				base_unit: def.base_unit,
+				type_class: def.type_class,
+				...itemMasterBase,
+				...(def.extra ?? {}),
+				...(existing?._rev ? { _rev: existing._rev } : {})
+			},
+			4
+		);
+	});
+
+	const recipesDef = [
+		{
+			label: 'ข้าวไข่เจียว',
+			fallbackId: 'recipe:fried-egg-rice',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' }
+			]
+		},
+		{
+			label: 'ข้าวต้มไก่สับ',
+			fallbackId: 'recipe:congee-chicken',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.15', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' }
+			]
+		},
+		{
+			label: 'ข้าวกะเพราไก่สับ',
+			fallbackId: 'recipe:basil-chicken-rice',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
+			]
+		},
+		{
+			label: 'ข้าวไก่ผัดกระเทียม',
+			fallbackId: 'recipe:garlic-chicken-rice',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
+			]
+		},
+		{
+			label: 'ข้าวไข่พะโล้ไก่',
+			fallbackId: 'recipe:stewed-egg-chicken',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
+				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' }
+			]
+		},
+		{
+			label: 'ข้าวปลากระป๋องทรงเครื่อง',
+			fallbackId: 'recipe:canned-fish-rice',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'ปลากระป๋อง', quantity: '0.5', uom: 'can' }
+			]
+		}
+	];
+
+	const recipes = recipesDef.map((r) => {
+		const existing = existingRecipesByLabel.get(r.label);
+		const id = existing?._id ?? r.fallbackId ?? `recipe:${ulid()}`;
+		return catalogDoc(
+			id,
+			'recipe',
+			{
+				label: r.label,
+				standard_portions: '1',
+				standard_duration_hours: '1',
+				ingredients: r.ingredients.map((ing) => ({
+					item_master_id: itemMasterIdByName.get(ing.name) ?? `item_master:${ing.name}`,
+					quantity: ing.quantity,
+					uom: ing.uom
+				})),
+				...(existing?._rev ? { _rev: existing._rev } : {})
+			},
+			4
+		);
+	});
+
+	for (const doc of [...items, ...itemCategories, ...itemMasters, ...recipes])
+		await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: ${items.length} supply items, ${itemCategories.length} item categories, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

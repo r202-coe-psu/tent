@@ -17,9 +17,9 @@ language: th
 
 | พื้นที่    | ผลลัพธ์จาก seed                                                               |
 | ---------- | ----------------------------------------------------------------------------- |
-| `registry` | global `master_data` 9 เอกสาร รวมรายการ seed 77 รายการ                        |
+| `registry` | global `master_data` 9 เอกสาร รวมรายการ seed 75 รายการ                        |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                     |
-| `catalog`  | `supply_item` 7, `item_master` 4 และ `recipe` 3                               |
+| `catalog`  | `item_category` 10, `item_master` 29, `recipe` 6 และ `supply_item` 7          |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                   |
 | `catalog`  | `requirement_group` 3, `food_sphere_standard` 14 และ `replenishment_policy` 3 |
 
@@ -57,7 +57,7 @@ language: th
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
 | จำนวน master types               | 9                                  |
-| จำนวนรายการใน canonical seed set | 77                                 |
+| จำนวนรายการใน canonical seed set | 75                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มี default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่ได้อยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ที่ระบุใน §1.4 ดังนั้นตารางด้านล่างคือ **รายการที่ seed กำหนด** ไม่ใช่ snapshot ของรายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -84,7 +84,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `dialysis`          | ผู้ป่วยฟอกไต                         | —       |
 | `wheelchair`        | ผู้ใช้วีลแชร์                        | —       |
 | `psychiatric`       | ผู้ป่วยจิตเวช                        | —       |
-| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | **ใช่** |
+| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | —       |
 | `infant`            | ทารก                                 | —       |
 | `young_child`       | เด็กเล็ก                             | —       |
 | `pregnant`          | สตรีมีครรภ์                          | —       |
@@ -97,7 +97,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 | key               | label           | default |
 | ----------------- | --------------- | ------- |
-| `diabetes`        | เบาหวาน         | **ใช่** |
+| `diabetes`        | เบาหวาน         | —       |
 | `hypertension`    | ความดันโลหิตสูง | —       |
 | `heart_disease`   | โรคหัวใจ        | —       |
 | `asthma`          | หอบหืด          | —       |
@@ -106,17 +106,15 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 #### `dietary_restrictions` — ศาสนาและข้อจำกัดอาหาร
 
-| key          | label          | default |
-| ------------ | -------------- | ------- |
-| `halal`      | อิสลาม (ฮาลาล) | **ใช่** |
-| `vegetarian` | มังสวิรัติ     | —       |
-| `soft_diet`  | อาหารอ่อน      | —       |
+| key     | label          | default |
+| ------- | -------------- | ------- |
+| `halal` | อิสลาม (ฮาลาล) | **ใช่** |
 
 #### `pet_types` — ประเภทสัตว์เลี้ยง
 
 | code    | label | default |
 | ------- | ----- | ------- |
-| `dog`   | สุนัข | **ใช่** |
+| `dog`   | สุนัข | —       |
 | `cat`   | แมว   | —       |
 | `other` | อื่นๆ | —       |
 
@@ -206,13 +204,82 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 - Legacy vulnerable-group code `disabled` ถูกย้ายเป็น `disability_other`
 - Legacy labels `ผู้สูงอายุ`, `ผู้พิการ` และ `ผู้ป่วยเรื้อรัง` ใช้ช่วยหา target ใหม่ระหว่าง migration
 - รายการ `pet_types` ที่มี code `bird` หรือ label `นก` จะไม่ถูกเก็บเป็น extra
+- รายการ `dietary_restrictions` ที่มี label `มังสวิรัติ` หรือ `อาหารอ่อน` จะไม่ถูกเก็บเป็น extra
 - การ seed ซ้ำ reuse code ของรายการเดิมจาก label เดิม และเก็บรายการเดิมที่ไม่อยู่ใน seed ไว้ตามกติกา
 
 ## 2. Catalog seed
 
 ข้อมูลส่วนนี้เป็น reference data ที่ seed ลง `catalog` ไม่ใช่ `registry.master_data`
 
-### 2.1 `supply_item`
+### 2.1 `item_category`
+
+หมวดหมู่สิ่งของมาตรฐาน 10 รายการ ใช้ `schema_v: 2`, สร้างด้วย `_id` รูปแบบ `item_category:{ulid}` และเก็บชื่อภาษาไทย:
+
+| `_id`                  | name                           |
+| ---------------------- | ------------------------------ |
+| `item_category:{ulid}` | อาหารและวัตถุดิบ               |
+| `item_category:{ulid}` | น้ำดื่มสะอาด                   |
+| `item_category:{ulid}` | สุขอนามัยและของใช้ส่วนตัว      |
+| `item_category:{ulid}` | เวชภัณฑ์และการปฐมพยาบาล        |
+| `item_category:{ulid}` | ของใช้กลุ่มเปราะบาง            |
+| `item_category:{ulid}` | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร |
+| `item_category:{ulid}` | อาหารปรุงเสร็จและเครื่องดื่ม   |
+| `item_category:{ulid}` | เครื่องนอนและที่พักพิง         |
+| `item_category:{ulid}` | เชื้อเพลิงและพลังงาน           |
+| `item_category:{ulid}` | ชุดพัสดุยังชีพรวม              |
+
+### 2.2 `item_master`
+
+รายการสิ่งของหลัก 29 รายการ ใช้ `schema_v: 4`, สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
+
+| `_id`                | name                    | category                       | base_unit  | type_class   |
+| -------------------- | ----------------------- | ------------------------------ | ---------- | ------------ |
+| `item_master:{ulid}` | ข้าวสาร                 | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
+| `item_master:{ulid}` | ไข่ไก่                  | อาหารและวัตถุดิบ               | `piece`    | `CONSUMABLE` |
+| `item_master:{ulid}` | ผักรวม                  | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
+| `item_master:{ulid}` | ปลากระป๋อง              | อาหารและวัตถุดิบ               | `can`      | `CONSUMABLE` |
+| `item_master:{ulid}` | เนื้อไก่สด              | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` |
+| `item_master:{ulid}` | น้ำมันพืช               | อาหารและวัตถุดิบ               | `bottle`   | `CONSUMABLE` |
+| `item_master:{ulid}` | น้ำดื่ม 600 มล.         | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` |
+| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร       | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` |
+| `item_master:{ulid}` | สบู่ก้อน                | สุขอนามัยและของใช้ส่วนตัว      | `bar`      | `CONSUMABLE` |
+| `item_master:{ulid}` | ยาสีฟัน                 | สุขอนามัยและของใช้ส่วนตัว      | `tube`     | `CONSUMABLE` |
+| `item_master:{ulid}` | แปรงสีฟัน               | สุขอนามัยและของใช้ส่วนตัว      | `piece`    | `CONSUMABLE` |
+| `item_master:{ulid}` | ผ้าอนามัย               | สุขอนามัยและของใช้ส่วนตัว      | `pack`     | `CONSUMABLE` |
+| `item_master:{ulid}` | ผงซักฟอก                | สุขอนามัยและของใช้ส่วนตัว      | `bag`      | `CONSUMABLE` |
+| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก.   | เวชภัณฑ์และการปฐมพยาบาล        | `tablet`   | `CONSUMABLE` |
+| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล       | เวชภัณฑ์และการปฐมพยาบาล        | `kit`      | `CONSUMABLE` |
+| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70%    | เวชภัณฑ์และการปฐมพยาบาล        | `bottle`   | `CONSUMABLE` |
+| `item_master:{ulid}` | ผงเกลือแร่ ORS          | เวชภัณฑ์และการปฐมพยาบาล        | `sachet`   | `CONSUMABLE` |
+| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L   | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` |
+| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M      | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` |
+| `item_master:{ulid}` | นมผงสำหรับทารก          | ของใช้กลุ่มเปราะบาง            | `can`      | `CONSUMABLE` |
+| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง      | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `piece`    | `EQUIPMENT`  |
+| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ     | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `pair`     | `EQUIPMENT`  |
+| `item_master:{ulid}` | ข้าวกล่องทั่วไป         | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` |
+| `item_master:{ulid}` | ข้าวกล่องฮาลาล          | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` |
+| `item_master:{ulid}` | ผ้าห่มกันหนาว           | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    |
+| `item_master:{ulid}` | เสื่อปูนอน              | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    |
+| `item_master:{ulid}` | เต็นท์ครอบครัว          | เครื่องนอนและที่พักพิง         | `tent`     | `DURABLE`    |
+| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก.| เชื้อเพลิงและพลังงาน           | `cylinder` | `CONSUMABLE` |
+| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ       | ชุดพัสดุยังชีพรวม              | `kit`      | `CONSUMABLE` |
+
+### 2.3 `recipe`
+
+สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิง 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"`:
+
+| `_id`                       | label                    | ingredients                                                  |
+| --------------------------- | ------------------------ | ------------------------------------------------------------ |
+| `recipe:fried-egg-rice`     | ข้าวไข่เจียว             | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece                               |
+| `recipe:congee-chicken`     | ข้าวต้มไก่สับ            | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg                           |
+| `recipe:basil-chicken-rice` | ข้าวกะเพราไก่สับ         | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
+| `recipe:garlic-chicken-rice`| ข้าวไก่ผัดกระเทียม       | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                          |
+| `recipe:stewed-egg-chicken` | ข้าวไข่พะโล้ไก่          | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg           |
+| `recipe:canned-fish-rice`   | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can                           |
+
+### 2.4 `supply_item`
+
+เอกสารพัสดุแบบเดิม 7 รายการ สำหรับ backward compatibility กับโมเดลสต็อก/การบริจาคเดิม:
 
 | `_id`              | name          | category   | unit     | perishable | reorder level |
 | ------------------ | ------------- | ---------- | -------- | ---------: | ------------: |
@@ -223,27 +290,6 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `item:blanket`     | ผ้าห่ม        | `bedding`  | `piece`  |     ไม่ใช่ |            30 |
 | `item:egg`         | ไข่ไก่        | `food`     | `piece`  |        ใช่ |           100 |
 | `item:vegetable`   | ผักรวม        | `food`     | `kg`     |        ใช่ |            30 |
-
-### 2.2 `item_master`
-
-รายการทั้งหมดใช้ `schema_v: 4`, `type_class: CONSUMABLE`, `distribution_type: recurring`, `conversions: []` และ `dietary: []`
-
-| `_id`                     | name       | category | base_unit |
-| ------------------------- | ---------- | -------- | --------- |
-| `item_master:rice`        | ข้าวสาร    | `food`   | `kg`      |
-| `item_master:egg`         | ไข่ไก่     | `food`   | `piece`   |
-| `item_master:vegetable`   | ผักรวม     | `food`   | `kg`      |
-| `item_master:canned-fish` | ปลากระป๋อง | `food`   | `can`     |
-
-### 2.3 `recipe`
-
-รายการทั้งหมดใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"`
-
-| `_id`                     | label          | ingredients                                                  |
-| ------------------------- | -------------- | ------------------------------------------------------------ |
-| `recipe:fried-egg-rice`   | ข้าวไข่เจียว   | `item_master:rice` 0.2 kg; `item_master:egg` 2 piece         |
-| `recipe:congee`           | ข้าวต้ม        | `item_master:rice` 0.15 kg                                   |
-| `recipe:canned-fish-rice` | ข้าวปลากระป๋อง | `item_master:rice` 0.2 kg; `item_master:canned-fish` 0.5 can |
 
 ## 3. SOP ratio seed
 
@@ -353,7 +399,6 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 - ตัวเลือก WASH, sanitation และ facility ที่เป็นข้อเสนอ
 - health service, referral reason และ medical catalog groups ที่ยังไม่มี fixture ใน seed
-- NFI items, kits และ item categories ที่ยังไม่มีใน `seedCatalog()`
 - shelter facility values ที่เป็น enum/schema แต่ไม่ได้สร้างเป็น `master_data` document
 - master-data local override ราย shelter ซึ่งเป็น runtime operation ไม่ใช่ global seed
 

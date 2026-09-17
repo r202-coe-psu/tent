@@ -94,7 +94,7 @@ export const CR112_VULNERABLE_GROUP_ACTIVE = [
 	{ code: 'dialysis', label: 'ผู้ป่วยฟอกไต', is_default: false },
 	{ code: 'wheelchair', label: 'ผู้ใช้วีลแชร์', is_default: false },
 	{ code: 'psychiatric', label: 'ผู้ป่วยจิตเวช', is_default: false },
-	{ code: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: true },
+	{ code: 'elderly_dependent', label: 'ผู้สูงอายุช่วยเหลือตัวเองไม่ได้', is_default: false },
 	{ code: 'infant', label: 'ทารก', is_default: false },
 	{ code: 'young_child', label: 'เด็กเล็ก', is_default: false },
 	{ code: 'pregnant', label: 'สตรีมีครรภ์', is_default: false },
