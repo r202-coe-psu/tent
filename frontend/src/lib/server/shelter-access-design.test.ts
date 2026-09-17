@@ -1792,4 +1792,371 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 	});
+
+	describe('Ticket-era Flow 2 VDU rules (Rules 12-14 / CR-121)', () => {
+		const validTicket = {
+			_id: 'requisition_ticket:01J00000000000000000000001',
+			type: 'requisition_ticket',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'user:staff1',
+			ticket_no: 'TKT-FOOD-0001',
+			requisition_type: 'food',
+			status: 'PENDING_PICK',
+			meal: 'lunch',
+			source_location: 'warehouse:main',
+			destination_location: 'distribution_point:tent_a',
+			requested_by: 'user:staff1',
+			items: [
+				{
+					item_id: 'item:cooked_rice',
+					item_name: 'Rice',
+					type_class: 'CONSUMABLE',
+					requested_qty: '50',
+					allocated_qty: '50'
+				}
+			]
+		};
+
+		const validFoodLog = {
+			_id: 'distribution_log:01J00000000000000000000001',
+			type: 'distribution_log',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'user:staff1',
+			ticket_id: 'requisition_ticket:01J00000000000000000000001',
+			item_id: 'item:cooked_rice',
+			qty: '2',
+			recipient_type: 'evacuee',
+			recipient_id: 'evacuee:01J00000000000000000000001',
+			household_id: 'household:01J00000000000000000000001',
+			meal: 'lunch',
+			is_returnable: false,
+			status: 'fulfilled',
+			is_override: false,
+			distributed_at: '2026-09-01T00:00:00.000Z',
+			distributed_by: 'user:staff1'
+		};
+
+		const validReturnableLog = {
+			...validFoodLog,
+			_id: 'distribution_log:01J00000000000000000000002',
+			item_id: 'item:wheelchair',
+			is_returnable: true,
+			status: 'active'
+		};
+
+		const validPool = {
+			_id: 'bulk_return_pool:01J00000000000000000000001',
+			type: 'bulk_return_pool',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'user:wh1',
+			item_id: 'item:cot',
+			stock_ledger_id: 'stock_ledger:01J00000000000000000000001',
+			total_received_qty: '20',
+			claimed_qty: '0',
+			unclaimed_quota: '20',
+			status: 'ACTIVE'
+		};
+
+		describe('requisition_ticket VDU validation', () => {
+			it('allows creating valid requisition_ticket in PENDING_PICK', () => {
+				expect(() => compile()(validTicket, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects creating ticket with non-PENDING_PICK status', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, status: 'DISTRIBUTING' }, null, WAREHOUSE),
+					/Initial requisition_ticket status must be PENDING_PICK/
+				);
+			});
+
+			it('rejects invalid requisition_type or empty items', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, requisition_type: 'invalid' }, null, WAREHOUSE),
+					/Invalid requisition_type/
+				);
+				expectForbidden(
+					() => compile()({ ...validTicket, items: [] }, null, WAREHOUSE),
+					/must have at least one item/
+				);
+			});
+
+			it('allows legal status transition and rejects illegal transition', () => {
+				const ready = { ...validTicket, status: 'READY_FOR_DISPATCH' };
+				expect(() => compile()(ready, validTicket, WAREHOUSE)).not.toThrow();
+
+				const illegal = { ...validTicket, status: 'DISTRIBUTING' };
+				expectForbidden(
+					() => compile()(illegal, validTicket, WAREHOUSE),
+					/Illegal requisition_ticket transition/
+				);
+			});
+
+			it('rejects mutating immutable ticket fields', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, ticket_no: 'FORGED' }, validTicket, WAREHOUSE),
+					/requisition_ticket.ticket_no is immutable/
+				);
+				expectForbidden(
+					() => compile()({ ...validTicket, requisition_type: 'supplies' }, validTicket, WAREHOUSE),
+					/requisition_ticket.requisition_type is immutable/
+				);
+			});
+
+			it('rejects decreasing requested_qty post DISTRIBUTING', () => {
+				const distributing = { ...validTicket, status: 'DISTRIBUTING' };
+				const decreased = {
+					...distributing,
+					items: [{ ...distributing.items[0], requested_qty: '20' }]
+				};
+				expectForbidden(
+					() => compile()(decreased, distributing, WAREHOUSE),
+					/requested_qty cannot be decreased or removed after DISTRIBUTING/
+				);
+			});
+		});
+
+		describe('distribution_log VDU validation', () => {
+			it('allows valid consumable and returnable distribution_log creation', () => {
+				expect(() => compile()(validFoodLog, null, REGISTRATION)).not.toThrow();
+				expect(() => compile()(validReturnableLog, null, REGISTRATION)).not.toThrow();
+			});
+
+			it('rejects hard-delete of distribution_log', () => {
+				expectForbidden(
+					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, REGISTRATION),
+					/Cannot delete distribution_log documents/
+				);
+			});
+
+			it('rejects mutating immutable issuance fields', () => {
+				expectForbidden(
+					() => compile()({ ...validFoodLog, qty: '5' }, validFoodLog, REGISTRATION),
+					/distribution_log.qty is immutable after issuance/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validFoodLog, ticket_id: 'requisition_ticket:01J99999999999999999999999' },
+							validFoodLog,
+							REGISTRATION
+						),
+					/distribution_log.ticket_id is immutable after issuance/
+				);
+			});
+
+			it('allows valid return on returnable log and rejects invalid return', () => {
+				const returned = {
+					...validReturnableLog,
+					status: 'returned',
+					qty_returned: '2',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: 'user:staff1'
+				};
+				expect(() => compile()(returned, validReturnableLog, REGISTRATION)).not.toThrow();
+
+				// Missing returned_at
+				expectForbidden(
+					() =>
+						compile()({ ...returned, returned_at: undefined }, validReturnableLog, REGISTRATION),
+					/Loan clear status requires return audit fields/
+				);
+			});
+
+			it('allows void with audit fields and rejects void without audit fields', () => {
+				const voided = {
+					...validFoodLog,
+					status: 'voided',
+					voided_at: '2026-09-01T01:00:00.000Z',
+					voided_by: 'user:staff1'
+				};
+				expect(() => compile()(voided, validFoodLog, REGISTRATION)).not.toThrow();
+
+				expectForbidden(
+					() => compile()({ ...voided, voided_at: undefined }, validFoodLog, REGISTRATION),
+					/Voided logs require void audit fields/
+				);
+			});
+		});
+
+		describe('bulk_return_pool VDU validation', () => {
+			it('allows creating valid bulk_return_pool with status ACTIVE', () => {
+				expect(() => compile()(validPool, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects creating pool with invalid equation', () => {
+				expectForbidden(
+					() => compile()({ ...validPool, unclaimed_quota: '15' }, null, WAREHOUSE),
+					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
+				);
+			});
+
+			it('rejects mutating immutable pool fields', () => {
+				expectForbidden(
+					() => compile()({ ...validPool, total_received_qty: '30' }, validPool, WAREHOUSE),
+					/bulk_return_pool.total_received_qty is immutable/
+				);
+			});
+
+			it('allows closing pool by warehouse_staff with audit fields and rejects non-authorized staff', () => {
+				const closed = {
+					...validPool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expect(() => compile()(closed, validPool, WAREHOUSE)).not.toThrow();
+
+				expectForbidden(
+					() => compile()(closed, validPool, REGISTRATION),
+					/Only warehouse staff, supply coordinator, or shelter manager can close bulk return pool/
+				);
+			});
+
+			it('rejects reopening a CLOSED bulk_return_pool', () => {
+				const closed = {
+					...validPool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expectForbidden(
+					() => compile()({ ...closed, status: 'ACTIVE' }, closed, WAREHOUSE),
+					/CLOSED bulk_return_pool cannot be reopened/
+				);
+			});
+		});
+
+		describe('stock_ledger reason/ref VDU alignment (Rule 13)', () => {
+			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+			const SHELTER_MGR: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
+			const SYS_ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+
+			it.each([
+				['warehouse_staff', WAREHOUSE],
+				['supply_coordinator', SUPPLY_COORD],
+				['shelter_manager', SHELTER_MGR],
+				['system_admin', SYS_ADMIN]
+			])('allows distribute referencing requisition_ticket from %s', (_role, userCtx) => {
+				const distTicket = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expect(() => compile()(distTicket, null, userCtx)).not.toThrow();
+			});
+
+			it('rejects distribute referencing requisition_ticket from unauthorized role', () => {
+				const distTicket = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expectForbidden(
+					() => compile()(distTicket, null, REGISTRATION),
+					/Only warehouse staff or managers can write stock ledger/
+				);
+			});
+
+			it('preserves legacy distribute authorization for distribution_batch', () => {
+				const distBatch = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'distribution_batch:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expect(() => compile()(distBatch, null, WAREHOUSE)).not.toThrow();
+				expect(() => compile()(distBatch, null, SYS_ADMIN)).not.toThrow();
+
+				expectForbidden(
+					() => compile()(distBatch, null, SUPPLY_COORD),
+					/Only warehouse staff or system admin can write distribute stock ledger/
+				);
+				expectForbidden(
+					() => compile()(distBatch, null, SHELTER_MGR),
+					/Only warehouse staff or system admin can write distribute stock ledger/
+				);
+			});
+
+			it('allows requisition referencing requisition_ticket or kitchen_requisition', () => {
+				const reqTicket = ledger({
+					qty: '-10',
+					reason: 'requisition',
+					ref_id: 'requisition_ticket:01J00000000000000000000001'
+				});
+				expect(() => compile()(reqTicket, null, WAREHOUSE)).not.toThrow();
+
+				const reqKitchen = ledger({
+					qty: '-10',
+					reason: 'requisition',
+					ref_id: 'kitchen_requisition:01J00000000000000000000001'
+				});
+				expect(() => compile()(reqKitchen, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('allows receive referencing meal_service, requisition_ticket, or distribution_log', () => {
+				const receiveMeal = ledger({
+					qty: '50',
+					reason: 'receive',
+					ref_id: 'meal_service:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveMeal, null, WAREHOUSE)).not.toThrow();
+
+				const receiveTicket = ledger({
+					qty: '10',
+					reason: 'receive',
+					ref_id: 'requisition_ticket:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveTicket, null, WAREHOUSE)).not.toThrow();
+
+				const receiveLog = ledger({
+					qty: '1',
+					reason: 'receive',
+					ref_id: 'distribution_log:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveLog, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects distribute with invalid ref_id', () => {
+				const invalid = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'donation:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expectForbidden(
+					() => compile()(invalid, null, WAREHOUSE),
+					/Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id/
+				);
+			});
+		});
+
+		describe('Tenancy isolation', () => {
+			it('rejects cross-shelter documents', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, shelter_code: 'SH002' }, null, WAREHOUSE),
+					/shelter_code must be SH001/
+				);
+				expectForbidden(
+					() => compile()({ ...validFoodLog, shelter_code: 'SH002' }, null, REGISTRATION),
+					/shelter_code must be SH001/
+				);
+				expectForbidden(
+					() => compile()({ ...validPool, shelter_code: 'SH002' }, null, WAREHOUSE),
+					/shelter_code must be SH001/
+				);
+			});
+		});
+	});
 });
