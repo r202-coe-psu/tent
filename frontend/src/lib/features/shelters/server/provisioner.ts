@@ -9,8 +9,8 @@ import {
 	deployShelterViews,
 	deployTransferLedgerMangoIndexes,
 	findMasterByCode,
+	findMasterByName,
 	findHighestShelterCodeNumber,
-	listShelterMasters,
 	mergeShelterSecurity,
 	nowIso
 } from '$lib/server/shelters.admin';
@@ -86,7 +86,8 @@ async function releaseSequenceBootstrapLock(ownerId: string): Promise<void> {
 	if (current.status !== 200) return;
 	const lock = current.data as SequenceBootstrapLock;
 	if (lock.owner_id !== ownerId) return;
-	const deleted = await adminRaw(path, 'DELETE', { _rev: lock._rev });
+	const deletePath = lock._rev ? `${path}?rev=${encodeURIComponent(lock._rev)}` : path;
+	const deleted = await adminRaw(deletePath, 'DELETE');
 	if (deleted.status >= 400 && deleted.status !== 404 && deleted.status !== 409) {
 		assertStatus(deleted.status, 'shelter sequence bootstrap lock release', deleted.data);
 	}
@@ -267,16 +268,12 @@ async function provisionShelterUnlocked(
 	assertActive?: () => Promise<void>
 ): Promise<{ ok: true; code: string; db: string; steps: ProvisionStep[] }> {
 	const normalizedName = normalizeShelterName(input.name);
-	const mastersBeforeProvision = await listShelterMasters();
-	const duplicateByName = mastersBeforeProvision.find(
-		(master) => normalizeShelterName(master.name) === normalizedName
-	);
+	const duplicateByName = await findMasterByName(input.name);
 	if (duplicateByName && duplicateByName.code !== allocatedCode) {
 		throw new ServiceError('CONFLICT', `Shelter name "${input.name}" already exists`);
 	}
 	const code = allocatedCode ?? (await allocateShelterCode());
-	const existingByCode =
-		mastersBeforeProvision.find((master) => master.code === code) ?? (await findMasterByCode(code));
+	const existingByCode = await findMasterByCode(code);
 	if (existingByCode && normalizeShelterName(existingByCode.name) !== normalizedName) {
 		throw new ServiceError('CONFLICT', `Shelter code "${code}" already belongs to another shelter`);
 	}
@@ -293,7 +290,8 @@ async function provisionShelterUnlocked(
 	await mergeShelterSecurity(
 		db,
 		{ roles: ['system_admin'] },
-		{ names: writerName ? [writerName] : [], roles: [`shelter:${code}`] }
+		{ names: writerName ? [writerName] : [], roles: [`shelter:${code}`] },
+		{ assertActive }
 	);
 	steps.push({ step: 'security', status: 200 });
 
@@ -336,14 +334,14 @@ async function provisionShelterUnlocked(
 	await mergeShelterSecurity(
 		SHELTER_REGISTRY_DB,
 		{ roles: ['system_admin'] },
-		{ roles: [...SHELTER_CAPABILITIES] }
+		{ roles: [...SHELTER_CAPABILITIES] },
+		{ assertActive }
 	);
 	await assertActive?.();
 	const registryDesign = await deployRegistryDesign();
 	steps.push({ step: 'registry-design', status: registryDesign.status });
 
-	const masters = await listShelterMasters();
-	const existingMaster = masters.find((master) => master.code === code);
+	const existingMaster = await findMasterByCode(code);
 	if (!existingMaster) {
 		await assertActive?.();
 		const ts = nowIso();

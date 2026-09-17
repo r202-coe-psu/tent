@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 3;
+export const REGISTRY_DESIGN_VERSION = 4;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -48,6 +48,8 @@ export function buildRegistryValidateDocUpdate(): string {
  * `by_code_number` — the same masters keyed by their numeric suffix. Query
  * descending with `limit=1` to bootstrap the shelter-code sequence without a
  * full registry scan.
+ * `by_name` — normalized shelter names for duplicate detection on the import
+ * path without loading the whole registry for every item.
  */
 export function buildRegistryDesignDoc(): RegistryDesignDoc {
 	return {
@@ -68,6 +70,13 @@ export function buildRegistryDesignDoc(): RegistryDesignDoc {
     emit(parseInt(doc.code.slice(2), 10), null);
   }
 }`
+			},
+			by_name: {
+				map: `function (doc) {
+  if (doc.type === 'shelter' && doc.name) {
+    emit(doc.name.trim().replace(/\\s+/g, ' ').toLowerCase(), null);
+  }
+}`
 			}
 		},
 		validate_doc_update: buildRegistryValidateDocUpdate()
@@ -84,4 +93,12 @@ export function registryByCodePath(code: string): string {
 /** Path for the highest numeric shelter-code suffix. */
 export function registryHighestByCodePath(): string {
 	return `/${REGISTRY_DB}/${REGISTRY_DESIGN_ID}/_view/by_code_number?descending=true&include_docs=true&limit=1`;
+}
+
+/** Path for a normalized shelter-name lookup. */
+export function registryByNamePath(name: string): string {
+	const normalized = name.trim().replace(/\s+/g, ' ').toLowerCase();
+	return `/${REGISTRY_DB}/${REGISTRY_DESIGN_ID}/_view/by_name?key=${encodeURIComponent(
+		JSON.stringify(normalized)
+	)}&include_docs=true&limit=1`;
 }

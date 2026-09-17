@@ -133,9 +133,10 @@ export async function releaseShelterNameLock(args: {
 	const id = lockId(normalized);
 	const current = await getLock(id);
 	if (!current || (current.owner_id ?? legacyOwner(current)) !== args.ownerId) return;
-	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'DELETE', {
-		_rev: current._rev
-	});
+	const path = current._rev
+		? `/${REGISTRY_DB}/${encodeURIComponent(id)}?rev=${encodeURIComponent(current._rev)}`
+		: `/${REGISTRY_DB}/${encodeURIComponent(id)}`;
+	const res = await adminRaw(path, 'DELETE');
 	if (res.status >= 400 && res.status !== 404 && res.status !== 409) {
 		assertOk(res.status, `release name lock ${normalized}`, res.data);
 	}
