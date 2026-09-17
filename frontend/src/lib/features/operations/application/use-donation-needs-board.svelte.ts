@@ -215,7 +215,7 @@ export function useDonationNeedsBoard(options?: {
 				{
 					item_id: itemId,
 					qty_target: input.target,
-					unit: 'ชิ้น'
+					unit: 'piece'
 				}
 			],
 			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
@@ -256,7 +256,7 @@ export function useDonationNeedsBoard(options?: {
 				{
 					item_id: itemId,
 					qty_target: input.target,
-					unit: input.unit || 'ชิ้น',
+					unit: input.unit || 'piece',
 					status: 'open' as const
 				}
 			],

@@ -89,7 +89,7 @@ export interface Recipe extends CatalogDoc {
 // ---------------------------------------------------------------- unit resolution
 
 /** Fallback unit for `item_master` docs written before `base_unit` was required. */
-export const DEFAULT_ITEM_UNIT = 'ชิ้น';
+export const DEFAULT_ITEM_UNIT = 'piece';
 
 /**
  * The stock-keeping unit of an `item_master`.
@@ -158,6 +158,12 @@ export const itemMasterInputSchema = z
 					message: 'Unit is required',
 					path: ['base_unit']
 				});
+			} else if (!/^[a-z][a-z0-9_]{0,15}$/.test(data.base_unit.trim())) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+					path: ['base_unit']
+				});
 			}
 			if (!data.distribution_type) {
 				ctx.addIssue({
@@ -167,6 +173,13 @@ export const itemMasterInputSchema = z
 				});
 			}
 		} else {
+			if (data.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(data.base_unit.trim())) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+					path: ['base_unit']
+				});
+			}
 			if (!data.asset_status) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
@@ -233,7 +246,7 @@ export function createItemMaster(
 			category: d.category,
 			sku: d.sku,
 			description: d.description,
-			base_unit: d.base_unit || 'ชิ้น',
+			base_unit: d.base_unit || 'piece',
 			conversions: d.conversions.map((c) => ({
 				...c,
 				multiplier: persistQty(c.multiplier)

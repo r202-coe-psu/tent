@@ -29,6 +29,7 @@ function expectForbidden(run: () => void, match: RegExp): void {
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
+const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 
 const envelope = {
 	schema_v: 2,
@@ -152,6 +153,89 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'item_category'");
 		expect(validateFn).toContain("'item_master'");
 		expect(validateFn).toContain("'recipe'");
+		expect(validateFn).toContain("'unit_of_measure'");
+	});
+
+	it('enforces item_master base_unit format and unit_of_measure protected rules', () => {
+		const validate = compile('SH001');
+
+		// Valid item_master with lowercase English code
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'kg',
+					...envelope
+				},
+				null,
+				ADMIN
+			)
+		).not.toThrow();
+
+		// Invalid item_master with Thai base_unit
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัม',
+						...envelope
+					},
+					null,
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
+		// Protected unit_of_measure cannot be deleted
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						_deleted: true,
+						...envelope
+					},
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						code: 'kg',
+						dimension: 'mass',
+						is_protected: true,
+						...envelope
+					},
+					ADMIN
+				),
+			/Cannot delete system protected unit of measure/
+		);
+
+		// Protected unit_of_measure cannot change code or dimension
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						code: 'kilogram',
+						dimension: 'mass',
+						is_protected: true,
+						...envelope
+					},
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						code: 'kg',
+						dimension: 'mass',
+						is_protected: true,
+						...envelope
+					},
+					ADMIN
+				),
+			/Cannot modify code or dimension/
+		);
 	});
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {

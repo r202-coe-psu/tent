@@ -33,6 +33,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { formatUnit } from '$lib/features/catalog';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
@@ -401,6 +402,11 @@
 														: t.noData}
 												</td>
 												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? t.noData}</td>
+												<td class="px-4 py-3 text-muted-foreground"
+													>{item.unit
+														? formatUnit(item.unit, null, langState.current)
+														: t.noData}</td
+												>
 											</tr>
 										{/each}
 									</tbody>

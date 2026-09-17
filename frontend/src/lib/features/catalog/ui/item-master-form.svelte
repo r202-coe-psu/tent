@@ -7,12 +7,14 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { itemMasterInputSchema, type ItemMaster, type ItemMasterInput } from '../domain/catalog';
+	import { formatUnit, FALLBACK_UNIT_DEFINITIONS } from '../domain/unit-of-measure';
 
 	import {
 		useItemMaster,
 		useCreateItemMaster,
 		useUpdateItemMaster,
-		useItemCategories
+		useItemCategories,
+		useUnitsOfMeasure
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -43,6 +45,7 @@
 		() => shelterCode ?? null
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -132,6 +135,7 @@
 					delete submitData.asset_status;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
 					submitData.base_unit = 'ชิ้น';
+					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
 
 					delete submitData.conversions;
@@ -232,6 +236,35 @@
 
 	const isLoading = $derived(isEdit ? itemMasterQuery.isLoading : false);
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
+
+	// Units of measure
+	const allUnits = $derived(
+		unitsOfMeasureQuery.data && unitsOfMeasureQuery.data.length > 0
+			? unitsOfMeasureQuery.data
+			: FALLBACK_UNIT_DEFINITIONS
+	);
+	const activeUnits = $derived.by(() => {
+		const list = allUnits.filter((u) => !u.deactivated || u.code === $formData.base_unit);
+		if ($formData.base_unit && !list.some((u) => u.code === $formData.base_unit)) {
+			return [
+				...list,
+				{
+					_id: `unit_of_measure:${$formData.base_unit}`,
+					doc_type: 'unit_of_measure' as const,
+					schema_v: 1 as const,
+					code: $formData.base_unit,
+					label_th: formatUnit($formData.base_unit, allUnits),
+					label_en: $formData.base_unit,
+					dimension: 'count' as const,
+					is_protected: false,
+					created_at: '',
+					updated_at: '',
+					created_by: ''
+				}
+			];
+		}
+		return list;
+	});
 
 	// Dynamically compute list of UOM choices for defaults in Section 4 and planning unit in Section 5
 	const uomOptions = $derived(
@@ -461,8 +494,8 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
 								>
 									<option value="" disabled selected>-- เลือกหน่วยฐาน --</option>
-									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'อัน', 'ชุด', 'ผืน', 'ตัว', 'คู่', 'แผ่น', 'หลอด', 'ม้วน', 'ก้อน', 'ห่อ', 'ฟอง', 'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร', 'เมตร'] as unit (unit)}
-										<option value={unit}>{unit}</option>
+									{#each activeUnits as unit (unit.code)}
+										<option value={unit.code}>{unit.label_th} ({unit.code})</option>
 									{/each}
 								</select>
 							{/snippet}
@@ -569,6 +602,7 @@
 										<option value="">-- เลือกหน่วย --</option>
 										{#each uomOptions as unit (unit)}
 											<option value={unit}>{unit}</option>
+											<option value={unit}>{formatUnit(unit, allUnits)}</option>
 										{/each}
 									</select>
 								{/snippet}
@@ -590,6 +624,7 @@
 										<option value="">-- เลือกหน่วย --</option>
 										{#each uomOptions as unit (unit)}
 											<option value={unit}>{unit}</option>
+											<option value={unit}>{formatUnit(unit, allUnits)}</option>
 										{/each}
 									</select>
 								{/snippet}

@@ -8,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
+	import { useUnitsOfMeasure, FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog';
 
 	interface Props {
 		onclose: () => void;
@@ -31,6 +32,13 @@
 	let urgency = $state<'critical' | 'important' | 'normal'>('normal');
 	let description = $state('');
 
+	const unitsQuery = useUnitsOfMeasure();
+	const availableUnits = $derived(
+		unitsQuery.data && unitsQuery.data.length > 0
+			? unitsQuery.data.filter((u) => !u.deactivated)
+			: FALLBACK_UNIT_DEFINITIONS
+	);
+
 	// Auto-fill category and unit based on search / item title
 	$effect(() => {
 		const lower = itemTitle.toLowerCase();
@@ -43,12 +51,15 @@
 		if (lower.includes('ข้าว') || lower.includes('อาหาร') || lower.includes('ปลากระป๋อง')) {
 			category = 'อาหาร/เครื่องดื่ม';
 			unit = lower.includes('ข้าว') ? 'ถุง (5kg)' : 'แพ็ค';
+			unit = lower.includes('ข้าว') ? 'bag' : 'pack';
 		} else if (lower.includes('น้ำ')) {
 			category = 'อาหาร/เครื่องดื่ม';
 			unit = 'ขวด';
+			unit = 'bottle';
 		} else if (lower.includes('ยา') || lower.includes('พารา') || lower.includes('เวชภัณฑ์')) {
 			category = 'ยารักษาโรค/เวชภัณฑ์';
 			unit = 'กล่อง';
+			unit = 'box';
 		} else if (
 			lower.includes('ผ้าห่ม') ||
 			lower.includes('สบู่') ||
@@ -57,9 +68,11 @@
 		) {
 			category = 'ของใช้ทั่วไป';
 			unit = lower.includes('ผ้าห่ม') ? 'ผืน' : lower.includes('สบู่') ? 'ก้อน' : 'ชิ้น';
+			unit = lower.includes('ผ้าห่ม') ? 'sheet' : lower.includes('สบู่') ? 'bar' : 'piece';
 		} else {
 			category = 'อื่นๆ';
 			unit = 'ชิ้น';
+			unit = 'piece';
 		}
 	});
 
@@ -83,7 +96,7 @@
 			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category,
-			unit: unit.startsWith('--') ? 'ชิ้น' : unit,
+			unit: unit.startsWith('--') ? 'piece' : unit,
 			urgency,
 			description
 		});
@@ -251,6 +264,9 @@
 						<option value="ผืน">ผืน</option>
 						<option value="ก้อน">ก้อน</option>
 						<option value="กก.">กก.</option>
+						{#each availableUnits as u (u.code)}
+							<option value={u.code}>{u.label_th} ({u.code})</option>
+						{/each}
 					</select>
 				</div>
 

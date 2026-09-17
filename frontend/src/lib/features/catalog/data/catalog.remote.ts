@@ -15,6 +15,12 @@ import {
 	isRecipe
 } from '../domain/catalog';
 import {
+	createUnitOfMeasure,
+	isUnitOfMeasure,
+	type UnitOfMeasure,
+	type UnitOfMeasureInput
+} from '../domain/unit-of-measure';
+import {
 	evaluateCategoryDeletion,
 	type CategoryUsageDetails,
 	type DeleteCategoryResult
@@ -50,7 +56,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo;
 	}
 
-	createItemCategory(
+	async createItemCategory(
 		input: ItemCategoryInput,
 		ctx: AuthorContext,
 		shelterCode?: string
@@ -96,7 +102,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return repo.put(touch(itemCategory));
 	}
 
-	createItemMaster(
+	async createItemMaster(
 		input: ItemMasterInput,
 		ctx: AuthorContext,
 		shelterCode?: string
@@ -138,11 +144,18 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	}
 
 	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+		if (itemMaster.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(itemMaster.base_unit.trim())) {
+			throw new Error('Base unit must be a valid lowercase English code');
+		}
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
 		return repo.put(touch(itemMaster));
 	}
 
-	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe> {
+	async createRecipe(
+		input: RecipeInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<Recipe> {
 		const repo = this.getWriteRepo(shelterCode);
 		return repo.put(createRecipe(input, ctx, shelterCode));
 	}
@@ -353,6 +366,58 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			await repo.remove(recipe);
 			return true;
 		}
+	}
+
+	async createUnitOfMeasure(input: UnitOfMeasureInput, ctx: AuthorContext): Promise<UnitOfMeasure> {
+		const doc = createUnitOfMeasure(input, ctx);
+		return this.repo.put(doc);
+	}
+
+	async listUnitsOfMeasure(): Promise<UnitOfMeasure[]> {
+		const items = await this.repo.allByType('unit_of_measure', isUnitOfMeasure);
+		return items.sort((a, b) => {
+			if (typeof a.sort_order === 'number' && typeof b.sort_order === 'number') {
+				return a.sort_order - b.sort_order;
+			}
+			if (typeof a.sort_order === 'number') return -1;
+			if (typeof b.sort_order === 'number') return 1;
+			return a.label_th.localeCompare(b.label_th, 'th');
+		});
+	}
+
+	async listUnitsOfMeasurePaginated(
+		page: number,
+		pageSize: number
+	): Promise<PaginatedResult<UnitOfMeasure>> {
+		const items = await this.listUnitsOfMeasure();
+		return paginate(items, page, pageSize);
+	}
+
+	async getUnitOfMeasure(codeOrId: string): Promise<UnitOfMeasure | null> {
+		const id = codeOrId.startsWith('unit_of_measure:') ? codeOrId : `unit_of_measure:${codeOrId}`;
+		return this.repo.get<UnitOfMeasure>(id);
+	}
+
+	async updateUnitOfMeasure(uom: UnitOfMeasure): Promise<UnitOfMeasure> {
+		if (uom.is_protected) {
+			const existing = await this.getUnitOfMeasure(uom._id);
+			if (existing) {
+				if (existing.code !== uom.code || existing.dimension !== uom.dimension) {
+					throw new Error('Cannot modify code or dimension of a protected unit of measure');
+				}
+			}
+		}
+		return this.repo.put(touch(uom));
+	}
+
+	async deleteUnitOfMeasure(id: string): Promise<boolean> {
+		const uom = await this.getUnitOfMeasure(id);
+		if (!uom) return false;
+		if (uom.is_protected) {
+			throw new Error('Cannot delete system protected unit of measure');
+		}
+		await this.repo.remove(uom);
+		return true;
 	}
 }
 

@@ -5,6 +5,13 @@
 
 // Domain — documents
 export type { Recipe, Ingredient, ItemCategory, ItemMaster } from './domain/catalog';
+export type {
+	Dimension,
+	UnitOfMeasure,
+	UnitOfMeasureInput,
+	UnitOfMeasureUpdateInput,
+	FallbackUnitDef
+} from './domain/unit-of-measure';
 
 // Domain — deletion policy & utilities
 export {
@@ -37,6 +44,19 @@ export {
 	isRecipe
 } from './domain/catalog';
 
+export {
+	// Unit of Measure
+	dimensionSchema,
+	unitCodeSchema,
+	unitOfMeasureInputSchema,
+	unitOfMeasureUpdateSchema,
+	createUnitOfMeasure,
+	isUnitOfMeasure,
+	FALLBACK_UNIT_DEFINITIONS,
+	FALLBACK_UNIT_LABELS,
+	formatUnit
+} from './domain/unit-of-measure';
+
 // Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';
 export { catalogRepository, CATALOG_DB } from './data/catalog.remote';
@@ -65,7 +85,14 @@ export {
 	useRecipe,
 	useCreateRecipe,
 	useUpdateRecipe,
-	useDeleteRecipe
+	useDeleteRecipe,
+	// Units of Measure
+	useUnitsOfMeasure,
+	useUnitsOfMeasurePaginated,
+	useUnitOfMeasure,
+	useCreateUnitOfMeasure,
+	useUpdateUnitOfMeasure,
+	useDeleteUnitOfMeasure
 } from './application/queries';
 
 // UI — feature components

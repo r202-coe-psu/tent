@@ -2,7 +2,7 @@
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit } from '$lib/features/catalog';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance, useLedger } from '$lib/features/operations';
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
@@ -103,8 +103,8 @@
 			name: si.name,
 			category: si.category || 'other',
 			sku: si._id,
-			base_unit: si.unit || 'ชิ้น',
-			unit: si.unit || 'ชิ้น'
+			base_unit: si.unit || 'piece',
+			unit: si.unit || 'piece'
 		}));
 
 		const map = new SvelteMap<
@@ -125,8 +125,8 @@
 				name: im.name,
 				category: im.category,
 				sku: im.sku,
-				base_unit: im.base_unit || 'ชิ้น',
-				unit: im.base_unit || 'ชิ้น'
+				base_unit: im.base_unit || 'piece',
+				unit: im.base_unit || 'piece'
 			});
 		}
 
@@ -275,7 +275,7 @@
 			return `สต็อกพอใช้เพียง ${item.docDays?.toFixed(1)} วัน (น้อยกว่าระยะเวลารอของ)`;
 		}
 		if (item.status === 'WARNING_REORDER') {
-			return `จุดสั่งเติม (${item.reorderLevel.toFixed(1)} ${item.baseUom}) ควรเริ่มทำเรื่องเบิก`;
+			return `จุดสั่งเติม (${item.reorderLevel.toFixed(1)} ${formatUnit(item.baseUom)}) ควรเริ่มทำเรื่องเบิก`;
 		}
 		if (item.status === 'ADEQUATE') {
 			return `สต็อกเพียงพอสำหรับ ${item.docDays?.toFixed(1)} วัน`;
@@ -641,7 +641,7 @@
 															<span class="font-mono">{item.sku}</span>
 															<span>·</span>
 														{/if}
-														<span>หน่วย: {item.baseUom}</span>
+														<span>หน่วย: {formatUnit(item.baseUom)}</span>
 														{#if item.expiryDate}
 															<span>·</span>
 															<span class="text-amber-600 dark:text-amber-400"
@@ -695,21 +695,25 @@
 												<span class="font-mono text-xs font-bold text-foreground">
 													{formatDemand(item.itemDailyDemand)}
 												</span>
-												<span class="text-[9px] text-muted-foreground">{item.baseUom}</span>
+												<span class="text-[9px] text-muted-foreground"
+													>{formatUnit(item.baseUom)}</span
+												>
 											</div>
 											<div class="flex flex-col justify-center border-x border-border/40 px-1">
 												<span class="text-[10px] font-medium text-muted-foreground">สต็อกจริง</span>
 												<span class="font-mono text-xs font-semibold text-foreground">
 													{formatStock(item.physicalStock)}
 												</span>
-												<span class="text-[9px] text-muted-foreground">{item.baseUom}</span>
+												<span class="text-[9px] text-muted-foreground"
+													>{formatUnit(item.baseUom)}</span
+												>
 											</div>
 											<div class="flex flex-col justify-center">
 												<span class="text-[10px] font-medium text-primary">ใช้งานได้จริง</span>
 												<span class="font-mono text-xs font-bold text-primary">
 													{formatStock(item.usableStock)}
 												</span>
-												<span class="text-[9px] text-primary/80">{item.baseUom}</span>
+												<span class="text-[9px] text-primary/80">{formatUnit(item.baseUom)}</span>
 											</div>
 										</div>
 
@@ -721,8 +725,8 @@
 												<span>{getStatusExplanation(item)}</span>
 												{#if item.conversionFactor > 1}
 													<span class="text-[10px] text-muted-foreground/80">
-														1 {item.baseUom} = {item.conversionFactor}
-														{group.standardUom}
+														1 {formatUnit(item.baseUom)} = {item.conversionFactor}
+														{formatUnit(group.standardUom)}
 													</span>
 												{/if}
 											</div>
@@ -786,7 +790,7 @@
 																	<span class="font-mono">{item.sku}</span>
 																	<span>·</span>
 																{/if}
-																<span>หน่วย: {item.baseUom}</span>
+																<span>หน่วย: {formatUnit(item.baseUom)}</span>
 																{#if item.expiryDate}
 																	<span>·</span>
 																	<span class="text-amber-600 dark:text-amber-400"
@@ -833,14 +837,14 @@
 												>
 													<div>
 														{formatDemand(item.itemDailyDemand)}
-														<span class="text-xs font-normal text-muted-foreground"
-															>{item.baseUom}/วัน</span
-														>
+														<span class="text-xs font-normal text-muted-foreground">
+															{formatUnit(item.baseUom)}/วัน
+														</span>
 													</div>
 													{#if item.conversionFactor > 1}
 														<div class="text-[10px] font-normal text-muted-foreground">
-															ตัวแปลง: 1 {item.baseUom} = {item.conversionFactor}
-															{group.standardUom}
+															ตัวแปลง: 1 {formatUnit(item.baseUom)} = {item.conversionFactor}
+															{formatUnit(group.standardUom)}
 														</div>
 													{/if}
 												</td>
@@ -850,9 +854,9 @@
 													class="max-w-[130px] min-w-[100px] p-3.5 text-right font-mono font-semibold whitespace-nowrap text-foreground"
 												>
 													{formatStock(item.physicalStock)}
-													<span class="text-xs font-normal text-muted-foreground"
-														>{item.baseUom}</span
-													>
+													<span class="text-xs font-normal text-muted-foreground">
+														{formatUnit(item.baseUom)}
+													</span>
 												</td>
 
 												<!-- Col 5: Usable stock (with width constraints) -->
@@ -861,7 +865,7 @@
 												>
 													<span class="inline-block rounded-lg bg-primary/10 px-2 py-1">
 														{formatStock(item.usableStock)}
-														{item.baseUom}
+														{formatUnit(item.baseUom)}
 													</span>
 												</td>
 

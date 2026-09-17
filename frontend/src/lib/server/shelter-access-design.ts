@@ -146,6 +146,9 @@ export function buildValidateDocUpdate(code: string): string {
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
+    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
+      throw { forbidden: 'Cannot delete system protected unit of measure' };
+    }
     if (oldDoc && oldDoc.type === 'simulation') {
       var canDeleteSimulation = isRole('shelter_manager');
       if (!canDeleteSimulation) {
@@ -199,7 +202,7 @@ export function buildValidateDocUpdate(code: string): string {
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
-    'item_category', 'item_master', 'recipe',
+    'item_category', 'item_master', 'recipe', 'unit_of_measure',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
@@ -1001,6 +1004,23 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
       if (newDoc.evacuee_id !== oldDoc.evacuee_id) throw { forbidden: 'Cannot change evacuee_id on one-time guard' };
       if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on one-time guard' };
+    }
+  }
+  // item_master base_unit invariant guard
+  if (newDoc.type === 'item_master') {
+    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+      throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+  }
+  // unit_of_measure protected invariant guard
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    if (newDoc._deleted && oldDoc && oldDoc.is_protected) {
+      throw { forbidden: 'Cannot delete system protected unit of measure' };
+    }
+    if (oldDoc && oldDoc.is_protected) {
+      if (oldDoc.code !== newDoc.code || oldDoc.dimension !== newDoc.dimension) {
+        throw { forbidden: 'Cannot modify code or dimension of a protected unit of measure' };
+      }
     }
   }
 }`;

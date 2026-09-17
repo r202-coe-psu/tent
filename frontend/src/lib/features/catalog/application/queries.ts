@@ -27,6 +27,7 @@ import type {
 	Recipe,
 	RecipeInput
 } from '../domain/catalog';
+import type { UnitOfMeasure, UnitOfMeasureInput } from '../domain/unit-of-measure';
 
 export const catalogKeys = {
 	all: ['catalog'] as const,
@@ -49,7 +50,11 @@ export const catalogKeys = {
 	recipes: (shelterCode?: string | null) =>
 		[...catalogKeys.all, 'recipes', shelterCode ?? null] as const,
 	recipesPaginated: (page: number, pageSize: number, shelterCode?: string | null) =>
-		[...catalogKeys.all, 'recipes', { page, pageSize, shelterCode: shelterCode ?? null }] as const
+		[...catalogKeys.all, 'recipes', { page, pageSize, shelterCode: shelterCode ?? null }] as const,
+	unitsofmeasure: () => [...catalogKeys.all, 'unitsofmeasure'] as const,
+	unitsofmeasurePaginated: (page: number, pageSize: number) =>
+		[...catalogKeys.all, 'unitsofmeasure', { page, pageSize }] as const,
+	unitofmeasure: (codeOrId: string) => [...catalogKeys.all, 'unitofmeasure', codeOrId] as const
 };
 
 // Item Categories
@@ -314,8 +319,72 @@ export const useDeleteRecipe = () => {
 	}));
 };
 
+// Units of Measure
+export const useUnitsOfMeasure = () =>
+	createQuery(() => ({
+		queryKey: catalogKeys.unitsofmeasure(),
+		queryFn: () => catalogRepository().listUnitsOfMeasure()
+	}));
+
+export const useUnitsOfMeasurePaginated = (page: () => number, pageSize: () => number) =>
+	createQuery(() => ({
+		queryKey: catalogKeys.unitsofmeasurePaginated(page(), pageSize()),
+		queryFn: () =>
+			catalogRepository().listUnitsOfMeasurePaginated(page(), pageSize()) as Promise<
+				PaginatedResult<UnitOfMeasure>
+			>
+	}));
+
+export const useUnitOfMeasure = (codeOrId: () => string) =>
+	createQuery(() => ({
+		queryKey: catalogKeys.unitofmeasure(codeOrId()),
+		queryFn: () => catalogRepository().getUnitOfMeasure(codeOrId()),
+		enabled: !!codeOrId()
+	}));
+
+export const useCreateUnitOfMeasure = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (input: UnitOfMeasureInput) => {
+			enforceWriteAccess(null);
+			const createdBy = authStore.user?.name || 'unknown';
+			const ctx: AuthorContext = { shelterCode: '', createdBy };
+			return catalogRepository().createUnitOfMeasure(input, ctx);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
+export const useUpdateUnitOfMeasure = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (uom: UnitOfMeasure) => {
+			enforceWriteAccess(null);
+			return catalogRepository().updateUnitOfMeasure(uom);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
+export const useDeleteUnitOfMeasure = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (id: string) => {
+			enforceWriteAccess(null);
+			return catalogRepository().deleteUnitOfMeasure(id);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
 export function startCatalogMasterLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
-	const allowed = ['item_category', 'item_master', 'recipe', 'sop_profile'];
+	const allowed = ['item_category', 'item_master', 'recipe', 'sop_profile', 'unit_of_measure'];
 	const catalogHandle = subscribeDataChanges(queryClient, CATALOG_DB, (type) => {
 		if (allowed.includes(type)) {
 			return [catalogKeys.all];

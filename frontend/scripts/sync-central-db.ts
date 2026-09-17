@@ -24,6 +24,7 @@ import {
 	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -173,6 +174,17 @@ async function syncCatalogAccessDesign(
 ): Promise<'already_current' | 'created' | 'updated'> {
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    if (newDoc._deleted && oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
+      throw({ forbidden: 'Cannot delete system protected unit of measure' });
+    }
+    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
+      if (oldDoc.code !== newDoc.code || oldDoc.dimension !== newDoc.dimension) {
+        throw({ forbidden: 'Cannot modify code or dimension of a protected unit of measure' });
+      }
+    }
+    if (newDoc.type === 'item_master' && newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+      throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+    }
     return;
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
@@ -183,6 +195,9 @@ async function syncCatalogAccessDesign(
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
     if (hasScope && (isManager || isWS)) {
+      if (newDoc.type === 'item_master' && newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+        throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+      }
       return;
     }
   }
@@ -217,6 +232,58 @@ async function syncCatalogAccessDesign(
 		);
 	}
 	return rev ? 'updated' : 'created';
+}
+
+async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; existing: number }> {
+	let created = 0;
+	let existing = 0;
+
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
+
+		if (status === 200) {
+			existing++;
+			if (!dryRun) {
+				const current = data as Record<string, unknown>;
+				// Ensure protected invariants while preserving user modifications
+				await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, {
+					...current,
+					type: 'unit_of_measure',
+					schema_v: 1,
+					code: def.code,
+					dimension: def.dimension,
+					is_protected: true,
+					updated_at: new Date().toISOString()
+				});
+			}
+		} else if (status === 404) {
+			created++;
+			if (!dryRun) {
+				const ts = new Date().toISOString();
+				await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, {
+					_id: docId,
+					type: 'unit_of_measure',
+					schema_v: 1,
+					created_at: ts,
+					updated_at: ts,
+					created_by: 'system',
+					code: def.code,
+					label_th: def.label_th,
+					...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
+					label_en: def.label_en,
+					dimension: def.dimension,
+					is_protected: true,
+					sort_order: def.sort_order,
+					deactivated: false
+				});
+			}
+		} else {
+			throw new Error(`Unexpected HTTP ${status} checking ${docId}`);
+		}
+	}
+
+	return { created, existing };
 }
 
 async function syncThailandLocationIndexes(
@@ -334,6 +401,12 @@ async function main() {
 	// 5. Baseline SOP profile
 	const sopRes = await syncMasterSopBaseline(DRY_RUN);
 	console.log(`  ✓ catalog: sop_profile:master_sphere_baseline (${sopRes})`);
+
+	// 6. Units of Measure Master Data
+	const uomRes = await syncUnitsOfMeasure(DRY_RUN);
+	console.log(
+		`  ✓ catalog: units of measure (${uomRes.created} created/would create, ${uomRes.existing} existing)`
+	);
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');

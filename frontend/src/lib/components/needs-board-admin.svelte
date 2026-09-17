@@ -7,6 +7,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero } from '$lib/utils/qty';
+	import { formatUnit } from '$lib/features/catalog';
 
 	let {
 		items = [],
@@ -126,6 +127,7 @@
 											<span class="text-muted-foreground">
 												จอง: {need.reserved} · คลัง: {need.onHand} / เป้าหมาย: {need.target}
 												{need.unit} ({progressPercent}%)
+												{formatUnit(need.unit)} ({progressPercent}%)
 											</span>
 										</div>
 										<div

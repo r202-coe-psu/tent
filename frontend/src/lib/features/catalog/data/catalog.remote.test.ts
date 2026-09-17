@@ -287,7 +287,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'บะหมี่สำเร็จรูป',
-					base_unit: 'ซอง',
+					base_unit: 'sachet',
 					category: 'อาหารแห้งเฉพาะศูนย์ SH001',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -315,7 +315,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'น้ำดื่มบรรจุขวด',
-					base_unit: 'ขวด',
+					base_unit: 'bottle',
 					category: 'เครื่องดื่ม',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -367,6 +367,84 @@ describe('CatalogRemoteRepository', () => {
 
 			const removed = await repo.getItemCategory(category._id, 'SH001');
 			expect(removed).toBeNull();
+		});
+	});
+
+	describe('UnitOfMeasure & AC-03 validation in repository', () => {
+		it('rejects createItemMaster when base_unit is Thai string (AC-03)', async () => {
+			await expect(
+				repo.createItemMaster(
+					{
+						name: 'ข้าวสารหอมมะลิ',
+						base_unit: 'กิโลกรัม',
+						type_class: 'CONSUMABLE',
+						distribution_type: 'recurring'
+					},
+					ctx
+				)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
+		it('creates and lists units of measure sorted by sort_order', async () => {
+			await repo.createUnitOfMeasure(
+				{
+					code: 'bottle',
+					label_th: 'ขวด',
+					label_en: 'bottle',
+					dimension: 'count',
+					sort_order: 10
+				},
+				ctx
+			);
+
+			await repo.createUnitOfMeasure(
+				{
+					code: 'piece',
+					label_th: 'ชิ้น',
+					label_en: 'pcs',
+					dimension: 'count',
+					sort_order: 1
+				},
+				ctx
+			);
+
+			const list = await repo.listUnitsOfMeasure();
+			expect(list).toHaveLength(2);
+			expect(list[0].code).toBe('piece');
+			expect(list[1].code).toBe('bottle');
+		});
+
+		it('protects is_protected unit of measure from code/dimension modification and deletion', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'kg',
+					label_th: 'กิโลกรัม',
+					label_en: 'kg',
+					dimension: 'mass',
+					is_protected: true
+				},
+				ctx
+			);
+
+			// Updating labels is allowed for protected units
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'กิโลกรัม (แก้ไข)'
+			});
+			expect(updated.label_th).toBe('กิโลกรัม (แก้ไข)');
+
+			// Attempting to change code or dimension must be rejected
+			await expect(
+				repo.updateUnitOfMeasure({
+					...uom,
+					dimension: 'volume'
+				})
+			).rejects.toThrow(/Cannot modify code or dimension of a protected unit of measure/);
+
+			// Attempting to delete must be rejected
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/Cannot delete system protected unit of measure/
+			);
 		});
 	});
 });

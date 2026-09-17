@@ -10,6 +10,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import { untrack, onMount } from 'svelte';
+	import { formatUnit } from '$lib/features/catalog';
 
 	let activeMode = $state<'scan' | 'walkin'>('scan');
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
@@ -18,14 +19,14 @@
 	let bookingRef = $state('DN-582910');
 	let donorName = $state('คุณสมชาย ใจดี');
 	let scannedItems = $state([
-		{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค' },
-		{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง' }
+		{ name: 'น้ำดื่ม', qty: 50, unit: 'pack' },
+		{ name: 'ปลากระป๋อง', qty: 100, unit: 'can' }
 	]);
 
 	// Walk-in data
 	let walkinDonorName = $state('');
 	let walkinDonorPhone = $state('');
-	let walkinItems = $state([{ name: '', qty: 1, unit: 'ชิ้น' }]);
+	let walkinItems = $state([{ name: '', qty: 1, unit: 'piece' }]);
 
 	let scanner: unknown = null;
 	let libReady = $state(false);
@@ -91,8 +92,8 @@
 		bookingRef = decodedText.includes('TX-') ? decodedText : 'DN-' + decodedText.substring(0, 6);
 		donorName = 'คุณสมชาย ใจดี';
 		scannedItems = [
-			{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค' },
-			{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง' }
+			{ name: 'น้ำดื่ม', qty: 50, unit: 'pack' },
+			{ name: 'ปลากระป๋อง', qty: 100, unit: 'can' }
 		];
 		scanState = 'result';
 		if (scanner) {
@@ -114,6 +115,7 @@
 		toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
 		scannedItems.forEach((item) => {
 			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
+			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${formatUnit(item.unit)}`);
 		});
 		scanState = 'idle';
 	}
@@ -131,6 +133,7 @@
 		walkinDonorName = '';
 		walkinDonorPhone = '';
 		walkinItems = [{ name: '', qty: 1, unit: 'ชิ้น' }];
+		walkinItems = [{ name: '', qty: 1, unit: 'piece' }];
 	}
 </script>
 
@@ -260,9 +263,9 @@
 											bind:value={item.qty}
 											class="h-8 w-20 rounded-lg border-primary/50 bg-card px-2 text-right text-xs font-semibold focus:border-primary"
 										/>
-										<span class="w-12 text-2xs font-semibold text-muted-foreground"
-											>{item.unit}</span
-										>
+										<span class="w-12 text-2xs font-semibold text-muted-foreground">
+											{formatUnit(item.unit)}
+										</span>
 									</div>
 								</div>
 							{/each}
@@ -313,7 +316,7 @@
 					<Button
 						variant="outline"
 						size="sm"
-						onclick={() => (walkinItems = [...walkinItems, { name: '', qty: 1, unit: 'ชิ้น' }])}
+						onclick={() => (walkinItems = [...walkinItems, { name: '', qty: 1, unit: 'piece' }])}
 						class="h-7 text-2xs font-bold"
 					>
 						<Plus class="mr-1 h-3 w-3" />
