@@ -2,26 +2,46 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from worker.projectors.occupant import (
     compute_age_range,
     mask_occupant_name,
     project_shelter_occupant,
+    resolve_age,
 )
+
+_CURRENT_YEAR_BE = datetime.now(UTC).year + 543
 
 
 def test_compute_age_range():
     assert compute_age_range(None) == "unknown"
     assert compute_age_range("invalid") == "unknown"
-    assert compute_age_range(0) == "0-4"
-    assert compute_age_range(4) == "0-4"
-    assert compute_age_range(5) == "5-17"
-    assert compute_age_range(17) == "5-17"
-    assert compute_age_range(18) == "18-59"
-    assert compute_age_range(59) == "18-59"
-    assert compute_age_range(60) == "60-69"
-    assert compute_age_range(69) == "60-69"
-    assert compute_age_range(70) == "70+"
-    assert compute_age_range(85) == "70+"
+    assert compute_age_range(0) == "<1"
+    assert compute_age_range(0.5) == "<1"
+    assert compute_age_range(1) == "1-5"
+    assert compute_age_range(5) == "1-5"
+    assert compute_age_range(6) == "6-11"
+    assert compute_age_range(11) == "6-11"
+    assert compute_age_range(12) == "12-19"
+    assert compute_age_range(19) == "12-19"
+    assert compute_age_range(20) == "20-59"
+    assert compute_age_range(59) == "20-59"
+    assert compute_age_range(60) == "60+"
+    assert compute_age_range(85) == "60+"
+
+
+def test_resolve_age_prefers_direct_age():
+    assert resolve_age({"age": 30, "birth_year": _CURRENT_YEAR_BE - 80}) == 30
+
+
+def test_resolve_age_falls_back_to_birth_year():
+    assert resolve_age({"birth_year": _CURRENT_YEAR_BE - 40}) == 40
+
+
+def test_resolve_age_none_when_no_age_data():
+    assert resolve_age({}) is None
+    assert resolve_age({"birth_year": "invalid"}) is None
 
 
 def test_mask_occupant_name():
@@ -52,10 +72,36 @@ def test_project_shelter_occupant_active():
     assert payload["shelter_code"] == "SH001"
     assert payload["occupant_ref"] == "OCC-01HXYZ1234567890ABCDEF"
     assert payload["name_masked"] == "สมชาย ใ."
-    assert payload["age_range"] == "60-69"
+    assert payload["age_range"] == "60+"
     assert payload["gender"] == "male"
     assert payload["care_flags"] == ["bedridden", "diabetic"]
     assert payload["checked_in_at"] is not None
+
+
+def test_project_shelter_occupant_falls_back_to_birth_year():
+    doc = {
+        "_id": "evacuee:03",
+        "type": "evacuee",
+        "first_name": "สมหญิง",
+        "last_name": "ดีใจ",
+        "birth_year": _CURRENT_YEAR_BE - 65,
+        "gender": "female",
+        "current_stay": {"status": "active", "since": "2026-08-10T18:40:00Z"},
+    }
+    payload = project_shelter_occupant(doc, "SH001")
+    assert payload is not None
+    assert payload["age_range"] == "60+"
+
+
+def test_project_shelter_occupant_unknown_without_age_or_birth_year():
+    doc = {
+        "_id": "evacuee:04",
+        "type": "evacuee",
+        "current_stay": {"status": "active", "since": "2026-08-10T18:40:00Z"},
+    }
+    payload = project_shelter_occupant(doc, "SH001")
+    assert payload is not None
+    assert payload["age_range"] == "unknown"
 
 
 def test_project_shelter_occupant_skips_inactive():

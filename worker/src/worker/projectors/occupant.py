@@ -28,15 +28,36 @@ def compute_age_range(age: float | None) -> str:
     except ValueError, TypeError:
         return "unknown"
 
-    if val < 5:
-        return "0-4"
-    if val < 18:
-        return "5-17"
+    if val < 1:
+        return "<1"
+    if val < 6:
+        return "1-5"
+    if val < 12:
+        return "6-11"
+    if val < 20:
+        return "12-19"
     if val < 60:
-        return "18-59"
-    if val < 70:
-        return "60-69"
-    return "70+"
+        return "20-59"
+    return "60+"
+
+
+BIRTH_YEAR_ERA_OFFSET = 543  # ค.ศ. → พ.ศ.
+
+
+def resolve_age(doc: dict[str, Any]) -> float | None:
+    """Registration only ever stores `age` when staff type it in directly (CR-057) —
+    every evacuee otherwise carries `birth_year` (พ.ศ.), so that's the field to fall
+    back to rather than reporting every occupant as "unknown"."""
+    age = doc.get("age")
+    if isinstance(age, (int, float)):
+        return age
+
+    birth_year = doc.get("birth_year")
+    if isinstance(birth_year, (int, float)):
+        current_year_be = datetime.now(UTC).year + BIRTH_YEAR_ERA_OFFSET
+        return current_year_be - birth_year
+
+    return None
 
 
 def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
@@ -75,7 +96,7 @@ def project_shelter_occupant(
     last_name = doc.get("last_name")
     name_masked = mask_occupant_name(first_name, last_name)
 
-    age_range = compute_age_range(doc.get("age"))
+    age_range = compute_age_range(resolve_age(doc))
     gender = doc.get("gender")
 
     special_needs = doc.get("special_needs") or []

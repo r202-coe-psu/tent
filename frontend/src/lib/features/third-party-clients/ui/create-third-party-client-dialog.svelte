@@ -7,10 +7,12 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import {
+		DEFAULT_SCOPES_BY_MODULE,
 		GRANTABLE_SCOPES,
 		PARTNER_MODULES,
 		PARTNER_MODULE_LABEL,
 		SCOPE_LABEL,
+		SENSITIVE_SCOPES,
 		createThirdPartyClientSchema,
 		type CreatedThirdPartyClient,
 		type GrantableScope,
@@ -41,6 +43,11 @@
 	function handleOpenChange(next: boolean) {
 		open = next;
 		if (!next) resetForm();
+	}
+
+	function handleModuleChange(next: string) {
+		moduleName = next as PartnerModule;
+		selectedScopes = [...DEFAULT_SCOPES_BY_MODULE[moduleName]];
 	}
 
 	function toggleScope(scope: GrantableScope, checked: boolean) {
@@ -99,7 +106,7 @@
 				<Label for="tpc-module-name" class="text-sm font-semibold"
 					>Name <span class="text-destructive">*</span></Label
 				>
-				<Select.Root type="single" bind:value={moduleName}>
+				<Select.Root type="single" value={moduleName} onValueChange={handleModuleChange}>
 					<Select.Trigger id="tpc-module-name" class="w-full">
 						{moduleName ? PARTNER_MODULE_LABEL[moduleName] : '-- เลือกหน่วยงาน --'}
 					</Select.Trigger>
@@ -123,12 +130,14 @@
 							/>
 							<span>{SCOPE_LABEL[scope]}</span>
 						</label>
+						{#if SENSITIVE_SCOPES.includes(scope)}
+							<p class="text-xs text-muted-foreground">
+								Grants access to individual occupant records (PDPA-sensitive). Grant only with
+								written approval on file for this module.
+							</p>
+						{/if}
 					{/each}
 				</div>
-				<p class="text-xs text-muted-foreground">
-					<code class="rounded bg-muted px-1">occupancy-pii-read</code> is never grantable here stays
-					denied by default.
-				</p>
 			</div>
 		</div>
 		<div class="flex items-center justify-end gap-2 border-t border-border bg-muted/30 p-4">
