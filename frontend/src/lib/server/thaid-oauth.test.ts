@@ -14,8 +14,10 @@ import {
 	maskPid,
 	buildThaidAuthorizeUrl,
 	resolveThaidLoginUser,
-	exchangeThaidCode
+	exchangeThaidCode,
+	resolveThaidRedirectUri
 } from './thaid-oauth';
+import { env } from '$env/dynamic/private';
 
 describe('thaid-oauth helpers (CR-ThaID)', () => {
 	beforeEach(() => {
@@ -72,6 +74,31 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(parsed.searchParams.get('response_type')).toBe('code');
 			expect(parsed.searchParams.get('scope')).toBe('pid name openid');
 			expect(parsed.searchParams.get('state')).toBe('test-state-token');
+		});
+	});
+
+	describe('resolveThaidRedirectUri', () => {
+		const dummyUrl = new URL('https://shelter.example.com/some/page');
+
+		it('returns configured redirect URI when THAID_OAUTH_REDIRECT_URI is set', () => {
+			(env as Record<string, string | undefined>).THAID_OAUTH_REDIRECT_URI =
+				'https://custom.example.com/callback';
+			(env as Record<string, string | undefined>).THAID_OAUTH_CALLBACK_PATH = undefined;
+			expect(resolveThaidRedirectUri(dummyUrl)).toBe('https://custom.example.com/callback');
+		});
+
+		it('uses THAID_OAUTH_CALLBACK_PATH when redirect URI is not explicitly set', () => {
+			(env as Record<string, string | undefined>).THAID_OAUTH_REDIRECT_URI = undefined;
+			(env as Record<string, string | undefined>).THAID_OAUTH_CALLBACK_PATH = '/custom/thaid/cb';
+			expect(resolveThaidRedirectUri(dummyUrl)).toBe('https://shelter.example.com/custom/thaid/cb');
+		});
+
+		it('defaults to /api/v1/auth/oauth/thaid/callback when neither is set', () => {
+			(env as Record<string, string | undefined>).THAID_OAUTH_REDIRECT_URI = undefined;
+			(env as Record<string, string | undefined>).THAID_OAUTH_CALLBACK_PATH = undefined;
+			expect(resolveThaidRedirectUri(dummyUrl)).toBe(
+				'https://shelter.example.com/api/v1/auth/oauth/thaid/callback'
+			);
 		});
 	});
 

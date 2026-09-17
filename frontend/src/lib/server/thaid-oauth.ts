@@ -63,7 +63,9 @@ export function getThaidOAuthConfig(): {
 export function resolveThaidRedirectUri(url: URL): string {
 	const configured = env.THAID_OAUTH_REDIRECT_URI?.trim();
 	if (configured) return configured;
-	return `${url.origin}/api/v1/auth/oauth/thaid/callback`;
+	const callbackPath = env.THAID_OAUTH_CALLBACK_PATH?.trim() || '/api/v1/auth/oauth/thaid/callback';
+	const normalizedPath = callbackPath.startsWith('/') ? callbackPath : `/${callbackPath}`;
+	return `${url.origin}${normalizedPath}`;
 }
 
 function cookieSecure(): boolean {
