@@ -28,7 +28,7 @@ import {
 	DistributionLogRemoteRepository,
 	type DistributionLogRepository
 } from '../../data/food-supplies';
-import { assertCanPerformFrontlineDistribution } from './auth';
+import { assertCanPerformFrontlineDistribution, assertCanReceivePhysicalStock } from './auth';
 import {
 	ConcurrencyCollisionError,
 	InsufficientPoolQuotaError,
@@ -74,15 +74,13 @@ export interface ClearLoanViaBulkPoolInput {
 
 function assertBulkPoolLedgerReplay(
 	actual: Awaited<ReturnType<OperationsRepository['addLedgerEntry']>>,
-	expected: Awaited<ReturnType<typeof createStockLedger>>,
-	ctx: AuthorContext
+	expected: Awaited<ReturnType<typeof createStockLedger>>
 ): void {
 	if (
 		actual._id !== expected._id ||
 		actual.type !== 'stock_ledger' ||
 		actual.schema_v !== expected.schema_v ||
-		actual.shelter_code !== ctx.shelterCode ||
-		actual.created_by !== ctx.createdBy ||
+		actual.shelter_code !== expected.shelter_code ||
 		actual.reason !== 'receive' ||
 		actual.ref_id !== expected.ref_id ||
 		actual.item_id !== expected.item_id ||
@@ -95,17 +93,12 @@ function assertBulkPoolLedgerReplay(
 	}
 }
 
-function assertBulkPoolReplay(
-	actual: BulkReturnPool,
-	expected: BulkReturnPool,
-	ctx: AuthorContext
-): void {
+function assertBulkPoolReplay(actual: BulkReturnPool, expected: BulkReturnPool): void {
 	if (
 		actual._id !== expected._id ||
 		actual.type !== 'bulk_return_pool' ||
 		actual.schema_v !== expected.schema_v ||
-		actual.shelter_code !== ctx.shelterCode ||
-		actual.created_by !== ctx.createdBy ||
+		actual.shelter_code !== expected.shelter_code ||
 		actual.stock_ledger_id !== expected.stock_ledger_id ||
 		actual.item_id !== expected.item_id ||
 		!parseQty(actual.total_received_qty).eq(expected.total_received_qty) ||
@@ -145,7 +138,7 @@ export async function returnLoanAtCounter(
 	ctx: AuthorContext,
 	deps?: ReturnWorkflowDependencies
 ): Promise<{ log: DistributionLog; ledgerEntryCreated: boolean }> {
-	assertCanPerformFrontlineDistribution(ctx);
+	assertCanReceivePhysicalStock(ctx);
 
 	const parsed = parseQty(input.qty_returned);
 	if (parsed.isNegative() || parsed.isZero()) {
@@ -278,7 +271,7 @@ export async function createBulkReturnPool(
 	ctx: AuthorContext,
 	deps?: ReturnWorkflowDependencies
 ): Promise<BulkReturnPool> {
-	assertCanPerformFrontlineDistribution(ctx);
+	assertCanReceivePhysicalStock(ctx);
 
 	const parsed = parseQty(input.total_received_qty);
 	if (parsed.isNegative() || parsed.isZero()) {
@@ -326,15 +319,15 @@ export async function createBulkReturnPool(
 				`Bulk return pool ${poolId} exists without its physical receipt ${ledgerId}`
 			);
 		}
-		assertBulkPoolLedgerReplay(existingLedger, ledgerEntry, ctx);
-		assertBulkPoolReplay(existingPool, poolDocument, ctx);
+		assertBulkPoolLedgerReplay(existingLedger, ledgerEntry);
+		assertBulkPoolReplay(existingPool, poolDocument);
 		return existingPool;
 	}
 
 	// NONE or LEDGER_ONLY state: attempt to write ledger; recover on conflict
 	try {
 		const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
-		assertBulkPoolLedgerReplay(persistedLedger, ledgerEntry, ctx);
+		assertBulkPoolLedgerReplay(persistedLedger, ledgerEntry);
 	} catch (error) {
 		if (!(error instanceof ConflictError)) {
 			throw error;
@@ -346,11 +339,11 @@ export async function createBulkReturnPool(
 				`ConflictError on ${ledgerId} but existing ledger could not be fetched — unrecoverable state`
 			);
 		}
-		assertBulkPoolLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+		assertBulkPoolLedgerReplay(recoveredLedger, ledgerEntry);
 	}
 
 	const savedPool = await poolRepo.create(poolDocument, ctx);
-	assertBulkPoolReplay(savedPool, poolDocument, ctx);
+	assertBulkPoolReplay(savedPool, poolDocument);
 	return savedPool;
 }
 

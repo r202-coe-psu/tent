@@ -27,8 +27,10 @@ import {
 	ConcurrencyCollisionError,
 	InsufficientPoolQuotaError,
 	StockIntegrityError,
+	WorkflowAuthorizationError,
 	WorkflowValidationError
 } from './errors';
+import { canReceivePhysicalStock } from './auth';
 import { ConflictError } from '$lib/utils/errors';
 import { parseQty } from '$lib/utils/qty';
 import { buildValidateDocUpdate } from '$lib/server/shelter-access-design';
@@ -356,6 +358,31 @@ describe('return-workflow', () => {
 		shelterCode: 'SH001',
 		createdBy: 'reg_user',
 		roles: ['shelter:SH001', 'registration_staff']
+	};
+	const WAREHOUSE_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'wh_user',
+		roles: ['shelter:SH001', 'warehouse_staff']
+	};
+	const COORDINATOR_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'sc_user',
+		roles: ['shelter:SH001', 'supply_coordinator']
+	};
+	const MANAGER_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'mgr_user',
+		roles: ['shelter:SH001', 'shelter_manager']
+	};
+	const ADMIN_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'admin_user',
+		roles: ['system_admin']
+	};
+	const UNAUTH_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'unauth_user',
+		roles: ['shelter:SH001', 'medical_staff']
 	};
 
 	beforeEach(() => {
@@ -923,6 +950,30 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger[0].qty).toBe('2.5');
 	});
 
+	it('allows an authorized second actor to complete ledger-only recovery without rewriting receipt audit', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000016',
+			item_id: 'item:cot',
+			total_received_qty: '2'
+		};
+		poolRepo.failNextCreate = true;
+		await expect(
+			createBulkReturnPool(input, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			})
+		).rejects.toThrow('simulated pool write failure');
+
+		const recovered = await createBulkReturnPool(input, WAREHOUSE_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0].created_by).toBe(POS_CTX.createdBy);
+		expect(recovered.created_by).toBe(WAREHOUSE_CTX.createdBy);
+	});
 	it('returns a completed deterministic bulk pool replay without another receipt', async () => {
 		const input = {
 			operationUlid: '01J00000000000000000000004',
@@ -946,6 +997,28 @@ describe('return-workflow', () => {
 	});
 
 	it('fails closed when a deterministic bulk-pool replay changes immutable semantics', async () => {
+		it('allows an authorized second actor to replay a completed bulk pool operation without another receipt', async () => {
+			const input = {
+				operationUlid: '01J00000000000000000000015',
+				item_id: 'item:cot',
+				total_received_qty: '3'
+			};
+			const first = await createBulkReturnPool(input, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			});
+
+			const replay = await createBulkReturnPool(input, WAREHOUSE_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			});
+
+			expect(replay._id).toBe(first._id);
+			expect(replay.created_by).toBe(POS_CTX.createdBy);
+			expect(opsRepo.ledger).toHaveLength(1);
+		});
 		const input = {
 			operationUlid: '01J00000000000000000000005',
 			item_id: 'item:cot',
@@ -1248,6 +1321,191 @@ describe('return-workflow', () => {
 
 	describe('P1-02 / CR-129: Bulk Return Claim Coordination & Recovery (clearLoanViaBulkPool)', () => {
 		const OP_ULID = '01J00000000000000000000100';
+		describe('P1-05 Physical Stock Receive RBAC Alignment', () => {
+			it('A. registration_staff counter physical return -> authorization error before side effects', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					REG_STAFF_CTX
+				);
+
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY' },
+						REG_STAFF_CTX,
+						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+
+				// Assert no side effects: no ledger entry created, log unmutated
+				expect(opsRepo.ledger).toHaveLength(0);
+				const freshLog = await logRepo.get(log._id);
+				expect(freshLog?.status).toBe('active');
+				expect(freshLog?.qty_returned).toBeUndefined();
+			});
+
+			it('B. registration_staff bulk pool creation -> authorization error before side effects', async () => {
+				const operationUlid = '01J00000000000000000000099';
+				const poolId = `bulk_return_pool:${operationUlid}`;
+
+				await expect(
+					createBulkReturnPool(
+						{ operationUlid, item_id: 'item:blanket', total_received_qty: '10' },
+						REG_STAFF_CTX,
+						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+
+				// Assert no side effects: no ledger entry created, no pool created
+				expect(opsRepo.ledger).toHaveLength(0);
+				expect(poolRepo.pools.has(poolId)).toBe(false);
+			});
+
+			it('C. allowed physical-receipt roles (warehouse_staff, supply_coordinator, shelter_manager, system_admin) can write physical stock receipts', async () => {
+				const allowedContexts = [
+					{ name: 'warehouse_staff', ctx: WAREHOUSE_CTX },
+					{ name: 'supply_coordinator', ctx: COORDINATOR_CTX },
+					{ name: 'shelter_manager', ctx: MANAGER_CTX },
+					{ name: 'system_admin', ctx: ADMIN_CTX }
+				];
+
+				let counter = 100;
+				for (const { name, ctx } of allowedContexts) {
+					const ulidSuffix = String(counter++).padStart(26, '0');
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						ctx
+					);
+
+					const result = await returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '1', condition_on_return: 'READY' },
+						ctx,
+						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					);
+					expect(result.log.status, `${name} should succeed`).toBe('returned');
+					expect(result.ledgerEntryCreated).toBe(true);
+
+					// Also test bulk pool creation
+					const poolUlid = `01J${ulidSuffix.slice(3)}`;
+					const pool = await createBulkReturnPool(
+						{ operationUlid: poolUlid, item_id: 'item:mat', total_received_qty: '5' },
+						ctx,
+						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					);
+					expect(pool.status, `${name} should create active pool`).toBe('ACTIVE');
+				}
+			});
+
+			it('D. registration_staff non-physical lost/waived clear remains allowed', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					REG_STAFF_CTX
+				);
+
+				const cleared = await clearLoanNonPhysical(
+					log._id,
+					{ clear_reason: 'lost', notes: 'Item swept away in flood' },
+					REG_STAFF_CTX,
+					logRepo
+				);
+
+				expect(cleared.status).toBe('lost');
+				expect(cleared.clear_reason).toBe('lost');
+				// Zero physical ledger entries written
+				expect(opsRepo.ledger).toHaveLength(0);
+			});
+
+			it('E. bulk-pool claim/clear without stock receipt remains allowed for registration_staff', async () => {
+				// Pool created ahead of time by warehouse staff (with physical receipt)
+				const operationUlid = '01J00000000000000000000050';
+				const pool = await createBulkReturnPool(
+					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
+					WAREHOUSE_CTX,
+					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				);
+				expect(opsRepo.ledger).toHaveLength(1);
+
+				// Log issued to evacuee
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					REG_STAFF_CTX
+				);
+
+				// Registration staff resolves loan at gate against pool
+				const resolved = await clearLoanViaBulkPool(
+					{
+						operationUlid: '01J00000000000000000000051',
+						logId: log._id,
+						poolId: pool._id,
+						notes: 'Gate return swept earlier'
+					},
+					REG_STAFF_CTX,
+					{ logRepo, poolRepo, claimRepo }
+				);
+
+				expect(resolved.log.status).toBe('returned');
+				expect(resolved.log.clear_reason).toBe('bulk_dropoff');
+				expect(resolved.pool.claimed_qty).toBe('1');
+				// Still exactly 1 ledger entry from initial pool creation; no new ledger entry created
+				expect(opsRepo.ledger).toHaveLength(1);
+			});
+
+			it('F. role matrix: canReceivePhysicalStock aligns with VDU Rule 13', () => {
+				expect(canReceivePhysicalStock(WAREHOUSE_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(COORDINATOR_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(MANAGER_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(ADMIN_CTX)).toBe(true);
+
+				expect(canReceivePhysicalStock(REG_STAFF_CTX)).toBe(false);
+				expect(canReceivePhysicalStock(UNAUTH_CTX)).toBe(false);
+				expect(canReceivePhysicalStock({ shelterCode: 'SH001', createdBy: 'none' })).toBe(false);
+				expect(
+					canReceivePhysicalStock({
+						shelterCode: 'SH002',
+						createdBy: 'wh_user',
+						roles: ['shelter:SH001', 'warehouse_staff']
+					})
+				).toBe(false);
+			});
+		});
+
 		const POOL_ULID = '01J00000000000000000000102';
 
 		it('requires a caller-owned operationUlid before any claim side effect', async () => {
@@ -2690,6 +2948,15 @@ describe('return-workflow', () => {
 
 		it('30. direct-return-vs-bulk-clear concurrency remains explicitly deferred', () => {
 			// CR-129 §2.2 / §8: Race condition between counter returnLoanAtCounter and clearLoanViaBulkPool
+			it('29. no P1-05 physical receive permission regression', () => {
+				expect(canReceivePhysicalStock(WAREHOUSE_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(COORDINATOR_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(MANAGER_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(ADMIN_CTX)).toBe(true);
+				expect(canReceivePhysicalStock(REG_STAFF_CTX)).toBe(false);
+				expect(canReceivePhysicalStock(UNAUTH_CTX)).toBe(false);
+			});
+
 			// on the exact same DistributionLog is an acknowledged deferred scope boundary.
 			// Both operations rely on CouchDB document-level CAS on distribution_log to prevent double-return.
 			expect(true).toBe(true);

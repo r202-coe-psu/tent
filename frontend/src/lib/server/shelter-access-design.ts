@@ -1331,9 +1331,10 @@ export function buildValidateDocUpdate(code: string): string {
     var canManageClaim =
       isRole('registration_staff') ||
       isRole('supply_coordinator') ||
-      isRole('shelter_manager');
+      isRole('shelter_manager') ||
+      isRole('system_admin');
     if (!canManageClaim) {
-      throw { forbidden: 'Only registration staff, supply coordinator, or shelter manager can manage bulk return claims' };
+      throw { forbidden: 'Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims' };
     }
     if (newDoc.schema_v !== 1) {
       throw { forbidden: 'Unsupported bulk_return_claim schema version' };

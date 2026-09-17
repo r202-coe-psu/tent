@@ -62,11 +62,26 @@ export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 }
 
 /**
+ * Checks if the actor is authorized to perform physical stock receipts (StockLedger reason='receive').
+ * Aligned with CouchDB VDU Rule 13 (shelter-access-design.ts §3).
+ * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin.
+ */
+export function canReceivePhysicalStock(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	if (isSystemAdmin(ctx.roles)) return true;
+	return (
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
+	);
+}
+
+/**
  * Checks if the actor is authorized to inspect and receive returns at warehouse (Step 7).
  * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin.
  */
 export function canReceiveWarehouseReturns(ctx: AuthorContext): boolean {
-	return canDispatchTicket(ctx);
+	return canReceivePhysicalStock(ctx);
 }
 
 export function canAllocateTicket(ctx: AuthorContext): boolean {
@@ -121,6 +136,14 @@ export function assertCanPerformFrontlineDistribution(ctx: AuthorContext): void 
 	if (!canPerformFrontlineDistribution(ctx)) {
 		throw new WorkflowAuthorizationError(
 			'Unauthorized: frontline distribution operations require registration_staff, supply_coordinator, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanReceivePhysicalStock(ctx: AuthorContext): void {
+	if (!canReceivePhysicalStock(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: physical stock receipt requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
 		);
 	}
 }
