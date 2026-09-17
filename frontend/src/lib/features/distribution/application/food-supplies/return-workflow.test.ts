@@ -996,29 +996,30 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
 
-	it('fails closed when a deterministic bulk-pool replay changes immutable semantics', async () => {
-		it('allows an authorized second actor to replay a completed bulk pool operation without another receipt', async () => {
-			const input = {
-				operationUlid: '01J00000000000000000000015',
-				item_id: 'item:cot',
-				total_received_qty: '3'
-			};
-			const first = await createBulkReturnPool(input, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			});
-
-			const replay = await createBulkReturnPool(input, WAREHOUSE_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			});
-
-			expect(replay._id).toBe(first._id);
-			expect(replay.created_by).toBe(POS_CTX.createdBy);
-			expect(opsRepo.ledger).toHaveLength(1);
+	it('allows an authorized second actor to replay a completed bulk pool operation without another receipt', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000015',
+			item_id: 'item:cot',
+			total_received_qty: '3'
+		};
+		const first = await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
 		});
+
+		const replay = await createBulkReturnPool(input, WAREHOUSE_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+
+		expect(replay._id).toBe(first._id);
+		expect(replay.created_by).toBe(POS_CTX.createdBy);
+		expect(opsRepo.ledger).toHaveLength(1);
+	});
+
+	it('fails closed when a deterministic bulk-pool replay changes immutable semantics', async () => {
 		const input = {
 			operationUlid: '01J00000000000000000000005',
 			item_id: 'item:cot',
@@ -2946,17 +2947,17 @@ describe('return-workflow', () => {
 			expect(result.claim.status).toBe('COMPLETE');
 		});
 
+		it('29. no P1-05 physical receive permission regression', () => {
+			expect(canReceivePhysicalStock(WAREHOUSE_CTX)).toBe(true);
+			expect(canReceivePhysicalStock(COORDINATOR_CTX)).toBe(true);
+			expect(canReceivePhysicalStock(MANAGER_CTX)).toBe(true);
+			expect(canReceivePhysicalStock(ADMIN_CTX)).toBe(true);
+			expect(canReceivePhysicalStock(REG_STAFF_CTX)).toBe(false);
+			expect(canReceivePhysicalStock(UNAUTH_CTX)).toBe(false);
+		});
+
 		it('30. direct-return-vs-bulk-clear concurrency remains explicitly deferred', () => {
 			// CR-129 §2.2 / §8: Race condition between counter returnLoanAtCounter and clearLoanViaBulkPool
-			it('29. no P1-05 physical receive permission regression', () => {
-				expect(canReceivePhysicalStock(WAREHOUSE_CTX)).toBe(true);
-				expect(canReceivePhysicalStock(COORDINATOR_CTX)).toBe(true);
-				expect(canReceivePhysicalStock(MANAGER_CTX)).toBe(true);
-				expect(canReceivePhysicalStock(ADMIN_CTX)).toBe(true);
-				expect(canReceivePhysicalStock(REG_STAFF_CTX)).toBe(false);
-				expect(canReceivePhysicalStock(UNAUTH_CTX)).toBe(false);
-			});
-
 			// on the exact same DistributionLog is an acknowledged deferred scope boundary.
 			// Both operations rely on CouchDB document-level CAS on distribution_log to prevent double-return.
 			expect(true).toBe(true);
