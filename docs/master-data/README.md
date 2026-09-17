@@ -19,6 +19,7 @@ language: th
 | ---------- | ----------------------------------------------------------------------------- |
 | `registry` | global `master_data` 9 เอกสาร รวมรายการ seed 75 รายการ                        |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                     |
+| `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `item_category` 10, `item_master` 29, `recipe` 6 และ `supply_item` 7          |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                   |
 | `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5 |
@@ -35,6 +36,8 @@ language: th
 - [food-sphere.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/food-sphere.fixture.ts) — Food Sphere standards
 - [replenishment-policy.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/replenishment-policy.fixture.ts) — replenishment policies
 - [app-config.ts](../../frontend/src/lib/features/shared/domain/app-config.ts) — app config defaults
+- [config.fixture.ts](../../frontend/src/lib/features/public-portal/domain/config.fixture.ts) — public portal config defaults
+- [public-portal-config.md](./public-portal-config.md) — รายละเอียดชุดข้อมูล Public Portal config seed ฉบับสมบูรณ์
 
 ### กติกา SSoT
 
@@ -409,7 +412,53 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 | `retention_months_after_close`   |          `3` | retention หลังปิดเคส เดือน       |
 | `fam_search_max_results`         |         `10` | จำนวนผลค้นหา family สูงสุด       |
 
-## 6. รายการที่ไม่ใช่ seeded master data
+## 6. Public portal config seed
+
+`seedPublicPortalConfig()` สร้างเอกสารนี้เฉพาะเมื่อยังไม่มีอยู่ หากมี `config:public_portal` อยู่แล้วจะไม่ overwrite ค่า operator ที่ตั้งไว้ ดูรายละเอียดและคำแปลภาษาอังกฤษฉบับเต็มได้ที่ [public-portal-config.md](./public-portal-config.md)
+
+### 6.1 Document contract
+
+| Field | ค่า seed | ความหมาย |
+| --- | --- | --- |
+| `_id` | `config:public_portal` | singleton ใน `registry` |
+| `type` | `config` | document type |
+| `schema_v` | `1` | config schema |
+| `phone_number` | `""` | ไม่ seed — เว้นว่างไว้รอผู้ดูแลระบบกำหนดค่า |
+| `line_oa_url` | `""` | ไม่ seed — เว้นว่างไว้รอผู้ดูแลระบบกำหนดค่า |
+| `facebook_url` | `""` | ไม่ seed — เว้นว่างไว้รอผู้ดูแลระบบกำหนดค่า |
+| `faqs` | 3 หมวดหมู่ รวม 13 รายการ | `public` (5), `registration` (4), `volunteer` (4) |
+
+### 6.2 Canonical seeded FAQ items
+
+#### `public` — FAQ หน้าเว็บสาธารณะ (5 รายการ)
+
+| ID | Order | คำถาม | สรุปคำตอบ |
+|---|:---:|---|---|
+| `c30b393c-29e8-4a3d-a583-d99a3cf9e34a` | 0 | วิธีการลงทะเบียนขอเข้าพักศูนย์พักพิงต้องทำอย่างไร? | ลงทะเบียนได้ 2 วิธี: หน้าศูนย์พักพิง หรือลงทะเบียนล่วงหน้าผ่านระบบออนไลน์ |
+| `aa67cda9-a91a-4e25-b3c3-236319e03a43` | 1 | ศูนย์พักพิงเปิดรับบริจาคสิ่งของอะไรบ้าง และส่งมอบได้ที่ไหน? | ตรวจสอบรายการขาดแคลนจริงแบบเรียลไทม์ที่หน้าแจ้งบริจาค และส่งมอบที่จุดรับบริจาคกลาง |
+| `e6b05673-b95b-4082-9dec-795e977fee10` | 2 | สามารถนำสัตว์เลี้ยงเข้ามาพักในศูนย์พักพิงได้หรือไม่? | มีโซนดูแลสัตว์เลี้ยงแยกเฉพาะ ขอความร่วมมือนำกรง สายจูง และอาหารสัตว์เลี้ยงมาด้วย |
+| `1fe16114-7187-4995-9db8-60ec542c1cf0` | 3 | ค้นหาข้อมูลญาติหรือคนในครอบครัวที่อยู่ในศูนย์พักพิงอย่างไร? | ค้นหาด้วยชื่อ-สกุลหรือเบอร์โทร ผ่านระบบค้นหาญาติภายใต้มาตรฐาน PDPA |
+| `893b5d08-fecb-45f4-a37f-b65023b3d72e` | 4 | หากเกิดเหตุฉุกเฉินหรือติดค้างในพื้นที่น้ำท่วมสูง ต้องติดต่อใคร? | สายด่วนกู้ชีพ 1669, สายด่วน ปภ. 1784 ตลอด 24 ชม. หรือสายตรงศูนย์ประสานงาน |
+
+#### `registration` — FAQ ระบบลงทะเบียน (4 รายการ)
+
+| ID | Order | คำถาม | สรุปคำตอบ |
+|---|:---:|---|---|
+| `5e454675-5dae-4f29-b78c-6d7d709261b8` | 0 | ต้องใช้เอกสารอะไรบ้างในการลงทะเบียนเข้าพัก? | บัตรประชาชนหรือเอกสารราชการ หากสูญหายเจ้าหน้าที่ช่วยบันทึกข้อมูลเข้าสู่ระบบได้ |
+| `379d26b7-b44f-4235-ad2a-13eea2834fc6` | 1 | สามารถลงทะเบียนล่วงหน้าแทนสมาชิกในครอบครัวได้หรือไม่? | ลงทะเบียนแทนได้ โดยระบุจำนวนและข้อมูลกลุ่มเปราะบางเพื่อเตรียมยา/พื้นที่ |
+| `8363a757-0036-4ca0-a1bf-eae2cc574aa8` | 2 | การลงทะเบียนล่วงหน้าถือเป็นการยืนยันสิทธิ์เตียงทันทีหรือไม่? | สำรองคิวคัดกรอง ยืนยันสิทธิ์เตียงสมบูรณ์เมื่อรายงานตัวและผ่านการคัดกรองหน้าศูนย์ |
+| `4d2d8417-c4e6-4ac3-8229-06f14f1300bc` | 3 | หากมีผู้ป่วยติดเตียงหรือผู้ใช้วีลแชร์ ต้องแจ้งในขั้นตอนใด? | ระบุในกลุ่มเปราะบางขณะลงทะเบียน เพื่อจัดพื้นที่ชั้นล่างและเตรียมอุปกรณ์แพทย์ |
+
+#### `volunteer` — FAQ อาสาสมัคร (4 รายการ)
+
+| ID | Order | คำถาม | สรุปคำตอบ |
+|---|:---:|---|---|
+| `b1d4b33d-bc65-45c5-8e45-d8ac616fc669` | 0 | คุณสมบัติของผู้ที่ต้องการสมัครเป็นอาสาสมัครมีอะไรบ้าง? | อายุ 18 ปีขึ้นไป สุขภาพแข็งแรง งานเฉพาะทาง (แพทย์/พยาบาล/ช่าง) ต้องมีใบวิชาชีพ |
+| `5ef35c15-c779-4ab4-a046-c0851e2ac4a6` | 1 | มีฝ่ายและบทบาทหน้าที่ใดบ้างที่เปิดรับอาสาสมัคร? | ครัวกลาง, คลังพัสดุ, คัดกรองผู้ประสบภัย, ขนย้ายกู้ภัย ปฏิบัติงานเป็นกะ |
+| `c11866ae-6466-4ea8-96e3-c5753cbcdb46` | 2 | อาสาสมัครต้องเตรียมสิ่งของใดมาในวันปฏิบัติหน้าที่? | บัตรประชาชน ยาประจำตัว รองเท้าหุ้มส้น ศูนย์มีเสื้อกั๊ก ป้ายชื่อ PPE และอาหารให้ |
+| `59a4b8af-f337-4a14-9311-2fa27d4bebc9` | 3 | หากต้องการเปลี่ยนหรือยกเลิกกะงานต้องทำอย่างไร? | แจ้งล่วงหน้าอย่างน้อย 6 ชั่วโมงผ่านระบบหรือติดต่อหัวหน้าฝ่ายอาสาสมัคร |
+
+## 7. รายการที่ไม่ใช่ seeded master data
 
 ค่าต่อไปนี้ไม่ถูกสร้างโดย `runMasterSeed()` และห้ามอ้างว่าเป็น default จาก seed จนกว่าจะเพิ่มลง executable source และเอกสารนี้พร้อมกัน:
 
@@ -418,10 +467,10 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 - shelter facility values ที่เป็น enum/schema แต่ไม่ได้สร้างเป็น `master_data` document
 - master-data local override ราย shelter ซึ่งเป็น runtime operation ไม่ใช่ global seed
 
-## 7. Definition of done สำหรับการแก้รายการ seed
+## 8. Definition of done สำหรับการแก้รายการ seed
 
 - รายการในเอกสารตรงกับ source code ครบทุก key, label, default, parent และตัวเลข
-- จำนวนรายการและ document ID ใน §1–§5 ถูกต้องหลังรัน static seed inspection
+- จำนวนรายการและ document ID ใน §1–§6 ถูกต้องหลังรัน static seed inspection
 - ไม่มีรายการ proposal ปะปนในตาราง `Seeded`
 - หากเปลี่ยน persisted shape, `schema_v`, scope, permission หรือ invariant ให้มี schema/CR ที่เกี่ยวข้องก่อน
 - อัปเดต `updated` เป็นวันที่แก้จริง และคงลิงก์ไปยัง executable source ที่เป็นคู่ mirror

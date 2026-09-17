@@ -2,6 +2,7 @@
  * Platform master seed: master_data + config:app + catalog/SOP/food-sphere.
  */
 import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared/domain/app-config';
+import { DEFAULT_PUBLIC_PORTAL_CONFIG } from '$lib/features/public-portal';
 import {
 	enforceOneDefault,
 	masterDocId,
@@ -152,6 +153,30 @@ export async function seedAppConfig(): Promise<void> {
 		type: 'config',
 		schema_v: 1,
 		...APP_CONFIG_DEFAULTS,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	});
+	console.log(`  ✓ registry: ${id} (defaults)`);
+}
+
+export const PUBLIC_PORTAL_CONFIG_DOC_ID = 'config:public_portal';
+
+export async function seedPublicPortalConfig(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+	const id = PUBLIC_PORTAL_CONFIG_DOC_ID;
+	const { status: getStatus } = await couchReq('GET', `/registry/${encodeURIComponent(id)}`);
+	if (getStatus === 200) {
+		console.log(`  · registry: ${id} already present — left as is`);
+		return;
+	}
+
+	await putDoc('registry', {
+		_id: id,
+		type: 'config',
+		schema_v: 1,
+		...DEFAULT_PUBLIC_PORTAL_CONFIG,
 		created_at: ts,
 		updated_at: ts,
 		created_by: 'seed'
@@ -992,6 +1017,7 @@ export async function seedCatalogFoodSphereParameters(
 export async function runMasterSeed(): Promise<MasterLookup> {
 	const master = await seedMasterData();
 	await seedAppConfig();
+	await seedPublicPortalConfig();
 	const itemMasterIdByName = await seedCatalog();
 	await seedCatalogSopRatios();
 	await seedCatalogFoodSphereParameters(itemMasterIdByName);
