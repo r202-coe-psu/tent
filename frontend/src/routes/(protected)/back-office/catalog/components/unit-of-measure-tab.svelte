@@ -67,9 +67,10 @@
 
 	const total = $derived(filteredAll.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const clampedPage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
 
 	const paginatedItems = $derived.by(() => {
-		const start = (currentPage - 1) * PAGE_SIZE;
+		const start = (clampedPage - 1) * PAGE_SIZE;
 		return filteredAll.slice(start, start + PAGE_SIZE);
 	});
 
@@ -419,14 +420,18 @@
 	<!-- Pagination -->
 	{#if totalPages > 1}
 		<div class="mt-2 flex justify-end">
-			<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
+			<Pagination.Root
+				bind:page={() => clampedPage, (p) => (currentPage = p)}
+				count={total}
+				perPage={PAGE_SIZE}
+			>
 				{#snippet children({ pages })}
 					<Pagination.Content>
 						<Pagination.Previous />
 						{#each pages as p, i (i)}
 							<Pagination.Item>
 								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === currentPage} />
+									<Pagination.Link page={p} isActive={p.value === clampedPage} />
 								{:else}
 									<Pagination.Ellipsis />
 								{/if}
