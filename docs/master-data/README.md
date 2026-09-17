@@ -7,15 +7,15 @@ language: th
 
 # Smart Shelter — Master Data Seed SSoT
 
-> **สรุป:** เอกสารนี้เป็นรายการค่าที่ `pnpm seed:master` สร้างจริงสำหรับ registry master data, catalog reference data, SOP/Food Sphere และ app config · รายการที่ไม่อยู่ในเอกสารนี้ไม่ถือว่าเป็นค่า default จาก seed · การเปลี่ยนค่าในเอกสารต้องปรับ executable seed ให้ตรงกันใน change เดียวกัน
+> **สรุป:** เอกสารนี้รวบรวมค่าที่คำสั่ง `pnpm seed:master` สร้างจริงใน registry master data, catalog reference data, SOP/Food Sphere และ app config · รายการที่ไม่มีในเอกสารนี้ไม่ถือว่าเป็นค่าเริ่มต้นจาก seed · หากเปลี่ยนค่าในเอกสาร ต้องเปลี่ยน executable seed ให้ตรงกันในการแก้ไขชุดเดียวกัน
 
 ## ขอบเขตและแหล่งข้อมูล
 
 ### ขอบเขต
 
-`pnpm seed:master` เรียก `runMasterSeed()` และสร้างข้อมูลต่อไปนี้:
+`pnpm seed:master` เรียกใช้ `runMasterSeed()` และสร้างข้อมูลดังนี้:
 
-| พื้นที่    | ผลลัพธ์จาก seed                                                               |
+| พื้นที่    | ข้อมูลที่ seed สร้าง                                                           |
 | ---------- | ----------------------------------------------------------------------------- |
 | `registry` | global `master_data` 9 เอกสาร รวมรายการ seed 75 รายการ                        |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                     |
@@ -24,9 +24,9 @@ language: th
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                   |
 | `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5 |
 
-ข้อมูล shelter, users, evacuees, operations และ daily snapshots ที่สร้างโดย `pnpm seed` อยู่ใน staging seed และไม่รวมอยู่ใน SSoT ฉบับนี้
+ข้อมูล shelter, users, evacuees, operations และ daily snapshots ที่สร้างโดย `pnpm seed` อยู่ใน staging seed จึงไม่รวมอยู่ใน SSoT ฉบับนี้
 
-### Executable sources
+### แหล่งข้อมูลต้นทาง
 
 - [master-defs.ts](../../frontend/scripts/seed/master-defs.ts) — รายการ `registry.master_data`
 - [master-seed.ts](../../frontend/scripts/seed/master-seed.ts) — ลำดับและรูปแบบการสร้าง registry/catalog/config
@@ -39,12 +39,12 @@ language: th
 - [config.fixture.ts](../../frontend/src/lib/features/public-portal/domain/config.fixture.ts) — public portal config defaults
 - [public-portal-config.md](./public-portal-config.md) — รายละเอียดชุดข้อมูล Public Portal config seed ฉบับสมบูรณ์
 
-### กติกา SSoT
+### กติกาของ SSoT
 
 - **DOC-001** — รายการในตาราง `Seeded` ต้องตรงกับ executable source ทุก key, label, default, parent และค่าตัวเลข
-- **DOC-002** — ค่าที่เป็นข้อเสนอหรือรอ owner ยืนยันต้องอยู่ในเอกสารแยก และห้ามปนในตาราง seed
-- **DOC-003** — การเพิ่ม/ลบ/เปลี่ยนค่า seed ต้องอัปเดตเอกสารนี้และ source code ใน change เดียวกัน
-- **DOC-004** — การเปลี่ยน shape, `schema_v`, role, scope หรือ invariant ต้องแก้ technical schema และทำ CR ตาม `docs/change-management.md` ก่อน
+- **DOC-002** — ค่าที่เป็นข้อเสนอหรือยังรอ owner ยืนยัน ต้องแยกไว้ในเอกสารอื่น และห้ามใส่รวมในตาราง seed
+- **DOC-003** — เมื่อเพิ่ม ลบ หรือเปลี่ยนค่า seed ต้องอัปเดตเอกสารนี้และ source code ในการแก้ไขชุดเดียวกัน
+- **DOC-004** — หากเปลี่ยน shape, `schema_v`, role, scope หรือ invariant ต้องแก้ technical schema และทำ CR ตาม `docs/change-management.md` ก่อน
 
 ## 1. Registry master data
 
@@ -62,11 +62,11 @@ language: th
 | จำนวน master types               | 9                                  |
 | จำนวนรายการใน canonical seed set | 75                                 |
 
-Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มี default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่ได้อยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ที่ระบุใน §1.4 ดังนั้นตารางด้านล่างคือ **รายการที่ seed กำหนด** ไม่ใช่ snapshot ของรายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
+Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
-### 1.2 Code และ key
+### 1.2 ความหมายของ code และ key
 
-`SeedItemDef.key` เป็น seed-only key ใช้สำหรับอ้างอิงระหว่างการ seed ส่วน `MasterDataItem.code` คือค่าที่ persist ใน CouchDB
+`SeedItemDef.key` เป็นคีย์ที่ใช้เฉพาะระหว่างการ seed ส่วน `MasterDataItem.code` คือค่าที่บันทึกจริงใน CouchDB
 
 | Master type                                                                                                  | Persisted code                                                |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
@@ -75,7 +75,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `housing_type`                                                                                               | ใช้ key เดิมแบบ stable                                        |
 | `health_condition`, `dietary_restrictions`, `house_damage`, `shelter_type`, `municipality_zone`, `community` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
 
-`community.parent_key` อ้างถึง key ของ `municipality_zone` ระหว่าง seed และถูกแปลงเป็น `parent_code` ของ zone ที่ persist จริง
+`community.parent_key` อ้างถึง key ของ `municipality_zone` ระหว่างการ seed จากนั้นระบบจะแปลงเป็น `parent_code` ของ zone ที่บันทึกจริง
 
 ### 1.3 Canonical seeded items
 
@@ -201,22 +201,22 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `rat_uthit`             | ชุมชนราษฎร์อุทิศ            | `zone_4`   | —       |
 | `hua_phan_rotfai`       | ชุมชนหัวพานรถไฟ             | `zone_4`   | —       |
 
-### 1.4 Migration และ idempotency
+### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
-- Legacy vulnerable-group code `elderly` ถูกย้ายเป็น `elderly_dependent`
-- Legacy vulnerable-group code `disabled` ถูกย้ายเป็น `disability_other`
-- Legacy labels `ผู้สูงอายุ`, `ผู้พิการ` และ `ผู้ป่วยเรื้อรัง` ใช้ช่วยหา target ใหม่ระหว่าง migration
-- รายการ `pet_types` ที่มี code `bird` หรือ label `นก` จะไม่ถูกเก็บเป็น extra
-- รายการ `dietary_restrictions` ที่มี label `มังสวิรัติ` หรือ `อาหารอ่อน` จะไม่ถูกเก็บเป็น extra
-- การ seed ซ้ำ reuse code ของรายการเดิมจาก label เดิม และเก็บรายการเดิมที่ไม่อยู่ใน seed ไว้ตามกติกา
+- code เดิมของกลุ่มเปราะบาง `elderly` จะถูกย้ายเป็น `elderly_dependent`
+- code เดิมของกลุ่มเปราะบาง `disabled` จะถูกย้ายเป็น `disability_other`
+- label เดิม `ผู้สูงอายุ`, `ผู้พิการ` และ `ผู้ป่วยเรื้อรัง` ใช้ช่วยค้นหารายการปลายทางระหว่าง migration
+- รายการ `pet_types` ที่มี code `bird` หรือ label `นก` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
+- รายการ `dietary_restrictions` ที่มี label `มังสวิรัติ` หรือ `อาหารอ่อน` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
+- เมื่อ seed ซ้ำ ระบบจะใช้ code เดิมของรายการที่มี label เดิม และเก็บรายการเดิมที่ไม่มีใน seed ไว้ตามกติกา
 
 ## 2. Catalog seed
 
-ข้อมูลส่วนนี้เป็น reference data ที่ seed ลง `catalog` ไม่ใช่ `registry.master_data`
+ข้อมูลส่วนนี้เป็นข้อมูลอ้างอิงที่ seed ลงใน `catalog` ไม่ใช่ `registry.master_data`
 
 ### 2.1 `item_category`
 
-หมวดหมู่สิ่งของมาตรฐาน 10 รายการ ใช้ `schema_v: 2`, สร้างด้วย `_id` รูปแบบ `item_category:{ulid}` และเก็บชื่อภาษาไทย:
+หมวดหมู่สิ่งของมาตรฐานมี 10 รายการ ใช้ `schema_v: 2` สร้างด้วย `_id` รูปแบบ `item_category:{ulid}` และเก็บชื่อเป็นภาษาไทย:
 
 | `_id`                  | name                           |
 | ---------------------- | ------------------------------ |
@@ -233,7 +233,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 ### 2.2 `item_master`
 
-รายการสิ่งของหลัก 29 รายการ ใช้ `schema_v: 4`, สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
+รายการสิ่งของหลักมี 29 รายการ ใช้ `schema_v: 4` สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
 
 | `_id` | name | category | base_unit | type_class | conversions | inventory / issue uom | storage / shelf life | properties / flags |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -269,7 +269,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 ### 2.3 `recipe`
 
-สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิง 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"`, สร้างด้วย `_id` รูปแบบ `recipe:{ulid}`:
+สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิงมี 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"` และสร้างด้วย `_id` รูปแบบ `recipe:{ulid}`:
 
 | `_id`          | label                    | ingredients                                                  |
 | -------------- | ------------------------ | ------------------------------------------------------------ |
@@ -282,7 +282,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 ### 2.4 `supply_item`
 
-เอกสารพัสดุแบบเดิม 7 รายการ สำหรับ backward compatibility กับโมเดลสต็อก/การบริจาคเดิม:
+เอกสารพัสดุรูปแบบเดิมมี 7 รายการ เพื่อให้ทำงานร่วมกับโมเดลสต็อกและการบริจาคเดิมได้:
 
 | `_id`              | name          | category   | unit     | perishable | reorder level |
 | ------------------ | ------------- | ---------- | -------- | ---------: | ------------: |
@@ -296,7 +296,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 ## 3. SOP ratio seed
 
-Seed สร้าง profile ใน `catalog` ดังนี้:
+การ seed จะสร้าง profile ใน `catalog` ดังนี้:
 
 | รายการ         | ค่า                                  |
 | -------------- | ------------------------------------ |
@@ -311,7 +311,7 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ### `sop_profile.ratios`
 
-ค่าถูก persist เป็น string ตาม strict 20-key schema
+ค่าทั้งหมดจะถูกบันทึกเป็น string ตาม strict 20-key schema
 
 | key                               |    ค่า | หน่วย/ความหมาย          |
 | --------------------------------- | -----: | ----------------------- |
@@ -340,7 +340,7 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ### 4.1 `requirement_group`
 
-ทุกเอกสารมี `schema_v: 1`, `status: active`, `source: SPHERE_BASELINE`, `created_by: system` และวันที่ `2026-07-16`
+เอกสารทุกฉบับมี `schema_v: 1`, `status: active`, `source: SPHERE_BASELINE`, `created_by: system` และวันที่ `2026-07-16`
 
 | `_id` | name | standard_uom | item map |
 | --- | --- | --- | --- |
@@ -350,11 +350,11 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 | `requirement_group:FOOD_FAT` | กลุ่มน้ำมันและไขมัน | `gram` | น้ำมันพืช (`bottle`), factor `900`, share `100%` |
 | `requirement_group:DRINKING_WATER` | กลุ่มน้ำดื่มสะอาด | `liter` | น้ำดื่ม 600 มล. (`bottle`), factor `0.6`, share `70%`<br/>น้ำดื่มถัง 5 ลิตร (`bottle`), factor `5.0`, share `30%` |
 
-> **หมายเหตุ:** ในฐานข้อมูลจริง `item_maps[].item_id` ถูก resolve เป็น `item_master:{ulid}` จริงอัตโนมัติขณะรัน seed ตามชื่อสิ่งของภาษาไทย
+> **หมายเหตุ:** ในฐานข้อมูลจริง ระบบจะ resolve `item_maps[].item_id` เป็น `item_master:{ulid}` ที่ตรงกับรายการจริงโดยอัตโนมัติขณะรัน seed โดยค้นหาจากชื่อสิ่งของภาษาไทย
 
 ### 4.2 `food_sphere_standard`
 
-ทุกเอกสารมี `schema_v: 1`, `effective_date: 2026-07-16`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` (รวม 24 รายการ)
+เอกสารทุกฉบับมี `schema_v: 1`, `effective_date: 2026-07-16`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` รวม 24 รายการ
 
 | `_id` | target segment | requirement group | daily demand | unit |
 | --- | --- | --- | ---: | --- |
@@ -385,7 +385,7 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ### 4.3 `replenishment_policy`
 
-ทุกเอกสารมี `schema_v: 1`, `scope_type: REQUIREMENT_GROUP`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` (รวม 5 รายการ)
+เอกสารทุกฉบับมี `schema_v: 1`, `scope_type: REQUIREMENT_GROUP`, `status: active`, `source: SPHERE_BASELINE` และ `created_by: system` รวม 5 รายการ
 
 | `_id` | target | lead time (วัน) | review period (วัน) | safety (วัน) | min days | max days |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -397,7 +397,7 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ## 5. App config seed
 
-`seedAppConfig()` สร้างเอกสารนี้เฉพาะเมื่อยังไม่มีอยู่ หากมี `config:app` อยู่แล้วจะไม่ overwrite ค่า operator ที่ตั้งไว้
+`seedAppConfig()` จะสร้างเอกสารนี้เมื่อยังไม่มีอยู่เท่านั้น หากมี `config:app` อยู่แล้ว ระบบจะไม่เขียนทับค่าที่ operator ตั้งไว้
 
 | Field                            |  ค่า default | ความหมาย                         |
 | -------------------------------- | -----------: | -------------------------------- |
@@ -414,7 +414,7 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 
 ## 6. Public portal config seed
 
-`seedPublicPortalConfig()` สร้างเอกสารนี้เฉพาะเมื่อยังไม่มีอยู่ หากมี `config:public_portal` อยู่แล้วจะไม่ overwrite ค่า operator ที่ตั้งไว้ ดูรายละเอียดและคำแปลภาษาอังกฤษฉบับเต็มได้ที่ [public-portal-config.md](./public-portal-config.md)
+`seedPublicPortalConfig()` จะสร้างเอกสารนี้เมื่อยังไม่มีอยู่เท่านั้น หากมี `config:public_portal` อยู่แล้ว ระบบจะไม่เขียนทับค่าที่ operator ตั้งไว้ ดูรายละเอียดและคำแปลภาษาอังกฤษฉบับเต็มได้ที่ [public-portal-config.md](./public-portal-config.md)
 
 ### 6.1 Document contract
 
@@ -458,19 +458,19 @@ Seed สร้าง profile ใน `catalog` ดังนี้:
 | `c11866ae-6466-4ea8-96e3-c5753cbcdb46` | 2 | อาสาสมัครต้องเตรียมสิ่งของใดมาในวันปฏิบัติหน้าที่? | บัตรประชาชน ยาประจำตัว รองเท้าหุ้มส้น ศูนย์มีเสื้อกั๊ก ป้ายชื่อ PPE และอาหารให้ |
 | `59a4b8af-f337-4a14-9311-2fa27d4bebc9` | 3 | หากต้องการเปลี่ยนหรือยกเลิกกะงานต้องทำอย่างไร? | แจ้งล่วงหน้าอย่างน้อย 6 ชั่วโมงผ่านระบบหรือติดต่อหัวหน้าฝ่ายอาสาสมัคร |
 
-## 7. รายการที่ไม่ใช่ seeded master data
+## 7. รายการที่ไม่ได้สร้างเป็น seeded master data
 
-ค่าต่อไปนี้ไม่ถูกสร้างโดย `runMasterSeed()` และห้ามอ้างว่าเป็น default จาก seed จนกว่าจะเพิ่มลง executable source และเอกสารนี้พร้อมกัน:
+รายการต่อไปนี้ไม่ได้สร้างโดย `runMasterSeed()` จึงห้ามถือว่าเป็นค่าเริ่มต้นจาก seed จนกว่าจะเพิ่มรายการลงใน executable source และเอกสารนี้พร้อมกัน:
 
 - ตัวเลือก WASH, sanitation และ facility ที่เป็นข้อเสนอ
 - health service, referral reason และ medical catalog groups ที่ยังไม่มี fixture ใน seed
 - shelter facility values ที่เป็น enum/schema แต่ไม่ได้สร้างเป็น `master_data` document
 - master-data local override ราย shelter ซึ่งเป็น runtime operation ไม่ใช่ global seed
 
-## 8. Definition of done สำหรับการแก้รายการ seed
+## 8. เกณฑ์ตรวจสอบเมื่อแก้รายการ seed
 
-- รายการในเอกสารตรงกับ source code ครบทุก key, label, default, parent และตัวเลข
-- จำนวนรายการและ document ID ใน §1–§6 ถูกต้องหลังรัน static seed inspection
-- ไม่มีรายการ proposal ปะปนในตาราง `Seeded`
-- หากเปลี่ยน persisted shape, `schema_v`, scope, permission หรือ invariant ให้มี schema/CR ที่เกี่ยวข้องก่อน
-- อัปเดต `updated` เป็นวันที่แก้จริง และคงลิงก์ไปยัง executable source ที่เป็นคู่ mirror
+- รายการในเอกสารต้องตรงกับ source code ทุก key, label, default, parent และค่าตัวเลข
+- จำนวนรายการและ document ID ใน §1–§6 ต้องถูกต้องหลังรัน static seed inspection
+- ห้ามมีรายการ proposal ปะปนอยู่ในตาราง `Seeded`
+- หากเปลี่ยน persisted shape, `schema_v`, scope, permission หรือ invariant ต้องมี schema/CR ที่เกี่ยวข้องก่อน
+- อัปเดต `updated` เป็นวันที่แก้ไขจริง และคงลิงก์ไปยัง executable source ที่เป็นคู่ mirror
