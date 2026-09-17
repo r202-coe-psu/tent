@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-16
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users
+updated: 2026-09-17
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog
 ---
 
 # Database Schema v5 — field-level
@@ -1368,9 +1368,9 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `capacity_kg` | qty_str>0 | conditional req | เมื่อเป็น FUEL_ENERGY; น้ำหนักแก๊สมาตรฐานต่อถัง |
 | `burn_rate_kg_per_hour` | qty_str>0 | conditional req | เมื่อเป็น FUEL_ENERGY; อัตราสิ้นเปลืองมาตรฐาน (kg/ชม.) |
 | `time_multiplier` | qty_str>0 | conditional opt | เมื่อเป็น FUEL_ENERGY; default `"1"` |
-| `conversions` | [{`uom_name`:str, `multiplier`:qty_str>0, `barcode`:str?}] | opt | หน่วยทวีคูณสำหรับรับ/จ่ายล็อตใหญ่ |
-| `default_inventory_uom` | str | opt | หน่วยรายงานสต็อกหลัก |
-| `default_issue_uom` | str | opt | หน่วยเริ่มต้นตอนเบิกจ่าย |
+| `conversions` | [{`uom_name`:str, `multiplier`:qty_str>0, `barcode`:str?}] | opt | หน่วยทวีคูณสำหรับรับ/จ่ายล็อตใหญ่ (ชื่อบรรจุภัณฑ์ เช่น "กล่อง 24 ขวด" หรือ UOM code) |
+| `default_inventory_uom` | str | opt | หน่วยรายงานสต็อกหลัก (อ้างอิง `unit_of_measure.code` หรือ `uom_name`; default = `base_unit`) |
+| `default_issue_uom` | str | opt | หน่วยเริ่มต้นตอนเบิกจ่าย (อ้างอิง `unit_of_measure.code` หรือ `uom_name`; default = `base_unit`) |
 | `distribution_type` | enum(`recurring`,`one_time`) | opt | `recurring` = แจกซ้ำได้ตามรอบ; `one_time` = แจกครั้งเดียวต่อคน |
 | `type_class` | enum(`CONSUMABLE`,`DURABLE`,`EQUIPMENT`) | req | ชั้นสินค้า; ใช้ `default_class` จาก category เป็นค่าเริ่มต้นแต่ override ได้ |
 | `shelf_life_days` | num | opt | อายุการจัดเก็บ |
@@ -1387,17 +1387,38 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 **FUEL_ENERGY contract (CR-120):** เมื่อ `category = item_category:fuel_energy` ให้ล็อค
-`base_unit = "cylinder"` และซ่อน/ไม่ persist ฟิลด์อาหารหรือการกระจายที่ไม่เกี่ยวข้อง
+`base_unit = "cylinder"` (แก้ไขจากเดิม `"ถัง"` ตาม CR-125) และซ่อน/ไม่ persist ฟิลด์อาหารหรือการกระจายที่ไม่เกี่ยวข้อง
 (`shelf_life_days`, `storage_type`, `allergens`, `dietary`, `target_gender`, `age_group`,
 `qty_per_person`, `returnable`, `asset_status`). `fuel_type` ต้องเป็น `LPG`; `capacity_kg`
 และ `burn_rate_kg_per_hour` ต้องมากกว่า 0; `time_multiplier` default เป็น `"1"`.
 
-**Migration/compatibility (CR-119/120):** `item_master` ใช้ `schema_v 4` ตาม CR-082/084;
-การเพิ่ม canonical category ID และ LPG fields เป็น additive ต่อ v4 ไม่ bump version เพิ่ม
+**Migration/compatibility (CR-119/120/125):** `item_master` ใช้ `schema_v 4` ตาม CR-082/084;
+การเพิ่ม canonical category ID, LPG fields และ canonical UOM code เป็น additive ต่อ v4 ไม่ bump version เพิ่ม
 และ documents เดิมยังอ่านได้.
-การสร้างหรือแก้ไขใหม่ของหมวด FUEL_ENERGY ต้องเขียนค่า LPG fields ครบและเก็บ `category` เป็น ID.
-อาหารปรุงสำเร็จใหม่ต้องเป็น `ItemMaster` รายชนิดภายใต้ `category: item_category:ready_meal`
-และ `type_class: CONSUMABLE` ตาม CR-121.
+
+- **Legacy Base Unit Compatibility Matrix:**
+  ค่า `base_unit` ภาษาไทยดั้งเดิมและรหัสใหม่แมปตามตารางด้านล่าง. ฟังก์ชัน `formatUnit` รองรับการอ่านทั้งรหัสสากลและข้อความภาษาไทย legacy ตลอดอายุระบบ โดยไม่ต้องบังคับ batch rewrite:
+
+  | Legacy Thai `base_unit` | Canonical `unit_of_measure.code` | แสดงผลภาษาไทย (`formatUnit`) |
+  | --- | --- | --- |
+  | `ชิ้น` | `piece` | ชิ้น |
+  | `ถัง` | `cylinder` | ถัง |
+  | `กรัม` | `g` | กรัม |
+  | `กิโลกรัม` | `kg` | กิโลกรัม |
+  | `มิลลิลิตร` | `ml` | มิลลิลิตร |
+  | `ลิตร` | `l` | ลิตร |
+  | `กล่อง` | `box` | กล่อง |
+  | `แพ็ค` / `แพค` | `pack` | แพ็ค |
+  | `ขวด` | `bottle` | ขวด |
+  | `กระป๋อง` | `can` | กระป๋อง |
+  | `ซอง` | `sachet` | ซอง |
+  | `แผง` / `เม็ด` | `tablet` | เม็ด |
+  | `ชุด` | `set` | ชุด |
+
+- **Write Path Policy:** การสร้าง `ItemMaster` ใหม่ต้องใช้ canonical `base_unit` ตาม `unit_of_measure.code` (regex `^[a-z][a-z0-9_]{0,15}$`). การอัปเดตเอกสารเดิมอนุญาตให้คงค่า legacy หรือปรับเป็นรหัส canonical ได้ เพื่อไม่บล็อกการแก้ไขฟิลด์อื่น.
+- **FUEL_ENERGY Amendment (CR-125 amends CR-120):** ล็อค `base_unit = "cylinder"` สำหรับแก๊ส LPG (แทนภาษาไทย `"ถัง"`) เพื่อให้เป็นไปตามระบบรหัสสากล โดย UI แสดงผลเป็น `"ถัง"` อัตโนมัติผ่าน `formatUnit`.
+- การสร้างหรือแก้ไขใหม่ของหมวด FUEL_ENERGY ต้องเขียนค่า LPG fields ครบและเก็บ `category` เป็น ID.
+- อาหารปรุงสำเร็จใหม่ต้องเป็น `ItemMaster` รายชนิดภายใต้ `category: item_category:ready_meal` และ `type_class: CONSUMABLE` ตาม CR-121.
 
 ### 4.3 `recipe` — `recipe:{ulid}` · **schema_v 4** (ขยาย field)
 
@@ -1407,7 +1428,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `label` | str | req | ชื่อแสดงผลภาษาไทย เช่น "ข้าวไข่เจียว" |
-| `ingredients` | [{`item_master_id`:str, `quantity`:qty_str>0, `uom`:str}] | req | รายการวัตถุดิบและปริมาณ; `item_master_id` → `item_master:{sku\|ulid}` |
+| `ingredients` | [{`item_master_id`:str, `quantity`:qty_str>0, `uom`:str}] | req | รายการวัตถุดิบและปริมาณ; `item_master_id` → `item_master:{sku\|ulid}`; `uom` สอดคล้องกับ `base_unit` หรือ packaging (out-of-scope สำหรับ CR-125) |
 | `standard_portions` | qty_str>0 | req | จำนวนที่ผลิตได้ต่อหนึ่งรอบประกอบอาหาร |
 | `standard_duration_hours` | qty_str>0 | req | ระยะเวลาปรุงในหน่วยชั่วโมง |
 | `deactivated` | bool | opt | default `false`; ถ้า `true` คือปิดการใช้งาน ไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่ |
@@ -1560,13 +1581,17 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 
 ### 4.9 `unit_of_measure` — `unit_of_measure:{code}` · **schema_v 1** (CR-125)
 
-หน่วยนับเป็น master data ระดับส่วนกลางในฐานข้อมูล `catalog` และ replicate ลงอุปกรณ์แบบ read-only.
+หน่วยนับเป็น master data ระดับส่วนกลางในฐานข้อมูล `catalog` เท่านั้น และ replicate ลงอุปกรณ์แบบ read-only.
 เอกสารระบบที่ seed จาก `FALLBACK_UNIT_DEFINITIONS` ใช้ deterministic ID ตาม `code` และกำหนด
 `is_protected: true`; หน่วยที่ผู้ดูแลระบบสร้างเองกำหนด `is_protected: false` ได้.
 
+**Write boundary & Authorization:**
+- **Central Catalog (`catalog` DB):** เป็น Source of Record เดียว. การเขียน/แก้ไข master data ทำได้เฉพาะบทบาท `system_admin` ที่ระดับ Application; CouchDB transport อนุญาตเฉพาะ user ที่มี role `system_admin` หรือ `_admin` session bypass.
+- **Shelter Database (`shelter_{shelter_code}` DB):** **ปฏิเสธการเขียน `unit_of_measure` ทุกกรณี** (`doc type not allowed yet: unit_of_measure`) โดย shelter client อ่านผ่าน catalog replica ตาม endpoint policy เท่านั้น เพื่อป้องกันไม่ให้ข้อมูล master แต่ละศูนย์แตกแถว.
+
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `code` | str | req | lowercase `[a-z][a-z0-9_]{0,15}`; เป็นส่วนท้ายของ `_id` และใช้เป็นค่าที่อ้างอิงจาก `item_master.base_unit` |
+| `code` | str | req | lowercase `[a-z][a-z0-9_]{0,15}`; deterministic primary key suffix (`unit_of_measure:{code}`) และ immutable สำหรับทุกเอกสาร |
 | `label_th` | str | req | ชื่อหน่วยภาษาไทย; ห้ามว่างเปล่า |
 | `label_th_short` | str | opt | ชื่อย่อภาษาไทย เช่น `กก.` หรือ `มล.` |
 | `label_en` | str | req | ชื่อหน่วยภาษาอังกฤษ/สัญลักษณ์; ห้ามว่างเปล่า |
@@ -1575,12 +1600,14 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `sort_order` | num | opt | ลำดับแสดงผลในรายการหน่วย |
 | `deactivated` | bool | opt | default `false`; หน่วยที่ปิดใช้งานไม่ควรปรากฏในตัวเลือกใหม่ |
 
-**Protected UOM invariants:**
-- หน่วยที่มี `is_protected: true` ห้ามลบ
-- `code` และ `dimension` ของหน่วย protected ห้ามเปลี่ยน
-- การอัปเดตหน่วย protected ต้องคง `is_protected: true`; ห้ามเปลี่ยนจาก `true` เป็น `false`
-- การแก้ `label_th`, `label_th_short`, `label_en`, `sort_order` หรือ `deactivated` ทำได้ตามสิทธิ์
-  `system_admin` โดยต้องคง invariants ข้างต้น
+**Universal Invariants (บังคับกับทุก `unit_of_measure`):**
+- **Immutable Code:** ฟิลด์ `code` เป็น immutable ห้ามแก้ไขในทุกกรณี (`oldDoc.code !== newDoc.code` จะถูก reject) เนื่องจาก `code` สัมพันธ์โดยตรงกับ `_id` และถูกใช้เป็น foreign-key reference ใน `item_master.base_unit`. หากต้องการเปลี่ยนรหัส ให้สร้างหน่วยใหม่และตั้งค่าหน่วยเดิมเป็น `deactivated: true`.
+
+**Protected UOM Invariants (เมื่อ `oldDoc.is_protected === true`):**
+- **ห้ามลบ:** ปฏิเสธการลบ (`newDoc._deleted === true`) ด้วย `Cannot delete system protected unit of measure`
+- **Immutable Code & Dimension:** ปฏิเสธการแก้ `code` หรือ `dimension` ด้วย `Cannot modify code or dimension of a protected unit of measure`
+- **ห้ามปลดสถานะ Protected:** หากคำขออัปเดตส่ง `newDoc.is_protected !== true` (ตรวจตรงเงื่อนไข `oldDoc.type === 'unit_of_measure' && oldDoc.is_protected === true && newDoc.is_protected !== true`) จะถูกปฏิเสธด้วย `Cannot unprotect a system protected unit of measure`
+- **ฟิลด์ที่อนุญาตให้แก้ไข:** `system_admin` สามารถแก้ไข `label_th`, `label_th_short`, `label_en`, `sort_order` หรือ `deactivated` ได้ โดยต้องคง invariants ข้างต้นทั้งหมด
 
 **Canonical seed set:**
 
@@ -1595,8 +1622,8 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 `schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้.
 
 **Migration/compatibility (CR-125):** เพิ่ม doc type ใหม่แบบ additive ที่ `schema_v: 1`; ไม่ต้อง bump
-`schema_v` ของ `item_master` หรือย้ายข้อมูลเดิม. ค่า `item_master.base_unit` เดิมยังอ่านได้ และ
-`formatUnit` รองรับทั้ง UOM code ใหม่กับ label ภาษาไทย legacy.
+`schema_v` ของ `item_master` หรือย้ายข้อมูลเดิม. ค่า `item_master.base_unit` เดิมที่เป็นภาษาไทยยังคงอ่านได้ตลอดอายุระบบ
+ผ่านตาราง mapping ใน §4.2 และฟังก์ชัน `formatUnit` รองรับทั้งรหัสภาษาอังกฤษและข้อความภาษาไทย legacy.
 
 **Index & Views:**
 - Primary Key lookup: `unit_of_measure:{code}`
@@ -1843,7 +1870,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 9. `food_sphere_standard`, `requirement_group`, `replenishment_policy` ใน `catalog` (`source=SPHERE_BASELINE`) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin`; ใน `shelter_*` (`source=SHELTER_OVERRIDE`) เขียน/แก้ไขได้เฉพาะบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database
 10. CR-059 request/batch บังคับ role และ transition graph ตาม §2.21–2.22; `distribution_issue` และ `distribution_issue_idempotency` เป็น append-only. Coordination record ตรวจ identity และโครงสร้าง `pending_claims` ตามชนิดเอกสาร
 11. `item_category` ที่ `is_protected=true` ห้ามลบ; `system_key`, `default_class` และ `is_protected` immutable และแก้ `name`/`description` ได้เฉพาะ `system_admin` ตาม CR-119
-12. `unit_of_measure` ใน `catalog` ที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `code`/`dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false`; การเขียน master ทำได้เฉพาะ `system_admin` ตาม CR-125
+12. `unit_of_measure` ใน `catalog`: `code` เป็น immutable สำหรับทุกเอกสาร; เอกสารที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false` (ตรวจตรงเงื่อนไข `oldDoc.type === 'unit_of_measure' && oldDoc.is_protected === true && newDoc.is_protected !== true`). การเขียน master ทำได้เฉพาะบทบาท `system_admin` ที่ระดับ Application (CouchDB transport อนุญาต role `system_admin` หรือ `_admin` bypass) ตาม CR-125; ฐานข้อมูล `shelter_*` ไม่อนุญาตให้เขียน `unit_of_measure` เด็ดขาด
 13. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
 14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
 15. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
