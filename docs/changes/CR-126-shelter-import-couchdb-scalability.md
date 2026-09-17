@@ -1,12 +1,12 @@
 ---
-id: draft
+id: CR-126
 extends: CR-123
 title: ป้องกัน CouchDB ค้างเมื่อนำเข้าศูนย์พักพิงจำนวนมาก
-status: proposed
+status: approved
 date: 2026-09-16
 updated: 2026-09-17
 requested_by: Dev Team B
-decided_by: รอเจ้าของโครงการอนุมัติ
+decided_by: เจ้าของโครงการอนุมัติ
 layer: volatile
 scope:
   in_scope:
@@ -58,7 +58,7 @@ affects:
 > **สรุป (TL;DR)**
 >
 > - **สาเหตุของอาการค้างยืนยันแล้ว:** CouchDB container ใช้ `ulimit -n` ค่า default ของ Docker คือ `1024` เมื่อนำเข้าถึงศูนย์ที่ ~50 file descriptor เต็ม CouchDB ตอบ `EMFILE` และหยุดรับ connection — **ไม่ใช่** ผลจาก query pattern
-> - **แก้แล้ว (ระยะที่ 0):** ตั้ง `ulimits.nofile = 65536` ให้ service `couchdb` ใน compose ทุก variant ตาม [CouchDB performance docs](https://docs.couchdb.org/en/stable/maintenance/performance.html)
+> - **แนวทางแก้ไข (ระยะที่ 0):** ตั้ง `ulimits.nofile = 65536` ให้ service `couchdb` ใน compose ทุก variant ตาม [CouchDB performance docs](https://docs.couchdb.org/en/stable/maintenance/performance.html)
 > - **ไม่ทำในรอบนี้:** ระยะที่ 1–2 (แก้ query O(N²) และแยก job/item ไป `shelter_import_queue`) **เลื่อนออกทั้งหมด** — ยังเป็นปัญหา scalability จริงแต่คนละเรื่องกับ file descriptor; บทวิเคราะห์คงไว้ในเอกสารนี้เพื่อใช้เป็นฐานของ change ถัดไป
 > - **dev ต้อง build อะไร:** แก้ `ulimits.nofile` ในไฟล์ Docker Compose ตาม FR-0-1 (ภายใต้ข้อจำกัด FR-0-2, FR-0-3) และเพิ่ม runbook ตาม FR-0-5 — **ไม่มีการแก้โค้ด**
 > - **กระทบ:** compose ทุก variant; ไม่กระทบ `schema_v`, field ของ doc ใด หรือ API contract
@@ -226,7 +226,7 @@ services:
 
 เพิ่ม `frontend/src/lib/server/shelter-import-queue-design.ts` เพื่อสร้าง design doc ใน `shelter_import_queue` โดยต้องมี version แยกจาก `registry` และ deploy แบบ read-modify-write พร้อม `_rev` เช่นเดียวกับ design doc อื่น
 
-การตั้งชื่อต้องตาม convention ของโครงการ (`.claude/skills/couchdb-bestpractices/SKILL.md` §View Naming and Query Conventions) ซึ่งแยกหน้าที่ของ design doc ออกจากกัน:
+การตั้งชื่อต้องตาม convention ของโครงการ (`.agents/skills/couchdb-bestpractices/SKILL.md` §View Naming and Query Conventions) ซึ่งแยกหน้าที่ของ design doc ออกจากกัน:
 
 | Design doc | เก็บอะไร | หมายเหตุ |
 |---|---|---|
@@ -527,3 +527,4 @@ Redis ไม่อยู่ใน change นี้ เพราะไม่แ�
 - 2026-09-17 — proposed: ย้าย FR-0-4 (server-side item logging) ออกจากระยะที่ 0 ไประยะที่ 1–2 เพราะต้องแก้โค้ดและอ้าง `job_id`/`item_id` ของ CR-123 ที่ยังไม่ implement — ขัดกับหลักการ "ระยะที่ 0 ไม่แก้โค้ด"; สงวนหมายเลข FR-0-4 ไม่นำกลับมาใช้ซ้ำ
 - 2026-09-17 — proposed: เปลี่ยนเกณฑ์ตรวจรับระยะที่ 0 จาก "นำเข้า 1,000 แถว" เป็น ">50 ศูนย์ (70–100)" เพราะเส้นทางนำเข้าปัจจุบัน (browser loop ของ CR-039) ติด HTTP timeout ก่อนถึงเพดาน descriptor จึงพิสูจน์ระยะที่ 0 ไม่ได้
 - 2026-09-17 — proposed: ย้าย runbook ของ FR-0-5 จาก `deployment/` เป็น `docs/sop/couchdb-file-descriptors.md` เพราะ `deployment/` เป็น data directory บน host ที่ compose mount จาก `../deployment/` ไม่ได้อยู่ใน repo
+- 2026-09-17 — approved: เจ้าของโครงการอนุมัติลด scope เหลือระยะที่ 0 เท่านั้น และกำหนดหมายเลขเป็น CR-126
