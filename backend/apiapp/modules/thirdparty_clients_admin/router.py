@@ -15,7 +15,7 @@ from .use_case import ThirdPartyClientsAdminUseCase, get_thirdparty_clients_admi
 
 router = APIRouter(
     prefix="/v1/admin/thirdparty-clients",
-    tags=["Third-party Clients Admin"],
+    tags=["External"],
     dependencies=[Depends(verify_external_secret)],
 )
 

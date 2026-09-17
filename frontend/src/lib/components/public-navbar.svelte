@@ -18,6 +18,7 @@
 
 	import { onMount } from 'svelte';
 	// import * as Select from '$lib/components/ui/select';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
 	// import { SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
@@ -95,6 +96,10 @@
 			alertsMenuOpen = false;
 			donationsMenuOpen = false;
 		}
+	}
+
+	function closeMobileMenu() {
+		mobileMenuOpen = false;
 	}
 
 	function toggleDonationsMenu() {
@@ -223,15 +228,14 @@
 			-->
 
 			<button
+				type="button"
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
 				onclick={toggleMobileMenu}
-				aria-label="Toggle mobile menu"
+				aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+				aria-expanded={mobileMenuOpen}
+				aria-controls="public-mobile-nav"
 			>
-				{#if mobileMenuOpen}
-					<X class="h-6 w-6" />
-				{:else}
-					<Menu class="h-6 w-6" />
-				{/if}
+				<Menu class="h-6 w-6" />
 			</button>
 		</div>
 
@@ -597,17 +601,20 @@
 		</div>
 	{/if}
 
-	<!-- Compact menu dropdown (phone + tablet) -->
-	{#if mobileMenuOpen}
-		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg lg:hidden">
-			<nav class="flex flex-col gap-2 p-4">
+	<!-- Compact menu sheet (phone + tablet) -->
+	<Sheet.Root bind:open={mobileMenuOpen}>
+		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
+			<Sheet.Header class="border-b p-4 pr-14">
+				<Sheet.Title>เมนู</Sheet.Title>
+			</Sheet.Header>
+			<nav class="flex flex-col gap-1 p-4">
 				<button
 					type="button"
 					onclick={() => {
-						mobileMenuOpen = false;
+						closeMobileMenu();
 						alertsMenuOpen = true;
 					}}
-					class="flex items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+					class="flex min-h-11 items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
 				>
 					<div class="flex items-center gap-3">
 						<Bell class="h-5 w-5 text-sky-600" />
@@ -621,8 +628,8 @@
 				</button>
 				<a
 					href={resolve('/')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -632,8 +639,8 @@
 
 				<a
 					href={resolve('/shelters')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
 						'/shelters'
 					)
 						? 'bg-primary-muted text-primary'
@@ -645,8 +652,8 @@
 
 				<a
 					href={resolve('/search')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
 						'/search'
 					)
 						? 'bg-primary-muted text-primary'
@@ -658,8 +665,8 @@
 
 				<a
 					href={resolve('/pre-register')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
 						'/pre-register'
 					)
 						? 'bg-primary-muted text-primary'
@@ -671,8 +678,8 @@
 
 				<a
 					href={resolve('/donations')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isDonatePage()
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isDonatePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -682,8 +689,8 @@
 
 				<a
 					href={resolve('/donations/track')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isTrackPage()
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isTrackPage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -735,8 +742,8 @@
 
 				<a
 					href={resolve('/login')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
 						'/login'
 					)
 						? 'bg-primary-muted text-primary'
@@ -746,8 +753,8 @@
 					{t.backoffice}
 				</a>
 			</nav>
-		</div>
-	{/if}
+		</Sheet.Content>
+	</Sheet.Root>
 </header>
 
 <PublicEmergencyModal bind:open={alertsModalOpen} {announcements} />

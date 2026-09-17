@@ -63,7 +63,7 @@ async def _request_token(
     grant_type: str = "client_credentials",
 ):
     return await client.post(
-        "/api/auth/token-third-party",
+        "/external/token",
         json={"grant_type": grant_type, "client_id": client_id, "client_secret": client_secret},
     )
 
@@ -88,7 +88,7 @@ async def test_scope_comes_from_db_not_request_body(
 ) -> None:
     """`grant_type`/`client_id`/`client_secret` are the only accepted fields — no scope override."""
     response = await client.post(
-        "/api/auth/token-third-party",
+        "/external/token",
         json={
             "grant_type": "client_credentials",
             "client_id": active_client.client_id,

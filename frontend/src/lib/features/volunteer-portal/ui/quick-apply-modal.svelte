@@ -116,7 +116,7 @@
 		const injected = window.__captchaToken || '';
 		if (injected) return injected;
 		if (!captchaEnabled) return '';
-		if (window.grecaptcha) {
+		if (window.grecaptcha?.execute) {
 			try {
 				return await window.grecaptcha.execute(siteKey, { action: 'volunteer_apply' });
 			} catch {

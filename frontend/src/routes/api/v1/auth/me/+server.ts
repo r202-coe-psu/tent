@@ -1,12 +1,49 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	isProtectedBootstrapAdmin,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import { getSession } from '$lib/db/couch';
+import { computeMfaFlags, verifyMfaOkCookie, MFA_OK_COOKIE } from '$lib/server/google-oauth';
+import {
+	getGoogleMfa,
+	updateOwnProfile,
+	type CouchUserDoc,
+	type OwnProfileFields
+} from '$lib/server/user-service';
 
 export const prerender = false;
 
-/** GET — Retrieve currently logged-in user profile status (security setup & roles) */
-export const GET: RequestHandler = async ({ fetch }) => {
+function profilePayload(
+	name: string,
+	doc: CouchUserDoc | null,
+	roles: string[],
+	mfa: { mfa_enrolled: boolean; pending_mfa: boolean },
+	mfaProviderEmail: string | null
+) {
+	const isBootstrap = isProtectedBootstrapAdmin({ name, roles });
+	return {
+		name,
+		display_name: doc?.display_name ?? name,
+		roles: doc?.roles ?? roles,
+		must_change_password: isBootstrap ? false : Boolean(doc?.must_change_password),
+		has_security_question: isBootstrap ? true : Boolean(doc?.security_question?.answer_hash),
+		mfa_enrolled: mfa.mfa_enrolled,
+		pending_mfa: mfa.pending_mfa,
+		mfa_provider_email: mfaProviderEmail,
+		phone: doc?.phone ?? null,
+		email: doc?.email ?? null,
+		organization: doc?.organization ?? null,
+		position: doc?.position ?? null,
+		personnel_type: doc?.personnel_type ?? null
+	};
+}
+
+/** GET — Retrieve currently logged-in user profile status (security setup, MFA & roles) */
+export const GET: RequestHandler = async ({ fetch, cookies }) => {
 	try {
 		const session = await getSession(fetch);
 		if (!session?.name) {
@@ -19,25 +56,62 @@ export const GET: RequestHandler = async ({ fetch }) => {
 		);
 
 		if (res.status === 200) {
-			const doc = res.data as Record<string, unknown>;
-			return json({
-				name: session.name,
-				display_name: (doc.display_name as string) ?? session.name,
-				roles: (doc.roles as string[]) ?? session.roles,
-				must_change_password: Boolean(doc.must_change_password),
-				has_security_question: Boolean(
-					(doc.security_question as Record<string, unknown> | undefined)?.answer_hash
-				)
-			});
+			const doc = res.data as CouchUserDoc;
+			const google = getGoogleMfa(doc);
+			const enrolled = Boolean(google);
+			const mfaOkValid = verifyMfaOkCookie(cookies.get(MFA_OK_COOKIE), session.name);
+			const mfa = computeMfaFlags({ enrolled, mfaOkValid });
+
+			return json(profilePayload(session.name, doc, session.roles, mfa, google?.email ?? null));
 		}
 
-		// Fallback for bootstrap admin or docs not yet in _users
+		// Fallback for bootstrap admin or docs not yet in _users — not MFA-enrolled
+		return json(
+			profilePayload(
+				session.name,
+				null,
+				session.roles,
+				{ mfa_enrolled: false, pending_mfa: false },
+				null
+			)
+		);
+	} catch (e) {
+		return serviceError(e);
+	}
+};
+
+/** PATCH — Self-edit soft profile fields on the session user's `_users` doc only */
+export const PATCH: RequestHandler = async ({ request, fetch }) => {
+	try {
+		const session = await getSession(fetch);
+		if (!session?.name) {
+			throw new ServiceError('UNAUTHENTICATED', 'Not logged in');
+		}
+
+		if (isProtectedBootstrapAdmin({ name: session.name, roles: session.roles })) {
+			throw new ServiceError('FORBIDDEN', 'Cannot modify the bootstrap admin user');
+		}
+
+		const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+		if (!body || typeof body !== 'object' || Array.isArray(body)) {
+			throw new ServiceError('VALIDATION', 'Request body must be a JSON object');
+		}
+
+		const summary = await updateOwnProfile(
+			session.name,
+			body as OwnProfileFields & Record<string, unknown>
+		);
+
 		return json({
-			name: session.name,
-			display_name: session.name,
-			roles: session.roles,
-			must_change_password: false,
-			has_security_question: true
+			ok: true as const,
+			name: summary.name,
+			display_name: summary.display_name ?? summary.name,
+			phone: summary.phone ?? null,
+			email: summary.email ?? null,
+			organization: summary.organization ?? null,
+			position: summary.position ?? null,
+			personnel_type: summary.personnel_type ?? null,
+			roles: summary.roles
 		});
 	} catch (e) {
 		return serviceError(e);

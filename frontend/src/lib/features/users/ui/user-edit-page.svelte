@@ -90,16 +90,16 @@
 			}
 			return goto(resolve(`/back-office/shelters/edit/${id}`));
 		}
-		if (from.startsWith('/portal/system-management/shelters/edit/')) {
+		if (from.startsWith('/system-management/shelters/edit/')) {
 			const path = from.split('?')[0] ?? '';
-			const id = path.slice('/portal/system-management/shelters/edit/'.length);
+			const id = path.slice('/system-management/shelters/edit/'.length);
 			if (from.includes('view=users')) {
-				return goto(resolve(`/portal/system-management/shelters/edit/${id}?view=users`));
+				return goto(resolve(`/system-management/shelters/edit/${id}?view=users`));
 			}
-			return goto(resolve(`/portal/system-management/shelters/edit/${id}`));
+			return goto(resolve(`/system-management/shelters/edit/${id}`));
 		}
-		if (backHref === '/portal/system-management/users') {
-			return goto(resolve('/portal/system-management/users'));
+		if (backHref === '/system-management/users') {
+			return goto(resolve('/system-management/users'));
 		}
 		return goto(resolve('/back-office/users'));
 	}

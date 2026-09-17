@@ -2,7 +2,15 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import type { UserSummary } from '../data/users.api';
-	import { Settings2, Trash2, KeyRound, Building, Users } from '@lucide/svelte';
+	import {
+		Settings2,
+		Trash2,
+		KeyRound,
+		Building,
+		Users,
+		ShieldCheck,
+		Unlink
+	} from '@lucide/svelte';
 	import * as Table from '$lib/components/ui/table/index.js';
 
 	import { formatRoleList, isStaffOnly, COUCH_ADMIN } from '$lib/auth/roles';
@@ -13,6 +21,7 @@
 		editHref,
 		ondelete,
 		onresetpassword,
+		onunlinkmfa,
 		pending = false
 	}: {
 		users: UserSummary[];
@@ -20,6 +29,7 @@
 		editHref: (user: UserSummary) => string;
 		ondelete: (name: string) => void;
 		onresetpassword?: (user: UserSummary) => void;
+		onunlinkmfa?: (user: UserSummary) => void;
 		pending?: boolean;
 	} = $props();
 </script>
@@ -36,6 +46,7 @@
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ชื่อ-สกุล</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ประเภท / สังกัด</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">บทบาทในระบบ</Table.Head>
+				<Table.Head class="py-4 text-center font-bold text-slate-700">MFA</Table.Head>
 				<Table.Head class="py-4 text-center font-bold text-slate-700">จัดการ</Table.Head>
 			</Table.Row>
 		</Table.Header>
@@ -91,6 +102,33 @@
 								</Badge>
 							{/each}
 						</div>
+					</Table.Cell>
+					<Table.Cell class="text-center">
+						{#if user.mfa_enrolled}
+							<div class="flex flex-col items-center gap-1">
+								<Badge
+									variant="outline"
+									class="h-auto gap-1 border-violet-300 bg-violet-50 px-2 py-0.5 text-xs text-violet-800"
+									title={user.mfa_google_email ?? 'Google MFA'}
+								>
+									<ShieldCheck class="size-3.5" /> Google
+								</Badge>
+								{#if onunlinkmfa}
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-7 px-2 text-xs text-red-700 hover:bg-red-50"
+										disabled={!canEdit || pending}
+										onclick={() => onunlinkmfa(user)}
+										title="ถอดการผูก Google MFA"
+									>
+										<Unlink class="mr-1 size-3" /> ถอด MFA
+									</Button>
+								{/if}
+							</div>
+						{:else}
+							<span class="text-xs text-muted-foreground">—</span>
+						{/if}
 					</Table.Cell>
 					<Table.Cell class="text-center">
 						<div class="flex items-center justify-center gap-1.5">

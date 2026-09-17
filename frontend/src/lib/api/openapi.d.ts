@@ -408,6 +408,160 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/token': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Issue Token */
+		post: operations['issue_token_external_token_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Clients */
+		get: operations['list_clients_v1_admin_thirdparty_clients_get'];
+		put?: never;
+		/** Create Client */
+		post: operations['create_client_v1_admin_thirdparty_clients_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/revoke': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Revoke Client */
+		post: operations['revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Locations */
+		get: operations['list_locations_external_locations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location */
+		get: operations['get_location_external_locations__location_code__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/occupancy': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Occupancy */
+		get: operations['get_location_occupancy_external_locations__location_code__occupancy_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/occupants': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Occupants */
+		get: operations['get_location_occupants_external_locations__location_code__occupants_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/locations/{location_code}/stock': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Location Stock */
+		get: operations['get_location_stock_external_locations__location_code__stock_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Summary */
+		get: operations['get_summary_external_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/transparency/summary': {
 		parameters: {
 			query?: never;
@@ -428,6 +582,153 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/photos': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Upload Unassigned Photo
+		 * @description Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255).
+		 */
+		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Create Unassigned Registration
+		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
+		 */
+		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Search Unassigned Registrations
+		 * @description Staff online search of open Unassigned Registrations (FR-UR-02 / #245 / #251).
+		 *
+		 *     Auth is shelter-scoped staff or SA (matches BFF) so Station 1 can federate
+		 *     anti-dupe for non-claim roles; claim remains ``require_registration_staff``.
+		 */
+		get: operations['search_unassigned_registrations_staff_v1_unassigned_registrations_search_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/stats': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Unassigned Registration Stats
+		 * @description SA-only open-queue counts for system overview KPIs.
+		 */
+		get: operations['unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * List Unassigned Registrations
+		 * @description SA-only paginated open Unassigned Registrations (system overview PII).
+		 */
+		get: operations['list_unassigned_registrations_staff_v1_unassigned_registrations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration
+		 * @description SA-only Unassigned Registration detail (read-only profile).
+		 */
+		get: operations['get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get'];
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Unassigned Registration
+		 * @description system_admin hard-delete of a central-queue document (FR-UR-04 / #246).
+		 */
+		delete: operations['delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}/claim': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Claim Unassigned Registration
+		 * @description Claim open members into this shelter — Couch birth at pre_registered (#247).
+		 */
+		post: operations['claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/jobs': {
 		parameters: {
 			query?: never;
@@ -439,6 +740,23 @@ export interface paths {
 		get: operations['list_jobs_public_v1_jobs_get'];
 		put?: never;
 		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs/{job_id}/preflight': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Preflight Job Application */
+		post: operations['preflight_job_application_public_v1_jobs__job_id__preflight_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -553,6 +871,46 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/volunteer/schedule/action': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule Action
+		 * @description Check in, check out, or withdraw from the caller's own assigned shift.
+		 */
+		post: operations['volunteer_schedule_action_public_v1_volunteer_schedule_action_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/access/resolve': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Resolve Volunteer Access
+		 * @description Resolve a portal credential before a browser session is created.
+		 */
+		post: operations['resolve_volunteer_access_public_v1_volunteer_access_resolve_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/volunteer/profile': {
 		parameters: {
 			query?: never;
@@ -587,180 +945,6 @@ export interface paths {
 		 * @description Change the parts of the profile the volunteer owns (skills, for now).
 		 */
 		post: operations['update_volunteer_profile_public_v1_volunteer_profile_update_post'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/auth/token-third-party': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/** Issue Token */
-		post: operations['issue_token_api_auth_token_third_party_post'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/v1/admin/thirdparty-clients': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** List Clients */
-		get: operations['list_clients_v1_admin_thirdparty_clients_get'];
-		put?: never;
-		/** Create Client */
-		post: operations['create_client_v1_admin_thirdparty_clients_post'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/v1/admin/thirdparty-clients/{client_row_id}/revoke': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/** Revoke Client */
-		post: operations['revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/locations': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** List Locations */
-		get: operations['list_locations_api_thirdparty_locations_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/locations/{location_code}': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Get Location */
-		get: operations['get_location_api_thirdparty_locations__location_code__get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/locations/{location_code}/occupancy': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Get Location Occupancy */
-		get: operations['get_location_occupancy_api_thirdparty_locations__location_code__occupancy_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/locations/{location_code}/occupants': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Get Location Occupants */
-		get: operations['get_location_occupants_api_thirdparty_locations__location_code__occupants_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/locations/{location_code}/stock': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Get Location Stock */
-		get: operations['get_location_stock_api_thirdparty_locations__location_code__stock_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/thirdparty/summary': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Get Summary */
-		get: operations['get_summary_api_thirdparty_summary_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/public/v1/unassigned-registrations': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/**
-		 * Create Unassigned Registration
-		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
-		 */
-		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -877,6 +1061,48 @@ export interface components {
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
 		};
+		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
+		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+			/** Full */
+			full: string;
+			/** Thumb */
+			thumb?: string | null;
+			/**
+			 * Filename
+			 * @default face.webp
+			 */
+			filename: string;
+			/**
+			 * Content Type
+			 * @default image/webp
+			 */
+			content_type: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/** ClaimedMemberOut */
+		ClaimedMemberOut: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default claimed
+			 * @constant
+			 */
+			status: 'claimed';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+		};
 		/** ConfigResponse */
 		ConfigResponse: {
 			/**
@@ -890,6 +1116,17 @@ export interface components {
 			facebook_url?: string | null;
 			/** Phone Number */
 			phone_number?: string | null;
+		};
+		/** CriticalItem */
+		CriticalItem: {
+			/** Name Th */
+			name_th: string;
+			/** Quantity On Hand */
+			quantity_on_hand: number;
+			/** Unit Label */
+			unit_label: string;
+			/** Level */
+			level: string;
 		};
 		/**
 		 * DispatchRespondRequest
@@ -905,6 +1142,8 @@ export interface components {
 			phone?: string | null;
 			/** Token */
 			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
 			/** Assignment Id */
 			assignment_id: string;
 			/** Code */
@@ -1079,6 +1318,33 @@ export interface components {
 			/** Email */
 			email?: string | null;
 		};
+		/** EmergencyContactInput */
+		EmergencyContactInput: {
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
+			/**
+			 * Phone
+			 * @default
+			 */
+			phone: string;
+			/**
+			 * Relation
+			 * @default
+			 */
+			relation: string;
+		};
+		/** EmergencyContactOut */
+		EmergencyContactOut: {
+			/** Name */
+			name: string;
+			/** Phone */
+			phone: string;
+			/** Relation */
+			relation: string;
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -1138,914 +1404,6 @@ export interface components {
 			/** Status */
 			status: string;
 		};
-		/** JobShiftTemplate */
-		JobShiftTemplate: {
-			/**
-			 * Shift Name
-			 * @default
-			 */
-			shift_name: string;
-			/**
-			 * Start Time
-			 * @default
-			 */
-			start_time: string;
-			/**
-			 * End Time
-			 * @default
-			 */
-			end_time: string;
-			/** Days */
-			days?: string[];
-		};
-		/** M2ErrorDetail */
-		M2ErrorDetail: {
-			/** Code */
-			code: string;
-			/** Message */
-			message: string;
-		};
-		/** M2ErrorResponse */
-		M2ErrorResponse: {
-			error: components['schemas']['M2ErrorDetail'];
-		};
-		/** M2PersonResidencyResponse */
-		M2PersonResidencyResponse: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Checkin Datetime
-			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
-			 */
-			checkin_datetime: string;
-			/**
-			 * Status
-			 * @description สถานะการเข้าพัก
-			 * @enum {string}
-			 */
-			status: 'CHECKED_IN' | 'CHECKED_OUT';
-			/**
-			 * Stay Status
-			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
-			 */
-			stay_status: string;
-			/**
-			 * In Zone
-			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
-			 */
-			in_zone: boolean;
-		};
-		/** M2ShelterItem */
-		M2ShelterItem: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง เช่น SH001
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Site Kind
-			 * @description ชนิดสถานที่
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/**
-			 * Lat
-			 * @description พิกัดละติจูด (WGS 84)
-			 */
-			lat?: number | null;
-			/**
-			 * Long
-			 * @description พิกัดลองจิจูด (WGS 84)
-			 */
-			long?: number | null;
-		};
-		/** NeedItemResponse */
-		NeedItemResponse: {
-			/** Item Id */
-			item_id: string;
-			/** Name */
-			name: string;
-			/** Qty Needed */
-			qty_needed: string;
-			/** Unit */
-			unit: string;
-			/** Status */
-			status: string;
-		};
-		/** NeedsListResponse */
-		NeedsListResponse: {
-			/** Shelters */
-			shelters: components['schemas']['ShelterNeedsResponse'][];
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
-		};
-		/** PaginatedAnnouncements */
-		PaginatedAnnouncements: {
-			/** Items */
-			items: components['schemas']['PublicAnnouncement'][];
-			/** Total */
-			total: number;
-			/** Page */
-			page: number;
-			/** Size */
-			size: number;
-			/** Total Pages */
-			total_pages: number;
-		};
-		/**
-		 * PublicAnnouncement
-		 * @description Public snapshot of a system announcement, stored in MongoDB `public_announcements`.
-		 *     Sourced from `announcement` docs in CouchDB `registry`.
-		 */
-		PublicAnnouncement: {
-			/**
-			 * Id
-			 * @description The CouchDB announcement document ID
-			 */
-			_id: string;
-			/** Title */
-			title: string;
-			/** Description */
-			description: string;
-			/** Title En */
-			title_en?: string | null;
-			/** Description En */
-			description_en?: string | null;
-			/**
-			 * Severity
-			 * @enum {string}
-			 */
-			severity: 'info' | 'warning' | 'emergency';
-			/** Is Active */
-			is_active: boolean;
-			/**
-			 * Updated At
-			 * Format: date-time
-			 */
-			updated_at: string;
-		};
-		/** PublicJobShift */
-		PublicJobShift: {
-			/** Shift Id */
-			shift_id: string;
-			/**
-			 * Date
-			 * @default
-			 */
-			date: string;
-			/** End Date */
-			end_date?: string | null;
-			/**
-			 * Start Time
-			 * @default
-			 */
-			start_time: string;
-			/**
-			 * End Time
-			 * @default
-			 */
-			end_time: string;
-			/** Station */
-			station?: string | null;
-			/**
-			 * Quota
-			 * @default 0
-			 */
-			quota: number;
-			/**
-			 * Slots Confirmed
-			 * @default 0
-			 */
-			slots_confirmed: number;
-			/**
-			 * Slots Dispatched
-			 * @default 0
-			 */
-			slots_dispatched: number;
-			/**
-			 * Slots Remaining
-			 * @default 0
-			 */
-			slots_remaining: number;
-		};
-		/**
-		 * PublicJobItem
-		 * @description One card on the board (CR-092 screen 1).
-		 *
-		 *     Carries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,
-		 *     ``dispatched``, is a back-office state and is folded into "not available" here
-		 *     rather than shown to the public.
-		 */
-		PublicJobItem: {
-			/** Job Id */
-			job_id: string;
-			/** Shelter Code */
-			shelter_code: string;
-			/**
-			 * Shelter Name
-			 * @default
-			 */
-			shelter_name: string;
-			/** Title */
-			title: string;
-			/** Description */
-			description: string;
-			/** Tier */
-			tier: string;
-			/** Skills Required */
-			skills_required?: string[];
-			shift_template?: components['schemas']['JobShiftTemplate'];
-			/** Shifts */
-			shifts?: components['schemas']['PublicJobShift'][];
-			/** Quota */
-			quota: number;
-			/** Slots Confirmed */
-			slots_confirmed: number;
-			/** Slots Remaining */
-			slots_remaining: number;
-			/** Status */
-			status: string;
-			/**
-			 * Requires Review
-			 * @default false
-			 */
-			requires_review: boolean;
-		};
-		/** PublicJobListResponse */
-		PublicJobListResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/** Jobs */
-			jobs?: components['schemas']['PublicJobItem'][];
-		};
-		/**
-		 * ScheduleLookupRequest
-		 * @description Same key as the ticket lookup — the portal signs in by phone or by token.
-		 */
-		ScheduleLookupRequest: {
-			/** Phone */
-			phone?: string | null;
-			/** Token */
-			token?: string | null;
-		};
-		/**
-		 * ScheduleShift
-		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
-		 *
-		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
-		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
-		 *     and the check-in stamps the tablet station writes.
-		 */
-		ScheduleShift: {
-			/** Assignment Id */
-			assignment_id: string;
-			/** Job Id */
-			job_id: string;
-			/** Shift Id */
-			shift_id?: string | null;
-			/**
-			 * Job Title
-			 * @default
-			 */
-			job_title: string;
-			/** Shelter Code */
-			shelter_code: string;
-			/**
-			 * Shelter Name
-			 * @default
-			 */
-			shelter_name: string;
-			/**
-			 * Date
-			 * @default
-			 */
-			date: string;
-			/**
-			 * Shift
-			 * @default
-			 */
-			shift: string;
-			/**
-			 * Station
-			 * @default
-			 */
-			station: string;
-			/** Start Ts */
-			start_ts?: string | null;
-			/** End Ts */
-			end_ts?: string | null;
-			/** Check In At */
-			check_in_at?: string | null;
-			/** Check Out At */
-			check_out_at?: string | null;
-			/** Status */
-			status: string;
-			/** Dispatch Status */
-			dispatch_status?: string | null;
-		};
-		/** SearchRequest */
-		SearchRequest: {
-			/** Search */
-			search: string;
-		};
-		/** SearchResponse */
-		SearchResponse: {
-			/** Results */
-			results: components['schemas']['SearchResult'][];
-			/** Count */
-			count: number;
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
-		};
-		/** SearchResult */
-		SearchResult: {
-			/** Name */
-			name: string;
-			/** Status */
-			status: string;
-			/** National Id */
-			national_id?: string | null;
-			/** Gender */
-			gender?: string | null;
-			/** Shelter Name */
-			shelter_name: string;
-			/** Origin Address */
-			origin_address?: string | null;
-			/** Checked In At */
-			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Family Members */
-			family_members?: components['schemas']['FamilyMember'][];
-			/** Shelter Address */
-			shelter_address?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
-		};
-		/** ShelterAdmissionPolicyDetail */
-		ShelterAdmissionPolicyDetail: {
-			/** Pets */
-			pets: string;
-			/** Vulnerable Groups */
-			vulnerable_groups: string[];
-		};
-		/** ShelterCapacityDetail */
-		ShelterCapacityDetail: {
-			/** Total */
-			total: number;
-			/** Available */
-			available: number;
-		};
-		/** ShelterContactDetail */
-		ShelterContactDetail: {
-			/** Manager */
-			manager: string;
-			/** Phone */
-			phone: string;
-		};
-		/** ShelterDetail */
-		ShelterDetail: {
-			/** Id */
-			id: string;
-			/** Name */
-			name: string;
-			/**
-			 * Site Kind
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/** Status */
-			status: string;
-			/** Admin Type */
-			admin_type: string;
-			/** Address */
-			address: string;
-			capacity: components['schemas']['ShelterCapacityDetail'];
-			/** Occupancy Rate */
-			occupancy_rate: number;
-			/** Building Status */
-			building_status: string;
-			geo?: components['schemas']['GeoPoint'] | null;
-			location?: components['schemas']['GeoJsonPoint'] | null;
-			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
-			travel: components['schemas']['ShelterTravelDetail'];
-			facilities: components['schemas']['ShelterFacilitiesDetail'];
-			/** Zones */
-			zones?: components['schemas']['ShelterZoneDetail'][] | null;
-			contact: components['schemas']['ShelterContactDetail'];
-			/** Faq */
-			faq: components['schemas']['ShelterFaqDetail'][];
-			/**
-			 * Occupancy
-			 * @description Forecast Occupancy headcount
-			 */
-			occupancy: number;
-			/**
-			 * Present
-			 * @description Present Occupancy headcount
-			 */
-			present: number;
-			/**
-			 * In Zone
-			 * @description In-zone Occupancy headcount (room_confirmed)
-			 */
-			in_zone: number;
-		};
-		/** ShelterDetailResponse */
-		ShelterDetailResponse: {
-			shelter: components['schemas']['ShelterDetail'];
-		};
-		/** ShelterFacilitiesDetail */
-		ShelterFacilitiesDetail: {
-			hygiene: components['schemas']['ShelterHygieneDetail'];
-			/** Power */
-			power: string;
-			/** Water */
-			water: string;
-			/** Comms */
-			comms: string[];
-			/** Kitchen */
-			kitchen: string;
-			/** Parking */
-			parking: string;
-		};
-		/** ShelterFaqDetail */
-		ShelterFaqDetail: {
-			/** Q */
-			q: string;
-			/** A */
-			a: string;
-		};
-		/** ShelterHygieneDetail */
-		ShelterHygieneDetail: {
-			/** Male */
-			male: number;
-			/** Female */
-			female: number;
-			/** Accessible */
-			accessible: number;
-			/** Shower */
-			shower: number;
-			/** Mobile Toilet */
-			mobile_toilet: number;
-		};
-		/** ShelterItem */
-		ShelterItem: {
-			/**
-			 * Code
-			 * @description Shelter code, e.g. SH001
-			 */
-			code: string;
-			/** Name */
-			name: string;
-			/**
-			 * Site Kind
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/** Status */
-			status: string;
-			/**
-			 * Capacity
-			 * @default 0
-			 */
-			capacity: number;
-			geo?: components['schemas']['GeoPoint'] | null;
-			location?: components['schemas']['GeoJsonPoint'] | null;
-			/** Province */
-			province?: string | null;
-			/** District */
-			district?: string | null;
-			/** Subdistrict */
-			subdistrict?: string | null;
-			/** Pet Policy */
-			pet_policy?: string | null;
-			/** Vulnerable Groups */
-			vulnerable_groups?: string[] | null;
-			/** Admin Type */
-			admin_type?: string | null;
-			/**
-			 * Updated At
-			 * Format: date-time
-			 */
-			updated_at: string;
-		};
-		/** ShelterListResponse */
-		ShelterListResponse: {
-			/** Shelters */
-			shelters: components['schemas']['ShelterItem'][];
-			/** Count */
-			count: number;
-			/**
-			 * As Of
-			 * Format: date-time
-			 */
-			as_of: string;
-		};
-		/** ShelterNeedsResponse */
-		ShelterNeedsResponse: {
-			/** Code */
-			code: string;
-			/** Name */
-			name: string;
-			/** Needs */
-			needs: components['schemas']['NeedItemResponse'][];
-		};
-		/** ShelterTravelDetail */
-		ShelterTravelDetail: {
-			/** Route */
-			route: string;
-			/** Altitude */
-			altitude: string;
-			/** Flood Warning */
-			flood_warning?: string | null;
-		};
-		/** ShelterZoneDetail */
-		ShelterZoneDetail: {
-			/** Name */
-			name?: string | null;
-			/** Type */
-			type: string;
-			/** Capacity */
-			capacity?: number | null;
-			/** Area M2 */
-			area_m2?: number | null;
-		};
-		/** TicketFindItem */
-		TicketFindItem: {
-			/**
-			 * Applicant Name
-			 * @default
-			 */
-			applicant_name: string;
-			/** Status */
-			status: string;
-			/**
-			 * Job Title
-			 * @default
-			 */
-			job_title: string;
-			/** Shelter Code */
-			shelter_code: string;
-			/**
-			 * Shift Date
-			 * @default
-			 */
-			shift_date: string;
-		};
-		/**
-		 * TicketFindRequest
-		 * @description Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand.
-		 */
-		TicketFindRequest: {
-			/** Phone */
-			phone?: string | null;
-			/** Token */
-			token?: string | null;
-		};
-		/** TicketFindResponse */
-		TicketFindResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/** Tickets */
-			tickets?: components['schemas']['TicketFindItem'][];
-			/**
-			 * Phone Masked
-			 * @default
-			 */
-			phone_masked: string;
-		};
-		/** TicketShift */
-		TicketShift: {
-			/** Shift Id */
-			shift_id?: string | null;
-			/**
-			 * Date
-			 * @default
-			 */
-			date: string;
-			/**
-			 * Start Time
-			 * @default
-			 */
-			start_time: string;
-			/**
-			 * End Time
-			 * @default
-			 */
-			end_time: string;
-			/** Station */
-			station?: string | null;
-		};
-		/** TransparencySummary */
-		TransparencySummary: {
-			/** Shelters Total */
-			shelters_total: number;
-			/**
-			 * Shelters Open
-			 * @description status in {open, full}
-			 */
-			shelters_open: number;
-			/**
-			 * Occupancy Total
-			 * @description active + pre_registered across projected shelters (CR-070)
-			 */
-			occupancy_total?: number | null;
-			/**
-			 * Vulnerable Count
-			 * @description Not projected in public_persons yet — always null until schema adds age
-			 */
-			vulnerable_count?: number | null;
-		};
-		/** TransparencySummaryResponse */
-		TransparencySummaryResponse: {
-			summary: components['schemas']['TransparencySummary'];
-			/**
-			 * Last Updated
-			 * Format: date-time
-			 */
-			last_updated: string;
-			/**
-			 * Is Stale
-			 * @default false
-			 */
-			is_stale: boolean;
-			/** Flags */
-			flags?: {
-				[key: string]: boolean;
-			};
-		};
-		/** ValidationError */
-		ValidationError: {
-			/** Location */
-			loc: (string | number)[];
-			/** Message */
-			msg: string;
-			/** Error Type */
-			type: string;
-			/** Input */
-			input?: unknown;
-			/** Context */
-			ctx?: Record<string, never>;
-		};
-		/** VerifyResponse */
-		VerifyResponse: {
-			/**
-			 * Status
-			 * @default ok
-			 */
-			status: string;
-		};
-		/**
-		 * VolunteerApplyRequest
-		 * @description The 4-field quick-apply form (FR-VOL-02.2).
-		 *
-		 *     ``national_id`` is optional here even though CR-092 lists it as a main field: a
-		 *     volunteer with a passport or a pink card has no 13-digit number, and refusing them
-		 *     at the form would be a worse failure than a profile that dedupes on phone alone.
-		 */
-		VolunteerApplyRequest: {
-			/** First Name */
-			first_name: string;
-			/** Last Name */
-			last_name: string;
-			/** Phone */
-			phone: string;
-			/** National Id */
-			national_id?: string | null;
-			/** Email */
-			email?: string | null;
-			/** Skills */
-			skills?: string[];
-			/** Shift Id */
-			shift_id?: string | null;
-			/** Shift Date */
-			shift_date?: string | null;
-			/** Station */
-			station?: string | null;
-		};
-		/** VolunteerApplyResponse */
-		VolunteerApplyResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/** Tracking Token */
-			tracking_token: string;
-			/** Status */
-			status: string;
-			/** Job Id */
-			job_id: string;
-			/** Shift Id */
-			shift_id?: string | null;
-		};
-		/** VolunteerCancelResponse */
-		VolunteerCancelResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/**
-			 * Message
-			 * @default Application cancelled
-			 */
-			message: string;
-		};
-		/**
-		 * VolunteerProfile
-		 * @description The volunteer's own profile, merged across every shelter they hold one at.
-		 *
-		 *     ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
-		 *     two of them. The portal shows one person, so the newest document supplies the
-		 *     identity and the shelters are listed alongside — and an edit made here is applied to
-		 *     all of them (see ``VolunteerProfileUpdateBuffer``).
-		 *
-		 *     No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
-		 */
-		VolunteerProfile: {
-			/**
-			 * First Name
-			 * @default
-			 */
-			first_name: string;
-			/**
-			 * Last Name
-			 * @default
-			 */
-			last_name: string;
-			/** Nickname */
-			nickname?: string | null;
-			/**
-			 * Phone Masked
-			 * @default
-			 */
-			phone_masked: string;
-			/** Email */
-			email?: string | null;
-			/**
-			 * Volunteer Code
-			 * @default
-			 */
-			volunteer_code: string;
-			/** Skills */
-			skills?: string[];
-			/** Organization */
-			organization?: string | null;
-			/**
-			 * Identity Verified
-			 * @default false
-			 */
-			identity_verified: boolean;
-			/**
-			 * Personnel Type
-			 * @default volunteer
-			 */
-			personnel_type: string;
-			/** Shelter Codes */
-			shelter_codes?: string[];
-		};
-		/** VolunteerProfileResponse */
-		VolunteerProfileResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			profile?: components['schemas']['VolunteerProfile'] | null;
-		};
-		/**
-		 * VolunteerProfileUpdateRequest
-		 * @description What a volunteer may change about themselves.
-		 *
-		 *     Skills only, for now. They are self-declared and carry no authority on their own: a
-		 *     controlled job still routes to review, and ``identity_verified`` stays a staff badge
-		 *     — so this cannot be used to unlock work the shelter has not approved.
-		 */
-		VolunteerProfileUpdateRequest: {
-			/** Phone */
-			phone?: string | null;
-			/** Token */
-			token?: string | null;
-			/** Skills */
-			skills?: string[];
-		};
-		/** VolunteerProfileUpdateResponse */
-		VolunteerProfileUpdateResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/**
-			 * Updated
-			 * @default 0
-			 */
-			updated: number;
-			profile?: components['schemas']['VolunteerProfile'] | null;
-		};
-		/** VolunteerScheduleResponse */
-		VolunteerScheduleResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			/** Shifts */
-			shifts?: components['schemas']['ScheduleShift'][];
-		};
-		/**
-		 * VolunteerTicket
-		 * @description What the Digital Pass may show.
-		 *
-		 *     No ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed
-		 *     because the pass displays it as the human-readable ticket id.
-		 */
-		VolunteerTicket: {
-			/** Token */
-			token: string;
-			/**
-			 * Can Cancel
-			 * @default true
-			 */
-			can_cancel: boolean;
-			/** Status */
-			status: string;
-			/** Job Id */
-			job_id: string;
-			/**
-			 * Job Title
-			 * @default
-			 */
-			job_title: string;
-			/** Shelter Code */
-			shelter_code: string;
-			/**
-			 * Shelter Name
-			 * @default
-			 */
-			shelter_name: string;
-			/** Applicant Name */
-			applicant_name: string;
-			/** Phone Masked */
-			phone_masked: string;
-			/** Skills */
-			skills?: string[];
-			selected_shift?: components['schemas']['TicketShift'];
-			/** Applied At */
-			applied_at: string;
-			/** Qr Payload */
-			qr_payload: string;
-		};
-		/** VolunteerTicketResponse */
-		VolunteerTicketResponse: {
-			/**
-			 * Success
-			 * @default true
-			 */
-			success: boolean;
-			ticket: components['schemas']['VolunteerTicket'];
-		};
-		/** CriticalItem */
-		CriticalItem: {
-			/** Name Th */
-			name_th: string;
-			/** Quantity On Hand */
-			quantity_on_hand: number;
-			/** Unit Label */
-			unit_label: string;
-			/** Level */
-			level: string;
-		};
 		/** HouseholdInput */
 		HouseholdInput: {
 			/** Housing Type */
@@ -2065,12 +1423,53 @@ export interface components {
 			province?: string | null;
 			/** Postal Code */
 			postal_code?: string | null;
-			/** Geo */
 			geo?: components['schemas']['GeoPoint'] | null;
 			/** Pets */
 			pets?: components['schemas']['PetInput'][];
 			/** Label */
 			label?: string | null;
+		};
+		/** HouseholdOut */
+		HouseholdOut: {
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			geo?: components['schemas']['GeoPoint'] | null;
+			/** Label */
+			label?: string | null;
+		};
+		/** JobShiftTemplate */
+		JobShiftTemplate: {
+			/**
+			 * Shift Name
+			 * @default
+			 */
+			shift_name: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Days */
+			days?: string[];
 		};
 		/** LocationDetailEnvelope */
 		LocationDetailEnvelope: {
@@ -2217,6 +1616,7 @@ export interface components {
 			message: string;
 			/** Result */
 			result: components['schemas']['LocationItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** LocationOccupancyEnvelope */
 		LocationOccupancyEnvelope: {
@@ -2275,6 +1675,81 @@ export interface components {
 			/** Items */
 			items: components['schemas']['StockItem'][];
 		};
+		/** M2ErrorDetail */
+		M2ErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** M2ErrorResponse */
+		M2ErrorResponse: {
+			error: components['schemas']['M2ErrorDetail'];
+		};
+		/** M2PersonResidencyResponse */
+		M2PersonResidencyResponse: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Checkin Datetime
+			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
+			 */
+			checkin_datetime: string;
+			/**
+			 * Status
+			 * @description สถานะการเข้าพัก
+			 * @enum {string}
+			 */
+			status: 'CHECKED_IN' | 'CHECKED_OUT';
+			/**
+			 * Stay Status
+			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
+			 */
+			stay_status: string;
+			/**
+			 * In Zone
+			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
+			 */
+			in_zone: boolean;
+		};
+		/** M2ShelterItem */
+		M2ShelterItem: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง เช่น SH001
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Site Kind
+			 * @description ชนิดสถานที่
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/**
+			 * Lat
+			 * @description พิกัดละติจูด (WGS 84)
+			 */
+			lat?: number | null;
+			/**
+			 * Long
+			 * @description พิกัดลองจิจูด (WGS 84)
+			 */
+			long?: number | null;
+		};
 		/** MemberCreated */
 		MemberCreated: {
 			/** Reserved Evacuee Id */
@@ -2299,6 +1774,17 @@ export interface components {
 			vulnerable_groups?: string[];
 			/** Special Needs */
 			special_needs?: string[];
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
 		};
 		/** MemberInput */
 		MemberInput: {
@@ -2334,8 +1820,32 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
-			/** Emergency Contact */
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
+			/** Photo */
+			photo?: string | null;
+		};
+		/** NeedItemResponse */
+		NeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+		};
+		/** NeedsListResponse */
+		NeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
 		};
 		/** OccupancyBreakdownItem */
 		OccupancyBreakdownItem: {
@@ -2400,6 +1910,7 @@ export interface components {
 			 * @default []
 			 */
 			result: components['schemas']['OccupantItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** OccupantsErrorResponse */
 		OccupantsErrorResponse: {
@@ -2409,6 +1920,70 @@ export interface components {
 			message: string;
 			/** Detail */
 			detail?: string | null;
+		};
+		/**
+		 * OpenMemberHit
+		 * @description Open member surfaced by staff search — claimable (not claimed/cancelled).
+		 */
+		OpenMemberHit: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default open
+			 * @constant
+			 */
+			status: 'open';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: string;
+			/** Phone */
+			phone?: string | null;
+			person_id?: components['schemas']['PersonIdOut'] | null;
+			/** Country */
+			country: string;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[];
+			/** Special Needs */
+			special_needs?: string[];
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
+		};
+		/** PaginatedAnnouncements */
+		PaginatedAnnouncements: {
+			/** Items */
+			items: components['schemas']['PublicAnnouncement'][];
+			/** Total */
+			total: number;
+			/** Page */
+			page: number;
+			/** Size */
+			size: number;
+			/** Total Pages */
+			total_pages: number;
+		};
+		/** PaginationMeta */
+		PaginationMeta: {
+			/** Page */
+			page: number;
+			/** Limit */
+			limit: number;
+			/** Total */
+			total: number;
+			/** Total Pages */
+			total_pages: number;
 		};
 		/** PersonIdInput */
 		PersonIdInput: {
@@ -2421,7 +1996,10 @@ export interface components {
 			/** Number */
 			number?: string | null;
 		};
-		/** PersonIdOut */
+		/**
+		 * PersonIdOut
+		 * @description Person id on create responses — distinct from request PersonIdInput.
+		 */
 		PersonIdOut: {
 			/**
 			 * Cardtype
@@ -2450,6 +2028,493 @@ export interface components {
 			 * @default false
 			 */
 			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
+		};
+		/**
+		 * PublicAnnouncement
+		 * @description Public snapshot of a system announcement, stored in MongoDB `public_announcements`.
+		 *     Sourced from `announcement` docs in CouchDB `registry`.
+		 */
+		PublicAnnouncement: {
+			/**
+			 * Id
+			 * @description The CouchDB announcement document ID
+			 */
+			_id: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Title En */
+			title_en?: string | null;
+			/** Description En */
+			description_en?: string | null;
+			/**
+			 * Severity
+			 * @enum {string}
+			 */
+			severity: 'info' | 'warning' | 'emergency';
+			/** Is Active */
+			is_active: boolean;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/**
+		 * PublicJobItem
+		 * @description One card on the board (CR-092 screen 1).
+		 *
+		 *     Carries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,
+		 *     ``dispatched``, is a back-office state and is folded into "not available" here
+		 *     rather than shown to the public.
+		 */
+		PublicJobItem: {
+			/** Job Id */
+			job_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Tier */
+			tier: string;
+			/** Skills Required */
+			skills_required?: string[];
+			shift_template?: components['schemas']['JobShiftTemplate'];
+			/** Shifts */
+			shifts?: components['schemas']['PublicJobShift'][];
+			/** Quota */
+			quota: number;
+			/** Slots Confirmed */
+			slots_confirmed: number;
+			/** Slots Remaining */
+			slots_remaining: number;
+			/**
+			 * Applicants Count
+			 * @default 0
+			 */
+			applicants_count: number;
+			/** Status */
+			status: string;
+			/**
+			 * Requires Review
+			 * @default false
+			 */
+			requires_review: boolean;
+		};
+		/** PublicJobListResponse */
+		PublicJobListResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Jobs */
+			jobs?: components['schemas']['PublicJobItem'][];
+		};
+		/**
+		 * PublicJobShift
+		 * @description Concrete shift identity plus renderable snapshot fields.
+		 */
+		PublicJobShift: {
+			/** Shift Id */
+			shift_id: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/** End Date */
+			end_date?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+			/**
+			 * Quota
+			 * @default 0
+			 */
+			quota: number;
+			/**
+			 * Slots Confirmed
+			 * @default 0
+			 */
+			slots_confirmed: number;
+			/**
+			 * Slots Dispatched
+			 * @default 0
+			 */
+			slots_dispatched: number;
+			/**
+			 * Slots Remaining
+			 * @default 0
+			 */
+			slots_remaining: number;
+			/**
+			 * Applicants Count
+			 * @default 0
+			 */
+			applicants_count: number;
+		};
+		/**
+		 * ScheduleActionRequest
+		 * @description A state change requested by the volunteer who owns a schedule row.
+		 */
+		ScheduleActionRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+			/** Assignment Id */
+			assignment_id: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'check_in' | 'check_out' | 'withdraw';
+		};
+		/** ScheduleActionResponse */
+		ScheduleActionResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Status */
+			status: string;
+			/** Requested At */
+			requested_at: string;
+		};
+		/**
+		 * ScheduleLookupRequest
+		 * @description Same key as the ticket lookup — the portal signs in by phone or by token.
+		 */
+		ScheduleLookupRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+		};
+		/**
+		 * ScheduleShift
+		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
+		 *
+		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
+		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
+		 *     and the check-in stamps the tablet station writes.
+		 */
+		ScheduleShift: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Shift
+			 * @default
+			 */
+			shift: string;
+			/**
+			 * Station
+			 * @default
+			 */
+			station: string;
+			/** Start Ts */
+			start_ts?: string | null;
+			/** End Ts */
+			end_ts?: string | null;
+			/** Check In At */
+			check_in_at?: string | null;
+			/** Check Out At */
+			check_out_at?: string | null;
+			/** Status */
+			status: string;
+			/** Dispatch Status */
+			dispatch_status?: string | null;
+		};
+		/** SearchRequest */
+		SearchRequest: {
+			/** Search */
+			search: string;
+		};
+		/** SearchResponse */
+		SearchResponse: {
+			/** Results */
+			results: components['schemas']['SearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** SearchResult */
+		SearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+		};
+		/** ShelterAdmissionPolicyDetail */
+		ShelterAdmissionPolicyDetail: {
+			/** Pets */
+			pets: string;
+			/** Vulnerable Groups */
+			vulnerable_groups: string[];
+		};
+		/** ShelterCapacityDetail */
+		ShelterCapacityDetail: {
+			/** Total */
+			total: number;
+			/** Available */
+			available: number;
+		};
+		/** ShelterContactDetail */
+		ShelterContactDetail: {
+			/** Manager */
+			manager: string;
+			/** Phone */
+			phone: string;
+		};
+		/** ShelterDetail */
+		ShelterDetail: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/** Status */
+			status: string;
+			/** Admin Type */
+			admin_type: string;
+			/** Address */
+			address: string;
+			capacity: components['schemas']['ShelterCapacityDetail'];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
+			/** Occupancy Rate */
+			occupancy_rate: number;
+			/** Building Status */
+			building_status: string;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
+			travel: components['schemas']['ShelterTravelDetail'];
+			facilities: components['schemas']['ShelterFacilitiesDetail'];
+			/** Zones */
+			zones?: components['schemas']['ShelterZoneDetail'][] | null;
+			contact: components['schemas']['ShelterContactDetail'];
+			/** Faq */
+			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
+		};
+		/** ShelterDetailResponse */
+		ShelterDetailResponse: {
+			shelter: components['schemas']['ShelterDetail'];
+		};
+		/** ShelterFacilitiesDetail */
+		ShelterFacilitiesDetail: {
+			hygiene: components['schemas']['ShelterHygieneDetail'];
+			/** Power */
+			power: string;
+			/** Water */
+			water: string;
+			/** Comms */
+			comms: string[];
+			/** Kitchen */
+			kitchen: string;
+			/** Parking */
+			parking: string;
+		};
+		/** ShelterFaqDetail */
+		ShelterFaqDetail: {
+			/** Q */
+			q: string;
+			/** A */
+			a: string;
+		};
+		/** ShelterHygieneDetail */
+		ShelterHygieneDetail: {
+			/** Male */
+			male: number;
+			/** Female */
+			female: number;
+			/** Accessible */
+			accessible: number;
+			/** Shower */
+			shower: number;
+			/** Mobile Toilet */
+			mobile_toilet: number;
+		};
+		/** ShelterItem */
+		ShelterItem: {
+			/**
+			 * Code
+			 * @description Shelter code, e.g. SH001
+			 */
+			code: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/** Status */
+			status: string;
+			/**
+			 * Capacity
+			 * @default 0
+			 */
+			capacity: number;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			/** Province */
+			province?: string | null;
+			/** District */
+			district?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** Pet Policy */
+			pet_policy?: string | null;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[] | null;
+			/** Admin Type */
+			admin_type?: string | null;
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** ShelterListResponse */
+		ShelterListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ShelterItem'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** ShelterNeedsResponse */
+		ShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['NeedItemResponse'][];
+		};
+		/** ShelterTravelDetail */
+		ShelterTravelDetail: {
+			/** Route */
+			route: string;
+			/** Altitude */
+			altitude: string;
+			/** Flood Warning */
+			flood_warning?: string | null;
+		};
+		/** ShelterZoneDetail */
+		ShelterZoneDetail: {
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/** Area M2 */
+			area_m2?: number | null;
 		};
 		/** StockErrorDetail */
 		StockErrorDetail: {
@@ -2614,6 +2679,93 @@ export interface components {
 			success: boolean;
 			client: components['schemas']['ThirdPartyClientPublic'];
 		};
+		/** TicketFindItem */
+		TicketFindItem: {
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Applicant Name
+			 * @default
+			 */
+			applicant_name: string;
+			/** Status */
+			status: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shift Date
+			 * @default
+			 */
+			shift_date: string;
+			/** End Date */
+			end_date?: string | null;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+		};
+		/**
+		 * TicketFindRequest
+		 * @description Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand.
+		 */
+		TicketFindRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+		};
+		/** TicketFindResponse */
+		TicketFindResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tickets */
+			tickets?: components['schemas']['TicketFindItem'][];
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+		};
+		/** TicketShift */
+		TicketShift: {
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+		};
 		/** TokenErrorDetail */
 		TokenErrorDetail: {
 			/** Code */
@@ -2650,6 +2802,103 @@ export interface components {
 			module_name: string;
 			/** Scopes */
 			scopes: string[];
+		};
+		/** TransparencySummary */
+		TransparencySummary: {
+			/** Shelters Total */
+			shelters_total: number;
+			/**
+			 * Shelters Open
+			 * @description status in {open, full}
+			 */
+			shelters_open: number;
+			/**
+			 * Occupancy Total
+			 * @description active + pre_registered across projected shelters (CR-070)
+			 */
+			occupancy_total?: number | null;
+			/**
+			 * Vulnerable Count
+			 * @description Not projected in public_persons yet — always null until schema adds age
+			 */
+			vulnerable_count?: number | null;
+		};
+		/** TransparencySummaryResponse */
+		TransparencySummaryResponse: {
+			summary: components['schemas']['TransparencySummary'];
+			/**
+			 * Last Updated
+			 * Format: date-time
+			 */
+			last_updated: string;
+			/**
+			 * Is Stale
+			 * @default false
+			 */
+			is_stale: boolean;
+			/** Flags */
+			flags?: {
+				[key: string]: boolean;
+			};
+		};
+		/**
+		 * UnassignedPhotoUploadResponse
+		 * @description Response from POST /public/v1/unassigned-registrations/photos.
+		 */
+		UnassignedPhotoUploadResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Photo Id */
+			photo_id: string;
+			/** Content Type */
+			content_type: string;
+			/** Filename */
+			filename: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/**
+		 * UnassignedRegistrationClaimRequest
+		 * @description Staff claim — body selects open member reserved ids (CR-113 / #247).
+		 */
+		UnassignedRegistrationClaimRequest: {
+			/** Member Ids */
+			member_ids: string[];
+			/** Shelter Code */
+			shelter_code?: string | null;
+		};
+		/** UnassignedRegistrationClaimResponse */
+		UnassignedRegistrationClaimResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Id */
+			id: string | null;
+			/** Deleted */
+			deleted: boolean;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Household Id */
+			household_id: string;
+			/** Evacuee Ids */
+			evacuee_ids: string[];
+			/** Claimed */
+			claimed: components['schemas']['ClaimedMemberOut'][];
+			/** Remaining Open */
+			remaining_open: components['schemas']['OpenMemberHit'][];
 		};
 		/** UnassignedRegistrationCreateRequest */
 		UnassignedRegistrationCreateRequest: {
@@ -2688,23 +2937,387 @@ export interface components {
 			/** Created At */
 			created_at: string;
 		};
-		/** EmergencyContactInput */
-		EmergencyContactInput: {
+		/** UnassignedRegistrationDetailResponse */
+		UnassignedRegistrationDetailResponse: {
+			/** Id */
+			id: string;
+			/** Schema V */
+			schema_v: number;
+			/** Reserved Household Id */
+			reserved_household_id: string;
 			/**
-			 * Name
-			 * @default
+			 * Registered Via
+			 * @enum {string}
 			 */
-			name: string;
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Members */
+			members: components['schemas']['MemberCreated'][];
+		};
+		/** UnassignedRegistrationListItem */
+		UnassignedRegistrationListItem: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
 			/**
-			 * Phone
-			 * @default
+			 * Registered Via
+			 * @enum {string}
 			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Member Count */
+			open_member_count: number;
+		};
+		/** UnassignedRegistrationListResponse */
+		UnassignedRegistrationListResponse: {
+			/** Items */
+			items: components['schemas']['UnassignedRegistrationListItem'][];
+			/** Total */
+			total: number;
+			/** Open Member Count */
+			open_member_count: number;
+			/** Limit */
+			limit: number;
+			/** Offset */
+			offset: number;
+		};
+		/** UnassignedRegistrationSearchHit */
+		UnassignedRegistrationSearchHit: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+		};
+		/** UnassignedRegistrationSearchResponse */
+		UnassignedRegistrationSearchResponse: {
+			/** Results */
+			results: components['schemas']['UnassignedRegistrationSearchHit'][];
+		};
+		/** UnassignedRegistrationStatsResponse */
+		UnassignedRegistrationStatsResponse: {
+			/** Open Registrations */
+			open_registrations: number;
+			/** Open Members */
+			open_members: number;
+		};
+		/** ValidationError */
+		ValidationError: {
+			/** Location */
+			loc: (string | number)[];
+			/** Message */
+			msg: string;
+			/** Error Type */
+			type: string;
+			/** Input */
+			input?: unknown;
+			/** Context */
+			ctx?: Record<string, never>;
+		};
+		/** VerifyResponse */
+		VerifyResponse: {
+			/**
+			 * Status
+			 * @default ok
+			 */
+			status: string;
+		};
+		/**
+		 * VolunteerApplyRequest
+		 * @description The 4-field quick-apply form (FR-VOL-02.2).
+		 *
+		 *     ``national_id`` is optional here even though CR-092 lists it as a main field: a
+		 *     volunteer with a passport or a pink card has no 13-digit number, and refusing them
+		 *     at the form would be a worse failure than a profile that dedupes on phone alone.
+		 */
+		VolunteerApplyRequest: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Phone */
 			phone: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Email */
+			email?: string | null;
+			/** Skills */
+			skills?: string[];
+			/** Shift Id */
+			shift_id?: string | null;
+			/** Shift Date */
+			shift_date?: string | null;
+			/** Station */
+			station?: string | null;
+		};
+		/** VolunteerApplyResponse */
+		VolunteerApplyResponse: {
 			/**
-			 * Relation
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+		};
+		/** VolunteerCancelResponse */
+		VolunteerCancelResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Application cancelled
+			 */
+			message: string;
+		};
+		/** VolunteerPreflightProfile */
+		VolunteerPreflightProfile: {
+			/**
+			 * Volunteer Code
 			 * @default
 			 */
-			relation: string;
+			volunteer_code: string;
+			/**
+			 * Display Name
+			 * @default
+			 */
+			display_name: string;
+			/**
+			 * Identity Status
+			 * @default pending
+			 * @enum {string}
+			 */
+			identity_status: 'verified' | 'pending' | 'rejected';
+			/** Existing Skills */
+			existing_skills?: string[];
+			/** New Skills */
+			new_skills?: string[];
+			/** New Controlled Skills */
+			new_controlled_skills?: string[];
+		};
+		/**
+		 * VolunteerPreflightRequest
+		 * @description Read-only identity preview; it never reserves a slot or writes a document.
+		 */
+		VolunteerPreflightRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Phone */
+			phone: string;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerPreflightResponse */
+		VolunteerPreflightResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Match
+			 * @enum {string}
+			 */
+			match: 'no_match' | 'matched_one' | 'ambiguous_match';
+			existing_profile?: components['schemas']['VolunteerPreflightProfile'] | null;
+			/**
+			 * Message
+			 * @default
+			 */
+			message: string;
+		};
+		/**
+		 * VolunteerProfile
+		 * @description The volunteer's own profile, merged across every shelter they hold one at.
+		 *
+		 *     ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
+		 *     two of them. The portal shows one person, so the newest document supplies the
+		 *     identity and the shelters are listed alongside — and an edit made here is applied to
+		 *     all of them (see ``VolunteerProfileUpdateBuffer``).
+		 *
+		 *     No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
+		 */
+		VolunteerProfile: {
+			/**
+			 * First Name
+			 * @default
+			 */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/** Nickname */
+			nickname?: string | null;
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+			/** Email */
+			email?: string | null;
+			/**
+			 * Volunteer Code
+			 * @default
+			 */
+			volunteer_code: string;
+			/** Skills */
+			skills?: string[];
+			/** Organization */
+			organization?: string | null;
+			/**
+			 * Identity Verified
+			 * @default false
+			 */
+			identity_verified: boolean;
+			/**
+			 * Personnel Type
+			 * @default volunteer
+			 */
+			personnel_type: string;
+			/** Shelter Codes */
+			shelter_codes?: string[];
+			/**
+			 * Portal Id
+			 * @default
+			 */
+			portal_id: string;
+		};
+		/** VolunteerProfileResponse */
+		VolunteerProfileResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/**
+		 * VolunteerProfileUpdateRequest
+		 * @description What a volunteer may change about themselves.
+		 *
+		 *     Skills only, for now. They are self-declared and carry no authority on their own: a
+		 *     controlled job still routes to review, and ``identity_verified`` stays a staff badge
+		 *     — so this cannot be used to unlock work the shelter has not approved.
+		 */
+		VolunteerProfileUpdateRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerProfileUpdateResponse */
+		VolunteerProfileUpdateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Updated
+			 * @default 0
+			 */
+			updated: number;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/** VolunteerScheduleResponse */
+		VolunteerScheduleResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Shifts */
+			shifts?: components['schemas']['ScheduleShift'][];
+		};
+		/**
+		 * VolunteerTicket
+		 * @description What the Digital Pass may show.
+		 *
+		 *     No ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed
+		 *     because the pass displays it as the human-readable ticket id.
+		 */
+		VolunteerTicket: {
+			/** Token */
+			token: string;
+			/**
+			 * Can Cancel
+			 * @default true
+			 */
+			can_cancel: boolean;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Applicant Name */
+			applicant_name: string;
+			/** Phone Masked */
+			phone_masked: string;
+			/** Skills */
+			skills?: string[];
+			selected_shift?: components['schemas']['TicketShift'];
+			/** Applied At */
+			applied_at: string;
+			/** Qr Payload */
+			qr_payload: string;
+		};
+		/** VolunteerTicketResponse */
+		VolunteerTicketResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			ticket: components['schemas']['VolunteerTicket'];
 		};
 	};
 	responses: never;
@@ -3093,7 +3706,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -3220,7 +3833,7 @@ export interface operations {
 					'application/json': components['schemas']['M2ErrorResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -3313,7 +3926,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -3499,6 +4112,384 @@ export interface operations {
 			};
 		};
 	};
+	issue_token_external_token_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TokenRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenResponse'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TokenErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_clients_v1_admin_thirdparty_clients_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientListResponse'];
+				};
+			};
+		};
+	};
+	create_client_v1_admin_thirdparty_clients_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ThirdPartyClientCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientRevokeResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_locations_external_locations_get: {
+		parameters: {
+			query?: {
+				/** @description Filter by location_status */
+				status?: string | null;
+				updated_since?: string | null;
+				/** @description Include soft-deleted (is_active=false) locations */
+				include_inactive?: boolean;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationListEnvelope'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_external_locations__location_code__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationDetailEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_occupancy_external_locations__location_code__occupancy_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationOccupancyEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupancyErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_occupants_external_locations__location_code__occupants_get: {
+		parameters: {
+			query?: {
+				purpose?: string | null;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
+			};
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['OccupantsErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_location_stock_external_locations__location_code__stock_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				location_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LocationStockEnvelope'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['StockErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_summary_external_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SummaryEnvelope'];
+				};
+			};
+		};
+	};
 	get_transparency_summary_public_v1_transparency_summary_get: {
 		parameters: {
 			query?: never;
@@ -3515,6 +4506,288 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['TransparencySummaryResponse'];
+				};
+			};
+		};
+	};
+	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'multipart/form-data': components['schemas']['Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	create_unassigned_registration_public_v1_unassigned_registrations_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedRegistrationCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_unassigned_registrations_staff_v1_unassigned_registrations_search_get: {
+		parameters: {
+			query?: {
+				/** @description Name, phone, or person id of an open member */
+				q?: string;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationStatsResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_unassigned_registrations_staff_v1_unassigned_registrations_get: {
+		parameters: {
+			query?: {
+				q?: string;
+				province?: string | null;
+				district?: string | null;
+				subdistrict?: string | null;
+				limit?: number;
+				offset?: number;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedRegistrationClaimRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationClaimResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
 				};
 			};
 		};
@@ -3538,6 +4811,41 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['PublicJobListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	preflight_job_application_public_v1_jobs__job_id__preflight_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				job_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerPreflightRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerPreflightResponse'];
 				};
 			};
 			/** @description Validation Error */
@@ -3747,6 +5055,72 @@ export interface operations {
 			};
 		};
 	};
+	volunteer_schedule_action_public_v1_volunteer_schedule_action_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleActionRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ScheduleActionResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	resolve_volunteer_access_public_v1_volunteer_access_resolve_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TicketFindRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	volunteer_profile_public_v1_volunteer_profile_post: {
 		parameters: {
 			query?: never;
@@ -3800,409 +5174,6 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['VolunteerProfileUpdateResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	issue_token_api_auth_token_third_party_post: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['TokenRequest'];
-			};
-		};
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TokenResponse'];
-				};
-			};
-			/** @description Bad Request */
-			400: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TokenErrorResponse'];
-				};
-			};
-			/** @description Unauthorized */
-			401: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TokenErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	list_clients_v1_admin_thirdparty_clients_get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['ThirdPartyClientListResponse'];
-				};
-			};
-		};
-	};
-	create_client_v1_admin_thirdparty_clients_post: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['ThirdPartyClientCreateRequest'];
-			};
-		};
-		responses: {
-			/** @description Successful Response */
-			201: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['ThirdPartyClientCreateResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				client_row_id: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['ThirdPartyClientRevokeResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	list_locations_api_thirdparty_locations_get: {
-		parameters: {
-			query?: {
-				/** @description Filter by location_status */
-				status?: string | null;
-				updated_since?: string | null;
-				/** @description Include soft-deleted (is_active=false) locations */
-				include_inactive?: boolean;
-			};
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LocationListEnvelope'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	get_location_api_thirdparty_locations__location_code__get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				location_code: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LocationDetailEnvelope'];
-				};
-			};
-			/** @description Not Found */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LocationErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	get_location_occupancy_api_thirdparty_locations__location_code__occupancy_get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				location_code: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LocationOccupancyEnvelope'];
-				};
-			};
-			/** @description Not Found */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['OccupancyErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	get_location_occupants_api_thirdparty_locations__location_code__occupants_get: {
-		parameters: {
-			query?: {
-				purpose?: string | null;
-			};
-			header?: never;
-			path: {
-				location_code: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['OccupantsEnvelope'];
-				};
-			};
-			/** @description Bad Request */
-			400: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['OccupantsErrorResponse'];
-				};
-			};
-			/** @description Forbidden */
-			403: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['OccupantsErrorResponse'];
-				};
-			};
-			/** @description Not Found */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['OccupantsErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	get_location_stock_api_thirdparty_locations__location_code__stock_get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				location_code: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LocationStockEnvelope'];
-				};
-			};
-			/** @description Not Found */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['StockErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-		};
-	};
-	get_summary_api_thirdparty_summary_get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['SummaryEnvelope'];
-				};
-			};
-		};
-	};
-	create_unassigned_registration_public_v1_unassigned_registrations_post: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['UnassignedRegistrationCreateRequest'];
-			};
-		};
-		responses: {
-			/** @description Successful Response */
-			201: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
 				};
 			};
 			/** @description Validation Error */

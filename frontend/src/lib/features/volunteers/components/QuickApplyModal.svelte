@@ -205,7 +205,7 @@
 
 	async function captchaToken(): Promise<string | null> {
 		if (!captchaEnabled) return '';
-		if (!window.grecaptcha) return null;
+		if (!window.grecaptcha?.execute) return null;
 		try {
 			return await window.grecaptcha.execute(siteKey, { action: 'volunteer_apply' });
 		} catch {

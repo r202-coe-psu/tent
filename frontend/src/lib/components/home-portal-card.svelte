@@ -56,7 +56,7 @@
 {#if href && !disabled}
 	<a
 		{href}
-		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} cursor-pointer bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md {className}"
+		class="group relative flex min-h-[280px] w-full min-w-0 flex-col items-start rounded-2xl {cardBorderClass} cursor-pointer bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md xl:min-h-[320px] {className}"
 	>
 		{#if badge}
 			<div
@@ -67,18 +67,20 @@
 		{/if}
 
 		<div
-			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+			class="mt-2 mb-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors group-hover:bg-primary-muted group-hover:text-primary"
 		>
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
-		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
+			{title}
+		</h2>
+		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
 			{description}
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}
@@ -86,7 +88,7 @@
 {:else}
 	<div
 		aria-disabled={disabled || undefined}
-		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all {disabled
+		class="group relative flex min-h-[280px] w-full min-w-0 flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all xl:min-h-[320px] {disabled
 			? 'cursor-not-allowed opacity-60'
 			: ''} {className}"
 	>
@@ -99,18 +101,20 @@
 		{/if}
 
 		<div
-			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors"
+			class="mt-2 mb-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors"
 		>
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
-		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
+			{title}
+		</h2>
+		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
 			{description}
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}

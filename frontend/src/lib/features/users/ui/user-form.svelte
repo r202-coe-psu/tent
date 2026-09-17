@@ -312,12 +312,13 @@
 		);
 	}
 
-	// Sync username with phone if not editing and not SA role
-	$effect(() => {
-		if (!editing && !isSaRoleSelected && $formData.phone) {
-			$formData.username = $formData.phone;
+	/** Create mode: phone is the username (including System Admin — username field is hidden). */
+	function setPhone(phone: string) {
+		$formData.phone = phone;
+		if (!editing && $formData.username !== phone) {
+			$formData.username = phone;
 		}
-	});
+	}
 
 	/** `label` is what the trigger shows once picked — the name, not the raw code. */
 	const shelterItems = $derived(
@@ -541,7 +542,7 @@
 							</Form.Label>
 							<Input
 								{...props}
-								bind:value={$formData.phone}
+								bind:value={() => $formData.phone ?? '', setPhone}
 								type="tel"
 								maxlength={10}
 								class="h-11 bg-white"

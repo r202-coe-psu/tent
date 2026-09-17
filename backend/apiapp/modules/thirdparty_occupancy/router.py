@@ -9,8 +9,8 @@ from .schemas import LocationOccupancyEnvelope, OccupancyErrorResponse
 from .use_case import ThirdPartyOccupancyUseCase, get_thirdparty_occupancy_use_case
 
 router = APIRouter(
-    prefix="/api/thirdparty",
-    tags=["Third-party Occupancy"],
+    prefix="/external",
+    tags=["External"],
     dependencies=[Depends(require_scope("occupancy-read"))],
 )
 

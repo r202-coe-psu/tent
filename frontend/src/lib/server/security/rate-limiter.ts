@@ -71,6 +71,12 @@ export class RateLimiter {
 //
 // The numbers follow what each surface exposes:
 
+/**
+ * Staff login captcha verify — credential-stuffing surface; room for retries,
+ * still caps a script hammering the BFF gate before CouchDB `_session`.
+ */
+export const loginCaptchaIpLimiter = new RateLimiter(60_000, 10);
+
 /** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
 export const donationIpLimiter = new RateLimiter(60000, 3);
 /** Same, per phone number, so one abuser cannot spread across IPs. */

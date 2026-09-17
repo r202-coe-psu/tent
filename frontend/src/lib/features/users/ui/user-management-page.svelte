@@ -17,13 +17,15 @@
 	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
 	import { useUsers, useCreateUser, useDeleteUser } from '../application/queries';
-	import { adminResetPassword, type UserSummary } from '../data/users.api';
+	import { adminResetPassword, unlinkGoogleMfa, type UserSummary } from '../data/users.api';
+	import { usersKeys } from '../application/queries';
 	import type { CreateUserInput, ShelterAssignmentInput } from '../domain/schema';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
-	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert } from '@lucide/svelte';
+	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { useQueryClient } from '@tanstack/svelte-query';
 
 	let {
 		lockedShelterCode,
@@ -45,6 +47,7 @@
 		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
 	);
 
+	const queryClient = useQueryClient();
 	const usersQuery = useUsers();
 	const createMutation = useCreateUser();
 	const deleteMutation = useDeleteUser();
@@ -53,6 +56,7 @@
 	let deleteDialogOpen = $state(false);
 	let resetDialogOpen = $state(false);
 	let resetResultDialogOpen = $state(false);
+	let unlinkMfaDialogOpen = $state(false);
 
 	let searchQuery = $state('');
 	let selectedUser = $state<UserSummary | null>(null);
@@ -60,6 +64,7 @@
 	let temporaryPassword = $state<string | null>(null);
 	let copied = $state(false);
 	let resetting = $state(false);
+	let unlinkingMfa = $state(false);
 
 	function rolesFromInput(input: {
 		is_system_admin?: boolean;
@@ -113,8 +118,8 @@
 		const listBase = usersListBaseFromPathname(page.url.pathname);
 		const from = withUsersView(page.url.pathname, page.url.search);
 		const path =
-			listBase === '/portal/system-management/users'
-				? resolve(`/portal/system-management/users/${encodeURIComponent(user.name)}`)
+			listBase === '/system-management/users'
+				? resolve(`/system-management/users/${encodeURIComponent(user.name)}`)
 				: resolve(`/back-office/users/${encodeURIComponent(user.name)}`);
 		return `${path}?from=${encodeURIComponent(from)}`;
 	}
@@ -139,6 +144,27 @@
 	function handleOpenReset(user: UserSummary) {
 		selectedUser = user;
 		resetDialogOpen = true;
+	}
+
+	function handleOpenUnlinkMfa(user: UserSummary) {
+		selectedUser = user;
+		unlinkMfaDialogOpen = true;
+	}
+
+	async function handleConfirmUnlinkMfa() {
+		if (!selectedUser) return;
+		unlinkingMfa = true;
+		try {
+			await unlinkGoogleMfa(selectedUser.name);
+			toast.success(`ถอด Google MFA ของ "${selectedUser.name}" แล้ว`);
+			unlinkMfaDialogOpen = false;
+			selectedUser = null;
+			await queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ถอด MFA ไม่สำเร็จ');
+		} finally {
+			unlinkingMfa = false;
+		}
 	}
 
 	async function handleConfirmReset() {
@@ -266,11 +292,46 @@
 				{editHref}
 				ondelete={confirmDelete}
 				onresetpassword={handleOpenReset}
-				pending={deleteMutation.isPending}
+				onunlinkmfa={handleOpenUnlinkMfa}
+				pending={deleteMutation.isPending || unlinkingMfa}
 			/>
 		{/if}
 	</div>
 </div>
+
+<!-- Unlink Google MFA Confirmation Dialog -->
+<Dialog.Root bind:open={unlinkMfaDialogOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[440px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-red-700">
+				<Unlink class="size-5" /> ถอดการผูก Google MFA
+			</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
+				จะถอดการผูก Google ของ
+				<strong class="text-slate-900">{selectedUser?.display_name ?? selectedUser?.name}</strong>
+				{#if selectedUser?.mfa_google_email}
+					({selectedUser.mfa_google_email})
+				{/if}
+				— หลังถอดแล้วผู้ใช้จะเข้าแอปได้โดยไม่ต้อง step-up จนกว่าจะผูกใหม่
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-4 flex justify-end gap-3">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					unlinkMfaDialogOpen = false;
+					selectedUser = null;
+				}}
+			>
+				ยกเลิก
+			</Button>
+			<Button variant="destructive" disabled={unlinkingMfa} onclick={handleConfirmUnlinkMfa}>
+				{#if unlinkingMfa}กำลังถอด...{:else}ยืนยันถอด MFA{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
 <!-- Reset Password Confirmation Dialog -->
 <Dialog.Root bind:open={resetDialogOpen}>

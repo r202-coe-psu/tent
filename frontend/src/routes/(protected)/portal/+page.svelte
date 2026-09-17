@@ -106,8 +106,8 @@
 	<title>SmartShelter Thailand</title>
 </svelte:head>
 
-<div class="flex flex-1 flex-col justify-start p-6 lg:justify-center">
-	<div class="mx-auto w-full max-w-7xl px-4">
+<div class="flex flex-1 flex-col justify-start p-4 sm:p-6 lg:justify-center">
+	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<header class="mb-8 text-center">
 			<h1 class="mb-2 text-3xl font-bold tracking-wide sm:text-4xl">
 				Smart<span class="text-primary">Shelter</span> Thailand
@@ -254,7 +254,7 @@
 			</div>
 		</section>
 
-		<main class="grid grid-cols-1 gap-6 md:grid-cols-2 {gridCols}">
+		<main class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 {gridCols}">
 			<HomePortalCard
 				icon={Users}
 				accent="brand"
@@ -279,7 +279,7 @@
 			<HomePortalCard
 				icon={Compass}
 				accent="neutral"
-				title="เว็บพอร์ทัลสาธารณะ"
+				title="เว็บไซต์สำหรับประชาชน"
 				badge="ประชาชน / อาสาสมัคร"
 				badgeVariant="neutral"
 				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
@@ -290,10 +290,10 @@
 				<HomePortalCard
 					icon={Building2}
 					accent="accent-purple"
-					title="ระบบส่วนกลาง"
+					title="เมนูผู้ดูแลระบบ"
 					badge="เฉพาะผู้ดูแลระบบ"
 					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
-					href={resolve('/portal/system-management')}
+					href={resolve('/system-management')}
 				/>
 			{/if}
 

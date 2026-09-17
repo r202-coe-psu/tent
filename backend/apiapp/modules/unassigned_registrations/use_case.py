@@ -35,6 +35,7 @@ from .couch_birth import (
 from .schemas import (
     ClaimedMemberOut,
     EmergencyContactOut,
+    HouseholdOut,
     MemberCreated,
     MemberInput,
     OpenMemberHit,
@@ -44,8 +45,12 @@ from .schemas import (
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
     UnassignedRegistrationCreateResponse,
+    UnassignedRegistrationDetailResponse,
+    UnassignedRegistrationListItem,
+    UnassignedRegistrationListResponse,
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
+    UnassignedRegistrationStatsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -300,6 +305,88 @@ class UnassignedRegistrationsUseCase:
             status=doc.status,
             created_at=doc.created_at.isoformat(),
         )
+
+    async def stats(self) -> UnassignedRegistrationStatsResponse:
+        """Open-queue headcounts for SA overview KPIs."""
+        try:
+            docs = await UnassignedRegistration.find({"status": "open"}).to_list()
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("stats") from exc
+        open_members = sum(1 for doc in docs for m in doc.members if m.status == "open")
+        return UnassignedRegistrationStatsResponse(
+            open_registrations=len(docs),
+            open_members=open_members,
+        )
+
+    async def list_open(
+        self,
+        *,
+        q: str = "",
+        province: str | None = None,
+        district: str | None = None,
+        subdistrict: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> UnassignedRegistrationListResponse:
+        """Paginated open Unassigned Registrations for SA overview (PII — SA gate)."""
+        try:
+            docs = (
+                await UnassignedRegistration.find({"status": "open"}).sort("-created_at").to_list()
+            )
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("list") from exc
+
+        query = q.strip()
+        filtered: list[UnassignedRegistration] = []
+        for doc in docs:
+            hh = doc.household
+            if province and (hh.province or "").strip() != province.strip():
+                continue
+            if district and (hh.district or "").strip() != district.strip():
+                continue
+            if subdistrict and (hh.subdistrict or "").strip() != subdistrict.strip():
+                continue
+            open_members = [m for m in doc.members if m.status == "open"]
+            if not open_members:
+                continue
+            if query:
+                if not (
+                    _identity_keys_match(doc, query)
+                    or doc.id == query
+                    or any(_member_matches_query(m, query) for m in open_members)
+                ):
+                    continue
+            filtered.append(doc)
+
+        total = len(filtered)
+        open_member_count = sum(1 for doc in filtered for m in doc.members if m.status == "open")
+        page = filtered[offset : offset + limit]
+        items = [_list_item(doc) for doc in page]
+        return UnassignedRegistrationListResponse(
+            items=items,
+            total=total,
+            open_member_count=open_member_count,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_detail(self, registration_id: str) -> UnassignedRegistrationDetailResponse:
+        """Full Unassigned Registration for SA read-only profile."""
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        return _detail_response(doc)
 
     async def search(self, raw_query: str) -> UnassignedRegistrationSearchResponse:
         """Search open members on the Mongo queue (FR-UR-02) — no public_persons."""
@@ -830,4 +917,46 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
         photo=member.photo,
         birth_year=member.birth_year,
         age=member.age,
+    )
+
+
+def _household_out(household: UnassignedHousehold) -> HouseholdOut:
+    return HouseholdOut(
+        housing_type=household.housing_type,
+        residence_landmark=household.residence_landmark,
+        address_no=household.address_no,
+        village_no=household.village_no,
+        subdistrict=household.subdistrict,
+        district=household.district,
+        province=household.province,
+        postal_code=household.postal_code,
+        geo=household.geo,
+        label=household.label,
+    )
+
+
+def _list_item(doc: UnassignedRegistration) -> UnassignedRegistrationListItem:
+    open_members = [_open_member_hit(m) for m in doc.members if m.status == "open"]
+    return UnassignedRegistrationListItem(
+        id=doc.id,
+        reserved_household_id=doc.reserved_household_id,
+        registered_via=doc.registered_via,
+        status=doc.status,
+        created_at=doc.created_at.isoformat(),
+        household=_household_out(doc.household),
+        open_members=open_members,
+        open_member_count=len(open_members),
+    )
+
+
+def _detail_response(doc: UnassignedRegistration) -> UnassignedRegistrationDetailResponse:
+    return UnassignedRegistrationDetailResponse(
+        id=doc.id,
+        schema_v=doc.schema_v,
+        reserved_household_id=doc.reserved_household_id,
+        registered_via=doc.registered_via,
+        status=doc.status,
+        created_at=doc.created_at.isoformat(),
+        household=_household_out(doc.household),
+        members=[_member_response(m) for m in doc.members],
     )
