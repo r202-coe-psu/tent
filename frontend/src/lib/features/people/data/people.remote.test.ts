@@ -1511,6 +1511,71 @@ describe('createFamilyRegistration', () => {
 		expect(result.household.residence_landmark).toBe('ใต้สะพาน');
 		expect(result.household.pets[0]).toMatchObject({ species: 'other', notes: 'ลิง' });
 	});
+
+	it('joins an existing Household without changing head or Residence', async () => {
+		const existing = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'เดิม',
+						last_name: 'หัวหน้า',
+						gender: 'male',
+						phone: '0810000000',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '99/1',
+					subdistrict: 'หาดใหญ่',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					pets: [{ species: 'cat', count: 1 }],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'onsite'
+		);
+
+		const joined = await repo.createFamilyRegistration(
+			{
+				join_household_id: existing.household._id,
+				members: [
+					{
+						first_name: 'ใหม่',
+						last_name: 'เข้าร่วม',
+						gender: 'female',
+						phone: '0820000000',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '99/1',
+					subdistrict: 'หาดใหญ่',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					pets: [{ species: 'dog', count: 1 }],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'onsite'
+		);
+
+		expect(joined.household._id).toBe(existing.household._id);
+		expect(joined.household.head_evacuee_id).toBe(existing.household.head_evacuee_id);
+		expect(joined.household.address_no).toBe('99/1');
+		expect(joined.members).toHaveLength(1);
+		expect(joined.members[0]?.household_id).toBe(existing.household._id);
+		expect(joined.household.pets).toEqual([
+			{ species: 'cat', count: 1 },
+			{ species: 'dog', count: 1 }
+		]);
+	});
 });
 
 describe('submitFamilyReportIn', () => {

@@ -1816,25 +1816,27 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |
 | `duty_window` | object\|null | opt | `{ start_ts: ISO, end_ts: ISO }` ช่วงเวลากะงานสำหรับตัดสิทธิ์อัตโนมัตินอกเวลา |
 | `security_question` | object\|null | opt | `{ question_id: enum, answer_hash: str, salt: str, set_at: ISO }` สำหรับกู้คืนรหัสผ่านด้วยตนเอง (6 คำถามมาตรฐาน, Salted SHA-256) |
-| `mfa` | object\|null | opt | CR-124 — `null` / ขาด field = ไม่ enrolled Google step-up MFA; ดูฟิลด์ย่อยด้านล่าง |
+| `mfa` | object\|null | opt | CR-124 / CR-ThaID — `null` / ขาด field = ไม่ enrolled MFA; ดูฟิลด์ย่อยด้านล่าง |
 | `active` | bool | req | default `true` (เปิด/ปิดการเข้าใช้งานระบบ) |
 | `must_change_password` | bool | opt | default `false` (บังคับเปลี่ยนรหัสผ่านและตั้งคำถามความปลอดภัยเมื่อเข้าสู่ระบบ) |
 | `affiliation_tags` | [str] | opt | แท็กสังกัดหรือกลุ่มสังกัดเพิ่มเติม |
 
-**`mfa` (CR-124 Phase 1 — Google step-up เท่านั้น):**
+**`mfa` (CR-124 Google MFA & CR-ThaID Staff ThaID Digital ID BORA):**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `mfa.providers` | array | req เมื่อมี `mfa` | รายการ IdP ที่ผูกแล้ว |
-| `mfa.providers[].type` | enum | req | Phase 1 อนุญาตเฉพาะ `"google"` |
-| `mfa.providers[].subject` | str | req | Google OIDC `sub` (stable) — ห้ามใช้ email เป็น identity หลัก |
-| `mfa.providers[].email` | str\|null | opt | สำหรับแสดงผลเท่านั้น |
+| `mfa.providers[].type` | enum | req | ค่า `"google"` หรือ `"thaid"` |
+| `mfa.providers[].subject` | str | req | OIDC `sub` (stable identifier) — ห้ามใช้ email หรือเลขประจำตัวประชาชนดิบเป็น identity หลัก |
+| `mfa.providers[].email` | str\|null | opt | สำหรับแสดงผลเท่านั้น (ใช้กับ provider `"google"`) |
+| `mfa.providers[].name` | str\|null | opt | ชื่อ-นามสกุลภาษาไทย สำหรับแสดงผลเท่านั้น (ใช้กับ provider `"thaid"`) |
+| `mfa.providers[].pid_masked` | str\|null | opt | เลขประจำตัวประชาชนแบบบังตา เช่น `1-xxxx-xxxxx-12-3` สำหรับแสดงผลยืนยันตัวตน (ไม่เก็บ plain text 13 หลัก) |
 | `mfa.providers[].linked_at` | ISO ts | req | เวลาที่ผูกสำเร็จ |
 | `mfa.providers[].verified_at` | ISO ts\|null | opt | เวลา verify ล่าสุด (ถ้าเก็บ) |
 
-- Google `subject` (`sub`) หนึ่งค่าผูกได้กับ `_users` เพียงหนึ่งเอกสาร
-- แต่ละ user มี `type:"google"` ได้ไม่เกินหนึ่งรายการใน `mfa.providers` (Phase 1)
-- ไม่เก็บ raw Google userinfo / metadata ทั้งก้อน — เก็บเฉพาะฟิลด์ในตารางนี้
+- `subject` (`sub`) หนึ่งค่าผูกได้กับ `_users` เพียงหนึ่งเอกสาร (ห้ามผูกซ้ำข้ามบัญชี)
+- แต่ละ user มี `type:"google"` และ `type:"thaid"` ได้ไม่เกินอย่างละหนึ่งรายการใน `mfa.providers`
+- ไม่เก็บ raw userinfo / metadata ทั้งก้อน — เก็บเฉพาะฟิลด์ในตารางนี้ตามหลัก Data Minimization (PDPA)
 
 **กฎความปลอดภัยของ Compound Roles (CR-093 / CR-104):**
 - กุญแจผ่านประตูฐานข้อมูล (`shelter:{code}`): กำหนดใน `_security.members.roles` ของฐานข้อมูล `shelter_{code}`

@@ -22,10 +22,11 @@ export type PublicNeedItem = {
 	item_id: string;
 	name: string;
 	qty_needed: string | number;
+	qty_target?: string | number;
 	unit: string;
 	status?: string;
 	category?: string;
-	urgency?: string;
+	urgency?: 'critical' | 'important' | 'normal' | string;
 	target?: number;
 	received?: number;
 };

@@ -23,6 +23,8 @@ export {
 	clearMfaOk,
 	unlinkGoogleMfa,
 	googleOAuthStartHref,
+	unlinkThaidMfa,
+	thaidOAuthStartHref,
 	type UserSummary,
 	type AuthStatus,
 	type OwnProfileUpdateInput,

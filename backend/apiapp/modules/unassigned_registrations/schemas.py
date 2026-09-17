@@ -146,6 +146,35 @@ class UnassignedRegistrationCreateRequest(BaseModel):
     members: list[MemberInput] = Field(min_length=1, max_length=20)
     household: HouseholdInput
     registered_via: Literal["web", "staff"] = "web"
+    join_registration_id: str | None = Field(
+        default=None,
+        description="Append members (and pets) into this open registration's reserved household.",
+    )
+
+
+class UnassignedResidenceMatchRequest(BaseModel):
+    """Service-to-service residence match — no member PII in response."""
+
+    housing_type: (
+        Literal["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"] | None
+    ) = None
+    residence_landmark: str | None = None
+    address_no: str | None = None
+    village_no: str | None = None
+    subdistrict: str | None = None
+    district: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+
+
+class UnassignedResidenceMatchHit(BaseModel):
+    id: str
+    landmark: str | None = None
+    housing_type: str | None = None
+
+
+class UnassignedResidenceMatchResponse(BaseModel):
+    matches: list[UnassignedResidenceMatchHit]
 
 
 class MemberCreated(BaseModel):
