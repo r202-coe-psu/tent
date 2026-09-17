@@ -126,7 +126,6 @@
 											</div>
 											<span class="text-muted-foreground">
 												จอง: {need.reserved} · คลัง: {need.onHand} / เป้าหมาย: {need.target}
-												{need.unit} ({progressPercent}%)
 												{formatUnit(need.unit)} ({progressPercent}%)
 											</span>
 										</div>
