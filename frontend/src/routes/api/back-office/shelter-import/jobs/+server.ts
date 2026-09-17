@@ -36,6 +36,36 @@ const bodySchema = z.object({
 	rows: z.array(rowSchema).min(1).max(MAX_IMPORT_ROWS)
 });
 
+/** Read at most `limit` bytes so chunked requests cannot buffer unbounded input. */
+async function readBodyWithinLimit(request: Request, limit: number): Promise<string | null> {
+	if (!request.body) return '';
+	const reader = request.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			total += value.byteLength;
+			if (total > limit) {
+				await reader.cancel();
+				return null;
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder().decode(bytes);
+}
+
 export const POST: RequestHandler = async ({ request }) => {
 	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
@@ -54,17 +84,35 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 413 }
 			);
 		}
-		const raw = await request.text();
-		if (new TextEncoder().encode(raw).byteLength > MAX_IMPORT_BODY_BYTES) {
+		const raw = await readBodyWithinLimit(request, MAX_IMPORT_BODY_BYTES);
+		if (raw === null) {
 			return json(
 				{ error: { code: 'VALIDATION', message: 'Import request is too large' } },
 				{ status: 413 }
 			);
 		}
-		const body = bodySchema.parse(JSON.parse(raw));
+		let parsedBody: z.infer<typeof bodySchema>;
+		try {
+			parsedBody = bodySchema.parse(JSON.parse(raw));
+		} catch (error) {
+			if (error instanceof z.ZodError) {
+				return json(
+					{
+						error: { code: 'VALIDATION', message: 'Invalid import request', details: error.issues }
+					},
+					{ status: 422 }
+				);
+			}
+			return json(
+				{ error: { code: 'VALIDATION', message: 'Request body must be valid JSON' } },
+				{ status: 422 }
+			);
+		}
+		const body = parsedBody;
 		const rows = body.rows.map((row) => {
 			const parsed = row.shelter === undefined ? null : createShelterSchema.safeParse(row.shelter);
-			const errors: ImportItemError[] = [...(row.errors ?? [])];
+			const errors: ImportItemError[] = [];
+			const clientValidationFailed = (row.errors?.length ?? 0) > 0;
 			if (!parsed || !parsed.success) {
 				if (parsed && !parsed.success) {
 					for (const issue of parsed.error.issues) {
@@ -74,17 +122,22 @@ export const POST: RequestHandler = async ({ request }) => {
 					errors.push({ column: '-', message: 'Missing shelter payload' });
 				}
 			}
+			if (clientValidationFailed && parsed?.success) {
+				errors.push({ column: '-', message: 'Row failed client-side validation' });
+			}
+			const input = parsed?.success && errors.length === 0 ? parsed.data : undefined;
 			return {
 				row: row.row,
-				name: row.name,
-				...(parsed?.success && errors.length === 0 ? { input: parsed.data } : {}),
+				name: input?.name ?? (parsed?.success ? parsed.data.name : null),
+				...(input ? { input } : {}),
 				errors: errors.length ? errors : undefined,
-				valid: Boolean(parsed?.success && errors.length === 0)
+				valid: Boolean(input)
 			};
 		});
 		const job = await createImportJob({
 			filename: body.filename,
 			importedBy: caller,
+			idempotencyKey: request.headers.get('idempotency-key') ?? '',
 			duplicateAction: body.duplicate_action,
 			rows
 		});

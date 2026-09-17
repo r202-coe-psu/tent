@@ -235,6 +235,7 @@
 
 	const hasRetryableFailures = $derived(
 		Boolean(
+			activeJob?.job.status === 'completed_with_errors' &&
 			activeJob?.items.some(
 				(item) => item.status === 'failed' && item.attempts < (item.max_attempts ?? 3)
 			)

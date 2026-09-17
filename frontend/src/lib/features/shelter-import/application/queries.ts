@@ -90,11 +90,23 @@ export interface ImportSheltersInput {
 	rows: RowValidation[];
 	/** what to do with those rows */
 	duplicateAction: DuplicateAction;
+	/** Reused when the same mutation is retried after a lost response. */
+	idempotencyKey?: string;
 }
 
 const INITIAL_JOB_POLL_MS = 2000;
 const MAX_JOB_POLL_MS = 10_000;
 const jobPollStates = new Map<string, { etag?: string; delay: number; data?: ImportJobSummary }>();
+const importIdempotencyKeys = new WeakMap<object, string>();
+
+function idempotencyKeyFor(input: ImportSheltersInput): string {
+	if (input.idempotencyKey) return input.idempotencyKey;
+	const existing = importIdempotencyKeys.get(input);
+	if (existing) return existing;
+	const key = crypto.randomUUID();
+	importIdempotencyKeys.set(input, key);
+	return key;
+}
 
 function jobPollDelay(jobId: string): number {
 	return jobPollStates.get(jobId)?.delay ?? INITIAL_JOB_POLL_MS;
@@ -149,9 +161,11 @@ export function useImportJob(jobId: () => string | null) {
 
 export function useImportShelters() {
 	return createMutation(() => ({
-		mutationFn: async ({ filename, rows, duplicateAction }: ImportSheltersInput) => {
+		mutationFn: async (input: ImportSheltersInput) => {
+			const { filename, rows, duplicateAction } = input;
 			return serviceFetch<CreateImportJobResponse>('/api/back-office/shelter-import/jobs', {
 				method: 'POST',
+				headers: { 'Idempotency-Key': idempotencyKeyFor(input) },
 				body: JSON.stringify({
 					filename,
 					duplicate_action: duplicateAction,

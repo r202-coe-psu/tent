@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { createHash } from 'node:crypto';
 import type { RequestHandler } from './$types';
 import { requireAdmin, serviceError } from '$lib/server/couch-admin';
 import { getImportJob } from '$lib/features/shelter-import/server/job-store';
@@ -14,7 +15,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
 				{ error: { code: 'NOT_FOUND', message: 'Import job not found' } },
 				{ status: 404 }
 			);
-		const etag = summary.job._rev ? `"${summary.job._rev}"` : undefined;
+		const itemProgressHash = createHash('sha256')
+			.update(JSON.stringify(summary.items.map((item) => [item._id, item._rev ?? ''])))
+			.digest('hex');
+		const etag = `"${summary.job._rev ?? 'no-job-revision'}:${itemProgressHash}"`;
 		const headers = {
 			'cache-control': 'no-store, max-age=0',
 			...(etag ? { etag } : {})
