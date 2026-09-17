@@ -319,7 +319,7 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
 	distribution_return: 'distribution_batch:',
-	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:']
+	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
 
 function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {

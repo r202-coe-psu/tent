@@ -328,7 +328,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ |
 | `distribute` | `requisition_ticket:{ulid}` — req | จ่ายพัสดุ/อาหารออกจาก ticket เบิกกลาง; `qty` ลบและต้องมี `lot_ref` (CR-121) |
 | `distribution_return` | `distribution_batch:{request_ulid}` — req | คืนยอดคงเหลือเข้าล็อตเดิม; `qty` บวกและต้องมี `lot_ref` |
-| `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}` หรือ `distribution_log:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง หรือรับของยืมคืน (CR-121) |
+| `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}`, `distribution_log:{ulid}` หรือ `bulk_return_pool:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง, รับของยืมคืน หรือรับของกองรวมเพื่อเปิด `bulk_return_pool` (CR-121) |
 
 **ขอบเขตการบังคับ:** Zod (`stockLedgerInputSchema.superRefine`) และ factory
 `createStockLedger` บังคับ reason/ref/lot contract. `_design/access` ตรวจ append-only, role gate และ
@@ -1063,7 +1063,11 @@ ledger ซ้ำ. `bulk_pool_id` จำกัดการ clear ตาม `uncla
 `stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. สำหรับ flow ใหม่
 `requisition_ticket` เป็นต้นเหตุของ outbound `requisition`/`distribute` และ `distribution_log`
 เป็นต้นเหตุของการรับคืนแบบ `receive`; `meal_service` เป็นต้นเหตุของการรับผลผลิต. การรับคืนของยืมแบบกองรวม
-ใช้ `bulk_return_pool` (§2.31) ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว.
+ใช้ `bulk_return_pool` (§2.31) ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว:
+ผู้เรียกสร้าง `operationUlid` ที่เสถียรก่อนเขียน แล้วใช้ suffix เดียวกันกับ `bulk_return_pool:{operationUlid}` และ
+`stock_ledger:{operationUlid}`; แถว receipt ใช้ `reason='receive'`, `ref_id=bulk_return_pool:{operationUlid}` และ Pool
+อ้างกลับผ่าน `stock_ledger_id=stock_ledger:{operationUlid}`. การ retry ต้องใช้ `operationUlid` เดิมและตรวจความเท่ากันของ
+ข้อมูล immutable ก่อนรับเอกสารที่มีอยู่แล้ว.
 Allocation, reservation, batch reconciliation และ coordination docs เป็น snapshot/coordination เท่านั้น.
 เอกสาร `distribution_request`–`distribution_issue_gate` ใน §2.21–2.28 ยังคงอ่านได้เพื่อ
 backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.31 เป็น canonical.

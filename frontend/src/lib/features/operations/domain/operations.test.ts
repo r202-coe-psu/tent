@@ -308,7 +308,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		adjust: { valid: null, invalid: 'donation:01J' },
 		distribute: { valid: 'requisition_ticket:01J', invalid: 'distribution_batch:01J' },
 		distribution_return: { valid: 'distribution_batch:01J', invalid: 'donation:01J' },
-		receive: { valid: 'distribution_log:01J', invalid: null }
+		receive: { valid: 'bulk_return_pool:01J', invalid: null }
 	};
 
 	for (const [reason, { valid, invalid }] of Object.entries(cases) as [
@@ -337,6 +337,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 	it('enforces Ticket-era references on normal writes and isolates legacy Flow 2 compatibility', () => {
 		const ticketRef = 'requisition_ticket:01J00000000000000000000000';
 		const logRef = 'distribution_log:01J00000000000000000000000';
+		const poolRef = 'bulk_return_pool:01J00000000000000000000000';
 
 		expect(() =>
 			createStockLedger({ ...base, reason: 'requisition', ref_id: ticketRef }, ctx)
@@ -367,6 +368,9 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		).not.toThrow();
 		expect(() =>
 			createStockLedger({ ...base, reason: 'receive', ref_id: logRef }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: poolRef }, ctx)
 		).not.toThrow();
 		expect(() => createStockLedger({ ...base, reason: 'receive', ref_id: null }, ctx)).toThrow();
 		expect(() =>

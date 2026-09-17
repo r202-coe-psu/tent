@@ -1,7 +1,8 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { ulid } from '$lib/db/ulid';
+import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
 	type OperationsRepository,
@@ -13,6 +14,7 @@ import type {
 	DistributionLog,
 	ReturnCondition
 } from '../../domain/food-supplies';
+import { createBulkReturnPool as createBulkReturnPoolDocument } from '../../domain/food-supplies';
 import {
 	BulkReturnPoolRemoteRepository,
 	type BulkReturnPoolRepository,
@@ -40,11 +42,58 @@ export interface NonPhysicalClearInput {
 }
 
 export interface CreateBulkPoolInput {
+	/** Stable caller-generated ULID reused for every retry of this physical receipt. */
+	operationUlid: string;
 	item_id: string;
 	total_received_qty: string;
 	ticket_id?: string;
 	shift_id?: string;
 	notes?: string;
+}
+
+function assertBulkPoolLedgerReplay(
+	actual: Awaited<ReturnType<OperationsRepository['addLedgerEntry']>>,
+	expected: Awaited<ReturnType<typeof createStockLedger>>,
+	ctx: AuthorContext
+): void {
+	if (
+		actual._id !== expected._id ||
+		actual.type !== 'stock_ledger' ||
+		actual.schema_v !== expected.schema_v ||
+		actual.shelter_code !== ctx.shelterCode ||
+		actual.created_by !== ctx.createdBy ||
+		actual.reason !== 'receive' ||
+		actual.ref_id !== expected.ref_id ||
+		actual.item_id !== expected.item_id ||
+		actual.unit !== expected.unit ||
+		!parseQty(actual.qty).eq(expected.qty) ||
+		actual.lot_ref !== expected._id ||
+		actual.lot?.note !== 'bulk_return_pool'
+	) {
+		throw new StockIntegrityError(`Bulk pool ledger replay mismatch for ${expected._id}`);
+	}
+}
+
+function assertBulkPoolReplay(
+	actual: BulkReturnPool,
+	expected: BulkReturnPool,
+	ctx: AuthorContext
+): void {
+	if (
+		actual._id !== expected._id ||
+		actual.type !== 'bulk_return_pool' ||
+		actual.schema_v !== expected.schema_v ||
+		actual.shelter_code !== ctx.shelterCode ||
+		actual.created_by !== ctx.createdBy ||
+		actual.stock_ledger_id !== expected.stock_ledger_id ||
+		actual.item_id !== expected.item_id ||
+		!parseQty(actual.total_received_qty).eq(expected.total_received_qty) ||
+		actual.ticket_id !== expected.ticket_id ||
+		actual.shift_id !== expected.shift_id ||
+		actual.notes !== expected.notes
+	) {
+		throw new StockIntegrityError(`Bulk return pool replay mismatch for ${expected._id}`);
+	}
 }
 
 function resolveDependencies(
@@ -212,35 +261,74 @@ export async function createBulkReturnPool(
 	if (parsed.isNegative() || parsed.isZero()) {
 		throw new WorkflowValidationError('total_received_qty must be a positive decimal string');
 	}
+	if (!isUlid(input.operationUlid)) {
+		throw new WorkflowValidationError('operationUlid must be a valid ULID');
+	}
 
 	const { poolRepo, operationsRepo } = resolveDependencies(deps, ctx);
+	const poolId = `bulk_return_pool:${input.operationUlid}`;
+	const ledgerId = `stock_ledger:${input.operationUlid}`;
 
-	// Inbound stock ledger entry for bulk physical receipt
-	const ledgerRefId = input.ticket_id || `requisition_ticket:${ulid()}`;
+	// The operation ULID gives one durable identity to the receipt and pool.
+	// A retry must reuse it; create-conflict winners are verified below, never adopted blindly.
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: input.item_id,
 			qty: input.total_received_qty,
 			unit: 'ชิ้น',
 			reason: 'receive',
-			ref_id: ledgerRefId,
+			ref_id: poolId,
 			lot: { note: 'bulk_return_pool' },
 			occurred_at: now()
 		},
-		ctx
+		ctx,
+		input.operationUlid
 	);
-	const savedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
-
 	const poolInput: BulkReturnPoolInput = {
 		item_id: input.item_id,
-		stock_ledger_id: savedLedger._id,
+		stock_ledger_id: ledgerId,
 		total_received_qty: input.total_received_qty,
 		...(input.ticket_id ? { ticket_id: input.ticket_id } : {}),
 		...(input.shift_id ? { shift_id: input.shift_id } : {}),
 		...(input.notes ? { notes: input.notes } : {})
 	};
 
-	return poolRepo.create(poolInput, ctx);
+	const poolDocument = createBulkReturnPoolDocument(poolInput, ctx, input.operationUlid);
+	const existingPool = await poolRepo.get(poolId);
+	if (existingPool) {
+		// COMPLETE or POOL_ONLY state: ledger must already exist
+		const existingLedger = await operationsRepo.getLedgerEntry(ledgerId);
+		if (!existingLedger) {
+			throw new StockIntegrityError(
+				`Bulk return pool ${poolId} exists without its physical receipt ${ledgerId}`
+			);
+		}
+		assertBulkPoolLedgerReplay(existingLedger, ledgerEntry, ctx);
+		assertBulkPoolReplay(existingPool, poolDocument, ctx);
+		return existingPool;
+	}
+
+	// NONE or LEDGER_ONLY state: attempt to write ledger; recover on conflict
+	try {
+		const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+		assertBulkPoolLedgerReplay(persistedLedger, ledgerEntry, ctx);
+	} catch (error) {
+		if (!(error instanceof ConflictError)) {
+			throw error;
+		}
+		// LEDGER_ONLY recovery: deterministic ledger already written — fetch and verify
+		const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+		if (!recoveredLedger) {
+			throw new StockIntegrityError(
+				`ConflictError on ${ledgerId} but existing ledger could not be fetched — unrecoverable state`
+			);
+		}
+		assertBulkPoolLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+	}
+
+	const savedPool = await poolRepo.create(poolDocument, ctx);
+	assertBulkPoolReplay(savedPool, poolDocument, ctx);
+	return savedPool;
 }
 
 /**

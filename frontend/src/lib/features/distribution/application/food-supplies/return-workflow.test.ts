@@ -18,6 +18,7 @@ import type {
 } from '../../data/food-supplies';
 import type { OperationsRepository, StockLedger } from '$lib/features/operations';
 import { StockIntegrityError } from './errors';
+import { ConflictError } from '$lib/utils/errors';
 import {
 	clearLoanNonPhysical,
 	clearLoanViaBulkPool,
@@ -105,10 +106,22 @@ class InMemoryLogRepository implements DistributionLogRepository {
 
 class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	ledger: StockLedger[] = [];
+	/** If true, the next addLedgerEntry call throws ConflictError instead of persisting. */
+	throwConflictOnNext = false;
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
+		if (this.throwConflictOnNext) {
+			this.throwConflictOnNext = false;
+			throw new ConflictError();
+		}
+		const existing = this.ledger.find((candidate) => candidate._id === entry._id);
+		if (existing) return existing;
 		this.ledger.push(entry);
 		return entry;
+	}
+
+	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		return this.ledger.find((entry) => entry._id === id) ?? null;
 	}
 
 	async listLedger(): Promise<StockLedger[]> {
@@ -118,12 +131,19 @@ class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 
 class InMemoryPoolRepository implements BulkReturnPoolRepository {
 	pools = new Map<string, BulkReturnPool>();
+	failNextCreate = false;
 
 	async create(
 		input: BulkReturnPoolInput | BulkReturnPool,
 		ctx: AuthorContext
 	): Promise<BulkReturnPool> {
+		if (this.failNextCreate) {
+			this.failNextCreate = false;
+			throw new Error('simulated pool write failure');
+		}
 		if ('_id' in input && input.type === 'bulk_return_pool') {
+			const existing = this.pools.get(input._id);
+			if (existing) return existing;
 			this.pools.set(input._id, input);
 			return input;
 		}
@@ -698,8 +718,10 @@ describe('return-workflow', () => {
 	});
 
 	it('creates bulk return pool and credits physical inventory exactly once', async () => {
+		const operationUlid = '01J00000000000000000000002';
 		const pool = await createBulkReturnPool(
 			{
+				operationUlid,
 				item_id: 'item:cot',
 				total_received_qty: '20',
 				ticket_id: 'requisition_ticket:01J00000000000000000000001'
@@ -711,17 +733,211 @@ describe('return-workflow', () => {
 		expect(pool.total_received_qty).toBe('20');
 		expect(pool.unclaimed_quota).toBe('20');
 		expect(pool.status).toBe('ACTIVE');
+		expect(pool._id).toBe(`bulk_return_pool:${operationUlid}`);
 
 		// Inbound stock ledger recorded ONCE
 		expect(opsRepo.ledger).toHaveLength(1);
 		expect(opsRepo.ledger[0].reason).toBe('receive');
 		expect(opsRepo.ledger[0].qty).toBe('20');
+		expect(opsRepo.ledger[0]._id).toBe(`stock_ledger:${operationUlid}`);
+		expect(opsRepo.ledger[0].ref_id).toBe(pool._id);
+	});
+
+	it('recovers a ledger-only bulk pool creation without a second stock receipt', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000003',
+			item_id: 'item:cot',
+			total_received_qty: '2.5',
+			ticket_id: 'requisition_ticket:01J00000000000000000000001',
+			shift_id: 'shift-A'
+		};
+		poolRepo.failNextCreate = true;
+
+		await expect(
+			createBulkReturnPool(input, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			})
+		).rejects.toThrow('simulated pool write failure');
+		expect(opsRepo.ledger).toHaveLength(1);
+
+		const recovered = await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+		expect(recovered._id).toBe('bulk_return_pool:01J00000000000000000000003');
+		expect(recovered.stock_ledger_id).toBe('stock_ledger:01J00000000000000000000003');
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0].qty).toBe('2.5');
+	});
+
+	it('returns a completed deterministic bulk pool replay without another receipt', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000004',
+			item_id: 'item:cot',
+			total_received_qty: '3',
+			ticket_id: 'requisition_ticket:01J00000000000000000000001'
+		};
+		const first = await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+		const replay = await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+
+		expect(replay._id).toBe(first._id);
+		expect(opsRepo.ledger).toHaveLength(1);
+	});
+
+	it('fails closed when a deterministic bulk-pool replay changes immutable semantics', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000005',
+			item_id: 'item:cot',
+			total_received_qty: '3'
+		};
+		await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+
+		await expect(
+			createBulkReturnPool({ ...input, total_received_qty: '4' }, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			})
+		).rejects.toBeInstanceOf(StockIntegrityError);
+		expect(opsRepo.ledger).toHaveLength(1);
+	});
+
+	it('fails closed when a deterministic pool replay changes ticket metadata', async () => {
+		const input = {
+			operationUlid: '01J00000000000000000000008',
+			item_id: 'item:cot',
+			total_received_qty: '3',
+			ticket_id: 'requisition_ticket:01J00000000000000000000001'
+		};
+		await createBulkReturnPool(input, POS_CTX, {
+			logRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository,
+			poolRepo
+		});
+
+		await expect(
+			createBulkReturnPool(
+				{ ...input, ticket_id: 'requisition_ticket:01J00000000000000000000009' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			)
+		).rejects.toBeInstanceOf(StockIntegrityError);
+		expect(opsRepo.ledger).toHaveLength(1);
+	});
+
+	it('fails closed when an existing deterministic ledger belongs to different semantics', async () => {
+		const operationUlid = '01J00000000000000000000006';
+		opsRepo.ledger.push({
+			_id: `stock_ledger:${operationUlid}`,
+			type: 'stock_ledger',
+			schema_v: 4,
+			shelter_code: POS_CTX.shelterCode,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			created_by: POS_CTX.createdBy,
+			item_id: 'item:other',
+			qty: '3',
+			unit: 'ชิ้น',
+			reason: 'receive',
+			ref_id: `bulk_return_pool:${operationUlid}`,
+			lot_ref: `stock_ledger:${operationUlid}`,
+			lot: { note: 'bulk_return_pool' },
+			occurred_at: '2026-01-01T00:00:00.000Z'
+		});
+
+		await expect(
+			createBulkReturnPool(
+				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			)
+		).rejects.toBeInstanceOf(StockIntegrityError);
+		expect(poolRepo.pools).toHaveLength(0);
+	});
+
+	it('fails closed when an existing deterministic ledger belongs to another shelter', async () => {
+		const operationUlid = '01J00000000000000000000009';
+		opsRepo.ledger.push({
+			_id: `stock_ledger:${operationUlid}`,
+			type: 'stock_ledger',
+			schema_v: 4,
+			shelter_code: 'SH002',
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			created_by: POS_CTX.createdBy,
+			item_id: 'item:cot',
+			qty: '3',
+			unit: 'ชิ้น',
+			reason: 'receive',
+			ref_id: `bulk_return_pool:${operationUlid}`,
+			lot_ref: `stock_ledger:${operationUlid}`,
+			lot: { note: 'bulk_return_pool' },
+			occurred_at: '2026-01-01T00:00:00.000Z'
+		});
+
+		await expect(
+			createBulkReturnPool(
+				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			)
+		).rejects.toBeInstanceOf(StockIntegrityError);
+	});
+
+	it('fails closed for a pool-only state instead of fabricating its missing receipt', async () => {
+		const operationUlid = '01J00000000000000000000010';
+		const pool = createBulkReturnPoolDoc(
+			{
+				item_id: 'item:cot',
+				stock_ledger_id: `stock_ledger:${operationUlid}`,
+				total_received_qty: '3'
+			},
+			POS_CTX,
+			operationUlid
+		);
+		poolRepo.pools.set(pool._id, pool);
+
+		await expect(
+			createBulkReturnPool(
+				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			)
+		).rejects.toBeInstanceOf(StockIntegrityError);
+		expect(opsRepo.ledger).toHaveLength(0);
+	});
+
+	it('rejects a malformed stable operation ULID before writing', async () => {
+		await expect(
+			createBulkReturnPool(
+				{ operationUlid: 'not-a-ulid', item_id: 'item:cot', total_received_qty: '3' },
+				POS_CTX,
+				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			)
+		).rejects.toThrow('operationUlid must be a valid ULID');
+		expect(opsRepo.ledger).toHaveLength(0);
 	});
 
 	it('resolves loan against bulk return pool quota without duplicate stock ledger write', async () => {
 		// 1. Create pool with 10 cots
 		const pool = await createBulkReturnPool(
 			{
+				operationUlid: '01J00000000000000000000007',
 				item_id: 'item:cot',
 				total_received_qty: '10',
 				ticket_id: 'requisition_ticket:01J00000000000000000000001'
@@ -763,5 +979,117 @@ describe('return-workflow', () => {
 
 		// CRITICAL INVARIANT: No second stock ledger entry created!
 		expect(opsRepo.ledger).toHaveLength(1);
+	});
+
+	describe('LEDGER_ONLY recovery via ConflictError', () => {
+		it('Scenario A — recovers when deterministic ledger already exists and pool is absent', async () => {
+			// Pre-seed the deterministic ledger as if a previous addLedgerEntry succeeded but pool write crashed
+			const operationUlid = '01J00000000000000000000011';
+			const ledgerId = `stock_ledger:${operationUlid}`;
+			const poolId = `bulk_return_pool:${operationUlid}`;
+			const input = {
+				operationUlid,
+				item_id: 'item:cot',
+				total_received_qty: '5',
+				ticket_id: 'requisition_ticket:01J00000000000000000000001'
+			};
+
+			// Arrange: ledger already exists in DB (prior crashed write completed the ledger)
+			// throwConflictOnNext makes addLedgerEntry throw ConflictError on the first call
+			opsRepo.throwConflictOnNext = true;
+			// The pre-seeded ledger must match what createBulkReturnPool would build
+			const { createStockLedger: buildLedger } = await import('$lib/features/operations');
+			const ctx = POS_CTX;
+			const preSeededLedger = buildLedger(
+				{
+					item_id: input.item_id,
+					qty: input.total_received_qty,
+					unit: 'ชิ้น',
+					reason: 'receive',
+					ref_id: poolId,
+					lot: { note: 'bulk_return_pool' },
+					occurred_at: '2026-01-01T00:00:00.000Z'
+				},
+				ctx,
+				operationUlid
+			);
+			opsRepo.ledger.push(preSeededLedger);
+
+			// Act: retry with same operationUlid — LEDGER_ONLY recovery
+			const recovered = await createBulkReturnPool(input, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo
+			});
+
+			// Assert: pool was created, no second ledger written
+			expect(recovered._id).toBe(poolId);
+			expect(recovered.stock_ledger_id).toBe(ledgerId);
+			expect(recovered.item_id).toBe('item:cot');
+			expect(opsRepo.ledger).toHaveLength(1);
+			expect(poolRepo.pools.get(poolId)).toBeDefined();
+		});
+
+		it('Scenario B — fails closed when ConflictError occurs and fetched ledger mismatches semantics', async () => {
+			const operationUlid = '01J00000000000000000000012';
+			const poolId = `bulk_return_pool:${operationUlid}`;
+
+			// Pre-seed ledger with wrong item_id
+			opsRepo.ledger.push({
+				_id: `stock_ledger:${operationUlid}`,
+				type: 'stock_ledger',
+				schema_v: 4,
+				shelter_code: POS_CTX.shelterCode,
+				created_at: '2026-01-01T00:00:00.000Z',
+				updated_at: '2026-01-01T00:00:00.000Z',
+				created_by: POS_CTX.createdBy,
+				item_id: 'item:blanket', // ← wrong item
+				qty: '5',
+				unit: 'ชิ้น',
+				reason: 'receive',
+				ref_id: poolId,
+				lot_ref: `stock_ledger:${operationUlid}`,
+				lot: { note: 'bulk_return_pool' },
+				occurred_at: '2026-01-01T00:00:00.000Z'
+			});
+			opsRepo.throwConflictOnNext = true;
+
+			await expect(
+				createBulkReturnPool(
+					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
+					POS_CTX,
+					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				)
+			).rejects.toBeInstanceOf(StockIntegrityError);
+
+			// Pool must not be created — fail-closed
+			expect(poolRepo.pools.has(poolId)).toBe(false);
+			// Ledger still at 1 (pre-seeded only)
+			expect(opsRepo.ledger).toHaveLength(1);
+		});
+
+		it('Scenario C — non-ConflictError from addLedgerEntry propagates without recovery attempt', async () => {
+			const operationUlid = '01J00000000000000000000013';
+			const networkError = new Error('network timeout');
+			const originalAdd = opsRepo.addLedgerEntry.bind(opsRepo);
+			opsRepo.addLedgerEntry = async () => {
+				throw networkError;
+			};
+
+			await expect(
+				createBulkReturnPool(
+					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
+					POS_CTX,
+					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				)
+			).rejects.toBe(networkError);
+
+			// No ledger, no pool — nothing swallowed
+			expect(opsRepo.ledger).toHaveLength(0);
+			expect(poolRepo.pools.has(`bulk_return_pool:${operationUlid}`)).toBe(false);
+
+			// Restore
+			opsRepo.addLedgerEntry = originalAdd;
+		});
 	});
 });

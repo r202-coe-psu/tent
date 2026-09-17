@@ -620,8 +620,8 @@ export function buildValidateDocUpdate(code: string): string {
     }
     if (newDoc.reason === 'receive') {
       if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
-        if (typeof newDoc.ref_id !== 'string' || (!/^meal_service:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^distribution_log:.+/.test(newDoc.ref_id))) {
-          throw { forbidden: 'Receive stock ledger ref_id must reference meal_service, requisition_ticket, or distribution_log' };
+        if (typeof newDoc.ref_id !== 'string' || (!/^meal_service:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^distribution_log:.+/.test(newDoc.ref_id) && !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.ref_id))) {
+          throw { forbidden: 'Receive stock ledger ref_id must reference meal_service, requisition_ticket, distribution_log, or bulk_return_pool' };
         }
       }
     }

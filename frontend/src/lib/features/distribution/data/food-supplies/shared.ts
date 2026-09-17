@@ -14,24 +14,11 @@ export function resolveShelterDbName(shelterCode: string): string {
 }
 
 /**
- * Checks whether an error indicates a CouchDB HTTP 409 Conflict.
- * Bounded CAS retry loops retry only on actual document conflicts.
+ * CouchDB's remote client normalizes an HTTP 409 into this project's typed
+ * ConflictError. CAS must fail closed for every other error shape.
  */
-export function isCouchConflictError(error: unknown): boolean {
-	if (!error || typeof error !== 'object') return false;
-	if (error instanceof ConflictError) return true;
-	const candidate = error as {
-		status?: number;
-		statusCode?: number;
-		name?: string;
-		message?: string;
-	};
-	return (
-		candidate.status === 409 ||
-		candidate.statusCode === 409 ||
-		candidate.name === 'ConflictError' ||
-		(typeof candidate.message === 'string' && candidate.message.includes('409'))
-	);
+export function isCouchConflictError(error: unknown): error is ConflictError {
+	return error instanceof ConflictError;
 }
 
 /**

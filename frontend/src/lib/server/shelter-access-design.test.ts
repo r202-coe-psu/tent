@@ -2105,7 +2105,7 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(reqKitchen, null, WAREHOUSE)).not.toThrow();
 			});
 
-			it('allows receive referencing meal_service, requisition_ticket, or distribution_log', () => {
+			it('allows receive referencing meal_service, requisition_ticket, distribution_log, or bulk_return_pool', () => {
 				const receiveMeal = ledger({
 					qty: '50',
 					reason: 'receive',
@@ -2126,6 +2126,13 @@ describe('buildValidateDocUpdate', () => {
 					ref_id: 'distribution_log:01J00000000000000000000001'
 				});
 				expect(() => compile()(receiveLog, null, WAREHOUSE)).not.toThrow();
+
+				const receivePool = ledger({
+					qty: '1',
+					reason: 'receive',
+					ref_id: 'bulk_return_pool:01J00000000000000000000001'
+				});
+				expect(() => compile()(receivePool, null, WAREHOUSE)).not.toThrow();
 			});
 
 			it('rejects distribute with invalid ref_id', () => {
