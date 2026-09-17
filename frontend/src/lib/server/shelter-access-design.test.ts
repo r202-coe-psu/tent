@@ -236,6 +236,31 @@ describe('buildValidateDocUpdate', () => {
 				),
 			/Cannot modify code or dimension/
 		);
+
+		// Protected unit_of_measure cannot be unprotected
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						code: 'kg',
+						dimension: 'mass',
+						is_protected: false,
+						...envelope
+					},
+					{
+						_id: 'unit_of_measure:kg',
+						type: 'unit_of_measure',
+						code: 'kg',
+						dimension: 'mass',
+						is_protected: true,
+						...envelope
+					},
+					ADMIN
+				),
+			/Cannot unprotect a system protected unit of measure/
+		);
 	});
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {

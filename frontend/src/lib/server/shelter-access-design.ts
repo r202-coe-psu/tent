@@ -1018,6 +1018,9 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'Cannot delete system protected unit of measure' };
     }
     if (oldDoc && oldDoc.is_protected) {
+      if (!newDoc.is_protected) {
+        throw { forbidden: 'Cannot unprotect a system protected unit of measure' };
+      }
       if (oldDoc.code !== newDoc.code || oldDoc.dimension !== newDoc.dimension) {
         throw { forbidden: 'Cannot modify code or dimension of a protected unit of measure' };
       }
