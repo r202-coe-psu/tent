@@ -9,8 +9,11 @@ const token = process.env.SHELTER_IMPORT_WORKER_TOKEN;
 const workerId =
 	process.env.SHELTER_IMPORT_WORKER_ID || `import-worker-${process.pid}-${randomUUID()}`;
 const endpoint = `${baseUrl}/api/internal/shelter-import/worker/next`;
-const pollMs = Math.max(3000, Number(process.env.SHELTER_IMPORT_WORKER_POLL_MS || 3000));
-const timeoutMs = Math.max(10_000, Number(process.env.SHELTER_IMPORT_WORKER_TIMEOUT_MS || 120_000));
+const parsedPollMs = Number(process.env.SHELTER_IMPORT_WORKER_POLL_MS);
+const pollMs = Number.isFinite(parsedPollMs) && parsedPollMs >= 1000 ? parsedPollMs : 3000;
+const parsedTimeoutMs = Number(process.env.SHELTER_IMPORT_WORKER_TIMEOUT_MS);
+const timeoutMs =
+	Number.isFinite(parsedTimeoutMs) && parsedTimeoutMs >= 10_000 ? parsedTimeoutMs : 120_000;
 
 if (!token) {
 	console.error('[shelter-import-worker] SHELTER_IMPORT_WORKER_TOKEN is required');
