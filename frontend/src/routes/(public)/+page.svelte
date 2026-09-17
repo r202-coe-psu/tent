@@ -10,7 +10,10 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
+	import Construction from '@lucide/svelte/icons/construction';
 
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
@@ -26,6 +29,7 @@
 
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
+	let devModalOpen = $state(false);
 
 	let donationScrollContainer = $state<HTMLElement | null>(null);
 	let volunteerScrollContainer = $state<HTMLElement | null>(null);
@@ -464,9 +468,9 @@
 					<h3 class="text-base font-bold text-slate-900 sm:text-lg">
 						{t.donationsEmptyTitle}
 					</h3>
-					<p class="mt-1 max-w-md text-xs text-slate-500 sm:text-sm">
+					<!-- <p class="mt-1 max-w-md text-xs text-slate-500 sm:text-sm">
 						{t.donationsEmptyDesc}
-					</p>
+					</p> -->
 					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
 						<a
 							href="/donations"
@@ -507,17 +511,18 @@
 					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
 						<button
 							type="button"
+							onclick={() => (devModalOpen = true)}
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-[#059669] px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-[#047857] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
 							<span>{t.allMissionsBtn}</span>
 							<span aria-hidden="true">➔</span>
 						</button>
-						<button
+						<!-- <button
 							type="button"
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-emerald-800 transition-colors hover:bg-emerald-100/70 sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
 							<span>{t.hostHouseBtn}</span>
-						</button>
+						</button> -->
 					</div>
 					{#if urgentVolunteers.length > 1}
 						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>
@@ -570,6 +575,15 @@
 					<h3 class="text-base font-bold text-slate-900 sm:text-lg">
 						{t.volunteersEmptyTitle}
 					</h3>
+					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+						<button
+							type="button"
+							onclick={() => (devModalOpen = true)}
+							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#059669] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#047857] sm:text-sm"
+						>
+							<span>{t.allMissionsBtn}</span>
+						</button>
+					</div>
 				</div>
 			{/if}
 		</section>
@@ -639,3 +653,34 @@
 </div>
 
 <FamilySearchModal bind:open={searchOpen} />
+
+<Dialog.Root bind:open={devModalOpen}>
+	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">
+		<div class="flex flex-col items-center text-center">
+			<div
+				class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200/80 bg-amber-50 text-amber-600 sm:h-16 sm:w-16"
+			>
+				<Construction class="h-7 w-7 sm:h-8 sm:w-8" />
+			</div>
+			<Dialog.Header class="text-center">
+				<Dialog.Title class="text-center text-lg font-bold text-slate-900 sm:text-xl">
+					{isEn ? 'Feature Under Development' : 'ระบบอยู่ระหว่างการพัฒนา'}
+				</Dialog.Title>
+				<Dialog.Description class="mt-2 text-center text-sm text-slate-500">
+					{isEn
+						? 'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!'
+						: 'ระบบดูภารกิจและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ'}
+				</Dialog.Description>
+			</Dialog.Header>
+			<div class="mt-6 flex w-full justify-center">
+				<Button
+					type="button"
+					onclick={() => (devModalOpen = false)}
+					class="min-w-[120px] rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+				>
+					{isEn ? 'Close' : 'รับทราบ'}
+				</Button>
+			</div>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
