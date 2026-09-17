@@ -6,7 +6,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '../domain/schema';
@@ -163,12 +162,14 @@
 </svelte:head>
 
 {#snippet fields()}
-	<form method="POST" use:form.enhance>
-		<Field.FieldGroup class="space-y-4">
+	<form method="POST" use:form.enhance class="flex flex-col gap-4">
+		<div class="flex flex-col gap-3.5">
 			<Form.Field {form} name="username">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold">ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label>
+						<Form.Label class="text-sm font-semibold text-slate-700"
+							>ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label
+						>
 						<Input
 							{...props}
 							bind:value={$formData.username}
@@ -180,11 +181,14 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+
 			<Form.Field {form} name="password">
 				<Form.Control>
 					{#snippet children({ props })}
 						<div class="flex items-center justify-between">
-							<Form.Label class="font-bold">รหัสผ่าน (Password)</Form.Label>
+							<Form.Label class="text-sm font-semibold text-slate-700"
+								>รหัสผ่าน (Password)</Form.Label
+							>
 							<a
 								href="/forgot-password"
 								class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
@@ -220,39 +224,50 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+		</div>
+
+		<div class="flex flex-col gap-2 pt-0.5">
 			<Form.Button
 				disabled={$submitting}
-				class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
+				class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
 			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
 
 			{#if captchaEnabled}
-				<p class="text-center text-2xs text-muted-foreground">
+				<p class="text-center text-xs text-muted-foreground">
 					เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
 				</p>
 			{/if}
+		</div>
 
-			<div class="relative py-1">
-				<div class="absolute inset-0 flex items-center" aria-hidden="true">
-					<div class="w-full border-t border-slate-200"></div>
-				</div>
-				<div class="relative flex justify-center text-xs">
-					<span class="bg-white px-2 text-slate-500">หรือ</span>
-				</div>
+		<div class="relative my-0.5">
+			<div class="absolute inset-0 flex items-center" aria-hidden="true">
+				<div class="w-full border-t border-slate-200"></div>
 			</div>
+			<div class="relative flex justify-center text-xs">
+				<span class="bg-white px-2 font-medium text-slate-500">หรือ</span>
+			</div>
+		</div>
 
-			<GoogleSignInButton href={googleOAuthStartHref('login')} />
-			<ThaIdSignInButton href={thaidOAuthStartHref('login')} />
-		</Field.FieldGroup>
+		<div class="flex flex-col gap-2.5">
+			<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+		</div>
 	</form>
 {/snippet}
 
 {#if showCard}
-	<Card.Root class="mx-auto w-full max-w-md rounded-2xl border-slate-200 shadow-lg">
-		<Card.Header class="space-y-1 text-center">
-			<Card.Title class="text-2xl font-bold text-slate-900">เข้าสู่ระบบ Smart Shelter</Card.Title>
-			<Card.Description>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description>
+	<Card.Root
+		class="mx-auto w-full max-w-md gap-4 rounded-2xl border border-slate-200/80 bg-white py-5 shadow-xs sm:py-6"
+	>
+		<Card.Header class="gap-1 pb-0 text-center">
+			<Card.Title class="text-xl font-bold text-[#0A2647] sm:text-2xl"
+				>เข้าสู่ระบบ Smart Shelter</Card.Title
+			>
+			<Card.Description class="text-xs text-slate-500 sm:text-sm"
+				>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description
+			>
 		</Card.Header>
 		<Card.Content>
 			{@render fields()}
