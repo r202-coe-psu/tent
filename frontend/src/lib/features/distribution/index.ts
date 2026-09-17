@@ -200,3 +200,6 @@ export {
 	type BulkReturnPoolRepository,
 	type BulkReturnPoolListFilter
 } from './data/food-supplies';
+
+/** Ticket-era Food & Supplies application workflows (CR-121). */
+export * from './application/food-supplies';
