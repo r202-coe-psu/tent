@@ -6,11 +6,11 @@ from ...utils.request_meta import client_ip
 from .schemas import TokenErrorResponse, TokenRequest, TokenResponse
 from .use_case import ThirdPartyAuthUseCase, get_thirdparty_auth_use_case
 
-router = APIRouter(prefix="/api/auth", tags=["Third-party Auth"])
+router = APIRouter(prefix="/external", tags=["External"])
 
 
 @router.post(
-    "/token-third-party",
+    "/token",
     response_model=TokenResponse,
     responses={
         400: {"model": TokenErrorResponse},

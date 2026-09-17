@@ -1,12 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
 import {
 	bookingCodeFrom,
-	isCaptchaKeyConfigured,
 	isForecastCapacityExceeded,
 	publicBookingInputSchema,
 	executePublicFamilyRegistration
@@ -21,13 +19,16 @@ import {
 } from '$lib/features/people/server';
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 // Never prerendered — runs on the Node server at runtime.
 export const prerender = false;
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 
 const noStore = { 'Cache-Control': 'no-store' };
 
@@ -183,23 +184,18 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 
-	// 3. CAPTCHA verification.
-	if (!isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY)) {
-		if (!dev) {
-			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
-			return json(
-				{ success: false, error: 'SERVER_MISCONFIGURED' },
-				{ status: 500, headers: noStore }
-			);
-		}
-		console.warn('[dev] SECRET_RECAPTCHA_KEY not configured — skipping CAPTCHA verification');
-	} else {
-		if (!captchaToken) {
-			return json({ success: false, error: 'CAPTCHA_REQUIRED' }, { status: 400, headers: noStore });
-		}
-		if (!(await captchaProvider.verifyToken(captchaToken, ip, 'register'))) {
-			return json({ success: false, error: 'CAPTCHA_FAILED' }, { status: 403, headers: noStore });
-		}
+	// 3. CAPTCHA verification (honors config:app.recaptcha_enabled).
+	const captcha = await verifyRecaptchaOrSkip({
+		token: captchaToken ?? '',
+		ip,
+		action: 'register',
+		provider: captchaProvider
+	});
+	if (!captcha.ok) {
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	// 4. Trust nothing from the browser about the shelter.

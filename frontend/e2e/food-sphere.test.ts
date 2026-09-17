@@ -6,7 +6,7 @@
  * Reason: catalog docs are global singletons — real writes would race.
  *
  * Coverage:
- * [Guard]     non-system_admin redirected away from /portal/system-management/sop-parameters
+ * [Guard]     non-system_admin redirected away from /system-management/sop-parameters
  * [Sphere]    create → auto-fill UOM → edit → delete round-trip
  * [Replen]    create with reactive reorder days → validation blocks invalid submit
  * [DoC Badge] all 5 alert statuses rendered correctly
@@ -23,7 +23,7 @@ import {
 import { injectSession, clearSession } from './helpers/login';
 
 const BASE = 'http://localhost:4173';
-const SOP_PATH = '/portal/system-management/sop-parameters';
+const SOP_PATH = '/system-management/sop-parameters';
 const BACK_OFFICE_SOP_PATH = '/back-office/sop-parameters';
 
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);

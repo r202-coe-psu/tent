@@ -27,7 +27,8 @@
 		onprogress?: () => void;
 	} = $props();
 
-	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/system-management/shelters'));
+
 	const logsQuery = useImportLogs();
 	const logs = $derived(logsQuery.data ?? []);
 	const activeJobIsRunning = $derived(

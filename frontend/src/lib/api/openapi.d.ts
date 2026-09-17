@@ -408,7 +408,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/auth/token-third-party': {
+	'/external/token': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -418,7 +418,7 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/** Issue Token */
-		post: operations['issue_token_api_auth_token_third_party_post'];
+		post: operations['issue_token_external_token_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -460,7 +460,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/locations': {
+	'/external/locations': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -468,7 +468,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** List Locations */
-		get: operations['list_locations_api_thirdparty_locations_get'];
+		get: operations['list_locations_external_locations_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -477,7 +477,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/locations/{location_code}': {
+	'/external/locations/{location_code}': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -485,7 +485,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location */
-		get: operations['get_location_api_thirdparty_locations__location_code__get'];
+		get: operations['get_location_external_locations__location_code__get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -494,7 +494,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/locations/{location_code}/occupancy': {
+	'/external/locations/{location_code}/occupancy': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -502,7 +502,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupancy */
-		get: operations['get_location_occupancy_api_thirdparty_locations__location_code__occupancy_get'];
+		get: operations['get_location_occupancy_external_locations__location_code__occupancy_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -511,7 +511,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/locations/{location_code}/occupants': {
+	'/external/locations/{location_code}/occupants': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -519,7 +519,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupants */
-		get: operations['get_location_occupants_api_thirdparty_locations__location_code__occupants_get'];
+		get: operations['get_location_occupants_external_locations__location_code__occupants_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -528,7 +528,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/locations/{location_code}/stock': {
+	'/external/locations/{location_code}/stock': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -536,7 +536,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Stock */
-		get: operations['get_location_stock_api_thirdparty_locations__location_code__stock_get'];
+		get: operations['get_location_stock_external_locations__location_code__stock_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -545,7 +545,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/thirdparty/summary': {
+	'/external/summary': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -553,7 +553,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Summary */
-		get: operations['get_summary_api_thirdparty_summary_get'];
+		get: operations['get_summary_external_summary_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -582,6 +582,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/photos': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Upload Unassigned Photo
+		 * @description Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255).
+		 */
+		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/unassigned-registrations': {
 		parameters: {
 			query?: never;
@@ -602,7 +622,94 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/public/v1/unassigned-registrations/photos': {
+	'/staff/v1/unassigned-registrations/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Search Unassigned Registrations
+		 * @description Staff online search of open Unassigned Registrations (FR-UR-02 / #245 / #251).
+		 *
+		 *     Auth is shelter-scoped staff or SA (matches BFF) so Station 1 can federate
+		 *     anti-dupe for non-claim roles; claim remains ``require_registration_staff``.
+		 */
+		get: operations['search_unassigned_registrations_staff_v1_unassigned_registrations_search_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/stats': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Unassigned Registration Stats
+		 * @description SA-only open-queue counts for system overview KPIs.
+		 */
+		get: operations['unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * List Unassigned Registrations
+		 * @description SA-only paginated open Unassigned Registrations (system overview PII).
+		 */
+		get: operations['list_unassigned_registrations_staff_v1_unassigned_registrations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration
+		 * @description SA-only Unassigned Registration detail (read-only profile).
+		 */
+		get: operations['get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get'];
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Unassigned Registration
+		 * @description system_admin hard-delete of a central-queue document (FR-UR-04 / #246).
+		 */
+		delete: operations['delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}/claim': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -612,10 +719,10 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/**
-		 * Upload Unassigned Photo
-		 * @description Store a compressed face photo in Mongo GridFS (#255).
+		 * Claim Unassigned Registration
+		 * @description Claim open members into this shelter — Couch birth at pre_registered (#247).
 		 */
-		post: operations['upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+		post: operations['claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -731,6 +838,48 @@ export interface components {
 			 */
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
+		};
+		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
+		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+			/** Full */
+			full: string;
+			/** Thumb */
+			thumb?: string | null;
+			/**
+			 * Filename
+			 * @default face.webp
+			 */
+			filename: string;
+			/**
+			 * Content Type
+			 * @default image/webp
+			 */
+			content_type: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/** ClaimedMemberOut */
+		ClaimedMemberOut: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default claimed
+			 * @constant
+			 */
+			status: 'claimed';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
 		};
 		/** ConfigResponse */
 		ConfigResponse: {
@@ -909,6 +1058,33 @@ export interface components {
 			/** Email */
 			email?: string | null;
 		};
+		/** EmergencyContactInput */
+		EmergencyContactInput: {
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
+			/**
+			 * Phone
+			 * @default
+			 */
+			phone: string;
+			/**
+			 * Relation
+			 * @default
+			 */
+			relation: string;
+		};
+		/** EmergencyContactOut */
+		EmergencyContactOut: {
+			/** Name */
+			name: string;
+			/** Phone */
+			phone: string;
+			/** Relation */
+			relation: string;
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -987,10 +1163,31 @@ export interface components {
 			province?: string | null;
 			/** Postal Code */
 			postal_code?: string | null;
-			/** Geo */
 			geo?: components['schemas']['GeoPoint'] | null;
 			/** Pets */
 			pets?: components['schemas']['PetInput'][];
+			/** Label */
+			label?: string | null;
+		};
+		/** HouseholdOut */
+		HouseholdOut: {
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			geo?: components['schemas']['GeoPoint'] | null;
 			/** Label */
 			label?: string | null;
 		};
@@ -1139,6 +1336,7 @@ export interface components {
 			message: string;
 			/** Result */
 			result: components['schemas']['LocationItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** LocationOccupancyEnvelope */
 		LocationOccupancyEnvelope: {
@@ -1343,38 +1541,8 @@ export interface components {
 			/** Religion */
 			religion?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
-			/**
-			 * Photo
-			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255)
-			 */
+			/** Photo */
 			photo?: string | null;
-		};
-		/** EmergencyContactInput */
-		EmergencyContactInput: {
-			/**
-			 * Name
-			 * @default
-			 */
-			name: string;
-			/**
-			 * Phone
-			 * @default
-			 */
-			phone: string;
-			/**
-			 * Relation
-			 * @default
-			 */
-			relation: string;
-		};
-		/** EmergencyContactOut */
-		EmergencyContactOut: {
-			/** Name */
-			name: string;
-			/** Phone */
-			phone: string;
-			/** Relation */
-			relation: string;
 		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
@@ -1462,6 +1630,7 @@ export interface components {
 			 * @default []
 			 */
 			result: components['schemas']['OccupantItem'][];
+			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** OccupantsErrorResponse */
 		OccupantsErrorResponse: {
@@ -1471,6 +1640,46 @@ export interface components {
 			message: string;
 			/** Detail */
 			detail?: string | null;
+		};
+		/**
+		 * OpenMemberHit
+		 * @description Open member surfaced by staff search — claimable (not claimed/cancelled).
+		 */
+		OpenMemberHit: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/**
+			 * Status
+			 * @default open
+			 * @constant
+			 */
+			status: 'open';
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: string;
+			/** Phone */
+			phone?: string | null;
+			person_id?: components['schemas']['PersonIdOut'] | null;
+			/** Country */
+			country: string;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[];
+			/** Special Needs */
+			special_needs?: string[];
+			/** Nickname */
+			nickname?: string | null;
+			/** Religion */
+			religion?: string | null;
+			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
+			/** Photo */
+			photo?: string | null;
+			/** Birth Year */
+			birth_year?: number | null;
+			/** Age */
+			age?: number | null;
 		};
 		/** PaginatedAnnouncements */
 		PaginatedAnnouncements: {
@@ -1485,6 +1694,17 @@ export interface components {
 			/** Total Pages */
 			total_pages: number;
 		};
+		/** PaginationMeta */
+		PaginationMeta: {
+			/** Page */
+			page: number;
+			/** Limit */
+			limit: number;
+			/** Total */
+			total: number;
+			/** Total Pages */
+			total_pages: number;
+		};
 		/** PersonIdInput */
 		PersonIdInput: {
 			/**
@@ -1496,7 +1716,10 @@ export interface components {
 			/** Number */
 			number?: string | null;
 		};
-		/** PersonIdOut */
+		/**
+		 * PersonIdOut
+		 * @description Person id on create responses — distinct from request PersonIdInput.
+		 */
 		PersonIdOut: {
 			/**
 			 * Cardtype
@@ -1525,10 +1748,7 @@ export interface components {
 			 * @default false
 			 */
 			has_cage: boolean;
-			/**
-			 * Image Url
-			 * @description GridFS ref `gfs:{oid}` from POST …/photos (#255 pet photo)
-			 */
+			/** Image Url */
 			image_url?: string | null;
 		};
 		/**
@@ -1674,6 +1894,11 @@ export interface components {
 			contact: components['schemas']['ShelterContactDetail'];
 			/** Faq */
 			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -1749,6 +1974,11 @@ export interface components {
 			vulnerable_groups?: string[] | null;
 			/** Admin Type */
 			admin_type?: string | null;
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -2034,6 +2264,65 @@ export interface components {
 				[key: string]: boolean;
 			};
 		};
+		/**
+		 * UnassignedPhotoUploadResponse
+		 * @description Response from POST /public/v1/unassigned-registrations/photos.
+		 */
+		UnassignedPhotoUploadResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Photo Id */
+			photo_id: string;
+			/** Content Type */
+			content_type: string;
+			/** Filename */
+			filename: string;
+			/** Width */
+			width?: number | null;
+			/** Height */
+			height?: number | null;
+			/** Original Size */
+			original_size?: number | null;
+			/** Compressed Size */
+			compressed_size?: number | null;
+			/** Thumbnail Size */
+			thumbnail_size?: number | null;
+		};
+		/**
+		 * UnassignedRegistrationClaimRequest
+		 * @description Staff claim — body selects open member reserved ids (CR-113 / #247).
+		 */
+		UnassignedRegistrationClaimRequest: {
+			/** Member Ids */
+			member_ids: string[];
+			/** Shelter Code */
+			shelter_code?: string | null;
+		};
+		/** UnassignedRegistrationClaimResponse */
+		UnassignedRegistrationClaimResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Id */
+			id: string | null;
+			/** Deleted */
+			deleted: boolean;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Household Id */
+			household_id: string;
+			/** Evacuee Ids */
+			evacuee_ids: string[];
+			/** Claimed */
+			claimed: components['schemas']['ClaimedMemberOut'][];
+			/** Remaining Open */
+			remaining_open: components['schemas']['OpenMemberHit'][];
+		};
 		/** UnassignedRegistrationCreateRequest */
 		UnassignedRegistrationCreateRequest: {
 			/** Members */
@@ -2071,29 +2360,90 @@ export interface components {
 			/** Created At */
 			created_at: string;
 		};
-		/** UnassignedPhotoUploadResponse */
-		UnassignedPhotoUploadResponse: {
+		/** UnassignedRegistrationDetailResponse */
+		UnassignedRegistrationDetailResponse: {
+			/** Id */
+			id: string;
+			/** Schema V */
+			schema_v: number;
+			/** Reserved Household Id */
+			reserved_household_id: string;
 			/**
-			 * Success
-			 * @default true
+			 * Registered Via
+			 * @enum {string}
 			 */
-			success: boolean;
-			/** Photo Id */
-			photo_id: string;
-			/** Content Type */
-			content_type: string;
-			/** Filename */
-			filename: string;
-			/** Width */
-			width?: number | null;
-			/** Height */
-			height?: number | null;
-			/** Original Size */
-			original_size?: number | null;
-			/** Compressed Size */
-			compressed_size?: number | null;
-			/** Thumbnail Size */
-			thumbnail_size?: number | null;
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Members */
+			members: components['schemas']['MemberCreated'][];
+		};
+		/** UnassignedRegistrationListItem */
+		UnassignedRegistrationListItem: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			household: components['schemas']['HouseholdOut'];
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Member Count */
+			open_member_count: number;
+		};
+		/** UnassignedRegistrationListResponse */
+		UnassignedRegistrationListResponse: {
+			/** Items */
+			items: components['schemas']['UnassignedRegistrationListItem'][];
+			/** Total */
+			total: number;
+			/** Open Member Count */
+			open_member_count: number;
+			/** Limit */
+			limit: number;
+			/** Offset */
+			offset: number;
+		};
+		/** UnassignedRegistrationSearchHit */
+		UnassignedRegistrationSearchHit: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+		};
+		/** UnassignedRegistrationSearchResponse */
+		UnassignedRegistrationSearchResponse: {
+			/** Results */
+			results: components['schemas']['UnassignedRegistrationSearchHit'][];
+		};
+		/** UnassignedRegistrationStatsResponse */
+		UnassignedRegistrationStatsResponse: {
+			/** Open Registrations */
+			open_registrations: number;
+			/** Open Members */
+			open_members: number;
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -2503,7 +2853,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -2630,7 +2980,7 @@ export interface operations {
 					'application/json': components['schemas']['M2ErrorResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -2723,7 +3073,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -2909,7 +3259,7 @@ export interface operations {
 			};
 		};
 	};
-	issue_token_api_auth_token_third_party_post: {
+	issue_token_external_token_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3044,7 +3394,7 @@ export interface operations {
 			};
 		};
 	};
-	list_locations_api_thirdparty_locations_get: {
+	list_locations_external_locations_get: {
 		parameters: {
 			query?: {
 				/** @description Filter by location_status */
@@ -3052,6 +3402,10 @@ export interface operations {
 				updated_since?: string | null;
 				/** @description Include soft-deleted (is_active=false) locations */
 				include_inactive?: boolean;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
 			};
 			header?: never;
 			path?: never;
@@ -3079,7 +3433,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_api_thirdparty_locations__location_code__get: {
+	get_location_external_locations__location_code__get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3119,7 +3473,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupancy_api_thirdparty_locations__location_code__occupancy_get: {
+	get_location_occupancy_external_locations__location_code__occupancy_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3159,10 +3513,14 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupants_api_thirdparty_locations__location_code__occupants_get: {
+	get_location_occupants_external_locations__location_code__occupants_get: {
 		parameters: {
 			query?: {
 				purpose?: string | null;
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				limit?: number;
 			};
 			header?: never;
 			path: {
@@ -3219,7 +3577,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_stock_api_thirdparty_locations__location_code__stock_get: {
+	get_location_stock_external_locations__location_code__stock_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3259,7 +3617,7 @@ export interface operations {
 			};
 		};
 	};
-	get_summary_api_thirdparty_summary_get: {
+	get_summary_external_summary_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3299,6 +3657,39 @@ export interface operations {
 			};
 		};
 	};
+	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'multipart/form-data': components['schemas']['Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	create_unassigned_registration_public_v1_unassigned_registrations_post: {
 		parameters: {
 			query?: never;
@@ -3332,36 +3723,209 @@ export interface operations {
 			};
 		};
 	};
-	upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
+	search_unassigned_registrations_staff_v1_unassigned_registrations_search_get: {
 		parameters: {
-			query?: never;
-			header?: never;
+			query?: {
+				/** @description Name, phone, or person id of an open member */
+				q?: string;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
 			path?: never;
-			cookie?: never;
-		};
-		requestBody?: {
-			content: {
-				'multipart/form-data': {
-					full: string;
-					thumb?: string;
-					filename?: string;
-					content_type?: string;
-					width?: number;
-					height?: number;
-					original_size?: number;
-					compressed_size?: number;
-					thumbnail_size?: number;
-				};
+			cookie?: {
+				AuthSession?: string | null;
 			};
 		};
+		requestBody?: never;
 		responses: {
 			/** @description Successful Response */
-			201: {
+			200: {
 				headers: {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['UnassignedPhotoUploadResponse'];
+					'application/json': components['schemas']['UnassignedRegistrationSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	unassigned_registration_stats_staff_v1_unassigned_registrations_stats_get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationStatsResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_unassigned_registrations_staff_v1_unassigned_registrations_get: {
+		parameters: {
+			query?: {
+				q?: string;
+				province?: string | null;
+				district?: string | null;
+				subdistrict?: string | null;
+				limit?: number;
+				offset?: number;
+			};
+			header?: {
+				Cookie?: string | null;
+			};
+			path?: never;
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_staff_v1_unassigned_registrations__registration_id__get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	delete_unassigned_registration_staff_v1_unassigned_registrations__registration_id__delete: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedRegistrationClaimRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationClaimResponse'];
 				};
 			};
 			/** @description Validation Error */

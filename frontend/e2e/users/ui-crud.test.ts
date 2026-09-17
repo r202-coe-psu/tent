@@ -466,7 +466,7 @@ test.describe('User Management UI — EOC route', () => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockUserList(page, []);
 		await mockShelters(page, [{ code: 'SH001', name: 'Test Shelter' }]);
-		await page.goto('http://localhost:4173/portal/system-management/users');
+		await page.goto('http://localhost:4173/system-management/users');
 
 		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
@@ -493,7 +493,7 @@ test.describe('User Management UI — EOC route', () => {
 
 	test('SM is redirected away from the EOC users URL', async ({ page }) => {
 		await injectSession(page, SM1, sessions[SM1.name]);
-		await page.goto('http://localhost:4173/portal/system-management/users');
+		await page.goto('http://localhost:4173/system-management/users');
 		await page.waitForURL((url) => !url.pathname.includes('/system-management/users'), {
 			timeout: 8000
 		});
@@ -510,7 +510,7 @@ test.describe('User Management UI — Shelter edit (locked)', () => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockUserList(page, []);
 		await mockShelters(page, [{ code: CODE, name: 'Test Shelter' }]);
-		await page.goto(`http://localhost:4173/portal/system-management/shelters/edit/${CODE}`);
+		await page.goto(`http://localhost:4173/system-management/shelters/edit/${CODE}`);
 
 		await page.getByRole('button', { name: 'ผู้ใช้งานและสิทธิ์' }).click();
 		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
