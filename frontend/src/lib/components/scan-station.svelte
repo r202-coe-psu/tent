@@ -131,7 +131,6 @@
 		toast.success(`บันทึกรับเข้าคลังแบบ Walk-in สำเร็จ (${walkinDonorName})`);
 		walkinDonorName = '';
 		walkinDonorPhone = '';
-		walkinItems = [{ name: '', qty: 1, unit: 'ชิ้น' }];
 		walkinItems = [{ name: '', qty: 1, unit: 'piece' }];
 	}
 </script>
