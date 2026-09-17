@@ -8,6 +8,7 @@
 	import { toast } from 'svelte-sonner';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
+	import { formatUnit } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -270,7 +271,7 @@
 									type="text"
 									id="unit-{item.id}"
 									readonly
-									value={item.unit}
+									value={formatUnit(item.unit, null, langState.current)}
 									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
 								/>
 							{:else}

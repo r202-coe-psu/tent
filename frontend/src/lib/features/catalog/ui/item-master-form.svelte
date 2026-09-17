@@ -134,7 +134,6 @@
 					submitData.dietary = [];
 					delete submitData.asset_status;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
-					submitData.base_unit = 'ชิ้น';
 					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
 
@@ -601,7 +600,6 @@
 									>
 										<option value="">-- เลือกหน่วย --</option>
 										{#each uomOptions as unit (unit)}
-											<option value={unit}>{unit}</option>
 											<option value={unit}>{formatUnit(unit, allUnits)}</option>
 										{/each}
 									</select>
@@ -623,7 +621,6 @@
 									>
 										<option value="">-- เลือกหน่วย --</option>
 										{#each uomOptions as unit (unit)}
-											<option value={unit}>{unit}</option>
 											<option value={unit}>{formatUnit(unit, allUnits)}</option>
 										{/each}
 									</select>

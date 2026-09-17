@@ -401,7 +401,6 @@
 															)
 														: t.noData}
 												</td>
-												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? t.noData}</td>
 												<td class="px-4 py-3 text-muted-foreground"
 													>{item.unit
 														? formatUnit(item.unit, null, langState.current)

@@ -84,7 +84,6 @@
 						<span
 							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
 						>
-							{item.base_unit}
 							{formatUnit(item.base_unit)}
 						</span>
 					</button>

@@ -130,7 +130,7 @@
 					<Form.Label class="text-xs font-bold text-foreground">หน่วยนับ</Form.Label>
 					<Input
 						{...props}
-						placeholder="เช่น kg, ชิ้น"
+						placeholder="เช่น kg, piece, pack"
 						bind:value={$formData.unit}
 						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 					/>

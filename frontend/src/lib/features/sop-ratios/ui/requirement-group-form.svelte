@@ -4,7 +4,7 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit } from '$lib/features/catalog';
 	import {
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
@@ -372,7 +372,7 @@
 														<span
 															class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
 														>
-															{item.base_unit}
+															{formatUnit(item.base_unit)}
 														</span>
 													{/if}
 												</div>

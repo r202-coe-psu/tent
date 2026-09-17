@@ -11,6 +11,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
+	import { formatUnit } from '$lib/features/catalog';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
@@ -235,7 +236,7 @@
 								<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 								<span class="{dotClass.split(' ')[1]} truncate">
 									{item.name || t.unspecified} — {item.amount}
-									{item.unit}
+									{formatUnit(item.unit, null, langState.current)}
 								</span>
 							</span>
 						{/each}
@@ -405,7 +406,7 @@
 										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
 									>
 										{item.amount}
-										{item.unit}
+										{formatUnit(item.unit, null, langState.current)}
 									</span>
 								</div>
 								<div

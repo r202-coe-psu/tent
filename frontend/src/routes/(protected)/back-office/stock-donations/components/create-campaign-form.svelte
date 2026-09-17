@@ -50,15 +50,12 @@
 
 		if (lower.includes('ข้าว') || lower.includes('อาหาร') || lower.includes('ปลากระป๋อง')) {
 			category = 'อาหาร/เครื่องดื่ม';
-			unit = lower.includes('ข้าว') ? 'ถุง (5kg)' : 'แพ็ค';
 			unit = lower.includes('ข้าว') ? 'bag' : 'pack';
 		} else if (lower.includes('น้ำ')) {
 			category = 'อาหาร/เครื่องดื่ม';
-			unit = 'ขวด';
 			unit = 'bottle';
 		} else if (lower.includes('ยา') || lower.includes('พารา') || lower.includes('เวชภัณฑ์')) {
 			category = 'ยารักษาโรค/เวชภัณฑ์';
-			unit = 'กล่อง';
 			unit = 'box';
 		} else if (
 			lower.includes('ผ้าห่ม') ||
@@ -67,11 +64,9 @@
 			lower.includes('ของใช้')
 		) {
 			category = 'ของใช้ทั่วไป';
-			unit = lower.includes('ผ้าห่ม') ? 'ผืน' : lower.includes('สบู่') ? 'ก้อน' : 'ชิ้น';
 			unit = lower.includes('ผ้าห่ม') ? 'sheet' : lower.includes('สบู่') ? 'bar' : 'piece';
 		} else {
 			category = 'อื่นๆ';
-			unit = 'ชิ้น';
 			unit = 'piece';
 		}
 	});
@@ -255,15 +250,6 @@
 						{#if unit.startsWith('--')}
 							<option disabled value={unit}>{unit}</option>
 						{/if}
-						<option value="ชิ้น">ชิ้น</option>
-						<option value="ขวด">ขวด</option>
-						<option value="แพ็ค">แพ็ค</option>
-						<option value="ถุง">ถุง</option>
-						<option value="ถุง (5kg)">ถุง (5kg)</option>
-						<option value="กล่อง">กล่อง</option>
-						<option value="ผืน">ผืน</option>
-						<option value="ก้อน">ก้อน</option>
-						<option value="กก.">กก.</option>
 						{#each availableUnits as u (u.code)}
 							<option value={u.code}>{u.label_th} ({u.code})</option>
 						{/each}
