@@ -8,7 +8,6 @@
 	import Users from '@lucide/svelte/icons/users';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-	import Home from '@lucide/svelte/icons/home';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
 
@@ -120,9 +119,15 @@
 		return sum.toLocaleString();
 	});
 
-	// 2. Urgent Donations Data (Real API Data only)
+	// 2. Urgent Donations Data (Real API Data only - strictly critical urgency)
 	const liveDonationCards = $derived.by(() => {
-		const list = (data.donationNeeds || []).filter((s) => s.needs && s.needs.length > 0);
+		const list = (data.donationNeeds || [])
+			.map((s) => ({
+				...s,
+				needs: (s.needs || []).filter((n) => n.urgency === 'critical')
+			}))
+			.filter((s) => s.needs.length > 0);
+
 		return list.map((s) => {
 			const geo = sheltersGeoMap.get(s.code);
 			const loc = geo
@@ -141,24 +146,27 @@
 
 			for (const n of s.needs || []) {
 				const qty = Number(n.qty_needed) || 0;
-				const target = n.target || (qty > 0 ? qty * 2 : 100);
-				const rec = n.received ?? Math.max(0, target - qty);
+				const target = Number(n.qty_target) || n.target || 0;
+				const rec = n.received ?? (target > 0 ? Math.max(0, target - qty) : 0);
 				totalQtyNeeded += qty;
 				totalTarget += target;
 				totalReceived += rec;
 			}
 
-			if (totalTarget === 0) totalTarget = 100;
-			const receivedPercent = Math.min(
-				100,
-				Math.max(0, Math.round((totalReceived / totalTarget) * 100))
-			);
+			const receivedPercent =
+				totalTarget > 0
+					? Math.min(100, Math.max(0, Math.round((totalReceived / totalTarget) * 100)))
+					: 0;
 			const deficitText = isEn
 				? totalQtyNeeded > 0
-					? `Need ${totalQtyNeeded.toLocaleString()} more of ${totalTarget.toLocaleString()} pcs`
+					? totalTarget > 0
+						? `Need ${totalQtyNeeded.toLocaleString()} more of ${totalTarget.toLocaleString()} pcs`
+						: `Need ${totalQtyNeeded.toLocaleString()} more pcs`
 					: 'Goal reached'
 				: totalQtyNeeded > 0
-					? `ขาดอีก ${totalQtyNeeded.toLocaleString()} ชิ้น จากเป้า ${totalTarget.toLocaleString()}`
+					? totalTarget > 0
+						? `ขาดอีก ${totalQtyNeeded.toLocaleString()} จากเป้า ${totalTarget.toLocaleString()}`
+						: `ขาดอีก ${totalQtyNeeded.toLocaleString()}`
 					: 'ได้รับครบตามเป้าหมายแล้ว';
 
 			return {
@@ -508,7 +516,6 @@
 							type="button"
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-emerald-800 transition-colors hover:bg-emerald-100/70 sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
-							<Home class="h-3.5 w-3.5" />
 							<span>{t.hostHouseBtn}</span>
 						</button>
 					</div>
