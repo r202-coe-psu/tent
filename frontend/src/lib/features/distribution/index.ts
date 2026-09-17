@@ -184,3 +184,19 @@ export {
 	assertSemanticIssueMatch,
 	assertSemanticClosingMatch
 } from './data/semantic-verify';
+
+/** Ticket-era Flow 2 persistence repositories (CR-121). Legacy DistributionRemoteRepository above remains intact. */
+export {
+	RequisitionTicketRemoteRepository,
+	DistributionLogRemoteRepository,
+	BulkReturnPoolRemoteRepository,
+	type RequisitionTicketRepository,
+	type RequisitionTicketListFilter,
+	type RequisitionTicketTransitionPatch,
+	type DistributionLogRepository,
+	type DistributionLogListFilter,
+	type RecordReturnInput,
+	type RecordClearInput,
+	type BulkReturnPoolRepository,
+	type BulkReturnPoolListFilter
+} from './data/food-supplies';
