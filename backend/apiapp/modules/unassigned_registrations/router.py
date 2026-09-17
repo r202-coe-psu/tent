@@ -41,6 +41,8 @@ from .schemas import (
     UnassignedRegistrationListResponse,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedResidenceMatchRequest,
+    UnassignedResidenceMatchResponse,
 )
 from .use_case import UnassignedRegistrationsUseCase
 
@@ -168,6 +170,25 @@ async def create_unassigned_registration(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.create(payload)
+
+
+@router.post(
+    "/residence-match",
+    response_model=UnassignedResidenceMatchResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def match_unassigned_residence(
+    request: Request,
+    response: Response,
+    payload: UnassignedResidenceMatchRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedResidenceMatchResponse:
+    """Service-to-service Residence match — ids + landmark/housing_type only (no member PII)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.match_by_residence(payload)
 
 
 @staff_router.get(

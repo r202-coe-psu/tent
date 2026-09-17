@@ -12,13 +12,13 @@
 	--registration-sticky-top: PublicNavbar sticky height (~4rem) so pre-register
 	UnifiedRegistrationForm sticky chrome matches onsite behavior via the same CSS var.
 -->
+<PublicNavbar announcements={data.announcements} />
 <div
-	class="flex min-h-svh flex-col bg-muted/30 pb-[var(--testing-banner-height)] text-foreground antialiased"
+	class="flex min-h-[calc(100svh-4rem)] flex-col bg-muted/30 pb-[var(--testing-banner-height)] text-foreground antialiased"
 	style="--registration-sticky-top: 4rem"
 >
-	<PublicNavbar announcements={data.announcements} />
 	<main class="flex-1">
 		{@render children?.()}
 	</main>
-	<PublicFooter />
+	<PublicFooter configData={data.configData} />
 </div>

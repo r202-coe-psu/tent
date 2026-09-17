@@ -89,6 +89,41 @@ export async function createUnassignedRegistration(
 	return (await res.json()) as UnassignedRegistrationResponse;
 }
 
+export type ResidenceMatchChip = {
+	match_token: string;
+	landmark?: string | null;
+	housing_type?: string | null;
+};
+
+export type ResidenceMatchRequest = {
+	shelter_code?: string;
+	unassigned?: boolean;
+	housing_type?: string | null;
+	residence_landmark?: string | null;
+	address_no?: string | null;
+	village_no?: string | null;
+	subdistrict?: string | null;
+	district?: string | null;
+	province?: string | null;
+	postal_code?: string | null;
+};
+
+/** Debounced Residence suggest for public create — tokens + non-PII chips only. */
+export async function matchResidence(
+	input: ResidenceMatchRequest
+): Promise<{ matches: ResidenceMatchChip[] }> {
+	const res = await fetch('/api/public/v1/households/residence-match', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!res.ok) {
+		return { matches: [] };
+	}
+	const body = (await res.json()) as { matches?: ResidenceMatchChip[] };
+	return { matches: body.matches ?? [] };
+}
+
 export interface UnassignedPhotoUploadResponse {
 	success: true;
 	photo_id: string;

@@ -1,395 +1,628 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { goto } from '$app/navigation';
+	import { SvelteMap } from 'svelte/reactivity';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
-	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import Compass from '@lucide/svelte/icons/compass';
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
-	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Home from '@lucide/svelte/icons/home';
-	import Building2 from '@lucide/svelte/icons/building-2';
+	import Building from '@lucide/svelte/icons/building';
 	import Users from '@lucide/svelte/icons/users';
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
-	import Bell from '@lucide/svelte/icons/bell';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import Inbox from '@lucide/svelte/icons/inbox';
+	import Info from '@lucide/svelte/icons/info';
+	import Construction from '@lucide/svelte/icons/construction';
 
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
-	import PublicEmergencyModal from '$lib/components/public-emergency-modal.svelte';
-	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
-	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
+	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
+	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
-	import { tokens } from '$lib/tokens';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
 
 	let { data }: { data: PageData } = $props();
 
+	const t = $derived(getTranslation(PUBLIC_PORTAL_HOME_I18N, langState.current));
+	const isEn = $derived(langState.current === 'en');
+
+	let searchQuery = $state('');
 	let searchOpen = $state(false);
-	let alertsOpen = $state(false);
+	let devModalOpen = $state(false);
 
-	const announcements = $derived(data.announcements ?? []);
-	const announcementsCount = $derived(announcements.length);
-	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
+	let donationScrollContainer = $state<HTMLElement | null>(null);
+	let volunteerScrollContainer = $state<HTMLElement | null>(null);
 
-	$effect(() => {
-		if (typeof window !== 'undefined' && window.location.hash === '#announcements') {
-			alertsOpen = true;
+	function handleSearch() {
+		const q = searchQuery.trim();
+		if (q) {
+			goto(`/search?q=${encodeURIComponent(q)}`);
+		} else {
+			searchOpen = true;
 		}
+	}
+
+	function scrollDonations(dir: 'left' | 'right') {
+		if (!donationScrollContainer) return;
+		const offset = donationScrollContainer.clientWidth * 0.85;
+		donationScrollContainer.scrollBy({
+			left: dir === 'left' ? -offset : offset,
+			behavior: 'smooth'
+		});
+	}
+
+	function scrollVolunteers(dir: 'left' | 'right') {
+		if (!volunteerScrollContainer) return;
+		const offset = volunteerScrollContainer.clientWidth * 0.85;
+		volunteerScrollContainer.scrollBy({
+			left: dir === 'left' ? -offset : offset,
+			behavior: 'smooth'
+		});
+	}
+
+	const ITEM_NAMES: Record<string, { th: string; en: string }> = {
+		'item:rice': { th: 'ข้าวสาร (อาหารแห้ง)', en: 'Rice & Dry Food' },
+		'item:water': { th: 'น้ำดื่มสะอาด', en: 'Clean Drinking Water' },
+		'item:soap': { th: 'สบู่และของใช้ส่วนตัว', en: 'Soap & Personal Toiletries' },
+		'item:blanket': { th: 'ผ้าห่มกันหนาว', en: 'Blankets' },
+		'item:paracetamol': { th: 'ยาพาราเซตามอล (ยาสามัญ)', en: 'Paracetamol & Basic Medicine' },
+		'item:canned_fish': { th: 'ปลากระป๋อง', en: 'Canned Fish' },
+		'item:instant_noodle': { th: 'บะหมี่กึ่งสำเร็จรูป', en: 'Instant Noodles' },
+		'item:mosquito_net': { th: 'มุ้งกันยุง', en: 'Mosquito Nets' },
+		'item:sanitary_pad': { th: 'ผ้าอนามัย', en: 'Sanitary Pads' }
+	};
+
+	function formatItemName(rawName: string): string {
+		if (!rawName) return isEn ? 'Essential Items' : 'สิ่งของจำเป็น';
+		const cleanKey = rawName.startsWith('item:') ? rawName : `item:${rawName}`;
+		if (ITEM_NAMES[cleanKey]) {
+			return isEn ? ITEM_NAMES[cleanKey].en : ITEM_NAMES[cleanKey].th;
+		}
+		if (ITEM_NAMES[rawName]) {
+			return isEn ? ITEM_NAMES[rawName].en : ITEM_NAMES[rawName].th;
+		}
+		return rawName;
+	}
+
+	const sheltersGeoMap = $derived.by(() => {
+		const map = new SvelteMap<
+			string,
+			{ province: string; district: string; subdistrict: string }
+		>();
+		for (const s of data.sheltersList || []) {
+			map.set(s.code, {
+				province: s.province || 'สงขลา',
+				district: s.district || 'หาดใหญ่',
+				subdistrict: s.subdistrict || 'หาดใหญ่'
+			});
+		}
+		return map;
 	});
 
-	const faqList = $derived(data.faqs ?? []);
-	const defaultOpenFaq = $derived(faqList.length > 0 ? `faq-${faqList[0].id ?? 1}` : undefined);
+	// 1. KPI Telemetry stats (live data only, 0 if empty)
+	const sheltersCount = $derived(
+		data.summary?.shelters_open ?? (data.sheltersList ? data.sheltersList.length : 0)
+	);
 
-	// Prefer live summary; fall back to 0 when Mongo/API has no data (empty env).
-	const totalCapacity = 0;
-	const currentOccupancy = $derived(data.summary?.occupancy_total ?? 0);
-	const remainingCapacity = $derived(Math.max(0, totalCapacity - currentOccupancy));
-	const sheltersOpen = $derived(data.summary?.shelters_open ?? 0);
-	const sheltersTotal = $derived(data.summary?.shelters_total ?? 0);
+	const urgentItemsCount = $derived.by(() => {
+		let totalNeeds = 0;
+		for (const s of data.donationNeeds || []) {
+			totalNeeds += (s.needs || []).length;
+		}
+		return totalNeeds;
+	});
+
+	const urgentItemsDeficit = $derived.by(() => {
+		let sum = 0;
+		for (const s of data.donationNeeds || []) {
+			for (const n of s.needs || []) {
+				sum += Number(n.qty_needed) || 0;
+			}
+		}
+		return sum.toLocaleString();
+	});
+
+	// 2. Urgent Donations Data (Real API Data only - strictly critical urgency)
+	const liveDonationCards = $derived.by(() => {
+		const list = (data.donationNeeds || [])
+			.map((s) => ({
+				...s,
+				needs: (s.needs || []).filter((n) => n.urgency === 'critical')
+			}))
+			.filter((s) => s.needs.length > 0);
+
+		return list.map((s) => {
+			const geo = sheltersGeoMap.get(s.code);
+			const loc = geo
+				? isEn
+					? `${geo.subdistrict}, ${geo.district}, ${geo.province}`
+					: `ต.${geo.subdistrict} อ.${geo.district} จ.${geo.province}`
+				: isEn
+					? 'Kho Hong, Hat Yai, Songkhla'
+					: 'ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา';
+
+			const formattedNeeds = (s.needs || []).map((n) => formatItemName(n.name || n.item_id));
+
+			let totalQtyNeeded = 0;
+			let totalTarget = 0;
+			let totalReceived = 0;
+
+			for (const n of s.needs || []) {
+				const qty = Number(n.qty_needed) || 0;
+				const target = Number(n.qty_target) || n.target || 0;
+				const rec = n.received ?? (target > 0 ? Math.max(0, target - qty) : 0);
+				totalQtyNeeded += qty;
+				totalTarget += target;
+				totalReceived += rec;
+			}
+
+			const receivedPercent =
+				totalTarget > 0
+					? Math.min(100, Math.max(0, Math.round((totalReceived / totalTarget) * 100)))
+					: 0;
+			const deficitText = isEn
+				? totalQtyNeeded > 0
+					? totalTarget > 0
+						? `Need ${totalQtyNeeded.toLocaleString()} more of ${totalTarget.toLocaleString()} pcs`
+						: `Need ${totalQtyNeeded.toLocaleString()} more pcs`
+					: 'Goal reached'
+				: totalQtyNeeded > 0
+					? totalTarget > 0
+						? `ขาดอีก ${totalQtyNeeded.toLocaleString()} จากเป้า ${totalTarget.toLocaleString()}`
+						: `ขาดอีก ${totalQtyNeeded.toLocaleString()}`
+					: 'ได้รับครบตามเป้าหมายแล้ว';
+
+			return {
+				id: s.code,
+				code: s.code,
+				name: s.name,
+				status: isEn ? 'Critical' : 'วิกฤติ',
+				location: loc,
+				needs:
+					formattedNeeds.length > 0 ? formattedNeeds : [isEn ? 'Essential Items' : 'สิ่งของจำเป็น'],
+				receivedPercent,
+				deficitText
+			};
+		});
+	});
+
+	const urgentDonations = $derived(liveDonationCards);
+
+	// 3. Urgent Volunteers Data (Real data only - empty until API/jobs dispatched)
+	type VolunteerItem = {
+		id: string;
+		name: string;
+		status: string;
+		location: string;
+		missions: string[];
+		volunteerPercent: number;
+		deficitText: string;
+	};
+
+	const urgentVolunteers = $derived<VolunteerItem[]>([]);
+	const volunteersNeeded = $derived(0);
+	const volunteersActive = $derived(0);
+
+	// 4. FAQs from API / CMS (Real data only)
+	const faqList = $derived(
+		(data.faqs || []).map((f, i) => ({
+			id: `faq-${f.id ?? i + 1}`,
+			question: isEn && f.question_en ? f.question_en : f.question,
+			answer: isEn && f.answer_en ? f.answer_en : f.answer
+		}))
+	);
+
+	let activeFaq = $state<string>('');
+	$effect(() => {
+		if (faqList.length > 0 && !faqList.some((f) => f.id === activeFaq)) {
+			activeFaq = faqList[0].id;
+		}
+	});
 </script>
 
 <svelte:head>
-	<title>Smart Shelter — ศูนย์ช่วยเหลือและพักพิงฉุกเฉิน</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<div class="relative w-full">
+<div class="relative w-full overflow-x-clip bg-[#F8FAFC]">
 	<!-- Anchor for announcements navigation -->
 	<div id="announcements" class="sr-only" aria-hidden="true"></div>
 
-	<!-- 2. Hero Banner (Full-width Brand Navy Header with Institutional Authority) -->
-	<header class="bg-[#0A2647] px-4 py-12 text-center text-white sm:py-16">
-		<div class="mx-auto max-w-4xl space-y-3">
-			<h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
-				ศูนย์ช่วยเหลือและพักพิงฉุกเฉิน
+	<!-- 1. Hero Header (Brand Navy with Institutional Authority) -->
+	<header
+		class="bg-[#0A2647] px-4 pt-10 pb-12 text-center text-white sm:px-6 sm:pt-14 sm:pb-16 lg:px-8"
+	>
+		<div class="mx-auto max-w-4xl space-y-2.5">
+			<h1 class="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+				{t.heroTitle}
 			</h1>
-			<p class="text-sm font-normal text-white/80 sm:text-base">
-				เช็คที่ว่างศูนย์พักพิง • ค้นหาความปลอดภัยญาติ • ส่งต่อความช่วยเหลือ
+			<p class="text-xs font-normal text-white/80 sm:text-sm">
+				{t.heroSubtitle}
 			</p>
+		</div>
+
+		<!-- 2 Quick Action Cards Inside Hero Area -->
+		<div class="mx-auto mt-7 grid max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
+			<!-- Left Card: ค้นหาศูนย์พักพิง -->
+			<div class="flex flex-col">
+				<div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/95 sm:text-sm">
+					<Building class="h-4 w-4" />
+					<span>{t.findSheltersTag}</span>
+				</div>
+				<a
+					href="/shelters"
+					class="group flex min-h-[76px] flex-1 items-center justify-between rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all hover:bg-slate-50/90 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
+				>
+					<div class="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-4">
+						<div
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] text-[#0A2647] transition-colors group-hover:bg-blue-100 sm:h-14 sm:w-14 sm:rounded-2xl"
+						>
+							<Building class="h-6 w-6 text-[#0A2647] sm:h-7 sm:w-7" />
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="truncate text-base font-bold tracking-tight text-[#0A2647] sm:text-xl">
+								{t.searchSheltersTitle}
+							</div>
+							<div class="mt-0.5 truncate text-xs font-normal text-slate-500 sm:text-sm">
+								{t.searchSheltersSubtitle}
+							</div>
+						</div>
+					</div>
+					<div
+						class="ml-2 flex h-11 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1F5F9] text-slate-700 transition-colors group-hover:bg-slate-200 sm:h-14 sm:w-14 sm:rounded-2xl"
+					>
+						<ChevronRight class="h-5 w-5 stroke-[2.5] sm:h-6 sm:w-6" />
+					</div>
+				</a>
+			</div>
+
+			<!-- Right Card: ค้นหาผู้พักพิง / ตามหาญาติ -->
+			<div class="flex flex-col">
+				<div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/95 sm:text-sm">
+					<Search class="h-4 w-4" />
+					<span>{t.searchEvacueesTag}</span>
+				</div>
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleSearch();
+					}}
+					class="flex min-h-[76px] flex-1 items-center rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all focus-within:ring-2 focus-within:ring-sky-400 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
+				>
+					<Search class="mr-2.5 h-4 w-4 shrink-0 text-slate-400 sm:mr-3 sm:h-5 sm:w-5" />
+					<input
+						type="text"
+						bind:value={searchQuery}
+						placeholder={t.searchPlaceholder}
+						class="min-w-0 flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none sm:text-sm"
+					/>
+					<button
+						type="submit"
+						aria-label={t.searchBtn}
+						class="ml-2 flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#081f3a] sm:h-12 sm:rounded-2xl sm:px-5 sm:text-sm"
+					>
+						<Search class="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+						<span>{t.searchBtn}</span>
+					</button>
+				</form>
+			</div>
 		</div>
 	</header>
 
-	<!-- 3. Main Portal Body -->
-	<div class="mx-auto max-w-7xl space-y-12 px-4 py-10 sm:space-y-16 sm:px-6 sm:py-14">
-		<!-- Section 1: เลือกบริการที่ท่านต้องการ (4 Pillars Architecture) -->
-		<section class="space-y-6">
-			<div class="border-b border-slate-100 pb-4">
-				<div class="flex items-center gap-2.5">
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-slate-700"
-					>
-						<Compass class="h-4 w-4" />
-					</div>
-					<h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-						เลือกบริการที่ท่านต้องการ
-					</h2>
+	<!-- 2. Main Body Container -->
+	<main class="mx-auto max-w-7xl space-y-12 px-4 py-8 sm:space-y-14 sm:px-6 lg:px-8">
+		<!-- KPI Summary Metrics (3 Cards) -->
+		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+			<!-- Card 1: 6 ศูนย์ -->
+			<div
+				class="flex items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-4.5 shadow-2xs sm:p-5"
+			>
+				<div
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"
+				>
+					<Building class="h-6 w-6" />
 				</div>
-				<p class="mt-1 hidden text-xs text-slate-500 sm:block sm:text-sm">
-					เข้าสู่ช่องทางบริการตามสถานการณ์ของท่านโดยตรง ไม่ต้องผ่านหลายขั้นตอน
-				</p>
+				<div class="space-y-0.5">
+					<div class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
+						{sheltersCount}
+						{t.sheltersUnit}
+					</div>
+					<div class="text-xs font-medium text-slate-500">
+						{t.sheltersDesc}
+					</div>
+				</div>
 			</div>
 
-			<!-- Mobile View (sm:hidden): กลุ่มปุ่มตาม 4 หมวดบริการ เป็นปุ่มล้วน ๆ ไม่มีคำอธิบายยืดยาว -->
-			<div class="grid grid-cols-1 gap-3.5 sm:hidden">
-				<!-- Service 1: 1. ค้นหาศูนย์พักพิง -->
-				<div class="rounded-2xl border-2 border-red-200/90 bg-white p-4 shadow-2xs">
-					<div class="mb-3 flex items-center gap-2.5">
-						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
-						>
-							<ShieldAlert class="h-4 w-4" />
-						</div>
-						<h3 class="text-sm font-bold text-slate-900">1. ค้นหาศูนย์พักพิง</h3>
+			<!-- Card 2: ความต้องการบริจาค -->
+			<div
+				class="flex items-center gap-4 rounded-2xl border border-orange-200/90 bg-orange-50/20 p-4.5 shadow-2xs sm:p-5"
+			>
+				<div
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#FF5C00] text-white shadow-xs"
+				>
+					<Package class="h-6 w-6" />
+				</div>
+				<div class="space-y-0.5">
+					<div class="flex flex-wrap items-baseline gap-1.5">
+						<span class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
+							{urgentItemsCount}
+							{t.itemsUnit}
+						</span>
+						{#if urgentItemsCount > 0}
+							<span class="text-xs font-bold text-orange-600 sm:text-sm">
+								({isEn ? `${urgentItemsDeficit} pcs lacking` : `ขาดอีก ${urgentItemsDeficit} ชิ้น`})
+							</span>
+						{:else}
+							<span class="text-xs font-medium text-slate-400 sm:text-sm">
+								({t.itemsNone})
+							</span>
+						{/if}
 					</div>
-					<div class="flex flex-col gap-2">
-						<PublicActionBtn href="/shelters" colorScheme="destructive" variant="solid">
-							ค้นหาศูนย์พักพิง
-						</PublicActionBtn>
-						<PublicActionBtn href="/pre-register" colorScheme="destructive" variant="subtle">
-							ลงทะเบียนเข้าพักล่วงหน้า
-						</PublicActionBtn>
+					<div class="text-xs font-medium text-slate-500">{t.itemsDesc}</div>
+				</div>
+			</div>
+
+			<!-- Card 3: จิตอาสา -->
+			<div
+				class="flex items-center gap-4 rounded-2xl border border-emerald-200/90 bg-emerald-50/20 p-4.5 shadow-2xs sm:p-5"
+			>
+				<div
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#059669] text-white shadow-xs"
+				>
+					<Users class="h-6 w-6" />
+				</div>
+				<div class="space-y-0.5">
+					<div class="flex flex-wrap items-baseline gap-1.5">
+						<span class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
+							{t.volunteersNeededText(volunteersNeeded)}
+						</span>
+						<span class="text-xs font-bold text-emerald-600 sm:text-sm">
+							({t.volunteersActiveText(volunteersActive)})
+						</span>
+					</div>
+					<div class="text-xs font-medium text-slate-500">{t.volunteersDesc}</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Section 1: ความต้องการบริจาคด่วน -->
+		<section class="space-y-3 sm:space-y-4">
+			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+				<!-- Title & Subtitle -->
+				<div class="flex items-center gap-2.5 sm:gap-3">
+					<Package class="h-6 w-6 shrink-0 text-[#FF5C00] sm:h-7 sm:w-7" />
+					<div>
+						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
+							{t.urgentDonationsTitle}
+						</h2>
+						<p class="text-[11px] text-slate-400 sm:text-xs">{t.urgentDonationsSubtitle}</p>
 					</div>
 				</div>
 
-				<!-- Service 2: 2. ผู้พักพิง -->
-				<div class="rounded-2xl border-2 border-sky-200/90 bg-white p-4 shadow-2xs">
-					<div class="mb-3 flex items-center gap-2.5">
-						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#0284C7]"
+				<!-- Action Controls & Carousel Nav -->
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
+					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+						<a
+							href="/donations"
+							class="flex items-center justify-center gap-1 rounded-xl bg-[#FF5C00] px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-[#E05200] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
-							<Search class="h-4 w-4" />
+							<span>{t.allNeedsBtn}</span>
+							<span aria-hidden="true">➔</span>
+						</a>
+						<a
+							href="/donations/track"
+							class="flex items-center justify-center rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-[#92400E] transition-colors hover:bg-[#FEF3C7] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+						>
+							{t.trackStatusBtn}
+						</a>
+					</div>
+					{#if urgentDonations.length > 1}
+						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>
+						<!-- Carousel Nav Arrows -->
+						<div class="flex items-center justify-end gap-1.5 sm:justify-start">
+							<button
+								type="button"
+								onclick={() => scrollDonations('left')}
+								aria-label={t.prevAriaLabel}
+								class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 sm:h-9 sm:w-9 sm:rounded-xl"
+							>
+								<ChevronLeft class="h-4 w-4" />
+							</button>
+							<button
+								type="button"
+								onclick={() => scrollDonations('right')}
+								aria-label={t.nextAriaLabel}
+								class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 sm:h-9 sm:w-9 sm:rounded-xl"
+							>
+								<ChevronRight class="h-4 w-4" />
+							</button>
 						</div>
-						<h3 class="text-sm font-bold text-slate-900">2. ผู้พักพิง</h3>
-					</div>
-					<div class="flex flex-col gap-2">
-						<PublicActionBtn
-							onclick={() => (searchOpen = true)}
-							colorScheme="primary"
-							variant="solid"
-							icon={ArrowRight}
-						>
-							ค้นหารายชื่อผู้พักพิง
-						</PublicActionBtn>
-						<PublicActionBtn href="/shelters" colorScheme="sky" variant="subtle" icon={MapPin}>
-							ดูแผนที่พิกัดศูนย์พักพิง
-						</PublicActionBtn>
-					</div>
+					{/if}
 				</div>
+			</div>
 
-				<!-- Service 3: 3. บริจาค -->
-				<div class="rounded-2xl border-2 border-amber-200/90 bg-white p-4 shadow-2xs">
-					<div class="mb-3 flex items-center gap-2.5">
-						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"
+			<!-- Divider line -->
+			<div class="my-1.5 border-b border-slate-200 sm:mt-2 sm:mb-4"></div>
+
+			{#if urgentDonations.length > 0}
+				<!-- Cards Container -->
+				<div
+					bind:this={donationScrollContainer}
+					class="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth px-1 py-1 after:w-2 after:shrink-0 after:content-[''] sm:gap-6 sm:px-0 sm:py-2"
+				>
+					{#each urgentDonations as item (item.id)}
+						<PublicDonationCard {item} />
+					{/each}
+				</div>
+			{:else}
+				<!-- Empty State Alert for Urgent Donations -->
+				<div
+					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-2xs sm:rounded-3xl sm:p-12"
+				>
+					<div
+						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-[#FF5C00] sm:h-16 sm:w-16"
+					>
+						<Inbox class="h-7 w-7 sm:h-8 sm:w-8" />
+					</div>
+					<h3 class="text-base font-bold text-slate-900 sm:text-lg">
+						{t.donationsEmptyTitle}
+					</h3>
+					<!-- <p class="mt-1 max-w-md text-xs text-slate-500 sm:text-sm">
+						{t.donationsEmptyDesc}
+					</p> -->
+					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+						<a
+							href="/donations"
+							class="inline-flex items-center gap-1.5 rounded-xl bg-[#FF5C00] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#E05200] sm:text-sm"
 						>
 							<Package class="h-4 w-4" />
-						</div>
-						<h3 class="text-sm font-bold text-slate-900">3. บริจาค</h3>
-					</div>
-					<div class="flex flex-col gap-2">
-						<PublicActionBtn href="/donations" colorScheme="amber" variant="solid">
-							แจ้งความประสงค์บริจาค
-						</PublicActionBtn>
-						<PublicActionBtn
+							<span>{t.allDonationsLink}</span>
+						</a>
+						<a
 							href="/donations/track"
-							colorScheme="amber"
-							variant="subtle"
-							icon={ArrowRight}
+							class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 sm:text-sm"
 						>
-							ตรวจสอบสถานะการบริจาค
-						</PublicActionBtn>
+							<span>{t.trackDonationLink}</span>
+						</a>
 					</div>
 				</div>
-
-				<!-- Service 4: 4. อาสาสมัคร -->
-				<div class="rounded-2xl border-2 border-emerald-200/90 bg-white p-4 shadow-2xs">
-					<div class="mb-3 flex items-center gap-2.5">
-						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"
-						>
-							<UserPlus class="h-4 w-4" />
-						</div>
-						<h3 class="text-sm font-bold text-slate-900">4. อาสาสมัคร</h3>
-					</div>
-					<div class="flex flex-col gap-2">
-						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
-							สมัครอาสาสมัคร (เลือกลงเวลา)
-						</PublicActionBtn>
-						<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
-							ลงทะเบียนเปิดบ้านพี่เลี้ยง
-						</PublicActionBtn>
-					</div>
-				</div>
-			</div>
-
-			<!-- Desktop View (hidden sm:grid): การ์ดบริการพร้อมคำอธิบายแบบเต็ม -->
-			<div class="hidden gap-5 sm:grid sm:grid-cols-2 lg:grid-cols-4">
-				<!-- Card 1: 1. ค้นหาศูนย์พักพิง (Shelter) -->
-				<PublicQuickServiceCard
-					title="1. ค้นหาศูนย์พักพิง"
-					description="ค้นหาศูนย์พักพิงใกล้ตัว ตรวจสอบเตียงว่าง และลงทะเบียนแจ้งความประสงค์เข้าพักพิงล่วงหน้า"
-					icon={ShieldAlert}
-					iconClass="bg-red-50 text-red-500"
-					cardClass="border-2 border-red-200 hover:border-red-300"
-				>
-					<PublicActionBtn href="/shelters" colorScheme="destructive" variant="solid">
-						ค้นหาศูนย์พักพิง
-					</PublicActionBtn>
-					<PublicActionBtn href="/pre-register" colorScheme="destructive" variant="subtle">
-						ลงทะเบียนเข้าพักล่วงหน้า
-					</PublicActionBtn>
-				</PublicQuickServiceCard>
-
-				<!-- Card 2: 2. ผู้พักพิง (Family Tracing) -->
-				<PublicQuickServiceCard
-					title="2. ผู้พักพิง"
-					description="ค้นหารายชื่อผู้พักพิง ตรวจสอบสถานะความปลอดภัย และพิกัดศูนย์พักพิงที่คนในครอบครัวเข้าพักอยู่"
-					icon={Search}
-					iconClass="bg-sky-50 text-[#0284C7]"
-					cardClass="border-2 border-sky-200 hover:border-sky-300"
-				>
-					<PublicActionBtn
-						onclick={() => (searchOpen = true)}
-						colorScheme="primary"
-						variant="solid"
-						icon={ArrowRight}
-					>
-						ค้นหารายชื่อผู้พักพิง
-					</PublicActionBtn>
-					<PublicActionBtn href="/shelters" colorScheme="sky" variant="subtle" icon={MapPin}>
-						ดูแผนที่พิกัดศูนย์พักพิง
-					</PublicActionBtn>
-				</PublicQuickServiceCard>
-
-				<!-- Card 3: 3. บริจาค (Donations) -->
-				<PublicQuickServiceCard
-					title="3. บริจาค"
-					description="ประสานงานมอบอาหารปรุงสุก น้ำดื่ม สิ่งของจำเป็น หรือสมทบทุนช่วยเหลือผู้ประสบภัย"
-					icon={Package}
-					iconClass="bg-amber-50 text-amber-500"
-					cardClass="border-2 border-amber-200 hover:border-amber-300"
-				>
-					<PublicActionBtn href="/donations" colorScheme="amber" variant="solid">
-						แจ้งความประสงค์บริจาค
-					</PublicActionBtn>
-					<PublicActionBtn
-						href="/donations/track"
-						colorScheme="amber"
-						variant="subtle"
-						icon={ArrowRight}
-					>
-						ตรวจสอบสถานะการบริจาค
-					</PublicActionBtn>
-				</PublicQuickServiceCard>
-
-				<!-- Card 4: 4. อาสาสมัคร (Volunteers) -->
-				<PublicQuickServiceCard
-					title="4. อาสาสมัคร"
-					description="ลงทะเบียนร่วมช่วยเหลือ เลือกลงเวลาตามความถนัด เช่น ครัวกลาง แพ็คของ และขนย้ายผู้ประสบภัย"
-					icon={UserPlus}
-					iconClass="bg-emerald-50 text-emerald-500"
-					cardClass="border-2 border-emerald-200 hover:border-emerald-300"
-				>
-					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="solid">
-						สมัครอาสาสมัคร (เลือกลงเวลา)
-					</PublicActionBtn>
-					<PublicActionBtn href="/volunteers" colorScheme="emerald" variant="subtle" icon={Home}>
-						ลงทะเบียนเปิดบ้านพี่เลี้ยง
-					</PublicActionBtn>
-				</PublicQuickServiceCard>
-			</div>
+			{/if}
 		</section>
 
-		<!-- Section 2: Telemetry Metrics (4 Cards with 360° Status Matrix) -->
-		<section class="space-y-4">
-			<div class="flex items-center gap-2">
-				<span class="relative flex h-2.5 w-2.5">
-					<span
-						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
-					></span>
-					<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-				</span>
-				<span class="text-xs font-medium text-slate-600">
-					ฐานข้อมูลศูนย์ EOC เรียลไทม์ • อัปเดตล่าสุดเมื่อสักครู่
-				</span>
+		<!-- Section 2: จิตอาสา -->
+		<section class="space-y-3 sm:space-y-4">
+			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+				<!-- Title & Subtitle -->
+				<div class="flex items-center gap-2.5 sm:gap-3">
+					<Users class="h-6 w-6 shrink-0 text-[#059669] sm:h-7 sm:w-7" />
+					<div>
+						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
+							{t.volunteersTitle}
+						</h2>
+						<p class="text-[11px] text-slate-400 sm:text-xs">
+							{t.volunteersSubtitle}
+						</p>
+					</div>
+				</div>
+
+				<!-- Action Controls & Carousel Nav -->
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
+					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+						<button
+							type="button"
+							onclick={() => (devModalOpen = true)}
+							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-[#059669] px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-[#047857] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+						>
+							<span>{t.allMissionsBtn}</span>
+							<span aria-hidden="true">➔</span>
+						</button>
+						<!-- <button
+							type="button"
+							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-emerald-800 transition-colors hover:bg-emerald-100/70 sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+						>
+							<span>{t.hostHouseBtn}</span>
+						</button> -->
+					</div>
+					{#if urgentVolunteers.length > 1}
+						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>
+						<!-- Carousel Nav Arrows -->
+						<div class="flex items-center justify-end gap-1.5 sm:justify-start">
+							<button
+								type="button"
+								onclick={() => scrollVolunteers('left')}
+								aria-label={t.prevAriaLabel}
+								class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 sm:h-9 sm:w-9 sm:rounded-xl"
+							>
+								<ChevronLeft class="h-4 w-4" />
+							</button>
+							<button
+								type="button"
+								onclick={() => scrollVolunteers('right')}
+								aria-label={t.nextAriaLabel}
+								class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 sm:h-9 sm:w-9 sm:rounded-xl"
+							>
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						</div>
+					{/if}
+				</div>
 			</div>
 
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				<!-- Metric 1: ศูนย์พักพิงที่เปิดรับได้ (Operational Matrix) -->
-				<div class="rounded-2xl {tokens.colors.status.operational.card} p-5">
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">ศูนย์พักพิงที่เปิดรับได้</span>
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"
-						>
-							<Building2 class="h-4 w-4" />
-						</div>
-					</div>
-					<div class="mt-2 flex items-baseline gap-1">
-						<span class="text-3xl font-bold text-slate-900 tabular-nums">
-							{sheltersOpen}
-						</span>
-						<span class="text-xs font-normal text-slate-400">
-							/{sheltersTotal} แห่ง
-						</span>
-					</div>
-					<div class="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-						<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-						<span>พร้อมรองรับผู้ประสบภัย</span>
-					</div>
-				</div>
+			<!-- Divider line -->
+			<div class="my-1.5 border-b border-slate-200 sm:mt-2 sm:mb-4"></div>
 
-				<!-- Metric 2: รองรับได้อีก (Operational Capacity) -->
-				<div class="rounded-2xl {tokens.colors.status.operational.card} p-5">
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">รองรับได้อีก</span>
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"
+			{#if urgentVolunteers.length > 0}
+				<!-- Cards Container -->
+				<div
+					bind:this={volunteerScrollContainer}
+					class="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth px-1 py-1 after:w-2 after:shrink-0 after:content-[''] sm:gap-6 sm:px-0 sm:py-2"
+				>
+					{#each urgentVolunteers as item (item.id)}
+						<PublicVolunteerCard {item} />
+					{/each}
+				</div>
+			{:else}
+				<!-- Empty State Alert for Volunteers -->
+				<div
+					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-2xs sm:rounded-3xl sm:p-12"
+				>
+					<div
+						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-[#059669] sm:h-16 sm:w-16"
+					>
+						<Users class="h-7 w-7 sm:h-8 sm:w-8" />
+					</div>
+					<h3 class="text-base font-bold text-slate-900 sm:text-lg">
+						{t.volunteersEmptyTitle}
+					</h3>
+					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+						<button
+							type="button"
+							onclick={() => (devModalOpen = true)}
+							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#059669] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#047857] sm:text-sm"
 						>
-							<Users class="h-4 w-4" />
-						</div>
-					</div>
-					<div class="mt-2 flex items-baseline gap-1">
-						<span class="text-3xl font-bold text-emerald-600 tabular-nums">
-							{remainingCapacity.toLocaleString()}
-						</span>
-						<span class="text-xs font-normal text-slate-400">คน</span>
-					</div>
-					<div class="mt-2 text-xs text-slate-400">
-						จาก {sheltersTotal} ศูนย์หลัก (ความจุรวม {totalCapacity.toLocaleString()} คน)
+							<span>{t.allMissionsBtn}</span>
+						</button>
 					</div>
 				</div>
-
-				<!-- Metric 3: ผู้ประสบภัยปลอดภัยแล้ว (Logistics / Occupancy Matrix) -->
-				<div class="rounded-2xl {tokens.colors.status.logistics.card} p-5">
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">ผู้ประสบภัยปลอดภัยแล้ว</span>
-						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-							<Users class="h-4 w-4" />
-						</div>
-					</div>
-					<div class="mt-2 flex items-baseline gap-1">
-						<span class="text-3xl font-bold text-slate-900 tabular-nums">
-							{currentOccupancy.toLocaleString()}
-						</span>
-						<span class="text-xs font-normal text-slate-400">คน</span>
-					</div>
-					<div class="mt-2 text-xs text-slate-400">เข้าสู่ระบบพักพิงและได้รับการดูแล</div>
-				</div>
-
-				<!-- Metric 4: อาสาสมัครลงปฏิบัติงาน (EOC Command Matrix) -->
-				<div class="rounded-2xl {tokens.colors.status.eoc.card} p-5">
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-medium text-slate-500">อาสาสมัครลงปฏิบัติงาน</span>
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600"
-						>
-							<HeartHandshake class="h-4 w-4" />
-						</div>
-					</div>
-					<div class="mt-2 flex items-baseline gap-1">
-						<span class="text-3xl font-bold text-slate-900 tabular-nums">0</span>
-						<span class="text-xs font-normal text-slate-400">คน</span>
-					</div>
-					<div class="mt-2 text-xs text-slate-400">ครัวกลาง ขนย้าย</div>
-				</div>
-			</div>
+			{/if}
 		</section>
 
-		<!-- Section 3: คำถามที่พบบ่อยในภาวะภัยพิบัติ (Emergency FAQ with shadcn-svelte Accordion) -->
-		<section class="space-y-6 pt-4">
+		<!-- Horizontal Divider -->
+		<div class="border-t border-slate-300"></div>
+
+		<!-- Section 3: คำถามที่พบบ่อย -->
+		<section class="space-y-6 pt-2">
 			<div class="text-center">
 				<h2 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-					คำถามที่พบบ่อยในภาวะภัยพิบัติ
-					<span class="block text-xl font-bold text-slate-900 sm:text-2xl">(Emergency FAQ)</span>
+					{t.faqSectionTitle}
 				</h2>
-				<p class="mt-2 text-xs text-slate-500 sm:text-sm">
-					ข้อสงสัยหลักเกี่ยวกับการเข้าพัก สัตว์เลี้ยง การค้นหาญาติ และการคุ้มครองข้อมูลส่วนบุคคล
-				</p>
 			</div>
 
 			<div class="mx-auto max-w-4xl">
 				{#if faqList.length > 0}
-					<Accordion.Root type="single" value={defaultOpenFaq} class="space-y-3">
-						{#each faqList as faq, i (faq.id || i)}
-							{@const itemId = `faq-${faq.id ?? i + 1}`}
+					<Accordion.Root type="single" bind:value={activeFaq} class="space-y-3">
+						{#each faqList as faq, i (faq.id)}
 							<Accordion.Item
-								value={itemId}
-								class="rounded-2xl border border-slate-200/80 bg-white transition-all duration-200 hover:border-slate-300 data-[state=open]:border-2 data-[state=open]:border-sky-300 data-[state=open]:shadow-2xs"
+								value={faq.id}
+								class="overflow-hidden rounded-2xl border border-slate-200/90 bg-white transition-all duration-200 hover:border-slate-300 data-[state=open]:border-2 data-[state=open]:border-sky-300 data-[state=open]:shadow-2xs"
 							>
 								<Accordion.Trigger
 									class="flex w-full items-center justify-between p-4 text-left hover:no-underline sm:p-5"
 								>
-									<div class="flex items-center gap-3 pr-2">
+									<div class="flex items-center gap-3.5 pr-2">
 										<span
-											class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 transition-colors group-data-[state=open]/accordion-trigger:bg-[#0A2647] group-data-[state=open]/accordion-trigger:text-white"
+											class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 transition-colors group-aria-expanded/accordion-trigger:bg-[#0A2647] group-aria-expanded/accordion-trigger:text-white group-data-[state=open]/accordion-trigger:bg-[#0A2647] group-data-[state=open]/accordion-trigger:text-white"
 										>
 											{i + 1}
 										</span>
-										<span class="text-xs font-bold text-slate-900 sm:text-sm md:text-base">
+										<span class="text-sm font-bold text-slate-900 sm:text-base">
 											{faq.question}
 										</span>
 									</div>
 								</Accordion.Trigger>
 								<Accordion.Content
-									class="border-t border-sky-50 px-4 pt-3 pb-4 text-xs leading-relaxed text-slate-600 sm:px-5 sm:pb-5 sm:text-sm"
+									class="px-5 pt-1 pb-5 text-xs leading-relaxed text-slate-600 sm:px-6 sm:text-sm"
 								>
 									{faq.answer}
 								</Accordion.Content>
@@ -397,41 +630,57 @@
 						{/each}
 					</Accordion.Root>
 				{:else}
+					<!-- Empty State Alert for FAQ -->
 					<div
-						class="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-8 text-center text-slate-500"
+						class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-2xs sm:rounded-3xl sm:p-12"
 					>
-						<p class="text-sm font-medium">ไม่มีรายการคำถามที่พบบ่อยในขณะนี้</p>
+						<div
+							class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-50 text-[#0284C7] sm:h-16 sm:w-16"
+						>
+							<Info class="h-7 w-7 sm:h-8 sm:w-8" />
+						</div>
+						<h3 class="text-base font-bold text-slate-900 sm:text-lg">
+							{t.faqEmptyTitle}
+						</h3>
+						<p class="mt-1 max-w-md text-xs text-slate-500 sm:text-sm">
+							{t.faqEmptyDesc}
+						</p>
 					</div>
 				{/if}
 			</div>
 		</section>
-	</div>
-
-	<!-- 4. Floating Emergency Action Pills (Fixed Bottom Right with Civic Light Elevation) -->
-	<div class="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2.5 md:right-6 md:bottom-6">
-		<button
-			type="button"
-			onclick={() => (alertsOpen = true)}
-			aria-label="การแจ้งเตือนภัย"
-			class="relative hidden items-center justify-center rounded-full bg-[#0284C7] whitespace-nowrap text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex md:h-auto md:w-full md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
-		>
-			<Bell class="h-4 w-4 shrink-0 text-amber-300" />
-			<span> แจ้งเตือนภัย </span>
-			{#if announcementsCount > 0}
-				<!-- Indicator red dot -->
-				<span class="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-					{#if hasEmergency}
-						<span
-							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"
-						></span>
-					{/if}
-					<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
-					></span>
-				</span>
-			{/if}
-		</button>
-	</div>
+	</main>
 </div>
 
-<PublicEmergencyModal bind:open={alertsOpen} {announcements} />
 <FamilySearchModal bind:open={searchOpen} />
+
+<Dialog.Root bind:open={devModalOpen}>
+	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">
+		<div class="flex flex-col items-center text-center">
+			<div
+				class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200/80 bg-amber-50 text-amber-600 sm:h-16 sm:w-16"
+			>
+				<Construction class="h-7 w-7 sm:h-8 sm:w-8" />
+			</div>
+			<Dialog.Header class="text-center">
+				<Dialog.Title class="text-center text-lg font-bold text-slate-900 sm:text-xl">
+					{isEn ? 'Feature Under Development' : 'ระบบอยู่ระหว่างการพัฒนา'}
+				</Dialog.Title>
+				<Dialog.Description class="mt-2 text-center text-sm text-slate-500">
+					{isEn
+						? 'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!'
+						: 'ระบบดูภารกิจและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ'}
+				</Dialog.Description>
+			</Dialog.Header>
+			<div class="mt-6 flex w-full justify-center">
+				<Button
+					type="button"
+					onclick={() => (devModalOpen = false)}
+					class="min-w-[120px] rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+				>
+					{isEn ? 'Close' : 'รับทราบ'}
+				</Button>
+			</div>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
