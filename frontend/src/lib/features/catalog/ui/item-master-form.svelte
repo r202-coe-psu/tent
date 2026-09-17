@@ -237,6 +237,12 @@
 	const uomOptions = $derived(
 		[$formData.base_unit, ...$formData.conversions.map((c) => c.uom_name)].filter(Boolean)
 	);
+
+	const availableCategories = $derived.by(() => {
+		return (itemCategoriesQuery.data ?? []).filter(
+			(cat) => !cat.deactivated || cat.name === $formData.category
+		);
+	});
 </script>
 
 {#if isLoading}
@@ -388,11 +394,11 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
-									{#if itemCategoriesQuery.data}
-										{#each itemCategoriesQuery.data as cat (cat._id)}
-											<option value={cat.name}>{cat.name}</option>
-										{/each}
-									{/if}
+									{#each availableCategories as cat (cat._id)}
+										<option value={cat.name}>
+											{cat.name}{cat.deactivated ? ' (ปิดการใช้งาน)' : ''}
+										</option>
+									{/each}
 								</select>
 							{/snippet}
 						</Form.Control>
@@ -966,7 +972,7 @@
 								for="deactivated-toggle"
 								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
 							>
-								สถานะปิดการใช้งาน (Deactivated)
+								สถานะปิดการใช้งาน
 							</label>
 							<p class="text-xs text-muted-foreground">
 								หากปิดการใช้งาน รายการนี้จะไม่แสดงให้เลือกในธุรกรรมคลังและการเบิกจ่ายใหม่
