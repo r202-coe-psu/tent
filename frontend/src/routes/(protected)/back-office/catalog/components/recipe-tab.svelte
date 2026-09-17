@@ -207,9 +207,9 @@
 									{/if}
 									{#if e.deactivated}
 										<span
-											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/10 ring-inset"
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
 										>
-											ปิดใช้งาน (Deactivated)
+											ปิดใช้งาน
 										</span>
 									{/if}
 								</Table.Cell>
@@ -348,8 +348,8 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากสูตรอาหารนี้ถูกใช้ในแผนเตรียมอาหาร (Meal Plan) อยู่ในระบบแล้ว
-							หรือเป็นสูตรอาหารมาตรฐานส่วนกลาง ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated)
-							แทนการลบถาวร เพื่อรักษาความสมบูรณ์ของข้อมูลอ้างอิง
+							หรือเป็นสูตรอาหารมาตรฐานส่วนกลาง ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทนการลบถาวร
+							เพื่อรักษาความสมบูรณ์ของข้อมูลอ้างอิง
 						</span>
 					{/if}
 				{/if}

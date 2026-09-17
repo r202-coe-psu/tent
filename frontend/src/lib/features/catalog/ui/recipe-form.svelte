@@ -338,7 +338,7 @@
 								for="recipe-deactivated-toggle"
 								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
 							>
-								สถานะปิดการใช้งาน (Deactivated)
+								สถานะปิดการใช้งาน
 							</label>
 							<p class="text-xs text-muted-foreground">
 								หากปิดการใช้งาน สูตรอาหารนี้จะไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่
