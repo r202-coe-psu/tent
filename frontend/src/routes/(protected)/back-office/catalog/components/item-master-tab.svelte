@@ -89,7 +89,7 @@
 					if (isOverride) {
 						toast.success(`คืนค่ามาตรฐานรายการ "${name}" สำเร็จ`);
 					} else if (!wasDeleted) {
-						toast.info(`เปลี่ยนสถานะรายการ "${name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`);
+						toast.success(`เปลี่ยนสถานะรายการ "${name}" เป็นปิดการใช้งานแล้ว`);
 					} else {
 						toast.success(`ลบรายการ "${name}" ถาวรสำเร็จ`);
 					}

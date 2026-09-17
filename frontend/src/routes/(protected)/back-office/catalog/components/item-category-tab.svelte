@@ -95,8 +95,8 @@
 					if (result.actionTaken === 'reset') {
 						toast.success(`คืนค่ามาตรฐานหมวดหมู่ "${result.categoryName || name}" สำเร็จ`);
 					} else if (result.actionTaken === 'deactivate') {
-						toast.info(
-							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`
+						toast.success(
+							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งานแล้ว`
 						);
 					} else {
 						toast.success(`ลบหมวดหมู่ "${result.categoryName || name}" ถาวรสำเร็จ`);
