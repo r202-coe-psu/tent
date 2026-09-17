@@ -1269,10 +1269,13 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 **เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
 `createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
 
-### 3.8 `shelter_import_job` — `shelter_import_job:{ulid}` · **schema_v 1** (async import)
+### 3.8 `shelter_import_job` — `shelter_import_job:{sha256}` · **schema_v 1** (async import)
 
-เอกสาร durable สำหรับการ import Excel หนึ่งงาน อยู่ใน `registry`. Item ต้องถูก stage ให้ครบก่อน
-จึงเขียน job ให้ worker มองเห็น; การ claim/update ใช้ `_rev` แบบ CAS และ lease expiry.
+เอกสาร durable สำหรับการ import Excel หนึ่งงาน อยู่ใน DB ส่วนตัว `shelter_import_queue` ไม่ใช่
+`registry` เพราะ item มี payload ที่ใช้ประมวลผลต่อและห้ามเปิดให้ client อ่าน. DB นี้ให้สิทธิ์เฉพาะ
+`_admin`/`system_admin`. Item ต้องถูก stage ให้ครบก่อนจึง publish job ให้ worker มองเห็น;
+การ claim/update ใช้ `_rev` แบบ CAS และ lease expiry. `_id` ผูกกับ actor และ `Idempotency-Key`
+ด้วย SHA-256 เพื่อให้ retry คำขอเดิมไม่สร้างงานซ้ำ โดยไม่เก็บ raw key.
 
 | Field                        | ชนิด                                                         | req | หมายเหตุ                                                    |
 | ---------------------------- | ------------------------------------------------------------ | --- | ----------------------------------------------------------- |
@@ -1283,7 +1286,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `pending` / `running`        | int                                                          | req | snapshot จำนวน item ที่ยังรอ/กำลังทำ                        |
 | `succeeded`                  | int                                                          | req | รวมสถานะ `created` + `updated`                              |
 | `failed` / `skipped`         | int                                                          | req | รวม validation/server failure และ duplicate skip            |
-| `status`                     | enum(`queued`,`running`,`completed`,`completed_with_errors`) | req | state ของ job                                               |
+| `status`                     | enum(`staging`,`queued`,`running`,`completed`,`completed_with_errors`) | req | `staging` ยังไม่ visible ต่อ worker; state อื่นของ job |
 | `attempt`                    | int                                                          | req | terminal attempt เริ่มที่ 1; retry เพิ่มค่า                 |
 | `audit_log_id`               | str                                                          | opt | `_id` ของ log terminal attempt ที่จะเขียนแบบ append-only    |
 | `audit_logged`               | bool                                                         | opt | `true` เมื่อเขียน audit log สำเร็จ                          |
@@ -1293,10 +1296,11 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 `created_at`, `updated_at`, `created_by` ใช้ common envelope. Status API อ่านอย่างเดียวและคืน `ETag`
 จาก `_rev`; การสร้าง audit log เป็น state transition ของ worker ไม่ใช่ side effect ของ status GET.
 
-### 3.9 `shelter_import_item` — `shelter_import_item:{job_ulid}:{row_6_digits}` · **schema_v 1**
+### 3.9 `shelter_import_item` — `shelter_import_item:{job_key}:{row_6_digits}` · **schema_v 1**
 
-หนึ่งแถวของ `shelter_import_job` ใน `registry`; เช่น `shelter_import_item:01J...:000002`.
-`job_id` ต้องเก็บ full job `_id` (`shelter_import_job:{ulid}`).
+หนึ่งแถวของ `shelter_import_job` ใน `shelter_import_queue`; เช่น
+`shelter_import_item:{job_key}:000002`. `input` เก็บไว้ฝั่ง server เท่านั้นและไม่คืนจาก status API.
+`job_id` ต้องเก็บ full job `_id` (`shelter_import_job:{key}`).
 
 | Field              | ชนิด                                                                                | req | หมายเหตุ                                                        |
 | ------------------ | ----------------------------------------------------------------------------------- | --- | --------------------------------------------------------------- |

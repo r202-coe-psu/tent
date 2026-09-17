@@ -1,17 +1,25 @@
 import { ulid } from '$lib/db/ulid';
+import { createHash } from 'node:crypto';
 import type { Shelter } from '$lib/features/shelters/domain/schema';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
-import { createShelterImportLog, type ImportRowResult } from '../domain/import-log';
+import {
+	createShelterImportLog,
+	type ImportRowResult,
+	type ShelterImportLog
+} from '../domain/import-log';
 
 export const IMPORT_JOB_TYPE = 'shelter_import_job' as const;
 export const IMPORT_ITEM_TYPE = 'shelter_import_item' as const;
 export const REGISTRY_DB = 'registry';
+export const IMPORT_QUEUE_DB = 'shelter_import_queue';
 export const MAX_IMPORT_ROWS = 1000;
 export const MAX_IMPORT_ATTEMPTS = 3;
+export const IMPORT_LEASE_MS = 5 * 60 * 1000;
 
 export type ImportItemStatus =
 	'pending' | 'running' | 'created' | 'updated' | 'skipped' | 'failed' | 'validation_error';
-export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_errors';
+export type ImportJobStatus =
+	'staging' | 'queued' | 'running' | 'completed' | 'completed_with_errors';
 
 export interface ImportItemError {
 	column: string;
@@ -43,6 +51,9 @@ export interface ShelterImportItem {
 	created_by: string;
 }
 
+/** Status fields returned by the job API. Raw validated input is never exposed. */
+export type ShelterImportItemSummary = Omit<ShelterImportItem, 'input' | 'job_id' | 'created_by'>;
+
 export interface ShelterImportJob {
 	_id: string;
 	_rev?: string;
@@ -68,11 +79,15 @@ export interface ShelterImportJob {
 	finished_at?: string;
 	updated_at: string;
 	created_by: string;
+	/** SHA-256 of the actor-bound Idempotency-Key; the raw key is never stored. */
+	idempotency_key_hash?: string;
+	/** SHA-256 of the validated request body used with the idempotency key. */
+	request_fingerprint?: string;
 }
 
 export interface ImportJobSummary {
 	job: ShelterImportJob;
-	items: ShelterImportItem[];
+	items: ShelterImportItemSummary[];
 }
 
 function detail(data: unknown): string {
@@ -117,28 +132,55 @@ async function ensureRegistryDatabase(): Promise<void> {
 	}
 }
 
+async function ensureImportQueueDatabase(): Promise<void> {
+	const database = await adminRaw(`/${IMPORT_QUEUE_DB}`, 'PUT');
+	if (database.status >= 400 && database.status !== 412) {
+		throw new ServiceError(
+			'INTERNAL',
+			`import queue database setup failed (${database.status}): ${detail(database.data)}`
+		);
+	}
+	// The queue contains the validated shelter payload used by the private
+	// worker. Keep it out of the broadly readable registry database and make the
+	// queue itself accessible only to server admins. Preserve existing admin
+	// names while explicitly removing database members.
+	const currentSecurity = await adminRaw(`/${IMPORT_QUEUE_DB}/_security`, 'GET');
+	if (currentSecurity.status !== 200 && currentSecurity.status !== 404) {
+		throw new ServiceError(
+			'INTERNAL',
+			`import queue security read failed (${currentSecurity.status}): ${detail(currentSecurity.data)}`
+		);
+	}
+	const existing =
+		(currentSecurity.data as {
+			admins?: { names?: string[]; roles?: string[] };
+		} | null) ?? {};
+	const security = await adminRaw(`/${IMPORT_QUEUE_DB}/_security`, 'PUT', {
+		admins: {
+			names: existing.admins?.names ?? [],
+			roles: [...new Set([...(existing.admins?.roles ?? []), '_admin', 'system_admin'])]
+		},
+		members: { names: [], roles: [] }
+	});
+	if (security.status >= 400) {
+		throw new ServiceError(
+			'INTERNAL',
+			`import queue security setup failed (${security.status}): ${detail(security.data)}`
+		);
+	}
+}
+
 async function getDoc<T extends { _id: string }>(id: string): Promise<T | null> {
-	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'GET');
+	const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(id)}`, 'GET');
 	if (res.status === 404) return null;
 	assertOk(res.status, `read ${id}`, res.data);
 	return res.data as T;
 }
 
 async function putDoc<T extends { _id: string }>(doc: T): Promise<T> {
-	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(doc._id)}`, 'PUT', doc);
+	const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(doc._id)}`, 'PUT', doc);
 	assertOk(res.status, `write ${doc._id}`, res.data);
 	return { ...doc, _rev: (res.data as { rev?: string }).rev };
-}
-
-async function deleteDoc(id: string): Promise<void> {
-	const current = await getDoc<{ _id: string; _rev?: string }>(id);
-	if (!current) return;
-	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'DELETE', {
-		_rev: current._rev
-	});
-	if (res.status >= 400 && res.status !== 404 && res.status !== 409) {
-		assertOk(res.status, `delete ${id}`, res.data);
-	}
 }
 
 async function putStagedDoc<T extends { _id: string }>(
@@ -206,15 +248,71 @@ async function ensureImportLog(job: ShelterImportJob, items: ShelterImportItem[]
 		...log
 	});
 	// The id is allocated once on the job and never reused by another terminal
-	// attempt. A conflict means this exact immutable log already exists.
-	if (saved.status === 409) return;
+	// attempt. Verify a conflict before treating it as an idempotent replay.
+	if (saved.status === 409) {
+		const existing = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(logId)}`, 'GET');
+		if (existing.status !== 200 || !sameAuditLog(existing.data, log)) {
+			throw new ServiceError(
+				'CONFLICT',
+				`Audit log ${logId} already exists with different contents`
+			);
+		}
+		return;
+	}
 	assertOk(saved.status, `write ${logId}`, saved.data);
+}
+
+type AuditLogFingerprint = Pick<
+	ShelterImportLog,
+	| 'type'
+	| 'schema_v'
+	| 'job_id'
+	| 'attempt'
+	| 'source'
+	| 'filename'
+	| 'imported_by'
+	| 'total_rows'
+	| 'success_count'
+	| 'updated_count'
+	| 'skipped_count'
+	| 'error_count'
+	| 'results'
+	| 'started_at'
+	| 'finished_at'
+>;
+
+function auditLogFingerprint(log: AuditLogFingerprint): string {
+	return stableStringify({
+		type: log.type,
+		schema_v: log.schema_v,
+		job_id: log.job_id,
+		attempt: log.attempt,
+		source: log.source,
+		filename: log.filename,
+		imported_by: log.imported_by,
+		total_rows: log.total_rows,
+		success_count: log.success_count,
+		updated_count: log.updated_count,
+		skipped_count: log.skipped_count,
+		error_count: log.error_count,
+		results: log.results,
+		started_at: log.started_at,
+		finished_at: log.finished_at
+	});
+}
+
+function sameAuditLog(existing: unknown, expected: ShelterImportLog): boolean {
+	return Boolean(
+		existing &&
+		typeof existing === 'object' &&
+		auditLogFingerprint(existing as AuditLogFingerprint) === auditLogFingerprint(expected)
+	);
 }
 
 async function listByPrefix<T>(prefix: string): Promise<T[]> {
 	const end = `${prefix}\ufff0`;
 	const res = await adminRaw(
-		`/${REGISTRY_DB}/_all_docs?include_docs=true&startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(end))}`,
+		`/${IMPORT_QUEUE_DB}/_all_docs?include_docs=true&startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(end))}`,
 		'GET'
 	);
 	if (res.status === 404) return [];
@@ -242,12 +340,125 @@ export async function getImportJob(jobId: string): Promise<ImportJobSummary | nu
 	const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
 	if (!job) return null;
 	const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
-	return { job, items: items.sort((a, b) => a.row - b.row) };
+	return {
+		job,
+		items: items
+			.sort((a, b) => a.row - b.row)
+			.map((item) => {
+				const status: Partial<ShelterImportItem> = { ...item };
+				delete status.input;
+				delete status.job_id;
+				delete status.created_by;
+				return status as ShelterImportItemSummary;
+			})
+	};
+}
+
+function stableStringify(value: unknown): string {
+	if (value === undefined) return 'undefined';
+	if (value === null || typeof value !== 'object') return JSON.stringify(value);
+	if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+	const record = value as Record<string, unknown>;
+	return `{${Object.keys(record)
+		.sort()
+		.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+		.join(',')}}`;
+}
+
+function sameStagedItem(left: ShelterImportItem, right: ShelterImportItem): boolean {
+	return (
+		left.type === right.type &&
+		left.job_id === right.job_id &&
+		left.row === right.row &&
+		stableStringify({
+			name: left.name,
+			input: left.input ?? null,
+			status: left.status,
+			attempts: left.attempts,
+			max_attempts: left.max_attempts,
+			errors: left.errors ?? []
+		}) ===
+			stableStringify({
+				name: right.name,
+				input: right.input ?? null,
+				status: right.status,
+				attempts: right.attempts,
+				max_attempts: right.max_attempts,
+				errors: right.errors ?? []
+			})
+	);
+}
+
+function sha256(value: unknown): string {
+	return createHash('sha256').update(stableStringify(value)).digest('hex');
+}
+
+function idempotencyHashes(args: {
+	importedBy: string;
+	idempotencyKey: string;
+	filename: string;
+	duplicateAction: 'skip' | 'update';
+	rows: Array<{
+		row: number;
+		name: string | null;
+		input?: Shelter;
+		errors?: ImportItemError[];
+		valid: boolean;
+	}>;
+}): { keyHash: string; requestFingerprint: string } {
+	return {
+		keyHash: sha256(`${args.importedBy}\u0000${args.idempotencyKey}`),
+		requestFingerprint: sha256({
+			filename: args.filename,
+			duplicateAction: args.duplicateAction,
+			rows: args.rows.map((row) => ({
+				row: row.row,
+				name: row.name,
+				input: row.input ?? null,
+				errors: row.errors ?? [],
+				valid: row.valid
+			}))
+		})
+	};
+}
+
+function assertSameIdempotentRequest(
+	job: ShelterImportJob,
+	keyHash: string,
+	requestFingerprint: string
+): void {
+	if (job.idempotency_key_hash !== keyHash || job.request_fingerprint !== requestFingerprint) {
+		throw new ServiceError(
+			'CONFLICT',
+			'Idempotency-Key was already used with a different import request'
+		);
+	}
+}
+
+async function publishStagedImportJob(job: ShelterImportJob): Promise<ShelterImportJob> {
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const current = await getDoc<ShelterImportJob>(job._id);
+		if (!current)
+			throw new ServiceError('INTERNAL', `Import job ${job._id} disappeared while staging`);
+		assertSameIdempotentRequest(
+			current,
+			job.idempotency_key_hash ?? '',
+			job.request_fingerprint ?? ''
+		);
+		if (current.status !== 'staging') return current;
+		const next: ShelterImportJob = { ...current, status: 'queued', updated_at: now() };
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		if (res.status === 409) continue;
+		assertOk(res.status, `publish ${next._id}`, res.data);
+		return { ...next, _rev: (res.data as { rev?: string }).rev };
+	}
+	throw new ServiceError('CONFLICT', `Could not publish staged import job ${job._id}`);
 }
 
 export async function createImportJob(args: {
 	filename: string;
 	importedBy: string;
+	idempotencyKey: string;
 	duplicateAction: 'skip' | 'update';
 	rows: Array<{
 		row: number;
@@ -263,11 +474,23 @@ export async function createImportJob(args: {
 	if (new Set(args.rows.map((row) => row.row)).size !== args.rows.length) {
 		throw new ServiceError('VALIDATION', 'Import rows must have unique row numbers');
 	}
+	const idempotencyKey = args.idempotencyKey.trim();
+	if (!idempotencyKey || idempotencyKey.length > 128) {
+		throw new ServiceError('VALIDATION', 'Idempotency-Key must be between 1 and 128 characters');
+	}
+	const { keyHash, requestFingerprint } = idempotencyHashes({ ...args, idempotencyKey });
 	const timestamp = now();
-	const id = ulid();
+	const id = keyHash;
+	const jobId = jobDocId(id);
+	await ensureImportQueueDatabase();
 	await ensureRegistryDatabase();
-	const job: ShelterImportJob = {
-		_id: `shelter_import_job:${id}`,
+	const existingJob = await getDoc<ShelterImportJob>(jobId);
+	if (existingJob) {
+		assertSameIdempotentRequest(existingJob, keyHash, requestFingerprint);
+		if (existingJob.status !== 'staging') return existingJob;
+	}
+	const job: ShelterImportJob = existingJob ?? {
+		_id: jobId,
 		type: IMPORT_JOB_TYPE,
 		schema_v: 1,
 		filename: args.filename,
@@ -279,17 +502,26 @@ export async function createImportJob(args: {
 		succeeded: 0,
 		failed: args.rows.filter((row) => !row.valid).length,
 		skipped: 0,
-		status: 'queued',
+		status: 'staging',
 		attempt: 1,
 		audit_logged: false,
 		created_at: timestamp,
 		updated_at: timestamp,
-		created_by: args.importedBy
+		created_by: args.importedBy,
+		idempotency_key_hash: keyHash,
+		request_fingerprint: requestFingerprint
 	};
+	const stagedJob =
+		existingJob ??
+		(await putStagedDoc(job, (persisted) => {
+			if (persisted.type !== IMPORT_JOB_TYPE) return false;
+			assertSameIdempotentRequest(persisted, keyHash, requestFingerprint);
+			return true;
+		}));
 	// Stage item documents before exposing the job as queued. Otherwise a worker
 	// polling between these writes could observe an empty/partial batch and mark
-	// the job complete before the remaining rows exist. Clean up a partial stage
-	// if CouchDB rejects any item write so no orphaned items remain discoverable.
+	// the job complete before the remaining rows exist. Keep a partial stage
+	// recoverable by the same idempotency key if a request fails mid-stage.
 	const items: ShelterImportItem[] = args.rows.map((row) => ({
 		_id: `${itemPrefix(id)}${String(row.row).padStart(6, '0')}`,
 		type: IMPORT_ITEM_TYPE,
@@ -306,39 +538,30 @@ export async function createImportJob(args: {
 		updated_at: timestamp,
 		created_by: args.importedBy
 	}));
-	let savedJob: ShelterImportJob;
-	try {
-		// Bounded parallel staging keeps the request duration proportional to a
-		// handful of CouchDB round trips while deterministic ids make a lost
-		// response safely reconcilable.
-		const stageConcurrency = 25;
-		for (let start = 0; start < items.length; start += stageConcurrency) {
-			const batch = items.slice(start, start + stageConcurrency);
-			const results = await Promise.allSettled(
-				batch.map((item) =>
-					putStagedDoc(
-						item,
-						(persisted) =>
-							persisted.type === IMPORT_ITEM_TYPE &&
-							persisted.job_id === job._id &&
-							persisted.row === item.row
-					)
+	// Bounded parallel staging keeps the request duration proportional to a
+	// handful of CouchDB round trips while deterministic ids make a lost
+	// response safely reconcilable.
+	const stageConcurrency = 25;
+	for (let start = 0; start < items.length; start += stageConcurrency) {
+		const batch = items.slice(start, start + stageConcurrency);
+		const results = await Promise.allSettled(
+			batch.map((item) =>
+				putStagedDoc(
+					item,
+					(persisted) =>
+						persisted.type === IMPORT_ITEM_TYPE &&
+						persisted.job_id === job._id &&
+						persisted.row === item.row &&
+						sameStagedItem(persisted, item)
 				)
-			);
-			const failed = results.find(
-				(result): result is PromiseRejectedResult => result.status === 'rejected'
-			);
-			if (failed) throw failed.reason;
-		}
-		savedJob = await putStagedDoc(job, (persisted) => persisted.type === IMPORT_JOB_TYPE);
-	} catch (error) {
-		// Reconcile every deterministic id, including writes whose response was
-		// lost before the batch failed. DELETE is best-effort cleanup only.
-		await Promise.all(
-			[...items.map((item) => item._id), job._id].map((id) => deleteDoc(id).catch(() => undefined))
+			)
 		);
-		throw error;
+		const failed = results.find(
+			(result): result is PromiseRejectedResult => result.status === 'rejected'
+		);
+		if (failed) throw failed.reason;
 	}
+	const savedJob = await publishStagedImportJob(stagedJob);
 	if (!args.rows.some((row) => row.valid)) return await recomputeImportJob(id);
 	return savedJob;
 }
@@ -347,7 +570,7 @@ function isTerminal(status: ImportJobStatus): boolean {
 	return status === 'completed' || status === 'completed_with_errors';
 }
 
-function maxAttempts(item: ShelterImportItem): number {
+function maxAttempts(item: Pick<ShelterImportItem, 'max_attempts'>): number {
 	return Number.isInteger(item.max_attempts) && item.max_attempts > 0
 		? item.max_attempts
 		: MAX_IMPORT_ATTEMPTS;
@@ -367,7 +590,7 @@ async function deadLetterItem(item: ShelterImportItem): Promise<boolean> {
 			: [{ column: '-', message: `ประมวลผลไม่สำเร็จภายใน ${maxAttempts(item)} ครั้ง` }],
 		updated_at: now()
 	};
-	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(item._id)}`, 'PUT', next);
+	const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(item._id)}`, 'PUT', next);
 	if (res.status === 409) return false;
 	assertOk(res.status, `dead-letter ${item._id}`, res.data);
 	return true;
@@ -377,7 +600,7 @@ async function deadLetterItem(item: ShelterImportItem): Promise<boolean> {
 export async function claimNextImportItem(
 	jobId: string,
 	workerId: string,
-	leaseMs = 5 * 60 * 1000
+	leaseMs = IMPORT_LEASE_MS
 ): Promise<ShelterImportItem | null> {
 	const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
 	if (!job || (job.status !== 'queued' && job.status !== 'running')) return null;
@@ -400,12 +623,46 @@ export async function claimNextImportItem(
 			attempts: Math.min(item.attempts + 1, maxAttempts(item)),
 			updated_at: new Date(cutoff).toISOString()
 		};
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(item._id)}`, 'PUT', claimed);
+		const res = await adminRaw(
+			`/${IMPORT_QUEUE_DB}/${encodeURIComponent(item._id)}`,
+			'PUT',
+			claimed
+		);
 		if (res.status === 409) continue;
 		assertOk(res.status, `claim ${item._id}`, res.data);
 		return { ...claimed, _rev: (res.data as { rev?: string }).rev };
 	}
 	return null;
+}
+
+/** Renew a still-owned item lease using a token- and revision-guarded write. */
+export async function renewImportItemClaim(
+	item: ShelterImportItem,
+	leaseMs = IMPORT_LEASE_MS
+): Promise<ShelterImportItem> {
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const current = await getDoc<ShelterImportItem>(item._id);
+		if (
+			!current ||
+			current.status !== 'running' ||
+			current.worker_id !== item.worker_id ||
+			!item.claim_token ||
+			current.claim_token !== item.claim_token ||
+			leaseExpired(current.lease_until)
+		) {
+			throw new ServiceError('CONFLICT', `Import item ${item._id} claim is no longer renewable`);
+		}
+		const next: ShelterImportItem = {
+			...current,
+			lease_until: new Date(Date.now() + leaseMs).toISOString(),
+			updated_at: now()
+		};
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		if (res.status === 409) continue;
+		assertOk(res.status, `renew ${next._id}`, res.data);
+		return { ...next, _rev: (res.data as { rev?: string }).rev };
+	}
+	throw new ServiceError('CONFLICT', `Could not renew import item ${item._id}`);
 }
 
 type ImportItemPatch = Partial<
@@ -455,7 +712,7 @@ export async function updateImportItem(
 			max_attempts: maxAttempts(current),
 			updated_at: now()
 		};
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
 		if (res.status === 409) continue;
 		assertOk(res.status, `update ${next._id}`, res.data);
 		return { ...next, _rev: (res.data as { rev?: string }).rev };
@@ -487,7 +744,7 @@ async function markAuditLogged(jobId: string, logId: string): Promise<ShelterImp
 		if (!current) throw new ServiceError('VALIDATION', `Import job ${jobId} not found`);
 		if (current.audit_log_id !== logId || current.audit_logged === true) return current;
 		const next: ShelterImportJob = { ...current, audit_logged: true, updated_at: now() };
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
 		if (res.status === 409) continue;
 		assertOk(res.status, `mark audit ${next._id}`, res.data);
 		return { ...next, _rev: (res.data as { rev?: string }).rev };
@@ -500,6 +757,12 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 		const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
 		if (!job) throw new ServiceError('VALIDATION', `Import job ${jobId} not found`);
 		const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
+		if (items.length !== job.total) {
+			throw new ServiceError(
+				'CONFLICT',
+				`Import job ${jobId} has ${items.length} staged items; expected ${job.total}`
+			);
+		}
 		const pending = items.filter((item) => item.status === 'pending').length;
 		const running = items.filter((item) => item.status === 'running').length;
 		const succeeded = items.filter(
@@ -550,7 +813,7 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 				: {}),
 			updated_at: now()
 		};
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
 		if (res.status === 409) continue;
 		assertOk(res.status, `recompute ${next._id}`, res.data);
 		const saved = { ...next, _rev: (res.data as { rev?: string }).rev };
@@ -562,7 +825,7 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 }
 
 async function requeueFailedItemWithRevision(
-	item: ShelterImportItem,
+	item: Pick<ShelterImportItem, '_id' | '_rev' | 'status' | 'attempts' | 'max_attempts'>,
 	expectedRevision?: string
 ): Promise<boolean> {
 	for (let attempt = 0; attempt < 3; attempt++) {
@@ -589,7 +852,7 @@ async function requeueFailedItemWithRevision(
 			dead_lettered_at: undefined,
 			updated_at: now()
 		};
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
 		if (res.status === 409) continue;
 		assertOk(res.status, `retry ${next._id}`, res.data);
 		return true;
@@ -608,7 +871,7 @@ async function activatePendingRetry(jobId: string): Promise<ShelterImportJob> {
 			retry_pending: undefined,
 			updated_at: now()
 		};
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
 		if (res.status === 409) continue;
 		assertOk(res.status, `activate retry ${next._id}`, res.data);
 		return { ...next, _rev: (res.data as { rev?: string }).rev };
@@ -623,7 +886,13 @@ export async function resumePendingImportRetry(jobId: string): Promise<ShelterIm
 	if (summary.job.retry_pending !== true) return summary.job;
 	for (const item of summary.items) {
 		if (item.status === 'failed' && item.attempts < maxAttempts(item)) {
-			await requeueFailedItemWithRevision(item);
+			const requeued = await requeueFailedItemWithRevision(item);
+			if (!requeued) {
+				throw new ServiceError(
+					'CONFLICT',
+					`Could not requeue failed import item ${item._id}; retry remains pending`
+				);
+			}
 		}
 	}
 	const activated = await activatePendingRetry(jobId);
@@ -663,14 +932,20 @@ export async function retryFailedImportItems(jobId: string): Promise<ImportJobSu
 			updated_at: now()
 		};
 		const res = await adminRaw(
-			`/${REGISTRY_DB}/${encodeURIComponent(nextJob._id)}`,
+			`/${IMPORT_QUEUE_DB}/${encodeURIComponent(nextJob._id)}`,
 			'PUT',
 			nextJob
 		);
 		if (res.status === 409) continue;
 		assertOk(res.status, `start retry ${nextJob._id}`, res.data);
 		for (const item of retryable) {
-			await requeueFailedItemWithRevision(item, item._rev);
+			const requeued = await requeueFailedItemWithRevision(item, item._rev);
+			if (!requeued) {
+				throw new ServiceError(
+					'CONFLICT',
+					`Could not requeue failed import item ${item._id}; retry remains pending`
+				);
+			}
 		}
 		await activatePendingRetry(jobId);
 		await recomputeImportJob(jobId);

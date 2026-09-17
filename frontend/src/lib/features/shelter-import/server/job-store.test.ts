@@ -12,17 +12,20 @@ import {
 	createImportJob,
 	getImportJob,
 	recomputeImportJob,
+	renewImportItemClaim,
 	retryFailedImportItems,
 	updateImportItem,
 	MAX_IMPORT_ATTEMPTS,
-	type ShelterImportItem
+	IMPORT_QUEUE_DB,
+	type ShelterImportItemSummary
 } from './job-store';
 
 const adminRawMock = vi.mocked(adminRaw);
 const docs = new Map<string, Record<string, unknown>>();
+const permanentlyConflictingIds = new Set<string>();
 
 function docId(path: string): string {
-	return decodeURIComponent(path.slice('/registry/'.length));
+	return decodeURIComponent(new URL(`http://test${path}`).pathname.split('/').slice(2).join('/'));
 }
 
 function allDocs(path: string): { rows: { id: string; doc: Record<string, unknown> }[] } {
@@ -39,9 +42,19 @@ function allDocs(path: string): { rows: { id: string; doc: Record<string, unknow
 
 function setupCouchMock(): void {
 	docs.clear();
+	permanentlyConflictingIds.clear();
 	adminRawMock.mockImplementation(async (path, method, body) => {
-		if (path === '/registry' && method === 'PUT') return { status: 201, data: { ok: true } };
+		if ((path === '/registry' || path === `/${IMPORT_QUEUE_DB}`) && method === 'PUT') {
+			return { status: 201, data: { ok: true } };
+		}
+		if (path === `/${IMPORT_QUEUE_DB}/_security` && method === 'GET') {
+			return { status: 200, data: { admins: {}, members: {} } };
+		}
+		if (path === `/${IMPORT_QUEUE_DB}/_security` && method === 'PUT') {
+			return { status: 200, data: { ok: true } };
+		}
 		if (path.includes('/_all_docs?')) return { status: 200, data: allDocs(path) };
+		const url = new URL(`http://test${path}`);
 		const id = docId(path);
 		if (method === 'GET') {
 			const doc = docs.get(id);
@@ -50,7 +63,8 @@ function setupCouchMock(): void {
 		if (method === 'DELETE') {
 			const current = docs.get(id);
 			if (!current) return { status: 404, data: { error: 'not_found' } };
-			if ((body as { _rev?: string } | undefined)?._rev !== current._rev) {
+			const revision = url.searchParams.get('rev') ?? (body as { _rev?: string } | undefined)?._rev;
+			if (revision !== current._rev) {
 				return { status: 409, data: { error: 'conflict' } };
 			}
 			docs.delete(id);
@@ -59,6 +73,9 @@ function setupCouchMock(): void {
 		if (method === 'PUT') {
 			const incoming = body as Record<string, unknown>;
 			const current = docs.get(id);
+			if (permanentlyConflictingIds.has(id)) {
+				return { status: 409, data: { error: 'conflict' } };
+			}
 			if (current && incoming._rev !== current._rev) {
 				return { status: 409, data: { error: 'conflict' } };
 			}
@@ -75,10 +92,11 @@ function input(name: string): Record<string, unknown> {
 	return { name, capacity: 100 };
 }
 
-async function createSingleJob(): Promise<{ jobId: string; item: ShelterImportItem }> {
+async function createSingleJob(): Promise<{ jobId: string; item: ShelterImportItemSummary }> {
 	const job = await createImportJob({
 		filename: 'shelters.xlsx',
 		importedBy: 'admin',
+		idempotencyKey: 'single-job-key',
 		duplicateAction: 'skip',
 		rows: [{ row: 1, name: 'ศูนย์ A', input: input('ศูนย์ A') as never, valid: true }]
 	});
@@ -96,6 +114,7 @@ describe('shelter import job lifecycle', () => {
 		const job = await createImportJob({
 			filename: 'shelters.xlsx',
 			importedBy: 'admin',
+			idempotencyKey: 'bounded-attempts-key',
 			duplicateAction: 'skip',
 			rows: [
 				{ row: 1, name: 'ศูนย์ A', input: input('ศูนย์ A') as never, valid: true },
@@ -106,8 +125,26 @@ describe('shelter import job lifecycle', () => {
 
 		expect(summary?.items[0]._id).toContain(':000001');
 		expect(summary?.items[1]._id).toContain(':000012');
-		expect(summary?.items.every((item) => item.job_id === job._id)).toBe(true);
+		expect(summary?.items.every((item) => !('input' in item))).toBe(true);
 		expect(summary?.items.every((item) => item.max_attempts === MAX_IMPORT_ATTEMPTS)).toBe(true);
+	});
+
+	it('replays an idempotent request and rejects key reuse with a different body', async () => {
+		const args = {
+			filename: 'shelters.xlsx',
+			importedBy: 'admin',
+			idempotencyKey: 'replay-key',
+			duplicateAction: 'skip' as const,
+			rows: [{ row: 1, name: 'ศูนย์ A', input: input('ศูนย์ A') as never, valid: true }]
+		};
+		const first = await createImportJob(args);
+		const second = await createImportJob(args);
+
+		expect(second._id).toBe(first._id);
+		expect([...docs.values()].filter((doc) => doc.type === 'shelter_import_item')).toHaveLength(1);
+		await expect(createImportJob({ ...args, filename: 'different.xlsx' })).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
 	});
 
 	it('only retries failed items after completed_with_errors and appends a new audit attempt', async () => {
@@ -172,6 +209,84 @@ describe('shelter import job lifecycle', () => {
 		expect(result.status).toBe('running');
 	});
 
+	it('allows only one winner when workers claim the same item concurrently', async () => {
+		const { jobId } = await createSingleJob();
+		const [first, second] = await Promise.all([
+			claimNextImportItem(jobId, 'worker-a'),
+			claimNextImportItem(jobId, 'worker-b')
+		]);
+
+		expect([first, second].filter(Boolean)).toHaveLength(1);
+		const winner = first ?? second;
+		expect(winner?.worker_id).toMatch(/worker-[ab]/);
+		expect([first, second].filter((claim) => claim === null)).toHaveLength(1);
+	});
+
+	it('renews only the current claim and rejects a reclaimed token', async () => {
+		const { jobId } = await createSingleJob();
+		const claimed = await claimNextImportItem(jobId, 'worker-a');
+		if (!claimed) throw new Error('item was not claimed');
+
+		const renewed = await renewImportItemClaim(claimed, 60_000);
+		expect(Date.parse(renewed.lease_until!)).toBeGreaterThan(Date.now());
+		const stored = docs.get(claimed._id);
+		if (!stored) throw new Error('claimed item missing from test store');
+		stored.claim_token = 'successor-token';
+
+		await expect(renewImportItemClaim(claimed)).rejects.toMatchObject({ code: 'CONFLICT' });
+	});
+
+	it('keeps retry pending when a failed item cannot win its requeue CAS', async () => {
+		const { jobId, item: snapshot } = await createSingleJob();
+		const claimed = await claimNextImportItem(jobId, 'worker-a');
+		if (!claimed) throw new Error('item was not claimed');
+		await updateImportItem(claimed, {
+			status: 'failed',
+			errors: [{ column: '-', message: 'temporary failure' }],
+			lease_until: undefined,
+			worker_id: undefined,
+			claim_token: undefined
+		});
+		await recomputeImportJob(jobId);
+		permanentlyConflictingIds.add(snapshot._id);
+
+		await expect(retryFailedImportItems(jobId)).rejects.toMatchObject({ code: 'CONFLICT' });
+		const recovered = await getImportJob(jobId);
+		expect(recovered?.job.retry_pending).toBe(true);
+		expect(recovered?.job.status).toBe('running');
+		expect(recovered?.items[0].status).toBe('failed');
+	});
+
+	it('does not accept an unrelated document on an audit-log conflict', async () => {
+		const { jobId } = await createSingleJob();
+		const claimed = await claimNextImportItem(jobId, 'worker-a');
+		if (!claimed) throw new Error('item was not claimed');
+		await updateImportItem(claimed, {
+			status: 'created',
+			code: 'SH001',
+			lease_until: undefined,
+			worker_id: undefined,
+			claim_token: undefined
+		});
+		const completed = await recomputeImportJob(jobId);
+		const log = [...docs.values()].find((doc) => doc.type === 'shelter_import_log');
+		if (!log) throw new Error('audit log was not created');
+		const jobDocument = docs.get(`shelter_import_job:${jobId}`);
+		if (!jobDocument) throw new Error('job document missing');
+		jobDocument.audit_logged = false;
+		log.results = [{ row: 99, name: 'unexpected', status: 'server_error' }];
+
+		await expect(recomputeImportJob(jobId)).rejects.toMatchObject({ code: 'CONFLICT' });
+		expect(completed.audit_logged).toBe(true);
+	});
+
+	it('does not terminalize a job when a staged item document is missing', async () => {
+		const { jobId, item } = await createSingleJob();
+		docs.delete(item._id);
+
+		await expect(recomputeImportJob(jobId)).rejects.toMatchObject({ code: 'CONFLICT' });
+	});
+
 	it('does not requeue a dead-lettered item after the attempt limit', async () => {
 		const { jobId } = await createSingleJob();
 		const item = (await getImportJob(jobId))?.items[0];
@@ -183,7 +298,7 @@ describe('shelter import job lifecycle', () => {
 			max_attempts: MAX_IMPORT_ATTEMPTS,
 			dead_lettered_at: new Date().toISOString()
 		};
-		await adminRaw(`/registry/${encodeURIComponent(item._id)}`, 'PUT', failed);
+		await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(item._id)}`, 'PUT', failed);
 		await recomputeImportJob(jobId);
 		const summary = await retryFailedImportItems(jobId);
 		expect(summary.items[0].status).toBe('failed');
