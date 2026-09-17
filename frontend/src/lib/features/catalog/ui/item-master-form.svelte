@@ -962,9 +962,12 @@
 				>
 					<div class="flex items-center justify-between">
 						<div class="space-y-0.5">
-							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+							<label
+								for="deactivated-toggle"
+								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
+							>
 								สถานะปิดการใช้งาน (Deactivated)
-							</Form.Label>
+							</label>
 							<p class="text-xs text-muted-foreground">
 								หากปิดการใช้งาน รายการนี้จะไม่แสดงให้เลือกในธุรกรรมคลังและการเบิกจ่ายใหม่
 								แต่ประวัติเก่ายังคงอยู่
