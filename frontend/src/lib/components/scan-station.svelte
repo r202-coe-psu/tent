@@ -114,7 +114,6 @@
 	function handleSaveScan() {
 		toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
 		scannedItems.forEach((item) => {
-			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
 			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${formatUnit(item.unit)}`);
 		});
 		scanState = 'idle';
