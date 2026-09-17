@@ -2,6 +2,10 @@ services:
   couchdb:
     container_name: tent-couchdb-production
     image: couchdb:3.5
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
@@ -107,7 +111,7 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
-      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN}
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
       # Roleless writer for anonymous public writes (CR-070 booking, CR-052
       # courier PATCH). putAsPublicWriter fails closed without it outside dev.
       COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@couchdb:5984
@@ -124,6 +128,12 @@ services:
         condition: service_completed_successfully
       fastapi:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     restart: unless-stopped
 
   import-worker:
@@ -134,7 +144,7 @@ services:
         condition: service_healthy
     environment:
       SHELTER_IMPORT_WORKER_URL: http://frontend:3000
-      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN}
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
     command: ["pnpm", "import-worker"]
     restart: unless-stopped
 
