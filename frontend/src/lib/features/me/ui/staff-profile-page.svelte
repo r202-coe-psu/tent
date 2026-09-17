@@ -9,6 +9,8 @@
 		updateOwnProfile,
 		googleOAuthStartHref,
 		unlinkGoogleMfa,
+		thaidOAuthStartHref,
+		unlinkThaidMfa,
 		type AuthStatus
 	} from '$lib/features/users';
 	import { ownProfileSchema, type OwnProfileInput } from '../domain/profile-schema';
@@ -41,6 +43,8 @@
 
 	let unlinkOpen = $state(false);
 	let unlinking = $state(false);
+	let unlinkThaidOpen = $state(false);
+	let unlinkingThaid = $state(false);
 
 	const displayTitle = $derived(profile?.display_name?.trim() || profile?.name?.trim() || '—');
 	const initials = $derived(computeInitials(displayTitle, profile?.name));
@@ -148,6 +152,17 @@
 		}
 	}
 
+	const hasGoogle = $derived(
+		Boolean(profile?.mfa_provider_email || profile?.mfa_providers?.includes('google'))
+	);
+	const hasThaid = $derived(
+		Boolean(
+			profile?.mfa_thaid_name ||
+			profile?.mfa_thaid_pid_masked ||
+			profile?.mfa_providers?.includes('thaid')
+		)
+	);
+
 	async function handleUnlink() {
 		unlinking = true;
 		try {
@@ -162,11 +177,30 @@
 		}
 	}
 
+	async function handleUnlinkThaid() {
+		unlinkingThaid = true;
+		try {
+			await unlinkThaidMfa();
+			toast.success('ถอดการผูก ThaID MFA แล้ว');
+			unlinkThaidOpen = false;
+			await refreshProfile();
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ถอดการผูกไม่สำเร็จ');
+		} finally {
+			unlinkingThaid = false;
+		}
+	}
+
 	onMount(async () => {
-		if (page.url.searchParams.get('mfa') === 'linked') {
+		const mfa = page.url.searchParams.get('mfa');
+		if (mfa === 'linked') {
 			toast.success('ผูกบัญชี Google สำหรับ MFA สำเร็จ');
-		} else if (page.url.searchParams.get('mfa') === 'conflict') {
+		} else if (mfa === 'conflict') {
 			toast.error('บัญชี Google นี้ถูกผูกกับผู้ใช้อื่นแล้ว');
+		} else if (mfa === 'thaid_linked') {
+			toast.success('ผูกบัญชี ThaID สำหรับ MFA สำเร็จ');
+		} else if (mfa === 'thaid_conflict') {
+			toast.error('บัญชี ThaID นี้ถูกผูกกับผู้ใช้อื่นแล้ว');
 		}
 		await refreshProfile();
 	});
@@ -371,14 +405,14 @@
 			<!-- Security / Google MFA -->
 			<section>
 				<Card.Root
-					class={profile.mfa_enrolled
+					class={hasGoogle
 						? 'rounded-2xl border border-emerald-200 bg-white shadow-2xs'
 						: 'rounded-2xl border border-slate-200/80 bg-white shadow-2xs'}
 				>
 					<Card.Header>
 						<Card.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
 							<ShieldCheck
-								class={profile.mfa_enrolled ? 'size-5 text-emerald-700' : 'size-5 text-[#0A2647]'}
+								class={hasGoogle ? 'size-5 text-emerald-700' : 'size-5 text-[#0A2647]'}
 							/>
 							ความปลอดภัย — Google MFA
 						</Card.Title>
@@ -387,7 +421,7 @@
 						</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-4">
-						{#if profile.mfa_enrolled}
+						{#if hasGoogle}
 							<div
 								class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-base text-emerald-900"
 							>
@@ -444,6 +478,95 @@
 							>
 								<Link2 class="size-4" />
 								ผูกบัญชี Google
+							</Button>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			</section>
+
+			<!-- Security / ThaID MFA -->
+			<section>
+				<Card.Root
+					class={hasThaid
+						? 'rounded-2xl border border-emerald-200 bg-white shadow-2xs'
+						: 'rounded-2xl border border-slate-200/80 bg-white shadow-2xs'}
+				>
+					<Card.Header>
+						<Card.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
+							<ShieldCheck class={hasThaid ? 'size-5 text-emerald-700' : 'size-5 text-[#0A2647]'} />
+							ความปลอดภัย — ThaID (Digital ID กรมการปกครอง BORA)
+						</Card.Title>
+						<Card.Description class="text-base text-slate-600">
+							ผูกบัญชี ThaID เพื่อยืนยันตัวตนระดับราชการหลังเข้าสู่ระบบด้วยรหัสผ่าน
+							หรือใช้เข้าสู่ระบบโดยตรง
+						</Card.Description>
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						{#if hasThaid}
+							<div
+								class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-base text-emerald-900"
+							>
+								ผูกแล้ว
+								{#if profile.mfa_thaid_name || profile.mfa_thaid_pid_masked}
+									— <span class="font-medium"
+										>{[profile.mfa_thaid_name, profile.mfa_thaid_pid_masked]
+											.filter(Boolean)
+											.join(' • ')}</span
+									>
+								{/if}
+							</div>
+							<Dialog.Root bind:open={unlinkThaidOpen}>
+								<Dialog.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											variant="outline"
+											class="min-h-11 w-full gap-2 text-red-700 sm:w-auto"
+										>
+											<Unlink class="size-4" />
+											ถอดการผูก ThaID
+										</Button>
+									{/snippet}
+								</Dialog.Trigger>
+								<Dialog.Content class="sm:max-w-md">
+									<Dialog.Header>
+										<Dialog.Title>ถอดการผูก ThaID MFA?</Dialog.Title>
+										<Dialog.Description>
+											หลังถอดแล้ว จะไม่ต้องยืนยัน ThaID ตอนเข้าสู่ระบบ จนกว่าจะผูกใหม่
+										</Dialog.Description>
+									</Dialog.Header>
+									<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+										<Button
+											variant="outline"
+											class="min-h-11"
+											onclick={() => (unlinkThaidOpen = false)}
+										>
+											ยกเลิก
+										</Button>
+										<Button
+											variant="destructive"
+											class="min-h-11"
+											disabled={unlinkingThaid}
+											onclick={handleUnlinkThaid}
+										>
+											{unlinkingThaid ? 'กำลังถอด...' : 'ยืนยันถอดการผูก'}
+										</Button>
+									</div>
+								</Dialog.Content>
+							</Dialog.Root>
+						{:else if isImmutable}
+							<p class="text-base text-slate-500">
+								บัญชีผู้ดูแลระบบเซิร์ฟเวอร์ (CouchDB Admin)
+								ได้รับการจัดการผ่านไฟล์การตั้งค่าเซิร์ฟเวอร์ และไม่รองรับ ThaID MFA
+							</p>
+						{:else}
+							<p class="text-base text-slate-500">ยังไม่ได้ผูกบัญชี ThaID</p>
+							<Button
+								href={thaidOAuthStartHref('link')}
+								class="min-h-11 w-full gap-2 bg-[#0A2647] text-white hover:bg-[#051930] sm:w-auto"
+							>
+								<Link2 class="size-4" />
+								ผูกบัญชี ThaID
 							</Button>
 						{/if}
 					</Card.Content>

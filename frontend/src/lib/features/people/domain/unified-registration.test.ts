@@ -234,6 +234,32 @@ describe('unified registration — family plan', () => {
 		const plan = planFamilyRegistration(validInput(), 'public');
 		expect(plan.memberInputs[0]?.status).toBe('pre_registered');
 		expect(plan.householdInput.status).toBe('pre_registered');
+		expect(plan.mode).toBe('create');
+		expect(plan.targetHouseholdId).toBeNull();
+	});
+
+	it('plans join mode when join_household_id is set without minting a new head link', () => {
+		const plan = planFamilyRegistration(
+			validInput({
+				join_household_id: 'household:existing',
+				members: [validMember({ first_name: 'ใหม่' }), validMember({ first_name: 'ลูก' })]
+			}),
+			'onsite'
+		);
+		expect(plan.mode).toBe('join');
+		expect(plan.targetHouseholdId).toBe('household:existing');
+		expect(plan.memberInputs.every((m) => m.household_id === 'household:existing')).toBe(true);
+		expect(plan.memberInputs).toHaveLength(2);
+	});
+
+	it('rejects both join_household_id and join_match_token together', () => {
+		const result = unifiedRegistrationInputSchema.safeParse(
+			validInput({
+				join_household_id: 'household:1',
+				join_match_token: 'token.sig'
+			})
+		);
+		expect(result.success).toBe(false);
 	});
 
 	it('requires at least one member', () => {

@@ -51,12 +51,26 @@ export class UnassignedRegistrationWriteError extends Error {
 
 /**
  * Map UnifiedRegistrationInput → FastAPI body and POST to Mongo queue.
+ * Optional `join_match_token` is verified here and mapped to `join_registration_id`.
  */
 export async function executeUnassignedRegistration(
 	input: UnifiedRegistrationInput,
 	options: ExecuteUnassignedRegistrationOptions
 ): Promise<UnassignedRegistrationResult> {
-	const upstreamBody: UnassignedRegistrationPayload = toUnassignedRegistrationPayload(input);
+	let joinRegistrationId: string | null = null;
+	const rawToken = input.join_match_token?.trim();
+	if (rawToken) {
+		const { verifyResidenceMatchToken } = await import('./residence-match-token.server');
+		const tokenPayload = verifyResidenceMatchToken(rawToken);
+		if (!tokenPayload || tokenPayload.kind !== 'unassigned') {
+			throw new UnassignedRegistrationWriteError('INVALID_JOIN_TOKEN', 400);
+		}
+		joinRegistrationId = tokenPayload.registrationId;
+	}
+
+	const upstreamBody: UnassignedRegistrationPayload = toUnassignedRegistrationPayload(input, {
+		joinRegistrationId
+	});
 
 	let apiRes: Response;
 	try {

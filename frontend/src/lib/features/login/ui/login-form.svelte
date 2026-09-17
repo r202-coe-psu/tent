@@ -15,9 +15,10 @@
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
-	import { fetchAuthStatus, googleOAuthStartHref } from '$lib/features/users';
+	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
+	import ThaIdSignInButton from './thaid-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -74,10 +75,16 @@
 			toast.error(
 				'บัญชี Google นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก Google ใน Settings'
 			);
+		} else if (err === 'thaid_not_linked') {
+			toast.error(
+				'บัญชี ThaID นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก ThaID ใน Settings'
+			);
+		} else if (err === 'thaid_login_failed') {
+			toast.error('ไม่สามารถเข้าสู่ระบบด้วย ThaID ได้ กรุณาลองอีกครั้ง');
 		} else if (err === 'invalid_state' || err === 'google_login_failed') {
-			toast.error('ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง');
+			toast.error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง');
 		} else if (err.startsWith('oauth_')) {
-			toast.error('ไม่สามารถเชื่อมต่อ Google ได้ กรุณาลองอีกครั้ง');
+			toast.error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนภายนอกได้ กรุณาลองอีกครั้ง');
 		}
 
 		const next = new URL(page.url);
@@ -236,6 +243,7 @@
 			</div>
 
 			<GoogleSignInButton href={googleOAuthStartHref('login')} />
+			<ThaIdSignInButton href={thaidOAuthStartHref('login')} />
 		</Field.FieldGroup>
 	</form>
 {/snippet}

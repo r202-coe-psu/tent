@@ -4,6 +4,7 @@
 	import Package from '@lucide/svelte/icons/package';
 	import Users from '@lucide/svelte/icons/users';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
@@ -12,6 +13,10 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
+	import {
+		matchResidence,
+		type ResidenceMatchChip
+	} from '$lib/features/public-register/data/public-register.api';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
@@ -40,8 +45,28 @@
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
 	import type { HouseholdVehicle, PetGroup } from '../../domain/people';
+	import {
+		hasMinimumResidence,
+		type ResidenceFields,
+		type ResidenceMatchCandidate
+	} from '../../domain/registration-shell';
+	import { peopleKeys, useHouseholds } from '../../application/queries';
+	import { peopleRepository } from '../../data/people.remote';
+	import {
+		readResidenceSuggestDeps,
+		residenceSuggestTick
+	} from './residence-suggest-reactivity.svelte';
+	import { createQuery } from '@tanstack/svelte-query';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
+
+	function safeQuery<T>(fn: () => T, fallback: T): T {
+		try {
+			return fn();
+		} catch {
+			return fallback;
+		}
+	}
 
 	let {
 		channel = 'onsite',
@@ -159,6 +184,34 @@
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
 	);
 
+	/** Create-path residence join — at most one of id (onsite) / token (public). */
+	let joinHouseholdId = $state<string | null>(null);
+	let joinMatchToken = $state<string | null>(null);
+	let joinSelectedSummary = $state<string | null>(null);
+
+	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
+	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
+	let publicMatchChips = $state<ResidenceMatchChip[]>([]);
+	let residenceSuggestPending = $state(false);
+	let residenceSuggestCheckedEmpty = $state(false);
+
+	const enableResidenceJoin = $derived(mode === 'create');
+	/** Same as `useHouseholds`, but `enabled` only for onsite create (no Couch fetch on public). */
+	const householdsQuery = safeQuery(
+		() =>
+			createQuery(() => ({
+				queryKey: peopleKeys.households(),
+				queryFn: () => peopleRepository().listHouseholds(),
+				enabled: channel === 'onsite' && mode === 'create'
+			})),
+		{
+			data: [],
+			isLoading: false
+		} as unknown as ReturnType<typeof useHouseholds>
+	);
+
+	const hasJoinSelection = $derived(Boolean(joinHouseholdId || joinMatchToken));
+
 	$effect(() => {
 		if (initialMembers && !touched) {
 			members = buildInitialMembers();
@@ -171,6 +224,129 @@
 			assetDescription = initialHousehold.assets?.description ?? '';
 			petItems = parseInitialPets((initialHousehold.pets ?? []) as PetGroup[]).items;
 		}
+	});
+
+	/** Onsite: debounce local household list suggest (FR-03b-H pattern). */
+	$effect(() => {
+		if (!enableResidenceJoin || channel !== 'onsite') {
+			residenceSuggestions = [];
+			return;
+		}
+
+		const households = householdsQuery.data ?? [];
+		const deps = readResidenceSuggestDeps(
+			'create',
+			household,
+			households,
+			Boolean(householdsQuery.isLoading) && households.length === 0
+		);
+		const tick = residenceSuggestTick(deps);
+
+		if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+
+		if (tick.kind === 'clear') {
+			residenceSuggestions = [];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = false;
+			if (untrack(() => joinHouseholdId)) clearJoinSelection();
+			return;
+		}
+
+		if (tick.kind === 'pending') {
+			residenceSuggestions = [];
+			residenceSuggestPending = true;
+			residenceSuggestCheckedEmpty = false;
+			return;
+		}
+
+		residenceSuggestPending = true;
+		residenceSuggestCheckedEmpty = false;
+		const matches = tick.matches;
+		const selectedId = untrack(() => joinHouseholdId);
+		residenceSuggestTimer = setTimeout(() => {
+			residenceSuggestions = matches;
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = matches.length === 0;
+			if (selectedId && !matches.some((m) => m._id === selectedId)) {
+				clearJoinSelection();
+			}
+		}, 350);
+		return () => {
+			if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+		};
+	});
+
+	/** Public: debounce BFF residence-match (token + non-PII chips only). */
+	$effect(() => {
+		if (!enableResidenceJoin || channel !== 'public') {
+			publicMatchChips = [];
+			return;
+		}
+
+		const form: ResidenceFields = {
+			housing_type: household.housing_type,
+			residence_landmark: household.residence_landmark,
+			address_no: household.address_no,
+			village_no: household.village_no,
+			subdistrict: household.subdistrict,
+			district: household.district,
+			province: household.province,
+			postal_code: household.postal_code
+		};
+
+		if (!hasMinimumResidence(form)) {
+			publicMatchChips = [];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = false;
+			if (untrack(() => joinMatchToken)) clearJoinSelection();
+			return;
+		}
+
+		const useUnassigned = enableUnassignedPhoto || !shelterCode.trim();
+		const request = useUnassigned
+			? {
+					unassigned: true as const,
+					housing_type: form.housing_type,
+					residence_landmark: form.residence_landmark,
+					address_no: form.address_no,
+					village_no: form.village_no,
+					subdistrict: form.subdistrict,
+					district: form.district,
+					province: form.province,
+					postal_code: form.postal_code
+				}
+			: {
+					shelter_code: shelterCode.trim(),
+					housing_type: form.housing_type,
+					residence_landmark: form.residence_landmark,
+					address_no: form.address_no,
+					village_no: form.village_no,
+					subdistrict: form.subdistrict,
+					district: form.district,
+					province: form.province,
+					postal_code: form.postal_code
+				};
+
+		residenceSuggestPending = true;
+		residenceSuggestCheckedEmpty = false;
+		let ignore = false;
+		const selectedToken = untrack(() => joinMatchToken);
+		const timer = setTimeout(() => {
+			void matchResidence(request).then((result) => {
+				if (ignore) return;
+				publicMatchChips = result.matches;
+				residenceSuggestPending = false;
+				residenceSuggestCheckedEmpty = result.matches.length === 0;
+				if (selectedToken && !result.matches.some((m) => m.match_token === selectedToken)) {
+					clearJoinSelection();
+				}
+			});
+		}, 350);
+
+		return () => {
+			ignore = true;
+			clearTimeout(timer);
+		};
 	});
 
 	const formSectionNav = $derived.by(() => {
@@ -299,6 +475,64 @@
 		onDirtyChange?.(false);
 	}
 
+	function formatResidenceSummary(r: ResidenceFields): string {
+		const parts = [
+			r.residence_landmark,
+			r.address_no,
+			r.village_no,
+			r.subdistrict ? `ต.${r.subdistrict}` : '',
+			r.district ? `อ.${r.district}` : '',
+			r.province ? `จ.${r.province}` : '',
+			r.postal_code
+		].filter((p) => (p ?? '').toString().trim());
+		return parts.join(' ') || '—';
+	}
+
+	function housingTypeLabel(code: string | null | undefined): string {
+		switch (code) {
+			case 'owned_house':
+				return t.housingOwned;
+			case 'rented_house':
+				return t.housingRented;
+			case 'condo':
+				return t.housingCondo;
+			case 'apartment_dorm':
+				return t.housingApartment;
+			case 'homeless':
+				return t.housingHomeless;
+			default:
+				return code?.trim() || '';
+		}
+	}
+
+	function clearJoinSelection() {
+		joinHouseholdId = null;
+		joinMatchToken = null;
+		joinSelectedSummary = null;
+	}
+
+	function confirmOnsiteJoin(suggestion: ResidenceMatchCandidate) {
+		joinHouseholdId = suggestion._id;
+		joinMatchToken = null;
+		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
+		markDirty();
+	}
+
+	function confirmPublicJoin(chip: ResidenceMatchChip) {
+		joinMatchToken = chip.match_token;
+		joinHouseholdId = null;
+		const parts = [chip.landmark?.trim() || '', housingTypeLabel(chip.housing_type)].filter(
+			Boolean
+		);
+		joinSelectedSummary = parts.join(' · ') || 'ครอบครัวที่อยู่นี้';
+		markDirty();
+	}
+
+	function continueCreateDespiteSuggest() {
+		clearJoinSelection();
+		markDirty();
+	}
+
 	function onPetsSynced() {
 		household.pets = syncPetsToHousehold(petItems);
 		markDirty();
@@ -368,7 +602,13 @@
 					showVehiclesAssets && assetDescription.trim()
 						? { description: assetDescription.trim(), image_url: null }
 						: null
-			}
+			},
+			...(mode === 'create'
+				? {
+						join_household_id: joinHouseholdId || undefined,
+						join_match_token: joinMatchToken || undefined
+					}
+				: {})
 		};
 
 		const result = unifiedRegistrationInputSchema.safeParse(payload);
@@ -500,6 +740,111 @@
 			required={true}
 			disabled={pending}
 		/>
+
+		{#if enableResidenceJoin}
+			{#if hasJoinSelection}
+				<div
+					class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
+					role="status"
+					aria-live="polite"
+				>
+					<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
+					{#if joinSelectedSummary}
+						<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
+					{/if}
+					<p class="text-xs text-muted-foreground">
+						สมาชิกใหม่จะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+					</p>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={pending}
+						onclick={continueCreateDespiteSuggest}
+					>
+						สร้างใหม่แทน
+					</Button>
+				</div>
+			{:else if residenceSuggestPending}
+				<div
+					class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+					role="status"
+					aria-live="polite"
+				>
+					<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+					กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+				</div>
+			{:else if channel === 'onsite' && residenceSuggestions.length > 0}
+				<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+					<p class="text-xs font-semibold text-foreground">
+						พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
+					</p>
+					<ul class="space-y-2">
+						{#each residenceSuggestions as suggestion (suggestion._id)}
+							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+								<span>
+									{#if suggestion.label?.trim()}
+										<span class="font-medium">{suggestion.label}</span>
+										<span class="text-muted-foreground">
+											· {formatResidenceSummary(suggestion)}
+										</span>
+									{:else}
+										<span class="text-muted-foreground">
+											{formatResidenceSummary(suggestion)}
+										</span>
+									{/if}
+								</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={pending}
+									onclick={() => confirmOnsiteJoin(suggestion)}
+								>
+									เข้าร่วม
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					<Button type="button" size="sm" disabled={pending} onclick={continueCreateDespiteSuggest}>
+						สร้างใหม่
+					</Button>
+				</div>
+			{:else if channel === 'public' && publicMatchChips.length > 0}
+				<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+					<p class="text-xs font-semibold text-foreground">
+						พบครอบครัวที่ลงทะเบียนที่อยู่นี้แล้ว — เข้าร่วมหรือสร้างใหม่
+					</p>
+					<ul class="space-y-2">
+						{#each publicMatchChips as chip (chip.match_token)}
+							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+								<span class="text-muted-foreground">
+									{[chip.landmark?.trim() || '', housingTypeLabel(chip.housing_type)]
+										.filter(Boolean)
+										.join(' · ') || 'ครอบครัวที่อยู่นี้'}
+								</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={pending}
+									onclick={() => confirmPublicJoin(chip)}
+								>
+									เข้าร่วม
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					<Button type="button" size="sm" disabled={pending} onclick={continueCreateDespiteSuggest}>
+						สร้างใหม่
+					</Button>
+				</div>
+			{:else if residenceSuggestCheckedEmpty}
+				<p class="mt-3 text-xs text-muted-foreground">
+					ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่
+				</p>
+			{/if}
+		{/if}
 	</UnifiedRegistrationSection>
 
 	<!-- ── Section 2: Pets ────────────────────────────────────────── -->

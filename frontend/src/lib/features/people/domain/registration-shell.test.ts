@@ -207,6 +207,47 @@ describe('matchesResidenceAddress / suggestHouseholdsByResidence', () => {
 			'household:1'
 		]);
 	});
+
+	it('matches homeless by landmark + geo when there is no house number', () => {
+		const homelessQuery = {
+			housing_type: 'homeless',
+			residence_landmark: 'ใต้สะพานใกล้ตลาด',
+			address_no: null,
+			subdistrict: 'คลองแห',
+			district: 'หาดใหญ่',
+			province: 'สงขลา'
+		};
+		expect(
+			matchesResidenceAddress(homelessQuery, {
+				...homelessQuery,
+				residence_landmark: 'ใต้สะพานใกล้ตลาด'
+			})
+		).toBe(true);
+		expect(
+			matchesResidenceAddress(homelessQuery, {
+				...homelessQuery,
+				residence_landmark: 'จุดอื่น'
+			})
+		).toBe(false);
+	});
+
+	it('excludes cancelled households from suggestions when status is present', () => {
+		const households = [
+			{
+				_id: 'household:active',
+				status: 'pre_registered',
+				...query
+			},
+			{
+				_id: 'household:cancelled',
+				status: 'cancelled',
+				...query
+			}
+		];
+		expect(suggestHouseholdsByResidence(query, households).map((h) => h._id)).toEqual([
+			'household:active'
+		]);
+	});
 });
 
 describe('filterJoinCandidatesByEvacueeQuery', () => {
