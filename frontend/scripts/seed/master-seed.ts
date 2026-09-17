@@ -281,9 +281,7 @@ export async function seedCatalog(): Promise<void> {
     if (newDoc.system_key !== oldDoc.system_key) {
       throw({ forbidden: 'system_key is immutable on protected categories' });
     }
-    if (newDoc.default_class !== oldDoc.default_class) {
-      throw({ forbidden: 'default_class is immutable on protected categories' });
-    }
+    // CR-125: default_class is editable on protected categories (amends CR-119 FR-04).
     if (newDoc.is_protected !== true) {
       throw({ forbidden: 'is_protected flag cannot be removed' });
     }
@@ -373,25 +371,52 @@ export async function seedCatalog(): Promise<void> {
 		catalogDoc(
 			'item_master:rice',
 			'item_master',
-			{ name: 'ข้าวสาร', category: 'item_category:food', base_unit: 'kg', ...itemMasterBase },
+			{
+				...itemMasterBase,
+				name: 'ข้าวสาร',
+				category: 'item_category:food',
+				base_unit: 'kg',
+				sku: 'SKU-RICE-01',
+				dietary: ['HALAL']
+			},
 			4
 		),
 		catalogDoc(
 			'item_master:egg',
 			'item_master',
-			{ name: 'ไข่ไก่', category: 'item_category:food', base_unit: 'piece', ...itemMasterBase },
+			{
+				...itemMasterBase,
+				name: 'ไข่ไก่',
+				category: 'item_category:food',
+				base_unit: 'piece',
+				sku: 'SKU-EGG-01',
+				dietary: ['HALAL']
+			},
 			4
 		),
 		catalogDoc(
 			'item_master:vegetable',
 			'item_master',
-			{ name: 'ผักรวม', category: 'item_category:food', base_unit: 'kg', ...itemMasterBase },
+			{
+				...itemMasterBase,
+				name: 'ผักรวม',
+				category: 'item_category:food',
+				base_unit: 'kg',
+				sku: 'SKU-VEG-01',
+				dietary: ['VEGAN']
+			},
 			4
 		),
 		catalogDoc(
 			'item_master:canned-fish',
 			'item_master',
-			{ name: 'ปลากระป๋อง', category: 'item_category:food', base_unit: 'can', ...itemMasterBase },
+			{
+				...itemMasterBase,
+				name: 'ปลากระป๋อง',
+				category: 'item_category:food',
+				base_unit: 'can',
+				sku: 'SKU-FISH-01'
+			},
 			4
 		),
 		catalogDoc(

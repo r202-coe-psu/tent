@@ -103,8 +103,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			}
 			const existing = await this.repo.get<ItemCategory>(itemCategory._id);
 			if (existing) {
+				// CR-125: default_class is editable on protected categories; system_key and
+				// is_protected remain immutable per CR-119 FR-04.
 				itemCategory.system_key = existing.system_key;
-				itemCategory.default_class = existing.default_class;
 				itemCategory.is_protected = true;
 			}
 		}

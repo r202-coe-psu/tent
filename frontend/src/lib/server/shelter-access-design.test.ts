@@ -1851,16 +1851,10 @@ describe('buildValidateDocUpdate', () => {
 				/system_key is immutable on protected categories/
 			);
 
-			// 3. default_class immutable
-			expectForbidden(
-				() =>
-					compile()(
-						{ ...protectedCategory, default_class: 'DURABLE' },
-						protectedCategory,
-						sysAdmin
-					),
-				/default_class is immutable on protected categories/
-			);
+			// 3. default_class is editable (CR-125 amends CR-119 FR-04)
+			expect(() =>
+				compile()({ ...protectedCategory, default_class: 'DURABLE' }, protectedCategory, sysAdmin)
+			).not.toThrow();
 
 			// 4. is_protected flag removal rejected
 			expectForbidden(

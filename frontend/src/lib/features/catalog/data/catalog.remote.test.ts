@@ -23,7 +23,6 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { CatalogRemoteRepository } from './catalog.remote';
 import type { AuthorContext } from '$lib/db/model';
-import type { TypeClass } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -420,7 +419,7 @@ describe('CatalogRemoteRepository', () => {
 			).rejects.toThrow('ไม่อนุญาตให้สร้าง local override บนหมวดหมู่ระบบมาตรฐาน');
 		});
 
-		it('CR-119: should preserve immutable fields on protected category updates', async () => {
+		it('CR-119/CR-125: should preserve system_key/is_protected but allow default_class on protected category updates', async () => {
 			await getDb('catalog').put({
 				_id: 'item_category:bedding',
 				type: 'item_category',
@@ -434,15 +433,16 @@ describe('CatalogRemoteRepository', () => {
 				created_by: 'system'
 			});
 
-			// System Admin updates name and description, but tries to change default_class to CONSUMABLE
+			// System Admin updates name, description, and default_class (CR-125), and tries to
+			// change system_key and unprotect the category (still not allowed).
 			const updated = await repo.updateItemCategory({
 				_id: 'item_category:bedding',
 				type: 'item_category',
 				schema_v: 2,
 				name: 'เครื่องนอนและเต็นท์',
 				description: 'คำอธิบายใหม่',
-				system_key: 'BEDDING',
-				default_class: 'CONSUMABLE' as unknown as TypeClass, // Attempted change
+				system_key: 'WATER', // Attempted change
+				default_class: 'CONSUMABLE', // CR-125: allowed change
 				is_protected: false as unknown as boolean, // Attempted unprotect
 				created_at: '2026-09-15T00:00:00.000Z',
 				updated_at: '2026-09-15T00:00:00.000Z',
@@ -451,8 +451,9 @@ describe('CatalogRemoteRepository', () => {
 
 			expect(updated.name).toBe('เครื่องนอนและเต็นท์');
 			expect(updated.description).toBe('คำอธิบายใหม่');
-			// Invariant fields must remain restored
-			expect(updated.default_class).toBe('DURABLE');
+			// CR-125: default_class is now editable on protected categories
+			expect(updated.default_class).toBe('CONSUMABLE');
+			// system_key and is_protected remain immutable per CR-119 FR-04
 			expect(updated.is_protected).toBe(true);
 			expect(updated.system_key).toBe('BEDDING');
 		});
