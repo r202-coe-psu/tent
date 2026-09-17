@@ -258,6 +258,7 @@ export interface DonationCampaign extends BaseDoc {
 	closes_at?: Timestamp | null;
 	notes?: string;
 	visible_on_home?: boolean;
+	urgency?: 'critical' | 'important' | 'normal';
 }
 
 export interface StockTransferItem {
@@ -1310,7 +1311,8 @@ export const campaignInputSchema = z.object({
 	opens_at: z.string().optional(),
 	closes_at: z.string().nullable().optional(),
 	notes: z.string().trim().optional(),
-	visible_on_home: z.boolean().optional().default(true)
+	visible_on_home: z.boolean().optional().default(true),
+	urgency: z.enum(['critical', 'important', 'normal']).optional().default('normal')
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
@@ -1324,6 +1326,7 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
 			status: 'open' as const,
 			visible_on_home: d.visible_on_home,
+			urgency: d.urgency,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
 			...(d.closes_at !== undefined ? { closes_at: d.closes_at } : {}),
 			...(d.notes ? { notes: d.notes } : {})
