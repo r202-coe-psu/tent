@@ -1304,7 +1304,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 ## 4. DB `catalog` (central-managed → pull ลง device; edge fallback replica)
 
 > **Current catalog versions:** `item_category` v2 (CR-119), `item_master` v4 (CR-082/084/120),
-> `recipe` v4 (CR-038/084); `sop_profile` ย้ายออกจาก catalog ไปอยู่ใน `sop-ratios` feature แยกต่างหาก.
+> `recipe` v4 (CR-038/084), `unit_of_measure` v1 (CR-125); `sop_profile` ย้ายออกจาก catalog ไปอยู่ใน `sop-ratios` feature แยกต่างหาก.
 
 ### 4.1 `item_category` — `item_category:{ulid}` หรือ `item_category:{system_key.toLowerCase()}` · **schema_v 2** (CR-119)
 
@@ -1363,7 +1363,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `sku` | str | opt | รหัสสินค้า เช่น `P-001` |
 | `description` | str | opt | รายละเอียด / หมายเหตุ |
 | `category` | str | opt | canonical = `category_id` เช่น `item_category:food`; legacy name/label อ่านได้เพื่อ backward compatibility |
-| `base_unit` | str | req | หน่วยที่เล็กที่สุด เช่น `ชิ้น`, `กรัม`, `มิลลิลิตร` |
+| `base_unit` | str | req | หน่วยที่เล็กที่สุด อ้างอิงรหัสภาษาอังกฤษตาม `unit_of_measure.code` (regex `^[a-z][a-z0-9_]{0,15}$`) เช่น `piece`, `g`, `ml` |
 | `fuel_type` | `LPG` | conditional req | เมื่อ `category = item_category:fuel_energy`; กำหนดเป็น `LPG` อัตโนมัติในเฟสนี้ |
 | `capacity_kg` | qty_str>0 | conditional req | เมื่อเป็น FUEL_ENERGY; น้ำหนักแก๊สมาตรฐานต่อถัง |
 | `burn_rate_kg_per_hour` | qty_str>0 | conditional req | เมื่อเป็น FUEL_ENERGY; อัตราสิ้นเปลืองมาตรฐาน (kg/ชม.) |
@@ -1387,7 +1387,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `shelter_code` | str | opt | รหัสศูนย์พักพิงเจ้าของเอกสาร (มีเฉพาะเอกสารใน DB ของศูนย์) |
 
 **FUEL_ENERGY contract (CR-120):** เมื่อ `category = item_category:fuel_energy` ให้ล็อค
-`base_unit = "ถัง"` และซ่อน/ไม่ persist ฟิลด์อาหารหรือการกระจายที่ไม่เกี่ยวข้อง
+`base_unit = "cylinder"` และซ่อน/ไม่ persist ฟิลด์อาหารหรือการกระจายที่ไม่เกี่ยวข้อง
 (`shelf_life_days`, `storage_type`, `allergens`, `dietary`, `target_gender`, `age_group`,
 `qty_per_person`, `returnable`, `asset_status`). `fuel_type` ต้องเป็น `LPG`; `capacity_kg`
 และ `burn_rate_kg_per_hour` ต้องมากกว่า 0; `time_multiplier` default เป็น `"1"`.
@@ -1557,6 +1557,50 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 **Index & Views:**
 - Primary Key lookup: `replenishment_policy:{scope_type}:{target_id}`
 - Mango index: `(type, scope_type, target_id)`
+
+### 4.9 `unit_of_measure` — `unit_of_measure:{code}` · **schema_v 1** (CR-125)
+
+หน่วยนับเป็น master data ระดับส่วนกลางในฐานข้อมูล `catalog` และ replicate ลงอุปกรณ์แบบ read-only.
+เอกสารระบบที่ seed จาก `FALLBACK_UNIT_DEFINITIONS` ใช้ deterministic ID ตาม `code` และกำหนด
+`is_protected: true`; หน่วยที่ผู้ดูแลระบบสร้างเองกำหนด `is_protected: false` ได้.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `code` | str | req | lowercase `[a-z][a-z0-9_]{0,15}`; เป็นส่วนท้ายของ `_id` และใช้เป็นค่าที่อ้างอิงจาก `item_master.base_unit` |
+| `label_th` | str | req | ชื่อหน่วยภาษาไทย; ห้ามว่างเปล่า |
+| `label_th_short` | str | opt | ชื่อย่อภาษาไทย เช่น `กก.` หรือ `มล.` |
+| `label_en` | str | req | ชื่อหน่วยภาษาอังกฤษ/สัญลักษณ์; ห้ามว่างเปล่า |
+| `dimension` | enum(`count`,`mass`,`volume`,`length`) | req | มิติของหน่วย ใช้ตรวจความสอดคล้องของข้อมูล master |
+| `is_protected` | bool | opt | default `false`; หน่วยระบบที่ seed ต้องเป็น `true` |
+| `sort_order` | num | opt | ลำดับแสดงผลในรายการหน่วย |
+| `deactivated` | bool | opt | default `false`; หน่วยที่ปิดใช้งานไม่ควรปรากฏในตัวเลือกใหม่ |
+
+**Protected UOM invariants:**
+- หน่วยที่มี `is_protected: true` ห้ามลบ
+- `code` และ `dimension` ของหน่วย protected ห้ามเปลี่ยน
+- การอัปเดตหน่วย protected ต้องคง `is_protected: true`; ห้ามเปลี่ยนจาก `true` เป็น `false`
+- การแก้ `label_th`, `label_th_short`, `label_en`, `sort_order` หรือ `deactivated` ทำได้ตามสิทธิ์
+  `system_admin` โดยต้องคง invariants ข้างต้น
+
+**Canonical seed set:**
+
+| Dimension | Codes |
+| --- | --- |
+| `count` | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `cylinder` |
+| `mass` | `g`, `kg` |
+| `volume` | `gallon`, `ml`, `l` |
+| `length` | `m` |
+
+รวม 27 หน่วย. Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
+`schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้.
+
+**Migration/compatibility (CR-125):** เพิ่ม doc type ใหม่แบบ additive ที่ `schema_v: 1`; ไม่ต้อง bump
+`schema_v` ของ `item_master` หรือย้ายข้อมูลเดิม. ค่า `item_master.base_unit` เดิมยังอ่านได้ และ
+`formatUnit` รองรับทั้ง UOM code ใหม่กับ label ภาษาไทย legacy.
+
+**Index & Views:**
+- Primary Key lookup: `unit_of_measure:{code}`
+- รายการหน่วยอ่านด้วย filter ตาม `type = unit_of_measure`; deactivated ใช้กรองที่ query/UI
 
 ---
 
@@ -1799,9 +1843,10 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 9. `food_sphere_standard`, `requirement_group`, `replenishment_policy` ใน `catalog` (`source=SPHERE_BASELINE`) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin`; ใน `shelter_*` (`source=SHELTER_OVERRIDE`) เขียน/แก้ไขได้เฉพาะบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database
 10. CR-059 request/batch บังคับ role และ transition graph ตาม §2.21–2.22; `distribution_issue` และ `distribution_issue_idempotency` เป็น append-only. Coordination record ตรวจ identity และโครงสร้าง `pending_claims` ตามชนิดเอกสาร
 11. `item_category` ที่ `is_protected=true` ห้ามลบ; `system_key`, `default_class` และ `is_protected` immutable และแก้ `name`/`description` ได้เฉพาะ `system_admin` ตาม CR-119
-12. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
-13. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
-14. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
+12. `unit_of_measure` ใน `catalog` ที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `code`/`dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false`; การเขียน master ทำได้เฉพาะ `system_admin` ตาม CR-125
+13. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
+14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
+15. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
 
 ---
 
