@@ -72,7 +72,7 @@ affects:
 | `capacity_kg` | `qty_str > 0` | Req | น้ำหนักบรรจุแก๊สมาตรฐานต่อถัง (kg) เช่น `"15"`, `"48"`, `"4"` |
 | `burn_rate_kg_per_hour` | `qty_str > 0` | Req | อัตราสิ้นเปลืองมาตรฐาน (kg/ชม.) เช่น `"0.5"` |
 | `time_multiplier` | `qty_str > 0` | Opt | ตัวคูณเวลาประกอบอาหารมาตรฐาน (default `"1"`) |
-| `base_unit` | `'ถัง'` | Req | ล็อคค่าเป็น `"ถัง"` อัตโนมัติ ไม่อนุญาตให้แก้ไขเป็นหน่วยอื่น |
+| `base_unit` | `'cylinder'` *(เดิม `'ถัง'`)* | Req | ล็อคค่าเป็น `"cylinder"` อัตโนมัติ (แก้ไขตาม CR-125 เพื่อใช้รหัสสากล; แสดงผลภาษาไทยเป็น `"ถัง"` ผ่าน `formatUnit`) |
 
 *ข้อกำหนดการจัดเก็บ:* ซ่อนและตัดฟิลด์ที่ไม่เกี่ยวข้อง (`shelf_life_days`, `storage_type`, `allergens`, `dietary`, `target_gender`, `age_group`, `qty_per_person`, `returnable`, `asset_status`) ออกจากเอกสาร
 
@@ -141,7 +141,7 @@ $$\text{remaining\_kg} = \sum_{e \in \text{gas\_ledger}} e\text{.qty\_kg (สำ
   - `capacity_kg`: ตัวเลขทศนิยมบวก (> 0) ระบุน้ำหนักแก๊สบรรจุมาตรฐาน (เช่น `"15"`)
   - `burn_rate_kg_per_hour`: ตัวเลขทศนิยมบวก (> 0) ระบุอัตราเผาผลาญมาตรฐาน (เช่น `"0.50"`)
   - `time_multiplier`: ตัวเลขทศนิยมบวก (ค่าเริ่มต้น `"1.0"`)
-- **FR-04 (Auto Base Unit Locking):** เมื่อเลือกหมวด `item_category:fuel_energy` ระบบต้องตั้งค่าและล็อคช่อง `base_unit` เป็น `"ถัง"` โดยอัตโนมัติ (Disabled ไม่ให้พิมพ์แก้)
+- **FR-04 (Auto Base Unit Locking):** เมื่อเลือกหมวด `item_category:fuel_energy` ระบบต้องตั้งค่าและล็อคช่อง `base_unit` เป็น `"cylinder"` โดยอัตโนมัติ (Disabled ไม่ให้พิมพ์แก้; แสดงผลภาษาไทยเป็น `"ถัง"` ผ่าน `formatUnit` ตาม CR-125)
 
 ### 4.2 ตารางรายการพัสดุในคลัง (Supply Stock Table & Hybrid UX)
 - **FR-05 (Stock Balance Dual Display):** ในตารางรายการพัสดุ (`stock-table.svelte`) เมื่อแสดงแถวสินค้าในหมวด `FUEL_ENERGY` คอลัมน์ "จำนวนคงเหลือ" ต้องแสดงผลทั้งจำนวนถังที่ใช้งานได้และน้ำหนักแก๊สรวม เช่น `"3 ถัง (38.5 กก.)"` (คำนวณจากผลรวม `remaining_kg` ของถังที่มีสถานะ `unused` หรือ `in_use` และ `!deactivated`)
@@ -249,27 +249,27 @@ $$\text{remaining\_kg} = \sum_{e \in \text{gas\_ledger}} e\text{.qty\_kg (สำ
        _id: 'item_master:lpg_15kg',
        type: 'item_master',
        name: 'แก๊สหุงต้ม LPG 15 กิโลกรัม',
-       category: 'item_category:fuel_energy',
-       base_unit: 'ถัง',
-       fuel_type: 'LPG',
-       capacity_kg: '15',
-       burn_rate_kg_per_hour: '0.50',
-       time_multiplier: '1.0',
-       distribution_type: 'recurring',
-       type_class: 'CONSUMABLE'
-     }
-     ```
-   - **Shelter DB (`seedShelter` สำหรับ `SH001`):** เพิ่มเอกสาร `fuel_cylinder` 3 ใบจำลองสถานการณ์จริง:
-     - `LPG-01`: ถังเต็ม (`remaining_kg = 15`, สถานะ `unused`, มี ledger `refill: 15`)
-     - `LPG-02`: กำลังใช้งานที่เตาหลัก (`remaining_kg = 8.5`, สถานะ `in_use`, มี ledger `refill: 15` และ `consumption: -6.5`)
-     - `LPG-03`: ถังเปล่ารอส่งเติม (`remaining_kg = 0`, สถานะ `empty`, ไม่มีการบันทึกแก๊สคงเหลือ)
+        category: 'item_category:fuel_energy',
+        base_unit: 'cylinder', // (amended by CR-125; เดิม 'ถัง')
+        fuel_type: 'LPG',
+        capacity_kg: '15',
+        burn_rate_kg_per_hour: '0.50',
+        time_multiplier: '1.0',
+        distribution_type: 'recurring',
+        type_class: 'CONSUMABLE'
+      }
+      ```
+    - **Shelter DB (`seedShelter` สำหรับ `SH001`):** เพิ่มเอกสาร `fuel_cylinder` 3 ใบจำลองสถานการณ์จริง:
+      - `LPG-01`: ถังเต็ม (`remaining_kg = 15`, สถานะ `unused`, มี ledger `refill: 15`)
+      - `LPG-02`: กำลังใช้งานที่เตาหลัก (`remaining_kg = 8.5`, สถานะ `in_use`, มี ledger `refill: 15` และ `consumption: -6.5`)
+      - `LPG-03`: ถังเปล่ารอส่งเติม (`remaining_kg = 0`, สถานะ `empty`, ไม่มีการบันทึกแก๊สคงเหลือ)
 
 ---
 
 ## 8. Acceptance Criteria & Definition of Done (เกณฑ์การตรวจรับ)
 
 - [ ] **AC-01 (Form Adaptation):** เมื่อสร้างหรือแก้ไข Item Master แล้วเลือกหมวดหมู่เป็น `item_category:fuel_energy` เซกชันอาหาร/ยาต้องถูกซ่อน และเซกชันคุณสมบัติแก๊ส LPG ปรากฏขึ้นพร้อมบังคับกรอก `capacity_kg` และ `burn_rate_kg_per_hour`
-- [ ] **AC-02 (Item Creation & Unit Lock):** บันทึก Item Master แก๊สสำเร็จ ฟิลด์ `base_unit` ถูกล็อคและจัดเก็บเป็น `"ถัง"` และ `fuel_type` เป็น `'LPG'`
+- [ ] **AC-02 (Item Creation & Unit Lock):** บันทึก Item Master แก๊สสำเร็จ ฟิลด์ `base_unit` ถูกล็อคและจัดเก็บเป็น `"cylinder"` (CR-125; เดิม `"ถัง"`) และ `fuel_type` เป็น `'LPG'`
 - [ ] **AC-03 (Stock Table Dual Display):** ในหน้าคลังสินค้าแท็บพัสดุ แถวของไอเทมแก๊สแสดงยอดคงเหลือเป็น `"X ถัง (Y กก.)"` ถูกต้องตรงตามผลรวมของถังที่ใช้งานได้จริง
 - [ ] **AC-04 (Hybrid UI - Expand & Modal):** สามารถกดคลี่แถวเพื่อดูสรุปสถานะถังย่อยในตารางได้ และมีปุ่มเปิด Dialog จัดการถังแก๊สเต็มรูปแบบ
 - [ ] **AC-05 (Batch Generation with Auto-Sequence):** สามารถสร้างถังแก๊สใหม่เป็นชุดโดยระบุ Prefix ระบบสแกนหาเลขรหัสถัดไปอัตโนมัติ พร้อมหน้าต่าง Preview ก่อนกดยืนยันสร้าง
