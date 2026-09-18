@@ -80,125 +80,117 @@
 		if (q) currentPage = 1;
 	});
 
-	// Create Dialog State
-	let createDialogOpen = $state(false);
-	let createCode = $state('');
-	let createLabelTh = $state('');
-	let createLabelThShort = $state('');
-	let createLabelEn = $state('');
-	let createDimension = $state<Dimension>('count');
-	let createSortOrder = $state<number>(100);
-	let createErrors = $state<Record<string, string>>({});
+	// Unified Create / Edit Form State
+	let formDialogOpen = $state(false);
+	let editingUnit = $state<UnitOfMeasure | null>(null);
+	const isEdit = $derived(!!editingUnit);
 
-	function resetCreateForm() {
-		createCode = '';
-		createLabelTh = '';
-		createLabelThShort = '';
-		createLabelEn = '';
-		createDimension = 'count';
-		createSortOrder = 100;
-		createErrors = {};
-	}
+	let formCode = $state('');
+	let formLabelTh = $state('');
+	let formLabelThShort = $state('');
+	let formLabelEn = $state('');
+	let formDimension = $state<Dimension>('count');
+	let formSortOrder = $state<number>(100);
+	let formDeactivated = $state(false);
+	let formErrors = $state<Record<string, string>>({});
 
 	function openCreateDialog() {
-		resetCreateForm();
-		createDialogOpen = true;
+		editingUnit = null;
+		formCode = '';
+		formLabelTh = '';
+		formLabelThShort = '';
+		formLabelEn = '';
+		formDimension = 'count';
+		formSortOrder = 100;
+		formDeactivated = false;
+		formErrors = {};
+		formDialogOpen = true;
 	}
-
-	function handleCreate() {
-		createErrors = {};
-		const result = unitOfMeasureInputSchema.safeParse({
-			code: createCode.trim().toLowerCase(),
-			label_th: createLabelTh.trim(),
-			label_th_short: createLabelThShort.trim() || undefined,
-			label_en: createLabelEn.trim(),
-			dimension: createDimension,
-			sort_order: createSortOrder ? Number(createSortOrder) : undefined
-		});
-
-		if (!result.success) {
-			const formatted = result.error.format();
-			createErrors = {
-				code: formatted.code?._errors?.[0] ?? '',
-				label_th: formatted.label_th?._errors?.[0] ?? '',
-				label_th_short: formatted.label_th_short?._errors?.[0] ?? '',
-				label_en: formatted.label_en?._errors?.[0] ?? '',
-				dimension: formatted.dimension?._errors?.[0] ?? ''
-			};
-			return;
-		}
-
-		createMutation.mutate(result.data, {
-			onSuccess: () => {
-				toast.success(`เพิ่มหน่วยนับ "${result.data.label_th} (${result.data.code})" สำเร็จ`);
-				createDialogOpen = false;
-				resetCreateForm();
-			},
-			onError: (err: Error) => {
-				toast.error(err.message || 'ไม่สามารถสร้างหน่วยนับได้');
-			}
-		});
-	}
-
-	// Edit Dialog State
-	let editDialogOpen = $state(false);
-	let editingUnit = $state<UnitOfMeasure | null>(null);
-	let editLabelTh = $state('');
-	let editLabelThShort = $state('');
-	let editLabelEn = $state('');
-	let editSortOrder = $state<number>(100);
-	let editDeactivated = $state(false);
-	let editErrors = $state<Record<string, string>>({});
 
 	function openEditDialog(unit: UnitOfMeasure) {
 		editingUnit = unit;
-		editLabelTh = unit.label_th;
-		editLabelThShort = unit.label_th_short ?? '';
-		editLabelEn = unit.label_en;
-		editSortOrder = unit.sort_order ?? 100;
-		editDeactivated = unit.deactivated ?? false;
-		editErrors = {};
-		editDialogOpen = true;
+		formCode = unit.code;
+		formLabelTh = unit.label_th;
+		formLabelThShort = unit.label_th_short ?? '';
+		formLabelEn = unit.label_en;
+		formDimension = unit.dimension;
+		formSortOrder = unit.sort_order ?? 100;
+		formDeactivated = unit.deactivated ?? false;
+		formErrors = {};
+		formDialogOpen = true;
 	}
 
-	function handleUpdate() {
-		if (!editingUnit) return;
-		editErrors = {};
+	function handleSubmit() {
+		formErrors = {};
 
-		const result = unitOfMeasureUpdateSchema.safeParse({
-			label_th: editLabelTh.trim(),
-			label_th_short: editLabelThShort.trim() || undefined,
-			label_en: editLabelEn.trim(),
-			sort_order: editSortOrder ? Number(editSortOrder) : undefined,
-			deactivated: editDeactivated
-		});
+		if (isEdit && editingUnit) {
+			const result = unitOfMeasureUpdateSchema.safeParse({
+				label_th: formLabelTh.trim(),
+				label_th_short: formLabelThShort.trim() || undefined,
+				label_en: formLabelEn.trim(),
+				sort_order: formSortOrder ? Number(formSortOrder) : undefined,
+				deactivated: formDeactivated
+			});
 
-		if (!result.success) {
-			const formatted = result.error.format();
-			editErrors = {
-				label_th: formatted.label_th?._errors?.[0] ?? '',
-				label_th_short: formatted.label_th_short?._errors?.[0] ?? '',
-				label_en: formatted.label_en?._errors?.[0] ?? ''
-			};
-			return;
-		}
+			if (!result.success) {
+				const formatted = result.error.format();
+				formErrors = {
+					label_th: formatted.label_th?._errors?.[0] ?? '',
+					label_th_short: formatted.label_th_short?._errors?.[0] ?? '',
+					label_en: formatted.label_en?._errors?.[0] ?? ''
+				};
+				return;
+			}
 
-		updateMutation.mutate(
-			{
-				...editingUnit,
-				...result.data
-			},
-			{
+			updateMutation.mutate(
+				{
+					...editingUnit,
+					...result.data
+				},
+				{
+					onSuccess: () => {
+						toast.success(`อัปเดตข้อมูลหน่วยนับ "${editingUnit?.code}" สำเร็จ`);
+						formDialogOpen = false;
+						editingUnit = null;
+					},
+					onError: (err: Error) => {
+						toast.error(err.message || 'ไม่สามารถแก้ไขข้อมูลหน่วยนับได้');
+					}
+				}
+			);
+		} else {
+			const result = unitOfMeasureInputSchema.safeParse({
+				code: formCode.trim().toLowerCase(),
+				label_th: formLabelTh.trim(),
+				label_th_short: formLabelThShort.trim() || undefined,
+				label_en: formLabelEn.trim(),
+				dimension: formDimension,
+				sort_order: formSortOrder ? Number(formSortOrder) : undefined
+			});
+
+			if (!result.success) {
+				const formatted = result.error.format();
+				formErrors = {
+					code: formatted.code?._errors?.[0] ?? '',
+					label_th: formatted.label_th?._errors?.[0] ?? '',
+					label_th_short: formatted.label_th_short?._errors?.[0] ?? '',
+					label_en: formatted.label_en?._errors?.[0] ?? '',
+					dimension: formatted.dimension?._errors?.[0] ?? ''
+				};
+				return;
+			}
+
+			createMutation.mutate(result.data, {
 				onSuccess: () => {
-					toast.success(`อัปเดตข้อมูลหน่วยนับ "${editingUnit?.code}" สำเร็จ`);
-					editDialogOpen = false;
+					toast.success(`เพิ่มหน่วยนับ "${result.data.label_th} (${result.data.code})" สำเร็จ`);
+					formDialogOpen = false;
 					editingUnit = null;
 				},
 				onError: (err: Error) => {
-					toast.error(err.message || 'ไม่สามารถแก้ไขข้อมูลหน่วยนับได้');
+					toast.error(err.message || 'ไม่สามารถสร้างหน่วยนับได้');
 				}
-			}
-		);
+			});
+		}
 	}
 
 	// Delete Dialog State
@@ -447,50 +439,67 @@
 	{/if}
 </div>
 
-<!-- CREATE DIALOG -->
-<Dialog.Root bind:open={createDialogOpen}>
+<!-- CREATE / EDIT DIALOG -->
+<Dialog.Root bind:open={formDialogOpen}>
 	<Dialog.Content class="sm:max-w-[480px]">
 		<Dialog.Header>
-			<Dialog.Title>เพิ่มหน่วยนับใหม่</Dialog.Title>
+			<Dialog.Title>
+				{#if isEdit}
+					แก้ไขหน่วยนับ: <span class="text-primary">{editingUnit?.code}</span>
+				{:else}
+					เพิ่มหน่วยนับใหม่
+				{/if}
+			</Dialog.Title>
 			<Dialog.Description>
-				กำหนดหน่วยนับมาตรฐานสำหรับใช้งานในรายการสิ่งของและคลังสินค้า
+				{isEdit
+					? 'ปรับปรุงชื่อเรียกและสถานะการใช้งานของหน่วยนับ'
+					: 'กำหนดหน่วยนับมาตรฐานสำหรับใช้งานในรายการสิ่งของและคลังสินค้า'}
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="mt-4 space-y-4">
-			<Field.Field data-invalid={!!createErrors.code || undefined}>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSubmit();
+			}}
+			class="mt-4 space-y-4"
+		>
+			<Field.Field data-invalid={(!isEdit && !!formErrors.code) || undefined}>
 				<Field.Label for="uom-code">
-					รหัสหน่วย (Unit Code) <span class="text-destructive">*</span>
+					รหัสหน่วย (Unit Code) {#if !isEdit}<span class="text-destructive">*</span>{/if}
 				</Field.Label>
 				<Input
 					id="uom-code"
 					type="text"
-					bind:value={createCode}
+					bind:value={formCode}
+					disabled={isEdit}
 					placeholder="เช่น box, kg, pack"
-					aria-invalid={!!createErrors.code}
+					aria-invalid={!isEdit && !!formErrors.code}
 				/>
-				{#if createErrors.code}
-					<Field.Error>{createErrors.code}</Field.Error>
+				{#if !isEdit && formErrors.code}
+					<Field.Error>{formErrors.code}</Field.Error>
 				{/if}
 				<Field.Description>
-					ตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง ไม่สามารถแก้ไขได้ภายหลัง
+					{isEdit
+						? 'รหัสหน่วยใช้เป็นคีย์อ้างอิงในฐานข้อมูล ไม่สามารถแก้ไขได้'
+						: 'ตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง ไม่สามารถแก้ไขได้ภายหลัง'}
 				</Field.Description>
 			</Field.Field>
 
 			<div class="grid grid-cols-2 gap-3">
-				<Field.Field data-invalid={!!createErrors.label_th || undefined}>
+				<Field.Field data-invalid={!!formErrors.label_th || undefined}>
 					<Field.Label for="uom-label-th">
 						ชื่อภาษาไทย <span class="text-destructive">*</span>
 					</Field.Label>
 					<Input
 						id="uom-label-th"
 						type="text"
-						bind:value={createLabelTh}
+						bind:value={formLabelTh}
 						placeholder="เช่น กล่อง, กิโลกรัม"
-						aria-invalid={!!createErrors.label_th}
+						aria-invalid={!!formErrors.label_th}
 					/>
-					{#if createErrors.label_th}
-						<Field.Error>{createErrors.label_th}</Field.Error>
+					{#if formErrors.label_th}
+						<Field.Error>{formErrors.label_th}</Field.Error>
 					{/if}
 				</Field.Field>
 
@@ -499,172 +508,106 @@
 					<Input
 						id="uom-label-th-short"
 						type="text"
-						bind:value={createLabelThShort}
+						bind:value={formLabelThShort}
 						placeholder="เช่น กก., ล."
 					/>
 				</Field.Field>
 			</div>
 
-			<Field.Field data-invalid={!!createErrors.label_en || undefined}>
+			<Field.Field data-invalid={!!formErrors.label_en || undefined}>
 				<Field.Label for="uom-label-en">
 					ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
 				</Field.Label>
 				<Input
 					id="uom-label-en"
 					type="text"
-					bind:value={createLabelEn}
+					bind:value={formLabelEn}
 					placeholder="เช่น can, kilogram"
-					aria-invalid={!!createErrors.label_en}
+					aria-invalid={!!formErrors.label_en}
 				/>
-				{#if createErrors.label_en}
-					<Field.Error>{createErrors.label_en}</Field.Error>
+				{#if formErrors.label_en}
+					<Field.Error>{formErrors.label_en}</Field.Error>
 				{/if}
 			</Field.Field>
 
 			<div class="grid grid-cols-2 gap-3">
-				<Field.Field>
+				<Field.Field data-invalid={(!isEdit && !!formErrors.dimension) || undefined}>
 					<Field.Label for="uom-dimension">
-						มิติการวัด (Dimension) <span class="text-destructive">*</span>
+						มิติการวัด (Dimension) {#if !isEdit}<span class="text-destructive">*</span>{/if}
 					</Field.Label>
-					<Select.Root
-						type="single"
-						value={createDimension}
-						onValueChange={(value) => {
-							if (value) createDimension = value as Dimension;
-						}}
-					>
-						<Select.Trigger id="uom-dimension" class="w-full">
-							{DIMENSION_LABELS[createDimension]?.th} ({createDimension})
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="count">จำนวนนับ (count)</Select.Item>
-							<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
-							<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
-							<Select.Item value="length">ความยาว (length)</Select.Item>
-						</Select.Content>
-					</Select.Root>
+					{#if isEdit}
+						<Input
+							id="uom-dimension"
+							value={DIMENSION_LABELS[formDimension]?.th ?? formDimension}
+							disabled
+						/>
+						<Field.Description>มิติการวัดไม่สามารถแก้ไขได้</Field.Description>
+					{:else}
+						<Select.Root
+							type="single"
+							value={formDimension}
+							onValueChange={(value) => {
+								if (value) formDimension = value as Dimension;
+							}}
+						>
+							<Select.Trigger id="uom-dimension" class="w-full">
+								{DIMENSION_LABELS[formDimension]?.th} ({formDimension})
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="count">จำนวนนับ (count)</Select.Item>
+								<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
+								<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
+								<Select.Item value="length">ความยาว (length)</Select.Item>
+							</Select.Content>
+						</Select.Root>
+					{/if}
 				</Field.Field>
 				<Field.Field>
 					<Field.Label for="uom-sort-order">ลำดับการแสดงผล</Field.Label>
 					<Input
 						id="uom-sort-order"
 						type="number"
-						bind:value={createSortOrder}
-						min="1"
-						class="tabular-nums"
-					/>
-				</Field.Field>
-			</div>
-		</div>
-
-		<div class="mt-6 flex justify-end gap-2">
-			<Button variant="outline" size="sm" onclick={() => (createDialogOpen = false)}>ยกเลิก</Button>
-			<Button size="sm" disabled={createMutation.isPending} onclick={handleCreate}>
-				{createMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกหน่วยนับ'}
-			</Button>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- EDIT DIALOG -->
-<Dialog.Root bind:open={editDialogOpen}>
-	<Dialog.Content class="sm:max-w-[480px]">
-		<Dialog.Header>
-			<Dialog.Title>
-				แก้ไขหน่วยนับ: <span class="text-primary">{editingUnit?.code}</span>
-			</Dialog.Title>
-			<Dialog.Description>ปรับปรุงชื่อเรียกและสถานะการใช้งานของหน่วยนับ</Dialog.Description>
-		</Dialog.Header>
-
-		<div class="mt-4 space-y-4">
-			<Field.Field>
-				<Field.Label for="edit-unit-code">รหัสหน่วย (Unit Code)</Field.Label>
-				<Input id="edit-unit-code" value={editingUnit?.code} disabled />
-				<Field.Description>
-					รหัสหน่วยใช้เป็นคีย์อ้างอิงในฐานข้อมูล ไม่สามารถแก้ไขได้
-				</Field.Description>
-			</Field.Field>
-
-			<Field.Field data-invalid={!!editErrors.label_th || undefined}>
-				<Field.Label for="edit-uom-label-th">
-					ชื่อภาษาไทย <span class="text-destructive">*</span>
-				</Field.Label>
-				<Input
-					id="edit-uom-label-th"
-					type="text"
-					bind:value={editLabelTh}
-					aria-invalid={!!editErrors.label_th}
-				/>
-				{#if editErrors.label_th}
-					<Field.Error>{editErrors.label_th}</Field.Error>
-				{/if}
-			</Field.Field>
-
-			<Field.Field>
-				<Field.Label for="edit-uom-label-th-short">ชื่อย่อภาษาไทย</Field.Label>
-				<Input id="edit-uom-label-th-short" type="text" bind:value={editLabelThShort} />
-			</Field.Field>
-
-			<Field.Field data-invalid={!!editErrors.label_en || undefined}>
-				<Field.Label for="edit-uom-label-en">
-					ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
-				</Field.Label>
-				<Input
-					id="edit-uom-label-en"
-					type="text"
-					bind:value={editLabelEn}
-					aria-invalid={!!editErrors.label_en}
-				/>
-				{#if editErrors.label_en}
-					<Field.Error>{editErrors.label_en}</Field.Error>
-				{/if}
-			</Field.Field>
-
-			<div class="grid grid-cols-2 gap-3">
-				<Field.Field>
-					<Field.Label for="edit-unit-dimension">มิติการวัด (Dimension)</Field.Label>
-					<Input
-						id="edit-unit-dimension"
-						value={DIMENSION_LABELS[editingUnit?.dimension ?? 'count']?.th ??
-							editingUnit?.dimension}
-						disabled
-					/>
-					<Field.Description>มิติการวัดไม่สามารถแก้ไขได้</Field.Description>
-				</Field.Field>
-				<Field.Field>
-					<Field.Label for="edit-uom-sort-order">ลำดับการแสดงผล</Field.Label>
-					<Input
-						id="edit-uom-sort-order"
-						type="number"
-						bind:value={editSortOrder}
+						bind:value={formSortOrder}
 						min="1"
 						class="tabular-nums"
 					/>
 				</Field.Field>
 			</div>
 
-			<div class="rounded-xl border border-border bg-muted/30 p-3">
-				<Field.Field orientation="horizontal" class="items-start gap-2.5">
-					<Checkbox id="edit-deactivated" bind:checked={editDeactivated} class="mt-0.5" />
-					<Field.Content>
-						<Field.Label for="edit-deactivated" class="cursor-pointer">
-							ปิดการใช้งานหน่วยนี้ (Deactivate)
-						</Field.Label>
-						<Field.Description>
-							หน่วยที่ปิดใช้งานจะไม่ปรากฏให้เลือกในฟอร์มสร้างสินค้าใหม่
-							แต่ยังคงแสดงผลในรายการสินค้าเดิมได้อย่างถูกต้อง
-						</Field.Description>
-					</Field.Content>
-				</Field.Field>
-			</div>
-		</div>
+			{#if isEdit}
+				<div class="rounded-xl border border-border bg-muted/30 p-3">
+					<Field.Field orientation="horizontal" class="items-start gap-2.5">
+						<Checkbox id="edit-deactivated" bind:checked={formDeactivated} class="mt-0.5" />
+						<Field.Content>
+							<Field.Label for="edit-deactivated" class="cursor-pointer">
+								ปิดการใช้งานหน่วยนี้ (Deactivate)
+							</Field.Label>
+							<Field.Description>
+								หน่วยที่ปิดใช้งานจะไม่ปรากฏให้เลือกในฟอร์มสร้างสินค้าใหม่
+								แต่ยังคงแสดงผลในรายการสินค้าเดิมได้อย่างถูกต้อง
+							</Field.Description>
+						</Field.Content>
+					</Field.Field>
+				</div>
+			{/if}
 
-		<div class="mt-6 flex justify-end gap-2">
-			<Button variant="outline" size="sm" onclick={() => (editDialogOpen = false)}>ยกเลิก</Button>
-			<Button size="sm" disabled={updateMutation.isPending} onclick={handleUpdate}>
-				{updateMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
-			</Button>
-		</div>
+			<div class="mt-6 flex justify-end gap-2">
+				<Button type="button" variant="outline" size="sm" onclick={() => (formDialogOpen = false)}>
+					ยกเลิก
+				</Button>
+				<Button
+					type="submit"
+					size="sm"
+					disabled={isEdit ? updateMutation.isPending : createMutation.isPending}
+				>
+					{#if isEdit}
+						{updateMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+					{:else}
+						{createMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกหน่วยนับ'}
+					{/if}
+				</Button>
+			</div>
+		</form>
 	</Dialog.Content>
 </Dialog.Root>
 
