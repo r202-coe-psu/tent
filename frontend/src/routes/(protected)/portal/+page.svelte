@@ -91,8 +91,8 @@
 	// onsite + public are always shown; system-management is SA-only; back-office
 	// is SA/SM — size the grid to the number of visible cards.
 	const visibleCards = $derived(2 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
-	const lgCols = $derived(
-		visibleCards >= 4 ? 'lg:grid-cols-4' : visibleCards === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+	const xlCols = $derived(
+		visibleCards >= 4 ? 'xl:grid-cols-4' : visibleCards === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'
 	);
 </script>
 
@@ -100,8 +100,8 @@
 	<title>SmartShelter Thailand</title>
 </svelte:head>
 
-<div class="flex flex-1 flex-col justify-start p-6 lg:justify-center">
-	<div class="mx-auto w-full max-w-7xl px-4">
+<div class="flex flex-1 flex-col justify-start p-4 sm:p-6 lg:justify-center">
+	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<header class="mb-8 text-center">
 			<h1 class="mb-2 text-3xl font-bold tracking-wide sm:text-4xl">
 				Smart<span class="text-primary">Shelter</span> Thailand
@@ -248,11 +248,11 @@
 			</div>
 		</section>
 
-		<main class="grid grid-cols-1 gap-6 md:grid-cols-2 {lgCols}">
+		<main class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 {xlCols}">
 			<HomePortalCard
 				icon={Users}
 				accent="brand"
-				title="ระบบส่วนหน้า ณ ศูนย์พักพิง"
+				title="ฝ่ายทะเบียน"
 				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พักสำหรับผู้ปฏิบัติงานหน้างาน"
 				href={resolve('/onsite')}
 			>
@@ -273,7 +273,7 @@
 			<HomePortalCard
 				icon={Compass}
 				accent="neutral"
-				title="เว็บพอร์ทัลสาธารณะ"
+				title="เว็บไซต์สำหรับประชาชน"
 				badge="ประชาชน / อาสาสมัคร"
 				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
 				href={resolve('/')}
@@ -283,10 +283,10 @@
 				<HomePortalCard
 					icon={Building2}
 					accent="accent-purple"
-					title="ระบบส่วนกลาง"
+					title="เมนูผู้ดูแลระบบ"
 					badge="เฉพาะผู้ดูแลระบบ"
 					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
-					href={resolve('/portal/system-management')}
+					href={resolve('/system-management')}
 				/>
 			{/if}
 
@@ -294,7 +294,7 @@
 				<HomePortalCard
 					icon={Boxes}
 					accent="muted"
-					title="ระบบส่วนหลัง (Back-Office)"
+					title="ระบบจัดการศูนย์พักพิง (Back-office)"
 					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
 					href={resolve('/back-office')}
 				>

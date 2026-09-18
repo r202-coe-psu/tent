@@ -1,6 +1,8 @@
 import hashlib
 from decimal import Decimal
 
+import pytest
+
 from worker.masking import (
     mask_last_name,
     mask_national_id,
@@ -779,3 +781,67 @@ def test_compute_shelter_stocks_maps_fields_and_keeps_zero_balances():
     assert (
         by_item["item:soap"]["name_th"] == "item:soap"
     )  # not in catalog — id fallback
+
+
+@pytest.mark.asyncio
+async def test_project_needs_for_shelter_visible_on_home_and_urgency():
+    from unittest.mock import AsyncMock
+
+    from worker.projectors.needs import project_needs_for_shelter
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+
+    campaign_visible = {
+        "_id": "donation_campaign:01",
+        "type": "donation_campaign",
+        "status": "open",
+        "visible_on_home": True,
+        "urgency": "critical",
+        "needs": [{"item_id": "item:water", "qty_target": "1000", "unit": "bottle"}],
+    }
+    campaign_hidden = {
+        "_id": "donation_campaign:02",
+        "type": "donation_campaign",
+        "status": "open",
+        "visible_on_home": False,
+        "urgency": "normal",
+        "needs": [{"item_id": "item:rice", "qty_target": "500", "unit": "kg"}],
+    }
+
+    async def mock_iter(db):
+        if db == "catalog":
+            yield {
+                "_id": "item:water",
+                "type": "supply_item",
+                "name": "น้ำดื่ม",
+                "category": "water",
+                "unit": "bottle",
+            }
+            yield {
+                "_id": "item:rice",
+                "type": "supply_item",
+                "name": "ข้าวสาร",
+                "category": "food",
+                "unit": "kg",
+            }
+        else:
+            yield campaign_visible
+            yield campaign_hidden
+
+    couch.iter_all_docs = mock_iter
+
+    actions = await project_needs_for_shelter(couch, "SH001")
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+
+    # item:rice from hidden campaign must be deleted
+    assert "SH001:item:rice" in action_dict
+    assert action_dict["SH001:item:rice"][0] == "delete"
+
+    # item:water from visible campaign must be upserted with qty_target and urgency="critical"
+    assert "SH001:item:water" in action_dict
+    assert action_dict["SH001:item:water"][0] == "upsert"
+    payload = action_dict["SH001:item:water"][1]
+    assert payload["qty_target"] == 1000.0
+    assert payload["qty_needed"] == 1000.0
+    assert payload["urgency"] == "critical"

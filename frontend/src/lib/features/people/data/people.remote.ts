@@ -324,6 +324,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	 * Unified multi-person registration (#249): create N Evacuees then 1 Household,
 	 * link members, set head = members[0]. Compensates created docs on failure
 	 * (intentional — keep even with the 20-member / pets / vehicles batch caps).
+	 *
+	 * Join mode (`join_household_id`): create members linked to an existing Household;
+	 * do not mint Household or overwrite Residence / head; append pets/vehicles/assets.
 	 */
 	async createFamilyRegistration(
 		input: UnifiedRegistrationInput,
@@ -333,6 +336,65 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const plan = planFamilyRegistration(input, channel);
 		const createdMemberIds: string[] = [];
 		let householdId: string | null = null;
+
+		if (plan.mode === 'join') {
+			const targetId = plan.targetHouseholdId;
+			if (!targetId) throw new Error('ไม่พบครัวเรือนปลายทาง');
+
+			try {
+				const targetDoc = await this.repo.get<Household>(targetId);
+				if (!targetDoc) throw new Error('ไม่พบครัวเรือนปลายทาง');
+				const target = migrateHouseholdV3ToV4(targetDoc);
+				if (!isActiveHouseholdStatus(target.status)) {
+					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+				}
+
+				const members: Evacuee[] = [];
+				for (const memberInput of plan.memberInputs) {
+					const saved = await this.createEvacuee({ ...memberInput, household_id: targetId }, ctx);
+					createdMemberIds.push(saved._id);
+					members.push(saved);
+				}
+
+				const appendPets = (plan.householdInput.pets ?? []) as Household['pets'];
+				const appendVehicles = (plan.householdInput.vehicles ?? []) as Household['vehicles'];
+				const appendAssets = (plan.householdInput.assets ?? null) as Household['assets'];
+				const hasAppend =
+					appendPets.length > 0 || appendVehicles.length > 0 || appendAssets != null;
+
+				let household = target;
+				if (hasAppend) {
+					const mergedAssets =
+						appendAssets == null
+							? target.assets
+							: target.assets
+								? {
+										description: [target.assets.description, appendAssets.description]
+											.filter(Boolean)
+											.join('\n')
+											.trim(),
+										image_url: target.assets.image_url ?? appendAssets.image_url ?? null
+									}
+								: appendAssets;
+					household = await this.patchHousehold(targetId, {
+						pets: [...(target.pets ?? []), ...appendPets],
+						vehicles: [...(target.vehicles ?? []), ...appendVehicles],
+						assets: mergedAssets
+					});
+				} else {
+					await this.refreshDerivedHouseholdStatus(targetId);
+					const refreshed = await this.getHousehold(targetId);
+					household = refreshed ?? target;
+				}
+
+				return { household, members };
+			} catch (err) {
+				for (const id of [...createdMemberIds].reverse()) {
+					await this.compensateFailedEvacueeRegistration(id);
+				}
+				throw err;
+			}
+		}
 
 		try {
 			const members: Evacuee[] = [];

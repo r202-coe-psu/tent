@@ -46,13 +46,13 @@ async def shelter_with_occupancy() -> PublicShelter:
 
 
 async def test_get_occupancy_requires_bearer_token(client: AsyncClient) -> None:
-    response = await client.get("/api/thirdparty/locations/SH001/occupancy")
+    response = await client.get("/external/locations/SH001/occupancy")
     assert response.status_code == 401
 
 
 async def test_get_occupancy_rejects_insufficient_scope(client: AsyncClient) -> None:
     headers = _bearer(["location-read"])
-    response = await client.get("/api/thirdparty/locations/SH001/occupancy", headers=headers)
+    response = await client.get("/external/locations/SH001/occupancy", headers=headers)
     assert response.status_code == 403
     assert response.json()["code"] == "insufficient_scope"
 
@@ -63,7 +63,7 @@ async def test_get_occupancy_returns_total_and_breakdown(
     shelter_with_occupancy: PublicShelter,
 ) -> None:
     response = await client.get(
-        "/api/thirdparty/locations/SH001/occupancy", headers=occupancy_read_headers
+        "/external/locations/SH001/occupancy", headers=occupancy_read_headers
     )
     assert response.status_code == 200
     result = response.json()["result"]
@@ -85,7 +85,7 @@ async def test_get_occupancy_unknown_location_returns_location_not_found(
     client: AsyncClient, occupancy_read_headers: dict[str, str]
 ) -> None:
     response = await client.get(
-        "/api/thirdparty/locations/NOPE/occupancy", headers=occupancy_read_headers
+        "/external/locations/NOPE/occupancy", headers=occupancy_read_headers
     )
     assert response.status_code == 404
     assert response.json()["code"] == "location_not_found"

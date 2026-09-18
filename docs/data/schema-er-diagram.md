@@ -173,7 +173,7 @@ erDiagram
         string name "req"
         string SKU "opt e.g. P-001"
         string description "opt"
-        string base_unit "req e.g. ชิ้น กรัม มิลลิลิตร"
+        string base_unit "req e.g. piece, kg, cylinder (unit_of_measure.code); legacy Thai labels supported via formatUnit"
         json conversions "opt uom_name multiplier barcode"
         string default_purchasing_uom "opt"
         string default_inventory_uom "opt"

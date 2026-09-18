@@ -182,13 +182,31 @@ function normAddr(value: string | null | undefined): string {
 }
 
 /**
- * Residence address match: house no + village_no when present on the query +
- * subdistrict + district + province. Same address ≠ same Household — suggestions only.
+ * Residence address match.
+ * - Default: house no + village_no when present on the query + subdistrict +
+ *   district + province.
+ * - Homeless / no house number: landmark + province/district/subdistrict.
+ * Same address ≠ same Household — suggestions only; create always remains available.
  */
 export function matchesResidenceAddress(
 	query: ResidenceFields,
 	candidate: ResidenceFields
 ): boolean {
+	const homelessMatch =
+		query.housing_type === 'homeless' ||
+		(!trimField(query.address_no) && Boolean(trimField(query.residence_landmark)));
+
+	if (homelessMatch) {
+		if (!trimField(query.residence_landmark)) return false;
+		if (normAddr(query.residence_landmark) !== normAddr(candidate.residence_landmark)) {
+			return false;
+		}
+		if (normAddr(query.subdistrict) !== normAddr(candidate.subdistrict)) return false;
+		if (normAddr(query.district) !== normAddr(candidate.district)) return false;
+		if (normAddr(query.province) !== normAddr(candidate.province)) return false;
+		return true;
+	}
+
 	if (normAddr(query.address_no) !== normAddr(candidate.address_no)) return false;
 	if (normAddr(query.subdistrict) !== normAddr(candidate.subdistrict)) return false;
 	if (normAddr(query.district) !== normAddr(candidate.district)) return false;
@@ -201,16 +219,34 @@ export function matchesResidenceAddress(
 	return true;
 }
 
+export type ResidenceMatchCandidateWithStatus = ResidenceMatchCandidate & {
+	status?: string | null;
+};
+
+const JOINABLE_HOUSEHOLD_STATUSES = new Set(['pre_registered', 'arriving', 'checked_in']);
+
+/** True when a Household is eligible for residence-join on create. */
+export function isJoinableHouseholdStatus(status: string | null | undefined): boolean {
+	return Boolean(status && JOINABLE_HOUSEHOLD_STATUSES.has(status));
+}
+
 /**
  * Suggest existing Households whose Residence matches the query.
  * Returns [] when minimum Residence is incomplete — never blocks create.
+ * When candidates carry `status`, cancelled / checked_out are excluded.
  */
 export function suggestHouseholdsByResidence<T extends ResidenceMatchCandidate>(
 	query: ResidenceFields,
 	households: readonly T[]
 ): T[] {
 	if (!hasMinimumResidence(query)) return [];
-	return households.filter((h) => matchesResidenceAddress(query, h));
+	return households.filter((h) => {
+		const withStatus = h as ResidenceMatchCandidateWithStatus;
+		if (withStatus.status != null && !isJoinableHouseholdStatus(withStatus.status)) {
+			return false;
+		}
+		return matchesResidenceAddress(query, h);
+	});
 }
 
 function matchesNameOrPhone(

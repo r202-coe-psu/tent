@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-17 # Proposed CR-129 bulk return claim recovery
+updated: 2026-09-18 # Ratified CR-127 volunteer permanent tracking_token_hash / QR check-in
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -141,5 +141,8 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-121](CR-121-spec-ticket.md) | ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog) | approved | stable | 2026-09-12 (approved 2026-09-14) | docs/data/schema.md §2.1/§2.7/§4.2, frontend/src/lib/features/tickets/**, distribution/**, kitchen/**, operations/**, server/shelter-access-design.ts |
 | [CR-122](CR-122-shelter-feedback-system.md) | ระบบประเมินความพึงพอใจศูนย์พักพิงและรับข้อความถึงเจ้าหน้าที่ (Shelter Feedback & Rubric Assessment) | approved | volatile | 2026-09-12 (approved 2026-09-15) | docs/data/schema.md §0 (feedback_session, feedback_response), docs/features/shelter-feedback-rubric-spec.md, frontend/src/lib/server/shelter-access-design.ts |
 | [CR-123](CR-123-shelter-import-worker-pipeline.md) | Shelter Excel Import — เปลี่ยนจาก browser loop เป็น Durable Worker Job Pipeline | approved | stable | 2026-09-14 (approved 2026-09-15) | docs/data/schema.md §3.7/§3.9/§3.10/§3.11, schema_v shelter_import_log 2→3, shelter_import_job 1, shelter_import_item 1, shelter_code_sequence 1, frontend/src/lib/features/shelter-import/ |
-| [CR-124](CR-124-staff-google-stepup-mfa.md) | Staff Google step-up MFA — password + linked Google after login (Phase 1); ThaiD/SSO out of scope | approved | stable | 2026-09-15 (approved 2026-09-15) | docs/data/schema.md §6 (_users.mfa), docs/data/api-contract.md §1.1, frontend auth/login/BFF oauth/guards/users |
+| [CR-124](CR-124-staff-google-stepup-mfa.md) | Staff Google MFA + SSO login for linked accounts (Phase 1 step-up + Phase 2 Google login enrolled-only + mint AuthSession) | done | stable | 2026-09-15 (Phase 2 done 2026-09-16) | docs/data/schema.md §6 (_users.mfa), docs/data/api-contract.md §1.1, frontend login OAuth mode=login, google-oauth mint cookie, user-service lookup by subject |
+| [CR-125](CR-125-unit-of-measure-master-data.md) | Unit of Measure master data — catalog schema_v 1, 27 canonical seed units, and protected UOM invariants | done | stable | 2026-09-17 | docs/data/schema.md §4.9/§8, frontend catalog UOM domain/repository/UI, frontend/scripts/sync-central-db.ts, frontend/scripts/seed/master-seed.ts, frontend/src/lib/server/shelter-access-design.ts |
+| [CR-126](CR-126-shelter-import-couchdb-scalability.md) | ป้องกัน CouchDB ค้างเมื่อนำเข้าศูนย์พักพิงจำนวนมาก (ระยะที่ 0: ปรับ ulimits.nofile เป็น 65536 และเพิ่ม Runbook เฝ้าระวัง descriptor) | approved | volatile | 2026-09-16 (approved 2026-09-17) | docker-compose*.yml, docs/sop/couchdb-file-descriptors.md, docs/changes/CR-123-shelter-import-worker-pipeline.md |
+| [CR-127](CR-127-volunteer-permanent-tracking-token.md) | Volunteer — permanent per-volunteer `tracking_token_hash` for portal / QR check-in | approved | volatile | 2026-09-18 | docs/data/schema.md §2.8 volunteer (schema_v 3 → 4), volunteers public-application + check-in, PublicVolunteer projector, FastAPI volunteer credential resolution |
 | [CR-129](CR-129-bulk-return-claim-recovery.md) | ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery) — bulk_return_claim (schema_v 1) + bulk_return_pool (schema_v 1 → 2) claim_ids | proposed | stable | 2026-09-17 (proposed) | docs/data/schema.md §2.31/§2.32, CR-121, frontend/src/lib/features/distribution/**, server/shelter-access-design.ts |

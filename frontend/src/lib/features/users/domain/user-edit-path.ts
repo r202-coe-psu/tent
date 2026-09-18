@@ -1,7 +1,7 @@
 /** List route for the current staff plane (portal SA vs shelter back-office). */
 export function usersListBaseFromPathname(pathname: string): string {
-	return pathname.includes('/portal/system-management')
-		? '/portal/system-management/users'
+	return pathname.includes('/system-management')
+		? '/system-management/users'
 		: '/back-office/users';
 }
 
