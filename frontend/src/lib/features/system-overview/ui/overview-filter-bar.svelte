@@ -2,14 +2,17 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import HouseholdSearchSelect from '$lib/components/household-search-select.svelte';
 	import type { OverviewFilters } from '../domain/schemas';
 
 	let {
 		filters,
-		onChange
+		onChange,
+		showHouseholdFilter = false
 	}: {
 		filters: OverviewFilters;
 		onChange: (next: OverviewFilters) => void;
+		showHouseholdFilter?: boolean;
 	} = $props();
 
 	function patch(partial: Partial<OverviewFilters>) {
@@ -20,6 +23,35 @@
 	const operationStatusValue = $derived(filters.operation_status ?? 'all');
 	const stayBucketValue = $derived(filters.stay_bucket ?? 'all');
 	const sourceValue = $derived(filters.source ?? 'all');
+	const householdMode = $derived(filters.shelter_code ? 'shelter' : 'universal');
+
+	const siteKindLabel = $derived.by(() => {
+		if (siteKindValue === 'evacuation_center') return 'ศูนย์อพยพ';
+		if (siteKindValue === 'host_house') return 'บ้านพี่เลี้ยง';
+		return 'ทั้งหมด';
+	});
+
+	const operationStatusLabel = $derived.by(() => {
+		if (operationStatusValue === 'standby') return 'เตรียมการ';
+		if (operationStatusValue === 'active') return 'เปิดรับ';
+		if (operationStatusValue === 'full_capacity') return 'เต็มความจุ';
+		if (operationStatusValue === 'closed') return 'ปิดศูนย์';
+		return 'ทั้งหมด';
+	});
+
+	const stayBucketLabel = $derived.by(() => {
+		if (stayBucketValue === 'present') return 'อยู่ในศูนย์';
+		if (stayBucketValue === 'forecast') return 'คาดการณ์';
+		if (stayBucketValue === 'pre_registered') return 'ลงทะเบียนล่วงหน้า';
+		if (stayBucketValue === 'checked_out') return 'ออกแล้ว';
+		return 'ทั้งหมด';
+	});
+
+	const sourceLabel = $derived.by(() => {
+		if (sourceValue === 'unassigned') return 'ยังไม่ผูกศูนย์';
+		if (sourceValue === 'bound') return 'ผูกศูนย์แล้ว';
+		return 'ทั้งหมด';
+	});
 </script>
 
 <div
@@ -37,15 +69,14 @@
 				});
 			}}
 		>
-			<Select.Trigger id="overview-site-kind" class="h-9 w-full" aria-label="ประเภทศูนย์">
-				<span class="truncate">
-					{#if siteKindValue === 'evacuation_center'}
-						ศูนย์อพยพ
-					{:else if siteKindValue === 'host_house'}
-						บ้านพี่เลี้ยง
-					{:else}
-						ทั้งหมด
-					{/if}
+			<Select.Trigger
+				id="overview-site-kind"
+				class="h-9 w-full min-w-0 overflow-hidden"
+				aria-label="ประเภทศูนย์"
+				title={`ประเภทศูนย์: ${siteKindLabel}`}
+			>
+				<span class="min-w-0 flex-1 truncate">
+					{siteKindLabel}
 				</span>
 			</Select.Trigger>
 			<Select.Content>
@@ -68,19 +99,14 @@
 				});
 			}}
 		>
-			<Select.Trigger id="overview-op-status" class="h-9 w-full" aria-label="สถานะศูนย์">
-				<span class="truncate">
-					{#if operationStatusValue === 'standby'}
-						เตรียมการ
-					{:else if operationStatusValue === 'active'}
-						เปิดรับ
-					{:else if operationStatusValue === 'full_capacity'}
-						เต็มความจุ
-					{:else if operationStatusValue === 'closed'}
-						ปิดศูนย์
-					{:else}
-						ทั้งหมด
-					{/if}
+			<Select.Trigger
+				id="overview-op-status"
+				class="h-9 w-full min-w-0 overflow-hidden"
+				aria-label="สถานะศูนย์"
+				title={`สถานะศูนย์: ${operationStatusLabel}`}
+			>
+				<span class="min-w-0 flex-1 truncate">
+					{operationStatusLabel}
 				</span>
 			</Select.Trigger>
 			<Select.Content>
@@ -103,19 +129,14 @@
 				patch({ stay_bucket: v as OverviewFilters['stay_bucket'] });
 			}}
 		>
-			<Select.Trigger id="overview-stay" class="h-9 w-full" aria-label="สถานะพัก">
-				<span class="truncate">
-					{#if stayBucketValue === 'present'}
-						อยู่ในศูนย์
-					{:else if stayBucketValue === 'forecast'}
-						คาดการณ์
-					{:else if stayBucketValue === 'pre_registered'}
-						ลงทะเบียนล่วงหน้า
-					{:else if stayBucketValue === 'checked_out'}
-						ออกแล้ว
-					{:else}
-						ทั้งหมด
-					{/if}
+			<Select.Trigger
+				id="overview-stay"
+				class="h-9 w-full min-w-0 overflow-hidden"
+				aria-label="สถานะพัก"
+				title={`สถานะพัก: ${stayBucketLabel}`}
+			>
+				<span class="min-w-0 flex-1 truncate">
+					{stayBucketLabel}
 				</span>
 			</Select.Trigger>
 			<Select.Content>
@@ -138,15 +159,14 @@
 				patch({ source: v as OverviewFilters['source'] });
 			}}
 		>
-			<Select.Trigger id="overview-source" class="h-9 w-full" aria-label="แหล่ง Pre-reg">
-				<span class="truncate">
-					{#if sourceValue === 'unassigned'}
-						ยังไม่ผูกศูนย์
-					{:else if sourceValue === 'bound'}
-						ผูกศูนย์แล้ว
-					{:else}
-						ทั้งหมด
-					{/if}
+			<Select.Trigger
+				id="overview-source"
+				class="h-9 w-full min-w-0 overflow-hidden"
+				aria-label="แหล่ง Pre-reg"
+				title={`แหล่ง Pre-reg: ${sourceLabel}`}
+			>
+				<span class="min-w-0 flex-1 truncate">
+					{sourceLabel}
 				</span>
 			</Select.Trigger>
 			<Select.Content>
@@ -156,6 +176,19 @@
 			</Select.Content>
 		</Select.Root>
 	</div>
+
+	{#if showHouseholdFilter}
+		<div class="w-[14rem] sm:w-[16rem] min-w-0 space-y-1.5">
+			<Label for="overview-household" class="text-sm font-semibold text-slate-700">ครอบครัว</Label>
+			<HouseholdSearchSelect
+				mode={householdMode}
+				shelterCode={filters.shelter_code}
+				value={filters.household_id ?? ''}
+				onSelect={(item) => patch({ household_id: item?.id || undefined })}
+				placeholder="ทุกครอบครัว"
+			/>
+		</div>
+	{/if}
 
 	<div class="min-w-[12rem] flex-1 space-y-1.5">
 		<Label for="overview-q" class="text-sm font-semibold text-slate-700">ค้นหา</Label>

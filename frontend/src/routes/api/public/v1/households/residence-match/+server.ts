@@ -4,7 +4,8 @@ import type { RequestHandler } from './$types';
 import { housingTypeSchema } from '$lib/features/people/server';
 import {
 	findShelterResidenceMatches,
-	findUnassignedResidenceMatches
+	findUnassignedResidenceMatches,
+	findUniversalResidenceMatches
 } from '$lib/features/public-register/residence-match.server';
 
 export const prerender = false;
@@ -22,7 +23,8 @@ const residenceMatchBodySchema = z
 		subdistrict: z.string().trim().nullable().optional(),
 		district: z.string().trim().nullable().optional(),
 		province: z.string().trim().nullable().optional(),
-		postal_code: z.string().trim().nullable().optional()
+		postal_code: z.string().trim().nullable().optional(),
+		phone: z.string().trim().nullable().optional()
 	})
 	.superRefine((value, ctx) => {
 		const hasShelter = Boolean(value.shelter_code?.trim());
@@ -57,11 +59,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		subdistrict: parsed.data.subdistrict ?? null,
 		district: parsed.data.district ?? null,
 		province: parsed.data.province ?? null,
-		postal_code: parsed.data.postal_code ?? null
+		postal_code: parsed.data.postal_code ?? null,
+		phone: parsed.data.phone ?? null
 	};
 
 	const matches = parsed.data.unassigned
-		? await findUnassignedResidenceMatches(query, fetch)
+		? await findUniversalResidenceMatches(query, fetch)
 		: await findShelterResidenceMatches(parsed.data.shelter_code!.trim(), query);
 
 	return json({ success: true, matches }, { headers: noStore });

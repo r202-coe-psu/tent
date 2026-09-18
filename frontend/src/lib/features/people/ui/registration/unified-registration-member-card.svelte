@@ -7,6 +7,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -28,7 +29,8 @@
 		PersonalInfoFields,
 		EmergencyContactFields,
 		SpecialNeedsFields,
-		VulnerableGroupsFields
+		VulnerableGroupsFields,
+		ZoneSelectionFields
 	} from '../forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { STATUS_LABELS } from '../../domain/people';
@@ -61,8 +63,11 @@
 		mode = 'create',
 		excludeIds = [],
 		fieldErrors,
+		isJoiningExistingHousehold = false,
+		primaryContactPhone = null,
 		onRemove,
-		onReportingInChange
+		onReportingInChange,
+		onApplyZoneToAll
 	}: {
 		member: UnifiedMemberWithMeta;
 		index: number;
@@ -74,8 +79,11 @@
 		mode?: 'create' | 'report-in';
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
+		isJoiningExistingHousehold?: boolean;
+		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
+		onApplyZoneToAll?: (zoneCode: string) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
@@ -422,7 +430,7 @@
 						size="sm"
 						{disabled}
 						onclick={() => (pullDialogOpen = true)}
-						class="h-11 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
+						class="h-9 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
 					>
 						<UserSearch class="size-4 text-blue-600" />
 						<span>ดึงข้อมูลจากคิว</span>
@@ -496,34 +504,39 @@
 	</div>
 
 	{#if showPhotoUpload}
-		<div class="space-y-3">
-			<div class="flex items-center gap-2">
-				<Camera class="size-4 text-primary" />
-				<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
+		<div class="rounded-xl border border-border/50 bg-muted/10 p-3 sm:p-3.5">
+			<div class="mb-2.5 flex flex-wrap items-center justify-between gap-1.5">
+				<div class="flex items-center gap-2">
+					<Camera class="size-4 text-muted-foreground" />
+					<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
+					<span class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground">
+						(ไม่จำเป็น / หากมี)
+					</span>
+				</div>
 			</div>
-			<div class="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+			<div class="flex items-center gap-3">
 				<div
-					class="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/30"
+					class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-background shadow-2xs"
 				>
 					{#if uploadingPhoto}
-						<Loader2 class="size-8 animate-spin text-primary" />
+						<Loader2 class="size-5 animate-spin text-primary" />
 					{:else if photoPreviewUrl}
 						<img src={photoPreviewUrl} alt={t.facePhotoTitle} class="size-full object-cover" />
 					{:else}
-						<Camera class="size-10 text-muted-foreground/50" />
+						<Camera class="size-6 text-muted-foreground/40" />
 					{/if}
 				</div>
-				<div class="space-y-2 text-center sm:text-left">
-					<p class="text-xs text-muted-foreground">{t.facePhotoHint}</p>
-					<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+					<p class="truncate text-2xs text-muted-foreground">{t.facePhotoHint}</p>
+					<div class="flex flex-wrap items-center gap-2">
 						<label
 							for={photoInputId}
-							class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {disabled ||
+							class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {disabled ||
 							uploadingPhoto
 								? 'pointer-events-none opacity-60'
 								: ''}"
 						>
-							<Camera class="size-4 text-primary" />
+							<Camera class="size-3.5 text-primary" />
 							<span>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span>
 						</label>
 						<input
@@ -544,7 +557,7 @@
 								type="button"
 								variant="ghost"
 								size="sm"
-								class="min-h-11 text-destructive hover:bg-destructive/10"
+								class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
 								disabled={disabled || uploadingPhoto}
 								onclick={clearPhoto}
 							>
@@ -576,6 +589,10 @@
 			bind:country={member.country}
 			{disabled}
 			{hideNoPhone}
+			phoneOptional={isJoiningExistingHousehold}
+			phoneHelperText={isJoiningExistingHousehold
+				? 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
+				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
 		/>
@@ -635,6 +652,65 @@
 			</Accordion.Content>
 		</Accordion.Item>
 	</Accordion.Root>
+
+	{#if channel === 'onsite'}
+		<div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3.5 sm:p-4">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="flex items-center gap-2">
+					<MapPin class="size-4 text-primary" />
+					<h4 class="text-xs font-semibold text-foreground sm:text-sm">การจัดโซนพักอาศัย</h4>
+					{#if !member.zone}
+						<Badge variant="outline" class="text-2xs font-normal text-muted-foreground">
+							จัดโซนภายหลัง (Unassigned)
+						</Badge>
+					{/if}
+				</div>
+				{#if isPrimary && onApplyZoneToAll}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="h-7 text-2xs"
+						disabled={disabled || !member.zone}
+						onclick={() => onApplyZoneToAll?.(member.zone ?? '')}
+					>
+						ใช้โซนนี้กับทุกคนในบ้าน
+					</Button>
+				{/if}
+			</div>
+
+			<ZoneSelectionFields
+				bind:selected_zone={
+					() => member.zone ?? '',
+					(v) => {
+						member.zone = v || null;
+					}
+				}
+				evacuee={{
+					_id: member._id ?? '',
+					household_id: '',
+					shelter_code: shelterCode || '',
+					first_name: member.first_name || '',
+					last_name: member.last_name || '',
+					gender: member.gender === 'male' || member.gender === 'female' ? member.gender : 'other',
+					phone: member.phone ?? null,
+					vulnerable_groups: member.vulnerable_groups ?? [],
+					special_needs: member.special_needs ?? [],
+					current_stay: { status: member.stay_status ?? 'arriving', zone: member.zone ?? null, since: '' },
+					country: 'THAILAND',
+					religion: 'unknown',
+					registered_via: 'staff',
+					schema_v: 4,
+					created_at: '',
+					updated_at: '',
+					created_by: '',
+					type: 'evacuee',
+					privacy: { search_excluded: false }
+				}}
+				{disabled}
+			/>
+		</div>
+	{/if}
 </section>
 
 <PullPreRegisteredDialog

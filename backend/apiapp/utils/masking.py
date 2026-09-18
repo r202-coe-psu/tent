@@ -63,3 +63,12 @@ def phone_hash(phone: str | None) -> str | None:
     if not phone:
         return None
     return sha256_hex(normalize_phone(phone))
+
+
+def mask_phone(phone: str) -> str:
+    norm = normalize_phone(phone)
+    if len(norm) == 10:
+        return f"{norm[:3]}-***-{norm[-4:]}"
+    elif len(norm) >= 7:
+        return f"{norm[:3]}***{norm[-3:]}"
+    return "***"

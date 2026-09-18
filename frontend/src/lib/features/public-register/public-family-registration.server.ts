@@ -29,6 +29,7 @@ import { shelterDbName } from '$lib/server/shelter-access-design';
 export interface ExecutePublicFamilyRegistrationOptions {
 	shelterCode: string;
 	createdBy?: string;
+	originShelterCode?: string;
 }
 
 export interface PublicFamilyRegistrationResult {
@@ -81,7 +82,47 @@ export async function executePublicFamilyRegistration(
 		const targetId = plan.targetHouseholdId;
 		if (!targetId) throw new Error('ไม่พบครัวเรือนปลายทาง');
 
-		const existing = await loadShelterHousehold(options.shelterCode, targetId);
+		let existing = await loadShelterHousehold(options.shelterCode, targetId);
+		let effectiveTargetId = targetId;
+		let isSatellite = false;
+
+		if (!existing && options.originShelterCode && options.originShelterCode !== options.shelterCode) {
+			const originHh = await loadShelterHousehold(options.originShelterCode, targetId);
+			if (originHh && isActiveHouseholdStatus(originHh.status)) {
+				isSatellite = true;
+				effectiveTargetId = `hh_sat_${crypto.randomUUID().slice(0, 8)}`;
+				existing = {
+					_id: effectiveTargetId,
+					type: 'household',
+					schema_v: 4,
+					label: originHh.label,
+					head_evacuee_id: null,
+					status: 'active',
+					checkout_destination: null,
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: [],
+					assets: null,
+					notes: `Satellite linked to shelter ${options.originShelterCode} (origin household ${originHh._id})`,
+					housing_type: originHh.housing_type ?? null,
+					residence_landmark: originHh.residence_landmark ?? null,
+					address_no: originHh.address_no ?? null,
+					village_no: originHh.village_no ?? null,
+					subdistrict: originHh.subdistrict ?? null,
+					district: originHh.district ?? null,
+					province: originHh.province ?? null,
+					postal_code: originHh.postal_code ?? null,
+					linked_shelter_code: options.originShelterCode,
+					origin_household_id: originHh._id,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					created_by: options.createdBy ?? 'public',
+					updated_by: options.createdBy ?? 'public'
+				} as unknown as Household;
+			}
+		}
+
 		if (!existing || !isActiveHouseholdStatus(existing.status)) {
 			throw new PublicRegistrationWriteError(
 				'JOIN_TARGET_NOT_FOUND',
@@ -92,7 +133,7 @@ export async function executePublicFamilyRegistration(
 		}
 
 		const evacuees = plan.memberInputs.map((memberInput) =>
-			createEvacuee({ ...memberInput, household_id: targetId }, ctx)
+			createEvacuee({ ...memberInput, household_id: effectiveTargetId }, ctx)
 		);
 		if (evacuees.length === 0) {
 			throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
@@ -105,7 +146,18 @@ export async function executePublicFamilyRegistration(
 
 		const docsToWrite: Array<Evacuee | Household> = [...evacuees];
 		let household = existing;
-		if (hasAppend) {
+
+		if (isSatellite) {
+			if (hasAppend) {
+				household = {
+					...existing,
+					pets: appendPets,
+					vehicles: appendVehicles,
+					assets: appendAssets
+				};
+			}
+			docsToWrite.push(household);
+		} else if (hasAppend) {
 			const mergedAssets =
 				appendAssets == null
 					? existing.assets

@@ -187,6 +187,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			}
 		}
 
+		if (saved.current_stay.zone) {
+			try {
+				const movement = createMovement(
+					{ evacuee_id: saved._id, action: 'check_in', zone: saved.current_stay.zone },
+					ctx
+				);
+				await this.repo.put(movement);
+			} catch (err) {
+				console.warn('Failed to record initial check-in movement:', err);
+			}
+		}
+
 		return saved;
 	}
 
@@ -1209,6 +1221,70 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return {
 			household: finalHousehold ?? savedHousehold,
 			members: reportedInMembers.length > 0 ? reportedInMembers : allSavedMembers
+		};
+	}
+
+	async mergeHouseholds(
+		sourceHouseholdId: string,
+		targetHouseholdId: string,
+		ctx: AuthorContext
+	): Promise<{
+		targetHousehold: Household;
+		mergedMembers: Evacuee[];
+	}> {
+		if (sourceHouseholdId === targetHouseholdId) {
+			throw new Error('ไม่สามารถรวมครัวเรือนเข้ากับตัวเองได้');
+		}
+		const sourceHh = await this.getHousehold(sourceHouseholdId);
+		if (!sourceHh) throw new Error('ไม่พบครัวเรือนต้นทาง');
+		const targetHh = await this.getHousehold(targetHouseholdId);
+		if (!targetHh) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (sourceHh.status === 'merged') {
+			throw new Error('ครัวเรือนต้นทางถูกรวมเข้ากับครัวเรือนอื่นแล้ว');
+		}
+
+		// 1. Get all members of source household
+		const sourceMembers = await this.listHouseholdMembers(sourceHouseholdId);
+
+		// 2. Reassign members to targetHouseholdId
+		const updatedMembers: Evacuee[] = [];
+		for (const m of sourceMembers) {
+			const latest = (await this.repo.get<Evacuee>(m._id)) ?? m;
+			const updated = await this.repo.put(touch({ ...latest, household_id: targetHouseholdId }));
+			updatedMembers.push(updated);
+		}
+
+		// 3. Append pets and vehicles to target household
+		const appendPets = sourceHh.pets ?? [];
+		const appendVehicles = sourceHh.vehicles ?? [];
+		const latestTarget = (await this.repo.get<Household>(targetHouseholdId)) ?? targetHh;
+		const updatedTarget = await this.repo.put(
+			touch({
+				...latestTarget,
+				pets: [...(latestTarget.pets ?? []), ...appendPets],
+				vehicles: [...(latestTarget.vehicles ?? []), ...appendVehicles]
+			})
+		);
+
+		// 4. Update source household status to 'merged'
+		const latestSource = (await this.repo.get<Household>(sourceHouseholdId)) ?? sourceHh;
+		await this.repo.put(
+			touch({
+				...latestSource,
+				status: 'merged' as const,
+				merged_to_household_id: targetHouseholdId,
+				notes: [latestSource.notes, `รวมเข้ากับครัวเรือน ${targetHouseholdId} (${latestTarget.label})`]
+					.filter(Boolean)
+					.join('\n')
+			})
+		);
+
+		await this.repairHouseholdHeadIfNeeded(targetHouseholdId);
+		await this.refreshDerivedHouseholdStatus(targetHouseholdId);
+
+		return {
+			targetHousehold: updatedTarget,
+			mergedMembers: updatedMembers
 		};
 	}
 }

@@ -232,19 +232,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	// 5. Resolve optional residence-join token → join_household_id (never trust client ids)
 	let resolvedInput = unifiedInput;
 	const rawToken = unifiedInput.join_match_token?.trim();
+	let originShelterCode: string | undefined;
 	if (rawToken) {
 		const { verifyResidenceMatchToken } =
 			await import('$lib/features/public-register/residence-match-token.server');
 		const tokenPayload = verifyResidenceMatchToken(rawToken);
-		if (
-			!tokenPayload ||
-			tokenPayload.kind !== 'shelter' ||
-			tokenPayload.shelterCode !== shelterCode
-		) {
+		if (!tokenPayload || tokenPayload.kind !== 'shelter') {
 			return json(
 				{ success: false, error: 'INVALID_JOIN_TOKEN' },
 				{ status: 400, headers: noStore }
 			);
+		}
+		if (tokenPayload.shelterCode !== shelterCode) {
+			originShelterCode = tokenPayload.shelterCode;
 		}
 		resolvedInput = {
 			...unifiedInput,
@@ -258,7 +258,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	try {
 		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
-			createdBy: 'public'
+			createdBy: 'public',
+			originShelterCode
 		});
 	} catch (err) {
 		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {

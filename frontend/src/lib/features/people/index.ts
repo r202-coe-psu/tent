@@ -172,6 +172,7 @@ export {
 	defaultHouseholdChoice,
 	isLeavingLinkedHousehold,
 	matchesResidenceAddress,
+	normThaiAddressText,
 	suggestHouseholdsByResidence,
 	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
@@ -234,6 +235,7 @@ export {
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
 	useSubmitFamilyReportIn,
+	useMergeHouseholds,
 	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
@@ -294,6 +296,8 @@ export { default as HouseholdPostArrival } from './ui/household-flows/household-
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
 export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
+export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';
+export { default as UnifiedRegistrationStepper } from './ui/registration/unified-registration-stepper.svelte';
 export { default as PullPreRegisteredDialog } from './ui/registration/pull-pre-registered-dialog.svelte';
 export {
 	default as EvacueeHandoverSlipModal,

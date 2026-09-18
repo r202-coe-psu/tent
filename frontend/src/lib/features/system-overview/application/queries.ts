@@ -7,6 +7,7 @@ import {
 	fetchOverviewOrigin,
 	fetchOverviewSites,
 	fetchOverviewSummary,
+	fetchOverviewHouseholds,
 	fetchPreRegistrations,
 	fetchUnassignedProfile
 } from '../data/overview.api';
@@ -25,7 +26,9 @@ export const overviewKeys = {
 		[...overviewKeys.all, 'pre-registrations', filters] as const,
 	unassignedProfile: (id: string) => [...overviewKeys.all, 'unassigned', id] as const,
 	boundProfile: (shelter: string, id: string) =>
-		[...overviewKeys.all, 'bound', shelter, id] as const
+		[...overviewKeys.all, 'bound', shelter, id] as const,
+	households: (params: { scope?: string; shelterCode?: string | null; q?: string | null }) =>
+		[...overviewKeys.all, 'households', params] as const
 };
 
 export function useOverviewSummary(getFilters: () => Partial<OverviewFilters>) {
@@ -66,7 +69,8 @@ export function useOverviewMovements(getFilters: () => Partial<OverviewFilters>)
 export function usePreRegistrations(getFilters: () => Partial<OverviewFilters>) {
 	return createQuery(() => ({
 		queryKey: overviewKeys.preRegs(getFilters()),
-		queryFn: () => fetchPreRegistrations(getFilters())
+		queryFn: () => fetchPreRegistrations(getFilters()),
+		staleTime: 10_000
 	}));
 }
 
@@ -85,3 +89,20 @@ export function useBoundEvacueeProfile(getShelter: () => string, getId: () => st
 		enabled: Boolean(getShelter() && getId())
 	}));
 }
+
+export function useOverviewHouseholds(getParams: () => {
+	scope?: 'universal' | 'shelter';
+	shelterCode?: string | null;
+	q?: string | null;
+	limit?: number;
+}) {
+	return createQuery(() => {
+		const p = getParams();
+		return {
+			queryKey: overviewKeys.households(p),
+			queryFn: () => fetchOverviewHouseholds(p),
+			staleTime: 30_000
+		};
+	});
+}
+

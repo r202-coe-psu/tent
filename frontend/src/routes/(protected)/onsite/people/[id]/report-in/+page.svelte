@@ -126,7 +126,7 @@
 	</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
+<div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
 		<FamilyBatchPrint
 			household={completed.household}
@@ -190,6 +190,7 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
+				shelterCode={getShelterCode()}
 				{initialHousehold}
 				{initialMembers}
 				pending={submitReportIn.isPending}

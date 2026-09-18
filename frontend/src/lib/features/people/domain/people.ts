@@ -140,7 +140,8 @@ export const householdStatusSchema = z.enum([
 	'arriving',
 	'checked_in',
 	'checked_out',
-	'cancelled'
+	'cancelled',
+	'merged'
 ]);
 export type HouseholdStatus = z.infer<typeof householdStatusSchema>;
 
@@ -153,11 +154,12 @@ export const ACTIVE_HOUSEHOLD_STATUSES: readonly HouseholdStatus[] = [
 export const HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	Record<HouseholdStatus, readonly HouseholdStatus[]>
 > = {
-	pre_registered: ['arriving', 'checked_in', 'cancelled'],
-	arriving: ['checked_in'],
-	checked_in: ['checked_out'],
+	pre_registered: ['arriving', 'checked_in', 'cancelled', 'merged'],
+	arriving: ['checked_in', 'merged'],
+	checked_in: ['checked_out', 'merged'],
 	checked_out: [],
-	cancelled: []
+	cancelled: [],
+	merged: []
 };
 
 /**
@@ -172,7 +174,8 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	arriving: [],
 	checked_in: [],
 	checked_out: [],
-	cancelled: []
+	cancelled: [],
+	merged: []
 };
 
 export const checkoutDestinationSchema = z.object({
@@ -367,6 +370,9 @@ export interface Household extends BaseDoc {
 	district: string | null;
 	province: string | null;
 	postal_code: string | null;
+	linked_shelter_code?: string | null;
+	origin_household_id?: string | null;
+	merged_to_household_id?: string | null;
 }
 
 export type EvacueeHouseholdConflict = {
@@ -636,6 +642,7 @@ export const evacueeInputSchema = z.object({
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
+	zone: z.string().trim().nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -742,7 +749,10 @@ const householdInputFieldsSchema = z.object({
 	subdistrict: z.string().trim().nullable().default(null),
 	district: z.string().trim().nullable().default(null),
 	province: z.string().trim().nullable().default(null),
-	postal_code: z.string().trim().nullable().default(null)
+	postal_code: z.string().trim().nullable().default(null),
+	linked_shelter_code: z.string().trim().nullable().optional().default(null),
+	origin_household_id: z.string().trim().nullable().optional().default(null),
+	merged_to_household_id: z.string().trim().nullable().optional().default(null)
 });
 
 export const householdInputSchema = householdInputFieldsSchema.superRefine((data, ctx) => {
@@ -1207,7 +1217,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(d.photo ? { photo: d.photo } : {}),
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
-			current_stay: { status: d.status, zone: null, since: now() },
+			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},

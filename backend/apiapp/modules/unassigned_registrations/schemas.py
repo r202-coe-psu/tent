@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from tent_model.public_shelter import GeoPoint
@@ -165,12 +165,21 @@ class UnassignedResidenceMatchRequest(BaseModel):
     district: str | None = None
     province: str | None = None
     postal_code: str | None = None
+    phone: str | None = None
 
 
 class UnassignedResidenceMatchHit(BaseModel):
     id: str
     landmark: str | None = None
     housing_type: str | None = None
+    claimed_shelter_code: str | None = None
+    claimed_household_id: str | None = None
+    status: str = "open"
+    primary_contact_name_masked: str | None = None
+    matched_member_masked: str | None = None
+    member_count: int = 0
+    pets: list[dict[str, Any]] = Field(default_factory=list)
+    household_address: dict[str, Any] | None = None
 
 
 class UnassignedResidenceMatchResponse(BaseModel):

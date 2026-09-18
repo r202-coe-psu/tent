@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
 	import QRCode from 'qrcode';
@@ -14,9 +15,11 @@
 		ticket: BookingTicket;
 		/** Shown on the confirmation step; hidden when the ticket is re-opened from lookup. */
 		showSuccessHeader?: boolean;
+		/** Optional callback when citizen confirms ticket has been verified at shelter. */
+		onVerified?: (code: string) => void;
 	}
 
-	const { ticket, showSuccessHeader = true }: Props = $props();
+	const { ticket, showSuccessHeader = true, onVerified }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 
@@ -199,11 +202,22 @@
 		{/if}
 	</div>
 
-	<div class="flex justify-center print:hidden">
+	<div class="flex flex-wrap items-center justify-center gap-3 print:hidden">
 		<Button type="button" variant="outline" disabled={downloading} onclick={downloadTicket}>
 			<Download class="h-4 w-4" />
 			{downloading ? t.downloadingBtn : t.downloadBtn}
 		</Button>
+		{#if onVerified}
+			<Button
+				type="button"
+				variant="secondary"
+				class="gap-1.5 font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+				onclick={() => onVerified?.(ticket.code)}
+			>
+				<CheckCircle class="h-4 w-4 text-emerald-600" />
+				<span>นำตั๋วไปยืนยันแล้ว (ลบตั๋ว)</span>
+			</Button>
+		{/if}
 	</div>
 </div>
 
