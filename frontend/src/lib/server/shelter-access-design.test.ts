@@ -153,10 +153,10 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'item_category'");
 		expect(validateFn).toContain("'item_master'");
 		expect(validateFn).toContain("'recipe'");
-		expect(validateFn).toContain("'unit_of_measure'");
+		expect(validateFn).toContain('unit_of_measure is central-only');
 	});
 
-	it('enforces item_master base_unit format and unit_of_measure protected rules', () => {
+	it('enforces item_master base_unit format and central-only unit_of_measure ownership', () => {
 		const validate = compile('SH001');
 
 		// Valid item_master with lowercase English code
@@ -189,77 +189,63 @@ describe('buildValidateDocUpdate', () => {
 			/base_unit must match/
 		);
 
-		// Protected unit_of_measure cannot be deleted
+		// A legacy Thai base_unit may remain unchanged while another field is edited.
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					name: 'legacy item updated',
+					base_unit: 'กิโลกรัม',
+					deactivated: true,
+					...envelope
+				},
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'กิโลกรัม',
+					...envelope
+				},
+				ADMIN
+			)
+		).not.toThrow();
+
+		// UOM writes are central-only, including deletes and updates.
 		expectForbidden(
 			() =>
 				validate(
 					{
-						_id: 'unit_of_measure:kg',
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						code: 'custom',
+						dimension: 'count',
+						...envelope
+					},
+					null,
+					WAREHOUSE
+				),
+			/unit_of_measure is central-only/
+		);
+
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:custom',
 						type: 'unit_of_measure',
 						_deleted: true,
 						...envelope
 					},
 					{
-						_id: 'unit_of_measure:kg',
+						_id: 'unit_of_measure:custom',
 						type: 'unit_of_measure',
-						code: 'kg',
-						dimension: 'mass',
-						is_protected: true,
+						code: 'custom',
+						dimension: 'count',
 						...envelope
 					},
-					ADMIN
+					WAREHOUSE
 				),
-			/Cannot delete system protected unit of measure/
-		);
-
-		// Protected unit_of_measure cannot change code or dimension
-		expectForbidden(
-			() =>
-				validate(
-					{
-						_id: 'unit_of_measure:kg',
-						type: 'unit_of_measure',
-						code: 'kilogram',
-						dimension: 'mass',
-						is_protected: true,
-						...envelope
-					},
-					{
-						_id: 'unit_of_measure:kg',
-						type: 'unit_of_measure',
-						code: 'kg',
-						dimension: 'mass',
-						is_protected: true,
-						...envelope
-					},
-					ADMIN
-				),
-			/Cannot modify code or dimension/
-		);
-
-		// Protected unit_of_measure cannot be unprotected
-		expectForbidden(
-			() =>
-				validate(
-					{
-						_id: 'unit_of_measure:kg',
-						type: 'unit_of_measure',
-						code: 'kg',
-						dimension: 'mass',
-						is_protected: false,
-						...envelope
-					},
-					{
-						_id: 'unit_of_measure:kg',
-						type: 'unit_of_measure',
-						code: 'kg',
-						dimension: 'mass',
-						is_protected: true,
-						...envelope
-					},
-					ADMIN
-				),
-			/Cannot unprotect a system protected unit of measure/
+			/unit_of_measure is central-only/
 		);
 	});
 

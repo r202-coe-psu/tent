@@ -6,7 +6,12 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { itemMasterInputSchema, type ItemMaster, type ItemMasterInput } from '../domain/catalog';
+	import {
+		itemMasterInputSchema,
+		itemMasterUpdateInputSchema,
+		type ItemMaster,
+		type ItemMasterInput
+	} from '../domain/catalog';
 	import { formatUnit, FALLBACK_UNIT_DEFINITIONS } from '../domain/unit-of-measure';
 
 	import {
@@ -38,6 +43,7 @@
 	const shelterCode = $derived(
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
+	const getValidationSchema = () => (isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
 
 	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(
@@ -73,12 +79,12 @@
 				asset_status: 'READY',
 				deactivated: false
 			},
-			zod4(itemMasterInputSchema)
+			zod4(getValidationSchema())
 		),
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(itemMasterInputSchema),
+			validators: zod4(getValidationSchema()),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;

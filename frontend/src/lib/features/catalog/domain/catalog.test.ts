@@ -3,6 +3,7 @@ import {
 	createItemMaster,
 	isItemMaster,
 	itemMasterInputSchema,
+	itemMasterUpdateInputSchema,
 	createItemCategory,
 	isItemCategory,
 	itemCategoryInputSchema,
@@ -305,5 +306,24 @@ describe('catalog domain', () => {
 				type_class: 'EQUIPMENT' as const
 			})
 		).toThrow();
+	});
+
+	it('allows known legacy base_unit labels only for updates', () => {
+		const legacy = itemMasterUpdateInputSchema.parse({
+			name: 'ข้าวสารเดิม',
+			base_unit: 'กิโลกรัม',
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
+		});
+		expect(legacy.base_unit).toBe('กิโลกรัม');
+
+		expect(() =>
+			itemMasterUpdateInputSchema.parse({
+				name: 'ข้าวสารใหม่',
+				base_unit: 'หน่วยเดิมที่ไม่รู้จัก',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
 	});
 });

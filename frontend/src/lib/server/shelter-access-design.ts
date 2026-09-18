@@ -128,6 +128,9 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw { forbidden: 'unit_of_measure is central-only' };
+  }
   // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
   function isRole(cap) {
     return userCtx.roles.indexOf('system_admin') !== -1 ||
@@ -145,9 +148,6 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc._deleted) {
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
-    }
-    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
-      throw { forbidden: 'Cannot delete system protected unit of measure' };
     }
     if (oldDoc && oldDoc.type === 'simulation') {
       var canDeleteSimulation = isRole('shelter_manager');
@@ -202,7 +202,7 @@ export function buildValidateDocUpdate(code: string): string {
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
-    'item_category', 'item_master', 'recipe', 'unit_of_measure',
+    'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
@@ -1008,22 +1008,10 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // item_master base_unit invariant guard
   if (newDoc.type === 'item_master') {
-    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+    var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
+      oldDoc.base_unit === newDoc.base_unit;
+    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {
       throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
-    }
-  }
-  // unit_of_measure protected invariant guard
-  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
-    if (newDoc._deleted && oldDoc && oldDoc.is_protected) {
-      throw { forbidden: 'Cannot delete system protected unit of measure' };
-    }
-    if (oldDoc && oldDoc.is_protected) {
-      if (!newDoc.is_protected) {
-        throw { forbidden: 'Cannot unprotect a system protected unit of measure' };
-      }
-      if (oldDoc.code !== newDoc.code || oldDoc.dimension !== newDoc.dimension) {
-        throw { forbidden: 'Cannot modify code or dimension of a protected unit of measure' };
-      }
     }
   }
 }`;

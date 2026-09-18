@@ -33,6 +33,8 @@ export {
 	// Item Master
 	itemMasterInputSchema,
 	type ItemMasterInput,
+	itemMasterUpdateInputSchema,
+	type ItemMasterUpdateInput,
 	createItemMaster,
 	isItemMaster,
 	itemMasterUnit,

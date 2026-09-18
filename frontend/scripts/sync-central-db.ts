@@ -177,6 +177,9 @@ async function syncCatalogAccessDesign(
     if (newDoc._deleted && oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
       throw({ forbidden: 'Cannot delete system protected unit of measure' });
     }
+    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.code !== newDoc.code) {
+      throw({ forbidden: 'Cannot modify code of a unit of measure' });
+    }
     if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
       if (!newDoc.is_protected) {
         throw({ forbidden: 'Cannot unprotect a system protected unit of measure' });
@@ -185,10 +188,15 @@ async function syncCatalogAccessDesign(
         throw({ forbidden: 'Cannot modify code or dimension of a protected unit of measure' });
       }
     }
-    if (newDoc.type === 'item_master' && newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+    if (newDoc.type === 'item_master' && newDoc.base_unit &&
+        !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
+        !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit)) {
       throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
     }
     return;
+  }
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw({ forbidden: 'unit_of_measure is central-only' });
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
     throw({ forbidden: 'shelter_code is immutable' });
@@ -198,7 +206,9 @@ async function syncCatalogAccessDesign(
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
     if (hasScope && (isManager || isWS)) {
-      if (newDoc.type === 'item_master' && newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit)) {
+      if (newDoc.type === 'item_master' && newDoc.base_unit &&
+          !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
+          !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit)) {
         throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
       }
       return;
@@ -240,6 +250,15 @@ async function syncCatalogAccessDesign(
 async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; existing: number }> {
 	let created = 0;
 	let existing = 0;
+	const putUnit = async (docId: string, payload: Record<string, unknown>): Promise<void> => {
+		const result = await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, payload);
+		if (result.status < 200 || result.status >= 300) {
+			const detail = (result.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot sync UOM "${docId}" (HTTP ${result.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	};
 
 	for (const def of FALLBACK_UNIT_DEFINITIONS) {
 		const docId = `unit_of_measure:${def.code}`;
@@ -250,7 +269,7 @@ async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; e
 			if (!dryRun) {
 				const current = data as Record<string, unknown>;
 				// Ensure protected invariants while preserving user modifications
-				await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, {
+				await putUnit(docId, {
 					...current,
 					type: 'unit_of_measure',
 					schema_v: 1,
@@ -264,7 +283,7 @@ async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; e
 			created++;
 			if (!dryRun) {
 				const ts = new Date().toISOString();
-				await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, {
+				await putUnit(docId, {
 					_id: docId,
 					type: 'unit_of_measure',
 					schema_v: 1,

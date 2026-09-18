@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
 import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { FALLBACK_UNIT_LABELS } from './unit-of-measure';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['recurring', 'one_time']);
@@ -114,82 +115,109 @@ export const itemCategoryInputSchema = z.object({
 
 export type ItemCategoryInput = z.input<typeof itemCategoryInputSchema>;
 
-export const itemMasterInputSchema = z
-	.object({
-		name: z.string().trim().min(1, 'Name is required'),
-		category: z.string().trim().optional(),
-		sku: z.string().trim().optional(),
-		description: z.string().trim().optional(),
-		base_unit: z.string().trim().optional(),
-		conversions: z
-			.array(
-				z.object({
-					uom_name: z.string().trim(),
-					multiplier: qtyStrCoercePositiveSchema,
-					barcode: z.string().trim().optional()
-				})
-			)
-			.default([]),
-		default_inventory_uom: z.string().trim().optional(),
-		default_issue_uom: z.string().trim().optional(),
-		distribution_type: distributionTypeSchema.optional(),
-		type_class: typeClassSchema,
-		deactivated: z.boolean().optional(),
+const itemMasterFieldsSchema = z.object({
+	name: z.string().trim().min(1, 'Name is required'),
+	category: z.string().trim().optional(),
+	sku: z.string().trim().optional(),
+	description: z.string().trim().optional(),
+	base_unit: z.string().trim().optional(),
+	conversions: z
+		.array(
+			z.object({
+				uom_name: z.string().trim(),
+				multiplier: qtyStrCoercePositiveSchema,
+				barcode: z.string().trim().optional()
+			})
+		)
+		.default([]),
+	default_inventory_uom: z.string().trim().optional(),
+	default_issue_uom: z.string().trim().optional(),
+	distribution_type: distributionTypeSchema.optional(),
+	type_class: typeClassSchema,
+	deactivated: z.boolean().optional(),
 
-		// New fields
-		shelf_life_days: z.number().optional(),
-		storage_type: storageTypeSchema.optional(),
-		allergens: z.string().trim().optional(),
-		target_gender: targetGenderSchema.optional(),
-		age_group: ageGroupSchema.optional(),
-		dietary: z.array(dietarySchema).default([]),
+	// New fields
+	shelf_life_days: z.number().optional(),
+	storage_type: storageTypeSchema.optional(),
+	allergens: z.string().trim().optional(),
+	target_gender: targetGenderSchema.optional(),
+	age_group: ageGroupSchema.optional(),
+	dietary: z.array(dietarySchema).default([]),
 
-		// Durable & Equipment specific fields
-		qty_per_person: z.number().min(0).optional(),
-		returnable: z.boolean().optional(),
-		asset_status: assetStatusSchema.optional(),
-		override: z.boolean().optional()
-	})
-	.superRefine((data, ctx) => {
-		if (data.type_class !== 'EQUIPMENT') {
-			if (!data.base_unit || data.base_unit.trim() === '') {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Unit is required',
-					path: ['base_unit']
-				});
-			} else if (!/^[a-z][a-z0-9_]{0,15}$/.test(data.base_unit.trim())) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
-					path: ['base_unit']
-				});
-			}
-			if (!data.distribution_type) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Distribution type is required',
-					path: ['distribution_type']
-				});
-			}
-		} else {
-			if (data.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(data.base_unit.trim())) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
-					path: ['base_unit']
-				});
-			}
-			if (!data.asset_status) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Asset status is required',
-					path: ['asset_status']
-				});
-			}
+	// Durable & Equipment specific fields
+	qty_per_person: z.number().min(0).optional(),
+	returnable: z.boolean().optional(),
+	asset_status: assetStatusSchema.optional(),
+	override: z.boolean().optional()
+});
+
+type ItemMasterFields = z.output<typeof itemMasterFieldsSchema>;
+
+function isLegacyBaseUnit(value: string): boolean {
+	const trimmed = value.trim();
+	return (
+		/^[a-z][a-z0-9_]{0,15}$/.test(trimmed) === false &&
+		Object.prototype.hasOwnProperty.call(FALLBACK_UNIT_LABELS, trimmed)
+	);
+}
+
+function validateItemMasterFields(
+	data: ItemMasterFields,
+	ctx: z.RefinementCtx,
+	allowLegacyBaseUnit: boolean
+): void {
+	const isValidBaseUnit = (value: string): boolean =>
+		/^[a-z][a-z0-9_]{0,15}$/.test(value.trim()) || (allowLegacyBaseUnit && isLegacyBaseUnit(value));
+
+	if (data.type_class !== 'EQUIPMENT') {
+		if (!data.base_unit || data.base_unit.trim() === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Unit is required',
+				path: ['base_unit']
+			});
+		} else if (!isValidBaseUnit(data.base_unit)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				path: ['base_unit']
+			});
 		}
-	});
+		if (!data.distribution_type) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Distribution type is required',
+				path: ['distribution_type']
+			});
+		}
+	} else {
+		if (data.base_unit && !isValidBaseUnit(data.base_unit)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				path: ['base_unit']
+			});
+		}
+		if (!data.asset_status) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Asset status is required',
+				path: ['asset_status']
+			});
+		}
+	}
+}
+
+export const itemMasterInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
+	validateItemMasterFields(data, ctx, false);
+});
+
+/** Update schema keeps recognized legacy Thai units readable without allowing new ones. */
+export const itemMasterUpdateInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
+	validateItemMasterFields(data, ctx, true);
+});
 export type ItemMasterInput = z.input<typeof itemMasterInputSchema>;
+export type ItemMasterUpdateInput = z.input<typeof itemMasterUpdateInputSchema>;
 
 export const recipeInputSchema = z.object({
 	label: z.string().trim().min(1, 'Name is required'),

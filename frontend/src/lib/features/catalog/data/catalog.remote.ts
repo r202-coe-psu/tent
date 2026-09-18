@@ -143,9 +143,12 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<ItemMaster>(id);
 	}
 
-	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
 		if (itemMaster.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(itemMaster.base_unit.trim())) {
-			throw new Error('Base unit must be a valid lowercase English code');
+			const current = await this.getItemMaster(itemMaster._id, itemMaster.shelter_code);
+			if (!current || current.base_unit !== itemMaster.base_unit) {
+				throw new Error('Base unit must be a valid lowercase English code');
+			}
 		}
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
 		return repo.put(touch(itemMaster));
@@ -399,15 +402,33 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	}
 
 	async updateUnitOfMeasure(uom: UnitOfMeasure): Promise<UnitOfMeasure> {
-		if (uom.is_protected) {
-			const existing = await this.getUnitOfMeasure(uom._id);
-			if (existing) {
-				if (existing.code !== uom.code || existing.dimension !== uom.dimension) {
-					throw new Error('Cannot modify code or dimension of a protected unit of measure');
-				}
+		const existing = await this.getUnitOfMeasure(uom._id);
+		if (!existing) {
+			throw new Error(`Unit of measure not found: ${uom._id}`);
+		}
+		if (existing.code !== uom.code) {
+			throw new Error('Cannot modify code of a unit of measure');
+		}
+		if (existing.is_protected) {
+			if (!uom.is_protected) {
+				throw new Error('Cannot unprotect a system protected unit of measure');
+			}
+			if (existing.dimension !== uom.dimension) {
+				throw new Error('Cannot modify code or dimension of a protected unit of measure');
 			}
 		}
-		return this.repo.put(touch(uom));
+
+		// Merge only editable fields onto the latest persisted document so a stale
+		// form cannot overwrite newer labels or send an obsolete _rev to CouchDB.
+		const updated: UnitOfMeasure = {
+			...existing,
+			label_th: uom.label_th,
+			label_th_short: uom.label_th_short,
+			label_en: uom.label_en,
+			sort_order: uom.sort_order,
+			deactivated: uom.deactivated
+		};
+		return this.repo.put(touch(updated));
 	}
 
 	async deleteUnitOfMeasure(id: string): Promise<boolean> {

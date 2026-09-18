@@ -23,6 +23,8 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { CatalogRemoteRepository } from './catalog.remote';
 import type { AuthorContext } from '$lib/db/model';
+import type { UnitOfMeasure } from '../domain/unit-of-measure';
+import type { ItemMaster } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -385,6 +387,27 @@ describe('CatalogRemoteRepository', () => {
 			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
 		});
 
+		it('allows legacy item_master edits when base_unit is unchanged', async () => {
+			const legacy = await getDb('catalog').put({
+				_id: 'item_master:legacy',
+				type: 'item_master',
+				base_unit: 'กิโลกรัม',
+				name: 'รายการเดิม',
+				updated_at: '2026-08-01T00:00:00.000Z'
+			});
+
+			const updated = await repo.updateItemMaster({
+				...legacy,
+				name: 'รายการเดิมแก้ไข'
+			} as unknown as ItemMaster);
+			expect(updated.name).toBe('รายการเดิมแก้ไข');
+			expect(updated.base_unit).toBe('กิโลกรัม');
+
+			await expect(
+				repo.updateItemMaster({ ...legacy, base_unit: 'หน่วยใหม่' } as unknown as ItemMaster)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
 		it('creates and lists units of measure sorted by sort_order', async () => {
 			await repo.createUnitOfMeasure(
 				{
@@ -437,6 +460,13 @@ describe('CatalogRemoteRepository', () => {
 			await expect(
 				repo.updateUnitOfMeasure({
 					...uom,
+					code: 'kilogram'
+				})
+			).rejects.toThrow(/Cannot modify code of a unit of measure/);
+
+			await expect(
+				repo.updateUnitOfMeasure({
+					...uom,
 					dimension: 'volume'
 				})
 			).rejects.toThrow(/Cannot modify code or dimension of a protected unit of measure/);
@@ -444,6 +474,31 @@ describe('CatalogRemoteRepository', () => {
 			// Attempting to delete must be rejected
 			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
 				/Cannot delete system protected unit of measure/
+			);
+		});
+
+		it('keeps custom UOM codes immutable and merges the latest persisted document', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
+				},
+				ctx
+			);
+
+			// Simulate a newer server-side field written after the caller read `uom`.
+			await getDb('catalog').put({ ...uom, server_note: 'keep-me' });
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'ลังสินค้า'
+			});
+
+			expect(updated.label_th).toBe('ลังสินค้า');
+			expect((updated as UnitOfMeasure & { server_note?: string }).server_note).toBe('keep-me');
+			await expect(repo.updateUnitOfMeasure({ ...uom, code: 'box' })).rejects.toThrow(
+				/Cannot modify code of a unit of measure/
 			);
 		});
 	});
