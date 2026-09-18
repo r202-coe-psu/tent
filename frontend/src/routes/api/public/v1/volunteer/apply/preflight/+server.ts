@@ -1,6 +1,9 @@
+import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { z } from 'zod';
+import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
 import {
 	volunteerApplyIpLimiter,
 	volunteerApplyPhoneLimiter
@@ -42,7 +45,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		);
 	}
 	const ip = getClientAddress();
-	if (!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(parsed.data.phone)) {
+	// Same budget as POST /apply (CR-092 FR-VOL-02.3, 3 per 10 min per IP and per phone),
+	// and the same dev escape hatch: the loopback bypass inside RateLimiter only covers the
+	// IP key, so without this a local test run burns the phone budget twice per submit
+	// (preflight + apply) and locks itself out after the second attempt.
+	const skipDevGuards = dev && !isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
+	if (
+		!skipDevGuards &&
+		(!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(parsed.data.phone))
+	) {
 		return json(
 			{ success: false, error: 'RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่อีกครั้ง' },
 			{ status: 429, headers: noStore }
