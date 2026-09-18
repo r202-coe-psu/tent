@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import {
 	donationPreDeclarationInputSchema,
@@ -7,9 +6,9 @@ import {
 	pickCampaignForItems
 } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
-import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
@@ -45,24 +44,21 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// 3. CAPTCHA Check
-		const captchaConfigured =
-			isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID) ||
-			isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
-		if (!captchaConfigured) {
-			if (!dev) {
-				console.error('reCAPTCHA configuration is missing or is a placeholder!');
-				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-			}
-			console.warn('[dev] reCAPTCHA not configured — skipping CAPTCHA verification');
-		} else {
-			if (!parsed.data.captchaToken) {
-				return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
-			}
-			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
-			if (!isHuman) {
-				return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
-			}
+		// 3. CAPTCHA Check (honors config:app.recaptcha_enabled)
+		const captcha = await verifyRecaptchaOrSkip({
+			token: parsed.data.captchaToken ?? '',
+			ip,
+			action: 'donate',
+			provider: captchaProvider
+		});
+		if (!captcha.ok) {
+			const message =
+				captcha.error === 'SERVER_MISCONFIGURED'
+					? 'Server configuration error.'
+					: captcha.error === 'CAPTCHA_REQUIRED'
+						? 'CAPTCHA token is required.'
+						: 'CAPTCHA verification failed.';
+			return json({ success: false, error: message }, { status: captcha.status });
 		}
 
 		// 3.1 shelter_code is validated by FastAPI against `public_shelters`

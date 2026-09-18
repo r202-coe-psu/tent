@@ -5,6 +5,9 @@ import { loginCaptchaIpLimiter } from '$lib/server/security/rate-limiter';
 type PostEvent = Parameters<typeof POST>[0];
 
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
+const { adminRaw } = vi.hoisted(() => ({
+	adminRaw: vi.fn()
+}));
 
 vi.mock('$lib/server/security/captcha', () => ({
 	ReCaptchaProvider: class {
@@ -12,6 +15,10 @@ vi.mock('$lib/server/security/captcha', () => ({
 			return verifyToken(token, ip, action);
 		}
 	}
+}));
+
+vi.mock('$lib/server/couch-admin', () => ({
+	adminRaw
 }));
 
 vi.mock('$lib/server/security/rate-limiter', async (importOriginal) => {
@@ -51,6 +58,11 @@ describe('POST /api/v1/auth/captcha/verify', () => {
 	beforeEach(() => {
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
+		adminRaw.mockReset();
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
+		});
 		vi.mocked(loginCaptchaIpLimiter.check).mockReturnValue(true);
 	});
 
@@ -80,6 +92,17 @@ describe('POST /api/v1/auth/captcha/verify', () => {
 		const res = await POST(makeEvent({ captchaToken: 'tok-1' }));
 		expect(res.status).toBe(429);
 		await expect(res.json()).resolves.toEqual({ ok: false, error: 'RATE_LIMITED' });
+		expect(verifyToken).not.toHaveBeenCalled();
+	});
+
+	it('skips verification when config:app.recaptcha_enabled is false', async () => {
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { recaptcha_enabled: false }
+		});
+		const res = await POST(makeEvent({}));
+		expect(res.status).toBe(200);
+		await expect(res.json()).resolves.toEqual({ ok: true, skipped: true });
 		expect(verifyToken).not.toHaveBeenCalled();
 	});
 });

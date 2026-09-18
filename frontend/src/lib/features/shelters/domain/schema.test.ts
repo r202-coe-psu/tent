@@ -11,6 +11,7 @@ import {
 	riskSchema,
 	subStorageItemSchema,
 	migrateShelterV2ToCurrent,
+	isShelterBookable,
 	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
@@ -47,6 +48,7 @@ describe('shelterSchema', () => {
 		const s = shelterSchema.parse(validShelterInput);
 		expect(s.feature_flags).toBeDefined();
 		expect(s.feature_flags?.enable_medical_screening).toBe(false);
+		expect(s.feature_flags?.accepts_pre_registration).toBe(false);
 
 		const withScreening = shelterSchema.parse({
 			...validShelterInput,
@@ -56,6 +58,7 @@ describe('shelterSchema', () => {
 		// Partial feature_flags must not wipe sibling defaults (e.g. public_donations_enabled).
 		expect(withScreening.feature_flags?.public_donations_enabled).toBe(true);
 		expect(withScreening.feature_flags?.allow_pets).toBe(false);
+		expect(withScreening.feature_flags?.accepts_pre_registration).toBe(false);
 	});
 
 	it('preserves sibling feature_flags when enable_medical_screening is toggled in a full object', () => {
@@ -66,7 +69,8 @@ describe('shelterSchema', () => {
 				allow_vehicles: true,
 				allow_assets: false,
 				public_donations_enabled: false,
-				enable_medical_screening: true
+				enable_medical_screening: true,
+				accepts_pre_registration: true
 			}
 		});
 		expect(parsed.feature_flags).toEqual({
@@ -74,7 +78,8 @@ describe('shelterSchema', () => {
 			allow_vehicles: true,
 			allow_assets: false,
 			public_donations_enabled: false,
-			enable_medical_screening: true
+			enable_medical_screening: true,
+			accepts_pre_registration: true
 		});
 	});
 
@@ -761,5 +766,46 @@ describe('CR-067 — migrate v4 → v5 site_kind back-fill', () => {
 	it('preserves an explicit host_house', () => {
 		const host = { ...v4doc, site_kind: 'host_house' } as unknown as ShelterMasterV2;
 		expect(migrateShelterV2ToCurrent(host).site_kind).toBe('host_house');
+	});
+});
+
+describe('isShelterBookable', () => {
+	it('requires accepts_pre_registration === true and a non-closed status', () => {
+		expect(
+			isShelterBookable({
+				operation_status: 'active',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(true);
+		expect(
+			isShelterBookable({
+				operation_status: 'full_capacity',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(true);
+		expect(
+			isShelterBookable({
+				operation_status: 'standby',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(true);
+	});
+
+	it('fails closed when the flag is missing, false, or status is closed', () => {
+		expect(isShelterBookable({ operation_status: 'active' })).toBe(false);
+		expect(
+			isShelterBookable({
+				operation_status: 'active',
+				feature_flags: { accepts_pre_registration: false }
+			})
+		).toBe(false);
+		expect(
+			isShelterBookable({
+				operation_status: 'closed',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(false);
+		expect(isShelterBookable(null)).toBe(false);
+		expect(isShelterBookable({})).toBe(false);
 	});
 });

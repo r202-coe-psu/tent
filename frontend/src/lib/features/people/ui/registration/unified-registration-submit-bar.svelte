@@ -4,6 +4,8 @@
 
 	let {
 		pending = false,
+		/** Disable submit without showing the submitting/loading state. */
+		submitDisabled = false,
 		label,
 		submittingLabel,
 		align = 'right',
@@ -11,6 +13,7 @@
 		sticky = true
 	}: {
 		pending?: boolean;
+		submitDisabled?: boolean;
 		label: string;
 		submittingLabel: string;
 		align?: 'right' | 'center';
@@ -27,7 +30,7 @@
 >
 	<Button
 		type="submit"
-		disabled={pending}
+		disabled={pending || submitDisabled}
 		class="h-11 w-full gap-2 rounded-xl text-base font-semibold shadow-xs sm:w-auto sm:min-w-56 sm:px-8"
 	>
 		{#if pending}

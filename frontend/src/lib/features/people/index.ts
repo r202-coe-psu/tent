@@ -173,6 +173,7 @@ export {
 	isLeavingLinkedHousehold,
 	matchesResidenceAddress,
 	suggestHouseholdsByResidence,
+	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
 	type SectionEFlags,
 	type SectionEExistingData,
@@ -204,6 +205,7 @@ export {
 	type UnifiedHouseholdInput,
 	type UnifiedRegistrationInput,
 	type FamilyRegistrationPlan,
+	type FamilyRegistrationMode,
 	type FamilyReportInPayload,
 	type MemberPhotoUploadMode
 } from './domain/unified-registration';

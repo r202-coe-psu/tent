@@ -23,9 +23,10 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
-	import { UNASSIGNED_SHELTER_CODE, isCaptchaKeyConfigured } from '../domain/booking';
+	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import type { ShelterSummary } from '$lib/features/shelters/index.js';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -41,16 +42,23 @@
 	const createBooking = useCreateBooking();
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
-	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+	let captchaEnabled = $state(false);
 
 	let selectedShelterCode = $state(untrack(() => lockedShelterCode));
 	let disclaimerAcknowledged = $state(false);
 
 	const isUnassigned = $derived(selectedShelterCode === UNASSIGNED_SHELTER_CODE);
-	const bookable = $derived(shelters.filter((s) => s.status !== 'CLOSED'));
+	const bookable = $derived(
+		shelters.filter((s) => s.status !== 'CLOSED' && s.accepts_pre_registration === true)
+	);
 	const selected = $derived(shelters.find((s) => s.code === selectedShelterCode) ?? null);
-	const hasShelter = $derived(selected !== null);
+	const selectedIsBookable = $derived(
+		isUnassigned || bookable.some((s) => s.code === selectedShelterCode)
+	);
+	const hasShelter = $derived(selected !== null && selectedIsBookable);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
+	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
+	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
 
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
@@ -58,6 +66,9 @@
 	let latestExistingTicket = $state<BookingTicket | null>(null);
 	onMount(() => {
 		latestExistingTicket = getLatestStoredTicket();
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
 	});
 
 	function capacityLabel(s: { capacity: number; available: number | null }): string {
@@ -91,6 +102,11 @@
 	let isSubmitting = $state(false);
 
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
+		if (!isUnassigned && !selectedIsBookable) {
+			const err = 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ';
+			toast.error(err);
+			throw new Error(err);
+		}
 		if (isUnassigned) {
 			if (!disclaimerAcknowledged) {
 				const err = t.unassignedDisclaimerRequired;
@@ -113,8 +129,10 @@
 
 		isSubmitting = true;
 		try {
+			const enabled = await fetchRecaptchaEnabled();
+			captchaEnabled = enabled;
 			const token = await captchaToken();
-			if (token === null) {
+			if (enabled && !token) {
 				toast.error(t.recaptchaError);
 				throw new Error(t.recaptchaError);
 			}
@@ -299,12 +317,17 @@
 					<div>
 						<p class="font-bold text-primary">กรณีไม่ระบุศูนย์พักพิง</p>
 						<p class="mt-0.5 text-muted-foreground">
-							ท่านสามารถลงทะเบียนข้อมูลล่วงหน้าไว้ในคิวกลางได้ เมื่อเดินทางถึงศูนย์พักพิง
-							แจ้งเบอร์โทรศัพท์หรือแสดง QR รหัสลงทะเบียนนี้ให้เจ้าหน้าที่ลงทะเบียนประจำศูนย์
-							(ยังไม่ใช่ QR ประตูศูนย์ / Station 1 จนกว่าเจ้าหน้าที่จะรับเข้าศูนย์)
+							การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์
 						</p>
 					</div>
 				</div>
+			{:else if selected && !selectedIsBookable}
+				<p
+					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
+				>
+					<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+					<span>ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ</span>
+				</p>
 			{:else if selected}
 				<p class="flex items-start gap-1 text-xs text-muted-foreground">
 					<MapPin class="mt-0.5 h-3 w-3 shrink-0" />
@@ -329,6 +352,7 @@
 			channel="public"
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
+			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
 			onsubmit={handleUnifiedSubmit}

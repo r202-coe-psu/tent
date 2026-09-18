@@ -1,9 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { loginCaptchaIpLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
@@ -26,27 +25,18 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	const body = (await request.json().catch(() => ({}))) as { captchaToken?: unknown };
 	const captchaToken = typeof body.captchaToken === 'string' ? body.captchaToken.trim() : '';
 
-	const captchaConfigured =
-		isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID) ||
-		isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
+	const result = await verifyRecaptchaOrSkip({
+		token: captchaToken,
+		ip,
+		action: 'login',
+		provider: captchaProvider
+	});
 
-	if (!captchaConfigured) {
-		if (!dev) {
-			console.error('reCAPTCHA configuration is missing or is a placeholder!');
-			return json({ ok: false, error: 'Server configuration error.' }, { status: 500 });
-		}
-		console.warn('[dev] reCAPTCHA not configured — skipping CAPTCHA verification');
-		return json({ ok: true, skipped: true });
+	if (!result.ok) {
+		const clientError =
+			result.error === 'SERVER_MISCONFIGURED' ? 'Server configuration error.' : result.error;
+		return json({ ok: false, error: clientError }, { status: result.status });
 	}
 
-	if (!captchaToken) {
-		return json({ ok: false, error: 'CAPTCHA_REQUIRED' }, { status: 400 });
-	}
-
-	const isHuman = await captchaProvider.verifyToken(captchaToken, ip, 'login');
-	if (!isHuman) {
-		return json({ ok: false, error: 'CAPTCHA_FAILED' }, { status: 403 });
-	}
-
-	return json({ ok: true });
+	return json({ ok: true, ...(result.skipped ? { skipped: true } : {}) });
 };

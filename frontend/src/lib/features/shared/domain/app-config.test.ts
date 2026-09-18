@@ -11,6 +11,15 @@ describe('readAppConfig', () => {
 		expect(APP_CONFIG_DEFAULTS.donation_reservation_ttl_hours).toBe(72);
 	});
 
+	it('defaults recaptcha_enabled to true (operator can turn off in System Management)', () => {
+		expect(APP_CONFIG_DEFAULTS.recaptcha_enabled).toBe(true);
+		expect(readAppConfig({ type: 'config' }).recaptcha_enabled).toBe(true);
+	});
+
+	it('honors an operator-disabled reCAPTCHA flag', () => {
+		expect(readAppConfig({ recaptcha_enabled: false }).recaptcha_enabled).toBe(false);
+	});
+
 	it('reads an operator-tuned TTL', () => {
 		const config = readAppConfig({ type: 'config', donation_reservation_ttl_hours: 24 });
 		expect(config.donation_reservation_ttl_hours).toBe(24);

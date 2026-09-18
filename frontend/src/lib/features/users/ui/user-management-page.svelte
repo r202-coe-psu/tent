@@ -17,7 +17,12 @@
 	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
 	import { useUsers, useCreateUser, useDeleteUser } from '../application/queries';
-	import { adminResetPassword, unlinkGoogleMfa, type UserSummary } from '../data/users.api';
+	import {
+		adminResetPassword,
+		unlinkGoogleMfa,
+		unlinkThaidMfa,
+		type UserSummary
+	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
 	import type { CreateUserInput, ShelterAssignmentInput } from '../domain/schema';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
@@ -57,6 +62,7 @@
 	let resetDialogOpen = $state(false);
 	let resetResultDialogOpen = $state(false);
 	let unlinkMfaDialogOpen = $state(false);
+	let unlinkMfaProvider = $state<'google' | 'thaid'>('google');
 
 	let searchQuery = $state('');
 	let selectedUser = $state<UserSummary | null>(null);
@@ -146,8 +152,9 @@
 		resetDialogOpen = true;
 	}
 
-	function handleOpenUnlinkMfa(user: UserSummary) {
+	function handleOpenUnlinkMfa(user: UserSummary, provider: 'google' | 'thaid' = 'google') {
 		selectedUser = user;
+		unlinkMfaProvider = provider;
 		unlinkMfaDialogOpen = true;
 	}
 
@@ -155,8 +162,13 @@
 		if (!selectedUser) return;
 		unlinkingMfa = true;
 		try {
-			await unlinkGoogleMfa(selectedUser.name);
-			toast.success(`ถอด Google MFA ของ "${selectedUser.name}" แล้ว`);
+			if (unlinkMfaProvider === 'thaid') {
+				await unlinkThaidMfa(selectedUser.name);
+				toast.success(`ถอด ThaID MFA ของ "${selectedUser.name}" แล้ว`);
+			} else {
+				await unlinkGoogleMfa(selectedUser.name);
+				toast.success(`ถอด Google MFA ของ "${selectedUser.name}" แล้ว`);
+			}
 			unlinkMfaDialogOpen = false;
 			selectedUser = null;
 			await queryClient.invalidateQueries({ queryKey: usersKeys.all });
@@ -299,20 +311,26 @@
 	</div>
 </div>
 
-<!-- Unlink Google MFA Confirmation Dialog -->
+<!-- Unlink MFA Confirmation Dialog -->
 <Dialog.Root bind:open={unlinkMfaDialogOpen}>
 	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[440px]">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-red-700">
-				<Unlink class="size-5" /> ถอดการผูก Google MFA
+				<Unlink class="size-5" /> ถอดการผูก {unlinkMfaProvider === 'thaid' ? 'ThaID' : 'Google'} MFA
 			</Dialog.Title>
 			<Dialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
-				จะถอดการผูก Google ของ
+				จะถอดการผูก {unlinkMfaProvider === 'thaid' ? 'ThaID' : 'Google'} ของ
 				<strong class="text-slate-900">{selectedUser?.display_name ?? selectedUser?.name}</strong>
-				{#if selectedUser?.mfa_google_email}
+				{#if unlinkMfaProvider === 'thaid' && (selectedUser?.mfa_thaid_name || selectedUser?.mfa_thaid_pid_masked)}
+					({[selectedUser.mfa_thaid_name, selectedUser.mfa_thaid_pid_masked]
+						.filter(Boolean)
+						.join(' • ')})
+				{:else if unlinkMfaProvider === 'google' && selectedUser?.mfa_google_email}
 					({selectedUser.mfa_google_email})
 				{/if}
-				— หลังถอดแล้วผู้ใช้จะเข้าแอปได้โดยไม่ต้อง step-up จนกว่าจะผูกใหม่
+				— หลังถอดแล้วผู้ใช้จะไม่ต้องยืนยันตัวตนด้วย {unlinkMfaProvider === 'thaid'
+					? 'ThaID'
+					: 'Google'} จนกว่าจะผูกใหม่
 			</Dialog.Description>
 		</Dialog.Header>
 		<div class="mt-4 flex justify-end gap-3">
