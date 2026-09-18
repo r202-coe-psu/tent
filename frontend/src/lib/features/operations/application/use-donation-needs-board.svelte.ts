@@ -261,7 +261,8 @@ export function useDonationNeedsBoard(options?: {
 				}
 			],
 			notes: buildCampaignNotes(input),
-			visible_on_home: true
+			visible_on_home: true,
+			urgency: input.urgency || 'normal'
 		};
 
 		createCampaignMutation.mutate(

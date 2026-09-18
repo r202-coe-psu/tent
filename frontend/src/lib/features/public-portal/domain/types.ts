@@ -36,6 +36,7 @@ export type PublicShelterCardModel = {
 	vulnerable_groups: string[] | null;
 	admin_type: string | null;
 	geo: PublicGeoPoint | null;
+	accepts_pre_registration: boolean;
 };
 
 export type ListPublicSheltersParams = {

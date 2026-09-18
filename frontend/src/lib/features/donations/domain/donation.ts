@@ -86,7 +86,7 @@ export const donationPreDeclarationInputSchema = z.object({
 			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
 			path: ['vehicle']
 		}),
-	captchaToken: z.string().min(1, 'CAPTCHA token is required')
+	captchaToken: z.string().min(1).optional()
 });
 
 export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaration =>

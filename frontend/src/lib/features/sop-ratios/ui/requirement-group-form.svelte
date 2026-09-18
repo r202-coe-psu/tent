@@ -42,13 +42,15 @@
 
 	const itemMasters = $derived(itemMastersQuery.data ?? []);
 	const itemOptions = $derived.by(() => {
-		return itemMasters.map((im) => ({
-			value: im._id,
-			label: im.name,
-			sku: im.sku,
-			base_unit: im.base_unit || '',
-			keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
-		}));
+		return itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				value: im._id,
+				label: im.name,
+				sku: im.sku,
+				base_unit: im.base_unit || '',
+				keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
+			}));
 	});
 
 	function getItemOptions(currentId?: string) {

@@ -20,9 +20,13 @@
 	let shelter = $derived(data.shelter);
 	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 
-	// CR-070 / T-71 — a closed shelter cannot be booked; everything else can
-	// (a full one warns inside the wizard rather than blocking, per FR-72).
-	let canBook = $derived(Boolean(shelter?.code) && shelter?.status !== 'CLOSED');
+	// Closed or not accepting public pre-registration → hide booking CTA (still visible for browse).
+	let shelterCode = $derived(shelter?.code ?? shelter?.id ?? '');
+	let canBook = $derived(
+		Boolean(shelterCode) &&
+			shelter?.status !== 'CLOSED' &&
+			shelter?.accepts_pre_registration === true
+	);
 </script>
 
 <svelte:head>
@@ -34,15 +38,15 @@
 	<div class="border-b border-border bg-card">
 		<div class="mx-auto flex max-w-380 items-center justify-between px-4 py-3 sm:px-6">
 			<a
-				href="/shelters"
+				href={resolve('/shelters')}
 				class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-bold text-foreground/90 transition-colors hover:text-primary"
 			>
 				<ChevronLeft class="h-4 w-4" />
 				{t.backToShelters}
 			</a>
-			{#if canBook && shelter}
+			{#if canBook && shelterCode}
 				<a
-					href={`${resolve('/pre-register')}?shelter=${encodeURIComponent(shelter.code)}`}
+					href={resolve(`/pre-register?shelter=${encodeURIComponent(shelterCode)}`)}
 					class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
 				>
 					<ClipboardCheck class="h-4 w-4" />
@@ -86,7 +90,7 @@
 				{t.shelterNotFoundDesc}
 			</p>
 			<a
-				href="/shelters"
+				href={resolve('/shelters')}
 				class="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
 			>
 				{t.backToShelters}

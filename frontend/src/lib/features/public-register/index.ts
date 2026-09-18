@@ -36,6 +36,7 @@ export {
 export {
 	createBooking,
 	createUnassignedRegistration,
+	matchResidence,
 	fetchDistricts,
 	fetchPetTypes,
 	fetchProvinces,
@@ -46,6 +47,8 @@ export {
 	type BookingTicketResponse,
 	type PetTypeOption,
 	type PublicSubdistrict,
+	type ResidenceMatchChip,
+	type ResidenceMatchRequest,
 	type ShelterBookingPhotoUploadResponse,
 	type UnassignedPhotoUploadResponse,
 	type UnassignedRegistrationResponse

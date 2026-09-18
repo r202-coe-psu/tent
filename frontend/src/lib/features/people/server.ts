@@ -16,10 +16,22 @@ export {
 	createHousehold,
 	evacueeInputSchema,
 	householdInputSchema,
+	housingTypeSchema,
 	isBlankEmergencyContact,
 	migrateVulnerableGroupCodes,
-	admissionSupportsVulnerableGroup
+	admissionSupportsVulnerableGroup,
+	isActiveHouseholdStatus,
+	ACTIVE_HOUSEHOLD_STATUSES
 } from './domain/people';
+
+export {
+	hasMinimumResidence,
+	matchesResidenceAddress,
+	suggestHouseholdsByResidence,
+	isJoinableHouseholdStatus,
+	type ResidenceFields,
+	type ResidenceMatchCandidate
+} from './domain/registration-shell';
 
 export {
 	planFamilyRegistration,
@@ -35,6 +47,7 @@ export { registeredViaSchema } from '$lib/db/model';
 export type { Evacuee, EvacueeInput, Household, HouseholdInput, StayStatus } from './domain/people';
 export type {
 	FamilyRegistrationPlan,
+	FamilyRegistrationMode,
 	UnifiedRegistrationInput,
 	UnifiedRegistrationParsed,
 	UnifiedMemberInput,
