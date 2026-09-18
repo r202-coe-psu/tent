@@ -24,7 +24,7 @@ import {
 	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
-import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 

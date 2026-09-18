@@ -1,7 +1,7 @@
 /**
  * Platform master seed: master_data + config:app + catalog/SOP/food-sphere.
  */
-import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared/domain/app-config';
 import {
 	enforceOneDefault,
 	masterDocId,
@@ -22,7 +22,7 @@ import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
 import { ITEM, masterCode, type MasterLookup } from './types';
-import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
