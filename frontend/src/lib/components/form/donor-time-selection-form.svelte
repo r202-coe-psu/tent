@@ -24,7 +24,6 @@
 
 	const donationStore = getDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
-	let captchaEnabled = $state(false);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
@@ -32,9 +31,6 @@
 	let isItemsModalOpen = $state(false);
 
 	onMount(async () => {
-		void fetchRecaptchaEnabled().then((enabled) => {
-			captchaEnabled = enabled;
-		});
 		try {
 			const res = await fetch('/api/public/v1/needs');
 			if (res.ok) {
@@ -104,7 +100,6 @@
 		let token = window.__captchaToken || '';
 
 		const enabled = await fetchRecaptchaEnabled();
-		captchaEnabled = enabled;
 
 		if (enabled) {
 			if (siteKey && window.grecaptcha) {
