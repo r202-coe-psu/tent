@@ -9,7 +9,7 @@ export const unitCodeSchema = z
 	.trim()
 	.regex(
 		/^[a-z][a-z0-9_]{0,15}$/,
-		'Code must be lowercase alphanumeric with optional underscores (1-16 chars)'
+		'รหัสหน่วยต้องเป็นตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง 1-16 ตัวอักษร'
 	);
 
 export function isCanonicalUnitCode(value: unknown): value is string {
@@ -42,9 +42,9 @@ export interface UnitOfMeasure extends CatalogDoc {
 
 export const unitOfMeasureInputSchema = z.object({
 	code: unitCodeSchema,
-	label_th: z.string().trim().min(1, 'Label (TH) is required'),
+	label_th: z.string().trim().min(1, 'กรุณาระบุชื่อภาษาไทย'),
 	label_th_short: z.string().trim().optional(),
-	label_en: z.string().trim().min(1, 'Label (EN) is required'),
+	label_en: z.string().trim().min(1, 'กรุณาระบุชื่อภาษาอังกฤษ'),
 	dimension: dimensionSchema,
 	is_protected: z.boolean().optional(),
 	sort_order: z.number().optional(),
@@ -54,9 +54,9 @@ export const unitOfMeasureInputSchema = z.object({
 export type UnitOfMeasureInput = z.input<typeof unitOfMeasureInputSchema>;
 
 export const unitOfMeasureUpdateSchema = z.object({
-	label_th: z.string().trim().min(1, 'Label (TH) is required'),
+	label_th: z.string().trim().min(1, 'กรุณาระบุชื่อภาษาไทย'),
 	label_th_short: z.string().trim().optional(),
-	label_en: z.string().trim().min(1, 'Label (EN) is required'),
+	label_en: z.string().trim().min(1, 'กรุณาระบุชื่อภาษาอังกฤษ'),
 	sort_order: z.number().optional(),
 	deactivated: z.boolean().optional()
 });

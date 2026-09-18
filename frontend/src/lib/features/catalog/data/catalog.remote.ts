@@ -472,7 +472,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	async createUnitOfMeasure(input: UnitOfMeasureInput, ctx: AuthorContext): Promise<UnitOfMeasure> {
 		const doc = createUnitOfMeasure(input, ctx);
 		if (await this.getUnitOfMeasure(doc.code)) {
-			throw new Error(`Unit of measure already exists: ${doc.code}`);
+			throw new Error(`รหัสหน่วยนับนี้มีอยู่ในระบบแล้ว: ${doc.code}`);
 		}
 		return this.repo.put(doc);
 	}
@@ -505,17 +505,17 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	async updateUnitOfMeasure(uom: UnitOfMeasure): Promise<UnitOfMeasure> {
 		const existing = await this.getUnitOfMeasure(uom._id);
 		if (!existing) {
-			throw new Error(`Unit of measure not found: ${uom._id}`);
+			throw new Error(`ไม่พบข้อมูลหน่วยนับ: ${uom._id}`);
 		}
 		if (existing.code !== uom.code) {
-			throw new Error('Cannot modify code of a unit of measure');
+			throw new Error('ไม่สามารถเปลี่ยนรหัสหน่วยนับได้');
 		}
 		if (existing.is_protected) {
 			if (!uom.is_protected) {
-				throw new Error('Cannot unprotect a system protected unit of measure');
+				throw new Error('ไม่สามารถยกเลิกการปกป้องหน่วยนับมาตรฐานของระบบได้');
 			}
 			if (existing.dimension !== uom.dimension) {
-				throw new Error('Cannot modify code or dimension of a protected unit of measure');
+				throw new Error('ไม่สามารถแก้ไขรหัสหรือมิติการวัดของหน่วยนับมาตรฐานได้');
 			}
 		}
 
@@ -536,7 +536,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		const uom = await this.getUnitOfMeasure(id);
 		if (!uom) return false;
 		if (uom.is_protected) {
-			throw new Error('Cannot delete system protected unit of measure');
+			throw new Error('ไม่สามารถลบหน่วยนับมาตรฐานของระบบได้');
 		}
 
 		const databases = new Set<string>([CATALOG_DB]);
@@ -602,7 +602,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 				const reference = docs.find((doc) => unitReferencesDoc(doc, uom.code));
 				if (reference) {
 					throw new Error(
-						`Cannot delete unit of measure ${uom.code}; it is referenced by ${reference._id}`
+						`ไม่สามารถลบหน่วยนับ "${uom.code}" ได้ เนื่องจากมีรายการสินค้าอ้างอิงอยู่ (${reference._id})`
 					);
 				}
 			}

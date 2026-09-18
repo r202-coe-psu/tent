@@ -488,18 +488,18 @@ describe('CatalogRemoteRepository', () => {
 					...uom,
 					code: 'kilogram'
 				})
-			).rejects.toThrow(/Cannot modify code of a unit of measure/);
+			).rejects.toThrow(/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/);
 
 			await expect(
 				repo.updateUnitOfMeasure({
 					...uom,
 					dimension: 'volume'
 				})
-			).rejects.toThrow(/Cannot modify code or dimension of a protected unit of measure/);
+			).rejects.toThrow(/ไม่สามารถแก้ไขรหัสหรือมิติการวัดของหน่วยนับมาตรฐานได้/);
 
 			// Attempting to delete must be rejected
 			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
-				/Cannot delete system protected unit of measure/
+				/ไม่สามารถลบหน่วยนับมาตรฐานของระบบได้/
 			);
 		});
 
@@ -524,7 +524,7 @@ describe('CatalogRemoteRepository', () => {
 			expect(updated.label_th).toBe('ลังสินค้า');
 			expect((updated as UnitOfMeasure & { server_note?: string }).server_note).toBe('keep-me');
 			await expect(repo.updateUnitOfMeasure({ ...uom, code: 'box' })).rejects.toThrow(
-				/Cannot modify code of a unit of measure/
+				/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/
 			);
 		});
 
@@ -549,7 +549,7 @@ describe('CatalogRemoteRepository', () => {
 			);
 
 			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
-				/Cannot delete unit of measure crate; it is referenced by item_master:/
+				/ไม่สามารถลบหน่วยนับ "crate" ได้ เนื่องจากมีรายการสินค้าอ้างอิงอยู่/
 			);
 		});
 
