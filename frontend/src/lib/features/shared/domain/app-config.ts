@@ -18,6 +18,8 @@ export const appConfigSchema = z.object({
 	public_otp_required: z.boolean().catch(false),
 	/** Operator kill-switch for reCAPTCHA; keys in env are still required when ON. */
 	recaptcha_enabled: z.boolean().catch(true),
+	/** Operator kill-switch for ThaiD Digital ID registration on public pre-register page. */
+	thaid_registration_enabled: z.boolean().catch(true),
 	duplicate_hint_threshold: z.coerce.number().min(0).max(1).catch(0.8),
 	donation_reservation_ttl_hours: z.coerce.number().int().positive().catch(72),
 	device_db_ttl_days: z.coerce.number().int().positive().catch(30),

@@ -4,33 +4,13 @@
 	import User from '@lucide/svelte/icons/user';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Baby from '@lucide/svelte/icons/baby';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-
-	export interface ThaiDAutofillProfile {
-		id: string;
-		roleLabel: string;
-		person_id: string;
-		first_name: string;
-		last_name: string;
-		nickname: string;
-		gender: 'male' | 'female' | 'other';
-		birth_year: number;
-		age: number;
-		phone: string | null;
-		vulnerable_groups: string[];
-		special_needs: string[];
-		medical_conditions: string[];
-		address: {
-			address_no: string;
-			village_no: string;
-			subdistrict: string;
-			district: string;
-			province: string;
-			postal_code: string;
-		};
-	}
+	import { fetchThaidRegistrationStatus, type ThaidStatusResponse } from '$lib/api/thaid-status';
+	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 
 	const MOCK_PROFILES: ThaiDAutofillProfile[] = [
 		{
@@ -104,23 +84,59 @@
 		}
 	];
 
-	let {
-		disabled = false,
-		onautofill
-	}: {
+	interface Props {
+		status?: {
+			enabled: boolean;
+			isDev: boolean;
+			mode: 'mock' | 'real';
+		} | null;
 		disabled?: boolean;
 		onautofill?: (profile: ThaiDAutofillProfile) => void;
-	} = $props();
+	}
 
-	// Gating: Only active in Dev or when explicitly enabled via env
-	const isDev = import.meta.env.DEV;
-	const isEnabled = isDev || import.meta.env.PUBLIC_ENABLE_THAID === 'true';
+	let {
+		status = undefined,
+		disabled = false,
+		onautofill
+	}: Props = $props();
 
 	let open = $state(false);
+	let isRedirecting = $state(false);
+	let fetchedStatus = $state<ThaidStatusResponse | null>(null);
+
+	onMount(() => {
+		if (status === undefined) {
+			void fetchThaidRegistrationStatus().then((res) => {
+				fetchedStatus = res;
+			});
+		}
+	});
+
+	const effectiveStatus = $derived<ThaidStatusResponse | null>(
+		status !== undefined ? status : fetchedStatus
+	);
+
+	const isDevEnv = import.meta.env.DEV;
+	const isEnabled = $derived(
+		effectiveStatus ? effectiveStatus.enabled : isDevEnv
+	);
+	const isMock = $derived(
+		effectiveStatus ? (effectiveStatus.isDev || effectiveStatus.mode === 'mock') : isDevEnv
+	);
 
 	function handleSelect(profile: ThaiDAutofillProfile) {
 		onautofill?.(profile);
 		open = false;
+	}
+
+	function handleRealConnect() {
+		if (isRedirecting) return;
+		isRedirecting = true;
+		const currentUrl = new URL(window.location.href);
+		currentUrl.searchParams.delete('error');
+		currentUrl.searchParams.delete('thaid');
+		const returnTo = currentUrl.pathname + (currentUrl.search ? currentUrl.search : '');
+		window.location.href = `/api/v1/auth/oauth/thaid/start?mode=register&return_to=${encodeURIComponent(returnTo)}`;
 	}
 </script>
 
@@ -136,36 +152,37 @@
 				<div>
 					<div class="flex items-center gap-2">
 						<span class="text-sm font-semibold text-foreground">ดึงข้อมูลด้วย ThaiD</span>
-						{#if isDev}
+						{#if isMock}
 							<Badge variant="outline" class="border-amber-500/30 bg-amber-500/10 text-xs text-amber-700">
 								จำลอง / Mock
 							</Badge>
 						{/if}
 					</div>
 					<p class="mt-0.5 text-xs text-muted-foreground">
-						{isDev
+						{isMock
 							? 'ระบบจำลองการอ่านข้อมูลบัตรประชาชนดิจิทัล สำหรับทดสอบเติมข้อมูลและที่อยู่'
 							: 'เชื่อมต่อและดึงข้อมูลทะเบียนราษฎร์อัตโนมัติ'}
 					</p>
 				</div>
 			</div>
 
-			<Dialog.Root bind:open>
-				<Dialog.Trigger>
-					{#snippet child({ props })}
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							{disabled}
-							class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
-							{...props}
-						>
-							<Sparkles class="mr-1.5 size-4" />
-							<span>{isDev ? 'เลือกข้อมูลจำลอง (Mock)' : 'เชื่อมต่อ ThaiD'}</span>
-						</Button>
-					{/snippet}
-				</Dialog.Trigger>
+			{#if isMock}
+				<Dialog.Root bind:open>
+					<Dialog.Trigger>
+						{#snippet child({ props })}
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								{disabled}
+								class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
+								{...props}
+							>
+								<Sparkles class="mr-1.5 size-4" />
+								<span>เลือกข้อมูลจำลอง (Mock)</span>
+							</Button>
+						{/snippet}
+					</Dialog.Trigger>
 
 				<Dialog.Content class="sm:max-w-lg">
 					<Dialog.Header>
@@ -234,6 +251,24 @@
 					</Dialog.Footer>
 				</Dialog.Content>
 			</Dialog.Root>
+		{:else}
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={disabled || isRedirecting}
+				onclick={handleRealConnect}
+				class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
+			>
+				{#if isRedirecting}
+					<Loader2 class="mr-1.5 size-4 animate-spin" />
+					<span>กำลังเชื่อมต่อ ThaiD...</span>
+				{:else}
+					<Sparkles class="mr-1.5 size-4" />
+					<span>เชื่อมต่อ ThaiD</span>
+				{/if}
+			</Button>
+		{/if}
 		</div>
 	</div>
 {/if}

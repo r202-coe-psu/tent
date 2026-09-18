@@ -257,12 +257,32 @@
 		return Number.isFinite(parsed) ? parsed : undefined;
 	});
 
+	let lastSyncedBirthYear = member.birth_year;
 	$effect(() => {
-		member.birth_year = resolvedBirthYear;
+		if (member.birth_year !== lastSyncedBirthYear) {
+			lastSyncedBirthYear = member.birth_year;
+			birthYear =
+				typeof member.birth_year === 'number' || typeof member.birth_year === 'string'
+					? member.birth_year
+					: '';
+		} else {
+			member.birth_year = resolvedBirthYear;
+			lastSyncedBirthYear = resolvedBirthYear;
+		}
 	});
 
+	let lastSyncedAge = member.age;
 	$effect(() => {
-		member.age = resolvedAge;
+		if (member.age !== lastSyncedAge) {
+			lastSyncedAge = member.age;
+			age =
+				typeof member.age === 'number' || typeof member.age === 'string'
+					? member.age
+					: '';
+		} else {
+			member.age = resolvedAge;
+			lastSyncedAge = resolvedAge;
+		}
 	});
 
 	$effect(() => {

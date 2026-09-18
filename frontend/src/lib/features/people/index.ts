@@ -296,6 +296,12 @@ export { default as HouseholdPostArrival } from './ui/household-flows/household-
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
 export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
+export type {
+	ThaiDAutofillProfile,
+	ThaiDAutofillAddress
+} from './domain/thaid-profile';
+export { stripThaiTitle } from './domain/thaid-profile';
+export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
 export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';
 export { default as UnifiedRegistrationStepper } from './ui/registration/unified-registration-stepper.svelte';
 export { default as PullPreRegisteredDialog } from './ui/registration/pull-pre-registered-dialog.svelte';

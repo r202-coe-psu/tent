@@ -31,7 +31,7 @@
 	import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
-	import type { ThaiDAutofillProfile } from './thaid-action-button.svelte';
+	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
@@ -93,6 +93,8 @@
 		enableUnassignedPhoto = false,
 		shelterCode = '',
 		shelterName = '',
+		initialThaidProfile = null,
+		thaidStatus = null,
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
@@ -112,6 +114,12 @@
 		enableUnassignedPhoto?: boolean;
 		shelterCode?: string;
 		shelterName?: string;
+		initialThaidProfile?: ThaiDAutofillProfile | null;
+		thaidStatus?: {
+			enabled: boolean;
+			isDev: boolean;
+			mode: 'mock' | 'real';
+		} | null;
 		onsubmit: (
 			input: UnifiedRegistrationInput,
 			meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
@@ -192,6 +200,7 @@
 	let memberFieldErrors = $state<Record<number, Record<string, string>>>({});
 	let formRootEl = $state<HTMLFormElement | null>(null);
 	let touched = $state(false);
+	let hasAutofilled = $state(false);
 	let activeSection = $state<FormSectionId>('address');
 	let scrollSpyPaused = $state(false);
 
@@ -411,6 +420,62 @@
 
 	onMount(() => {
 		onDirtyChange?.(false);
+
+		if (initialThaidProfile && !hasAutofilled) {
+			hasAutofilled = true;
+			void tick().then(() => {
+				handleThaiDAutofill(initialThaidProfile);
+			});
+		}
+
+		if (channel === 'public' && typeof window !== 'undefined') {
+			const params = new URLSearchParams(window.location.search);
+			const errorParam = params.get('error');
+			if (errorParam) {
+				if (errorParam === 'thaid_disabled') {
+					toast.error('การลงทะเบียนผ่าน ThaiD ถูกปิดใช้งานชั่วคราว');
+				} else if (errorParam === 'invalid_state') {
+					toast.error('การยืนยันตัวตน ThaiD ไม่ถูกต้อง หรือหมดอายุ กรุณาลองใหม่อีกครั้ง');
+				} else {
+					toast.error(`การยืนยันตัวตน ThaiD ไม่สำเร็จ (${errorParam})`);
+				}
+				const cleanUrl = new URL(window.location.href);
+				cleanUrl.searchParams.delete('error');
+				window.history.replaceState(
+					{},
+					'',
+					cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
+				);
+			}
+
+			if (params.get('thaid') === 'autofill' && !hasAutofilled) {
+				hasAutofilled = true;
+				void fetch('/api/public/v1/thaid/claim')
+					.then(async (res) => {
+						if (!res.ok) return null;
+						return (await res.json()) as { profile?: ThaiDAutofillProfile | null };
+					})
+					.then((data) => {
+						if (data?.profile) {
+							void tick().then(() => {
+								handleThaiDAutofill(data.profile!);
+							});
+						}
+					})
+					.catch(() => {
+						toast.error('ไม่สามารถดึงข้อมูลจาก ThaiD ได้');
+					})
+					.finally(() => {
+						const cleanUrl = new URL(window.location.href);
+						cleanUrl.searchParams.delete('thaid');
+						window.history.replaceState(
+							{},
+							'',
+							cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
+						);
+					});
+			}
+		}
 	});
 
 	function findScrollParent(element: Element): Element | null {
@@ -611,6 +676,15 @@
 		markDirty();
 		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อย`);
 	}
+
+	$effect(() => {
+		if (initialThaidProfile && !hasAutofilled) {
+			hasAutofilled = true;
+			void tick().then(() => {
+				handleThaiDAutofill(initialThaidProfile);
+			});
+		}
+	});
 
 	/** Absorb another household into the current form (merge-in-form). */
 	function handleAbsorbHouseholdIntoForm(sourceHousehold: Household, sourceMembers: Evacuee[]) {
@@ -836,8 +910,8 @@
 		description={t.sectionAddressDesc}
 		icon={Home}
 	>
-		<!-- ThaiD Action Button (Dev Mock only — hidden in prod/staging without credentials) -->
-		<ThaidActionButton disabled={pending} onautofill={handleThaiDAutofill} />
+		<!-- ThaiD Action Button (Dev Mock, or OAuth in Staging/Prod when enabled) -->
+		<ThaidActionButton status={thaidStatus} disabled={pending} onautofill={handleThaiDAutofill} />
 
 		<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 		{#if enableResidenceJoin}

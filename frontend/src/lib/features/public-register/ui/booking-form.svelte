@@ -17,6 +17,7 @@
 		useCreateUnassignedRegistration,
 		useShelterPolicy
 	} from '../application/queries';
+	import type { ShelterSummary } from '$lib/features/shelters';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { saveTicketToStorage } from '../data/ticket-storage';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -24,8 +25,10 @@
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
-	import type { ShelterSummary } from '$lib/features/shelters/index.js';
-	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import {
+		UnifiedRegistrationForm,
+		type UnifiedRegistrationInput
+	} from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	interface Props {
@@ -35,7 +38,12 @@
 		onviewexistingticket?: () => void;
 	}
 
-	let { shelters, lockedShelterCode = '', onbooked, onviewexistingticket }: Props = $props();
+	let {
+		shelters,
+		lockedShelterCode = '',
+		onbooked,
+		onviewexistingticket
+	}: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 

@@ -15,7 +15,11 @@ import {
 	buildThaidAuthorizeUrl,
 	resolveThaidLoginUser,
 	exchangeThaidCode,
-	resolveThaidRedirectUri
+	resolveThaidRedirectUri,
+	parseThaidCitizenClaims,
+	setCitizenClaimCookie,
+	consumeCitizenClaimCookie,
+	type ThaiDAutofillProfile
 } from './thaid-oauth';
 import { env } from '$env/dynamic/private';
 
@@ -152,6 +156,114 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(claims.name).toBe('นาย สมชาย ใจดี');
 			expect(claims.pid).toBe('1234567890123');
 			expect(claims.pid_masked).toBe('1-xxxx-xxxxx-12-3');
+		});
+	});
+
+	describe('register OAuth mode & citizen claims', () => {
+		it('creates and parses register state with returnTo', () => {
+			const state = createThaidOAuthState('register', undefined, '/pre-register?shelter=A');
+			const parsed = parseThaidOAuthState(state);
+			expect(parsed).toMatchObject({
+				mode: 'register',
+				returnTo: '/pre-register?shelter=A'
+			});
+			expect(parsed?.name).toBe('');
+		});
+
+		it('parses ThaiD claims into ThaiDAutofillProfile with title prefix and address', () => {
+			const claims = {
+				sub: 'sub-user-99',
+				pid: '1-1005-00123-45-6',
+				name: 'นาย ประหยัด ร่ำรวย',
+				raw: {
+					given_name: 'นายประหยัด',
+					family_name: 'ร่ำรวย',
+					birthdate: '1985-04-12',
+					gender: '1',
+					phone: '0812345678',
+					address: {
+						house_no: '99/1',
+						moo: 'หมู่ 4',
+						tambon: 'ช้างเผือก',
+						amphur: 'เมืองเชียงใหม่',
+						changwat: 'เชียงใหม่',
+						postcode: '50300'
+					}
+				}
+			};
+
+			const profile = parseThaidCitizenClaims(claims);
+			expect(profile.person_id).toBe('1100500123456');
+			expect(profile.first_name).toBe('ประหยัด');
+			expect(profile.last_name).toBe('ร่ำรวย');
+			expect(profile.gender).toBe('male');
+			expect(profile.birth_year).toBe(2528); // 1985 + 543
+			expect(profile.phone).toBe('0812345678');
+			expect(profile.address).toEqual({
+				address_no: '99/1',
+				village_no: 'หมู่ 4',
+				subdistrict: 'ช้างเผือก',
+				district: 'เมืองเชียงใหม่',
+				province: 'เชียงใหม่',
+				postal_code: '50300'
+			});
+		});
+
+		it('falls back to single name string and derives female gender from นางสาว prefix', () => {
+			const claims = {
+				sub: 'sub-user-88',
+				pid: '3100500123456',
+				name: 'นางสาว สมหญิง รักดี',
+				raw: {
+					birthdate: '2530-01-01'
+				}
+			};
+
+			const profile = parseThaidCitizenClaims(claims);
+			expect(profile.first_name).toBe('สมหญิง');
+			expect(profile.last_name).toBe('รักดี');
+			expect(profile.gender).toBe('female');
+			expect(profile.birth_year).toBe(2530);
+		});
+
+		it('round-trips signed citizen claim cookie', () => {
+			const mockProfile: ThaiDAutofillProfile = {
+				id: 'thaid-1100500123456',
+				roleLabel: 'ผู้ลงทะเบียนผ่าน ThaiD',
+				person_id: '1100500123456',
+				first_name: 'สมชาย',
+				last_name: 'มั่นคง',
+				nickname: '',
+				gender: 'male',
+				birth_year: 2528,
+				age: 41,
+				phone: '0812345678',
+				vulnerable_groups: [],
+				special_needs: [],
+				medical_conditions: [],
+				address: {
+					address_no: '123/45',
+					village_no: 'หมู่ 2',
+					subdistrict: 'ช้างเผือก',
+					district: 'เมืองเชียงใหม่',
+					province: 'เชียงใหม่',
+					postal_code: '50300'
+				}
+			};
+
+			const cookieStore = new Map<string, string>();
+			const mockCookies = {
+				set: (name: string, value: string) => cookieStore.set(name, value),
+				get: (name: string) => cookieStore.get(name),
+				delete: (name: string) => cookieStore.delete(name)
+			} as unknown as import('@sveltejs/kit').Cookies;
+
+			setCitizenClaimCookie(mockCookies, mockProfile);
+			expect(cookieStore.has('thaid_citizen_claim')).toBe(true);
+
+			const consumed = consumeCitizenClaimCookie(mockCookies);
+			expect(consumed).toEqual(mockProfile);
+			expect(cookieStore.has('thaid_citizen_claim')).toBe(false);
 		});
 	});
 });
