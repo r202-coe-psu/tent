@@ -63,14 +63,15 @@
 </script>
 
 <div class="mx-auto max-w-xl space-y-4">
-	<form onsubmit={search} class="flex gap-2">
+	<form onsubmit={search} class="flex flex-col gap-3 sm:flex-row">
 		<Input
 			bind:value={phone}
 			inputmode="tel"
 			placeholder="กรอกเบอร์โทรศัพท์ที่ใช้สมัคร"
+			class="min-h-11 flex-1"
 			aria-label="เบอร์โทรศัพท์"
 		/>
-		<Button type="submit" disabled={find.isPending}>
+		<Button type="submit" disabled={find.isPending} class="min-h-11 w-full sm:w-auto">
 			{#if find.isPending}
 				<Loader2 class="size-4 animate-spin" aria-hidden="true" />
 			{:else}
@@ -96,8 +97,10 @@
 		<Card.Root>
 			<Card.Header>
 				<div class="flex items-start justify-between gap-2">
-					<Card.Title class="text-base">{ticket.job_title || 'งานอาสาสมัคร'}</Card.Title>
-					<Badge variant={ticket.status === 'confirmed' ? 'default' : 'secondary'}>
+					<Card.Title class="min-w-0 text-base break-words"
+						>{ticket.job_title || 'งานอาสาสมัคร'}</Card.Title
+					>
+					<Badge class="shrink-0" variant={ticket.status === 'confirmed' ? 'default' : 'secondary'}>
 						{ticketStatusLabel(ticket.status)}
 					</Badge>
 				</div>

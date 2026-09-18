@@ -20,7 +20,7 @@
 <div class="flex min-h-svh flex-col bg-[#f5f7fa] text-foreground antialiased">
 	<header class="sticky top-0 z-50 border-b border-[#092f58] bg-[#0a3b6e] text-white shadow-sm">
 		<div
-			class="mx-auto flex min-h-[76px] w-full max-w-[1440px] items-center justify-between gap-4 px-5 py-3 sm:px-8"
+			class="mx-auto flex min-h-[76px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-8"
 		>
 			<a
 				href={resolve('/')}
@@ -37,7 +37,9 @@
 					<p class="truncate text-base font-extrabold tracking-tight sm:text-lg">
 						ระบบบริการจิตอาสา
 					</p>
-					<p class="truncate text-[11px] font-medium text-blue-100 sm:text-xs">
+					<p
+						class="line-clamp-2 text-[11px] leading-snug font-medium whitespace-normal text-blue-100 sm:text-xs"
+					>
 						เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่
 					</p>
 				</div>

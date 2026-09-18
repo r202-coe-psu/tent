@@ -155,10 +155,10 @@
 				</div>
 				{#if volunteer.checked_in}
 					<p
-						class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+						class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
 					>
 						<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"></span>
-						On-site ปฏิบัติหน้าที่ ณ {shelterLine}
+						On-site
 					</p>
 				{/if}
 				{#if volunteer.phone}

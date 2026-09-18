@@ -737,9 +737,9 @@
 
 	{#if !isLoading && filteredJobs.length > 0}
 		<div
-			class="flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-4 sm:flex-row"
+			class="grid grid-cols-1 items-center gap-4 border-t border-border/60 pt-4 sm:grid-cols-[1fr_auto_1fr]"
 		>
-			<p class="text-xs text-muted-foreground">
+			<p class="text-xs text-muted-foreground sm:justify-self-start">
 				{t.paginationSummary(
 					(currentPage - 1) * PAGE_SIZE + 1,
 					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
@@ -748,23 +748,25 @@
 			</p>
 
 			{#if totalPages > 1}
-				<Pagination.Root bind:page={currentPage} count={filteredJobs.length} perPage={PAGE_SIZE}>
-					{#snippet children({ pages })}
-						<Pagination.Content>
-							<Pagination.Previous />
-							{#each pages as page, index (index)}
-								<Pagination.Item>
-									{#if page.type === 'page'}
-										<Pagination.Link {page} isActive={page.value === currentPage} />
-									{:else}
-										<Pagination.Ellipsis />
-									{/if}
-								</Pagination.Item>
-							{/each}
-							<Pagination.Next />
-						</Pagination.Content>
-					{/snippet}
-				</Pagination.Root>
+				<div class="w-fit justify-self-center">
+					<Pagination.Root bind:page={currentPage} count={filteredJobs.length} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as page, index (index)}
+									<Pagination.Item>
+										{#if page.type === 'page'}
+											<Pagination.Link {page} isActive={page.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
 			{/if}
 		</div>
 	{/if}

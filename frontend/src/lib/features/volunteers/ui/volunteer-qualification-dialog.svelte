@@ -167,8 +167,8 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-h-[94vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
-		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
+	<Dialog.Content class="flex max-h-[94vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+		<div class="flex shrink-0 items-center gap-2 border-b border-border px-6 py-4 pr-12">
 			<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600">
 				<Search class="h-5 w-5" />
 			</div>
@@ -182,18 +182,25 @@
 			</div>
 		</div>
 
-		<div class="max-h-[78vh] space-y-4 overflow-y-auto px-6 py-5">
+		<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
 			<div
-				class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3"
+				class="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
 			>
 				<div class="flex min-w-0 items-center gap-2">
 					<UserRound class="h-4 w-4 shrink-0 text-primary" />
-					<span class="text-sm font-semibold">ผู้ตรวจ (Officer):</span>
-					<span class="truncate rounded-lg border border-border bg-background px-3 py-1.5 text-sm">
+					<span class="shrink-0 text-sm font-semibold">ผู้ตรวจ (Officer):</span>
+					<span
+						class="min-w-0 truncate rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
+					>
 						{actorName}
 					</span>
 				</div>
-				<Badge variant="outline" class="text-xs">ศูนย์: {shelterLine}</Badge>
+				<Badge
+					variant="outline"
+					class="h-auto w-full max-w-full min-w-0 justify-start px-3 py-1.5 text-left leading-relaxed break-words whitespace-normal sm:w-auto"
+				>
+					<span class="break-words">ศูนย์: {shelterLine}</span>
+				</Badge>
 			</div>
 
 			<section class="space-y-3 rounded-xl border border-border p-4">
@@ -379,7 +386,9 @@
 			</section>
 		</div>
 
-		<div class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-6 py-4">
+		<div
+			class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border px-6 py-4"
+		>
 			<Button type="button" variant="outline" onclick={() => (open = false)} disabled={isPending}>
 				ยกเลิก
 			</Button>

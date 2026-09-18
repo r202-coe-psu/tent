@@ -377,24 +377,28 @@
 				</p>
 			</div>
 
-			<div class="inline-flex gap-1 rounded-xl bg-muted p-1">
+			<div class="grid w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:flex sm:w-auto">
 				<Button
 					size="sm"
 					variant={mode === 'single' ? 'default' : 'ghost'}
-					class="gap-1.5 rounded-lg text-xs"
+					class="w-full min-w-0 justify-center gap-1.5 rounded-lg text-xs sm:w-auto"
 					onclick={() => (mode = 'single')}
 				>
 					<Plus class="h-3.5 w-3.5" />
-					เพิ่มทีละวัน (Single)
+					<span class="min-w-0 truncate"
+						>เพิ่มทีละวัน<span class="hidden lg:inline"> (Single)</span></span
+					>
 				</Button>
 				<Button
 					size="sm"
 					variant={mode === 'batch' ? 'default' : 'ghost'}
-					class="gap-1.5 rounded-lg text-xs"
+					class="w-full min-w-0 justify-center gap-1.5 rounded-lg text-xs sm:w-auto"
 					onclick={() => (mode = 'batch')}
 				>
 					<Zap class="h-3.5 w-3.5" />
-					สร้างเป็นช่วงวัน (Batch Generator)
+					<span class="min-w-0 truncate">
+						สร้างเป็นช่วงวัน<span class="hidden lg:inline"> (Batch Generator)</span>
+					</span>
 				</Button>
 			</div>
 		</div>

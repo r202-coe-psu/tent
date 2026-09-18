@@ -112,27 +112,25 @@
 				{/each}
 			</div>
 
-			<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+			<div class="flex max-w-full min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
 				<MapPin class="h-3.5 w-3.5 text-primary" />
-				<span class="font-medium text-foreground">{job.shelter}</span>
+				<span class="min-w-0 font-medium break-words text-foreground">{job.shelter}</span>
 			</div>
 		</div>
 
-		<h3 class="mb-2 text-xl leading-tight font-bold text-foreground">{job.title}</h3>
+		<h3 class="mb-2 text-xl leading-tight font-bold break-words text-foreground">{job.title}</h3>
 		<p class="line-clamp-1 text-sm leading-relaxed text-muted-foreground">{job.description}</p>
 	</div>
 
 	<!-- Shifts & Quota Section -->
 	<div class="flex flex-1 flex-col p-5 sm:p-6">
-		<div
-			class="mb-4 flex flex-col justify-between gap-2 border-b border-border/50 pb-4 sm:flex-row sm:items-center"
-		>
-			<span class="flex items-center gap-2 text-sm font-bold text-primary">
+		<div class="mb-4 flex w-full flex-col gap-2 border-b border-border/50 pb-4">
+			<span class="flex w-full items-center gap-2 text-sm font-bold text-primary">
 				<CalendarDays class="h-4.5 w-4.5" />
 				{t.shiftsAndQuota} ({job.shifts.length}
 				{t.shiftsUnit})
 			</span>
-			<span class="text-xs font-bold text-muted-foreground"
+			<span class="block w-full text-xs leading-relaxed font-bold text-muted-foreground"
 				>{t.totalApplied}
 				{totalApplicants}
 				{t.peopleUnit} · {t.requiredQuota}
@@ -204,16 +202,17 @@
 
 					<!-- Quota Bar -->
 					<div class="mb-5">
-						<div class="mb-2 flex justify-between text-xs">
-							<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
-								>{t.quotaCap}
-								{shift.quota}
-								{t.peopleUnit} ({t.appliedCount}
-								{applicants} · {t.confirmedCount}
-								{shift.confirmed})</span
-							>
-							<span class="font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
-								>{isFull ? t.fullSeats : `${t.availableSeats} ${remaining} ${t.seatsUnit}`}</span
+						<div class="mb-2 space-y-1 text-xs">
+							<div class="flex items-center justify-between gap-2 whitespace-nowrap">
+								<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
+									>{t.quotaCap} {shift.quota} {t.peopleUnit}</span
+								>
+								<span class="shrink-0 font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
+									>{isFull ? t.fullSeats : `${t.availableSeats} ${remaining} ${t.seatsUnit}`}</span
+								>
+							</div>
+							<span class="block whitespace-nowrap text-muted-foreground"
+								>{t.appliedCount} {applicants} · {t.confirmedCount} {shift.confirmed}</span
 							>
 						</div>
 						<div class="h-2 w-full overflow-hidden rounded-full bg-muted">

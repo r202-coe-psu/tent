@@ -57,17 +57,19 @@
 <div class="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-xs">
 	<div class="flex items-start justify-between gap-2">
 		<div class="min-w-0">
-			<p class="inline-flex items-center gap-1.5 text-sm font-bold text-foreground">
+			<p class="flex items-center gap-1.5 text-sm font-bold text-foreground">
 				<CalendarDays class="h-3.5 w-3.5 text-primary" />
 				{shift.date}
 			</p>
-			<p class="mt-0.5 inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-				<Clock class="h-3.5 w-3.5" />
-				{shift.start_time} - {shift.end_time} น.
+			<div class="mt-0.5 flex flex-col items-start gap-0.5 text-xs font-medium text-primary">
+				<p class="flex items-center gap-1.5">
+					<Clock class="h-3.5 w-3.5" />
+					<span>{shift.start_time} - {shift.end_time} น.</span>
+				</p>
 				{#if crossesMidnight}
-					<span class="text-muted-foreground">(ถึง {shift.end_date})</span>
+					<span class="pl-5 text-muted-foreground">(ถึง {shift.end_date})</span>
 				{/if}
-			</p>
+			</div>
 		</div>
 
 		<div class="flex shrink-0 items-center gap-0.5">

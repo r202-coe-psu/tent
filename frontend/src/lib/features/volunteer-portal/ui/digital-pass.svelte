@@ -188,19 +188,25 @@
 					{ticket.job_title || t.defaultJobTitle}
 				</h1>
 
-				<div class="mt-3 flex items-center gap-1.5 text-xs font-medium text-white/90">
+				<div
+					class="mt-3 flex min-w-0 items-start gap-1.5 text-xs leading-relaxed font-medium text-white/90"
+				>
 					<Building2 class="size-4 shrink-0" aria-hidden="true" />
-					<span>{ticket.shelter_name || ticket.shelter_code || t.shelterDefault}</span>
+					<span class="min-w-0 break-words"
+						>{ticket.shelter_name || ticket.shelter_code || t.shelterDefault}</span
+					>
 				</div>
 
 				<!-- Card Token Row -->
-				<div class="mt-4 flex items-center justify-between border-t border-white/20 pt-3 text-xs">
-					<div>
+				<div
+					class="mt-4 flex flex-col items-start gap-2 border-t border-white/20 pt-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="min-w-0 break-words">
 						<span class="opacity-80">{t.tokenLabel}</span>
-						<strong class="ml-1 font-mono text-white">{ticket.token}</strong>
+						<strong class="ml-1 font-mono break-all text-white">{ticket.token}</strong>
 					</div>
 					{#if appliedAt}
-						<div>
+						<div class="shrink-0 sm:text-right">
 							<span class="opacity-80">{t.appliedAtLabel}</span>
 							<strong class="ml-1 text-white">{appliedAt}</strong>
 						</div>

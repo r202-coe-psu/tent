@@ -14,18 +14,20 @@
 <PublicPageShell class="space-y-6 md:space-y-10">
 	<!-- Hero Banner -->
 	<div
-		class="relative overflow-hidden rounded-3xl bg-primary px-12 py-16 md:px-16 md:py-20 lg:px-20"
+		class="relative overflow-hidden rounded-3xl bg-primary p-6 sm:px-12 sm:py-16 md:px-16 md:py-20 lg:px-20"
 	>
 		<!-- Subtle Grid Background -->
 		<div
 			class="absolute inset-0 opacity-10"
 			style="background-image: linear-gradient(rgba(255, 255, 255, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.4) 1px, transparent 1px); background-size: 40px 40px;"
 		></div>
-		<div class="relative z-10 flex flex-col items-center justify-between gap-10 md:flex-row">
+		<div
+			class="relative z-10 flex flex-col items-center justify-between gap-8 md:flex-row md:gap-10"
+		>
 			<!-- Text Content -->
-			<div class="max-w-xl flex-1 text-left">
+			<div class="max-w-xl min-w-0 flex-1 text-left">
 				<div
-					class="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold text-white backdrop-blur-md"
+					class="mb-6 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs leading-relaxed font-bold text-white backdrop-blur-md"
 				>
 					<CheckCircle2 class="h-4 w-4" />
 					โครงการบ้านพี่เลี้ยง (LEVEL 1 SHELTER)
@@ -45,14 +47,16 @@
 				</p>
 
 				<button
-					class="rounded-xl bg-white px-8 py-3.5 text-sm font-bold text-primary shadow-lg transition-transform hover:scale-105 active:scale-95"
+					class="min-h-11 w-full rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-primary shadow-lg transition-transform hover:scale-105 active:scale-95 sm:w-auto sm:px-8"
 				>
 					ลงทะเบียนเข้าร่วมโครงการ
 				</button>
 			</div>
 
 			<!-- Graphic Side -->
-			<div class="relative flex h-64 w-64 shrink-0 items-center justify-center md:h-80 md:w-80">
+			<div
+				class="relative flex h-64 w-64 max-w-full shrink-0 items-center justify-center md:h-80 md:w-80"
+			>
 				<!-- Outer Circle -->
 				<div class="absolute inset-0 rounded-full border border-white/20"></div>
 				<!-- Inner Circle -->
