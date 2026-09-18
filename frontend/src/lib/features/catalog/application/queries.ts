@@ -351,7 +351,7 @@ export const useCreateUnitOfMeasure = () => {
 				throw new Error('Catalog UOM requires system_admin');
 			}
 			const createdBy = authStore.user?.name || 'unknown';
-			const ctx: AuthorContext = { shelterCode: '', createdBy };
+			const ctx: AuthorContext = { shelterCode: 'catalog', createdBy };
 			return catalogRepository().createUnitOfMeasure(input, ctx);
 		},
 		onSuccess: () => {
