@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-127
 title: Volunteer — permanent per-volunteer tracking token (`tracking_token_hash`)
-status: draft
+status: approved
 date: 2026-09-16
-requested_by: dev Team B
-decided_by:
+updated: 2026-09-18
+requested_by: Dev Team B
+decided_by: Project Owner (Jakee / net-lynx) — approved permanent volunteer tracking_token_hash design 2026-09-18
 layer: volatile
 affects:
   - docs/data/schema.md §2.8 volunteer (new field `tracking_token_hash`, schema_v 3 → 4)
@@ -22,7 +23,8 @@ why: >
   `job_application.tracking_token`, which is stored plaintext).
 migration: >
   schema_v 3 → 4 on `volunteer` (docs/data/schema.md §2.8), additive
-  (`tracking_token_hash: str | null`, default absent). No backfill — see Migration section.
+  (`tracking_token_hash: str | null`, default absent). No backfill — lazy mint on first
+  apply; dual-resolve with `job_application.tracking_token`. Schema.md bump is follow-up #275.
 ---
 
 # Volunteer — permanent per-volunteer tracking token
@@ -63,7 +65,21 @@ themself, which the portal sign-in and on-site check-in both need one of.
 ## Migration
 
 - `schema_v` on `volunteer` (docs/data/schema.md §2.8): **3 → 4**, purely additive.
-- Once approved (not during this draft): update `docs/data/couchdb-mongodb-sync.md` to add
+  Schema.md edit is **not** in this ratification; it ships with follow-up #275.
+- **Lazy mint:** no backfill. `tracking_token_hash` is absent until the volunteer first
+  applies after this change; mint-on-first-apply in `public-application.ts`.
+- **Dual-resolve:** portal sign-in and on-site QR check-in resolve
+  `volunteer.tracking_token_hash` **and** existing `job_application.tracking_token`
+  (plaintext, per application). Unmigrated pre-change tokens keep working.
+- **Index later with schema:** Couch/Mongo lookup index on `tracking_token_hash` ships
+  with the schema_v bump (#275), not this CR file.
+- After schema bump: update `docs/data/couchdb-mongodb-sync.md` to add
   `tracking_token_hash` to the synced field list for `PublicVolunteer`.
 
+## Decision log
 
+- 2026-09-16 — proposed as `draft-volunteer-permanent-tracking-token` (hash-only permanent
+  volunteer token; mint-once on first apply).
+- 2026-09-18 — Project Owner (Jakee / net-lynx) approved the permanent
+  `tracking_token_hash` design. Ratified as **CR-127**. Schema.md bump remains follow-up
+  with #275; this record is the design decision only.
