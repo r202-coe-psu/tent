@@ -43,7 +43,7 @@
 	const shelterCode = $derived(
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
-	const getValidationSchema = () => (isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
+	const validationSchema = $derived(isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
 
 	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(
@@ -79,12 +79,12 @@
 				asset_status: 'READY',
 				deactivated: false
 			},
-			zod4(getValidationSchema())
+			zod4(validationSchema)
 		),
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(getValidationSchema()),
+			validators: zod4(validationSchema),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
