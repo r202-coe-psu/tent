@@ -11,6 +11,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
 
 	// Icons
 	import Search from '@lucide/svelte/icons/search';
@@ -337,7 +338,7 @@
 				{:else}
 					{#each paginatedItems as item (item._id)}
 						<Table.Row class="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
-							<Table.Cell class="font-mono text-xs font-bold text-foreground">
+							<Table.Cell class="text-xs font-bold text-foreground">
 								{item.code}
 							</Table.Cell>
 							<Table.Cell class="text-xs font-semibold text-slate-800 dark:text-slate-200">
@@ -382,7 +383,7 @@
 									</span>
 								{/if}
 							</Table.Cell>
-							<Table.Cell class="text-center font-mono text-xs text-muted-foreground tabular-nums">
+							<Table.Cell class="text-center text-xs text-muted-foreground tabular-nums">
 								{item.sort_order ?? '—'}
 							</Table.Cell>
 							{#if isSA}
@@ -448,102 +449,83 @@
 
 <!-- CREATE DIALOG -->
 <Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[480px]">
+	<Dialog.Content class="sm:max-w-[480px]">
 		<Dialog.Header>
-			<Dialog.Title class="text-base font-bold text-slate-800 dark:text-slate-100">
-				เพิ่มหน่วยนับมาตรฐาน (Unit of Measure) ใหม่
-			</Dialog.Title>
-			<Dialog.Description class="text-xs text-muted-foreground">
-				กำหนดรหัสและชื่อเรียกสำหรับหน่วยนับใหม่ที่จะนำไปใช้ในแคตตาล็อกสินค้า
+			<Dialog.Title>เพิ่มหน่วยนับใหม่</Dialog.Title>
+			<Dialog.Description>
+				กำหนดหน่วยนับมาตรฐานสำหรับใช้งานในรายการสิ่งของและคลังสินค้า
 			</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="mt-4 space-y-4">
-			<div>
-				<label
-					for="uom-code"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
+			<Field.Field data-invalid={!!createErrors.code || undefined}>
+				<Field.Label for="uom-code">
 					รหัสหน่วย (Unit Code) <span class="text-destructive">*</span>
-				</label>
+				</Field.Label>
 				<Input
 					id="uom-code"
 					type="text"
 					bind:value={createCode}
-					placeholder="เช่น can, pack, cylinder"
-					class="h-10 rounded-xl font-mono text-xs"
+					placeholder="เช่น box, kg, pack"
+					aria-invalid={!!createErrors.code}
 				/>
-				<p class="mt-1 text-2xs text-muted-foreground">
-					เฉพาะอักษรภาษาอังกฤษตัวพิมพ์เล็กและตัวเลข (a-z, 0-9, _) 1-16 ตัวอักษร
-				</p>
 				{#if createErrors.code}
-					<p class="mt-1 text-2xs font-semibold text-destructive">{createErrors.code}</p>
+					<Field.Error>{createErrors.code}</Field.Error>
 				{/if}
-			</div>
+				<Field.Description>
+					ตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง ไม่สามารถแก้ไขได้ภายหลัง
+				</Field.Description>
+			</Field.Field>
 
 			<div class="grid grid-cols-2 gap-3">
-				<div>
-					<label
-						for="uom-label-th"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
+				<Field.Field data-invalid={!!createErrors.label_th || undefined}>
+					<Field.Label for="uom-label-th">
 						ชื่อภาษาไทย <span class="text-destructive">*</span>
-					</label>
+					</Field.Label>
 					<Input
 						id="uom-label-th"
 						type="text"
 						bind:value={createLabelTh}
-						placeholder="เช่น กระป๋อง"
-						class="h-10 rounded-xl text-xs"
+						placeholder="เช่น กล่อง, กิโลกรัม"
+						aria-invalid={!!createErrors.label_th}
 					/>
 					{#if createErrors.label_th}
-						<p class="mt-1 text-2xs font-semibold text-destructive">{createErrors.label_th}</p>
+						<Field.Error>{createErrors.label_th}</Field.Error>
 					{/if}
-				</div>
-				<div>
-					<label
-						for="uom-label-th-short"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
-						ชื่อย่อภาษาไทย
-					</label>
+				</Field.Field>
+
+				<Field.Field>
+					<Field.Label for="uom-label-th-short">ชื่อย่อภาษาไทย</Field.Label>
 					<Input
 						id="uom-label-th-short"
 						type="text"
 						bind:value={createLabelThShort}
 						placeholder="เช่น กก., ล."
-						class="h-10 rounded-xl text-xs"
 					/>
-				</div>
+				</Field.Field>
 			</div>
 
-			<div>
-				<label
-					for="uom-label-en"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
+			<Field.Field data-invalid={!!createErrors.label_en || undefined}>
+				<Field.Label for="uom-label-en">
 					ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
-				</label>
+				</Field.Label>
 				<Input
 					id="uom-label-en"
 					type="text"
 					bind:value={createLabelEn}
 					placeholder="เช่น can, kilogram"
-					class="h-10 rounded-xl text-xs"
+					aria-invalid={!!createErrors.label_en}
 				/>
 				{#if createErrors.label_en}
-					<p class="mt-1 text-2xs font-semibold text-destructive">{createErrors.label_en}</p>
+					<Field.Error>{createErrors.label_en}</Field.Error>
 				{/if}
-			</div>
+			</Field.Field>
 
 			<div class="grid grid-cols-2 gap-3">
-				<div>
-					<label
-						for="uom-dimension"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
+				<Field.Field>
+					<Field.Label for="uom-dimension">
 						มิติการวัด (Dimension) <span class="text-destructive">*</span>
-					</label>
+					</Field.Label>
 					<Select.Root
 						type="single"
 						value={createDimension}
@@ -551,7 +533,7 @@
 							if (value) createDimension = value as Dimension;
 						}}
 					>
-						<Select.Trigger id="uom-dimension" class="h-10 w-full rounded-xl text-xs">
+						<Select.Trigger id="uom-dimension" class="w-full">
 							{DIMENSION_LABELS[createDimension]?.th} ({createDimension})
 						</Select.Trigger>
 						<Select.Content>
@@ -561,40 +543,23 @@
 							<Select.Item value="length">ความยาว (length)</Select.Item>
 						</Select.Content>
 					</Select.Root>
-				</div>
-				<div>
-					<label
-						for="uom-sort-order"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
-						ลำดับการแสดงผล
-					</label>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="uom-sort-order">ลำดับการแสดงผล</Field.Label>
 					<Input
 						id="uom-sort-order"
 						type="number"
 						bind:value={createSortOrder}
 						min="1"
-						class="h-10 rounded-xl text-xs tabular-nums"
+						class="tabular-nums"
 					/>
-				</div>
+				</Field.Field>
 			</div>
 		</div>
 
 		<div class="mt-6 flex justify-end gap-2">
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={() => (createDialogOpen = false)}
-				class="rounded-xl text-xs"
-			>
-				ยกเลิก
-			</Button>
-			<Button
-				size="sm"
-				disabled={createMutation.isPending}
-				onclick={handleCreate}
-				class="rounded-xl text-xs font-bold"
-			>
+			<Button variant="outline" size="sm" onclick={() => (createDialogOpen = false)}>ยกเลิก</Button>
+			<Button size="sm" disabled={createMutation.isPending} onclick={handleCreate}>
 				{createMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกหน่วยนับ'}
 			</Button>
 		</div>
@@ -603,153 +568,100 @@
 
 <!-- EDIT DIALOG -->
 <Dialog.Root bind:open={editDialogOpen}>
-	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[480px]">
+	<Dialog.Content class="sm:max-w-[480px]">
 		<Dialog.Header>
-			<Dialog.Title class="text-base font-bold text-slate-800 dark:text-slate-100">
-				แก้ไขหน่วยนับ: <span class="font-mono text-primary">{editingUnit?.code}</span>
+			<Dialog.Title>
+				แก้ไขหน่วยนับ: <span class="text-primary">{editingUnit?.code}</span>
 			</Dialog.Title>
-			<Dialog.Description class="text-xs text-muted-foreground">
-				ปรับปรุงชื่อเรียกและสถานะการใช้งานของหน่วยนับ
-			</Dialog.Description>
+			<Dialog.Description>ปรับปรุงชื่อเรียกและสถานะการใช้งานของหน่วยนับ</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="mt-4 space-y-4">
-			<div>
-				<label
-					for="edit-unit-code"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
-					รหัสหน่วย (Unit Code)
-				</label>
-				<Input
-					id="edit-unit-code"
-					value={editingUnit?.code}
-					disabled
-					class="h-10 rounded-xl font-mono text-xs disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-zinc-800"
-				/>
-				<p class="mt-1 text-2xs text-muted-foreground">
+			<Field.Field>
+				<Field.Label for="edit-unit-code">รหัสหน่วย (Unit Code)</Field.Label>
+				<Input id="edit-unit-code" value={editingUnit?.code} disabled />
+				<Field.Description>
 					รหัสหน่วยใช้เป็นคีย์อ้างอิงในฐานข้อมูล ไม่สามารถแก้ไขได้
-				</p>
-			</div>
+				</Field.Description>
+			</Field.Field>
 
-			<div>
-				<label
-					for="edit-uom-label-th"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
+			<Field.Field data-invalid={!!editErrors.label_th || undefined}>
+				<Field.Label for="edit-uom-label-th">
 					ชื่อภาษาไทย <span class="text-destructive">*</span>
-				</label>
+				</Field.Label>
 				<Input
 					id="edit-uom-label-th"
 					type="text"
 					bind:value={editLabelTh}
-					class="h-10 rounded-xl text-xs"
+					aria-invalid={!!editErrors.label_th}
 				/>
 				{#if editErrors.label_th}
-					<p class="mt-1 text-2xs font-semibold text-destructive">{editErrors.label_th}</p>
+					<Field.Error>{editErrors.label_th}</Field.Error>
 				{/if}
-			</div>
+			</Field.Field>
 
-			<div>
-				<label
-					for="edit-uom-label-th-short"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
-					ชื่อย่อภาษาไทย
-				</label>
-				<Input
-					id="edit-uom-label-th-short"
-					type="text"
-					bind:value={editLabelThShort}
-					class="h-10 rounded-xl text-xs"
-				/>
-			</div>
+			<Field.Field>
+				<Field.Label for="edit-uom-label-th-short">ชื่อย่อภาษาไทย</Field.Label>
+				<Input id="edit-uom-label-th-short" type="text" bind:value={editLabelThShort} />
+			</Field.Field>
 
-			<div>
-				<label
-					for="edit-uom-label-en"
-					class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-				>
+			<Field.Field data-invalid={!!editErrors.label_en || undefined}>
+				<Field.Label for="edit-uom-label-en">
 					ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
-				</label>
+				</Field.Label>
 				<Input
 					id="edit-uom-label-en"
 					type="text"
 					bind:value={editLabelEn}
-					class="h-10 rounded-xl text-xs"
+					aria-invalid={!!editErrors.label_en}
 				/>
 				{#if editErrors.label_en}
-					<p class="mt-1 text-2xs font-semibold text-destructive">{editErrors.label_en}</p>
+					<Field.Error>{editErrors.label_en}</Field.Error>
 				{/if}
-			</div>
+			</Field.Field>
 
 			<div class="grid grid-cols-2 gap-3">
-				<div>
-					<label
-						for="edit-unit-dimension"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
-						มิติการวัด (Dimension)
-					</label>
+				<Field.Field>
+					<Field.Label for="edit-unit-dimension">มิติการวัด (Dimension)</Field.Label>
 					<Input
 						id="edit-unit-dimension"
 						value={DIMENSION_LABELS[editingUnit?.dimension ?? 'count']?.th ??
 							editingUnit?.dimension}
 						disabled
-						class="h-10 rounded-xl text-xs disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-zinc-800"
 					/>
-					<p class="mt-1 text-2xs text-muted-foreground">มิติการวัดไม่สามารถแก้ไขได้</p>
-				</div>
-				<div>
-					<label
-						for="edit-uom-sort-order"
-						class="mb-1 block text-xs font-bold text-slate-800 dark:text-slate-200"
-					>
-						ลำดับการแสดงผล
-					</label>
+					<Field.Description>มิติการวัดไม่สามารถแก้ไขได้</Field.Description>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="edit-uom-sort-order">ลำดับการแสดงผล</Field.Label>
 					<Input
 						id="edit-uom-sort-order"
 						type="number"
 						bind:value={editSortOrder}
 						min="1"
-						class="h-10 rounded-xl text-xs tabular-nums"
+						class="tabular-nums"
 					/>
-				</div>
+				</Field.Field>
 			</div>
 
-			<div
-				class="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3 dark:border-zinc-800 dark:bg-zinc-900/30"
-			>
-				<label class="flex cursor-pointer items-start gap-2.5">
-					<Checkbox bind:checked={editDeactivated} class="mt-0.5" />
-					<div class="text-xs">
-						<span class="font-bold text-slate-800 dark:text-slate-200"
-							>ปิดการใช้งานหน่วยนี้ (Deactivate)</span
-						>
-						<p class="text-2xs text-muted-foreground">
+			<div class="rounded-xl border border-border bg-muted/30 p-3">
+				<Field.Field orientation="horizontal" class="items-start gap-2.5">
+					<Checkbox id="edit-deactivated" bind:checked={editDeactivated} class="mt-0.5" />
+					<Field.Content>
+						<Field.Label for="edit-deactivated" class="cursor-pointer">
+							ปิดการใช้งานหน่วยนี้ (Deactivate)
+						</Field.Label>
+						<Field.Description>
 							หน่วยที่ปิดใช้งานจะไม่ปรากฏให้เลือกในฟอร์มสร้างสินค้าใหม่
 							แต่ยังคงแสดงผลในรายการสินค้าเดิมได้อย่างถูกต้อง
-						</p>
-					</div>
-				</label>
+						</Field.Description>
+					</Field.Content>
+				</Field.Field>
 			</div>
 		</div>
 
 		<div class="mt-6 flex justify-end gap-2">
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={() => (editDialogOpen = false)}
-				class="rounded-xl text-xs"
-			>
-				ยกเลิก
-			</Button>
-			<Button
-				size="sm"
-				disabled={updateMutation.isPending}
-				onclick={handleUpdate}
-				class="rounded-xl text-xs font-bold"
-			>
+			<Button variant="outline" size="sm" onclick={() => (editDialogOpen = false)}>ยกเลิก</Button>
+			<Button size="sm" disabled={updateMutation.isPending} onclick={handleUpdate}>
 				{updateMutation.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
 			</Button>
 		</div>
@@ -758,15 +670,15 @@
 
 <!-- DELETE CONFIRM DIALOG -->
 <Dialog.Root bind:open={deleteConfirmOpen}>
-	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
+	<Dialog.Content class="sm:max-w-[400px]">
 		<Dialog.Header>
-			<Dialog.Title class="text-base font-bold text-destructive">ยืนยันการลบหน่วยนับ</Dialog.Title>
-			<Dialog.Description class="pt-2 text-xs text-muted-foreground">
-				คุณแน่ใจหรือไม่ว่าต้องการลบหน่วยนับ <strong class="font-mono text-foreground"
+			<Dialog.Title class="text-destructive">ยืนยันการลบหน่วยนับ</Dialog.Title>
+			<Dialog.Description>
+				คุณแน่ใจหรือไม่ว่าต้องการลบหน่วยนับ <strong class="text-foreground"
 					>{pendingDeleteUnit?.code}</strong
 				>
 				({pendingDeleteUnit?.label_th})?
-				<span class="mt-2 block text-2xs text-amber-700 dark:text-amber-400">
+				<span class="mt-2 block text-xs text-amber-700 dark:text-amber-400">
 					* โปรดตรวจสอบให้แน่ใจว่าไม่มีรายการสินค้าในแคตตาล็อกกำลังอ้างอิงหน่วยนับนี้
 				</span>
 			</Dialog.Description>
@@ -780,7 +692,6 @@
 					deleteConfirmOpen = false;
 					pendingDeleteUnit = null;
 				}}
-				class="rounded-xl text-xs"
 			>
 				ยกเลิก
 			</Button>
@@ -789,7 +700,6 @@
 				size="sm"
 				disabled={deleteMutation.isPending}
 				onclick={confirmDelete}
-				class="rounded-xl text-xs font-bold"
 			>
 				{deleteMutation.isPending ? 'กำลังลบ...' : 'ยืนยันการลบ'}
 			</Button>
