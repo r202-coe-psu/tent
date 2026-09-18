@@ -61,7 +61,7 @@ def _volunteer_doc(
     return {
         "_id": application.volunteer_id,
         "type": "volunteer",
-        "schema_v": 3,
+        "schema_v": 4,
         "shelter_code": application.shelter_code,
         "created_at": _iso(application.created_at),
         "updated_at": now,
@@ -74,7 +74,10 @@ def _volunteer_doc(
         "national_id_hash": applicant.national_id_hash,
         "email": applicant.email,
         "skills": list(applicant.skills),
-        "tracking_token": application.tracking_token,
+        # The raw bearer token is only held in the inbound buffer. CouchDB stores
+        # the hash so the same token can resolve the permanent volunteer profile
+        # without making the role-card secret recoverable from the database.
+        "tracking_token_hash": application.tracking_token_hash,
         "status": "active",
         "user_name": None,
         "central_profile_id": application.volunteer_id,

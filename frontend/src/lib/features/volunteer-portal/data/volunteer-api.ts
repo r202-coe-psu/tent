@@ -29,7 +29,6 @@ const ERROR_COPY: Record<string, string> = {
 	ALREADY_APPLIED: 'เบอร์นี้สมัครภารกิจนี้ไว้แล้ว — เปิดดูตั๋วเดิมได้จาก "ค้นหาตั๋วของฉัน"',
 	DUPLICATE_APPLICATION: 'คุณได้สมัครภารกิจนี้ไว้แล้ว',
 	AMBIGUOUS_VOLUNTEER: 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
-	MISSING_REQUIRED_SKILLS: 'กรุณาเลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้อย่างน้อย 1 ทักษะ',
 	TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 	WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
 	APPLY_FAILED: 'ไม่สามารถบันทึกใบสมัครได้ กรุณาลองใหม่อีกครั้ง',
@@ -47,7 +46,9 @@ const ERROR_COPY: Record<string, string> = {
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
-	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง'
+	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง',
+	ROLE_CARD_NOT_FOUND: 'ไม่พบข้อมูล role card ของอาสาสมัคร',
+	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
 };
 
 function apiError(body: unknown, status: number, fallback: string): Error {
@@ -222,6 +223,27 @@ export async function resolvePortalAccess(
 		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้');
 	}
 	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
+}
+
+export type RoleCardTokenResult = {
+	token: string;
+	generated: boolean;
+};
+
+/** Resolve/mint the role-card payload from `volunteer.tracking_token_hash`, without a job. */
+export async function fetchRoleCardToken(
+	credential: Extract<PortalCredential, { phone: string }>
+): Promise<RoleCardTokenResult> {
+	const response = await fetch('/api/public/v1/volunteer/access/role-card', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(credential)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถสร้าง QR Role Card ได้');
+	}
+	return data as RoleCardTokenResult;
 }
 
 export async function updateProfileSkills(

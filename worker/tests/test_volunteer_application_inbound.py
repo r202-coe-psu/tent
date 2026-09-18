@@ -44,6 +44,9 @@ def test_new_profile_marks_controlled_skill_pending() -> None:
     doc = _volunteer_doc(_application(), now="2026-09-09T00:00:00Z")
 
     assert doc["_id"] == "volunteer:01VOL"
+    assert doc["schema_v"] == 4
+    assert doc["tracking_token_hash"] == "token-hash"
+    assert "tracking_token" not in doc
     assert doc["identity_verification"]["status"] == "pending"
     assert doc["skill_verifications"]["medical"]["status"] == "pending"
 

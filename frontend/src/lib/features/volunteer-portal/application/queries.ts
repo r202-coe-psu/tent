@@ -5,6 +5,7 @@ import {
 	cancelTicket,
 	fetchJobs,
 	fetchProfile,
+	fetchRoleCardToken,
 	fetchVolunteerSkills,
 	fetchSchedule,
 	findTickets,
@@ -174,6 +175,14 @@ export function useVolunteerProfile(credential: () => PortalCredential | null) {
 export function useResolvePortalAccessMutation() {
 	return createMutation(() => ({
 		mutationFn: (credential: PortalCredential) => resolvePortalAccess(credential)
+	}));
+}
+
+/** Resolve the role-card payload directly from the volunteer profile, independent of jobs. */
+export function useRoleCardTokenMutation() {
+	return createMutation(() => ({
+		mutationFn: (credential: Extract<PortalCredential, { phone: string }>) =>
+			fetchRoleCardToken(credential)
 	}));
 }
 

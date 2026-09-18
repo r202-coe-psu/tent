@@ -12,6 +12,7 @@ import {
 	needsDispatchResponse,
 	responseCodeSchema,
 	shiftStatusLabel,
+	trackingTokenHashFromPayload,
 	ticketStatusLabel,
 	volunteerApplySchema,
 	volunteerProfileUpdateSchema,
@@ -227,6 +228,12 @@ describe('isJobApplicable', () => {
 describe('normalizeTicketToken', () => {
 	it('uppercases a tracking token, which is hex and case-insensitive in practice', () => {
 		expect(normalizeTicketToken('  tkt-vol-abc123  ')).toBe('TKT-VOL-ABC123');
+	});
+
+	it('recognizes a role-card payload backed by volunteer.tracking_token_hash', () => {
+		const hash = 'a'.repeat(64);
+		expect(trackingTokenHashFromPayload(`tkt-vol-hash-${hash}`)).toBe(hash);
+		expect(trackingTokenHashFromPayload('TKT-VOL-ABC123')).toBeNull();
 	});
 
 	it('refuses a VIEW- reference — that whole mechanism has been removed', () => {

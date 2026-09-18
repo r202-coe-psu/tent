@@ -129,6 +129,7 @@ _SCHEDULE_ACTION_ERRORS = {
 _BANGKOK = ZoneInfo("Asia/Bangkok")
 _TIME_CONFLICT_STATUSES = frozenset({"assigned", "standby", "checked_in", "completed"})
 _TIME_CONFLICT_APPLICATION_STATUSES = frozenset({"confirmed", "pending_review"})
+_TRACKING_TOKEN_HASH_PREFIX = "TKT-VOL-HASH-"
 
 
 def _config_values(doc: dict | None, *fields: str) -> list[str]:
@@ -266,6 +267,16 @@ def _clean_skills(skills: list[str]) -> list[str]:
 def _ticket_url(token: str) -> str:
     """Relative on purpose — the public origin belongs to the BFF, not this service."""
     return f"/volunteer/ticket/{token}"
+
+
+def _tracking_token_hash(token: str) -> str:
+    """Read a role-card hash payload, or hash a normal plaintext token."""
+    normalized = token.strip().upper()
+    if normalized.startswith(_TRACKING_TOKEN_HASH_PREFIX):
+        candidate = normalized[len(_TRACKING_TOKEN_HASH_PREFIX) :]
+        if len(candidate) == 64 and all(char in "0123456789ABCDEF" for char in candidate):
+            return candidate.lower()
+    return sha256_hex(normalized)
 
 
 def _select_concrete_shift(job: PublicJob, payload: VolunteerApplyRequest):
@@ -793,7 +804,7 @@ class VolunteersUseCase:
         if not token:
             return None
 
-        token_hash = sha256_hex(token)
+        token_hash = _tracking_token_hash(token)
         projected = await PublicJobApplication.find_one(
             PublicJobApplication.tracking_token_hash == token_hash
         )

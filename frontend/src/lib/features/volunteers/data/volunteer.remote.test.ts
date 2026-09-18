@@ -50,6 +50,15 @@ describe('VolunteerRemoteRepository', () => {
 		expect(volunteer.status).toBe('active');
 	});
 
+	it('mints phone and tracking hashes for fast-track walk-ins before any job is selected', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+		const volunteer = await repo.create(baseInput, ctx);
+
+		expect(volunteer.phone_hash).toBe(await sha256Hex('0812345678'));
+		expect(volunteer.tracking_token_hash).toMatch(/^[0-9a-f]{64}$/);
+		expect(volunteer.tracking_token).toBeNull();
+	});
+
 	it('list() filters by status/source/checkedIn', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		await repo.create(baseInput, ctx, { status: 'active' });
@@ -123,6 +132,22 @@ describe('VolunteerRemoteRepository', () => {
 			selector: {
 				type: 'volunteer',
 				$or: [{ tracking_token_hash: expectedHash }, { tracking_token: rawToken }]
+			},
+			limit: 1
+		});
+	});
+
+	it('getByTrackingToken compares a hash-backed role-card payload directly with volunteer.tracking_token_hash', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+		const findSpy = vi.spyOn(memoryRepo, 'find');
+		const hash = 'b'.repeat(64);
+
+		await repo.getByTrackingToken(`TKT-VOL-HASH-${hash}`);
+
+		expect(findSpy).toHaveBeenCalledWith({
+			selector: {
+				type: 'volunteer',
+				$or: [{ tracking_token_hash: hash }, { tracking_token: `TKT-VOL-HASH-${hash}` }]
 			},
 			limit: 1
 		});

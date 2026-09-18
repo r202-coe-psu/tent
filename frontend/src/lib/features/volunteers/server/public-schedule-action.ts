@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '$lib/db/hash';
 import type {
 	PortalCredential,
@@ -10,6 +11,10 @@ import {
 } from '$lib/server/couch-public-writer';
 import { adminRaw } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import {
+	TRACKING_TOKEN_HASH_PREFIX,
+	trackingTokenHashFromPayload
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import { isWithinDutyWindow } from '../domain/duty-window';
 
 const MAX_WRITE_RETRIES = 5;
@@ -49,6 +54,8 @@ export class PublicScheduleError extends Error {
 			| 'SHIFT_NOT_READY_FOR_CHECK_IN'
 			| 'SHIFT_NOT_CHECKED_IN'
 			| 'SHIFT_NOT_WITHDRAWABLE'
+			| 'ROLE_CARD_NOT_FOUND'
+			| 'ROLE_CARD_WRITE_FAILED'
 			| 'WRITE_FAILED'
 			| 'SCHEDULE_UNAVAILABLE',
 		readonly httpStatus = 409
@@ -76,7 +83,8 @@ function normalizePhone(value: string): string {
 }
 
 function tokenHash(value: string): Promise<string> {
-	return sha256Hex(value.trim().toUpperCase());
+	const embeddedHash = trackingTokenHashFromPayload(value);
+	return embeddedHash ? Promise.resolve(embeddedHash) : sha256Hex(value.trim().toUpperCase());
 }
 
 function assignmentDbFallback(): ShelterRef[] {
@@ -415,4 +423,81 @@ export async function readPublicVolunteerSchedule(
 		(left.start_ts ?? left.date).localeCompare(right.start_ts ?? right.date)
 	);
 	return { success: true, shifts };
+}
+
+type RoleCardTokenResult = {
+	token: string;
+	generated: boolean;
+};
+
+function roleCardPayloadFromHash(hash: string): string {
+	return `${TRACKING_TOKEN_HASH_PREFIX}${hash.trim().toUpperCase()}`;
+}
+
+function isValidTokenHash(value: unknown): value is string {
+	return typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value.trim());
+}
+
+/**
+ * Resolve the role-card credential from the volunteer document itself.
+ *
+ * A stored SHA-256 cannot be reversed into the original bearer token. When the hash is
+ * already present, the QR therefore carries an explicit hash payload and the staff-side
+ * lookup compares that payload directly with `volunteer.tracking_token_hash`. A volunteer
+ * created without a token gets one minted here; no job/application is required.
+ */
+export async function readOrMintRoleCardToken(
+	credential: PortalCredential
+): Promise<RoleCardTokenResult> {
+	if (!credential.phone || !credential.portal_id || credential.token) {
+		throw new PublicScheduleError('ROLE_CARD_NOT_FOUND', 422);
+	}
+
+	const identities = await resolveIdentities(credential);
+	for (const identity of identities) {
+		for (const volunteerId of identity.volunteerIds) {
+			const currentResult = await getAsPublicWriter(identity.ref.dbName, volunteerId);
+			if (currentResult.status !== 200 || !currentResult.data) continue;
+			const current = currentResult.data as CouchDoc;
+
+			if (isValidTokenHash(current.tracking_token_hash)) {
+				return {
+					token: roleCardPayloadFromHash(current.tracking_token_hash),
+					generated: false
+				};
+			}
+
+			// Seed/legacy documents may still have the original plaintext. Preserve it and
+			// backfill the hash so later role-card reads use the volunteer hash path.
+			if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
+				const legacyToken = current.tracking_token.trim().toUpperCase();
+				const updated = {
+					...current,
+					tracking_token_hash: await sha256Hex(legacyToken),
+					updated_at: new Date().toISOString(),
+					updated_by: 'volunteer_portal'
+				};
+				const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
+				if (put.status >= 200 && put.status < 300) {
+					return { token: legacyToken, generated: false };
+				}
+				throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+			}
+
+			const token = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+			const updated = {
+				...current,
+				tracking_token_hash: await sha256Hex(token),
+				updated_at: new Date().toISOString(),
+				updated_by: 'volunteer_portal'
+			};
+			const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
+			if (put.status >= 200 && put.status < 300) {
+				return { token, generated: true };
+			}
+			throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+		}
+	}
+
+	throw new PublicScheduleError('ROLE_CARD_NOT_FOUND', 404);
 }

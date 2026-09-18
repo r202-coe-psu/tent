@@ -337,6 +337,12 @@ export function isStoredPortalSessionExpired(raw: unknown, now: number = Date.no
 }
 
 const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
+/**
+ * A role card can be rebuilt from the volunteer document's hash without recovering the
+ * original plaintext token.  This is deliberately an opaque bearer payload: the staff
+ * checker compares the embedded hash directly with `volunteer.tracking_token_hash`.
+ */
+export const TRACKING_TOKEN_HASH_PREFIX = 'TKT-VOL-HASH-';
 
 /**
  * Clean up a code that was typed, pasted or scanned, or `null` if it is not a tracking
@@ -351,6 +357,14 @@ export function normalizeTicketToken(raw: string): string | null {
 		return trimmed.toUpperCase();
 	}
 	return null;
+}
+
+/** Return the stored volunteer hash when a role-card payload carries one directly. */
+export function trackingTokenHashFromPayload(raw: string): string | null {
+	const normalized = raw.trim().toUpperCase();
+	if (!normalized.startsWith(TRACKING_TOKEN_HASH_PREFIX)) return null;
+	const hash = normalized.slice(TRACKING_TOKEN_HASH_PREFIX.length);
+	return /^[0-9A-F]{64}$/.test(hash) ? hash.toLowerCase() : null;
 }
 
 /** A QR on a pass encodes its URL, so a scan hands us a link, not a bare token. */

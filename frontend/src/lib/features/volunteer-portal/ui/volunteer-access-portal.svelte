@@ -30,6 +30,7 @@
 		useRespondToDispatchMutation,
 		useScheduleActionMutation,
 		useResolvePortalAccessMutation,
+		useRoleCardTokenMutation,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
@@ -103,6 +104,9 @@
 	let session = $state<PortalCredential | null>(null);
 	let restoring = $state(true);
 	let isLoggingIn = $state(false);
+	let roleCardPayload = $state('');
+	let roleCardLookupKey = $state('');
+	let roleCardLoading = $state(false);
 
 	function persistSession(credential: PortalCredential | null) {
 		try {
@@ -139,7 +143,34 @@
 	}
 
 	const resolveAccess = useResolvePortalAccessMutation();
+	const roleCardToken = useRoleCardTokenMutation();
 	const queryClient = useQueryClient();
+
+	/**
+	 * Phone login has no raw token to put in the QR. Ask the server to inspect this
+	 * volunteer's own document instead: an existing hash becomes a hash-backed role-card
+	 * payload, while a profile without one gets a token minted there. Neither path needs a
+	 * job or an application.
+	 */
+	$effect(() => {
+		const credential = session;
+		if (!credential?.phone || !credential.portal_id) return;
+		const lookupKey = `${credential.phone}:${credential.portal_id}`;
+		if (roleCardLookupKey === lookupKey || roleCardLoading) return;
+		roleCardLookupKey = lookupKey;
+		roleCardLoading = true;
+		void roleCardToken
+			.mutateAsync({ phone: credential.phone, portal_id: credential.portal_id })
+			.then((result) => {
+				roleCardPayload = result.token;
+			})
+			.catch(() => {
+				roleCardPayload = '';
+			})
+			.finally(() => {
+				roleCardLoading = false;
+			});
+	});
 
 	async function resolveAndEnter(credential: PortalCredential) {
 		isLoggingIn = true;
@@ -501,17 +532,13 @@
 	let qrDataUrl = $state<string>('');
 	let qrGeneration = 0;
 
-	// On-site check-in resolves a scan with a direct CouchDB lookup against the
-	// volunteer's own `tracking_token_hash` (docs/changes/draft-volunteer-role-card-checkin.md)
-	// — a staff-plane query, not FastAPI, so there is nothing left to decode a `VIEW-`
-	// reference into (that whole mechanism has been removed). A phone-login session
-	// never carries a `.token` of its own, and there is no other stable identifier to
-	// fall back to that would actually resolve at check-in, so phone sign-in gets no
-	// scannable role card at all rather than a QR that looks fine but silently fails
-	// every scan — see `hasScannableToken`.
-	const hasScannableToken = $derived(Boolean(session?.token));
+	// The staff scanner checks this payload against `volunteer.tracking_token_hash`.
+	// Token-login sessions already carry a raw token; phone-login sessions get a payload
+	// from the volunteer document through the role-card endpoint above.
+	const qrPayload = $derived(session?.token ?? roleCardPayload);
+	const hasScannableToken = $derived(Boolean(qrPayload));
 	$effect(() => {
-		const payload = session?.token;
+		const payload = qrPayload;
 		const generation = ++qrGeneration;
 		if (!payload) {
 			qrDataUrl = '';
@@ -612,6 +639,8 @@
 
 	function handleLogout() {
 		session = null;
+		roleCardPayload = '';
+		roleCardLookupKey = '';
 		clearPortalSession();
 		dispatchCodes = {};
 		dispatchErrors = {};
@@ -676,11 +705,11 @@
 			<!-- MAIN LOGIN CARD -->
 			<div class="rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 				<!-- TAB SWITCHER -->
-				<div class="mb-6 flex rounded-2xl bg-muted/40 p-1.5">
+				<div class="mb-6 flex flex-col gap-1.5 rounded-2xl bg-muted/40 p-1.5 sm:flex-row">
 					<button
 						type="button"
 						onclick={() => (loginTab = 'phone')}
-						class="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-bold transition-all md:text-sm {loginTab ===
+						class="flex min-h-11 w-full min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-center text-xs leading-snug font-bold transition-all sm:w-auto sm:px-4 md:text-sm {loginTab ===
 						'phone'
 							? 'bg-primary text-primary-foreground shadow-md'
 							: 'text-muted-foreground hover:text-foreground'}"
@@ -692,7 +721,7 @@
 					<button
 						type="button"
 						onclick={() => (loginTab = 'qr')}
-						class="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-bold transition-all md:text-sm {loginTab ===
+						class="flex min-h-11 w-full min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-center text-xs leading-snug font-bold transition-all sm:w-auto sm:px-4 md:text-sm {loginTab ===
 						'qr'
 							? 'bg-primary text-primary-foreground shadow-md'
 							: 'text-muted-foreground hover:text-foreground'}"
@@ -1255,6 +1284,12 @@
 									alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
 									class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
 								/>
+							{:else if roleCardLoading}
+								<div
+									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
+								>
+									<QrCode class="size-16 animate-pulse" />
+								</div>
 							{:else if !hasScannableToken}
 								<div
 									class="mx-auto flex size-28 flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-muted-foreground"
@@ -1263,12 +1298,6 @@
 									<p class="text-3xs leading-tight">
 										เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน
 									</p>
-								</div>
-							{:else}
-								<div
-									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
-								>
-									<QrCode class="size-16 animate-pulse" />
 								</div>
 							{/if}
 							<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
@@ -1411,6 +1440,12 @@
 						alt="QR Code Pass"
 						class="mx-auto size-48 rounded-2xl border-2 border-primary/20 bg-white p-2 shadow-md"
 					/>
+				{:else if roleCardLoading}
+					<div
+						class="mx-auto flex size-48 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/20 text-muted-foreground"
+					>
+						<QrCode class="size-10 animate-pulse" />
+					</div>
 				{:else if !hasScannableToken}
 					<div
 						class="mx-auto flex size-48 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-muted/20 p-4 text-center text-muted-foreground"
