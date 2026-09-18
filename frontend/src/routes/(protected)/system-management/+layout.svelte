@@ -36,7 +36,7 @@
 	<SystemManagementNavbar />
 	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<header
-			class="sticky top-0 z-30 flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
+			class="sticky top-14 z-30 flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
 		>
 			<div class="flex items-center justify-between gap-4">
 				<div class="flex items-center gap-2.5">

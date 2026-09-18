@@ -29,6 +29,7 @@ def test_compute_age_range():
     assert compute_age_range(59) == "20-59"
     assert compute_age_range(60) == "60+"
     assert compute_age_range(85) == "60+"
+    assert compute_age_range(-5) == "unknown"
 
 
 def test_resolve_age_prefers_direct_age():
@@ -42,6 +43,27 @@ def test_resolve_age_falls_back_to_birth_year():
 def test_resolve_age_none_when_no_age_data():
     assert resolve_age({}) is None
     assert resolve_age({"birth_year": "invalid"}) is None
+
+
+def test_resolve_age_none_for_negative_direct_age():
+    assert resolve_age({"age": -5}) is None
+
+
+def test_resolve_age_none_for_future_birth_year():
+    assert resolve_age({"birth_year": _CURRENT_YEAR_BE + 1}) is None
+
+
+def test_resolve_age_none_for_implausibly_old_birth_year():
+    assert resolve_age({"birth_year": _CURRENT_YEAR_BE - 200}) is None
+
+
+def test_resolve_age_none_for_boolean_age_or_birth_year():
+    assert resolve_age({"age": True}) is None
+    assert resolve_age({"birth_year": False}) is None
+
+
+def test_resolve_age_falls_back_to_birth_year_when_direct_age_invalid():
+    assert resolve_age({"age": -5, "birth_year": _CURRENT_YEAR_BE - 40}) == 40
 
 
 def test_mask_occupant_name():
