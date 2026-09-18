@@ -347,6 +347,9 @@ export const useCreateUnitOfMeasure = () => {
 	return createMutation(() => ({
 		mutationFn: async (input: UnitOfMeasureInput) => {
 			enforceWriteAccess(null);
+			if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+				throw new Error('Catalog UOM requires system_admin');
+			}
 			const createdBy = authStore.user?.name || 'unknown';
 			const ctx: AuthorContext = { shelterCode: '', createdBy };
 			return catalogRepository().createUnitOfMeasure(input, ctx);
@@ -362,6 +365,9 @@ export const useUpdateUnitOfMeasure = () => {
 	return createMutation(() => ({
 		mutationFn: async (uom: UnitOfMeasure) => {
 			enforceWriteAccess(null);
+			if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+				throw new Error('Catalog UOM requires system_admin');
+			}
 			return catalogRepository().updateUnitOfMeasure(uom);
 		},
 		onSuccess: () => {
@@ -375,6 +381,9 @@ export const useDeleteUnitOfMeasure = () => {
 	return createMutation(() => ({
 		mutationFn: async (id: string) => {
 			enforceWriteAccess(null);
+			if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+				throw new Error('Catalog UOM requires system_admin');
+			}
 			return catalogRepository().deleteUnitOfMeasure(id);
 		},
 		onSuccess: () => {

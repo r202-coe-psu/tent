@@ -44,6 +44,7 @@
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
 	const validationSchema = $derived(isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
+	const getValidationAdapter = () => zod4(validationSchema);
 
 	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(
@@ -79,12 +80,12 @@
 				asset_status: 'READY',
 				deactivated: false
 			},
-			zod4(validationSchema)
+			getValidationAdapter()
 		),
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(validationSchema),
+			validators: getValidationAdapter(),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
@@ -208,6 +209,10 @@
 	);
 
 	const { form: formData, submitting } = form;
+
+	$effect(() => {
+		form.options.validators = getValidationAdapter();
+	});
 
 	// Populate form fields when data loads in edit mode
 	$effect(() => {
