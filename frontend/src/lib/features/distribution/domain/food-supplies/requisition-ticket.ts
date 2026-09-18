@@ -92,6 +92,18 @@ export const requisitionTicketDocSchema = z
 		notes: z.string().trim().min(1).optional()
 	})
 	.superRefine((ticket, ctx) => {
+		const itemIds = new Set<string>();
+		for (const [index, item] of ticket.items.entries()) {
+			if (itemIds.has(item.item_id)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['items', index, 'item_id'],
+					message: 'Ticket item_id values must be unique'
+				});
+			}
+			itemIds.add(item.item_id);
+		}
+
 		const amendmentIds = new Set<string>();
 		for (const [index, amendment] of (ticket.amendments ?? []).entries()) {
 			if (amendmentIds.has(amendment.amendment_id)) {
@@ -122,6 +134,18 @@ export const requisitionTicketInputSchema = z
 		notes: z.string().trim().min(1).optional()
 	})
 	.superRefine((ticket, ctx) => {
+		const itemIds = new Set<string>();
+		for (const [index, item] of ticket.items.entries()) {
+			if (itemIds.has(item.item_id)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['items', index, 'item_id'],
+					message: 'Ticket item_id values must be unique'
+				});
+			}
+			itemIds.add(item.item_id);
+		}
+
 		const typeSegment = ticket.ticket_no.split('-')[1]?.toLowerCase();
 		if (typeSegment !== ticket.requisition_type) {
 			ctx.addIssue({

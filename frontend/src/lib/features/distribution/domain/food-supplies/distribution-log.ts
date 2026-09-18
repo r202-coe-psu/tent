@@ -125,6 +125,21 @@ function validateDistributionLog(
 			message: 'Voided logs require void audit fields'
 		});
 	}
+	if (
+		log.status === 'voided' &&
+		log.is_returnable &&
+		((log.qty_returned != null && qtyGt(log.qty_returned, 0)) ||
+			log.returned_at != null ||
+			log.returned_by != null ||
+			log.clear_reason != null ||
+			log.bulk_pool_id != null)
+	) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['status'],
+			message: 'A loan cannot be voided after return or clear activity has begun'
+		});
+	}
 	const requiresReturnAudit = ['partially_returned', 'returned', 'lost', 'waived'].includes(
 		log.status
 	);
@@ -279,5 +294,35 @@ export function assertDistributionLogIssuanceImmutable(
 		if (previous[field] !== next[field]) {
 			throw new Error(`distribution_log.${field} is immutable after issuance`);
 		}
+	}
+}
+
+/** A void only reverses an erroneous, untouched issuance; it never erases return history. */
+export function assertDistributionLogCanBeVoided(log: DistributionLog): void {
+	const terminalOrReturning: DistributionLogStatus[] = [
+		'partially_returned',
+		'returned',
+		'lost',
+		'waived'
+	];
+	if (terminalOrReturning.includes(log.status)) {
+		throw new Error(
+			`Cannot void distribution log ${log._id} after return or clear activity has begun (status: '${log.status}')`
+		);
+	}
+	if (log.status === 'voided') {
+		// already voided — caller should detect this and short-circuit; treat as idempotent
+		return;
+	}
+	if (
+		(log.qty_returned != null && qtyGt(log.qty_returned, 0)) ||
+		log.returned_at != null ||
+		log.returned_by != null ||
+		log.clear_reason != null ||
+		log.bulk_pool_id != null
+	) {
+		throw new Error(
+			`Cannot void distribution log ${log._id} after return or clear activity has begun`
+		);
 	}
 }

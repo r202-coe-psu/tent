@@ -491,6 +491,31 @@ describe('DistributionLogRemoteRepository', () => {
 		expect(voided.voided_at).toBeDefined();
 	});
 
+	it('rejects voiding a loan after a physical return has begun', async () => {
+		const created = await repo.create(
+			{
+				ticket_id: dummyTicketId,
+				item_id: 'item:wheelchair',
+				qty: '2',
+				recipient_type: 'evacuee',
+				recipient_id: dummyEvacueeId,
+				is_returnable: true,
+				is_override: false
+			},
+			ctx
+		);
+		const partiallyReturned = await repo.recordReturn(
+			created._id,
+			{ qty_returned: '1', clear_reason: 'routine' },
+			ctx
+		);
+		expect(partiallyReturned.status).toBe('partially_returned');
+
+		await expect(repo.recordVoid(created._id, ctx, 'Too late')).rejects.toThrow(
+			/partially_returned/
+		);
+	});
+
 	it('rejects mutating immutable issuance fields', async () => {
 		const created = await repo.create(
 			{

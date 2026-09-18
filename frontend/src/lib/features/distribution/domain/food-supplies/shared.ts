@@ -25,3 +25,12 @@ export const foodSuppliesBaseDocShape = {
 
 export const mealPeriodSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 export type MealPeriod = z.infer<typeof mealPeriodSchema>;
+
+export const THAILAND_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** The project convention defines operational calendar days in Thailand (UTC+7) as YYYY-MM-DD. */
+export function thailandCalendarDay(isoTimestampOrDate: string | Date = new Date()): string {
+	const d =
+		typeof isoTimestampOrDate === 'string' ? new Date(isoTimestampOrDate) : isoTimestampOrDate;
+	return new Date(d.getTime() + THAILAND_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}

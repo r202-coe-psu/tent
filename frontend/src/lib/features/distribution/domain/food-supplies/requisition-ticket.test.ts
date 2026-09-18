@@ -100,6 +100,21 @@ describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
 		).toBe(true);
 	});
 
+	it('requires each ticket item_id to be unique', () => {
+		const duplicateItems = [ticketItem, { ...ticketItem, item_name: 'Rice duplicate' }];
+		expect(
+			requisitionTicketInputSchema.safeParse({ ...ticketInput(), items: duplicateItems }).success
+		).toBe(false);
+
+		const ticket = createFlow2RequisitionTicket(ticketInput(), ctx, ULID);
+		expect(
+			requisitionTicketDocSchema.safeParse({
+				...ticket,
+				items: [ticket.items[0], { ...ticket.items[0], item_name: 'Rice duplicate' }]
+			}).success
+		).toBe(false);
+	});
+
 	it('requires the canonical Flow 2 ticket number and Food meal while leaving Supplies meal-free', () => {
 		expect(requisitionTicketInputSchema.safeParse(ticketInput('food')).success).toBe(true);
 		expect(

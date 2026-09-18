@@ -405,4 +405,124 @@ describe('reconciliation-workflow', () => {
 		expect(ledger.ref_id).toBe(ticket._id);
 		expect(ledger.qty).toBe('4');
 	});
+
+	it('rejects warehouse quantities above the shift return and unknown ticket items before ledger writes', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0004',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '5' } },
+				WH_CTX,
+				{
+					ticketRepo,
+					logRepo: logRepo as unknown as DistributionLogRepository,
+					operationsRepo: opsRepo as unknown as OperationsRepository
+				}
+			)
+		).rejects.toThrow(/cannot exceed the 4 sent from the shift/);
+		expect(opsRepo.ledger).toHaveLength(0);
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '-1' } },
+				WH_CTX,
+				{
+					ticketRepo,
+					logRepo: logRepo as unknown as DistributionLogRepository,
+					operationsRepo: opsRepo as unknown as OperationsRepository
+				}
+			)
+		).rejects.toThrow(/non-negative decimal string/);
+		expect(opsRepo.ledger).toHaveLength(0);
+
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:unknown': '1' } },
+				WH_CTX,
+				{
+					ticketRepo,
+					logRepo: logRepo as unknown as DistributionLogRepository,
+					operationsRepo: opsRepo as unknown as OperationsRepository
+				}
+			)
+		).rejects.toThrow(/unknown ticket item/);
+		expect(opsRepo.ledger).toHaveLength(0);
+	});
+
+	it('receives each valid multi-item warehouse return exactly once', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0005',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					},
+					{
+						item_id: 'item:blanket',
+						item_name: 'Blanket',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '8',
+						allocated_qty: '8'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+		pending.items[1].distributed_qty = '5';
+		pending.items[1].returned_qty = '3';
+
+		const result = await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:mat': '4', 'item:blanket': '2' } },
+			WH_CTX,
+			{
+				ticketRepo,
+				logRepo: logRepo as unknown as DistributionLogRepository,
+				operationsRepo: opsRepo as unknown as OperationsRepository
+			}
+		);
+		expect(result.ledgerEntriesCreated).toBe(2);
+		expect(opsRepo.ledger.map((entry) => entry.item_id).sort()).toEqual([
+			'item:blanket',
+			'item:mat'
+		]);
+		expect(result.ticket.items[1].discrepancy_qty).toBe('1');
+	});
 });

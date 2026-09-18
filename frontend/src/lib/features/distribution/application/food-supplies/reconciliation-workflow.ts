@@ -1,6 +1,6 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { addQty, qtyGt, subQty } from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyLte, qtyStrNonNegativeSchema, subQty } from '$lib/utils/qty';
 import {
 	createStockLedger,
 	type OperationsRepository,
@@ -14,7 +14,7 @@ import {
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
-import { TicketStateError } from './errors';
+import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 
 export interface ReconciliationDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -209,25 +209,82 @@ export async function receiveWarehouseReturns(
 		);
 	}
 
+	const requestedQuantities = options?.verified_returned_quantities ?? {};
+	const ticketItemIds = new Set(current.items.map((item) => item.item_id));
+	for (const itemId of Object.keys(requestedQuantities)) {
+		if (!ticketItemIds.has(itemId)) {
+			throw new WorkflowValidationError(
+				`Cannot receive warehouse return for unknown ticket item ${itemId}`
+			);
+		}
+	}
+
+	const verifiedByItem = new Map<string, string>();
+	for (const item of current.items) {
+		const rawVerified = requestedQuantities[item.item_id] ?? item.returned_qty ?? '0';
+		const parsedVerified = qtyStrNonNegativeSchema.safeParse(rawVerified);
+		if (!parsedVerified.success) {
+			throw new WorkflowValidationError(
+				`Warehouse verified return for ${item.item_id} must be a non-negative decimal string`
+			);
+		}
+
+		const expectedReturn = item.returned_qty ?? '0';
+		const remainingAfterDistribution = subQty(item.allocated_qty, item.distributed_qty ?? '0');
+		if (!qtyLte(parsedVerified.data, expectedReturn)) {
+			throw new WorkflowValidationError(
+				`Warehouse verified return for ${item.item_id} cannot exceed the ${expectedReturn} sent from the shift`
+			);
+		}
+		if (!qtyLte(parsedVerified.data, remainingAfterDistribution)) {
+			throw new StockIntegrityError(
+				`Warehouse verified return for ${item.item_id} exceeds its ${remainingAfterDistribution} ticket remainder`
+			);
+		}
+		verifiedByItem.set(item.item_id, parsedVerified.data);
+	}
+
 	// Idempotency check against existing receive ledger entries for this ticket
 	const existingLedger = await operationsRepo.listLedger();
 	const existingReceiveEntries = existingLedger.filter(
 		(e) => e.ref_id === current._id && e.reason === 'receive'
 	);
-	const existingItems = new Set(existingReceiveEntries.map((e) => e.item_id));
+	const existingByItem = new Map<string, typeof existingReceiveEntries>();
+	for (const entry of existingReceiveEntries) {
+		if (!ticketItemIds.has(entry.item_id)) {
+			throw new StockIntegrityError(
+				`Warehouse return ledger ${entry._id} references unknown ticket item ${entry.item_id}`
+			);
+		}
+		const itemEntries = existingByItem.get(entry.item_id) ?? [];
+		itemEntries.push(entry);
+		existingByItem.set(entry.item_id, itemEntries);
+	}
 
 	let ledgerEntriesCreated = 0;
 	const updatedItems: TicketItem[] = [];
 
 	for (const item of current.items) {
-		const verifiedReturned =
-			options?.verified_returned_quantities?.[item.item_id] ?? item.returned_qty ?? '0';
+		const verifiedReturned = verifiedByItem.get(item.item_id)!;
 
 		const allocated = item.allocated_qty || '0';
 		const distributed = item.distributed_qty || '0';
 		const discrepancy = subQty(subQty(allocated, distributed), verifiedReturned);
 
-		if (qtyGt(verifiedReturned, 0) && !existingItems.has(item.item_id)) {
+		const existingItemEntries = existingByItem.get(item.item_id) ?? [];
+		if (existingItemEntries.length > 1) {
+			throw new StockIntegrityError(
+				`Multiple warehouse return ledger rows exist for ticket item ${item.item_id}`
+			);
+		}
+		if (existingItemEntries.length === 1) {
+			const [existingEntry] = existingItemEntries;
+			if (!existingEntry || !parseQty(existingEntry.qty).eq(verifiedReturned)) {
+				throw new StockIntegrityError(
+					`Warehouse return ledger quantity for ${item.item_id} does not match the verified return`
+				);
+			}
+		} else if (qtyGt(verifiedReturned, 0)) {
 			const ledgerEntry = createStockLedger(
 				{
 					item_id: item.item_id,

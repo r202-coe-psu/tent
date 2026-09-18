@@ -1889,6 +1889,24 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
+			it('rejects duplicate item_id lines', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...validTicket,
+								items: [
+									validTicket.items[0],
+									{ ...validTicket.items[0], item_name: 'Rice duplicate' }
+								]
+							},
+							null,
+							WAREHOUSE
+						),
+					/requisition_ticket item_id values must be unique/
+				);
+			});
+
 			it('allows legal status transition and rejects illegal transition', () => {
 				const ready = { ...validTicket, status: 'READY_FOR_DISPATCH' };
 				expect(() => compile()(ready, validTicket, WAREHOUSE)).not.toThrow();
@@ -1984,6 +2002,27 @@ describe('buildValidateDocUpdate', () => {
 				expectForbidden(
 					() => compile()({ ...voided, voided_at: undefined }, validFoodLog, REGISTRATION),
 					/Voided logs require void audit fields/
+				);
+			});
+
+			it('rejects voiding loans once return or clear activity has begun', () => {
+				const partiallyReturned = {
+					...validReturnableLog,
+					status: 'partially_returned',
+					qty_returned: '1',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: 'user:staff1'
+				};
+				const voided = {
+					...partiallyReturned,
+					status: 'voided',
+					voided_at: '2026-09-01T02:00:00.000Z',
+					voided_by: 'user:staff1'
+				};
+				expectForbidden(
+					() => compile()(voided, partiallyReturned, REGISTRATION),
+					/Cannot void a distribution_log after return or clear activity has begun/
 				);
 			});
 		});

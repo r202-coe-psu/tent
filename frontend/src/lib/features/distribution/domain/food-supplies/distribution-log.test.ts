@@ -65,6 +65,45 @@ describe('Food & Supplies DistributionLog contract (CR-121)', () => {
 		).toBe(true);
 	});
 
+	it('rejects voided loans that retain return or clear activity', () => {
+		const loan = createDistributionLog(
+			{
+				...foodLogInput,
+				item_id: 'item:wheelchair',
+				meal_service_id: undefined,
+				meal: undefined,
+				qty: '2',
+				is_returnable: true
+			},
+			ctx,
+			ULID
+		);
+		expect(
+			distributionLogDocSchema.safeParse({
+				...loan,
+				status: 'voided',
+				qty_returned: '1',
+				clear_reason: 'routine',
+				returned_at: '2026-09-16T01:00:00.000Z',
+				returned_by: 'staff:checkout',
+				voided_at: '2026-09-16T02:00:00.000Z',
+				voided_by: 'staff:warehouse'
+			}).success
+		).toBe(false);
+		expect(
+			distributionLogDocSchema.safeParse({
+				...loan,
+				status: 'voided',
+				clear_reason: 'lost',
+				returned_at: '2026-09-16T01:00:00.000Z',
+				returned_by: 'staff:checkout',
+				notes: 'Lost during evacuation',
+				voided_at: '2026-09-16T02:00:00.000Z',
+				voided_by: 'staff:warehouse'
+			}).success
+		).toBe(false);
+	});
+
 	it('models current returnable supplies statuses with clear audit and quantity limits', () => {
 		const loan = createDistributionLog(
 			{

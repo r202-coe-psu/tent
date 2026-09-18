@@ -1,6 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { addQty, parseQty, qtyGte, subQty } from '$lib/utils/qty';
-import type { DistributionLog, DistributionRecipientType } from '../../domain/food-supplies';
+import {
+	assertDistributionLogCanBeVoided,
+	thailandCalendarDay,
+	type DistributionLog,
+	type DistributionRecipientType
+} from '../../domain/food-supplies';
 import {
 	DistributionLogRemoteRepository,
 	type DistributionLogRepository,
@@ -105,12 +110,14 @@ export async function recordFoodDistribution(
 
 	// Food duplicate check (advisory query per CR-121 FR-DST-02)
 	if (input.recipient_id && ticket.meal) {
-		const recentRecipientLogs = await logRepo.list({
-			recipient_id: input.recipient_id,
-			item_id: input.item_id
-		});
+		const recentRecipientLogs = await logRepo.list({ recipient_id: input.recipient_id });
+		const distributionDay = thailandCalendarDay(new Date().toISOString());
 		const duplicate = recentRecipientLogs.some(
-			(l) => l.status !== 'voided' && l.meal === ticket.meal
+			(l) =>
+				l.status !== 'voided' &&
+				!l.is_returnable &&
+				l.meal === ticket.meal &&
+				thailandCalendarDay(l.distributed_at) === distributionDay
 		);
 		if (duplicate && !input.is_override) {
 			throw new WorkflowValidationError(
@@ -237,5 +244,9 @@ export async function voidDistributionLog(
 	assertCanPerformFrontlineDistribution(ctx);
 
 	const repository = logRepo ?? new DistributionLogRemoteRepository(ctx.shelterCode);
+	const current = await repository.get(logId);
+	if (current && current.status !== 'voided') {
+		assertDistributionLogCanBeVoided(current);
+	}
 	return repository.recordVoid(logId, ctx, reason);
 }

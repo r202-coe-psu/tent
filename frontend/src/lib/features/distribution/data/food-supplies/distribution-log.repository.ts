@@ -3,6 +3,7 @@ import { now, type AuthorContext } from '$lib/db/model';
 import { parseQty, qtyLte } from '$lib/utils/qty';
 import {
 	assertDistributionLogIssuanceImmutable,
+	assertDistributionLogCanBeVoided,
 	createDistributionLog,
 	distributionLogDocSchema,
 	type DistributionLog,
@@ -216,6 +217,7 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 			if (current.status === 'voided') {
 				return current;
 			}
+			assertDistributionLogCanBeVoided(current);
 			return {
 				...current,
 				status: 'voided',

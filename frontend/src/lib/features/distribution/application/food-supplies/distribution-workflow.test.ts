@@ -347,6 +347,106 @@ describe('distribution-workflow', () => {
 		expect(overrideLog.is_override).toBe(true);
 	});
 
+	it('scopes food entitlement to the Thailand calendar day and ignores voided logs', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-0005',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					},
+					{
+						item_id: 'item:rice',
+						item_name: 'Rice',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const recipientId = 'evacuee:01JEVACUEE0000000000000005';
+		await logRepo.create(
+			{
+				ticket_id: ticket._id,
+				item_id: 'item:curry',
+				qty: '1',
+				recipient_type: 'evacuee',
+				recipient_id: recipientId,
+				meal: 'lunch',
+				is_returnable: false,
+				is_override: false,
+				distributed_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+			},
+			POS_CTX
+		);
+
+		await expect(
+			recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:curry', qty: '1', recipient_type: 'evacuee', recipient_id: recipientId },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			)
+		).resolves.toMatchObject({ status: 'fulfilled' });
+		await expect(
+			recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice', qty: '1', recipient_type: 'evacuee', recipient_id: recipientId },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			)
+		).rejects.toThrow(/already received a meal/);
+
+		const voidedRecipientId = 'evacuee:01JEVACUEE0000000000000006';
+		const voided = createDistributionLog(
+			{
+				ticket_id: ticket._id,
+				item_id: 'item:curry',
+				qty: '1',
+				recipient_type: 'evacuee',
+				recipient_id: voidedRecipientId,
+				meal: 'lunch',
+				is_returnable: false,
+				is_override: false
+			},
+			POS_CTX
+		);
+		await logRepo.create(
+			{
+				...voided,
+				status: 'voided',
+				voided_at: new Date().toISOString(),
+				voided_by: POS_CTX.createdBy
+			},
+			POS_CTX
+		);
+		await expect(
+			recordFoodDistribution(
+				ticket._id,
+				{
+					item_id: 'item:curry',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: voidedRecipientId
+				},
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			)
+		).resolves.toMatchObject({ status: 'fulfilled' });
+	});
+
 	it('applies 4-hour soft warning flag when food exceeds safety window', async () => {
 		const ticket = await ticketRepo.create(
 			{
@@ -480,5 +580,100 @@ describe('distribution-workflow', () => {
 		const voided = await voidDistributionLog(log._id, 'Duplicate tap error', POS_CTX, logRepo);
 		expect(voided.status).toBe('voided');
 		expect(voided.voided_by).toBe(POS_CTX.createdBy);
+	});
+
+	it('allows voiding an untouched active loan but rejects loans with return or clear activity', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0003',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:supplies',
+				items: [
+					{
+						item_id: 'item:wheelchair',
+						item_name: 'Wheelchair',
+						type_class: 'EQUIPMENT',
+						returnable: true,
+						requested_qty: '5',
+						allocated_qty: '5'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const loanInput = (recipient_id: string) => ({
+			item_id: 'item:wheelchair',
+			qty: '1',
+			recipient_type: 'evacuee' as const,
+			recipient_id
+		});
+		const active = await recordSuppliesDistribution(
+			ticket._id,
+			loanInput('evacuee:01JEVACUEE0000000000000010'),
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		await expect(
+			voidDistributionLog(active._id, 'Wrong scan', POS_CTX, logRepo)
+		).resolves.toMatchObject({
+			status: 'voided'
+		});
+
+		const partial = await recordSuppliesDistribution(
+			ticket._id,
+			loanInput('evacuee:01JEVACUEE0000000000000011'),
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		await logRepo.recordReturn(
+			partial._id,
+			{ qty_returned: '0.5', clear_reason: 'routine' },
+			POS_CTX
+		);
+		await expect(voidDistributionLog(partial._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(
+			/after.*return|resolution state/
+		);
+
+		const returned = await recordSuppliesDistribution(
+			ticket._id,
+			loanInput('evacuee:01JEVACUEE0000000000000012'),
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		await logRepo.recordReturn(
+			returned._id,
+			{ qty_returned: '1', clear_reason: 'routine' },
+			POS_CTX
+		);
+		await expect(voidDistributionLog(returned._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(
+			/after return or clear activity|resolution state/
+		);
+
+		const lost = await recordSuppliesDistribution(
+			ticket._id,
+			loanInput('evacuee:01JEVACUEE0000000000000013'),
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		await logRepo.recordClear(lost._id, { clear_reason: 'lost', notes: 'Lost in flood' }, POS_CTX);
+		await expect(voidDistributionLog(lost._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(
+			/after return or clear activity|resolution state/
+		);
+
+		const waived = await recordSuppliesDistribution(
+			ticket._id,
+			loanInput('evacuee:01JEVACUEE0000000000000014'),
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		await logRepo.recordClear(
+			waived._id,
+			{ clear_reason: 'waived', notes: 'Manager approved waiver' },
+			POS_CTX
+		);
+		await expect(voidDistributionLog(waived._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(
+			/after return or clear activity|resolution state/
+		);
 	});
 });

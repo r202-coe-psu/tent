@@ -1083,11 +1083,16 @@ export function buildValidateDocUpdate(code: string): string {
     if (!Array.isArray(newDoc.items) || newDoc.items.length === 0) {
       throw { forbidden: 'requisition_ticket must have at least one item' };
     }
+    var seenTicketItemIds = {};
     for (var ti = 0; ti < newDoc.items.length; ti++) {
       var tItem = newDoc.items[ti];
       if (!tItem || typeof tItem.item_id !== 'string' || !tItem.item_id) {
         throw { forbidden: 'requisition_ticket item requires item_id' };
       }
+      if (seenTicketItemIds[tItem.item_id]) {
+        throw { forbidden: 'requisition_ticket item_id values must be unique' };
+      }
+      seenTicketItemIds[tItem.item_id] = true;
       var reqQty = parseDecimal4(tItem.requested_qty);
       var allocQty = parseDecimal4(tItem.allocated_qty);
       if (isNaN(reqQty) || reqQty <= 0) {
@@ -1194,6 +1199,17 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.status === 'voided') {
         if (!newDoc.voided_at || !newDoc.voided_by) {
           throw { forbidden: 'Voided logs require void audit fields' };
+        }
+        var previousReturnedQty = oldDoc.qty_returned === undefined ? 0 : parseDecimal4(oldDoc.qty_returned);
+        if (
+          (oldDoc.status !== 'fulfilled' && oldDoc.status !== 'active') ||
+          previousReturnedQty > 0 ||
+          oldDoc.returned_at ||
+          oldDoc.returned_by ||
+          oldDoc.clear_reason ||
+          oldDoc.bulk_pool_id
+        ) {
+          throw { forbidden: 'Cannot void a distribution_log after return or clear activity has begun' };
         }
       }
       var returnClearStatuses = ['partially_returned', 'returned', 'lost', 'waived'];
