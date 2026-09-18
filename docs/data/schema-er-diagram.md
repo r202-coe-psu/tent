@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-07-23
+updated: 2026-09-18
 source: docs/data/schema.md
 ---
 
@@ -447,6 +447,7 @@ erDiagram
         json facilities "toilets showers water points"
         json location "address lat lng"
         json contact "name phone"
+        json food_distribution_points "จุดแจกอาหาร — id name note lat lng (schema_v 6, staff-only)"
         string edge_url "nullable sys"
         datetime opened_at "sys"
         datetime closed_at "nullable sys"

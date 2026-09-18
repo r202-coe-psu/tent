@@ -83,8 +83,9 @@ UAT-052,Back-Office,Referral reject/close,P1,"SA,SM",/back-office/referrals,Reje
 UAT-053,Back-Office,Referral medical privacy,P0,"SA,SM,PUB",/back-office/referrals + /public,รายละเอียด medical ของ referral ไม่หลุดสู่ public,มี referral ที่มี medical note,"1) ตรวจใน staff UI เห็น medical
 2) ตรวจ public/API ว่าไม่มี medical",medical อยู่เฉพาะ internal shelter scope,Not Tested,,,,,Staging,
 UAT-060,System Management,Shelter list,P0,SA,/portal/system-management/shelters,SA ดูรายการศูนย์ทั้งหมด,Login SA,1) เปิดจัดการศูนย์พักพิง,เห็นรายการทุกศูนย์ สร้าง/แก้ไข/import ได้,Not Tested,,,,,Staging,
-UAT-061,System Management,Shelter create wizard,P0,SA,/portal/system-management/shelters/create,สร้างศูนย์ใหม่ครบ 8 ขั้นตอน,Login SA,"1) กรอก: พื้นฐาน → ความจุ → โซน → สาธารณูปโภค → ความเสี่ยง → นโยบายรับ → สัมภาระ → ยานพาหนะ
-2) บันทึก",ศูนย์ถูกสร้างและปรากฏในรายการ + sync ไป public ได้ภายในเวลาที่กำหนด,Not Tested,,,,,Staging,
+UAT-061,System Management,Shelter create single-page form,P0,SA,/portal/system-management/shelters/create,สร้างศูนย์ใหม่บนฟอร์มหน้าเดียว (scroll-spy) รวมจุดแจกอาหาร,Login SA,"1) กรอกครบ 9 หมวดบนหน้าเดียว: พื้นฐาน → ความจุ → โซน → จุดแจกอาหาร → สาธารณูปโภค → ความเสี่ยง → นโยบายรับ → สัมภาระ → ยานพาหนะ (ใช้ sidebar/scroll-spy กระโดดหมวดได้)
+2) เพิ่ม/ลบจุดแจกอาหารอย่างน้อย 1 จุด (ชื่อ required; พิกัด optional)
+3) บันทึก",ศูนย์ถูกสร้างและปรากฏในรายการ + food_distribution_points ถูกบันทึก + sync ไป public ได้ภายในเวลาที่กำหนด,Not Tested,,,,,Staging,
 UAT-062,Back-Office,Shelter edit own,P0,SM,/back-office/shelters,SM แก้ไขศูนย์ตนได้,Login SM,"1) เปิดข้อมูลศูนย์ปัจจุบัน
 2) แก้ไขและบันทึก",บันทึกสำเร็จเฉพาะศูนย์ตน,Not Tested,,,,,Staging,
 UAT-063,Back-Office,Shelter create blocked for SM,P1,SM,/back-office/shelters,SM สร้างศูนย์ใหม่ไม่ได้ (SA only),Login SM,1) พยายามเข้า create mode,ถูกกัน — สร้างศูนย์ทำได้เฉพาะ SA ผ่าน system-management,Not Tested,,,,,Staging,
