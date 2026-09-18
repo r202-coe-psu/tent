@@ -28,6 +28,7 @@ import {
 	type CategoryUsageDetails,
 	type DeleteCategoryResult
 } from '../domain/catalog-deletion';
+import { NotFoundError, CouchAuthError, AuthError } from '$lib/utils/errors';
 import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
@@ -538,18 +539,33 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			throw new Error('Cannot delete system protected unit of measure');
 		}
 
-		const databases = new Set<string>([CATALOG_DB, 'central_ops']);
-		const registry = createRemoteRepository('registry');
-		const shelters = await registry.allByType(
-			'shelter',
-			(doc): doc is AnyDoc =>
-				!!doc &&
-				typeof doc === 'object' &&
-				(doc as { type?: unknown }).type === 'shelter' &&
-				typeof (doc as { code?: unknown }).code === 'string'
-		);
-		for (const shelter of shelters) {
-			databases.add(`shelter_${String(shelter.code).toLowerCase()}`);
+		const databases = new Set<string>([CATALOG_DB]);
+		try {
+			const registry = createRemoteRepository('registry');
+			const shelters = await registry.allByType(
+				'shelter',
+				(doc): doc is AnyDoc =>
+					!!doc &&
+					typeof doc === 'object' &&
+					(doc as { type?: unknown }).type === 'shelter' &&
+					typeof (doc as { code?: unknown }).code === 'string'
+			);
+			for (const shelter of shelters) {
+				databases.add(`shelter_${String(shelter.code).toLowerCase()}`);
+			}
+		} catch (err) {
+			// If registry is unreachable or permission denied, continue with central catalog check
+			if (!(
+				err instanceof NotFoundError ||
+				err instanceof CouchAuthError ||
+				err instanceof AuthError ||
+				(typeof err === 'object' &&
+					err !== null &&
+					((err as { status?: number }).status === 404 ||
+						(err as { status?: number }).status === 403))
+			)) {
+				throw err;
+			}
 		}
 
 		const referenceTypes = [
@@ -557,13 +573,32 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			'recipe',
 			'donation_campaign',
 			'stock_ledger',
-			'purchase',
-			'stock_transfer'
+			'purchase'
 		];
 		for (const database of databases) {
 			const repository = database === CATALOG_DB ? this.repo : createRemoteRepository(database);
 			for (const type of referenceTypes) {
-				const docs = await repository.allByType(type, isDocType(type));
+				let docs: AnyDoc[];
+				try {
+					docs = await repository.allByType(type, isDocType(type));
+				} catch (err) {
+					// If the database does not exist (404) or is forbidden to this session (403), skip it
+					if (
+						err instanceof NotFoundError ||
+						err instanceof CouchAuthError ||
+						err instanceof AuthError ||
+						(typeof err === 'object' &&
+							err !== null &&
+							((err as { status?: number }).status === 404 ||
+								(err as { status?: number }).status === 403 ||
+								(err as { name?: string }).name === 'NotFoundError' ||
+								(err as { name?: string }).name === 'CouchAuthError' ||
+								(err as { name?: string }).name === 'AuthError'))
+					) {
+						break;
+					}
+					throw err;
+				}
 				const reference = docs.find((doc) => unitReferencesDoc(doc, uom.code));
 				if (reference) {
 					throw new Error(

@@ -552,5 +552,22 @@ describe('CatalogRemoteRepository', () => {
 				/Cannot delete unit of measure crate; it is referenced by item_master:/
 			);
 		});
+
+		it('successfully deletes an unreferenced custom UOM', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'unreferenced_box',
+					label_th: 'กล่องทดสอบ',
+					label_en: 'test box',
+					dimension: 'count'
+				},
+				ctx
+			);
+			const wasDeleted = await repo.deleteUnitOfMeasure(uom._id);
+			expect(wasDeleted).toBe(true);
+
+			const found = await repo.getUnitOfMeasure(uom._id);
+			expect(found).toBeNull();
+		});
 	});
 });

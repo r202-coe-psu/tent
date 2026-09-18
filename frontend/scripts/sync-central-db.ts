@@ -446,7 +446,7 @@ async function main() {
 	console.log('');
 
 	// 1. Ensure databases
-	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations'];
+	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations', 'central_ops'];
 	for (const db of CENTRAL_DBS) {
 		const res = await ensureDb(db, DRY_RUN);
 		console.log(`  ✓ DB: ${db} (${res === 'created' && DRY_RUN ? 'would create' : res})`);
