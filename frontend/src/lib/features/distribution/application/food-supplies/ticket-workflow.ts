@@ -1,5 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
-import { qtyGt, parseQty } from '$lib/utils/qty';
+import { qtyGt } from '$lib/utils/qty';
 import type {
 	RequisitionTicket,
 	RequisitionTicketInput,
@@ -17,6 +17,7 @@ import {
 	assertCanPerformFrontlineDistribution
 } from './auth';
 import { TicketStateError, WorkflowValidationError } from './errors';
+import { assertPositiveQty } from './validation';
 
 export interface ItemAllocationInput {
 	item_id: string;
@@ -75,12 +76,7 @@ export async function allocateTicketItems(
 	}
 
 	for (const alloc of allocations) {
-		const parsed = parseQty(alloc.allocated_qty);
-		if (parsed.isNegative() || parsed.isZero()) {
-			throw new WorkflowValidationError(
-				`allocated_qty must be a positive decimal string for item ${alloc.item_id}`
-			);
-		}
+		assertPositiveQty(alloc.allocated_qty, 'allocated_qty', `for item ${alloc.item_id}`);
 	}
 
 	const ticketRepo = resolveTicketRepo(repo, ctx);

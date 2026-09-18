@@ -6,6 +6,7 @@ import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
 	type OperationsRepository,
+	type StockLedger,
 	operationsRepository
 } from '$lib/features/operations';
 import type {
@@ -35,6 +36,8 @@ import {
 	StockIntegrityError,
 	WorkflowValidationError
 } from './errors';
+import { assertLedgerReplayBase } from './ledger-replay';
+import { assertPositiveQty } from './validation';
 
 export interface ReturnWorkflowDependencies {
 	logRepo?: DistributionLogRepository;
@@ -72,23 +75,24 @@ export interface ClearLoanViaBulkPoolInput {
 	notes?: string;
 }
 
-function assertBulkPoolLedgerReplay(
-	actual: Awaited<ReturnType<OperationsRepository['addLedgerEntry']>>,
-	expected: Awaited<ReturnType<typeof createStockLedger>>
-): void {
-	if (
-		actual._id !== expected._id ||
-		actual.type !== 'stock_ledger' ||
-		actual.schema_v !== expected.schema_v ||
-		actual.shelter_code !== expected.shelter_code ||
-		actual.reason !== 'receive' ||
-		actual.ref_id !== expected.ref_id ||
-		actual.item_id !== expected.item_id ||
-		actual.unit !== expected.unit ||
-		!parseQty(actual.qty).eq(expected.qty) ||
-		actual.lot_ref !== expected._id ||
-		actual.lot?.note !== 'bulk_return_pool'
-	) {
+function assertBulkPoolLedgerReplay(actual: StockLedger, expected: StockLedger): void {
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expected._id,
+			schemaVersion: expected.schema_v,
+			shelterCode: expected.shelter_code,
+			reason: 'receive',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expected._id
+		},
+		`Bulk pool ledger replay mismatch for ${expected._id}`
+	);
+
+	if (actual.lot?.note !== 'bulk_return_pool') {
 		throw new StockIntegrityError(`Bulk pool ledger replay mismatch for ${expected._id}`);
 	}
 }
@@ -140,10 +144,7 @@ export async function returnLoanAtCounter(
 ): Promise<{ log: DistributionLog; ledgerEntryCreated: boolean }> {
 	assertCanReceivePhysicalStock(ctx);
 
-	const parsed = parseQty(input.qty_returned);
-	if (parsed.isNegative() || parsed.isZero()) {
-		throw new WorkflowValidationError('qty_returned must be a positive decimal string');
-	}
+	assertPositiveQty(input.qty_returned, 'qty_returned');
 
 	const { logRepo, operationsRepo } = resolveDependencies(deps, ctx);
 	const currentLog = await logRepo.get(logId);
@@ -273,10 +274,7 @@ export async function createBulkReturnPool(
 ): Promise<BulkReturnPool> {
 	assertCanReceivePhysicalStock(ctx);
 
-	const parsed = parseQty(input.total_received_qty);
-	if (parsed.isNegative() || parsed.isZero()) {
-		throw new WorkflowValidationError('total_received_qty must be a positive decimal string');
-	}
+	assertPositiveQty(input.total_received_qty, 'total_received_qty');
 	if (!isUlid(input.operationUlid)) {
 		throw new WorkflowValidationError('operationUlid must be a valid ULID');
 	}

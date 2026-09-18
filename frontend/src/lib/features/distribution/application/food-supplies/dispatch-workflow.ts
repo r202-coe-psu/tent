@@ -16,6 +16,8 @@ import {
 } from '../../data/food-supplies';
 import { assertCanDispatchTicket } from './auth';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
+import { assertLedgerReplayBase } from './ledger-replay';
+import { assertPositiveQty } from './validation';
 
 export interface DispatchWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -45,20 +47,21 @@ function assertAmendmentLedgerReplay(
 	expected: StockLedger,
 	ctx: AuthorContext
 ): void {
-	if (
-		actual._id !== expected._id ||
-		actual.type !== 'stock_ledger' ||
-		actual.schema_v !== expected.schema_v ||
-		actual.shelter_code !== ctx.shelterCode ||
-		actual.reason !== 'distribute' ||
-		actual.ref_id !== expected.ref_id ||
-		actual.item_id !== expected.item_id ||
-		actual.unit !== expected.unit ||
-		!parseQty(actual.qty).eq(expected.qty) ||
-		actual.lot_ref !== expected.lot_ref
-	) {
-		throw new StockIntegrityError(`Amendment ledger replay mismatch for ${expected._id}`);
-	}
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expected._id,
+			schemaVersion: expected.schema_v,
+			shelterCode: ctx.shelterCode,
+			reason: 'distribute',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expected.lot_ref
+		},
+		`Amendment ledger replay mismatch for ${expected._id}`
+	);
 }
 
 function assertAmendmentReplay(actual: TicketAmendment, expected: TicketAmendment): void {
@@ -174,10 +177,7 @@ export async function amendActiveTicket(
 ): Promise<RequisitionTicket> {
 	assertCanDispatchTicket(ctx);
 
-	const addedDec = parseQty(input.added_qty);
-	if (addedDec.isNegative() || addedDec.isZero()) {
-		throw new WorkflowValidationError('Amendment added_qty must be a positive decimal string');
-	}
+	assertPositiveQty(input.added_qty, 'Amendment added_qty');
 
 	const amendmentId = input.amendmentId;
 	if (!isUlid(amendmentId)) {
