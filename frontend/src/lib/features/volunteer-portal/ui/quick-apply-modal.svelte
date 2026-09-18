@@ -63,7 +63,7 @@
 	 * the back office and the controlled-skill gate see the same value the job
 	 * asked for.
 	 */
-	const requiredSkills = $derived(skillLabels(job?.skills_required ?? [], skillOptions));
+	const suggestedSkills = $derived(skillLabels(job?.skills_required ?? [], skillOptions));
 
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
@@ -83,7 +83,7 @@
 	let formError = $state('');
 
 	// Nothing typed survives a different job being opened — the skills list below is the
-	// job's own required skills, so carrying them over would tick boxes that do not exist.
+	// job's own suggested skills, so carrying them over would tick boxes that do not exist.
 	$effect(() => {
 		if (!open) {
 			firstName = '';
@@ -111,6 +111,11 @@
 		skills = skills.includes(skill) ? skills.filter((s) => s !== skill) : [...skills, skill];
 	}
 
+	function showSubmitError(message: string) {
+		formError = message;
+		toast.error(message);
+	}
+
 	/** Resolve a reCAPTCHA token. `''` = not configured here, `null` = it failed. */
 	async function captchaToken(): Promise<string | null> {
 		const injected = window.__captchaToken || '';
@@ -130,29 +135,26 @@
 		event.preventDefault();
 		if (!job) return;
 		formError = '';
+		if (!firstName.trim()) {
+			showSubmitError('กรุณากรอกชื่อ');
+			return;
+		}
+		if (!lastName.trim()) {
+			showSubmitError('กรุณากรอกนามสกุล');
+			return;
+		}
+		if (!phone.trim()) {
+			showSubmitError('กรุณากรอกเบอร์โทรศัพท์');
+			return;
+		}
 		if (job.shifts?.length && !shiftId) {
-			formError = 'กรุณาเลือกกะที่ต้องการสมัคร';
+			showSubmitError('กรุณาเลือกกะที่ต้องการสมัคร');
 			return;
 		}
 
 		if (!consentPdpa) {
-			formError = 'กรุณายอมรับเงื่อนไข PDPA ก่อนจองภารกิจ';
+			showSubmitError('กรุณายอมรับเงื่อนไข PDPA ก่อนจองภารกิจ');
 			return;
-		}
-
-		if (job.skills_required && job.skills_required.length > 0) {
-			const hasMatching = skills.some((s) =>
-				job.skills_required.some(
-					(req) =>
-						req.toLowerCase() === s.toLowerCase() ||
-						req.includes(s.toLowerCase()) ||
-						s.toLowerCase().includes(req.toLowerCase())
-				)
-			);
-			if (!hasMatching) {
-				formError = 'กรุณาเลือกทักษะที่จำเป็นสำหรับภารกิจนี้อย่างน้อย 1 อย่าง';
-				return;
-			}
 		}
 
 		const parsed = volunteerApplySchema.safeParse({
@@ -167,13 +169,13 @@
 			shift_id: shiftId || undefined
 		});
 		if (!parsed.success) {
-			formError = parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง';
+			showSubmitError(parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
 			return;
 		}
 
 		const token = await captchaToken();
 		if (token === null) {
-			formError = 'ไม่สามารถยืนยัน reCAPTCHA ได้ กรุณาลองใหม่อีกครั้ง';
+			showSubmitError('ไม่สามารถยืนยัน reCAPTCHA ได้ กรุณาลองใหม่อีกครั้ง');
 			return;
 		}
 
@@ -197,8 +199,7 @@
 			}
 			await goto(`${resolve('/volunteers/portal')}?tab=portal`);
 		} catch (err) {
-			formError = err instanceof Error ? err.message : 'จองภารกิจไม่สำเร็จ';
-			toast.error(formError);
+			showSubmitError(err instanceof Error ? err.message : 'จองภารกิจไม่สำเร็จ');
 		}
 	}
 </script>
@@ -244,7 +245,7 @@
 					</div>
 				</div>
 
-				<form onsubmit={submit} class="px-6 py-6">
+				<form onsubmit={submit} novalidate class="px-6 py-6">
 					<div class="space-y-8">
 						<section>
 							<h3 class="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
@@ -260,7 +261,7 @@
 										<input
 											id="apply-first-name"
 											type="text"
-											required
+											aria-required="true"
 											bind:value={firstName}
 											placeholder="เช่น เก่งกล้า"
 											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
@@ -273,7 +274,7 @@
 										<input
 											id="apply-last-name"
 											type="text"
-											required
+											aria-required="true"
 											bind:value={lastName}
 											placeholder="เช่น งานอาสา"
 											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
@@ -288,7 +289,7 @@
 										<input
 											id="apply-phone"
 											type="tel"
-											required
+											aria-required="true"
 											inputmode="tel"
 											bind:value={phone}
 											placeholder="08x-xxx-xxxx"
@@ -373,21 +374,25 @@
 							<div class="mb-4 flex items-center justify-between">
 								<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 									<Tag class="h-4 w-4 text-muted-foreground" />
-									3. ทักษะที่ภารกิจนี้ต้องการ
+									3. ทักษะแนะนำสำหรับภารกิจนี้
 								</h3>
-								<span class="text-xs text-muted-foreground">เลือกแล้ว {skills.length} ทักษะ</span>
+								<span class="text-xs font-semibold text-emerald-700">เลือกได้ ไม่บังคับ</span>
 							</div>
 
-							{#if requiredSkills.length > 0}
+							{#if suggestedSkills.length > 0}
+								<p class="mb-3 text-xs text-muted-foreground">
+									ทักษะเหล่านี้เป็นคำแนะนำเท่านั้น ไม่เลือกก็สมัครได้
+								</p>
 								<div class="flex flex-wrap gap-2.5">
-									{#each requiredSkills as skill (skill.value)}
+									{#each suggestedSkills as skill (skill.value)}
 										{@const selected = skills.includes(skill.value)}
 										<button
 											type="button"
 											onclick={() => toggleSkill(skill.value)}
+											aria-pressed={selected}
 											class="flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition-all {selected
-												? 'border-primary bg-primary text-primary-foreground shadow-sm'
-												: 'border-border bg-card text-foreground hover:bg-muted'}"
+												? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+												: 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}"
 										>
 											{#if selected}
 												<CheckCircle2 class="h-3.5 w-3.5" />
@@ -409,7 +414,7 @@
 							<label class="flex cursor-pointer items-start gap-3">
 								<input
 									type="checkbox"
-									required
+									aria-required="true"
 									bind:checked={consentPdpa}
 									class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
 								/>
@@ -442,7 +447,7 @@
 							</button>
 							<button
 								type="submit"
-								disabled={apply.isPending || !consentPdpa}
+								disabled={apply.isPending}
 								class="flex flex-[2] cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
 							>
 								{apply.isPending

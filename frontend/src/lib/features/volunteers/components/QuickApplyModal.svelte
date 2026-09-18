@@ -203,6 +203,11 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
 
+	function showSubmitError(message: string) {
+		errorMessage = message;
+		toast.error(message);
+	}
+
 	async function captchaToken(): Promise<string | null> {
 		if (!captchaEnabled) return '';
 		if (!window.grecaptcha?.execute) return null;
@@ -235,7 +240,7 @@
 		);
 	}
 
-	function skillMatchesJob(skillCode: string): boolean {
+	function isSuggestedForJob(skillCode: string): boolean {
 		const target = canonicalSkillId(skillCode);
 		return (
 			job?.skills_required?.some((required: string) => canonicalSkillId(required) === target) ??
@@ -274,16 +279,19 @@
 	}
 
 	async function submitApplication() {
-		if (!job || !activeShift) return;
+		if (!job || !activeShift) {
+			showSubmitError(t.errNoJobSelected);
+			return;
+		}
 		if (activeShift.conflict) {
-			errorMessage = 'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว';
+			showSubmitError('เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว');
 			return;
 		}
 		isSubmitting = true;
 		try {
 			const recaptchaToken = await captchaToken();
 			if (recaptchaToken === null) {
-				errorMessage = t.errRecaptchaFailed;
+				showSubmitError(t.errRecaptchaFailed);
 				return;
 			}
 			const firstName = formData.firstName.trim();
@@ -362,8 +370,7 @@
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : t.errApplyGeneric;
-			errorMessage = msg;
-			toast.error(msg);
+			showSubmitError(msg);
 		} finally {
 			isSubmitting = false;
 		}
@@ -372,15 +379,27 @@
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (!formData.consentPdpa) {
-			errorMessage = t.errPdpaRequired;
+			showSubmitError(t.errPdpaRequired);
 			return;
 		}
 		if (!job || !activeShift) {
-			errorMessage = t.errNoJobSelected;
+			showSubmitError(t.errNoJobSelected);
 			return;
 		}
 		if (activeShift.conflict) {
-			errorMessage = 'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว กรุณาเลือกกะอื่นที่ไม่ทับซ้อนกัน';
+			showSubmitError('เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว กรุณาเลือกกะอื่นที่ไม่ทับซ้อนกัน');
+			return;
+		}
+		if (!isPortalApplicant && !formData.firstName.trim()) {
+			showSubmitError(t.errFirstName);
+			return;
+		}
+		if (!isPortalApplicant && !formData.lastName.trim()) {
+			showSubmitError(t.errLastName);
+			return;
+		}
+		if (!cleanApplicantPhone()) {
+			showSubmitError(t.errPhone);
 			return;
 		}
 		if (
@@ -389,21 +408,9 @@
 			'token' in applicantCredential &&
 			!formData.phone.trim()
 		) {
-			errorMessage = 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal';
+			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal');
 			return;
 		}
-		if (formData.skills.length === 0) {
-			errorMessage = t.errSkills;
-			return;
-		}
-		if (job?.skills_required && job.skills_required.length > 0) {
-			const hasMatching = formData.skills.some((skillCode) => skillMatchesJob(skillCode));
-			if (!hasMatching) {
-				errorMessage = t.errMissingRequiredSkill;
-				return;
-			}
-		}
-
 		errorMessage = null;
 		isSubmitting = true;
 		try {
@@ -423,15 +430,16 @@
 			});
 			const preflight = await preflightRes.json().catch(() => null);
 			if (!preflightRes.ok || !preflight?.success) {
-				errorMessage = preflight?.message || 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
+				let message = preflight?.message || 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
 				if (preflight?.error === 'AMBIGUOUS_VOLUNTEER') {
-					errorMessage = 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่';
+					message = 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่';
 				}
+				showSubmitError(message);
 				return;
 			}
 
 			if (preflight.match === 'ambiguous_match') {
-				errorMessage = preflight.message;
+				showSubmitError(preflight.message);
 				return;
 			}
 			if (preflight.match === 'matched_one') {
@@ -442,7 +450,7 @@
 			isSubmitting = false;
 			await submitApplication();
 		} catch (err) {
-			errorMessage = err instanceof Error ? err.message : 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
+			showSubmitError(err instanceof Error ? err.message : 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ');
 		} finally {
 			isSubmitting = false;
 		}
@@ -498,7 +506,7 @@
 					</div>
 				</div>
 
-				<form onsubmit={handleSubmit} class="px-6 py-6">
+				<form onsubmit={handleSubmit} novalidate class="px-6 py-6">
 					{#if errorMessage}
 						<div
 							class="mb-6 flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger/10 p-3.5 text-xs text-danger"
@@ -832,21 +840,11 @@
 							</div>
 
 							{#if job?.skills_required && job.skills_required.length > 0}
-								{@const hasSelectedRequired = formData.skills.some((s) => skillMatchesJob(s))}
 								<div
-									class="mb-3.5 flex items-center gap-2 rounded-xl p-3 text-xs font-medium transition-all {hasSelectedRequired
-										? 'border border-success/30 bg-success/10 text-success'
-										: 'border border-warning/30 bg-warning/10 text-warning-foreground'}"
+									class="mb-3.5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900"
 								>
-									<Tag class="h-4 w-4 shrink-0" />
-									<span>
-										{#if hasSelectedRequired}
-											✓ คุณได้เลือกทักษะที่ตรงตามเงื่อนไขของงานนี้แล้ว
-										{:else}
-											งานนี้กำหนดให้ต้องมีทักษะเฉพาะ (ป้ายกำกับสีฟ้า) กรุณาเลือกอย่างน้อย 1
-											ทักษะที่ตรงกันเพื่อสมัคร
-										{/if}
-									</span>
+									<Tag class="h-4 w-4 shrink-0 text-emerald-600" />
+									<span>{t.applySkillsSuggestion}</span>
 								</div>
 							{/if}
 
@@ -860,14 +858,14 @@
 									{#each masterSkills as skill (skill.id)}
 										{@const isSelected = formData.skills.includes(skill.id)}
 										{@const isControlled = skill.controlled}
-										{@const isRequiredByJob = skillMatchesJob(skill.id)}
+										{@const isSuggested = isSuggestedForJob(skill.id)}
 										<button
 											type="button"
 											onclick={() => toggleSkill(skill.key || skill.id || skill.label)}
 											class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all {isSelected
-												? 'border-primary bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
-												: isRequiredByJob
-													? 'border-primary/50 bg-primary/5 text-foreground hover:bg-primary/10'
+												? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200'
+												: isSuggested
+													? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
 													: 'border-border bg-card text-foreground hover:bg-muted'}"
 										>
 											{#if isSelected}
@@ -890,7 +888,7 @@
 												</span>
 											{/if}
 
-											{#if isRequiredByJob && !isSelected}
+											{#if isSuggested && !isSelected}
 												<span
 													class="rounded-full bg-primary/20 px-1.5 py-0.5 text-3xs font-bold text-primary"
 												>
@@ -941,7 +939,7 @@
 							</button>
 							<button
 								type="submit"
-								disabled={isSubmitting || !formData.consentPdpa}
+								disabled={isSubmitting}
 								class="flex flex-[2] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-70"
 							>
 								{isSubmitting ? t.applySubmitting : t.applySubmitButton}

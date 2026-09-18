@@ -95,7 +95,6 @@ export class PublicApplicationError extends Error {
 			| 'SHIFT_FULL'
 			| 'SHIFT_ID_REQUIRED'
 			| 'SHIFT_DATE_AMBIGUOUS'
-			| 'MISSING_REQUIRED_SKILLS'
 			| 'DUPLICATE_APPLICATION'
 			| 'AMBIGUOUS_VOLUNTEER'
 			| 'TIME_CONFLICT'
@@ -540,43 +539,6 @@ export async function applyPublicVolunteerApplication(
 	const selected = selectedShift(job, input);
 	const verifiedShiftId = shiftId(selected);
 	const skills = [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))];
-
-	if (job.skills_required && job.skills_required.length > 0) {
-		let masterItems: Array<{ code: string; label: string }> = [];
-		try {
-			const masterDoc = await readEffectiveMasterDoc('volunteer_skills', shelterCode);
-			if (masterDoc?.items) {
-				masterItems = masterDoc.items;
-			}
-		} catch {
-			// ignore
-		}
-
-		const matchSkill = (a: string, b: string): boolean => {
-			const normA = a.trim().toLowerCase();
-			const normB = b.trim().toLowerCase();
-			if (normA === normB || normA.includes(normB) || normB.includes(normA)) return true;
-			const itemA = masterItems.find(
-				(item) => item.code.toLowerCase() === normA || item.label.toLowerCase() === normA
-			);
-			const itemB = masterItems.find(
-				(item) => item.code.toLowerCase() === normB || item.label.toLowerCase() === normB
-			);
-			if (itemA && itemB) return itemA.code.toLowerCase() === itemB.code.toLowerCase();
-			if (itemA && (itemA.code.toLowerCase() === normB || itemA.label.toLowerCase() === normB))
-				return true;
-			if (itemB && (itemB.code.toLowerCase() === normA || itemB.label.toLowerCase() === normA))
-				return true;
-			return false;
-		};
-
-		const hasRequired = job.skills_required.some((needed) =>
-			skills.some((held) => matchSkill(held, needed))
-		);
-		if (!hasRequired) {
-			throw new PublicApplicationError('MISSING_REQUIRED_SKILLS', 422);
-		}
-	}
 
 	const controlled = await controlledSkills(shelterCode);
 	const phoneHash = await sha256Hex(normalizePhone(input.phone));

@@ -90,6 +90,7 @@ export interface JobsTranslations {
 	applyLoadingSkills: string;
 	applyControlledSkillBadge: string;
 	applyMatchesJobBadge: string;
+	applySkillsSuggestion: string;
 	applyPdpaTitle: string;
 	applyPdpaText: string;
 	applyProtectedFooter: string;
@@ -109,8 +110,6 @@ export interface JobsTranslations {
 	errFirstName: string;
 	errLastName: string;
 	errPhone: string;
-	errSkills: string;
-	errMissingRequiredSkill: string;
 }
 
 export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
@@ -189,8 +188,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',
 		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน (Shifts)',
-		applyStep3Title: '3. ทักษะความสามารถ (ดึงจาก Master Data)',
-		applyStep3Subtitle: 'เลือกทักษะที่คุณมีความพร้อมหรือความชำนาญ (สามารถเลือกได้มากกว่า 1 ข้อ)',
+		applyStep3Title: '3. ทักษะความสามารถ',
+		applyStep3Subtitle: 'เลือกทักษะที่คุณมีความพร้อมหรือความชำนาญ (เลือกได้ ไม่บังคับ)',
 		applyFirstName: 'ชื่อ',
 		applyLastName: 'นามสกุล',
 		applyNickname: 'ชื่อเล่น',
@@ -206,7 +205,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySkillsSelected: 'เลือกแล้ว',
 		applyLoadingSkills: 'กำลังโหลดรายการทักษะมาตรฐาน...',
 		applyControlledSkillBadge: 'ทักษะควบคุม',
-		applyMatchesJobBadge: 'ตรงกับงานนี้',
+		applyMatchesJobBadge: 'แนะนำ',
+		applySkillsSuggestion: 'ทักษะที่มีป้ายกำกับสีเขียวเป็นทักษะแนะนำสำหรับภารกิจนี้',
 		applyPdpaTitle: 'ความยินยอม PDPA:',
 		applyPdpaText:
 			'ข้าพเจ้ายินยอมให้ศูนย์พักพิงและระบบจัดสรรจิตอาสาเก็บรวบรวมและประมวลผลข้อมูลส่วนบุคคลข้างต้น เพื่อการประสานงานและจัดสรรงานจิตอาสาตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562',
@@ -227,9 +227,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errApplyGeneric: 'เกิดข้อผิดพลาดในการส่งใบสมัคร',
 		errFirstName: 'กรุณากรอกชื่อจริง',
 		errLastName: 'กรุณากรอกนามสกุล',
-		errPhone: 'กรุณากรอกเบอร์โทรศัพท์มือถือ 10 หลัก',
-		errSkills: 'กรุณาเลือกทักษะอย่างน้อย 1 อย่าง',
-		errMissingRequiredSkill: 'คุณต้องเลือกทักษะที่ตรงตามเงื่อนไขของภารกิจนี้อย่างน้อย 1 ทักษะ'
+		errPhone: 'กรุณากรอกเบอร์โทรศัพท์มือถือ 10 หลัก'
 	},
 	en: {
 		pageTitle: 'Volunteer Job Board — Smart Shelter',
@@ -306,8 +304,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		shiftDateLabel: 'Shift Date',
 		applyStep1Title: '1. Volunteer Identity Information',
 		applyStep2Title: '2. Select Shift Time (Shifts)',
-		applyStep3Title: '3. Skills & Capabilities (Master Data)',
-		applyStep3Subtitle: 'Select skills matching your capabilities (Multiple selection allowed)',
+		applyStep3Title: '3. Skills & Capabilities',
+		applyStep3Subtitle: 'Select skills matching your capabilities (Optional)',
 		applyFirstName: 'First Name',
 		applyLastName: 'Last Name',
 		applyNickname: 'Nickname',
@@ -323,7 +321,9 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySkillsSelected: 'Selected',
 		applyLoadingSkills: 'Loading standard skills master data...',
 		applyControlledSkillBadge: 'Controlled Skill',
-		applyMatchesJobBadge: 'Matches Job',
+		applyMatchesJobBadge: 'Suggested',
+		applySkillsSuggestion:
+			'Skills highlighted in green are suggestions for this job. Choose what matches your capabilities; selection is optional.',
 		applyPdpaTitle: 'PDPA Consent:',
 		applyPdpaText:
 			'I consent to the evacuation shelter and volunteer coordination system collecting and processing my personal data for volunteer management in accordance with the Personal Data Protection Act (PDPA).',
@@ -345,8 +345,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errApplyGeneric: 'An error occurred while submitting your application',
 		errFirstName: 'Please enter your first name',
 		errLastName: 'Please enter your last name',
-		errPhone: 'Please enter a valid 10-digit mobile phone number',
-		errSkills: 'Please select at least 1 skill',
-		errMissingRequiredSkill: 'You must select at least 1 skill required for this job'
+		errPhone: 'Please enter a valid 10-digit mobile phone number'
 	}
 };
