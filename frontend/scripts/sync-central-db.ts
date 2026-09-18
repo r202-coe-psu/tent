@@ -173,6 +173,21 @@ async function syncCatalogAccessDesign(
 	dryRun: boolean
 ): Promise<'already_current' | 'created' | 'updated'> {
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw({ forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' });
+    }
+  }
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
     if (newDoc._deleted && oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
       throw({ forbidden: 'Cannot delete system protected unit of measure' });
@@ -190,8 +205,28 @@ async function syncCatalogAccessDesign(
     }
     if (newDoc.type === 'item_master' && newDoc.base_unit &&
         !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
-        !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit)) {
+        !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit &&
+          isLegacyUnitLabel(newDoc.base_unit))) {
       throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+    }
+    if (newDoc.type === 'item_master') {
+      validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+      validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+      if (Array.isArray(newDoc.conversions)) {
+        for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+          validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+        }
+      }
+    }
+    if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+      for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+        validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+      }
+    }
+    if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+      for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+        validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
+      }
     }
     return;
   }
@@ -208,8 +243,28 @@ async function syncCatalogAccessDesign(
     if (hasScope && (isManager || isWS)) {
       if (newDoc.type === 'item_master' && newDoc.base_unit &&
           !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
-          !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit)) {
+          !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit &&
+            isLegacyUnitLabel(newDoc.base_unit))) {
         throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+      }
+      if (newDoc.type === 'item_master') {
+        validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+        validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+        if (Array.isArray(newDoc.conversions)) {
+          for (var localConversionIndex = 0; localConversionIndex < newDoc.conversions.length; localConversionIndex++) {
+            validateUnitField(newDoc.conversions[localConversionIndex].uom_name, 'conversions.uom_name');
+          }
+        }
+      }
+      if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+        for (var localIngredientIndex = 0; localIngredientIndex < newDoc.ingredients.length; localIngredientIndex++) {
+          validateUnitField(newDoc.ingredients[localIngredientIndex].uom, 'ingredients.uom');
+        }
+      }
+      if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+        for (var localNeedIndex = 0; localNeedIndex < newDoc.needs.length; localNeedIndex++) {
+          validateUnitField(newDoc.needs[localNeedIndex].unit, 'needs.unit');
+        }
       }
       return;
     }

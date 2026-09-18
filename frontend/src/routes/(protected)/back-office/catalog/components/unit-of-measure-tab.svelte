@@ -9,6 +9,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
 	// Icons
@@ -543,16 +544,23 @@
 					>
 						มิติการวัด (Dimension) <span class="text-destructive">*</span>
 					</label>
-					<select
-						id="uom-dimension"
-						bind:value={createDimension}
-						class="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:ring-2 focus:ring-ring focus:outline-none"
+					<Select.Root
+						type="single"
+						value={createDimension}
+						onValueChange={(value) => {
+							if (value) createDimension = value as Dimension;
+						}}
 					>
-						<option value="count">จำนวนนับ (count)</option>
-						<option value="mass">น้ำหนัก (mass)</option>
-						<option value="volume">ปริมาตร (volume)</option>
-						<option value="length">ความยาว (length)</option>
-					</select>
+						<Select.Trigger id="uom-dimension" class="h-10 w-full rounded-xl text-xs">
+							{DIMENSION_LABELS[createDimension]?.th} ({createDimension})
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="count">จำนวนนับ (count)</Select.Item>
+							<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
+							<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
+							<Select.Item value="length">ความยาว (length)</Select.Item>
+						</Select.Content>
+					</Select.Root>
 				</div>
 				<div>
 					<label

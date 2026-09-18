@@ -187,6 +187,52 @@ export class TransferServerRepository {
 		}
 	}
 
+	private async validateTransferUnits(items: { item_id: string; unit: string }[]): Promise<void> {
+		const response = await adminRaw('/catalog/_all_docs?include_docs=true', 'GET');
+		if (response.status !== HTTP_OK) {
+			throw new TransferServerRepositoryError(
+				'Failed to read catalog master data for transfer validation',
+				response.status,
+				response.data
+			);
+		}
+
+		const rows =
+			(response.data as { rows?: { doc?: Record<string, unknown> }[] } | null)?.rows ?? [];
+		const docs = rows.map((row) => row.doc).filter((doc): doc is Record<string, unknown> => !!doc);
+		const unitCodes = new Map(
+			docs
+				.filter((doc) => doc.type === 'unit_of_measure' && doc.deactivated !== true)
+				.map((doc) => [String(doc.code).toLowerCase(), doc])
+		);
+
+		for (const item of items) {
+			if (!unitCodes.has(item.unit.toLowerCase())) {
+				throw new TransferServerRepositoryError(
+					`Unknown or deactivated unit of measure: ${item.unit}`,
+					HTTP_UNPROCESSABLE
+				);
+			}
+			const catalogItem = docs.find((doc) => doc._id === item.item_id);
+			if (!catalogItem) {
+				throw new TransferServerRepositoryError(
+					`Unknown item: ${item.item_id} — transfer must reference the catalog`,
+					HTTP_UNPROCESSABLE
+				);
+			}
+			const expected =
+				catalogItem.type === 'item_master'
+					? String(catalogItem.base_unit ?? '')
+					: String(catalogItem.unit ?? '');
+			if (expected !== item.unit) {
+				throw new TransferServerRepositoryError(
+					`Unit mismatch for item ${item.item_id}: expected ${expected}, got ${item.unit}`,
+					HTTP_UNPROCESSABLE
+				);
+			}
+		}
+	}
+
 	async list(filter?: TransferFilter): Promise<StockTransfer[]> {
 		const parsed = transferFilterSchema.parse(filter ?? {});
 		const selector: Record<string, unknown> = {
@@ -231,6 +277,7 @@ export class TransferServerRepository {
 	}
 
 	async create(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer> {
+		await this.validateTransferUnits(input.items);
 		const doc = createTransfer(input, ctx);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(

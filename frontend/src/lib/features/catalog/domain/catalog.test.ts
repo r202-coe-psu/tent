@@ -86,7 +86,7 @@ describe('catalog domain', () => {
 	it('should create recipe doc with recipe: prefix', () => {
 		const input = {
 			label: 'แกงจืดเต้าหู้หมูสับ',
-			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
+			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'tube' }],
 			standard_portions: '50',
 			standard_duration_hours: '0.5'
 		};

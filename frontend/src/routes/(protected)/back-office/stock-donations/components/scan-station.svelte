@@ -9,7 +9,8 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import type { ScanDonationView } from '$lib/features/donations';
-	import { formatUnit } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	/**
 	 * `initialQuery` — set when opened from the "กำลังตรวจรับ (Verifying)" tab
@@ -48,6 +49,8 @@
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	/**
 	 * Lot labels the server minted on the last successful receive (CR-088). Staff
 	 * write these on the physical boxes, so they must survive the form resetting
@@ -315,7 +318,7 @@
 											class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
 										/>
 										<span class="w-12 text-2xs font-semibold text-muted-foreground">
-											{formatUnit(item.unit)}
+											{formatUnit(item.unit, units, langState.current)}
 										</span>
 									</div>
 								</div>

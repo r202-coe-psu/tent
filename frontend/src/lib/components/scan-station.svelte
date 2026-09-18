@@ -10,9 +10,12 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import { untrack, onMount } from 'svelte';
-	import { formatUnit } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let activeMode = $state<'scan' | 'walkin'>('scan');
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
 
 	// Mocked scanned booking data
@@ -114,7 +117,9 @@
 	function handleSaveScan() {
 		toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
 		scannedItems.forEach((item) => {
-			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${formatUnit(item.unit)}`);
+			toast.info(
+				`รับเข้า: ${item.name} จำนวน ${item.qty} ${formatUnit(item.unit, units, langState.current)}`
+			);
 		});
 		scanState = 'idle';
 	}
@@ -262,7 +267,7 @@
 											class="h-8 w-20 rounded-lg border-primary/50 bg-card px-2 text-right text-xs font-semibold focus:border-primary"
 										/>
 										<span class="w-12 text-2xs font-semibold text-muted-foreground">
-											{formatUnit(item.unit)}
+											{formatUnit(item.unit, units, langState.current)}
 										</span>
 									</div>
 								</div>

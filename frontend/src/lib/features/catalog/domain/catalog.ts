@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
 import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
-import { FALLBACK_UNIT_LABELS } from './unit-of-measure';
+import { isCanonicalUnitCode, isLegacyUnitLabel, unitCodeSchema } from './unit-of-measure';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['recurring', 'one_time']);
@@ -124,14 +124,14 @@ const itemMasterFieldsSchema = z.object({
 	conversions: z
 		.array(
 			z.object({
-				uom_name: z.string().trim(),
+				uom_name: z.union([z.literal(''), unitCodeSchema]),
 				multiplier: qtyStrCoercePositiveSchema,
 				barcode: z.string().trim().optional()
 			})
 		)
 		.default([]),
-	default_inventory_uom: z.string().trim().optional(),
-	default_issue_uom: z.string().trim().optional(),
+	default_inventory_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
+	default_issue_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
 	distribution_type: distributionTypeSchema.optional(),
 	type_class: typeClassSchema,
 	deactivated: z.boolean().optional(),
@@ -155,10 +155,7 @@ type ItemMasterFields = z.output<typeof itemMasterFieldsSchema>;
 
 function isLegacyBaseUnit(value: string): boolean {
 	const trimmed = value.trim();
-	return (
-		/^[a-z][a-z0-9_]{0,15}$/.test(trimmed) === false &&
-		Object.prototype.hasOwnProperty.call(FALLBACK_UNIT_LABELS, trimmed)
-	);
+	return !isCanonicalUnitCode(trimmed) && isLegacyUnitLabel(trimmed);
 }
 
 function validateItemMasterFields(
@@ -167,7 +164,7 @@ function validateItemMasterFields(
 	allowLegacyBaseUnit: boolean
 ): void {
 	const isValidBaseUnit = (value: string): boolean =>
-		/^[a-z][a-z0-9_]{0,15}$/.test(value.trim()) || (allowLegacyBaseUnit && isLegacyBaseUnit(value));
+		isCanonicalUnitCode(value) || (allowLegacyBaseUnit && isLegacyBaseUnit(value));
 
 	if (data.type_class !== 'EQUIPMENT') {
 		if (!data.base_unit || data.base_unit.trim() === '') {
@@ -226,7 +223,7 @@ export const recipeInputSchema = z.object({
 			z.object({
 				item_master_id: z.string().trim(),
 				quantity: qtyStrCoercePositiveSchema,
-				uom: z.string().trim()
+				uom: unitCodeSchema
 			})
 		)
 		.default([]),

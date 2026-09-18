@@ -14,6 +14,7 @@ import {
 	qtyStrCoerceNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
+import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -1043,7 +1044,7 @@ export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[])
 export const transferItemSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
-	unit: z.string().trim().min(1)
+	unit: unitCodeSchema
 });
 
 export const transferInputSchema = z.object({
@@ -1303,7 +1304,7 @@ export const campaignInputSchema = z.object({
 			z.object({
 				item_id: z.string().min(1),
 				qty_target: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1),
+				unit: unitCodeSchema,
 				status: z.enum(['open', 'closed']).optional().default('open')
 			})
 		)

@@ -210,6 +210,28 @@ describe('buildValidateDocUpdate', () => {
 			)
 		).not.toThrow();
 
+		// An unknown legacy typo is not grandfathered just because it is unchanged.
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						name: 'invalid legacy item',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
 		// UOM writes are central-only, including deletes and updates.
 		expectForbidden(
 			() =>

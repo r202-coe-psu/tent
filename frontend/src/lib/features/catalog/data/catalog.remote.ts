@@ -17,6 +17,9 @@ import {
 import {
 	createUnitOfMeasure,
 	isUnitOfMeasure,
+	assertKnownUnitCodes,
+	isCanonicalUnitCode,
+	isLegacyUnitLabel,
 	type UnitOfMeasure,
 	type UnitOfMeasureInput
 } from '../domain/unit-of-measure';
@@ -28,6 +31,60 @@ import {
 import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
+
+type AnyDoc = { _id: string; type: string; [key: string]: unknown };
+
+function isDocType(type: string) {
+	return (doc: unknown): doc is AnyDoc =>
+		!!doc && typeof doc === 'object' && (doc as { type?: unknown }).type === type;
+}
+
+function unitReferencesDoc(doc: AnyDoc, code: string): boolean {
+	const target = code.trim().toLowerCase();
+	const same = (value: unknown) =>
+		typeof value === 'string' && value.trim().toLowerCase() === target;
+
+	if (doc.type === 'item_master') {
+		const conversions = Array.isArray(doc.conversions) ? doc.conversions : [];
+		return [
+			doc.base_unit,
+			doc.default_inventory_uom,
+			doc.default_issue_uom,
+			...conversions.map((conversion) =>
+				conversion && typeof conversion === 'object'
+					? (conversion as { uom_name?: unknown }).uom_name
+					: undefined
+			)
+		].some(same);
+	}
+	if (doc.type === 'recipe') {
+		return (Array.isArray(doc.ingredients) ? doc.ingredients : []).some(
+			(ingredient) =>
+				!!ingredient &&
+				typeof ingredient === 'object' &&
+				same((ingredient as { uom?: unknown }).uom)
+		);
+	}
+	if (doc.type === 'donation_campaign') {
+		return (Array.isArray(doc.needs) ? doc.needs : []).some(
+			(need) => !!need && typeof need === 'object' && same((need as { unit?: unknown }).unit)
+		);
+	}
+	if (doc.type === 'stock_ledger') {
+		return same(doc.unit);
+	}
+	if (doc.type === 'purchase') {
+		return (Array.isArray(doc.items) ? doc.items : []).some(
+			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
+		);
+	}
+	if (doc.type === 'stock_transfer') {
+		return (Array.isArray(doc.items) ? doc.items : []).some(
+			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
+		);
+	}
+	return false;
+}
 
 function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResult<T> {
 	const total = items.length;
@@ -108,7 +165,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string
 	): Promise<ItemMaster> {
 		const repo = this.getWriteRepo(shelterCode);
-		return repo.put(createItemMaster(input, ctx, shelterCode));
+		const item = createItemMaster(input, ctx, shelterCode);
+		await this.validateItemMasterUnits(item);
+		return repo.put(item);
 	}
 
 	async listItemMasters(shelterCode?: string | null): Promise<ItemMaster[]> {
@@ -144,14 +203,38 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	}
 
 	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
-		if (itemMaster.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(itemMaster.base_unit.trim())) {
-			const current = await this.getItemMaster(itemMaster._id, itemMaster.shelter_code);
-			if (!current || current.base_unit !== itemMaster.base_unit) {
-				throw new Error('Base unit must be a valid lowercase English code');
-			}
-		}
+		const current = await this.getItemMaster(itemMaster._id, itemMaster.shelter_code);
+		if (!current) throw new Error(`Item master not found: ${itemMaster._id}`);
+		await this.validateItemMasterUnits(itemMaster, current);
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
 		return repo.put(touch(itemMaster));
+	}
+
+	private async validateItemMasterUnits(item: ItemMaster, current?: ItemMaster): Promise<void> {
+		const units = await this.listUnitsOfMeasure();
+		if (units.length === 0) {
+			throw new Error('Unit of measure master is unavailable; item master write was rejected');
+		}
+
+		const legacyBaseUnchanged =
+			!!current &&
+			typeof current.base_unit === 'string' &&
+			current.base_unit === item.base_unit &&
+			!isCanonicalUnitCode(item.base_unit) &&
+			isLegacyUnitLabel(item.base_unit);
+		if (!legacyBaseUnchanged && !isCanonicalUnitCode(item.base_unit)) {
+			throw new Error(`Base unit must be a valid lowercase English code: ${item.base_unit}`);
+		}
+		const canonicalCodes = [
+			item.default_inventory_uom,
+			item.default_issue_uom,
+			...(item.conversions ?? []).map((conversion) => conversion.uom_name),
+			...(legacyBaseUnchanged ? [] : [item.base_unit])
+		].filter((code): code is string => !!code && code.trim() !== '');
+
+		assertKnownUnitCodes(canonicalCodes, units, {
+			allowDeactivated: current?.base_unit === item.base_unit ? [item.base_unit] : []
+		});
 	}
 
 	async createRecipe(
@@ -160,7 +243,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string
 	): Promise<Recipe> {
 		const repo = this.getWriteRepo(shelterCode);
-		return repo.put(createRecipe(input, ctx, shelterCode));
+		const recipe = createRecipe(input, ctx, shelterCode);
+		await this.validateRecipeUnits(recipe);
+		return repo.put(recipe);
 	}
 
 	async listRecipes(shelterCode?: string | null): Promise<Recipe[]> {
@@ -195,9 +280,21 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<Recipe>(id);
 	}
 
-	updateRecipe(recipe: Recipe): Promise<Recipe> {
+	async updateRecipe(recipe: Recipe): Promise<Recipe> {
 		const repo = this.getWriteRepo(recipe.shelter_code);
+		await this.validateRecipeUnits(recipe);
 		return repo.put(touch(recipe));
+	}
+
+	private async validateRecipeUnits(recipe: Recipe): Promise<void> {
+		const units = await this.listUnitsOfMeasure();
+		if (units.length === 0) {
+			throw new Error('Unit of measure master is unavailable; recipe write was rejected');
+		}
+		assertKnownUnitCodes(
+			recipe.ingredients.map((ingredient) => ingredient.uom),
+			units
+		);
 	}
 
 	async deleteItemMaster(id: string, shelterCode?: string | null): Promise<boolean> {
@@ -373,6 +470,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 
 	async createUnitOfMeasure(input: UnitOfMeasureInput, ctx: AuthorContext): Promise<UnitOfMeasure> {
 		const doc = createUnitOfMeasure(input, ctx);
+		if (await this.getUnitOfMeasure(doc.code)) {
+			throw new Error(`Unit of measure already exists: ${doc.code}`);
+		}
 		return this.repo.put(doc);
 	}
 
@@ -436,6 +536,41 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (!uom) return false;
 		if (uom.is_protected) {
 			throw new Error('Cannot delete system protected unit of measure');
+		}
+
+		const databases = new Set<string>([CATALOG_DB, 'central_ops']);
+		const registry = createRemoteRepository('registry');
+		const shelters = await registry.allByType(
+			'shelter',
+			(doc): doc is AnyDoc =>
+				!!doc &&
+				typeof doc === 'object' &&
+				(doc as { type?: unknown }).type === 'shelter' &&
+				typeof (doc as { code?: unknown }).code === 'string'
+		);
+		for (const shelter of shelters) {
+			databases.add(`shelter_${String(shelter.code).toLowerCase()}`);
+		}
+
+		const referenceTypes = [
+			'item_master',
+			'recipe',
+			'donation_campaign',
+			'stock_ledger',
+			'purchase',
+			'stock_transfer'
+		];
+		for (const database of databases) {
+			const repository = database === CATALOG_DB ? this.repo : createRemoteRepository(database);
+			for (const type of referenceTypes) {
+				const docs = await repository.allByType(type, isDocType(type));
+				const reference = docs.find((doc) => unitReferencesDoc(doc, uom.code));
+				if (reference) {
+					throw new Error(
+						`Cannot delete unit of measure ${uom.code}; it is referenced by ${reference._id}`
+					);
+				}
+			}
 		}
 		await this.repo.remove(uom);
 		return true;

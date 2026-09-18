@@ -28,12 +28,32 @@ import type { ItemMaster } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
+async function seedUnitMaster() {
+	for (const [code, label, dimension] of [
+		['kg', 'กิโลกรัม', 'mass'],
+		['bottle', 'ขวด', 'count'],
+		['sachet', 'ซอง', 'count'],
+		['piece', 'ชิ้น', 'count']
+	] as const) {
+		await getDb('catalog').put({
+			_id: `unit_of_measure:${code}`,
+			type: 'unit_of_measure',
+			code,
+			label_th: label,
+			label_en: code,
+			dimension,
+			deactivated: false
+		});
+	}
+}
+
 describe('CatalogRemoteRepository', () => {
 	let repo: CatalogRemoteRepository;
 
 	beforeEach(async () => {
 		dbs.clear();
 		repo = new CatalogRemoteRepository();
+		await seedUnitMaster();
 	});
 
 	it('should deactivate central recipe when deleted even if not used by any meal plan', async () => {
@@ -409,6 +429,9 @@ describe('CatalogRemoteRepository', () => {
 		});
 
 		it('creates and lists units of measure sorted by sort_order', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
 			await repo.createUnitOfMeasure(
 				{
 					code: 'bottle',
@@ -438,6 +461,9 @@ describe('CatalogRemoteRepository', () => {
 		});
 
 		it('protects is_protected unit of measure from code/dimension modification and deletion', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
 			const uom = await repo.createUnitOfMeasure(
 				{
 					code: 'kg',
@@ -499,6 +525,31 @@ describe('CatalogRemoteRepository', () => {
 			expect((updated as UnitOfMeasure & { server_note?: string }).server_note).toBe('keep-me');
 			await expect(repo.updateUnitOfMeasure({ ...uom, code: 'box' })).rejects.toThrow(
 				/Cannot modify code of a unit of measure/
+			);
+		});
+
+		it('blocks deletion of a custom UOM while it is referenced by an item master', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
+				},
+				ctx
+			);
+			await repo.createItemMaster(
+				{
+					name: 'ลังสินค้า',
+					base_unit: 'crate',
+					type_class: 'CONSUMABLE',
+					distribution_type: 'recurring'
+				},
+				ctx
+			);
+
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/Cannot delete unit of measure crate; it is referenced by item_master:/
 			);
 		});
 	});

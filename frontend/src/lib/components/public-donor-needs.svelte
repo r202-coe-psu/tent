@@ -12,9 +12,11 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
-	import { formatUnit as formatUnitCatalog } from '$lib/features/catalog';
+	import { formatUnit as formatUnitCatalog, useUnitsOfMeasure } from '$lib/features/catalog';
 
 	const donationStore = getDonationStore();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	interface Need {
@@ -220,7 +222,7 @@
 	});
 
 	function formatUnit(unit: string): string {
-		return formatUnitCatalog(unit, null, langState.current);
+		return formatUnitCatalog(unit, units, langState.current);
 	}
 
 	function goToShelterDetails(shelter: ShelterNeeds) {

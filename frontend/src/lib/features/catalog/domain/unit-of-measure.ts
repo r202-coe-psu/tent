@@ -12,6 +12,22 @@ export const unitCodeSchema = z
 		'Code must be lowercase alphanumeric with optional underscores (1-16 chars)'
 	);
 
+export function isCanonicalUnitCode(value: unknown): value is string {
+	return typeof value === 'string' && unitCodeSchema.safeParse(value.trim()).success;
+}
+
+/**
+ * Legacy labels are accepted only when reading/updating an existing document.
+ * New documents must always carry a canonical code from the UOM master.
+ */
+export function isLegacyUnitLabel(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		!isCanonicalUnitCode(value.trim()) &&
+		Object.prototype.hasOwnProperty.call(FALLBACK_UNIT_LABELS, value.trim())
+	);
+}
+
 export interface UnitOfMeasure extends CatalogDoc {
 	type: 'unit_of_measure';
 	code: string;
@@ -220,4 +236,30 @@ export function formatUnit(
 	}
 
 	return trimmed;
+}
+
+export function assertKnownUnitCodes(
+	codes: readonly string[],
+	units: readonly UnitOfMeasure[],
+	options: { allowDeactivated?: readonly string[] } = {}
+): void {
+	const allowedDeactivated = new Set(
+		(options.allowDeactivated ?? []).map((code) => code.trim().toLowerCase())
+	);
+	const byCode = new Map(units.map((unit) => [unit.code.trim().toLowerCase(), unit]));
+
+	for (const rawCode of codes) {
+		const code = rawCode.trim();
+		if (!isCanonicalUnitCode(code)) {
+			throw new Error(`Unit must be a valid lowercase English code: ${rawCode}`);
+		}
+
+		const unit = byCode.get(code.toLowerCase());
+		if (!unit) {
+			throw new Error(`Unknown unit of measure: ${code}`);
+		}
+		if (unit.deactivated && !allowedDeactivated.has(code.toLowerCase())) {
+			throw new Error(`Unit of measure is deactivated: ${code}`);
+		}
+	}
 }

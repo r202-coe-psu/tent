@@ -16,7 +16,7 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { publicDonationErrorMessage } from '$lib/features/donations';
-	import { formatUnit } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -24,6 +24,8 @@
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	const donationStore = getDonationStore();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
@@ -255,7 +257,7 @@
 						<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 						<span class="{dotClass.split(' ')[1]} truncate">
 							{item.name || t.unspecified} — {item.amount}
-							{formatUnit(item.unit, null, langState.current)}
+							{formatUnit(item.unit, units, langState.current)}
 						</span>
 					</span>
 				{/each}
@@ -562,7 +564,7 @@
 										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
 									>
 										{item.amount}
-										{formatUnit(item.unit, null, langState.current)}
+										{formatUnit(item.unit, units, langState.current)}
 									</span>
 								</div>
 								<div

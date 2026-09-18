@@ -50,6 +50,9 @@ export {
 	// Unit of Measure
 	dimensionSchema,
 	unitCodeSchema,
+	isCanonicalUnitCode,
+	isLegacyUnitLabel,
+	assertKnownUnitCodes,
 	unitOfMeasureInputSchema,
 	unitOfMeasureUpdateSchema,
 	createUnitOfMeasure,

@@ -681,16 +681,33 @@ describe('OperationsRemoteRepository', () => {
 describe('OperationsRemoteRepository.updateCampaign', () => {
 	let repo: OperationsRemoteRepository;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		memoryRepo = createInMemoryRepository();
 		repo = new OperationsRemoteRepository('shelter_sh001');
+		mockGetItem.mockReset();
+		mockGetItem.mockResolvedValue({
+			_id: 'item:water',
+			type: 'item',
+			name: 'น้ำดื่ม',
+			unit: 'bottle',
+			perishable: false
+		} as unknown as SupplyItem);
+		await memoryRepo.put({
+			_id: 'unit_of_measure:bottle',
+			type: 'unit_of_measure',
+			code: 'bottle',
+			label_th: 'ขวด',
+			label_en: 'bottle',
+			dimension: 'count',
+			deactivated: false
+		});
 	});
 
 	it('should update campaign and create an audit log entry', async () => {
 		const created = await repo.createCampaign(
 			{
 				title: 'น้ำดื่มและยารักษาโรค',
-				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' }]
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' }]
 			},
 			ctx
 		);

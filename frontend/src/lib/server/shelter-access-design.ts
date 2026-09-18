@@ -1007,11 +1007,43 @@ export function buildValidateDocUpdate(code: string): string {
     }
   }
   // item_master base_unit invariant guard
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw { forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+  }
   if (newDoc.type === 'item_master') {
     var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
-      oldDoc.base_unit === newDoc.base_unit;
+      oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
     if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {
       throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+    validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+    validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+    if (Array.isArray(newDoc.conversions)) {
+      for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+        validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+      }
+    }
+  }
+  if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+    for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+      validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+    }
+  }
+  if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+    for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+      validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
     }
   }
 }`;
