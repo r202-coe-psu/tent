@@ -10,7 +10,6 @@
 	import ClipboardPenLine from '@lucide/svelte/icons/clipboard-pen-line';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
-	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Bell from '@lucide/svelte/icons/bell';
 	// import Users from '@lucide/svelte/icons/users'; // Volunteer link temporarily disabled

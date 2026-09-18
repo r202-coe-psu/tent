@@ -12,9 +12,7 @@ export async function fetchAppConfig(fetchFn: typeof fetch = fetch): Promise<App
 		credentials: 'include'
 	});
 	const body = (await res.json().catch(() => null)) as
-		| AppConfigResponse
-		| { error?: { message?: string } }
-		| null;
+		AppConfigResponse | { error?: { message?: string } } | null;
 	if (!res.ok) {
 		const message =
 			body && typeof body === 'object' && 'error' in body && body.error?.message
@@ -36,9 +34,7 @@ export async function updateAppConfig(
 		body: JSON.stringify(patch)
 	});
 	const body = (await res.json().catch(() => null)) as
-		| { config: AppConfig; ok?: boolean }
-		| { error?: { message?: string } }
-		| null;
+		{ config: AppConfig; ok?: boolean } | { error?: { message?: string } } | null;
 	if (!res.ok) {
 		const message =
 			body && typeof body === 'object' && 'error' in body && body.error?.message

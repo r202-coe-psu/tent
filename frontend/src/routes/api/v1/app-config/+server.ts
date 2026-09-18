@@ -6,7 +6,7 @@ import {
 	appConfigSchema,
 	readAppConfig,
 	type AppConfig
-} from '$lib/features/shared/domain/app-config';
+} from '$lib/features/shared';
 import { adminRaw, authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 
 export const prerender = false;

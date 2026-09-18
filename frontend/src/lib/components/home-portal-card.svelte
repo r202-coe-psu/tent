@@ -61,7 +61,7 @@
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 min-w-0 text-lg font-bold break-words text-balance text-foreground xl:text-xl">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
 			{title}
 		</h2>
 		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
@@ -69,7 +69,7 @@
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex min-w-0 max-w-full items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}
@@ -95,7 +95,7 @@
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 min-w-0 text-lg font-bold break-words text-balance text-foreground xl:text-xl">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
 			{title}
 		</h2>
 		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
@@ -103,7 +103,7 @@
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex min-w-0 max-w-full items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}
