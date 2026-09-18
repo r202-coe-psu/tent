@@ -568,13 +568,8 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 ข้อมูลเดิม. `reason='consumption'` ถูกเขียนร่วมกับ `stock_ledger` ของวัตถุดิบใน `bulkDocs`
 เดียวกัน และต้อง reject ทั้ง transaction หากแก๊สไม่พอ.
 
-### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 4**
+### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 3**
 
-> **schema_v 4** — เพิ่ม `tracking_token_hash` (draft CR:
-> [draft-volunteer-role-card-checkin.md](../changes/draft-volunteer-role-card-checkin.md)). Token
-> ถาวรระดับอาสาสมัคร (ไม่ใช่ต่อใบสมัครงานเหมือน `job_application.tracking_token_hash` §2.18) มินต์
-> ครั้งเดียวตอนสมัครงานครั้งแรก ใช้ล็อกอินพอร์ทัลและสแกนเช็คอินหน้างานได้ทั้งคู่ ไม่มี migration
-> script — ฟิลด์ additive, มินต์แบบ lazy ตอนสมัครครั้งถัดไปสำหรับอาสาสมัครเก่าที่ยังไม่มี.
 > **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). บันทึก `phone` เป็น Mandatory Key (เบอร์โทรศัพท์สำหรับระบุตัวตนและดึงตั๋ว), `national_id` เป็น Optional, เพิ่ม `personnel_type` ('volunteer' | 'staff'), `checked_in` สถานะปฏิบัติงานสด, `current_shelter_code`, และลิงก์ไปยัง `user_name` กรณีเป็น Staff-Capable Volunteer.
 > schema_v 2 — ปรับปรุงฟิลด์กะงาน.
 > schema_v 1 — baseline โปรไฟล์อาสาสมัคร (CR-041).
@@ -592,9 +587,8 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `current_shelter_code` | str\|null | opt | รหัสศูนย์ที่กำลังปฏิบัติงานอยู่ในปัจจุบัน |
 | `user_name` | str\|null | opt | ชื่อผู้ใช้ใน `_users` (เฉพาะอาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์ชั่วคราว) |
 | `status` | enum(`active`,`inactive`) | req | default `active` |
-| `tracking_token_hash` | str\|null | opt | SHA-256 hash ของ token ถาวรระดับอาสาสมัคร (`TKT-VOL-{32 hex}`) มินต์ครั้งเดียวตอนสมัครงานครั้งแรก ไม่หมดอายุ ไม่ re-mint; เก็บเฉพาะ hash — plaintext ส่งกลับตอน apply ครั้งที่มินต์เท่านั้น |
 
-**Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)` · `(tracking_token_hash)`
+**Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
 ### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 3**
 
