@@ -1,5 +1,6 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { now, touch, type AuthorContext } from '$lib/db/model';
+import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
 import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
@@ -361,11 +362,48 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
 				}
 
-				const members: Evacuee[] = [];
+				const memberDocs: Evacuee[] = [];
+				const medicalDocs: Medical[] = [];
+				const movementDocs: Movement[] = [];
+
 				for (const memberInput of plan.memberInputs) {
-					const saved = await this.createEvacuee({ ...memberInput, household_id: targetId }, ctx);
-					createdMemberIds.push(saved._id);
-					members.push(saved);
+					const memberUlid = ulid();
+					const memberId = makeDocId('evacuee', memberUlid);
+					createdMemberIds.push(memberId);
+
+					const evacuee = buildEvacuee({ ...memberInput, household_id: targetId }, ctx, memberUlid);
+					memberDocs.push(evacuee);
+
+					const needsMedical =
+						(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
+						(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
+						(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
+						(memberInput.medical_note && memberInput.medical_note.length > 0);
+
+					if (needsMedical) {
+						medicalDocs.push(
+							buildMedical(
+								{
+									evacuee_id: evacuee._id,
+									conditions: memberInput.medical_conditions || [],
+									allergies: memberInput.medical_allergies || [],
+									medications: memberInput.medical_medications || [],
+									notes: memberInput.medical_note || '',
+									track: memberInput.track || ('normal' as const)
+								},
+								ctx
+							)
+						);
+					}
+
+					if (evacuee.current_stay.zone) {
+						movementDocs.push(
+							createMovement(
+								{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
+								ctx
+							)
+						);
+					}
 				}
 
 				const appendPets = (plan.householdInput.pets ?? []) as Household['pets'];
@@ -374,7 +412,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const hasAppend =
 					appendPets.length > 0 || appendVehicles.length > 0 || appendAssets != null;
 
-				let household = target;
+				let updatedHouseholdDoc: Household | null = null;
 				if (hasAppend) {
 					const mergedAssets =
 						appendAssets == null
@@ -388,16 +426,36 @@ export class PeopleRemoteRepository implements PeopleRepository {
 										image_url: target.assets.image_url ?? appendAssets.image_url ?? null
 									}
 								: appendAssets;
-					household = await this.patchHousehold(targetId, {
+					updatedHouseholdDoc = touch({
+						...target,
 						pets: [...(target.pets ?? []), ...appendPets],
 						vehicles: [...(target.vehicles ?? []), ...appendVehicles],
 						assets: mergedAssets
 					});
-				} else {
-					await this.refreshDerivedHouseholdStatus(targetId);
-					const refreshed = await this.getHousehold(targetId);
-					household = refreshed ?? target;
 				}
+
+				const docsToWrite: Array<{ _id: string; _rev?: string }> = updatedHouseholdDoc
+					? [updatedHouseholdDoc, ...memberDocs, ...medicalDocs, ...movementDocs]
+					: [...memberDocs, ...medicalDocs, ...movementDocs];
+
+				const savedDocs = await this.repo.bulkDocs(docsToWrite);
+
+				const members = memberDocs.map((m) => {
+					const saved = savedDocs.find((d) => d._id === m._id) as Evacuee | undefined;
+					return saved ?? m;
+				});
+
+				let household: Household;
+				if (updatedHouseholdDoc) {
+					household =
+						(savedDocs.find((d) => d._id === targetId) as Household) ?? updatedHouseholdDoc;
+				} else {
+					household = target;
+				}
+
+				await this.refreshDerivedHouseholdStatus(targetId);
+				const refreshed = await this.getHousehold(targetId);
+				household = refreshed ?? household;
 
 				return { household, members };
 			} catch (err) {
@@ -409,28 +467,85 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		}
 
 		try {
-			const members: Evacuee[] = [];
-			for (const memberInput of plan.memberInputs) {
-				const saved = await this.createEvacuee(memberInput, ctx);
-				createdMemberIds.push(saved._id);
-				members.push(saved);
+			if (plan.memberInputs.length === 0) {
+				throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 			}
 
-			const head = members[0];
-			if (!head) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
+			const householdUlid = ulid();
+			householdId = makeDocId('household', householdUlid);
 
-			const household = await this.createHousehold(
-				{ ...plan.householdInput, head_evacuee_id: head._id },
-				ctx
+			const memberUlids = plan.memberInputs.map(() => ulid());
+			const memberIds = memberUlids.map((u) => makeDocId('evacuee', u));
+			createdMemberIds.push(...memberIds);
+			const headId = memberIds[0];
+
+			const householdDoc = buildHousehold(
+				{ ...plan.householdInput, head_evacuee_id: headId },
+				ctx,
+				householdUlid
 			);
-			householdId = household._id;
 
-			const linked: Evacuee[] = [];
-			for (const member of members) {
-				linked.push(await this.patchEvacuee(member._id, { household_id: household._id }));
+			const memberDocs: Evacuee[] = [];
+			const medicalDocs: Medical[] = [];
+			const movementDocs: Movement[] = [];
+
+			for (let i = 0; i < plan.memberInputs.length; i++) {
+				const memberInput = plan.memberInputs[i];
+				const evacuee = buildEvacuee(
+					{ ...memberInput, household_id: householdId },
+					ctx,
+					memberUlids[i]
+				);
+				memberDocs.push(evacuee);
+
+				const needsMedical =
+					(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
+					(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
+					(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
+					(memberInput.medical_note && memberInput.medical_note.length > 0);
+
+				if (needsMedical) {
+					medicalDocs.push(
+						buildMedical(
+							{
+								evacuee_id: evacuee._id,
+								conditions: memberInput.medical_conditions || [],
+								allergies: memberInput.medical_allergies || [],
+								medications: memberInput.medical_medications || [],
+								notes: memberInput.medical_note || '',
+								track: memberInput.track || ('normal' as const)
+							},
+							ctx
+						)
+					);
+				}
+
+				if (evacuee.current_stay.zone) {
+					movementDocs.push(
+						createMovement(
+							{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
+							ctx
+						)
+					);
+				}
 			}
 
-			return { household, members: linked };
+			const docsToWrite: Array<{ _id: string; _rev?: string }> = [
+				householdDoc,
+				...memberDocs,
+				...medicalDocs,
+				...movementDocs
+			];
+			const savedDocs = await this.repo.bulkDocs(docsToWrite);
+
+			const household =
+				(savedDocs.find((d) => d._id === householdId) as Household | undefined) ?? householdDoc;
+			const members = memberDocs.map((m) => {
+				const saved = savedDocs.find((d) => d._id === m._id) as Evacuee | undefined;
+				return saved ?? m;
+			});
+
+			return { household, members };
 		} catch (err) {
 			if (householdId) {
 				for (const id of createdMemberIds) {
@@ -1059,15 +1174,19 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			license_plate: v.license_plate ?? null
 		}));
 
+		const docsToWrite: Array<{ _id: string; _rev?: string }> = [];
+
 		if (!existingHousehold) {
 			const headName = formatPersonName(
 				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้ประสบภัย', last_name: '' }
 			);
 			const label = autoHouseholdLabel(headName);
-			savedHousehold = await this.createHousehold(
+			const householdUlid = ulid();
+			const headId = memberInputs[0]?._id ?? makeDocId('evacuee', ulid());
+			savedHousehold = buildHousehold(
 				{
 					label,
-					head_evacuee_id: memberInputs[0]?._id ?? null,
+					head_evacuee_id: headId,
 					status: 'arriving',
 					checkout_destination: null,
 					municipality_zone: null,
@@ -1091,8 +1210,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						: null,
 					notes: ''
 				},
-				ctx
+				ctx,
+				householdUlid
 			);
+			docsToWrite.push(savedHousehold);
 		} else {
 			const updatedHouseholdDoc: Household = touch({
 				...existingHousehold,
@@ -1114,7 +1235,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						}
 					: null
 			});
-			savedHousehold = await this.repo.put(updatedHouseholdDoc);
+			savedHousehold = updatedHouseholdDoc;
+			docsToWrite.push(updatedHouseholdDoc);
 		}
 
 		const effectiveHouseholdId = savedHousehold._id;
@@ -1189,23 +1311,62 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					current_stay: updatedStay
 				});
 
-				const saved = await this.repo.put(updatedEvacuee);
-				allSavedMembers.push(saved);
+				docsToWrite.push(updatedEvacuee);
+				allSavedMembers.push(updatedEvacuee);
 				if (willReportIn) {
-					reportedInMembers.push(saved);
+					reportedInMembers.push(updatedEvacuee);
 				}
 			} else {
-				const newEvacueeInput: EvacueeInput = {
-					...m,
-					household_id: effectiveHouseholdId,
-					status: 'arriving',
-					registered_via: 'staff'
-				};
-				const saved = await this.createEvacuee(newEvacueeInput, ctx);
-				allSavedMembers.push(saved);
-				reportedInMembers.push(saved);
+				const newMemberUlid = ulid();
+				const newEvacuee = buildEvacuee(
+					{
+						...m,
+						household_id: effectiveHouseholdId,
+						status: 'arriving',
+						registered_via: 'staff'
+					},
+					ctx,
+					newMemberUlid
+				);
+				docsToWrite.push(newEvacuee);
+				allSavedMembers.push(newEvacuee);
+				reportedInMembers.push(newEvacuee);
+
+				const needsMedical =
+					(m.medical_conditions && m.medical_conditions.length > 0) ||
+					(m.medical_allergies && m.medical_allergies.length > 0) ||
+					(m.medical_medications && m.medical_medications.length > 0) ||
+					(m.medical_note && m.medical_note.length > 0);
+
+				if (needsMedical) {
+					docsToWrite.push(
+						buildMedical(
+							{
+								evacuee_id: newEvacuee._id,
+								conditions: m.medical_conditions || [],
+								allergies: m.medical_allergies || [],
+								medications: m.medical_medications || [],
+								notes: m.medical_note || '',
+								track: 'normal' as const
+							},
+							ctx
+						)
+					);
+				}
 			}
 		}
+
+		const savedDocs = await this.repo.bulkDocs(docsToWrite);
+
+		const finalSavedHousehold =
+			(savedDocs.find((d) => d._id === effectiveHouseholdId) as Household | undefined) ??
+			savedHousehold;
+		const finalReportedMembers = reportedInMembers.map(
+			(m) => (savedDocs.find((d) => d._id === m._id) as Evacuee | undefined) ?? m
+		);
+		const finalAllSavedMembers = allSavedMembers.map(
+			(m) => (savedDocs.find((d) => d._id === m._id) as Evacuee | undefined) ?? m
+		);
 
 		for (const oldHhId of affectedOldHouseholdIds) {
 			await this.cancelHouseholdIfEmpty(oldHhId);
@@ -1219,8 +1380,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const finalHousehold = await this.getHousehold(effectiveHouseholdId);
 
 		return {
-			household: finalHousehold ?? savedHousehold,
-			members: reportedInMembers.length > 0 ? reportedInMembers : allSavedMembers
+			household: finalHousehold ?? finalSavedHousehold,
+			members: finalReportedMembers.length > 0 ? finalReportedMembers : finalAllSavedMembers
 		};
 	}
 

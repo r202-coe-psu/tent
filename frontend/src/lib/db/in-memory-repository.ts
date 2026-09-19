@@ -84,6 +84,14 @@ export function createInMemoryRepository(): Repository {
 			return docs.filter((d) =>
 				matchesSelector(d as Record<string, unknown>, query.selector)
 			) as unknown as T[];
+		},
+
+		async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+			const savedDocs: T[] = [];
+			for (const doc of docs) {
+				savedDocs.push(await this.put(doc));
+			}
+			return savedDocs;
 		}
 	};
 }

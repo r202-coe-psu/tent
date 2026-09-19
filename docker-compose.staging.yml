@@ -7,6 +7,7 @@ services:
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     volumes:
       - /mnt/tent-data/couchdb/data:/opt/couchdb/data
+      - ./couchdb-session.ini:/opt/couchdb/etc/local.d/session.ini
     # No port binding — reachable only inside Docker network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]

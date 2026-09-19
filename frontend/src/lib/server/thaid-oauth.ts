@@ -11,8 +11,10 @@ import { ServiceError } from '$lib/server/couch-admin';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain import; barrel pulls client UI / qrcode
 import {
 	type ThaiDAutofillProfile,
-	stripThaiTitle
+	stripThaiTitle,
+	cleanAreaPrefix
 } from '$lib/features/people/domain/thaid-profile';
+import { lookupZipcode } from './thailand-location';
 
 export type { ThaiDAutofillProfile };
 
@@ -193,7 +195,7 @@ export function buildThaidAuthorizeUrl(opts: {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const defaultScope =
 		opts.mode === 'register' || opts.mode === 'member_scan'
-			? env.THAID_OAUTH_SCOPE?.trim() || 'openid pid name birthdate address'
+			? env.THAID_OAUTH_SCOPE?.trim() || 'openid pid name birthdate address house_address'
 			: 'pid name openid';
 	const params = new URLSearchParams({
 		response_type: 'code',
@@ -353,10 +355,15 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 	const givenName = typeof raw.given_name === 'string' ? raw.given_name.trim() : '';
 	const familyName = typeof raw.family_name === 'string' ? raw.family_name.trim() : '';
 
-	const rawGender = typeof raw.gender === 'string' ? raw.gender.toLowerCase() : '';
-	if (rawGender === 'male' || rawGender === '1' || rawGender === 'm') {
+	const rawGender = typeof raw.gender === 'string' ? raw.gender.trim().toLowerCase() : '';
+	if (rawGender === 'male' || rawGender === '1' || rawGender === 'm' || rawGender === 'ชาย') {
 		gender = 'male';
-	} else if (rawGender === 'female' || rawGender === '2' || rawGender === 'f') {
+	} else if (
+		rawGender === 'female' ||
+		rawGender === '2' ||
+		rawGender === 'f' ||
+		rawGender === 'หญิง'
+	) {
 		gender = 'female';
 	}
 
@@ -378,11 +385,11 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		lastName = parts.slice(1).join(' ') ?? '';
 	}
 
-	// Birthdate / age parsing
+	// Birthdate / age parsing — do not assume hardcoded age 30 when omitted
 	const currentCeYear = new Date().getFullYear();
 	const currentBeYear = currentCeYear + 543;
-	let birthYear = currentBeYear - 30; // sensible adult default if omitted
-	let age = 30;
+	let birthYear = 0;
+	let age = 0;
 
 	const rawBirth =
 		typeof raw.birthdate === 'string'
@@ -405,7 +412,7 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		}
 	}
 
-	// Address mapping
+	// Address mapping: support house_address (raw # delimited or formatted) and address object/string
 	const address = {
 		address_no: '',
 		village_no: '',
@@ -415,46 +422,101 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		postal_code: ''
 	};
 
-	if (raw.address && typeof raw.address === 'object') {
-		const a = raw.address as Record<string, unknown>;
-		address.address_no =
-			typeof a.house_no === 'string'
-				? a.house_no
-				: typeof a.address_no === 'string'
-					? a.address_no
-					: '';
-		address.village_no =
-			typeof a.village_no === 'string' ? a.village_no : typeof a.moo === 'string' ? a.moo : '';
-		address.subdistrict =
-			typeof a.subdistrict === 'string'
-				? a.subdistrict
-				: typeof a.tambon === 'string'
-					? a.tambon
-					: '';
-		address.district =
-			typeof a.district === 'string' ? a.district : typeof a.amphur === 'string' ? a.amphur : '';
-		address.province =
-			typeof a.province === 'string'
-				? a.province
-				: typeof a.changwat === 'string'
-					? a.changwat
-					: '';
-		address.postal_code =
-			typeof a.postal_code === 'string'
-				? a.postal_code
-				: typeof a.postcode === 'string'
-					? a.postcode
-					: '';
-	} else if (typeof raw.formatted_address === 'string' && raw.formatted_address) {
-		address.address_no = raw.formatted_address;
+	// 1. Check house_address (DOPA scope 19: raw is เลขที่#หมู่ที่#ตรอก#ซอย#ถนน#ตำบล#อำเภอ#จังหวัด)
+	const houseAddressRaw =
+		raw.house_address && typeof raw.house_address === 'object'
+			? (raw.house_address as Record<string, unknown>).raw
+			: typeof raw.house_address === 'string'
+				? raw.house_address
+				: null;
+
+	if (typeof houseAddressRaw === 'string' && houseAddressRaw.includes('#')) {
+		const parts = houseAddressRaw.split('#').map((p) => p.trim());
+		address.address_no = parts[0] ?? '';
+		address.village_no = parts[1] ?? '';
+		// parts[2]=ตรอก, parts[3]=ซอย, parts[4]=ถนน
+		address.subdistrict = cleanAreaPrefix(parts[5] ?? '');
+		address.district = cleanAreaPrefix(parts[6] ?? '');
+		address.province = cleanAreaPrefix(parts[7] ?? '');
 	}
 
-	const phone =
+	// 2. Check address object (DOPA scope 5)
+	if (raw.address && typeof raw.address === 'object') {
+		const a = raw.address as Record<string, unknown>;
+		if (!address.address_no) {
+			address.address_no =
+				typeof a.house_no === 'string'
+					? a.house_no.trim()
+					: typeof a.address_no === 'string'
+						? a.address_no.trim()
+						: '';
+		}
+		if (!address.village_no) {
+			address.village_no =
+				typeof a.village_no === 'string'
+					? a.village_no.trim()
+					: typeof a.moo === 'string'
+						? a.moo.trim()
+						: '';
+		}
+		if (!address.subdistrict) {
+			const sub =
+				typeof a.subdistrict === 'string'
+					? a.subdistrict
+					: typeof a.tambon === 'string'
+						? a.tambon
+						: '';
+			address.subdistrict = cleanAreaPrefix(sub);
+		}
+		if (!address.district) {
+			const dist =
+				typeof a.district === 'string' ? a.district : typeof a.amphur === 'string' ? a.amphur : '';
+			address.district = cleanAreaPrefix(dist);
+		}
+		if (!address.province) {
+			const prov =
+				typeof a.province === 'string'
+					? a.province
+					: typeof a.changwat === 'string'
+						? a.changwat
+						: '';
+			address.province = cleanAreaPrefix(prov);
+		}
+		if (!address.postal_code) {
+			address.postal_code =
+				typeof a.postal_code === 'string'
+					? a.postal_code.trim()
+					: typeof a.postcode === 'string'
+						? a.postcode.trim()
+						: '';
+		}
+	} else if (!address.address_no) {
+		if (typeof raw.formatted_address === 'string' && raw.formatted_address) {
+			address.address_no = raw.formatted_address.trim();
+		} else if (
+			raw.house_address &&
+			typeof raw.house_address === 'object' &&
+			typeof (raw.house_address as Record<string, unknown>).formatted === 'string'
+		) {
+			address.address_no = (
+				(raw.house_address as Record<string, unknown>).formatted as string
+			).trim();
+		}
+	}
+
+	// 3. Resolve postal code automatically if missing but province and subdistrict are known
+	if (!address.postal_code && address.province && address.subdistrict) {
+		address.postal_code =
+			lookupZipcode(address.province, address.district, address.subdistrict) ?? '';
+	}
+
+	const rawPhone =
 		typeof raw.phone_number === 'string'
 			? raw.phone_number
 			: typeof raw.phone === 'string'
 				? raw.phone
 				: null;
+	const phone = rawPhone ? rawPhone.replace(/[-\s]/g, '').trim() || null : null;
 
 	return {
 		id: `thaid-${pid || claims.sub}`,

@@ -171,7 +171,12 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 		});
 
 		it('creates and parses member_scan state with sessionId', () => {
-			const state = createThaidOAuthState('member_scan', undefined, undefined, 'sess_1234567890abcdef');
+			const state = createThaidOAuthState(
+				'member_scan',
+				undefined,
+				undefined,
+				'sess_1234567890abcdef'
+			);
 			const parsed = parseThaidOAuthState(state);
 			expect(parsed).toMatchObject({
 				mode: 'member_scan',
@@ -274,6 +279,57 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			const consumed = consumeCitizenClaimCookie(mockCookies);
 			expect(consumed).toEqual(mockProfile);
 			expect(cookieStore.has('thaid_citizen_claim')).toBe(false);
+		});
+
+		it('parses DOPA house_address raw #-delimited format and cleans area prefixes', () => {
+			const claims = {
+				sub: 'sub-user-99',
+				pid: '1509900123456',
+				name: 'นาย ประเสริฐ ยิ่งยง',
+				raw: {
+					house_address: {
+						raw: '99/1#2#ตรอกสุขใจ#ซอย 5#ถนนมิตรภาพ#ตำบลสุเทพ#อำเภอเมืองเชียงใหม่#จังหวัดเชียงใหม่'
+					},
+					phone: '081-999-8877'
+				}
+			};
+
+			const profile = parseThaidCitizenClaims(claims);
+			expect(profile.first_name).toBe('ประเสริฐ');
+			expect(profile.last_name).toBe('ยิ่งยง');
+			expect(profile.address.address_no).toBe('99/1');
+			expect(profile.address.village_no).toBe('2');
+			expect(profile.address.subdistrict).toBe('สุเทพ');
+			expect(profile.address.district).toBe('เมืองเชียงใหม่');
+			expect(profile.address.province).toBe('เชียงใหม่');
+			expect(profile.address.postal_code).toBe('50200'); // auto-resolved via lookupZipcode
+			expect(profile.phone).toBe('0819998877'); // cleaned hyphens
+		});
+
+		it('parses Thai gender strings ชาย and หญิง and does not force age 30 when birthdate is missing', () => {
+			const maleClaims = {
+				sub: 'sub-male',
+				pid: '111',
+				name: 'กิตติ สันติ',
+				raw: {
+					gender: 'ชาย'
+				}
+			};
+			const maleProfile = parseThaidCitizenClaims(maleClaims);
+			expect(maleProfile.gender).toBe('male');
+			expect(maleProfile.birth_year).toBe(0);
+			expect(maleProfile.age).toBe(0);
+
+			const femaleClaims = {
+				sub: 'sub-female',
+				pid: '222',
+				name: 'มาลี ใจกล้า',
+				raw: {
+					gender: 'หญิง'
+				}
+			};
+			const femaleProfile = parseThaidCitizenClaims(femaleClaims);
+			expect(femaleProfile.gender).toBe('female');
 		});
 	});
 });

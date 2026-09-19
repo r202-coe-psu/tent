@@ -1194,7 +1194,7 @@ export function replacePersonId(evacuee: Evacuee, personId: PersonId): Evacuee {
 	};
 }
 
-export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee {
+export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
@@ -1221,7 +1221,8 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
@@ -1272,7 +1273,7 @@ export function createKioskEvacueeFromCard(
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
-export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical {
+export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);
 	return makeDoc(
 		'medical',
@@ -1286,11 +1287,12 @@ export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical 
 			track: d.track,
 			...(d.notes ? { notes: d.notes } : {})
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
-export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Household {
+export function createHousehold(input: HouseholdInput, ctx: AuthorContext, id?: string): Household {
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
@@ -1315,7 +1317,8 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			province: d.province || null,
 			postal_code: d.postal_code || null
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 

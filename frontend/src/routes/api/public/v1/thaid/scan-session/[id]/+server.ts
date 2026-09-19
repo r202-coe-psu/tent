@@ -11,10 +11,7 @@ export const prerender = false;
 export const GET: RequestHandler = async ({ params }) => {
 	const session = getScanSession(params.id);
 	if (!session) {
-		return json(
-			{ status: 'expired' },
-			{ status: 404, headers: { 'Cache-Control': 'no-store' } }
-		);
+		return json({ status: 'expired' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
 	}
 
 	return json(
