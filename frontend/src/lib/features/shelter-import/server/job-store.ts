@@ -37,6 +37,8 @@ export interface ShelterImportItem {
 	row: number;
 	name: string | null;
 	input?: Shelter;
+	/** Whether the uploaded workbook explicitly included the food-point sheet. */
+	food_distribution_points_present?: boolean;
 	status: ImportItemStatus;
 	attempts: number;
 	max_attempts: number;
@@ -373,6 +375,7 @@ function sameStagedItem(left: ShelterImportItem, right: ShelterImportItem): bool
 		stableStringify({
 			name: left.name,
 			input: left.input ?? null,
+			food_distribution_points_present: left.food_distribution_points_present ?? false,
 			status: left.status,
 			attempts: left.attempts,
 			max_attempts: left.max_attempts,
@@ -381,6 +384,7 @@ function sameStagedItem(left: ShelterImportItem, right: ShelterImportItem): bool
 			stableStringify({
 				name: right.name,
 				input: right.input ?? null,
+				food_distribution_points_present: right.food_distribution_points_present ?? false,
 				status: right.status,
 				attempts: right.attempts,
 				max_attempts: right.max_attempts,
@@ -402,6 +406,7 @@ function idempotencyHashes(args: {
 		row: number;
 		name: string | null;
 		input?: Shelter;
+		food_distribution_points_present?: boolean;
 		errors?: ImportItemError[];
 		valid: boolean;
 	}>;
@@ -415,6 +420,7 @@ function idempotencyHashes(args: {
 				row: row.row,
 				name: row.name,
 				input: row.input ?? null,
+				food_distribution_points_present: row.food_distribution_points_present ?? false,
 				errors: row.errors ?? [],
 				valid: row.valid
 			}))
@@ -464,6 +470,7 @@ export async function createImportJob(args: {
 		row: number;
 		name: string | null;
 		input?: Shelter;
+		food_distribution_points_present?: boolean;
 		errors?: ImportItemError[];
 		valid: boolean;
 	}>;
@@ -530,6 +537,9 @@ export async function createImportJob(args: {
 		row: row.row,
 		name: row.name,
 		...(row.input ? { input: row.input } : {}),
+		...(row.food_distribution_points_present === true
+			? { food_distribution_points_present: true }
+			: {}),
 		status: row.valid ? 'pending' : 'validation_error',
 		attempts: 0,
 		max_attempts: MAX_IMPORT_ATTEMPTS,

@@ -192,7 +192,12 @@ export const POST: RequestHandler = async ({ request }) => {
 					await updateMaster(
 						duplicate.code,
 						(current) => ({
-							patch: { ...buildUpdatePayload(input, current), updated_at: nowIso() }
+							patch: {
+								...buildUpdatePayload(input, current, {
+									foodDistributionPointsProvided: item.food_distribution_points_present === true
+								}),
+								updated_at: nowIso()
+							}
 						}),
 						{ assertActive: assertActiveClaim }
 					);
@@ -224,7 +229,12 @@ export const POST: RequestHandler = async ({ request }) => {
 						await updateMaster(
 							duplicateBeforeProvision.code,
 							(current) => ({
-								patch: { ...buildUpdatePayload(input, current), updated_at: nowIso() }
+								patch: {
+									...buildUpdatePayload(input, current, {
+										foodDistributionPointsProvided: item.food_distribution_points_present === true
+									}),
+									updated_at: nowIso()
+								}
 							}),
 							{ assertActive: assertActiveClaim }
 						);

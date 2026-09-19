@@ -17,6 +17,7 @@ const rowSchema = z.object({
 	row: z.number().int().positive(),
 	name: z.string().max(500).nullable(),
 	shelter: z.unknown().optional(),
+	food_distribution_points_present: z.boolean().optional(),
 	errors: z
 		.array(
 			z.object({
@@ -129,6 +130,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			return {
 				row: row.row,
 				name: input?.name ?? (parsed?.success ? parsed.data.name : null),
+				food_distribution_points_present: row.food_distribution_points_present === true,
 				...(input ? { input } : {}),
 				errors: errors.length ? errors : undefined,
 				valid: Boolean(input)

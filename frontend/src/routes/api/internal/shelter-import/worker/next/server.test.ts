@@ -155,7 +155,9 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 		const latest = { name: 'ศูนย์ A', capacity: 101 };
 		updateMasterMock.mockImplementation(async (_code, mutator) => {
 			const result = await mutator(latest);
-			expect(buildUpdatePayloadMock).toHaveBeenCalledWith(input, latest);
+			expect(buildUpdatePayloadMock).toHaveBeenCalledWith(input, latest, {
+				foodDistributionPointsProvided: false
+			});
 			expect(result.patch).toEqual({ capacity: 250, updated_at: '2026-09-17T00:00:00.000Z' });
 		});
 
