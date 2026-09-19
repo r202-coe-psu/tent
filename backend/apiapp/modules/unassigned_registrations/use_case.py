@@ -18,6 +18,7 @@ from tent_model.unassigned_registration import (
     UnassignedRegistration,
 )
 
+from ...core.staff_session import StaffSession
 from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
 from ...utils.masking import (
     mask_last_name,
