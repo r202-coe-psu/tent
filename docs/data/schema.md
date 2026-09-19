@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-18
+updated: 2026-09-19
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog
 ---
 
@@ -568,9 +568,10 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 ข้อมูลเดิม. `reason='consumption'` ถูกเขียนร่วมกับ `stock_ledger` ของวัตถุดิบใน `bulkDocs`
 เดียวกัน และต้อง reject ทั้ง transaction หากแก๊สไม่พอ.
 
-### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 3**
+### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 4**
 
-> **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). บันทึก `phone` เป็น Mandatory Key (เบอร์โทรศัพท์สำหรับระบุตัวตนและดึงตั๋ว), `national_id` เป็น Optional, เพิ่ม `personnel_type` ('volunteer' | 'staff'), `checked_in` สถานะปฏิบัติงานสด, `current_shelter_code`, และลิงก์ไปยัง `user_name` กรณีเป็น Staff-Capable Volunteer.
+> **schema_v 4** — เพิ่ม `tracking_token_hash` สำหรับ role-card token ถาวรของอาสาสมัคร (สร้างครั้งเดียวต่อ volunteer และใช้ซ้ำกับ digital pass, portal login และ on-site check-in); เก็บเฉพาะ hash ใน CouchDB สำหรับเอกสารใหม่. เอกสาร `schema_v 3` เดิมยังอ่านได้แบบ additive compatibility.
+> **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). เพิ่ม `phone`, `national_id`, `personnel_type`, `checked_in`, `current_shelter_code`, `volunteer_code`, `identity_verified`, `source` และลิงก์ `user_name` กรณีเป็น Staff-Capable Volunteer.
 > schema_v 2 — ปรับปรุงฟิลด์กะงาน.
 > schema_v 1 — baseline โปรไฟล์อาสาสมัคร (CR-041).
 
@@ -578,22 +579,31 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | --- | --- | --- | --- |
 | `first_name` | str | req | ชื่อจริง (ตัดช่องว่างหัวท้าย) |
 | `last_name` | str | req | นามสกุล |
-| `phone` | str | req | เบอร์โทรศัพท์สำหรับติดต่อและระบุตัวตน (ตัวเลขล้วน เช่น `"0812345678"`) |
+| `nickname` | str | opt | ชื่อเล่น (ตัดช่องว่างหัวท้าย) |
+| `phone` | str\|null | req | เบอร์โทรศัพท์สำหรับติดต่อและระบุตัวตน; public apply ต้องมีค่า แต่เอกสาร legacy/staff entry อาจเป็น `null` |
 | `phone_hash` | str\|null | opt | SHA-256 hash ของเบอร์โทรเพื่อค้นหาแบบไม่เปิดเผยตัวตน / deduplication |
+| `email` | str\|null | opt | อีเมลติดต่อ |
+| `organization` | str\|null | opt | หน่วยงาน/องค์กรต้นสังกัด |
+| `tracking_token` | str\|null | opt | ค่า legacy สำหรับเอกสารเก่า/เอกสารที่เจ้าหน้าที่สร้าง; **ห้ามเขียน plaintext ใน public apply ใหม่** และห้ามส่งออก public |
+| `tracking_token_hash` | str\|null | opt/sys | SHA-256 ของ permanent role-card token; public apply ใหม่ต้องมีค่าเมื่อออก token และใช้ lookup สำหรับ portal/digital pass/on-site check-in |
 | `national_id` | str\|null | opt | เลขประจำตัวประชาชน 13 หลัก (ทางเลือกเสริม ไม่บังคับ) |
+| `national_id_hash` | str\|null | opt/sys | SHA-256 ของ `national_id` สำหรับ deduplication/lookup; ไม่เปิดเผยบน public plane |
+| `skills` | [str] | req | รหัส/ค่าทักษะจาก master data (default `[]`); ไม่ใช้แทนผลรับรองทักษะ |
 | `personnel_type` | enum(`volunteer`,`staff`) | req | แยกประเภท: `'volunteer'` (อาสาสมัครทั่วไป) หรือ `'staff'` (เจ้าหน้าที่ประจำศูนย์) |
-| `skills` | [str] | req | ทักษะความสามารถ เช่น `["ครัว", "ยกของ", "คอมพิวเตอร์", "ปฐมพยาบาล"]` (default `[]`) |
 | `checked_in` | bool | req | สถานะกำลังปฏิบัติงานสดหน้างาน ณ ปัจจุบัน (default `false`) |
 | `current_shelter_code` | str\|null | opt | รหัสศูนย์ที่กำลังปฏิบัติงานอยู่ในปัจจุบัน |
+| `volunteer_code` | str | req | รหัสอ่านง่ายต่อศูนย์ เช่น `V-001` |
 | `user_name` | str\|null | opt | ชื่อผู้ใช้ใน `_users` (เฉพาะอาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์ชั่วคราว) |
+| `central_profile_id` | str\|null | opt | ลิงก์ไปยัง profile กลาง/SSOT identity ถ้ามี |
 | `identity_verified` | bool | req | compatibility flag เดิมสำหรับ gate เข้างาน; sync จาก `identity_verification.status` เมื่อผ่านการตรวจ |
-| `identity_verification` | {`status`,`reviewed_at`,`reviewed_by`,`notes`} | opt | ผลตรวจตัวตนระดับ volunteer: `pending` / `verified` / `rejected` |
-| `skill_verifications` | map<skill_code, {`status`,`reviewed_at`,`reviewed_by`,`notes`,`credential_reference`}> | opt | ผลรับรองทักษะควบคุมระดับ volunteer พร้อมเลขใบอนุญาต/เลข ว./เลขอ้างอิงเอกสาร; ไม่เปลี่ยนรายการ `skills` |
+| `identity_verification` | {`status`,`reviewed_at?`,`reviewed_by?`,`notes?`,`credential_reference?`}\|null | opt | ผลตรวจตัวตนระดับ volunteer: `pending` / `verified` / `rejected` |
+| `skill_verifications` | map<skill_code, {`status`,`reviewed_at?`,`reviewed_by?`,`notes?`,`credential_reference?`}> | opt | ผลรับรองทักษะควบคุมระดับ volunteer พร้อมเลขใบอนุญาต/เลข ว./เลขอ้างอิงเอกสาร; ไม่เปลี่ยนรายการ `skills` |
+| `source` | enum(`public_apply`,`walk_in`,`staff_entry`,`transfer`) | req | ช่องทางที่สร้าง profile; ใช้ใน roster/filter และ audit |
 | `status` | enum(`active`,`inactive`) | req | default `active` |
 
 **Additive migration:** เอกสารเก่าที่ไม่มี review fields เติม `identity_verification` จาก `identity_verified` และเติม `skill_verifications: {}`; ไม่เปลี่ยน `identity_verified` และไม่ลบทักษะเดิม. ใช้ `pnpm migrate:volunteer-review --write --confirm` ใน `frontend/`.
 
-**Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
+**Index:** `(phone)` · `(phone_hash)` · `(tracking_token_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
 **Soft-delete policy:** การกด “ปิดใช้งาน” ต้องทำแบบ read-modify-write โดยเปลี่ยน `status` เป็น `inactive` และเก็บเอกสารกับ references ที่เกี่ยวข้องไว้ ห้าม hard-delete เอกสาร volunteer; หากต้องเปิดใช้งานอีกครั้งให้เปลี่ยนสถานะกลับเป็น `active` ผ่าน mutation ที่ตรวจสิทธิ์แล้ว
 
@@ -1907,7 +1917,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
