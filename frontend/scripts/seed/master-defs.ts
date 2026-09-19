@@ -73,7 +73,7 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'health_condition',
 		items: [
-			{ key: 'diabetes', label: 'เบาหวาน', is_default: true },
+			{ key: 'diabetes', label: 'เบาหวาน' },
 			{ key: 'hypertension', label: 'ความดันโลหิตสูง' },
 			{ key: 'heart_disease', label: 'โรคหัวใจ' },
 			{ key: 'asthma', label: 'หอบหืด' },
@@ -83,16 +83,12 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	},
 	{
 		type: 'dietary_restrictions',
-		items: [
-			{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true },
-			{ key: 'vegetarian', label: 'มังสวิรัติ' },
-			{ key: 'soft_diet', label: 'อาหารอ่อน' }
-		]
+		items: [{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true }]
 	},
 	{
 		type: 'pet_types',
 		items: [
-			{ key: 'dog', label: 'สุนัข', is_default: true },
+			{ key: 'dog', label: 'สุนัข' },
 			{ key: 'cat', label: 'แมว' },
 			{ key: 'other', label: 'อื่นๆ' }
 		]
