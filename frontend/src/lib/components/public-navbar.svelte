@@ -348,21 +348,6 @@
 							<Lock class="h-4 w-4 shrink-0" />
 							<span>{t.volunteerPortal}</span>
 						</a>
-						<a
-							role="menuitem"
-							href={resolve('/volunteers/host-home')}
-							onclick={() => {
-								volunteersMenuOpen = false;
-							}}
-							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
-								'/volunteers/host-home'
-							)
-								? 'bg-primary-muted text-primary'
-								: 'text-muted-foreground'}"
-						>
-							<Home class="h-4 w-4 shrink-0" />
-							<span>{t.volunteerHostHome}</span>
-						</a>
 					</div>
 				{/if}
 			</div>
@@ -526,18 +511,6 @@
 					>
 						<Lock class="h-5 w-5 shrink-0" />
 						{t.volunteerPortal}
-					</a>
-					<a
-						href={resolve('/volunteers/host-home')}
-						onclick={() => (mobileMenuOpen = false)}
-						class="ml-2 flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
-							'/volunteers/host-home'
-						)
-							? 'bg-primary-muted text-primary'
-							: 'text-muted-foreground'}"
-					>
-						<Home class="h-5 w-5" />
-						{t.volunteerHostHome}
 					</a>
 				</div>
 

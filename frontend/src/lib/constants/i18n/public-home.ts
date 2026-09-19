@@ -228,7 +228,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersTitle: 'จิตอาสา',
 		volunteersSubtitle: 'ร่วมเป็นกำลังสำคัญช่วยเหลือผู้ประสบภัย',
 		allMissionsBtn: 'ดูภารกิจทั้งหมด',
-		hostHouseBtn: 'สมัครเป็นบ้านพี่เลี้ยง',
 		urgentRolesNeededLabel: 'ภารกิจจิตอาสาที่เปิดรับ:',
 		enrolledLabel: 'มีอาสาแล้ว',
 		needMorePrefix: 'ต้องการอีก',
@@ -239,7 +238,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersEmptyDesc:
 			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีภารกิจใหม่',
 		preRegisterVolunteerBtn: 'ลงทะเบียนจิตอาสาล่วงหน้า',
-		hostHouseInfoBtn: 'ข้อมูลบ้านพี่เลี้ยง',
 
 		// FAQ
 		faqSectionTitle: 'คำถามที่พบบ่อย',
@@ -300,7 +298,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersTitle: 'Volunteers',
 		volunteersSubtitle: 'Be a vital force in disaster relief.',
 		allMissionsBtn: 'All Missions',
-		hostHouseBtn: 'Sign Up as Host House',
 		urgentRolesNeededLabel: 'Urgent volunteer roles needed:',
 		enrolledLabel: 'Enrolled',
 		needMorePrefix: 'Need',
@@ -311,7 +308,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersEmptyDesc:
 			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new missions open.',
 		preRegisterVolunteerBtn: 'Pre-register as Volunteer',
-		hostHouseInfoBtn: 'Host House Information',
 
 		// FAQ
 		faqSectionTitle: 'Frequently Asked Questions (FAQ)',
