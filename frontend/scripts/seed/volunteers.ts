@@ -31,17 +31,34 @@ import {
 	initialStatusForSkills,
 	reviewReasonsForApplication
 } from '$lib/features/volunteers/domain/skills';
-import { type AuthorContext, makeDoc, now } from '$lib/db/model';
+import { randomBytes } from 'node:crypto';
+import { type AuthorContext, now } from '$lib/db/model';
 import { sha256Hex } from '$lib/db/hash';
-import { ulid } from '$lib/db/ulid';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { bulkDocs, ensureDb, putDoc, putDocUpsert } from './couch';
+import { bulkDocs, ensureDb, putDocUpsert } from './couch';
 import { masterCodes, SH001_CODE, SH002_CODE, type MasterLookup } from './types';
 
 const SH001_DB = shelterDbName(SH001_CODE);
 const SH001_CTX: AuthorContext = { shelterCode: SH001_CODE, createdBy: 'seed' };
 const SH002_DB = shelterDbName(SH002_CODE);
 const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
+
+/**
+ * A readable, valid 128-bit fixture token used to log in and generate a role-card QR.
+ * Job applications keep the real public-apply shape (hash only); seeded volunteer
+ * profiles additionally keep the raw value on the document so a fixture can be opened
+ * straight from CouchDB. Seed data only.
+ */
+function seedVolunteerToken(prefix: string): string {
+	const body = prefix.toUpperCase().padEnd(32, '0').slice(0, 32);
+	return `TKT-VOL-${body}`;
+}
+
+function seedApplicationToken(): string {
+	return `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+}
+
+const SEEDED_SCHEDULE_TOKEN = seedVolunteerToken('B1');
 
 /**
  * `docs/plans/volunteer-backoffice/00-foundation.md` §00.5 — seed the `volunteers`
@@ -365,7 +382,23 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 	v2.checked_in = true;
 	v2.current_shelter_code = SH001_CODE;
 
-	for (const v of [v1, v2, v3, v4, v5]) volunteerSchema.parse(v);
+	// Permanent role-card token (schema.md §2.8, CR-094): minted once per volunteer and
+	// normally only ever persisted as a hash. Fixtures keep the raw value alongside it so
+	// the seeded profiles can actually be opened in the Access Portal / QR scanner without
+	// re-running the public apply flow — seed data only, never a production shape.
+	const seededVolunteerTokens: Array<{ volunteer: typeof v1; token: string }> = [
+		{ volunteer: v1, token: seedVolunteerToken('V1') },
+		{ volunteer: v2, token: seedVolunteerToken('V2') },
+		{ volunteer: v3, token: seedVolunteerToken('V3') },
+		{ volunteer: v4, token: seedVolunteerToken('V4') },
+		{ volunteer: v5, token: seedVolunteerToken('V5') }
+	];
+	for (const { volunteer, token } of seededVolunteerTokens) {
+		if (volunteer.phone) volunteer.phone_hash = await sha256Hex(volunteer.phone);
+		volunteer.tracking_token = token;
+		volunteer.tracking_token_hash = await sha256Hex(token);
+		volunteerSchema.parse(volunteer);
+	}
 
 	// — shift_assignments ————————————————————————————————————————————————————
 	// All 4 against job1 (the `open` job), dated "today" so the Control Hub /
@@ -439,7 +472,7 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 			first_name: v1.first_name,
 			last_name: v1.last_name,
 			phone: v1.phone ?? '',
-			phone_hash: 'mock-hash-v-001',
+			phone_hash: await sha256Hex(v1.phone ?? ''),
 			email: v1.email ?? null,
 			skills: v1.skills,
 			national_id: v1.national_id ?? null
@@ -450,11 +483,14 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 			start_time: '08:00',
 			end_time: '16:00'
 		},
-		tracking_token: ulid()
+		tracking_token: seedApplicationToken()
 	};
+	const confirmedTrackingToken = confirmedApplicationInput.tracking_token;
 	const confirmedApplication = makeJobApplication(confirmedApplicationInput, ctx, 'confirmed', {
 		reviewReasons: []
 	});
+	confirmedApplication.tracking_token_hash = await sha256Hex(confirmedTrackingToken);
+	delete confirmedApplication.tracking_token;
 	confirmedApplication.reviewed_at = now();
 	confirmedApplication.reviewed_by = 'seed';
 	confirmedApplication.review_notes = 'ตรวจสอบแล้ว ทักษะตรงตามที่ต้องการ อนุมัติเข้าปฏิบัติงาน';
@@ -468,7 +504,7 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 			first_name: v5.first_name,
 			last_name: v5.last_name,
 			phone: v5.phone ?? '',
-			phone_hash: 'mock-hash-v-005',
+			phone_hash: await sha256Hex(v5.phone ?? ''),
 			email: v5.email ?? null,
 			skills: v5.skills,
 			national_id: v5.national_id ?? null
@@ -479,8 +515,9 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 			start_time: '08:00',
 			end_time: '16:00'
 		},
-		tracking_token: ulid()
+		tracking_token: seedApplicationToken()
 	};
+	const pendingTrackingToken = pendingApplicationInput.tracking_token;
 	const pendingStatus = initialStatusForSkills(v5.skills, {
 		auto_accept: job1.auto_accept,
 		tier: job1.tier
@@ -488,6 +525,8 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 	const pendingApplication = makeJobApplication(pendingApplicationInput, ctx, pendingStatus, {
 		reviewReasons: reviewReasonsForApplication(v5.skills, job1)
 	});
+	pendingApplication.tracking_token_hash = await sha256Hex(pendingTrackingToken);
+	delete pendingApplication.tracking_token;
 
 	for (const app of [confirmedApplication, pendingApplication]) jobApplicationSchema.parse(app);
 
@@ -515,6 +554,9 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 	console.log(
 		`  ✓ ${SH001_DB}: 6 jobs, 5 volunteers, 4 shift_assignments, 2 job_applications (today=${today})`
 	);
+	for (const { volunteer, token } of seededVolunteerTokens) {
+		console.log(`    · ${volunteer.volunteer_code} ${volunteer.phone} token ${token}`);
+	}
 }
 
 /**
@@ -668,26 +710,31 @@ export async function seedVolunteerSchedule(master: MasterLookup): Promise<void>
 
 	const phone = '0891112222';
 	const volunteerId = 'seedvol001';
-	// Typed as a Record so makeDoc's result keeps the index signature putDoc expects —
-	// an object literal narrows to an exact shape that no longer matches it.
-	const volunteerBody: Record<string, unknown> = {
-		first_name: 'อาสา',
-		last_name: 'ทดสอบ',
-		phone,
-		phone_hash: await sha256Hex(phone),
-		email: null,
-		// Store codes from the seeded master items so this fixture follows the
-		// same canonical shape as jobs and new volunteer profiles.
-		skills: masterCodes(master, 'volunteer_skills', 'cooking', 'logistics'),
-		organization: null,
-		tracking_token: null,
-		status: 'active',
-		user_name: null,
-		central_profile_id: `volunteer:${volunteerId}`,
-		checked_in: false,
-		current_shelter_code: null
-	};
-	await putDoc(SH001_DB, makeDoc('volunteer', 1, volunteerBody, SH001_CTX, volunteerId));
+	// Use the same factory as the back-office flow. The old fixture used a hand-rolled
+	// schema_v 1 document, which omitted volunteer_code/source/personnel_type and could
+	// never carry the permanent role-card token needed by the QR scanner.
+	const volunteer = makeVolunteer(
+		{
+			first_name: 'อาสา',
+			last_name: 'ทดสอบ',
+			phone,
+			email: null,
+			skills: masterCodes(master, 'volunteer_skills', 'cooking', 'logistics'),
+			organization: null,
+			national_id: null,
+			source: 'walk_in',
+			personnel_type: 'volunteer'
+		},
+		SH001_CTX,
+		{ volunteer_code: 'V-006' }
+	);
+	volunteer._id = `volunteer:${volunteerId}`;
+	volunteer.central_profile_id = volunteer._id;
+	volunteer.phone_hash = await sha256Hex(phone);
+	volunteer.tracking_token = SEEDED_SCHEDULE_TOKEN;
+	volunteer.tracking_token_hash = await sha256Hex(SEEDED_SCHEDULE_TOKEN);
+	volunteerSchema.parse(volunteer);
+	await putDocUpsert(SH001_DB, { ...volunteer });
 
 	// Relative to today so the fixture does not rot into a schedule of past shifts.
 	const day = (offset: number) => {
@@ -763,6 +810,6 @@ export async function seedVolunteerSchedule(master: MasterLookup): Promise<void>
 	}
 
 	console.log(
-		`  ✓ volunteer schedule: 1 profile + ${shifts.length} shifts (login ${phone}, offer code SEED-99)`
+		`  ✓ volunteer schedule: 1 schema_v 4 profile + ${shifts.length} shifts (phone ${phone}, token ${SEEDED_SCHEDULE_TOKEN}, offer code SEED-99)`
 	);
 }

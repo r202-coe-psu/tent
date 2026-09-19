@@ -202,7 +202,7 @@ describe('makeVolunteer', () => {
 		expect(volunteerSchema.safeParse(v).success).toBe(true);
 	});
 
-	it('defaults tracking_token_hash to null — minted later, on first job application', () => {
+	it('defaults tracking_token_hash to null in the pure factory — the remote writer mints it', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-008' });
 		expect(v.tracking_token_hash).toBeNull();
 	});

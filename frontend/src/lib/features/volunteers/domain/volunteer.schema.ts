@@ -50,11 +50,10 @@ export interface Volunteer extends BaseDoc {
 	tracking_token?: string | null;
 	/**
 	 * SHA-256 of a permanent `TKT-VOL-{...}` role-card token, minted once per
-	 * volunteer (not per application) the first time they apply and reused for
-	 * every later application, the public digital pass, portal login, and
+	 * volunteer (not per application) by public apply or backoffice fast-track
+	 * registration and reused for the public digital pass, portal login, and
 	 * on-site check-in (schema.md §2.8, additive — see
-	 * `server/public-application.ts` for the mint and
-	 * `data/volunteer.remote.ts#getByTrackingToken` for the check-in lookup).
+	 * `server/public-application.ts` and `data/volunteer.remote.ts` for the mint).
 	 * Plaintext is never persisted to CouchDB.
 	 */
 	tracking_token_hash?: string | null;
@@ -63,6 +62,8 @@ export interface Volunteer extends BaseDoc {
 	central_profile_id?: string | null;
 	/** CR-094 §3.1 — SSOT identity link (evacuee/volunteer/staff), optional everywhere. */
 	national_id?: string | null;
+	/** SHA-256 of national_id; persisted by public intake without exposing the ID to public reads. */
+	national_id_hash?: string | null;
 	/** CR-094 §3.1 — live on-shift flag, drives Time-Bound Write Access (FR-VOL-05R). */
 	checked_in: boolean;
 	/** CR-094 §3.1 — shelter the volunteer is presently posted at (set on check-in/transfer). */
@@ -103,6 +104,7 @@ export const volunteerSchema = z.object({
 	user_name: z.string().nullable().optional(),
 	central_profile_id: z.string().nullable().optional(),
 	national_id: nationalIdSchema.nullable().optional(),
+	national_id_hash: z.string().nullable().optional(),
 	checked_in: z.boolean(),
 	current_shelter_code: z.string().nullable().optional(),
 	volunteer_code: z.string().min(1),
