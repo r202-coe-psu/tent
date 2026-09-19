@@ -757,8 +757,10 @@
 	{/if}
 </section>
 
-<PullPreRegisteredDialog
-	bind:open={pullDialogOpen}
-	{excludeIds}
-	onselect={handlePopulateFromQueue}
-/>
+{#if channel === 'onsite' && isReportIn}
+	<PullPreRegisteredDialog
+		bind:open={pullDialogOpen}
+		{excludeIds}
+		onselect={handlePopulateFromQueue}
+	/>
+{/if}

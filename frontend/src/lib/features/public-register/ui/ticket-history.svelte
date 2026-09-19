@@ -38,7 +38,7 @@
 		for (const t of current) {
 			try {
 				const res = await checkTicketStatus(t.code);
-				if (res.verified) {
+				if (res.verified || res.notFound) {
 					removeStoredTicket(t.code);
 					removedAny = true;
 				}
@@ -100,6 +100,14 @@
 				toast.success(
 					'ตั๋วนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย'
 				);
+			} else if (res.notFound) {
+				removeStoredTicket(code);
+				tickets = getStoredTickets();
+				if (selectedTicket?.code === code) {
+					selectedTicket = null;
+				}
+				onTicketsChange?.();
+				toast.info('ไม่พบข้อมูลตั๋วนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) ระบบได้ลบข้อมูลออกจากอุปกรณ์');
 			} else {
 				toast.info('ตั๋วนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์');
 			}

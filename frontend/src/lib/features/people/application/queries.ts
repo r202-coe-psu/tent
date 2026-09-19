@@ -86,10 +86,11 @@ export const usePendingScreeningEvacuees = (shelterCode?: () => string) =>
 		};
 	});
 
-export const useEvacuees = () =>
+export const useEvacuees = (enabled?: () => boolean) =>
 	createQuery(() => ({
 		queryKey: peopleKeys.evacuees(),
-		queryFn: () => peopleRepository().listEvacuees()
+		queryFn: () => peopleRepository().listEvacuees(),
+		enabled: enabled ? enabled() : true
 	}));
 
 export const useEvacueesPaginated = (
