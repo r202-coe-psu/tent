@@ -289,3 +289,21 @@ export {
 	getReturnableBadgeLabel,
 	getReturnableBadgeClass
 } from './ui/model/catalog-eligibility';
+
+/** Ticket-era Food & Supplies UI components & models (Slice 5.2). */
+export { default as TicketLifecycleProgress } from './ui/common/TicketLifecycleProgress.svelte';
+export { default as TicketDetailShell } from './ui/back-office/TicketDetailShell.svelte';
+export { default as TicketActionPanel } from './ui/back-office/TicketActionPanel.svelte';
+export { default as TicketAllocationDialog } from './ui/back-office/TicketAllocationDialog.svelte';
+export { default as CancelTicketDialog } from './ui/back-office/CancelTicketDialog.svelte';
+
+export {
+	NORMAL_LIFECYCLE_SEQUENCE,
+	isTicketReadyForApproval,
+	isTerminalTicketStatus,
+	isReturnsStageStatus,
+	getLifecycleSteps,
+	type LifecycleStageId,
+	type StepState,
+	type LifecycleStep
+} from './ui/model/ticket-lifecycle';

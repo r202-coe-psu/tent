@@ -15,8 +15,11 @@
 	import TicketFilters from './TicketFilters.svelte';
 	import TicketTable from './TicketTable.svelte';
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
+	import TicketDetailShell from './TicketDetailShell.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Truck from '@lucide/svelte/icons/truck';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -34,6 +37,47 @@
 	const tickets = $derived(ticketsQuery.data ?? []);
 	const isLoading = $derived(ticketsQuery.isLoading);
 	const isError = $derived(ticketsQuery.isError);
+
+	// Detail shell selection & deep linking (?ticketId=...)
+	let localSelectedTicketId = $state<string | null>(null);
+	const activeTicketId = $derived.by(() => {
+		if (localSelectedTicketId) return localSelectedTicketId;
+		try {
+			return page.url.searchParams.get('ticketId') ?? '';
+		} catch {
+			return '';
+		}
+	});
+
+	function handleOpenDetail(id: string) {
+		localSelectedTicketId = id;
+		try {
+			const url = new URL(page.url);
+			url.searchParams.set('ticketId', id);
+			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+		} catch {
+			if (typeof window !== 'undefined') {
+				const url = new URL(window.location.href);
+				url.searchParams.set('ticketId', id);
+				window.history.pushState({}, '', url.toString());
+			}
+		}
+	}
+
+	function handleCloseDetail() {
+		localSelectedTicketId = null;
+		try {
+			const url = new URL(page.url);
+			url.searchParams.delete('ticketId');
+			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+		} catch {
+			if (typeof window !== 'undefined') {
+				const url = new URL(window.location.href);
+				url.searchParams.delete('ticketId');
+				window.history.pushState({}, '', url.toString());
+			}
+		}
+	}
 
 	// Filter states
 	let activeGroup = $state<TicketWorkflowGroupId>('all');
@@ -257,7 +301,10 @@
 				</button>
 			</div>
 		{:else}
-			<TicketTable tickets={filteredTickets} />
+			<TicketTable
+				tickets={filteredTickets}
+				onViewTicket={(ticket) => handleOpenDetail(ticket._id)}
+			/>
 		{/if}
 	</div>
 </div>
@@ -269,3 +316,8 @@
 	onCreated={handleTicketCreated}
 	onClose={() => (isCreateOpen = false)}
 />
+
+<!-- Ticket Detail Shell Modal (State-driven detail & lifecycle actions) -->
+{#if activeTicketId}
+	<TicketDetailShell ticketId={activeTicketId} {shelterCode} onClose={handleCloseDetail} />
+{/if}
