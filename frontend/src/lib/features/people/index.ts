@@ -286,6 +286,12 @@ export {
 	type RegisteredViaStyle
 } from './ui/shared/registered-via-badge.svelte';
 export { default as Station1IntakeSearch } from './ui/search-scan/station1-intake-search.svelte';
+export { default as Station1EvacueeQueue } from './ui/search-scan/evacuee-queue-view.svelte';
+export {
+	goToEvacueeReportIn,
+	goToEvacueeProfile,
+	openEvacueeRow
+} from './ui/search-scan/evacuee-queue-navigation';
 export { default as EvacueeProfileView } from './ui/evacuee-profile/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/registration/evacuee-form.svelte';
 export { default as RegistrationShell } from './ui/registration/registration-shell.svelte';

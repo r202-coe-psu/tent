@@ -55,7 +55,13 @@
 		type UnifiedRegistrationInput,
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
-	import type { Evacuee, Household, HousingType, HouseholdVehicle, PetGroup } from '../../domain/people';
+	import type {
+		Evacuee,
+		Household,
+		HousingType,
+		HouseholdVehicle,
+		PetGroup
+	} from '../../domain/people';
 	import {
 		hasMinimumResidence,
 		type ResidenceFields,
@@ -86,6 +92,8 @@
 		initialMembers = null,
 		pending = false,
 		submitDisabled = false,
+		/** Fully read-only display: blocks all interaction and hides the submit bar. */
+		readOnly = false,
 		submitLabel,
 		submitAlign = 'right',
 		stickyTopOffset,
@@ -107,6 +115,8 @@
 		pending?: boolean;
 		/** Disable the confirm button without locking fields or showing submit spinner. */
 		submitDisabled?: boolean;
+		/** Fully read-only display: blocks all interaction and hides the submit bar. */
+		readOnly?: boolean;
 		submitLabel?: string;
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
@@ -131,6 +141,8 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
+	/** Locks every field/control (pending submit OR explicit read-only view). */
+	const fieldsLocked = $derived(pending || readOnly);
 	const showVehiclesAssets = $derived(includeVehiclesAssets ?? channel === 'onsite');
 	const formStickyStyle = $derived(
 		stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : undefined
@@ -560,7 +572,7 @@
 	}
 
 	function markDirty() {
-		if (touched) return;
+		if (readOnly || touched) return;
 		touched = true;
 		onDirtyChange?.(true);
 	}
@@ -634,7 +646,8 @@
 		// Prefill address from chip (read-only lock via hasJoinSelection)
 		if (chip.address) {
 			household.housing_type = (chip.address.housing_type as HousingType) || household.housing_type;
-			household.residence_landmark = chip.address.residence_landmark ?? household.residence_landmark;
+			household.residence_landmark =
+				chip.address.residence_landmark ?? household.residence_landmark;
 			household.address_no = chip.address.address_no || household.address_no;
 			household.village_no = chip.address.village_no || household.village_no;
 			household.subdistrict = chip.address.subdistrict || household.subdistrict;
@@ -769,7 +782,7 @@
 
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		if (pending) return;
+		if (pending || readOnly) return;
 
 		for (const p of petItems) {
 			if (p.species === 'other' && !p.customSpecies.trim()) {
@@ -844,6 +857,9 @@
 
 <form
 	class="space-y-6"
+	class:pointer-events-none={readOnly}
+	class:opacity-70={readOnly}
+	inert={readOnly || undefined}
 	style={formStickyStyle}
 	bind:this={formRootEl}
 	onsubmit={handleSubmit}
@@ -887,7 +903,7 @@
 				{showVehiclesAssets}
 				{activeSection}
 				{pending}
-				{submitDisabled}
+				submitDisabled={submitDisabled || readOnly}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
@@ -906,361 +922,378 @@
 			<!-- ── Section 1: Address ─────────────────────────────────── -->
 			<UnifiedRegistrationSection
 				id="unified-address"
-		title={t.sectionAddress}
-		description={t.sectionAddressDesc}
-		icon={Home}
-	>
-		<!-- ThaiD Action Button (Dev Mock, or OAuth in Staging/Prod when enabled) -->
-		<ThaidActionButton status={thaidStatus} disabled={pending} onautofill={handleThaiDAutofill} />
+				title={t.sectionAddress}
+				description={t.sectionAddressDesc}
+				icon={Home}
+			>
+				<!-- ThaiD Action Button (Dev Mock, or OAuth in Staging/Prod when enabled) -->
+				<ThaidActionButton
+					status={thaidStatus}
+					disabled={fieldsLocked}
+					onautofill={handleThaiDAutofill}
+				/>
 
-		<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
-		{#if enableResidenceJoin}
-			<div class="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3">
-				<div class="flex items-center justify-between gap-2">
-					<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-						<Search class="size-3.5 text-primary" />
-						<span>
-							{channel === 'public'
-								? 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
-								: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์'}
-						</span>
-					</p>
-					{#if channel === 'onsite'}
-						<Button
-							type="button"
-							size="sm"
-							variant="outline"
-							disabled={pending}
-							class="gap-1.5"
-							onclick={() => (mergeDialogOpen = true)}
-						>
-							<GitMerge class="size-3.5" />
-							ค้นหาเพื่อรวม 2 ครอบครัว
-						</Button>
-					{/if}
-				</div>
-				<div class="relative w-full">
-					<Input
-						type="tel"
-						placeholder="ค้นหาด้วยเบอร์โทรศัพท์ของสมาชิกคนใดก็ได้ (เช่น 0812345678)"
-						bind:value={searchPhoneQuery}
-						disabled={pending || hasJoinSelection}
-						class="h-9 w-full text-sm pr-7"
-					/>
-					{#if searchPhoneQuery}
-						<button
-							type="button"
-							class="absolute right-2.5 top-2.5 text-xs text-muted-foreground hover:text-foreground"
-							onclick={() => (searchPhoneQuery = '')}
-							title="ล้างเบอร์โทร"
-						>
-							✕
-						</button>
-					{/if}
-				</div>
-				{#if channel === 'public'}
-					<p class="text-2xs text-muted-foreground">
-						หากมีสมาชิกในครอบครัวได้ลงทะเบียนไว้แล้ว สามารถพิมพ์เบอร์โทรศัพท์ของสมาชิกคนใดก็ได้เพื่อค้นหาและเข้าร่วมครอบครัวเดียวกัน
-					</p>
-				{/if}
-			</div>
-		{/if}
-
-		<HouseholdAddressFields
-			bind:housing_type={household.housing_type}
-			bind:residence_landmark={
-				() => household.residence_landmark ?? '',
-				(v) => {
-					household.residence_landmark = v || null;
-				}
-			}
-			bind:address_no={
-				() => household.address_no ?? '',
-				(v) => {
-					household.address_no = v;
-				}
-			}
-			bind:village_no={
-				() => household.village_no ?? '',
-				(v) => {
-					household.village_no = v;
-				}
-			}
-			bind:subdistrict={
-				() => household.subdistrict ?? '',
-				(v) => {
-					household.subdistrict = v;
-				}
-			}
-			bind:district={
-				() => household.district ?? '',
-				(v) => {
-					household.district = v;
-				}
-			}
-			bind:province={
-				() => household.province ?? '',
-				(v) => {
-					household.province = v;
-				}
-			}
-			bind:postal_code={
-				() => household.postal_code ?? '',
-				(v) => {
-					household.postal_code = v;
-				}
-			}
-			loadMasterHousingTypes={channel !== 'public'}
-			required={true}
-			disabled={pending || hasJoinSelection}
-		/>
-
-		{#if enableResidenceJoin}
-			{#if hasJoinSelection}
-				<div
-					class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
-					role="status"
-					aria-live="polite"
-				>
-					<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
-					{#if joinSelectedSummary}
-						<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
-					{/if}
-					<p class="text-xs text-muted-foreground">
-						สมาชิกใหม่จะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
-					</p>
-					{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
-						<div
-							class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
-						>
-							<span class="text-muted-foreground">
-								📍 ครอบครัวนี้อยู่ที่: <strong class="text-foreground">{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong>
-								{#if !shelterCode}
-									(คุณกำลังลงทะเบียนในคิวส่วนกลาง — ข้อมูลจะเชื่อมโยงข้ามศูนย์ให้อัตโนมัติ)
-								{:else}
-									(ข้อมูลจะเชื่อมโยงข้ามศูนย์พักพิงให้อัตโนมัติ)
-								{/if}
-							</span>
-							{#if onselectshelter}
+				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
+				{#if enableResidenceJoin}
+					<div class="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3">
+						<div class="flex items-center justify-between gap-2">
+							<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+								<Search class="size-3.5 text-primary" />
+								<span>
+									{channel === 'public'
+										? 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+										: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์'}
+								</span>
+							</p>
+							{#if channel === 'onsite'}
 								<Button
 									type="button"
-									variant="outline"
 									size="sm"
-									class="h-6 px-2 text-2xs border-primary/30 text-primary hover:bg-primary/10"
-									onclick={() =>
-										onselectshelter?.(
-											selectedMatchChip!.shelter_code!,
-											selectedMatchChip!.shelter_name ?? undefined
-										)}
+									variant="outline"
+									disabled={fieldsLocked}
+									class="gap-1.5"
+									onclick={() => (mergeDialogOpen = true)}
 								>
-									ต้องการย้ายไปศูนย์นี้ด้วย
+									<GitMerge class="size-3.5" />
+									ค้นหาเพื่อรวม 2 ครอบครัว
 								</Button>
 							{/if}
 						</div>
-					{/if}
-					<Button
-						type="button"
-						size="sm"
-						variant="outline"
-						disabled={pending}
-						onclick={continueCreateDespiteSuggest}
-					>
-						สร้างใหม่แทน
-					</Button>
-				</div>
-			{:else if residenceSuggestPending}
-				<div
-					class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-					role="status"
-					aria-live="polite"
-				>
-					<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-					กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
-				</div>
-			{:else if channel === 'onsite' && residenceSuggestions.length > 0}
-				<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-					<p class="text-xs font-semibold text-foreground">
-						พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
-					</p>
-					<ul class="space-y-2">
-						{#each residenceSuggestions as suggestion (suggestion._id)}
-							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
-								<span>
-									{#if suggestion.label?.trim()}
-										<span class="font-medium">{suggestion.label}</span>
-										<span class="text-muted-foreground">
-											· {formatResidenceSummary(suggestion)}
-										</span>
-									{:else}
-										<span class="text-muted-foreground">
-											{formatResidenceSummary(suggestion)}
-										</span>
-									{/if}
-								</span>
-								<Button
+						<div class="relative w-full">
+							<Input
+								type="tel"
+								placeholder="ค้นหาด้วยเบอร์โทรศัพท์ของสมาชิกคนใดก็ได้ (เช่น 0812345678)"
+								bind:value={searchPhoneQuery}
+								disabled={fieldsLocked || hasJoinSelection}
+								class="h-9 w-full pr-7 text-sm"
+							/>
+							{#if searchPhoneQuery}
+								<button
 									type="button"
-									size="sm"
-									variant="outline"
-									disabled={pending}
-									onclick={() => confirmOnsiteJoin(suggestion)}
+									class="absolute top-2.5 right-2.5 text-xs text-muted-foreground hover:text-foreground"
+									onclick={() => (searchPhoneQuery = '')}
+									title="ล้างเบอร์โทร"
 								>
-									เข้าร่วม
-								</Button>
-							</li>
-						{/each}
-					</ul>
-					<Button type="button" size="sm" disabled={pending} onclick={continueCreateDespiteSuggest}>
-						สร้างใหม่
-					</Button>
-				</div>
-			{:else if channel === 'public' && publicMatchChips.length > 0}
-				<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-					<p class="text-xs font-semibold text-foreground">
-						พบครอบครัวที่ลงทะเบียนแล้ว — เข้าร่วมหรือสร้างใหม่
-					</p>
-					<ul class="space-y-2">
-						{#each publicMatchChips as chip (chip.match_token)}
-							<li class="rounded-lg border border-border/60 bg-card p-2.5">
-								<div class="flex flex-wrap items-start justify-between gap-2">
-									<div class="flex flex-col gap-1">
-										<!-- Address line (no "บ้านตนเอง") -->
-										<span class="text-sm font-medium text-foreground">
-											{#if chip.address?.address_no}
-												บ้านเลขที่ {chip.address.address_no}
-												{chip.address.residence_landmark || ''}
+									✕
+								</button>
+							{/if}
+						</div>
+						{#if channel === 'public'}
+							<p class="text-2xs text-muted-foreground">
+								หากมีสมาชิกในครอบครัวได้ลงทะเบียนไว้แล้ว
+								สามารถพิมพ์เบอร์โทรศัพท์ของสมาชิกคนใดก็ได้เพื่อค้นหาและเข้าร่วมครอบครัวเดียวกัน
+							</p>
+						{/if}
+					</div>
+				{/if}
+
+				<HouseholdAddressFields
+					bind:housing_type={household.housing_type}
+					bind:residence_landmark={
+						() => household.residence_landmark ?? '',
+						(v) => {
+							household.residence_landmark = v || null;
+						}
+					}
+					bind:address_no={
+						() => household.address_no ?? '',
+						(v) => {
+							household.address_no = v;
+						}
+					}
+					bind:village_no={
+						() => household.village_no ?? '',
+						(v) => {
+							household.village_no = v;
+						}
+					}
+					bind:subdistrict={
+						() => household.subdistrict ?? '',
+						(v) => {
+							household.subdistrict = v;
+						}
+					}
+					bind:district={
+						() => household.district ?? '',
+						(v) => {
+							household.district = v;
+						}
+					}
+					bind:province={
+						() => household.province ?? '',
+						(v) => {
+							household.province = v;
+						}
+					}
+					bind:postal_code={
+						() => household.postal_code ?? '',
+						(v) => {
+							household.postal_code = v;
+						}
+					}
+					loadMasterHousingTypes={channel !== 'public'}
+					required={true}
+					disabled={fieldsLocked || hasJoinSelection}
+				/>
+
+				{#if enableResidenceJoin}
+					{#if hasJoinSelection}
+						<div
+							class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
+							role="status"
+							aria-live="polite"
+						>
+							<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
+							{#if joinSelectedSummary}
+								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
+							{/if}
+							<p class="text-xs text-muted-foreground">
+								สมาชิกใหม่จะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+							</p>
+							{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
+								<div
+									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
+								>
+									<span class="text-muted-foreground">
+										📍 ครอบครัวนี้อยู่ที่: <strong class="text-foreground"
+											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
+										>
+										{#if !shelterCode}
+											(คุณกำลังลงทะเบียนในคิวส่วนกลาง — ข้อมูลจะเชื่อมโยงข้ามศูนย์ให้อัตโนมัติ)
+										{:else}
+											(ข้อมูลจะเชื่อมโยงข้ามศูนย์พักพิงให้อัตโนมัติ)
+										{/if}
+									</span>
+									{#if onselectshelter}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											class="h-6 border-primary/30 px-2 text-2xs text-primary hover:bg-primary/10"
+											onclick={() =>
+												onselectshelter?.(
+													selectedMatchChip!.shelter_code!,
+													selectedMatchChip!.shelter_name ?? undefined
+												)}
+										>
+											ต้องการย้ายไปศูนย์นี้ด้วย
+										</Button>
+									{/if}
+								</div>
+							{/if}
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={fieldsLocked}
+								onclick={continueCreateDespiteSuggest}
+							>
+								สร้างใหม่แทน
+							</Button>
+						</div>
+					{:else if residenceSuggestPending}
+						<div
+							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+							role="status"
+							aria-live="polite"
+						>
+							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+							กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+						</div>
+					{:else if channel === 'onsite' && residenceSuggestions.length > 0}
+						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+							<p class="text-xs font-semibold text-foreground">
+								พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
+							</p>
+							<ul class="space-y-2">
+								{#each residenceSuggestions as suggestion (suggestion._id)}
+									<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+										<span>
+											{#if suggestion.label?.trim()}
+												<span class="font-medium">{suggestion.label}</span>
+												<span class="text-muted-foreground">
+													· {formatResidenceSummary(suggestion)}
+												</span>
 											{:else}
-												{chip.landmark?.trim() || 'ครอบครัวที่อยู่นี้'}
+												<span class="text-muted-foreground">
+													{formatResidenceSummary(suggestion)}
+												</span>
 											{/if}
 										</span>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={fieldsLocked}
+											onclick={() => confirmOnsiteJoin(suggestion)}
+										>
+											เข้าร่วม
+										</Button>
+									</li>
+								{/each}
+							</ul>
+							<Button
+								type="button"
+								size="sm"
+								disabled={fieldsLocked}
+								onclick={continueCreateDespiteSuggest}
+							>
+								สร้างใหม่
+							</Button>
+						</div>
+					{:else if channel === 'public' && publicMatchChips.length > 0}
+						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+							<p class="text-xs font-semibold text-foreground">
+								พบครอบครัวที่ลงทะเบียนแล้ว — เข้าร่วมหรือสร้างใหม่
+							</p>
+							<ul class="space-y-2">
+								{#each publicMatchChips as chip (chip.match_token)}
+									<li class="rounded-lg border border-border/60 bg-card p-2.5">
+										<div class="flex flex-wrap items-start justify-between gap-2">
+											<div class="flex flex-col gap-1">
+												<!-- Address line (no "บ้านตนเอง") -->
+												<span class="text-sm font-medium text-foreground">
+													{#if chip.address?.address_no}
+														บ้านเลขที่ {chip.address.address_no}
+														{chip.address.residence_landmark || ''}
+													{:else}
+														{chip.landmark?.trim() || 'ครอบครัวที่อยู่นี้'}
+													{/if}
+												</span>
 
-										<!-- Masked primary contact -->
-										{#if chip.primary_contact_masked}
-											<span class="text-xs text-muted-foreground">
-												ผู้ติดต่อหลัก: {chip.primary_contact_masked}
-											</span>
-										{/if}
+												<!-- Masked primary contact -->
+												{#if chip.primary_contact_masked}
+													<span class="text-xs text-muted-foreground">
+														ผู้ติดต่อหลัก: {chip.primary_contact_masked}
+													</span>
+												{/if}
 
-										<!-- Shelter name -->
-										{#if chip.shelter_name}
-											<span class="text-2xs text-muted-foreground">
-												อยู่ที่: {chip.shelter_name}
-											</span>
-										{/if}
+												<!-- Shelter name -->
+												{#if chip.shelter_name}
+													<span class="text-2xs text-muted-foreground">
+														อยู่ที่: {chip.shelter_name}
+													</span>
+												{/if}
 
-										<!-- Member phone match confirmation badge -->
-										{#if chip.matched_member_masked}
-											<span
-												class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
+												<!-- Member phone match confirmation badge -->
+												{#if chip.matched_member_masked}
+													<span
+														class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
+													>
+														<CheckCircle2 class="size-3" />
+														ตรงกับเบอร์โทรศัพท์ของสมาชิก: {chip.matched_member_masked}
+													</span>
+												{/if}
+
+												<!-- Member & pet count badges -->
+												<div class="mt-0.5 flex flex-wrap gap-1.5">
+													{#if chip.member_count && chip.member_count > 0}
+														<span
+															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+														>
+															<Users class="size-3" />
+															{chip.member_count} สมาชิก
+														</span>
+													{/if}
+													{#if chip.pets && chip.pets.length > 0}
+														<span
+															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+														>
+															<PawPrint class="size-3" />
+															{chip.pets.length} สัตว์เลี้ยง
+														</span>
+													{/if}
+												</div>
+											</div>
+
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												disabled={fieldsLocked}
+												onclick={() => confirmPublicJoin(chip)}
 											>
-												<CheckCircle2 class="size-3" />
-												ตรงกับเบอร์โทรศัพท์ของสมาชิก: {chip.matched_member_masked}
-											</span>
-										{/if}
-
-										<!-- Member & pet count badges -->
-										<div class="mt-0.5 flex flex-wrap gap-1.5">
-											{#if chip.member_count && chip.member_count > 0}
-												<span
-													class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-												>
-													<Users class="size-3" />
-													{chip.member_count} สมาชิก
-												</span>
-											{/if}
-											{#if chip.pets && chip.pets.length > 0}
-												<span
-													class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-												>
-													<PawPrint class="size-3" />
-													{chip.pets.length} สัตว์เลี้ยง
-												</span>
-											{/if}
+												เข้าร่วม
+											</Button>
 										</div>
-									</div>
+									</li>
+								{/each}
+							</ul>
+							<Button
+								type="button"
+								size="sm"
+								disabled={fieldsLocked}
+								onclick={continueCreateDespiteSuggest}
+							>
+								สร้างใหม่
+							</Button>
+						</div>
+					{:else if residenceSuggestCheckedEmpty}
+						<p class="mt-3 text-xs text-muted-foreground">
+							{searchPhoneQuery.trim()
+								? 'ไม่พบครอบครัวที่ตรงกับเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้'
+								: 'ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่'}
+						</p>
+					{/if}
+				{/if}
+			</UnifiedRegistrationSection>
 
-									<Button
-										type="button"
-										size="sm"
-										variant="outline"
-										disabled={pending}
-										onclick={() => confirmPublicJoin(chip)}
-									>
-										เข้าร่วม
-									</Button>
-								</div>
-							</li>
-						{/each}
-					</ul>
-					<Button type="button" size="sm" disabled={pending} onclick={continueCreateDespiteSuggest}>
-						สร้างใหม่
-					</Button>
-				</div>
-			{:else if residenceSuggestCheckedEmpty}
-				<p class="mt-3 text-xs text-muted-foreground">
-					{searchPhoneQuery.trim()
-						? 'ไม่พบครอบครัวที่ตรงกับเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้'
-						: 'ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่'}
-				</p>
+			<!-- ── Section 2: Members ─────────────────────────────────── -->
+			<UnifiedRegistrationMembersSection
+				bind:members
+				{memberFieldErrors}
+				pending={fieldsLocked}
+				{mode}
+				{channel}
+				{memberPhotoUpload}
+				{shelterCode}
+				{membersSectionDesc}
+				isJoiningExistingHousehold={hasJoinSelection}
+				primaryContactPhone={selectedMatchChip?.primary_contact_masked ?? null}
+				onDirty={markDirty}
+			/>
+
+			<!-- ── Section 3: Pets ────────────────────────────────────────── -->
+			<UnifiedRegistrationPetsSection
+				bind:petItems
+				pending={fieldsLocked}
+				{showPetPhotoUpload}
+				{channel}
+				{enableUnassignedPhoto}
+				{shelterCode}
+				existingPets={selectedMatchChip?.pets ?? []}
+				onsync={onPetsSynced}
+			/>
+
+			<!-- ── Section 4: Vehicles + assets (optional; onsite default) ──────── -->
+			{#if showVehiclesAssets}
+				<UnifiedRegistrationVehiclesSection
+					bind:vehicles={
+						() => household.vehicles ?? [],
+						(v) => {
+							household.vehicles = v;
+						}
+					}
+					bind:assetDescription
+					pending={fieldsLocked}
+					onDirty={markDirty}
+				/>
 			{/if}
-		{/if}
-	</UnifiedRegistrationSection>
 
-	<!-- ── Section 2: Members ─────────────────────────────────── -->
-	<UnifiedRegistrationMembersSection
-		bind:members
-		{memberFieldErrors}
-		{pending}
-		{mode}
-		{channel}
-		{memberPhotoUpload}
-		{shelterCode}
-		{membersSectionDesc}
-		isJoiningExistingHousehold={hasJoinSelection}
-		primaryContactPhone={selectedMatchChip?.primary_contact_masked ?? null}
-		onDirty={markDirty}
-	/>
-
-	<!-- ── Section 3: Pets ────────────────────────────────────────── -->
-	<UnifiedRegistrationPetsSection
-		bind:petItems
-		{pending}
-		{showPetPhotoUpload}
-		{channel}
-		{enableUnassignedPhoto}
-		{shelterCode}
-		existingPets={selectedMatchChip?.pets ?? []}
-		onsync={onPetsSynced}
-	/>
-
-	<!-- ── Section 4: Vehicles + assets (optional; onsite default) ──────── -->
-	{#if showVehiclesAssets}
-		<UnifiedRegistrationVehiclesSection
-			bind:vehicles={
-				() => household.vehicles ?? [],
-				(v) => {
-					household.vehicles = v;
-				}
-			}
-			bind:assetDescription
-			{pending}
-			onDirty={markDirty}
-		/>
-	{/if}
-
-	{#if children}
-		<div class="pt-2">
-			{@render children({
-				household: {
-					...household,
-					vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
-					assets:
-						showVehiclesAssets && assetDescription.trim()
-							? { description: assetDescription.trim(), image_url: null }
-							: null
-				}
-			})}
-		</div>
-	{/if}
+			{#if children}
+				<div class="pt-2">
+					{@render children({
+						household: {
+							...household,
+							vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
+							assets:
+								showVehiclesAssets && assetDescription.trim()
+									? { description: assetDescription.trim(), image_url: null }
+									: null
+						}
+					})}
+				</div>
+			{/if}
 
 			<div class="unified-reg-bottom-chrome">
 				<div class="lg:hidden">
@@ -1271,14 +1304,16 @@
 						onNavigate={(id) => scrollToSection(id as FormSectionId)}
 					/>
 				</div>
-				<UnifiedRegistrationSubmitBar
-					{pending}
-					{submitDisabled}
-					label={effectiveSubmitLabel}
-					submittingLabel={t.submitting}
-					align={submitAlign}
-					sticky={false}
-				/>
+				{#if !readOnly}
+					<UnifiedRegistrationSubmitBar
+						{pending}
+						{submitDisabled}
+						label={effectiveSubmitLabel}
+						submittingLabel={t.submitting}
+						align={submitAlign}
+						sticky={false}
+					/>
+				{/if}
 			</div>
 		</div>
 	</div>

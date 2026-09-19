@@ -5,6 +5,7 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import Lock from '@lucide/svelte/icons/lock';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
@@ -81,7 +82,7 @@
 		goto(resolve('/onsite/people'));
 	}
 
-	const wrongStatus = $derived(
+	const alreadyReportedIn = $derived(
 		Boolean(evacuee && evacuee.current_stay.status !== 'pre_registered')
 	);
 
@@ -89,6 +90,7 @@
 		input: UnifiedRegistrationInput,
 		meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
 	) {
+		if (alreadyReportedIn) return;
 		const shelterCode = getShelterCode();
 		const ctx = {
 			shelterCode,
@@ -126,6 +128,21 @@
 	</title>
 </svelte:head>
 
+{#snippet registrationForm(readOnly: boolean)}
+	<UnifiedRegistrationForm
+		mode="report-in"
+		channel="onsite"
+		includeVehiclesAssets={true}
+		shelterCode={getShelterCode()}
+		{initialHousehold}
+		{initialMembers}
+		{readOnly}
+		pending={submitReportIn.isPending}
+		onsubmit={handleReportIn}
+		onDirtyChange={(dirty) => (isDirty = dirty)}
+	/>
+{/snippet}
+
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
 		<FamilyBatchPrint
@@ -149,7 +166,9 @@
 			<Badge variant="outline">Station 1 · Report-in</Badge>
 		</div>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
-			ตรวจสอบข้อมูลครอบครัว เลือกสมาชิกที่เดินทางมารายงานตัวในรอบนี้ และสามารถเพิ่มสมาชิกใหม่ได้
+			{alreadyReportedIn
+				? 'แสดงข้อมูลแบบอ่านอย่างเดียว — การแก้ไขทำได้ที่หน้าโปรไฟล์ผู้ประสบภัยเท่านั้น'
+				: 'ตรวจสอบข้อมูลครอบครัว เลือกสมาชิกที่เดินทางมารายงานตัวในรอบนี้ และสามารถเพิ่มสมาชิกใหม่ได้'}
 		</p>
 
 		{#if saveError}
@@ -176,27 +195,28 @@
 				</p>
 				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
 			</Card.Root>
-		{:else if wrongStatus}
+		{:else if alreadyReportedIn}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
-				<h2 class="text-base font-bold">สถานะไม่ใช่ pre_registered</h2>
+				<div
+					class="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600"
+				>
+					<Lock class="size-6" />
+				</div>
+				<h2 class="text-base font-bold">ผู้ประสบภัยรายงานตัวแล้ว</h2>
 				<p class="mt-1.5 text-xs text-muted-foreground">
-					รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า — สถานะปัจจุบัน:
-					{evacuee.current_stay.status}
+					สถานะปัจจุบัน: {evacuee.current_stay.status} — ข้อมูลด้านล่างแสดงแบบอ่านอย่างเดียว หากต้องการแก้ไข
+					กรุณาไปที่หน้าโปรไฟล์ผู้ประสบภัย
 				</p>
-				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
+				<Button
+					class="mt-4"
+					onclick={() => goto(resolve(`/onsite/people/evacuee-profile-view/${evacuee._id}`))}
+				>
+					ไปที่หน้าโปรไฟล์
+				</Button>
 			</Card.Root>
+			{@render registrationForm(true)}
 		{:else}
-			<UnifiedRegistrationForm
-				mode="report-in"
-				channel="onsite"
-				includeVehiclesAssets={true}
-				shelterCode={getShelterCode()}
-				{initialHousehold}
-				{initialMembers}
-				pending={submitReportIn.isPending}
-				onsubmit={handleReportIn}
-				onDirtyChange={(dirty) => (isDirty = dirty)}
-			/>
+			{@render registrationForm(false)}
 		{/if}
 	{/if}
 </div>

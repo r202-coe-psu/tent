@@ -33,7 +33,6 @@
 		ZoneSelectionFields
 	} from '../forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { STATUS_LABELS } from '../../domain/people';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import UserSearch from '@lucide/svelte/icons/user-search';
 	import {
@@ -97,17 +96,17 @@
 	const isAlreadyReported = $derived(
 		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
 	);
-	const alreadyReportedStatusLabel = $derived(
-		member.stay_status ? (STATUS_LABELS[member.stay_status] ?? member.stay_status) : ''
-	);
 	const isNewReportInMember = $derived(isReportIn && !member._id);
 	const isToggleableReportIn = $derived(
 		isReportIn && !!member._id && (!member.stay_status || member.stay_status === 'pre_registered')
 	);
 	const isReportingInSelected = $derived(member.reporting_in ?? true);
+	/** Lock fields when parent says so, or when this member already reported in. */
+	const fieldsDisabled = $derived(disabled || isAlreadyReported);
 	const cardClass = $derived(
 		cn(
 			'rounded-xl p-4 shadow-xs sm:p-5 space-y-5',
+			isAlreadyReported && 'pointer-events-none',
 			isToggleableReportIn
 				? isReportingInSelected
 					? 'border-2 border-primary/50 bg-sky-100/5 ring-1 ring-primary/30'
@@ -275,10 +274,7 @@
 	$effect(() => {
 		if (member.age !== lastSyncedAge) {
 			lastSyncedAge = member.age;
-			age =
-				typeof member.age === 'number' || typeof member.age === 'string'
-					? member.age
-					: '';
+			age = typeof member.age === 'number' || typeof member.age === 'string' ? member.age : '';
 		} else {
 			member.age = resolvedAge;
 			lastSyncedAge = resolvedAge;
@@ -318,7 +314,7 @@
 	});
 
 	function applyAnonymous() {
-		if (disabled) return;
+		if (fieldsDisabled) return;
 		member = applyAnonymousIdToMember(member);
 	}
 
@@ -340,7 +336,7 @@
 	}
 
 	async function handlePhotoSelect(file: File | null) {
-		if (!file || disabled || uploadingPhoto || !showPhotoUpload) return;
+		if (!file || fieldsDisabled || uploadingPhoto || !showPhotoUpload) return;
 
 		uploadingPhoto = true;
 		const localPreview = URL.createObjectURL(file);
@@ -384,14 +380,19 @@
 	}
 
 	function clearPhoto() {
-		if (disabled || uploadingPhoto) return;
+		if (fieldsDisabled || uploadingPhoto) return;
 		forgetPhotoPreview(member.photo);
 		photoPreviewUrl = null;
 		member.photo = null;
 	}
 </script>
 
-<section id="unified-member-{index}" class={cardClass} aria-labelledby="member-card-title-{index}">
+<section
+	id="unified-member-{index}"
+	class={cardClass}
+	inert={isAlreadyReported || undefined}
+	aria-labelledby="member-card-title-{index}"
+>
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
@@ -406,12 +407,8 @@
 				>
 					{title}
 				</h3>
-				{#if isReportIn}
-					{#if isAlreadyReported}
-						<Badge variant="secondary" class="text-2xs">
-							รายงานตัวแล้ว ({alreadyReportedStatusLabel})
-						</Badge>
-					{:else if member._id}
+				{#if isReportIn && !isAlreadyReported}
+					{#if member._id}
 						<Badge
 							variant="outline"
 							class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400"
@@ -448,7 +445,7 @@
 						type="button"
 						variant="outline"
 						size="sm"
-						{disabled}
+						disabled={fieldsDisabled}
 						onclick={() => (pullDialogOpen = true)}
 						class="h-9 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
 					>
@@ -466,7 +463,7 @@
 					>
 						<Checkbox
 							checked={isReportingInSelected}
-							{disabled}
+							disabled={fieldsDisabled}
 							onCheckedChange={(checked) => {
 								member.reporting_in = checked === true;
 								onReportingInChange?.(checked === true);
@@ -484,7 +481,7 @@
 							type="button"
 							variant="ghost"
 							size="sm"
-							{disabled}
+							disabled={fieldsDisabled}
 							onclick={handleUnlinkQueue}
 							class="h-11 gap-1 text-xs text-muted-foreground hover:text-destructive"
 						>
@@ -495,23 +492,25 @@
 				{/if}
 			{/if}
 
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				{disabled}
-				onclick={applyAnonymous}
-				class="h-9 gap-1.5 text-xs"
-			>
-				<IdCard class="size-3.5" />
-				{t.anonymousBtn}
-			</Button>
-			{#if canRemove}
+			{#if !isAlreadyReported}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					disabled={fieldsDisabled}
+					onclick={applyAnonymous}
+					class="h-9 gap-1.5 text-xs"
+				>
+					<IdCard class="size-3.5" />
+					{t.anonymousBtn}
+				</Button>
+			{/if}
+			{#if canRemove && !isAlreadyReported}
 				<Button
 					type="button"
 					variant="ghost"
 					size="sm"
-					{disabled}
+					disabled={fieldsDisabled}
 					onclick={() => onRemove?.()}
 					class="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"
 					aria-label={t.removeMemberAria}
@@ -529,7 +528,9 @@
 				<div class="flex items-center gap-2">
 					<Camera class="size-4 text-muted-foreground" />
 					<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
-					<span class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground">
+					<span
+						class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
+					>
 						(ไม่จำเป็น / หากมี)
 					</span>
 				</div>
@@ -551,7 +552,7 @@
 					<div class="flex flex-wrap items-center gap-2">
 						<label
 							for={photoInputId}
-							class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {disabled ||
+							class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {fieldsDisabled ||
 							uploadingPhoto
 								? 'pointer-events-none opacity-60'
 								: ''}"
@@ -565,7 +566,7 @@
 							accept="image/*"
 							capture="user"
 							class="sr-only"
-							disabled={disabled || uploadingPhoto}
+							disabled={fieldsDisabled || uploadingPhoto}
 							onchange={(e) => {
 								const input = e.currentTarget;
 								void handlePhotoSelect(input.files?.[0] ?? null);
@@ -578,7 +579,7 @@
 								variant="ghost"
 								size="sm"
 								class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-								disabled={disabled || uploadingPhoto}
+								disabled={fieldsDisabled || uploadingPhoto}
 								onclick={clearPhoto}
 							>
 								{t.facePhotoRemove}
@@ -607,7 +608,7 @@
 			bind:gender={member.gender}
 			bind:religion={member.religion}
 			bind:country={member.country}
-			{disabled}
+			disabled={fieldsDisabled}
 			{hideNoPhone}
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
@@ -632,7 +633,7 @@
 						bind:name={emergency.name}
 						bind:phone={emergency.phone}
 						bind:relation={emergency.relation}
-						{disabled}
+						disabled={fieldsDisabled}
 					/>
 				</div>
 			</Accordion.Content>
@@ -650,7 +651,7 @@
 					<span class="text-2xs text-muted-foreground">{t.vulnerableMultiHint}</span>
 					<VulnerableGroupsFields
 						bind:vulnerable_groups={member.vulnerable_groups}
-						{disabled}
+						disabled={fieldsDisabled}
 						idPrefix="vg-{index}"
 						label=""
 					/>
@@ -667,7 +668,11 @@
 			</Accordion.Trigger>
 			<Accordion.Content>
 				<div class="space-y-3 pt-1">
-					<SpecialNeedsFields bind:special_needs={member.special_needs} {disabled} label="" />
+					<SpecialNeedsFields
+						bind:special_needs={member.special_needs}
+						disabled={fieldsDisabled}
+						label=""
+					/>
 				</div>
 			</Accordion.Content>
 		</Accordion.Item>
@@ -691,7 +696,7 @@
 						variant="outline"
 						size="sm"
 						class="h-7 text-2xs"
-						disabled={disabled || !member.zone}
+						disabled={fieldsDisabled || !member.zone}
 						onclick={() => onApplyZoneToAll?.(member.zone ?? '')}
 					>
 						ใช้โซนนี้กับทุกคนในบ้าน
@@ -716,7 +721,11 @@
 					phone: member.phone ?? null,
 					vulnerable_groups: member.vulnerable_groups ?? [],
 					special_needs: member.special_needs ?? [],
-					current_stay: { status: member.stay_status ?? 'arriving', zone: member.zone ?? null, since: '' },
+					current_stay: {
+						status: member.stay_status ?? 'arriving',
+						zone: member.zone ?? null,
+						since: ''
+					},
 					country: 'THAILAND',
 					religion: 'unknown',
 					registered_via: 'staff',
@@ -727,7 +736,7 @@
 					type: 'evacuee',
 					privacy: { search_excluded: false }
 				}}
-				{disabled}
+				disabled={fieldsDisabled}
 			/>
 		</div>
 	{/if}
