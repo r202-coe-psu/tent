@@ -67,6 +67,9 @@ async def project_needs_for_shelter(
     if not await couch.database_exists(database):
         return []
 
+    # Read once and keep the unfiltered list: the delete pass below needs every item
+    # any campaign ever asked for, including the campaigns filtered out right here.
+    all_campaigns = await _fetch_docs_by_prefix(couch, database, "donation_campaign:")
     # `visible_on_home` is the back-office "กำลังโชว์บนหน้าเว็บ / ซ่อนจากหน้าเว็บ" toggle
     # (schema.md §2.4, CR-034: "ควบคุมการโปรโมตแคมเปญบนหน้าแรก"). This projection is the
     # only public surface that reads campaign needs, so hiding a campaign has to happen
@@ -76,7 +79,7 @@ async def project_needs_for_shelter(
     # Absent field = visible (CR-034 explicitly needs no backfill).
     campaigns = [
         doc
-        for doc in await _fetch_docs_by_prefix(couch, database, "donation_campaign:")
+        for doc in all_campaigns
         if doc.get("type") == "donation_campaign"
         and doc.get("status") == "open"
         and doc.get("visible_on_home", True) is not False
@@ -95,6 +98,24 @@ async def project_needs_for_shelter(
     ]
     catalog = await _load_catalog_map(couch)
 
+    # Highest urgency any open campaign attaches to the item. `qty_target` is NOT
+    # accumulated here — `need_breakdown` below already sums it, and does so skipping
+    # needs staff force-closed, which a plain sum over `needs[]` would still count.
+    urgency_by_item: dict[str, str] = {}
+    for camp in campaigns:
+        camp_urg = camp.get("urgency")
+        if not camp_urg and "[ด่วน]" in (camp.get("notes") or ""):
+            camp_urg = "critical"
+        elif not camp_urg:
+            camp_urg = "normal"
+
+        for need in camp.get("needs") or []:
+            item_id = need.get("item_id")
+            if not item_id:
+                continue
+            if camp_urg == "critical" or urgency_by_item.get(item_id) != "critical":
+                urgency_by_item[item_id] = camp_urg
+
     remaining, _ = compute_needs(campaigns, donations, stock_ledgers)
     # The terms behind the shortage, so the donor board can show what it is made of
     # instead of inventing a target and a received figure of its own.
@@ -102,10 +123,27 @@ async def project_needs_for_shelter(
     now = datetime.now(UTC)
     actions: list[tuple[ProjectionAction, dict[str, Any] | None]] = []
 
+    # Candidates: all items that were ever configured in any campaign in this shelter
+    candidate_item_ids = {
+        need["item_id"]
+        for c in all_campaigns
+        for need in (c.get("needs") or [])
+        if need.get("item_id")
+    }
+
+    # Retract any item no longer in `remaining` — campaign closed, or hidden with
+    # `visible_on_home`. Keyed exactly like the upsert below (`{shelter}:{item_id}`,
+    # the id carrying its own generation prefix). Re-adding `item:` here would aim the
+    # delete at `SH001:item:item_master:x` while the row lives at
+    # `SH001:item_master:x`, leaving the retracted need on the donor board forever.
+    for item_id in sorted(candidate_item_ids):
+        if item_id not in remaining:
+            actions.append(("delete", {"_id": f"{shelter_code}:{item_id}"}))
+
     for item_id, qty_open in remaining.items():
         try:
             qty_needed = float(qty_open)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             qty_needed = 0.0
         # The item id already carries its own generation prefix (`item:` or
         # `item_master:` — schema.md §4.2). This used to strip `item:` and re-add it,
@@ -130,6 +168,7 @@ async def project_needs_for_shelter(
                     "qty_target": terms.get("qty_target", 0.0),
                     "on_hand": terms.get("on_hand", 0.0),
                     "reserved": terms.get("reserved", 0.0),
+                    "urgency": urgency_by_item.get(item_id, "normal"),
                     "unit": details.get("unit", "unit"),
                     "updated_at": now,
                 },

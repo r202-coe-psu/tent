@@ -15,6 +15,59 @@ export function publicWriterName(): string | null {
 	return couchUserFromUrl(env.COUCHDB_PUBLIC_WRITER_URL);
 }
 
+/** Read one document through the same limited public-writer identity used for writes. */
+export async function getAsPublicWriter(
+	dbName: string,
+	docId: string
+): Promise<{ status: number; data: unknown }> {
+	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+	const path = `/${dbName}/${encodeURIComponent(docId)}`;
+	if (writerUrl) {
+		const creds = parseCouchCredentialUrl(writerUrl);
+		if (!creds) throw new Error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
+		const res = await fetch(`${creds.base}${path}`, {
+			headers: {
+				Authorization: basicAuthHeader(creds.user, creds.password),
+				Accept: 'application/json'
+			}
+		});
+		return { status: res.status, data: await res.json().catch(() => null) };
+	}
+	if (!dev) throw new Error('COUCHDB_PUBLIC_WRITER_URL is missing in production');
+	return adminRaw(path, 'GET');
+}
+
+/** Query a bounded public CouchDB view through the public-writer identity. */
+export async function findAsPublicWriter(
+	dbName: string,
+	selector: Record<string, unknown>,
+	options: { limit?: number; fields?: string[] } = {}
+): Promise<{ status: number; data: unknown }> {
+	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+	const path = `/${dbName}/_find`;
+	const body = {
+		selector,
+		limit: options.limit ?? 100,
+		...(options.fields ? { fields: options.fields } : {})
+	};
+	if (writerUrl) {
+		const creds = parseCouchCredentialUrl(writerUrl);
+		if (!creds) throw new Error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
+		const res = await fetch(`${creds.base}${path}`, {
+			method: 'POST',
+			headers: {
+				Authorization: basicAuthHeader(creds.user, creds.password),
+				'Content-Type': 'application/json',
+				Accept: 'application/json'
+			},
+			body: JSON.stringify(body)
+		});
+		return { status: res.status, data: await res.json().catch(() => null) };
+	}
+	if (!dev) throw new Error('COUCHDB_PUBLIC_WRITER_URL is missing in production');
+	return adminRaw(path, 'POST', body);
+}
+
 /**
  * PUT a document using the dedicated limited-permission public writer user
  * (`COUCHDB_PUBLIC_WRITER_URL`) so public `/api/public/v1/*` writes never use the

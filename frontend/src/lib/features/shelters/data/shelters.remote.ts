@@ -62,6 +62,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		},
 		risk: master.risk ?? {},
 		zones: master.zones ?? [],
+		food_distribution_points: master.food_distribution_points ?? [],
 		admission_policy: master.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 		luggage_policy: master.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY },

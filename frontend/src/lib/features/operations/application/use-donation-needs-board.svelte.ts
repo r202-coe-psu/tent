@@ -2,7 +2,14 @@ import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { supplyRepository, useSupplyItems } from '$lib/features/supply';
-import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+import {
+	catalogRepository,
+	formatUnit,
+	itemMasterUnit,
+	useItemMasters,
+	useUnitsOfMeasure
+} from '$lib/features/catalog';
+import { langState } from '$lib/states/i18n.svelte';
 import { useQueryClient } from '@tanstack/svelte-query';
 import {
 	operationsKeys,
@@ -40,13 +47,22 @@ function bareItemId(itemId: string): string {
 	return itemId.replace(/^(item_master:|item:)/, '');
 }
 
-async function warnIfItemNotInCatalog(itemId: string, displayName: string): Promise<void> {
-	const catalogItem = await supplyRepository().getItem(itemId);
-	if (!catalogItem) {
-		toast.warning(
-			`"${displayName}" ไม่พบในแคตตาล็อก — ระบบจะใช้รหัส ${itemId} ชั่วคราว กรุณาตรวจสอบก่อนเปิดรับบริจาค`
-		);
-	}
+async function resolveNeedCatalogItem(itemId: string, displayName: string) {
+	const supplyItem = await supplyRepository().getItem(itemId);
+	if (supplyItem) return { itemId: supplyItem._id, unit: supplyItem.unit };
+
+	const itemMaster = itemId.startsWith('item_master:')
+		? await catalogRepository().getItemMaster(itemId, getShelterCode())
+		: null;
+	if (itemMaster) return { itemId: itemMaster._id, unit: itemMasterUnit(itemMaster) };
+
+	const matchingMaster = (await catalogRepository().listItemMasters(getShelterCode())).find(
+		(item) => item.name.trim().toLowerCase() === displayName.trim().toLowerCase()
+	);
+	if (matchingMaster) return { itemId: matchingMaster._id, unit: itemMasterUnit(matchingMaster) };
+
+	toast.error(`"${displayName}" ไม่พบใน Item Master — กรุณาเลือกสินค้าที่มีหน่วยมาตรฐานก่อน`);
+	return null;
 }
 
 export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) {
@@ -76,6 +92,10 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 	function itemDisplayName(itemId: string): string {
 		return catalogNames[itemId] ?? FALLBACK_ITEM_NAMES[itemId] ?? bareItemId(itemId);
 	}
+
+	// UOM master data, for turning a canonical code back into a Thai label (CR-125).
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
 
 	/**
 	 * Exact-id → stock-keeping unit, keyed and read exactly like `catalogNames` above.
@@ -281,7 +301,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 	 * on a bare substring match and merged it into the drinking-water card. The
 	 * binding is now chosen, not inferred.
 	 */
-	function handleAddRequestFromForm(input: {
+	async function handleAddRequestFromForm(input: {
 		itemId: string;
 		name: string;
 		target: string;
@@ -292,21 +312,31 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		imageUrl?: string;
 		description?: string;
 	}) {
-		const itemId = input.itemId;
-		void warnIfItemNotInCatalog(itemId, input.name);
+		// The picker supplies the id, but the unit written onto the need comes from the
+		// CATALOG, never from the form — an item with no Item Master row has no standard
+		// unit to announce, so the campaign is refused rather than inventing one (CR-125).
+		const item = await resolveNeedCatalogItem(input.itemId, input.name);
+		if (!item) return;
+		if (input.unit && input.unit.trim() !== item.unit) {
+			toast.error(
+				`หน่วยของ ${input.name} ต้องเป็น ${formatUnit(item.unit, unitsOfMeasure, langState.current)} ตาม Item Master`
+			);
+			return;
+		}
 
 		const newCampaignInput = {
 			title: input.name,
 			needs: [
 				{
-					item_id: itemId,
+					item_id: item.itemId,
 					qty_target: input.target,
-					unit: input.unit || 'ชิ้น',
+					unit: item.unit,
 					status: 'open' as const
 				}
 			],
 			notes: buildCampaignNotes(input),
-			visible_on_home: true
+			visible_on_home: true,
+			urgency: input.urgency || 'normal'
 		};
 
 		createCampaignMutation.mutate(

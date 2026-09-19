@@ -1,10 +1,13 @@
 /**
- * Helpers for mapping Superforms / Zod validation errors onto shelter wizard steps.
+ * Helpers for mapping Superforms / Zod validation errors onto shelter form sections.
  */
 
-/** Top-level shelterSchema keys that belong to each wizard step (index = step). */
-export const SHELTER_STEP_FIELDS: readonly (readonly string[])[] = [
-	[
+/**
+ * Top-level shelterSchema keys that belong to each single-page form section,
+ * keyed by the section anchor id. Key order is the canonical DOM order.
+ */
+export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
+	'basic-info': [
 		'name',
 		'site_kind',
 		'operation_status',
@@ -23,14 +26,15 @@ export const SHELTER_STEP_FIELDS: readonly (readonly string[])[] = [
 		'key_personnel',
 		'feature_flags'
 	],
-	['capacity', 'area_m2', 'area_type'],
-	['zones', 'facilities', 'common_areas'],
-	['utilities'],
-	['risk'],
-	['admission_policy'],
-	['luggage_policy'],
-	['parking_policy']
-];
+	capacity: ['capacity', 'area_m2', 'area_type'],
+	'zones-facilities': ['zones', 'facilities', 'common_areas'],
+	'food-distribution': ['food_distribution_points'],
+	utilities: ['utilities'],
+	risk: ['risk'],
+	'admission-policy': ['admission_policy'],
+	'luggage-policy': ['luggage_policy'],
+	'parking-policy': ['parking_policy']
+};
 
 /** Top-level keys present on a Superforms errors object (skip `_errors`). */
 export function topLevelErrorKeys(errors: unknown): string[] {
@@ -38,17 +42,17 @@ export function topLevelErrorKeys(errors: unknown): string[] {
 	return Object.keys(errors as Record<string, unknown>).filter((key) => key !== '_errors');
 }
 
-/** Step indexes (0-based) that contain at least one errored top-level field. */
-export function findInvalidStepIndexes(
+/** Section ids that contain at least one errored top-level field, in canonical order. */
+export function findInvalidSectionIds(
 	errors: unknown,
-	stepFields: readonly (readonly string[])[] = SHELTER_STEP_FIELDS
-): number[] {
+	sectionFields: Record<string, readonly string[]> = SHELTER_SECTION_FIELDS
+): string[] {
 	const keys = new Set(topLevelErrorKeys(errors));
 	if (keys.size === 0) return [];
-	const invalid: number[] = [];
-	for (let i = 0; i < stepFields.length; i++) {
-		if (stepFields[i]?.some((field) => keys.has(field))) {
-			invalid.push(i);
+	const invalid: string[] = [];
+	for (const [sectionId, fields] of Object.entries(sectionFields)) {
+		if (fields.some((field) => keys.has(field))) {
+			invalid.push(sectionId);
 		}
 	}
 	return invalid;
@@ -88,12 +92,15 @@ export function collectErrorMessages(errors: unknown): string[] {
 	return out;
 }
 
-/** Messages for a subset of top-level fields (e.g. the current wizard step). */
+/** Messages for a section's top-level fields (e.g. the section being revealed). */
 export function collectErrorMessagesForFields(
 	errors: unknown,
-	fields: readonly string[]
+	sectionId: string,
+	sectionFields: Record<string, readonly string[]> = SHELTER_SECTION_FIELDS
 ): string[] {
 	if (!errors || typeof errors !== 'object') return [];
+	const fields = sectionFields[sectionId];
+	if (!fields) return [];
 	const record = errors as Record<string, unknown>;
 	const out: string[] = [];
 	const seen = new Set<string>();
@@ -105,12 +112,12 @@ export function collectErrorMessagesForFields(
 	return out;
 }
 
-export function stepHasFieldErrors(
-	stepIndex: number,
+export function sectionHasFieldErrors(
+	sectionId: string,
 	errors: unknown,
-	stepFields: readonly (readonly string[])[] = SHELTER_STEP_FIELDS
+	sectionFields: Record<string, readonly string[]> = SHELTER_SECTION_FIELDS
 ): boolean {
-	const fields = stepFields[stepIndex];
+	const fields = sectionFields[sectionId];
 	if (!fields) return false;
 	const keys = new Set(topLevelErrorKeys(errors));
 	return fields.some((field) => keys.has(field));

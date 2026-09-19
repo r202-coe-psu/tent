@@ -22,6 +22,8 @@ class PublicNeed(Document):
 	on_hand: float = 0.0
 	reserved: float = 0.0
 	unit: str
+	#: Highest urgency across the open campaigns asking for this item.
+	urgency: str = "normal"
 	updated_at: datetime
 
 	class Settings:

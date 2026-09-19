@@ -30,6 +30,7 @@ class NeedsUseCase:
                     reserved=str(need.reserved),
                     unit=need.unit,
                     category=need.category,
+                    urgency=need.urgency,
                     status="open" if need.qty_needed > 0 else "closed",
                 )
             )

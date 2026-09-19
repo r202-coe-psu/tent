@@ -36,7 +36,8 @@
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
 	import { qtyGt } from '$lib/utils/qty';
@@ -44,6 +45,8 @@
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const stockBalance = useStockBalance();
 	const gasTypes = useGasCylinderTypes();
 	const gasLedger = useGasLedger();
@@ -209,11 +212,22 @@
 	// then an item_master lookup (an unresolved BOM ingredient — still shows a
 	// real name even though it can't be withdrawn yet), else the raw id.
 	function recipeLabel(recipeId: string): { label: string; unit: string } {
-		if (RECIPE_LABELS[recipeId]) return RECIPE_LABELS[recipeId];
+		if (RECIPE_LABELS[recipeId]) {
+			const recipe = RECIPE_LABELS[recipeId];
+			return { ...recipe, unit: formatUnit(recipe.unit, units, langState.current) };
+		}
 		const supplyItem = supplyItems.data?.find((i) => i._id === recipeId);
-		if (supplyItem) return { label: supplyItem.name, unit: supplyItem.unit };
+		if (supplyItem)
+			return {
+				label: supplyItem.name,
+				unit: formatUnit(supplyItem.unit, units, langState.current)
+			};
 		const itemMaster = itemMasters.data?.find((im) => im._id === recipeId);
-		if (itemMaster) return { label: itemMaster.name, unit: itemMaster.base_unit };
+		if (itemMaster)
+			return {
+				label: itemMaster.name,
+				unit: formatUnit(itemMaster.base_unit, units, langState.current)
+			};
 		return { label: recipeId, unit: '' };
 	}
 

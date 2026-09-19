@@ -18,7 +18,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
-	import EvacueePhoto from '../evacuee-photo.svelte';
+	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	let {
 		vehicles = $bindable<HouseholdVehicle[]>([]),

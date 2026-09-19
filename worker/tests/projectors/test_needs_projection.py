@@ -105,12 +105,19 @@ async def test_card_is_named_from_the_catalog_not_the_campaign():
 
 @pytest.mark.asyncio
 async def test_hidden_campaign_is_kept_off_the_public_board():
+    """Hiding a campaign RETRACTS its rows, it does not merely stop refreshing them.
+
+    Skipping the upsert alone left whatever was last projected sitting in
+    `public_needs` forever, so a campaign staff had taken off the donor board kept
+    being advertised. The retraction is keyed exactly like the upsert
+    (`{shelter}:{item_id}`) so it actually reaches the row it is aimed at.
+    """
     actions = await project_needs_for_shelter(
         _couch([_campaign("a", "100", visible_on_home=False)]), SHELTER
     )
 
     assert _upserts(actions) == []
-    assert [d["_id"] for d in _deletes(actions)] == []
+    assert [d["_id"] for d in _deletes(actions)] == ["SH001:item:water"]
 
 
 @pytest.mark.asyncio
@@ -154,14 +161,14 @@ async def test_projection_publishes_the_terms_behind_the_shortage():
         "type": "donation",
         "status": "pending_review",
         "campaign_id": "donation_campaign:a",
-        "items": [{"item_id": "item:water", "qty": "30", "unit": "bottle"}]
+        "items": [{"item_id": "item:water", "qty": "30", "unit": "bottle"}],
     }
     ledger = {
         "_id": "stock_ledger:on-shelf",
         "type": "stock_ledger",
         "item_id": "item:water",
         "qty": "20",
-        "reason": "purchase"
+        "reason": "purchase",
     }
     couch = _couch([_campaign("a", "100")], [donation, ledger])
 
@@ -231,7 +238,9 @@ async def test_item_master_id_is_not_doubled_up():
 @pytest.mark.asyncio
 async def test_legacy_item_id_keeps_its_existing_document_id():
     """The id scheme must not move for `item:` rows — they already exist in Mongo."""
-    doc = _upserts(await project_needs_for_shelter(_couch([_campaign("a", "100")]), SHELTER))[0]
+    doc = _upserts(
+        await project_needs_for_shelter(_couch([_campaign("a", "100")]), SHELTER)
+    )[0]
 
     assert doc["_id"] == f"{SHELTER}:item:water"
 
@@ -239,7 +248,9 @@ async def test_legacy_item_id_keeps_its_existing_document_id():
 @pytest.mark.asyncio
 async def test_deactivated_item_master_falls_back_instead_of_naming_the_card():
     campaign = _campaign("a", "50")
-    campaign["needs"] = [{"item_id": "item_master:retired", "qty_target": "50", "unit": "ชิ้น"}]
+    campaign["needs"] = [
+        {"item_id": "item_master:retired", "qty_target": "50", "unit": "ชิ้น"}
+    ]
 
     doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
 

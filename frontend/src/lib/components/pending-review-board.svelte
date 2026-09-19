@@ -14,6 +14,8 @@
 		donationRefLabel,
 		type PendingDonationRow
 	} from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		requests = [],
@@ -24,6 +26,8 @@
 		loading?: boolean;
 		onViewDetails: (request: PendingDonationRow) => void;
 	} = $props();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	let searchQuery = $state('');
 	let sourceFilter = $state('all');
@@ -47,7 +51,10 @@
 	function itemsSummary(req: PendingDonationRow): string {
 		if (req.items.length === 0) return '—';
 		return req.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${it.unit}`)
+			.map(
+				(it) =>
+					`${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+			)
 			.join(', ');
 	}
 

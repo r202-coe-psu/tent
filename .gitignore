@@ -24,6 +24,7 @@ Thumbs.db
 # Local agent scratch / temp publish bodies (not shared)
 .scratch/
 .tmp-*
+_bmad-output/
 
 # Local slides deck (not part of app repo)
 /slides/
@@ -46,3 +47,5 @@ __pycache__/
 
 node_modules/
 backend/uv.lock
+
+secrets/

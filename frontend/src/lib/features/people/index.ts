@@ -172,7 +172,9 @@ export {
 	defaultHouseholdChoice,
 	isLeavingLinkedHousehold,
 	matchesResidenceAddress,
+	normThaiAddressText,
 	suggestHouseholdsByResidence,
+	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
 	type SectionEFlags,
 	type SectionEExistingData,
@@ -204,6 +206,7 @@ export {
 	type UnifiedHouseholdInput,
 	type UnifiedRegistrationInput,
 	type FamilyRegistrationPlan,
+	type FamilyRegistrationMode,
 	type FamilyReportInPayload,
 	type MemberPhotoUploadMode
 } from './domain/unified-registration';
@@ -232,6 +235,7 @@ export {
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
 	useSubmitFamilyReportIn,
+	useMergeHouseholds,
 	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
@@ -275,36 +279,48 @@ export {
 export {
 	default as StayStatusBadge,
 	STAY_STATUS_BADGE_STYLES
-} from './ui/stay-status-badge.svelte';
+} from './ui/shared/stay-status-badge.svelte';
 export {
 	default as RegisteredViaBadge,
 	REGISTERED_VIA_BADGE_STYLES,
 	type RegisteredViaStyle
-} from './ui/registered-via-badge.svelte';
-export { default as Station1IntakeSearch } from './ui/station1-intake-search.svelte';
-export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
-export { default as EvacueeForm } from './ui/evacuee-form.svelte';
-export { default as RegistrationShell } from './ui/registration-shell.svelte';
-export { default as EvacueeList } from './ui/evacuee-list.svelte';
-export { default as HouseholdForm } from './ui/household-form.svelte';
-export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
-export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
-export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
-export { default as FamilyBatchPrint } from './ui/family-batch-print.svelte';
-export { default as UnifiedRegistrationForm } from './ui/unified-registration-form.svelte';
-export { default as PullPreRegisteredDialog } from './ui/pull-pre-registered-dialog.svelte';
+} from './ui/shared/registered-via-badge.svelte';
+export { default as Station1IntakeSearch } from './ui/search-scan/station1-intake-search.svelte';
+export { default as Station1EvacueeQueue } from './ui/search-scan/evacuee-queue-view.svelte';
+export {
+	goToEvacueeReportIn,
+	goToEvacueeProfile,
+	openEvacueeRow
+} from './ui/search-scan/evacuee-queue-navigation';
+export { default as EvacueeProfileView } from './ui/evacuee-profile/evacuee-profile-view.svelte';
+export { default as EvacueeForm } from './ui/registration/evacuee-form.svelte';
+export { default as RegistrationShell } from './ui/registration/registration-shell.svelte';
+export { default as EvacueeList } from './ui/search-scan/evacuee-list.svelte';
+export { default as HouseholdForm } from './ui/household-form/household-form.svelte';
+export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
+export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
+export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
+export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
+export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
+export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
+export { stripThaiTitle } from './domain/thaid-profile';
+export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
+export { default as ThaidMemberScanDialog } from './ui/registration/thaid-member-scan-dialog.svelte';
+export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';
+export { default as UnifiedRegistrationStepper } from './ui/registration/unified-registration-stepper.svelte';
+export { default as PullPreRegisteredDialog } from './ui/registration/pull-pre-registered-dialog.svelte';
 export {
 	default as EvacueeHandoverSlipModal,
 	buildScreeningDeepLink
-} from './ui/evacuee-handover-slip-modal.svelte';
-export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
-export { default as EvacueeSearchEditPage } from './ui/evacuee-search-edit-page.svelte';
-export { default as EvacueeSearchResultsPage } from './ui/evacuee-search-results-page.svelte';
-export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
-export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
-export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
-export { default as HouseholdProfileView } from './ui/household-profile-view.svelte';
-export { default as RegistrationSaveErrorAlert } from './ui/registration-save-error-alert.svelte';
+} from './ui/evacuee-profile/evacuee-handover-slip-modal.svelte';
+export { default as ScanCheckInOutPage } from './ui/search-scan/scan-check-in-out-page.svelte';
+export { default as EvacueeSearchEditPage } from './ui/search-scan/evacuee-search-edit-page.svelte';
+export { default as EvacueeSearchResultsPage } from './ui/search-scan/evacuee-search-results-page.svelte';
+export { default as EvacueePetAssetVehicle } from './ui/household-flows/evacuee-pet-asset-vehicle.svelte';
+export { default as HouseholdPreRegister } from './ui/household-flows/household-pre-register.svelte';
+export { default as HouseholdPreRegisterSummary } from './ui/household-flows/household-pre-register-summary.svelte';
+export { default as HouseholdProfileView } from './ui/household-profile/household-profile-view.svelte';
+export { default as RegistrationSaveErrorAlert } from './ui/registration/registration-save-error-alert.svelte';
 export {
 	buildSaveFailureReport,
 	formatSaveFailureReport,

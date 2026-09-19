@@ -11,6 +11,8 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		items = [],
@@ -26,6 +28,9 @@
 		/** One row = one need, so the edited item travels with the campaign. */
 		onEdit?: (item: NeedItem, itemId: string) => void;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	let searchQuery = $state('');
 	let statusFilter = $state('all');
@@ -117,7 +122,7 @@
 						location: item.location,
 						description: parseCampaignNotes(item.location).description ?? '',
 						name: need.name,
-						unit: need.unit || 'ชิ้น',
+						unit: need.unit || 'piece',
 						reserved: need.reserved,
 						onHand: need.onHand,
 						target: need.target,
@@ -326,7 +331,7 @@
 											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
 												row.publicTotal
 											)}
-											{row.unit}
+											{formatUnit(row.unit, units, langState.current)}
 										</Badge>
 									{/if}
 								</Table.Cell>
@@ -351,7 +356,9 @@
 								<!-- Target -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									{roundQty(row.target || '0')}
-									<span class="ml-1 text-2xs font-medium text-muted-foreground">{row.unit}</span>
+									<span class="ml-1 text-2xs font-medium text-muted-foreground"
+										>{formatUnit(row.unit, units, langState.current)}</span
+									>
 								</Table.Cell>
 
 								<!-- Progress -->

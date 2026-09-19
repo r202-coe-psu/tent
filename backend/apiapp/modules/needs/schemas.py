@@ -19,6 +19,9 @@ class NeedItemResponse(BaseModel):
     reserved: str = "0"
     unit: str
     status: str
+    #: Highest urgency across the open campaigns asking for this item, so the donor
+    #: board can rank "ด่วน" rows without a second round-trip.
+    urgency: str = "normal"
     #: Catalog category of the item (``food``/``water``/``bedding``/…). The projection
     #: has carried it since the start, but this response dropped it — so the donate
     #: wizard had nothing to pre-fill the item's category from and defaulted every

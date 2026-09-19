@@ -11,6 +11,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -18,6 +19,8 @@
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	let courierTracking = $state('');
@@ -222,7 +225,7 @@
 								<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 								<span class="{dotClass.split(' ')[1]} truncate">
 									{item.name || t.unspecified} — {item.amount}
-									{item.unit}
+									{formatUnit(item.unit, units, langState.current)}
 								</span>
 							</span>
 						{/each}
@@ -392,7 +395,7 @@
 										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
 									>
 										{item.amount}
-										{item.unit}
+										{formatUnit(item.unit, units, langState.current)}
 									</span>
 								</div>
 								<div

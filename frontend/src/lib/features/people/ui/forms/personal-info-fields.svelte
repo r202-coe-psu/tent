@@ -47,6 +47,8 @@
 		disabled = false,
 		/** Hide「ไม่มีเบอร์」— public primary contact must enter a phone. */
 		hideNoPhone = false,
+		phoneOptional = false,
+		phoneHelperText = '',
 		idPrefix = '',
 		errors
 	}: {
@@ -63,6 +65,8 @@
 		country?: string;
 		disabled?: boolean;
 		hideNoPhone?: boolean;
+		phoneOptional?: boolean;
+		phoneHelperText?: string;
 		idPrefix?: string;
 		errors?: Record<string, string | undefined>;
 	} = $props();
@@ -186,8 +190,8 @@
 </script>
 
 <div class="space-y-4">
-	<!-- Name & Surname -->
-	<div class="grid gap-3 sm:grid-cols-2">
+	<!-- Name & Surname (2-column on mobile & desktop) -->
+	<div class="grid grid-cols-2 gap-2 sm:gap-3">
 		<div class="space-y-1.5">
 			<Label for={fid('first-name')} class="text-xs font-semibold text-foreground">
 				{t.firstNameLabel} <span class="text-destructive">*</span>
@@ -271,7 +275,7 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
+				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
 					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? t.cardTypeNationalId}
 				</Select.Trigger>
 				<Select.Content>
@@ -289,7 +293,7 @@
 			{#if isAnonymousCard}
 				<p
 					id={fid('card-number')}
-					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-xs text-muted-foreground"
+					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-sm text-muted-foreground"
 				>
 					{t.cardNumberAnonymousHint}
 				</p>
@@ -314,22 +318,23 @@
 		</div>
 	</div>
 
-	<!-- Birth Year, Age, Gender -->
-	<div class="grid gap-3 sm:grid-cols-3">
-		<div class="space-y-1.5">
-			<div class="flex items-center justify-between gap-2">
-				<Label for={fid('birth-year')} class="text-xs font-semibold text-foreground">
+	<!-- Birth Year & Age on mobile (2 cols), plus Gender -->
+	<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+		<div class="flex flex-col gap-1.5">
+			<div class="flex min-h-7 items-center justify-between gap-1 sm:gap-2">
+				<Label for={fid('birth-year')} class="truncate text-xs font-semibold text-foreground">
 					{calendar === 'BE' ? t.birthYearLabelBE : t.birthYearLabelCE}
 				</Label>
 				<div
-					class="inline-flex rounded-md border border-border p-0.5"
+					class="inline-flex shrink-0 rounded-md border border-border p-0.5"
 					role="group"
 					aria-label={t.calendarToggleAria}
 				>
 					<button
 						type="button"
 						{disabled}
-						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar === 'BE'
+						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar ===
+						'BE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'BE'}
@@ -340,7 +345,8 @@
 					<button
 						type="button"
 						{disabled}
-						class="rounded px-1.5 py-0.5 text-2xs font-semibold transition-colors {calendar === 'CE'
+						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar ===
+						'CE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'CE'}
@@ -365,8 +371,10 @@
 			{/if}
 		</div>
 
-		<div class="space-y-1.5">
-			<Label for={fid('age')} class="text-xs font-semibold text-foreground">{t.ageLabel}</Label>
+		<div class="flex flex-col gap-1.5">
+			<div class="flex min-h-7 items-center">
+				<Label for={fid('age')} class="text-xs font-semibold text-foreground">{t.ageLabel}</Label>
+			</div>
 			<Input
 				id={fid('age')}
 				value={age ?? ''}
@@ -382,10 +390,12 @@
 			{/if}
 		</div>
 
-		<div class="space-y-1.5">
-			<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
-				{t.genderLabel} <span class="text-destructive">*</span>
-			</Label>
+		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+			<div class="flex min-h-7 items-center">
+				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
+					{t.genderLabel} <span class="text-destructive">*</span>
+				</Label>
+			</div>
 			<RadioGroup.Root
 				value={genderRadioValue}
 				onValueChange={(val) => {
@@ -396,10 +406,10 @@
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
-				class="flex flex-wrap gap-3 pt-1"
+				class="flex flex-wrap gap-2 sm:gap-3"
 			>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs {genderRadioValue ===
+					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -409,7 +419,7 @@
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs {genderRadioValue ===
+					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -439,7 +449,7 @@
 				searchPlaceholder={t.countrySearch}
 				emptyText={t.countryEmpty}
 				{disabled}
-				class="!h-9 rounded-md text-xs {errors?.country ? errClass : ''}"
+				class="!h-9 rounded-md text-sm {errors?.country ? errClass : ''}"
 				controlProps={{ id: fid('country'), 'aria-invalid': !!errors?.country }}
 			/>
 			{#if errors?.country}
@@ -459,7 +469,7 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
+				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
 					{religionOptions.find((o) => o.value === religionSelectValue)?.label ?? t.religionUnknown}
 				</Select.Trigger>
 				<Select.Content>
@@ -476,7 +486,11 @@
 		<div class="space-y-1.5">
 			<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
 				{t.phoneFieldLabel}
-				{#if !no_phone || hideNoPhone}<span class="text-destructive">*</span>{/if}
+				{#if phoneOptional}
+					<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
+				{:else if !no_phone || hideNoPhone}
+					<span class="text-destructive">*</span>
+				{/if}
 			</Label>
 			<Input
 				id={fid('phone')}
@@ -490,6 +504,9 @@
 				aria-invalid={!!errors?.phone}
 				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
+			{#if phoneHelperText}
+				<p class="text-2xs text-muted-foreground">{phoneHelperText}</p>
+			{/if}
 			{#if errors?.phone}
 				<p class="text-2xs text-destructive">{errors.phone}</p>
 			{/if}
@@ -506,7 +523,10 @@
 					}}
 					{disabled}
 				/>
-				<Label for={fid('no-phone')} class="cursor-pointer text-xs text-muted-foreground">
+				<Label
+					for={fid('no-phone')}
+					class="cursor-pointer text-xs font-medium text-muted-foreground"
+				>
 					{t.noPhone}
 				</Label>
 			</div>

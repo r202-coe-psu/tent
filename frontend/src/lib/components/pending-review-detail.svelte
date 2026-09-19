@@ -21,6 +21,8 @@
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		request,
@@ -44,6 +46,9 @@
 
 	let memo = $state('');
 	let actionPanel = $state<'none' | 'redirect' | 'reject'>('none');
+
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	// Redirect inline form state. The shelter list comes from the feature's query
 	// hook (TanStack Query — CONTRIBUTING §4) rather than a hand-rolled `onMount`
@@ -284,7 +289,7 @@
 								</div>
 								<span class="shrink-0 text-xs font-bold whitespace-nowrap text-foreground">
 									{item.qty}
-									{item.unit}
+									{formatUnit(item.unit, units, langState.current)}
 								</span>
 							</li>
 						{/each}

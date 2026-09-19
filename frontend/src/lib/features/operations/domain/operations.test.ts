@@ -507,7 +507,7 @@ describe('openNeeds', () => {
 			{
 				title: 'น้ำดื่ม',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -533,7 +533,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -565,7 +565,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'closed' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'closed' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -832,7 +832,7 @@ describe('deriveNeedAvailability', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -1460,7 +1460,7 @@ describe('forceCutOffNeed + reopenNeed (T-22 manual force cut-off)', () => {
 			{
 				title: 'ของใช้จำเป็น',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -1664,7 +1664,7 @@ describe('editNeed (needs board edit)', () => {
 			{
 				title: 'ของใช้จำเป็น',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -1672,14 +1672,14 @@ describe('editNeed (needs board edit)', () => {
 		);
 
 	it('changes only the named need', () => {
-		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80', unit: 'ถุง' });
+		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80', unit: 'bag' });
 		expect(edited.needs.find((n) => n.item_id === 'item:rice')).toMatchObject({
 			qty_target: '80',
-			unit: 'ถุง'
+			unit: 'bag'
 		});
 		expect(edited.needs.find((n) => n.item_id === 'item:water')).toMatchObject({
 			qty_target: '100',
-			unit: 'ขวด'
+			unit: 'bottle'
 		});
 	});
 
@@ -1817,7 +1817,10 @@ describe('campaign notes encode/decode', () => {
 describe('publicItemAggregate (what the donor board really shows)', () => {
 	const campaign = (id: string, qty: number, over: Partial<DonationCampaign> = {}) => ({
 		...createCampaign(
-			{ title: `ประกาศ ${id}`, needs: [{ item_id: 'item:water', qty_target: qty, unit: 'ขวด' }] },
+			{
+				title: `ประกาศ ${id}`,
+				needs: [{ item_id: 'item:water', qty_target: qty, unit: 'bottle' }]
+			},
 			ctx
 		),
 		_id: `donation_campaign:${id}`,
@@ -1842,7 +1845,7 @@ describe('publicItemAggregate (what the donor board really shows)', () => {
 		const closedNeed = createCampaign(
 			{
 				title: 'need ปิดเอง',
-				needs: [{ item_id: 'item:water', qty_target: 50, unit: 'ขวด' }]
+				needs: [{ item_id: 'item:water', qty_target: 50, unit: 'bottle' }]
 			},
 			ctx
 		);

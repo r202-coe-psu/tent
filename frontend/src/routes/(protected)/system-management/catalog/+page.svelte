@@ -3,9 +3,15 @@
 	import ItemCategoryTab from '../../back-office/catalog/components/item-category-tab.svelte';
 	import ItemMasterTab from '../../back-office/catalog/components/item-master-tab.svelte';
 	import RecipeTab from '../../back-office/catalog/components/recipe-tab.svelte';
+	import UnitOfMeasureTab from '../../back-office/catalog/components/unit-of-measure-tab.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
+	import {
+		useItemCategories,
+		useItemMasters,
+		useRecipes,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
@@ -13,23 +19,32 @@
 	const itemCategoriesQuery = useItemCategories();
 	const itemMastersQuery = useItemMasters();
 	const recipesQuery = useRecipes();
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
 
 	const totalItemCategories = $derived(itemCategoriesQuery.data?.length ?? 0);
 	const totalItemMasters = $derived(itemMastersQuery.data?.length ?? 0);
 	const totalRecipes = $derived(recipesQuery.data?.length ?? 0);
+	const totalUnitsOfMeasure = $derived(unitsOfMeasureQuery.data?.length ?? 0);
 
-	let activeTab = $state<'item_category' | 'item_master' | 'recipe'>('item_category');
+	let activeTab = $state<'item_category' | 'item_master' | 'recipe' | 'unit_of_measure'>(
+		'item_category'
+	);
 
 	$effect(() => {
 		const tabParam = page.url.searchParams.get('tab');
-		if (tabParam === 'item_category' || tabParam === 'item_master' || tabParam === 'recipe') {
+		if (
+			tabParam === 'item_category' ||
+			tabParam === 'item_master' ||
+			tabParam === 'recipe' ||
+			tabParam === 'unit_of_measure'
+		) {
 			activeTab = tabParam;
 		}
 	});
 
 	const basePath = resolve('/system-management/catalog');
 
-	function selectTab(tab: 'item_category' | 'item_master' | 'recipe') {
+	function selectTab(tab: 'item_category' | 'item_master' | 'recipe' | 'unit_of_measure') {
 		activeTab = tab;
 		goto(`${basePath}?tab=${tab}`, { replaceState: true, noScroll: true, keepFocus: true });
 	}
@@ -77,6 +92,15 @@
 					<span>สูตรอาหารมาตรฐาน</span>
 					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalRecipes}</span>
 				</Button>
+				<Button
+					size="lg"
+					variant={activeTab === 'unit_of_measure' ? 'default' : 'outline'}
+					onclick={() => selectTab('unit_of_measure')}
+					class="w-full justify-between py-6"
+				>
+					<span>หน่วยนับมาตรฐาน (Unit of Measure)</span>
+					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalUnitsOfMeasure}</span>
+				</Button>
 			</div>
 		</div>
 		<div class="col-span-1 flex lg:col-span-2">
@@ -86,6 +110,8 @@
 				<ItemMasterTab {basePath} />
 			{:else if activeTab === 'recipe'}
 				<RecipeTab {basePath} />
+			{:else if activeTab === 'unit_of_measure'}
+				<UnitOfMeasureTab {basePath} />
 			{/if}
 		</div>
 	</div>

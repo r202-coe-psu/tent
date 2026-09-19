@@ -30,6 +30,7 @@ class ShelterItem(BaseModel):
     pet_policy: str | None = None
     vulnerable_groups: list[str] | None = None
     admin_type: str | None = None
+    accepts_pre_registration: bool = False
     updated_at: datetime
 
 
@@ -111,6 +112,7 @@ class ShelterDetail(BaseModel):
     zones: list[ShelterZoneDetail] | None = None
     contact: ShelterContactDetail
     faq: list[ShelterFaqDetail]
+    accepts_pre_registration: bool = False
 
 
 class ShelterDetailResponse(BaseModel):

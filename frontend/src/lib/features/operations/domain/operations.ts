@@ -14,6 +14,7 @@ import {
 	qtyStrCoerceNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
+import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -258,6 +259,7 @@ export interface DonationCampaign extends BaseDoc {
 	closes_at?: Timestamp | null;
 	notes?: string;
 	visible_on_home?: boolean;
+	urgency?: 'critical' | 'important' | 'normal';
 }
 
 export interface StockTransferItem {
@@ -1052,7 +1054,7 @@ export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[])
 export const transferItemSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
-	unit: z.string().trim().min(1)
+	unit: unitCodeSchema
 });
 
 export const transferInputSchema = z.object({
@@ -1312,7 +1314,7 @@ export const campaignInputSchema = z.object({
 			z.object({
 				item_id: z.string().min(1),
 				qty_target: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1),
+				unit: unitCodeSchema,
 				status: z.enum(['open', 'closed']).optional().default('open')
 			})
 		)
@@ -1320,7 +1322,8 @@ export const campaignInputSchema = z.object({
 	opens_at: z.string().optional(),
 	closes_at: z.string().nullable().optional(),
 	notes: z.string().trim().optional(),
-	visible_on_home: z.boolean().optional().default(true)
+	visible_on_home: z.boolean().optional().default(true),
+	urgency: z.enum(['critical', 'important', 'normal']).optional().default('normal')
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
@@ -1334,6 +1337,7 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
 			status: 'open' as const,
 			visible_on_home: d.visible_on_home,
+			urgency: d.urgency,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
 			...(d.closes_at !== undefined ? { closes_at: d.closes_at } : {}),
 			...(d.notes ? { notes: d.notes } : {})

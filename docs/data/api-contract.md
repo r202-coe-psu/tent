@@ -46,28 +46,31 @@ DELETE /couch/_session          → logout
 - เมื่อ central กลับมา app ตรวจ/ขอ central session แล้ว fail back active endpoint ไป central
 - ถ้า cookie หมดอายุและไม่มี central/edge session ที่ใช้ได้ ให้หยุด mutation และบังคับ re-auth ก่อนส่งคำขอใหม่
 
-**Staff Google MFA + SSO login (CR-124)** — Google เป็นปัจจัยเพิ่ม / ทางเข้าสำหรับบัญชีที่ผูกแล้ว ไม่แทนที่ CouchDB เป็น IdP หลัก และไม่เปิด SSO ให้บัญชีที่ยังไม่ enroll:
+**Staff Google & ThaID MFA + Linked SSO login (CR-124 & CR-ThaID)** — Google และ ThaID (DOPA BORA Digital ID) เป็นปัจจัยเพิ่ม / ทางเข้าสำหรับบัญชีที่ผูกแล้ว ไม่แทนที่ CouchDB เป็น IdP หลัก และไม่เปิด SSO ให้บัญชีที่ยังไม่ enroll:
 
-- **Password path (Phase 1):** Factor 1 = username/password → `POST /couch/_session` ตามเดิม
-- หลัง password login: ถ้า `_users.mfa.providers` มี `type:"google"` → สถานะแอป `pending_mfa` จนกว่า BFF
-  จะยืนยัน Google OIDC `sub` ตรงกับที่ผูกไว้ แล้วตั้ง `mfa_ok` สำหรับรอบ session นั้น
-- ถ้ายังไม่ enroll Google → ไม่บังคับ step-up (opt-in link); ลำดับ gate = force-setup (CR-105) ก่อน แล้วจึง MFA
-- **Google login path (Phase 2, enrolled-only):** ปุ่ม Google บนหน้า login → BFF `mode=login` (ไม่ต้องมี `AuthSession` ก่อน)
-  - สำเร็จ: lookup `_users` โดย Google `sub` → **mint** cookie `AuthSession` + ตั้ง `mfa_ok` ในรอบเดียวกัน → redirect `/portal`
+- **Password path:** Factor 1 = username/password → `POST /couch/_session` ตามเดิม
+- หลัง password login: ถ้า `_users.mfa.providers` มี `type:"google"` หรือ `type:"thaid"` → สถานะแอป `pending_mfa` จนกว่า BFF
+  จะยืนยัน Google/ThaID OIDC `sub` ตรงกับที่ผูกไว้ แล้วตั้ง `mfa_ok` สำหรับรอบ session นั้น (หากผูกทั้งสองตัว ผู้ใช้เลือกยืนยันตัวตนตัวใดตัวหนึ่งได้)
+- ถ้ายังไม่ enroll MFA → ไม่บังคับ step-up (opt-in link); ลำดับ gate = force-setup (CR-105) ก่อน แล้วจึง MFA
+- **Linked SSO login path (enrolled-only):** ปุ่ม Google หรือ ThaID บนหน้า login → BFF `mode=login` (ไม่ต้องมี `AuthSession` ก่อน)
+  - สำเร็จ: lookup `_users` โดย provider `sub` → **mint** cookie `AuthSession` + ตั้ง `mfa_ok` ในรอบเดียวกัน → redirect `/portal`
     (guards ยัง enforce force-setup ถ้าเข้าเงื่อนไข; ไม่ส่งไป `/mfa-challenge` เพราะมี `mfa_ok` แล้ว)
-  - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; redirect `/login?error=google_not_linked`
+  - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; redirect `/login?error=google_not_linked` หรือ `thaid_not_linked`
   - Mint ใช้ cookie-auth secret จาก CouchDB config (`chttpd_auth` / `couch_httpd_auth`) + `_users.salt`
     และ hash ตาม `hash_algorithms` ของโหนด — อ่านได้เฉพาะฝั่งเซิร์ฟเวอร์ (ห้าม `PUBLIC_*`); **ไม่** ใช้ Proxy Auth
 - BFF (central เท่านั้น; secrets ฝั่งเซิร์ฟเวอร์):
   ```
   GET/POST /api/v1/auth/oauth/google/start      → redirect ไป Google authorize (mode: link | stepup | login)
   GET      /api/v1/auth/oauth/google/callback   → แลก code, อ่าน sub/email; link / step-up / mint login
-  POST     /api/v1/auth/oauth/google/unlink     → ถอดการผูก (self หรือ admin ตามสิทธิ์)
-  GET      /api/v1/auth/me                      → รวมสถานะ mfa_enrolled / pending_mfa (ขยายจาก CR-105)
+  POST     /api/v1/auth/oauth/google/unlink     → ถอดการผูก Google (self หรือ admin ตามสิทธิ์)
+  GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login)
+  GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
+  POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
+  GET      /api/v1/auth/me                      → รวมสถานะ mfa_enrolled / pending_mfa / providers (ขยายจาก CR-105/CR-124)
   ```
 - `start` modes: `link` | `stepup` ต้องมี `AuthSession`; `login` ไม่ต้องมี session ก่อน
 - `AuthSession` อาจเกิดก่อน MFA เสร็จ (password path) — แอป/BFF ต้อง enforce `pending_mfa` จริงก่อนเข้า `(protected)`
-- Step-up / Google login ต้องมี central + Google reachable; ช่วง edge-only ถ้า enrolled แล้วแต่ทำไม่ได้ → บล็อกเข้าแอป
+- Step-up / OAuth login ต้องมี central + IdP reachable; ช่วง edge-only ถ้า enrolled แล้วแต่ทำไม่ได้ → บล็อกเข้าแอป
   (ไม่ข้าม MFA อัตโนมัติ)
 - แยกจาก Partner OAuth2 `EXT-001` / ADR 0002 ทั้งหมด
 

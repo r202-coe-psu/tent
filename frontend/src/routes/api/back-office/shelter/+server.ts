@@ -13,6 +13,7 @@ import {
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
+	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMaster
 } from '$lib/features/shelters/server';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
@@ -142,7 +143,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter' as const,
-				schema_v: 5 as const,
+				schema_v: SHELTER_MASTER_SCHEMA_V,
 				code,
 				...input,
 				created_at: ts,
@@ -210,6 +211,7 @@ export const GET: RequestHandler = async ({ request }) => {
 					utilities: migrated.utilities ?? { communications: [] },
 					risk: migrated.risk ?? {},
 					zones: migrated.zones ?? [],
+					food_distribution_points: migrated.food_distribution_points ?? [],
 					admission_policy: migrated.admission_policy ?? EMPTY_ADMISSION_POLICY,
 					luggage_policy: migrated.luggage_policy ?? EMPTY_LUGGAGE_POLICY,
 					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,

@@ -182,7 +182,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		defaultItemFreeText: 'ของบริจาคทั่วไป',
 		generalItemsFallback: 'ของบริจาคทั่วไป',
-		defaultItemUnit: 'ชิ้น',
+		defaultItemUnit: 'piece',
 
 		// Success Ticket
 		ticketHeaderPending: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ',
@@ -542,7 +542,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		defaultItemFreeText: 'General Donation Item',
 		generalItemsFallback: 'General Donation Item',
-		defaultItemUnit: 'pcs',
+		defaultItemUnit: 'piece',
 
 		// Success Ticket
 		ticketHeaderPending: 'Submitted: Pending Staff Review',

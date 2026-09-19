@@ -3,6 +3,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Compass from '@lucide/svelte/icons/compass';
+	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import User from '@lucide/svelte/icons/user';
@@ -26,7 +27,6 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const canSeeBackoffice = $derived(isSA || isShelterManager(roles));
-
 	// Query shelters
 	const sheltersQuery = useShelters();
 	const userShelterCodes = $derived(shelterCodesFromRoles(roles));
@@ -88,11 +88,17 @@
 		return labels.length > 0 ? labels : ['ผู้ใช้งานทั่วไป'];
 	});
 
-	// onsite + public are always shown; system-management is SA-only; back-office
+	// onsite + public + volunteer are always shown; system-management is SA-only; back-office
 	// is SA/SM — size the grid to the number of visible cards.
-	const visibleCards = $derived(2 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
-	const lgCols = $derived(
-		visibleCards >= 4 ? 'lg:grid-cols-4' : visibleCards === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+	const visibleCards = $derived(3 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
+	const gridCols = $derived(
+		visibleCards >= 5
+			? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+			: visibleCards === 4
+				? 'sm:grid-cols-2 lg:grid-cols-4'
+				: visibleCards === 3
+					? 'sm:grid-cols-2 lg:grid-cols-3'
+					: 'sm:grid-cols-2'
 	);
 </script>
 
@@ -100,8 +106,8 @@
 	<title>SmartShelter Thailand</title>
 </svelte:head>
 
-<div class="flex flex-1 flex-col justify-start p-6 lg:justify-center">
-	<div class="mx-auto w-full max-w-7xl px-4">
+<div class="flex flex-1 flex-col justify-start p-4 sm:p-6 lg:justify-center">
+	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<header class="mb-8 text-center">
 			<h1 class="mb-2 text-3xl font-bold tracking-wide sm:text-4xl">
 				Smart<span class="text-primary">Shelter</span> Thailand
@@ -248,12 +254,12 @@
 			</div>
 		</section>
 
-		<main class="grid grid-cols-1 gap-6 md:grid-cols-2 {lgCols}">
+		<main class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 {gridCols}">
 			<HomePortalCard
 				icon={Users}
 				accent="brand"
 				title="ระบบส่วนหน้า ณ ศูนย์พักพิง"
-				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พักสำหรับผู้ปฏิบัติงานหน้างาน"
+				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พัก สำหรับผู้ปฏิบัติงานหน้างาน"
 				href={resolve('/onsite')}
 			>
 				{#snippet actions()}
@@ -273,8 +279,9 @@
 			<HomePortalCard
 				icon={Compass}
 				accent="neutral"
-				title="เว็บพอร์ทัลสาธารณะ"
+				title="เว็บไซต์สำหรับประชาชน"
 				badge="ประชาชน / อาสาสมัคร"
+				badgeVariant="neutral"
 				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
 				href={resolve('/')}
 			/>
@@ -283,18 +290,28 @@
 				<HomePortalCard
 					icon={Building2}
 					accent="accent-purple"
-					title="ระบบส่วนกลาง"
+					title="เมนูผู้ดูแลระบบ"
 					badge="เฉพาะผู้ดูแลระบบ"
 					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
 					href={resolve('/system-management')}
 				/>
 			{/if}
 
+			<HomePortalCard
+				icon={HeartHandshake}
+				accent="success"
+				title="ระบบบริการจิตอาสา"
+				badge="สำหรับอาสาสมัคร"
+				badgeVariant="success"
+				description="ตารางงานจิตอาสาประจำตัว (My Schedule), อัปเดตความพร้อมปฏิบัติงาน, รายงานตัวปฏิบัติภารกิจ และดูงานด่วน"
+				href={resolve('/volunteers/portal')}
+			/>
+
 			{#if canSeeBackoffice}
 				<HomePortalCard
 					icon={Boxes}
 					accent="muted"
-					title="ระบบส่วนหลัง (Back-Office)"
+					title="ระบบส่วนหลัง (Back-End)"
 					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
 					href={resolve('/back-office')}
 				>

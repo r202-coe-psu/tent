@@ -10,7 +10,13 @@
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { toast } from 'svelte-sonner';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { mergeCatalogGenerations, useItemMasters } from '$lib/features/catalog';
+	import {
+		formatUnit,
+		mergeCatalogGenerations,
+		useItemMasters,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
 
@@ -70,6 +76,11 @@
 	// what "the catalog" is.
 	const supplyItemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	// UOM master data (CR-125). `base_unit` is a canonical code (`piece`, `kg`); this
+	// turns it back into the Thai wording for display only — what gets SAVED stays the
+	// code, so the ledger and the campaign keep comparing like with like.
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
 
 	// Both generations of the catalog, de-duplicated by name (schema.md §4.2) — the
 	// seed carries `item:rice` AND `item_master:rice`, and the picker listed both.
@@ -80,7 +91,9 @@
 	const catalogOptions = $derived(
 		catalogItems.map((c) => ({
 			value: c._id,
-			label: c.unit ? `${c.name} (${c.unit})` : c.name
+			label: c.unit
+				? `${c.name} (${formatUnit(c.unit, unitsOfMeasure, langState.current)})`
+				: c.name
 		}))
 	);
 	const selectedItem = $derived(catalogItems.find((c) => c._id === selectedItemId));
@@ -140,6 +153,13 @@
 			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
 			return;
 		}
+		// The unit is the catalog's (see `catalogUnit`), so there is nothing to pick —
+		// but an item_master row with no `base_unit` would silently save `piece`, which
+		// the ledger would then disagree with. Refuse instead.
+		if (!finalUnit) {
+			toast.error('รายการนี้ยังไม่มีหน่วยฐานในแคตตาล็อก — กรุณาตั้งหน่วยที่ Item Master ก่อน');
+			return;
+		}
 		if (!description.trim()) {
 			toast.error('กรุณาระบุเหตุผลหรือรายละเอียดเพิ่มเติม');
 			return;
@@ -151,7 +171,7 @@
 			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category: category.trim() || 'ของใช้ทั่วไป',
-			unit: finalUnit || 'ชิ้น',
+			unit: finalUnit,
 			urgency,
 			description: description.trim()
 		});
@@ -254,7 +274,8 @@
 						class="flex h-10 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-muted-foreground"
 						title="หน่วยฐานจากแคตตาล็อก — แก้ที่นี่ไม่ได้ เพราะยอดคงคลังนับด้วยหน่วยนี้"
 					>
-						{catalogUnit || (selectedItemId ? 'แคตตาล็อกไม่ได้ระบุหน่วย' : 'เลือกรายการพัสดุก่อน')}
+						{formatUnit(catalogUnit, unitsOfMeasure, langState.current) ||
+							(selectedItemId ? 'แคตตาล็อกไม่ได้ระบุหน่วย' : 'เลือกรายการพัสดุก่อน')}
 					</div>
 					<p class="mt-1.5 text-3xs text-muted-foreground">
 						มาจากหน่วยฐานของรายการในแคตตาล็อก — ต้องแก้ที่แคตตาล็อกถ้าไม่ถูกต้อง

@@ -41,10 +41,13 @@
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
+		formatUnit,
 		mergeCatalogGenerations,
 		useItemMasters,
-		useCreateItemMaster
+		useCreateItemMaster,
+		useUnitsOfMeasure
 	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useShelters } from '$lib/features/shelters';
@@ -85,7 +88,7 @@
 	const catalogItems = $derived(
 		mergeCatalogGenerations(supplyItemsQuery.data ?? [], itemMastersQuery.data ?? []).map((c) => ({
 			...c,
-			unit: c.unit || 'ชิ้น',
+			unit: c.unit || 'piece',
 			category: c.category || 'other'
 		}))
 	);
@@ -112,7 +115,9 @@
 	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
 	function catalogLabel(itemId: string | undefined, placeholder: string): string {
 		const found = catalogItems.find((c) => c._id === itemId);
-		return found ? `${found.name} (${found.unit})` : placeholder;
+		return found
+			? `${found.name} (${formatUnit(found.unit, unitsOfMeasure, langState.current)})`
+			: placeholder;
 	}
 
 	/** Is this catalog id a perishable item? Drives the expiry requirement below. */
@@ -125,7 +130,7 @@
 	let quickCreateTargetIndex = $state<number | null>(null);
 	let newItemName = $state('');
 	let newItemCategory = $state('general');
-	let newItemUnit = $state('ชิ้น');
+	let newItemUnit = $state('piece');
 	let creatingItem = $state(false);
 
 	const newItemCategoryLabel = $derived(
@@ -167,6 +172,11 @@
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
+	// UOM master data (CR-125): `base_unit` is stored as a canonical code, so every
+	// place this file SHOWS a unit runs it back through `formatUnit`.
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
+	const availableUnits = $derived(unitsOfMeasure.filter((u) => !u.deactivated));
 	let lastLots = $state<{ item_id: string; lot_no: string | null }[]>([]);
 
 	const VEHICLE_LABELS: Record<string, string> = {
@@ -325,7 +335,7 @@
 			itemId: '',
 			name: '',
 			qty: '1',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			expiry: '',
 			storageZone: ''
 		}
@@ -563,7 +573,7 @@
 		quickCreateTargetIndex = targetIdx;
 		newItemName = '';
 		newItemCategory = 'general';
-		newItemUnit = 'ชิ้น';
+		newItemUnit = 'piece';
 		isQuickCreateOpen = true;
 	}
 
@@ -580,7 +590,7 @@
 				input: {
 					name: newItemName.trim(),
 					category: newItemCategory.trim() || 'general',
-					base_unit: newItemUnit.trim() || 'ชิ้น',
+					base_unit: newItemUnit.trim() || 'piece',
 					type_class: 'CONSUMABLE',
 					distribution_type: 'one_time'
 				},
@@ -617,7 +627,7 @@
 			itemId: '',
 			name: '',
 			qty: '1',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			expiry: '',
 			storageZone: ''
 		});
@@ -719,7 +729,7 @@
 					itemId: '',
 					name: '',
 					qty: '1',
-					unit: 'ชิ้น',
+					unit: 'piece',
 					expiry: '',
 					storageZone: ''
 				}
@@ -840,7 +850,7 @@
 											<span class="text-base font-bold text-foreground">{item.name}</span>
 											<Badge variant="secondary" class="h-6 px-2.5 text-xs font-semibold">
 												แจ้งไว้: {item.declaredQty}
-												{item.unit}
+												{formatUnit(item.unit, unitsOfMeasure, langState.current)}
 											</Badge>
 											{#if item.qty === item.declaredQty}
 												<Badge
@@ -987,7 +997,7 @@
 													</Label>
 													<span class="text-xs text-muted-foreground">
 														แจ้งไว้: {item.declaredQty}
-														{item.unit}
+														{formatUnit(item.unit, unitsOfMeasure, langState.current)}
 													</span>
 												</div>
 												<div class="relative flex items-center">
@@ -1001,7 +1011,7 @@
 													<span
 														class="pointer-events-none absolute right-3 text-sm font-medium text-muted-foreground"
 													>
-														{item.unit}
+														{formatUnit(item.unit, unitsOfMeasure, langState.current)}
 													</span>
 												</div>
 											</div>
@@ -1674,19 +1684,18 @@
 									</div>
 
 									<!-- Unit Display / Input -->
+									<!-- Read-only: the unit comes from the chosen item's `base_unit`
+									     (`handleWalkinItemSelect`), and the ledger row this intake
+									     writes is denominated in it. Retyping it here would put the
+									     receipt and the shelf balance in different units. -->
 									<div class="space-y-1.5 md:col-span-2">
-										<Label
-											for="walkin-unit-{item.id}"
-											class="text-sm font-semibold text-foreground"
+										<span class="block text-sm font-semibold text-foreground">หน่วย</span>
+										<div
+											class="flex h-10 items-center justify-center rounded-xl border border-border/60 bg-muted/40 px-3 text-sm font-medium text-muted-foreground"
+											title="หน่วยฐานจากแคตตาล็อก — แก้ที่แคตตาล็อกถ้าไม่ถูกต้อง"
 										>
-											หน่วย
-										</Label>
-										<Input
-											id="walkin-unit-{item.id}"
-											type="text"
-											bind:value={item.unit}
-											class="h-10 rounded-xl text-center text-sm"
-										/>
+											{formatUnit(item.unit, unitsOfMeasure, langState.current) || '—'}
+										</div>
 									</div>
 
 									<!-- Lot details. Both reach `stock_ledger.lot` (CR-088); the expiry
@@ -1819,13 +1828,23 @@
 					<Label for="new-item-unit" class="text-sm font-semibold text-foreground">
 						หน่วยนับมาตรฐาน
 					</Label>
-					<Input
-						id="new-item-unit"
-						type="text"
-						placeholder="เช่น กระป๋อง, ชิ้น"
-						bind:value={newItemUnit}
-						class="h-10 rounded-xl text-sm"
-					/>
+					<Select.Root
+						type="single"
+						value={newItemUnit}
+						onValueChange={(value) => (newItemUnit = value)}
+						disabled={unitsOfMeasureQuery.isPending || availableUnits.length === 0}
+					>
+						<Select.Trigger id="new-item-unit" class="h-10 w-full rounded-xl text-sm">
+							{formatUnit(newItemUnit, unitsOfMeasure, langState.current) || '-- เลือกหน่วยนับ --'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each availableUnits as u (u.code)}
+								<Select.Item value={u.code} label={`${u.label_th} (${u.code})`}>
+									{u.label_th} ({u.code})
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 		</div>
