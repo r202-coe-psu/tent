@@ -129,20 +129,24 @@ pnpm exec lefthook run pre-push
 - `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
-- `pnpm seed` — Create mock data (purge old data first)
+- `pnpm seed` — Staging/local full seed (alias ของ `seed:staging`: ~1,000 ผู้เข้าพัก + ops)
+- `pnpm seed:master` — Platform init เท่านั้น (`master_data` + catalog/SOP/config) — ใช้ร่วม prod/staging
+- `pnpm seed:staging` — Full staging demo (master + users + 3 ศูนย์ + volume people)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
 
 การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root; ต้องมี `couchdb` / `mongodb` จาก base compose):
 
-- **Seed** (Couch อย่างเดียว):
+- **Seed** (Couch อย่างเดียว — staging profile):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
+- **Master only**:
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile master run --rm seed-master`
 - **Unseed** (ลบ Couch DBs ยกเว้น `_users`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
 - **Wipe Mongo** (`dropDatabase` ตาม `DATABASE_URI`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
 - **Bootstrap Mongo** (project จาก Couch แล้ว exit):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm bootstrap`
-- **Full reset** (unseed → wipe Mongo → seed → bootstrap; **หยุด worker ก่อน**):
+- **Full reset** (unseed → wipe Mongo → seed staging → bootstrap; **หยุด worker ก่อน**):
   ```bash
   docker compose -f docker-compose.yml stop worker
   docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
@@ -150,6 +154,21 @@ pnpm exec lefthook run pre-push
   ```
 
   ใช้กับ staging ได้เช่นกัน ถ้า base compose มี service ชื่อ `couchdb` + `mongodb` (และ ideally `worker`)
+
+### Staging greenfield (ล้างแล้ว seed ใหม่)
+
+```bash
+# บนเครื่องที่ชี้ compose ไป staging (เช่น docker-compose.staging.no-nginx.yml)
+docker compose -f docker-compose.staging.no-nginx.yml stop worker
+docker compose -f docker-compose.staging.no-nginx.yml -f docker-compose.seed.yml --profile unseed run --rm unseed
+docker compose -f docker-compose.staging.no-nginx.yml -f docker-compose.seed.yml --profile mongo-wipe run --rm mongo-wipe
+docker compose -f docker-compose.staging.no-nginx.yml -f docker-compose.seed.yml run --rm seed
+# optional: pnpm seed:thailand (ชี้ COUCHDB_ADMIN_URL ไป staging)
+docker compose -f docker-compose.staging.no-nginx.yml -f docker-compose.seed.yml --profile bootstrap run --rm bootstrap
+docker compose -f docker-compose.staging.no-nginx.yml start worker
+```
+
+หรือจาก `frontend/` ด้วย `COUCHDB_ADMIN_URL` ชี้ staging: `pnpm unseed --confirm` → `pnpm seed:staging` แล้ว bootstrap worker
 
 คำสั่ง worker (จาก repo root):
 

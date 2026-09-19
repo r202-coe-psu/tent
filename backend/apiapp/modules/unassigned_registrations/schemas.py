@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from tent_model.public_shelter import GeoPoint
@@ -146,6 +146,44 @@ class UnassignedRegistrationCreateRequest(BaseModel):
     members: list[MemberInput] = Field(min_length=1, max_length=20)
     household: HouseholdInput
     registered_via: Literal["web", "staff"] = "web"
+    join_registration_id: str | None = Field(
+        default=None,
+        description="Append members (and pets) into this open registration's reserved household.",
+    )
+
+
+class UnassignedResidenceMatchRequest(BaseModel):
+    """Service-to-service residence match — no member PII in response."""
+
+    housing_type: (
+        Literal["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"] | None
+    ) = None
+    residence_landmark: str | None = None
+    address_no: str | None = None
+    village_no: str | None = None
+    subdistrict: str | None = None
+    district: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    phone: str | None = None
+
+
+class UnassignedResidenceMatchHit(BaseModel):
+    id: str
+    landmark: str | None = None
+    housing_type: str | None = None
+    claimed_shelter_code: str | None = None
+    claimed_household_id: str | None = None
+    status: str = "open"
+    primary_contact_name_masked: str | None = None
+    matched_member_masked: str | None = None
+    member_count: int = 0
+    pets: list[dict[str, Any]] = Field(default_factory=list)
+    household_address: dict[str, Any] | None = None
+
+
+class UnassignedResidenceMatchResponse(BaseModel):
+    matches: list[UnassignedResidenceMatchHit]
 
 
 class MemberCreated(BaseModel):
@@ -224,6 +262,54 @@ class UnassignedRegistrationSearchHit(BaseModel):
 
 class UnassignedRegistrationSearchResponse(BaseModel):
     results: list[UnassignedRegistrationSearchHit]
+
+
+class HouseholdOut(BaseModel):
+    housing_type: str | None = None
+    residence_landmark: str | None = None
+    address_no: str | None = None
+    village_no: str | None = None
+    subdistrict: str | None = None
+    district: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    geo: GeoPoint | None = None
+    label: str | None = None
+
+
+class UnassignedRegistrationListItem(BaseModel):
+    id: str
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    household: HouseholdOut
+    open_members: list[OpenMemberHit]
+    open_member_count: int
+
+
+class UnassignedRegistrationListResponse(BaseModel):
+    items: list[UnassignedRegistrationListItem]
+    total: int
+    open_member_count: int
+    limit: int
+    offset: int
+
+
+class UnassignedRegistrationDetailResponse(BaseModel):
+    id: str
+    schema_v: int
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    household: HouseholdOut
+    members: list[MemberCreated]
+
+
+class UnassignedRegistrationStatsResponse(BaseModel):
+    open_registrations: int
+    open_members: int
 
 
 class UnassignedRegistrationClaimRequest(BaseModel):

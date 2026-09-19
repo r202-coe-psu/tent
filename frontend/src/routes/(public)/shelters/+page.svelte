@@ -20,6 +20,8 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Users from '@lucide/svelte/icons/users';
+	import House from '@lucide/svelte/icons/house';
+	import Tent from '@lucide/svelte/icons/tent';
 
 	import {
 		PublicShelterMetricCard,
@@ -170,7 +172,7 @@
 		const target = shelterCode
 			? `${resolve('/pre-register')}?shelter=${encodeURIComponent(shelterCode)}`
 			: resolve('/pre-register');
-		goto(target as `/${string}`);
+		void goto(target);
 	}
 
 	/** Map pin / GPS origin → sync filter panel + reload list with radius. */
@@ -277,6 +279,22 @@
 			unit={t.locationsUnit}
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
+		/>
+
+		<PublicShelterMetricCard
+			title={t.evacCenters}
+			value={data?.summary?.evac_centers ?? 0}
+			unit={t.locationsUnit}
+			icon={Tent}
+			iconClass="border-primary shadow-primary/15 text-primary"
+		/>
+
+		<PublicShelterMetricCard
+			title={t.hostHouses}
+			value={data?.summary?.host_houses ?? 0}
+			unit={t.locationsUnit}
+			icon={House}
+			iconClass="border-sky-300 shadow-sky-300/15 text-sky-700"
 		/>
 	</div>
 
@@ -465,7 +483,7 @@
 
 					<!-- Actions row -->
 					<div class="mt-2.5 flex gap-1.5">
-						{#if selectedShelter.status !== 'CLOSED' && selectedShelter.code}
+						{#if selectedShelter.status !== 'CLOSED' && selectedShelter.accepts_pre_registration && selectedShelter.code}
 							<Button
 								type="button"
 								size="sm"

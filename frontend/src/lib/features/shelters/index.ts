@@ -3,6 +3,8 @@ export {
 	operationStatusSchema,
 	siteKindSchema,
 	SITE_KIND_LABELS,
+	resolveOperationStatus,
+	isShelterBookable,
 	zoneTypeSchema,
 	zoneStatusSchema,
 	powerSourceSchema,
@@ -11,6 +13,7 @@ export {
 	subStorageTypeSchema,
 	locationSchema,
 	contactSchema,
+	foodDistributionPointSchema,
 	facilitiesSchema,
 	subStorageItemSchema,
 	commonAreasSchema,
@@ -55,6 +58,7 @@ export {
 	type SubStorageType,
 	type Location,
 	type Contact,
+	type FoodDistributionPoint,
 	type Facilities,
 	type SubStorageItem,
 	type CommonAreas,
@@ -149,6 +153,7 @@ export { default as ShelterList } from './ui/shelter-list.svelte';
 export { default as BasicInfoSection } from './ui/basic-info-section.svelte';
 export { default as CapacitySection } from './ui/capacity-section.svelte';
 export { default as ZonesFacilitiesSection } from './ui/zones-facilities-section.svelte';
+export { default as FoodDistributionSection } from './ui/food-distribution-section.svelte';
 export { default as UtilitiesSection } from './ui/utilities-section.svelte';
 export { default as RiskSection } from './ui/risk-section.svelte';
 export { default as AdmissionPolicySection } from './ui/admission-policy-section.svelte';

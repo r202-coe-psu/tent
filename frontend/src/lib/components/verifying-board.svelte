@@ -2,6 +2,8 @@
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import type { PendingDonationRow } from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		requests = [],
@@ -12,11 +14,16 @@
 		loading?: boolean;
 		onVerify: (bookingRef: string) => void;
 	} = $props();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	function itemsSummary(req: PendingDonationRow): string {
 		if (req.items.length === 0) return '—';
 		return req.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${it.unit}`)
+			.map(
+				(it) =>
+					`${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+			)
 			.join(', ');
 	}
 </script>

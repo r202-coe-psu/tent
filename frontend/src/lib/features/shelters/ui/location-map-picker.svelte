@@ -86,12 +86,15 @@
 
 		const initialCenter: [number, number] =
 			lat != null && lng != null ? [Number(lng), Number(lat)] : center;
+		// Prefer the caller's zoom; keep ≥16 when a pin already exists so
+		// basic-info (default zoom=12) still opens at street-ish level.
+		const initialZoom = lat != null && lng != null ? Math.max(zoom, 16) : zoom;
 
 		mapInstance = new L.Map({
 			container: mapElement,
 			style: DEFAULT_MAP_STYLE,
 			center: initialCenter,
-			zoom: lat != null && lng != null ? 16 : zoom
+			zoom: initialZoom
 		});
 
 		mapInstance.addControl(new L.NavigationControl({ showCompass: false }), 'top-right');

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from beanie import Document
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 from pymongo import IndexModel
 
 
@@ -16,6 +16,8 @@ class PublicNeed(Document):
 	category: str
 	qty_needed: float
 	unit: str
+	qty_target: float = 0.0
+	urgency: str = "normal"
 	updated_at: datetime
 
 	class Settings:

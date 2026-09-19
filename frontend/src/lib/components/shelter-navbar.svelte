@@ -16,6 +16,10 @@
 		sheltersQuery.data?.filter((s) => isAdmin || userShelterCodes.includes(s.code)) ?? []
 	);
 
+	const selectedShelterName = $derived(
+		allowedShelters.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'
+	);
+
 	$effect(() => {
 		if (!allowedShelters.length) return;
 		const current = shelterStore.selectedShelterCode;
@@ -38,9 +42,14 @@
 </script>
 
 <nav
-	class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm"
+	class="flex h-[52px] w-full items-center justify-between gap-3 bg-[#0A2647] px-6 text-white shadow-sm"
 >
-	<div class="flex items-center">
+	<div class="flex min-w-0 shrink items-center gap-2.5">
+		<img src="/logo.png" alt="PSU Smart Shelter" class="h-8 w-8 shrink-0" />
+		<span class="hidden truncate text-sm font-medium text-white sm:inline">PSU Smart Shelter</span>
+	</div>
+
+	<div class="flex min-w-0 items-center">
 		{#if sheltersQuery.isPending}
 			<span class="pr-4 text-sm font-medium text-white/80">กำลังโหลด...</span>
 		{:else if sheltersQuery.isError}
@@ -48,11 +57,11 @@
 		{:else if sheltersQuery.data}
 			<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 				<Select.Trigger
-					class="w-auto min-w-[250px] border-none bg-transparent text-sm font-medium text-white shadow-none hover:bg-white/5 focus:ring-0 focus-visible:ring-0 [&_svg]:text-white/80"
+					class="h-11 min-h-11 w-full max-w-[min(100%,20rem)] min-w-0 border-none bg-transparent text-sm font-medium text-white shadow-none hover:bg-white/5 focus:ring-0 focus-visible:ring-0 sm:min-w-[12rem] [&_svg]:text-white/80"
 				>
-					{allowedShelters.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'}
+					<span class="truncate">{selectedShelterName}</span>
 				</Select.Trigger>
-				<Select.Content align="end" class="w-[350px]">
+				<Select.Content align="end" class="w-[min(100vw-2rem,22rem)]">
 					<Select.Group>
 						{#each allowedShelters as shelter (shelter.code)}
 							<Select.Item value={shelter.code} label={shelter.name}>

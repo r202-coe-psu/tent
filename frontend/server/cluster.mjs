@@ -33,6 +33,7 @@ if (workers === 1) {
 	await startServer();
 } else if (cluster.isPrimary) {
 	let shuttingDown = false;
+	const activeSessions = new Map();
 
 	console.info(
 		`[cluster] primary ${process.pid}: starting ${workers} workers` +
@@ -42,6 +43,43 @@ if (workers === 1) {
 	for (let i = 0; i < workers; i++) {
 		cluster.fork();
 	}
+
+	// Relay ThaiD scan sessions across workers so SSE and polling work on any worker
+	cluster.on('message', (worker, message) => {
+		if (message && message.topic === 'thaid-scan-session') {
+			const now = Date.now();
+			if (message.action === 'create' && message.session) {
+				activeSessions.set(message.session.id, message.session);
+			} else if (message.action === 'complete' && message.id && message.profile) {
+				const s = activeSessions.get(message.id);
+				if (s) {
+					s.status = 'completed';
+					s.profile = message.profile;
+				}
+			} else if (message.action === 'expire' && message.id) {
+				activeSessions.delete(message.id);
+			} else if (message.action === 'init') {
+				for (const [id, s] of activeSessions.entries()) {
+					if (s.expiresAt <= now) activeSessions.delete(id);
+				}
+				if (worker.isConnected()) {
+					worker.send({
+						topic: 'thaid-scan-session',
+						action: 'init_sync',
+						sessions: Array.from(activeSessions.values())
+					});
+				}
+				return;
+			}
+
+			for (const id in cluster.workers) {
+				const w = cluster.workers[id];
+				if (w && w !== worker && w.isConnected()) {
+					w.send(message);
+				}
+			}
+		}
+	});
 
 	cluster.on('exit', (worker, code, signal) => {
 		if (shuttingDown) return;

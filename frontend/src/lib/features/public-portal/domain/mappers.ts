@@ -48,7 +48,8 @@ export function toPublicShelterCard(
 		pet_policy: item?.pet_policy ?? null,
 		vulnerable_groups: Array.isArray(item?.vulnerable_groups) ? item.vulnerable_groups : null,
 		admin_type: item?.admin_type ?? null,
-		geo: item?.geo ?? null
+		geo: item?.geo ?? null,
+		accepts_pre_registration: item?.accepts_pre_registration === true
 	};
 }
 

@@ -177,18 +177,80 @@ export function isLeavingLinkedHousehold(
 	return choice === 'create' || choice === 'join';
 }
 
+/**
+ * Normalize Thai address text for fuzzy yet robust residence comparison.
+ * - Converts Thai numerals to Arabic digits.
+ * - Expands common Thai street/administrative prefixes (ถ., ซ., ม., etc.).
+ * - Strips whitespace around separators (/ and -).
+ * - Strips Thai thanthakhat / karan (\u0E4C) and its silenced consonant.
+ * - Collapses whitespace.
+ */
+export function normThaiAddressText(value: string | null | undefined): string {
+	if (!value) return '';
+	let s = trimField(value).toLowerCase();
+	if (!s) return '';
+
+	// Thai numerals to Arabic
+	const thaiNums = '๐๑๒๓๔๕๖๗๘๙';
+	for (let i = 0; i < 10; i++) {
+		s = s.replaceAll(thaiNums[i], String(i));
+	}
+
+	// Expand standard abbreviations
+	s = s.replace(/ถ\.\s*/g, 'ถนน');
+	s = s.replace(/ซ\.\s*/g, 'ซอย');
+	s = s.replace(/ม\.\s*/g, 'หมู่');
+	s = s.replace(/หมู่ที่\s*/g, 'หมู่');
+	s = s.replace(/จ\.\s*/g, 'จังหวัด');
+	s = s.replace(/อ\.\s*/g, 'อำเภอ');
+	s = s.replace(/ต\.\s*/g, 'ตำบล');
+
+	// Strip optional leading administrative prefixes (e.g. จ.สงขลา / จังหวัดสงขลา -> สงขลา)
+	s = s.replace(/^(จังหวัด|อำเภอ|ตำบล)\s*/, '');
+
+	// Ensure space between Thai prefixes and digits (e.g. ซอย6 -> ซอย 6, หมู่2 -> หมู่ 2)
+	s = s.replace(/(ถนน|ซอย|หมู่|ตำบล|อำเภอ|จังหวัด)\s*([0-9]+)/g, '$1 $2');
+
+	// Clean slash and dash spacing (e.g. 49 / 12 -> 49/12)
+	s = s.replace(/\s*([/-])\s*/g, '$1');
+
+	// Strip thanthakhat and the silent character it cancels (e.g. นิพัทธ์ -> นิพัท)
+	s = s.replace(/[ก-ฮ]?\u0E4C/g, '');
+
+	// Collapse whitespace
+	return s.replace(/\s+/g, ' ').trim();
+}
+
 function normAddr(value: string | null | undefined): string {
-	return trimField(value).toLowerCase();
+	return normThaiAddressText(value);
 }
 
 /**
- * Residence address match: house no + village_no when present on the query +
- * subdistrict + district + province. Same address ≠ same Household — suggestions only.
+ * Residence address match.
+ * - Default: house no + village_no when present on the query + subdistrict +
+ *   district + province.
+ * - Homeless / no house number: landmark + province/district/subdistrict.
+ * Same address ≠ same Household — suggestions only; create always remains available.
  */
 export function matchesResidenceAddress(
 	query: ResidenceFields,
 	candidate: ResidenceFields
 ): boolean {
+	const homelessMatch =
+		query.housing_type === 'homeless' ||
+		(!trimField(query.address_no) && Boolean(trimField(query.residence_landmark)));
+
+	if (homelessMatch) {
+		if (!trimField(query.residence_landmark)) return false;
+		if (normAddr(query.residence_landmark) !== normAddr(candidate.residence_landmark)) {
+			return false;
+		}
+		if (normAddr(query.subdistrict) !== normAddr(candidate.subdistrict)) return false;
+		if (normAddr(query.district) !== normAddr(candidate.district)) return false;
+		if (normAddr(query.province) !== normAddr(candidate.province)) return false;
+		return true;
+	}
+
 	if (normAddr(query.address_no) !== normAddr(candidate.address_no)) return false;
 	if (normAddr(query.subdistrict) !== normAddr(candidate.subdistrict)) return false;
 	if (normAddr(query.district) !== normAddr(candidate.district)) return false;
@@ -201,16 +263,34 @@ export function matchesResidenceAddress(
 	return true;
 }
 
+export type ResidenceMatchCandidateWithStatus = ResidenceMatchCandidate & {
+	status?: string | null;
+};
+
+const JOINABLE_HOUSEHOLD_STATUSES = new Set(['pre_registered', 'arriving', 'checked_in']);
+
+/** True when a Household is eligible for residence-join on create. */
+export function isJoinableHouseholdStatus(status: string | null | undefined): boolean {
+	return Boolean(status && JOINABLE_HOUSEHOLD_STATUSES.has(status));
+}
+
 /**
  * Suggest existing Households whose Residence matches the query.
  * Returns [] when minimum Residence is incomplete — never blocks create.
+ * When candidates carry `status`, cancelled / checked_out are excluded.
  */
 export function suggestHouseholdsByResidence<T extends ResidenceMatchCandidate>(
 	query: ResidenceFields,
 	households: readonly T[]
 ): T[] {
 	if (!hasMinimumResidence(query)) return [];
-	return households.filter((h) => matchesResidenceAddress(query, h));
+	return households.filter((h) => {
+		const withStatus = h as ResidenceMatchCandidateWithStatus;
+		if (withStatus.status != null && !isJoinableHouseholdStatus(withStatus.status)) {
+			return false;
+		}
+		return matchesResidenceAddress(query, h);
+	});
 }
 
 function matchesNameOrPhone(

@@ -1,6 +1,9 @@
 <script lang="ts">
-	/* eslint-disable svelte/prefer-writable-derived */
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -74,16 +77,24 @@
 	} = $props();
 
 	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
+	const SEARCH_DEBOUNCE_MS = 300;
 
 	let searchQuery = $state<string>('');
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
 	let selectedSiteKind = $state<string>('');
+	let selectedType = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
+	let hideFullToggle = $state(false);
+	let hydrating = $state(false);
+
+	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastProvince: string | null = null;
+	let lastDistrict: string | null = null;
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
 
@@ -101,19 +112,125 @@
 		return String(rounded);
 	}
 
+	function serializeParams(params: { entries(): IterableIterator<[string, string]> }): string {
+		return [...params.entries()]
+			.sort(([ka, va], [kb, vb]) => ka.localeCompare(kb) || va.localeCompare(vb))
+			.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+			.join('&');
+	}
+
+	function buildFilterParams(): SvelteURLSearchParams {
+		const params = new SvelteURLSearchParams();
+		const q = searchQuery.trim();
+		if (q) params.set('q', q);
+		if (selectedProvince) params.set('province', selectedProvince);
+		if (selectedDistrict) params.set('district', selectedDistrict);
+		if (selectedSubdistrict) params.set('subdistrict', selectedSubdistrict);
+		if (selectedSiteKind) params.set('site_kind', selectedSiteKind);
+		if (selectedType) params.set('type', selectedType);
+		if (userLat && userLng) {
+			params.set('user_lat', userLat);
+			params.set('user_lng', userLng);
+			if (distanceValue) params.set('distance', distanceValue);
+		}
+		if (hideFullToggle) params.set('hide_full', 'true');
+		return params;
+	}
+
+	function commitFilters() {
+		if (hydrating) return;
+		const next = buildFilterParams();
+		if (serializeParams(next) === serializeParams(page.url.searchParams)) return;
+		const qs = next.toString();
+		const href = (qs ? `${action}?${qs}` : action) as '/shelters';
+		void goto(resolve(href), {
+			keepFocus: true,
+			noScroll: true,
+			replaceState: true
+		});
+	}
+
+	function scheduleSearchCommit() {
+		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			searchDebounceTimer = null;
+			commitFilters();
+		}, SEARCH_DEBOUNCE_MS);
+	}
+
 	$effect(() => {
+		hydrating = true;
 		searchQuery = filters.search ?? '';
 		selectedProvince = filters.province ?? '';
 		selectedDistrict = filters.district ?? '';
 		selectedSubdistrict = filters.subdistrict ?? '';
 		selectedSiteKind = filters.site_kind ?? '';
+		selectedType = filters.type ?? '';
 		const nextDistance = filters.distance || '5';
 		distanceValue = nextDistance;
 		customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 		customDistanceError = false;
+		hideFullToggle =
+			filters.hide_full === true ||
+			filters.hide_full === 'true' ||
+			page.url.searchParams.get('hide_full') === 'true';
 
 		if (filters.user_lat) userLat = filters.user_lat.toString();
 		if (filters.user_lng) userLng = filters.user_lng.toString();
+
+		lastProvince = selectedProvince;
+		lastDistrict = selectedDistrict;
+
+		void tick().then(() => {
+			hydrating = false;
+		});
+	});
+
+	// Clear dependent admin areas when parent selection changes (not during hydrate).
+	$effect(() => {
+		const province = selectedProvince;
+		if (hydrating) {
+			lastProvince = province;
+			return;
+		}
+		if (lastProvince !== null && province !== lastProvince) {
+			selectedDistrict = '';
+			selectedSubdistrict = '';
+		}
+		lastProvince = province;
+	});
+
+	$effect(() => {
+		const district = selectedDistrict;
+		if (hydrating) {
+			lastDistrict = district;
+			return;
+		}
+		if (lastDistrict !== null && district !== lastDistrict) {
+			selectedSubdistrict = '';
+		}
+		lastDistrict = district;
+	});
+
+	// Debounced live sync for text search.
+	$effect(() => {
+		// Always read searchQuery so Svelte tracks it (timer alone is not enough).
+		if (typeof searchQuery !== 'string') return;
+		if (hydrating) return;
+		scheduleSearchCommit();
+		return () => {
+			if (searchDebounceTimer) {
+				clearTimeout(searchDebounceTimer);
+				searchDebounceTimer = null;
+			}
+		};
+	});
+
+	// Immediate live sync for all other controls (and bindable lat/lng).
+	// Readings happen inside commitFilters → buildFilterParams.
+	$effect(() => {
+		if (hydrating) return;
+		commitFilters();
 	});
 
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
@@ -199,6 +316,7 @@
 			userLat = pos.lat;
 			userLng = pos.lng;
 			geoReason = null;
+			commitFilters();
 			return true;
 		} catch (err) {
 			geoReason = err instanceof GeolocationUnavailableError ? err.reason : 'unavailable';
@@ -222,17 +340,26 @@
 		await locationsPromise;
 	});
 
+	onDestroy(() => {
+		if (searchDebounceTimer) {
+			clearTimeout(searchDebounceTimer);
+			searchDebounceTimer = null;
+		}
+	});
+
 	async function selectDistance(km: string) {
 		if (distanceValue === km) {
 			distanceValue = '';
 			customDistanceDraft = '';
 			customDistanceError = false;
+			commitFilters();
 			return;
 		}
 		if (!(await ensureUserPosition())) return;
 		distanceValue = km;
 		customDistanceDraft = '';
 		customDistanceError = false;
+		commitFilters();
 	}
 
 	async function applyCustomDistance() {
@@ -240,7 +367,10 @@
 		if (normalized === null) {
 			if (customDistanceDraft.trim() === '') {
 				customDistanceError = false;
-				if (isCustomDistance) distanceValue = '';
+				if (isCustomDistance) {
+					distanceValue = '';
+					commitFilters();
+				}
 				return;
 			}
 			customDistanceError = true;
@@ -250,29 +380,12 @@
 		customDistanceError = false;
 		customDistanceDraft = normalized;
 		distanceValue = normalized;
+		commitFilters();
 	}
 
 	async function onCustomDistanceFocus() {
 		customDistanceError = false;
 		if (!hasPosition) await ensureUserPosition();
-	}
-
-	/** Sync custom draft into distance before GET submit (covers submit without blur). */
-	function prepareDistanceForSubmit(): boolean {
-		const draft = customDistanceDraft.trim();
-		if (!draft) {
-			customDistanceError = false;
-			return true;
-		}
-		const normalized = normalizeDistanceKm(draft);
-		if (normalized === null) {
-			customDistanceError = true;
-			return false;
-		}
-		customDistanceError = false;
-		customDistanceDraft = normalized;
-		distanceValue = normalized;
-		return true;
 	}
 
 	function translateAdminType(type: string): string {
@@ -294,11 +407,6 @@
 		};
 		return map[type] || type;
 	}
-
-	let hideFullToggle = $state<boolean>(false);
-	$effect(() => {
-		hideFullToggle = filters.hide_full === true || filters.hide_full === 'true';
-	});
 </script>
 
 <div
@@ -307,10 +415,13 @@
 		className || 'h-[85vh] max-h-200'
 	]}
 >
-	<div class="mb-4 flex shrink-0 items-center justify-between gap-2">
-		<div class="flex items-center gap-2">
-			<Filter class="h-4 w-4 text-primary" />
-			<h3 class="font-bold text-foreground">{t.title}</h3>
+	<div class="mb-3 flex shrink-0 items-center justify-between gap-2">
+		<div class="flex min-w-0 flex-col gap-0.5">
+			<div class="flex items-center gap-2">
+				<Filter class="h-4 w-4 shrink-0 text-primary" />
+				<h3 class="font-bold text-foreground">{t.title}</h3>
+			</div>
+			<p class="text-2xs text-muted-foreground">{t.liveSyncHint}</p>
 		</div>
 		{#if onClose}
 			<button
@@ -326,11 +437,9 @@
 	</div>
 
 	<form
-		method="GET"
-		{action}
 		class="flex min-h-0 flex-1 flex-col"
 		onsubmit={(e) => {
-			if (!prepareDistanceForSubmit()) e.preventDefault();
+			e.preventDefault();
 		}}
 	>
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
@@ -412,7 +521,7 @@
 				<div class="space-y-1.5">
 					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
 					>
-					<Select.Root type="single" name="type" value={filters.type ?? ''}>
+					<Select.Root type="single" name="type" bind:value={selectedType}>
 						<Select.Trigger class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
@@ -702,18 +811,15 @@
 			</div>
 		</div>
 
-		<!-- Submit -->
-		<div class="flex shrink-0 gap-2 border-t border-border pt-4">
+		<!-- Clear only — filters live-sync to the URL -->
+		<div class="flex shrink-0 border-t border-border pt-4">
 			<Button
 				variant="outline"
 				href={action}
 				size="lg"
-				class="w-1/3 rounded-xl font-bold text-muted-foreground shadow-sm hover:bg-muted"
+				class="w-full rounded-xl font-bold text-muted-foreground shadow-sm hover:bg-muted"
 			>
 				{t.clearBtn}
-			</Button>
-			<Button type="submit" size="lg" class="w-2/3 rounded-xl font-bold shadow-sm">
-				{t.submitBtn}
 			</Button>
 		</div>
 	</form>

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { serviceError, ServiceError } from '$lib/server/couch-admin';
+import { isProtectedBootstrapAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { setupSecurityQuestionAndResetPassword } from '$lib/server/user-service';
 import { getSession } from '$lib/db/couch';
 
@@ -12,6 +12,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		const session = await getSession(fetch);
 		if (!session?.name) {
 			throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+		}
+
+		if (isProtectedBootstrapAdmin({ name: session.name, roles: session.roles })) {
+			throw new ServiceError('FORBIDDEN', 'Bootstrap admin does not use security question setup');
 		}
 
 		const body = (await request.json().catch(() => ({}))) as {

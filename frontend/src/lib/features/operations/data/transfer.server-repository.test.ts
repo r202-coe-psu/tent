@@ -56,6 +56,24 @@ describe('TransferServerRepository', () => {
 	it('creates a transfer doc in central_ops', async () => {
 		adminRaw.mockImplementation(async (path: string, method: string) => {
 			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded.startsWith('/catalog/_all_docs')) {
+				return {
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'unit_of_measure:kg',
+									type: 'unit_of_measure',
+									code: 'kg',
+									deactivated: false
+								}
+							},
+							{ doc: { _id: 'item:rice', type: 'item', unit: 'kg' } }
+						]
+					}
+				};
+			}
 			if (method === 'PUT' && decoded.startsWith('/central_ops/stock_transfer:')) {
 				return { status: 201, data: { ok: true, id: 'x', rev: '1-new' } };
 			}

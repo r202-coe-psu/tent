@@ -2,6 +2,7 @@
 	import MapPinX from '@lucide/svelte/icons/map-pin-x';
 	import LocateFixed from '@lucide/svelte/icons/locate-fixed';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -26,6 +27,7 @@
 		postal_code = $bindable(''),
 		disabled = false,
 		required = false,
+		loadMasterHousingTypes = true,
 		errors
 	}: {
 		housing_type?: string | null;
@@ -38,6 +40,8 @@
 		postal_code?: string;
 		disabled?: boolean;
 		required?: boolean;
+		/** When false (e.g. public channel), skip back-office master-data and use defaults. */
+		loadMasterHousingTypes?: boolean;
 		errors?: {
 			housing_type?: string;
 			residence_landmark?: string;
@@ -62,10 +66,16 @@
 
 	const fallbackQueryResult = { data: undefined, isLoading: false, isError: false };
 
-	const housingTypeQuery = safeQuery(
-		() => useMasterData(() => 'housing_type'),
-		fallbackQueryResult as unknown as ReturnType<typeof useMasterData>
-	);
+	// Channel (public vs staff) is fixed for the component lifetime — untrack avoids
+	// state_referenced_locally when gating whether to subscribe to master-data.
+	const shouldLoadMasterHousingTypes = untrack(() => loadMasterHousingTypes);
+
+	const housingTypeQuery = shouldLoadMasterHousingTypes
+		? safeQuery(
+				() => useMasterData(() => 'housing_type'),
+				fallbackQueryResult as unknown as ReturnType<typeof useMasterData>
+			)
+		: (fallbackQueryResult as unknown as ReturnType<typeof useMasterData>);
 	const provincesQuery = safeQuery(
 		() => useProvinces(),
 		fallbackQueryResult as unknown as ReturnType<typeof useProvinces>
@@ -109,6 +119,7 @@
 	]);
 
 	const housingTypeItems = $derived.by(() => {
+		if (!shouldLoadMasterHousingTypes) return DEFAULT_HOUSING_TYPES;
 		const masterItems = (housingTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
 			.map((i) => ({ value: i.code, label: housingLabelForCode(i.code, i.label) }));
@@ -365,7 +376,7 @@
 					size="sm"
 					disabled={disabled || isLocating}
 					onclick={handleGetCurrentLocation}
-					class="h-7 gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
+					class="h-8 gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
 				>
 					{#if isLocating}
 						<Loader2 class="size-3.5 animate-spin" />
@@ -394,7 +405,7 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'province' }}
 				/>
 				{#if errors?.province}
@@ -417,7 +428,7 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'district' }}
 				/>
 				{#if errors?.district}
@@ -440,7 +451,7 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'subdistrict' }}
 				/>
 				{#if errors?.subdistrict}
@@ -459,7 +470,7 @@
 					bind:value={postal_code}
 					disabled
 					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
-					class="h-9 bg-muted/50 text-xs"
+					class="h-9 bg-muted/50 text-sm"
 				/>
 				{#if errors?.postal_code}
 					<p class="text-2xs text-destructive">{errors.postal_code}</p>

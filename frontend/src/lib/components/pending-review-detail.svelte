@@ -13,6 +13,8 @@
 	import type { PendingDonationRow } from '$lib/features/donations';
 	import RejectDonationDialog from './reject-donation-dialog.svelte';
 	import RedirectDonationDialog from './redirect-donation-dialog.svelte';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		request,
@@ -33,11 +35,16 @@
 	let memo = $state('');
 	let isRejectDialogOpen = $state(false);
 	let isRedirectDialogOpen = $state(false);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	function formatItems(req: PendingDonationRow): string {
 		if (!req.items || req.items.length === 0) return 'ไม่มีรายการสิ่งของระบุ';
 		return req.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'สิ่งของ'} ${it.qty} ${it.unit}`)
+			.map(
+				(it) =>
+					`${it.free_text ?? it.item_id ?? 'สิ่งของ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+			)
 			.join(', ');
 	}
 

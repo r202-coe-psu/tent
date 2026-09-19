@@ -86,10 +86,11 @@ export const usePendingScreeningEvacuees = (shelterCode?: () => string) =>
 		};
 	});
 
-export const useEvacuees = () =>
+export const useEvacuees = (enabled?: () => boolean) =>
 	createQuery(() => ({
 		queryKey: peopleKeys.evacuees(),
-		queryFn: () => peopleRepository().listEvacuees()
+		queryFn: () => peopleRepository().listEvacuees(),
+		enabled: enabled ? enabled() : true
 	}));
 
 export const useEvacueesPaginated = (
@@ -437,6 +438,26 @@ export const useSubmitFamilyReportIn = () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.household(result.household._id) });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+export const useMergeHouseholds = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			sourceHouseholdId,
+			targetHouseholdId,
+			ctx
+		}: {
+			sourceHouseholdId: string;
+			targetHouseholdId: string;
+			ctx: AuthorContext;
+		}) => peopleRepository().mergeHouseholds(sourceHouseholdId, targetHouseholdId, ctx),
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(result.targetHousehold._id) });
 		}
 	}));
 };

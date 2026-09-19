@@ -27,6 +27,9 @@ class NeedsUseCase:
                     qty_needed=str(need.qty_needed),
                     unit=need.unit,
                     status="open" if need.qty_needed > 0 else "closed",
+                    qty_target=str(getattr(need, "qty_target", 0.0)),
+                    urgency=getattr(need, "urgency", "normal"),
+                    category=getattr(need, "category", None),
                 )
             )
 

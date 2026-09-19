@@ -12,8 +12,11 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { formatUnit as formatUnitCatalog, useUnitsOfMeasure } from '$lib/features/catalog';
 
 	const donationStore = getDonationStore();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	interface Need {
@@ -218,21 +221,8 @@
 			});
 	});
 
-	const UNIT_LABEL: Record<string, { th: string; en: string }> = {
-		kg: { th: 'กก.', en: 'kg' },
-		bottle: { th: 'ขวด', en: 'bottle' },
-		bar: { th: 'ก้อน', en: 'bar' },
-		piece: { th: 'ชิ้น', en: 'pcs' },
-		tablet: { th: 'เม็ด', en: 'tab' },
-		box: { th: 'กล่อง', en: 'box' },
-		pack: { th: 'แพ็ค', en: 'pack' },
-		unit: { th: 'ชิ้น', en: 'unit' }
-	};
-
 	function formatUnit(unit: string): string {
-		const u = UNIT_LABEL[unit];
-		if (u) return u[langState.current === 'en' ? 'en' : 'th'];
-		return unit;
+		return formatUnitCatalog(unit, units, langState.current);
 	}
 
 	function goToShelterDetails(shelter: ShelterNeeds) {
@@ -254,7 +244,7 @@
 				category: need.category || 'food',
 				name: formatItemName(need.raw_name || need.name || need.item_id),
 				amount: need.qty_needed > 0 ? need.qty_needed : 1,
-				unit: formatUnit(need.unit),
+				unit: need.unit,
 				condition: 'new',
 				remark: '',
 				image: need.image || ''

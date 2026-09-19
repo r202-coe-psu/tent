@@ -14,7 +14,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
 		useDonationTracking,
@@ -33,12 +33,15 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const trackingQuery = useDonationTracking(() => token);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const courierMutation = useUpdateCourierTracking();
 
 	let courierInput = $state('');
@@ -64,7 +67,7 @@
 			return;
 		}
 		let cancelled = false;
-		QRCode.toDataURL(token, { margin: 1, width: 256 })
+		generateQrDataUrl(token, { margin: 1, width: 256 })
 			.then((url) => {
 				if (!cancelled) qrCodeUrl = url;
 			})
@@ -400,7 +403,11 @@
 															)
 														: t.noData}
 												</td>
-												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? t.noData}</td>
+												<td class="px-4 py-3 text-muted-foreground"
+													>{item.unit
+														? formatUnit(item.unit, units, langState.current)
+														: t.noData}</td
+												>
 											</tr>
 										{/each}
 									</tbody>

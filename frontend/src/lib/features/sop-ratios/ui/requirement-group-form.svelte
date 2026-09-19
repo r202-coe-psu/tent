@@ -4,7 +4,8 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
@@ -32,6 +33,8 @@
 
 	const saveMutation = useSaveRequirementGroup();
 	const itemMastersQuery = useItemMasters();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	let formGroupId = $state('');
 	let formName = $state('');
@@ -42,13 +45,15 @@
 
 	const itemMasters = $derived(itemMastersQuery.data ?? []);
 	const itemOptions = $derived.by(() => {
-		return itemMasters.map((im) => ({
-			value: im._id,
-			label: im.name,
-			sku: im.sku,
-			base_unit: im.base_unit || '',
-			keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
-		}));
+		return itemMasters
+			.filter((im) => !im.deactivated)
+			.map((im) => ({
+				value: im._id,
+				label: im.name,
+				sku: im.sku,
+				base_unit: im.base_unit || '',
+				keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
+			}));
 	});
 
 	function getItemOptions(currentId?: string) {
@@ -372,7 +377,7 @@
 														<span
 															class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
 														>
-															{item.base_unit}
+															{formatUnit(item.base_unit, units, langState.current)}
 														</span>
 													{/if}
 												</div>

@@ -24,6 +24,8 @@ type LoadResult = {
 	summary: {
 		shelters_total: number;
 		shelters_open: number;
+		evac_centers: number;
+		host_houses: number;
 	};
 	filters: Record<string, string>;
 	available_types: string[];
@@ -110,6 +112,7 @@ describe('public/shelters load function', () => {
 					province: 'สงขลา',
 					district: 'หาดใหญ่',
 					subdistrict: 'หาดใหญ่',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -121,6 +124,7 @@ describe('public/shelters load function', () => {
 					province: 'สงขลา',
 					district: 'หาดใหญ่',
 					subdistrict: 'คอหงส์',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
@@ -148,6 +152,7 @@ describe('public/shelters load function', () => {
 					name: 'สแตนด์บาย',
 					status: 'standby',
 					capacity: 100,
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -155,6 +160,7 @@ describe('public/shelters load function', () => {
 					name: 'เปิด',
 					status: 'open',
 					capacity: 100,
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -162,6 +168,7 @@ describe('public/shelters load function', () => {
 					name: 'เต็ม',
 					status: 'full',
 					capacity: 100,
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
@@ -189,6 +196,7 @@ describe('public/shelters load function', () => {
 					capacity: 100,
 					province: 'สงขลา',
 					district: 'หาดใหญ่',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -198,6 +206,7 @@ describe('public/shelters load function', () => {
 					capacity: 50,
 					province: 'ยะลา',
 					district: 'เมืองยะลา',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
@@ -221,6 +230,7 @@ describe('public/shelters load function', () => {
 					status: 'open',
 					capacity: 50,
 					geo: { lat: 7.1, lng: 100.6 },
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -229,6 +239,7 @@ describe('public/shelters load function', () => {
 					status: 'open',
 					capacity: 50,
 					geo: { lat: 7.01, lng: 100.48 },
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -237,6 +248,7 @@ describe('public/shelters load function', () => {
 					status: 'open',
 					capacity: 50,
 					geo: null,
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
@@ -271,6 +283,7 @@ describe('public/shelters load function', () => {
 					capacity: 100,
 					province: 'เชียงใหม่',
 					district: 'เมือง',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -281,6 +294,7 @@ describe('public/shelters load function', () => {
 					capacity: 50,
 					province: 'เชียงใหม่',
 					district: 'เมือง',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
@@ -312,6 +326,7 @@ describe('public/shelters load function', () => {
 					capacity: 100,
 					province: 'เชียงใหม่',
 					district: 'เมือง',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				},
 				{
@@ -322,6 +337,7 @@ describe('public/shelters load function', () => {
 					capacity: 50,
 					province: 'เชียงใหม่',
 					district: 'เมือง',
+					accepts_pre_registration: false,
 					updated_at: '2026-08-19T00:00:00Z'
 				}
 			],
