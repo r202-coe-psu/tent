@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-18 # Ratified CR-127 volunteer permanent tracking_token_hash / QR check-in
+updated: 2026-09-18 # Ratified CR-127 volunteer permanent tracking_token_hash / QR check-in; CR-128 shelter food_distribution_points + single-page form
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -145,4 +145,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-125](CR-125-unit-of-measure-master-data.md) | Unit of Measure master data — catalog schema_v 1, 27 canonical seed units, and protected UOM invariants | done | stable | 2026-09-17 | docs/data/schema.md §4.9/§8, frontend catalog UOM domain/repository/UI, frontend/scripts/sync-central-db.ts, frontend/scripts/seed/master-seed.ts, frontend/src/lib/server/shelter-access-design.ts |
 | [CR-126](CR-126-shelter-import-couchdb-scalability.md) | ป้องกัน CouchDB ค้างเมื่อนำเข้าศูนย์พักพิงจำนวนมาก (ระยะที่ 0: ปรับ ulimits.nofile เป็น 65536 และเพิ่ม Runbook เฝ้าระวัง descriptor) | approved | volatile | 2026-09-16 (approved 2026-09-17) | docker-compose*.yml, docs/sop/couchdb-file-descriptors.md, docs/changes/CR-123-shelter-import-worker-pipeline.md |
 | [CR-127](CR-127-volunteer-permanent-tracking-token.md) | Volunteer — permanent per-volunteer `tracking_token_hash` for portal / QR check-in | approved | volatile | 2026-09-18 | docs/data/schema.md §2.8 volunteer (schema_v 3 → 4), volunteers public-application + check-in, PublicVolunteer projector, FastAPI volunteer credential resolution |
-| [CR-129](CR-129-bulk-return-claim-recovery.md) | ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery) — bulk_return_claim (schema_v 1) + bulk_return_pool (schema_v 1 → 2) claim_ids | proposed | stable | 2026-09-17 (proposed) | docs/data/schema.md §2.31/§2.32, CR-121, frontend/src/lib/features/distribution/**, server/shelter-access-design.ts |
+| [CR-128](CR-128-shelter-food-distribution-points-and-single-page-form.md) | shelter — เพิ่ม `food_distribution_points` (จุดแจกอาหาร, staff-only, schema_v 5 → 6) + ฟอร์มสร้าง/แก้ศูนย์จาก 8-step wizard เป็น single-page scroll-spy (UX, ไม่ใช่ schema change) | approved | volatile | 2026-09-18 | docs/data/schema.md §3.1 (schema_v shelter 5 → 6), docs/data/schema-er-diagram.md SHELTER block, frontend/src/lib/features/shelters/{domain,ui}, docs/uat/smart-shelter-uat-checklist.csv |
+| [CR-134](CR-134-bulk-return-claim-recovery.md) | ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery) — bulk_return_claim (schema_v 1) + bulk_return_pool (schema_v 1 → 2) claim_ids | proposed | stable | 2026-09-17 (proposed) | docs/data/schema.md §2.31/§2.32, CR-121, frontend/src/lib/features/distribution/**, server/shelter-access-design.ts |

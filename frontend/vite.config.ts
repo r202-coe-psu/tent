@@ -60,7 +60,8 @@ export default defineConfig(({ mode }) => {
 		test: {
 			globals: true,
 			environment: 'node',
-			include: ['src/**/*.{test,spec}.{ts,js}']
+			include: ['src/**/*.{test,spec}.{ts,js}'],
+			setupFiles: ['./src/lib/testing/vitest-setup.ts']
 		}
 	};
 });

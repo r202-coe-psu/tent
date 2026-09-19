@@ -157,6 +157,9 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw { forbidden: 'unit_of_measure is central-only' };
+  }
   // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
   function isRole(cap) {
     return userCtx.roles.indexOf('system_admin') !== -1 ||
@@ -1256,7 +1259,7 @@ export function buildValidateDocUpdate(code: string): string {
       }
     }
   }
-  // 14. CR-121 / CR-129: bulk_return_pool validation (Rule 14)
+  // 14. CR-121 / CR-134: bulk_return_pool validation (Rule 14)
   if (newDoc.type === 'bulk_return_pool') {
     if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported bulk_return_pool schema version' };
@@ -1342,7 +1345,7 @@ export function buildValidateDocUpdate(code: string): string {
       }
     }
   }
-  // 15. CR-129: bulk_return_claim validation (Rule 15)
+  // 15. CR-134: bulk_return_claim validation (Rule 15)
   if (newDoc.type === 'bulk_return_claim') {
     var canManageClaim =
       isRole('registration_staff') ||
@@ -1432,6 +1435,46 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.status !== 'CLAIM_INTENT') {
         throw { forbidden: 'Initial bulk_return_claim status must be CLAIM_INTENT' };
       }
+    }
+  }
+  // item_master base_unit invariant guard
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw { forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+  }
+  if (newDoc.type === 'item_master') {
+    var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
+      oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
+    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {
+      throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+    validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+    validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+    if (Array.isArray(newDoc.conversions)) {
+      for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+        validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+      }
+    }
+  }
+  if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+    for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+      validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+    }
+  }
+  if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+    for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+      validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
     }
   }
 }`;

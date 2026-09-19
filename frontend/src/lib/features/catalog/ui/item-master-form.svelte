@@ -4,19 +4,28 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { itemMasterInputSchema, type ItemMaster, type ItemMasterInput } from '../domain/catalog';
+	import {
+		itemMasterInputSchema,
+		itemMasterUpdateInputSchema,
+		type ItemMaster,
+		type ItemMasterInput
+	} from '../domain/catalog';
+	import { formatUnit } from '../domain/unit-of-measure';
 
 	import {
 		useItemMaster,
 		useCreateItemMaster,
 		useUpdateItemMaster,
-		useItemCategories
+		useItemCategories,
+		useUnitsOfMeasure
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	// Icons
 	import Info from '@lucide/svelte/icons/info';
@@ -36,6 +45,8 @@
 	const shelterCode = $derived(
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
+	const validationSchema = $derived(isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
+	const getValidationAdapter = () => zod4(validationSchema);
 
 	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(
@@ -43,6 +54,7 @@
 		() => shelterCode ?? null
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -70,12 +82,12 @@
 				asset_status: 'READY',
 				deactivated: false
 			},
-			zod4(itemMasterInputSchema)
+			getValidationAdapter()
 		),
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(itemMasterInputSchema),
+			validators: getValidationAdapter(),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
@@ -131,7 +143,7 @@
 					submitData.dietary = [];
 					delete submitData.asset_status;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
-					submitData.base_unit = 'ชิ้น';
+					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
 
 					delete submitData.conversions;
@@ -200,6 +212,10 @@
 
 	const { form: formData, submitting } = form;
 
+	$effect(() => {
+		form.options.validators = getValidationAdapter();
+	});
+
 	// Populate form fields when data loads in edit mode
 	$effect(() => {
 		if (isEdit && itemMasterQuery.data) {
@@ -233,9 +249,39 @@
 	const isLoading = $derived(isEdit ? itemMasterQuery.isLoading : false);
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
 
+	// Units of measure
+	const allUnits = $derived(unitsOfMeasureQuery.data ?? []);
+	const activeUnits = $derived.by(() => {
+		const selectedCodes = [
+			$formData.base_unit,
+			$formData.default_inventory_uom,
+			$formData.default_issue_uom,
+			...$formData.conversions.map((conversion) => conversion.uom_name)
+		].filter((code): code is string => Boolean(code));
+		const list = allUnits.filter((unit) => !unit.deactivated || selectedCodes.includes(unit.code));
+		const missing = selectedCodes
+			.filter((code, index, codes) => code && !codes.slice(0, index).includes(code))
+			.filter((code) => !list.some((unit) => unit.code === code))
+			.map((code) => ({
+				_id: `legacy-unit:${code}`,
+				type: 'unit_of_measure' as const,
+				schema_v: 1,
+				code,
+				label_th: formatUnit(code, allUnits, langState.current),
+				label_en: formatUnit(code, allUnits, 'en'),
+				dimension: 'count' as const,
+				deactivated: true,
+				created_at: '',
+				updated_at: '',
+				created_by: ''
+			}));
+		return [...list, ...missing];
+	});
+
 	// Dynamically compute list of UOM choices for defaults in Section 4 and planning unit in Section 5
-	const uomOptions = $derived(
-		[$formData.base_unit, ...$formData.conversions.map((c) => c.uom_name)].filter(Boolean)
+	const uomOptions = $derived(activeUnits);
+	const unitMasterReady = $derived(
+		!unitsOfMeasureQuery.isLoading && !unitsOfMeasureQuery.isError && allUnits.length > 0
 	);
 
 	const availableCategories = $derived.by(() => {
@@ -262,6 +308,15 @@
 		</div>
 
 		<Field.FieldGroup class="space-y-6">
+			{#if unitsOfMeasureQuery.isError}
+				<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+					โหลดหน่วยนับมาตรฐานไม่สำเร็จ จึงยังไม่สามารถบันทึก Item Master ได้
+				</div>
+			{:else if !unitsOfMeasureQuery.isLoading && allUnits.length === 0}
+				<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+					ไม่พบหน่วยนับมาตรฐาน กรุณาให้ผู้ดูแลระบบ seed UOM master ก่อนสร้างรายการ
+				</div>
+			{/if}
 			<!-- ประเภทสิ่งของ (Item Class) -->
 			<Form.Field
 				{form}
@@ -460,17 +515,24 @@
 								<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
 									หน่วยที่เล็กที่สุด (Base Unit)
 								</Form.Label>
-								<select
-									{...props}
-									bind:value={$formData.base_unit}
-									disabled={isEdit}
-									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
+								<Select.Root
+									type="single"
+									value={$formData.base_unit}
+									onValueChange={(value) => ($formData.base_unit = value)}
+									disabled={isEdit || !unitMasterReady}
 								>
-									<option value="" disabled selected>-- เลือกหน่วยฐาน --</option>
-									{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'อัน', 'ชุด', 'ผืน', 'ตัว', 'คู่', 'แผ่น', 'หลอด', 'ม้วน', 'ก้อน', 'ห่อ', 'ฟอง', 'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร', 'เมตร'] as unit (unit)}
-										<option value={unit}>{unit}</option>
-									{/each}
-								</select>
+									<Select.Trigger {...props} class="h-12 w-full rounded-xl">
+										{activeUnits.find((unit) => unit.code === $formData.base_unit)?.label_th ??
+											'-- เลือกหน่วยฐาน --'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each activeUnits as unit (unit.code)}
+											<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
+												{unit.label_th} ({unit.code})
+											</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
@@ -503,12 +565,26 @@
 									<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
 										ชื่อหน่วยทวีคูณ
 									</span>
-									<Input
-										type="text"
-										bind:value={$formData.conversions[0].uom_name}
-										placeholder="เช่น กล่อง, ลัง, แผง"
-										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
-									/>
+									<Select.Root
+										type="single"
+										value={$formData.conversions[0].uom_name}
+										onValueChange={(value) => ($formData.conversions[0].uom_name = value)}
+										disabled={!unitMasterReady}
+									>
+										<Select.Trigger
+											class="h-12 rounded-xl border-slate-200/80 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+										>
+											{uomOptions.find((unit) => unit.code === $formData.conversions[0].uom_name)
+												?.label_th ?? '-- เลือกหน่วยทวีคูณ --'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each uomOptions as unit (unit.code)}
+												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
+													{unit.label_th} ({unit.code})
+												</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
 								</div>
 								<div>
 									<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -567,16 +643,25 @@
 									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
 										หน่วยสำหรับจัดเก็บ (Inventory)
 									</Form.Label>
-									<select
-										{...props}
-										bind:value={$formData.default_inventory_uom}
-										class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+									<Select.Root
+										type="single"
+										value={$formData.default_inventory_uom ?? ''}
+										onValueChange={(value) => ($formData.default_inventory_uom = value)}
+										disabled={!unitMasterReady}
 									>
-										<option value="">-- เลือกหน่วย --</option>
-										{#each uomOptions as unit (unit)}
-											<option value={unit}>{unit}</option>
-										{/each}
-									</select>
+										<Select.Trigger {...props} class="h-12 w-full rounded-xl">
+											{uomOptions.find((unit) => unit.code === $formData.default_inventory_uom)
+												?.label_th ?? '-- เลือกหน่วย --'}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="" label="-- เลือกหน่วย --">-- เลือกหน่วย --</Select.Item>
+											{#each uomOptions as unit (unit.code)}
+												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
+													{unit.label_th} ({unit.code})
+												</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
@@ -588,16 +673,25 @@
 									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
 										หน่วยสำหรับเบิกจ่าย (Issue/Sales)
 									</Form.Label>
-									<select
-										{...props}
-										bind:value={$formData.default_issue_uom}
-										class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+									<Select.Root
+										type="single"
+										value={$formData.default_issue_uom ?? ''}
+										onValueChange={(value) => ($formData.default_issue_uom = value)}
+										disabled={!unitMasterReady}
 									>
-										<option value="">-- เลือกหน่วย --</option>
-										{#each uomOptions as unit (unit)}
-											<option value={unit}>{unit}</option>
-										{/each}
-									</select>
+										<Select.Trigger {...props} class="h-12 w-full rounded-xl">
+											{uomOptions.find((unit) => unit.code === $formData.default_issue_uom)
+												?.label_th ?? '-- เลือกหน่วย --'}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="" label="-- เลือกหน่วย --">-- เลือกหน่วย --</Select.Item>
+											{#each uomOptions as unit (unit.code)}
+												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
+													{unit.label_th} ({unit.code})
+												</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
@@ -1003,7 +1097,7 @@
 
 				<Button
 					type="submit"
-					disabled={$submitting || isPending}
+					disabled={$submitting || isPending || !unitMasterReady}
 					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
 				>
 					{#if $submitting || isPending}

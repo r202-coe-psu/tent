@@ -39,6 +39,7 @@
 	import HouseholdHeadModal from './household-head-modal.svelte';
 	import HouseholdMembersModal from './household-members-modal.svelte';
 	import EvacueeZoneModal from '../evacuee-profile/evacuee-zone-modal.svelte';
+	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 
 	let { householdId }: { householdId: string } = $props();
 
@@ -74,6 +75,7 @@
 	let showAddressModal = $state(false);
 	let showAssetsModal = $state(false);
 	let showZoneModal = $state(false);
+	let showMergeModal = $state(false);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
@@ -110,6 +112,12 @@
 			colorClass:
 				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800',
 			dotClass: 'bg-slate-400'
+		},
+		merged: {
+			label: 'รวมครอบครัวแล้ว (Merged)',
+			colorClass:
+				'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+			dotClass: 'bg-purple-500'
 		}
 	} satisfies Record<HouseholdStatus, { label: string; colorClass: string; dotClass: string }>;
 
@@ -312,6 +320,7 @@
 			{statusConfig}
 			onOpenStatusModal={() => (showStatusModal = true)}
 			onOpenZoneModal={() => (showZoneModal = true)}
+			onOpenMergeModal={() => (showMergeModal = true)}
 			onCancelPreRegistration={cancelPreRegistration}
 			isCancelling={cancelPreRegistrationMutation.isPending}
 			{canCancel}
@@ -479,4 +488,15 @@
 			onRemoveMember={removeMemberFromHousehold}
 		/>
 	{/if}
+
+	<HouseholdMergeDialog
+		bind:open={showMergeModal}
+		targetHouseholdId={household._id}
+		targetHouseholdLabel={household.label}
+		onMerged={() => {
+			void householdQuery.refetch?.();
+			void evacueesQuery.refetch?.();
+			void householdsQuery.refetch?.();
+		}}
+	/>
 {/if}

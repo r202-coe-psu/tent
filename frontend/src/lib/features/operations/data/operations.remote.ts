@@ -44,6 +44,8 @@ import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
 	isItemMaster,
 	itemMasterUnit,
+	assertKnownUnitCodes,
+	isLegacyUnitLabel,
 	catalogRepository,
 	type ItemMaster
 } from '$lib/features/catalog';
@@ -243,7 +245,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	/** Create a campaign from input and persist it. */
 	async createCampaign(input: CampaignInput, ctx: AuthorContext): Promise<DonationCampaign> {
-		return this.repo.put(buildCampaign(input, ctx));
+		const campaign = buildCampaign(input, ctx);
+		await this.validateCampaignUnits(campaign);
+		return this.repo.put(campaign);
 	}
 
 	/** Persist updates to a campaign (bumps updated_at timestamp). */
@@ -253,6 +257,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	): Promise<DonationCampaign> {
 		// Read-Modify-Write: Fetch the latest _rev from the database to prevent 409 conflict
 		const existing = await this.repo.get<DonationCampaign>(campaign._id);
+		await this.validateCampaignUnits(campaign, existing ?? undefined);
 		const merged = {
 			...campaign,
 			_rev: existing?._rev ?? undefined
@@ -273,6 +278,35 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		}
 
 		return updated;
+	}
+
+	private async validateCampaignUnits(
+		campaign: DonationCampaign,
+		current?: DonationCampaign
+	): Promise<void> {
+		const units = await catalogRepository().listUnitsOfMeasure();
+		if (units.length === 0) {
+			throw new Error('Unit of measure master is unavailable; campaign write was rejected');
+		}
+
+		for (const need of campaign.needs) {
+			const previous = current?.needs.find((candidate) => candidate.item_id === need.item_id);
+			const legacyUnchanged =
+				!!previous && previous.unit === need.unit && isLegacyUnitLabel(need.unit);
+			if (legacyUnchanged) continue;
+
+			assertKnownUnitCodes([need.unit], units);
+			const item = await this.loadCatalogItem(need.item_id);
+			if (!item) {
+				throw new Error(`Unknown item: ${need.item_id} — campaign need must reference the catalog`);
+			}
+			const expected = catalogItemRules(item).unit;
+			if (expected !== need.unit) {
+				throw new Error(
+					`Unit mismatch for campaign item ${need.item_id}: expected ${expected}, got ${need.unit}`
+				);
+			}
+		}
 	}
 
 	/** Fetch all donations in this shelter. */

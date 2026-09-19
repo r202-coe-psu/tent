@@ -346,7 +346,7 @@ export async function createBulkReturnPool(
 }
 
 /**
- * Resolves a returnable loan at check-out gate against a Bulk Return Pool quota (FR-LON-04, CR-129).
+ * Resolves a returnable loan at check-out gate against a Bulk Return Pool quota (FR-LON-04, CR-134).
  * Coordinates quota claim through deterministic bulk_return_claim, records bulk_dropoff clear on DistributionLog,
  * enforces strict final quantity equality, and creates ZERO stock ledger entries.
  */

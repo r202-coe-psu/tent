@@ -8,16 +8,21 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { ServiceError } from '$lib/server/couch-admin';
+import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people';
+
+export type { ThaiDAutofillProfile };
 
 export const OAUTH_THAID_STATE_COOKIE = 'oauth_thaid_state';
 
-export type ThaidOAuthMode = 'link' | 'stepup' | 'login';
+export type ThaidOAuthMode = 'link' | 'stepup' | 'login' | 'register';
 
 export interface ThaidOAuthState {
 	mode: ThaidOAuthMode;
-	/** Username for link/stepup; empty string for login until callback lookup. */
+	/** Username for link/stepup; empty string for login/register until callback lookup. */
 	name: string;
 	nonce: string;
+	/** Optional safe relative return path (e.g. /pre-register?shelter=SH001) for mode=register */
+	returnTo?: string;
 }
 
 export interface ThaidClaims {
@@ -25,6 +30,7 @@ export interface ThaidClaims {
 	name?: string | null;
 	pid?: string | null;
 	pid_masked?: string | null;
+	raw?: Record<string, unknown>;
 }
 
 /** Pure outcome of enrolled-user lookup for mode=login. */
@@ -98,14 +104,19 @@ function verifyStatePayload(value: string): string | null {
 }
 
 function isThaidOAuthMode(mode: unknown): mode is ThaidOAuthMode {
-	return mode === 'link' || mode === 'stepup' || mode === 'login';
+	return mode === 'link' || mode === 'stepup' || mode === 'login' || mode === 'register';
 }
 
-export function createThaidOAuthState(mode: ThaidOAuthMode, name: string): string {
+export function createThaidOAuthState(
+	mode: ThaidOAuthMode,
+	name: string = '',
+	returnTo?: string
+): string {
 	const state: ThaidOAuthState = {
 		mode,
-		name,
-		nonce: randomBytes(16).toString('hex')
+		name: name || '',
+		nonce: randomBytes(16).toString('hex'),
+		...(returnTo ? { returnTo } : {})
 	};
 	return signStatePayload(Buffer.from(JSON.stringify(state), 'utf8').toString('base64url'));
 }
@@ -121,7 +132,8 @@ export function parseThaidOAuthState(raw: string | undefined): ThaidOAuthState |
 		if (
 			!isThaidOAuthMode(parsed.mode) ||
 			typeof parsed.name !== 'string' ||
-			typeof parsed.nonce !== 'string'
+			typeof parsed.nonce !== 'string' ||
+			(parsed.returnTo !== undefined && typeof parsed.returnTo !== 'string')
 		) {
 			return null;
 		}
@@ -161,13 +173,18 @@ export function buildThaidAuthorizeUrl(opts: {
 	redirectUri: string;
 	state: string;
 	authUrl?: string;
+	mode?: ThaidOAuthMode;
 }): string {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
+	const defaultScope =
+		opts.mode === 'register'
+			? env.THAID_OAUTH_SCOPE?.trim() || 'openid pid name birthdate address'
+			: 'pid name openid';
 	const params = new URLSearchParams({
 		response_type: 'code',
 		client_id: opts.clientId,
 		redirect_uri: opts.redirectUri,
-		scope: 'pid name openid',
+		scope: defaultScope,
 		state: opts.state
 	});
 	const separator = base.includes('?') ? '&' : '?';
@@ -208,6 +225,7 @@ export async function exchangeThaidCode(opts: {
 		name?: string;
 		error?: string;
 		error_description?: string;
+		[key: string]: unknown;
 	} | null;
 
 	if (!tokenRes.ok || !tokenData) {
@@ -220,17 +238,18 @@ export async function exchangeThaidCode(opts: {
 	let sub: string | null = null;
 	let name: string | null = null;
 	let pid: string | null = null;
+	let idTokenClaims: Record<string, unknown> = {};
 
 	if (tokenData.id_token) {
-		const claims = decodeJwtPayload(tokenData.id_token);
-		if (typeof claims.sub === 'string' && claims.sub) {
-			sub = claims.sub;
+		idTokenClaims = decodeJwtPayload(tokenData.id_token);
+		if (typeof idTokenClaims.sub === 'string' && idTokenClaims.sub) {
+			sub = idTokenClaims.sub;
 		}
-		if (typeof claims.name === 'string' && claims.name) {
-			name = claims.name;
+		if (typeof idTokenClaims.name === 'string' && idTokenClaims.name) {
+			name = idTokenClaims.name;
 		}
-		if (typeof claims.pid === 'string' && claims.pid) {
-			pid = claims.pid;
+		if (typeof idTokenClaims.pid === 'string' && idTokenClaims.pid) {
+			pid = idTokenClaims.pid;
 		}
 	}
 
@@ -249,11 +268,17 @@ export async function exchangeThaidCode(opts: {
 		throw new ServiceError('VALIDATION', 'ThaID did not return a valid subject identifier');
 	}
 
+	const raw: Record<string, unknown> = {
+		...tokenData,
+		...idTokenClaims
+	};
+
 	return {
 		sub,
 		name: name ? name.trim() : null,
 		pid: pid ? pid.trim() : null,
-		pid_masked: maskPid(pid)
+		pid_masked: maskPid(pid),
+		raw
 	};
 }
 
@@ -272,4 +297,164 @@ export function resolveThaidLoginUser(
 	const salt = typeof doc.salt === 'string' ? doc.salt : '';
 	if (!salt) return { ok: false, reason: 'missing_salt' };
 	return { ok: true, name: doc.name, salt };
+}
+
+export const THAID_CITIZEN_CLAIM_COOKIE = 'thaid_citizen_claim';
+
+export function setCitizenClaimCookie(cookies: Cookies, profile: ThaiDAutofillProfile): void {
+	const payload = Buffer.from(JSON.stringify(profile), 'utf8').toString('base64url');
+	const signed = signStatePayload(payload);
+	cookies.set(THAID_CITIZEN_CLAIM_COOKIE, signed, {
+		path: '/',
+		httpOnly: true,
+		sameSite: 'lax',
+		secure: cookieSecure(),
+		maxAge: 60 * 5 // 5 minutes
+	});
+}
+
+export function consumeCitizenClaimCookie(cookies: Cookies): ThaiDAutofillProfile | null {
+	const raw = cookies.get(THAID_CITIZEN_CLAIM_COOKIE);
+	if (!raw) return null;
+	cookies.delete(THAID_CITIZEN_CLAIM_COOKIE, { path: '/' });
+	const payload = verifyStatePayload(raw);
+	if (!payload) return null;
+	try {
+		const json = Buffer.from(payload, 'base64url').toString('utf8');
+		return JSON.parse(json) as ThaiDAutofillProfile;
+	} catch {
+		return null;
+	}
+}
+
+export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfile {
+	const raw = claims.raw ?? {};
+	const pid = (claims.pid ?? (typeof raw.pid === 'string' ? raw.pid : '')).replace(/\D/g, '');
+
+	let firstName: string;
+	let lastName: string;
+	let gender: 'male' | 'female' | 'other' = 'other';
+
+	const givenName = typeof raw.given_name === 'string' ? raw.given_name.trim() : '';
+	const familyName = typeof raw.family_name === 'string' ? raw.family_name.trim() : '';
+
+	const rawGender = typeof raw.gender === 'string' ? raw.gender.toLowerCase() : '';
+	if (rawGender === 'male' || rawGender === '1' || rawGender === 'm') {
+		gender = 'male';
+	} else if (rawGender === 'female' || rawGender === '2' || rawGender === 'f') {
+		gender = 'female';
+	}
+
+	if (givenName) {
+		const stripped = stripThaiTitle(givenName);
+		firstName = stripped.cleanedText;
+		if (gender === 'other' && stripped.inferredGender) {
+			gender = stripped.inferredGender;
+		}
+		lastName = familyName;
+	} else {
+		const rawFullName = (claims.name || (typeof raw.name === 'string' ? raw.name : '')).trim();
+		const stripped = stripThaiTitle(rawFullName);
+		if (gender === 'other' && stripped.inferredGender) {
+			gender = stripped.inferredGender;
+		}
+		const parts = stripped.cleanedText.split(/\s+/).filter(Boolean);
+		firstName = parts[0] ?? '';
+		lastName = parts.slice(1).join(' ') ?? '';
+	}
+
+	// Birthdate / age parsing
+	const currentCeYear = new Date().getFullYear();
+	const currentBeYear = currentCeYear + 543;
+	let birthYear = currentBeYear - 30; // sensible adult default if omitted
+	let age = 30;
+
+	const rawBirth =
+		typeof raw.birthdate === 'string'
+			? raw.birthdate
+			: typeof raw.birth_date === 'string'
+				? raw.birth_date
+				: typeof raw.bdate === 'string'
+					? raw.bdate
+					: null;
+
+	if (rawBirth) {
+		const match = rawBirth.match(/^(\d{4})[-/]?(\d{2})[-/]?(\d{2})/);
+		if (match) {
+			let parsedYear = parseInt(match[1], 10);
+			if (parsedYear < 2400) {
+				parsedYear += 543; // convert CE to BE
+			}
+			birthYear = parsedYear;
+			age = Math.max(0, currentBeYear - birthYear);
+		}
+	}
+
+	// Address mapping
+	const address = {
+		address_no: '',
+		village_no: '',
+		subdistrict: '',
+		district: '',
+		province: '',
+		postal_code: ''
+	};
+
+	if (raw.address && typeof raw.address === 'object') {
+		const a = raw.address as Record<string, unknown>;
+		address.address_no =
+			typeof a.house_no === 'string'
+				? a.house_no
+				: typeof a.address_no === 'string'
+					? a.address_no
+					: '';
+		address.village_no =
+			typeof a.village_no === 'string' ? a.village_no : typeof a.moo === 'string' ? a.moo : '';
+		address.subdistrict =
+			typeof a.subdistrict === 'string'
+				? a.subdistrict
+				: typeof a.tambon === 'string'
+					? a.tambon
+					: '';
+		address.district =
+			typeof a.district === 'string' ? a.district : typeof a.amphur === 'string' ? a.amphur : '';
+		address.province =
+			typeof a.province === 'string'
+				? a.province
+				: typeof a.changwat === 'string'
+					? a.changwat
+					: '';
+		address.postal_code =
+			typeof a.postal_code === 'string'
+				? a.postal_code
+				: typeof a.postcode === 'string'
+					? a.postcode
+					: '';
+	} else if (typeof raw.formatted_address === 'string' && raw.formatted_address) {
+		address.address_no = raw.formatted_address;
+	}
+
+	const phone =
+		typeof raw.phone_number === 'string'
+			? raw.phone_number
+			: typeof raw.phone === 'string'
+				? raw.phone
+				: null;
+
+	return {
+		id: `thaid-${pid || claims.sub}`,
+		roleLabel: 'ผู้ลงทะเบียนผ่าน ThaiD',
+		person_id: pid,
+		first_name: firstName,
+		last_name: lastName,
+		nickname: '',
+		gender,
+		birth_year: birthYear,
+		age,
+		phone,
+		vulnerable_groups: [],
+		special_needs: [],
+		medical_conditions: [],
+		address
+	};
 }

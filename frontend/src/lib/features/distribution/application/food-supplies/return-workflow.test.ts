@@ -1320,7 +1320,7 @@ describe('return-workflow', () => {
 		});
 	});
 
-	describe('P1-02 / CR-129: Bulk Return Claim Coordination & Recovery (clearLoanViaBulkPool)', () => {
+	describe('P1-02 / CR-134: Bulk Return Claim Coordination & Recovery (clearLoanViaBulkPool)', () => {
 		const OP_ULID = '01J00000000000000000000100';
 		describe('P1-05 Physical Stock Receive RBAC Alignment', () => {
 			it('A. registration_staff counter physical return -> authorization error before side effects', async () => {
@@ -2957,7 +2957,7 @@ describe('return-workflow', () => {
 		});
 
 		it('30. direct-return-vs-bulk-clear concurrency remains explicitly deferred', () => {
-			// CR-129 §2.2 / §8: Race condition between counter returnLoanAtCounter and clearLoanViaBulkPool
+			// CR-134 §2.2 / §8: Race condition between counter returnLoanAtCounter and clearLoanViaBulkPool
 			// on the exact same DistributionLog is an acknowledged deferred scope boundary.
 			// Both operations rely on CouchDB document-level CAS on distribution_log to prevent double-return.
 			expect(true).toBe(true);

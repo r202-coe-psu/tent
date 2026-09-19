@@ -628,7 +628,7 @@ describe('openNeeds', () => {
 			{
 				title: 'น้ำดื่ม',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -654,7 +654,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -695,7 +695,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'closed' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'closed' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -962,7 +962,7 @@ describe('deriveNeedAvailability', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -1599,7 +1599,7 @@ describe('forceCutOffNeed + reopenNeed (T-22 manual force cut-off)', () => {
 			{
 				title: 'ของใช้จำเป็น',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},

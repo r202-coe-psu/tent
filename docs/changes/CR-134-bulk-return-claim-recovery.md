@@ -1,5 +1,5 @@
 ---
-id: CR-129
+id: CR-134
 title: ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery)
 status: proposed
 date: 2026-09-17
@@ -28,7 +28,7 @@ affects:
    - เพิ่มแถวใน `docs/changes/_index.md`
 -->
 
-# CR-129: ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery)
+# CR-134: ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery)
 
 > [!NOTE]
 > **สรุป (TL;DR):** แก้ปัญหา P1-02 โดยเพิ่มเอกสารประสานงานแบบ Deterministic ชนิดใหม่ **`bulk_return_claim:{distributionLogUlid}`** (`schema_v 1`) ผูกมัดสิทธิ์การเคลียร์กับรายการยืมรายตัวอย่างถาวร ป้องกันการแย่งสิทธิ์เคลียร์ซ้ำด้วย Operation ID ที่ต่างกัน · ปรับ `bulk_return_pool` สู่ **`schema_v 2`** เพิ่ม `claim_ids: string[]` บันทึก Claim Document ID เต็มรูปแบบในระดับพูล พร้อมรองรับ **In-Place Lazy Upgrade** สำหรับพูล v1 ที่เปิดใช้งานอยู่หน้างานโดยไม่ต้องรันสคริปต์ Migration · เพิ่มกลไก **Pre-flight Quota Check** ปฏิเสธคำสั่งก่อนสร้างเอกสาร และ **ABORTED Re-initialization Contract** ให้สามารถเริ่มรายการใหม่ผ่าน CAS ได้โดยไม่ล็อก Log ถาวร · แยกแยะความล้มเหลวชั่วคราว (Transient Errors) ไม่ให้กลายเป็นสถานะ `ABORTED` โดยไม่จำเป็น · บังคับความเท่ากันของยอดคืนสุดท้ายอย่างเคร่งครัด (`new_qty_returned == log.qty`) ก่อนปิดภาระยืม · ยืนยันการตรวจรับพัสดุครั้งเดียว ไม่สร้างแถว `stock_ledger` ซ้ำซ้อน

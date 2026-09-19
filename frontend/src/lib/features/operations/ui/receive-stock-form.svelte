@@ -12,7 +12,13 @@
 		type WalkInDonationInput
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		itemMasterUnit,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
@@ -33,6 +39,8 @@
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -418,7 +426,7 @@
 											<span
 												class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
 											>
-												หน่วย: {item.unit}
+												หน่วย: {formatUnit(item.unit, units, langState.current)}
 											</span>
 										</button>
 									{/each}

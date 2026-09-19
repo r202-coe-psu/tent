@@ -27,6 +27,7 @@ export {
 export {
 	hasMinimumResidence,
 	matchesResidenceAddress,
+	normThaiAddressText,
 	suggestHouseholdsByResidence,
 	isJoinableHouseholdStatus,
 	type ResidenceFields,

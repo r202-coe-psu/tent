@@ -7,7 +7,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { env } from '$env/dynamic/public';
-	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -17,14 +16,14 @@
 		useCreateUnassignedRegistration,
 		useShelterPolicy
 	} from '../application/queries';
+	import type { ShelterSummary } from '$lib/features/shelters';
 	import type { BookingTicket } from '../application/booking-store.svelte';
-	import { getLatestStoredTicket, saveTicketToStorage } from '../data/ticket-storage';
+	import { saveTicketToStorage } from '../data/ticket-storage';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
-	import type { ShelterSummary } from '$lib/features/shelters/index.js';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
@@ -32,10 +31,9 @@
 		shelters: (PublicShelterCardModel & { available: number | null })[];
 		lockedShelterCode?: string;
 		onbooked: (ticket: BookingTicket) => void;
-		onviewexistingticket?: () => void;
 	}
 
-	let { shelters, lockedShelterCode = '', onbooked, onviewexistingticket }: Props = $props();
+	let { shelters, lockedShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
@@ -63,9 +61,7 @@
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
 
-	let latestExistingTicket = $state<BookingTicket | null>(null);
 	onMount(() => {
-		latestExistingTicket = getLatestStoredTicket();
 		void fetchRecaptchaEnabled().then((enabled) => {
 			captchaEnabled = enabled;
 		});
@@ -220,34 +216,6 @@
 		</div>
 	</div>
 
-	<!-- Existing ticket notice (if any) -->
-	{#if latestExistingTicket && onviewexistingticket}
-		<div
-			class="flex flex-col gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div class="flex items-center gap-3">
-				<QrCode class="h-5 w-5 shrink-0 text-emerald-600" />
-				<div>
-					<p class="text-sm font-bold text-foreground">
-						มีตั๋วลงทะเบียนเดิมในอุปกรณ์นี้ ({latestExistingTicket.code})
-					</p>
-					<p class="text-xs text-muted-foreground">
-						{latestExistingTicket.shelter_name || latestExistingTicket.shelter_code} · {latestExistingTicket.first_name}
-					</p>
-				</div>
-			</div>
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				class="w-full font-semibold sm:w-auto"
-				onclick={onviewexistingticket}
-			>
-				เปิดดูตั๋วเดิม
-			</Button>
-		</div>
-	{/if}
-
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
 	<section class="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-2xs sm:p-6">
 		<div class="flex items-center gap-2.5 border-b border-border/60 pb-3">
@@ -257,10 +225,12 @@
 
 		<div class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
-				<Label>{t.shelterLabel} <span class="text-destructive">*</span></Label>
+				<Label class="text-xs font-semibold text-foreground">
+					{t.shelterLabel} <span class="text-destructive">*</span>
+				</Label>
 				{#if selected && selected.capacity > 0}
 					<span
-						class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-bold text-success"
+						class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-semibold text-success"
 					>
 						{capacityLabel(selected)}
 					</span>
@@ -275,7 +245,7 @@
 				}}
 				disabled={Boolean(lockedShelterCode)}
 			>
-				<Select.Trigger class="!h-11 w-full font-semibold">
+				<Select.Trigger class="!h-10 w-full text-sm font-semibold">
 					{isUnassigned ? '📍 ไม่ระบุศูนย์พักพิง' : (selected?.name ?? t.selectShelterPlaceholder)}
 				</Select.Trigger>
 				<Select.Content>
@@ -355,7 +325,14 @@
 			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
+			shelterName={selected?.name ?? (isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : selectedShelterCode)}
 			onsubmit={handleUnifiedSubmit}
+			onselectshelter={(code, name) => {
+				if (code && selectedShelterCode !== code) {
+					selectedShelterCode = code;
+					toast.success(`เปลี่ยนศูนย์พักพิงเป็น "${name || code}" เรียบร้อยแล้ว`);
+				}
+			}}
 			submitLabel="ยืนยันการลงทะเบียน"
 		>
 			{#snippet children({ household })}

@@ -11,9 +11,13 @@
 		type MealPlan
 	} from '$lib/features/kitchen';
 	import { qtyGte } from '$lib/utils/qty';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	const requisitions = useRequisitions();
 	const plans = useMealPlans();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	// meal_plan_id is a ulid _id (not a deterministic date:meal string) — look
 	// the plan up directly by id instead of parsing it out of the id, same
@@ -120,7 +124,7 @@
 													{item.qty_issued}
 												</span>
 												/ {item.qty_requested}
-												{item.unit}
+												{formatUnit(item.unit, units, langState.current)}
 											</li>
 										{/each}
 									</ul>

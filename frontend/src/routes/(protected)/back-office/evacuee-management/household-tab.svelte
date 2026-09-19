@@ -62,6 +62,11 @@
 			label: 'ยกเลิกการจอง',
 			colorClass:
 				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+		},
+		merged: {
+			label: 'รวมแล้ว',
+			colorClass:
+				'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800'
 		}
 	} satisfies Record<HouseholdStatus, { label: string; colorClass: string }>;
 

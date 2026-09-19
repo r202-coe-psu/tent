@@ -23,8 +23,29 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { CatalogRemoteRepository } from './catalog.remote';
 import type { AuthorContext } from '$lib/db/model';
+import type { UnitOfMeasure } from '../domain/unit-of-measure';
+import type { ItemMaster } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
+
+async function seedUnitMaster() {
+	for (const [code, label, dimension] of [
+		['kg', 'กิโลกรัม', 'mass'],
+		['bottle', 'ขวด', 'count'],
+		['sachet', 'ซอง', 'count'],
+		['piece', 'ชิ้น', 'count']
+	] as const) {
+		await getDb('catalog').put({
+			_id: `unit_of_measure:${code}`,
+			type: 'unit_of_measure',
+			code,
+			label_th: label,
+			label_en: code,
+			dimension,
+			deactivated: false
+		});
+	}
+}
 
 describe('CatalogRemoteRepository', () => {
 	let repo: CatalogRemoteRepository;
@@ -32,6 +53,7 @@ describe('CatalogRemoteRepository', () => {
 	beforeEach(async () => {
 		dbs.clear();
 		repo = new CatalogRemoteRepository();
+		await seedUnitMaster();
 	});
 
 	it('should deactivate central recipe when deleted even if not used by any meal plan', async () => {
@@ -287,7 +309,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'บะหมี่สำเร็จรูป',
-					base_unit: 'ซอง',
+					base_unit: 'sachet',
 					category: 'อาหารแห้งเฉพาะศูนย์ SH001',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -315,7 +337,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'น้ำดื่มบรรจุขวด',
-					base_unit: 'ขวด',
+					base_unit: 'bottle',
 					category: 'เครื่องดื่ม',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -367,6 +389,185 @@ describe('CatalogRemoteRepository', () => {
 
 			const removed = await repo.getItemCategory(category._id, 'SH001');
 			expect(removed).toBeNull();
+		});
+	});
+
+	describe('UnitOfMeasure & AC-03 validation in repository', () => {
+		it('rejects createItemMaster when base_unit is Thai string (AC-03)', async () => {
+			await expect(
+				repo.createItemMaster(
+					{
+						name: 'ข้าวสารหอมมะลิ',
+						base_unit: 'กิโลกรัม',
+						type_class: 'CONSUMABLE',
+						distribution_type: 'recurring'
+					},
+					ctx
+				)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
+		it('allows legacy item_master edits when base_unit is unchanged', async () => {
+			const legacy = await getDb('catalog').put({
+				_id: 'item_master:legacy',
+				type: 'item_master',
+				base_unit: 'กิโลกรัม',
+				name: 'รายการเดิม',
+				updated_at: '2026-08-01T00:00:00.000Z'
+			});
+
+			const updated = await repo.updateItemMaster({
+				...legacy,
+				name: 'รายการเดิมแก้ไข'
+			} as unknown as ItemMaster);
+			expect(updated.name).toBe('รายการเดิมแก้ไข');
+			expect(updated.base_unit).toBe('กิโลกรัม');
+
+			await expect(
+				repo.updateItemMaster({ ...legacy, base_unit: 'หน่วยใหม่' } as unknown as ItemMaster)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
+		it('creates and lists units of measure sorted by sort_order', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
+			await repo.createUnitOfMeasure(
+				{
+					code: 'bottle',
+					label_th: 'ขวด',
+					label_en: 'bottle',
+					dimension: 'count',
+					sort_order: 10
+				},
+				ctx
+			);
+
+			await repo.createUnitOfMeasure(
+				{
+					code: 'piece',
+					label_th: 'ชิ้น',
+					label_en: 'pcs',
+					dimension: 'count',
+					sort_order: 1
+				},
+				ctx
+			);
+
+			const list = await repo.listUnitsOfMeasure();
+			expect(list).toHaveLength(2);
+			expect(list[0].code).toBe('piece');
+			expect(list[1].code).toBe('bottle');
+		});
+
+		it('protects is_protected unit of measure from code/dimension modification and deletion', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'kg',
+					label_th: 'กิโลกรัม',
+					label_en: 'kg',
+					dimension: 'mass',
+					is_protected: true
+				},
+				ctx
+			);
+
+			// Updating labels is allowed for protected units
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'กิโลกรัม (แก้ไข)'
+			});
+			expect(updated.label_th).toBe('กิโลกรัม (แก้ไข)');
+
+			// Attempting to change code or dimension must be rejected
+			await expect(
+				repo.updateUnitOfMeasure({
+					...uom,
+					code: 'kilogram'
+				})
+			).rejects.toThrow(/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/);
+
+			await expect(
+				repo.updateUnitOfMeasure({
+					...uom,
+					dimension: 'volume'
+				})
+			).rejects.toThrow(/ไม่สามารถแก้ไขรหัสหรือมิติการวัดของหน่วยนับมาตรฐานได้/);
+
+			// Attempting to delete must be rejected
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/ไม่สามารถลบหน่วยนับมาตรฐานของระบบได้/
+			);
+		});
+
+		it('keeps custom UOM codes immutable and merges the latest persisted document', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
+				},
+				ctx
+			);
+
+			// Simulate a newer server-side field written after the caller read `uom`.
+			await getDb('catalog').put({ ...uom, server_note: 'keep-me' });
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'ลังสินค้า'
+			});
+
+			expect(updated.label_th).toBe('ลังสินค้า');
+			expect((updated as UnitOfMeasure & { server_note?: string }).server_note).toBe('keep-me');
+			await expect(repo.updateUnitOfMeasure({ ...uom, code: 'box' })).rejects.toThrow(
+				/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/
+			);
+		});
+
+		it('blocks deletion of a custom UOM while it is referenced by an item master', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
+				},
+				ctx
+			);
+			await repo.createItemMaster(
+				{
+					name: 'ลังสินค้า',
+					base_unit: 'crate',
+					type_class: 'CONSUMABLE',
+					distribution_type: 'recurring'
+				},
+				ctx
+			);
+
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/ไม่สามารถลบหน่วยนับ "crate" ได้ เนื่องจากมีรายการสินค้าอ้างอิงอยู่/
+			);
+		});
+
+		it('successfully deletes an unreferenced custom UOM', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'unreferenced_box',
+					label_th: 'กล่องทดสอบ',
+					label_en: 'test box',
+					dimension: 'count'
+				},
+				ctx
+			);
+			const wasDeleted = await repo.deleteUnitOfMeasure(uom._id);
+			expect(wasDeleted).toBe(true);
+
+			const found = await repo.getUnitOfMeasure(uom._id);
+			expect(found).toBeNull();
 		});
 	});
 });

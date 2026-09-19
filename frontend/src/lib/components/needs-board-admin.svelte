@@ -7,6 +7,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero } from '$lib/utils/qty';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		items = [],
@@ -19,6 +21,9 @@
 		onToggleShowOnHome: (id: string) => void;
 		onToggleCutOff: (id: string, itemId: string) => void;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	let searchQuery = $state('');
 
@@ -125,7 +130,7 @@
 											</div>
 											<span class="text-muted-foreground">
 												จอง: {need.reserved} · คลัง: {need.onHand} / เป้าหมาย: {need.target}
-												{need.unit} ({progressPercent}%)
+												{formatUnit(need.unit, units, langState.current)} ({progressPercent}%)
 											</span>
 										</div>
 										<div

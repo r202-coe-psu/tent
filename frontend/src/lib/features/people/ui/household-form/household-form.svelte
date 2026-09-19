@@ -22,7 +22,8 @@
 		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
 		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
 		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
-		cancelled: { label: 'ยกเลิก', variant: 'destructive' }
+		cancelled: { label: 'ยกเลิก', variant: 'destructive' },
+		merged: { label: 'รวมแล้ว', variant: 'secondary' }
 	};
 	import HouseholdFormHeadSection from './household-form-head-section.svelte';
 	import HouseholdFormMembersSection from './household-form-members-section.svelte';

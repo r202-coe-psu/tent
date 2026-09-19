@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-17
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; CR-129 bulk_return_claim (schema_v 1) and bulk_return_pool (schema_v 2)
+updated: 2026-09-18
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; CR-134 bulk_return_claim (schema_v 1) and bulk_return_pool (schema_v 2)
 ---
 
 # Database Schema v5 — field-level
@@ -1036,9 +1036,9 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 ได้รับคืน, clear, lost, waived หรือ bulk drop-off แล้ว. `bulk_pool_id` จำกัดการ clear ตาม
 `unclaimed_quota` ของกองรวมนั้น.
 
-### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 2** (CR-121, CR-129)
+### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 2** (CR-121, CR-134)
 
-> **schema_v 2** (CR-129) — เพิ่ม `claim_ids: [str]` เก็บรายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จเพื่อเป็น durable identity สำหรับ Crash Recovery ข้ามเอกสาร; บังคับตัดโควตาพร้อม append `claim_ids` แบบ Atomic ภายใต้ Pool CAS; ห้ามลด schema_v กลับเป็น 1; รองรับ In-place Lazy Upgrade สำหรับพูล active v1.
+> **schema_v 2** (CR-134) — เพิ่ม `claim_ids: [str]` เก็บรายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จเพื่อเป็น durable identity สำหรับ Crash Recovery ข้ามเอกสาร; บังคับตัดโควตาพร้อม append `claim_ids` แบบ Atomic ภายใต้ Pool CAS; ห้ามลด schema_v กลับเป็น 1; รองรับ In-place Lazy Upgrade สำหรับพูล active v1.
 > **schema_v 1** (CR-121) — โครงสร้างเริ่มต้น (aggregate quota).
 
 เอกสารควบคุมโควตารับคืนพัสดุคงทนแบบกองรวม (Hybrid Auto-Pool Guard) ใน `shelter_{shelter_code}`
@@ -1055,7 +1055,7 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 | `total_received_qty` | qty_str>0 | req | จำนวนของจริงที่คลังตรวจรับเข้ากองรวม |
 | `claimed_qty` | qty_str≥0 | req | จำนวนที่ด่าน Check-out กดเคลียร์ตัดสิทธิ์ไปแล้ว; default `"0"` |
 | `unclaimed_quota` | qty_str≥0 | req | โควตาคงเหลือที่ยังกดเคลียร์ได้ (`total_received_qty - claimed_qty`) |
-| `claim_ids` | [str] | req | รายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จ; v2 initialize เป็น `[]`; ห้ามมี ID ซ้ำ (CR-129) |
+| `claim_ids` | [str] | req | รายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จ; v2 initialize เป็น `[]`; ห้ามมี ID ซ้ำ (CR-134) |
 | `status` | enum(`ACTIVE`,`EXHAUSTED`,`CLOSED`) | req | `ACTIVE` (ยังมีโควตา), `EXHAUSTED` (โควตาหมดแล้ว), `CLOSED` (ปิดกะกระทบยอดแล้ว) |
 | `closed_at` / `closed_by` | ts / str | opt | เวลาและผู้ปิด Pool เมื่อสิ้นสุดกะ |
 | `notes` | str | opt | หมายเหตุ |
@@ -1077,7 +1077,7 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
   - `status: 'EXHAUSTED'` หากโควตาหมด
   ทั้งหมดสำเร็จพร้อมกันใน CouchDB Single Document Update เดียวกัน ไม่ต้องใช้ Migration Script
 
-### 2.32 `bulk_return_claim` — `bulk_return_claim:{distributionLogUlid}` · **schema_v 1** (CR-129)
+### 2.32 `bulk_return_claim` — `bulk_return_claim:{distributionLogUlid}` · **schema_v 1** (CR-134)
 
 เอกสารประสานงานความคงทนและฟื้นฟูการเคลียร์ของยืมแบบกองรวม (Bulk Return Claim Coordination & Crash Recovery) ใน `shelter_{shelter_code}`
 สร้างขึ้นเพื่อเป็น Durable Coordination Record รับประกัน Idempotency และ Crash Recovery ข้ามเอกสารระหว่าง `bulk_return_pool` (§2.31)
@@ -1170,6 +1170,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
+> **schema_v 6** — เพิ่ม `food_distribution_points` (จุดแจกอาหาร — named spot + optional lat/lng; staff-only plane) ([CR-128](../changes/CR-128-shelter-food-distribution-points-and-single-page-form.md)). optional ⇒ doc เดิมไม่ต้อง backfill.
 > **schema_v 5** — เพิ่ม `site_kind` เพื่อแยกศูนย์อพยพกับบ้านพี่เลี้ยงโดยใช้ doc type `shelter` เดิม (CR-067).
 > **schema_v 4** — ขยาย shelter form v4/v5: structured address, project level, key personnel,
 > zone area/specifics, admission/luggage/parking policy และ risk/common-area เพิ่มเติม. CR-023.
@@ -1203,6 +1204,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `utilities` | {`power_source`:enum(`city_grid`,`generator`,`solar`)\|null, `water_source`:enum(`city_water`,`water_tank`,`groundwater`)\|null, `communications`:[enum(`cellular`,`wifi`,`vhf_radio`)], `vhf_channel`:str\|null} | opt | utility profile ของศูนย์ |
 | `risk` | {`elevation_m`:num≥0?, `entrance_description`:str?, `constraints`:str?, `secondary_muster_point`:str?} | opt | ความเสี่ยงและข้อจำกัดเชิงกายภาพ |
 | `zones` | [{`code`:str, `name`:str, `capacity`:int>0, `type`:enum(`general`,`male`,`female`,`vulnerable`,`pet`,`quarantine`), `status`:enum(`active`,`closed`), `closed_at`:ts\|null, `closed_by`:str\|null, `reopened_at`:ts\|null, `reopened_by`:str\|null, `reason`:str\|null, `area_m2`:num≥0?, `specifics`:str?}] | req | โครงสร้างโซน + state |
+| `food_distribution_points` | [{`id`:str, `name`:str, `note`:str\|null, `lat`:num\|null, `lng`:num\|null}] | opt | จุดแจกอาหาร (schema_v 6, CR-128) — `id` = ULID, `name` required, `lat` −90..90 / `lng` −180..180; default `[]`; **staff-only plane** (ไม่ส่งออก public/external API), ไม่ผูก `zones[]`, ไม่มี feature flag |
 | `admission_policy` | {`supported_vulnerable_groups`:[str], `pet_policy`:{`policy`:enum(`no_pets`,`conditional`)\|null, `categories`:[{`category`:enum(`small_general`,`large_dog`,`livestock`), `conditions`:[str]?, `max_capacity`:int≥0?, `location`:str?, `other`:str?}]}} | opt | section นโยบายการรับผู้อพยพ/สัตว์ |
 | `luggage_policy` | {`limitation`:enum(`no_limit`,`limited`)\|null, `max_per_family`:int≥0\|null, `rules`:[enum(`valuables_self_responsibility`,`no_hazardous_items`,`no_large_appliances`,`has_temp_storage_service`)], `rules_other`:str\|null} | opt | section นโยบายทรัพย์สิน/สัมภาระ |
 | `parking_policy` | {`availability`:enum(`none`,`available`)\|null, `supported_vehicles`:[{`type`:enum(`motorcycle`,`car`,`truck`,`boat`), `max_capacity`:int≥0\|null}], `rules`:[enum(`no_liability`,`first_come_first_served`,`key_deposit_required`,`no_blocking_emergency_lane`,`ev_emergency_charging`)], `rules_other`:str\|null} | opt | section นโยบายยานพาหนะ |
@@ -1213,6 +1215,8 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 **Migration (schema_v 3 → 4):** additive default-fill บน read/write — field ใหม่เติม `null`/`[]`/default object ตาม domain schema; `status` เดิม migrate เป็น `operation_status` (`open`→`active`, `closed`→`closed`).
 
 **Migration (schema_v 4 → 5, CR-067):** `site_kind` เป็น required สำหรับ shelter ที่สร้าง/เขียนใหม่. Reader ของเอกสาร v4 ที่ไม่มี field ให้ default เป็น `evacuation_center` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเอกสารเดิมถูกเขียนใหม่ ให้ persist `site_kind` และ `schema_v: 5`. `code` ยังคงใช้ pattern `SH\d{3,}` และ database name `shelter_{code}`; ไม่มี sequence `HH` แยก.
+
+**Migration (schema_v 5 → 6, CR-128):** purely additive — `food_distribution_points` เป็น array ใหม่ default `[]`. Reader ของเอกสาร v5 ที่ไม่มี field ให้ default-fill `[]` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเขียนใหม่ stamp `schema_v: 6`; `scripts/migrate-shelter.ts` re-stamp เอกสารเดิมเป็น v6 พร้อมเติม `[]`. ไม่มี rename/semantic change.
 
 ### 3.2 `config` — `config:app` (singleton)
 

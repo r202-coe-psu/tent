@@ -3,6 +3,7 @@ import {
 	createItemMaster,
 	isItemMaster,
 	itemMasterInputSchema,
+	itemMasterUpdateInputSchema,
 	createItemCategory,
 	isItemCategory,
 	itemCategoryInputSchema,
@@ -71,7 +72,7 @@ describe('catalog domain', () => {
 			label: 'ข้าวผัดไข่มาตรฐาน',
 			ingredients: [
 				{ item_master_id: 'item_master_rice_123', quantity: 10, uom: 'kg' },
-				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'ชิ้น' }
+				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'piece' }
 			],
 			standard_portions: 100,
 			standard_duration_hours: 1.5
@@ -85,7 +86,7 @@ describe('catalog domain', () => {
 	it('should create recipe doc with recipe: prefix', () => {
 		const input = {
 			label: 'แกงจืดเต้าหู้หมูสับ',
-			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
+			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'tube' }],
 			standard_portions: '50',
 			standard_duration_hours: '0.5'
 		};
@@ -214,7 +215,7 @@ describe('catalog domain', () => {
 		// Consumable
 		const consumableInput = {
 			name: 'นมสด',
-			base_unit: 'ขวด',
+			base_unit: 'bottle',
 			distribution_type: 'recurring' as const,
 			type_class: 'CONSUMABLE' as const,
 			shelf_life_days: 7,
@@ -231,7 +232,7 @@ describe('catalog domain', () => {
 		// Durable
 		const durableInput = {
 			name: 'เต็นท์พักแรม',
-			base_unit: 'หลัง',
+			base_unit: 'unit',
 			distribution_type: 'one_time' as const,
 			type_class: 'DURABLE' as const,
 			qty_per_person: 0.5,
@@ -257,10 +258,10 @@ describe('catalog domain', () => {
 
 		const equipmentDoc = createItemMaster(equipmentInput, ctx);
 		expect(equipmentDoc.asset_status).toBe('READY');
-		expect(equipmentDoc.base_unit).toBe('ชิ้น');
+		expect(equipmentDoc.base_unit).toBe('piece');
 	});
 
-	it('should enforce required fields conditionally', () => {
+	it('should enforce required fields conditionally and reject non-code base_unit', () => {
 		// For Consumable/Durable, base_unit is required
 		expect(() =>
 			itemMasterInputSchema.parse({
@@ -270,11 +271,30 @@ describe('catalog domain', () => {
 			})
 		).toThrow();
 
+		// base_unit must be lowercase English code (reject Thai labels)
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'กิโลกรัม',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'ชิ้น',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
 		// For Consumable/Durable, distribution_type is required
 		expect(() =>
 			itemMasterInputSchema.parse({
 				name: 'นมสด',
-				base_unit: 'ขวด',
+				base_unit: 'bottle',
 				type_class: 'CONSUMABLE' as const
 			})
 		).toThrow();
@@ -286,5 +306,24 @@ describe('catalog domain', () => {
 				type_class: 'EQUIPMENT' as const
 			})
 		).toThrow();
+	});
+
+	it('allows known legacy base_unit labels only for updates', () => {
+		const legacy = itemMasterUpdateInputSchema.parse({
+			name: 'ข้าวสารเดิม',
+			base_unit: 'กิโลกรัม',
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
+		});
+		expect(legacy.base_unit).toBe('กิโลกรัม');
+
+		expect(() =>
+			itemMasterUpdateInputSchema.parse({
+				name: 'ข้าวสารใหม่',
+				base_unit: 'หน่วยเดิมที่ไม่รู้จัก',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
 	});
 });
