@@ -58,12 +58,15 @@
 		isOpen = $bindable(false),
 		onSubmit,
 		applicantProfile = null,
-		applicantCredential = null
+		applicantCredential = null,
+		showExistingProfileConfirmation = true
 	} = $props<{
 		job: QuickApplyJob | null;
 		isOpen: boolean;
 		applicantProfile?: VolunteerProfile | null;
 		applicantCredential?: PortalCredential | null;
+		/** Keep the existing-profile confirmation on the public application flow only. */
+		showExistingProfileConfirmation?: boolean;
 		onSubmit?: (data: {
 			firstName?: string;
 			lastName?: string;
@@ -443,8 +446,15 @@
 				return;
 			}
 			if (preflight.match === 'matched_one') {
-				preflightResult = preflight;
-				confirmationOpen = true;
+				if (showExistingProfileConfirmation) {
+					preflightResult = preflight;
+					confirmationOpen = true;
+				} else {
+					// A signed-in portal volunteer has already identified this profile.
+					// Keep the re-application confirmation for the public flow only.
+					isSubmitting = false;
+					await submitApplication();
+				}
 				return;
 			}
 			isSubmitting = false;
