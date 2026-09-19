@@ -9,6 +9,8 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import type { ScanDonationView } from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	/**
 	 * `initialQuery` — set when opened from the "กำลังตรวจรับ (Verifying)" tab
@@ -47,6 +49,8 @@
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	/**
 	 * Lot labels the server minted on the last successful receive (CR-088). Staff
 	 * write these on the physical boxes, so they must survive the form resetting
@@ -76,7 +80,7 @@
 					key: `${it.item_id ?? it.free_text ?? 'line'}-${i}`,
 					name: it.free_text || it.item_id || 'ไม่ระบุชื่อสินค้า',
 					qty: it.qty != null && it.qty !== '' ? String(it.qty) : '0',
-					unit: it.unit || 'ชิ้น',
+					unit: it.unit || 'piece',
 					item_id: it.item_id,
 					expiry: '',
 					storage_zone: ''
@@ -313,9 +317,9 @@
 											bind:value={item.qty}
 											class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
 										/>
-										<span class="w-12 text-2xs font-semibold text-muted-foreground"
-											>{item.unit}</span
-										>
+										<span class="w-12 text-2xs font-semibold text-muted-foreground">
+											{formatUnit(item.unit, units, langState.current)}
+										</span>
 									</div>
 								</div>
 								{#if item.item_id}

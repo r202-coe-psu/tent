@@ -2,6 +2,7 @@ import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { supplyRepository } from '$lib/features/supply';
+import { catalogRepository, itemMasterUnit } from '$lib/features/catalog';
 import {
 	useCampaigns,
 	useStockLedgers,
@@ -51,13 +52,22 @@ function buildCampaignNotes(input: {
 	return parts.join(' ');
 }
 
-async function warnIfItemNotInCatalog(itemId: string, displayName: string): Promise<void> {
-	const catalogItem = await supplyRepository().getItem(itemId);
-	if (!catalogItem) {
-		toast.warning(
-			`"${displayName}" ไม่พบในแคตตาล็อก — ระบบจะใช้รหัส ${itemId} ชั่วคราว กรุณาตรวจสอบก่อนเปิดรับบริจาค`
-		);
-	}
+async function resolveNeedCatalogItem(itemId: string, displayName: string) {
+	const supplyItem = await supplyRepository().getItem(itemId);
+	if (supplyItem) return { itemId: supplyItem._id, unit: supplyItem.unit };
+
+	const itemMaster = itemId.startsWith('item_master:')
+		? await catalogRepository().getItemMaster(itemId, getShelterCode())
+		: null;
+	if (itemMaster) return { itemId: itemMaster._id, unit: itemMasterUnit(itemMaster) };
+
+	const matchingMaster = (await catalogRepository().listItemMasters(getShelterCode())).find(
+		(item) => item.name.trim().toLowerCase() === displayName.trim().toLowerCase()
+	);
+	if (matchingMaster) return { itemId: matchingMaster._id, unit: itemMasterUnit(matchingMaster) };
+
+	toast.error(`"${displayName}" ไม่พบใน Item Master — กรุณาเลือกสินค้าที่มีหน่วยมาตรฐานก่อน`);
+	return null;
 }
 
 export function useDonationNeedsBoard(options?: {
@@ -205,17 +215,18 @@ export function useDonationNeedsBoard(options?: {
 		);
 	}
 
-	function handleAddRequest(input: SpecialRequestInput) {
+	async function handleAddRequest(input: SpecialRequestInput) {
 		const itemId = mapNeedItemHeuristic(input.name);
-		void warnIfItemNotInCatalog(itemId, input.name);
+		const item = await resolveNeedCatalogItem(itemId, input.name);
+		if (!item) return;
 
 		const newCampaignInput = {
 			title: input.name,
 			needs: [
 				{
-					item_id: itemId,
+					item_id: item.itemId,
 					qty_target: input.target,
-					unit: 'ชิ้น'
+					unit: item.unit
 				}
 			],
 			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
@@ -238,7 +249,7 @@ export function useDonationNeedsBoard(options?: {
 		);
 	}
 
-	function handleAddRequestFromForm(input: {
+	async function handleAddRequestFromForm(input: {
 		name: string;
 		target: string;
 		location: string;
@@ -248,15 +259,20 @@ export function useDonationNeedsBoard(options?: {
 		description?: string;
 	}) {
 		const itemId = mapNeedItemHeuristic(input.name);
-		void warnIfItemNotInCatalog(itemId, input.name);
+		const item = await resolveNeedCatalogItem(itemId, input.name);
+		if (!item) return;
+		if (input.unit !== item.unit) {
+			toast.error(`หน่วยของ ${input.name} ต้องเป็น ${item.unit} ตาม Item Master`);
+			return;
+		}
 
 		const newCampaignInput = {
 			title: input.name,
 			needs: [
 				{
-					item_id: itemId,
+					item_id: item.itemId,
 					qty_target: input.target,
-					unit: input.unit || 'ชิ้น',
+					unit: item.unit,
 					status: 'open' as const
 				}
 			],
