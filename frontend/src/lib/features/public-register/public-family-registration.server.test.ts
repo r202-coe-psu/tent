@@ -4,11 +4,16 @@ import {
 	PublicRegistrationWriteError
 } from './public-family-registration.server';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
+import { adminRaw } from '$lib/server/couch-admin';
 import type { UnifiedRegistrationInput } from '$lib/features/people/server';
 
 vi.mock('$lib/server/couch-public-writer', () => ({
 	bulkAsPublicWriter: vi.fn(),
 	rollbackAsPublicWriter: vi.fn()
+}));
+
+vi.mock('$lib/server/couch-admin', () => ({
+	adminRaw: vi.fn()
 }));
 
 function sampleInput(over: Partial<UnifiedRegistrationInput> = {}): UnifiedRegistrationInput {
@@ -70,6 +75,7 @@ describe('executePublicFamilyRegistration (#254)', () => {
 	beforeEach(() => {
 		vi.mocked(bulkAsPublicWriter).mockReset();
 		vi.mocked(rollbackAsPublicWriter).mockReset();
+		vi.mocked(adminRaw).mockReset();
 		vi.mocked(bulkAsPublicWriter).mockResolvedValue({
 			status: 201,
 			failed: [],
@@ -110,7 +116,6 @@ describe('executePublicFamilyRegistration (#254)', () => {
 		expect(result.household).toBeDefined();
 		expect(result.evacuees).toHaveLength(2);
 
-		// Household checks
 		expect(result.household.type).toBe('household');
 		expect(result.household.status).toBe('pre_registered');
 		expect(result.household.head_evacuee_id).toBe(result.evacuees[0]._id);
@@ -120,7 +125,6 @@ describe('executePublicFamilyRegistration (#254)', () => {
 		expect(result.household.vehicles).toEqual([{ type: 'car', license_plate: 'กก 1234' }]);
 		expect(result.household.assets?.description).toBe('สร้อยคอทองคำ');
 
-		// Evacuee checks — face photo survives plan → mint
 		expect(result.evacuees[0].photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		for (const evacuee of result.evacuees) {
 			expect(evacuee.type).toBe('evacuee');
@@ -129,11 +133,60 @@ describe('executePublicFamilyRegistration (#254)', () => {
 			expect(evacuee.current_stay.status).toBe('pre_registered');
 		}
 
-		// Verify bulk write call
 		expect(bulkAsPublicWriter).toHaveBeenCalledTimes(1);
-		const [dbName, docs] = vi.mocked(bulkAsPublicWriter).mock.calls[0];
+		const [dbName, docs] = vi.mocked(bulkAsPublicWriter).mock.calls[0]!;
 		expect(dbName).toBe('shelter_sh001');
-		expect(docs).toHaveLength(3); // 1 household + 2 evacuees
+		expect(docs).toHaveLength(3);
+	});
+
+	it('joins an existing Household without minting a new Household or changing head', async () => {
+		vi.mocked(adminRaw).mockResolvedValueOnce({
+			status: 200,
+			data: {
+				_id: 'household:existing',
+				_rev: '3-xyz',
+				type: 'household',
+				label: 'ครอบครัวเดิม',
+				head_evacuee_id: 'evacuee:head',
+				status: 'pre_registered',
+				address_no: '123/45',
+				subdistrict: 'คอหงส์',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				pets: [{ species: 'cat', count: 1 }],
+				vehicles: [],
+				assets: null
+			}
+		});
+		vi.mocked(bulkAsPublicWriter).mockResolvedValueOnce({
+			status: 201,
+			failed: [],
+			written: [
+				{ id: 'evacuee:E1', rev: '1-b' },
+				{ id: 'evacuee:E2', rev: '1-c' },
+				{ id: 'household:existing', rev: '4-abc' }
+			]
+		});
+
+		const result = await executePublicFamilyRegistration(
+			sampleInput({ join_household_id: 'household:existing' }),
+			{ shelterCode: 'SH001' }
+		);
+
+		expect(result.household._id).toBe('household:existing');
+		expect(result.household.head_evacuee_id).toBe('evacuee:head');
+		expect(result.household.address_no).toBe('123/45');
+		expect(result.evacuees.every((e) => e.household_id === 'household:existing')).toBe(true);
+		expect(result.household.pets).toEqual([
+			{ species: 'cat', count: 1 },
+			{ species: 'dog', count: 1 }
+		]);
+
+		const [, docs] = vi.mocked(bulkAsPublicWriter).mock.calls[0]!;
+		const typed = docs as Array<{ _id: string; type?: string }>;
+		expect(typed.some((d) => d.type === 'household' && d._id === 'household:existing')).toBe(true);
+		expect(typed.filter((d) => d.type === 'evacuee')).toHaveLength(2);
+		expect(typed.filter((d) => d.type === 'household')).toHaveLength(1);
 	});
 
 	it('triggers rollbackAsPublicWriter and throws PublicRegistrationWriteError on partial failure', async () => {

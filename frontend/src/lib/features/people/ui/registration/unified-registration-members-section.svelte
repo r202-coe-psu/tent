@@ -23,6 +23,7 @@
 		memberPhotoUpload = 'none',
 		shelterCode = '',
 		membersSectionDesc,
+		isJoiningExistingHousehold = false,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -33,6 +34,7 @@
 		memberPhotoUpload?: MemberPhotoUploadMode;
 		shelterCode?: string;
 		membersSectionDesc: string;
+		isJoiningExistingHousehold?: boolean;
 		onDirty?: () => void;
 	} = $props();
 
@@ -56,6 +58,14 @@
 			if (index === 0 || members.length <= 1) return;
 		}
 		members = members.filter((_, i) => i !== index);
+		onDirty?.();
+	}
+
+	function applyZoneToAll(zoneCode: string) {
+		for (const m of members) {
+			m.zone = zoneCode;
+		}
+		members = [...members];
 		onDirty?.();
 	}
 </script>
@@ -107,6 +117,8 @@
 				{channel}
 				excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 				fieldErrors={memberFieldErrors[index]}
+				isJoiningExistingHousehold={isJoiningExistingHousehold && index > 0}
+				onApplyZoneToAll={applyZoneToAll}
 				onRemove={() => removeMember(index)}
 			/>
 		{/each}

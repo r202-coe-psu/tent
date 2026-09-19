@@ -25,6 +25,6 @@
 		<main class="flex-1">
 			{@render children?.()}
 		</main>
-		<PublicFooter />
+		<PublicFooter configData={data.configData} />
 	</div>
 {/if}

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { makeDoc, catalogDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
-import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
 import { qtyStrPositiveSchema } from '$lib/utils/qty';
 
 export const SOP_RATIO_KEYS = [

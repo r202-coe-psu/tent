@@ -10,6 +10,8 @@
 		BookingTicketView,
 		TicketHistory,
 		getStoredTickets,
+		removeStoredTicket,
+		checkTicketStatus,
 		type BookingTicketModel
 	} from '$lib/features/public-register';
 	import {
@@ -18,6 +20,7 @@
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 
 	interface Props {
 		data: {
@@ -35,6 +38,32 @@
 	let isLoading = $state(true);
 
 	let storedTicketsCount = $state(0);
+
+	async function syncTicketsStatus() {
+		const current = getStoredTickets();
+		if (current.length === 0) {
+			storedTicketsCount = 0;
+			return;
+		}
+
+		let anyVerified = false;
+		for (const t of current) {
+			try {
+				const res = await checkTicketStatus(t.code);
+				if (res.verified) {
+					removeStoredTicket(t.code);
+					anyVerified = true;
+				}
+			} catch {
+				// skip on failure
+			}
+		}
+
+		storedTicketsCount = getStoredTickets().length;
+		if (anyVerified) {
+			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
+		}
+	}
 
 	async function loadInitialData() {
 		try {
@@ -70,6 +99,7 @@
 
 	onMount(() => {
 		storedTicketsCount = getStoredTickets().length;
+		void syncTicketsStatus();
 		void loadInitialData();
 	});
 
@@ -83,7 +113,7 @@
 	<title>ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-6 md:py-8">
+<div class="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
 	<!-- Top Navigation -->
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 		<a
@@ -109,20 +139,23 @@
 			</button>
 			<button
 				type="button"
-				class="inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all {activeTab ===
+				class="relative inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all {activeTab ===
 				'history'
 					? 'bg-card text-foreground shadow-xs ring-1 ring-border/50'
-					: 'text-muted-foreground hover:text-foreground'}"
+					: 'text-muted-foreground hover:text-foreground'} {storedTicketsCount > 0
+					? 'ticket-tab-glow font-bold text-foreground ring-2 ring-primary/60'
+					: ''}"
 				onclick={() => {
 					activeTab = 'history';
 					storedTicketsCount = getStoredTickets().length;
+					void syncTicketsStatus();
 				}}
 			>
 				<History class="size-4" />
 				<span>ประวัติการจองของฉัน</span>
 				{#if storedTicketsCount > 0}
 					<span
-						class="flex size-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
+						class="flex size-5 animate-pulse items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 					>
 						{storedTicketsCount}
 					</span>
@@ -145,12 +178,25 @@
 	<!-- Main Content Area -->
 	{#if activeTab === 'history'}
 		<div class="rounded-2xl border border-border/80 bg-card p-6 shadow-2xs sm:p-8">
-			<TicketHistory onNewBooking={handleNewBooking} />
+			<TicketHistory
+				onNewBooking={handleNewBooking}
+				onTicketsChange={() => {
+					storedTicketsCount = getStoredTickets().length;
+				}}
+			/>
 		</div>
 	{:else if ticket}
 		<div class="space-y-6">
 			<div class="rounded-2xl border border-border/80 bg-card p-6 shadow-2xs sm:p-8">
-				<BookingTicketView {ticket} />
+				<BookingTicketView
+					{ticket}
+					onVerified={(code) => {
+						removeStoredTicket(code);
+						ticket = null;
+						storedTicketsCount = getStoredTickets().length;
+						toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย');
+					}}
+				/>
 			</div>
 
 			<div class="flex flex-wrap items-center justify-between gap-4">
@@ -194,11 +240,28 @@
 						ticket = t;
 						storedTicketsCount = getStoredTickets().length;
 					}}
-					onviewexistingticket={() => {
-						activeTab = 'history';
-					}}
 				/>
 			{/key}
 		</div>
 	{/if}
 </div>
+
+<style>
+	@keyframes ticketTabGlow {
+		0%,
+		100% {
+			box-shadow:
+				0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent),
+				0 0 10px color-mix(in srgb, var(--primary) 30%, transparent);
+		}
+		50% {
+			box-shadow:
+				0 0 0 3px color-mix(in srgb, var(--primary) 85%, transparent),
+				0 0 20px color-mix(in srgb, var(--primary) 60%, transparent);
+		}
+	}
+
+	.ticket-tab-glow {
+		animation: ticketTabGlow 2s ease-in-out infinite;
+	}
+</style>

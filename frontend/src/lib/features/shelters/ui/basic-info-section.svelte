@@ -190,7 +190,10 @@
 	}
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
+<section
+	id="basic-info"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+>
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<MapPin class="h-5 w-5 text-shelter-blue-text" />
 		<span class="text-sm font-bold text-black">1.</span>
@@ -314,9 +317,9 @@
 		คุณสมบัติการปฏิบัติการ (Feature Flags)
 	</h3>
 
-	<div class="space-y-3">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
 			<div class="min-w-0 flex-1 space-y-1">
 				<label for="accepts-pre-registration" class="text-sm font-medium text-card-foreground">
@@ -337,17 +340,14 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="enable-medical-screening" class="text-sm font-medium text-card-foreground">
-					เปิดคัดกรองการแพทย์ (Station 2)
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: ท่อลงทะเบียน S1→S2→S3 — แสดง Station 2 และ Handover Slip หลังลงทะเบียน · ปิด: S1→S3
-					(ข้ามแพทย์) โดยยังแยกโต๊ะจัดโซนจากทะเบียน
-				</p>
-			</div>
+			<label
+				for="enable-medical-screening"
+				class="min-w-0 flex-1 text-sm font-medium text-card-foreground"
+			>
+				เปิดคัดกรองการแพทย์ (Station 2)
+			</label>
 			<Switch
 				id="enable-medical-screening"
 				checked={$formData.feature_flags?.enable_medical_screening ?? false}
@@ -358,17 +358,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-pets" class="text-sm font-medium text-card-foreground">
-					บันทึกสัตว์เลี้ยงตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนสัตว์เลี้ยงในฟอร์มลงทะเบียน และตั้งนโยบายรับสัตว์เป็น “อนุญาตภายใต้เงื่อนไข”
-					· ปิด: ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่อนุญาตสัตว์เลี้ยง”
-				</p>
-			</div>
+			<label for="allow-pets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกสัตว์เลี้ยงตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-pets"
 				checked={$formData.feature_flags?.allow_pets ?? false}
@@ -379,17 +373,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-assets" class="text-sm font-medium text-card-foreground">
-					บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนทรัพย์สินในฟอร์มลงทะเบียน และเปิดนโยบายสัมภาระ · ปิด: ซ่อนส่วนลงทะเบียน
-					และล้างนโยบายสัมภาระ
-				</p>
-			</div>
+			<label for="allow-assets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-assets"
 				checked={$formData.feature_flags?.allow_assets ?? false}
@@ -400,17 +388,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-vehicles" class="text-sm font-medium text-card-foreground">
-					บันทึกยานพาหนะตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนยานพาหนะในฟอร์มลงทะเบียน และตั้งนโยบายจอดรถเป็น “มีพื้นที่จอด” · ปิด:
-					ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่มีที่จอด”
-				</p>
-			</div>
+			<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกยานพาหนะตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-vehicles"
 				checked={$formData.feature_flags?.allow_vehicles ?? false}

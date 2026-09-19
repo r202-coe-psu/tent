@@ -29,6 +29,7 @@ function expectForbidden(run: () => void, match: RegExp): void {
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
+const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 
 const envelope = {
 	schema_v: 2,
@@ -152,6 +153,122 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'item_category'");
 		expect(validateFn).toContain("'item_master'");
 		expect(validateFn).toContain("'recipe'");
+		expect(validateFn).toContain('unit_of_measure is central-only');
+	});
+
+	it('enforces item_master base_unit format and central-only unit_of_measure ownership', () => {
+		const validate = compile('SH001');
+
+		// Valid item_master with lowercase English code
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'kg',
+					...envelope
+				},
+				null,
+				ADMIN
+			)
+		).not.toThrow();
+
+		// Invalid item_master with Thai base_unit
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัม',
+						...envelope
+					},
+					null,
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
+		// A legacy Thai base_unit may remain unchanged while another field is edited.
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					name: 'legacy item updated',
+					base_unit: 'กิโลกรัม',
+					deactivated: true,
+					...envelope
+				},
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'กิโลกรัม',
+					...envelope
+				},
+				ADMIN
+			)
+		).not.toThrow();
+
+		// An unknown legacy typo is not grandfathered just because it is unchanged.
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						name: 'invalid legacy item',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
+		// UOM writes are central-only, including deletes and updates.
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						code: 'custom',
+						dimension: 'count',
+						...envelope
+					},
+					null,
+					WAREHOUSE
+				),
+			/unit_of_measure is central-only/
+		);
+
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						_deleted: true,
+						...envelope
+					},
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						code: 'custom',
+						dimension: 'count',
+						...envelope
+					},
+					WAREHOUSE
+				),
+			/unit_of_measure is central-only/
+		);
 	});
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {

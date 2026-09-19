@@ -24,6 +24,7 @@ import {
 	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -172,8 +173,65 @@ async function syncCatalogAccessDesign(
 	dryRun: boolean
 ): Promise<'already_current' | 'created' | 'updated'> {
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw({ forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' });
+    }
+  }
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    if (newDoc._deleted && oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
+      throw({ forbidden: 'Cannot delete system protected unit of measure' });
+    }
+    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.code !== newDoc.code) {
+      throw({ forbidden: 'Cannot modify code of a unit of measure' });
+    }
+    if (oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
+      if (!newDoc.is_protected) {
+        throw({ forbidden: 'Cannot unprotect a system protected unit of measure' });
+      }
+      if (oldDoc.code !== newDoc.code || oldDoc.dimension !== newDoc.dimension) {
+        throw({ forbidden: 'Cannot modify code or dimension of a protected unit of measure' });
+      }
+    }
+    if (newDoc.type === 'item_master' && newDoc.base_unit &&
+        !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
+        !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit &&
+          isLegacyUnitLabel(newDoc.base_unit))) {
+      throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+    }
+    if (newDoc.type === 'item_master') {
+      validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+      validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+      if (Array.isArray(newDoc.conversions)) {
+        for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+          validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+        }
+      }
+    }
+    if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+      for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+        validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+      }
+    }
+    if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+      for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+        validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
+      }
+    }
     return;
+  }
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw({ forbidden: 'unit_of_measure is central-only' });
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
     throw({ forbidden: 'shelter_code is immutable' });
@@ -183,6 +241,31 @@ async function syncCatalogAccessDesign(
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
     if (hasScope && (isManager || isWS)) {
+      if (newDoc.type === 'item_master' && newDoc.base_unit &&
+          !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) &&
+          !(oldDoc && oldDoc.type === 'item_master' && oldDoc.base_unit === newDoc.base_unit &&
+            isLegacyUnitLabel(newDoc.base_unit))) {
+        throw({ forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' });
+      }
+      if (newDoc.type === 'item_master') {
+        validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+        validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+        if (Array.isArray(newDoc.conversions)) {
+          for (var localConversionIndex = 0; localConversionIndex < newDoc.conversions.length; localConversionIndex++) {
+            validateUnitField(newDoc.conversions[localConversionIndex].uom_name, 'conversions.uom_name');
+          }
+        }
+      }
+      if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+        for (var localIngredientIndex = 0; localIngredientIndex < newDoc.ingredients.length; localIngredientIndex++) {
+          validateUnitField(newDoc.ingredients[localIngredientIndex].uom, 'ingredients.uom');
+        }
+      }
+      if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+        for (var localNeedIndex = 0; localNeedIndex < newDoc.needs.length; localNeedIndex++) {
+          validateUnitField(newDoc.needs[localNeedIndex].unit, 'needs.unit');
+        }
+      }
       return;
     }
   }
@@ -217,6 +300,67 @@ async function syncCatalogAccessDesign(
 		);
 	}
 	return rev ? 'updated' : 'created';
+}
+
+async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; existing: number }> {
+	let created = 0;
+	let existing = 0;
+	const putUnit = async (docId: string, payload: Record<string, unknown>): Promise<void> => {
+		const result = await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, payload);
+		if (result.status < 200 || result.status >= 300) {
+			const detail = (result.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot sync UOM "${docId}" (HTTP ${result.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	};
+
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
+
+		if (status === 200) {
+			existing++;
+			if (!dryRun) {
+				const current = data as Record<string, unknown>;
+				// Ensure protected invariants while preserving user modifications
+				await putUnit(docId, {
+					...current,
+					type: 'unit_of_measure',
+					schema_v: 1,
+					code: def.code,
+					dimension: def.dimension,
+					is_protected: true,
+					updated_at: new Date().toISOString()
+				});
+			}
+		} else if (status === 404) {
+			created++;
+			if (!dryRun) {
+				const ts = new Date().toISOString();
+				await putUnit(docId, {
+					_id: docId,
+					type: 'unit_of_measure',
+					schema_v: 1,
+					created_at: ts,
+					updated_at: ts,
+					created_by: 'system',
+					code: def.code,
+					label_th: def.label_th,
+					...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
+					label_en: def.label_en,
+					dimension: def.dimension,
+					is_protected: true,
+					sort_order: def.sort_order,
+					deactivated: false
+				});
+			}
+		} else {
+			throw new Error(`Unexpected HTTP ${status} checking ${docId}`);
+		}
+	}
+
+	return { created, existing };
 }
 
 async function syncThailandLocationIndexes(
@@ -302,7 +446,7 @@ async function main() {
 	console.log('');
 
 	// 1. Ensure databases
-	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations'];
+	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations', 'central_ops'];
 	for (const db of CENTRAL_DBS) {
 		const res = await ensureDb(db, DRY_RUN);
 		console.log(`  ✓ DB: ${db} (${res === 'created' && DRY_RUN ? 'would create' : res})`);
@@ -334,6 +478,12 @@ async function main() {
 	// 5. Baseline SOP profile
 	const sopRes = await syncMasterSopBaseline(DRY_RUN);
 	console.log(`  ✓ catalog: sop_profile:master_sphere_baseline (${sopRes})`);
+
+	// 6. Units of Measure Master Data
+	const uomRes = await syncUnitsOfMeasure(DRY_RUN);
+	console.log(
+		`  ✓ catalog: units of measure (${uomRes.created} created/would create, ${uomRes.existing} existing)`
+	);
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');

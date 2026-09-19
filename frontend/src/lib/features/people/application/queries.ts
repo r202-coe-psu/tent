@@ -441,6 +441,26 @@ export const useSubmitFamilyReportIn = () => {
 	}));
 };
 
+export const useMergeHouseholds = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			sourceHouseholdId,
+			targetHouseholdId,
+			ctx
+		}: {
+			sourceHouseholdId: string;
+			targetHouseholdId: string;
+			ctx: AuthorContext;
+		}) => peopleRepository().mergeHouseholds(sourceHouseholdId, targetHouseholdId, ctx),
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(result.targetHousehold._id) });
+		}
+	}));
+};
+
 export const useUpdateHousehold = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({

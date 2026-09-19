@@ -10,6 +10,7 @@ import {
 	utilitiesBaseSchema,
 	riskSchema,
 	subStorageItemSchema,
+	foodDistributionPointSchema,
 	migrateShelterV2ToCurrent,
 	isShelterBookable,
 	SHELTER_MASTER_SCHEMA_V,
@@ -42,6 +43,8 @@ describe('shelterSchema', () => {
 		expect(s.utilities).toEqual({ communications: [], vhf_channel: null });
 		expect(s.risk).toEqual({});
 		expect(s.zones).toEqual([]);
+		// CR-128 — omitted food points default to an empty array.
+		expect(s.food_distribution_points).toEqual([]);
 	});
 
 	it('supports feature_flags with enable_medical_screening defaulting to false', () => {
@@ -240,6 +243,79 @@ describe('subStorageItemSchema', () => {
 	});
 });
 
+// ===== CR-128 — food distribution points =====
+
+describe('CR-128 foodDistributionPointSchema', () => {
+	it('accepts a full point with lat/lng', () => {
+		const p = foodDistributionPointSchema.parse({
+			id: 'p1',
+			name: 'จุดแจกหน้าศาลา',
+			note: 'แจกข้าวกล่อง',
+			lat: 7.5,
+			lng: 100.5
+		});
+		expect(p.lat).toBe(7.5);
+		expect(p.lng).toBe(100.5);
+		expect(p.note).toBe('แจกข้าวกล่อง');
+	});
+
+	it('allows omitting note/lat/lng', () => {
+		const p = foodDistributionPointSchema.parse({ id: 'p1', name: 'จุด A' });
+		expect(p.note).toBeUndefined();
+		expect(p.lat).toBeUndefined();
+		expect(p.lng).toBeUndefined();
+	});
+
+	it('rejects empty / whitespace-only name', () => {
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: '' })).toThrow();
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: '   ' })).toThrow();
+	});
+
+	it('rejects empty id', () => {
+		expect(() => foodDistributionPointSchema.parse({ id: '', name: 'จุด A' })).toThrow();
+	});
+
+	it('rejects out-of-range lat/lng', () => {
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: 'A', lat: 91 })).toThrow();
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: 'A', lat: -91 })).toThrow();
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: 'A', lng: 181 })).toThrow();
+		expect(() => foodDistributionPointSchema.parse({ id: 'p1', name: 'A', lng: -181 })).toThrow();
+	});
+
+	it('coerces lat/lng from strings (numeric inputs)', () => {
+		const p = foodDistributionPointSchema.parse({ id: 'p1', name: 'A', lat: '7.5', lng: '100' });
+		expect(p.lat).toBe(7.5);
+		expect(p.lng).toBe(100);
+	});
+});
+
+describe('CR-128 shelterSchema food_distribution_points', () => {
+	it('defaults to [] when omitted', () => {
+		expect(shelterSchema.parse(validShelterInput).food_distribution_points).toEqual([]);
+	});
+
+	it('accepts a list of points', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			food_distribution_points: [
+				{ id: 'p1', name: 'จุด A', note: null, lat: null, lng: null },
+				{ id: 'p2', name: 'จุด B', lat: 7.5, lng: 100.5 }
+			]
+		});
+		expect(r.food_distribution_points).toHaveLength(2);
+		expect(r.food_distribution_points[1].lat).toBe(7.5);
+	});
+
+	it('rejects a point with an empty name', () => {
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				food_distribution_points: [{ id: 'p1', name: '  ' }]
+			})
+		).toThrow();
+	});
+});
+
 describe('utilitiesSchema', () => {
 	it('accepts empty utilities', () => {
 		expect(utilitiesSchema.parse({})).toEqual({ communications: [], vhf_channel: null });
@@ -339,7 +415,7 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('migrates status open → operation_status active', () => {
 		const migrated = migrateShelterV2ToCurrent(v2Master);
 		expect(migrated.operation_status).toBe('active');
-		expect(migrated.schema_v).toBe(5);
+		expect(migrated.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(migrated.site_kind).toBe('evacuation_center');
 	});
 
@@ -419,11 +495,11 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('is idempotent — calling twice on v2 produces same result', () => {
 		const first = migrateShelterV2ToCurrent(v2Master);
 		const second = migrateShelterV2ToCurrent(first);
-		expect(second.schema_v).toBe(5);
+		expect(second.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(second.operation_status).toBe(first.operation_status);
 	});
 
-	it('is idempotent — calling on current (v5) returns as-is', () => {
+	it('is idempotent — calling on current (v6) returns as-is', () => {
 		const current = migrateShelterV2ToCurrent(v2Master);
 		const again = migrateShelterV2ToCurrent(current);
 		expect(again).toBe(current);
@@ -721,7 +797,7 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 			updated_at: '2024-01-01T00:00:00Z'
 		} as unknown as ShelterMasterV2;
 		const m = migrateShelterV2ToCurrent(v3doc);
-		expect(m.schema_v).toBe(5);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.project_level).toBeNull();
 		expect(m.municipality_zone).toBeNull();
 		expect(m.admission_policy).toEqual({
@@ -766,6 +842,54 @@ describe('CR-067 — migrate v4 → v5 site_kind back-fill', () => {
 	it('preserves an explicit host_house', () => {
 		const host = { ...v4doc, site_kind: 'host_house' } as unknown as ShelterMasterV2;
 		expect(migrateShelterV2ToCurrent(host).site_kind).toBe('host_house');
+	});
+});
+
+describe('CR-128 — migrate v5 → v6 food_distribution_points back-fill', () => {
+	const v5doc = {
+		_id: 'shelter:x',
+		type: 'shelter' as const,
+		schema_v: 5,
+		code: 'SH001',
+		name: 'X',
+		site_kind: 'evacuation_center' as const,
+		operation_status: 'standby' as const,
+		capacity: 10,
+		zones: [],
+		created_at: '2024-01-01T00:00:00Z',
+		updated_at: '2024-01-01T00:00:00Z'
+	} as unknown as ShelterMasterV2;
+
+	it('bumps a v5 doc to the current version and back-fills []', () => {
+		const m = migrateShelterV2ToCurrent(v5doc);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.food_distribution_points).toEqual([]);
+	});
+
+	it('back-fills a doc already stamped current but missing food_distribution_points', () => {
+		const stamped = { ...v5doc, schema_v: SHELTER_MASTER_SCHEMA_V } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.food_distribution_points).toEqual([]);
+	});
+
+	it('does not clobber existing food_distribution_points', () => {
+		const withPoints = {
+			...v5doc,
+			schema_v: SHELTER_MASTER_SCHEMA_V,
+			food_distribution_points: [{ id: 'p1', name: 'จุด A' }]
+		} as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(withPoints);
+		expect(m.food_distribution_points).toEqual([{ id: 'p1', name: 'จุด A' }]);
+	});
+
+	it('is idempotent — running twice does not duplicate or clobber', () => {
+		const first = migrateShelterV2ToCurrent(v5doc);
+		const second = migrateShelterV2ToCurrent(first);
+		expect(second.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(second.food_distribution_points).toEqual([]);
+		// Nothing missing → identity return (no write needed downstream).
+		expect(second).toBe(first);
 	});
 });
 

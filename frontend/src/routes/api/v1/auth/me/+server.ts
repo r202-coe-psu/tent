@@ -10,6 +10,7 @@ import { getSession } from '$lib/db/couch';
 import { computeMfaFlags, verifyMfaOkCookie, MFA_OK_COOKIE } from '$lib/server/google-oauth';
 import {
 	getGoogleMfa,
+	getThaidMfa,
 	updateOwnProfile,
 	type CouchUserDoc,
 	type OwnProfileFields
@@ -17,12 +18,19 @@ import {
 
 export const prerender = false;
 
+interface MfaDetails {
+	mfaProviderEmail: string | null;
+	mfaProviders: ('google' | 'thaid')[];
+	mfaThaidName: string | null;
+	mfaThaidPidMasked: string | null;
+}
+
 function profilePayload(
 	name: string,
 	doc: CouchUserDoc | null,
 	roles: string[],
 	mfa: { mfa_enrolled: boolean; pending_mfa: boolean },
-	mfaProviderEmail: string | null
+	details: MfaDetails
 ) {
 	const isBootstrap = isProtectedBootstrapAdmin({ name, roles });
 	return {
@@ -33,7 +41,10 @@ function profilePayload(
 		has_security_question: isBootstrap ? true : Boolean(doc?.security_question?.answer_hash),
 		mfa_enrolled: mfa.mfa_enrolled,
 		pending_mfa: mfa.pending_mfa,
-		mfa_provider_email: mfaProviderEmail,
+		mfa_providers: details.mfaProviders,
+		mfa_provider_email: details.mfaProviderEmail,
+		mfa_thaid_name: details.mfaThaidName,
+		mfa_thaid_pid_masked: details.mfaThaidPidMasked,
 		phone: doc?.phone ?? null,
 		email: doc?.email ?? null,
 		organization: doc?.organization ?? null,
@@ -58,11 +69,23 @@ export const GET: RequestHandler = async ({ fetch, cookies }) => {
 		if (res.status === 200) {
 			const doc = res.data as CouchUserDoc;
 			const google = getGoogleMfa(doc);
-			const enrolled = Boolean(google);
+			const thaid = getThaidMfa(doc);
+			const enrolled = Boolean(google || thaid);
 			const mfaOkValid = verifyMfaOkCookie(cookies.get(MFA_OK_COOKIE), session.name);
 			const mfa = computeMfaFlags({ enrolled, mfaOkValid });
 
-			return json(profilePayload(session.name, doc, session.roles, mfa, google?.email ?? null));
+			const mfaProviders: ('google' | 'thaid')[] = [];
+			if (google) mfaProviders.push('google');
+			if (thaid) mfaProviders.push('thaid');
+
+			return json(
+				profilePayload(session.name, doc, session.roles, mfa, {
+					mfaProviderEmail: google?.email ?? null,
+					mfaProviders,
+					mfaThaidName: thaid?.name ?? null,
+					mfaThaidPidMasked: thaid?.pid_masked ?? null
+				})
+			);
 		}
 
 		// Fallback for bootstrap admin or docs not yet in _users — not MFA-enrolled
@@ -72,7 +95,12 @@ export const GET: RequestHandler = async ({ fetch, cookies }) => {
 				null,
 				session.roles,
 				{ mfa_enrolled: false, pending_mfa: false },
-				null
+				{
+					mfaProviderEmail: null,
+					mfaProviders: [],
+					mfaThaidName: null,
+					mfaThaidPidMasked: null
+				}
 			)
 		);
 	} catch (e) {

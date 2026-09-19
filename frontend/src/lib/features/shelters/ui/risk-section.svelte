@@ -19,11 +19,12 @@
 </script>
 
 <section
-	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-rose-bg/10 p-6"
+	id="risk"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<ShieldAlert class="h-5 w-5 text-shelter-rose-text" />
-		<span class="text-sm font-bold text-black">5.</span>
+		<span class="text-sm font-bold text-black">6.</span>
 		<h2 class="text-base font-bold text-black">ข้อมูลการประเมินความเสี่ยงและโครงสร้าง</h2>
 	</div>
 

@@ -33,12 +33,15 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const trackingQuery = useDonationTracking(() => token);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const courierMutation = useUpdateCourierTracking();
 
 	let courierInput = $state('');
@@ -400,7 +403,11 @@
 															)
 														: t.noData}
 												</td>
-												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? t.noData}</td>
+												<td class="px-4 py-3 text-muted-foreground"
+													>{item.unit
+														? formatUnit(item.unit, units, langState.current)
+														: t.noData}</td
+												>
 											</tr>
 										{/each}
 									</tbody>

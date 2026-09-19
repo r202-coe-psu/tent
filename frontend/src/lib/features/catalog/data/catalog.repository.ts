@@ -76,4 +76,27 @@ export interface CatalogRepository {
 	): Promise<import('../domain/catalog-deletion').DeleteCategoryResult>;
 
 	deleteRecipe(id: string, shelterCode?: string | null): Promise<boolean>;
+
+	// Unit of Measure
+	createUnitOfMeasure(
+		input: import('../domain/unit-of-measure').UnitOfMeasureInput,
+		ctx: AuthorContext
+	): Promise<import('../domain/unit-of-measure').UnitOfMeasure>;
+
+	listUnitsOfMeasure(): Promise<import('../domain/unit-of-measure').UnitOfMeasure[]>;
+
+	listUnitsOfMeasurePaginated(
+		page: number,
+		pageSize: number
+	): Promise<PaginatedResult<import('../domain/unit-of-measure').UnitOfMeasure>>;
+
+	getUnitOfMeasure(
+		codeOrId: string
+	): Promise<import('../domain/unit-of-measure').UnitOfMeasure | null>;
+
+	updateUnitOfMeasure(
+		uom: import('../domain/unit-of-measure').UnitOfMeasure
+	): Promise<import('../domain/unit-of-measure').UnitOfMeasure>;
+
+	deleteUnitOfMeasure(id: string): Promise<boolean>;
 }

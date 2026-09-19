@@ -16,6 +16,8 @@ class PublicNeed(Document):
 	category: str
 	qty_needed: float
 	unit: str
+	qty_target: float = 0.0
+	urgency: str = "normal"
 	updated_at: datetime
 
 	class Settings:

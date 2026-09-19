@@ -10,6 +10,11 @@ import {
 	linkGoogleMfa,
 	unlinkGoogleMfa,
 	getGoogleMfa,
+	linkThaidMfa,
+	unlinkThaidMfa,
+	getThaidMfa,
+	touchThaidMfaVerified,
+	findUserByThaidSubject,
 	listUsers,
 	touchGoogleMfaVerified,
 	findUserByGoogleSubject,
@@ -333,6 +338,151 @@ describe('user-service', () => {
 			await seedUser('0810000009');
 			fakeUsersDb['org.couchdb.user:0810000009'].mfa = { providers: [] };
 			expect(await findUserByGoogleSubject('nope')).toBeNull();
+		});
+	});
+
+	describe('ThaID MFA (CR-ThaID)', () => {
+		async function seedUser(name: string) {
+			fakeUsersDb[`org.couchdb.user:${name}`] = {
+				_id: `org.couchdb.user:${name}`,
+				_rev: '1-abc',
+				name,
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				display_name: 'เจ้าหน้าที่',
+				phone: name
+			};
+		}
+
+		it('links ThaID MFA and surfaces in user summary', async () => {
+			await seedUser('0820000001');
+			await linkThaidMfa('0820000001', {
+				subject: 'thaid-sub-001',
+				name: 'นาย ประชา สุขใจ',
+				pid_masked: '1-xxxx-xxxxx-12-3'
+			});
+
+			const doc = fakeUsersDb['org.couchdb.user:0820000001'];
+			const thaid = getThaidMfa(doc);
+			expect(thaid).toMatchObject({
+				type: 'thaid',
+				subject: 'thaid-sub-001',
+				name: 'นาย ประชา สุขใจ',
+				pid_masked: '1-xxxx-xxxxx-12-3'
+			});
+
+			const caller = {
+				name: 'sa01',
+				roles: ['system_admin'],
+				isSA: true,
+				shelterCode: null
+			};
+			const listed = await listUsers(caller);
+			const row = listed.find((u) => u.name === '0820000001');
+			expect(row?.mfa_enrolled).toBe(true);
+			expect(row?.mfa_thaid_name).toBe('นาย ประชา สุขใจ');
+			expect(row?.mfa_thaid_pid_masked).toBe('1-xxxx-xxxxx-12-3');
+		});
+
+		it('allows linking both Google and ThaID on the same user', async () => {
+			await seedUser('0820000002');
+			await linkGoogleMfa('0820000002', { subject: 'google-sub-2', email: 'g2@x.com' });
+			await linkThaidMfa('0820000002', {
+				subject: 'thaid-sub-2',
+				name: 'นางสาว สมศรี ดีงาม',
+				pid_masked: '2-xxxx-xxxxx-45-6'
+			});
+
+			const doc = fakeUsersDb['org.couchdb.user:0820000002'];
+			expect(getGoogleMfa(doc)?.subject).toBe('google-sub-2');
+			expect(getThaidMfa(doc)?.subject).toBe('thaid-sub-2');
+
+			const caller = {
+				name: 'sa01',
+				roles: ['system_admin'],
+				isSA: true,
+				shelterCode: null
+			};
+			const listed = await listUsers(caller);
+			const row = listed.find((u) => u.name === '0820000002');
+			expect(row?.mfa_enrolled).toBe(true);
+			expect(row?.mfa_google_email).toBe('g2@x.com');
+			expect(row?.mfa_thaid_name).toBe('นางสาว สมศรี ดีงาม');
+			expect(row?.mfa_thaid_pid_masked).toBe('2-xxxx-xxxxx-45-6');
+		});
+
+		it('rejects linking the same ThaID subject to another user (CONFLICT)', async () => {
+			await seedUser('0820000003');
+			await seedUser('0820000004');
+			await linkThaidMfa('0820000003', { subject: 'shared-thaid-sub' });
+
+			await expect(
+				linkThaidMfa('0820000004', { subject: 'shared-thaid-sub' })
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+		});
+
+		it('rejects a second ThaID provider on the same user (CONFLICT)', async () => {
+			await seedUser('0820000005');
+			await linkThaidMfa('0820000005', { subject: 'first-thaid-sub' });
+
+			await expect(
+				linkThaidMfa('0820000005', { subject: 'second-thaid-sub' })
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+		});
+
+		it('unlinks ThaID MFA and preserves Google MFA if present', async () => {
+			await seedUser('0820000006');
+			await linkGoogleMfa('0820000006', { subject: 'g-stay', email: 'stay@x.com' });
+			await linkThaidMfa('0820000006', { subject: 't-remove' });
+
+			await unlinkThaidMfa('0820000006');
+
+			const doc = fakeUsersDb['org.couchdb.user:0820000006'];
+			expect(getThaidMfa(doc)).toBeNull();
+			expect(getGoogleMfa(doc)?.subject).toBe('g-stay');
+
+			const caller = {
+				name: 'sa01',
+				roles: ['system_admin'],
+				isSA: true,
+				shelterCode: null
+			};
+			const listed = await listUsers(caller);
+			const row = listed.find((u) => u.name === '0820000006');
+			expect(row?.mfa_enrolled).toBe(true);
+			expect(row?.mfa_google_email).toBe('stay@x.com');
+			expect(row?.mfa_thaid_name).toBeNull();
+		});
+
+		it('unlinks ThaID MFA and clears enrollment when it was the only provider', async () => {
+			await seedUser('0820000007');
+			await linkThaidMfa('0820000007', { subject: 't-only' });
+			await unlinkThaidMfa('0820000007');
+
+			const doc = fakeUsersDb['org.couchdb.user:0820000007'];
+			expect(getThaidMfa(doc)).toBeNull();
+			expect(doc.mfa).toBeNull();
+		});
+
+		it('updates verified_at on touchThaidMfaVerified', async () => {
+			await seedUser('0820000008');
+			await linkThaidMfa('0820000008', { subject: 'touch-t-sub' });
+			const before = getThaidMfa(fakeUsersDb['org.couchdb.user:0820000008'])!.verified_at;
+			await new Promise((r) => setTimeout(r, 5));
+			await touchThaidMfaVerified('0820000008');
+			const after = getThaidMfa(fakeUsersDb['org.couchdb.user:0820000008'])!.verified_at;
+			expect(after).toBeTruthy();
+			expect(after! >= before!).toBe(true);
+		});
+
+		it('findUserByThaidSubject finds enrolled user or returns null', async () => {
+			await seedUser('0820000009');
+			await linkThaidMfa('0820000009', { subject: 'lookup-t-sub' });
+
+			const found = await findUserByThaidSubject('lookup-t-sub');
+			expect(found?.name).toBe('0820000009');
+			expect(await findUserByThaidSubject('not-exist')).toBeNull();
+			expect(await findUserByThaidSubject('')).toBeNull();
 		});
 	});
 

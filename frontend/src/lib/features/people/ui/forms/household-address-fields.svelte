@@ -376,7 +376,7 @@
 					size="sm"
 					disabled={disabled || isLocating}
 					onclick={handleGetCurrentLocation}
-					class="h-7 gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
+					class="h-8 gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
 				>
 					{#if isLocating}
 						<Loader2 class="size-3.5 animate-spin" />
@@ -405,7 +405,7 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'province' }}
 				/>
 				{#if errors?.province}
@@ -428,7 +428,7 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'district' }}
 				/>
 				{#if errors?.district}
@@ -451,7 +451,7 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-xs"
+					class="!h-9 rounded-md text-sm"
 					controlProps={{ id: 'subdistrict' }}
 				/>
 				{#if errors?.subdistrict}
@@ -470,7 +470,7 @@
 					bind:value={postal_code}
 					disabled
 					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
-					class="h-9 bg-muted/50 text-xs"
+					class="h-9 bg-muted/50 text-sm"
 				/>
 				{#if errors?.postal_code}
 					<p class="text-2xs text-destructive">{errors.postal_code}</p>

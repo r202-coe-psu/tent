@@ -6,8 +6,11 @@ import {
 	overviewOriginPayloadSchema,
 	overviewSitesPayloadSchema,
 	overviewSummarySchema,
+	householdOptionsPayloadSchema,
 	preRegistrationProfileSchema,
 	preRegistrationsListPayloadSchema,
+	type HouseholdOption,
+	type HouseholdOptionsPayload,
 	type OverviewDemographicsPayload,
 	type OverviewFilters,
 	type OverviewMovementsPayload,
@@ -93,4 +96,23 @@ export async function fetchBoundEvacueeProfile(
 		`/api/back-office/overview/pre-registrations/evacuee/${encodeURIComponent(shelter)}/${encodeURIComponent(evacueeId)}`
 	);
 	return preRegistrationProfileSchema.parse(data);
+}
+
+export async function fetchOverviewHouseholds(params: {
+	scope?: 'universal' | 'shelter';
+	shelterCode?: string | null;
+	q?: string | null;
+	limit?: number;
+}): Promise<HouseholdOption[]> {
+	const paramsQs = new URLSearchParams();
+	if (params.scope) paramsQs.set('scope', params.scope);
+	if (params.shelterCode) paramsQs.set('shelter_code', params.shelterCode);
+	if (params.q) paramsQs.set('q', params.q);
+	if (params.limit) paramsQs.set('limit', String(params.limit));
+
+	const s = paramsQs.toString();
+	const data = await serviceFetch<HouseholdOptionsPayload>(
+		`/api/back-office/overview/households${s ? `?${s}` : ''}`
+	);
+	return householdOptionsPayloadSchema.parse(data).items;
 }

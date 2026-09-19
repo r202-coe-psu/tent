@@ -16,7 +16,9 @@ export const useAppConfig = () =>
 export const useUpdateAppConfig = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (patch: Pick<AppConfig, 'recaptcha_enabled'>) => updateAppConfig(patch),
+		mutationFn: (
+			patch: Partial<Pick<AppConfig, 'recaptcha_enabled' | 'thaid_registration_enabled'>>
+		) => updateAppConfig(patch),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: appConfigKeys.all })
 	}));
 };

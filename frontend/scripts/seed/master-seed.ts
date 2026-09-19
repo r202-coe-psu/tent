@@ -1,7 +1,7 @@
 /**
  * Platform master seed: master_data + config:app + catalog/SOP/food-sphere.
  */
-import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared/domain/app-config';
 import {
 	enforceOneDefault,
 	masterDocId,
@@ -22,6 +22,7 @@ import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
 import { ITEM, masterCode, type MasterLookup } from './types';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
@@ -349,9 +350,48 @@ export async function seedCatalog(): Promise<void> {
 		)
 	];
 
+	let uomCount = 0;
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
+		if (status === 200) {
+			const existing = data as Record<string, unknown>;
+			// Idempotent: preserve admin labels while ensuring protected system invariants
+			await putDoc('catalog', {
+				...existing,
+				type: 'unit_of_measure',
+				schema_v: 1,
+				code: def.code,
+				dimension: def.dimension,
+				is_protected: true,
+				updated_at: now()
+			});
+		} else {
+			await putDoc(
+				'catalog',
+				catalogDoc(
+					docId,
+					'unit_of_measure',
+					{
+						code: def.code,
+						label_th: def.label_th,
+						...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
+						label_en: def.label_en,
+						dimension: def.dimension,
+						is_protected: true,
+						sort_order: def.sort_order,
+						deactivated: false
+					},
+					1
+				)
+			);
+		}
+		uomCount++;
+	}
+
 	for (const doc of [...items, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: ${uomCount} units of measure, ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

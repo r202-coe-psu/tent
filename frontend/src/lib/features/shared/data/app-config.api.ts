@@ -24,7 +24,7 @@ export async function fetchAppConfig(fetchFn: typeof fetch = fetch): Promise<App
 }
 
 export async function updateAppConfig(
-	patch: Pick<AppConfig, 'recaptcha_enabled'>,
+	patch: Partial<Pick<AppConfig, 'recaptcha_enabled' | 'thaid_registration_enabled'>>,
 	fetchFn: typeof fetch = fetch
 ): Promise<AppConfig> {
 	const res = await fetchFn('/api/v1/app-config', {
