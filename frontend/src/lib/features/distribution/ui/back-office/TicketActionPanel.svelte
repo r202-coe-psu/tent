@@ -2,16 +2,20 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		resolveAuthenticatedAuthorContext,
-		useApproveTicketForDispatch
+		useApproveTicketForDispatch,
+		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import {
 		canAllocateTicket,
 		canApproveTicket,
-		canCancelTicket
+		canCancelTicket,
+		canDispatchTicket,
+		canPerformFrontlineDistribution
 	} from '../../application/food-supplies/auth';
 	import { isTicketReadyForApproval } from '../model/ticket-lifecycle';
 	import TicketAllocationDialog from './TicketAllocationDialog.svelte';
 	import CancelTicketDialog from './CancelTicketDialog.svelte';
+	import DispatchTicketDialog from './DispatchTicketDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import Boxes from '@lucide/svelte/icons/boxes';
@@ -20,6 +24,9 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Info from '@lucide/svelte/icons/info';
+	import Truck from '@lucide/svelte/icons/truck';
+	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 
 	interface Props {
 		ticket: RequisitionTicket;
@@ -33,8 +40,11 @@
 	let isAllocateOpen = $state(false);
 	let isCancelOpen = $state(false);
 	let isApproveConfirmOpen = $state(false);
+	let isDispatchOpen = $state(false);
+	let isReceiveConfirmOpen = $state(false);
 
 	const approveMutation = useApproveTicketForDispatch();
+	const receiveMutation = useReceiveTicketAtDistributionPoint();
 
 	// Authoritative capabilities derived from session
 	const authContext = $derived.by(() => {
@@ -48,11 +58,13 @@
 	const canAllocate = $derived(authContext ? canAllocateTicket(authContext) : false);
 	const canApprove = $derived(authContext ? canApproveTicket(authContext) : false);
 	const canCancel = $derived(authContext ? canCancelTicket(authContext) : false);
+	const canDispatch = $derived(authContext ? canDispatchTicket(authContext) : false);
+	const canReceive = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
 	// Approval readiness check
 	const approvalReadiness = $derived(isTicketReadyForApproval(ticket));
 
-	const isAnyPending = $derived(approveMutation.isPending);
+	const isAnyPending = $derived(approveMutation.isPending || receiveMutation.isPending);
 
 	async function handleConfirmApprove() {
 		try {
@@ -66,6 +78,24 @@
 			onActionSuccess?.();
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอนุมัติตั๋ว';
+			toast.error(msg);
+		}
+	}
+
+	async function handleConfirmReceive() {
+		try {
+			await receiveMutation.mutateAsync({
+				ticketId: ticket._id,
+				shelterCode
+			});
+
+			toast.success(
+				`ยืนยันรับสินค้าสำหรับใบเบิกจ่าย ${ticket.ticket_no} ถึงจุดแจกจ่ายเรียบร้อยแล้ว (สถานะ: กำลังแจกจ่าย)`
+			);
+			isReceiveConfirmOpen = false;
+			onActionSuccess?.();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยืนยันรับสินค้า';
 			toast.error(msg);
 		}
 	}
@@ -143,40 +173,109 @@
 				{/if}
 			</div>
 		{:else if ticket.status === 'READY_FOR_DISPATCH'}
-			<div
-				class="flex items-center gap-2.5 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-xs text-sky-900"
-			>
-				<Info class="h-4 w-4 shrink-0 text-sky-600" />
-				<div>
-					<strong>อนุมัติให้ปล่อยของแล้ว (พร้อมส่งออก)</strong>
-					<p class="mt-0.5 text-slate-600">
-						รอเจ้าหน้าที่คลังจัดสินค้าและเลือก Physical Lot เพื่อปล่อยรถนำส่งไปยังจุดแจกจ่าย (Slice
-						5.3)
-					</p>
+			<div class="space-y-4">
+				<div class="flex flex-wrap items-center gap-3">
+					{#if canDispatch}
+						<button
+							type="button"
+							disabled={isAnyPending}
+							onclick={() => (isDispatchOpen = true)}
+							class="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<Truck class="h-4 w-4" />
+							<span>เลือก Physical Lot และปล่อยรถ</span>
+						</button>
+					{/if}
+
+					{#if canCancel}
+						<button
+							type="button"
+							disabled={isAnyPending}
+							onclick={() => (isCancelOpen = true)}
+							class="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-3.5 text-xs font-semibold text-red-700 shadow-2xs transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<Ban class="h-4 w-4" />
+							<span>ยกเลิกตั๋ว</span>
+						</button>
+					{/if}
 				</div>
+
+				{#if !canDispatch}
+					<div
+						class="flex items-center gap-2.5 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-xs text-sky-900"
+					>
+						<Info class="h-4 w-4 shrink-0 text-sky-600" />
+						<div>
+							<strong>อนุมัติให้ปล่อยของแล้ว (พร้อมส่งออก)</strong>
+							<p class="mt-0.5 text-slate-600">
+								รอเจ้าหน้าที่คลังหรือผู้จัดการเลือก Physical Lot เพื่อปล่อยรถนำส่งไปยังจุดแจกจ่าย
+							</p>
+						</div>
+					</div>
+				{/if}
 			</div>
 		{:else if ticket.status === 'IN_TRANSIT'}
-			<div
-				class="flex items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-900"
-			>
-				<Info class="h-4 w-4 shrink-0 text-blue-600" />
-				<div>
-					<strong>กำลังนำส่ง (In Transit)</strong>
-					<p class="mt-0.5 text-slate-600">
-						สินค้าอยู่ระหว่างการเดินทางไปยัง {ticket.destination_location} (รอเจ้าหน้าที่จุดแจกยืนยันรับของ)
-					</p>
+			<div class="space-y-4">
+				<div class="flex flex-wrap items-center gap-3">
+					{#if canReceive}
+						<button
+							type="button"
+							disabled={isAnyPending}
+							onclick={() => (isReceiveConfirmOpen = true)}
+							class="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{#if receiveMutation.isPending}
+								<Loader2 class="h-4 w-4 animate-spin" />
+								<span>กำลังบันทึกการรับของ...</span>
+							{:else}
+								<PackageCheck class="h-4 w-4" />
+								<span>ยืนยันรับของถึงจุดแจก</span>
+							{/if}
+						</button>
+					{/if}
+				</div>
+
+				<div
+					class="flex items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-900"
+				>
+					<Info class="h-4 w-4 shrink-0 text-blue-600" />
+					<div>
+						<strong>กำลังนำส่ง (In Transit)</strong>
+						<p class="mt-0.5 text-slate-600">
+							สินค้าอยู่ระหว่างการเดินทางไปยัง <strong>{ticket.destination_location}</strong>
+							{#if ticket.driver_name}
+								(คนขับ: {ticket.driver_name}{ticket.license_plate
+									? ` / ทะเบียน: ${ticket.license_plate}`
+									: ''})
+							{/if}
+							(รอเจ้าหน้าที่จุดแจกยืนยันรับของ)
+						</p>
+					</div>
 				</div>
 			</div>
 		{:else if ticket.status === 'DISTRIBUTING'}
-			<div
-				class="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900"
-			>
-				<Info class="h-4 w-4 shrink-0 text-emerald-600" />
-				<div>
-					<strong>เปิดแจกจ่ายแล้ว (Distributing)</strong>
-					<p class="mt-0.5 text-slate-600">
-						การแจกจ่ายผู้พักพิงดำเนินอยู่ที่สถานี Onsite Distribution ตามโควตามื้ออาหารและพัสดุ
-					</p>
+			<div class="space-y-4">
+				<div
+					class="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900"
+				>
+					<Info class="h-4 w-4 shrink-0 text-emerald-600" />
+					<div>
+						<strong>เปิดแจกจ่ายแล้ว (Distributing)</strong>
+						<p class="mt-0.5 text-slate-600">
+							สินค้าพร้อมแจกจ่ายที่จุดบริการ <strong>{ticket.destination_location}</strong> การแจกจ่ายดำเนินการที่สถานี
+							Onsite Distribution (Slice 5.4)
+						</p>
+					</div>
+				</div>
+
+				<div class="flex items-center gap-3">
+					<a
+						href="/onsite"
+						class="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3.5 text-xs font-semibold text-emerald-800 shadow-2xs transition-colors hover:bg-emerald-50"
+					>
+						<span>ไปยังหน้าจุดแจกจ่าย Onsite</span>
+						<ArrowRight class="h-3.5 w-3.5" />
+					</a>
 				</div>
 			</div>
 		{:else if ticket.status === 'SHIFT_CLOSED'}
@@ -309,6 +408,87 @@
 					<span>กำลังอนุมัติ...</span>
 				{:else}
 					<span>ยืนยันอนุมัติ</span>
+				{/if}
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Dispatch Ticket Dialog (Slice 5.3) -->
+<DispatchTicketDialog
+	bind:open={isDispatchOpen}
+	{ticket}
+	{shelterCode}
+	onSuccess={() => {
+		onActionSuccess?.();
+	}}
+	onClose={() => {
+		isDispatchOpen = false;
+	}}
+/>
+
+<!-- Receive Cargo Confirmation Dialog (Slice 5.3) -->
+<Dialog.Root bind:open={isReceiveConfirmOpen}>
+	<Dialog.Content class="sm:max-w-[500px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
+				<PackageCheck class="h-5 w-5 text-emerald-600" />
+				<span>ยืนยันรับสินค้าถึงจุดแจกจ่าย</span>
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-slate-500">
+				ยืนยันว่าสินค้าถูกขนส่งมาถึงจุดแจกจ่ายและพร้อมเปิดแจกจ่ายผู้พักพิง (สถานะจะเปลี่ยนเป็น
+				DISTRIBUTING)
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div
+			class="my-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs text-slate-700"
+		>
+			<div class="flex justify-between">
+				<span class="text-slate-500">เลขที่ตั๋ว:</span>
+				<span class="font-mono font-bold text-slate-900">{ticket.ticket_no}</span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-slate-500">จุดหมายปลายทาง:</span>
+				<span class="font-semibold text-slate-800">{ticket.destination_location}</span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-slate-500">จำนวนรายการ:</span>
+				<span class="font-semibold text-slate-800">{ticket.items.length} รายการ</span>
+			</div>
+			{#if ticket.driver_name}
+				<div class="flex justify-between">
+					<span class="text-slate-500">คนขับ / ยานพาหนะ:</span>
+					<span class="text-slate-800"
+						>{ticket.driver_name} {ticket.license_plate ? `(${ticket.license_plate})` : ''}</span
+					>
+				</div>
+			{/if}
+			<div class="flex justify-between border-t border-slate-200/80 pt-2">
+				<span class="text-slate-500">ผู้รับมอบสินค้า (Session):</span>
+				<span class="font-mono font-semibold text-slate-800">{authContext?.createdBy ?? '-'}</span>
+			</div>
+		</div>
+
+		<Dialog.Footer class="flex items-center justify-end gap-2">
+			<button
+				type="button"
+				onclick={() => (isReceiveConfirmOpen = false)}
+				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+			>
+				ยกเลิก
+			</button>
+			<button
+				type="button"
+				onclick={handleConfirmReceive}
+				disabled={receiveMutation.isPending}
+				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-700 px-4 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				{#if receiveMutation.isPending}
+					<Loader2 class="h-3.5 w-3.5 animate-spin" />
+					<span>กำลังบันทึก...</span>
+				{:else}
+					<span>ยืนยันรับของ</span>
 				{/if}
 			</button>
 		</Dialog.Footer>

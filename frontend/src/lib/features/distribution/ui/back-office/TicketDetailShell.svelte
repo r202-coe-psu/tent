@@ -151,6 +151,35 @@
 							<span>ผู้อนุมัติ: <strong class="text-slate-900">{ticket.approved_by}</strong></span>
 						</div>
 					{/if}
+
+					{#if ticket.dispatched_by}
+						<div class="flex items-center gap-1.5">
+							<span class="text-slate-400">•</span>
+							<span
+								>ผู้ปล่อยของ: <strong class="text-slate-900">{ticket.dispatched_by}</strong></span
+							>
+						</div>
+					{/if}
+
+					{#if ticket.driver_name || ticket.license_plate}
+						<div class="flex items-center gap-1.5">
+							<span class="text-slate-400">•</span>
+							<span
+								>ขนส่ง: <strong class="text-slate-900"
+									>{ticket.driver_name ?? '-'}{ticket.license_plate
+										? ` (${ticket.license_plate})`
+										: ''}</strong
+								></span
+							>
+						</div>
+					{/if}
+
+					{#if ticket.received_by}
+						<div class="flex items-center gap-1.5">
+							<span class="text-slate-400">•</span>
+							<span>ผู้รับมอบ: <strong class="text-slate-900">{ticket.received_by}</strong></span>
+						</div>
+					{/if}
 				</div>
 			</div>
 

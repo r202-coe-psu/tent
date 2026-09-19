@@ -307,3 +307,13 @@ export {
 	type StepState,
 	type LifecycleStep
 } from './ui/model/ticket-lifecycle';
+
+/** Ticket-era Food & Supplies UI components & models (Slice 5.3). */
+export { default as PhysicalLotPicker } from './ui/back-office/PhysicalLotPicker.svelte';
+export { default as DispatchTicketDialog } from './ui/back-office/DispatchTicketDialog.svelte';
+
+export {
+	getEligiblePhysicalLots,
+	isLotDateExpired,
+	type EligiblePhysicalLot
+} from './ui/model/physical-lot';
