@@ -24,6 +24,7 @@
 		x="count"
 		y="bucket"
 		orientation="horizontal"
+		padding={{ left: 150, bottom: 24 }}
 		yScale={scaleBand().paddingInner(0.2).paddingOuter(0.1)}
 		props={{
 			bars: {

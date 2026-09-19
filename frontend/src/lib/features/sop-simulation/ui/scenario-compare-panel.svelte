@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { RATIO_LABELS } from '$lib/features/sop-ratios';
+	import { RATIO_LABELS, isVisibleSopRatioKey } from '$lib/features/sop-ratios';
 	import Decimal from 'decimal.js';
 	import type { ScenarioComparisonRow, ScenarioResult } from '../domain/scenario.schema';
 	import {
@@ -18,26 +18,26 @@
 	import Info from '@lucide/svelte/icons/info';
 
 	let { result }: { result: ScenarioResult } = $props();
+
+	// Only the Sphere variables kept by the 2026-09-16 requirement are shown (display-only filter).
+	const rows = $derived(result.comparison.filter((row) => isVisibleSopRatioKey(row.key)));
 	const number = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 });
-	const overriddenCount = $derived(result.comparison.filter((row) => row.ratio_overridden).length);
+	const overriddenCount = $derived(rows.filter((row) => row.ratio_overridden).length);
 	const currentShortfallCount = $derived(
-		result.comparison.filter((row) => scenarioStockBalanceState(row, 'current') === 'shortage')
-			.length
+		rows.filter((row) => scenarioStockBalanceState(row, 'current') === 'shortage').length
 	);
 	const scenarioShortfallCount = $derived(
-		result.comparison.filter((row) => scenarioStockBalanceState(row, 'scenario') === 'shortage')
-			.length
+		rows.filter((row) => scenarioStockBalanceState(row, 'scenario') === 'shortage').length
 	);
 	const newlyShortCount = $derived(
-		result.comparison.filter(
+		rows.filter(
 			(row) =>
 				scenarioStockBalanceState(row, 'scenario') === 'shortage' &&
 				scenarioStockBalanceState(row, 'current') !== 'shortage'
 		).length
 	);
 	const missingStockCount = $derived(
-		result.comparison.filter((row) => scenarioStockBalanceState(row, 'scenario') === 'missing')
-			.length
+		rows.filter((row) => scenarioStockBalanceState(row, 'scenario') === 'missing').length
 	);
 
 	const dailyNeed = (row: ScenarioComparisonRow, side: 'current' | 'scenario') =>
@@ -141,7 +141,7 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each result.comparison as row (row.key)}
+				{#each rows as row (row.key)}
 					{@const meta = RATIO_LABELS[row.key]}
 					{@const currentBalance = scenarioStockBalanceState(row, 'current')}
 					{@const scenarioBalance = scenarioStockBalanceState(row, 'scenario')}
@@ -192,7 +192,7 @@
 	</div>
 
 	<div class="compare-mobile-list md:hidden">
-		{#each result.comparison as row (row.key)}
+		{#each rows as row (row.key)}
 			{@const meta = RATIO_LABELS[row.key]}
 			{@const currentBalance = scenarioStockBalanceState(row, 'current')}
 			{@const scenarioBalance = scenarioStockBalanceState(row, 'scenario')}

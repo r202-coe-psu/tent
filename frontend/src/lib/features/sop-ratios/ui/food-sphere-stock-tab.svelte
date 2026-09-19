@@ -9,6 +9,7 @@
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import { useReplenishmentPolicies } from '../application/replenishment-queries';
+	import { headcountsFromAgeGroups } from '../domain/food-sphere-calc';
 	import { useDashboardDemographics, useDashboardOccupancy } from '$lib/features/dashboard';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
@@ -150,14 +151,7 @@
 		const policies = policiesQuery.data ?? [];
 		const demographics = demographicsQuery.data;
 
-		const headcounts: Record<string, number> = {
-			ALL: effectiveOccupancy
-		};
-		if (demographics?.age_groups) {
-			headcounts.ELDERLY = demographics.age_groups['60+'] ?? 0;
-			headcounts.CHILD_2_5 =
-				(demographics.age_groups['<1'] ?? 0) + (demographics.age_groups['1-5'] ?? 0);
-		}
+		const headcounts = headcountsFromAgeGroups(effectiveOccupancy, demographics?.age_groups);
 
 		return buildFoodSphereTable({
 			itemMasters: allItems,

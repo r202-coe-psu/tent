@@ -1,22 +1,16 @@
 <script lang="ts">
 	export type SopTabType =
-		| 'sphere_standard'
-		| 'food_sphere_standard'
-		| 'requirement_group'
-		| 'replenishment_policy'
-		| 'alert_threshold';
+		'sphere_standard' | 'food_sphere_standard' | 'requirement_group' | 'replenishment_policy';
 
 	let {
 		activeTab = $bindable(),
 		sphereCount = 20,
-		alertCount = 8,
 		reqGroupCount,
 		foodSphereCount,
 		replenishmentCount
 	}: {
 		activeTab: SopTabType;
 		sphereCount?: number;
-		alertCount?: number;
 		reqGroupCount?: number;
 		foodSphereCount?: number;
 		replenishmentCount?: number;
@@ -33,11 +27,6 @@
 			key: 'sphere_standard' as const,
 			label: 'ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard)',
 			count: sphereCount
-		},
-		{
-			key: 'alert_threshold' as const,
-			label: 'เกณฑ์การแจ้งเตือน (Alert Threshold)',
-			count: alertCount
 		},
 		{
 			key: 'requirement_group' as const,

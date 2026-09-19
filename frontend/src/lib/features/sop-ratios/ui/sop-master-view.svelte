@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopMaster } from '../index.js';
+	import { VISIBLE_SOP_RATIO_KEYS, RATIO_LABELS, type SopMaster } from '../index.js';
 
 	let {
 		profile,
@@ -11,11 +11,11 @@
 
 	const filteredKeys = $derived(
 		search.trim()
-			? SOP_RATIO_KEYS.filter((key) => {
+			? VISIBLE_SOP_RATIO_KEYS.filter((key) => {
 					const label = RATIO_LABELS[key]?.label ?? key;
 					return label.toLowerCase().includes(search.trim().toLowerCase());
 				})
-			: SOP_RATIO_KEYS
+			: VISIBLE_SOP_RATIO_KEYS
 	);
 </script>
 

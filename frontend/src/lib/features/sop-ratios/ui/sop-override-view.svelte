@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopOverride } from '../index.js';
+	import { VISIBLE_SOP_RATIO_KEYS, RATIO_LABELS, type SopOverride } from '../index.js';
 
 	let {
 		profile,
@@ -22,11 +22,11 @@
 
 	const filteredKeys = $derived(
 		search.trim()
-			? SOP_RATIO_KEYS.filter((key) => {
+			? VISIBLE_SOP_RATIO_KEYS.filter((key) => {
 					const label = RATIO_LABELS[key]?.label ?? key;
 					return label.toLowerCase().includes(search.trim().toLowerCase());
 				})
-			: SOP_RATIO_KEYS
+			: VISIBLE_SOP_RATIO_KEYS
 	);
 </script>
 
@@ -53,7 +53,7 @@
 			ยังไม่มีการปรับแต่งสำหรับศูนย์ {shelterCode}
 		</h2>
 		<p class="mt-2 text-sm text-muted-foreground">
-			ขณะนี้กำลังใช้ค่ามาตรฐาน EOC อยู่
+			ขณะนี้กำลังใช้ตัวแปรมาตรฐาน Sphere อยู่
 			{#if canEditOverride}
 				คุณสามารถกดปุ่มด้านล่างเพื่อเริ่มสร้างอัตราส่วนของศูนย์นี้ได้
 			{:else}

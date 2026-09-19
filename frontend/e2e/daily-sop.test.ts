@@ -117,10 +117,10 @@ test.describe('Daily SOP — Design workflow', () => {
 		}
 	});
 
-	test('Resource Dashboard remains on its original route', async ({ page }) => {
+	test('Resource Dashboard is served from the supply page sphere tab', async ({ page }) => {
 		await injectSession(page, admin, adminSession);
-		await page.goto('/back-office/resource-dashboard');
-		await expect(page).toHaveURL(/\/back-office\/resource-dashboard/);
+		await page.goto('/back-office/supply?tab=sphere');
+		await expect(page).toHaveURL(/\/back-office\/supply\?tab=sphere/);
 		await expect(page.getByRole('heading', { name: 'วิเคราะห์ความต้องการเสบียง' })).toBeVisible();
 	});
 
