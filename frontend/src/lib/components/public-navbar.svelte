@@ -156,7 +156,7 @@
 				<img
 					src="/logo.png"
 					alt="PSU Smart Shelter"
-					class="h-8 w-8 shrink-0 rounded-lg sm:h-9 sm:w-9"
+					class="h-8 w-8 shrink-0 rounded-lg object-contain sm:h-9 sm:w-9"
 				/>
 				<span class="truncate text-sm font-bold tracking-tight text-foreground sm:text-base"
 					>PSU Smart Shelter</span

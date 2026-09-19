@@ -25,7 +25,16 @@
 			class="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6"
 		>
 			<div class="flex items-center gap-6">
-				<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
+				<a href={resolve('/portal')} class="flex min-w-0 items-center gap-2.5">
+					<img
+						src="/logo.png"
+						alt="PSU Smart Shelter"
+						class="h-8 w-8 shrink-0 rounded-lg object-contain"
+					/>
+					<span class="truncate text-sm font-semibold tracking-tight sm:text-base"
+						>PSU Smart Shelter</span
+					>
+				</a>
 			</div>
 			<div class="flex items-center gap-2">
 				<StaffAccountMenu />

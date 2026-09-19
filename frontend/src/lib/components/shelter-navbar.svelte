@@ -45,7 +45,11 @@
 	class="flex h-[52px] w-full items-center justify-between gap-3 bg-[#0A2647] px-6 text-white shadow-sm"
 >
 	<div class="flex min-w-0 shrink items-center gap-2.5">
-		<img src="/logo.png" alt="PSU Smart Shelter" class="h-8 w-8 shrink-0" />
+		<img
+			src="/logo.png"
+			alt="PSU Smart Shelter"
+			class="h-8 w-8 shrink-0 rounded-lg object-contain"
+		/>
 		<span class="hidden truncate text-sm font-medium text-white sm:inline">PSU Smart Shelter</span>
 	</div>
 
