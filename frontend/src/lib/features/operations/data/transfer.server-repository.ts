@@ -8,6 +8,7 @@ import {
 	cancelTransfer,
 	disputeTransfer,
 	resumeTransfer,
+	undoCancelTransfer,
 	isStockTransfer,
 	isStockLedger,
 	stockBalance,
@@ -50,6 +51,7 @@ const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
+const HTTP_PRECONDITION_FAILED = 412;
 const HTTP_UNPROCESSABLE = 422;
 
 export class TransferServerRepositoryError extends Error {
@@ -305,6 +307,8 @@ export class TransferServerRepository {
 			vehicle_plate?: string;
 			cancel_reason?: string;
 			dispute_reason?: string;
+			/** CR-090 FR-11 — the `_rev` the caller acted on; any other revision refuses with 412. */
+			expected_rev?: string;
 		}
 	): Promise<StockTransfer> {
 		const latest = await this.get(id);
@@ -319,6 +323,20 @@ export class TransferServerRepository {
 				throw new TransferServerRepositoryError(e.message, HTTP_FORBIDDEN);
 			}
 			throw e;
+		}
+
+		// Reading `latest` right before the PUT already keeps CouchDB MVCC honest for this write,
+		// but it cannot tell whether the document is still the one the user saw. An undo from the
+		// toast must walk back THAT cancellation, not a later one written by someone else in the
+		// same 5 seconds (cancel → undo → cancel again reads `cancelled` both times). Only the rev
+		// can tell them apart. 412, not 409: re-reading will never make the revisions match, so
+		// the route's conflict retry must not pick this up.
+		if (opts?.expected_rev !== undefined && latest._rev !== opts.expected_rev) {
+			throw new TransferServerRepositoryError(
+				'คำร้องนี้ถูกเปลี่ยนแปลงไปแล้ว กรุณาตรวจสอบรายการล่าสุด',
+				HTTP_PRECONDITION_FAILED,
+				{ expected_rev: opts.expected_rev, current_rev: latest._rev, status: latest.status }
+			);
 		}
 
 		const ctx: AuthorContext = { shelterCode: actorShelter, createdBy: actor };
@@ -347,7 +365,12 @@ export class TransferServerRepository {
 				dispute_reason: opts?.dispute_reason ?? ''
 			}));
 		} else if (to === 'requested') {
-			({ transfer } = resumeTransfer(latest));
+			// Two different backward transitions land on `requested`, and they are not
+			// interchangeable: each drops the `*_reason` that belongs to the status it came from
+			// (CR-089 FR-05 amended + CR-090 FR-02/FR-04). Branch on where the document IS, not on
+			// where the caller says it is going.
+			({ transfer } =
+				latest.status === 'cancelled' ? undoCancelTransfer(latest) : resumeTransfer(latest));
 		} else {
 			throw new TransferServerRepositoryError(
 				`Unsupported transition to "${to}"`,

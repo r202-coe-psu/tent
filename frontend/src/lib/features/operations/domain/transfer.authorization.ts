@@ -22,18 +22,25 @@ function isValidTransition(from: TransferStatus, to: TransferStatus): boolean {
 	// CR-089 FR-07 — `disputed` leads back to `requested` and nowhere else, so a held transfer
 	// can never reach `shipped`/`received`/`cancelled` without being resumed first.
 	if (from === 'disputed') return to === 'requested';
+	// CR-090 FR-02/FR-03 — `cancelled` is no longer terminal: the source shelter can walk a
+	// cancellation back to `requested`, and that is the ONLY way out. Reaching `shipped`,
+	// `received` or `disputed` still means passing through `requested` first.
+	if (from === 'cancelled') return to === 'requested';
 	if (from === 'shipped') return to === 'received';
 	return false;
 }
 
 /**
  * Whether the actor's shelter may perform `to` on this transfer.
- * Dispatch/cancel/dispute (`requested` → `shipped`/`cancelled`/`disputed`) and resume
- * (`disputed` → `requested`) → source (`from_shelter`) only.
+ * Dispatch/cancel/dispute (`requested` → `shipped`/`cancelled`/`disputed`), resume
+ * (`disputed` → `requested`) and undo-cancel (`cancelled` → `requested`, CR-090 FR-02)
+ * → source (`from_shelter`) only.
  * Receive (`shipped` → `received`) → destination (`to_shelter`) only.
  *
  * CR-089 FR-06 — the destination is read-only while a transfer is `disputed`: every transition
- * out of `disputed` is source-only, so no extra branch is needed to hold that rule.
+ * out of `disputed` is source-only, so no extra branch is needed to hold that rule. The same
+ * holds for `cancelled` (CR-090 FR-03) — both backward transitions land on `requested`, which
+ * the source-only branch below already covers.
  */
 export function assertActorMayTransition(
 	transfer: StockTransfer,
@@ -49,7 +56,7 @@ export function assertActorMayTransition(
 	if (to === 'shipped' || to === 'cancelled' || to === 'disputed' || to === 'requested') {
 		if (!sameShelter(transfer.from_shelter, actorShelter)) {
 			throw new TransferAuthorizationError(
-				'Only the source shelter can dispatch, cancel, dispute or resume this transfer'
+				'Only the source shelter can dispatch, cancel, dispute, resume or undo-cancel this transfer'
 			);
 		}
 		return;
