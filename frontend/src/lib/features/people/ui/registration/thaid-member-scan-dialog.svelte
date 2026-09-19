@@ -23,12 +23,13 @@
 
 	let sessionState = $state<SessionState>('loading');
 	let qrDataUrl = $state<string | null>(null);
-	let remainingSeconds = $state<number>(300);
+	let remainingSeconds = $state<number>(900);
 	let completedProfile = $state<ThaiDAutofillProfile | null>(null);
 
 	let eventSource: EventSource | null = null;
 	let countdownTimer: NodeJS.Timeout | null = null;
 	let pollTimer: NodeJS.Timeout | null = null;
+	let consecutiveNotFoundCount = 0;
 
 	function formatRemainingTime(seconds: number): string {
 		const m = Math.floor(Math.max(0, seconds) / 60);
@@ -56,6 +57,7 @@
 		sessionState = 'loading';
 		qrDataUrl = null;
 		completedProfile = null;
+		consecutiveNotFoundCount = 0;
 
 		try {
 			const res = await fetch('/api/public/v1/thaid/scan-session', {
@@ -67,10 +69,13 @@
 				sessionId: string;
 				qrUrl: string;
 				expiresAt: number;
+				ttlSeconds?: number;
 			};
 
-			const totalSec = Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000));
-			remainingSeconds = totalSec;
+			remainingSeconds =
+				typeof data.ttlSeconds === 'number' && data.ttlSeconds > 0
+					? data.ttlSeconds
+					: Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000)) || 900;
 
 			// Generate QR code image
 			qrDataUrl = await QRCode.toDataURL(data.qrUrl, {
@@ -136,8 +141,10 @@
 			});
 
 			es.addEventListener('expired', () => {
-				sessionState = 'expired';
-				cleanupLiveConnections();
+				if (remainingSeconds <= 0) {
+					sessionState = 'expired';
+					cleanupLiveConnections();
+				}
 			});
 
 			es.onerror = () => {
@@ -156,11 +163,16 @@
 			const res = await fetch(`/api/public/v1/thaid/scan-session/${sessionId}`);
 			if (!res.ok) {
 				if (res.status === 404) {
-					sessionState = 'expired';
-					cleanupLiveConnections();
+					consecutiveNotFoundCount += 1;
+					// Only transition to expired if we got multiple consecutive 404s or timer ran out
+					if (consecutiveNotFoundCount >= 3 || remainingSeconds <= 0) {
+						sessionState = 'expired';
+						cleanupLiveConnections();
+					}
 				}
 				return;
 			}
+			consecutiveNotFoundCount = 0;
 			const data = (await res.json()) as {
 				status: 'pending' | 'completed' | 'expired';
 				profile?: ThaiDAutofillProfile;
@@ -172,7 +184,7 @@
 				cleanupLiveConnections();
 			}
 		} catch {
-			// ignore transient polling errors
+			// ignore transient polling network errors
 		}
 	}
 

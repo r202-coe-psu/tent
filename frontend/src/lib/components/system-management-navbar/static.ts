@@ -133,6 +133,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
+						label: '7. อาสาสมัคร',
+						href: resolve(`${base}/volunteer-config`),
+						icon: Users,
+						requiresAdmin: true
+					},
+					{
 						label: 'ความปลอดภัย / reCAPTCHA',
 						href: resolve(`${base}/security`),
 						icon: Shield,

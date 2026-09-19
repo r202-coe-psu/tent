@@ -11,6 +11,8 @@
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Lock from '@lucide/svelte/icons/lock';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Bell from '@lucide/svelte/icons/bell';
 	// import Users from '@lucide/svelte/icons/users'; // Volunteer link temporarily disabled
 
@@ -77,6 +79,8 @@
 	let mobileMenuOpen = $state(false);
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
+	let volunteersMenuOpen = $state(false);
+	let volunteersMenuEl: HTMLDivElement | undefined = $state();
 	let alertsMenuOpen = $state(false);
 	let desktopAlertsOpen = $state(false);
 	let headerHeight = $state(64);
@@ -117,15 +121,20 @@
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
+		if (volunteersMenuOpen && volunteersMenuEl && !volunteersMenuEl.contains(target)) {
+			volunteersMenuOpen = false;
+		}
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		closeDonationsMenu();
+		volunteersMenuOpen = false;
 	}
 
 	afterNavigate(() => {
 		donationsMenuOpen = false;
+		volunteersMenuOpen = false;
 		mobileMenuOpen = false;
 		alertsMenuOpen = false;
 		desktopAlertsOpen = false;
@@ -285,20 +294,63 @@
 				{/if}
 			</div>
 
-			<!-- Volunteers (Access temporarily disabled per user request) -->
-			<!--
-			<a
-				href={resolve('/volunteers')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
-					'/volunteers'
-				)
-					? 'bg-primary-muted text-primary'
-					: 'text-muted-foreground'}"
-			>
-				<Users class="h-4 w-4" />
-				{t.volunteer}
-			</a>
-			-->
+			<!-- Volunteers Dropdown -->
+			<div class="relative" bind:this={volunteersMenuEl}>
+				<button
+					type="button"
+					onclick={() => (volunteersMenuOpen = !volunteersMenuOpen)}
+					aria-haspopup="menu"
+					aria-expanded={volunteersMenuOpen}
+					aria-controls={volunteersMenuOpen ? 'volunteers-menu' : undefined}
+					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/volunteers'
+					) || volunteersMenuOpen
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<UserPlus class="h-4 w-4" />
+					{t.volunteers}
+					<ChevronDown
+						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {volunteersMenuOpen
+							? 'rotate-180'
+							: ''}"
+					/>
+				</button>
+				{#if volunteersMenuOpen}
+					<div
+						id="volunteers-menu"
+						role="menu"
+						class="absolute right-0 mt-1 w-60 rounded-xl border border-border bg-card p-1.5 shadow-sm"
+					>
+						<a
+							role="menuitem"
+							href={resolve('/volunteers/jobs')}
+							onclick={() => (volunteersMenuOpen = false)}
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+								'/volunteers/jobs'
+							)
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<UserPlus class="h-4 w-4 shrink-0" />
+							<span>{t.volunteerJobBoard}</span>
+						</a>
+						<a
+							role="menuitem"
+							href={resolve('/volunteer/portal')}
+							onclick={() => (volunteersMenuOpen = false)}
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+								'/volunteer/portal'
+							)
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<Lock class="h-4 w-4 shrink-0" />
+							<span>{t.volunteerPortal}</span>
+						</a>
+					</div>
+				{/if}
+			</div>
 
 			<a
 				href={resolve('/login')}
@@ -432,21 +484,35 @@
 					{t.trackDonationLong}
 				</a>
 
-				<!-- Volunteers (Access temporarily disabled per user request) -->
-				<!--
-				<a
-					href={resolve('/volunteers')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/volunteers'
-					)
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
-				>
-					<Users class="h-5 w-5" />
-					{t.volunteer}
-				</a>
-				-->
+				<div class="space-y-1 py-1">
+					<div class="px-4 py-2 text-xs font-bold tracking-widest text-muted-foreground uppercase">
+						{t.volunteers}
+					</div>
+					<a
+						href={resolve('/volunteers/jobs')}
+						onclick={() => (mobileMenuOpen = false)}
+						class="ml-2 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
+							'/volunteers/jobs'
+						)
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<UserPlus class="h-5 w-5" />
+						{t.volunteerJobBoard}
+					</a>
+					<a
+						href={resolve('/volunteer/portal')}
+						onclick={() => (mobileMenuOpen = false)}
+						class="ml-2 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
+							'/volunteer/portal'
+						)
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<Lock class="h-5 w-5 shrink-0" />
+						{t.volunteerPortal}
+					</a>
+				</div>
 
 				<a
 					href={resolve('/login')}

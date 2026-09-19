@@ -119,6 +119,25 @@ export async function putDoc(
 	}
 }
 
+/** PUT a deterministic fixture, carrying the current revision when it exists. */
+export async function putDocUpsert(
+	db: string,
+	doc: Record<string, unknown> & { _id: string }
+): Promise<void> {
+	const id = doc._id;
+	const path = `/${db}/${encodeURIComponent(id)}`;
+	const current = await couchReq('GET', path);
+	const currentRev =
+		current.status === 200 && current.data && typeof current.data === 'object'
+			? (current.data as { _rev?: string })._rev
+			: undefined;
+	const next = currentRev ? { ...doc, _rev: currentRev } : doc;
+	const { status } = await couchReq('PUT', path, next);
+	if (status !== 201 && status !== 409) {
+		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
+	}
+}
+
 export async function bulkDocs(
 	db: string,
 	docs: unknown[],
