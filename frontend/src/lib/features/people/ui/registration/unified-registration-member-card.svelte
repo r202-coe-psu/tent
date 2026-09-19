@@ -8,6 +8,7 @@
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -66,7 +67,8 @@
 		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
-		onApplyZoneToAll
+		onApplyZoneToAll,
+		onScanThaiD
 	}: {
 		member: UnifiedMemberWithMeta;
 		index: number;
@@ -83,6 +85,7 @@
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onApplyZoneToAll?: (zoneCode: string) => void;
+		onScanThaiD?: () => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
@@ -490,6 +493,20 @@
 						</Button>
 					{/if}
 				{/if}
+			{/if}
+
+			{#if channel === 'public' && !isPrimary && onScanThaiD && !isAlreadyReported}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					disabled={fieldsDisabled}
+					onclick={onScanThaiD}
+					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
+				>
+					<QrCode class="size-3.5" />
+					<span>สแกน ThaiD</span>
+				</Button>
 			{/if}
 
 			{#if !isAlreadyReported}

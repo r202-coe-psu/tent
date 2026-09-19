@@ -30,10 +30,11 @@
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
 		lockedShelterCode?: string;
+		initialShelterCode?: string;
 		onbooked: (ticket: BookingTicket) => void;
 	}
 
-	let { shelters, lockedShelterCode = '', onbooked }: Props = $props();
+	let { shelters, lockedShelterCode = '', initialShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
@@ -42,8 +43,45 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let captchaEnabled = $state(false);
 
-	let selectedShelterCode = $state(untrack(() => lockedShelterCode));
+	function resolveInitialShelter(): string {
+		if (lockedShelterCode) return lockedShelterCode;
+		if (initialShelterCode) return initialShelterCode;
+		if (typeof sessionStorage !== 'undefined') {
+			try {
+				return sessionStorage.getItem('pre_register_shelter') ?? '';
+			} catch {
+				// ignore storage exceptions
+				return '';
+			}
+		}
+		return '';
+	}
+
+	let selectedShelterCode = $state(untrack(() => resolveInitialShelter()));
 	let disclaimerAcknowledged = $state(false);
+
+	function updateShelterSelection(code: string) {
+		selectedShelterCode = code;
+		disclaimerAcknowledged = false;
+		if (typeof window !== 'undefined') {
+			const url = new URL(window.location.href);
+			if (code) {
+				url.searchParams.set('shelter', code);
+			} else {
+				url.searchParams.delete('shelter');
+			}
+			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			try {
+				if (code) {
+					sessionStorage.setItem('pre_register_shelter', code);
+				} else {
+					sessionStorage.removeItem('pre_register_shelter');
+				}
+			} catch {
+				// ignore storage exceptions
+			}
+		}
+	}
 
 	const isUnassigned = $derived(selectedShelterCode === UNASSIGNED_SHELTER_CODE);
 	const bookable = $derived(
@@ -65,6 +103,13 @@
 		void fetchRecaptchaEnabled().then((enabled) => {
 			captchaEnabled = enabled;
 		});
+		if (selectedShelterCode && typeof window !== 'undefined') {
+			const url = new URL(window.location.href);
+			if (url.searchParams.get('shelter') !== selectedShelterCode) {
+				url.searchParams.set('shelter', selectedShelterCode);
+				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			}
+		}
 	});
 
 	function capacityLabel(s: { capacity: number; available: number | null }): string {
@@ -89,6 +134,7 @@
 					return await win.grecaptcha.execute(siteKey, { action });
 				}
 			} catch {
+				// ignore reCAPTCHA execution failure
 				return null;
 			}
 		}
@@ -156,6 +202,13 @@
 					member_count: res.members?.length ?? unifiedInput.members.length
 				};
 				saveTicketToStorage(ticket);
+				if (typeof sessionStorage !== 'undefined') {
+					try {
+						sessionStorage.removeItem('pre_register_shelter');
+					} catch {
+						// ignore storage exceptions
+					}
+				}
 				onbooked(ticket);
 				return;
 			}
@@ -180,6 +233,13 @@
 				member_count: unifiedInput.members.length
 			};
 			saveTicketToStorage(ticket);
+			if (typeof sessionStorage !== 'undefined') {
+				try {
+					sessionStorage.removeItem('pre_register_shelter');
+				} catch {
+					// ignore storage exceptions
+				}
+			}
 			onbooked(ticket);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
@@ -239,10 +299,7 @@
 			<Select.Root
 				type="single"
 				value={selectedShelterCode}
-				onValueChange={(v) => {
-					selectedShelterCode = v;
-					disclaimerAcknowledged = false;
-				}}
+				onValueChange={updateShelterSelection}
 				disabled={Boolean(lockedShelterCode)}
 			>
 				<Select.Trigger class="!h-10 w-full text-sm font-semibold">
@@ -329,7 +386,7 @@
 			onsubmit={handleUnifiedSubmit}
 			onselectshelter={(code, name) => {
 				if (code && selectedShelterCode !== code) {
-					selectedShelterCode = code;
+					updateShelterSelection(code);
 					toast.success(`เปลี่ยนศูนย์พักพิงเป็น "${name || code}" เรียบร้อยแล้ว`);
 				}
 			}}
