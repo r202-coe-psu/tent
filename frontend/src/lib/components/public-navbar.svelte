@@ -326,27 +326,27 @@
 							role="menuitem"
 							href={resolve('/volunteers/jobs')}
 							onclick={() => (volunteersMenuOpen = false)}
-							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteers/jobs'
 							)
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
 							<UserPlus class="h-4 w-4 shrink-0" />
-							<span>สมัครอาสาสมัคร (Job Board)</span>
+							<span>{t.volunteerJobBoard}</span>
 						</a>
 						<a
 							role="menuitem"
 							href={resolve('/volunteer/portal')}
 							onclick={() => (volunteersMenuOpen = false)}
-							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteer/portal'
 							)
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
 							<Lock class="h-4 w-4 shrink-0" />
-							<span class="leading-relaxed">เข้าสู่ระบบจิตอาสา / ตารางงาน</span>
+							<span>{t.volunteerPortal}</span>
 						</a>
 						<a
 							role="menuitem"
@@ -354,14 +354,14 @@
 							onclick={() => {
 								volunteersMenuOpen = false;
 							}}
-							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-normal transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
 								'/volunteers/host-home'
 							)
 								? 'bg-primary-muted text-primary'
 								: 'text-muted-foreground'}"
 						>
 							<Home class="h-4 w-4 shrink-0" />
-							<span>ลงทะเบียนบ้านพี่เลี้ยง</span>
+							<span>{t.volunteerHostHome}</span>
 						</a>
 					</div>
 				{/if}
@@ -513,7 +513,7 @@
 							: 'text-muted-foreground'}"
 					>
 						<UserPlus class="h-5 w-5" />
-						สมัครอาสาสมัคร
+						{t.volunteerJobBoard}
 					</a>
 					<a
 						href={resolve('/volunteer/portal')}
@@ -525,7 +525,7 @@
 							: 'text-muted-foreground'}"
 					>
 						<Lock class="h-5 w-5 shrink-0" />
-						เข้าสู่ระบบจิตอาสา
+						{t.volunteerPortal}
 					</a>
 					<a
 						href={resolve('/volunteers/host-home')}
@@ -537,7 +537,7 @@
 							: 'text-muted-foreground'}"
 					>
 						<Home class="h-5 w-5" />
-						ลงทะเบียนบ้านพี่เลี้ยง
+						{t.volunteerHostHome}
 					</a>
 				</div>
 

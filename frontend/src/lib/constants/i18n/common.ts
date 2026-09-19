@@ -23,6 +23,9 @@ export const PUBLIC_NAVBAR_I18N = {
 		trackDonationLong: 'ตรวจสอบสถานะบริจาค',
 		volunteers: 'อาสาฯ / พี่เลี้ยง',
 		volunteer: 'จิตอาสา',
+		volunteerJobBoard: 'สมัครอาสาสมัคร (Job Board)',
+		volunteerPortal: 'เข้าสู่ระบบจิตอาสา / ตารางงาน',
+		volunteerHostHome: 'ลงทะเบียนบ้านพี่เลี้ยง',
 		backoffice: 'ระบบหลังบ้าน',
 		alerts: 'การแจ้งเตือนภัย',
 		switchLanguage: 'เปลี่ยนภาษา (Language)'
@@ -40,6 +43,9 @@ export const PUBLIC_NAVBAR_I18N = {
 		trackDonationLong: 'Track Donation Status',
 		volunteers: 'Volunteer',
 		volunteer: 'Volunteer',
+		volunteerJobBoard: 'Volunteer Job Board',
+		volunteerPortal: 'Volunteer Portal / My Schedule',
+		volunteerHostHome: 'Register as a Host Home',
 		backoffice: 'Backoffice',
 		alerts: 'Emergency Alerts',
 		switchLanguage: 'Switch Language'
