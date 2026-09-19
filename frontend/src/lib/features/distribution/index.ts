@@ -317,3 +317,6 @@ export {
 	isLotDateExpired,
 	type EligiblePhysicalLot
 } from './ui/model/physical-lot';
+
+/** Ticket-era Food & Supplies UI components & models (Slice 5.4 — Frontline Handover). */
+export { default as FrontlineStationPage } from './ui/frontline/FrontlineStationPage.svelte';

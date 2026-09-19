@@ -1,8 +1,9 @@
 import type { AuthorContext } from '$lib/db/model';
-import { addQty, qtyGte, subQty } from '$lib/utils/qty';
+import { qtyGte } from '$lib/utils/qty';
 import {
 	assertDistributionLogCanBeVoided,
-	thailandCalendarDay,
+	calculateInHandQtyForTicketItem,
+	isDuplicateMealDistributionLog,
 	type DistributionLog,
 	type DistributionRecipientType,
 	type RequisitionTicket,
@@ -98,10 +99,7 @@ async function assertSufficientInHandCapacity(
 	requestedQty: string
 ): Promise<void> {
 	const existingLogs = await logRepo.list({ ticket_id: ticketId, item_id: targetItem.item_id });
-	const validLogs = existingLogs.filter((log) => log.status !== 'voided');
-	const totalDistributed = validLogs.reduce((acc, log) => addQty(acc, log.qty), '0');
-	const allocated = targetItem.allocated_qty || '0';
-	const inHand = subQty(allocated, totalDistributed);
+	const inHand = calculateInHandQtyForTicketItem(ticketId, targetItem, existingLogs);
 
 	if (!qtyGte(inHand, requestedQty)) {
 		throw new CapacityExceededError(
@@ -136,13 +134,8 @@ export async function recordFoodDistribution(
 	// Food duplicate check (advisory query per CR-121 FR-DST-02)
 	if (input.recipient_id && ticket.meal) {
 		const recentRecipientLogs = await logRepo.list({ recipient_id: input.recipient_id });
-		const distributionDay = thailandCalendarDay(new Date().toISOString());
-		const duplicate = recentRecipientLogs.some(
-			(l) =>
-				l.status !== 'voided' &&
-				!l.is_returnable &&
-				l.meal === ticket.meal &&
-				thailandCalendarDay(l.distributed_at) === distributionDay
+		const duplicate = recentRecipientLogs.some((l) =>
+			isDuplicateMealDistributionLog(l, ticket.meal!)
 		);
 		if (duplicate && !input.is_override) {
 			throw new WorkflowValidationError(
