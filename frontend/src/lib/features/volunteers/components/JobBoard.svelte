@@ -58,7 +58,8 @@
 		shelter_code?: string;
 		description: string;
 		shifts: DisplayShift[];
-		tags: { label: string; variant: 'default' | 'success' | 'warning' | 'purple' | 'outline' }[];
+		tags: { label: string; variant: 'success' | 'warning' | 'outline' }[];
+		skills: { value: string; label: string }[];
 		skills_required?: string[];
 		applicants_count: number;
 		isControlled: boolean;
@@ -361,15 +362,7 @@
 					shifts.reduce((sum, s) => sum + s.applicants_count, 0)
 				);
 
-				const tags: {
-					label: string;
-					variant: 'default' | 'success' | 'warning' | 'purple' | 'outline';
-				}[] = [];
-				if (isControlled) {
-					tags.push({ label: t.controlledMission, variant: 'purple' });
-				} else {
-					tags.push({ label: t.generalMission, variant: 'default' });
-				}
+				const tags: { label: string; variant: 'success' | 'warning' | 'outline' }[] = [];
 
 				if (job.status === 'open') {
 					tags.push({ label: t.tagOpen, variant: 'success' });
@@ -379,12 +372,10 @@
 					tags.push({ label: t.tagFull, variant: 'outline' });
 				}
 
-				if (job.skills_required) {
-					for (const sk of job.skills_required) {
-						const label = resolvedSkillLabel(sk);
-						if (label) tags.push({ label, variant: 'outline' });
-					}
-				}
+				const skills = (job.skills_required ?? []).flatMap((value) => {
+					const label = resolvedSkillLabel(value);
+					return label ? [{ value, label }] : [];
+				});
 
 				return {
 					id: cleanJobId,
@@ -394,6 +385,7 @@
 					description: job.description || t.defaultJobDesc,
 					shifts,
 					tags,
+					skills,
 					skills_required: job.skills_required,
 					applicants_count: totalApplicants,
 					isControlled
@@ -460,7 +452,8 @@
 				const matchText =
 					j.title.toLowerCase().includes(q) ||
 					j.shelter.toLowerCase().includes(q) ||
-					j.tags.some((tg) => tg.label.toLowerCase().includes(q));
+					j.tags.some((tg) => tg.label.toLowerCase().includes(q)) ||
+					j.skills.some((skill) => skill.label.toLowerCase().includes(q));
 				if (!matchText) return false;
 			}
 
@@ -471,7 +464,7 @@
 			if (selectedSkill !== 'all') {
 				const hasSkill =
 					j.skills_required?.some((s) => skillsMatch(s, selectedSkill)) ||
-					j.tags.some((tg) => skillsMatch(tg.label, selectedSkill)) ||
+					j.skills.some((skill) => skillsMatch(skill.label, selectedSkill)) ||
 					skillsMatch(j.title, selectedSkill);
 				if (!hasSkill) return false;
 			}
@@ -777,4 +770,5 @@
 	job={selectedJob}
 	{applicantProfile}
 	{applicantCredential}
+	showExistingProfileConfirmation={!applicantProfile && !applicantCredential}
 />

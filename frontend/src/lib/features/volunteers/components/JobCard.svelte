@@ -12,7 +12,7 @@
 
 	interface JobTag {
 		label: string;
-		variant: 'default' | 'success' | 'warning' | 'purple' | 'outline';
+		variant: 'success' | 'warning' | 'outline';
 	}
 
 	interface JobShift {
@@ -36,6 +36,8 @@
 			description: string;
 			shifts: JobShift[];
 			tags: JobTag[];
+			skills: { value: string; label: string }[];
+			isControlled: boolean;
 			applicants_count?: number;
 		};
 		onApply: (jobId: string, shiftId: string) => void;
@@ -59,12 +61,7 @@
 		)
 	);
 
-	let isControlled = $derived(
-		job.tags.some(
-			(tg: JobTag) =>
-				tg.variant === 'purple' || tg.label.includes('ควบคุม') || tg.label.includes('แพทย์')
-		)
-	);
+	const isControlled = $derived(job.isControlled);
 </script>
 
 <div
@@ -94,10 +91,8 @@
 				{#each job.tags as tag (tag.label)}
 					<span
 						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
-					{tag.variant === 'default' ? 'bg-primary/10 text-primary' : ''}
 					{tag.variant === 'success' ? 'bg-success/15 text-success' : ''}
 					{tag.variant === 'warning' ? 'bg-warning/15 text-warning-foreground' : ''}
-					{tag.variant === 'purple' ? 'bg-purple-500/15 text-purple-600' : ''}
 					{tag.variant === 'outline' ? 'border border-border bg-muted/30 text-muted-foreground' : ''}"
 					>
 						{#if tag.variant === 'success'}
@@ -117,6 +112,24 @@
 				<span class="min-w-0 font-medium break-words text-foreground">{job.shelter}</span>
 			</div>
 		</div>
+
+		{#if job.skills.length > 0}
+			<div class="border-t border-border/60 pt-3">
+				<div class="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+					<Tag class="h-3.5 w-3.5 text-primary" />
+					<span>ความสามารถ</span>
+				</div>
+				<div class="flex flex-wrap gap-1.5">
+					{#each job.skills as skill (skill.value)}
+						<span
+							class="rounded-lg border border-border/80 bg-muted/30 px-2.5 py-1 text-xs font-medium text-foreground"
+						>
+							{skill.label}
+						</span>
+					{/each}
+				</div>
+			</div>
+		{/if}
 
 		<h3 class="mb-2 text-xl leading-tight font-bold break-words text-foreground">{job.title}</h3>
 		<p class="line-clamp-1 text-sm leading-relaxed text-muted-foreground">{job.description}</p>
