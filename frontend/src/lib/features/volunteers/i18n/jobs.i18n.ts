@@ -217,7 +217,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySuccessTitle: 'สมัครงานจิตอาสาสำเร็จ!',
 		applySuccessDesc: 'ระบบได้ออกบัตรตั๋วดิจิทัล (Digital Pass) ประจำตัวของคุณเรียบร้อยแล้ว',
 		applyViewPassButton: 'เปิดดูตั๋วดิจิทัลของคุณ',
-		toastApplySuccess: 'ส่งใบสมัครสำเร็จ! คุณจะได้รับตั๋วดิจิทัล (QR Code) ทันที',
+		toastApplySuccess: 'ส่งใบสมัครสำเร็จ!',
 		errPdpaRequired: 'กรุณายอมรับเงื่อนไข PDPA ก่อนดำเนินการต่อ',
 		errNoJobSelected: 'ไม่พบข้อมูลงานหรือกะเวลาที่เลือก',
 		errRecaptchaFailed: 'ไม่สามารถยืนยัน reCAPTCHA ได้ กรุณาลองใหม่อีกครั้ง',
@@ -334,8 +334,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySuccessTitle: 'Application Submitted Successfully!',
 		applySuccessDesc: 'Your Digital Pass has been generated and is ready for on-site check-in.',
 		applyViewPassButton: 'Open Your Digital Pass',
-		toastApplySuccess:
-			'Application submitted! You will receive your Digital Pass (QR Code) instantly.',
+		toastApplySuccess: 'Application submitted!',
 		errPdpaRequired: 'Please accept the PDPA consent before proceeding',
 		errNoJobSelected: 'No job or shift selected',
 		errRecaptchaFailed: 'reCAPTCHA verification failed. Please try again.',
