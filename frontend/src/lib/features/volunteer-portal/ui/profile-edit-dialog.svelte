@@ -89,7 +89,7 @@
 		error = '';
 		try {
 			const skills = selected.map(
-				(value) => findSkillOption(value, skillsQuery.data ?? [])?.code ?? value
+				(value) => findSkillOption(value, skillsQuery.data ?? [])?.label ?? value
 			);
 			await save.mutateAsync([...new Set(skills)]);
 			toast.success('บันทึกโปรไฟล์แล้ว');
