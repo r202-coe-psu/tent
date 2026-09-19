@@ -10,7 +10,6 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type {
-		UnifiedHouseholdInput,
 		UnifiedMemberWithMeta,
 		UnifiedRegistrationInput
 	} from '../../domain/unified-registration';
@@ -26,8 +25,7 @@
 		submitDisabled = false,
 		submitLabel = 'ยืนยันการลงทะเบียน',
 		submittingLabel = 'กำลังบันทึก...',
-		onNavigate,
-		onsubmit
+		onNavigate
 	}: {
 		shelterName?: string;
 		shelterCode?: string;
@@ -40,7 +38,6 @@
 		submitLabel?: string;
 		submittingLabel?: string;
 		onNavigate: (sectionId: string) => void;
-		onsubmit?: () => void;
 	} = $props();
 
 	const formattedAddress = $derived.by(() => {
@@ -73,7 +70,9 @@
 	);
 
 	const isAddressReady = $derived(
-		Boolean(household.province?.trim() && household.district?.trim() && household.subdistrict?.trim())
+		Boolean(
+			household.province?.trim() && household.district?.trim() && household.subdistrict?.trim()
+		)
 	);
 	const isMembersReady = $derived(Boolean(headMember?.first_name?.trim()));
 </script>
@@ -128,14 +127,14 @@
 				</button>
 			</div>
 			{#if formattedAddress}
-				<p class="text-xs font-medium text-foreground leading-relaxed">
+				<p class="text-xs leading-relaxed font-medium text-foreground">
 					{formattedAddress}
 				</p>
 			{:else}
 				<p class="text-xs text-muted-foreground italic">ยังไม่ได้ระบุที่อยู่</p>
 			{/if}
 			{#if household.residence_landmark}
-				<p class="text-2xs text-muted-foreground truncate">
+				<p class="truncate text-2xs text-muted-foreground">
 					จุดสังเกต: {household.residence_landmark}
 				</p>
 			{/if}

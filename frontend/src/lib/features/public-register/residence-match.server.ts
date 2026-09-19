@@ -10,10 +10,7 @@ import {
 	matchesResidenceAddress,
 	type ResidenceFields
 } from '$lib/features/people/server';
-import {
-	signResidenceMatchToken,
-	verifyResidenceMatchToken
-} from './residence-match-token.server';
+import { signResidenceMatchToken, verifyResidenceMatchToken } from './residence-match-token.server';
 
 export type ResidenceSearchQuery = ResidenceFields & {
 	phone?: string | null;
@@ -85,7 +82,9 @@ function toChip(
 		...(fields.housing_type?.trim() ? { housing_type: fields.housing_type.trim() } : {}),
 		...(meta?.shelter_code ? { shelter_code: meta.shelter_code } : {}),
 		...(meta?.shelter_name ? { shelter_name: meta.shelter_name } : {}),
-		...(meta?.primary_contact_masked ? { primary_contact_masked: meta.primary_contact_masked } : {}),
+		...(meta?.primary_contact_masked
+			? { primary_contact_masked: meta.primary_contact_masked }
+			: {}),
 		...(meta?.matched_member_masked ? { matched_member_masked: meta.matched_member_masked } : {}),
 		...(typeof meta?.member_count === 'number' ? { member_count: meta.member_count } : {}),
 		...(meta?.pets ? { pets: meta.pets } : {}),
@@ -111,7 +110,8 @@ export async function findShelterResidenceMatches(
 	const db = shelterDbName(shelterCode);
 
 	const phoneHouseholdIds = new Set<string>();
-	const phoneMatchedEvacuees: Record<string, { _id: string; first_name: string; phone: string }> = {};
+	const phoneMatchedEvacuees: Record<string, { _id: string; first_name: string; phone: string }> =
+		{};
 
 	if (hasPhone) {
 		const phoneVariations = [
@@ -128,16 +128,18 @@ export async function findShelterResidenceMatches(
 		});
 		if (evRes.status < 400) {
 			const evDocs =
-				(evRes.data as {
-					docs?: Array<{
-						_id: string;
-						first_name: string;
-						last_name?: string;
-						phone?: string;
-						household_id?: string;
-						is_head?: boolean;
-					}>;
-				} | null)?.docs ?? [];
+				(
+					evRes.data as {
+						docs?: Array<{
+							_id: string;
+							first_name: string;
+							last_name?: string;
+							phone?: string;
+							household_id?: string;
+							is_head?: boolean;
+						}>;
+					} | null
+				)?.docs ?? [];
 			for (const ev of evDocs) {
 				if (ev.household_id) {
 					phoneHouseholdIds.add(ev.household_id);
@@ -229,18 +231,22 @@ export async function findShelterResidenceMatches(
 
 		const evList =
 			(evRes.status < 400
-				? (evRes.data as {
-						docs?: Array<{
-							_id: string;
-							first_name: string;
-							last_name?: string;
-							phone?: string;
-							is_head?: boolean;
-						}>;
-					} | null)?.docs
+				? (
+						evRes.data as {
+							docs?: Array<{
+								_id: string;
+								first_name: string;
+								last_name?: string;
+								phone?: string;
+								is_head?: boolean;
+							}>;
+						} | null
+					)?.docs
 				: null) ?? [];
 		const head =
-			evList.find((e) => e.is_head) || evList.find((e) => e._id === doc.head_evacuee_id) || evList[0];
+			evList.find((e) => e.is_head) ||
+			evList.find((e) => e._id === doc.head_evacuee_id) ||
+			evList[0];
 		const primaryMasked = head ? `${head.first_name} ${maskLastName(head.last_name)}`.trim() : null;
 
 		let matchedMemberMasked: string | null = null;
@@ -401,11 +407,14 @@ export async function findUniversalResidenceMatches(
 		sheltersPromise
 	]);
 
-	const unassignedMatches =
-		unassignedResult.status === 'fulfilled' ? unassignedResult.value : [];
+	const unassignedMatches = unassignedResult.status === 'fulfilled' ? unassignedResult.value : [];
 	const sheltersList =
 		sheltersResult.status === 'fulfilled'
-			? ((sheltersResult.value as { shelters?: Array<{ code: string; name: string; status?: string }> } | null)?.shelters ?? [])
+			? ((
+					sheltersResult.value as {
+						shelters?: Array<{ code: string; name: string; status?: string }>;
+					} | null
+				)?.shelters ?? [])
 			: [];
 	const openShelters = sheltersList.filter((s) => s.status?.toLowerCase() !== 'closed');
 

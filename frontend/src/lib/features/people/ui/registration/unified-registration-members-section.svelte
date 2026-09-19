@@ -28,7 +28,6 @@
 		shelterCode = '',
 		membersSectionDesc,
 		isJoiningExistingHousehold = false,
-		primaryContactPhone = null,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -40,7 +39,6 @@
 		shelterCode?: string;
 		membersSectionDesc: string;
 		isJoiningExistingHousehold?: boolean;
-		primaryContactPhone?: string | null;
 		onDirty?: () => void;
 	} = $props();
 
@@ -132,7 +130,7 @@
 					variant="outline"
 					disabled={pending}
 					onclick={handleAddMemberViaThaiD}
-					class="h-9 gap-1.5 border-primary/30 text-primary hover:bg-primary/10 text-xs sm:text-sm"
+					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10 sm:text-sm"
 				>
 					<QrCodeIcon class="size-4" />
 					<span>เพิ่มสมาชิกด้วย ThaiD (สแกน QR)</span>
@@ -178,7 +176,6 @@
 				excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 				fieldErrors={memberFieldErrors[index]}
 				isJoiningExistingHousehold={isJoiningExistingHousehold && index > 0}
-				primaryContactPhone={members[0]?.phone}
 				onApplyZoneToAll={applyZoneToAll}
 				onRemove={() => removeMember(index)}
 				onScanThaiD={() => handleOpenScanForMember(index)}
@@ -188,7 +185,9 @@
 
 	<ThaidMemberScanDialog
 		bind:open={scanDialogOpen}
-		memberLabel={targetMemberIndex !== null ? `สมาชิกคนที่ ${targetMemberIndex + 1}` : 'สมาชิกในครอบครัว'}
+		memberLabel={targetMemberIndex !== null
+			? `สมาชิกคนที่ ${targetMemberIndex + 1}`
+			: 'สมาชิกในครอบครัว'}
 		onscanned={handleMemberScanned}
 	/>
 </UnifiedRegistrationSection>

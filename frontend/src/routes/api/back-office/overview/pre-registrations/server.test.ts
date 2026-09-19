@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
-import { buildPreRegistrationsList, parseOverviewFilters } from '$lib/server/system-overview';
+import { buildPreRegistrationsList } from '$lib/server/system-overview';
 
 vi.mock('$lib/server/system-overview', () => ({
 	requireOverviewSA: vi.fn().mockResolvedValue({ name: 'sa', isSA: true }),
@@ -45,13 +45,19 @@ describe('GET /api/back-office/overview/pre-registrations', () => {
 			limit: 50,
 			offset: 0
 		};
-		vi.mocked(buildPreRegistrationsList).mockResolvedValue(mockPayload as any);
+		vi.mocked(buildPreRegistrationsList).mockResolvedValue(
+			mockPayload as unknown as Awaited<ReturnType<typeof buildPreRegistrationsList>>
+		);
 
 		const res = await GET({
-			request: new Request('http://localhost/api/back-office/overview/pre-registrations?household_id=household:hh-100'),
-			url: new URL('http://localhost/api/back-office/overview/pre-registrations?household_id=household:hh-100'),
+			request: new Request(
+				'http://localhost/api/back-office/overview/pre-registrations?household_id=household:hh-100'
+			),
+			url: new URL(
+				'http://localhost/api/back-office/overview/pre-registrations?household_id=household:hh-100'
+			),
 			fetch: vi.fn()
-		} as any);
+		} as unknown as Parameters<typeof GET>[0]);
 
 		expect(res.status).toBe(200);
 		const json = await res.json();
@@ -84,13 +90,19 @@ describe('GET /api/back-office/overview/pre-registrations', () => {
 			limit: 50,
 			offset: 0
 		};
-		vi.mocked(buildPreRegistrationsList).mockResolvedValue(mockPayload as any);
+		vi.mocked(buildPreRegistrationsList).mockResolvedValue(
+			mockPayload as unknown as Awaited<ReturnType<typeof buildPreRegistrationsList>>
+		);
 
 		const res = await GET({
-			request: new Request('http://localhost/api/back-office/overview/pre-registrations?stay_bucket=present'),
-			url: new URL('http://localhost/api/back-office/overview/pre-registrations?stay_bucket=present'),
+			request: new Request(
+				'http://localhost/api/back-office/overview/pre-registrations?stay_bucket=present'
+			),
+			url: new URL(
+				'http://localhost/api/back-office/overview/pre-registrations?stay_bucket=present'
+			),
 			fetch: vi.fn()
-		} as any);
+		} as unknown as Parameters<typeof GET>[0]);
 
 		expect(res.status).toBe(200);
 		const json = await res.json();

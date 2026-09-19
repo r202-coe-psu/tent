@@ -1,7 +1,6 @@
 <script lang="ts">
 	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import Search from '@lucide/svelte/icons/search';
-	import Users from '@lucide/svelte/icons/users';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Home from '@lucide/svelte/icons/home';
@@ -46,7 +45,9 @@
 
 	const activeHouseholds = $derived.by(() => {
 		const excluded = new Set([targetHouseholdId, excludeHouseholdId].filter(Boolean));
-		return allHouseholds.filter((h) => h.status !== 'merged' && h.status !== 'cancelled' && !excluded.has(h._id));
+		return allHouseholds.filter(
+			(h) => h.status !== 'merged' && h.status !== 'cancelled' && !excluded.has(h._id)
+		);
 	});
 
 	const searchFilteredHouseholds = $derived.by(() => {
@@ -98,7 +99,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-xl max-h-[90vh] flex flex-col">
+	<Dialog.Content class="flex max-h-[90vh] flex-col sm:max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2 text-base font-bold sm:text-lg">
 				<GitMerge class="size-5 text-primary" />
@@ -106,7 +107,9 @@
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-muted-foreground">
 				{#if targetHouseholdLabel}
-					เลือกครอบครัวที่จะนำมารวมเข้ากับ <strong class="text-foreground">{targetHouseholdLabel}</strong>
+					เลือกครอบครัวที่จะนำมารวมเข้ากับ <strong class="text-foreground"
+						>{targetHouseholdLabel}</strong
+					>
 				{:else}
 					ค้นหาครอบครัวอื่นเพื่อดึงสมาชิกและสัตว์เลี้ยงมารวมในครอบครัวนี้
 				{/if}
@@ -114,23 +117,23 @@
 		</Dialog.Header>
 
 		<div class="relative mt-2">
-			<Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+			<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 			<Input
 				type="search"
 				bind:value={searchQuery}
 				placeholder="ค้นหาด้วยชื่อครอบครัว หรือ ที่อยู่..."
-				class="pl-9 h-10"
+				class="h-10 pl-9"
 			/>
 		</div>
 
-		<div class="mt-3 flex-1 overflow-y-auto space-y-2.5 min-h-[220px] max-h-[380px] pr-1">
+		<div class="mt-3 max-h-[380px] min-h-[220px] flex-1 space-y-2.5 overflow-y-auto pr-1">
 			{#if householdsQuery.isLoading}
-				<div class="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+				<div class="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
 					<Loader2 class="size-6 animate-spin text-primary" />
 					<span class="text-xs">กำลังโหลดรายชื่อครอบครัว...</span>
 				</div>
 			{:else if searchFilteredHouseholds.length === 0}
-				<div class="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+				<div class="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
 					<AlertCircle class="size-6" />
 					<span class="text-xs">ไม่พบครอบครัวที่ตรงกับคำค้นหา</span>
 				</div>
@@ -138,11 +141,11 @@
 				{#each searchFilteredHouseholds as hh (hh._id)}
 					{@const isMerging = loadingHhId === hh._id}
 					<div
-						class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/80 bg-card p-3.5 transition-colors hover:border-primary/40 hover:bg-muted/10"
+						class="flex flex-col justify-between gap-3 rounded-xl border border-border/80 bg-card p-3.5 transition-colors hover:border-primary/40 hover:bg-muted/10 sm:flex-row sm:items-center"
 					>
 						<div class="space-y-1">
 							<div class="flex items-center gap-2">
-								<Home class="size-4 text-primary shrink-0" />
+								<Home class="size-4 shrink-0 text-primary" />
 								<span class="text-sm font-bold text-foreground">
 									{hh.label || 'ครอบครัว'}
 								</span>
@@ -153,7 +156,13 @@
 								{/if}
 							</div>
 							<p class="text-xs text-muted-foreground">
-								{[hh.address_no ? `บ้านเลขที่ ${hh.address_no}` : '', hh.residence_landmark, hh.subdistrict, hh.district, hh.province]
+								{[
+									hh.address_no ? `บ้านเลขที่ ${hh.address_no}` : '',
+									hh.residence_landmark,
+									hh.subdistrict,
+									hh.district,
+									hh.province
+								]
 									.filter(Boolean)
 									.join(' ') || 'ไม่ระบุที่อยู่'}
 							</p>
@@ -169,7 +178,7 @@
 							type="button"
 							size="sm"
 							variant="outline"
-							class="shrink-0 min-h-9 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+							class="min-h-9 shrink-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
 							disabled={isMerging || Boolean(loadingHhId)}
 							onclick={() => handleSelect(hh)}
 						>

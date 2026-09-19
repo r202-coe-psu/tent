@@ -42,8 +42,9 @@
 					เปิดใช้งานการลงทะเบียนด้วย ThaiD Digital ID
 				</label>
 				<p class="text-xs text-muted-foreground">
-					อนุญาตให้ประชาชนดึงข้อมูลบัตรประชาชนและที่อยู่อัตโนมัติในหน้าลงทะเบียนล่วงหน้า
-					(<code class="rounded bg-muted px-1">/pre-register</code>) ผ่านระบบ ThaiD (BORA Digital ID)
+					อนุญาตให้ประชาชนดึงข้อมูลบัตรประชาชนและที่อยู่อัตโนมัติในหน้าลงทะเบียนล่วงหน้า (<code
+						class="rounded bg-muted px-1">/pre-register</code
+					>) ผ่านระบบ ThaiD (BORA Digital ID)
 				</p>
 			</div>
 			<Switch

@@ -1232,6 +1232,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		targetHousehold: Household;
 		mergedMembers: Evacuee[];
 	}> {
+		void ctx;
 		if (sourceHouseholdId === targetHouseholdId) {
 			throw new Error('ไม่สามารถรวมครัวเรือนเข้ากับตัวเองได้');
 		}
@@ -1273,7 +1274,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				...latestSource,
 				status: 'merged' as const,
 				merged_to_household_id: targetHouseholdId,
-				notes: [latestSource.notes, `รวมเข้ากับครัวเรือน ${targetHouseholdId} (${latestTarget.label})`]
+				notes: [
+					latestSource.notes,
+					`รวมเข้ากับครัวเรือน ${targetHouseholdId} (${latestTarget.label})`
+				]
 					.filter(Boolean)
 					.join('\n')
 			})

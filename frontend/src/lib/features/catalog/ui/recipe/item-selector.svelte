@@ -2,6 +2,9 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
 	import type { ItemMaster } from '../../domain/catalog';
+	import { formatUnit } from '../../domain/unit-of-measure';
+	import { useUnitsOfMeasure } from '../../application/queries';
+	import { langState } from '$lib/states/i18n.svelte';
 	import Search from '@lucide/svelte/icons/search';
 
 	let {
@@ -16,6 +19,8 @@
 
 	let searchTerm = $state('');
 	let isOpen = $state(false);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	// Sync input text when the bound value changes (e.g. initial load)
 	$effect(() => {
@@ -83,7 +88,7 @@
 						<span
 							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
 						>
-							{item.base_unit}
+							{formatUnit(item.base_unit, units, langState.current)}
 						</span>
 					</button>
 				</li>

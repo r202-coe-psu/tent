@@ -244,10 +244,13 @@
 								<span
 									class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
 								>
-									{totalPetCount} {t.petCountUnit ? `${t.petCountUnit}` : 'ตัว'}
+									{totalPetCount}
+									{t.petCountUnit ? `${t.petCountUnit}` : 'ตัว'}
 								</span>
 							{:else}
-								<span class="rounded-full bg-muted px-2 py-0.5 text-2xs font-normal text-muted-foreground">
+								<span
+									class="rounded-full bg-muted px-2 py-0.5 text-2xs font-normal text-muted-foreground"
+								>
 									ไม่จำเป็น / หากมี
 								</span>
 							{/if}
@@ -274,7 +277,8 @@
 							</span>
 						</div>
 						<p class="mt-1 text-xs text-muted-foreground">
-							ครอบครัวนี้มีสัตว์เลี้ยงที่ลงทะเบียนไว้แล้วด้านล่าง หากมีสัตว์เลี้ยงตัวอื่นที่นำมาเพิ่ม สามารถกดปุ่มเพิ่มสัตว์เลี้ยงได้
+							ครอบครัวนี้มีสัตว์เลี้ยงที่ลงทะเบียนไว้แล้วด้านล่าง
+							หากมีสัตว์เลี้ยงตัวอื่นที่นำมาเพิ่ม สามารถกดปุ่มเพิ่มสัตว์เลี้ยงได้
 						</p>
 						<div class="mt-2.5 flex flex-wrap gap-2">
 							{#each existingPets as ep, i (i)}
@@ -340,216 +344,222 @@
 					</div>
 				</div>
 
-	{#if petItems.length === 0}
-		<div
-			class="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/80 bg-white p-4 text-center"
-		>
-			<PawPrint class="size-6 text-muted-foreground/50" />
-			<p class="text-sm font-medium text-foreground">{t.sectionPetsEmpty}</p>
-			<p class="text-xs text-muted-foreground">{t.sectionPetsEmptyHint}</p>
-			<div class="mt-1 flex flex-wrap justify-center gap-2">
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('dog')}
-					class="h-8 gap-1 text-xs"
-				>
-					<Plus class="size-3.5" />
-					{t.addDogFull}
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('cat')}
-					class="h-8 gap-1 text-xs"
-				>
-					<Plus class="size-3.5" />
-					{t.addCatFull}
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					disabled={pending || petItems.length >= 20}
-					onclick={() => addPet('other')}
-					class="h-8 gap-1 text-xs"
-				>
-					<Plus class="size-3.5" />
-					{t.addOtherPetFull}
-				</Button>
-			</div>
-		</div>
-	{:else}
-		<div class="space-y-2">
-			{#each petItems as pet (pet.id)}
-				<div class="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs sm:p-3">
-					<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-						<div class="flex min-w-0 items-center gap-2">
-							<span
-								class="inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs font-semibold
-								{pet.species === 'dog'
-									? 'border-amber-200 bg-amber-50 text-amber-900'
-									: pet.species === 'cat'
-										? 'border-sky-200 bg-sky-50 text-sky-900'
-										: 'border-emerald-200 bg-emerald-50 text-emerald-900'}"
-							>
-								{pet.species === 'dog'
-									? t.dogTitle
-									: pet.species === 'cat'
-										? t.catTitle
-										: t.otherPetTitle}
-							</span>
-							<span class="truncate text-sm font-semibold text-foreground">
-								{petTitle(pet)}
-							</span>
-						</div>
-
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							disabled={pending}
-							onclick={() => removePet(pet.id)}
-							class="h-7 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-						>
-							<Trash2 class="mr-1 size-3.5" />
-							{t.removeBtn}
-						</Button>
-					</div>
-
+				{#if petItems.length === 0}
 					<div
-						class="flex flex-col gap-2.5 {showPetPhotoUpload ? 'sm:flex-row sm:items-start' : ''}"
+						class="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/80 bg-white p-4 text-center"
 					>
-						{#if showPetPhotoUpload}
-							<div class="flex shrink-0 items-start gap-2 sm:w-[7.5rem] sm:flex-col">
-								<div
-									class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30 sm:size-16"
-								>
-									{#if uploadingPetId === pet.id}
-										<Loader2 class="size-5 animate-spin text-primary" />
-									{:else if pet.previewUrl}
-										<img
-											src={pet.previewUrl}
-											alt={t.petPhotoLabel}
-											class="size-full object-cover"
-										/>
-									{:else}
-										<Camera class="size-5 text-muted-foreground/50" />
-									{/if}
-								</div>
-								<div
-									class="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:w-full sm:flex-col sm:items-stretch"
-								>
-									<span class="text-2xs text-muted-foreground sm:text-center">
-										(ไม่จำเป็น / หากมี)
-									</span>
-									<label
-										for="pet-photo-{pet.id}"
-										class="inline-flex min-h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {pending ||
-										uploadingPetId === pet.id
-											? 'pointer-events-none opacity-60'
-											: ''}"
-									>
-										<Camera class="size-3.5 text-primary" />
-										<span class="truncate">
-											{pet.previewUrl || pet.image_url ? t.petPhotoChange : t.petPhotoPick}
-										</span>
-									</label>
-									<input
-										id="pet-photo-{pet.id}"
-										type="file"
-										accept="image/*"
-										class="sr-only"
-										disabled={pending || uploadingPetId === pet.id}
-										onchange={(e) => void onPetPhotoChange(pet.id, e)}
-									/>
-									{#if pet.previewUrl || pet.image_url}
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											disabled={pending || uploadingPetId === pet.id}
-											onclick={() => clearPetPhoto(pet.id)}
-											class="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-											aria-label={t.petPhotoRemove}
-										>
-											<X class="size-3.5" />
-											{t.petPhotoRemove}
-										</Button>
-									{/if}
-								</div>
-							</div>
-						{/if}
-
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="grid grid-cols-1 gap-2 {pet.species === 'other' ? 'sm:grid-cols-2' : ''}">
-								{#if pet.species === 'other'}
-									<div class="space-y-1">
-										<Label class="text-xs font-semibold text-foreground">
-											{t.petSpeciesCustomLabel} <span class="text-destructive">*</span>
-										</Label>
-										<Input
-											placeholder={t.petSpeciesCustomPlaceholder}
-											bind:value={pet.customSpecies}
-											disabled={pending}
-											class="h-9 text-sm"
-											oninput={notifySync}
-										/>
-									</div>
-								{/if}
-
-								<div class="space-y-1">
-									<Label class="text-xs font-semibold text-foreground">
-										{t.petNameLabel}
-									</Label>
-									<Input
-										placeholder={t.petNamePlaceholder}
-										bind:value={pet.name}
-										disabled={pending}
-										class="h-9 text-sm"
-										oninput={notifySync}
-									/>
-								</div>
-							</div>
-
-							<div class="space-y-1">
-								<Label class="text-xs font-semibold text-foreground">
-									{t.petExtraLabel}
-								</Label>
-								<Textarea
-									placeholder={t.petExtraPlaceholder}
-									bind:value={pet.details}
-									disabled={pending}
-									rows={1}
-									class="min-h-9 resize-y text-sm"
-									oninput={notifySync}
-								/>
-							</div>
-
-							<label
-								class="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-foreground select-none"
+						<PawPrint class="size-6 text-muted-foreground/50" />
+						<p class="text-sm font-medium text-foreground">{t.sectionPetsEmpty}</p>
+						<p class="text-xs text-muted-foreground">{t.sectionPetsEmptyHint}</p>
+						<div class="mt-1 flex flex-wrap justify-center gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={pending || petItems.length >= 20}
+								onclick={() => addPet('dog')}
+								class="h-8 gap-1 text-xs"
 							>
-								<Checkbox
-									checked={pet.has_cage}
-									onCheckedChange={(v) => {
-										pet.has_cage = v === true;
-										notifySync();
-									}}
-									disabled={pending}
-									class="size-4"
-								/>
-								<span>{t.petHasCage}</span>
-							</label>
+								<Plus class="size-3.5" />
+								{t.addDogFull}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={pending || petItems.length >= 20}
+								onclick={() => addPet('cat')}
+								class="h-8 gap-1 text-xs"
+							>
+								<Plus class="size-3.5" />
+								{t.addCatFull}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={pending || petItems.length >= 20}
+								onclick={() => addPet('other')}
+								class="h-8 gap-1 text-xs"
+							>
+								<Plus class="size-3.5" />
+								{t.addOtherPetFull}
+							</Button>
 						</div>
 					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
+				{:else}
+					<div class="space-y-2">
+						{#each petItems as pet (pet.id)}
+							<div class="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs sm:p-3">
+								<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+									<div class="flex min-w-0 items-center gap-2">
+										<span
+											class="inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs font-semibold
+								{pet.species === 'dog'
+												? 'border-amber-200 bg-amber-50 text-amber-900'
+												: pet.species === 'cat'
+													? 'border-sky-200 bg-sky-50 text-sky-900'
+													: 'border-emerald-200 bg-emerald-50 text-emerald-900'}"
+										>
+											{pet.species === 'dog'
+												? t.dogTitle
+												: pet.species === 'cat'
+													? t.catTitle
+													: t.otherPetTitle}
+										</span>
+										<span class="truncate text-sm font-semibold text-foreground">
+											{petTitle(pet)}
+										</span>
+									</div>
+
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										disabled={pending}
+										onclick={() => removePet(pet.id)}
+										class="h-7 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+									>
+										<Trash2 class="mr-1 size-3.5" />
+										{t.removeBtn}
+									</Button>
+								</div>
+
+								<div
+									class="flex flex-col gap-2.5 {showPetPhotoUpload
+										? 'sm:flex-row sm:items-start'
+										: ''}"
+								>
+									{#if showPetPhotoUpload}
+										<div class="flex shrink-0 items-start gap-2 sm:w-[7.5rem] sm:flex-col">
+											<div
+												class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30 sm:size-16"
+											>
+												{#if uploadingPetId === pet.id}
+													<Loader2 class="size-5 animate-spin text-primary" />
+												{:else if pet.previewUrl}
+													<img
+														src={pet.previewUrl}
+														alt={t.petPhotoLabel}
+														class="size-full object-cover"
+													/>
+												{:else}
+													<Camera class="size-5 text-muted-foreground/50" />
+												{/if}
+											</div>
+											<div
+												class="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:w-full sm:flex-col sm:items-stretch"
+											>
+												<span class="text-2xs text-muted-foreground sm:text-center">
+													(ไม่จำเป็น / หากมี)
+												</span>
+												<label
+													for="pet-photo-{pet.id}"
+													class="inline-flex min-h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {pending ||
+													uploadingPetId === pet.id
+														? 'pointer-events-none opacity-60'
+														: ''}"
+												>
+													<Camera class="size-3.5 text-primary" />
+													<span class="truncate">
+														{pet.previewUrl || pet.image_url ? t.petPhotoChange : t.petPhotoPick}
+													</span>
+												</label>
+												<input
+													id="pet-photo-{pet.id}"
+													type="file"
+													accept="image/*"
+													class="sr-only"
+													disabled={pending || uploadingPetId === pet.id}
+													onchange={(e) => void onPetPhotoChange(pet.id, e)}
+												/>
+												{#if pet.previewUrl || pet.image_url}
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														disabled={pending || uploadingPetId === pet.id}
+														onclick={() => clearPetPhoto(pet.id)}
+														class="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+														aria-label={t.petPhotoRemove}
+													>
+														<X class="size-3.5" />
+														{t.petPhotoRemove}
+													</Button>
+												{/if}
+											</div>
+										</div>
+									{/if}
+
+									<div class="min-w-0 flex-1 space-y-2">
+										<div
+											class="grid grid-cols-1 gap-2 {pet.species === 'other'
+												? 'sm:grid-cols-2'
+												: ''}"
+										>
+											{#if pet.species === 'other'}
+												<div class="space-y-1">
+													<Label class="text-xs font-semibold text-foreground">
+														{t.petSpeciesCustomLabel} <span class="text-destructive">*</span>
+													</Label>
+													<Input
+														placeholder={t.petSpeciesCustomPlaceholder}
+														bind:value={pet.customSpecies}
+														disabled={pending}
+														class="h-9 text-sm"
+														oninput={notifySync}
+													/>
+												</div>
+											{/if}
+
+											<div class="space-y-1">
+												<Label class="text-xs font-semibold text-foreground">
+													{t.petNameLabel}
+												</Label>
+												<Input
+													placeholder={t.petNamePlaceholder}
+													bind:value={pet.name}
+													disabled={pending}
+													class="h-9 text-sm"
+													oninput={notifySync}
+												/>
+											</div>
+										</div>
+
+										<div class="space-y-1">
+											<Label class="text-xs font-semibold text-foreground">
+												{t.petExtraLabel}
+											</Label>
+											<Textarea
+												placeholder={t.petExtraPlaceholder}
+												bind:value={pet.details}
+												disabled={pending}
+												rows={1}
+												class="min-h-9 resize-y text-sm"
+												oninput={notifySync}
+											/>
+										</div>
+
+										<label
+											class="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-foreground select-none"
+										>
+											<Checkbox
+												checked={pet.has_cage}
+												onCheckedChange={(v) => {
+													pet.has_cage = v === true;
+													notifySync();
+												}}
+												disabled={pending}
+												class="size-4"
+											/>
+											<span>{t.petHasCage}</span>
+										</label>
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</Accordion.Content>
 		</Accordion.Item>
 	</Accordion.Root>

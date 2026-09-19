@@ -90,12 +90,14 @@ export function useBoundEvacueeProfile(getShelter: () => string, getId: () => st
 	}));
 }
 
-export function useOverviewHouseholds(getParams: () => {
-	scope?: 'universal' | 'shelter';
-	shelterCode?: string | null;
-	q?: string | null;
-	limit?: number;
-}) {
+export function useOverviewHouseholds(
+	getParams: () => {
+		scope?: 'universal' | 'shelter';
+		shelterCode?: string | null;
+		q?: string | null;
+		limit?: number;
+	}
+) {
 	return createQuery(() => {
 		const p = getParams();
 		return {
@@ -105,4 +107,3 @@ export function useOverviewHouseholds(getParams: () => {
 		};
 	});
 }
-

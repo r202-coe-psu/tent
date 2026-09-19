@@ -8,7 +8,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { ServiceError } from '$lib/server/couch-admin';
-import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people/domain/thaid-profile';
+import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people';
 
 export type { ThaiDAutofillProfile };
 
@@ -342,8 +342,8 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 	const raw = claims.raw ?? {};
 	const pid = (claims.pid ?? (typeof raw.pid === 'string' ? raw.pid : '')).replace(/\D/g, '');
 
-	let firstName = '';
-	let lastName = '';
+	let firstName: string;
+	let lastName: string;
 	let gender: 'male' | 'female' | 'other' = 'other';
 
 	const givenName = typeof raw.given_name === 'string' ? raw.given_name.trim() : '';
@@ -420,11 +420,7 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 					? a.address_no
 					: '';
 		address.village_no =
-			typeof a.village_no === 'string'
-				? a.village_no
-				: typeof a.moo === 'string'
-					? a.moo
-					: '';
+			typeof a.village_no === 'string' ? a.village_no : typeof a.moo === 'string' ? a.moo : '';
 		address.subdistrict =
 			typeof a.subdistrict === 'string'
 				? a.subdistrict
@@ -432,11 +428,7 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 					? a.tambon
 					: '';
 		address.district =
-			typeof a.district === 'string'
-				? a.district
-				: typeof a.amphur === 'string'
-					? a.amphur
-					: '';
+			typeof a.district === 'string' ? a.district : typeof a.amphur === 'string' ? a.amphur : '';
 		address.province =
 			typeof a.province === 'string'
 				? a.province
@@ -477,4 +469,3 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		address
 	};
 }
-

@@ -93,7 +93,11 @@
 	}
 
 	function formatAddress(opt: HouseholdOption): string {
-		return [opt.subdistrict ? `ต.${opt.subdistrict}` : '', opt.district ? `อ.${opt.district}` : '', opt.province ? `จ.${opt.province}` : '']
+		return [
+			opt.subdistrict ? `ต.${opt.subdistrict}` : '',
+			opt.district ? `อ.${opt.district}` : '',
+			opt.province ? `จ.${opt.province}` : ''
+		]
 			.filter(Boolean)
 			.join(' ');
 	}
@@ -123,10 +127,10 @@
 					<Popover.Trigger
 						{...tooltipProps}
 						class={cn(
-							'flex h-9 w-full min-w-0 max-w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-left text-sm shadow-2xs transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0A2647]/20 disabled:cursor-not-allowed disabled:opacity-50',
+							'flex h-9 w-full max-w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-left text-sm shadow-2xs transition-colors hover:border-slate-300 focus:ring-2 focus:ring-[#0A2647]/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
 							className
 						)}
-						disabled={disabled}
+						{disabled}
 						aria-label="เลือกครอบครัว"
 						title={tooltipSummary || undefined}
 					>
@@ -139,7 +143,7 @@
 								{#if selectedOption.statusLabel}
 									<span
 										class={cn(
-											'shrink-0 max-w-[45%] truncate rounded-full px-2 py-0.5 text-2xs font-semibold',
+											'max-w-[45%] shrink-0 truncate rounded-full px-2 py-0.5 text-2xs font-semibold',
 											selectedOption.status === 'unassigned'
 												? 'border border-amber-200 bg-amber-50 text-amber-800'
 												: 'border border-sky-200 bg-sky-50 text-sky-800'
@@ -180,15 +184,15 @@
 					class="z-50 max-w-xs rounded-xl bg-slate-900/95 px-3 py-2 text-xs font-normal text-white shadow-xl backdrop-blur-sm"
 				>
 					<div class="space-y-1">
-						<div class="font-semibold text-white truncate">{selectedOption?.label ?? value}</div>
+						<div class="truncate font-semibold text-white">{selectedOption?.label ?? value}</div>
 						{#if selectedOption?.statusLabel}
-							<div class="text-sky-300 text-[11px] font-medium">{selectedOption.statusLabel}</div>
+							<div class="text-[11px] font-medium text-sky-300">{selectedOption.statusLabel}</div>
 						{/if}
 						{#if selectedOption && formatAddress(selectedOption)}
-							<div class="text-slate-300 text-[11px]">{formatAddress(selectedOption)}</div>
+							<div class="text-[11px] text-slate-300">{formatAddress(selectedOption)}</div>
 						{/if}
 						{#if selectedOption?.memberNames && selectedOption.memberNames.length > 0}
-							<div class="text-slate-400 text-[10px] leading-tight">
+							<div class="text-[10px] leading-tight text-slate-400">
 								สมาชิก ({selectedOption.memberCount} คน): {selectedOption.memberNames.join(', ')}
 							</div>
 						{/if}
@@ -198,7 +202,7 @@
 		</Tooltip.Root>
 
 		<Popover.Content
-			class="w-80 min-w-[20rem] max-w-sm rounded-xl border border-slate-200/80 bg-white p-2 shadow-lg sm:w-96"
+			class="w-80 max-w-sm min-w-[20rem] rounded-xl border border-slate-200/80 bg-white p-2 shadow-lg sm:w-96"
 			align="start"
 			sideOffset={4}
 		>
@@ -215,7 +219,7 @@
 					/>
 				</div>
 
-				<div class="max-h-60 overflow-y-auto space-y-1 pr-1">
+				<div class="max-h-60 space-y-1 overflow-y-auto pr-1">
 					{#if isLoading && items.length === 0}
 						<div class="flex items-center justify-center gap-2 py-6 text-xs text-slate-500">
 							<Loader class="size-4 animate-spin" />
@@ -240,21 +244,21 @@
 							<button
 								type="button"
 								class={cn(
-									'flex w-full min-w-0 flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:bg-slate-100',
+									'flex w-full min-w-0 flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-slate-100 focus:bg-slate-100 focus:outline-none',
 									isSelected && 'bg-sky-50/80 hover:bg-sky-50'
 								)}
 								title={itemTooltip}
 								onclick={() => handleSelect(item)}
 							>
-								<div class="flex min-w-0 w-full items-center justify-between gap-2">
-									<span class="min-w-0 flex-1 truncate font-semibold text-xs text-slate-900">
+								<div class="flex w-full min-w-0 items-center justify-between gap-2">
+									<span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-900">
 										{item.label}
 									</span>
-									<div class="flex items-center gap-1.5 shrink-0">
+									<div class="flex shrink-0 items-center gap-1.5">
 										{#if item.statusLabel}
 											<span
 												class={cn(
-													'max-w-[130px] truncate rounded-full px-1.5 py-0.2 text-[10px] font-semibold',
+													'py-0.2 max-w-[130px] truncate rounded-full px-1.5 text-2xs font-semibold',
 													item.status === 'unassigned'
 														? 'border border-amber-200 bg-amber-50 text-amber-800'
 														: 'border border-sky-200 bg-sky-50 text-sky-800'
@@ -264,7 +268,7 @@
 											</span>
 										{/if}
 										{#if isSelected}
-											<Check class="size-3.5 text-[#0284C7] shrink-0" />
+											<Check class="size-3.5 shrink-0 text-[#0284C7]" />
 										{/if}
 									</div>
 								</div>

@@ -86,7 +86,11 @@ export async function executePublicFamilyRegistration(
 		let effectiveTargetId = targetId;
 		let isSatellite = false;
 
-		if (!existing && options.originShelterCode && options.originShelterCode !== options.shelterCode) {
+		if (
+			!existing &&
+			options.originShelterCode &&
+			options.originShelterCode !== options.shelterCode
+		) {
 			const originHh = await loadShelterHousehold(options.originShelterCode, targetId);
 			if (originHh && isActiveHouseholdStatus(originHh.status)) {
 				isSatellite = true;

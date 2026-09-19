@@ -34,7 +34,9 @@ function postEvent(body: unknown): PostEvent {
 
 function getEvent(code: string): GetEvent {
 	return {
-		url: new URL(`http://localhost/api/public/v1/registrations/status?code=${encodeURIComponent(code)}`),
+		url: new URL(
+			`http://localhost/api/public/v1/registrations/status?code=${encodeURIComponent(code)}`
+		),
 		getClientAddress: () => '203.0.113.9',
 		fetch: vi.fn()
 	} as unknown as GetEvent;

@@ -64,7 +64,6 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
-		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
 		onApplyZoneToAll,
@@ -81,7 +80,6 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
-		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onApplyZoneToAll?: (zoneCode: string) => void;
@@ -502,7 +500,7 @@
 					size="sm"
 					disabled={fieldsDisabled}
 					onclick={onScanThaiD}
-					class="h-9 gap-1.5 border-primary/30 text-primary hover:bg-primary/10 text-xs"
+					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
 				>
 					<QrCode class="size-3.5" />
 					<span>สแกน ThaiD</span>

@@ -56,7 +56,9 @@ describe('GET /api/back-office/overview/households', () => {
 		vi.mocked(searchHouseholds).mockResolvedValue(mockItems);
 
 		const res = await GET({
-			request: new Request('http://localhost/api/back-office/overview/households?scope=universal&q=สม'),
+			request: new Request(
+				'http://localhost/api/back-office/overview/households?scope=universal&q=สม'
+			),
 			url: new URL('http://localhost/api/back-office/overview/households?scope=universal&q=สม'),
 			fetch: globalThis.fetch
 		} as never);
