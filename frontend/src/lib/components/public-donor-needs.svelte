@@ -28,7 +28,9 @@
 		unit: string;
 		status: 'open' | 'closed';
 		category?: string;
-		urgency?: 'critical' | 'high' | 'normal';
+		/** ค่าที่ back-office บันทึกไว้ (`critical` | `important` | `normal`)
+		 * อ่านผ่าน `needUrgency()` เท่านั้น อย่าเทียบ field นี้ตรงๆ */
+		urgency?: string;
 		/** The terms behind `qty_needed`, published by the projection. */
 		qty_target?: number;
 		on_hand?: number;
@@ -97,7 +99,7 @@
 							qty_target: Number(n.qty_target) || 0,
 							on_hand: Number(n.on_hand) || 0,
 							reserved: Number(n.reserved) || 0,
-							urgency: n.urgency || (qty >= 50 ? 'critical' : qty > 0 ? 'high' : 'normal')
+							urgency: n.urgency
 						};
 					})
 				}));
@@ -186,13 +188,11 @@
 
 				if (filterType === 'critical') {
 					filteredNeeds = filteredNeeds.filter(
-						(n) => n.status !== 'closed' && (n.urgency === 'critical' || n.qty_needed >= 50)
+						(n) => n.status !== 'closed' && needUrgency(n) === 'critical'
 					);
 				} else if (filterType === 'high') {
 					filteredNeeds = filteredNeeds.filter(
-						(n) =>
-							n.status !== 'closed' &&
-							(n.urgency === 'high' || (n.qty_needed > 0 && n.qty_needed < 50))
+						(n) => n.status !== 'closed' && needUrgency(n) === 'high'
 					);
 				} else if (filterType === 'normal') {
 					filteredNeeds = filteredNeeds.filter((n) => n.status !== 'closed');
@@ -248,17 +248,34 @@
 			})
 			.filter((s) => s.needs.length > 0 || (search.trim() === '' && filterType === 'all'))
 			.sort((a, b) => {
-				const aCrit = a.needs.some(
-					(n) => n.status !== 'closed' && (n.urgency === 'critical' || n.qty_needed >= 50)
-				);
-				const bCrit = b.needs.some(
-					(n) => n.status !== 'closed' && (n.urgency === 'critical' || n.qty_needed >= 50)
-				);
+				const aCrit = a.needs.some((n) => n.status !== 'closed' && needUrgency(n) === 'critical');
+				const bCrit = b.needs.some((n) => n.status !== 'closed' && needUrgency(n) === 'critical');
 				if (aCrit && !bCrit) return -1;
 				if (!aCrit && bCrit) return 1;
 				return 0;
 			});
 	});
+
+	/**
+	 * ระดับความเร่งด่วนที่ใช้แสดงผล — ยึดค่าที่เจ้าหน้าที่ตั้งไว้เป็นหลัก
+	 *
+	 * เดิมทุกจุดบนหน้านี้ตัดสินเองด้วยยอดที่ยังขาด: ถ้าขาดตั้งแต่ 50 หน่วยขึ้นไปจะขึ้น
+	 * "วิกฤต" เสมอ ไม่ว่า back-office จะตั้งระดับไหนไว้ก็ตาม แก้เป็นระดับอื่นแล้วหน้านี้
+	 * จึงยังโชว์วิกฤตเหมือนเดิม
+	 *
+	 * back-office บันทึกคำว่า `important` ส่วน `high` เป็นคำเดิมของหน้านี้ จึงรับทั้งคู่
+	 * ยอดที่ขาดใช้เดาได้เฉพาะตอน projection ยังไม่ส่ง `urgency` มาเท่านั้น
+	 */
+	function needUrgency(n: {
+		urgency?: string;
+		qty_needed: number;
+	}): 'critical' | 'high' | 'normal' {
+		const level = (n.urgency ?? '').trim();
+		if (level === 'critical') return 'critical';
+		if (level === 'important' || level === 'high') return 'high';
+		if (level === 'normal') return 'normal';
+		return n.qty_needed >= 50 ? 'critical' : n.qty_needed > 0 ? 'high' : 'normal';
+	}
 
 	function formatUnit(unit: string): string {
 		return formatUnitCatalog(unit, units, langState.current);
@@ -411,8 +428,8 @@
 								</div>
 							</div>
 						{:else}
-							{@const isCritical = need.urgency === 'critical' || need.qty_needed >= 50}
-							{@const isHigh = need.urgency === 'high' || (!isCritical && need.qty_needed > 0)}
+							{@const isCritical = needUrgency(need) === 'critical'}
+							{@const isHigh = needUrgency(need) === 'high'}
 
 							<!-- Active Need Card -->
 							<div
@@ -688,9 +705,7 @@
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each filteredShelters as shelter (shelter.code)}
 					{@const displayedNeeds = shelter.needs.filter((n) => n.status !== 'closed')}
-					{@const hasCritical = displayedNeeds.some(
-						(n) => n.urgency === 'critical' || n.qty_needed >= 50
-					)}
+					{@const hasCritical = displayedNeeds.some((n) => needUrgency(n) === 'critical')}
 					<!-- Shelter-level progress from the projection's own terms, summed over the
 					     items it publishes. Only items that announced a target take part, so a
 					     board with no targets shows no percentage rather than a made-up one. -->
@@ -754,8 +769,8 @@
 								{/if}
 
 								{#each displayedNeeds.slice(0, 3) as need, i (need.item_id || i)}
-									{@const isCrit = need.urgency === 'critical' || need.qty_needed >= 50}
-									{@const isHig = need.urgency === 'high' || (!isCrit && need.qty_needed > 0)}
+									{@const isCrit = needUrgency(need) === 'critical'}
+									{@const isHig = needUrgency(need) === 'high'}
 									{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
 
 									<div class="flex flex-col gap-1.5 py-1">

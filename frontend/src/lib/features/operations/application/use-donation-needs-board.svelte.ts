@@ -417,6 +417,12 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 				campaign: {
 					...updatedCampaign,
 					title,
+					// The level has to land on the FIELD, not only inside `notes`. The public
+					// projection reads `campaign.urgency` (`worker/projectors/needs.py`), so an
+					// edit that rewrote the notes tag alone left the donor board on whatever
+					// level the campaign was created with — staff lowered it and `/donations`
+					// kept advertising "วิกฤต".
+					...(updated.urgency ? { urgency: updated.urgency } : {}),
 					...(notes ? { notes } : {})
 				},
 				auditInput: {
