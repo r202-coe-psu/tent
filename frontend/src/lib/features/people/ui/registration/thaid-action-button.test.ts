@@ -22,4 +22,13 @@ describe('ThaidActionButton', () => {
 		expect(result.body).toContain('disabled');
 		expect(result.body).toContain('เชื่อมต่อ ThaiD');
 	});
+
+	it('renders correctly with shelterCode prop', () => {
+		const result = render(ThaidActionButton, {
+			props: {
+				shelterCode: 'SH-001'
+			}
+		});
+		expect(result.body).toContain('เชื่อมต่อ ThaiD');
+	});
 });

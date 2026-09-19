@@ -8,7 +8,11 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { ServiceError } from '$lib/server/couch-admin';
-import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain import; barrel pulls client UI / qrcode
+import {
+	type ThaiDAutofillProfile,
+	stripThaiTitle
+} from '$lib/features/people/domain/thaid-profile';
 
 export type { ThaiDAutofillProfile };
 

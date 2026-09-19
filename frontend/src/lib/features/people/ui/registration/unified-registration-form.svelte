@@ -906,7 +906,10 @@
 			>
 				<!-- ThaiD Action Button: Public Pre-Register -->
 				{#if channel === 'public'}
-					<ThaidActionButton disabled={fieldsLocked} onautofill={handleThaiDAutofill} />
+					<ThaidActionButton
+						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
+						disabled={fieldsLocked}
+					/>
 				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->

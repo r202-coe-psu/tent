@@ -3,17 +3,13 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 
 	interface Props {
+		shelterCode?: string;
 		disabled?: boolean;
-		onautofill?: (profile: ThaiDAutofillProfile) => void;
 	}
 
-	let {
-		disabled = false,
-		onautofill: _onautofill
-	}: Props = $props();
+	let { shelterCode = '', disabled = false }: Props = $props();
 
 	let isRedirecting = $state(false);
 
@@ -23,6 +19,9 @@
 		const currentUrl = new URL(window.location.href);
 		currentUrl.searchParams.delete('error');
 		currentUrl.searchParams.delete('thaid');
+		if (shelterCode) {
+			currentUrl.searchParams.set('shelter', shelterCode);
+		}
 		const returnTo = currentUrl.pathname + (currentUrl.search ? currentUrl.search : '');
 		window.location.href = `/api/v1/auth/oauth/thaid/start?mode=register&return_to=${encodeURIComponent(returnTo)}`;
 	}

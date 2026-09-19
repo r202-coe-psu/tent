@@ -235,7 +235,7 @@
 			{#key data.shelterCode}
 				<BookingForm
 					{shelters}
-					lockedShelterCode={data.shelterCode}
+					initialShelterCode={data.shelterCode}
 					onbooked={(t) => {
 						ticket = t;
 						storedTicketsCount = getStoredTickets().length;
