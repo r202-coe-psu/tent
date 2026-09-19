@@ -1,7 +1,7 @@
 import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
-import { supplyRepository, useSupplyItems } from '$lib/features/supply';
+import { isSupplyItem, supplyRepository, useSupplyItems } from '$lib/features/supply';
 import {
 	catalogRepository,
 	formatUnit,
@@ -48,18 +48,27 @@ function bareItemId(itemId: string): string {
 }
 
 async function resolveNeedCatalogItem(itemId: string, displayName: string) {
-	const supplyItem = await supplyRepository().getItem(itemId);
-	if (supplyItem) return { itemId: supplyItem._id, unit: supplyItem.unit };
+	// `getItem` is a raw `_id` GET on the shared `catalog` DB — unlike `listItems` it
+	// does NOT filter by type (`supply.remote.ts`). Both generations live in that one
+	// database, so an `item_master:` id came back here typed as a SupplyItem whose
+	// `unit` is null — masters keep the unit in `base_unit` — and the campaign was
+	// refused against a blank unit ("หน่วยของ ปลากระป๋อง ต้องเป็น  ตาม Item Master").
+	// Trust the document's own `type`, not the fact that a fetch succeeded.
+	const catalogDoc = await supplyRepository().getItem(itemId);
+	if (isSupplyItem(catalogDoc) && catalogDoc.unit?.trim()) {
+		return { itemId: catalogDoc._id, unit: catalogDoc.unit.trim() };
+	}
 
 	const itemMaster = itemId.startsWith('item_master:')
 		? await catalogRepository().getItemMaster(itemId, getShelterCode())
 		: null;
-	if (itemMaster) return { itemId: itemMaster._id, unit: itemMasterUnit(itemMaster) };
+	if (itemMaster) return { itemId: itemMaster._id, unit: itemMasterUnit(itemMaster).trim() };
 
 	const matchingMaster = (await catalogRepository().listItemMasters(getShelterCode())).find(
 		(item) => item.name.trim().toLowerCase() === displayName.trim().toLowerCase()
 	);
-	if (matchingMaster) return { itemId: matchingMaster._id, unit: itemMasterUnit(matchingMaster) };
+	if (matchingMaster)
+		return { itemId: matchingMaster._id, unit: itemMasterUnit(matchingMaster).trim() };
 
 	toast.error(`"${displayName}" ไม่พบใน Item Master — กรุณาเลือกสินค้าที่มีหน่วยมาตรฐานก่อน`);
 	return null;
