@@ -9,6 +9,7 @@
 	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { onMount, tick, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -596,23 +597,6 @@
 		return parts.join(' ') || '—';
 	}
 
-	function housingTypeLabel(code: string | null | undefined): string {
-		switch (code) {
-			case 'owned_house':
-				return t.housingOwned;
-			case 'rented_house':
-				return t.housingRented;
-			case 'condo':
-				return t.housingCondo;
-			case 'apartment_dorm':
-				return t.housingApartment;
-			case 'homeless':
-				return t.housingHomeless;
-			default:
-				return code?.trim() || '';
-		}
-	}
-
 	function clearJoinSelection() {
 		joinHouseholdId = null;
 		joinMatchToken = null;
@@ -711,7 +695,7 @@
 		// Merge pets from source household
 		const sourcePets = (sourceHousehold.pets ?? []) as PetGroup[];
 		if (sourcePets.length > 0) {
-			const existingSpecies = new Set(petItems.map((p) => p.species));
+			const existingSpecies = new SvelteSet(petItems.map((p) => p.species));
 			let nextId = Math.max(0, ...petItems.map((p) => p.id)) + 1;
 			for (const pg of sourcePets) {
 				const species = pg.species as 'dog' | 'cat' | 'other';
@@ -1249,7 +1233,6 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
-				primaryContactPhone={selectedMatchChip?.primary_contact_masked ?? null}
 				onDirty={markDirty}
 			/>
 

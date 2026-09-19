@@ -104,8 +104,7 @@
 	async function openPinDialog(id: string) {
 		pinPointId = id;
 		pinMapReady = false;
-		const point =
-			($formData.food_distribution_points ?? []).find((p) => p.id === id) ?? null;
+		const point = ($formData.food_distribution_points ?? []).find((p) => p.id === id) ?? null;
 
 		if (point?.lat != null && point?.lng != null) {
 			pinDraftLat = point.lat;
@@ -137,8 +136,7 @@
 		if (!pinPointId) return;
 		const id = pinPointId;
 		$formData.food_distribution_points = ($formData.food_distribution_points ?? []).map(
-			(p: FoodDistributionPoint) =>
-				p.id === id ? { ...p, lat: pinDraftLat, lng: pinDraftLng } : p
+			(p: FoodDistributionPoint) => (p.id === id ? { ...p, lat: pinDraftLat, lng: pinDraftLng } : p)
 		);
 		resetPinDialog();
 	}

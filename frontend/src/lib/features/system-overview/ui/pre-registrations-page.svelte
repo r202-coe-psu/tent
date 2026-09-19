@@ -56,7 +56,9 @@
 <div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
 	<header class="space-y-1">
 		<h1 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">ลงทะเบียนล่วงหน้า</h1>
-		<p class="text-base text-slate-600">ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง</p>
+		<p class="text-base text-slate-600">
+			ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง
+		</p>
 	</header>
 
 	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
@@ -165,11 +167,14 @@
 											<div class="flex flex-col">
 												<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
 												{#if item.shelter_code}
-													<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span>
+													<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span
+													>
 												{/if}
 											</div>
 										{:else if item.shelter_code}
-											<span class="font-mono text-sm font-medium text-slate-900">[{item.shelter_code}]</span>
+											<span class="font-mono text-sm font-medium text-slate-900"
+												>[{item.shelter_code}]</span
+											>
 										{:else}
 											<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
 										{/if}

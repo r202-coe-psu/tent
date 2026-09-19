@@ -321,4 +321,3 @@ export async function checkTicketStatus(code: string): Promise<TicketStatusResul
 		};
 	}
 }
-

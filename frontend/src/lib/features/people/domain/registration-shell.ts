@@ -212,7 +212,7 @@ export function normThaiAddressText(value: string | null | undefined): string {
 	s = s.replace(/(ถนน|ซอย|หมู่|ตำบล|อำเภอ|จังหวัด)\s*([0-9]+)/g, '$1 $2');
 
 	// Clean slash and dash spacing (e.g. 49 / 12 -> 49/12)
-	s = s.replace(/\s*([/\-])\s*/g, '$1');
+	s = s.replace(/\s*([/-])\s*/g, '$1');
 
 	// Strip thanthakhat and the silent character it cancels (e.g. นิพัทธ์ -> นิพัท)
 	s = s.replace(/[ก-ฮ]?\u0E4C/g, '');

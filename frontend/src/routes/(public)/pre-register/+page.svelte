@@ -143,7 +143,7 @@
 				'history'
 					? 'bg-card text-foreground shadow-xs ring-1 ring-border/50'
 					: 'text-muted-foreground hover:text-foreground'} {storedTicketsCount > 0
-					? 'ticket-tab-glow ring-2 ring-primary/60 text-foreground font-bold'
+					? 'ticket-tab-glow font-bold text-foreground ring-2 ring-primary/60'
 					: ''}"
 				onclick={() => {
 					activeTab = 'history';
@@ -155,7 +155,7 @@
 				<span>ประวัติการจองของฉัน</span>
 				{#if storedTicketsCount > 0}
 					<span
-						class="flex size-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground animate-pulse"
+						class="flex size-5 animate-pulse items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 					>
 						{storedTicketsCount}
 					</span>
@@ -239,9 +239,6 @@
 					onbooked={(t) => {
 						ticket = t;
 						storedTicketsCount = getStoredTickets().length;
-					}}
-					onviewexistingticket={() => {
-						activeTab = 'history';
 					}}
 				/>
 			{/key}

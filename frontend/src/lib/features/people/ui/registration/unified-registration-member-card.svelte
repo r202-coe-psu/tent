@@ -63,7 +63,6 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
-		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
 		onApplyZoneToAll
@@ -79,7 +78,6 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
-		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onApplyZoneToAll?: (zoneCode: string) => void;

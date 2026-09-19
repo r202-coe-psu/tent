@@ -588,10 +588,14 @@ export async function buildOverviewOrigin(
 function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {
 	if (!stayBucket || stayBucket === 'all') return true;
 	if (stayBucket === 'present') {
-		return stayStatus === 'active' || stayStatus === 'room_confirmed' || stayStatus === 'temporary_leave';
+		return (
+			stayStatus === 'active' || stayStatus === 'room_confirmed' || stayStatus === 'temporary_leave'
+		);
 	}
 	if (stayBucket === 'forecast') {
-		return ['pre_registered', 'arriving', 'active', 'room_confirmed', 'temporary_leave'].includes(stayStatus);
+		return ['pre_registered', 'arriving', 'active', 'room_confirmed', 'temporary_leave'].includes(
+			stayStatus
+		);
 	}
 	if (stayBucket === 'pre_registered') {
 		return stayStatus === 'pre_registered' || stayStatus === 'unassigned';
@@ -613,7 +617,11 @@ export async function buildPreRegistrationsList(
 	for (const m of masters) nameByCode.set(m.code, m.name);
 	const filteredMasters = masters.filter((m) => matchesShelterGeo(m, filters));
 
-	if (filters.source !== 'bound' && !filters.shelter_code && matchesStayBucket('unassigned', filters.stay_bucket)) {
+	if (
+		filters.source !== 'bound' &&
+		!filters.shelter_code &&
+		matchesStayBucket('unassigned', filters.stay_bucket)
+	) {
 		const qs = new URLSearchParams({
 			limit: '200',
 			offset: '0'
@@ -686,7 +694,7 @@ export async function buildPreRegistrationsList(
 				if (filters.household_id && ev.household_id !== filters.household_id) {
 					continue;
 				}
-				const hh = ev.household_id ? hhMap.get(ev.household_id) ?? null : null;
+				const hh = ev.household_id ? (hhMap.get(ev.household_id) ?? null) : null;
 				if (!matchesResidence(hh?.province, hh?.district, hh?.subdistrict, filters)) {
 					continue;
 				}
@@ -909,7 +917,9 @@ export async function searchHouseholds(
 			);
 			for (const d of docs) {
 				const label = d.label?.trim() || 'ครอบครัวไม่ระบุชื่อ';
-				const addr = [d.province, d.district, d.subdistrict, d.address_no].filter(Boolean).join(' ');
+				const addr = [d.province, d.district, d.subdistrict, d.address_no]
+					.filter(Boolean)
+					.join(' ');
 				if (trimmedQ) {
 					const match =
 						label.toLowerCase().includes(trimmedQ) ||
@@ -998,7 +1008,9 @@ export async function searchHouseholds(
 			for (const { doc: d, shelterCode: code, shelterName: name } of items) {
 				if (seenIds.has(d._id)) continue;
 				const label = d.label?.trim() || 'ครอบครัวไม่ระบุชื่อ';
-				const addr = [d.province, d.district, d.subdistrict, d.address_no].filter(Boolean).join(' ');
+				const addr = [d.province, d.district, d.subdistrict, d.address_no]
+					.filter(Boolean)
+					.join(' ');
 				if (trimmedQ) {
 					const match =
 						label.toLowerCase().includes(trimmedQ) ||

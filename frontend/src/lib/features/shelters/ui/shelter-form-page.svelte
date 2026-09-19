@@ -295,10 +295,7 @@
 			<a href={resolvedBasePath} class="text-muted-foreground underline">กลับหน้ารวม</a>
 		</div>
 	{:else}
-		<div
-			class="flex flex-col gap-6 p-6 md:flex-row"
-			class:pb-28={!usersViewActive}
-		>
+		<div class="flex flex-col gap-6 p-6 md:flex-row" class:pb-28={!usersViewActive}>
 			<!-- Desktop sticky section nav -->
 			<nav
 				class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+0.5rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-1.5rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-2xl md:border md:border-shelter-border md:bg-background/90 md:p-3 md:shadow-sm md:backdrop-blur-sm"

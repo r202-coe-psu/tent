@@ -4,7 +4,6 @@ import type { RequestHandler } from './$types';
 import { housingTypeSchema } from '$lib/features/people/server';
 import {
 	findShelterResidenceMatches,
-	findUnassignedResidenceMatches,
 	findUniversalResidenceMatches
 } from '$lib/features/public-register/residence-match.server';
 

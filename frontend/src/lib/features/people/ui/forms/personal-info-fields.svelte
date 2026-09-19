@@ -319,7 +319,7 @@
 	</div>
 
 	<!-- Birth Year & Age on mobile (2 cols), plus Gender -->
-	<div class="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
+	<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
 		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center justify-between gap-1 sm:gap-2">
 				<Label for={fid('birth-year')} class="truncate text-xs font-semibold text-foreground">
@@ -333,7 +333,8 @@
 					<button
 						type="button"
 						{disabled}
-						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar === 'BE'
+						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar ===
+						'BE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'BE'}
@@ -344,7 +345,8 @@
 					<button
 						type="button"
 						{disabled}
-						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar === 'CE'
+						class="rounded px-1.5 py-0.5 text-xs font-semibold transition-colors sm:px-2 {calendar ===
+						'CE'
 							? 'bg-primary text-primary-foreground'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-pressed={calendar === 'CE'}
@@ -521,7 +523,10 @@
 					}}
 					{disabled}
 				/>
-				<Label for={fid('no-phone')} class="cursor-pointer text-xs font-medium text-muted-foreground">
+				<Label
+					for={fid('no-phone')}
+					class="cursor-pointer text-xs font-medium text-muted-foreground"
+				>
 					{t.noPhone}
 				</Label>
 			</div>

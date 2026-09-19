@@ -94,11 +94,7 @@
 		onautofill?: (profile: ThaiDAutofillProfile) => void;
 	}
 
-	let {
-		status = undefined,
-		disabled = false,
-		onautofill
-	}: Props = $props();
+	let { status = undefined, disabled = false, onautofill }: Props = $props();
 
 	let open = $state(false);
 	let isRedirecting = $state(false);
@@ -117,11 +113,9 @@
 	);
 
 	const isDevEnv = import.meta.env.DEV;
-	const isEnabled = $derived(
-		effectiveStatus ? effectiveStatus.enabled : isDevEnv
-	);
+	const isEnabled = $derived(effectiveStatus ? effectiveStatus.enabled : isDevEnv);
 	const isMock = $derived(
-		effectiveStatus ? (effectiveStatus.isDev || effectiveStatus.mode === 'mock') : isDevEnv
+		effectiveStatus ? effectiveStatus.isDev || effectiveStatus.mode === 'mock' : isDevEnv
 	);
 
 	function handleSelect(profile: ThaiDAutofillProfile) {
@@ -153,7 +147,10 @@
 					<div class="flex items-center gap-2">
 						<span class="text-sm font-semibold text-foreground">ดึงข้อมูลด้วย ThaiD</span>
 						{#if isMock}
-							<Badge variant="outline" class="border-amber-500/30 bg-amber-500/10 text-xs text-amber-700">
+							<Badge
+								variant="outline"
+								class="border-amber-500/30 bg-amber-500/10 text-xs text-amber-700"
+							>
 								จำลอง / Mock
 							</Badge>
 						{/if}
@@ -184,91 +181,99 @@
 						{/snippet}
 					</Dialog.Trigger>
 
-				<Dialog.Content class="sm:max-w-lg">
-					<Dialog.Header>
-						<Dialog.Title class="flex items-center gap-2 text-base font-bold sm:text-lg">
-							<IdCard class="size-5 text-primary" />
-							<span>จำลองการอ่านข้อมูล ThaiD</span>
-						</Dialog.Title>
-						<Dialog.Description class="text-xs text-muted-foreground">
-							เลือกชุดข้อมูลพลเมืองตัวอย่างเพื่อทดสอบการกรอกข้อมูลบ้านและสมาชิกโดยอัตโนมัติ
-						</Dialog.Description>
-					</Dialog.Header>
+					<Dialog.Content class="sm:max-w-lg">
+						<Dialog.Header>
+							<Dialog.Title class="flex items-center gap-2 text-base font-bold sm:text-lg">
+								<IdCard class="size-5 text-primary" />
+								<span>จำลองการอ่านข้อมูล ThaiD</span>
+							</Dialog.Title>
+							<Dialog.Description class="text-xs text-muted-foreground">
+								เลือกชุดข้อมูลพลเมืองตัวอย่างเพื่อทดสอบการกรอกข้อมูลบ้านและสมาชิกโดยอัตโนมัติ
+							</Dialog.Description>
+						</Dialog.Header>
 
-					<div class="mt-3 space-y-2.5">
-						{#each MOCK_PROFILES as p (p.id)}
-							<button
+						<div class="mt-3 space-y-2.5">
+							{#each MOCK_PROFILES as p (p.id)}
+								<button
+									type="button"
+									class="flex w-full cursor-pointer flex-col gap-1.5 rounded-xl border border-border/80 bg-card p-3 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus:ring-2 focus:ring-primary/40 focus:outline-none"
+									onclick={() => handleSelect(p)}
+								>
+									<div class="flex items-center justify-between">
+										<span class="text-sm font-semibold text-foreground">
+											{p.first_name}
+											{p.last_name}
+											{#if p.nickname}
+												<span class="font-normal text-muted-foreground">({p.nickname})</span>
+											{/if}
+										</span>
+										<span
+											class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+										>
+											{p.person_id}
+										</span>
+									</div>
+
+									<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+										<span class="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5">
+											{#if p.id === 'adult-head'}
+												<User class="size-3" />
+											{:else if p.id === 'elderly-vulnerable'}
+												<ShieldAlert class="size-3 text-amber-600" />
+											{:else}
+												<Baby class="size-3 text-blue-600" />
+											{/if}
+											<span>{p.roleLabel}</span>
+										</span>
+										<span>·</span>
+										<span>อายุ {p.age} ปี (พ.ศ. {p.birth_year})</span>
+										<span>·</span>
+										<span>{p.phone ? p.phone : 'ไม่มีเบอร์โทร'}</span>
+									</div>
+
+									<div class="mt-0.5 text-xs text-muted-foreground">
+										<span
+											>ที่อยู่: {p.address.address_no}
+											{p.address.village_no} ต.{p.address.subdistrict} อ.{p.address.district} จ.{p
+												.address.province}
+											{p.address.postal_code}</span
+										>
+									</div>
+								</button>
+							{/each}
+						</div>
+
+						<Dialog.Footer class="mt-4">
+							<Button
 								type="button"
-								class="flex w-full cursor-pointer flex-col gap-1.5 rounded-xl border border-border/80 bg-card p-3 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/40"
-								onclick={() => handleSelect(p)}
+								variant="ghost"
+								size="sm"
+								class="min-h-10"
+								onclick={() => (open = false)}
 							>
-								<div class="flex items-center justify-between">
-									<span class="text-sm font-semibold text-foreground">
-										{p.first_name} {p.last_name}
-										{#if p.nickname}
-											<span class="font-normal text-muted-foreground">({p.nickname})</span>
-										{/if}
-									</span>
-									<span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-										{p.person_id}
-									</span>
-								</div>
-
-								<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-									<span class="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5">
-										{#if p.id === 'adult-head'}
-											<User class="size-3" />
-										{:else if p.id === 'elderly-vulnerable'}
-											<ShieldAlert class="size-3 text-amber-600" />
-										{:else}
-											<Baby class="size-3 text-blue-600" />
-										{/if}
-										<span>{p.roleLabel}</span>
-									</span>
-									<span>·</span>
-									<span>อายุ {p.age} ปี (พ.ศ. {p.birth_year})</span>
-									<span>·</span>
-									<span>{p.phone ? p.phone : 'ไม่มีเบอร์โทร'}</span>
-								</div>
-
-								<div class="mt-0.5 text-xs text-muted-foreground">
-									<span>ที่อยู่: {p.address.address_no} {p.address.village_no} ต.{p.address.subdistrict} อ.{p.address.district} จ.{p.address.province} {p.address.postal_code}</span>
-								</div>
-							</button>
-						{/each}
-					</div>
-
-					<Dialog.Footer class="mt-4">
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							class="min-h-10"
-							onclick={() => (open = false)}
-						>
-							ยกเลิก
-						</Button>
-					</Dialog.Footer>
-				</Dialog.Content>
-			</Dialog.Root>
-		{:else}
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				disabled={disabled || isRedirecting}
-				onclick={handleRealConnect}
-				class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
-			>
-				{#if isRedirecting}
-					<Loader2 class="mr-1.5 size-4 animate-spin" />
-					<span>กำลังเชื่อมต่อ ThaiD...</span>
-				{:else}
-					<Sparkles class="mr-1.5 size-4" />
-					<span>เชื่อมต่อ ThaiD</span>
-				{/if}
-			</Button>
-		{/if}
+								ยกเลิก
+							</Button>
+						</Dialog.Footer>
+					</Dialog.Content>
+				</Dialog.Root>
+			{:else}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					disabled={disabled || isRedirecting}
+					onclick={handleRealConnect}
+					class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
+				>
+					{#if isRedirecting}
+						<Loader2 class="mr-1.5 size-4 animate-spin" />
+						<span>กำลังเชื่อมต่อ ThaiD...</span>
+					{:else}
+						<Sparkles class="mr-1.5 size-4" />
+						<span>เชื่อมต่อ ThaiD</span>
+					{/if}
+				</Button>
+			{/if}
 		</div>
 	</div>
 {/if}

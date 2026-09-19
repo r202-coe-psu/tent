@@ -7,7 +7,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { env } from '$env/dynamic/public';
-	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -25,25 +24,16 @@
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
-	import {
-		UnifiedRegistrationForm,
-		type UnifiedRegistrationInput
-	} from '$lib/features/people';
+	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
 		lockedShelterCode?: string;
 		onbooked: (ticket: BookingTicket) => void;
-		onviewexistingticket?: () => void;
 	}
 
-	let {
-		shelters,
-		lockedShelterCode = '',
-		onbooked,
-		onviewexistingticket
-	}: Props = $props();
+	let { shelters, lockedShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 

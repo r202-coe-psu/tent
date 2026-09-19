@@ -22,11 +22,7 @@ interface EvacueeDoc {
 	current_stay?: { status?: string };
 }
 
-async function handleStatusCheck(
-	code: string,
-	clientIp: string,
-	fetchFn: typeof globalThis.fetch
-) {
+async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof globalThis.fetch) {
 	const parsed = statusRequestSchema.safeParse({ code });
 	if (!parsed.success) {
 		return json(
@@ -105,7 +101,9 @@ async function handleStatusCheck(
 
 export const POST: RequestHandler = async ({ request, getClientAddress, fetch }) => {
 	const payload = await request.json().catch(() => null);
-	const code = (payload && typeof payload === 'object' && 'code' in payload ? payload.code : '') as string;
+	const code = (
+		payload && typeof payload === 'object' && 'code' in payload ? payload.code : ''
+	) as string;
 	return handleStatusCheck(code, getClientAddress(), fetch);
 };
 

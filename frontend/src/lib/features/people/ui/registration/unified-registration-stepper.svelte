@@ -1,9 +1,5 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
-	import Home from '@lucide/svelte/icons/home';
-	import Users from '@lucide/svelte/icons/users';
-	import PawPrint from '@lucide/svelte/icons/paw-print';
-	import Package from '@lucide/svelte/icons/package';
 	import type { Component } from 'svelte';
 
 	export type StepperSection = {
@@ -37,21 +33,6 @@
 		}
 	}
 
-	function getSectionIcon(id: string): Component<{ class?: string }> {
-		switch (id) {
-			case 'address':
-				return Home;
-			case 'members':
-				return Users;
-			case 'pets':
-				return PawPrint;
-			case 'vehicles':
-				return Package;
-			default:
-				return Home;
-		}
-	}
-
 	const activeIndex = $derived(
 		Math.max(
 			0,
@@ -66,7 +47,6 @@
 			{#each sections as section, index (section.id)}
 				{@const isCurrent = section.id === activeSection}
 				{@const isCompleted = index < activeIndex}
-				{@const Icon = section.icon ?? getSectionIcon(section.id)}
 
 				<li class="flex min-w-0 flex-1 items-center {index < sections.length - 1 ? 'w-full' : ''}">
 					<button

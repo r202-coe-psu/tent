@@ -178,7 +178,7 @@
 	</div>
 
 	{#if showHouseholdFilter}
-		<div class="w-[14rem] sm:w-[16rem] min-w-0 space-y-1.5">
+		<div class="w-[14rem] min-w-0 space-y-1.5 sm:w-[16rem]">
 			<Label for="overview-household" class="text-sm font-semibold text-slate-700">ครอบครัว</Label>
 			<HouseholdSearchSelect
 				mode={householdMode}
