@@ -242,3 +242,50 @@ export {
 	startDistributionLiveQuery,
 	type ItemReconciliationSummary
 } from './application/queries';
+
+/** Ticket-era Food & Supplies UI components & models (Slice 5.1). */
+export { default as TicketStatusBadge } from './ui/common/TicketStatusBadge.svelte';
+export { default as TicketManagementPage } from './ui/back-office/TicketManagementPage.svelte';
+export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
+export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
+export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
+export { default as CreateTicketDialog } from './ui/back-office/CreateTicketDialog.svelte';
+export { default as CatalogItemPicker } from './ui/back-office/CatalogItemPicker.svelte';
+
+export {
+	REQUISITION_TICKET_STATUSES,
+	TICKET_STATUS_LABELS,
+	TICKET_STATUS_BADGE_CLASSES,
+	getTicketStatusLabel,
+	getTicketStatusBadgeClass,
+	REQUISITION_TYPE_LABELS,
+	getRequisitionTypeLabel,
+	MEAL_PERIOD_LABELS,
+	getMealPeriodLabel
+} from './ui/model/ticket-status';
+
+export {
+	WORKFLOW_GROUPS,
+	WORKFLOW_GROUP_MAP,
+	matchesWorkflowGroup,
+	getWorkflowGroupForStatus,
+	computeTicketGroupCounts,
+	filterRequisitionTickets,
+	type TicketWorkflowGroupId,
+	type WorkflowGroupDefinition,
+	type TicketGroupCounts,
+	type TicketFilterOptions
+} from './ui/model/ticket-filters';
+
+export {
+	READY_MEAL_CATEGORY_ID,
+	READY_MEAL_SYSTEM_KEY,
+	KITCHEN_FOOD_CATEGORY_ID,
+	KITCHEN_FOOD_SYSTEM_KEY,
+	isReadyMealCategory,
+	isKitchenFoodCategory,
+	isAnyFoodCategory,
+	isEligibleDistributionCatalogItem,
+	getReturnableBadgeLabel,
+	getReturnableBadgeClass
+} from './ui/model/catalog-eligibility';
