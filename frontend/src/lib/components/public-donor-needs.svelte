@@ -195,7 +195,9 @@
 						(n) => n.status !== 'closed' && needUrgency(n) === 'high'
 					);
 				} else if (filterType === 'normal') {
-					filteredNeeds = filteredNeeds.filter((n) => n.status !== 'closed');
+					filteredNeeds = filteredNeeds.filter(
+						(n) => n.status !== 'closed' && needUrgency(n) === 'normal'
+					);
 				} else if (filterType !== 'all') {
 					filteredNeeds = filteredNeeds.filter((n) => {
 						const name = (n.raw_name || n.name).toLowerCase();
@@ -479,6 +481,13 @@
 														>
 															<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 															{t.highBadge}
+														</span>
+													{:else}
+														<span
+															class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-bold tracking-wider text-emerald-700 uppercase shadow-2xs"
+														>
+															<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+															{t.normalBadge}
 														</span>
 													{/if}
 												</div>
