@@ -18,7 +18,7 @@
 	import { env } from '$env/dynamic/public';
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
-	import { jobsI18n } from '../i18n/jobs.i18n';
+	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import {
 		applyToJob,
 		resolvePortalAccess

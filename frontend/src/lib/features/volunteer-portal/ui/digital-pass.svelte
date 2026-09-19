@@ -172,9 +172,9 @@
 		</Card.Root>
 	{:else}
 		<!-- Ticket Pass Card -->
-		<div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 			<!-- Card Header -->
-			<div class="relative bg-[#0b2447] p-6 text-white">
+			<div class="relative bg-[#0A2647] p-6 text-white">
 				<div class="mb-4 flex flex-wrap items-center gap-2">
 					<div
 						class="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur"
@@ -220,12 +220,12 @@
 				{#if !hideQr}
 					<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 text-center">
 						<div
-							class="mb-2 inline-block rounded-full bg-sky-50 px-3 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-700 uppercase"
+							class="mb-2 inline-block rounded-full bg-sky-50 px-3 py-0.5 text-xs font-bold tracking-wide text-sky-700 uppercase"
 						>
 							{t.onSiteVerificationBadge}
 						</div>
 						<h2 class="text-sm font-bold text-slate-800">{t.onSiteVerificationTitle}</h2>
-						<p class="mt-0.5 text-[11px] text-slate-500">{t.onSiteVerificationSubtitle}</p>
+						<p class="mt-0.5 text-xs text-slate-500">{t.onSiteVerificationSubtitle}</p>
 
 						<div
 							class="my-5 inline-block rounded-2xl border border-slate-200 bg-white p-3 shadow-xs"

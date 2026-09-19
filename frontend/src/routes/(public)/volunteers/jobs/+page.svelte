@@ -9,8 +9,10 @@
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
-	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
-	import TicketSearch from '$lib/features/volunteers/components/TicketSearch.svelte';
+	import {
+		VolunteerPublicJobBoard as JobBoard,
+		VolunteerTicketSearch as TicketSearch
+	} from '$lib/features/volunteers';
 
 	let activeTab = $state<'jobs' | 'ticket'>('jobs');
 	const t = $derived(jobsI18n[languageStore.current]);

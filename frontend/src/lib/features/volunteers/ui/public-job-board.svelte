@@ -20,8 +20,8 @@
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
-	import JobCard from './JobCard.svelte';
-	import QuickApplyModal, { type QuickApplyJob } from './QuickApplyModal.svelte';
+	import JobCard from './public-job-card.svelte';
+	import QuickApplyModal, { type QuickApplyJob } from './public-quick-apply-modal.svelte';
 
 	let {
 		applicantProfile = null,

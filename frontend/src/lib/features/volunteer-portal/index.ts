@@ -69,6 +69,5 @@ export {
 } from './application/queries';
 
 export { default as TicketFinder } from './ui/ticket-finder.svelte';
-export { default as JobBoard } from './ui/job-board.svelte';
 export { default as DigitalPass } from './ui/digital-pass.svelte';
 export { default as VolunteerAccessPortal } from './ui/volunteer-access-portal.svelte';

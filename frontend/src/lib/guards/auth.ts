@@ -188,11 +188,12 @@ export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 export async function requireVolunteerCheckIn(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
 	if (
 		!isSystemAdmin(roles) &&
-		!isShelterManager(roles) &&
-		!hasStaffCapability(roles, 'volunteer_coordinator') &&
-		!hasStaffCapability(roles, 'registration_staff')
+		!isShelterManager(roles, shelter) &&
+		!hasStaffCapability(roles, 'volunteer_coordinator', shelter) &&
+		!hasStaffCapability(roles, 'registration_staff', shelter)
 	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}

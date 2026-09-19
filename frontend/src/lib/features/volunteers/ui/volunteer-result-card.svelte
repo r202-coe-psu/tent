@@ -83,8 +83,8 @@
 
 	/** Cosmetic only — not a persisted field. Gives the screen something ticket-shaped to show. */
 	function ticketCode(v: Volunteer): string {
-		const digits = v._id.replace(/\D/g, '').slice(-6);
-		return `TKT-VOL-${digits || v.volunteer_code.replace(/\D/g, '')}`;
+		const suffix = v._id.slice(-6).toUpperCase();
+		return `TKT-VOL-${suffix || v.volunteer_code.replace(/\D/g, '')}`;
 	}
 
 	function formatTime(ts: string): string {

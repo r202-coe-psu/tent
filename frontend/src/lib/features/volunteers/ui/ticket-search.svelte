@@ -7,7 +7,7 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import { getTicket } from '$lib/features/volunteer-portal/data/volunteer-api';
-	import VolunteerQrScannerModal from './VolunteerQrScannerModal.svelte';
+	import VolunteerQrScannerModal from './volunteer-qr-scanner-modal.svelte';
 
 	const t = $derived(jobsI18n[languageStore.current]);
 

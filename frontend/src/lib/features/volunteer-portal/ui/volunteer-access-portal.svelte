@@ -23,7 +23,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import VolunteerQrScannerModal from '$lib/features/volunteers/components/VolunteerQrScannerModal.svelte';
+	import VolunteerQrScannerModal from '$lib/features/volunteers/ui/volunteer-qr-scanner-modal.svelte';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
 	import {
@@ -37,7 +37,7 @@
 		useVolunteerTickets
 	} from '../application/queries';
 	import { volunteerPortalKeys } from '../application/queries';
-	import JobBoard from '$lib/features/volunteers/components/JobBoard.svelte';
+	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
 		buildStoredPortalSession,

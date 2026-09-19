@@ -607,9 +607,10 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 **Soft-delete policy:** การกด “ปิดใช้งาน” ต้องทำแบบ read-modify-write โดยเปลี่ยน `status` เป็น `inactive` และเก็บเอกสารกับ references ที่เกี่ยวข้องไว้ ห้าม hard-delete เอกสาร volunteer; หากต้องเปิดใช้งานอีกครั้งให้เปลี่ยนสถานะกลับเป็น `active` ผ่าน mutation ที่ตรวจสิทธิ์แล้ว
 
-### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 4**
+### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 5**
 
-> **schema_v 4** — การมอบหมายกะงานจิตอาสาและการเช็คอิน (CR-107). ผูกกับ `job_id` และ `shift_id` ภายในกะย่อยรายวัน `job.shifts[]`, บันทึก `duty_window` หน้าต่างเวลาจริง, `check_in_at`, `check_out_at`, `check_in_by` (เจ้าหน้าที่ผู้รับรายงานตัว หรือ `'self_service'`), ตัดฟิลด์ `dispatched` และ `response_code` ทิ้งทั้งหมด (Job Board Model เท่านั้น).
+> **schema_v 5** — เพิ่ม actor/method/reason สำหรับ checkout และ manual override ให้ audit ได้ครบ (CR-108). `check_out_by` ระบุเจ้าหน้าที่หรือ `'self_service'`; เมื่อใช้ `manual_override` ต้องมีเหตุผล.
+> **schema_v 4** — การมอบหมายกะงานจิตอาสาและการเช็คอิน (CR-107). ผูกกับ `job_id` และ `shift_id` ภายในกะย่อยรายวัน `job.shifts[]`, บันทึก `duty_window` หน้าต่างเวลาจริง, `check_in_at`, `check_out_at`, `check_in_by`, `check_in_method` และ `check_in_reason`, ตัดฟิลด์ `dispatched` และ `response_code` ทิ้งทั้งหมด (Job Board Model เท่านั้น).
 > แถว schema_v 3 ที่ไม่มี `shift_id` ยังอ่านได้ด้วย compatibility fallback บน `duty_window`; assignment ใหม่ต้องผ่านการตรวจว่า `shift_id` เป็น child ของ `job_id` เดียวกัน. รอบนี้ไม่มี production migration runner — seed ใหม่ใช้สำหรับ local/dev.
 > schema_v 2 — baseline ผูก `job_id` (CR-041).
 > schema_v 1 — baseline `(volunteer_id, date, shift, station)`.
@@ -619,17 +620,26 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `job_id` | str | req | → `job:{ulid}` (§2.17) |
 | `shift_id` | str | req | อ้างอิง `shift_id` ภายใน `job.shifts[]` |
 | `volunteer_id` | str | req | → `volunteer:{ulid}` (§2.8) |
+| `date` | date | req | วันที่ของกะ (เขตเวลา Asia/Bangkok) |
+| `shift` | enum(`morning`,`afternoon`,`night`,`flex`,`custom`) | req | ประเภทกะ |
+| `station` | str | req | จุดปฏิบัติงาน |
 | `duty_window` | {`start_ts`:ts, `end_ts`:ts} | req | หน้าต่างเวลาปฏิบัติงานจริง (ใช้สำหรับ Time-Bound Dynamic Role Sweeper) |
 | `check_in_at` | ts\|null | opt | เวลาที่สแกนรายงานตัวเข้างาน |
 | `check_out_at` | ts\|null | opt | เวลาที่สแกนเช็คเอาต์ออกงาน |
 | `check_in_by` | str\|null | opt | username ของเจ้าหน้าที่ผู้รับรายงานตัว หรือ `'self_service'` (กรณีสแกนป้ายหน้าศูนย์) |
+| `check_out_by` | str\|null | opt | username ของเจ้าหน้าที่ผู้ทำรายการเช็คเอาต์ หรือ `'self_service'` |
 | `status` | enum(`assigned`,`checked_in`,`completed`,`no_show`,`cancelled`) | req | default `assigned` |
+| `dispatch_status` | enum(`dispatched`,`accepted`,`declined`)\|null | opt | สถานะข้อเสนอเวรเดิม; ใช้เฉพาะข้อมูลที่ยังอยู่ในช่วง compatibility |
+| `check_in_method` | enum(`qr`,`manual_override`,`portal`) | req | ช่องทางเช็คอิน; default `qr` |
+| `check_in_reason` | str\|null | req | ต้องมีเมื่อ `check_in_method = manual_override` |
+| `check_out_method` | enum(`qr`,`manual_override`,`portal`) | req | ช่องทางเช็คเอาต์; default `qr` |
+| `check_out_reason` | str\|null | req | ต้องมีเมื่อ `check_out_method = manual_override` |
 
 **Index:** `(job_id, shift_id)` · `(volunteer_id, status)` · `(status)` · `(duty_window.start_ts, duty_window.end_ts)`
 
 **Migration (schema_v 2 → 3):** additive & cleanup — ตัด `dispatched_at`, `dispatched_by`, `response_code` ทิ้ง, เติม `shift_id` ให้ตรงกับกะย่อยของ job.
 
-**Migration (schema_v 3 → 4):** สำหรับเอกสารใหม่เขียนเป็น v4; เอกสารเก่ายังอ่านแบบ compatibility โดยไม่ทำ batch backfill ในรอบนี้.
+**Migration (schema_v 4 → 5):** เอกสารใหม่เขียนเป็น v5; เติม `check_out_by`, `check_out_method`, `check_out_reason` แบบ default `null`/`qr`/`null` ให้เอกสารเก่าเมื่ออ่าน และไม่ทำ batch backfill ในรอบนี้.
 
 **Migration (schema_v 2 → 3):** rename ค่า `status: done → completed`; เติม `check_in_method='qr'`, `dispatch_status=null`; **ไม่แปลงเวลา `duty_window` ของแถวเดิม** (แถวเดิมยังใช้เวลาที่บันทึกไว้) — เวลามาตรฐานใหม่ 8 ชม. ใช้กับกะที่สร้างหลัง deploy เท่านั้น ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
 
