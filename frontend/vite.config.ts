@@ -47,6 +47,7 @@ export default defineConfig(({ mode }) => {
 			noExternal: ['decimal.js', 'jsonwebtoken', 'openapi-fetch', 'qrcode']
 		},
 		server: {
+			allowedHosts: ['host.docker.internal'],
 			proxy: {
 				'/couch': {
 					target: couchTarget,

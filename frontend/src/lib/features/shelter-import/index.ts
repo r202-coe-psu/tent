@@ -14,6 +14,7 @@ export {
 	SHELTER_SHEETS,
 	MAIN_SHEET_NAME,
 	ZONE_SHEET_NAME,
+	FOOD_DISTRIBUTION_SHEET_NAME,
 	MASTER_COLUMNS,
 	MULTI_SEPARATOR,
 	FIELD_SEPARATOR,
@@ -45,7 +46,9 @@ export {
 } from './domain/columns';
 export {
 	buildMasterLookup,
+	buildUpdatePayload,
 	emptyLookups,
+	orphanFoodDistributionRows,
 	orphanZoneRows,
 	validateRow,
 	validateRows,
@@ -60,6 +63,7 @@ export {
 	type RowValidation,
 	type ShelterInput
 } from './domain/import-row';
+export { normalizeShelterName } from './domain/duplicates';
 export {
 	createShelterImportLog,
 	isShelterImportLog,
@@ -81,8 +85,16 @@ export {
 	shelterImportKeys,
 	useImportLogs,
 	useImportShelters,
+	useImportJob,
+	useRetryImportJob,
+	isImportJobTerminal,
 	startShelterImportLiveQuery,
-	type ImportSheltersInput
+	type ImportSheltersInput,
+	type ImportJob,
+	type ImportJobItem,
+	type ImportJobSummary,
+	type ImportJobStatus,
+	type ImportItemStatus
 } from './application/queries';
 
 // UI

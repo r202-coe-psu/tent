@@ -3,16 +3,17 @@ import { catalogDoc, type CatalogDoc } from '$lib/db/model';
 import type { RowStatus } from './import-row';
 
 /**
- * `shelter_import_log` — one append-only record per Excel import batch
+ * `shelter_import_log` — one append-only record per terminal Excel import attempt
  * (CR-039, schema.md §3.7). Lives in the `registry` DB, so it uses the central
  * envelope (`CatalogDoc` — no `shelter_code`). `_id = shelter_import_log:{ulid}`
  * (type-prefixed so `allByType` finds it via a plain `_all_docs` prefix scan).
  */
 
 export const SHELTER_IMPORT_LOG_TYPE = 'shelter_import_log' as const;
-// v2: adds `updated_count` / `skipped_count` (duplicate-by-name handling). Additive
-// only — v1 docs simply lack the two counters and still read back fine.
-export const SHELTER_IMPORT_LOG_SCHEMA_V = 2 as const;
+// v2: adds `updated_count` / `skipped_count` (duplicate-by-name handling).
+// v3: records the durable job and terminal run attempt. Each terminal attempt
+// receives its own immutable document; retries never overwrite an earlier log.
+export const SHELTER_IMPORT_LOG_SCHEMA_V = 3 as const;
 
 export interface ImportRowResult {
 	row: number;
@@ -27,6 +28,8 @@ export interface ImportRowResult {
 export interface ShelterImportLog extends CatalogDoc {
 	type: typeof SHELTER_IMPORT_LOG_TYPE;
 	schema_v: typeof SHELTER_IMPORT_LOG_SCHEMA_V;
+	job_id: string;
+	attempt: number;
 	source: 'shelter';
 	filename: string;
 	imported_by: string;
@@ -60,6 +63,8 @@ const rowResultSchema = z.object({
 
 /** Body (envelope-free) — the payload the factory stamps the envelope onto. */
 export const shelterImportLogBodySchema = z.object({
+	job_id: z.string().trim().min(1),
+	attempt: z.number().int().min(1),
 	source: z.literal('shelter'),
 	filename: z.string().trim().min(1),
 	imported_by: z.string().trim().min(1),
@@ -98,7 +103,8 @@ function trimResult(r: ImportRowResult): ImportRowResult {
 /** Mint a fresh log doc (registry envelope, ULID id). */
 export function createShelterImportLog(
 	body: ShelterImportLogBody,
-	createdBy: string
+	createdBy: string,
+	id?: string
 ): ShelterImportLog {
 	const bounded: ShelterImportLogBody = {
 		...body,
@@ -108,7 +114,8 @@ export function createShelterImportLog(
 		SHELTER_IMPORT_LOG_TYPE,
 		SHELTER_IMPORT_LOG_SCHEMA_V,
 		bounded,
-		createdBy
+		createdBy,
+		id
 	) as ShelterImportLog;
 }
 

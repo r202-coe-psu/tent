@@ -26,6 +26,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { couchUserFromUrl } from '$lib/server/couch-credentials';
@@ -117,6 +118,90 @@ async function couchReq(
 	return { status: res.status, data };
 }
 
+const SECURITY_LOCK_DB = 'registry';
+const SECURITY_LOCK_PREFIX = 'shelter_security_lock:';
+const SECURITY_LOCK_LEASE_MS = 30_000;
+
+interface SecurityMutationLock {
+	_id: string;
+	_rev?: string;
+	_type: 'shelter_security_mutation_lock';
+	owner_id: string;
+	resource: string;
+	lease_until: string;
+}
+
+function securityLockPath(id: string): string {
+	return `/${SECURITY_LOCK_DB}/${encodeURIComponent(id)}`;
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSecurityMutationLock<T>(resource: string, mutate: () => Promise<T>): Promise<T> {
+	const id = `${SECURITY_LOCK_PREFIX}${encodeURIComponent(resource)}`;
+	const ownerId = `security:${randomUUID()}`;
+	let lock: SecurityMutationLock | undefined;
+	for (let attempt = 0; attempt < 8; attempt++) {
+		const current = await couchReq('GET', securityLockPath(id));
+		if (current.status !== 404 && current.status !== 200) {
+			throw new Error(`Could not read _security mutation lock (${current.status})`);
+		}
+		const existing = current.status === 200 ? (current.data as SecurityMutationLock) : null;
+		const leaseUntil = Date.parse(existing?.lease_until ?? '');
+		if (existing && Number.isFinite(leaseUntil) && leaseUntil > Date.now()) {
+			await sleep(25 + attempt * 25);
+			continue;
+		}
+		const next: SecurityMutationLock = {
+			_id: id,
+			_type: 'shelter_security_mutation_lock',
+			owner_id: ownerId,
+			resource,
+			lease_until: new Date(Date.now() + SECURITY_LOCK_LEASE_MS).toISOString(),
+			...(existing?._rev ? { _rev: existing._rev } : {})
+		};
+		const put = await couchReq('PUT', securityLockPath(id), next);
+		if (put.status === 409) continue;
+		if (put.status >= 400)
+			throw new Error(`Could not acquire _security mutation lock (${put.status})`);
+		lock = { ...next, _rev: (put.data as { rev?: string }).rev };
+		break;
+	}
+	if (!lock) throw new Error(`Could not serialize _security update for ${resource}`);
+
+	let result!: T;
+	let mutationFailed = false;
+	let mutationError: unknown;
+	try {
+		result = await mutate();
+	} catch (error) {
+		mutationFailed = true;
+		mutationError = error;
+	}
+
+	try {
+		const current = await couchReq('GET', securityLockPath(lock._id));
+		if (current.status === 200) {
+			const document = current.data as SecurityMutationLock;
+			if (document.owner_id === lock.owner_id) {
+				const path = document._rev
+					? `${securityLockPath(lock._id)}?rev=${encodeURIComponent(document._rev)}`
+					: securityLockPath(lock._id);
+				const deleted = await couchReq('DELETE', path);
+				if (deleted.status >= 400 && deleted.status !== 404 && deleted.status !== 409) {
+					throw new Error(`Could not release _security mutation lock (${deleted.status})`);
+				}
+			}
+		}
+	} catch (error) {
+		if (!mutationFailed) throw error;
+	}
+	if (mutationFailed) throw mutationError;
+	return result;
+}
+
 interface ShelterMasterRow {
 	code: string;
 }
@@ -191,10 +276,20 @@ async function deployRegistryDesign(dryRun: boolean): Promise<'current' | 'deplo
 	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
 	const current =
 		existing.status === 200
-			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> } | null)
+			? (existing.data as {
+					_rev?: string;
+					version?: number;
+					views?: Record<string, { map: string }>;
+					validate_doc_update?: string;
+				} | null)
 			: null;
 
-	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+	if (
+		current &&
+		current.version === desired.version &&
+		current.validate_doc_update === desired.validate_doc_update &&
+		Object.entries(desired.views).every(([name, view]) => current.views?.[name]?.map === view.map)
+	) {
 		return 'current';
 	}
 	if (dryRun) return 'deployed';
@@ -220,42 +315,46 @@ async function deployRegistryDesign(dryRun: boolean): Promise<'current' | 'deplo
  * already present so the caller can report a no-op instead of a write.
  */
 async function grantSecurityMember(db: string, name: string, dryRun: boolean): Promise<boolean> {
-	const current = await couchReq('GET', `/${db}/_security`);
-	if (current.status >= 400 && current.status !== 404) {
-		const detail = (current.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`Could not read _security (${current.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	const existing =
-		(current.data as {
-			admins?: { names?: string[]; roles?: string[] };
-			members?: { names?: string[]; roles?: string[] };
-		} | null) ?? {};
-
-	const names = existing.members?.names ?? [];
-	if (names.includes(name)) return false;
-	if (dryRun) return true;
-
-	const merged = {
-		admins: {
-			names: existing.admins?.names ?? [],
-			roles: existing.admins?.roles ?? []
-		},
-		members: {
-			names: [...names, name],
-			roles: existing.members?.roles ?? []
+	const mutate = async (): Promise<boolean> => {
+		const current = await couchReq('GET', `/${db}/_security`);
+		if (current.status >= 400 && current.status !== 404) {
+			const detail = (current.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Could not read _security (${current.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
 		}
+		const existing =
+			(current.data as {
+				admins?: { names?: string[]; roles?: string[] };
+				members?: { names?: string[]; roles?: string[] };
+			} | null) ?? {};
+
+		const names = existing.members?.names ?? [];
+		if (names.includes(name)) return false;
+		if (dryRun) return true;
+
+		const merged = {
+			admins: {
+				names: existing.admins?.names ?? [],
+				roles: existing.admins?.roles ?? []
+			},
+			members: {
+				names: [...names, name],
+				roles: existing.members?.roles ?? []
+			}
+		};
+
+		const put = await couchReq('PUT', `/${db}/_security`, merged);
+		if (put.status >= 400) {
+			const detail = (put.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`_security write failed (${put.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+		return true;
 	};
 
-	const put = await couchReq('PUT', `/${db}/_security`, merged);
-	if (put.status >= 400) {
-		const detail = (put.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`_security write failed (${put.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	return true;
+	return dryRun ? mutate() : withSecurityMutationLock(db, mutate);
 }
 
 async function deployReferralMangoIndexes(

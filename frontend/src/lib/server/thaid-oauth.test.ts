@@ -171,7 +171,12 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 		});
 
 		it('creates and parses member_scan state with sessionId', () => {
-			const state = createThaidOAuthState('member_scan', undefined, undefined, 'sess_1234567890abcdef');
+			const state = createThaidOAuthState(
+				'member_scan',
+				undefined,
+				undefined,
+				'sess_1234567890abcdef'
+			);
 			const parsed = parseThaidOAuthState(state);
 			expect(parsed).toMatchObject({
 				mode: 'member_scan',

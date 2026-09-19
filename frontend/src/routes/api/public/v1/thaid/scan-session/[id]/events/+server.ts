@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { getScanSession } from '$lib/server/thaid-scan-session';
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 export const prerender = false;
 
@@ -82,14 +82,18 @@ export const GET: RequestHandler = async ({ params }) => {
 				sendEvent('completed', { status: 'completed', profile: session.profile });
 				try {
 					controller.close();
-				} catch {}
+				} catch {
+					// Controller already closed.
+				}
 				return;
 			}
 			if (session.status === 'expired') {
 				sendEvent('expired', { status: 'expired' });
 				try {
 					controller.close();
-				} catch {}
+				} catch {
+					// Controller already closed.
+				}
 				return;
 			}
 

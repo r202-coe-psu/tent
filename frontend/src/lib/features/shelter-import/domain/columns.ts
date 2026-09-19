@@ -33,11 +33,11 @@ import {
  * without drift. Enum labels mirror the shelter form sections so a downloaded
  * template reads the same as the app.
  *
- * The workbook is split into five sheets joined on the shelter's running
+ * The workbook is split into six sheets joined on the shelter's running
  * number: four 1:1 sheets carrying the shelter's own fields (grouped the way
- * the form groups them, so a ~70-column contract stays readable) plus one N:1
- * sheet for `zones[]`. The parser merges the 1:1 sheets back into a single flat
- * row, so downstream code still sees one `RawRow` per shelter.
+ * the form groups them, so a ~70-column contract stays readable), plus the
+ * N:1 `โซน` and `จุดแจกอาหาร` sheets. The parser merges the 1:1 sheets back
+ * into a single flat row, so downstream code still sees one `RawRow` per shelter.
  *
  * The join key's header differs per sheet — `ลำดับที่` ({@link H.ref}) on the
  * 1:1 sheets, `รหัสศูนย์พักพิง` ({@link H.zone_shelter_ref}) on the zone sheet —
@@ -300,7 +300,14 @@ export const H = {
 	zone_type: 'ประเภทโซน',
 	zone_status: 'สถานะโซน',
 	zone_area_m2: 'พื้นที่โซน (ตร.ม.)',
-	zone_specifics: 'รายละเอียดโซน'
+	zone_specifics: 'รายละเอียดโซน',
+
+	// -- sheet 6: จุดแจกอาหาร (N rows per shelter) --
+	food_point_id: 'รหัสจุดแจกอาหาร',
+	food_point_name: 'ชื่อจุดแจกอาหาร',
+	food_point_note: 'หมายเหตุจุดแจกอาหาร',
+	food_point_lat: 'ละติจูดจุดแจกอาหาร',
+	food_point_lng: 'ลองจิจูดจุดแจกอาหาร'
 } as const;
 
 /**
@@ -362,7 +369,8 @@ export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type'];
 export const APP_ONLY_FIELDS: readonly string[] = [
 	'โซนเทศบาล',
 	'ชุมชน',
-	'กลุ่มเปราะบางที่ศูนย์รองรับได้'
+	'กลุ่มเปราะบางที่ศูนย์รองรับได้',
+	'การตั้งค่า feature_flags'
 ];
 
 export interface ColumnDef {
@@ -393,7 +401,7 @@ export interface SheetDef {
 	 * `shelter` sheets are 1:1 and merged into one row by {@link H.ref};
 	 * `zone` sheets are N:1 and stay as repeated rows.
 	 */
-	kind: 'shelter' | 'zone';
+	kind: 'shelter' | 'zone' | 'food-distribution';
 	columns: readonly ColumnDef[];
 	/** Header text of this sheet's join key — the `isRef` column's header. */
 	refHeader: string;
@@ -965,17 +973,64 @@ const SHEET_ZONES: SheetDef = {
 	]
 };
 
+const SHEET_FOOD_DISTRIBUTION: SheetDef = {
+	name: 'จุดแจกอาหาร',
+	kind: 'food-distribution',
+	refHeader: H.zone_shelter_ref,
+	description: `หนึ่งแถว = หนึ่งจุดแจกอาหาร — ผูกกลับด้วย "${H.zone_shelter_ref}" ซึ่งคือเลข "${H.ref}" ของชีตข้อมูลศูนย์`,
+	columns: [
+		zoneRefColumn,
+		{
+			header: H.food_point_id,
+			kind: 'string',
+			required: false,
+			path: 'id',
+			hint: 'รหัสจุดแจกอาหาร (เว้นว่างได้ ระบบจะสร้างรหัสให้อัตโนมัติ)'
+		},
+		{
+			header: H.food_point_name,
+			kind: 'string',
+			required: true,
+			path: 'name',
+			hint: 'ชื่อจุดแจกอาหาร (จำเป็น)'
+		},
+		{
+			header: H.food_point_note,
+			kind: 'string',
+			required: false,
+			path: 'note',
+			hint: 'หมายเหตุหรือเวลาเปิด-ปิดจุดแจกอาหาร'
+		},
+		{
+			header: H.food_point_lat,
+			kind: 'number',
+			required: false,
+			path: 'lat',
+			hint: 'ละติจูดระหว่าง -90 ถึง 90'
+		},
+		{
+			header: H.food_point_lng,
+			kind: 'number',
+			required: false,
+			path: 'lng',
+			hint: 'ลองจิจูดระหว่าง -180 ถึง 180'
+		}
+	]
+};
+
 /** Workbook layout, in tab order. */
 export const SHEETS: readonly SheetDef[] = [
 	SHEET_MAIN,
 	SHEET_FACILITIES,
 	SHEET_UTILITIES,
 	SHEET_POLICY,
-	SHEET_ZONES
+	SHEET_ZONES,
+	SHEET_FOOD_DISTRIBUTION
 ];
 
 export const MAIN_SHEET_NAME = SHEET_MAIN.name;
 export const ZONE_SHEET_NAME = SHEET_ZONES.name;
+export const FOOD_DISTRIBUTION_SHEET_NAME = SHEET_FOOD_DISTRIBUTION.name;
 
 /** The 1:1 sheets the parser merges into a single row per shelter. */
 export const SHELTER_SHEETS: readonly SheetDef[] = SHEETS.filter((s) => s.kind === 'shelter');
@@ -989,6 +1044,8 @@ export const COLUMNS: readonly ColumnDef[] = SHELTER_SHEETS.flatMap((s) =>
 export const COLUMN_HEADERS: readonly string[] = COLUMNS.map((c) => c.header);
 
 export const ZONE_COLUMNS: readonly ColumnDef[] = SHEET_ZONES.columns.filter((c) => !c.isRef);
+export const FOOD_DISTRIBUTION_COLUMNS: readonly ColumnDef[] =
+	SHEET_FOOD_DISTRIBUTION.columns.filter((c) => !c.isRef);
 
 /** header → sheet name, so an error can tell the user which tab to open. */
 export const HEADER_TO_SHEET: Readonly<Record<string, string>> = Object.fromEntries(
@@ -1004,3 +1061,9 @@ export const PATH_TO_HEADER: Readonly<Record<string, string>> = Object.fromEntri
 export const ZONE_PATH_TO_HEADER: Readonly<Record<string, string>> = Object.fromEntries(
 	ZONE_COLUMNS.filter((c) => c.path).map((c) => [c.path!, c.header] as const)
 );
+
+/** Same, for one food distribution point (paths are relative to the point object). */
+export const FOOD_DISTRIBUTION_PATH_TO_HEADER: Readonly<Record<string, string>> =
+	Object.fromEntries(
+		FOOD_DISTRIBUTION_COLUMNS.filter((c) => c.path).map((c) => [c.path!, c.header] as const)
+	);

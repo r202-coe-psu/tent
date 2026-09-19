@@ -11,13 +11,21 @@
  * `$lib/server/` is excluded from the client build.
  */
 
+import { randomUUID } from 'node:crypto';
 import { adminRaw, ServiceError } from './couch-admin';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
-import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID, registryByCodePath } from './registry-design';
+import {
+	buildRegistryDesignDoc,
+	buildRegistryValidateDocUpdate,
+	REGISTRY_DESIGN_ID,
+	registryByCodePath,
+	registryHighestByCodePath,
+	registryByNamePath
+} from './registry-design';
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
@@ -36,6 +44,10 @@ export const SHELTER_REGISTRY_DB = 'registry';
 /** ISO 8601 UTC timestamp (server clock). */
 export function nowIso(): string {
 	return new Date().toISOString();
+}
+
+function normalizedShelterName(name: string): string {
+	return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 /**
@@ -74,6 +86,43 @@ export async function findMasterByCode(code: string): Promise<ShelterMaster | nu
 	throw new ServiceError('INTERNAL', 'Could not read registry');
 }
 
+/**
+ * Find a shelter master by normalized name through the registry view. The
+ * import worker uses this keyed lookup instead of scanning every master for
+ * each item in a batch.
+ */
+export async function findMasterByName(name: string): Promise<ShelterMaster | null> {
+	const res = await adminRaw(registryByNamePath(name), 'GET');
+	if (res.status === 200) {
+		const rows = (res.data as { rows?: { doc?: unknown }[] })?.rows ?? [];
+		return (rows[0]?.doc as ShelterMaster) ?? null;
+	}
+	if (res.status === 404) {
+		const reason = (res.data as { reason?: string } | null)?.reason ?? '';
+		if (reason === 'Database does not exist.') return null;
+		return findMasterByNameScan(name);
+	}
+	throw new ServiceError('INTERNAL', 'Could not read registry by shelter name');
+}
+
+/**
+ * Read the highest numeric shelter-code suffix from the registry view. This is
+ * used only to initialize the allocator and avoids an O(registry) scan on the
+ * provisioning request path.
+ */
+export async function findHighestShelterCodeNumber(): Promise<number> {
+	const res = await adminRaw(registryHighestByCodePath(), 'GET');
+	if (res.status === 200) {
+		const rows = (res.data as { rows?: { key?: unknown }[] })?.rows ?? [];
+		const key = rows[0]?.key;
+		return typeof key === 'number' && Number.isSafeInteger(key) && key > 0 ? key : 0;
+	}
+	if (res.status === 404) {
+		throw new ServiceError('INTERNAL', 'Registry code index is not available');
+	}
+	throw new ServiceError('INTERNAL', 'Could not read highest shelter code');
+}
+
 /** Pre-view fallback for {@link findMasterByCode}; O(registry) — avoid on hot paths. */
 async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null> {
 	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
@@ -86,34 +135,74 @@ async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null>
 	return (match?.doc as ShelterMaster) ?? null;
 }
 
+/** Pre-view fallback for {@link findMasterByName}; only used during migration. */
+async function findMasterByNameScan(name: string): Promise<ShelterMaster | null> {
+	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
+	const normalized = normalizedShelterName(name);
+	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
+	const match = rows.find(
+		(r) =>
+			r.id.startsWith('shelter:') &&
+			r.doc &&
+			normalizedShelterName(String((r.doc as { name?: unknown }).name ?? '')) === normalized
+	);
+	return (match?.doc as ShelterMaster) ?? null;
+}
+
 /**
  * Idempotent PUT of the registry `_design/app` (the `by_code` view). Safe to
  * re-run: skips the write when the deployed doc already matches.
  */
 export async function deployRegistryDesign(): Promise<{ status: number; updated: boolean }> {
 	const desired = buildRegistryDesignDoc();
-	const existing = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'GET');
-	const current =
-		existing.status === 200
-			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
-			: null;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const existing = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'GET');
+		if (existing.status !== 200 && existing.status !== 404) {
+			throw new ServiceError(
+				'INTERNAL',
+				`Could not read registry _design/app (${existing.status})`
+			);
+		}
+		const current =
+			existing.status === 200
+				? (existing.data as {
+						_rev?: string;
+						version?: number;
+						views?: Record<string, { map: string }>;
+						validate_doc_update?: string;
+					})
+				: null;
 
-	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
-		return { status: 304, updated: false };
-	}
+		const matchesDesired =
+			current?.version === desired.version &&
+			current?.validate_doc_update === buildRegistryValidateDocUpdate() &&
+			Object.entries(desired.views).every(
+				([name, view]) => current.views?.[name]?.map === view.map
+			);
+		if (matchesDesired) {
+			return { status: 304, updated: false };
+		}
 
-	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'PUT', {
-		...desired,
-		...(current?._rev ? { _rev: current._rev } : {})
-	});
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new ServiceError(
-			'INTERNAL',
-			`registry _design/app write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
+		const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'PUT', {
+			...desired,
+			...(current?._rev ? { _rev: current._rev } : {})
+		});
+		if (res.status === 409) continue;
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`registry _design/app write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+		return { status: res.status, updated: true };
 	}
-	return { status: res.status, updated: true };
+	throw new ServiceError(
+		'CONFLICT',
+		'Could not deploy registry _design/app after concurrent retries'
+	);
 }
 
 /** Idempotent legacy → current migration wrapper. */
@@ -139,7 +228,8 @@ export async function updateMaster<T = void>(
 		current: ShelterMaster
 	) =>
 		| { patch: Partial<ShelterMaster>; meta?: T }
-		| Promise<{ patch: Partial<ShelterMaster>; meta?: T }>
+		| Promise<{ patch: Partial<ShelterMaster>; meta?: T }>,
+	options?: { assertActive?: () => Promise<void> }
 ): Promise<{ id: string; rev: string; meta?: T }> {
 	const MAX_RETRIES = 3;
 	let lastStatus = 0;
@@ -152,6 +242,7 @@ export async function updateMaster<T = void>(
 		}
 		const migrated = migrate(current);
 		const next = await mutator(migrated);
+		await options?.assertActive?.();
 		const body: ShelterMaster = {
 			...migrated,
 			...next.patch,
@@ -186,6 +277,119 @@ export async function updateMaster<T = void>(
 	);
 }
 
+const SECURITY_LOCK_DB = SHELTER_REGISTRY_DB;
+const SECURITY_LOCK_PREFIX = 'shelter_security_lock:';
+const SECURITY_LOCK_LEASE_MS = 30_000;
+
+interface SecurityMutationLock {
+	_id: string;
+	_rev?: string;
+	type: 'shelter_security_mutation_lock';
+	owner_id: string;
+	resource: string;
+	lease_until: string;
+}
+
+/** Build a normal CouchDB document for the registry lock.
+ *
+ * `_type` is reserved by CouchDB as a special document member.  Keeping this
+ * builder exported makes the wire contract directly unit-testable so a future
+ * refactor cannot reintroduce the 400 seen during shelter import.
+ */
+export function buildSecurityMutationLock(input: {
+	id: string;
+	ownerId: string;
+	resource: string;
+	leaseUntil: string;
+	rev?: string;
+}): SecurityMutationLock {
+	return {
+		_id: input.id,
+		type: 'shelter_security_mutation_lock',
+		owner_id: input.ownerId,
+		resource: input.resource,
+		lease_until: input.leaseUntil,
+		...(input.rev ? { _rev: input.rev } : {})
+	};
+}
+
+function securityLockPath(id: string): string {
+	return `/${SECURITY_LOCK_DB}/${encodeURIComponent(id)}`;
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function ensureRegistryDatabase(): Promise<void> {
+	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
+	if (res.status >= 400 && res.status !== 412) {
+		const body = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`registry database setup failed (${res.status}): ${body.reason ?? body.error ?? 'unknown'}`
+		);
+	}
+}
+
+async function acquireSecurityMutationLock(resource: string): Promise<SecurityMutationLock> {
+	const id = `${SECURITY_LOCK_PREFIX}${encodeURIComponent(resource)}`;
+	const ownerId = `security:${randomUUID()}`;
+	for (let attempt = 0; attempt < 8; attempt++) {
+		const current = await adminRaw(securityLockPath(id), 'GET');
+		if (current.status !== 404 && current.status !== 200) {
+			const body = (current.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`security lock read failed (${current.status}): ${body.reason ?? body.error ?? 'unknown'}`
+			);
+		}
+		const existing = current.status === 200 ? (current.data as SecurityMutationLock) : null;
+		const leaseUntil = Date.parse(existing?.lease_until ?? '');
+		if (existing && Number.isFinite(leaseUntil) && leaseUntil > Date.now()) {
+			await sleep(25 + attempt * 25);
+			continue;
+		}
+		const next = buildSecurityMutationLock({
+			id,
+			ownerId,
+			resource,
+			leaseUntil: new Date(Date.now() + SECURITY_LOCK_LEASE_MS).toISOString(),
+			rev: existing?._rev
+		});
+		const put = await adminRaw(securityLockPath(id), 'PUT', next);
+		if (put.status === 409) continue;
+		if (put.status >= 400) {
+			const body = (put.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`security lock write failed (${put.status}): ${body.reason ?? body.error ?? 'unknown'}`
+			);
+		}
+		return { ...next, _rev: (put.data as { rev?: string }).rev };
+	}
+	throw new ServiceError('CONFLICT', `Could not serialize _security update for ${resource}`);
+}
+
+async function releaseSecurityMutationLock(lock: SecurityMutationLock): Promise<void> {
+	const current = await adminRaw(securityLockPath(lock._id), 'GET');
+	if (current.status !== 200) return;
+	const document = current.data as SecurityMutationLock;
+	if (document.owner_id !== lock.owner_id) return;
+	const rev = document._rev;
+	const path = rev
+		? `${securityLockPath(lock._id)}?rev=${encodeURIComponent(rev)}`
+		: securityLockPath(lock._id);
+	const deleted = await adminRaw(path, 'DELETE');
+	if (deleted.status >= 400 && deleted.status !== 404 && deleted.status !== 409) {
+		const body = (deleted.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`security lock release failed (${deleted.status}): ${body.reason ?? body.error ?? 'unknown'}`
+		);
+	}
+}
+
 /**
  * Read-modify-write helper for the shelter `_security` document.
  *
@@ -197,33 +401,49 @@ export async function updateMaster<T = void>(
 export async function mergeShelterSecurity(
 	db: string,
 	addAdmins: { names?: string[]; roles?: string[] } = {},
-	addMembers: { names?: string[]; roles?: string[] } = {}
+	addMembers: { names?: string[]; roles?: string[] } = {},
+	options?: { assertActive?: () => Promise<void> }
 ): Promise<void> {
-	const current = await adminRaw(`/${db}/_security`, 'GET');
-	const existing =
-		(current.data as {
-			admins?: { names?: string[]; roles?: string[] };
-			members?: { names?: string[]; roles?: string[] };
-		} | null) ?? {};
-
-	const merged = {
-		admins: {
-			names: uniq([...(existing.admins?.names ?? []), ...(addAdmins.names ?? [])]),
-			roles: uniq([...(existing.admins?.roles ?? []), ...(addAdmins.roles ?? [])])
-		},
-		members: {
-			names: uniq([...(existing.members?.names ?? []), ...(addMembers.names ?? [])]),
-			roles: uniq([...(existing.members?.roles ?? []), ...(addMembers.roles ?? [])])
+	await ensureRegistryDatabase();
+	const lock = await acquireSecurityMutationLock(db);
+	try {
+		await options?.assertActive?.();
+		const current = await adminRaw(`/${db}/_security`, 'GET');
+		if (current.status >= 400) {
+			const detail = (current.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`_security read failed (${current.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
 		}
-	};
+		const existing =
+			(current.data as {
+				admins?: { names?: string[]; roles?: string[] };
+				members?: { names?: string[]; roles?: string[] };
+			} | null) ?? {};
+		await options?.assertActive?.();
 
-	const put = await adminRaw(`/${db}/_security`, 'PUT', merged);
-	if (put.status >= 400) {
-		const detail = (put.data as { reason?: string; error?: string } | null) ?? {};
-		throw new ServiceError(
-			'INTERNAL',
-			`_security write failed (${put.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
+		const merged = {
+			admins: {
+				names: uniq([...(existing.admins?.names ?? []), ...(addAdmins.names ?? [])]),
+				roles: uniq([...(existing.admins?.roles ?? []), ...(addAdmins.roles ?? [])])
+			},
+			members: {
+				names: uniq([...(existing.members?.names ?? []), ...(addMembers.names ?? [])]),
+				roles: uniq([...(existing.members?.roles ?? []), ...(addMembers.roles ?? [])])
+			}
+		};
+
+		const put = await adminRaw(`/${db}/_security`, 'PUT', merged);
+		if (put.status >= 400) {
+			const detail = (put.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`_security write failed (${put.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	} finally {
+		await releaseSecurityMutationLock(lock);
 	}
 }
 
