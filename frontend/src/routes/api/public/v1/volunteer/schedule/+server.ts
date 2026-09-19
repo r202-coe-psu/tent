@@ -21,13 +21,15 @@ import {
  * not reachable from here.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	if (!volunteerTicketFindLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
 	try {
 		const parsed = portalCredentialSchema.safeParse(await request.json());
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
+		}
+		// Validate first so malformed requests do not consume the lookup budget and
+		// can consistently return the contract's 422 response.
+		if (!volunteerTicketFindLimiter.check(getClientAddress())) {
+			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 		return json(await readPublicVolunteerSchedule(parsed.data), {
 			headers: { 'Cache-Control': 'no-store' }
