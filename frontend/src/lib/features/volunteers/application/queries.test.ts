@@ -56,6 +56,7 @@ const volunteerRepo = {
 	getByPhoneHash: vi.fn(),
 	create: vi.fn(),
 	update: vi.fn(),
+	deactivate: vi.fn(),
 	setCheckedIn: vi.fn()
 };
 /** Shelter code the last `volunteerRepositoryFor()` call asked for — `undefined` = active shelter. */
@@ -120,6 +121,7 @@ import {
 	useVolunteer,
 	useCreateJob,
 	useUpdateJob,
+	useDeactivateVolunteer,
 	useDispatchVolunteers,
 	useReviewApplication,
 	useCheckIn,
@@ -325,6 +327,16 @@ describe('mutation invalidation map', () => {
 		await useUpdateJob(qc).mutate({} as never);
 		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
 		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.jobsAll() });
+	});
+
+	it('useDeactivateVolunteer invalidates volunteers + hubMetrics', async () => {
+		volunteerRepo.deactivate.mockResolvedValue({ status: 'inactive' });
+		const qc = fakeQueryClient();
+		await useDeactivateVolunteer(qc).mutate('volunteer:1');
+		expect(volunteerRepo.deactivate).toHaveBeenCalledWith('volunteer:1');
+		expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
+		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
+		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
 	});
 
 	it('useDispatchVolunteers invalidates jobs + shiftAssignments + hubMetrics (quota-changing)', async () => {

@@ -441,6 +441,16 @@ export const useUpdateVolunteer = (queryClient: QueryClient) =>
 		}
 	}));
 
+/** Soft-deactivates a volunteer profile and refreshes roster-derived metrics. */
+export const useDeactivateVolunteer = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (id: string) => volunteerRepository().deactivate(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
 /** Records the reusable volunteer identity decision, separate from any job application. */
 export const useReviewVolunteerIdentity = (queryClient: QueryClient) =>
 	createMutation(() => ({

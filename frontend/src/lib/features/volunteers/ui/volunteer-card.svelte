@@ -5,7 +5,7 @@
 	 * each other with a shared header — mirrors `users/ui/user-list.svelte`).
 	 * Rendered inside `people-tab.svelte`'s `<Table.Body>`.
 	 *
-	 * Of the action buttons (ตรวจสอบ & อนุมัติ / จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ลบ):
+	 * Of the action buttons (ตรวจสอบ & อนุมัติ / จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ปิดใช้งาน):
 	 *   - Not identity-verified → only "ตรวจสอบ & อนุมัติ" opens the
 	 *     volunteer-level qualification audit. It records identity and
 	 *     controlled-skill evidence; it does not approve a specific job.
@@ -16,9 +16,6 @@
 	 *     its username/email back to the volunteer profile.
 	 * (Cross-shelter transfer was cut by CR-104 AC-104-10 — a volunteer now
 	 * applies directly to any shelter's jobs via the Job Board instead.)
-	 * "ลบ" stays a UI-only stub for this pass (explicit scope call from the
-	 * requester) — `VolunteerRepository` has no `delete()` at all, flagged for
-	 * the CR alongside the other schema gaps.
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import SearchCheck from '@lucide/svelte/icons/search-check';
@@ -27,12 +24,15 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
+	import { useDeactivateVolunteer } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import {
 		hasPendingControlledSkill,
@@ -104,19 +104,32 @@
 		)?.code ?? null
 	);
 
-	function stub(label: string) {
-		toast.info(`${label} — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา`);
-	}
-
 	let manageDialogOpen = $state(false);
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
+	let deleteDialogOpen = $state(false);
+
+	const queryClient = useQueryClient();
+	const deactivateMutation = useDeactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
 		manageDialogOpen = false;
 		qualificationFocusSkillCode = skillCode ?? null;
 		qualificationDialogOpen = true;
+	}
+
+	function confirmDeactivate(event: MouseEvent) {
+		event.preventDefault();
+		deactivateMutation.mutate(volunteer._id, {
+			onSuccess: () => {
+				deleteDialogOpen = false;
+				toast.success(`ปิดใช้งานอาสาสมัคร ${fullName} แล้ว`);
+			},
+			onError: (error) => {
+				toast.error(error instanceof Error ? error.message : 'ปิดใช้งานอาสาสมัครไม่สำเร็จ');
+			}
+		});
 	}
 </script>
 
@@ -146,6 +159,14 @@
 					<Badge variant="outline" class="text-[11px] text-muted-foreground">
 						{SOURCE_LABELS[volunteer.source]}
 					</Badge>
+					{#if volunteer.status === 'inactive'}
+						<Badge
+							variant="outline"
+							class="border-rose-200 bg-rose-50 text-[11px] font-bold text-rose-700"
+						>
+							ปิดใช้งาน
+						</Badge>
+					{/if}
 					{#if !volunteer.checked_in}
 						<Badge variant="outline" class="gap-1 text-[11px] text-muted-foreground">
 							<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"></span>
@@ -283,8 +304,9 @@
 					size="icon"
 					variant="outline"
 					class="shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50"
-					aria-label="ลบอาสาสมัคร"
-					onclick={() => stub('ลบอาสาสมัคร')}
+					aria-label="ปิดใช้งานอาสาสมัคร"
+					onclick={() => (deleteDialogOpen = true)}
+					disabled={deactivateMutation.isPending || volunteer.status === 'inactive'}
 				>
 					<Trash2 class="h-4 w-4" />
 				</Button>
@@ -307,3 +329,26 @@
 	focusSkillCode={qualificationFocusSkillCode}
 />
 <VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
+
+<AlertDialog.Root bind:open={deleteDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ยืนยันการปิดใช้งานอาสาสมัคร?</AlertDialog.Title>
+			<AlertDialog.Description>
+				โปรไฟล์ <span class="font-semibold text-foreground">{fullName}</span>
+				(<code class="text-xs">{volunteer.volunteer_code}</code>) จะเปลี่ยนสถานะเป็น
+				<code class="text-xs">inactive</code> และเก็บประวัติไว้ในระบบ อาสาสมัครจะไม่สามารถรับงานใหม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				onclick={confirmDeactivate}
+				disabled={deactivateMutation.isPending}
+			>
+				{deactivateMutation.isPending ? 'กำลังปิดใช้งาน...' : 'ยืนยันการปิดใช้งาน'}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

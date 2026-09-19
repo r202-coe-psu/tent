@@ -147,6 +147,8 @@ export interface VolunteerRepository {
 	): Promise<Volunteer>;
 	/** Read-modify-write an edited volunteer (LWW: bumps `updated_at`). */
 	update(volunteer: Volunteer): Promise<Volunteer>;
+	/** Soft-delete a volunteer profile by marking it inactive using the latest CouchDB `_rev`. */
+	deactivate(id: string): Promise<Volunteer>;
 	/** Record the reusable identity decision without changing job applications. */
 	reviewIdentity(
 		id: string,

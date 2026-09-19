@@ -595,6 +595,8 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 **Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
+**Soft-delete policy:** การกด “ปิดใช้งาน” ต้องทำแบบ read-modify-write โดยเปลี่ยน `status` เป็น `inactive` และเก็บเอกสารกับ references ที่เกี่ยวข้องไว้ ห้าม hard-delete เอกสาร volunteer; หากต้องเปิดใช้งานอีกครั้งให้เปลี่ยนสถานะกลับเป็น `active` ผ่าน mutation ที่ตรวจสิทธิ์แล้ว
+
 ### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 4**
 
 > **schema_v 4** — การมอบหมายกะงานจิตอาสาและการเช็คอิน (CR-107). ผูกกับ `job_id` และ `shift_id` ภายในกะย่อยรายวัน `job.shifts[]`, บันทึก `duty_window` หน้าต่างเวลาจริง, `check_in_at`, `check_out_at`, `check_in_by` (เจ้าหน้าที่ผู้รับรายงานตัว หรือ `'self_service'`), ตัดฟิลด์ `dispatched` และ `response_code` ทิ้งทั้งหมด (Job Board Model เท่านั้น).
