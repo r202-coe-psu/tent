@@ -50,6 +50,7 @@
 			try {
 				return sessionStorage.getItem('pre_register_shelter') ?? '';
 			} catch {
+				// ignore storage exceptions
 				return '';
 			}
 		}
@@ -133,6 +134,7 @@
 					return await win.grecaptcha.execute(siteKey, { action });
 				}
 			} catch {
+				// ignore reCAPTCHA execution failure
 				return null;
 			}
 		}

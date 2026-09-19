@@ -117,6 +117,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return this.repo.put(entry);
 	}
 
+	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		return this.repo.get<StockLedger>(id);
+	}
+
 	async listLedger(): Promise<StockLedger[]> {
 		return this.repo.allByType('stock_ledger', isStockLedger);
 	}

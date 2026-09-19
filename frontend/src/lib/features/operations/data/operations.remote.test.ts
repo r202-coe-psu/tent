@@ -48,9 +48,8 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 // that only need stock on hand still have to name one.
 const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
-// Phase 2A requires the strict batch reference contract (distribution_batch:*),
-// while actual batch persistence/verification is introduced in Phase 3.
-const DISTRIBUTION_BATCH_REF = 'distribution_batch:01JFIXTUREBATCH';
+// Ticket-era canonical distribute reference requires requisition_ticket: (CR-121 / schema §2.1)
+const DISTRIBUTION_BATCH_REF = 'requisition_ticket:01JFIXTURETICKET';
 
 describe('assertReceiveAgainstCatalog', () => {
 	const entry = createReceiveEntry(

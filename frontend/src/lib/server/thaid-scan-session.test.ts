@@ -5,8 +5,7 @@ import {
 	completeScanSession,
 	_resetSessionsForTest
 } from './thaid-scan-session';
-// eslint-disable-next-line no-restricted-imports
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const SAMPLE_PROFILE: ThaiDAutofillProfile = {
 	id: 'thaid-1234567890123',

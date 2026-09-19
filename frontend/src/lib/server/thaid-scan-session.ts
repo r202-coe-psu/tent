@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
-// eslint-disable-next-line no-restricted-imports
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 export type ScanSessionStatus = 'pending' | 'completed' | 'expired';
 
