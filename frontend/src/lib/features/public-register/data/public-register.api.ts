@@ -89,6 +89,59 @@ export async function createUnassignedRegistration(
 	return (await res.json()) as UnassignedRegistrationResponse;
 }
 
+export type ResidenceMatchChip = {
+	match_token: string;
+	landmark?: string | null;
+	housing_type?: string | null;
+	shelter_code?: string | null;
+	shelter_name?: string | null;
+	is_in_shelter?: boolean;
+	primary_contact_masked?: string | null;
+	matched_member_masked?: string | null;
+	member_count?: number;
+	pets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
+	address?: {
+		housing_type?: string;
+		residence_landmark?: string | null;
+		address_no?: string;
+		village_no?: string;
+		subdistrict?: string;
+		district?: string;
+		province?: string;
+		postal_code?: string;
+	} | null;
+};
+
+export type ResidenceMatchRequest = {
+	shelter_code?: string;
+	unassigned?: boolean;
+	housing_type?: string | null;
+	residence_landmark?: string | null;
+	address_no?: string | null;
+	village_no?: string | null;
+	subdistrict?: string | null;
+	district?: string | null;
+	province?: string | null;
+	postal_code?: string | null;
+	phone?: string | null;
+};
+
+/** Debounced Residence suggest for public create — tokens + non-PII chips only. */
+export async function matchResidence(
+	input: ResidenceMatchRequest
+): Promise<{ matches: ResidenceMatchChip[] }> {
+	const res = await fetch('/api/public/v1/households/residence-match', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!res.ok) {
+		return { matches: [] };
+	}
+	const body = (await res.json()) as { matches?: ResidenceMatchChip[] };
+	return { matches: body.matches ?? [] };
+}
+
 export interface UnassignedPhotoUploadResponse {
 	success: true;
 	photo_id: string;
@@ -235,4 +288,36 @@ export async function fetchShelterPolicy(
 	);
 	if (!res.ok) return null;
 	return (await res.json().catch(() => null)) as ShelterPolicyResponse | null;
+}
+
+export interface TicketStatusResult {
+	success: boolean;
+	verified: boolean;
+	status?: string;
+	error?: string;
+}
+
+/** Check if an issued ticket has been verified / checked in at the shelter */
+export async function checkTicketStatus(code: string): Promise<TicketStatusResult> {
+	if (!code.trim()) return { success: false, verified: false, error: 'NO_CODE' };
+	try {
+		const res = await fetch('/api/public/v1/registrations/status', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ code: code.trim() })
+		});
+		const body = (await res.json().catch(() => ({}))) as TicketStatusResult;
+		return {
+			success: res.ok && body.success === true,
+			verified: body.verified === true,
+			status: body.status,
+			error: body.error
+		};
+	} catch (e) {
+		return {
+			success: false,
+			verified: false,
+			error: e instanceof Error ? e.message : 'NETWORK_ERROR'
+		};
+	}
 }

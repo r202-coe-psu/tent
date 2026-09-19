@@ -96,6 +96,20 @@ export const contactSchema = z
 	.optional();
 export type Contact = z.infer<typeof contactSchema>;
 
+/**
+ * Named food distribution point (CR-128). Staff-only plane: a free-standing
+ * spot with an optional coordinate, no zone linkage. `id` is a client-minted
+ * ULID so rows survive reorder/removal without React-style key churn.
+ */
+export const foodDistributionPointSchema = z.object({
+	id: z.string().trim().min(1),
+	name: z.string().trim().min(1, { message: 'กรุณาระบุชื่อจุดแจกอาหาร' }),
+	note: z.string().trim().nullish(),
+	lat: z.coerce.number().min(-90).max(90).nullish(),
+	lng: z.coerce.number().min(-180).max(180).nullish()
+});
+export type FoodDistributionPoint = z.infer<typeof foodDistributionPointSchema>;
+
 // ===== Facilities (per-shelter, per image section 3b) =====
 
 export const facilitiesSchema = z.object({
@@ -390,6 +404,8 @@ export const shelterSchema = z.object({
 	utilities: utilitiesSchema,
 	risk: riskSchema,
 	zones: z.array(zoneSchema),
+	// CR-128 — named food distribution points (staff-only, optional coords)
+	food_distribution_points: z.array(foodDistributionPointSchema).optional().default([]),
 	admission_policy: admissionPolicySchema
 		.optional()
 		.default({ supported_vulnerable_groups: [], pet_policy: { policy: null, categories: [] } }),
@@ -505,6 +521,8 @@ export interface ShelterMaster {
 		secondary_muster_point?: string | null;
 	};
 	zones?: Zone[];
+	// CR-128 — named food distribution points (staff-only plane)
+	food_distribution_points?: FoodDistributionPoint[];
 	admission_policy?: AdmissionPolicy;
 	luggage_policy?: LuggagePolicy;
 	parking_policy?: ParkingPolicy;
@@ -588,26 +606,54 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 5;
+export const SHELTER_MASTER_SCHEMA_V = 6;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
 	return {
 		...v4,
-		schema_v: SHELTER_MASTER_SCHEMA_V,
+		schema_v: 5 as const,
 		site_kind: v4.site_kind ?? 'evacuation_center'
+	};
+}
+
+/** v5 → v6 default-fill (CR-128). Food distribution points start empty. */
+function migrateV5ToV6(v5: ShelterMaster): ShelterMaster {
+	return {
+		...v5,
+		schema_v: SHELTER_MASTER_SCHEMA_V,
+		food_distribution_points: v5.food_distribution_points ?? []
+	};
+}
+
+/**
+ * Normalize a doc already stamped at (or past) the current version. Additive
+ * fields can be missing when a doc was written before the field existed but
+ * stamped current by a partial migration, so re-apply the default-fills here.
+ *
+ * Identity-preserving: returns the same object when nothing is missing, so
+ * callers can use `===` to mean "nothing to write" (see `updateMaster`).
+ */
+function normalizeCurrent(master: ShelterMaster): ShelterMaster {
+	const hasSiteKind = 'site_kind' in master && !!master.site_kind;
+	if (hasSiteKind && Array.isArray(master.food_distribution_points)) return master;
+	return {
+		...master,
+		site_kind: master.site_kind ?? 'evacuation_center',
+		food_distribution_points: master.food_distribution_points ?? []
 	};
 }
 
 /** Idempotent v2 → current migration. Safe to call multiple times. */
 export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
-		if ('site_kind' in master && master.site_kind) return master as ShelterMaster;
-		return migrateV4ToV5(master as ShelterMaster);
+		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 4) return migrateV4ToV5(master as unknown as ShelterMaster);
+	if (master.schema_v === 5) return migrateV5ToV6(master as unknown as ShelterMaster);
+	if (master.schema_v === 4)
+		return migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster));
 	if (master.schema_v === 3)
-		return migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster));
+		return migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster)));
 	const v2 = master as ShelterMasterV2;
 	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
 	// are the source of truth, so sum zone capacity (>= 0) and fall back to 100
@@ -668,6 +714,6 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→v4 so a v2 doc lands on the current shape in one call.
-	return migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster));
+	// Chain v2→v3→v4→v5→v6 so a v2 doc lands on the current shape in one call.
+	return migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster)));
 }

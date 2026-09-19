@@ -69,7 +69,9 @@
 				className
 			)}
 		>
-			{selectedLabel}
+			<span class={cn('truncate', !value && !loading && 'text-xs')}>
+				{selectedLabel}
+			</span>
 			{#if loading}
 				<Loader class="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
 			{:else}

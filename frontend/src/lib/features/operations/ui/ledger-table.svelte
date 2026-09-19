@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { useLedger, useLedgerByItem } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -14,6 +15,8 @@
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const allLedgerQuery = useLedger(() => !filterItemId);
 	const filteredLedgerQuery = useLedgerByItem(() => filterItemId);
 	const ledgerQuery = $derived(filterItemId ? filteredLedgerQuery : allLedgerQuery);
@@ -149,7 +152,9 @@
 												{entry.qty}
 											</span>
 										{/if}
-										<span class="text-xs font-medium text-muted-foreground">{entry.unit}</span>
+										<span class="text-xs font-medium text-muted-foreground"
+											>{formatUnit(entry.unit, units, langState.current)}</span
+										>
 									</span>
 								</Table.Cell>
 

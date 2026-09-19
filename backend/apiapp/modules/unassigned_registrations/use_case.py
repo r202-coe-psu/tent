@@ -18,10 +18,14 @@ from tent_model.unassigned_registration import (
     UnassignedRegistration,
 )
 
-from ...core.staff_session import StaffSession
-from ...utils.masking import normalize_national_id, normalize_phone
-from ...utils.ulid import new_ulid
 from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
+from ...utils.masking import (
+    mask_last_name,
+    mask_phone,
+    normalize_national_id,
+    normalize_phone,
+)
+from ...utils.ulid import new_ulid
 from .couch_birth import (
     CouchBirthError,
     CouchBirthPort,
@@ -51,6 +55,9 @@ from .schemas import (
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedResidenceMatchHit,
+    UnassignedResidenceMatchRequest,
+    UnassignedResidenceMatchResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -204,6 +211,63 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
     )
 
 
+def _norm_addr(value: str | None) -> str:
+    if not value:
+        return ""
+    s = value.strip().lower()
+    if not s:
+        return ""
+    thai_nums = "๐๑๒๓๔๕๖๗๘๙"
+    for i, ch in enumerate(thai_nums):
+        s = s.replace(ch, str(i))
+    s = re.sub(r"ถ\.\s*", "ถนน", s)
+    s = re.sub(r"ซ\.\s*", "ซอย", s)
+    s = re.sub(r"ม\.\s*", "หมู่", s)
+    s = re.sub(r"หมู่ที่\s*", "หมู่", s)
+    s = re.sub(r"จ\.\s*", "จังหวัด", s)
+    s = re.sub(r"อ\.\s*", "อำเภอ", s)
+    s = re.sub(r"ต\.\s*", "ตำบล", s)
+    s = re.sub(r"^(จังหวัด|อำเภอ|ตำบล)\s*", "", s)
+    s = re.sub(r"(ถนน|ซอย|หมู่|ตำบล|อำเภอ|จังหวัด)\s*([0-9]+)", r"\1 \2", s)
+    s = re.sub(r"\s*([/\-])\s*", r"\1", s)
+    s = re.sub(r"[ก-ฮ]?\u0E4C", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _residence_matches(
+    query: UnassignedResidenceMatchRequest, household: UnassignedHousehold
+) -> bool:
+    """Mirror frontend matchesResidenceAddress (incl. homeless landmark + geo)."""
+    homeless = query.housing_type == "homeless" or (
+        not _norm_addr(query.address_no) and bool(_norm_addr(query.residence_landmark))
+    )
+    if homeless:
+        if not _norm_addr(query.residence_landmark):
+            return False
+        if _norm_addr(query.residence_landmark) != _norm_addr(household.residence_landmark):
+            return False
+        if _norm_addr(query.subdistrict) != _norm_addr(household.subdistrict):
+            return False
+        if _norm_addr(query.district) != _norm_addr(household.district):
+            return False
+        if _norm_addr(query.province) != _norm_addr(household.province):
+            return False
+        return True
+
+    if _norm_addr(query.address_no) != _norm_addr(household.address_no):
+        return False
+    if _norm_addr(query.subdistrict) != _norm_addr(household.subdistrict):
+        return False
+    if _norm_addr(query.district) != _norm_addr(household.district):
+        return False
+    if _norm_addr(query.province) != _norm_addr(household.province):
+        return False
+    query_village = (query.village_no or "").strip()
+    if query_village and _norm_addr(query.village_no) != _norm_addr(household.village_no):
+        return False
+    return True
+
+
 def _emergency_out(member: UnassignedMember) -> EmergencyContactOut | None:
     if member.emergency_contact is None:
         return None
@@ -248,6 +312,10 @@ class UnassignedRegistrationsUseCase:
     async def create(
         self, payload: UnassignedRegistrationCreateRequest
     ) -> UnassignedRegistrationCreateResponse:
+        join_id = (payload.join_registration_id or "").strip()
+        if join_id:
+            return await self._join_existing(payload, join_id)
+
         now = datetime.now(UTC)
         members = [_build_member(m) for m in payload.members]
         open_person_ids, open_phones = _open_identity_keys(members)
@@ -305,6 +373,147 @@ class UnassignedRegistrationsUseCase:
             status=doc.status,
             created_at=doc.created_at.isoformat(),
         )
+
+    async def _join_existing(
+        self, payload: UnassignedRegistrationCreateRequest, join_id: str
+    ) -> UnassignedRegistrationCreateResponse:
+        """Append members (+ pets) into an existing open reserved household."""
+        try:
+            doc = await UnassignedRegistration.get(join_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("join") from exc
+
+        if doc is None or doc.status != "open":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "JOIN_TARGET_NOT_FOUND"},
+            )
+
+        new_members = [_build_member(m) for m in payload.members]
+        combined = list(doc.members) + new_members
+        open_person_ids, open_phones = _open_identity_keys(combined)
+
+        append_pets = [
+            UnassignedPet(
+                species=pet.species,
+                count=pet.count,
+                notes=pet.notes,
+                has_cage=pet.has_cage,
+                image_url=_normalize_photo_ref(pet.image_url),
+            )
+            for pet in payload.household.pets
+        ]
+        if append_pets:
+            existing_pets = list(doc.household.pets or [])
+            doc.household.pets = existing_pets + append_pets
+
+        doc.members = combined
+        doc.open_person_id_numbers = open_person_ids
+        doc.open_phones = open_phones
+
+        try:
+            await doc.save()
+        except DuplicateKeyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "DUPLICATE_OPEN_IDENTITY"},
+            ) from exc
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("join") from exc
+
+        return UnassignedRegistrationCreateResponse(
+            id=doc.id,
+            schema_v=doc.schema_v,
+            reserved_household_id=doc.reserved_household_id,
+            members=[_member_response(m) for m in doc.members],
+            registered_via=doc.registered_via,
+            status=doc.status,
+            created_at=doc.created_at.isoformat(),
+        )
+
+    async def match_by_residence(
+        self, payload: UnassignedResidenceMatchRequest
+    ) -> UnassignedResidenceMatchResponse:
+        """Return registrations whose Residence matches — ids + non-PII chips only."""
+        try:
+            docs = await UnassignedRegistration.find(
+                {"status": {"$in": ["open", "claimed", "partial_claim"]}}
+            ).to_list()
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("residence_match") from exc
+
+        query_phone = normalize_phone(payload.phone) if payload.phone else None
+
+        matches: list[UnassignedResidenceMatchHit] = []
+        for doc in docs:
+            phone_match = False
+            matched_member_str: str | None = None
+            if query_phone and query_phone in doc.open_phones:
+                phone_match = True
+                head = doc.members[0] if doc.members else None
+                head_phone = normalize_phone(head.phone) if (head and head.phone) else ""
+                if head_phone != query_phone:
+                    for m in doc.members:
+                        if m.phone and normalize_phone(m.phone) == query_phone:
+                            first_char = m.first_name[0] if m.first_name else ""
+                            masked_p = mask_phone(m.phone)
+                            matched_member_str = f"คุณ{first_char}*** ({masked_p})"
+                            break
+
+            residence_match = _residence_matches(payload, doc.household)
+            if not phone_match and not residence_match:
+                continue
+
+            landmark = (doc.household.residence_landmark or "").strip() or None
+            housing = doc.household.housing_type
+            claimed_shelter = None
+            for m in doc.members:
+                if m.claimed_shelter_code:
+                    claimed_shelter = m.claimed_shelter_code
+                    break
+
+            primary_masked = None
+            if doc.members:
+                head = doc.members[0]
+                masked_last = mask_last_name(head.last_name) if head.last_name else ""
+                primary_masked = f"{head.first_name} {masked_last}".strip()
+
+            pets_list = [
+                p.model_dump() if hasattr(p, "model_dump") else p
+                for p in (doc.household.pets or [])
+            ]
+            hh_addr = {
+                "housing_type": doc.household.housing_type,
+                "residence_landmark": doc.household.residence_landmark,
+                "address_no": doc.household.address_no,
+                "village_no": doc.household.village_no,
+                "subdistrict": doc.household.subdistrict,
+                "district": doc.household.district,
+                "province": doc.household.province,
+                "postal_code": doc.household.postal_code,
+                "latitude": doc.household.geo.coordinates[1] if doc.household.geo else None,
+                "longitude": doc.household.geo.coordinates[0] if doc.household.geo else None,
+            }
+
+            matches.append(
+                UnassignedResidenceMatchHit(
+                    id=doc.id,
+                    landmark=landmark,
+                    housing_type=housing,
+                    claimed_shelter_code=claimed_shelter,
+                    claimed_household_id=doc.reserved_household_id if claimed_shelter else None,
+                    status=doc.status,
+                    primary_contact_name_masked=primary_masked,
+                    matched_member_masked=matched_member_str,
+                    member_count=len(doc.members),
+                    pets=pets_list,
+                    household_address=hh_addr,
+                )
+            )
+            if len(matches) >= 25:
+                break
+
+        return UnassignedResidenceMatchResponse(matches=matches)
 
     async def stats(self) -> UnassignedRegistrationStatsResponse:
         """Open-queue headcounts for SA overview KPIs."""
@@ -588,18 +797,14 @@ class UnassignedRegistrationsUseCase:
         for member in claim_targets:
             if not member.photo:
                 continue
-            image_id = await _append_gridfs_image(
-                member.photo, label=member.reserved_evacuee_id
-            )
+            image_id = await _append_gridfs_image(member.photo, label=member.reserved_evacuee_id)
             if image_id:
                 photo_by_member[member.reserved_evacuee_id] = image_id
 
         for index, pet in enumerate(doc.household.pets):
             if not pet.image_url:
                 continue
-            image_id = await _append_gridfs_image(
-                pet.image_url, label=f"pet[{index}]"
-            )
+            image_id = await _append_gridfs_image(pet.image_url, label=f"pet[{index}]")
             if image_id:
                 pet_image_urls[index] = image_id
 
@@ -665,7 +870,7 @@ class UnassignedRegistrationsUseCase:
                 if refreshed is not None:
                     await refreshed.delete()
                 deleted = True
-            except (PyMongoError, ConnectionError, TimeoutError, OSError):
+            except PyMongoError, ConnectionError, TimeoutError, OSError:
                 logger.exception(
                     "Unassigned Registration %s claim succeeded but Mongo delete failed",
                     registration_id,

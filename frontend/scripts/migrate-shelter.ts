@@ -153,7 +153,11 @@ async function main() {
 		const v2 = row.doc;
 		// Mirror `migrateShelterV2ToCurrent`'s own idempotence check: a doc at the
 		// current version still needs a write if an additive field never landed.
-		if ((v2.schema_v ?? 0) >= SHELTER_MASTER_SCHEMA_V && v2.site_kind) {
+		if (
+			(v2.schema_v ?? 0) >= SHELTER_MASTER_SCHEMA_V &&
+			v2.site_kind &&
+			Array.isArray((v2 as { food_distribution_points?: unknown }).food_distribution_points)
+		) {
 			console.log(`  ⊘ ${v2.code} (${row.id}) — already v${SHELTER_MASTER_SCHEMA_V}, skip`);
 			skipped++;
 			continue;

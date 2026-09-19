@@ -7,6 +7,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import type { PendingDonationRow } from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		open = false,
@@ -27,6 +29,8 @@
 	let memo = $state('');
 	let rejectReason = $state('');
 	let showRejectReasonError = $state(false);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	$effect(() => {
 		if (open) {
@@ -92,7 +96,9 @@
 						{#each request.items as it, i (i)}
 							<div class="flex items-center justify-between text-xs font-bold text-foreground">
 								<span>{it.free_text ?? it.item_id ?? 'ไม่ระบุ'}</span>
-								<span class="text-muted-foreground">{it.qty} {it.unit}</span>
+								<span class="text-muted-foreground"
+									>{it.qty} {formatUnit(it.unit, units, langState.current)}</span
+								>
 							</div>
 						{:else}
 							<p class="text-xs text-muted-foreground">ไม่มีรายการสิ่งของ</p>

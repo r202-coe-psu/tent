@@ -29,6 +29,7 @@ describe('toPublicShelterCard', () => {
 			province: 'สงขลา',
 			district: 'หาดใหญ่',
 			subdistrict: 'หาดใหญ่',
+			accepts_pre_registration: false,
 			updated_at: '2026-07-16T00:00:00Z'
 		};
 		const card = toPublicShelterCard(item, 3.2);

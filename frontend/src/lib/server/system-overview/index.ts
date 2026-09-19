@@ -31,6 +31,7 @@ import {
 	type OriginBucket,
 	type PreRegistrationListItem,
 	type PreRegistrationProfile,
+	type HouseholdOption,
 	resolveMovementDateRange
 } from '$lib/features/system-overview/domain';
 
@@ -264,6 +265,7 @@ type UnassignedList = {
 		status: string;
 		created_at: string;
 		household: {
+			label?: string | null;
 			province?: string | null;
 			district?: string | null;
 			subdistrict?: string | null;
@@ -447,10 +449,15 @@ type EvacueeDoc = {
 	household_id?: string;
 	current_stay?: { status?: string; since?: string };
 	created_at?: string;
+	registered_via?: string;
 };
 
 type HouseholdDoc = {
 	_id: string;
+	type?: string;
+	label?: string | null;
+	status?: string | null;
+	shelter_code?: string | null;
 	province?: string | null;
 	district?: string | null;
 	subdistrict?: string | null;
@@ -462,11 +469,35 @@ type HouseholdDoc = {
 async function findPreRegisteredEvacuees(code: string): Promise<EvacueeDoc[]> {
 	const db = `shelter_${code.toLowerCase()}`;
 	const res = await adminRaw(`/${db}/_find`, 'POST', {
-		selector: { type: 'evacuee', 'current_stay.status': 'pre_registered' },
+		selector: {
+			type: 'evacuee',
+			$or: [
+				{ 'current_stay.status': 'pre_registered' },
+				{ registered_via: { $in: ['web', 'kiosk', 'backoffice', 'import'] } }
+			]
+		},
 		limit: 10_000
 	});
 	if (res.status >= 400) return [];
 	return ((res.data as { docs?: EvacueeDoc[] })?.docs ?? []).filter((d) => d.type === 'evacuee');
+}
+
+async function getHouseholdsMap(code: string): Promise<Map<string, HouseholdDoc>> {
+	const map = new Map<string, HouseholdDoc>();
+	const db = `shelter_${code.toLowerCase()}`;
+	const res = await adminRaw(`/${db}/_find`, 'POST', {
+		selector: { type: 'household' },
+		limit: 10_000
+	});
+	if (res.status < 400 && res.data) {
+		const docs = ((res.data as { docs?: HouseholdDoc[] }).docs ?? []).filter(
+			(d) => d.type === 'household' || d._id?.startsWith('household:')
+		);
+		for (const d of docs) {
+			map.set(d._id, d);
+		}
+	}
+	return map;
 }
 
 async function getHousehold(code: string, householdId: string): Promise<HouseholdDoc | null> {
@@ -554,6 +585,27 @@ export async function buildOverviewOrigin(
 	return overviewOriginPayloadSchema.parse({ buckets });
 }
 
+function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {
+	if (!stayBucket || stayBucket === 'all') return true;
+	if (stayBucket === 'present') {
+		return (
+			stayStatus === 'active' || stayStatus === 'room_confirmed' || stayStatus === 'temporary_leave'
+		);
+	}
+	if (stayBucket === 'forecast') {
+		return ['pre_registered', 'arriving', 'active', 'room_confirmed', 'temporary_leave'].includes(
+			stayStatus
+		);
+	}
+	if (stayBucket === 'pre_registered') {
+		return stayStatus === 'pre_registered' || stayStatus === 'unassigned';
+	}
+	if (stayBucket === 'checked_out') {
+		return stayStatus === 'checked_out';
+	}
+	return true;
+}
+
 export async function buildPreRegistrationsList(
 	filters: OverviewFilters,
 	fetchFn: FastapiFetch,
@@ -565,7 +617,11 @@ export async function buildPreRegistrationsList(
 	for (const m of masters) nameByCode.set(m.code, m.name);
 	const filteredMasters = masters.filter((m) => matchesShelterGeo(m, filters));
 
-	if (filters.source !== 'bound') {
+	if (
+		filters.source !== 'bound' &&
+		!filters.shelter_code &&
+		matchesStayBucket('unassigned', filters.stay_bucket)
+	) {
 		const qs = new URLSearchParams({
 			limit: '200',
 			offset: '0'
@@ -580,6 +636,14 @@ export async function buildPreRegistrationsList(
 			`/staff/v1/unassigned-registrations?${qs}`
 		);
 		for (const reg of list?.items ?? []) {
+			if (filters.household_id && reg.reserved_household_id !== filters.household_id) {
+				continue;
+			}
+			const hhLabel =
+				reg.household.label?.trim() ||
+				(reg.open_members[0]
+					? `ครอบครัว ${displayName(reg.open_members[0].first_name, reg.open_members[0].last_name)}`
+					: 'ครอบครัวไม่ระบุชื่อ');
 			for (const member of reg.open_members) {
 				const band = ageBandForBirthYear(member.birth_year ?? null);
 				if (filters.age_band && band !== filters.age_band) continue;
@@ -593,6 +657,8 @@ export async function buildPreRegistrationsList(
 					id: `unassigned:${reg.id}:${member.reserved_evacuee_id}`,
 					source: 'unassigned',
 					display_name: displayName(member.first_name, member.last_name),
+					household_id: reg.reserved_household_id,
+					household_name: hhLabel,
 					province: reg.household.province ?? null,
 					district: reg.household.district ?? null,
 					subdistrict: reg.household.subdistrict ?? null,
@@ -601,6 +667,8 @@ export async function buildPreRegistrationsList(
 					age: member.age ?? null,
 					age_band: band,
 					queue_status: 'unassigned',
+					stay_status: 'unassigned',
+					registered_via: reg.registered_via ?? 'web',
 					shelter_code: null,
 					shelter_name: null,
 					registered_at: reg.created_at,
@@ -614,9 +682,19 @@ export async function buildPreRegistrationsList(
 
 	if (filters.source !== 'unassigned') {
 		for (const master of filteredMasters) {
-			const evacuees = await findPreRegisteredEvacuees(master.code);
+			const [evacuees, hhMap] = await Promise.all([
+				findPreRegisteredEvacuees(master.code),
+				getHouseholdsMap(master.code)
+			]);
 			for (const ev of evacuees) {
-				const hh = ev.household_id ? await getHousehold(master.code, ev.household_id) : null;
+				const stayStatus = ev.current_stay?.status ?? 'pre_registered';
+				if (!matchesStayBucket(stayStatus, filters.stay_bucket)) {
+					continue;
+				}
+				if (filters.household_id && ev.household_id !== filters.household_id) {
+					continue;
+				}
+				const hh = ev.household_id ? (hhMap.get(ev.household_id) ?? null) : null;
 				if (!matchesResidence(hh?.province, hh?.district, hh?.subdistrict, filters)) {
 					continue;
 				}
@@ -632,10 +710,30 @@ export async function buildPreRegistrationsList(
 						continue;
 					}
 				}
+
+				let queueStatus = `pre_registered@${master.code}`;
+				if (stayStatus === 'active') {
+					queueStatus = `checked_in@${master.code}`;
+				} else if (stayStatus === 'room_confirmed') {
+					queueStatus = `room_confirmed@${master.code}`;
+				} else if (stayStatus === 'arriving') {
+					queueStatus = `arriving@${master.code}`;
+				} else if (stayStatus === 'temporary_leave') {
+					queueStatus = `temporary_leave@${master.code}`;
+				} else if (stayStatus === 'checked_out') {
+					queueStatus = `checked_out@${master.code}`;
+				} else if (stayStatus === 'transferred') {
+					queueStatus = `transferred@${master.code}`;
+				} else if (stayStatus === 'cancelled') {
+					queueStatus = `cancelled@${master.code}`;
+				}
+
 				items.push({
 					id: `bound:${master.code}:${ev._id}`,
 					source: 'bound',
 					display_name: name,
+					household_id: ev.household_id ?? null,
+					household_name: hh?.label?.trim() || null,
 					province: hh?.province ?? null,
 					district: hh?.district ?? null,
 					subdistrict: hh?.subdistrict ?? null,
@@ -643,10 +741,12 @@ export async function buildPreRegistrationsList(
 					birth_year: ev.birth_year ?? null,
 					age: ev.age ?? null,
 					age_band: band,
-					queue_status: `pre_registered@${master.code}`,
+					queue_status: queueStatus,
+					stay_status: stayStatus,
+					registered_via: ev.registered_via ?? null,
 					shelter_code: master.code,
 					shelter_name: nameByCode.get(master.code) ?? master.name,
-					registered_at: ev.current_stay?.since ?? ev.created_at ?? null,
+					registered_at: ev.created_at ?? ev.current_stay?.since ?? null,
 					profile_href: `/system-management/pre-registrations/evacuee/${encodeURIComponent(master.code)}/${encodeURIComponent(ev._id)}`,
 					registration_id: null,
 					evacuee_id: ev._id
@@ -782,6 +882,164 @@ export async function buildBoundEvacueeProfile(
 			: null,
 		members
 	});
+}
+
+export interface SearchHouseholdsOptions {
+	scope?: 'universal' | 'shelter';
+	shelterCode?: string | null;
+	q?: string | null;
+	limit?: number;
+}
+
+export async function searchHouseholds(
+	options: SearchHouseholdsOptions,
+	fetchFn: FastapiFetch,
+	cookie: string | null
+): Promise<HouseholdOption[]> {
+	const { scope = 'universal', shelterCode, q = '', limit = 20 } = options;
+	const trimmedQ = (q ?? '').trim().toLowerCase();
+	const results: HouseholdOption[] = [];
+	const seenIds = new Set<string>();
+
+	if (scope === 'shelter') {
+		if (!shelterCode) {
+			throw new ServiceError('VALIDATION', 'shelter_code is required when scope is shelter');
+		}
+		const db = `shelter_${shelterCode.toLowerCase()}`;
+		const selector: Record<string, unknown> = { type: 'household' };
+		const res = await adminRaw(`/${db}/_find`, 'POST', {
+			selector,
+			limit: 200
+		});
+		if (res.status < 400 && res.data) {
+			const docs = ((res.data as { docs?: HouseholdDoc[] }).docs ?? []).filter(
+				(d) => d.type === 'household' || d._id?.startsWith('household:')
+			);
+			for (const d of docs) {
+				const label = d.label?.trim() || 'ครอบครัวไม่ระบุชื่อ';
+				const addr = [d.province, d.district, d.subdistrict, d.address_no]
+					.filter(Boolean)
+					.join(' ');
+				if (trimmedQ) {
+					const match =
+						label.toLowerCase().includes(trimmedQ) ||
+						addr.toLowerCase().includes(trimmedQ) ||
+						d._id.toLowerCase().includes(trimmedQ);
+					if (!match) continue;
+				}
+				results.push({
+					id: d._id,
+					label,
+					status: d.status ?? 'active',
+					statusLabel: `ในศูนย์: ${shelterCode}`,
+					shelterCode,
+					shelterName: null,
+					province: d.province ?? null,
+					district: d.district ?? null,
+					subdistrict: d.subdistrict ?? null,
+					memberCount: 0,
+					memberNames: [],
+					scope: 'shelter'
+				});
+				if (results.length >= limit) break;
+			}
+		}
+		return results;
+	}
+
+	// Universal mode:
+	// 1. Fetch unassigned registrations from FastAPI (Mongo unassigned queue)
+	try {
+		const qs = new URLSearchParams({ limit: '100' });
+		if (trimmedQ) qs.set('q', trimmedQ);
+		const list = await fastapiJson<UnassignedList>(
+			fetchFn,
+			cookie,
+			`/staff/v1/unassigned-registrations?${qs.toString()}`
+		);
+		for (const reg of list?.items ?? []) {
+			if (seenIds.has(reg.reserved_household_id)) continue;
+			seenIds.add(reg.reserved_household_id);
+			const label =
+				reg.household.label?.trim() ||
+				(reg.open_members[0]
+					? `ครอบครัว ${displayName(reg.open_members[0].first_name, reg.open_members[0].last_name)}`
+					: 'ครอบครัวไม่ระบุชื่อ');
+			results.push({
+				id: reg.reserved_household_id,
+				label,
+				status: 'unassigned',
+				statusLabel: 'ยังไม่ผูกศูนย์',
+				shelterCode: null,
+				shelterName: null,
+				province: reg.household.province ?? null,
+				district: reg.household.district ?? null,
+				subdistrict: reg.household.subdistrict ?? null,
+				memberCount: reg.open_member_count ?? reg.open_members.length,
+				memberNames: reg.open_members
+					.map((m) => displayName(m.first_name, m.last_name))
+					.slice(0, 5),
+				scope: 'universal'
+			});
+			if (results.length >= limit) break;
+		}
+	} catch {
+		// continue to confirmed if FastAPI fails
+	}
+
+	// 2. Fetch confirmed / in-shelter households across shelters
+	if (results.length < limit) {
+		const masters = (await listShelterMasters()).map(migrate);
+		const shelterPromises = masters.map(async (m) => {
+			const db = `shelter_${m.code.toLowerCase()}`;
+			const res = await adminRaw(`/${db}/_find`, 'POST', {
+				selector: { type: 'household' },
+				limit: 100
+			});
+			if (res.status >= 400 || !res.data) return [];
+			const docs = ((res.data as { docs?: HouseholdDoc[] }).docs ?? []).filter(
+				(d) => d.type === 'household' || d._id?.startsWith('household:')
+			);
+			return docs.map((d) => ({ doc: d, shelterCode: m.code, shelterName: m.name }));
+		});
+
+		const shelterResults = await Promise.all(shelterPromises);
+		for (const items of shelterResults) {
+			for (const { doc: d, shelterCode: code, shelterName: name } of items) {
+				if (seenIds.has(d._id)) continue;
+				const label = d.label?.trim() || 'ครอบครัวไม่ระบุชื่อ';
+				const addr = [d.province, d.district, d.subdistrict, d.address_no]
+					.filter(Boolean)
+					.join(' ');
+				if (trimmedQ) {
+					const match =
+						label.toLowerCase().includes(trimmedQ) ||
+						addr.toLowerCase().includes(trimmedQ) ||
+						d._id.toLowerCase().includes(trimmedQ);
+					if (!match) continue;
+				}
+				seenIds.add(d._id);
+				results.push({
+					id: d._id,
+					label,
+					status: d.status ?? 'checked_in',
+					statusLabel: `อยู่ในศูนย์: ${name || code}`,
+					shelterCode: code,
+					shelterName: name,
+					province: d.province ?? null,
+					district: d.district ?? null,
+					subdistrict: d.subdistrict ?? null,
+					memberCount: 0,
+					memberNames: [],
+					scope: 'universal'
+				});
+				if (results.length >= limit) break;
+			}
+			if (results.length >= limit) break;
+		}
+	}
+
+	return results;
 }
 
 export { parseOverviewFilters, noStore };

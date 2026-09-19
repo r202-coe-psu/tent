@@ -277,4 +277,16 @@ export interface PeopleRepository {
 		household: Household;
 		members: Evacuee[];
 	}>;
+	/**
+	 * Merge source household into target household:
+	 * moves all source members to target, merges pets/vehicles, and marks source as 'merged'.
+	 */
+	mergeHouseholds(
+		sourceHouseholdId: string,
+		targetHouseholdId: string,
+		ctx: AuthorContext
+	): Promise<{
+		targetHousehold: Household;
+		mergedMembers: Evacuee[];
+	}>;
 }

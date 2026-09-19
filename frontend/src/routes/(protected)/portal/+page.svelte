@@ -101,7 +101,7 @@
 </svelte:head>
 
 <div class="flex flex-1 flex-col justify-start p-4 sm:p-6 lg:justify-center">
-	<div class="mx-auto w-full min-w-0 max-w-7xl px-4 sm:px-0">
+	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<header class="mb-8 text-center">
 			<h1 class="mb-2 text-3xl font-bold tracking-wide sm:text-4xl">
 				Smart<span class="text-primary">Shelter</span> Thailand

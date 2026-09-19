@@ -177,7 +177,7 @@
 							for="category-deactivated-toggle"
 							class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
 						>
-							สถานะปิดการใช้งาน (Deactivated)
+							สถานะปิดการใช้งาน
 						</label>
 						<p class="text-xs text-muted-foreground">
 							หากปิดการใช้งาน หมวดหมู่นี้จะไม่แสดงให้เลือกในการสร้างสิ่งของใหม่

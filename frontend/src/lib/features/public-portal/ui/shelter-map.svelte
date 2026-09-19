@@ -43,6 +43,7 @@
 		type?: string;
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
+		accepts_pre_registration?: boolean;
 	}
 
 	type ShelterMarkerItem = {

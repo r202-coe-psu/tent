@@ -13,6 +13,9 @@ class NeedItemResponse(BaseModel):
     qty_needed: str
     unit: str
     status: str
+    qty_target: str = "0"
+    urgency: str = "normal"
+    category: str | None = None
 
 
 class ShelterNeedsResponse(BaseModel):

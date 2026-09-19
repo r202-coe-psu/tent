@@ -42,7 +42,8 @@
 		arriving: 'กำลังเดินทางมา',
 		checked_in: 'เช็คอินแล้ว',
 		checked_out: 'เช็คเอาท์แล้ว',
-		cancelled: 'ยกเลิก'
+		cancelled: 'ยกเลิก',
+		merged: 'รวมแล้ว'
 	};
 
 	const STAY_STATUS_LABEL: Partial<Record<StayStatus, string>> = {

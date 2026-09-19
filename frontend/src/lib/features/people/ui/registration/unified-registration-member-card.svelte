@@ -7,6 +7,8 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -28,10 +30,10 @@
 		PersonalInfoFields,
 		EmergencyContactFields,
 		SpecialNeedsFields,
-		VulnerableGroupsFields
+		VulnerableGroupsFields,
+		ZoneSelectionFields
 	} from '../forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { STATUS_LABELS } from '../../domain/people';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import UserSearch from '@lucide/svelte/icons/user-search';
 	import {
@@ -61,8 +63,11 @@
 		mode = 'create',
 		excludeIds = [],
 		fieldErrors,
+		isJoiningExistingHousehold = false,
 		onRemove,
-		onReportingInChange
+		onReportingInChange,
+		onApplyZoneToAll,
+		onScanThaiD
 	}: {
 		member: UnifiedMemberWithMeta;
 		index: number;
@@ -74,8 +79,11 @@
 		mode?: 'create' | 'report-in';
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
+		isJoiningExistingHousehold?: boolean;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
+		onApplyZoneToAll?: (zoneCode: string) => void;
+		onScanThaiD?: () => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
@@ -89,17 +97,17 @@
 	const isAlreadyReported = $derived(
 		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
 	);
-	const alreadyReportedStatusLabel = $derived(
-		member.stay_status ? (STATUS_LABELS[member.stay_status] ?? member.stay_status) : ''
-	);
 	const isNewReportInMember = $derived(isReportIn && !member._id);
 	const isToggleableReportIn = $derived(
 		isReportIn && !!member._id && (!member.stay_status || member.stay_status === 'pre_registered')
 	);
 	const isReportingInSelected = $derived(member.reporting_in ?? true);
+	/** Lock fields when parent says so, or when this member already reported in. */
+	const fieldsDisabled = $derived(disabled || isAlreadyReported);
 	const cardClass = $derived(
 		cn(
 			'rounded-xl p-4 shadow-xs sm:p-5 space-y-5',
+			isAlreadyReported && 'pointer-events-none',
 			isToggleableReportIn
 				? isReportingInSelected
 					? 'border-2 border-primary/50 bg-sky-100/5 ring-1 ring-primary/30'
@@ -249,12 +257,29 @@
 		return Number.isFinite(parsed) ? parsed : undefined;
 	});
 
+	let lastSyncedBirthYear = member.birth_year;
 	$effect(() => {
-		member.birth_year = resolvedBirthYear;
+		if (member.birth_year !== lastSyncedBirthYear) {
+			lastSyncedBirthYear = member.birth_year;
+			birthYear =
+				typeof member.birth_year === 'number' || typeof member.birth_year === 'string'
+					? member.birth_year
+					: '';
+		} else {
+			member.birth_year = resolvedBirthYear;
+			lastSyncedBirthYear = resolvedBirthYear;
+		}
 	});
 
+	let lastSyncedAge = member.age;
 	$effect(() => {
-		member.age = resolvedAge;
+		if (member.age !== lastSyncedAge) {
+			lastSyncedAge = member.age;
+			age = typeof member.age === 'number' || typeof member.age === 'string' ? member.age : '';
+		} else {
+			member.age = resolvedAge;
+			lastSyncedAge = resolvedAge;
+		}
 	});
 
 	$effect(() => {
@@ -290,7 +315,7 @@
 	});
 
 	function applyAnonymous() {
-		if (disabled) return;
+		if (fieldsDisabled) return;
 		member = applyAnonymousIdToMember(member);
 	}
 
@@ -312,7 +337,7 @@
 	}
 
 	async function handlePhotoSelect(file: File | null) {
-		if (!file || disabled || uploadingPhoto || !showPhotoUpload) return;
+		if (!file || fieldsDisabled || uploadingPhoto || !showPhotoUpload) return;
 
 		uploadingPhoto = true;
 		const localPreview = URL.createObjectURL(file);
@@ -356,14 +381,19 @@
 	}
 
 	function clearPhoto() {
-		if (disabled || uploadingPhoto) return;
+		if (fieldsDisabled || uploadingPhoto) return;
 		forgetPhotoPreview(member.photo);
 		photoPreviewUrl = null;
 		member.photo = null;
 	}
 </script>
 
-<section id="unified-member-{index}" class={cardClass} aria-labelledby="member-card-title-{index}">
+<section
+	id="unified-member-{index}"
+	class={cardClass}
+	inert={isAlreadyReported || undefined}
+	aria-labelledby="member-card-title-{index}"
+>
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
@@ -378,12 +408,8 @@
 				>
 					{title}
 				</h3>
-				{#if isReportIn}
-					{#if isAlreadyReported}
-						<Badge variant="secondary" class="text-2xs">
-							รายงานตัวแล้ว ({alreadyReportedStatusLabel})
-						</Badge>
-					{:else if member._id}
+				{#if isReportIn && !isAlreadyReported}
+					{#if member._id}
 						<Badge
 							variant="outline"
 							class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400"
@@ -420,9 +446,9 @@
 						type="button"
 						variant="outline"
 						size="sm"
-						{disabled}
+						disabled={fieldsDisabled}
 						onclick={() => (pullDialogOpen = true)}
-						class="h-11 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
+						class="h-9 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
 					>
 						<UserSearch class="size-4 text-blue-600" />
 						<span>ดึงข้อมูลจากคิว</span>
@@ -438,7 +464,7 @@
 					>
 						<Checkbox
 							checked={isReportingInSelected}
-							{disabled}
+							disabled={fieldsDisabled}
 							onCheckedChange={(checked) => {
 								member.reporting_in = checked === true;
 								onReportingInChange?.(checked === true);
@@ -456,7 +482,7 @@
 							type="button"
 							variant="ghost"
 							size="sm"
-							{disabled}
+							disabled={fieldsDisabled}
 							onclick={handleUnlinkQueue}
 							class="h-11 gap-1 text-xs text-muted-foreground hover:text-destructive"
 						>
@@ -467,23 +493,39 @@
 				{/if}
 			{/if}
 
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				{disabled}
-				onclick={applyAnonymous}
-				class="h-9 gap-1.5 text-xs"
-			>
-				<IdCard class="size-3.5" />
-				{t.anonymousBtn}
-			</Button>
-			{#if canRemove}
+			{#if channel === 'public' && !isPrimary && onScanThaiD && !isAlreadyReported}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					disabled={fieldsDisabled}
+					onclick={onScanThaiD}
+					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
+				>
+					<QrCode class="size-3.5" />
+					<span>สแกน ThaiD</span>
+				</Button>
+			{/if}
+
+			{#if !isAlreadyReported}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					disabled={fieldsDisabled}
+					onclick={applyAnonymous}
+					class="h-9 gap-1.5 text-xs"
+				>
+					<IdCard class="size-3.5" />
+					{t.anonymousBtn}
+				</Button>
+			{/if}
+			{#if canRemove && !isAlreadyReported}
 				<Button
 					type="button"
 					variant="ghost"
 					size="sm"
-					{disabled}
+					disabled={fieldsDisabled}
 					onclick={() => onRemove?.()}
 					class="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"
 					aria-label={t.removeMemberAria}
@@ -496,34 +538,41 @@
 	</div>
 
 	{#if showPhotoUpload}
-		<div class="space-y-3">
-			<div class="flex items-center gap-2">
-				<Camera class="size-4 text-primary" />
-				<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
+		<div class="rounded-xl border border-border/50 bg-muted/10 p-3 sm:p-3.5">
+			<div class="mb-2.5 flex flex-wrap items-center justify-between gap-1.5">
+				<div class="flex items-center gap-2">
+					<Camera class="size-4 text-muted-foreground" />
+					<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
+					<span
+						class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
+					>
+						(ไม่จำเป็น / หากมี)
+					</span>
+				</div>
 			</div>
-			<div class="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+			<div class="flex items-center gap-3">
 				<div
-					class="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/30"
+					class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-background shadow-2xs"
 				>
 					{#if uploadingPhoto}
-						<Loader2 class="size-8 animate-spin text-primary" />
+						<Loader2 class="size-5 animate-spin text-primary" />
 					{:else if photoPreviewUrl}
 						<img src={photoPreviewUrl} alt={t.facePhotoTitle} class="size-full object-cover" />
 					{:else}
-						<Camera class="size-10 text-muted-foreground/50" />
+						<Camera class="size-6 text-muted-foreground/40" />
 					{/if}
 				</div>
-				<div class="space-y-2 text-center sm:text-left">
-					<p class="text-xs text-muted-foreground">{t.facePhotoHint}</p>
-					<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+					<p class="truncate text-2xs text-muted-foreground">{t.facePhotoHint}</p>
+					<div class="flex flex-wrap items-center gap-2">
 						<label
 							for={photoInputId}
-							class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {disabled ||
+							class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {fieldsDisabled ||
 							uploadingPhoto
 								? 'pointer-events-none opacity-60'
 								: ''}"
 						>
-							<Camera class="size-4 text-primary" />
+							<Camera class="size-3.5 text-primary" />
 							<span>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span>
 						</label>
 						<input
@@ -532,7 +581,7 @@
 							accept="image/*"
 							capture="user"
 							class="sr-only"
-							disabled={disabled || uploadingPhoto}
+							disabled={fieldsDisabled || uploadingPhoto}
 							onchange={(e) => {
 								const input = e.currentTarget;
 								void handlePhotoSelect(input.files?.[0] ?? null);
@@ -544,8 +593,8 @@
 								type="button"
 								variant="ghost"
 								size="sm"
-								class="min-h-11 text-destructive hover:bg-destructive/10"
-								disabled={disabled || uploadingPhoto}
+								class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+								disabled={fieldsDisabled || uploadingPhoto}
 								onclick={clearPhoto}
 							>
 								{t.facePhotoRemove}
@@ -574,8 +623,12 @@
 			bind:gender={member.gender}
 			bind:religion={member.religion}
 			bind:country={member.country}
-			{disabled}
+			disabled={fieldsDisabled}
 			{hideNoPhone}
+			phoneOptional={isJoiningExistingHousehold}
+			phoneHelperText={isJoiningExistingHousehold
+				? 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
+				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
 		/>
@@ -595,7 +648,7 @@
 						bind:name={emergency.name}
 						bind:phone={emergency.phone}
 						bind:relation={emergency.relation}
-						{disabled}
+						disabled={fieldsDisabled}
 					/>
 				</div>
 			</Accordion.Content>
@@ -613,7 +666,7 @@
 					<span class="text-2xs text-muted-foreground">{t.vulnerableMultiHint}</span>
 					<VulnerableGroupsFields
 						bind:vulnerable_groups={member.vulnerable_groups}
-						{disabled}
+						disabled={fieldsDisabled}
 						idPrefix="vg-{index}"
 						label=""
 					/>
@@ -630,11 +683,78 @@
 			</Accordion.Trigger>
 			<Accordion.Content>
 				<div class="space-y-3 pt-1">
-					<SpecialNeedsFields bind:special_needs={member.special_needs} {disabled} label="" />
+					<SpecialNeedsFields
+						bind:special_needs={member.special_needs}
+						disabled={fieldsDisabled}
+						label=""
+					/>
 				</div>
 			</Accordion.Content>
 		</Accordion.Item>
 	</Accordion.Root>
+
+	{#if channel === 'onsite'}
+		<div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3.5 sm:p-4">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="flex items-center gap-2">
+					<MapPin class="size-4 text-primary" />
+					<h4 class="text-xs font-semibold text-foreground sm:text-sm">การจัดโซนพักอาศัย</h4>
+					{#if !member.zone}
+						<Badge variant="outline" class="text-2xs font-normal text-muted-foreground">
+							จัดโซนภายหลัง (Unassigned)
+						</Badge>
+					{/if}
+				</div>
+				{#if isPrimary && onApplyZoneToAll}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="h-7 text-2xs"
+						disabled={fieldsDisabled || !member.zone}
+						onclick={() => onApplyZoneToAll?.(member.zone ?? '')}
+					>
+						ใช้โซนนี้กับทุกคนในบ้าน
+					</Button>
+				{/if}
+			</div>
+
+			<ZoneSelectionFields
+				bind:selected_zone={
+					() => member.zone ?? '',
+					(v) => {
+						member.zone = v || null;
+					}
+				}
+				evacuee={{
+					_id: member._id ?? '',
+					household_id: '',
+					shelter_code: shelterCode || '',
+					first_name: member.first_name || '',
+					last_name: member.last_name || '',
+					gender: member.gender === 'male' || member.gender === 'female' ? member.gender : 'other',
+					phone: member.phone ?? null,
+					vulnerable_groups: member.vulnerable_groups ?? [],
+					special_needs: member.special_needs ?? [],
+					current_stay: {
+						status: member.stay_status ?? 'arriving',
+						zone: member.zone ?? null,
+						since: ''
+					},
+					country: 'THAILAND',
+					religion: 'unknown',
+					registered_via: 'staff',
+					schema_v: 4,
+					created_at: '',
+					updated_at: '',
+					created_by: '',
+					type: 'evacuee',
+					privacy: { search_excluded: false }
+				}}
+				disabled={fieldsDisabled}
+			/>
+		</div>
+	{/if}
 </section>
 
 <PullPreRegisteredDialog

@@ -8,11 +8,14 @@
 	import { toast } from 'svelte-sonner';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const CATEGORY_MAP: Record<string, { th: string; en: string }> = {
@@ -270,7 +273,7 @@
 									type="text"
 									id="unit-{item.id}"
 									readonly
-									value={item.unit}
+									value={formatUnit(item.unit, units, langState.current)}
 									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
 								/>
 							{:else}

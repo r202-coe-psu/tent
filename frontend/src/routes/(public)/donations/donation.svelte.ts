@@ -40,7 +40,7 @@ class DonationStore {
 			category: 'food',
 			name: '',
 			amount: 1,
-			unit: 'ชิ้น',
+			unit: 'piece',
 			condition: 'new',
 			remark: '',
 			image: ''
@@ -65,7 +65,7 @@ class DonationStore {
 			category: 'food',
 			name: '',
 			amount: 1,
-			unit: 'ชิ้น',
+			unit: 'piece',
 			condition: 'new',
 			remark: '',
 			image: ''
@@ -103,7 +103,7 @@ class DonationStore {
 				category: 'food',
 				name: '',
 				amount: 1,
-				unit: 'ชิ้น',
+				unit: 'piece',
 				condition: 'new',
 				remark: '',
 				image: ''
