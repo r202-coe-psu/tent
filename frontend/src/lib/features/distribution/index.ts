@@ -203,3 +203,42 @@ export {
 
 /** Ticket-era Food & Supplies application workflows (CR-121). */
 export * from './application/food-supplies';
+
+/** Ticket-era Food & Supplies TanStack Query hooks & query keys (Slice 5.0). */
+export {
+	distributionKeys,
+	createStableOperationId,
+	resolveAuthenticatedAuthorContext,
+	requisitionTicketRepository,
+	distributionLogRepository,
+	bulkReturnPoolRepository,
+	bulkReturnClaimRepository,
+	useRequisitionTickets,
+	useRequisitionTicket,
+	useDistributionLogs,
+	useDistributionLog,
+	useBulkReturnPools,
+	useBulkReturnPool,
+	useBulkReturnClaim,
+	useShiftReconciliation,
+	useCreateRequisitionTicket,
+	useAllocateTicketItems,
+	useApproveTicketForDispatch,
+	useCancelTicket,
+	useDispatchTicket,
+	useReceiveTicketAtDistributionPoint,
+	useAmendActiveTicket,
+	useRecordFoodDistribution,
+	useRecordSuppliesDistribution,
+	useVoidDistributionLog,
+	useReturnLoanAtCounter,
+	useClearLoanNonPhysical,
+	useCreateBulkReturnPool,
+	useClearLoanViaBulkPool,
+	useCloseShift,
+	useSubmitReturnsToWarehouse,
+	useReceiveWarehouseReturns,
+	useCompleteTicket,
+	startDistributionLiveQuery,
+	type ItemReconciliationSummary
+} from './application/queries';

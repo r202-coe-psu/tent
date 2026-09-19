@@ -48,16 +48,24 @@
 
 	function groupIsActive(node: BackofficeNavbarNode): boolean {
 		if (!isGroup(node)) return false;
-		return node.children.some((c) => isActive(c.href));
+		return node.children.some((c) => (isGroup(c) ? groupIsActive(c) : isActive(c.href)));
 	}
 
+	function collectAllNodes(nodes: BackofficeNavbarNode[]): BackofficeNavbarNode[] {
+		const result: BackofficeNavbarNode[] = [];
+		for (const node of nodes) {
+			result.push(node);
+			if (isGroup(node)) {
+				result.push(...collectAllNodes(node.children));
+			}
+		}
+		return result;
+	}
+
+	const allNavbarNodes = $derived(collectAllNodes(backofficeNavbarGroups.flatMap((g) => g.items)));
+
 	const expandedKeys = $derived(
-		new Set(
-			backofficeNavbarGroups
-				.flatMap((g) => g.items)
-				.filter(groupIsActive)
-				.map((n) => (n as { label: string }).label)
-		)
+		new Set(allNavbarNodes.filter(groupIsActive).map((n) => (n as { label: string }).label))
 	);
 
 	let manualOverrides = $state<Record<string, boolean>>({});
@@ -68,9 +76,7 @@
 	}
 
 	function toggleExpanded(label: string) {
-		const node = backofficeNavbarGroups
-			.flatMap((g) => g.items)
-			.find((n) => 'label' in n && n.label === label);
+		const node = allNavbarNodes.find((n) => 'label' in n && n.label === label);
 		if (!node) return;
 		manualOverrides[label] = !isExpanded(label, node);
 	}
@@ -177,33 +183,94 @@
 									{#if expanded && !collapsed}
 										<div class="mt-1 space-y-1">
 											{#each item.children.filter(canSee) as child (child.label)}
-												{@const childActive = isActive(child.href)}
-												{@const ChildIcon = child.icon}
-												{#if child.href}
-													<a
-														href={child.href}
-														class="ml-4 flex items-center gap-3 rounded-xl px-4 py-2.5 transition-colors {childActive
-															? 'bg-primary font-semibold text-primary-foreground'
+												{#if isGroup(child)}
+													{@const subExpanded = isExpanded(child.label, child)}
+													{@const subActive = groupIsActive(child)}
+													{@const SubIcon = child.icon}
+													<button
+														type="button"
+														class="ml-4 flex w-[calc(100%-1rem)] items-center gap-3 rounded-xl px-4 py-2.5 transition-colors {subActive
+															? 'bg-primary-muted text-primary'
 															: 'hover:bg-muted/60'}"
-														aria-current={childActive ? 'page' : undefined}
+														onclick={() => toggleExpanded(child.label)}
+														aria-expanded={subExpanded}
 														title={child.label}
 													>
-														<ChildIcon
-															class="h-4 w-4 shrink-0 {childActive
-																? 'text-primary-foreground'
+														<SubIcon
+															class="h-4 w-4 shrink-0 {subActive
+																? 'text-primary'
 																: 'text-muted-foreground'}"
 														/>
-														<span class="whitespace-nowrap">{child.label}</span>
-													</a>
+														<span class="flex-1 text-left whitespace-nowrap">{child.label}</span>
+														<ChevronDown
+															class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
+																? 'rotate-180'
+																: ''}"
+														/>
+													</button>
+													{#if subExpanded}
+														<div class="mt-1 space-y-1">
+															{#each child.children.filter(canSee) as subChild (subChild.label)}
+																{@const subChildActive = isActive(subChild.href)}
+																{@const SubChildIcon = subChild.icon}
+																{#if subChild.href}
+																	<a
+																		href={subChild.href}
+																		class="ml-8 flex items-center gap-3 rounded-xl px-4 py-2 transition-colors {subChildActive
+																			? 'bg-primary font-semibold text-primary-foreground'
+																			: 'hover:bg-muted/60'}"
+																		aria-current={subChildActive ? 'page' : undefined}
+																		title={subChild.label}
+																	>
+																		<SubChildIcon
+																			class="h-4 w-4 shrink-0 {subChildActive
+																				? 'text-primary-foreground'
+																				: 'text-muted-foreground'}"
+																		/>
+																		<span class="whitespace-nowrap">{subChild.label}</span>
+																	</a>
+																{:else}
+																	<span
+																		class="ml-8 flex cursor-not-allowed items-center gap-3 rounded-xl px-4 py-2 text-muted-foreground opacity-50"
+																		aria-disabled="true"
+																		title={subChild.label}
+																	>
+																		<SubChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+																		<span class="whitespace-nowrap">{subChild.label}</span>
+																	</span>
+																{/if}
+															{/each}
+														</div>
+													{/if}
 												{:else}
-													<span
-														class="ml-4 flex cursor-not-allowed items-center gap-3 rounded-xl px-4 py-2.5 text-muted-foreground opacity-50"
-														aria-disabled="true"
-														title={child.label}
-													>
-														<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-														<span class="whitespace-nowrap">{child.label}</span>
-													</span>
+													{@const childActive = isActive(child.href)}
+													{@const ChildIcon = child.icon}
+													{#if child.href}
+														<a
+															href={child.href}
+															class="ml-4 flex items-center gap-3 rounded-xl px-4 py-2.5 transition-colors {childActive
+																? 'bg-primary font-semibold text-primary-foreground'
+																: 'hover:bg-muted/60'}"
+															aria-current={childActive ? 'page' : undefined}
+															title={child.label}
+														>
+															<ChildIcon
+																class="h-4 w-4 shrink-0 {childActive
+																	? 'text-primary-foreground'
+																	: 'text-muted-foreground'}"
+															/>
+															<span class="whitespace-nowrap">{child.label}</span>
+														</a>
+													{:else}
+														<span
+															class="ml-4 flex cursor-not-allowed items-center gap-3 rounded-xl px-4 py-2.5 text-muted-foreground opacity-50"
+															aria-disabled="true"
+															title={child.label}
+														>
+															<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+															<span class="whitespace-nowrap">{child.label}</span>
+														</span>
+													{/if}
 												{/if}
 											{/each}
 										</div>
@@ -365,32 +432,94 @@
 											{#if expanded}
 												<div class="mt-1 space-y-1">
 													{#each item.children.filter(canSee) as child (child.label)}
-														{@const childActive = isActive(child.href)}
-														{@const ChildIcon = child.icon}
-														{#if child.href}
-															<a
-																href={child.href}
-																class="ml-4 flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-colors {childActive
-																	? 'bg-primary font-semibold text-primary-foreground'
+														{#if isGroup(child)}
+															{@const subExpanded = isExpanded(child.label, child)}
+															{@const subActive = groupIsActive(child)}
+															{@const SubIcon = child.icon}
+															<button
+																type="button"
+																class="ml-4 flex min-h-11 w-[calc(100%-1rem)] items-center gap-3 rounded-xl px-4 py-3 transition-colors {subActive
+																	? 'bg-primary-muted text-primary'
 																	: 'hover:bg-muted/60'}"
-																onclick={closeMobileMenu}
-																aria-current={childActive ? 'page' : undefined}
+																onclick={() => toggleExpanded(child.label)}
+																aria-expanded={subExpanded}
 															>
-																<ChildIcon
-																	class="h-4 w-4 shrink-0 {childActive
-																		? 'text-primary-foreground'
+																<SubIcon
+																	class="h-4 w-4 shrink-0 {subActive
+																		? 'text-primary'
 																		: 'text-muted-foreground'}"
 																/>
-																<span class="whitespace-nowrap">{child.label}</span>
-															</a>
+																<span class="flex-1 text-left whitespace-nowrap">{child.label}</span
+																>
+																<ChevronDown
+																	class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
+																		? 'rotate-180'
+																		: ''}"
+																/>
+															</button>
+															{#if subExpanded}
+																<div class="mt-1 space-y-1">
+																	{#each child.children.filter(canSee) as subChild (subChild.label)}
+																		{@const subChildActive = isActive(subChild.href)}
+																		{@const SubChildIcon = subChild.icon}
+																		{#if subChild.href}
+																			<a
+																				href={subChild.href}
+																				class="ml-8 flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-colors {subChildActive
+																					? 'bg-primary font-semibold text-primary-foreground'
+																					: 'hover:bg-muted/60'}"
+																				onclick={closeMobileMenu}
+																				aria-current={subChildActive ? 'page' : undefined}
+																			>
+																				<SubChildIcon
+																					class="h-4 w-4 shrink-0 {subChildActive
+																						? 'text-primary-foreground'
+																						: 'text-muted-foreground'}"
+																				/>
+																				<span class="whitespace-nowrap">{subChild.label}</span>
+																			</a>
+																		{:else}
+																			<span
+																				class="ml-8 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
+																				aria-disabled="true"
+																			>
+																				<SubChildIcon
+																					class="h-4 w-4 shrink-0 text-muted-foreground"
+																				/>
+																				<span class="whitespace-nowrap">{subChild.label}</span>
+																			</span>
+																		{/if}
+																	{/each}
+																</div>
+															{/if}
 														{:else}
-															<span
-																class="ml-4 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
-																aria-disabled="true"
-															>
-																<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-																<span class="whitespace-nowrap">{child.label}</span>
-															</span>
+															{@const childActive = isActive(child.href)}
+															{@const ChildIcon = child.icon}
+															{#if child.href}
+																<a
+																	href={child.href}
+																	class="ml-4 flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-colors {childActive
+																		? 'bg-primary font-semibold text-primary-foreground'
+																		: 'hover:bg-muted/60'}"
+																	onclick={closeMobileMenu}
+																	aria-current={childActive ? 'page' : undefined}
+																>
+																	<ChildIcon
+																		class="h-4 w-4 shrink-0 {childActive
+																			? 'text-primary-foreground'
+																			: 'text-muted-foreground'}"
+																	/>
+																	<span class="whitespace-nowrap">{child.label}</span>
+																</a>
+															{:else}
+																<span
+																	class="ml-4 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
+																	aria-disabled="true"
+																>
+																	<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+																	<span class="whitespace-nowrap">{child.label}</span>
+																</span>
+															{/if}
 														{/if}
 													{/each}
 												</div>
