@@ -8,21 +8,23 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { ServiceError } from '$lib/server/couch-admin';
-import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people';
+import { type ThaiDAutofillProfile, stripThaiTitle } from '$lib/features/people/domain/thaid-profile';
 
 export type { ThaiDAutofillProfile };
 
 export const OAUTH_THAID_STATE_COOKIE = 'oauth_thaid_state';
 
-export type ThaidOAuthMode = 'link' | 'stepup' | 'login' | 'register';
+export type ThaidOAuthMode = 'link' | 'stepup' | 'login' | 'register' | 'member_scan';
 
 export interface ThaidOAuthState {
 	mode: ThaidOAuthMode;
-	/** Username for link/stepup; empty string for login/register until callback lookup. */
+	/** Username for link/stepup; empty string for login/register/member_scan until callback lookup. */
 	name: string;
 	nonce: string;
 	/** Optional safe relative return path (e.g. /pre-register?shelter=SH001) for mode=register */
 	returnTo?: string;
+	/** Optional session ID for mode=member_scan cross-device flow */
+	sessionId?: string;
 }
 
 export interface ThaidClaims {
@@ -104,19 +106,27 @@ function verifyStatePayload(value: string): string | null {
 }
 
 function isThaidOAuthMode(mode: unknown): mode is ThaidOAuthMode {
-	return mode === 'link' || mode === 'stepup' || mode === 'login' || mode === 'register';
+	return (
+		mode === 'link' ||
+		mode === 'stepup' ||
+		mode === 'login' ||
+		mode === 'register' ||
+		mode === 'member_scan'
+	);
 }
 
 export function createThaidOAuthState(
 	mode: ThaidOAuthMode,
 	name: string = '',
-	returnTo?: string
+	returnTo?: string,
+	sessionId?: string
 ): string {
 	const state: ThaidOAuthState = {
 		mode,
 		name: name || '',
 		nonce: randomBytes(16).toString('hex'),
-		...(returnTo ? { returnTo } : {})
+		...(returnTo ? { returnTo } : {}),
+		...(sessionId ? { sessionId } : {})
 	};
 	return signStatePayload(Buffer.from(JSON.stringify(state), 'utf8').toString('base64url'));
 }
@@ -133,7 +143,8 @@ export function parseThaidOAuthState(raw: string | undefined): ThaidOAuthState |
 			!isThaidOAuthMode(parsed.mode) ||
 			typeof parsed.name !== 'string' ||
 			typeof parsed.nonce !== 'string' ||
-			(parsed.returnTo !== undefined && typeof parsed.returnTo !== 'string')
+			(parsed.returnTo !== undefined && typeof parsed.returnTo !== 'string') ||
+			(parsed.sessionId !== undefined && typeof parsed.sessionId !== 'string')
 		) {
 			return null;
 		}
@@ -177,7 +188,7 @@ export function buildThaidAuthorizeUrl(opts: {
 }): string {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const defaultScope =
-		opts.mode === 'register'
+		opts.mode === 'register' || opts.mode === 'member_scan'
 			? env.THAID_OAUTH_SCOPE?.trim() || 'openid pid name birthdate address'
 			: 'pid name openid';
 	const params = new URLSearchParams({

@@ -102,7 +102,6 @@
 		shelterCode = '',
 		shelterName = '',
 		initialThaidProfile = null,
-		thaidStatus = null,
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
@@ -125,11 +124,6 @@
 		shelterCode?: string;
 		shelterName?: string;
 		initialThaidProfile?: ThaiDAutofillProfile | null;
-		thaidStatus?: {
-			enabled: boolean;
-			isDev: boolean;
-			mode: 'mock' | 'real';
-		} | null;
 		onsubmit: (
 			input: UnifiedRegistrationInput,
 			meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
@@ -926,12 +920,13 @@
 				description={t.sectionAddressDesc}
 				icon={Home}
 			>
-				<!-- ThaiD Action Button (Dev Mock, or OAuth in Staging/Prod when enabled) -->
-				<ThaidActionButton
-					status={thaidStatus}
-					disabled={fieldsLocked}
-					onautofill={handleThaiDAutofill}
-				/>
+				<!-- ThaiD Action Button: Public Pre-Register -->
+				{#if channel === 'public'}
+					<ThaidActionButton
+						disabled={fieldsLocked}
+						onautofill={handleThaiDAutofill}
+					/>
+				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 				{#if enableResidenceJoin}

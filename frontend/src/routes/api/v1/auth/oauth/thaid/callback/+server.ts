@@ -13,6 +13,7 @@ import {
 	resolveThaidRedirectUri,
 	setCitizenClaimCookie
 } from '$lib/server/thaid-oauth';
+import { completeScanSession } from '$lib/server/thaid-scan-session';
 import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
@@ -57,6 +58,10 @@ function registerErrorRedirect(code: string, returnTo?: string): never {
 	throw redirect(302, `${base}${sep}error=${encodeURIComponent(code)}`);
 }
 
+function memberScanErrorRedirect(code: string): never {
+	throw redirect(302, `/thaid-scan-success?error=${encodeURIComponent(code)}`);
+}
+
 /** GET — ThaID OAuth callback: register, link, step-up, or enrolled login mint. */
 export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	const cookieState = cookies.get(OAUTH_THAID_STATE_COOKIE);
@@ -67,6 +72,7 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	const detectedReturnTo = earlyState?.returnTo ?? paramState?.returnTo;
 	const isRegisterMode = detectedMode === 'register';
 	const isLoginMode = detectedMode === 'login';
+	const isMemberScanMode = detectedMode === 'member_scan';
 
 	function dispatchErrorRedirect(code: string): never {
 		if (isRegisterMode) {
@@ -74,6 +80,9 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		}
 		if (isLoginMode) {
 			loginErrorRedirect(code);
+		}
+		if (isMemberScanMode) {
+			memberScanErrorRedirect(code);
 		}
 		mfaErrorRedirect(code);
 	}
@@ -114,6 +123,18 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			const base = sanitizeRegisterReturnTo(state.returnTo);
 			const sep = base.includes('?') ? '&' : '?';
 			throw redirect(302, `${base}${sep}thaid=autofill`);
+		}
+
+		if (state.mode === 'member_scan') {
+			if (!state.sessionId) {
+				memberScanErrorRedirect('missing_session');
+			}
+			const profile = parseThaidCitizenClaims(claims);
+			const completed = completeScanSession(state.sessionId, profile);
+			if (!completed) {
+				memberScanErrorRedirect('session_expired');
+			}
+			throw redirect(302, '/thaid-scan-success?status=success');
 		}
 
 		if (state.mode === 'login') {
@@ -186,6 +207,9 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		if (isRedirect(e)) throw e;
 		if (isRegisterMode) {
 			registerErrorRedirect('oauth_exchange_failed', detectedReturnTo);
+		}
+		if (isMemberScanMode) {
+			memberScanErrorRedirect('oauth_exchange_failed');
 		}
 		return serviceError(e);
 	}

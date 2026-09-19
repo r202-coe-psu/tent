@@ -170,6 +170,16 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(parsed?.name).toBe('');
 		});
 
+		it('creates and parses member_scan state with sessionId', () => {
+			const state = createThaidOAuthState('member_scan', undefined, undefined, 'sess_1234567890abcdef');
+			const parsed = parseThaidOAuthState(state);
+			expect(parsed).toMatchObject({
+				mode: 'member_scan',
+				sessionId: 'sess_1234567890abcdef'
+			});
+			expect(parsed?.name).toBe('');
+		});
+
 		it('parses ThaiD claims into ThaiDAutofillProfile with title prefix and address', () => {
 			const claims = {
 				sub: 'sub-user-99',
