@@ -128,6 +128,9 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw { forbidden: 'unit_of_measure is central-only' };
+  }
   // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
   function isRole(cap) {
     return userCtx.roles.indexOf('system_admin') !== -1 ||
@@ -193,12 +196,22 @@ export function buildValidateDocUpdate(code: string): string {
   // kitchen_staff could never actually write a meal plan, requisition, service
   // record, or gas cylinder/ledger without an _admin session (bug found + fixed
   // alongside CR-080).
+  // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18) was
+  // missing here entirely too — same class of bug: the back-office volunteers
+  // UI shipped and worked in dev only because dev testing used an _admin
+  // session; any real session-staff write (walk-in registration, job
+  // create/dispatch, check-in/out, identity approval) 403'd with
+  // "doc type not allowed yet" (bug found + fixed as CR-096).
+  // volunteer_transfer (schema.md §2.20) was cut entirely by CR-104
+  // AC-104-10 -- cross-shelter transfer no longer exists; a volunteer applies
+  // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+    'volunteer', 'job', 'job_application', 'shift_assignment',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
@@ -1001,6 +1014,46 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
       if (newDoc.evacuee_id !== oldDoc.evacuee_id) throw { forbidden: 'Cannot change evacuee_id on one-time guard' };
       if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on one-time guard' };
+    }
+  }
+  // item_master base_unit invariant guard
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw { forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+  }
+  if (newDoc.type === 'item_master') {
+    var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
+      oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
+    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {
+      throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+    validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+    validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+    if (Array.isArray(newDoc.conversions)) {
+      for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+        validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+      }
+    }
+  }
+  if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+    for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+      validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+    }
+  }
+  if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+    for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+      validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
     }
   }
 }`;

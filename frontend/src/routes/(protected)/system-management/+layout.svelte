@@ -32,7 +32,7 @@
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 </script>
 
-<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground md:flex-row">
+<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground lg:flex-row">
 	<SystemManagementNavbar />
 	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<header

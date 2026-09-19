@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -18,9 +20,21 @@
 		householdPreRegisterAddressFormSchema,
 		type HouseholdAddressForm
 	} from '../../domain/people';
+	import {
+		hasMinimumResidence,
+		suggestHouseholdsByResidence,
+		type ResidenceFields,
+		type ResidenceMatchCandidate
+	} from '../../domain/registration-shell';
+	import { useHouseholds } from '../../application/queries';
+	import {
+		readResidenceSuggestDeps,
+		residenceSuggestTick
+	} from '../registration/residence-suggest-reactivity.svelte';
 
 	let {
 		initialData = null,
+		initialJoinHouseholdId = null,
 		householdLabel = '',
 		municipalityZoneItems = [],
 		communityItems = [],
@@ -30,6 +44,7 @@
 		onNext
 	}: {
 		initialData?: Partial<HouseholdAddressForm> | null;
+		initialJoinHouseholdId?: string | null;
 		householdLabel?: string;
 		municipalityZoneItems?: { value: string; label: string }[];
 		communityItems?: { value: string; label: string }[];
@@ -37,7 +52,7 @@
 		defaultMunicipalityZone?: string;
 		defaultCommunity?: string;
 		onBack: () => void;
-		onNext: (data: HouseholdAddressForm) => void;
+		onNext: (data: HouseholdAddressForm, joinHouseholdId: string | null) => void;
 	} = $props();
 
 	const form = superForm(defaults(zod4(householdPreRegisterAddressFormSchema)), {
@@ -46,7 +61,7 @@
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
-			onNext(form.data);
+			onNext(form.data, selectedJoinHouseholdId);
 		}
 	});
 
@@ -86,6 +101,7 @@
 		() => $formData.district || null
 	);
 	const housingTypeQuery = useMasterData(() => 'housing_type');
+	const householdsQuery = useHouseholds();
 
 	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
 	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
@@ -98,6 +114,103 @@
 			.map((i) => ({ value: i.code, label: i.label }))
 	);
 	const isHomeless = $derived($formData.housingType === 'homeless');
+
+	let selectedJoinHouseholdId = $state<string | null>(
+		untrack(() => initialJoinHouseholdId ?? null)
+	);
+	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
+	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
+	let residenceSuggestPending = $state(false);
+	let residenceSuggestCheckedEmpty = $state(false);
+
+	const hasJoinSelection = $derived(Boolean(selectedJoinHouseholdId));
+	const selectedJoinHousehold = $derived(
+		selectedJoinHouseholdId
+			? ((householdsQuery.data ?? []).find((h) => h._id === selectedJoinHouseholdId) ?? null)
+			: null
+	);
+
+	function formatResidenceSummary(r: ResidenceFields): string {
+		const parts = [
+			r.residence_landmark,
+			r.address_no,
+			r.village_no,
+			r.subdistrict ? `ต.${r.subdistrict}` : '',
+			r.district ? `อ.${r.district}` : '',
+			r.province ? `จ.${r.province}` : '',
+			r.postal_code
+		].filter((p) => (p ?? '').toString().trim());
+		return parts.join(' ') || '—';
+	}
+
+	function clearJoinSelection() {
+		selectedJoinHouseholdId = null;
+	}
+
+	function confirmJoin(suggestion: ResidenceMatchCandidate) {
+		selectedJoinHouseholdId = suggestion._id;
+	}
+
+	function continueCreateDespiteSuggest() {
+		clearJoinSelection();
+	}
+
+	/** Debounced residence suggest while address fields change (choice always create). */
+	$effect(() => {
+		// Read each Superforms field so nested mutations re-run this effect.
+		const residence: ResidenceFields = {
+			housing_type: $formData.housingType,
+			residence_landmark: $formData.residenceLandmark,
+			address_no: $formData.addressNo,
+			village_no: $formData.villageNo,
+			subdistrict: $formData.subdistrict,
+			district: $formData.district,
+			province: $formData.province,
+			postal_code: $formData.postalCode
+		};
+
+		const households = householdsQuery.data ?? [];
+		const deps = readResidenceSuggestDeps(
+			'create',
+			residence,
+			households,
+			Boolean(householdsQuery.isLoading) && households.length === 0
+		);
+		const tick = residenceSuggestTick(deps);
+
+		if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+
+		if (tick.kind === 'clear' || !hasMinimumResidence(residence)) {
+			residenceSuggestions = [];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = false;
+			if (untrack(() => selectedJoinHouseholdId)) clearJoinSelection();
+			return;
+		}
+
+		if (tick.kind === 'pending') {
+			residenceSuggestions = [];
+			residenceSuggestPending = true;
+			residenceSuggestCheckedEmpty = false;
+			return;
+		}
+
+		residenceSuggestPending = true;
+		residenceSuggestCheckedEmpty = false;
+		const matches = suggestHouseholdsByResidence(residence, households);
+		const selectedId = untrack(() => selectedJoinHouseholdId);
+		residenceSuggestTimer = setTimeout(() => {
+			residenceSuggestions = matches;
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = matches.length === 0;
+			if (selectedId && !matches.some((m) => m._id === selectedId)) {
+				clearJoinSelection();
+			}
+		}, 350);
+		return () => {
+			if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+		};
+	});
 
 	const selectTriggerClass =
 		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
@@ -317,6 +430,79 @@
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
+
+			{#if hasJoinSelection}
+				<div
+					class="mt-4 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
+					role="status"
+					aria-live="polite"
+				>
+					<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
+					{#if selectedJoinHousehold}
+						<p class="text-xs text-muted-foreground">
+							{#if selectedJoinHousehold.label?.trim()}
+								<span class="font-medium text-foreground">{selectedJoinHousehold.label}</span>
+								·
+							{/if}
+							{formatResidenceSummary(selectedJoinHousehold)}
+						</p>
+					{/if}
+					<p class="text-xs text-muted-foreground">
+						หัวหน้าครัวเรือนจะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={continueCreateDespiteSuggest}>
+						สร้างครอบครัวใหม่ที่อยู่นี้
+					</Button>
+				</div>
+			{:else if residenceSuggestPending}
+				<div
+					class="mt-4 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+					role="status"
+					aria-live="polite"
+				>
+					<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+					กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+				</div>
+			{:else if residenceSuggestions.length > 0}
+				<div class="mt-4 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+					<p class="text-xs font-semibold text-foreground">
+						พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
+					</p>
+					<ul class="space-y-2">
+						{#each residenceSuggestions as suggestion (suggestion._id)}
+							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+								<span>
+									{#if suggestion.label?.trim()}
+										<span class="font-medium">{suggestion.label}</span>
+										<span class="text-muted-foreground">
+											· {formatResidenceSummary(suggestion)}
+										</span>
+									{:else}
+										<span class="text-muted-foreground">
+											{formatResidenceSummary(suggestion)}
+										</span>
+									{/if}
+								</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									onclick={() => confirmJoin(suggestion)}
+								>
+									เข้าร่วม
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					<Button type="button" size="sm" onclick={continueCreateDespiteSuggest}>
+						สร้างครอบครัวใหม่ที่อยู่นี้
+					</Button>
+				</div>
+			{:else if residenceSuggestCheckedEmpty}
+				<p class="mt-4 text-xs text-muted-foreground">
+					ไม่พบครอบครัวที่อยู่ตรงกันในศูนย์นี้ — จะสร้างครอบครัวใหม่
+				</p>
+			{/if}
 		</div>
 
 		<!-- Navigation -->

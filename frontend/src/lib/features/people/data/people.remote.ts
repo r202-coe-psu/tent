@@ -187,6 +187,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			}
 		}
 
+		if (saved.current_stay.zone) {
+			try {
+				const movement = createMovement(
+					{ evacuee_id: saved._id, action: 'check_in', zone: saved.current_stay.zone },
+					ctx
+				);
+				await this.repo.put(movement);
+			} catch (err) {
+				console.warn('Failed to record initial check-in movement:', err);
+			}
+		}
+
 		return saved;
 	}
 
@@ -324,6 +336,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	 * Unified multi-person registration (#249): create N Evacuees then 1 Household,
 	 * link members, set head = members[0]. Compensates created docs on failure
 	 * (intentional — keep even with the 20-member / pets / vehicles batch caps).
+	 *
+	 * Join mode (`join_household_id`): create members linked to an existing Household;
+	 * do not mint Household or overwrite Residence / head; append pets/vehicles/assets.
 	 */
 	async createFamilyRegistration(
 		input: UnifiedRegistrationInput,
@@ -333,6 +348,65 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const plan = planFamilyRegistration(input, channel);
 		const createdMemberIds: string[] = [];
 		let householdId: string | null = null;
+
+		if (plan.mode === 'join') {
+			const targetId = plan.targetHouseholdId;
+			if (!targetId) throw new Error('ไม่พบครัวเรือนปลายทาง');
+
+			try {
+				const targetDoc = await this.repo.get<Household>(targetId);
+				if (!targetDoc) throw new Error('ไม่พบครัวเรือนปลายทาง');
+				const target = migrateHouseholdV3ToV4(targetDoc);
+				if (!isActiveHouseholdStatus(target.status)) {
+					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+				}
+
+				const members: Evacuee[] = [];
+				for (const memberInput of plan.memberInputs) {
+					const saved = await this.createEvacuee({ ...memberInput, household_id: targetId }, ctx);
+					createdMemberIds.push(saved._id);
+					members.push(saved);
+				}
+
+				const appendPets = (plan.householdInput.pets ?? []) as Household['pets'];
+				const appendVehicles = (plan.householdInput.vehicles ?? []) as Household['vehicles'];
+				const appendAssets = (plan.householdInput.assets ?? null) as Household['assets'];
+				const hasAppend =
+					appendPets.length > 0 || appendVehicles.length > 0 || appendAssets != null;
+
+				let household = target;
+				if (hasAppend) {
+					const mergedAssets =
+						appendAssets == null
+							? target.assets
+							: target.assets
+								? {
+										description: [target.assets.description, appendAssets.description]
+											.filter(Boolean)
+											.join('\n')
+											.trim(),
+										image_url: target.assets.image_url ?? appendAssets.image_url ?? null
+									}
+								: appendAssets;
+					household = await this.patchHousehold(targetId, {
+						pets: [...(target.pets ?? []), ...appendPets],
+						vehicles: [...(target.vehicles ?? []), ...appendVehicles],
+						assets: mergedAssets
+					});
+				} else {
+					await this.refreshDerivedHouseholdStatus(targetId);
+					const refreshed = await this.getHousehold(targetId);
+					household = refreshed ?? target;
+				}
+
+				return { household, members };
+			} catch (err) {
+				for (const id of [...createdMemberIds].reverse()) {
+					await this.compensateFailedEvacueeRegistration(id);
+				}
+				throw err;
+			}
+		}
 
 		try {
 			const members: Evacuee[] = [];
@@ -1147,6 +1221,74 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return {
 			household: finalHousehold ?? savedHousehold,
 			members: reportedInMembers.length > 0 ? reportedInMembers : allSavedMembers
+		};
+	}
+
+	async mergeHouseholds(
+		sourceHouseholdId: string,
+		targetHouseholdId: string,
+		ctx: AuthorContext
+	): Promise<{
+		targetHousehold: Household;
+		mergedMembers: Evacuee[];
+	}> {
+		void ctx;
+		if (sourceHouseholdId === targetHouseholdId) {
+			throw new Error('ไม่สามารถรวมครัวเรือนเข้ากับตัวเองได้');
+		}
+		const sourceHh = await this.getHousehold(sourceHouseholdId);
+		if (!sourceHh) throw new Error('ไม่พบครัวเรือนต้นทาง');
+		const targetHh = await this.getHousehold(targetHouseholdId);
+		if (!targetHh) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (sourceHh.status === 'merged') {
+			throw new Error('ครัวเรือนต้นทางถูกรวมเข้ากับครัวเรือนอื่นแล้ว');
+		}
+
+		// 1. Get all members of source household
+		const sourceMembers = await this.listHouseholdMembers(sourceHouseholdId);
+
+		// 2. Reassign members to targetHouseholdId
+		const updatedMembers: Evacuee[] = [];
+		for (const m of sourceMembers) {
+			const latest = (await this.repo.get<Evacuee>(m._id)) ?? m;
+			const updated = await this.repo.put(touch({ ...latest, household_id: targetHouseholdId }));
+			updatedMembers.push(updated);
+		}
+
+		// 3. Append pets and vehicles to target household
+		const appendPets = sourceHh.pets ?? [];
+		const appendVehicles = sourceHh.vehicles ?? [];
+		const latestTarget = (await this.repo.get<Household>(targetHouseholdId)) ?? targetHh;
+		const updatedTarget = await this.repo.put(
+			touch({
+				...latestTarget,
+				pets: [...(latestTarget.pets ?? []), ...appendPets],
+				vehicles: [...(latestTarget.vehicles ?? []), ...appendVehicles]
+			})
+		);
+
+		// 4. Update source household status to 'merged'
+		const latestSource = (await this.repo.get<Household>(sourceHouseholdId)) ?? sourceHh;
+		await this.repo.put(
+			touch({
+				...latestSource,
+				status: 'merged' as const,
+				merged_to_household_id: targetHouseholdId,
+				notes: [
+					latestSource.notes,
+					`รวมเข้ากับครัวเรือน ${targetHouseholdId} (${latestTarget.label})`
+				]
+					.filter(Boolean)
+					.join('\n')
+			})
+		);
+
+		await this.repairHouseholdHeadIfNeeded(targetHouseholdId);
+		await this.refreshDerivedHouseholdStatus(targetHouseholdId);
+
+		return {
+			targetHousehold: updatedTarget,
+			mergedMembers: updatedMembers
 		};
 	}
 }

@@ -29,6 +29,7 @@ function expectForbidden(run: () => void, match: RegExp): void {
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
+const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 
 const envelope = {
 	schema_v: 2,
@@ -152,6 +153,122 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'item_category'");
 		expect(validateFn).toContain("'item_master'");
 		expect(validateFn).toContain("'recipe'");
+		expect(validateFn).toContain('unit_of_measure is central-only');
+	});
+
+	it('enforces item_master base_unit format and central-only unit_of_measure ownership', () => {
+		const validate = compile('SH001');
+
+		// Valid item_master with lowercase English code
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'kg',
+					...envelope
+				},
+				null,
+				ADMIN
+			)
+		).not.toThrow();
+
+		// Invalid item_master with Thai base_unit
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัม',
+						...envelope
+					},
+					null,
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
+		// A legacy Thai base_unit may remain unchanged while another field is edited.
+		expect(() =>
+			validate(
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					name: 'legacy item updated',
+					base_unit: 'กิโลกรัม',
+					deactivated: true,
+					...envelope
+				},
+				{
+					_id: 'item_master:01H',
+					type: 'item_master',
+					base_unit: 'กิโลกรัม',
+					...envelope
+				},
+				ADMIN
+			)
+		).not.toThrow();
+
+		// An unknown legacy typo is not grandfathered just because it is unchanged.
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						name: 'invalid legacy item',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					{
+						_id: 'item_master:01H',
+						type: 'item_master',
+						base_unit: 'กิโลกรัมผิด',
+						...envelope
+					},
+					ADMIN
+				),
+			/base_unit must match/
+		);
+
+		// UOM writes are central-only, including deletes and updates.
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						code: 'custom',
+						dimension: 'count',
+						...envelope
+					},
+					null,
+					WAREHOUSE
+				),
+			/unit_of_measure is central-only/
+		);
+
+		expectForbidden(
+			() =>
+				validate(
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						_deleted: true,
+						...envelope
+					},
+					{
+						_id: 'unit_of_measure:custom',
+						type: 'unit_of_measure',
+						code: 'custom',
+						dimension: 'count',
+						...envelope
+					},
+					WAREHOUSE
+				),
+			/unit_of_measure is central-only/
+		);
 	});
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
@@ -646,6 +763,72 @@ describe('buildValidateDocUpdate', () => {
 				time_multiplier: '1'
 			};
 			expect(() => compile()({ ...doc, capacity_kg: '20' }, doc, KITCHEN)).not.toThrow();
+		});
+	});
+
+	// Volunteers (CR-092/CR-094/CR-095) shipped without an entry here — every
+	// session-staff write (walk-in registration, job create/dispatch,
+	// check-in/out, identity approval) 403'd with "doc type not
+	// allowed yet", even though the UI let staff into the flow. Dev testing
+	// never caught it because it ran under an _admin session (bug found + fixed
+	// as CR-096, same class as the kitchen gap above).
+	// `volunteer_transfer` (schema.md §2.20) was cut by CR-104 AC-104-10.
+	describe('volunteer doc types (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18)', () => {
+		it('includes every volunteer-feature doc type in the allowed whitelist', () => {
+			const validateFn = buildValidateDocUpdate('SH001');
+			for (const type of ['volunteer', 'job', 'job_application', 'shift_assignment'] as const) {
+				expect(validateFn).toContain(`'${type}'`);
+			}
+		});
+
+		it('accepts a new volunteer from registration staff', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'volunteer:01J',
+						type: 'volunteer',
+						...envelope,
+						schema_v: 3,
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						phone: '0800000000',
+						skills: [],
+						status: 'active',
+						checked_in: false,
+						volunteer_code: 'V-001',
+						identity_verified: false,
+						source: 'walk_in',
+						personnel_type: 'volunteer'
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('accepts a shift_assignment check-in update from registration staff', () => {
+			const assignment = {
+				...envelope,
+				schema_v: 3,
+				_id: 'shift_assignment:01J',
+				type: 'shift_assignment',
+				job_id: 'job:01J',
+				volunteer_id: 'volunteer:01J',
+				date: '2026-08-29',
+				shift: 'morning',
+				station: 'Zone A',
+				duty_window: { start_ts: '2026-08-29T01:00:00.000Z', end_ts: '2026-08-29T09:00:00.000Z' },
+				status: 'assigned',
+				check_in_method: 'qr',
+				check_in_reason: null
+			};
+			expect(() =>
+				compile()(
+					{ ...assignment, status: 'checked_in', check_in_at: '2026-08-29T01:05:00.000Z' },
+					assignment,
+					REGISTRATION
+				)
+			).not.toThrow();
 		});
 	});
 

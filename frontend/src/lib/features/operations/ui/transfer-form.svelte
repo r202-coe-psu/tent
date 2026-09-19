@@ -2,18 +2,22 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { z } from 'zod';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useCreateTransfer } from '../application/queries';
+	import { useUnitsOfMeasure } from '$lib/features/catalog';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 
 	let { onsuccess }: { onsuccess?: () => void } = $props();
 
 	const createMutation = useCreateTransfer();
+	const unitsQuery = useUnitsOfMeasure();
+	const activeUnits = $derived((unitsQuery.data ?? []).filter((unit) => !unit.deactivated));
 
 	// Interim single-item form schema — the domain's `transferInputSchema` takes an `items[]`
 	// array (split-lot allocation across multiple lots/items is out of scope this round; see
@@ -128,12 +132,24 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label class="text-xs font-bold text-foreground">หน่วยนับ</Form.Label>
-					<Input
-						{...props}
-						placeholder="เช่น kg, ชิ้น"
-						bind:value={$formData.unit}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					/>
+					<Select.Root
+						type="single"
+						value={$formData.unit}
+						onValueChange={(value) => ($formData.unit = value)}
+						disabled={unitsQuery.isLoading || unitsQuery.isError || activeUnits.length === 0}
+					>
+						<Select.Trigger {...props} class="h-10 w-full rounded-xl">
+							{activeUnits.find((unit) => unit.code === $formData.unit)?.label_th ??
+								'-- เลือกหน่วยนับ --'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each activeUnits as unit (unit.code)}
+								<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
+									{unit.label_th} ({unit.code})
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

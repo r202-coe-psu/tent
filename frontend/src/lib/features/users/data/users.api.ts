@@ -31,10 +31,14 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
-	/** CR-124 — Google MFA enrolled. */
+	/** True when at least one MFA provider (Google or ThaID) is enrolled. */
 	mfa_enrolled?: boolean;
 	/** CR-124 — linked Google email (display). */
 	mfa_google_email?: string | null;
+	/** CR-ThaID — linked ThaID name (display). */
+	mfa_thaid_name?: string | null;
+	/** CR-ThaID — linked ThaID masked PID (display). */
+	mfa_thaid_pid_masked?: string | null;
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -57,6 +61,7 @@ export function createUser(input: {
 		start_ts: string;
 		end_ts: string;
 	} | null;
+	must_change_password?: boolean;
 	affiliation_tags?: string[];
 }): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
@@ -130,11 +135,14 @@ export interface AuthStatus {
 	roles: string[];
 	must_change_password: boolean;
 	has_security_question: boolean;
-	/** CR-124 — `_users` has a Google MFA provider. */
+	/** True when at least one MFA provider is enrolled. */
 	mfa_enrolled: boolean;
-	/** CR-124 — enrolled and no valid session `mfa_ok` cookie. */
+	/** Enrolled and no valid session `mfa_ok` cookie. */
 	pending_mfa: boolean;
+	mfa_providers?: Array<'google' | 'thaid'>;
 	mfa_provider_email?: string | null;
+	mfa_thaid_name?: string | null;
+	mfa_thaid_pid_masked?: string | null;
 	phone?: string | null;
 	email?: string | null;
 	organization?: string | null;
@@ -201,4 +209,19 @@ export function unlinkGoogleMfa(name?: string): Promise<{ ok: true }> {
 /** Browser navigation target for Google OAuth start (BFF redirects to Google). */
 export function googleOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string {
 	return `/api/v1/auth/oauth/google/start?mode=${mode}`;
+}
+
+/**
+ * Unlink ThaID MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
+ */
+export function unlinkThaidMfa(name?: string): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/oauth/thaid/unlink', {
+		method: 'POST',
+		body: JSON.stringify(name ? { name } : {})
+	});
+}
+
+/** Browser navigation target for ThaID OAuth start (BFF redirects to ThaID). */
+export function thaidOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string {
+	return `/api/v1/auth/oauth/thaid/start?mode=${mode}`;
 }

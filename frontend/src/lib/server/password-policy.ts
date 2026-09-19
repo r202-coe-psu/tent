@@ -39,3 +39,29 @@ export function validatePassword(raw: string): string {
 
 	return password;
 }
+
+/**
+ * Validate a newly provisioned account. A volunteer may use their phone as a
+ * one-time bootstrap password only when the caller also forces first-login
+ * password setup; all other passwords must satisfy the normal policy.
+ */
+export function validateProvisionedPassword(
+	raw: string,
+	options: {
+		phone?: string | null;
+		personnelType?: 'staff' | 'volunteer';
+		mustChangePassword?: boolean;
+	} = {}
+): string {
+	const password = raw.trim();
+	const phone = options.phone?.trim() ?? '';
+	if (
+		options.personnelType === 'volunteer' &&
+		options.mustChangePassword === true &&
+		/^0\d{9}$/.test(phone) &&
+		password === phone
+	) {
+		return password;
+	}
+	return validatePassword(password);
+}

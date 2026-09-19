@@ -6,8 +6,10 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
+	import { useUnitsOfMeasure } from '$lib/features/catalog';
 
 	interface Props {
 		onclose: () => void;
@@ -27,28 +29,27 @@
 	let itemTitle = $state('');
 	let category = $state('ถูกกำหนดอัตโนมัติ');
 	let targetQty = $state('');
-	let unit = $state('-- โปรดเลือกรายการสิ่งของก่อน --');
+	let unit = $state('');
 	let urgency = $state<'critical' | 'important' | 'normal'>('normal');
 	let description = $state('');
+
+	const unitsQuery = useUnitsOfMeasure();
+	const availableUnits = $derived((unitsQuery.data ?? []).filter((u) => !u.deactivated));
 
 	// Auto-fill category and unit based on search / item title
 	$effect(() => {
 		const lower = itemTitle.toLowerCase();
 		if (!lower) {
 			category = 'ถูกกำหนดอัตโนมัติ';
-			unit = '-- โปรดเลือกรายการสิ่งของก่อน --';
 			return;
 		}
 
 		if (lower.includes('ข้าว') || lower.includes('อาหาร') || lower.includes('ปลากระป๋อง')) {
 			category = 'อาหาร/เครื่องดื่ม';
-			unit = lower.includes('ข้าว') ? 'ถุง (5kg)' : 'แพ็ค';
 		} else if (lower.includes('น้ำ')) {
 			category = 'อาหาร/เครื่องดื่ม';
-			unit = 'ขวด';
 		} else if (lower.includes('ยา') || lower.includes('พารา') || lower.includes('เวชภัณฑ์')) {
 			category = 'ยารักษาโรค/เวชภัณฑ์';
-			unit = 'กล่อง';
 		} else if (
 			lower.includes('ผ้าห่ม') ||
 			lower.includes('สบู่') ||
@@ -56,10 +57,8 @@
 			lower.includes('ของใช้')
 		) {
 			category = 'ของใช้ทั่วไป';
-			unit = lower.includes('ผ้าห่ม') ? 'ผืน' : lower.includes('สบู่') ? 'ก้อน' : 'ชิ้น';
 		} else {
 			category = 'อื่นๆ';
-			unit = 'ชิ้น';
 		}
 	});
 
@@ -73,6 +72,10 @@
 			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
 			return;
 		}
+		if (!unit || unitsQuery.isError || availableUnits.length === 0) {
+			toast.error('กรุณาเลือกหน่วยนับจาก UOM master');
+			return;
+		}
 		if (!description.trim()) {
 			toast.error('กรุณาระบุเหตุผลความจำเป็น');
 			return;
@@ -83,7 +86,7 @@
 			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category,
-			unit: unit.startsWith('--') ? 'ชิ้น' : unit,
+			unit,
 			urgency,
 			description
 		});
@@ -234,24 +237,23 @@
 					<label for="unit" class="text-xs font-bold text-foreground">
 						หน่วยนับ (Unit of Measurement) <span class="text-destructive">*</span>
 					</label>
-					<select
-						id="unit"
-						bind:value={unit}
-						class="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+					<Select.Root
+						type="single"
+						value={unit}
+						onValueChange={(value) => (unit = value)}
+						disabled={unitsQuery.isLoading || unitsQuery.isError || availableUnits.length === 0}
 					>
-						{#if unit.startsWith('--')}
-							<option disabled value={unit}>{unit}</option>
-						{/if}
-						<option value="ชิ้น">ชิ้น</option>
-						<option value="ขวด">ขวด</option>
-						<option value="แพ็ค">แพ็ค</option>
-						<option value="ถุง">ถุง</option>
-						<option value="ถุง (5kg)">ถุง (5kg)</option>
-						<option value="กล่อง">กล่อง</option>
-						<option value="ผืน">ผืน</option>
-						<option value="ก้อน">ก้อน</option>
-						<option value="กก.">กก.</option>
-					</select>
+						<Select.Trigger id="unit" class="h-10 w-full rounded-xl text-xs">
+							{availableUnits.find((u) => u.code === unit)?.label_th ?? '-- เลือกหน่วยนับ --'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each availableUnits as u (u.code)}
+								<Select.Item value={u.code} label={`${u.label_th} (${u.code})`}>
+									{u.label_th} ({u.code})
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<!-- Urgency Level -->

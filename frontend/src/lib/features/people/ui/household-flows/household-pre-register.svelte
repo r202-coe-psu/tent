@@ -5,8 +5,10 @@
 	import {
 		useCreateEvacuee,
 		useUpdateEvacuee,
-		useCreateHousehold
+		useCreateHousehold,
+		usePatchHousehold
 	} from '../../application/queries';
+	import { peopleRepository } from '../../data/people.remote';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type {
 		Evacuee,
@@ -35,6 +37,7 @@
 	const createEvacueeMutation = useCreateEvacuee();
 	const createHouseholdMutation = useCreateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
+	const patchHouseholdMutation = usePatchHousehold();
 
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
@@ -76,6 +79,7 @@
 	// --- Validated step data (filled once each step's form passes Zod validation) ---
 	let headData = $state<EvacueeInput | null>(null);
 	let addressData = $state<HouseholdAddressForm | null>(null);
+	let joinHouseholdId = $state<string | null>(null);
 
 	const householdLabel = $derived(headData ? `ครอบครัว${formatPersonName(headData)}`.trim() : '');
 
@@ -109,6 +113,49 @@
 				}
 			});
 			createdHead = updatedHeadDoc;
+
+			if (joinHouseholdId) {
+				// Join existing household — do not create a new one
+				const existing = await peopleRepository().getHousehold(joinHouseholdId);
+				if (!existing) {
+					throw new Error('ไม่พบครัวเรือนที่เลือกเข้าร่วม');
+				}
+
+				const hasPets = petsList.length > 0;
+				const hasVehicles = vehicleRows.length > 0;
+				const trimmedAssets = assetDescription.trim();
+				if (hasPets || hasVehicles || trimmedAssets) {
+					const mergedAssets = trimmedAssets
+						? {
+								description: [existing.assets?.description, trimmedAssets]
+									.filter(Boolean)
+									.join('\n'),
+								image_url: existing.assets?.image_url ?? null
+							}
+						: existing.assets;
+					await patchHouseholdMutation.mutateAsync({
+						id: joinHouseholdId,
+						patch: {
+							...(hasPets ? { pets: [...(existing.pets ?? []), ...petsList] } : {}),
+							...(hasVehicles ? { vehicles: [...(existing.vehicles ?? []), ...vehicleRows] } : {}),
+							...(trimmedAssets ? { assets: mergedAssets } : {})
+						}
+					});
+				}
+
+				const finalHeadDoc = await updateEvacueeMutation.mutateAsync({
+					...updatedHeadDoc,
+					household_id: joinHouseholdId
+				});
+				createdHead = finalHeadDoc;
+
+				const refreshed = (await peopleRepository().getHousehold(joinHouseholdId)) ?? existing;
+				createdHousehold = refreshed;
+
+				toast.success(`ลงทะเบียนหัวหน้าครัวเรือนและเข้าร่วมครัวเรือน "${refreshed.label}" สำเร็จ`);
+				step = 5;
+				return;
+			}
 
 			// 2. Create Household (pre_registered state)
 			const householdInput = {
@@ -249,14 +296,16 @@
 	{#if step === 2}
 		<HouseholdPreRegisterAddress
 			initialData={addressData}
+			initialJoinHouseholdId={joinHouseholdId}
 			{householdLabel}
 			{municipalityZoneItems}
 			{communityItems}
 			{defaultMunicipalityZone}
 			{defaultCommunity}
 			onBack={() => (step = 1)}
-			onNext={(data) => {
+			onNext={(data, joinId) => {
 				addressData = data;
+				joinHouseholdId = joinId;
 				step = 3;
 			}}
 		/>

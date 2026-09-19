@@ -1,5 +1,5 @@
 import { ulid } from '$lib/db/ulid';
-import type { Shelter, ShelterMaster } from '../domain/schema';
+import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
@@ -348,7 +348,7 @@ async function provisionShelterUnlocked(
 		const master: ShelterMaster = {
 			_id: `shelter:${ulid()}`,
 			type: 'shelter',
-			schema_v: 5,
+			schema_v: SHELTER_MASTER_SCHEMA_V,
 			code,
 			...input,
 			created_at: ts,

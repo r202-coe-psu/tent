@@ -95,8 +95,8 @@
 					if (result.actionTaken === 'reset') {
 						toast.success(`คืนค่ามาตรฐานหมวดหมู่ "${result.categoryName || name}" สำเร็จ`);
 					} else if (result.actionTaken === 'deactivate') {
-						toast.info(
-							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`
+						toast.success(
+							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งานแล้ว`
 						);
 					} else {
 						toast.success(`ลบหมวดหมู่ "${result.categoryName || name}" ถาวรสำเร็จ`);
@@ -206,13 +206,6 @@
 							<Table.Row>
 								<Table.Cell class="font-bold text-foreground">
 									{e.name}
-									{#if e.deactivated}
-										<span
-											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
-										>
-											ปิดใช้งาน
-										</span>
-									{/if}
 									{#if !e.shelter_code}
 										<span
 											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
@@ -230,6 +223,13 @@
 											class="ml-2 inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-600/10 ring-inset dark:bg-teal-950/40 dark:text-teal-400 dark:ring-teal-500/20"
 										>
 											เฉพาะศูนย์
+										</span>
+									{/if}
+									{#if e.deactivated}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
+										>
+											ปิดใช้งาน
 										</span>
 									{/if}
 								</Table.Cell>
@@ -376,8 +376,7 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากหมวดหมู่นี้มีสินค้าใช้งานอยู่ หรือเป็นหมวดหมู่ส่วนกลาง
-							ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทนการลบถาวร
-							เพื่อไม่ให้กระทบต่อประวัติสิ่งของ
+							ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทนการลบถาวร เพื่อไม่ให้กระทบต่อประวัติสิ่งของ
 						</span>
 					{/if}
 				{/if}
