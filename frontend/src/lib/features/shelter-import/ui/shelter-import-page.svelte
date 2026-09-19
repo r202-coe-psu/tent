@@ -15,6 +15,7 @@
 	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
+		orphanFoodDistributionRows,
 		orphanZoneRows,
 		validateWorkbook,
 		type Lookups,
@@ -60,7 +61,12 @@
 		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
 	);
 
-	let workbook = $state<ParsedWorkbook>({ shelters: [], zones: [] });
+	let workbook = $state<ParsedWorkbook>({
+		shelters: [],
+		zones: [],
+		foodDistributionPoints: [],
+		hasFoodDistributionPointsSheet: false
+	});
 	let filename = $state('');
 	let parsing = $state(false);
 
@@ -70,7 +76,11 @@
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
 	const orphanZones = $derived(workbook.shelters.length ? orphanZoneRows(workbook) : []);
+	const orphanFoodPoints = $derived(
+		workbook.shelters.length ? orphanFoodDistributionRows(workbook) : []
+	);
 	const zoneCount = $derived(workbook.zones.length);
+	const foodPointCount = $derived(workbook.foodDistributionPoints.length);
 
 	let existingShelters = $state<ExistingShelter[]>([]);
 	let duplicateCheckReady = $state(false);
@@ -172,7 +182,12 @@
 			else await refreshExistingShelters();
 		} catch {
 			toast.error('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง');
-			workbook = { shelters: [], zones: [] };
+			workbook = {
+				shelters: [],
+				zones: [],
+				foodDistributionPoints: [],
+				hasFoodDistributionPointsSheet: false
+			};
 			filename = '';
 			existingShelters = [];
 			duplicateCheckReady = false;
@@ -184,7 +199,12 @@
 	}
 
 	function clearFile() {
-		workbook = { shelters: [], zones: [] };
+		workbook = {
+			shelters: [],
+			zones: [],
+			foodDistributionPoints: [],
+			hasFoodDistributionPointsSheet: false
+		};
 		filename = '';
 		existingShelters = [];
 		duplicateCheckReady = false;
@@ -284,10 +304,8 @@
 					<FileSpreadsheet class="h-5 w-5 text-muted-foreground" />
 					<span class="font-medium">{filename}</span>
 					<span class="text-muted-foreground">
-						· {validations.length} ศูนย์ · {zoneCount} โซน · พร้อมนำเข้า {validCount} · ผิดพลาด {errorCount}{dupCount >
-						0
-							? ` · ชื่อซ้ำ ${dupCount}`
-							: ''}
+						· {validations.length} ศูนย์ · {zoneCount} โซน · {foodPointCount} จุดแจกอาหาร · พร้อมนำเข้า
+						{validCount} · ผิดพลาด {errorCount}{dupCount > 0 ? ` · ชื่อซ้ำ ${dupCount}` : ''}
 					</span>
 				</div>
 				<Button variant="ghost" size="sm" onclick={clearFile} disabled={jobRunning}>
@@ -419,6 +437,13 @@
 					>
 						ไม่พบข้อมูลงานนำเข้านี้แล้ว
 					</div>
+				{/if}
+				{#if orphanFoodPoints.length > 0}
+					<p class="mb-3 text-sm text-amber-600">
+						ชีต "จุดแจกอาหาร" มี {orphanFoodPoints.length} แถวที่ "รหัสศูนย์พักพิง" ไม่ตรงกับศูนย์ใดเลย
+						(แถวที่ {orphanFoodPoints.map((point) => point.line).join(', ')}) —
+						แถวเหล่านี้จะไม่ถูกนำเข้า
+					</p>
 				{/if}
 
 				<Dialog.Footer>
