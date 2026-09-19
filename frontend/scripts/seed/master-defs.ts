@@ -138,6 +138,66 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 		type: 'community',
 		parent_type: 'municipality_zone',
 		items: HAT_YAI_COMMUNITIES
+	},
+	{
+		type: 'volunteer_skills',
+		items: [
+			{
+				key: 'cooking',
+				label: 'ประกอบอาหาร / ครัวสนาม',
+				category: 'operational',
+				description: 'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง',
+				is_default: true
+			},
+			{
+				key: 'logistics',
+				label: 'ขนย้ายสิ่งของ / พลาธิการ',
+				category: 'operational',
+				description: 'ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก'
+			},
+			{
+				key: 'screening',
+				label: 'คัดกรองและสแกนประวัติ',
+				category: 'operational',
+				description: 'ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น'
+			},
+			{
+				key: 'medical',
+				label: 'การแพทย์ / ปฐมพยาบาล',
+				category: 'controlled',
+				description: 'ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ)'
+			},
+			{
+				key: 'reception',
+				label: 'ประสานงาน / ต้อนรับ',
+				category: 'operational',
+				description: 'ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ'
+			},
+			{
+				key: 'distribution',
+				label: 'แจกจ่ายของยังชีพ',
+				category: 'operational',
+				description: 'แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค'
+			},
+			{
+				key: 'sanitation',
+				label: 'ทำความสะอาด / สุขอนามัย',
+				category: 'operational',
+				description: 'ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์'
+			},
+			{
+				key: 'childcare',
+				label: 'สันทนาการ / ดูแลเด็ก',
+				category: 'operational',
+				description: 'กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ'
+			},
+			{
+				key: 'transport',
+				label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+				category: 'operational',
+				description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ'
+			}
+		]
 	}
 ];
 
