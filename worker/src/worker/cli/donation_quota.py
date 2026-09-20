@@ -4,8 +4,10 @@ Two subcommands over the same core (``worker.quota.reconcile``):
 
 ``backfill``      one-time pre-rollout: seed ``qty_target`` for every open campaign
                   (CR-060 FR-5) then set ``reserved_qty`` from the systems of record.
-``recalculate``   DR / data-inconsistency tool: recompute ``reserved_qty`` only, leaving
-                  ``qty_target`` untouched.
+``recalculate``   DR / data-inconsistency tool: recompute ``reserved_qty``. Add
+                  ``--targets`` to also realign ``qty_target`` with the open campaign it
+                  came from — the gap CR-060 FR-2 leaves open by design (a CDC event may
+                  never move a live ceiling) and names this tool to close.
 
 **Dry-run is the default.** Nothing is written without ``--apply``, and ``--apply``
 refuses to run without ``--confirm-write-path-locked`` — the operator must state that the
@@ -17,6 +19,7 @@ a conflict and the command exits non-zero instead of stomping the live count.
     uv run --project worker donation-quota backfill --apply --confirm-write-path-locked
     uv run --project worker donation-quota recalculate --shelter SH001 --apply \
         --confirm-write-path-locked
+    uv run --project worker donation-quota recalculate --shelter SH001 --targets
 """
 
 from __future__ import annotations
@@ -86,6 +89,15 @@ def _print_report(report: ShelterReconcileReport, *, apply: bool) -> None:
     )
     for (campaign_id, item_id), before, after in report.changes:
         print(f"    {campaign_id} / {item_id}: reserved_qty {before} → {after}")
+    for (campaign_id, item_id), before, after in report.target_changes:
+        print(f"    {campaign_id} / {item_id}: qty_target {before} → {after}")
+    for (campaign_id, item_id), before, after in report.target_refused:
+        print(
+            f"    !! REFUSED {campaign_id} / {item_id}: qty_target {before} → {after} "
+            f"is below the quota already reserved — close the need or cancel bookings first"
+        )
+    for campaign_id, item_id in report.target_conflicts:
+        print(f"    !! CONFLICT {campaign_id} / {item_id} — qty_target moved mid-run")
     for (campaign_id, item_id), qty in report.missing_counters:
         print(f"    + no counter yet: {campaign_id} / {item_id} outstanding qty {qty}")
     for campaign_id, item_id in report.conflicts:
@@ -121,19 +133,27 @@ async def _run(args: argparse.Namespace) -> int:
                 # else backfills it: the change feed only reacts to new ledger entries.
                 if apply:
                     on_hand_total += await refresh_on_hand(couch, code)
-            report = await reconcile_shelter(couch, code, now=now, apply=apply)
+            report = await reconcile_shelter(
+                couch, code, now=now, apply=apply, targets=bool(args.targets)
+            )
             reports.append(report)
             _print_report(report, apply=apply)
 
         changed = sum(len(r.changes) for r in reports)
         conflicts = sum(r.counters_conflicted for r in reports)
         unattributed = sum(len(r.unattributed_items) for r in reports)
+        targets_changed = sum(len(r.target_changes) for r in reports)
+        targets_refused = sum(len(r.target_refused) for r in reports)
+        conflicts += sum(len(r.target_conflicts) for r in reports)
 
         print("\nSummary")
         if args.command == "backfill":
             print(f"  qty_target seeds planned: {seeded_total}")
             print(f"  on_hand_qty refreshed: {on_hand_total}")
         print(f"  reserved_qty {'changed' if apply else 'to change'}: {changed}")
+        if args.targets:
+            print(f"  qty_target {'changed' if apply else 'to change'}: {targets_changed}")
+            print(f"  qty_target refused (below reserved): {targets_refused}")
         print(f"  conflicts: {conflicts}")
         print(f"  unattributed items (need manual review): {unattributed}")
         if not apply:
@@ -154,7 +174,15 @@ def main() -> None:
         "command",
         choices=("backfill", "recalculate"),
         help="backfill = seed qty_target then recompute reserved_qty; "
-        "recalculate = recompute reserved_qty only",
+        "recalculate = recompute reserved_qty (add --targets to realign qty_target too)",
+    )
+    parser.add_argument(
+        "--targets",
+        action="store_true",
+        help="also realign qty_target with each open campaign's current value. Needed "
+        "after staff edit a campaign target: CDC deliberately leaves the live ceiling "
+        "alone (CR-060 FR-2), so donors keep hitting NEED_FULL at the old figure while "
+        "the board shows the new one",
     )
     parser.add_argument(
         "--shelter",
