@@ -94,8 +94,8 @@ async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof
 	}
 
 	return json(
-		{ success: false, verified: false, error: 'BOOKING_NOT_FOUND' },
-		{ status: 404, headers: noStore }
+		{ success: true, verified: false, notFound: true, error: 'BOOKING_NOT_FOUND' },
+		{ status: 200, headers: noStore }
 	);
 }
 

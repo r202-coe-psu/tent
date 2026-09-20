@@ -82,22 +82,24 @@ async def test_create_rejects_duplicate_client_id(
     assert second.status_code == 409
 
 
-async def test_create_rejects_occupancy_pii_read_scope(
+async def test_create_allows_occupancy_pii_read_scope(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    """EXT-007 stays denied by default — this admin surface can never grant the PII scope."""
+    """EXT-007's PII scope is now grantable through this admin surface, per written approval."""
     response = await client.post(
         "/v1/admin/thirdparty-clients",
         headers=auth_headers,
         json={
-            "client_id": "sneaky-client",
-            "module_name": "M6",
+            "client_id": "m7-pii-client",
+            "module_name": "M7",
             "allowed_scopes": ["location-read", "occupancy-pii-read"],
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 201
 
-    assert await ThirdPartyClient.find_one(ThirdPartyClient.client_id == "sneaky-client") is None
+    created = await ThirdPartyClient.find_one(ThirdPartyClient.client_id == "m7-pii-client")
+    assert created is not None
+    assert "occupancy-pii-read" in created.allowed_scopes
 
 
 async def test_create_rejects_unknown_module_name(

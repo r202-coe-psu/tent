@@ -53,6 +53,8 @@
 				if (res.verified) {
 					removeStoredTicket(t.code);
 					anyVerified = true;
+				} else if (res.notFound) {
+					removeStoredTicket(t.code);
 				}
 			} catch {
 				// skip on failure

@@ -293,6 +293,7 @@ export async function fetchShelterPolicy(
 export interface TicketStatusResult {
 	success: boolean;
 	verified: boolean;
+	notFound?: boolean;
 	status?: string;
 	error?: string;
 }
@@ -310,6 +311,7 @@ export async function checkTicketStatus(code: string): Promise<TicketStatusResul
 		return {
 			success: res.ok && body.success === true,
 			verified: body.verified === true,
+			notFound: body.notFound === true || body.error === 'BOOKING_NOT_FOUND',
 			status: body.status,
 			error: body.error
 		};

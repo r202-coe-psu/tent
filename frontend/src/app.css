@@ -456,11 +456,17 @@
 		scroll-margin-top: var(--shelter-form-scroll-mt);
 	}
 	.unified-reg-section-header {
-		@apply sticky z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4;
-		top: var(--registration-sticky-top);
+		/* Do not set `top` here: with `relative` it offsets headers into the body on mobile. */
+		@apply relative flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-xs sm:sticky sm:z-20 sm:bg-card/95 sm:p-4 sm:backdrop-blur-md;
+	}
+	@media (min-width: 640px) {
+		.unified-reg-section-header {
+			top: var(--registration-sticky-top);
+		}
 	}
 	.unified-reg-bottom-chrome {
-		@apply sticky bottom-0 z-30 -mx-1 space-y-2 border-t border-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
+		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 	}
 	/* Always-reachable Save dock (registration-shell fixed pattern; sits above testing banner). */
 	.shelter-form-bottom-chrome {

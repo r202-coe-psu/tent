@@ -17,23 +17,19 @@
 		onscanned?: (profile: ThaiDAutofillProfile) => void;
 	}
 
-	let {
-		open = $bindable(false),
-		memberLabel = 'สมาชิกในครอบครัว',
-		onscanned
-	}: Props = $props();
+	let { open = $bindable(false), memberLabel = 'สมาชิกในครอบครัว', onscanned }: Props = $props();
 
 	type SessionState = 'loading' | 'active' | 'success' | 'expired' | 'error';
 
 	let sessionState = $state<SessionState>('loading');
 	let qrDataUrl = $state<string | null>(null);
-	let remainingSeconds = $state<number>(300);
+	let remainingSeconds = $state<number>(900);
 	let completedProfile = $state<ThaiDAutofillProfile | null>(null);
 
-	let currentSessionId: string | null = null;
 	let eventSource: EventSource | null = null;
 	let countdownTimer: NodeJS.Timeout | null = null;
 	let pollTimer: NodeJS.Timeout | null = null;
+	let consecutiveNotFoundCount = 0;
 
 	function formatRemainingTime(seconds: number): string {
 		const m = Math.floor(Math.max(0, seconds) / 60);
@@ -61,6 +57,7 @@
 		sessionState = 'loading';
 		qrDataUrl = null;
 		completedProfile = null;
+		consecutiveNotFoundCount = 0;
 
 		try {
 			const res = await fetch('/api/public/v1/thaid/scan-session', {
@@ -72,11 +69,13 @@
 				sessionId: string;
 				qrUrl: string;
 				expiresAt: number;
+				ttlSeconds?: number;
 			};
 
-			currentSessionId = data.sessionId;
-			const totalSec = Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000));
-			remainingSeconds = totalSec;
+			remainingSeconds =
+				typeof data.ttlSeconds === 'number' && data.ttlSeconds > 0
+					? data.ttlSeconds
+					: Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000)) || 900;
 
 			// Generate QR code image
 			qrDataUrl = await QRCode.toDataURL(data.qrUrl, {
@@ -136,12 +135,16 @@
 					if (payload?.profile) {
 						handleScanSuccess(payload.profile);
 					}
-				} catch {}
+				} catch {
+					// ignore malformed SSE event payload
+				}
 			});
 
 			es.addEventListener('expired', () => {
-				sessionState = 'expired';
-				cleanupLiveConnections();
+				if (remainingSeconds <= 0) {
+					sessionState = 'expired';
+					cleanupLiveConnections();
+				}
 			});
 
 			es.onerror = () => {
@@ -160,11 +163,16 @@
 			const res = await fetch(`/api/public/v1/thaid/scan-session/${sessionId}`);
 			if (!res.ok) {
 				if (res.status === 404) {
-					sessionState = 'expired';
-					cleanupLiveConnections();
+					consecutiveNotFoundCount += 1;
+					// Only transition to expired if we got multiple consecutive 404s or timer ran out
+					if (consecutiveNotFoundCount >= 3 || remainingSeconds <= 0) {
+						sessionState = 'expired';
+						cleanupLiveConnections();
+					}
 				}
 				return;
 			}
+			consecutiveNotFoundCount = 0;
 			const data = (await res.json()) as {
 				status: 'pending' | 'completed' | 'expired';
 				profile?: ThaiDAutofillProfile;
@@ -175,7 +183,9 @@
 				sessionState = 'expired';
 				cleanupLiveConnections();
 			}
-		} catch {}
+		} catch {
+			// ignore transient polling network errors
+		}
 	}
 
 	$effect(() => {
@@ -210,7 +220,9 @@
 					<p class="text-xs text-muted-foreground">กำลังสร้าง QR Code เชื่อมต่อ ThaiD...</p>
 				</div>
 			{:else if sessionState === 'active'}
-				<div class="relative flex flex-col items-center rounded-2xl border border-primary/20 bg-muted/20 p-4">
+				<div
+					class="relative flex flex-col items-center rounded-2xl border border-primary/20 bg-muted/20 p-4"
+				>
 					{#if qrDataUrl}
 						<img
 							src={qrDataUrl}
@@ -219,40 +231,53 @@
 						/>
 					{/if}
 
-					<div class="mt-3 flex items-center gap-1.5 rounded-full bg-background/80 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-2xs border border-border">
+					<div
+						class="mt-3 flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-2xs"
+					>
 						<Clock class="size-3.5 text-amber-600" />
 						<span>หมดอายุใน {formatRemainingTime(remainingSeconds)}</span>
 					</div>
 				</div>
 
-				<div class="mt-4 flex items-start gap-2 text-left rounded-xl bg-primary/5 p-3 border border-primary/20">
-					<Smartphone class="size-5 shrink-0 text-primary mt-0.5" />
-					<div class="text-xs space-y-0.5">
+				<div
+					class="mt-4 flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-left"
+				>
+					<Smartphone class="mt-0.5 size-5 shrink-0 text-primary" />
+					<div class="space-y-0.5 text-xs">
 						<p class="font-semibold text-foreground">วิธีสแกนสำหรับสมาชิก:</p>
-						<p class="text-muted-foreground">1. เปิด <strong>กล้องถ่ายรูปมือถือ</strong> หรือ <strong>แอป LINE</strong></p>
-						<p class="text-muted-foreground">2. ส่องมาที่ QR Code นี้ เพื่อเข้าสู่หน้ายืนยันตัวตน ThaiD</p>
+						<p class="text-muted-foreground">
+							1. เปิด <strong>กล้องถ่ายรูปมือถือ</strong> หรือ <strong>แอป LINE</strong>
+						</p>
+						<p class="text-muted-foreground">
+							2. ส่องมาที่ QR Code นี้ เพื่อเข้าสู่หน้ายืนยันตัวตน ThaiD
+						</p>
 						<p class="text-muted-foreground">3. ยืนยันบนมือถือ ข้อมูลจะวิ่งมาแสดงบนหน้านี้ทันที</p>
 					</div>
 				</div>
 			{:else if sessionState === 'success'}
 				<div class="flex h-64 flex-col items-center justify-center gap-3">
-					<div class="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary animate-in zoom-in-50 duration-300">
+					<div
+						class="flex size-16 animate-in items-center justify-center rounded-full bg-primary/10 text-primary duration-300 zoom-in-50"
+					>
 						<CheckCircle2 class="size-10" />
 					</div>
 					<h3 class="text-base font-bold text-foreground">ดึงข้อมูลสำเร็จ!</h3>
 					{#if completedProfile}
 						<p class="text-xs text-muted-foreground">
-							{completedProfile.first_name} {completedProfile.last_name}
+							{completedProfile.first_name}
+							{completedProfile.last_name}
 						</p>
 					{/if}
 				</div>
 			{:else if sessionState === 'expired'}
 				<div class="flex h-64 flex-col items-center justify-center gap-3">
-					<div class="flex size-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+					<div
+						class="flex size-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-600"
+					>
 						<Clock class="size-8" />
 					</div>
 					<h3 class="text-sm font-bold text-foreground">QR Code หมดอายุแล้ว</h3>
-					<p class="text-xs text-muted-foreground max-w-xs">
+					<p class="max-w-xs text-xs text-muted-foreground">
 						ไม่ได้ทำรายการภายในเวลาที่กำหนด กรุณากดปุ่มเพื่อสร้าง QR Code ใหม่
 					</p>
 					<Button
@@ -269,13 +294,7 @@
 			{:else if sessionState === 'error'}
 				<div class="flex h-64 flex-col items-center justify-center gap-3">
 					<p class="text-xs text-destructive">เกิดข้อผิดพลาดในการสร้างเซสชัน</p>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onclick={startSession}
-						class="gap-1.5"
-					>
+					<Button type="button" variant="outline" size="sm" onclick={startSession} class="gap-1.5">
 						<RotateCw class="size-4" />
 						ลองใหม่อีกครั้ง
 					</Button>
@@ -284,12 +303,7 @@
 		</div>
 
 		<Dialog.Footer class="mt-2 flex flex-row items-center justify-between sm:justify-between">
-			<Button
-				type="button"
-				variant="ghost"
-				size="sm"
-				onclick={() => (open = false)}
-			>
+			<Button type="button" variant="ghost" size="sm" onclick={() => (open = false)}>
 				กรอกข้อมูลด้วยตนเอง (Manual)
 			</Button>
 		</Dialog.Footer>

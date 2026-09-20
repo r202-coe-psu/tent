@@ -43,13 +43,13 @@ describe('createThirdPartyClientSchema', () => {
 		expect(result.success).toBe(false);
 	});
 
-	it('rejects occupancy-pii-read — never grantable through this form', () => {
+	it('accepts occupancy-pii-read — grantable through this form per written approval', () => {
 		const result = createThirdPartyClientSchema.safeParse({
 			client_id: 'm7-command-center',
 			module_name: 'M7',
 			allowed_scopes: ['occupancy-pii-read']
 		});
-		expect(result.success).toBe(false);
+		expect(result.success).toBe(true);
 	});
 });
 
