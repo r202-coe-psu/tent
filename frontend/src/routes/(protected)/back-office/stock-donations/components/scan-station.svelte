@@ -48,6 +48,7 @@
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { ulid } from '$lib/db/ulid';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useShelters } from '$lib/features/shelters';
@@ -331,7 +332,7 @@
 	};
 	let walkinItems = $state<WalkinItemState[]>([
 		{
-			id: crypto.randomUUID(),
+			id: ulid(),
 			itemId: '',
 			name: '',
 			qty: '1',
@@ -623,7 +624,7 @@
 	// Walk-in form handlers
 	function addWalkinItem() {
 		walkinItems.push({
-			id: crypto.randomUUID(),
+			id: ulid(),
 			itemId: '',
 			name: '',
 			qty: '1',
@@ -725,7 +726,7 @@
 			walkinDonorEmail = '';
 			walkinItems = [
 				{
-					id: crypto.randomUUID(),
+					id: ulid(),
 					itemId: '',
 					name: '',
 					qty: '1',

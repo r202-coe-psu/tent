@@ -1,4 +1,5 @@
 import { setContext, getContext } from 'svelte';
+import { ulid } from '$lib/db/ulid';
 
 export interface DonationItem {
 	id: string;
@@ -48,7 +49,7 @@ class DonationStore {
 
 	items = $state<DonationItem[]>([
 		{
-			id: crypto.randomUUID(),
+			id: ulid(),
 			category: 'food',
 			name: '',
 			amount: 1,
@@ -73,7 +74,7 @@ class DonationStore {
 
 	addItem() {
 		this.items.push({
-			id: crypto.randomUUID(),
+			id: ulid(),
 			category: 'food',
 			name: '',
 			amount: 1,
@@ -111,7 +112,7 @@ class DonationStore {
 		this.deliveryDate = '';
 		this.items = [
 			{
-				id: crypto.randomUUID(),
+				id: ulid(),
 				category: 'food',
 				name: '',
 				amount: 1,

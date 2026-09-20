@@ -10,6 +10,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { ulid } from '$lib/db/ulid';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { donorCategoryFromCatalog } from '$lib/features/donations';
@@ -297,7 +298,7 @@
 		donationStore.shelterLocked = true;
 		donationStore.items = [
 			{
-				id: crypto.randomUUID(),
+				id: ulid(),
 				item_id: need.item_id,
 				// The card's category comes from the CATALOG (`food`/`water`/`bedding`/…),
 				// which is a finer split than the five buckets the donor form shows — so it
@@ -325,7 +326,7 @@
 		donationStore.shelterLocked = true;
 		donationStore.items = [
 			{
-				id: crypto.randomUUID(),
+				id: ulid(),
 				category: 'food',
 				name: '',
 				amount: 1,

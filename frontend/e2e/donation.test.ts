@@ -356,3 +356,75 @@ test.describe('Urgency filter chips', () => {
 		await expect(shelterCard).toHaveCount(0);
 	});
 });
+
+/**
+ * `crypto.randomUUID` is `[SecureContext]`-gated: it exists on `localhost` and over
+ * HTTPS, and is `undefined` when staff open the site by LAN IP over plain HTTP —
+ * which is exactly how a shelter reaches it from a phone. Constructing `DonationState`
+ * threw `TypeError: crypto.randomUUID is not a function` before the page rendered, so
+ * `/donations` came up blank.
+ *
+ * `crypto.getRandomValues` (what `$lib/db/ulid` uses) carries no such gate, so this
+ * deletes `randomUUID` to stand in for a non-secure origin without needing a second
+ * host. Keep it deleted for any page that mints client-side ids.
+ */
+test.describe('Non-secure context (LAN HTTP over an IP)', () => {
+	test.beforeEach(async ({ page }) => {
+		await page.addInitScript(() => {
+			// @ts-expect-error — deleting a readonly DOM property on purpose
+			delete Crypto.prototype.randomUUID;
+			// @ts-expect-error — some engines expose it as an own property too
+			delete globalThis.crypto.randomUUID;
+		});
+		await page.route('**/api/public/v1/needs', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{
+						code: 'SH001',
+						name: 'ศูนย์พักพิงทดสอบ LAN',
+						needs: [
+							{
+								item_id: 'item:rice',
+								name: 'ข้าวสาร',
+								category: 'food',
+								qty_needed: 50,
+								unit: 'kg',
+								urgency: 'critical',
+								status: 'open'
+							}
+						]
+					}
+				])
+			});
+		});
+	});
+
+	test('/donations renders instead of white-screening', async ({ page }) => {
+		const crashes: string[] = [];
+		page.on('pageerror', (err) => crashes.push(err.message));
+
+		await page.goto('/donations');
+
+		await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+		await expect(page.getByText('ศูนย์พักพิงทดสอบ LAN')).toBeVisible();
+		expect(crashes.join('\n')).not.toContain('randomUUID');
+		expect(crashes).toEqual([]);
+	});
+
+	test('picking a need still mints an item id', async ({ page }) => {
+		const crashes: string[] = [];
+		page.on('pageerror', (err) => crashes.push(err.message));
+
+		await page.goto('/donations');
+		await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+		await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+
+		// Reaching the donor form means `donationStore.items` was built — the id is
+		// minted right there, and it used to throw on this exact step.
+		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
+		await expect(page.locator('input[id^="name-"]').first()).toHaveValue('ข้าวสาร');
+		expect(crashes).toEqual([]);
+	});
+});
