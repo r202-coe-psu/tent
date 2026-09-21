@@ -55,8 +55,49 @@ export interface ShelterImportItem {
 	created_by: string;
 }
 
-/** Status fields returned by the job API. Raw validated input is never exposed. */
-export type ShelterImportItemSummary = Omit<ShelterImportItem, 'input' | 'job_id' | 'created_by'>;
+/** Fields allowed to cross the server-to-browser status boundary. */
+export type ShelterImportItemSummary = Pick<
+	ShelterImportItem,
+	| '_id'
+	| '_rev'
+	| 'type'
+	| 'schema_v'
+	| 'row'
+	| 'name'
+	| 'food_distribution_points_present'
+	| 'status'
+	| 'attempts'
+	| 'max_attempts'
+	| 'dead_lettered_at'
+	| 'code'
+	| 'errors'
+	| 'created_at'
+	| 'updated_at'
+>;
+
+export function toShelterImportItemSummary(
+	item: ShelterImportItem | ShelterImportItemSummary
+): ShelterImportItemSummary {
+	return {
+		_id: item._id,
+		...(item._rev !== undefined ? { _rev: item._rev } : {}),
+		type: item.type,
+		schema_v: item.schema_v,
+		row: item.row,
+		name: item.name,
+		...(item.food_distribution_points_present !== undefined
+			? { food_distribution_points_present: item.food_distribution_points_present }
+			: {}),
+		status: item.status,
+		attempts: item.attempts,
+		max_attempts: item.max_attempts,
+		...(item.dead_lettered_at !== undefined ? { dead_lettered_at: item.dead_lettered_at } : {}),
+		...(item.code !== undefined ? { code: item.code } : {}),
+		...(item.errors !== undefined ? { errors: item.errors } : {}),
+		created_at: item.created_at,
+		updated_at: item.updated_at
+	};
+}
 
 export interface ShelterImportJob {
 	_id: string;
@@ -144,9 +185,9 @@ async function ensurePrivateDatabase(databaseName: string, label: string): Promi
 			`${label} database setup failed (${database.status}): ${detail(database.data)}`
 		);
 	}
-	// Both databases contain cross-shelter data. Read the existing document before
-	// replacing it, but deliberately converge to the exact server-only contract:
-	// SvelteKit's admin client is the sole privileged reader/writer.
+	// Both databases contain cross-shelter data. Preserve existing principals while
+	// ensuring CouchDB server admins retain access; SvelteKit remains the sole
+	// privileged reader/writer.
 	const currentSecurity = await adminRaw(`/${databaseName}/_security`, 'GET');
 	if (currentSecurity.status !== 200 && currentSecurity.status !== 404) {
 		throw new ServiceError(
@@ -154,9 +195,22 @@ async function ensurePrivateDatabase(databaseName: string, label: string): Promi
 			`${label} security read failed (${currentSecurity.status}): ${detail(currentSecurity.data)}`
 		);
 	}
+	const existing =
+		(currentSecurity.status === 200
+			? (currentSecurity.data as {
+					admins?: { names?: string[]; roles?: string[] };
+					members?: { names?: string[]; roles?: string[] };
+				} | null)
+			: null) ?? {};
 	const security = await adminRaw(`/${databaseName}/_security`, 'PUT', {
-		admins: { names: [], roles: ['_admin'] },
-		members: { names: [], roles: [] }
+		admins: {
+			names: existing.admins?.names ?? [],
+			roles: [...new Set([...(existing.admins?.roles ?? []), '_admin'])]
+		},
+		members: {
+			names: existing.members?.names ?? [],
+			roles: existing.members?.roles ?? []
+		}
 	});
 	if (security.status >= 400) {
 		throw new ServiceError(
@@ -362,15 +416,7 @@ export async function getImportJob(jobId: string): Promise<ImportJobSummary | nu
 	const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
 	return {
 		job,
-		items: items
-			.sort((a, b) => a.row - b.row)
-			.map((item) => {
-				const status: Partial<ShelterImportItem> = { ...item };
-				delete status.input;
-				delete status.job_id;
-				delete status.created_by;
-				return status as ShelterImportItemSummary;
-			})
+		items: items.sort((a, b) => a.row - b.row).map(toShelterImportItemSummary)
 	};
 }
 

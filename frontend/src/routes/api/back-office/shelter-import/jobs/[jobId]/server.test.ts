@@ -2,13 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requireSystemAdminMock = vi.hoisted(() => vi.fn());
 const getImportJobMock = vi.hoisted(() => vi.fn());
+const toShelterImportItemSummaryMock = vi.hoisted(() =>
+	vi.fn((item: Record<string, unknown>) => ({
+		_id: item._id,
+		_rev: item._rev,
+		row: item.row,
+		name: item.name,
+		status: item.status,
+		attempts: item.attempts,
+		max_attempts: item.max_attempts
+	}))
+);
 
 vi.mock('$lib/server/couch-admin', () => ({
 	requireSystemAdmin: requireSystemAdminMock,
 	serviceError: vi.fn()
 }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
-	getImportJob: getImportJobMock
+	getImportJob: getImportJobMock,
+	toShelterImportItemSummary: toShelterImportItemSummaryMock
 }));
 
 import { GET } from './+server';
@@ -24,7 +36,11 @@ function summary(itemRevision: string, status: 'pending' | 'running' = 'pending'
 				name: 'ศูนย์ A',
 				status,
 				attempts: status === 'running' ? 1 : 0,
-				max_attempts: 3
+				max_attempts: 3,
+				type: 'shelter_import_item',
+				schema_v: 1,
+				created_at: '2026-09-21T00:00:00.000Z',
+				updated_at: '2026-09-21T00:00:00.000Z'
 			}
 		]
 	};
@@ -68,5 +84,37 @@ describe('GET /api/back-office/shelter-import/jobs/[jobId]', () => {
 		const unchanged = await call(first.headers.get('etag')!);
 
 		expect(unchanged.status).toBe(304);
+	});
+
+	it('does not return item payload or worker fencing fields', async () => {
+		getImportJobMock.mockResolvedValueOnce({
+			...summary('1-item'),
+			items: [
+				{
+					...summary('1-item').items[0],
+					input: { national_id: 'secret' },
+					job_id: 'shelter_import_job:job-1',
+					created_by: 'admin',
+					lease_until: '2026-09-21T00:05:00.000Z',
+					worker_id: 'worker-secret',
+					claim_token: 'claim-secret'
+				}
+			]
+		});
+
+		const response = await call();
+		const body = (await response.json()) as { items: Record<string, unknown>[] };
+
+		expect(response.status).toBe(200);
+		for (const field of [
+			'input',
+			'job_id',
+			'created_by',
+			'lease_until',
+			'worker_id',
+			'claim_token'
+		]) {
+			expect(body.items[0]).not.toHaveProperty(field);
+		}
 	});
 });

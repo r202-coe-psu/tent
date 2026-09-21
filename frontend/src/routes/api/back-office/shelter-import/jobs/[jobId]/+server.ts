@@ -2,7 +2,10 @@ import { json } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
 import type { RequestHandler } from './$types';
 import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
-import { getImportJob } from '$lib/features/shelter-import/server/job-store';
+import {
+	getImportJob,
+	toShelterImportItemSummary
+} from '$lib/features/shelter-import/server/job-store';
 
 export const prerender = false;
 
@@ -15,8 +18,9 @@ export const GET: RequestHandler = async ({ request, params }) => {
 				{ error: { code: 'NOT_FOUND', message: 'Import job not found' } },
 				{ status: 404 }
 			);
+		const items = summary.items.map(toShelterImportItemSummary);
 		const itemProgressHash = createHash('sha256')
-			.update(JSON.stringify(summary.items.map((item) => [item._id, item._rev ?? ''])))
+			.update(JSON.stringify(items.map((item) => [item._id, item._rev ?? ''])))
 			.digest('hex');
 		const etag = `"${summary.job._rev ?? 'no-job-revision'}:${itemProgressHash}"`;
 		const headers = {
@@ -27,7 +31,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		if (etag && ifNoneMatch?.split(',').some((value) => value.trim() === etag)) {
 			return new Response(null, { status: 304, headers });
 		}
-		return json({ job: summary.job, items: summary.items }, { headers });
+		return json({ job: summary.job, items }, { headers });
 	} catch (e) {
 		return serviceError(e);
 	}

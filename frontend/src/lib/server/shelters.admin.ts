@@ -13,6 +13,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { adminRaw, ServiceError } from './couch-admin';
+import { buildSecurityMutationLock, type SecurityMutationLock } from './security-mutation-lock';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
@@ -281,37 +282,7 @@ const SECURITY_LOCK_DB = SHELTER_REGISTRY_DB;
 const SECURITY_LOCK_PREFIX = 'shelter_security_lock:';
 const SECURITY_LOCK_LEASE_MS = 30_000;
 
-interface SecurityMutationLock {
-	_id: string;
-	_rev?: string;
-	type: 'shelter_security_mutation_lock';
-	owner_id: string;
-	resource: string;
-	lease_until: string;
-}
-
-/** Build a normal CouchDB document for the registry lock.
- *
- * `_type` is reserved by CouchDB as a special document member.  Keeping this
- * builder exported makes the wire contract directly unit-testable so a future
- * refactor cannot reintroduce the 400 seen during shelter import.
- */
-export function buildSecurityMutationLock(input: {
-	id: string;
-	ownerId: string;
-	resource: string;
-	leaseUntil: string;
-	rev?: string;
-}): SecurityMutationLock {
-	return {
-		_id: input.id,
-		type: 'shelter_security_mutation_lock',
-		owner_id: input.ownerId,
-		resource: input.resource,
-		lease_until: input.leaseUntil,
-		...(input.rev ? { _rev: input.rev } : {})
-	};
-}
+export { buildSecurityMutationLock } from './security-mutation-lock';
 
 function securityLockPath(id: string): string {
 	return `/${SECURITY_LOCK_DB}/${encodeURIComponent(id)}`;

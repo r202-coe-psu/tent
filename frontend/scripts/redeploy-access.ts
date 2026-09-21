@@ -33,6 +33,10 @@ import { couchUserFromUrl } from '$lib/server/couch-credentials';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import {
+	buildSecurityMutationLock,
+	type SecurityMutationLock
+} from '$lib/server/security-mutation-lock';
+import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
@@ -122,15 +126,6 @@ const SECURITY_LOCK_DB = 'registry';
 const SECURITY_LOCK_PREFIX = 'shelter_security_lock:';
 const SECURITY_LOCK_LEASE_MS = 30_000;
 
-interface SecurityMutationLock {
-	_id: string;
-	_rev?: string;
-	_type: 'shelter_security_mutation_lock';
-	owner_id: string;
-	resource: string;
-	lease_until: string;
-}
-
 function securityLockPath(id: string): string {
 	return `/${SECURITY_LOCK_DB}/${encodeURIComponent(id)}`;
 }
@@ -154,14 +149,13 @@ async function withSecurityMutationLock<T>(resource: string, mutate: () => Promi
 			await sleep(25 + attempt * 25);
 			continue;
 		}
-		const next: SecurityMutationLock = {
-			_id: id,
-			_type: 'shelter_security_mutation_lock',
-			owner_id: ownerId,
+		const next = buildSecurityMutationLock({
+			id,
+			ownerId,
 			resource,
-			lease_until: new Date(Date.now() + SECURITY_LOCK_LEASE_MS).toISOString(),
-			...(existing?._rev ? { _rev: existing._rev } : {})
-		};
+			leaseUntil: new Date(Date.now() + SECURITY_LOCK_LEASE_MS).toISOString(),
+			rev: existing?._rev
+		});
 		const put = await couchReq('PUT', securityLockPath(id), next);
 		if (put.status === 409) continue;
 		if (put.status >= 400)

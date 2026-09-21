@@ -148,12 +148,38 @@ describe('shelter import job lifecycle', () => {
 		expect(summary?.items.every((item) => item.max_attempts === MAX_IMPORT_ATTEMPTS)).toBe(true);
 	});
 
+	it('projects worker fencing and private item fields out of status summaries', async () => {
+		const { jobId } = await createSingleJob();
+		const storedItem = [...docs.values()].find((doc) => doc.type === 'shelter_import_item');
+		if (!storedItem) throw new Error('test item was not persisted');
+		Object.assign(storedItem, {
+			lease_until: new Date(Date.now() + 300_000).toISOString(),
+			worker_id: 'worker-secret',
+			claim_token: 'claim-secret'
+		});
+
+		const summary = await getImportJob(jobId);
+		const item = summary?.items[0];
+		if (!item) throw new Error('test item summary was not returned');
+
+		for (const field of [
+			'input',
+			'job_id',
+			'created_by',
+			'lease_until',
+			'worker_id',
+			'claim_token'
+		]) {
+			expect(item).not.toHaveProperty(field);
+		}
+	});
+
 	it('keeps the import queue private to CouchDB server admins', async () => {
 		await createSingleJob();
 
 		expect(securityWrites.at(-1)).toEqual({
-			admins: { names: [], roles: ['_admin'] },
-			members: { names: [], roles: [] }
+			admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
+			members: { names: ['legacy-member'], roles: ['shelter:SH001'] }
 		});
 	});
 
