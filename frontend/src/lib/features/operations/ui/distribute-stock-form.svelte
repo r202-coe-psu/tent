@@ -11,7 +11,8 @@
 		type DistributeInput,
 		projectStockLotBalances,
 		sortStockLotsByConsumptionOrder,
-		type StockLedger
+		type StockLedger,
+		StockLotIntegrityError
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
@@ -47,18 +48,21 @@
 	});
 
 	// Calculate per-lot balances for selectedItem
-	const itemLots = $derived.by(() => {
+	const lotProjection = $derived.by(() => {
 		const current = selectedItem;
-		if (!current || !ledgerQuery.data) return [];
+		if (!current || !ledgerQuery.data) return { lots: [], error: null };
 		try {
 			const lots = projectStockLotBalances(ledgerQuery.data as StockLedger[]).filter(
 				(l) => l.item_id === current._id && qtyGt(l.qty, 0)
 			);
-			return sortStockLotsByConsumptionOrder(lots);
-		} catch {
-			return [];
+			return { lots: sortStockLotsByConsumptionOrder(lots), error: null };
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			return { lots: [], error: error.message };
 		}
 	});
+	const itemLots = $derived(lotProjection.lots);
+	const lotProjectionError = $derived(lotProjection.error);
 
 	const activeLot = $derived(itemLots.find((l) => l.lot_ref === $formData.lot_ref));
 	const maxLotQty = $derived(activeLot ? activeLot.qty : currentStock);
@@ -354,6 +358,13 @@
 						>
 						{#if ledgerQuery.isLoading}
 							<div class="text-xs text-muted-foreground">กำลังโหลดข้อมูลล็อต...</div>
+						{:else if lotProjectionError}
+							<div
+								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
+							>
+								<p>ข้อมูลประวัติคลังไม่สอดคล้องกัน จึงคำนวณยอดคงเหลือของล็อตไม่ได้</p>
+								<p class="mt-1 font-normal">กรุณาแจ้งผู้ดูแลระบบ: {lotProjectionError}</p>
+							</div>
 						{:else if itemLots.length === 0}
 							<div
 								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
@@ -366,8 +377,8 @@
 									{...props}
 									class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
 								>
-									{itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)
-										? `📍 ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.note || itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.storage_zone || 'คลังหลัก'} ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.expiry ? `(หมดอายุ: ${formatExpiry(itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.lot_no ? `[${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.lot_no}]` : ''} - คงเหลือ ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.qty} ${selectedItem?.unit}`
+									{activeLot
+										? `📍 ${activeLot.lot?.note || activeLot.lot?.storage_zone || 'คลังหลัก'} ${activeLot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(activeLot.lot.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${activeLot.lot?.lot_no ? `[${activeLot.lot.lot_no}]` : ''} - คงเหลือ ${activeLot.qty} ${selectedItem?.unit}`
 										: 'เลือกสถานที่ / ล็อตที่ต้องการเบิกจ่าย'}
 								</Select.Trigger>
 								<Select.Content>

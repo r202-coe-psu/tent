@@ -110,6 +110,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
 import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
+import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -483,6 +484,50 @@ describe('OperationsRemoteRepository', () => {
 			).rejects.toThrow('is not available');
 
 			expect(await repo.listLedger()).toHaveLength(1);
+		});
+
+		it('recovers an abandoned direct-distribution claim before checking availability', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+			const reservationId = await makeLotReservationDocId(inbound._id);
+			const staleReservation = createStockLotReservation(
+				{
+					lot_ref: inbound._id,
+					pending_claims: [
+						{
+							operation_id: 'op_dist_abandoned',
+							request_id: 'distribution_request:abandoned',
+							batch_id: 'distribution_batch:abandoned',
+							item_id: 'item:soap',
+							lot_ref: inbound._id,
+							qty: '8',
+							claimed_at: '2026-09-01T00:00:00.000Z'
+						}
+					]
+				},
+				reservationId.slice('stock_lot_reservation:'.length),
+				ctx
+			);
+			mockPutDoc(staleReservation);
+
+			await repo.distributeStock(
+				{
+					item_id: 'item:soap',
+					qty: 5,
+					unit: 'bar',
+					ref_id: DISTRIBUTION_BATCH_REF,
+					lot_ref: inbound._id
+				},
+				ctx
+			);
+
+			expect(
+				mockGetDoc<{ _id: string; pending_claims: unknown[] }>(reservationId)?.pending_claims
+			).toEqual([]);
+			expect((await repo.getBalance()).get('item:soap')).toBe('5');
 		});
 
 		it('serializes concurrent distributions for the same lot across multiple clients and never creates a negative lot balance', async () => {

@@ -70,6 +70,12 @@ import { addQty, persistQty, qtyAbs, qtyGt, qtyGte, qtyLte, subQty } from '$lib/
  */
 export type CatalogItem = SupplyItem | ItemMaster;
 
+// A direct distribution is a short-lived browser operation. Claims older than
+// this window with no deterministic ledger row are recoverable abandoned work.
+// Approval claims use different operation IDs and are deliberately left for
+// their own workflow to reconcile.
+const DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS = 15 * 60 * 1000;
+
 /** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
 export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
 	return isItemMaster(item)
@@ -247,6 +253,29 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				break;
 			}
 
+			const recoverableClaimIds = await this.findRecoverableReservationClaims(
+				resDoc,
+				ledger,
+				operationId
+			);
+			if (recoverableClaimIds.size > 0) {
+				try {
+					await putDocStrict<StockLotReservation>(this.dbName, {
+						...resDoc,
+						pending_claims: resDoc.pending_claims.filter(
+							(claim) => !recoverableClaimIds.has(claim.operation_id)
+						),
+						updated_at: now()
+					});
+				} catch (reconcileErr) {
+					if (!(reconcileErr instanceof ConflictError) || attempt === maxRetries) {
+						throw reconcileErr;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
+				}
+				continue;
+			}
+
 			// Only deduct claims whose ledger rows have not yet been committed to the physical ledger,
 			// to prevent double-counting when a concurrent client has already appended its ledger row.
 			const otherUncommittedClaims = resDoc.pending_claims
@@ -295,17 +324,65 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			throw new Error(`Failed to acquire reservation for ${lotRef} after retries`);
 		}
 
-		let ledgerResult: StockLedger;
+		let ledgerResult: StockLedger | undefined;
+		let ledgerError: unknown;
 		try {
 			ledgerResult = await this.addLedgerEntry(entry);
-		} finally {
-			try {
-				await this.releaseClaimWithRetry(lotRef, operationId, ctx, 5);
-			} catch (releaseErr) {
-				console.error('Failed to release reservation claim for lot', lotRef, releaseErr);
-			}
+		} catch (err) {
+			ledgerError = err;
 		}
-		return ledgerResult;
+
+		try {
+			await this.releaseClaimWithRetry(lotRef, operationId, ctx, 5);
+		} catch (releaseErr) {
+			if (ledgerError) {
+				throw new Error(
+					`Stock distribution ${operationId} could not commit its ledger entry or release its reservation claim; retry after connectivity is restored`,
+					{ cause: releaseErr }
+				);
+			}
+			console.error('Failed to release committed reservation claim for lot', lotRef, releaseErr);
+		}
+
+		if (ledgerError) throw ledgerError;
+		return ledgerResult!;
+	}
+
+	private async findRecoverableReservationClaims(
+		resDoc: StockLotReservation,
+		ledger: readonly StockLedger[],
+		currentOperationId: string
+	): Promise<Set<string>> {
+		const recoverable = new Set<string>();
+		const recoveryCutoff = Date.now() - DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS;
+
+		for (const claim of resDoc.pending_claims) {
+			if (claim.operation_id === currentOperationId) continue;
+
+			// A committed ledger row makes the claim safe to remove immediately. This
+			// repairs the case where the ledger write succeeded but cleanup lost a race.
+			if (ledger.some((entry) => entry._id === `stock_ledger:${claim.operation_id}`)) {
+				recoverable.add(claim.operation_id);
+				continue;
+			}
+
+			if (
+				!claim.operation_id.startsWith('op_dist_') ||
+				Date.parse(claim.claimed_at) > recoveryCutoff
+			) {
+				continue;
+			}
+
+			// Re-check the deterministic ledger ID before releasing an old claim so a
+			// stale projection cannot delete a claim whose write already committed.
+			const committed = await getDoc<{ _id: string }>(
+				this.dbName,
+				`stock_ledger:${claim.operation_id}`
+			);
+			if (!committed) recoverable.add(claim.operation_id);
+		}
+
+		return recoverable;
 	}
 
 	private async releaseClaimWithRetry(

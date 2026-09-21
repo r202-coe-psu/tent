@@ -6,6 +6,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -624,12 +625,12 @@
 						</p>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<div>
-								<label
+								<Label
 									for="walkin-donor-name"
 									class="mb-1.5 block text-xs font-medium text-foreground"
 								>
 									ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
-								</label>
+								</Label>
 								<Input
 									id="walkin-donor-name"
 									placeholder="ระบุชื่อผู้บริจาค"
@@ -637,12 +638,12 @@
 								/>
 							</div>
 							<div>
-								<label
+								<Label
 									for="walkin-donor-phone"
 									class="mb-1.5 block text-xs font-medium text-foreground"
 								>
 									เบอร์โทร (ไม่บังคับ)
-								</label>
+								</Label>
 								<Input
 									id="walkin-donor-phone"
 									placeholder="ระบุเบอร์โทร"
