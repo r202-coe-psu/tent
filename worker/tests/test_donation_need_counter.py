@@ -30,7 +30,7 @@ def _campaign(needs, status="open"):
     }
 
 
-async def _seed(campaign) -> int:
+async def _seed(campaign) -> tuple[int, int]:
     return await apply_need_counters(plan_need_counters(campaign, shelter_code=SHELTER))
 
 
@@ -39,7 +39,7 @@ async def _get(item_id: str) -> DonationNeedCounter | None:
 
 
 async def test_seeds_one_counter_per_need(db: None) -> None:
-    created = await _seed(
+    created, realigned = await _seed(
         _campaign(
             [
                 {"item_id": "item:rice", "qty_target": "10"},
@@ -47,7 +47,7 @@ async def test_seeds_one_counter_per_need(db: None) -> None:
             ]
         )
     )
-    assert created == 2
+    assert (created, realigned) == (2, 0)
 
     rice = await _get("item:rice")
     water = await _get("item:water")
@@ -60,12 +60,103 @@ async def test_seeds_one_counter_per_need(db: None) -> None:
     assert water.qty_target == Decimal(25)
 
 
-async def test_replaying_campaign_does_not_move_qty_target(db: None) -> None:
-    """FR-2 — a later CDC event with an edited qty_target must not change the ceiling."""
+async def test_editing_campaign_raises_qty_target(db: None) -> None:
+    """The ceiling follows the campaign — supersedes CR-060 FR-2.
+
+    Under FR-2 this asserted the opposite (``qty_target`` stayed at 10): the ceiling was
+    frozen at creation, so staff raising a target moved the board and the donor card but
+    not the gate donors are actually checked against.
+    """
     await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
 
-    created = await _seed(_campaign([{"item_id": "item:rice", "qty_target": "999"}]))
-    assert created == 0
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "999"}])
+    )
+    assert (created, realigned) == (0, 1)
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(999)
+
+
+async def test_editing_campaign_lowers_qty_target(db: None) -> None:
+    """Lowering is allowed while it stays at or above what donors already hold."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(20),
+        now=datetime.now(UTC),
+    )
+
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "30"}])
+    )
+    assert (created, realigned) == (0, 1)
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(30)
+    assert rice.reserved_qty == Decimal(20)
+
+
+async def test_refuses_lowering_below_reserved(db: None) -> None:
+    """Bookings accepted under the old ceiling are still owed, so the ceiling holds.
+
+    Dropping to 5 with 20 already reserved would make ``reserved_qty <= qty_target``
+    false for reservations that already exist — the need would read as over-full and
+    could never be released cleanly.
+    """
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(20),
+        now=datetime.now(UTC),
+    )
+
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "5"}])
+    )
+    assert (created, realigned) == (0, 0)
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(100)
+    assert rice.reserved_qty == Decimal(20)
+
+
+async def test_lowering_to_exactly_reserved_is_allowed(db: None) -> None:
+    """Equal is not below: the need goes exactly full, which cut-off already handles."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(20),
+        now=datetime.now(UTC),
+    )
+
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "20"}])
+    )
+    assert (created, realigned) == (0, 1)
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(20)
+
+
+async def test_replaying_same_campaign_is_a_no_op(db: None) -> None:
+    """An unchanged target writes nothing — CDC replay after a checkpoint rewind."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
+
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "10"}])
+    )
+    assert (created, realigned) == (0, 0)
 
     rice = await _get("item:rice")
     assert rice is not None
