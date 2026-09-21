@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -281,8 +282,7 @@
 					<Button
 						type="button"
 						variant="ghost"
-						size="xs"
-						class="absolute top-1/2 right-2 -translate-y-1/2"
+						class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 						onclick={clearSelection}
 					>
 						ล้างค่า
@@ -325,17 +325,23 @@
 					>สถานที่และล็อตที่ต้องการปรับปรุง <span class="font-bold text-destructive">*</span
 					></Field.Label
 				>
-				<select
-					id="lot-select"
-					bind:value={selectedLotKey}
-					class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-				>
-					<option value="" disabled>-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --</option>
-					{#each itemLots as lot (lot.key)}
-						<option value={lot.key}>{lot.label}</option>
-					{/each}
-					<option value="new">➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...</option>
-				</select>
+				<Select.Root type="single" bind:value={selectedLotKey}>
+					<Select.Trigger
+						id="lot-select"
+						class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+					>
+						{selectedLotKey === 'new'
+							? '➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...'
+							: (itemLots.find((lot) => lot.key === selectedLotKey)?.label ??
+								'-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --')}
+					</Select.Trigger>
+					<Select.Content>
+						{#each itemLots as lot (lot.key)}
+							<Select.Item value={lot.key} label={lot.label} />
+						{/each}
+						<Select.Item value="new" label="➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้..." />
+					</Select.Content>
+				</Select.Root>
 			</Field.Root>
 
 			<!-- Conditional Inputs for New Lot -->
@@ -344,16 +350,26 @@
 					<Field.Label for="custom-location"
 						>สถานที่จัดเก็บใหม่ <span class="font-bold text-destructive">*</span></Field.Label
 					>
-					<select
-						id="custom-location"
-						bind:value={customLocation}
-						class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-					>
-						<option value="">เลือกโซนที่จัดเก็บ</option>
-						<option value="Zone A">Zone A (ของใช้ทั่วไป)</option>
-						<option value="Zone B">Zone B (ของที่เน่าเสียได้)</option>
-						<option value="Zone C">Zone C (ยาและเวชภัณฑ์)</option>
-					</select>
+					<Select.Root type="single" bind:value={customLocation}>
+						<Select.Trigger
+							id="custom-location"
+							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+						>
+							{customLocation === 'Zone A'
+								? 'Zone A (ของใช้ทั่วไป)'
+								: customLocation === 'Zone B'
+									? 'Zone B (ของที่เน่าเสียได้)'
+									: customLocation === 'Zone C'
+										? 'Zone C (ยาและเวชภัณฑ์)'
+										: customLocation || 'เลือกโซนที่จัดเก็บ'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="" label="เลือกโซนที่จัดเก็บ" />
+							<Select.Item value="Zone A" label="Zone A (ของใช้ทั่วไป)" />
+							<Select.Item value="Zone B" label="Zone B (ของที่เน่าเสียได้)" />
+							<Select.Item value="Zone C" label="Zone C (ยาและเวชภัณฑ์)" />
+						</Select.Content>
+					</Select.Root>
 				</Field.Root>
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">

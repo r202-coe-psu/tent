@@ -1,7 +1,17 @@
-import { bulkDocs } from '$lib/db/couch-db';
+import { bulkDocs, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { now, touch, type AuthorContext } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
+import { ConflictError } from '$lib/utils/errors';
+import {
+	makeLotReservationDocId,
+	createStockLotReservation,
+	assertSemanticReservationMatch,
+	InsufficientStockError,
+	type StockLotReservation,
+	type StockLotPendingClaim
+} from '$lib/features/distribution';
 import {
 	createCampaign as buildCampaign,
 	createPurchase as buildPurchase,
@@ -50,7 +60,7 @@ import {
 	catalogRepository,
 	type ItemMaster
 } from '$lib/features/catalog';
-import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
+import { addQty, persistQty, qtyAbs, qtyGt, qtyGte, qtyLte, subQty } from '$lib/utils/qty';
 
 /**
  * A catalog row a ledger entry can point at. The `catalog` database holds two
@@ -87,14 +97,6 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogIte
 export class OperationsRemoteRepository implements OperationsRepository {
 	private readonly dbName: string;
 	private readonly repo: Repository;
-	/**
-	 * Serialize direct distributions targeting the same lot within this repository
-	 * instance. The fresh ledger read inside the critical section prevents two
-	 * submissions from this browser from both spending the same physical stock.
-	 * Cross-process atomicity still belongs in a persisted reservation/command
-	 * flow, which is outside this append-only direct-distribution path.
-	 */
-	private readonly distributionLocks = new Map<string, Promise<void>>();
 
 	constructor(dbName: string = getShelterDb()) {
 		this.dbName = dbName;
@@ -192,13 +194,22 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
-		const entry = createDistributeEntry(input, ctx);
+		const operationId = `op_dist_${ulid()}`;
+		const entry = createDistributeEntry(input, ctx, operationId);
 		const lotRef = entry.lot_ref;
 		if (!lotRef) {
 			throw new Error('Distribute stock requires a physical lot reference');
 		}
 
-		return this.withDistributionLock(lotRef, async () => {
+		const requestId = `distribution_request:direct-${ulid()}`;
+		const batchId = entry.ref_id ?? `distribution_batch:direct-${ulid()}`;
+		const requestedQty = qtyAbs(entry.qty);
+		const resId = await makeLotReservationDocId(lotRef);
+
+		// Acquire reservation claim with remote CouchDB CAS
+		const maxRetries = 5;
+		let acquired = false;
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
 			const ledger = await this.listLedger();
 			const lots = projectStockLotBalances(ledger);
 			const selectedLot = lots.find((lot) => lot.lot_ref === lotRef);
@@ -212,33 +223,133 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				);
 			}
 
-			const requestedQty = qtyAbs(entry.qty);
-			if (!qtyGte(selectedLot.qty, requestedQty)) {
-				throw new Error(
-					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${selectedLot.qty})`
+			const physicalBalance = selectedLot.qty;
+
+			let resDoc: StockLotReservation;
+			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
+			if (!rawRes) {
+				resDoc = createStockLotReservation(
+					{ lot_ref: lotRef, pending_claims: [] },
+					resId.slice('stock_lot_reservation:'.length),
+					ctx
+				);
+			} else {
+				resDoc = assertSemanticReservationMatch(rawRes, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+			}
+
+			const existingMyClaim = resDoc.pending_claims.find((c) => c.operation_id === operationId);
+			if (existingMyClaim) {
+				acquired = true;
+				break;
+			}
+
+			// Only deduct claims whose ledger rows have not yet been committed to the physical ledger,
+			// to prevent double-counting when a concurrent client has already appended its ledger row.
+			const otherUncommittedClaims = resDoc.pending_claims
+				.filter((c) => c.operation_id !== operationId)
+				.filter((c) => !ledger.some((l) => l._id === `stock_ledger:${c.operation_id}`))
+				.reduce((sum, c) => addQty(sum, c.qty), '0');
+
+			const availableForClaim = subQty(physicalBalance, otherUncommittedClaims);
+
+			if (qtyGt(requestedQty, availableForClaim)) {
+				throw new InsufficientStockError(
+					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${availableForClaim})`
 				);
 			}
 
-			return this.addLedgerEntry(entry);
-		});
+			const otherPending = resDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+			const myClaim: StockLotPendingClaim = {
+				operation_id: operationId,
+				request_id: requestId,
+				batch_id: batchId,
+				item_id: entry.item_id,
+				lot_ref: lotRef,
+				qty: persistQty(requestedQty),
+				claimed_at: now()
+			};
+
+			const nextResDoc: StockLotReservation = {
+				...resDoc,
+				pending_claims: [...otherPending, myClaim],
+				updated_at: now()
+			};
+
+			try {
+				await putDocStrict(this.dbName, nextResDoc);
+				acquired = true;
+				break;
+			} catch (putErr) {
+				if (!(putErr instanceof ConflictError) || attempt === maxRetries) {
+					throw putErr;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
+			}
+		}
+
+		if (!acquired) {
+			throw new Error(`Failed to acquire reservation for ${lotRef} after retries`);
+		}
+
+		let ledgerResult: StockLedger;
+		try {
+			ledgerResult = await this.addLedgerEntry(entry);
+		} finally {
+			try {
+				await this.releaseClaimWithRetry(lotRef, operationId, ctx, 5);
+			} catch (releaseErr) {
+				console.error('Failed to release reservation claim for lot', lotRef, releaseErr);
+			}
+		}
+		return ledgerResult;
 	}
 
-	private async withDistributionLock<T>(lotRef: string, operation: () => Promise<T>): Promise<T> {
-		const previous = this.distributionLocks.get(lotRef) ?? Promise.resolve();
-		let release!: () => void;
-		const current = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-		const queued = previous.then(() => current);
-		this.distributionLocks.set(lotRef, queued);
+	private async releaseClaimWithRetry(
+		lotRef: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const resId = await makeLotReservationDocId(lotRef);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawDoc = await getDoc<{ _id: string }>(this.dbName, resId);
+				if (!rawDoc) return;
 
-		await previous;
-		try {
-			return await operation();
-		} finally {
-			release();
-			if (this.distributionLocks.get(lotRef) === queued) {
-				this.distributionLocks.delete(lotRef);
+				const resDoc = assertSemanticReservationMatch(rawDoc, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+
+				const hasMyClaim = resDoc.pending_claims.some((c) => c.operation_id === operationId);
+				if (!hasMyClaim) return;
+
+				const remaining = resDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+				await putDocStrict<StockLotReservation>(this.dbName, {
+					...resDoc,
+					pending_claims: remaining,
+					updated_at: now()
+				});
+				const confirmedRaw = await getDoc<{ _id: string }>(this.dbName, resId);
+				if (!confirmedRaw) return;
+				const confirmed = assertSemanticReservationMatch(confirmedRaw, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+				if (!confirmed.pending_claims.some((c) => c.operation_id === operationId)) {
+					return;
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) {
+					throw err;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
 			}
 		}
 	}

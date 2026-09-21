@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { ulid } from '$lib/db/ulid';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -227,21 +228,6 @@
 		isDonationDropdownOpen = false;
 	}
 
-	/**
-	 * Drop the donation when the source stops being a donation.
-	 *
-	 * The picker is hidden for `manual`, but hiding a field does not empty it:
-	 * a leftover `ref_id` maps to `reason: 'adjust'`, which R2 requires to be
-	 * null, so the submit would fail against a field the user can no longer see.
-	 * The schema rejects the stale value — it cannot clear it, so the form must.
-	 */
-	function handleSourceChange(e: Event & { currentTarget: HTMLSelectElement }) {
-		if (e.currentTarget.value !== 'donation') {
-			clearDonation();
-			resetWalkIn();
-		}
-	}
-
 	// Quick expiry date buttons (+3d / +7d)
 	function setQuickExpiry(days: number) {
 		const formatted = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -405,8 +391,7 @@
 							<Button
 								type="button"
 								variant="ghost"
-								size="xs"
-								class="absolute top-1/2 right-2 -translate-y-1/2"
+								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={clearSelection}
 							>
 								ล้างค่า
@@ -501,15 +486,29 @@
 						lands, so offering the option would only produce submissions that
 						can never validate.
 					-->
-					<select
-						{...props}
+					<Select.Root
+						type="single"
 						bind:value={$formData.source}
-						onchange={handleSourceChange}
-						class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+						onValueChange={(val) => {
+							if (val && val !== 'donation') {
+								clearDonation();
+								resetWalkIn();
+							}
+						}}
 					>
-						<option value="donation">ของบริจาค (Donation)</option>
-						<option value="manual">กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)</option>
-					</select>
+						<Select.Trigger
+							{...props}
+							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+						>
+							{$formData.source === 'manual'
+								? 'กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)'
+								: 'ของบริจาค (Donation)'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="donation" label="ของบริจาค (Donation)" />
+							<Select.Item value="manual" label="กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)" />
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -614,8 +613,7 @@
 							<Button
 								type="button"
 								variant="ghost"
-								size="xs"
-								class="text-xs font-bold text-muted-foreground hover:text-foreground"
+								class="min-h-11 min-w-11 px-4 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={resetWalkIn}
 							>
 								เลือกจากใบบริจาคแทน
@@ -676,23 +674,38 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สถานที่จัดเก็บในคลัง (โซน/ชั้นวาง)</Form.Label>
-					<select
-						{...props}
+					<Select.Root
+						type="single"
 						value={$formData.lot?.note ?? ''}
-						onchange={(e) => {
+						onValueChange={(val) => {
 							if (!$formData.lot) {
-								$formData.lot = { expiry: '', note: e.currentTarget.value };
+								$formData.lot = { expiry: '', note: val ?? '' };
 							} else {
-								$formData.lot.note = e.currentTarget.value;
+								$formData.lot.note = val ?? '';
 							}
 						}}
-						class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
 					>
-						<option value="">เลือกโซนที่เก็บ</option>
-						<option value="Zone A">Zone A (ของใช้ทั่วไป)</option>
-						<option value="Zone B">Zone B (ของที่เน่าเสียได้)</option>
-						<option value="Zone C">Zone C (ยาและเวชภัณฑ์)</option>
-					</select>
+						<Select.Trigger
+							{...props}
+							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+						>
+							{$formData.lot?.note
+								? $formData.lot.note === 'Zone A'
+									? 'Zone A (ของใช้ทั่วไป)'
+									: $formData.lot.note === 'Zone B'
+										? 'Zone B (ของที่เน่าเสียได้)'
+										: $formData.lot.note === 'Zone C'
+											? 'Zone C (ยาและเวชภัณฑ์)'
+											: $formData.lot.note
+								: 'เลือกโซนที่เก็บ'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="" label="เลือกโซนที่เก็บ" />
+							<Select.Item value="Zone A" label="Zone A (ของใช้ทั่วไป)" />
+							<Select.Item value="Zone B" label="Zone B (ของที่เน่าเสียได้)" />
+							<Select.Item value="Zone C" label="Zone C (ยาและเวชภัณฑ์)" />
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -709,12 +722,11 @@
 								<span class="font-bold text-destructive">* (ของเสียได้ บังคับกรอก)</span>
 							{/if}
 						</Form.Label>
-						<div class="flex gap-1.5">
+						<div class="flex gap-2">
 							<Button
 								type="button"
 								variant="outline"
-								size="xs"
-								class="h-6 rounded-full px-2 text-2xs font-bold"
+								class="min-h-11 min-w-[48px] rounded-lg px-3.5 text-xs font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={() => setQuickExpiry(3)}
 							>
 								+3 วัน
@@ -722,8 +734,7 @@
 							<Button
 								type="button"
 								variant="outline"
-								size="xs"
-								class="h-6 rounded-full px-2 text-2xs font-bold"
+								class="min-h-11 min-w-[48px] rounded-lg px-3.5 text-xs font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={() => setQuickExpiry(7)}
 							>
 								+7 วัน

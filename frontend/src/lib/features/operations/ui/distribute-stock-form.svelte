@@ -3,6 +3,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -271,8 +272,7 @@
 							<Button
 								type="button"
 								variant="ghost"
-								size="xs"
-								class="absolute top-1/2 right-2 -translate-y-1/2"
+								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={clearSelection}
 							>
 								ล้างค่า
@@ -361,22 +361,24 @@
 								ไม่พบล็อตสินค้าที่มีสต็อกคงเหลือสำหรับเบิกจ่าย
 							</div>
 						{:else}
-							<select
-								{...props}
-								bind:value={$formData.lot_ref}
-								class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-							>
-								{#each itemLots as lot (lot.lot_ref)}
-									<option value={lot.lot_ref}>
-										📍 {lot.lot?.note || lot.lot?.storage_zone || 'คลังหลัก'}
-										{lot.lot?.expiry
-											? `(หมดอายุ: ${formatExpiry(lot.lot.expiry)})`
-											: '(ไม่ระบุวันหมดอายุ)'}
-										{lot.lot?.lot_no ? `[${lot.lot.lot_no}]` : ''} - คงเหลือ {lot.qty}
-										{selectedItem?.unit}
-									</option>
-								{/each}
-							</select>
+							<Select.Root type="single" bind:value={$formData.lot_ref}>
+								<Select.Trigger
+									{...props}
+									class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+								>
+									{itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)
+										? `📍 ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.note || itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.storage_zone || 'คลังหลัก'} ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.expiry ? `(หมดอายุ: ${formatExpiry(itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.lot_no ? `[${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.lot?.lot_no}]` : ''} - คงเหลือ ${itemLots.find((lot) => lot.lot_ref === $formData.lot_ref)?.qty} ${selectedItem?.unit}`
+										: 'เลือกสถานที่ / ล็อตที่ต้องการเบิกจ่าย'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each itemLots as lot (lot.lot_ref)}
+										<Select.Item
+											value={lot.lot_ref}
+											label={`📍 ${lot.lot?.note || lot.lot?.storage_zone || 'คลังหลัก'} ${lot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(lot.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${lot.lot?.lot_no ? `[${lot.lot?.lot_no}]` : ''} - คงเหลือ ${lot.qty} ${selectedItem?.unit}`}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
 						{/if}
 					{/snippet}
 				</Form.Control>
