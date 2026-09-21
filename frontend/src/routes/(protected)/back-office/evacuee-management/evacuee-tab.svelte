@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -83,7 +83,6 @@
 
 	const items = $derived(query.data?.items ?? []);
 	const total = $derived(query.data?.total ?? 0);
-	const totalPages = $derived(query.data?.totalPages ?? 1);
 
 	const pageIds = $derived(items.map((e) => e._id));
 	const allPageSelected = $derived(
@@ -475,24 +474,6 @@
 			</Table.Root>
 		</div>
 
-		{#if totalPages > 1}
-			<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
-				{#snippet children({ pages })}
-					<Pagination.Content>
-						<Pagination.Previous />
-						{#each pages as p, i (i)}
-							<Pagination.Item>
-								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === currentPage} />
-								{:else}
-									<Pagination.Ellipsis />
-								{/if}
-							</Pagination.Item>
-						{/each}
-						<Pagination.Next />
-					</Pagination.Content>
-				{/snippet}
-			</Pagination.Root>
-		{/if}
+		<PaginationControls bind:page={currentPage} count={total} perPage={PAGE_SIZE} />
 	{/if}
 </div>

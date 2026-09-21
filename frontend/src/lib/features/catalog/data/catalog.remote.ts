@@ -1,3 +1,4 @@
+import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
@@ -87,15 +88,6 @@ function unitReferencesDoc(doc: AnyDoc, code: string): boolean {
 	return false;
 }
 
-function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResult<T> {
-	const total = items.length;
-	const totalPages = Math.max(1, Math.ceil(total / pageSize));
-	const safePage = Math.max(1, Math.min(page, totalPages));
-	const start = (safePage - 1) * pageSize;
-	const slicedItems = items.slice(start, start + pageSize);
-	return { items: slicedItems, total, page: safePage, pageSize, totalPages };
-}
-
 /**
  * Remote CouchDB implementation of the catalog master-data repository.
  * Reads/writes the `catalog` database via the active central endpoint.
@@ -143,7 +135,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemCategory>> {
 		const items = await this.listItemCategories(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getItemCategory(id: string, shelterCode?: string | null): Promise<ItemCategory | null> {
@@ -191,7 +183,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemMaster>> {
 		const items = await this.listItemMasters(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getItemMaster(id: string, shelterCode?: string | null): Promise<ItemMaster | null> {
@@ -269,7 +261,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<Recipe>> {
 		const items = await this.listRecipes(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getRecipe(id: string, shelterCode?: string | null): Promise<Recipe | null> {
@@ -494,7 +486,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		pageSize: number
 	): Promise<PaginatedResult<UnitOfMeasure>> {
 		const items = await this.listUnitsOfMeasure();
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getUnitOfMeasure(codeOrId: string): Promise<UnitOfMeasure | null> {

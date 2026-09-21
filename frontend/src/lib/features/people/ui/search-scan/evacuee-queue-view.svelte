@@ -13,13 +13,15 @@
 	import Users from '@lucide/svelte/icons/users';
 	import Zap from '@lucide/svelte/icons/zap';
 
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table';
+	import { paginateItems } from '$lib/db/paginate';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
 	import { formatPersonName, maskNationalId, matchesEvacueeSearch, zoneLabel } from '../../domain/people';
@@ -27,6 +29,8 @@
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
+
+	const PAGE_SIZE = 10;
 
 	type WorkflowTab = 'pre_registered' | 'arriving' | 'all';
 	type ArrivingSubTab = 'all' | 'medical' | 'zoning';
@@ -82,6 +86,7 @@
 	let preRegChannelFilter = $state<PreRegChannelFilter>('all');
 	let allStatusFilter = $state<string>('all');
 	let allZoneFilter = $state<string>('all');
+	let currentPage = $state(1);
 
 	// Summary KPI counts
 	const preRegisteredEvacuees = $derived(
@@ -154,6 +159,30 @@
 			})
 			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
 	);
+
+	const activeFiltered = $derived(
+		activeTab === 'pre_registered'
+			? preRegisteredFiltered
+			: activeTab === 'arriving'
+				? arrivingFiltered
+				: allFiltered
+	);
+
+	// Hybrid: full `useEvacuees()` for KPI/tab filters; client `paginateItems` for the table.
+	// Back-office `listEvacueesPaginated` uses limited Couch `_all_docs` when unfiltered.
+	const pagedRows = $derived(paginateItems(activeFiltered, currentPage, PAGE_SIZE));
+
+	$effect(() => {
+		void [
+			activeTab,
+			arrivingSubTab,
+			preRegChannelFilter,
+			allStatusFilter,
+			allZoneFilter,
+			filterQuery
+		];
+		currentPage = 1;
+	});
 
 	const availableZones = $derived(
 		Array.from(new Set(allEvacuees.map((e) => e.current_stay?.zone).filter(Boolean))) as string[]
@@ -432,7 +461,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each allFiltered as row (row._id)}
+							{#each pagedRows.items as row (row._id)}
 								{@const next = nextQueueLabel(row, {
 									enableMedicalScreening: enableMedical,
 									hasScreening: screenedIds.has(row._id)
@@ -484,6 +513,15 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={allFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
+					</div>
+				{/if}
 			{/if}
 		</div>
 
@@ -599,7 +637,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each preRegisteredFiltered as row (row._id)}
+							{#each pagedRows.items as row (row._id)}
 								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 								<Table.Row
 									class="cursor-pointer hover:bg-slate-50/80"
@@ -665,6 +703,15 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={preRegisteredFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
+					</div>
+				{/if}
 			{/if}
 		</div>
 
@@ -749,7 +796,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each arrivingFiltered as row (row._id)}
+							{#each pagedRows.items as row (row._id)}
 								{@const next = nextQueueLabel(row, {
 									enableMedicalScreening: enableMedical,
 									hasScreening: screenedIds.has(row._id)
@@ -835,6 +882,15 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={arrivingFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
+					</div>
+				{/if}
 			{/if}
 		</div>
 	{/if}

@@ -1,3 +1,4 @@
+import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { now, touch, type AuthorContext } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
@@ -57,20 +58,6 @@ import type {
 	PeopleRepository
 } from './people.repository';
 
-function paginateSlice<T>(matched: T[], page: number, pageSize: number): PaginatedResult<T> {
-	const total = matched.length;
-	const totalPages = Math.max(1, Math.ceil(total / pageSize));
-	const safePage = Math.max(1, Math.min(page, totalPages));
-	const start = (safePage - 1) * pageSize;
-	return {
-		items: matched.slice(start, start + pageSize),
-		total,
-		page: safePage,
-		pageSize,
-		totalPages
-	};
-}
-
 function matchesHouseholdSearch(
 	household: Household,
 	query: string,
@@ -95,6 +82,19 @@ function matchesHouseholdSearch(
 		commLabel.includes(needle) ||
 		headName.includes(needle)
 	);
+}
+
+function hasEvacueeClientFilters(search?: string, filters?: EvacueeFilters): boolean {
+	return !!(
+		search?.trim() ||
+		filters?.specialNeed ||
+		filters?.zone ||
+		filters?.status
+	);
+}
+
+function hasHouseholdClientFilters(search?: string, filters?: HouseholdFilters): boolean {
+	return !!(search?.trim() || filters?.status);
 }
 
 /**
@@ -220,8 +220,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		search?: string,
 		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>> {
+		// Unfiltered: limited `_all_docs` page (server-side). Filters/search still need a
+		// full prefix scan until Mango indexes are provisioned.
+		if (!hasEvacueeClientFilters(search, filters)) {
+			return this.repo.pageByType('evacuee', isEvacuee, page, pageSize);
+		}
 		const matched = await this.filterEvacuees(search, filters);
-		return paginateSlice(matched, page, pageSize);
+		return paginateItems(matched, page, pageSize);
 	}
 
 	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
@@ -461,8 +466,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		labels?: HouseholdSearchLabels,
 		filters?: HouseholdFilters
 	): Promise<PaginatedResult<Household>> {
+		if (!hasHouseholdClientFilters(search, filters)) {
+			const result = await this.repo.pageByType('household', isHousehold, page, pageSize);
+			return { ...result, items: result.items.map(migrateHouseholdV3ToV4) };
+		}
 		const matched = await this.filterHouseholds(search, labels, filters);
-		return paginateSlice(matched, page, pageSize);
+		return paginateItems(matched, page, pageSize);
 	}
 
 	async listMatchingHouseholdIds(

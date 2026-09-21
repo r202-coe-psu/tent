@@ -153,6 +153,14 @@ export {
 } from './domain/scan-lookup';
 
 export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
+
+export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,
