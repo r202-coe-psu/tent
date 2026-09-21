@@ -1772,9 +1772,29 @@ export function evacueeAgeYears(doc: {
 	return null;
 }
 
-export function zoneLabel(zone: string | null | undefined): string {
+/** Minimal zone shape for display lookup (shelter living zones). */
+export type ZoneLabelSource = {
+	code: string;
+	name?: string | null;
+};
+
+/**
+ * Display label for a stay-zone code. Prefer the shelter zone `name` when a
+ * lookup list is provided; never surface internal codes like `z1` when a name
+ * exists. Falls back to the raw code only when no name is available.
+ */
+export function zoneLabel(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string {
 	if (!zone) return '—';
-	return zone.toUpperCase();
+	if (zones?.length) {
+		const lower = zone.toLowerCase();
+		const match = zones.find((z) => z.code.toLowerCase() === lower);
+		const name = match?.name?.trim();
+		if (name) return name;
+	}
+	return zone;
 }
 
 // ---------------------------------------------------------------- type guards

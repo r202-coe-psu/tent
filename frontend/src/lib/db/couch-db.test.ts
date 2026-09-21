@@ -1,6 +1,15 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDoc, getDocWithConflicts, putDoc, putDocStrict, bulkDocs } from './couch-db';
+import {
+	getDoc,
+	getDocWithConflicts,
+	putDoc,
+	putDocStrict,
+	bulkDocs,
+	takePageWithCursor,
+	allDocsByTypePage,
+	countDocsByType
+} from './couch-db';
 import { CouchAuthError, CouchDocumentPolicyError, ConflictError } from '$lib/utils/errors';
 
 const markNeedsReauth = vi.fn();
@@ -26,6 +35,43 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 	const method = init?.method ?? 'GET';
 	const idMatch = url.pathname.match(/\/testdb\/([^/?]+)/);
 	const id = idMatch ? decodeURIComponent(idMatch[1]) : '';
+
+	if (url.pathname.includes('/_all_docs')) {
+		const startkeyRaw = url.searchParams.get('startkey');
+		const endkeyRaw = url.searchParams.get('endkey');
+		const startkey = startkeyRaw ? JSON.parse(startkeyRaw) : '';
+		const endkey = endkeyRaw ? JSON.parse(endkeyRaw) : '\uffff';
+		const limitRaw = url.searchParams.get('limit');
+		const skipRaw = url.searchParams.get('skip');
+		const includeDocs = url.searchParams.get('include_docs') !== 'false';
+		const limit = limitRaw != null ? Number(limitRaw) : undefined;
+		const skip = skipRaw != null ? Number(skipRaw) : 0;
+
+		let docs = [...store.values()]
+			.filter((doc) => {
+				const docId = (doc as { _id: string })._id;
+				return docId >= startkey && docId <= endkey;
+			})
+			.sort((a, b) =>
+				(a as { _id: string })._id.localeCompare((b as { _id: string })._id)
+			);
+
+		if (skip > 0) docs = docs.slice(skip);
+		if (limit != null && Number.isFinite(limit)) docs = docs.slice(0, limit);
+
+		return Promise.resolve(
+			new Response(
+				JSON.stringify({
+					rows: docs.map((doc) => ({
+						id: (doc as { _id: string })._id,
+						value: { rev: (doc as { _rev?: string })._rev ?? '1-x' },
+						...(includeDocs ? { doc } : {})
+					}))
+				}),
+				{ status: 200 }
+			)
+		);
+	}
 
 	if (method === 'PUT' && id) {
 		const body = JSON.parse(init?.body as string) as { _id: string; _rev?: string };
@@ -75,6 +121,93 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+});
+
+describe('takePageWithCursor', () => {
+	const rows = [
+		{ _id: 'evacuee:a' },
+		{ _id: 'evacuee:b' },
+		{ _id: 'evacuee:c' },
+		{ _id: 'evacuee:d' }
+	];
+
+	it('returns a full page and nextCursor when more rows exist', () => {
+		expect(takePageWithCursor(rows, 2, (r) => r._id)).toEqual({
+			items: [{ _id: 'evacuee:a' }, { _id: 'evacuee:b' }],
+			nextCursor: 'evacuee:b'
+		});
+	});
+
+	it('returns null nextCursor on the last page', () => {
+		expect(takePageWithCursor(rows.slice(0, 2), 2, (r) => r._id)).toEqual({
+			items: [{ _id: 'evacuee:a' }, { _id: 'evacuee:b' }],
+			nextCursor: null
+		});
+	});
+
+	it('handles limit < 1 as an empty page', () => {
+		expect(takePageWithCursor(rows, 0, (r) => r._id)).toEqual({
+			items: [],
+			nextCursor: null
+		});
+	});
+});
+
+describe('allDocsByTypePage / countDocsByType', () => {
+	const isEvacuee = (d: unknown): d is { _id: string; type: string; name: string } =>
+		!!d &&
+		typeof d === 'object' &&
+		(d as { type?: unknown }).type === 'evacuee' &&
+		typeof (d as { _id?: unknown })._id === 'string';
+
+	beforeEach(() => {
+		for (const id of ['evacuee:01', 'evacuee:02', 'evacuee:03', 'evacuee:04', 'note:x']) {
+			store.set(id, {
+				_id: id,
+				_rev: '1-a',
+				type: id.startsWith('evacuee:') ? 'evacuee' : 'note',
+				name: id
+			});
+		}
+	});
+
+	it('pages with limit and resumes via afterId cursor', async () => {
+		const page1 = await allDocsByTypePage('testdb', 'evacuee', isEvacuee, { limit: 2 });
+		expect(page1.items.map((d) => d._id)).toEqual(['evacuee:01', 'evacuee:02']);
+		expect(page1.nextCursor).toBe('evacuee:02');
+
+		const page2 = await allDocsByTypePage('testdb', 'evacuee', isEvacuee, {
+			limit: 2,
+			afterId: page1.nextCursor!
+		});
+		expect(page2.items.map((d) => d._id)).toEqual(['evacuee:03', 'evacuee:04']);
+		expect(page2.nextCursor).toBeNull();
+	});
+
+	it('countDocsByType counts the prefix without include_docs bodies', async () => {
+		const fetchSpy = vi.fn(mockFetch);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		expect(await countDocsByType('testdb', 'evacuee')).toBe(4);
+
+		const calledUrl = new URL(String(fetchSpy.mock.calls[0][0]));
+		expect(calledUrl.searchParams.get('include_docs')).toBe('false');
+	});
+
+	it('requests startkey_docid when resuming from afterId', async () => {
+		const fetchSpy = vi.fn(mockFetch);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		await allDocsByTypePage('testdb', 'evacuee', isEvacuee, {
+			limit: 2,
+			afterId: 'evacuee:02'
+		});
+
+		const calledUrl = new URL(String(fetchSpy.mock.calls[0][0]));
+		expect(calledUrl.searchParams.get('startkey_docid')).toBe('evacuee:02');
+		expect(calledUrl.searchParams.get('skip')).toBe('1');
+		expect(calledUrl.searchParams.get('limit')).toBe('3');
+	});
 });
 
 describe('couch-db', () => {

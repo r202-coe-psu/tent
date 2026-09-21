@@ -106,6 +106,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
@@ -150,6 +151,14 @@ export {
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
 } from './domain/scan-lookup';
+
+export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
 
 export {
 	REPORT_IN_CTA_LABEL,

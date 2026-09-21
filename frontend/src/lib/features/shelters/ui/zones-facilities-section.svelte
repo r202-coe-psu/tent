@@ -45,6 +45,10 @@
 	let confirmZoneCode = $state<string>('');
 	let confirmReason = $state<string>('');
 	let confirmOpen = $derived(confirmAction !== null);
+	const confirmZoneName = $derived(
+		($formData.zones ?? []).find((z) => z.code === confirmZoneCode)?.name?.trim() ||
+			confirmZoneCode
+	);
 
 	function openConfirm(action: 'close' | 'reopen', zoneCode: string) {
 		if (!shelterCode) {
@@ -73,7 +77,13 @@
 
 		if (action === 'close') {
 			closeZoneMutation.mutate(
-				{ code: shelterCode, zoneCode, reason: reason || undefined, closedBy: actor ?? undefined },
+				{
+					code: shelterCode,
+					zoneCode,
+					zoneName: confirmZoneName,
+					reason: reason || undefined,
+					closedBy: actor ?? undefined
+				},
 				{
 					onSuccess: () => {
 						$formData.zones = $formData.zones.map((z) =>
@@ -86,7 +96,12 @@
 			);
 		} else {
 			reopenZoneMutation.mutate(
-				{ code: shelterCode, zoneCode, reopenedBy: actor ?? undefined },
+				{
+					code: shelterCode,
+					zoneCode,
+					zoneName: confirmZoneName,
+					reopenedBy: actor ?? undefined
+				},
 				{
 					onSuccess: () => {
 						$formData.zones = $formData.zones.map((z) =>
@@ -673,8 +688,8 @@
 			<Dialog.Header>
 				<Dialog.Title>
 					{confirmAction === 'close'
-						? `ปิดโซน ${confirmZoneCode}`
-						: `เปิดโซน ${confirmZoneCode} อีกครั้ง`}
+						? `ปิดโซน ${confirmZoneName}`
+						: `เปิดโซน ${confirmZoneName} อีกครั้ง`}
 				</Dialog.Title>
 				<Dialog.Description>
 					{confirmAction === 'close'

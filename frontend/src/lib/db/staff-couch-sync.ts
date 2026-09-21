@@ -50,6 +50,17 @@ export interface StartStaffCouchSyncOptions {
 }
 
 /**
+ * Refetch active TanStack queries after a Couch `_session` cookie is restored.
+ *
+ * Queries that failed with 401/403 while `needsReauth` was set stay in the
+ * error cache; live `_changes` only invalidates on document events, so the
+ * protected layout must call this when reauth succeeds (see CR-033 sync restart).
+ */
+export function invalidateQueriesAfterReauth(queryClient: QueryClient): void {
+	void queryClient.invalidateQueries();
+}
+
+/**
  * Staff-only CouchDB live connection: probe central, long-poll `_changes`,
  * and invalidate TanStack Query via feature live-query subscribers.
  * Call from `(protected)` layout only — public routes must not import this.
