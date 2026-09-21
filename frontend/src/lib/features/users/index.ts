@@ -18,6 +18,7 @@ export {
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
 	fetchAuthStatus,
+	invalidateAuthStatusRequest,
 	updateOwnProfile,
 	submitForceSetup,
 	clearMfaOk,
