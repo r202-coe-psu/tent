@@ -1,6 +1,7 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { isUlid, ulid } from '$lib/db/ulid';
+import { sha256Hex } from '$lib/db/hash';
+import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyNeg } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
 import {
@@ -40,6 +41,56 @@ export interface InFlightAmendmentInput {
 	added_qty: string;
 	reason?: string;
 	lot_ref?: string;
+}
+
+const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * Produces a schema-valid ULID suffix from the immutable dispatch effect identity.
+ * CouchDB then serializes the irreversible stock deduction through this document ID.
+ */
+async function dispatchLedgerSuffix(ticketId: string, itemId: string): Promise<string> {
+	const hash = await sha256Hex(`dispatch:${ticketId}:${itemId}`);
+	const bytes = Array.from({ length: hash.length / 2 }, (_, index) =>
+		Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16)
+	);
+	let bits = 0;
+	let value = 0;
+	let suffix = '';
+
+	for (const byte of bytes) {
+		value = (value << 8) | byte;
+		bits += 8;
+		while (bits >= 5 && suffix.length < 26) {
+			bits -= 5;
+			suffix += CROCKFORD_BASE32[(value >>> bits) & 31];
+		}
+		if (suffix.length === 26) return suffix;
+	}
+
+	throw new StockIntegrityError('Unable to derive deterministic dispatch ledger identity');
+}
+
+function assertDispatchLedgerReplay(
+	actual: StockLedger,
+	expected: StockLedger,
+	ctx: AuthorContext
+): void {
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expected._id,
+			schemaVersion: expected.schema_v,
+			shelterCode: ctx.shelterCode,
+			reason: 'distribute',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expected.lot_ref
+		},
+		`Dispatch ledger replay mismatch for ${expected._id}`
+	);
 }
 
 function assertAmendmentLedgerReplay(
@@ -115,25 +166,16 @@ export async function dispatchTicket(
 		}
 	}
 
-	// Retrieve existing ledger rows for this ticket to guarantee idempotent retry
-	const existingLedger = await operationsRepo.listLedger();
-	const existingTicketEntries = existingLedger.filter(
-		(entry) => entry.ref_id === current._id && entry.reason === 'distribute'
-	);
-	const existingItemIds = new Set(existingTicketEntries.map((e) => e.item_id));
-
 	let createdCount = 0;
 	for (const item of current.items) {
-		if (existingItemIds.has(item.item_id)) {
-			// Already deducted on an earlier retry attempt
-			continue;
-		}
+		const ledgerSuffix = await dispatchLedgerSuffix(current._id, item.item_id);
+		const ledgerId = `stock_ledger:${ledgerSuffix}`;
 
 		const lotRef =
 			options?.item_lots?.[item.item_id] &&
 			options.item_lots[item.item_id].startsWith('stock_ledger:')
 				? options.item_lots[item.item_id]
-				: `stock_ledger:${ulid()}`;
+				: ledgerId;
 
 		const ledgerEntry = createStockLedger(
 			{
@@ -145,11 +187,26 @@ export async function dispatchTicket(
 				lot_ref: lotRef,
 				occurred_at: now()
 			},
-			ctx
+			ctx,
+			ledgerSuffix
 		);
 
-		await operationsRepo.addLedgerEntry(ledgerEntry);
-		createdCount++;
+		try {
+			const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+			assertDispatchLedgerReplay(persistedLedger, ledgerEntry, ctx);
+			createdCount++;
+		} catch (error) {
+			if (!(error instanceof ConflictError)) {
+				throw error;
+			}
+			const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+			if (!recoveredLedger) {
+				throw new StockIntegrityError(
+					`ConflictError on ${ledgerId} but existing dispatch ledger could not be fetched`
+				);
+			}
+			assertDispatchLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+		}
 	}
 
 	const updatedTicket = await ticketRepo.transitionTicket(ticketId, 'IN_TRANSIT', ctx, {

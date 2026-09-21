@@ -2211,8 +2211,25 @@ describe('buildValidateDocUpdate', () => {
 		});
 
 		describe('bulk_return_pool VDU validation', () => {
+			const firstClaimId = 'bulk_return_claim:01J00000000000000000000003';
+			const secondClaimId = 'bulk_return_claim:01J00000000000000000000004';
+			const activeV2Pool = {
+				...validPool,
+				schema_v: 2,
+				claimed_qty: '4',
+				unclaimed_quota: '16',
+				claim_ids: [firstClaimId]
+			};
+
 			it('allows creating valid bulk_return_pool with status ACTIVE', () => {
 				expect(() => compile()(validPool, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects pool creation by a role without physical receipt authority', () => {
+				expectForbidden(
+					() => compile()(validPool, null, REGISTRATION),
+					/Only warehouse staff, supply coordinator, or shelter manager can create bulk return pool/
+				);
 			});
 
 			it('rejects creating pool with invalid equation', () => {
@@ -2222,10 +2239,131 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
+			it('enforces ACTIVE and EXHAUSTED quota states', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validPool, claimed_qty: '20', unclaimed_quota: '0', status: 'ACTIVE' },
+							null,
+							WAREHOUSE
+						),
+					/ACTIVE bulk_return_pool must have remaining quota/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validPool, claimed_qty: '4', unclaimed_quota: '16', status: 'EXHAUSTED' },
+							null,
+							WAREHOUSE
+						),
+					/EXHAUSTED bulk_return_pool must have zero unclaimed quota/
+				);
+			});
+
 			it('rejects mutating immutable pool fields', () => {
 				expectForbidden(
 					() => compile()({ ...validPool, total_received_qty: '30' }, validPool, WAREHOUSE),
 					/bulk_return_pool.total_received_qty is immutable/
+				);
+			});
+
+			it('allows a canonical ACTIVE to EXHAUSTED quota claim', () => {
+				const exhausted = {
+					...activeV2Pool,
+					claimed_qty: '20',
+					unclaimed_quota: '0',
+					claim_ids: [firstClaimId, secondClaimId],
+					status: 'EXHAUSTED'
+				};
+				expect(() => compile()(exhausted, activeV2Pool, REGISTRATION)).not.toThrow();
+			});
+
+			it('rejects reopening EXHAUSTED capacity', () => {
+				const exhausted = {
+					...activeV2Pool,
+					claimed_qty: '20',
+					unclaimed_quota: '0',
+					claim_ids: [firstClaimId, secondClaimId],
+					status: 'EXHAUSTED'
+				};
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...exhausted, claimed_qty: '19', unclaimed_quota: '1', status: 'ACTIVE' },
+							exhausted,
+							REGISTRATION
+						),
+					/Invalid bulk_return_pool status transition EXHAUSTED -> ACTIVE/
+				);
+			});
+
+			it('rejects reversing claimed or unclaimed accounting', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claimed_qty: '2', unclaimed_quota: '18' },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/bulk_return_pool claimed_qty cannot decrease/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claimed_qty: '4', unclaimed_quota: '17' },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
+				);
+			});
+
+			it('allows an authorized append-only v2 quota claim and rejects unauthorized claim updates', () => {
+				const claimed = {
+					...activeV2Pool,
+					claimed_qty: '5',
+					unclaimed_quota: '15',
+					claim_ids: [firstClaimId, secondClaimId]
+				};
+				expect(() => compile()(claimed, activeV2Pool, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()(claimed, activeV2Pool, KITCHEN),
+					/Only frontline distribution staff can claim bulk return pool quota/
+				);
+			});
+
+			it('preserves v1 to v2 lazy upgrade only when it carries the first quota claim', () => {
+				const lazyUpgrade = {
+					...validPool,
+					schema_v: 2,
+					claimed_qty: '4',
+					unclaimed_quota: '16',
+					claim_ids: [firstClaimId]
+				};
+				expect(() => compile()(lazyUpgrade, validPool, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()({ ...validPool, schema_v: 2, claim_ids: [] }, validPool, REGISTRATION),
+					/bulk_return_pool v1 to v2 upgrade must include the first quota claim and claim_id/
+				);
+				expectForbidden(
+					() => compile()({ ...validPool, schema_v: 1 }, lazyUpgrade, REGISTRATION),
+					/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+				);
+			});
+
+			it('requires v2 claim_ids to remain unique and append-only', () => {
+				expectForbidden(
+					() => compile()({ ...activeV2Pool, claim_ids: [] }, activeV2Pool, REGISTRATION),
+					/Cannot remove claim_ids from bulk_return_pool/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claim_ids: [firstClaimId, firstClaimId] },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/Duplicate claim_id in bulk_return_pool/
 				);
 			});
 
@@ -2253,7 +2391,21 @@ describe('buildValidateDocUpdate', () => {
 				};
 				expectForbidden(
 					() => compile()({ ...closed, status: 'ACTIVE' }, closed, WAREHOUSE),
-					/CLOSED bulk_return_pool cannot be reopened/
+					/Invalid bulk_return_pool status transition CLOSED -> ACTIVE/
+				);
+			});
+
+			it('rejects changing accounting after a pool is CLOSED', () => {
+				const closed = {
+					...activeV2Pool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expectForbidden(
+					() =>
+						compile()({ ...closed, claimed_qty: '5', unclaimed_quota: '15' }, closed, WAREHOUSE),
+					/CLOSED bulk_return_pool accounting is immutable/
 				);
 			});
 		});

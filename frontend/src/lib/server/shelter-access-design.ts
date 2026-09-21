@@ -1271,6 +1271,9 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 14. CR-121 / CR-134: bulk_return_pool validation (Rule 14)
   if (newDoc.type === 'bulk_return_pool') {
+    var canCreatePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    var canClaimPool = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    var canClosePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
     if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported bulk_return_pool schema version' };
     }
@@ -1280,9 +1283,6 @@ export function buildValidateDocUpdate(code: string): string {
     if (oldDoc) {
       if (oldDoc.schema_v === 2 && newDoc.schema_v === 1) {
         throw { forbidden: 'Cannot downgrade bulk_return_pool from schema_v 2 to 1' };
-      }
-      if (oldDoc.schema_v === 1 && newDoc.schema_v === 2 && oldDoc.status !== 'ACTIVE') {
-        throw { forbidden: 'Only ACTIVE bulk_return_pool can be upgraded to schema_v 2' };
       }
       var immutablePoolFields = [
         '_id', 'type', 'shelter_code', 'item_id', 'stock_ledger_id', 'total_received_qty', 'created_at', 'created_by'
@@ -1309,6 +1309,15 @@ export function buildValidateDocUpdate(code: string): string {
     if (claimed + unclaimed !== totalRec) {
       throw { forbidden: 'claimed_qty + unclaimed_quota must equal total_received_qty' };
     }
+    if (['ACTIVE', 'EXHAUSTED', 'CLOSED'].indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Invalid bulk_return_pool status: ' + newDoc.status };
+    }
+    if (newDoc.status === 'ACTIVE' && unclaimed <= 0) {
+      throw { forbidden: 'ACTIVE bulk_return_pool must have remaining quota' };
+    }
+    if (newDoc.status === 'EXHAUSTED' && unclaimed !== 0) {
+      throw { forbidden: 'EXHAUSTED bulk_return_pool must have zero unclaimed quota' };
+    }
     if (newDoc.schema_v === 2) {
       if (!Array.isArray(newDoc.claim_ids)) {
         throw { forbidden: 'bulk_return_pool schema_v 2 requires claim_ids array' };
@@ -1333,23 +1342,56 @@ export function buildValidateDocUpdate(code: string): string {
       }
     }
     if (oldDoc) {
+      var oldClaimed = parseDecimal4(oldDoc.claimed_qty);
       var oldUnclaimed = parseDecimal4(oldDoc.unclaimed_quota);
-      if (unclaimed < 0 || (oldUnclaimed <= 0 && unclaimed < oldUnclaimed)) {
-        throw { forbidden: 'Cannot claim from exhausted or zero quota pool' };
+      if (isNaN(oldClaimed) || isNaN(oldUnclaimed)) {
+        throw { forbidden: 'Existing bulk_return_pool has invalid quota accounting' };
       }
-      if (oldDoc.status === 'CLOSED' && newDoc.status !== 'CLOSED') {
-        throw { forbidden: 'CLOSED bulk_return_pool cannot be reopened' };
+      var validPoolTransitions = {
+        ACTIVE: ['ACTIVE', 'EXHAUSTED', 'CLOSED'],
+        EXHAUSTED: ['EXHAUSTED', 'CLOSED'],
+        CLOSED: ['CLOSED']
+      };
+      var allowedPoolStatuses = validPoolTransitions[oldDoc.status] || [];
+      if (allowedPoolStatuses.indexOf(newDoc.status) === -1) {
+        throw { forbidden: 'Invalid bulk_return_pool status transition ' + oldDoc.status + ' -> ' + newDoc.status };
       }
+
+      if (claimed < oldClaimed) {
+        throw { forbidden: 'bulk_return_pool claimed_qty cannot decrease' };
+      }
+      if (unclaimed > oldUnclaimed) {
+        throw { forbidden: 'bulk_return_pool unclaimed_quota cannot increase' };
+      }
+
+      if (oldDoc.status === 'CLOSED' &&
+          (claimed !== oldClaimed || unclaimed !== oldUnclaimed)) {
+        throw { forbidden: 'CLOSED bulk_return_pool accounting is immutable' };
+      }
+
+      if (oldDoc.schema_v === 1 && newDoc.schema_v === 2) {
+        if (oldDoc.status !== 'ACTIVE' ||
+            newDoc.claim_ids.length !== 1 ||
+            claimed <= oldClaimed ||
+            unclaimed >= oldUnclaimed) {
+          throw { forbidden: 'bulk_return_pool v1 to v2 upgrade must include the first quota claim and claim_id' };
+        }
+      }
+
       if (newDoc.status === 'CLOSED') {
-        var canClosePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
         if (!canClosePool) {
           throw { forbidden: 'Only warehouse staff, supply coordinator, or shelter manager can close bulk return pool' };
         }
         if (!newDoc.closed_at || !newDoc.closed_by) {
           throw { forbidden: 'CLOSED pool requires close audit fields' };
         }
+      } else if (!canClaimPool) {
+        throw { forbidden: 'Only frontline distribution staff can claim bulk return pool quota' };
       }
     } else {
+      if (!canCreatePool) {
+        throw { forbidden: 'Only warehouse staff, supply coordinator, or shelter manager can create bulk return pool' };
+      }
       if (newDoc.status !== 'ACTIVE') {
         throw { forbidden: 'Initial bulk_return_pool status must be ACTIVE' };
       }
