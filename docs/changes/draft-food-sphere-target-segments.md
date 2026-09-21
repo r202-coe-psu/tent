@@ -1,30 +1,28 @@
 ---
 id: draft
-title: Food Sphere Standard target_segment ตาม 7 กลุ่มอายุ Dashboard + ตัดตัวแปร SOP ratio 20 → 9 คีย์ 
+title: Food Sphere Standard target_segment ตาม 7 กลุ่มอายุ Dashboard (schema_v 1 → 2) + ซ่อนตัวแปร SOP ratio ในหน้าจอเหลือ 9 คีย์ (แบบ A)
 status: proposed
 date: 2026-09-17
 requested_by: ทีมพัฒนา SOP Ratios & Demographics Dashboard; Kontuch Suksawat (ส่วน B — requirement 2026-09-16 "สิ่งที่ตัดออกในตัวแปรมาตรฐาน Sphere")
+decision_date: 2026-09-18 (PO decisions — ดู Decision Log)
 decided_by: เจ้าของโครงการ
 layer: volatile
 affects:
-  - docs/data/schema.md §4.6 (`food_sphere_standard`)
+  - docs/data/schema.md §4.6 (`food_sphere_standard`) — enum `target_segment`, ตัวอย่าง `_id`, schema_v 1 → 2
   - frontend/src/lib/features/sop-ratios/domain/food-sphere.ts
   - frontend/src/lib/features/sop-ratios/domain/food-sphere-calc.ts
   - frontend/src/lib/features/sop-ratios/domain/food-sphere.fixture.ts
-  - docs/data/schema.md §4.4 (`sop_profile`) — schema_v 3 → 4 (ส่วน B)
-  - docs/data/schema.md §2.14 (`sop_override`) — schema_v 2 → 3 (ส่วน B)
-  - docs/data/schema.md §2.20 (`simulation`) — schema_v 1 → 2 (ส่วน B)
-  - docs/data/schema.md §2.15 (`daily_calc`) — หมายเหตุ whitelist + invariant (ส่วน B, schema_v 2 คงเดิม)
-  - docs/data/data-model.md, docs/features/daily-sop-resource-calc-flow.md (ส่วน B)
-  - docs/changes/CR-042-daily-sop-calc-follow-up.md OD-2 แถวที่ถูกตัด (ส่วน B)
-  - frontend/src/lib/features/sop-ratios/{domain,data,application,ui} (ส่วน B)
-  - frontend/src/lib/features/resource-calc/{data,domain,ui} (ส่วน B)
-  - frontend/src/lib/features/sop-simulation/{domain,application,data,ui} (ส่วน B)
-  - frontend/src/lib/server/shelter-access-design.ts — `_design/access` validate_doc_update (ส่วน B)
-  - frontend/scripts/seed/master-seed.ts, frontend/scripts/sync-central-db.ts, frontend/scripts/demo/t31-scenario-2-illustrative.ts (ส่วน B)
+  - frontend/src/lib/features/sop-ratios/data/food-sphere.remote.ts (เขียน schema_v 2)
+  - frontend/src/lib/features/sop-ratios/ui/food-sphere-stock-tab.svelte
+  - frontend/src/lib/features/sop-ratios/domain/sop-ratio.ts (`VISIBLE_SOP_RATIO_KEYS` — ส่วน B แบบ A)
+  - frontend/src/lib/features/sop-ratios/ui/ + resource-calc/ui/ + sop-simulation/ui/ (ตัวกรองการแสดงผล — ส่วน B แบบ A)
+  - frontend/scripts/seed/master-seed.ts, frontend/scripts/sync-central-db.ts (seed schema_v 2)
+  - PR #285 (`chore/sop-parameters-sphere-cleanup`) — โค้ดของทั้งสองส่วนอยู่ที่นี่ ยังไม่อยู่บน `develop`
 ---
 
-> **ไฟล์นี้มี 2 การเปลี่ยนแปลง:** ส่วน A = `food_sphere_standard.target_segment` (หัวข้อ 1–6) · ส่วน B = ตัดตัวแปร SOP ratio 20 → 9 คีย์ (หัวข้อ B1–B9). ตอนอนุมัติแยกเลข CR ได้ทีละส่วน
+> **CR เดียว 2 ส่วน (ตามมติเจ้าของโครงการ 2026-09-18):** ส่วน A = `food_sphere_standard.target_segment` + bump `schema_v` 1 → 2 (หัวข้อ 1–6) · ส่วน B = ซ่อนตัวแปร SOP ratio ในหน้าจอให้เหลือ 9 จาก 20 คีย์ โดย **ไม่แตะ schema** (หัวข้อ B1–B7). **ใช้เลข CR เดียวกันทั้งไฟล์ ไม่แยกเลขรายส่วน**
+>
+> โค้ดของทั้งสองส่วนอยู่บน **PR #285** (`chore/sop-parameters-sphere-cleanup`) ยังไม่ merge เข้า `develop` — เอกสาร CR นี้กับ PR #285 ต้องอนุมัติและ merge ไปด้วยกัน
 
 # Draft — Food Sphere Standard target_segment Alignment with Demographics Dashboard
 
@@ -32,8 +30,8 @@ affects:
 
 - **เปลี่ยนอะไร:** ปรับ enum ของ `target_segment` ในเอกสาร `food_sphere_standard` จากเดิม 7 กลุ่มตามสรีรวิทยา (`ALL`, `INFANT_0_6`, `INFANT_6_23`, `CHILD_2_5`, `PREGNANT`, `LACTATING`, `ELDERLY`) เป็น 7 กลุ่มตามช่วงอายุจริงใน Demographics Dashboard (`ALL`, `INFANT`, `YOUNG_CHILD`, `OLDER_CHILD`, `TEEN`, `ADULT`, `ELDERLY`)
 - **เพื่อใคร/ทำไม:** ข้อมูลผู้พักพิงในศูนย์ที่เก็บผ่านระบบทะเบียนและแสดงในแดชบอร์ดมีเพียงข้อมูลวันเกิด/ช่วงอายุ ไม่มีข้อมูลสรีรวิทยา เช่น การตั้งครรภ์หรือการให้นมบุตร การจับคู่ตัวเลขกลุ่มประชากรเข้ากับเกณฑ์โภชนาการ Sphere จึงต้องอิงตามช่วงอายุเดียวกันแบบ 1-to-1 เพื่อให้คำนวณ Demand ได้จริง
-- **Dev ต้อง build:** อัปเดตนิยามใน `docs/data/schema.md §4.6` ให้ตรงกับโค้ดที่ implement แล้วใน `frontend/src/lib/features/sop-ratios/domain/food-sphere.ts`
-- **กระทบ schema/scope:** `docs/data/schema.md §4.6` (enum whitelist และตัวอย่าง `_id`), ไม่ bump `schema_v` (`schema_v: 1` คงเดิม)
+- **Dev ต้อง build:** อัปเดต `docs/data/schema.md §4.6` (enum + ตัวอย่าง `_id` + `schema_v`), bump `schema_v` ของ `food_sphere_standard` เป็น 2 ในโค้ดและ seed, และจัดการเอกสารเดิมที่ `_id` ฝังรหัสกลุ่มเก่า
+- **กระทบ schema/scope:** `docs/data/schema.md §4.6` · **bump `schema_v` 1 → 2** (รูปเอกสารที่ persist เปลี่ยน: enum และ `_id`) · โค้ดอยู่บน PR #285 ยังไม่ถึง `develop`
 
 ---
 
@@ -56,6 +54,12 @@ affects:
 2. ประชากรในกลุ่ม `unknown` (ไม่ระบุอายุ) ให้นับรวมเข้ากลุ่ม `ALL`
 3. ประชากรทุกคนต้องถูกนับรวมเพียงครั้งเดียว (Total headcounts = Effective occupancy)
 
+### FR-03: Bump `schema_v` ของ `food_sphere_standard` 1 → 2
+1. `food_sphere_standard` ต้องใช้ `schema_v: 2` เนื่องจากรูปเอกสารที่ persist เปลี่ยน 2 จุด: ค่าที่อนุญาตของ `target_segment` และ `_id` ที่ฝังรหัสกลุ่มไว้ (`food_sphere_standard:{target_segment}:{req_group_id}`)
+2. เอกสารที่เขียนใหม่ทุกช่องทาง (หน้าจอ, seed, fixture) ต้องเขียน `schema_v: 2` พร้อมรหัสกลุ่มใหม่
+3. เอกสาร `schema_v: 1` ที่ค้างอยู่ต้องอ่านได้โดยไม่ throw และต้อง **ไม่ถูกนำไปคำนวณ** เมื่อ `target_segment` ไม่อยู่ใน enum ใหม่
+4. หน้าจอที่แสดงเอกสาร `schema_v: 1` ต้องแสดงรหัสกลุ่มเดิมตามข้อมูล ไม่ใช่ค่าว่าง
+
 ---
 
 ## 2. Why
@@ -72,28 +76,41 @@ affects:
 | **Enum values** | `ALL`, `INFANT_0_6`, `INFANT_6_23`, `CHILD_2_5`, `PREGNANT`, `LACTATING`, `ELDERLY` | `ALL`, `INFANT`, `YOUNG_CHILD`, `OLDER_CHILD`, `TEEN`, `ADULT`, `ELDERLY` |
 | **การแมปช่วงอายุ** | อิงเกณฑ์สรีรวิทยา ไม่ตรงกับ Demographics View | แมปตรงกับ Demographics View: `<1`, `1-5`, `6-11`, `12-19`, `20-59`, `60+` |
 | **ตัวอย่าง `_id` ใน schema.md** | `food_sphere_standard:INFANT_0_6:FOOD_ENERGY` | `food_sphere_standard:YOUNG_CHILD:FOOD_ENERGY` หรือ `food_sphere_standard:INFANT:FOOD_ENERGY` |
-| **Schema Version** | `schema_v: 1` | `schema_v: 1` (คงเดิม) |
+| **Schema Version** | `schema_v: 1` | **`schema_v: 2`** (รูปเอกสารที่ persist เปลี่ยน: enum + `_id`) |
 
 ---
 
 ## 4. Impact
 
 - **Documentation:**
-  - `docs/data/schema.md §4.6`: ปรับ Enum whitelist และตัวอย่าง `_id`
-- **Code (Implement เรียบร้อยแล้วใน commit `b0826f5ee`):**
+  - `docs/data/schema.md §4.6`: ปรับ Enum whitelist, ตัวอย่าง `_id`, `schema_v` 1 → 2 พร้อม migration note และอัปเดต `updated:`
+- **Code (อยู่บน PR #285 `chore/sop-parameters-sphere-cleanup` commit `b0826f5e` — ยังไม่อยู่บน `develop`):**
   - `frontend/src/lib/features/sop-ratios/domain/food-sphere.ts`: `targetSegmentSchema` และ `TARGET_SEGMENT_LABELS`
   - `frontend/src/lib/features/sop-ratios/domain/food-sphere-calc.ts`: `AGE_BUCKET_BY_SEGMENT` และ `headcountsFromAgeGroups`
   - `frontend/src/lib/features/sop-ratios/domain/food-sphere.fixture.ts`: ปรับ fixture ให้ตรงกับ enum ใหม่
   - `frontend/src/lib/features/sop-ratios/ui/food-sphere-stock-tab.svelte`: เรียกใช้ `headcountsFromAgeGroups`
+- **Code ที่ต้องเพิ่มจากมติ 2026-09-18 (ยังไม่ได้ทำใน `b0826f5e`):**
+  - `frontend/src/lib/features/sop-ratios/domain/food-sphere.ts`: `FOOD_SPHERE_STANDARD_SCHEMA_VERSION = 2`
+  - `frontend/src/lib/features/sop-ratios/data/food-sphere.remote.ts`: เขียน `schema_v: 2` และอ่านเอกสาร `schema_v: 1` แบบ legacy ได้
+  - `frontend/scripts/seed/master-seed.ts`, `frontend/scripts/sync-central-db.ts`: seed เอกสาร `schema_v: 2`
 - **Test:**
   - `frontend/src/lib/features/sop-ratios/domain/food-sphere-calc.test.ts`: ทดสอบความถูกต้องของ schema, การ reject ค่าเดิม และการกระจาย headcount
+  - เพิ่มเทสต์: เขียนเอกสารใหม่ได้ `schema_v: 2` และอ่านเอกสาร `schema_v: 1` ได้โดยไม่ throw
 
 ---
 
 ## 5. Migration
 
-- **ผลกระทบต่อเอกสารเดิม:** ปัจจุบันระบบยังอยู่ในช่วงทดสอบและ seed ข้อมูลระดับ local/staging ไม่มีเอกสาร `food_sphere_standard` ใน production ที่ต้องรัน batch migration
-- **Baseline Seed:** ค่าเริ่มต้นใน fixture และ seed ปรับเป็น enum ใหม่เรียบร้อยแล้ว
+**schema_v 1 → 2** — `_id` ฝังรหัสกลุ่มเป้าหมายไว้ เอกสารเดิมจึง **แก้ในที่ไม่ได้** ต้องสร้างเอกสารใหม่แทน
+
+- **Production:** ยังไม่มีข้อมูล production — ไม่ต้องทำ batch migration
+- **Local / dev:** unseed + seed ใหม่ (`pnpm seed:master`) ได้เอกสาร `schema_v: 2` ทั้งหมด
+- **Staging:** ทำอย่างใดอย่างหนึ่ง แล้วบันทึกผลไว้ใน PR
+  1. ถ้าไม่มีเกณฑ์ที่ตั้งเอง: unseed + seed ใหม่
+  2. ถ้ามีเกณฑ์ที่ตั้งเอง: แปลงรหัสกลุ่มตามตารางด้านล่าง → สร้างเอกสารใหม่ `food_sphere_standard:{new_segment}:{req_group_id}` (`schema_v: 2`) → ลบเอกสารเดิมด้วย tombstone
+- **ตารางแปลงรหัสกลุ่ม (ใช้เมื่อ migrate ด้วยมือ):** `INFANT_0_6` / `INFANT_6_23` → `INFANT` · `CHILD_2_5` → `YOUNG_CHILD` · `PREGNANT` / `LACTATING` → **ไม่มีกลุ่มรองรับ** ต้องให้ผู้ดูแลตัดสินว่าลบทิ้งหรือย้ายไป `ADULT` · `ALL` / `ELDERLY` คงเดิม
+- **ระหว่างที่ยังไม่ migrate:** เอกสาร `schema_v: 1` ที่มีรหัสกลุ่มเก่าจะแสดงรหัสดิบในหน้าจอ และไม่ถูกนำไปคำนวณ (fallback `ALL` ตาม Invariant 8)
+- **ย้อนกลับ:** revert โค้ดและเอกสาร แล้ว seed ใหม่ — เอกสาร `schema_v: 2` ที่สร้างไว้ต้องลบทิ้ง
 
 ---
 
@@ -102,179 +119,118 @@ affects:
 - [ ] **AC-01:** เอกสาร `docs/data/schema.md §4.6` ระบุ `target_segment` เป็น `enum('ALL','INFANT','YOUNG_CHILD','OLDER_CHILD','TEEN','ADULT','ELDERLY')`
 - [ ] **AC-02:** ตัวอย่าง `_id` ใน `docs/data/schema.md §4.6` ใช้นิพจน์กลุ่มเป้าหมายใหม่ เช่น `food_sphere_standard:YOUNG_CHILD:FOOD_ENERGY`
 - [ ] **AC-03:** Unit tests สำหรับ target segments และ calculation logic ผ่านทั้งหมด
+- [ ] **AC-04:** `docs/data/schema.md §4.6` ระบุ **schema_v 2** พร้อม migration note และอัปเดต `updated:` เป็นวันจริง
+- [ ] **AC-05:** เอกสาร `food_sphere_standard` ที่สร้างจากหน้าจอและจาก seed มี `schema_v: 2`
+- [ ] **AC-06:** เปิดหน้าพารามิเตอร์อาหารขณะที่ยังมีเอกสาร `schema_v: 1` ค้างอยู่ได้โดยไม่ error และเอกสารนั้นไม่ถูกนำไปคำนวณ
+- [ ] **AC-07:** staging ทำ migration/reseed ตามหัวข้อ 5 แล้ว และบันทึกผลไว้ใน PR #285
 
 ---
 
-# ส่วน B — ตัดตัวแปร SOP ratio จาก 20 เหลือ 9 คีย์ ออกจาก schema จริง (แบบ B)
+# ส่วน B — ซ่อนตัวแปร SOP ratio ในหน้าจอให้เหลือ 9 จาก 20 คีย์ (แบบ A)
 
 ## B0. สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** ลด canonical SOP ratio keys จาก 20 → 9 คีย์ ใน `sop_profile`, `sop_override`, `simulation` และเครื่องคำนวณ T-31 — ลบ 11 คีย์ออกจากโค้ด validator และเอกสารที่ persist (ไม่ใช่แค่ซ่อนในหน้าจอ)
-- **เพื่อใคร/ทำไม:** requirement 2026-09-16 (Kontuch Suksawat) ให้หน้า "ตัวแปรมาตรฐาน Sphere" เหลือเฉพาะตัวแปรตาม PDF. การซ่อนในหน้าจอ (แบบ A) ทิ้งข้อมูลที่ไม่ได้ใช้ไว้ในฐานข้อมูลและ spec ยังระบุ 20 คีย์ — แบบ B ทำให้ data model ตรงกับ requirement
-- **Dev ต้อง build:** แก้ domain/validator ให้เหลือ 9 คีย์ · bump `schema_v` 3 เอกสาร · migration script สร้างเวอร์ชันใหม่ของ master/override ที่มี 9 คีย์ · deploy `_design/access` ใหม่ · ถอดโค้ดกรองของแบบ A
-- **กระทบ schema/scope:** `sop_profile` schema_v 3→4 · `sop_override` 2→3 · `simulation` 1→2 · `daily_calc` schema_v 2 คงเดิม (คีย์ generic) แต่ invariant เปลี่ยน · supersede CR-042 OD-2 แถว 1–5, 13–16, 18–19
+- **เปลี่ยนอะไร:** หน้าจอที่เกี่ยวกับตัวแปรมาตรฐาน Sphere แสดงเฉพาะ **9 คีย์** ตาม requirement 2026-09-16 โดย **คง canonical 20 คีย์ไว้ใน schema, validator, เครื่องคำนวณ และฐานข้อมูลตามเดิม**
+- **เพื่อใคร/ทำไม:** เจ้าหน้าที่ศูนย์เห็นเฉพาะตัวแปรที่ใช้จริงตาม PDF "สิ่งที่ตัดออกในตัวแปรมาตรฐาน Sphere" ส่วนการตัดออกจาก schema จริงยังไม่ทำในรอบนี้เพราะย้อนกลับยากและต้อง migrate (มติเจ้าของโครงการ 2026-09-18)
+- **Dev ต้อง build:** รายการคีย์ที่แสดง (`VISIBLE_SOP_RATIO_KEYS` หรือเทียบเท่า) ไว้ที่จุดเดียวใน domain แล้วให้ทุกหน้าจอกรองจากรายการนี้
+- **กระทบ schema/scope:** **ไม่กระทบ schema** — ไม่แก้ `docs/data/schema.md`, ไม่ bump `schema_v`, ไม่ migrate ข้อมูล, ไม่แตะ `_design/access`
 
 ## B1. ตัวแปร
 
-**คงไว้ (9 คีย์ — ลำดับ canonical ใหม่):**
+**แสดงในหน้าจอ (9 คีย์ ตามลำดับ canonical เดิม):**
 
-| ลำดับ | คีย์ | ชื่อแสดงผล | หน่วย | kind | แหล่ง `have` (CR-042 OD-2) |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `people_per_tap` | ก๊อกน้ำ | คน/จุด | divide | shelter `facilities.water_points` |
-| 2 | `people_per_handpump` | ปั๊มน้ำมือโยก | คน/จุด | divide | none → `null` |
-| 3 | `people_per_open_well` | บ่อน้ำเปิด | คน/จุด | divide | none → `null` |
-| 4 | `people_per_laundry` | จุดซักล้าง | คน/จุด | divide | none → `null` |
-| 5 | `people_per_bathing` | ห้องอาบน้ำ | คน/ห้อง | divide | shelter `facilities.showers` |
-| 6 | `people_per_toilet_female` | ห้องน้ำหญิง | คน/ห้อง | divide | shelter `facilities.toilets_female` |
-| 7 | `people_per_toilet_male` | ห้องน้ำชาย | คน/ห้อง | divide | shelter `facilities.toilets_male` |
-| 8 | `m2_per_person_total` | พื้นที่พักพิงรวม | ตร.ม./คน | multiply | shelter `area_m2` |
-| 9 | `people_per_volunteer` | อาสาสมัคร | คน/อาสา 1 คน | divide | none → `null` |
+| คีย์ | ชื่อแสดงผล | หน่วย |
+| --- | --- | --- |
+| `people_per_tap` | ก๊อกน้ำ | คน/จุด |
+| `people_per_handpump` | ปั๊มน้ำมือโยก | คน/จุด |
+| `people_per_open_well` | บ่อน้ำเปิด | คน/จุด |
+| `people_per_laundry` | จุดซักล้าง | คน/จุด |
+| `people_per_bathing` | ห้องอาบน้ำ | คน/ห้อง |
+| `people_per_toilet_female` | ห้องน้ำหญิง | คน/ห้อง |
+| `people_per_toilet_male` | ห้องน้ำชาย | คน/ห้อง |
+| `m2_per_person_total` | พื้นที่พักพิงรวม | ตร.ม./คน |
+| `people_per_volunteer` | อาสาสมัคร | คน/อาสา 1 คน |
 
-**ลบ (11 คีย์):** `water_l_per_person_day`, `drinking_water_l_per_person_day`, `cooking_water_l_per_person_day`, `hygiene_water_l_per_person_day`, `kcal_per_adult_day`, `people_per_dining_point_adult`, `people_per_dining_point_child`, `m2_per_person_living`, `m2_per_person_living_cold`, `max_waterpoint_distance_m`, `max_queue_minutes`
-
-> [NEEDS DECISION: B-D1] "พื้นที่พักพิงรวม" = คีย์ `m2_per_person_total` เดิม (ค่า baseline 45 ตร.ม./คน) โดยไม่รวมค่าจาก `m2_per_person_living` / `m2_per_person_living_cold` — ยืนยันหรือกำหนดค่าใหม่
+**ซ่อนจากหน้าจอ (11 คีย์ — ยังคงอยู่ในฐานข้อมูลและยังถูกคำนวณ):** `water_l_per_person_day`, `drinking_water_l_per_person_day`, `cooking_water_l_per_person_day`, `hygiene_water_l_per_person_day`, `kcal_per_adult_day`, `people_per_dining_point_adult`, `people_per_dining_point_child`, `m2_per_person_living`, `m2_per_person_living_cold`, `max_waterpoint_distance_m`, `max_queue_minutes`
 
 ## B2. Requirements
 
-### FR-B01 — Domain (`sop-ratios/domain/sop-ratio.ts`)
-1. `SOP_RATIO_KEYS` ต้องมีเฉพาะ 9 คีย์ใน B1 ตามลำดับ canonical ในตาราง
-2. `SOP_RATIO_KIND` และ `RATIO_LABELS` ต้องมีเฉพาะ 9 คีย์; ป้าย `m2_per_person_total` = "พื้นที่พักพิงรวม"
-3. `ratiosSchema` ยังเป็น strict: ครบ 9 คีย์ ขาด/เกินแม้คีย์เดียว = validation fail
-4. `SOP_MASTER_SCHEMA_VERSION` = 4 และ `SOP_OVERRIDE_SCHEMA_VERSION` = 3
-5. การเขียนเอกสารใหม่ทุกช่องทาง (create initial, create next version, override) ต้องเขียน schema_v ใหม่ + 9 คีย์เท่านั้น
+### FR-B01 — รายการคีย์ที่แสดง (จุดกำหนดเดียว)
+1. `frontend/src/lib/features/sop-ratios/domain/sop-ratio.ts` ต้องมีรายการคีย์ที่แสดง (`VISIBLE_SOP_RATIO_KEYS`) 9 คีย์ตาม B1 และฟังก์ชันตรวจ (`isVisibleSopRatioKey`) export ผ่าน barrel
+2. `SOP_RATIO_KEYS`, `SOP_RATIO_KIND`, `ratiosSchema` (strict 20 คีย์), `SOP_MASTER_SCHEMA_VERSION`, `SOP_OVERRIDE_SCHEMA_VERSION` **ต้องไม่เปลี่ยน**
+3. ป้ายของ `m2_per_person_total` แสดงเป็น "พื้นที่พักพิงรวม"
 
-### FR-B02 — เอกสารเวอร์ชันเก่า (legacy read)
-1. เอกสาร `sop_profile` schema_v 3 และ `sop_override` schema_v 2 (20 คีย์) ที่ค้างในฐานข้อมูลต้อง**อ่านได้ในประวัติเวอร์ชัน** (read-only) — แสดงเฉพาะ 9 คีย์ที่ยังมีอยู่
-2. เอกสาร legacy ต้อง**ไม่ถูกเลือกเป็น effective profile** ของการคำนวณ; pointer `sop_profile_active:global` ที่ชี้เอกสาร legacy = `SopMasterIntegrityError` (fail-closed ตาม CR-083) จนกว่าจะ migrate
-3. การสร้างเวอร์ชันถัดไปจากเอกสาร legacy ต้องตัด 11 คีย์ทิ้งอัตโนมัติ (ไม่ต้องให้ผู้ใช้แก้เอง)
+### FR-B02 — หน้าจอที่ต้องกรอง
+1. หน้า 5. พารามิเตอร์ (ตารางมาสเตอร์, ค่าปรับเฉพาะศูนย์, ฟอร์มแก้ไข, ประวัติเวอร์ชัน) แสดงและแก้ไขได้เฉพาะ 9 คีย์ และตัวนับในแท็บแสดงจำนวนคีย์ที่แสดง
+2. แท็บวิเคราะห์ความต้องการพื้นฐาน (แผงควบคุมสต็อก): ตาราง, KPI, ตัวกรองหมวด และไฟล์ส่งออก CSV ใช้เฉพาะ 9 คีย์
+3. หน้าจำลองสถานการณ์ SOP: เลือกปรับค่าได้เฉพาะ 9 คีย์, ตารางผลเทียบและตัวนับแสดงเฉพาะ 9 คีย์, กลุ่มที่ไม่มีคีย์เหลือต้องไม่แสดง
+4. การแก้ค่าต้องไม่ลบหรือเปลี่ยนค่าคีย์ที่ซ่อน (ส่งเฉพาะค่าที่เปลี่ยนแล้วรวมกับค่าเดิม)
+5. การสร้างโปรไฟล์มาสเตอร์ใหม่ยังต้องได้เอกสารครบ 20 คีย์ตาม `ratiosSchema`
 
-### FR-B03 — เครื่องคำนวณ T-31 (`resource-calc`)
-1. `buildCalculationResources` / `calculateResources` ต้องผลิต `resource_inputs` และ `results` 9 แถวตามลำดับ canonical
-2. `have-map.ts`: ลบกลุ่ม `WATER_RATIO_KEYS`, `AREA_RATIO_KEYS` (คงเฉพาะ `m2_per_person_total → area_m2`) และลด `NULL_HAVE_KEYS` เหลือ `people_per_handpump`, `people_per_open_well`, `people_per_laundry`, `people_per_volunteer`
-3. `cr042HaveSnapshotIssues`: ลบ invariant "water keys must share item:water balance" และ "area keys must share area_m2"
-4. `ui/sop-category.ts`: map เฉพาะ 9 คีย์; หมวด `food` ไม่มีรายการ
-5. `daily_calc` เก่าที่มี 20 แถวต้องเปิดดูได้: UI ต้องข้ามแถวที่ `key` ไม่อยู่ใน `SOP_RATIO_KEYS` (ไม่ throw, ไม่แสดง)
+### FR-B03 — ข้อมูลและการคำนวณไม่เปลี่ยน
+1. เครื่องคำนวณ T-31 ยังคำนวณครบ 20 แถว และ `daily_calc` ยังบันทึกครบ 20 แถว
+2. `sop_profile`, `sop_override`, `simulation` และ `_design/access` ไม่เปลี่ยนรูปและไม่ bump `schema_v`
+3. snapshot และ scenario ที่บันทึกไว้เดิมต้องเปิดดูได้ตามปกติ
 
-### FR-B04 — SOP Simulation (T-42)
-1. `scenario.schema.ts`: `resource_inputs`, `daily_results`, `horizon_results`, `comparison` ต้องมี 9 แถวตามลำดับ canonical; `ratio_overrides` รับเฉพาะ 9 คีย์
-2. `simulation` schema_v = 2; เอกสารใหม่ต้องเขียน schema_v 2
-3. `lib/server/shelter-access-design.ts` (`_design/access` validate_doc_update) ต้องตรวจ `simulation` ด้วย 9 คีย์ใหม่ และ deploy design doc ใหม่ในทุก `shelter_*` DB
-4. `scenario-form.svelte`: กลุ่มที่ไม่มีคีย์เหลือ (อาหาร) ต้องไม่แสดง
-
-> [NEEDS DECISION: B-D2] เอกสาร `simulation` schema_v 1 (20 แถว) ที่บันทึกแล้ว: (ก) ลบทิ้งด้วย tombstone ตอน migrate หรือ (ข) คงไว้และแสดงเป็น legacy read-only (ต้องเพิ่ม legacy parser)
-
-### FR-B05 — Migration script
-1. เพิ่ม script (เช่น `frontend/scripts/migrate-sop-ratio-keys-9.ts`) ที่รันซ้ำได้ (idempotent)
-2. Master: อ่าน active master ผ่าน pointer → ถ้าเป็น schema_v 3 ให้สร้าง `sop_profile:{slug}:{version+1}` schema_v 4 ที่มี 9 คีย์ (ค่าเดิม) → ย้าย pointer ด้วย CAS (`onConflict: 'throw'`) → เขียน `audit` เหตุผล "CR-NNN: ตัดตัวแปร SOP ratio เหลือ 9 คีย์"
-3. Override: ทุก `shelter_*` DB — `sop_override` ที่ `active: true` และ schema_v 2 → สร้างเวอร์ชันถัดไป schema_v 3 ที่มี 9 คีย์ → ปิด (`active: false`) เวอร์ชันเดิม → เขียน audit
-4. เวอร์ชันเก่าไม่ถูกแก้ไข (immutable history)
-5. Deploy `_design/access` ใหม่ทุก `shelter_*` DB
-6. จัดการ `simulation` schema_v 1 ตาม B-D2
-7. รายงานผล: จำนวนเอกสารที่ migrate / ข้าม / error ต่อ DB
-
-> [NEEDS DECISION: B-D3] ลำดับ deploy บน staging: รัน migration **ก่อน** deploy frontend ใหม่ (ระหว่างนั้นระบบเดิมยังอ่าน schema_v 4 ไม่ได้) หรือ deploy frontend ที่อ่านได้ทั้ง legacy+ใหม่ก่อนแล้วค่อย migrate
-
-### FR-B06 — Seed และ fixture
-1. `sop-ratio.fixture.ts` `validRatios`: 9 คีย์
-2. `scripts/seed/master-seed.ts` และ `scripts/sync-central-db.ts`: สร้าง master schema_v 4
-3. `scripts/demo/t31-scenario-2-illustrative.ts`: ปรับเป็น 9 คีย์ หรือทำเครื่องหมาย deprecated
-
-### FR-B07 — ถอดโค้ดของแบบ A
-1. ลบ `VISIBLE_SOP_RATIO_KEYS`, `isVisibleSopRatioKey` และจุดที่กรองด้วยฟังก์ชันนี้ (หน้าพารามิเตอร์, supply dashboard, simulation form/compare panel/workspace) — ให้ใช้ `SOP_RATIO_KEYS` ตรง
-2. คงข้อความ UI ที่เปลี่ยนแล้ว ("ตัวแปรมาตรฐาน Sphere", "พื้นที่พักพิงรวม")
-
-> [NEEDS DECISION: B-D4] โค้ดแบบ A อยู่ใน branch `chore/sop-parameters-sphere-cleanup` (commit `35fb26ec`) ยังไม่ merge เข้า `develop`: (ก) merge PR แบบ A ก่อน แล้ว CR นี้ถอดออก หรือ (ข) ตัด commit `35fb26ec` ออกจาก PR แล้วทำแบบ B แทนโดยตรง
+### FR-B04 — เทสต์
+1. unit test: รายการคีย์ที่แสดงมี 9 คีย์ ไม่ซ้ำ และทุกคีย์อยู่ใน `SOP_RATIO_KEYS`
+2. unit test: คีย์ที่ต้องซ่อนทั้ง 11 คีย์ถูกซ่อนจริง และ `m2_per_person_total` ยังแสดง
+3. e2e ที่อ้างคีย์ที่ถูกซ่อนต้องปรับไปใช้คีย์ที่ยังแสดง
 
 ## B3. Why
 
-1. **Requirement ใหม่:** PDF "สิ่งที่ตัดออกในตัวแปรมาตรฐาน Sphere" ขีดฆ่า 11 ตัวแปร และให้รวมพื้นที่พักพิงเป็นตัวเดียว
-2. **แบบ A ไม่พอ:** ข้อมูลที่ไม่ได้ใช้ยังถูก persist, คำนวณ, และผ่าน validator; `schema.md` ยังระบุ 20 คีย์ → spec กับ requirement ไม่ตรงกัน และหน้าจอใหม่ที่ลืมกรองจะแสดงตัวแปรที่ตัดไปแล้ว
-3. **ข้อมูลน้ำไม่ได้ใช้จริงอยู่แล้ว:** `have` ของน้ำ 4 คีย์ผูกกับ `item:water` แบบ hardcode (CR-042 OD-2) ซึ่งมีเฉพาะใน seed — บน staging แถวน้ำเป็น "รอสต็อก" ทุกแถว
-4. **ทางเลือกที่ตัดทิ้ง:** แบบ A (ซ่อนในหน้าจอ) — ย้อนกลับง่ายแต่ data model ไม่ตรง requirement; ถูกเลือกไว้ชั่วคราว 2026-09-16
+1. **Requirement:** PDF 2026-09-16 ของ Kontuch ขีดฆ่า 11 ตัวแปรและให้เหลือพื้นที่พักพิงตัวเดียว
+2. **ทำไมเลือกแบบ A ก่อน (มติ PO 2026-09-18):** ปลอดภัยกว่าและย้อนกลับง่าย — ไม่ต้อง bump `schema_v`, ไม่ต้อง migrate staging, ไม่ต้อง deploy `_design/access` ใหม่ และโค้ดพร้อมอยู่บน PR #285 แล้ว
+3. **ทำไมยังไม่ตัดออกจาก schema (แบบ B):** ต้องยืนยันกับ stakeholder ก่อนว่าคีย์ที่ตัดจะไม่ถูกใช้อีก ถ้าตัดแล้วต้องกลับมาใช้ ต้อง migrate ย้อนกลับซึ่งมีความเสี่ยงสูง
 
 ## B4. Change (Before → After)
 
 | มิติ | ก่อน | หลัง |
 | --- | --- | --- |
-| Canonical SOP ratio keys | 20 (CR-021 / CR-026) | 9 |
-| `sop_profile` | schema_v 3, `ratios` 20 คีย์ strict | schema_v 4, `ratios` 9 คีย์ strict |
-| `sop_override` | schema_v 2, `ratios` 20 คีย์ strict | schema_v 3, `ratios` 9 คีย์ strict |
-| `simulation` | schema_v 1, ทุก array 20 แถว | schema_v 2, ทุก array 9 แถว |
-| `daily_calc` | schema_v 2, `results` 20 แถว | schema_v 2 (คงเดิม), `results` 9 แถว |
-| `have` invariant (CR-042) | น้ำ 4 คีย์เท่ากัน, พื้นที่ 3 คีย์เท่ากัน, null 9 คีย์ | null 4 คีย์ |
-| `_design/access` (shelter DB) | ตรวจ simulation ด้วย 20 คีย์ | 9 คีย์ |
-| UI | แสดง 9 จาก 20 ด้วย `VISIBLE_SOP_RATIO_KEYS` (แบบ A) | แสดง `SOP_RATIO_KEYS` ทั้งหมด (9) |
+| จำนวนคีย์ในหน้าจอ | 20 | 9 |
+| canonical keys ในโค้ด/ฐานข้อมูล | 20 | 20 (ไม่เปลี่ยน) |
+| `sop_profile` / `sop_override` / `simulation` | schema_v 3 / 2 / 1 | เท่าเดิมทั้งหมด |
+| `daily_calc` results | 20 แถว | 20 แถว (หน้าจอแสดง 9) |
+| ป้าย `m2_per_person_total` | "พื้นที่รวม" | "พื้นที่พักพิงรวม" |
+| `_design/access`, migration, seed ratios | — | ไม่เปลี่ยน |
 
 ## B5. Impact
 
-**Docs**
-- `docs/data/schema.md` §4.4 `sop_profile` (field `ratios` + schema_v note + migration note)
-- `docs/data/schema.md` §2.14 `sop_override` (field `ratios` + schema_v note)
-- `docs/data/schema.md` §2.20 `simulation` (ข้อความ "canonical SOP ratio keys ทั้ง 20 รายการ" → 9, schema_v)
-- `docs/data/schema.md` §2.15 `daily_calc` (หมายเหตุ "whitelist 20 keys")
-- `docs/data/data-model.md`, `docs/features/daily-sop-resource-calc-flow.md`
-- `docs/changes/CR-042-daily-sop-calc-follow-up.md` — หมายเหตุว่า OD-2 แถวที่ตัดถูก supersede
-- ไม่แก้ (บันทึกประวัติ): CR-006, CR-015, CR-021, `docs/demo/T-31-*`, `docs/questions/QR-001-*`, `docs/source/handbooks/sop-ratio-reference-table.md`
+- **Docs:** ไม่มี — `docs/data/schema.md` ยังระบุ canonical 20 คีย์ตามเดิม (CR-021 / CR-026 ไม่ถูก supersede)
+- **Code (อยู่บน PR #285 แล้ว):** `sop-ratios/domain/sop-ratio.ts`, `sop-ratio.labels.ts`, UI ของหน้าพารามิเตอร์, `resource-calc/ui/resource-needs-dashboard.svelte`, `sop-simulation/ui/{scenario-form,scenario-compare-panel,scenario-workspace}.svelte` (commit `35fb26ec`, `04f10684`)
+- **Test:** `sop-ratios/domain/sop-ratio.test.ts` (เทสต์ใหม่ 3 ข้อ) และ `e2e/sop-simulation.test.ts`
+- **ไม่กระทบ:** เครื่องคำนวณ, ข้อมูลใน CouchDB, `_design/access`, backend, worker
 
-**Code (non-test)**
-- `sop-ratios`: `domain/sop-ratio.ts`, `domain/sop-ratio.labels.ts`, `domain/sop-ratio.fixture.ts`, `data/sop-ratio.remote.ts` (legacy read), `ui/version-history-drawer.svelte` + UI ที่ใช้ `VISIBLE_SOP_RATIO_KEYS`
-- `resource-calc`: `data/have-map.ts`, `data/daily-calc.validation.ts`, `ui/sop-category.ts`, `ui/resource-needs-dashboard.svelte`
-- `sop-simulation`: `domain/scenario.schema.ts`, `ui/scenario-form.svelte`, `ui/scenario-compare-panel.svelte`, `ui/scenario-workspace.svelte`
-- `lib/server/shelter-access-design.ts`
-- `scripts/seed/master-seed.ts`, `scripts/sync-central-db.ts`, `scripts/demo/t31-scenario-2-illustrative.ts`, migration script ใหม่
+## B6. นอกขอบเขตรอบนี้ (backlog)
 
-**Tests (ต้องแก้ fixture/expectation 20 → 9)**
-- `sop-ratios`: `domain/sop-ratio.test.ts`, `data/sop-ratio.remote.test.ts`, `application/queries.test.ts`
-- `resource-calc`: `data/have-map.test.ts`, `data/daily-calc.validation.test.ts`, `data/daily-calc.remote.test.ts`, `domain/calc.formula.test.ts`, `domain/calc.schema.test.ts`
-- `sop-simulation`: `application/use-run-simulation.test.ts`, `data/scenario.remote.test.ts`, `domain/scenario-display.test.ts`, `domain/scenario.projection.test.ts`, `domain/scenario.schema.test.ts`, `t42-flood-demo.test.ts`, `ui/scenario-mode.test.ts`
-- `lib/server/shelter-access-design.test.ts`
-- e2e: `e2e/sop-simulation.test.ts`
+รายการด้านล่าง **เลื่อนไปรอบ refactor** ตามมติ PO 2026-09-18 จะพิจารณาเมื่อ stakeholder ยืนยันว่าไม่ใช้คีย์ที่ตัดแล้ว และต้องเปิด CR ใหม่แยกต่างหาก
 
-**ไม่กระทบ:** backend (FastAPI), worker, MongoDB projections, kitchen/meal-plan (ไม่มีการอ้าง 11 คีย์)
-
-**ประมาณการ:** ~4–5 วันทำงาน (ไม่รวมรอบ review และการรัน migration บน staging)
-
-## B6. Migration
-
-- **Persisted docs ที่กระทบ:** `catalog/sop_profile:*` (schema_v 3), `shelter_*/sop_override:*` (schema_v 2), `shelter_*/simulation:*` (schema_v 1), `shelter_*/daily_calc:*` (ไม่ migrate — อ่านแบบข้ามแถวที่ไม่รู้จัก)
-- **วิธี:** migration script ตาม FR-B05 — สร้างเวอร์ชันใหม่ ไม่แก้เอกสารเดิม (immutable history ตาม CR-006/CR-083)
-- **ย้อนกลับ:** ย้าย pointer กลับไปเวอร์ชัน schema_v 3 เดิม + deploy frontend/`_design/access` รุ่นก่อน; เอกสารที่สร้างใหม่คงอยู่ในประวัติ
-- **Pre-prod:** local/dev รัน unseed + seed ใหม่แทน migration ได้
-- **Production:** ยังไม่มี production data — migration ใช้กับ staging
+- ตัด canonical keys จาก 20 เหลือ 9 ใน `SOP_RATIO_KEYS` / `ratiosSchema`
+- bump `sop_profile` schema_v 3 → 4, `sop_override` 2 → 3, `simulation` 1 → 2 และปรับ invariant ของ `daily_calc`
+- migration script (สร้างเวอร์ชันใหม่ + ย้าย pointer แบบ CAS ตาม CR-083) และ deploy `_design/access` ใหม่ทุก `shelter_*` DB
+- supersede CR-042 OD-2 แถวที่เกี่ยวกับคีย์ที่ตัด และแก้ `docs/data/schema.md` §4.4 / §2.14 / §2.15 / §2.20
+- ถอดรายการคีย์ที่แสดง (`VISIBLE_SOP_RATIO_KEYS`) ออกเมื่อ canonical keys เหลือ 9 แล้ว
+- คำถามที่ต้องเคาะเมื่อทำแบบ B (เดิมคือ B-D1…B-D5 — **ไม่ต้องเคาะในรอบนี้**): ค่าของ "พื้นที่พักพิงรวม", เอกสาร `simulation` เดิม, ลำดับ deploy กับ migration, การจัดการโค้ดแบบ A, phase ที่จะทำ
 
 ## B7. Acceptance Criteria
 
-- [ ] **AC-B01:** `SOP_RATIO_KEYS` มี 9 คีย์ตาม B1; `ratiosSchema` ปฏิเสธ 11 คีย์ที่ลบและปฏิเสธ ratios ที่ขาดคีย์
-- [ ] **AC-B02:** สร้าง master / override ใหม่ได้เอกสาร schema_v 4 / 3 ที่มี 9 คีย์
-- [ ] **AC-B03:** หลังรัน migration บน staging: pointer ชี้ master schema_v 4, override active ทุกตัวเป็น schema_v 3, audit ครบทุกเอกสารที่ migrate; รันซ้ำแล้วไม่สร้างเวอร์ชันเพิ่ม
-- [ ] **AC-B04:** ประวัติเวอร์ชันเปิดเอกสาร schema_v 3 / 2 ได้โดยไม่ error
-- [ ] **AC-B05:** กด "คำนวณใหม่" ได้ `daily_calc` 9 แถว; เปิด `daily_calc` เก่า 20 แถวได้โดยแสดง 9 แถว
-- [ ] **AC-B06:** หน้าจำลองรันและบันทึก scenario ได้ (schema_v 2, 9 แถว) ผ่าน `_design/access` ใหม่; เอกสาร schema_v 1 จัดการตาม B-D2
-- [ ] **AC-B07:** ไม่มี `VISIBLE_SOP_RATIO_KEYS` / `isVisibleSopRatioKey` เหลือในโค้ด
-- [ ] **AC-B08:** `pnpm lint`, `pnpm check` (0 error), `pnpm test`, `pnpm test:e2e` (sop-simulation, daily-sop) ผ่าน
-- [ ] **AC-B09:** `docs/data/schema.md` §4.4, §2.14, §2.15, §2.20 อัปเดตพร้อม `updated:` และ migration note
-
-## B8. Decisions ที่ต้องเคาะก่อน implement
-
-| # | คำถาม | ข้อเสนอ |
-| --- | --- | --- |
-| B-D1 | "พื้นที่พักพิงรวม" ใช้ค่า `m2_per_person_total` เดิม (45 ตร.ม./คน) | ใช้ค่าเดิม |
-| B-D2 | เอกสาร `simulation` schema_v 1 ที่บันทึกแล้ว | ลบด้วย tombstone (ยังเป็นข้อมูลทดสอบ) |
-| B-D3 | ลำดับ deploy frontend กับ migration บน staging | deploy frontend ที่อ่าน legacy ได้ก่อน แล้วค่อย migrate |
-| B-D4 | โค้ดแบบ A (`35fb26ec`) | ตัดออกจาก PR `chore/sop-parameters-sphere-cleanup` แล้วทำแบบ B ตรง |
-| B-D5 | อยู่ใน phase ปัจจุบันหรือ backlog (change-management §5) | ให้เจ้าของโครงการกำหนด |
-
-## B9. ความสัมพันธ์กับ CR อื่น
-
-- **CR-021 / CR-026:** กำหนด 20 canonical keys — ส่วนนี้ลดขอบเขตเหลือ 9 (supersede เฉพาะรายการคีย์)
-- **CR-006:** โครงสร้าง master/override และ immutable version — ยึดตามเดิม
-- **CR-042 OD-2:** have map แถวน้ำ, พลังงาน, จุดรับอาหาร, พื้นที่ร้อน/หนาว, ระยะทาง, เวลารอคิว ถูก supersede
-- **CR-079:** simulation — schema_v 1 → 2
-- **CR-083:** pointer fail-closed — migration ต้องย้าย pointer ด้วย CAS
+- [ ] **AC-B01:** หน้า 5. พารามิเตอร์ แสดงและแก้ไขได้ 9 คีย์ และตัวนับในแท็บตรงกับจำนวนที่แสดง
+- [ ] **AC-B02:** แท็บวิเคราะห์ความต้องการพื้นฐานและหน้าจำลองสถานการณ์ SOP แสดงเฉพาะ 9 คีย์ (รวม CSV และตัวนับ)
+- [ ] **AC-B03:** แก้ค่าคีย์ที่แสดงแล้วบันทึก เอกสารใหม่ยังมีครบ 20 คีย์ และค่าคีย์ที่ซ่อนไม่เปลี่ยน
+- [ ] **AC-B04:** `daily_calc` ที่คำนวณใหม่ยังมี 20 แถว และ `sop_profile` / `sop_override` / `simulation` ยังเป็น schema_v เดิม
+- [ ] **AC-B05:** `pnpm lint`, `pnpm check` (0 error), `pnpm test` ผ่าน และ e2e ที่เกี่ยวข้องไม่อ้างคีย์ที่ถูกซ่อน
+- [ ] **AC-B06:** เอกสาร CR นี้และโค้ดบน PR #285 merge ไปพร้อมกัน
 
 ---
 
 ## Decision Log
 
 - 2026-09-17 — ร่าง Change Record (Proposed) เพื่อประสานเอกสาร `docs/data/schema.md` ให้สอดคล้องกับการเปลี่ยนแปลงในโค้ดและแดชบอร์ดศูนย์
-- 2026-09-17 — เพิ่มส่วน B (proposed): ตัดตัวแปร SOP ratio 20 → 9 คีย์ออกจาก schema จริง แทนแบบ A (ซ่อนในหน้าจอ) ที่ทำไว้ 2026-09-16 ใน branch `chore/sop-parameters-sphere-cleanup`
+- 2026-09-17 — ร่างส่วน B ฉบับแรกเป็นแนวทาง "ตัดตัวแปร 20 → 9 ออกจาก schema จริง" (แบบ B)
+- 2026-09-18 — **มติเจ้าของโครงการ (PR review #294):**
+  1. รวมส่วน A และส่วน B เป็น **CR เดียว** ไม่แยกเลขรายส่วน
+  2. ส่วน A **bump `food_sphere_standard` schema_v 1 → 2** เพราะ enum และ `_id` ของ `target_segment` ที่ persist เปลี่ยนรูป (ไม่ใช้วิธีไม่ bump แล้ว wipe อย่างเดียว)
+  3. ส่วน B ใช้ **แบบ A** (ซ่อนในหน้าจอเหลือ 9 คีย์ คง canonical 20 คีย์ใน DB / validator / schema) เพราะปลอดภัยกว่าและย้อนกลับง่าย โค้ดมีอยู่แล้วบน PR #285
+  4. **แบบ B (ตัด 20 → 9 ออกจาก schema จริง) เลื่อน** ไปรอบ refactor หลังคุย stakeholder และยืนยันว่าไม่ใช้คีย์ที่ตัดแล้ว · B-D1…B-D5 ไม่ต้องเคาะในรอบนี้
+  5. คง commit ของแบบ A บน PR #285 ไว้ (ไม่ตัดออกตามข้อเสนอเดิมของแบบ B)
+  6. รันเลข CR จาก `docs/changes/_index.md` ตอน approve และ merge เอกสารกับ PR #285 ไปพร้อมกัน
