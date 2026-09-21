@@ -292,7 +292,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				// A timer callback may already be waiting on the name-lock CAS. Do
 				// not release the lock until that renewal has settled, otherwise a
 				// late renewal can reacquire it after cleanup and leave a stale lock.
-				await renewingClaim?.catch(() => undefined);
+				const pendingRenewal = renewingClaim as Promise<void> | null;
+				if (pendingRenewal !== null) await pendingRenewal.catch(() => undefined);
 				if (nameLockAcquired && lockedName) {
 					await releaseShelterNameLock({ name: lockedName, ownerId: lockOwnerId }).catch(
 						() => undefined
