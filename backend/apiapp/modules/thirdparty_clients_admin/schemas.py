@@ -7,12 +7,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 from tent_model.third_party_client import THIRD_PARTY_SCOPES
 
-# `occupancy-pii-read` is never grantable through this admin surface — EXT-007 stays
-# denied by default (403 scaffold). Granting it in production is explicitly out of
-# scope (ext-spec.md) pending a separate written-approval process.
-GRANTABLE_SCOPES: tuple[str, ...] = tuple(
-    scope for scope in THIRD_PARTY_SCOPES if scope != "occupancy-pii-read"
-)
+# All scopes defined on the third-party client model are grantable here, including
+# `occupancy-pii-read` (EXT-007) — enabled per written approval from the project owner.
+GRANTABLE_SCOPES: tuple[str, ...] = THIRD_PARTY_SCOPES
 
 # Only these two partner systems exist today (ADR 0002 / ext-spec.md). Kept as a
 # closed set — not free text — so a client can't be created under a typo'd or
