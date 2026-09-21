@@ -196,6 +196,11 @@ export function clearMfaOk(): Promise<{ ok: true }> {
 	return serviceFetch('/api/v1/auth/mfa/clear', { method: 'POST', body: '{}' });
 }
 
+/** Skip BFF MFA challenge for the current session (sets `mfa_ok` cookie). */
+export function skipMfa(): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/mfa/skip', { method: 'POST', body: '{}' });
+}
+
 /**
  * Unlink Google MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
  */

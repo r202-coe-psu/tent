@@ -21,6 +21,7 @@ export {
 	updateOwnProfile,
 	submitForceSetup,
 	clearMfaOk,
+	skipMfa,
 	unlinkGoogleMfa,
 	googleOAuthStartHref,
 	unlinkThaidMfa,
