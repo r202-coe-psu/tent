@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -15,8 +19,13 @@
 
 	let {
 		onsuccess,
-		preselectedItemId = undefined
-	}: { onsuccess?: () => void; preselectedItemId?: string } = $props();
+		preselectedItemId = undefined,
+		initialAdjustmentType = 'write_off'
+	}: {
+		onsuccess?: () => void;
+		preselectedItemId?: string;
+		initialAdjustmentType?: 'write_off' | 'add';
+	} = $props();
 
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
@@ -37,9 +46,7 @@
 	let selectedLotKey = $state<string>('');
 	let customLocation = $state<string>('');
 	let customExpiry = $state<string>('');
-
 	let newQtyInput = $state<string>('');
-	let adjustmentType = $state<'write_off' | 'add'>('write_off');
 	let reason = $state<string>('');
 
 	const items = $derived.by(() => {
@@ -105,6 +112,10 @@
 		return subQty(newQtyInput, base);
 	});
 
+	let adjustmentType = $derived(
+		Number(deltaQty) < 0 ? 'write_off' : Number(deltaQty) > 0 ? 'add' : initialAdjustmentType
+	);
+
 	const isSubmitting = $derived(adjustMutation.isPending);
 
 	// Helpers
@@ -128,7 +139,7 @@
 		// Reset form fields
 		selectedLotKey = '';
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = initialAdjustmentType;
 		reason = '';
 	}
 
@@ -138,19 +149,9 @@
 		isDropdownOpen = false;
 		selectedLotKey = '';
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = initialAdjustmentType;
 		reason = '';
 	}
-
-	// Watch newQtyInput to auto-set adjustmentType
-	$effect(() => {
-		const delta = Number(deltaQty);
-		if (delta < 0) {
-			adjustmentType = 'write_off';
-		} else if (delta > 0) {
-			adjustmentType = 'add';
-		}
-	});
 
 	// Submit
 	async function handleSubmit(e: SubmitEvent) {
@@ -257,13 +258,13 @@
 		<h3 class="text-sm font-bold text-foreground">ปรับปรุงยอดสต๊อก (Stock Adjustment)</h3>
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<!-- Searchable Item Selector -->
-		<div class="relative col-span-1 sm:col-span-2">
-			<label for="item-search" class="text-xs font-bold text-foreground"
-				>ค้นหาและเลือกรายการสิ่งของ</label
+		<Field.Root class="relative col-span-1 sm:col-span-2">
+			<Field.Label for="item-search"
+				>ค้นหาและเลือกรายการสิ่งของ <span class="font-bold text-destructive">*</span></Field.Label
 			>
-			<div bind:this={container} class="relative mt-1 w-full">
+			<div bind:this={container} class="relative w-full">
 				<Input
 					id="item-search"
 					placeholder="พิมพ์เพื่อค้นหา เช่น ข้าวสาร, น้ำดื่ม..."
@@ -272,19 +273,20 @@
 					oninput={() => !preselectedItemId && (isDropdownOpen = true)}
 					autocomplete="off"
 					disabled={!!preselectedItemId}
-					class={[
-						'h-10 w-full rounded-xl border border-border/80 bg-background px-3 shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
-						preselectedItemId ? 'cursor-not-allowed bg-muted font-bold text-muted-foreground' : ''
-					]}
+					class={preselectedItemId
+						? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
+						: ''}
 				/>
 				{#if selectedItem && !preselectedItemId}
-					<button
+					<Button
 						type="button"
-						class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+						variant="ghost"
+						size="xs"
+						class="absolute top-1/2 right-2 -translate-y-1/2"
 						onclick={clearSelection}
 					>
 						ล้างค่า
-					</button>
+					</Button>
 				{/if}
 
 				{#if isDropdownOpen}
@@ -314,18 +316,19 @@
 					</div>
 				{/if}
 			</div>
-		</div>
+		</Field.Root>
 
 		{#if selectedItem}
 			<!-- Lot / Location selector -->
-			<div class="col-span-1 sm:col-span-2">
-				<label for="lot-select" class="text-xs font-bold text-foreground"
-					>สถานที่และล็อตที่ต้องการปรับปรุง *</label
+			<Field.Root class="col-span-1 sm:col-span-2">
+				<Field.Label for="lot-select"
+					>สถานที่และล็อตที่ต้องการปรับปรุง <span class="font-bold text-destructive">*</span
+					></Field.Label
 				>
 				<select
 					id="lot-select"
 					bind:value={selectedLotKey}
-					class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
+					class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
 				>
 					<option value="" disabled>-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --</option>
 					{#each itemLots as lot (lot.key)}
@@ -333,46 +336,43 @@
 					{/each}
 					<option value="new">➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...</option>
 				</select>
-			</div>
+			</Field.Root>
 
 			<!-- Conditional Inputs for New Lot -->
 			{#if selectedLotKey === 'new'}
-				<div class="col-span-1">
-					<label for="custom-location" class="text-xs font-bold text-foreground"
-						>สถานที่จัดเก็บใหม่ *</label
+				<Field.Root class="col-span-1">
+					<Field.Label for="custom-location"
+						>สถานที่จัดเก็บใหม่ <span class="font-bold text-destructive">*</span></Field.Label
 					>
 					<select
 						id="custom-location"
 						bind:value={customLocation}
-						class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
+						class="flex h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
 					>
 						<option value="">เลือกโซนที่จัดเก็บ</option>
 						<option value="Zone A">Zone A (ของใช้ทั่วไป)</option>
 						<option value="Zone B">Zone B (ของที่เน่าเสียได้)</option>
 						<option value="Zone C">Zone C (ยาและเวชภัณฑ์)</option>
 					</select>
-				</div>
-				<div class="col-span-1">
-					<label for="custom-expiry" class="text-xs font-bold text-foreground">
+				</Field.Root>
+				<Field.Root class="col-span-1">
+					<Field.Label for="custom-expiry">
 						วันหมดอายุใหม่
 						{#if selectedItem.perishable}
-							<span class="font-bold text-rose-500">* (ของเสียง่าย บังคับกรอก)</span>
+							<span class="font-bold text-destructive">* (ของเสียง่าย บังคับกรอก)</span>
 						{/if}
-					</label>
-					<Input
-						id="custom-expiry"
-						type="date"
-						bind:value={customExpiry}
-						class="mt-1 h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					/>
-				</div>
+					</Field.Label>
+					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุใหม่" bind:value={customExpiry} />
+				</Field.Root>
 			{/if}
 
 			{#if selectedLotKey}
 				<!-- Quantity Input -->
-				<div class="col-span-1">
-					<label for="new-qty" class="text-xs font-bold text-foreground">จำนวนใหม่ *</label>
-					<div class="relative mt-1">
+				<Field.Root class="col-span-1">
+					<Field.Label for="new-qty"
+						>จำนวนใหม่ <span class="font-bold text-destructive">*</span></Field.Label
+					>
+					<div class="relative">
 						<Input
 							id="new-qty"
 							type="number"
@@ -380,7 +380,7 @@
 							min="0"
 							step="any"
 							bind:value={newQtyInput}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background pr-16 pl-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+							class="pr-16 font-mono font-bold"
 						/>
 						<span
 							class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground"
@@ -388,19 +388,17 @@
 							{selectedItem.unit}
 						</span>
 					</div>
-				</div>
+				</Field.Root>
 
 				<!-- Issuer (Disabled) -->
-				<div class="col-span-1">
-					<label for="issuer" class="text-xs font-bold text-foreground">ผู้ดำเนินการ (Issuer)</label
-					>
+				<Field.Root class="col-span-1">
+					<Field.Label for="issuer">ผู้ดำเนินการ (Issuer)</Field.Label>
 					<Input
 						id="issuer"
 						value={authStore.user?.name || 'เจ้าหน้าที่คลังสินค้า (Admin)'}
 						disabled
-						class="mt-1 h-10 w-full cursor-not-allowed rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm"
 					/>
-				</div>
+				</Field.Root>
 
 				<!-- Delta preview & Type display -->
 				<div
@@ -433,11 +431,13 @@
 				</div>
 
 				<!-- Adjustment Type (Toggle Group) -->
-				<div class="col-span-1 sm:col-span-2">
-					<span class="block text-xs font-bold text-foreground">ประเภทการปรับปรุง</span>
-					<div class="mt-2 grid grid-cols-2 gap-3">
-						<button
+				<Field.Root class="col-span-1 sm:col-span-2">
+					<Field.Label>ประเภทการปรับปรุง</Field.Label>
+					<div class="grid grid-cols-2 gap-3">
+						<Button
 							type="button"
+							variant={adjustmentType === 'write_off' ? 'destructive' : 'outline'}
+							size="lg"
 							onclick={() => {
 								if (Number(deltaQty) > 0) {
 									toast.error('ไม่สามารถเลือกประเภทเขียนทิ้งเมื่อจำนวนใหม่มากกว่าจำนวนเดิม');
@@ -446,19 +446,15 @@
 								adjustmentType = 'write_off';
 							}}
 							disabled={Number(deltaQty) > 0}
-							class={[
-								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
-								adjustmentType === 'write_off'
-									? 'border-rose-500 bg-rose-500/5 text-rose-600'
-									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) > 0 ? 'cursor-not-allowed opacity-40' : ''
-							]}
+							class={adjustmentType === 'write_off' ? 'font-bold shadow-xs' : 'font-bold'}
 						>
 							<MinusCircle class="h-4 w-4" />
 							เขียนทิ้ง/ชำรุด
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
+							variant={adjustmentType === 'add' ? 'default' : 'outline'}
+							size="lg"
 							onclick={() => {
 								if (Number(deltaQty) < 0) {
 									toast.error('ไม่สามารถเลือกประเภทปรับยอดเพิ่มเมื่อจำนวนใหม่น้อยกว่าจำนวนเดิม');
@@ -467,43 +463,39 @@
 								adjustmentType = 'add';
 							}}
 							disabled={Number(deltaQty) < 0}
-							class={[
-								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
-								adjustmentType === 'add'
-									? 'border-primary bg-primary/5 text-primary'
-									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) < 0 ? 'cursor-not-allowed opacity-40' : ''
-							]}
+							class={adjustmentType === 'add' ? 'font-bold shadow-xs' : 'font-bold'}
 						>
 							<PlusCircle class="h-4 w-4" />
 							ปรับยอดเพิ่ม
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Field.Root>
 
 				<!-- Reason / Note -->
-				<div class="col-span-1 sm:col-span-2">
-					<label for="reason" class="text-xs font-bold text-foreground">เหตุผล / หมายเหตุ *</label>
-					<textarea
+				<Field.Root class="col-span-1 sm:col-span-2">
+					<Field.Label for="reason"
+						>เหตุผล / หมายเหตุ <span class="font-bold text-destructive">*</span></Field.Label
+					>
+					<Textarea
 						id="reason"
 						placeholder="เช่น ถุงข้าวสารเปียกน้ำฝนสาด หรือ ค้นพบสินค้าตกหล่นระหว่างตรวจนับ"
 						bind:value={reason}
-						rows="3"
-						class="mt-1 w-full rounded-xl border border-border/80 bg-background p-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					></textarea>
-				</div>
+						rows={3}
+					/>
+				</Field.Root>
 
 				<!-- Submit Button -->
 				<div class="col-span-1 pt-3 sm:col-span-2">
-					<button
+					<Button
 						type="submit"
+						size="lg"
 						disabled={isSubmitting || deltaQty === '0' || !reason.trim()}
-						class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold text-white shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+						class="w-full font-bold"
 					>
 						{isSubmitting ? 'กำลังบันทึกยอด...' : 'ยืนยันทำรายการ ปรับปรุงยอด'}
-					</button>
+					</Button>
 				</div>
 			{/if}
 		{/if}
-	</div>
+	</Field.FieldGroup>
 </form>
