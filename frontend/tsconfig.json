@@ -29,10 +29,14 @@
 		"tests/**/*.svelte",
 		"scripts/**/*.js",
 		"scripts/**/*.ts"
+	],
+	"exclude": [
+		"node_modules",
+		"dist",
+		"build",
+		"public",
+		"static",
+		"templates",
+		"tests",
 	]
-	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-	//
-	// If you want to overwrite includes/excludes, make sure to copy over the relevant includes/excludes
-	// from the referenced tsconfig.json - TypeScript does not merge them in
 }

@@ -121,6 +121,16 @@ export {
 } from './domain/people';
 
 export {
+	CR112_HOUSING_TYPE_CODES,
+	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	buildHousingTypeSelectItems,
+	setHousingTypeFromSelect,
+	housingTypeLabelForCode,
+	type HousingTypeSelectItem,
+	type MasterHousingItem
+} from './domain/housing-type-ui';
+
+export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
