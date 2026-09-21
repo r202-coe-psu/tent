@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const requireAdminMock = vi.hoisted(() => vi.fn());
+const requireSystemAdminMock = vi.hoisted(() => vi.fn());
 const getImportJobMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/server/couch-admin', () => ({
-	requireAdmin: requireAdminMock,
+	requireSystemAdmin: requireSystemAdminMock,
 	serviceError: vi.fn()
 }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
@@ -40,7 +40,12 @@ async function call(ifNoneMatch?: string): Promise<Response> {
 }
 
 beforeEach(() => {
-	requireAdminMock.mockReset().mockResolvedValue('admin');
+	requireSystemAdminMock.mockReset().mockResolvedValue({
+		name: 'admin',
+		roles: ['system_admin'],
+		isSA: true,
+		shelterCode: null
+	});
 	getImportJobMock.mockReset().mockResolvedValue(summary('1-item'));
 });
 

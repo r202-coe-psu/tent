@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const env = vi.hoisted(() => ({ SHELTER_IMPORT_WORKER_TOKEN: 'worker-secret' }));
-const requireAdminMock = vi.hoisted(() => vi.fn());
+const requireSystemAdminMock = vi.hoisted(() => vi.fn());
 const createImportJobMock = vi.hoisted(() => vi.fn());
 const safeParseMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/couch-admin', () => ({
-	requireAdmin: requireAdminMock,
+	requireSystemAdmin: requireSystemAdminMock,
 	serviceError: (error: unknown) =>
 		new Response(JSON.stringify({ error: { code: 'INTERNAL', message: String(error) } }), {
 			status: 500,
@@ -38,7 +38,12 @@ function request(body: string, idempotencyKey = 'import-key-1'): Request {
 
 beforeEach(() => {
 	env.SHELTER_IMPORT_WORKER_TOKEN = 'worker-secret';
-	requireAdminMock.mockReset().mockResolvedValue('admin');
+	requireSystemAdminMock.mockReset().mockResolvedValue({
+		name: 'admin',
+		roles: ['system_admin'],
+		isSA: true,
+		shelterCode: null
+	});
 	createImportJobMock.mockReset().mockResolvedValue({ _id: 'shelter_import_job:key-hash' });
 	safeParseMock.mockReset().mockImplementation((value) => ({
 		success: true,
@@ -79,6 +84,31 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 				})
 			]
 		});
+	});
+
+	it.each([
+		['app system admin', ['system_admin']],
+		['CouchDB server admin', ['_admin']]
+	])('allows %s sessions through the server gate', async (_label, roles) => {
+		requireSystemAdminMock.mockResolvedValueOnce({
+			name: 'admin',
+			roles,
+			isSA: true,
+			shelterCode: null
+		});
+
+		const response = await POST({
+			request: request(
+				JSON.stringify({
+					filename: 'shelters.xlsx',
+					duplicate_action: 'skip',
+					rows: [{ row: 1, name: 'ศูนย์ A', shelter: { name: 'ศูนย์ A', capacity: 100 } }]
+				})
+			)
+		} as unknown as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(202);
+		expect(requireSystemAdminMock).toHaveBeenCalledWith('session=admin');
 	});
 
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {

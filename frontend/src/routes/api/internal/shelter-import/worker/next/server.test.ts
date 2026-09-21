@@ -201,4 +201,43 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			expect.objectContaining({ status: 'failed' })
 		);
 	});
+
+	it('waits for an in-flight renewal before releasing the name lock', async () => {
+		vi.useFakeTimers();
+		let releasePendingRenewal!: () => void;
+		const pendingRenewal = new Promise<boolean>((resolve) => {
+			releasePendingRenewal = () => resolve(true);
+		});
+		let resolveProvision!: (value: { ok: true; code: string; db: string; steps: never[] }) => void;
+		const pendingProvision = new Promise<{ ok: true; code: string; db: string; steps: never[] }>(
+			(resolve) => {
+				resolveProvision = resolve;
+			}
+		);
+		let renewalArmed = false;
+		acquireNameLockMock.mockImplementation(async () => {
+			return renewalArmed ? pendingRenewal : true;
+		});
+		provisionMock.mockImplementationOnce(() => {
+			renewalArmed = true;
+			return pendingProvision;
+		});
+
+		try {
+			const responsePromise = call();
+			for (let attempt = 0; attempt < 100 && provisionMock.mock.calls.length === 0; attempt += 1) {
+				await Promise.resolve();
+			}
+			expect(provisionMock).toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(100_000);
+			resolveProvision({ ok: true, code: 'SH001', db: 'shelter_sh001', steps: [] });
+			await Promise.resolve();
+			expect(releaseNameLockMock).not.toHaveBeenCalled();
+			releasePendingRenewal();
+			await expect(responsePromise).resolves.toMatchObject({ status: 200 });
+			expect(releaseNameLockMock).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

@@ -17,12 +17,14 @@ import {
 	updateImportItem,
 	MAX_IMPORT_ATTEMPTS,
 	IMPORT_QUEUE_DB,
+	IMPORT_AUDIT_DB,
 	type ShelterImportItemSummary
 } from './job-store';
 
 const adminRawMock = vi.mocked(adminRaw);
 const docs = new Map<string, Record<string, unknown>>();
 const permanentlyConflictingIds = new Set<string>();
+let securityWrites: unknown[] = [];
 
 function docId(path: string): string {
 	return decodeURIComponent(new URL(`http://test${path}`).pathname.split('/').slice(2).join('/'));
@@ -43,14 +45,31 @@ function allDocs(path: string): { rows: { id: string; doc: Record<string, unknow
 function setupCouchMock(): void {
 	docs.clear();
 	permanentlyConflictingIds.clear();
+	securityWrites = [];
 	adminRawMock.mockImplementation(async (path, method, body) => {
-		if ((path === '/registry' || path === `/${IMPORT_QUEUE_DB}`) && method === 'PUT') {
+		if (
+			(path === '/registry' || path === `/${IMPORT_QUEUE_DB}` || path === `/${IMPORT_AUDIT_DB}`) &&
+			method === 'PUT'
+		) {
 			return { status: 201, data: { ok: true } };
 		}
-		if (path === `/${IMPORT_QUEUE_DB}/_security` && method === 'GET') {
-			return { status: 200, data: { admins: {}, members: {} } };
+		if (
+			(path === `/${IMPORT_QUEUE_DB}/_security` || path === `/${IMPORT_AUDIT_DB}/_security`) &&
+			method === 'GET'
+		) {
+			return {
+				status: 200,
+				data: {
+					admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
+					members: { names: ['legacy-member'], roles: ['shelter:SH001'] }
+				}
+			};
 		}
-		if (path === `/${IMPORT_QUEUE_DB}/_security` && method === 'PUT') {
+		if (
+			(path === `/${IMPORT_QUEUE_DB}/_security` || path === `/${IMPORT_AUDIT_DB}/_security`) &&
+			method === 'PUT'
+		) {
+			securityWrites.push(body);
 			return { status: 200, data: { ok: true } };
 		}
 		if (path.includes('/_all_docs?')) return { status: 200, data: allDocs(path) };
@@ -127,6 +146,15 @@ describe('shelter import job lifecycle', () => {
 		expect(summary?.items[1]._id).toContain(':000012');
 		expect(summary?.items.every((item) => !('input' in item))).toBe(true);
 		expect(summary?.items.every((item) => item.max_attempts === MAX_IMPORT_ATTEMPTS)).toBe(true);
+	});
+
+	it('keeps the import queue private to CouchDB server admins', async () => {
+		await createSingleJob();
+
+		expect(securityWrites.at(-1)).toEqual({
+			admins: { names: [], roles: ['_admin'] },
+			members: { names: [], roles: [] }
+		});
 	});
 
 	it('replays an idempotent request and rejects key reuse with a different body', async () => {

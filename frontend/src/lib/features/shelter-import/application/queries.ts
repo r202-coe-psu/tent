@@ -1,18 +1,8 @@
-import {
-	createMutation,
-	createQuery,
-	useQueryClient,
-	type QueryClient
-} from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
 import { serviceFetch } from '$lib/api/service';
-import {
-	subscribeDataChanges,
-	type SubscribeDataChangesHandle
-} from '$lib/db/subscribe-data-changes';
-import { SHELTER_IMPORT_LOG_TYPE } from '../domain/import-log';
 import type { RowValidation } from '../domain/import-row';
-import { IMPORT_LOG_REGISTRY_DB, listImportLogs } from '../data/import-log.remote';
+import { listImportLogs } from '../data/import-log.remote';
 
 export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_errors';
 export type ImportItemStatus =
@@ -90,23 +80,13 @@ export interface ImportSheltersInput {
 	rows: RowValidation[];
 	/** what to do with those rows */
 	duplicateAction: DuplicateAction;
-	/** Reused when the same mutation is retried after a lost response. */
-	idempotencyKey?: string;
+	/** Stable for this import attempt; callers must reuse it when retrying a lost response. */
+	idempotencyKey: string;
 }
 
 const INITIAL_JOB_POLL_MS = 2000;
 const MAX_JOB_POLL_MS = 10_000;
 const jobPollStates = new Map<string, { etag?: string; delay: number; data?: ImportJobSummary }>();
-const importIdempotencyKeys = new WeakMap<object, string>();
-
-function idempotencyKeyFor(input: ImportSheltersInput): string {
-	if (input.idempotencyKey) return input.idempotencyKey;
-	const existing = importIdempotencyKeys.get(input);
-	if (existing) return existing;
-	const key = crypto.randomUUID();
-	importIdempotencyKeys.set(input, key);
-	return key;
-}
 
 function jobPollDelay(jobId: string): number {
 	return jobPollStates.get(jobId)?.delay ?? INITIAL_JOB_POLL_MS;
@@ -162,10 +142,10 @@ export function useImportJob(jobId: () => string | null) {
 export function useImportShelters() {
 	return createMutation(() => ({
 		mutationFn: async (input: ImportSheltersInput) => {
-			const { filename, rows, duplicateAction } = input;
+			const { filename, rows, duplicateAction, idempotencyKey } = input;
 			return serviceFetch<CreateImportJobResponse>('/api/back-office/shelter-import/jobs', {
 				method: 'POST',
-				headers: { 'Idempotency-Key': idempotencyKeyFor(input) },
+				headers: { 'Idempotency-Key': idempotencyKey },
 				body: JSON.stringify({
 					filename,
 					duplicate_action: duplicateAction,
@@ -202,11 +182,4 @@ export function useRetryImportJob() {
 		},
 		onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'ส่งรายการซ้ำไม่สำเร็จ')
 	}));
-}
-
-/** Wire the `registry` changes feed → import-log query invalidation. */
-export function startShelterImportLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
-	return subscribeDataChanges(queryClient, IMPORT_LOG_REGISTRY_DB, (type) =>
-		type === SHELTER_IMPORT_LOG_TYPE ? [shelterImportKeys.logs()] : []
-	);
 }

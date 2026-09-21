@@ -78,9 +78,9 @@ export {
 // Data — template generation, parsing, persistence
 export { buildShelterTemplateBlob, type TemplateMasters } from './data/template';
 export { parseShelterWorkbook } from './data/parse';
-export { listImportLogs, writeImportLog, IMPORT_LOG_REGISTRY_DB } from './data/import-log.remote';
+export { listImportLogs, IMPORT_LOG_AUDIT_DB } from './data/import-log.remote';
 
-// Application — TanStack Query hooks + live-sync
+// Application — TanStack Query hooks
 export {
 	shelterImportKeys,
 	useImportLogs,
@@ -88,7 +88,6 @@ export {
 	useImportJob,
 	useRetryImportJob,
 	isImportJobTerminal,
-	startShelterImportLiveQuery,
 	type ImportSheltersInput,
 	type ImportJob,
 	type ImportJobItem,

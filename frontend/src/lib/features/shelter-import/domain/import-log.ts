@@ -4,8 +4,9 @@ import type { RowStatus } from './import-row';
 
 /**
  * `shelter_import_log` — one append-only record per terminal Excel import attempt
- * (CR-039, schema.md §3.7). Lives in the `registry` DB, so it uses the central
- * envelope (`CatalogDoc` — no `shelter_code`). `_id = shelter_import_log:{ulid}`
+ * (CR-039, schema.md §3.7). Lives in the private `shelter_import_audit` DB,
+ * but keeps the central envelope (`CatalogDoc` — no `shelter_code`).
+ * `_id = shelter_import_log:{ulid}`
  * (type-prefixed so `allByType` finds it via a plain `_all_docs` prefix scan).
  */
 
@@ -100,7 +101,7 @@ function trimResult(r: ImportRowResult): ImportRowResult {
 	};
 }
 
-/** Mint a fresh log doc (registry envelope, ULID id). */
+/** Mint a fresh log doc (central catalog envelope, ULID id). */
 export function createShelterImportLog(
 	body: ShelterImportLogBody,
 	createdBy: string,

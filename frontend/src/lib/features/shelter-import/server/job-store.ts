@@ -4,6 +4,7 @@ import type { Shelter } from '$lib/features/shelters/domain/schema';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createShelterImportLog,
+	isShelterImportLog,
 	type ImportRowResult,
 	type ShelterImportLog
 } from '../domain/import-log';
@@ -12,6 +13,7 @@ export const IMPORT_JOB_TYPE = 'shelter_import_job' as const;
 export const IMPORT_ITEM_TYPE = 'shelter_import_item' as const;
 export const REGISTRY_DB = 'registry';
 export const IMPORT_QUEUE_DB = 'shelter_import_queue';
+export const IMPORT_AUDIT_DB = 'shelter_import_audit';
 export const MAX_IMPORT_ROWS = 1000;
 export const MAX_IMPORT_ATTEMPTS = 3;
 export const IMPORT_LEASE_MS = 5 * 60 * 1000;
@@ -134,42 +136,42 @@ async function ensureRegistryDatabase(): Promise<void> {
 	}
 }
 
-async function ensureImportQueueDatabase(): Promise<void> {
-	const database = await adminRaw(`/${IMPORT_QUEUE_DB}`, 'PUT');
+async function ensurePrivateDatabase(databaseName: string, label: string): Promise<void> {
+	const database = await adminRaw(`/${databaseName}`, 'PUT');
 	if (database.status >= 400 && database.status !== 412) {
 		throw new ServiceError(
 			'INTERNAL',
-			`import queue database setup failed (${database.status}): ${detail(database.data)}`
+			`${label} database setup failed (${database.status}): ${detail(database.data)}`
 		);
 	}
-	// The queue contains the validated shelter payload used by the private
-	// worker. Keep it out of the broadly readable registry database and make the
-	// queue itself accessible only to server admins. Preserve existing admin
-	// names while explicitly removing database members.
-	const currentSecurity = await adminRaw(`/${IMPORT_QUEUE_DB}/_security`, 'GET');
+	// Both databases contain cross-shelter data. Read the existing document before
+	// replacing it, but deliberately converge to the exact server-only contract:
+	// SvelteKit's admin client is the sole privileged reader/writer.
+	const currentSecurity = await adminRaw(`/${databaseName}/_security`, 'GET');
 	if (currentSecurity.status !== 200 && currentSecurity.status !== 404) {
 		throw new ServiceError(
 			'INTERNAL',
-			`import queue security read failed (${currentSecurity.status}): ${detail(currentSecurity.data)}`
+			`${label} security read failed (${currentSecurity.status}): ${detail(currentSecurity.data)}`
 		);
 	}
-	const existing =
-		(currentSecurity.data as {
-			admins?: { names?: string[]; roles?: string[] };
-		} | null) ?? {};
-	const security = await adminRaw(`/${IMPORT_QUEUE_DB}/_security`, 'PUT', {
-		admins: {
-			names: existing.admins?.names ?? [],
-			roles: [...new Set([...(existing.admins?.roles ?? []), '_admin', 'system_admin'])]
-		},
+	const security = await adminRaw(`/${databaseName}/_security`, 'PUT', {
+		admins: { names: [], roles: ['_admin'] },
 		members: { names: [], roles: [] }
 	});
 	if (security.status >= 400) {
 		throw new ServiceError(
 			'INTERNAL',
-			`import queue security setup failed (${security.status}): ${detail(security.data)}`
+			`${label} security setup failed (${security.status}): ${detail(security.data)}`
 		);
 	}
+}
+
+async function ensureImportQueueDatabase(): Promise<void> {
+	await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
+}
+
+async function ensureImportAuditDatabase(): Promise<void> {
+	await ensurePrivateDatabase(IMPORT_AUDIT_DB, 'import audit');
 }
 
 async function getDoc<T extends { _id: string }>(id: string): Promise<T | null> {
@@ -246,13 +248,14 @@ async function ensureImportLog(job: ShelterImportJob, items: ShelterImportItem[]
 		job.created_by,
 		logIdPart
 	);
-	const saved = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(logId)}`, 'PUT', {
+	await ensureImportAuditDatabase();
+	const saved = await adminRaw(`/${IMPORT_AUDIT_DB}/${encodeURIComponent(logId)}`, 'PUT', {
 		...log
 	});
 	// The id is allocated once on the job and never reused by another terminal
 	// attempt. Verify a conflict before treating it as an idempotent replay.
 	if (saved.status === 409) {
-		const existing = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(logId)}`, 'GET');
+		const existing = await adminRaw(`/${IMPORT_AUDIT_DB}/${encodeURIComponent(logId)}`, 'GET');
 		if (existing.status !== 200 || !sameAuditLog(existing.data, log)) {
 			throw new ServiceError(
 				'CONFLICT',
@@ -262,6 +265,21 @@ async function ensureImportLog(job: ShelterImportJob, items: ShelterImportItem[]
 		return;
 	}
 	assertOk(saved.status, `write ${logId}`, saved.data);
+}
+
+/** Read the private audit store for the SA-only history BFF. */
+export async function listImportLogs(): Promise<ShelterImportLog[]> {
+	const prefix = 'shelter_import_log:';
+	const res = await adminRaw(
+		`/${IMPORT_AUDIT_DB}/_all_docs?include_docs=true&startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(`${prefix}\ufff0`))}`,
+		'GET'
+	);
+	if (res.status === 404) return [];
+	assertOk(res.status, 'list import audit logs', res.data);
+	return ((res.data as { rows?: { doc?: unknown }[] }).rows ?? [])
+		.map((row) => row.doc)
+		.filter(isShelterImportLog)
+		.sort((a, b) => (a._id < b._id ? 1 : -1));
 }
 
 type AuditLogFingerprint = Pick<

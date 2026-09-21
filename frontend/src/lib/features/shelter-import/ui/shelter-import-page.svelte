@@ -106,6 +106,7 @@
 	);
 	let progressDialogOpen = $state(false);
 	let importSubmitted = $state(false);
+	let importIdempotencyKey = $state<string | null>(null);
 	let restoreDialogHandled = $state(false);
 	let invalidatedJobId = $state<string | null>(null);
 
@@ -172,6 +173,9 @@
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		// A newly selected file starts a new import attempt. A transport failure
+		// leaves this key intact so the next click replays the same durable job.
+		importIdempotencyKey = null;
 		parsing = true;
 		try {
 			const parsed = await parseShelterWorkbook(file);
@@ -209,6 +213,14 @@
 		existingShelters = [];
 		duplicateCheckReady = false;
 		importSubmitted = false;
+		importIdempotencyKey = null;
+	}
+
+	function setDuplicateAction(value: string) {
+		if (value === 'skip' || value === 'update') {
+			if (duplicateAction !== value) importIdempotencyKey = null;
+			duplicateAction = value;
+		}
 	}
 
 	const importDisabled = $derived(
@@ -229,12 +241,14 @@
 	async function runImport() {
 		if (importDisabled) return;
 		if (!(await refreshExistingShelters())) return;
+		importIdempotencyKey ??= crypto.randomUUID();
 		importSubmitted = true;
 		importMutation.mutate(
 			{
 				filename,
 				rows: validations,
-				duplicateAction
+				duplicateAction,
+				idempotencyKey: importIdempotencyKey
 			},
 			{
 				onSuccess: (result) => {
@@ -369,9 +383,7 @@
 					</ul>
 					<RadioGroup.Root
 						value={duplicateAction}
-						onValueChange={(value) => {
-							if (value === 'skip' || value === 'update') duplicateAction = value;
-						}}
+						onValueChange={setDuplicateAction}
 						class="mt-3 gap-2"
 					>
 						<label for="duplicate-action-skip" class="flex items-center gap-3 text-sm">

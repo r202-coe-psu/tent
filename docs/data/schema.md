@@ -243,7 +243,7 @@ Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำ�
 ### 1.7 `people_import_log` — `people_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-071)
 
 Log 1 doc ต่อ 1 batch ของการ import ครัวเรือน+สมาชิกจาก Excel/CSV (T-72). envelope กลาง **มี
-`shelter_code`** — ต่างจาก `shelter_import_log` (§3.7) ที่อยู่ใน `registry` เพราะ `results[]` ของ log นี้
+`shelter_code`** — ต่างจาก `shelter_import_log` (§3.7) ที่อยู่ใน `shelter_import_audit` เพราะ `results[]` ของ log นี้
 มีชื่อผู้ประสบภัย จึงต้องอยู่ใน db ของศูนย์เดียวกับข้อมูลคนที่มันอ้างถึง (shelter-scope isolation).
 เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง
 
@@ -1313,7 +1313,10 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 ### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 3** · **append-only** (CR-039, CR-077)
 
 Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
-เป็น registry doc). เขียนหลังแต่ละ terminal attempt ของ job เสร็จ; retry จะสร้าง log ใหม่และไม่แก้ย้อนหลัง.
+เป็น private audit doc). เขียนหลังแต่ละ terminal attempt ของ job เสร็จ; retry จะสร้าง log ใหม่และไม่แก้ย้อนหลัง.
+เอกสารใหม่อยู่ใน database `shelter_import_audit` ซึ่งให้สิทธิ์เฉพาะ CouchDB `_admin`; การอ่านประวัติผ่าน
+SA-only BFF เท่านั้น เพื่อไม่ให้ log ใหม่ถูกอ่านข้ามขอบเขตจาก `registry`. log รุ่นเก่าที่อยู่ใน `registry`
+ยังเป็น legacy data และยังไม่ถูกย้ายในรอบนี้.
 
 | Field           | ชนิด            | req             | หมายเหตุ                                               |
 | --------------- | --------------- | --------------- | ------------------------------------------------------ |
@@ -1341,16 +1344,17 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 
 **v1 → v2 (CR-077, additive):** doc รุ่น v1 ไม่มี `updated_count` / `skipped_count` — อ่านกลับได้ตามปกติ
 (Zod ใส่ค่า default 0). **v2 → v3 (async import):** เพิ่ม `job_id` / `attempt` เพื่อผูก log กับ job และ
-แยก retry แต่ละครั้งเป็นเอกสารใหม่. Reader เดิมยังอ่าน log เก่าได้; ไม่มี migration script.
+แยก retry แต่ละครั้งเป็นเอกสารใหม่. Reader เดิมยังอ่าน log เก่าได้; การจัดการ legacy log เป็นงานแยกต่างหาก.
 
-**เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
-`createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
+**เขียน/อ่าน:** server เท่านั้นผ่าน `adminRaw`; browser อ่านผ่าน
+`GET /api/back-office/shelter-import/logs` ซึ่งตรวจ `system_admin` หรือ CouchDB `_admin` และคืน projection
+สำหรับ history เท่านั้น. ห้ามให้ browser เปิด CouchDB `shelter_import_audit` โดยตรง.
 
 ### 3.8 `shelter_import_job` — `shelter_import_job:{sha256}` · **schema_v 1** (async import)
 
 เอกสาร durable สำหรับการ import Excel หนึ่งงาน อยู่ใน DB ส่วนตัว `shelter_import_queue` ไม่ใช่
 `registry` เพราะ item มี payload ที่ใช้ประมวลผลต่อและห้ามเปิดให้ client อ่าน. DB นี้ให้สิทธิ์เฉพาะ
-`_admin`/`system_admin`. Item ต้องถูก stage ให้ครบก่อนจึง publish job ให้ worker มองเห็น;
+`_admin` เท่านั้น. Item ต้องถูก stage ให้ครบก่อนจึง publish job ให้ worker มองเห็น;
 การ claim/update ใช้ `_rev` แบบ CAS และ lease expiry. `_id` ผูกกับ actor และ `Idempotency-Key`
 ด้วย SHA-256 เพื่อให้ retry คำขอเดิมไม่สร้างงานซ้ำ โดยไม่เก็บ raw key.
 

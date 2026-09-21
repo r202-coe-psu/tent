@@ -1,13 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
 import type { RequestHandler } from './$types';
-import { requireAdmin, serviceError } from '$lib/server/couch-admin';
+import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
 import { getImportJob } from '$lib/features/shelter-import/server/job-store';
 
 export const prerender = false;
 
 export const GET: RequestHandler = async ({ request, params }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		const summary = await getImportJob(params.jobId);
 		if (!summary)

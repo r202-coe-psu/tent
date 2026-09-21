@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
-import { requireAdmin, serviceError } from '$lib/server/couch-admin';
+import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
 import { createShelterSchema } from '$lib/features/shelters/server';
 import {
 	createImportJob,
@@ -68,7 +68,7 @@ async function readBodyWithinLimit(request: Request, limit: number): Promise<str
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const caller = await requireAdmin(request.headers.get('cookie'));
+	const caller = await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		if (!env.SHELTER_IMPORT_WORKER_TOKEN) {
 			return json(
@@ -138,7 +138,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		const job = await createImportJob({
 			filename: body.filename,
-			importedBy: caller,
+			importedBy: caller.name,
 			idempotencyKey: request.headers.get('idempotency-key') ?? '',
 			duplicateAction: body.duplicate_action,
 			rows

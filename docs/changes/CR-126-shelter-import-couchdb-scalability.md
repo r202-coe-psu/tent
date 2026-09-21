@@ -195,7 +195,8 @@ services:
 | ฐานข้อมูล | เอกสารที่เก็บ | ผู้เขียน | หมายเหตุ |
 |---|---|---|---|
 | `shelter_import_queue` | `shelter_import_job`, `shelter_import_item`, migration marker | SvelteKit server เท่านั้น | ฐานข้อมูลใหม่สำหรับคิวโดยเฉพาะ; เป็น transient/high-write ให้สร้างด้วย `q=1, n=1` บน dev/local เพื่อลด latency และจำนวน shard file |
-| `registry` | `shelter:{ulid}`, `shelter_import_log`, `shelter_import_name_lock`, `shelter_counter` | server-side provisioning/admin | name lock และ code allocator ต้องใช้ร่วมกับ single-shelter API |
+| `registry` | `shelter:{ulid}`, `shelter_import_name_lock`, `shelter_counter` | server-side provisioning/admin + scoped registry reads | name lock และ code allocator ต้องใช้ร่วมกับ single-shelter API |
+| `shelter_import_audit` | `shelter_import_log` | server-side admin เท่านั้น | private audit store; browser อ่านผ่าน SA-only BFF projection |
 | `shelter_{code}` | ข้อมูลภายในศูนย์พักพิงและ seed | provisioning service | ไม่เปลี่ยน schema จาก CR-123 |
 
 `shelter_import_job` และ `shelter_import_item` คงชื่อ field และ `schema_v` เดิมจาก CR-123 เพื่อให้ reader เดิมเข้าใจข้อมูลได้ การเปลี่ยน database เป็น storage migration ไม่ใช่การ bump `shelter` schema และไม่อนุญาตให้ worker รุ่นเก่าเขียน queue ใหม่หลัง cutover
@@ -207,7 +208,7 @@ services:
 | `shelter_import_job` | `shelter_import_job:<ulid>` | metadata, actor, duplicate policy, counters, status, attempt, audit marker, timestamps | สร้างหลัง stage item ครบ; `queued/running` คือ job ที่ worker มองเห็น |
 | `shelter_import_item` | `shelter_import_item:<job_ulid>:<row_6_digits>` | validated `input`, row, status, attempts, lease, claim token, code, errors | status ของ item เป็นแหล่งข้อมูลจริงของความคืบหน้า; `input` ห้ามคืนให้ browser |
 | `shelter_import_migration` | `shelter_import_migration:<job_ulid>` | source DB, target DB, state, count/hash, timestamps | marker สำหรับ migration ที่รันซ้ำได้; ไม่ใช่ job ที่ worker หยิบไปทำ |
-| `shelter_import_log` | `shelter_import_log:<ulid>` | audit snapshot ต่อ terminal attempt | อยู่ `registry`, append-only, ใช้ schema_v 3 และ cap จาก CR-077 |
+| `shelter_import_log` | `shelter_import_log:<ulid>` | audit snapshot ต่อ terminal attempt | อยู่ `shelter_import_audit`, append-only, ใช้ schema_v 3 และ cap จาก CR-077 |
 | `shelter_import_name_lock` | `shelter_import_name_lock:<normalized-name>` | owner, lease, updated_at | อยู่ `registry` เพราะใช้ร่วมกับ single-shelter API |
 | `shelter_counter` | `counter:shelter` | value | อยู่ `registry`; อัปเดตด้วย `_rev` CAS และใช้ร่วมกับ single-shelter API |
 
@@ -307,7 +308,7 @@ Item status เป็น source of truth ส่วน counter ใน job เป�
 4. ถ้า worker ตายหลังเขียน item แต่ก่อน sync job ให้ job คงสถานะที่ยังไม่ terminal และ worker/recovery รอบถัดไป sync จาก reduce view
 5. ห้าม mark job เป็น `completed`/`completed_with_errors` จนกว่าจะ sync counter สำเร็จและไม่มี item `pending`/`running`
 6. Recovery ต้องใช้ reduce view ไม่ใช่ `_all_docs`; ต้องแก้ counter ที่ติดลบหรือไม่ตรงกับ item และบันทึก metric/เหตุผลการซ่อม
-7. การสร้าง audit log เป็นงานข้ามฐานข้อมูล: จอง `audit_log_id` ใน job ด้วย CAS, เขียน log append-only ใน `registry`, แล้ว mark `audit_logged`; ถ้าขั้นใดล้มให้ซ่อมต่อด้วย ID เดิมและไม่สร้าง log ซ้ำ
+7. การสร้าง audit log เป็นงานข้ามฐานข้อมูล: จอง `audit_log_id` ใน job ด้วย CAS, เขียน log append-only ใน `shelter_import_audit`, แล้ว mark `audit_logged`; ถ้าขั้นใดล้มให้ซ่อมต่อด้วย ID เดิมและไม่สร้าง log ซ้ำ
 
 ## Security และขอบเขตการเข้าถึง
 
@@ -394,7 +395,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - `frontend/src/lib/features/shelter-import/server/job-store.ts` — เปลี่ยน database client, bounded claim, reduce counter, bulk staging, migration compatibility และ audit repair
 - `frontend/src/lib/server/shelters.admin.ts` — เพิ่ม lookup ตาม code/normalized name และกัน full scan ใน provisioning path
 - `frontend/src/lib/features/shelter-import/application/queries.ts` — คง active-job ETag/backoff และ history changes feed ให้ถูก database
-- `frontend/src/lib/features/shelter-import/data/import-log.remote.ts` — คง audit log ที่ `registry` และ response cap
+- `frontend/src/lib/features/shelter-import/data/import-log.remote.ts` — อ่าน audit log ผ่าน BFF จาก `shelter_import_audit` และคง response cap
 - `frontend/src/lib/features/shelters/server/provisioner.ts` — ใช้ indexed duplicate lookup โดยยังใช้ name lock/code allocator จาก `registry`
 - `frontend/src/lib/server/shelter-name-lock.ts` — ตรวจและทดสอบว่า lock ไม่ถูกย้ายไป queue จนทำให้ single-shelter API ใช้คนละ lock
 
@@ -422,7 +423,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 > **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
 
 - job/item ที่ terminal แล้วล้างหลัง 30 วัน โดย cleanup ต้องตรวจ `finished_at`, database ที่ถูกต้อง และไม่ลบงาน `queued/running`
-- audit log อยู่ `registry` และเก็บตาม audit-retention policy ของโครงการ อย่างน้อย 365 วันจนกว่าจะมี policy กลางที่อนุมัติตัวเลขอื่น
+- audit log อยู่ `shelter_import_audit` และเก็บตาม audit-retention policy ของโครงการ อย่างน้อย 365 วันจนกว่าจะมี policy กลางที่อนุมัติตัวเลขอื่น
 - cleanup ใช้ server-side credential ที่ได้รับอนุญาตเท่านั้น ทำงานแบบ idempotent และบันทึกจำนวนเอกสารที่ลบ/ล้มเหลว
 - ห้ามลบ audit log เพื่อแก้ counter และห้าม cleanup เอกสารที่มี migration marker แต่ยังตรวจสอบไม่เสร็จ
 
