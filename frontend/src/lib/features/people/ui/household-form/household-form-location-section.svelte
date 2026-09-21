@@ -8,6 +8,12 @@
 	import type { SuperForm } from 'sveltekit-superforms';
 	import { useMasterData } from '$lib/features/master-data';
 	import type { HouseholdFormData } from '../../domain/people';
+	import {
+		buildHousingTypeSelectItems,
+		DEFAULT_HOUSING_TYPE_ITEMS_TH,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 
 	let {
 		form,
@@ -32,9 +38,21 @@
 
 	const housingTypeQuery = useMasterData(() => 'housing_type');
 	const housingTypeItems = $derived(
-		(housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPE_ITEMS_TH,
+			masterItems: housingTypeQuery.data?.items ?? [],
+			currentValue: formData.current.housing_type
+		})
+	);
+
+	const housingTypeTriggerLabel = $derived(
+		formData.current.housing_type
+			? housingTypeLabelForCode(
+					formData.current.housing_type,
+					housingTypeItems,
+					formData.current.housing_type
+				)
+			: '— เลือกประเภทที่อยู่อาศัย —'
 	);
 
 	const isHomeless = $derived(formData.current.housing_type === 'homeless');
@@ -104,12 +122,11 @@
 						type="single"
 						bind:value={
 							() => formData.current.housing_type ?? '',
-							(v) => (formData.current.housing_type = v || null)
+							(v) => setHousingTypeFromSelect(v, (next) => (formData.current.housing_type = next))
 						}
 					>
 						<Select.Trigger {...props} class={selectTriggerClass}>
-							{housingTypeItems.find((o) => o.value === formData.current.housing_type)?.label ??
-								'— เลือกประเภทที่อยู่อาศัย —'}
+							{housingTypeTriggerLabel}
 						</Select.Trigger>
 						<Select.Content>
 							{#each housingTypeItems as opt (opt.value)}

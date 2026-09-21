@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { ulid } from '$lib/db/ulid';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -343,8 +344,8 @@
 	async function buildWalkInInput(data: ReceiveInput): Promise<WalkInDonationInput> {
 		const phone = walkInDonorPhone.trim() || null;
 		const [phoneHash, trackingTokenHash] = await Promise.all([
-			sha256Hex(phone ?? crypto.randomUUID()),
-			sha256Hex(crypto.randomUUID())
+			sha256Hex(phone ?? ulid()),
+			sha256Hex(ulid())
 		]);
 		return {
 			donor: { name: walkInDonorName.trim(), phone, phone_hash: phoneHash },
