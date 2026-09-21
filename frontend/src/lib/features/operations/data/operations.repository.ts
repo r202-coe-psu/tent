@@ -70,7 +70,8 @@ export interface OperationsRepository {
 
 	/**
 	 * Process and persist an outbound stock distribute entry.
-	 * Will throw an error if there is insufficient stock.
+	 * Will throw an error if the selected physical lot is missing, mismatched, or
+	 * does not have enough stock.
 	 */
 	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
 

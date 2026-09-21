@@ -39,7 +39,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 });
 
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
-import { createReceiveEntry } from '../domain/operations';
+import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -348,6 +348,109 @@ describe('OperationsRemoteRepository', () => {
 					ctx
 				)
 			).rejects.toThrow('Insufficient stock');
+		});
+
+		it('rejects an overdrawn selected lot even when another lot keeps the aggregate balance sufficient', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const firstLot = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 2, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 5,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: firstLot._id
+					},
+					ctx
+				)
+			).rejects.toThrow('Insufficient stock in lot');
+
+			expect(await repo.listLedger()).toHaveLength(2);
+		});
+
+		it('rejects a selected lot that belongs to another item or does not exist', async () => {
+			mockGetItem.mockImplementation(async (itemId: string) =>
+				itemId === 'item:soap' || itemId === 'item:water' ? ({ unit: 'bar' } as SupplyItem) : null
+			);
+			const waterLot = await repo.receiveStock(
+				{ item_id: 'item:water', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 1,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: waterLot._id
+					},
+					ctx
+				)
+			).rejects.toThrow('does not match item');
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 1,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: 'stock_ledger:missing-lot'
+					},
+					ctx
+				)
+			).rejects.toThrow('is not available');
+
+			expect(await repo.listLedger()).toHaveLength(1);
+		});
+
+		it('serializes concurrent distributions for the same lot and never creates a negative lot balance', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			const results = await Promise.allSettled([
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 7,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				),
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 7,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				)
+			]);
+
+			expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+			expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+			expect(await repo.getBalance()).toEqual(new Map([['item:soap', '3']]));
+			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
+				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '3' })
+			]);
 		});
 	});
 

@@ -17,6 +17,7 @@ import {
 	createWalkInDonation,
 	createDistributeEntry,
 	createAdjustEntry,
+	projectStockLotBalances,
 	keyPurchaseReceipt,
 	type DonationCampaign,
 	type CampaignInput,
@@ -86,6 +87,14 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogIte
 export class OperationsRemoteRepository implements OperationsRepository {
 	private readonly dbName: string;
 	private readonly repo: Repository;
+	/**
+	 * Serialize direct distributions targeting the same lot within this repository
+	 * instance. The fresh ledger read inside the critical section prevents two
+	 * submissions from this browser from both spending the same physical stock.
+	 * Cross-process atomicity still belongs in a persisted reservation/command
+	 * flow, which is outside this append-only direct-distribution path.
+	 */
+	private readonly distributionLocks = new Map<string, Promise<void>>();
 
 	constructor(dbName: string = getShelterDb()) {
 		this.dbName = dbName;
@@ -184,21 +193,54 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createDistributeEntry(input, ctx);
-
-		// WARNING (C-1): This read-then-write is not atomic. Concurrent distributes
-		// may both pass the balance check before either write lands, potentially
-		// causing negative stock. Acceptable for single-user shelter scenario;
-		// tracked for future hardening.
-		const balances = await this.getBalance();
-		const currentQty = balances.get(entry.item_id) ?? '0';
-		const requestedQty = qtyAbs(entry.qty);
-
-		if (!qtyGte(currentQty, requestedQty)) {
-			throw new Error(
-				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
-			);
+		const lotRef = entry.lot_ref;
+		if (!lotRef) {
+			throw new Error('Distribute stock requires a physical lot reference');
 		}
-		return this.addLedgerEntry(entry);
+
+		return this.withDistributionLock(lotRef, async () => {
+			const ledger = await this.listLedger();
+			const lots = projectStockLotBalances(ledger);
+			const selectedLot = lots.find((lot) => lot.lot_ref === lotRef);
+
+			if (!selectedLot) {
+				throw new Error(`Selected stock lot ${lotRef} is not available for item ${entry.item_id}`);
+			}
+			if (selectedLot.item_id !== entry.item_id || selectedLot.unit !== entry.unit) {
+				throw new Error(
+					`Selected stock lot ${lotRef} does not match item ${entry.item_id} and unit ${entry.unit}`
+				);
+			}
+
+			const requestedQty = qtyAbs(entry.qty);
+			if (!qtyGte(selectedLot.qty, requestedQty)) {
+				throw new Error(
+					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${selectedLot.qty})`
+				);
+			}
+
+			return this.addLedgerEntry(entry);
+		});
+	}
+
+	private async withDistributionLock<T>(lotRef: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.distributionLocks.get(lotRef) ?? Promise.resolve();
+		let release!: () => void;
+		const current = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const queued = previous.then(() => current);
+		this.distributionLocks.set(lotRef, queued);
+
+		await previous;
+		try {
+			return await operation();
+		} finally {
+			release();
+			if (this.distributionLocks.get(lotRef) === queued) {
+				this.distributionLocks.delete(lotRef);
+			}
+		}
 	}
 
 	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {
