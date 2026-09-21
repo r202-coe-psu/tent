@@ -106,6 +106,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,

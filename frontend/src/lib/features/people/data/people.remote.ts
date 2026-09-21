@@ -863,11 +863,17 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		opts?: { reason?: string }
 	): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, action);
+		assertMovementAllowed(evacuee, action, opts);
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action, zone: evacuee.current_stay.zone },
+			{
+				evacuee_id: evacuee._id,
+				action,
+				zone: evacuee.current_stay.zone,
+				...(opts?.reason ? { reason: opts.reason } : {})
+			},
 			ctx
 		);
 		await this.repo.put(movement);

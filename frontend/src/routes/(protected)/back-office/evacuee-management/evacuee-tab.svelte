@@ -439,7 +439,7 @@
 							</Table.Cell>
 							<Table.Cell>
 								<span class="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-									{zoneLabel(e.current_stay.zone)}
+									{zoneLabel(e.current_stay.zone, shelterQuery.data?.zones ?? [])}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
