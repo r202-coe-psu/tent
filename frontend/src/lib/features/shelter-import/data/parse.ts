@@ -4,6 +4,7 @@ import {
 	normalizeHeader,
 	SHELTER_SHEETS,
 	SHEETS,
+	FOOD_DISTRIBUTION_SHEET_NAME,
 	ZONE_SHEET_NAME,
 	type SheetDef
 } from '../domain/columns';
@@ -13,10 +14,11 @@ import type { ParsedWorkbook, RawRow, RawSheetRow } from '../domain/import-row';
 /**
  * Parse an uploaded shelter-import `.xlsx` into raw rows (CR-039).
  *
- * The workbook has five sheets (see `domain/columns.ts`): four 1:1 sheets whose
+ * The workbook has six sheets (see `domain/columns.ts`): four 1:1 sheets whose
  * rows are merged into one row per shelter on the `ลำดับที่` join key, and the
- * N:1 `โซน` sheet whose rows are kept separate and carry that same key under the
- * clearer header `รหัสศูนย์พักพิง` (each sheet names its own via `refHeader`). Row 1 of each sheet is the
+ * N:1 `โซน` and `จุดแจกอาหาร` sheets whose rows are kept separate and carry that
+ * same key under the clearer header `รหัสศูนย์พักพิง` (each sheet names its own
+ * via `refHeader`). Row 1 of each sheet is the
  * header; columns are matched to the known Thai headers by exact text once the
  * required-column "*" marker is stripped (see `normalizeHeader`; unknown
  * columns are ignored) and cell values are read as display text (`cell.text`)
@@ -82,12 +84,24 @@ export async function parseShelterWorkbook(file: File): Promise<ParsedWorkbook> 
 	// Legacy single-sheet template: treat worksheet 1 as the main sheet.
 	if (named.size === 0) {
 		const first = wb.worksheets[0];
-		if (!first) return { shelters: [], zones: [] };
+		if (!first)
+			return {
+				shelters: [],
+				zones: [],
+				foodDistributionPoints: [],
+				hasFoodDistributionPointsSheet: false
+			};
 		named.set(MAIN_SHEET_NAME, first);
 	}
 
 	const mainWs = named.get(MAIN_SHEET_NAME);
-	if (!mainWs) return { shelters: [], zones: [] };
+	if (!mainWs)
+		return {
+			shelters: [],
+			zones: [],
+			foodDistributionPoints: [],
+			hasFoodDistributionPointsSheet: false
+		};
 
 	const mainSheet = SHELTER_SHEETS.find((s) => s.name === MAIN_SHEET_NAME)!;
 	const shelters = readSheet(mainWs, mainSheet);
@@ -114,5 +128,16 @@ export async function parseShelterWorkbook(file: File): Promise<ParsedWorkbook> 
 	const zoneSheet = SHEETS.find((s) => s.name === ZONE_SHEET_NAME)!;
 	const zones = zoneWs ? readSheet(zoneWs, zoneSheet) : [];
 
-	return { shelters, zones };
+	const foodDistributionWs = named.get(FOOD_DISTRIBUTION_SHEET_NAME);
+	const foodDistributionSheet = SHEETS.find((s) => s.name === FOOD_DISTRIBUTION_SHEET_NAME)!;
+	const foodDistributionPoints = foodDistributionWs
+		? readSheet(foodDistributionWs, foodDistributionSheet)
+		: [];
+
+	return {
+		shelters,
+		zones,
+		foodDistributionPoints,
+		hasFoodDistributionPointsSheet: Boolean(foodDistributionWs)
+	};
 }

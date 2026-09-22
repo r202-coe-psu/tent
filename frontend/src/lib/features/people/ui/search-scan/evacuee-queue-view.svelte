@@ -24,7 +24,12 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
-	import { formatPersonName, maskNationalId, matchesEvacueeSearch, zoneLabel } from '../../domain/people';
+	import {
+		formatPersonName,
+		maskNationalId,
+		matchesEvacueeSearch,
+		zoneLabel
+	} from '../../domain/people';
 	import { nextQueueLabel } from '../../domain/intake-pipeline';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
