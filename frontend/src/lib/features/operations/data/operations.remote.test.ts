@@ -85,6 +85,25 @@ let memoryRepo: Repository = {
 	},
 	async find<T>(): Promise<T[]> {
 		return [...couchDocs.values()] as unknown as T[];
+	},
+	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+		const saved: T[] = [];
+		for (const doc of docs) {
+			const existing = mockGetDoc<T>(doc._id);
+			if (!existing) {
+				// CouchDB reports a conflict for a create carrying an _rev.
+				saved.push(doc._rev ? doc : mockPutDoc(doc, false));
+				continue;
+			}
+			if (!doc._rev || doc._rev !== existing._rev) {
+				// bulkDocs returns per-document conflicts; the repository wrapper keeps
+				// the original document for idempotent conflict-only batches.
+				saved.push(doc);
+				continue;
+			}
+			saved.push(mockPutDoc(doc, true));
+		}
+		return saved;
 	}
 };
 
