@@ -113,9 +113,18 @@
 		return subQty(newQtyInput, base);
 	});
 
-	let adjustmentType = $derived(
-		Number(deltaQty) < 0 ? 'write_off' : Number(deltaQty) > 0 ? 'add' : initialAdjustmentType
-	);
+	// svelte-ignore state_referenced_locally
+	let adjustmentType = $state<'write_off' | 'add'>(initialAdjustmentType);
+
+	// Watch newQtyInput to auto-set adjustmentType
+	$effect(() => {
+		const delta = Number(deltaQty);
+		if (delta < 0) {
+			adjustmentType = 'write_off';
+		} else if (delta > 0) {
+			adjustmentType = 'add';
+		}
+	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
 
