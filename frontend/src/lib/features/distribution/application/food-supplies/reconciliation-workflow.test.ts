@@ -15,15 +15,18 @@ import type {
 	RequisitionTicketRepository
 } from '../../data/food-supplies';
 import type { OperationsRepository, StockLedger } from '$lib/features/operations';
+import { ConflictError } from '$lib/utils/errors';
 import {
 	calculateShiftReconciliation,
 	closeShift,
 	receiveWarehouseReturns,
 	submitReturnsToWarehouse
 } from './reconciliation-workflow';
+import { StockIntegrityError } from './errors';
 
 class InMemoryTicketRepository implements RequisitionTicketRepository {
 	tickets = new Map<string, RequisitionTicket>();
+	failNextTransition: Error | null = null;
 
 	async create(
 		input: RequisitionTicketInput | Flow2RequisitionTicket,
@@ -85,6 +88,11 @@ class InMemoryTicketRepository implements RequisitionTicketRepository {
 		patch?: Partial<RequisitionTicket>
 	): Promise<RequisitionTicket> {
 		void _ctx;
+		if (this.failNextTransition) {
+			const error = this.failNextTransition;
+			this.failNextTransition = null;
+			throw error;
+		}
 		const current = this.tickets.get(ticketId);
 		if (!current) throw new Error('Not found');
 		const updated = {
@@ -128,10 +136,40 @@ class InMemoryLogRepository implements Partial<DistributionLogRepository> {
 
 class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	ledger: StockLedger[] = [];
+	failItemIdOnce: string | null = null;
+	private addBarrier: { remaining: number; release: () => void; wait: Promise<void> } | null = null;
+
+	holdNextLedgerWrites(count: number): void {
+		let release: () => void = () => undefined;
+		const wait = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		this.addBarrier = { remaining: count, release, wait };
+	}
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
+		const barrier = this.addBarrier;
+		if (barrier) {
+			barrier.remaining -= 1;
+			if (barrier.remaining === 0) {
+				this.addBarrier = null;
+				barrier.release();
+			}
+			await barrier.wait;
+		}
+		if (this.ledger.some((existing) => existing._id === entry._id)) {
+			throw new ConflictError();
+		}
+		if (this.failItemIdOnce === entry.item_id) {
+			this.failItemIdOnce = null;
+			throw new Error(`simulated write failure for ${entry.item_id}`);
+		}
 		this.ledger.push(entry);
 		return entry;
+	}
+
+	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		return this.ledger.find((entry) => entry._id === id) ?? null;
 	}
 
 	async listLedger(): Promise<StockLedger[]> {
@@ -406,6 +444,188 @@ describe('reconciliation-workflow', () => {
 		expect(ledger.qty).toBe('4');
 	});
 
+	it('does not create a receipt when the final warehouse count is zero', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0003B',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+
+		const result = await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:mat': '0' } },
+			WH_CTX,
+			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+		);
+
+		expect(result.ticket.status).toBe('RETURN_COMPLETED');
+		expect(result.ticket.items[0].returned_qty).toBe('0');
+		expect(result.ticket.items[0].discrepancy_qty).toBe('4');
+		expect(result.ledgerEntriesCreated).toBe(0);
+		expect(opsRepo.ledger).toHaveLength(0);
+	});
+
+	it('recovers a deterministic warehouse receipt after the ticket transition fails', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0003C',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+		ticketRepo.failNextTransition = new Error('simulated ticket CAS failure');
+
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		).rejects.toThrow('simulated ticket CAS failure');
+		expect(opsRepo.ledger).toHaveLength(1);
+
+		const retry = await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:mat': '4' } },
+			WH_CTX,
+			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+		);
+
+		expect(retry.ledgerEntriesCreated).toBe(0);
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(retry.ticket.status).toBe('RETURN_COMPLETED');
+	});
+
+	it('keeps one receipt when same-target warehouse returns race', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0003D',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+		opsRepo.holdNextLedgerWrites(2);
+
+		await Promise.allSettled([
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			),
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		]);
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0].qty).toBe('4');
+	});
+
+	it('fails closed when competing final warehouse counts differ', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0003E',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '5';
+		pending.items[0].returned_qty = '5';
+		opsRepo.holdNextLedgerWrites(2);
+
+		const results = await Promise.allSettled([
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			),
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '5' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		]);
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+		const rejected = results.find((result) => result.status === 'rejected');
+		expect(rejected?.status).toBe('rejected');
+		if (rejected?.status === 'rejected') {
+			expect(rejected.reason).toBeInstanceOf(StockIntegrityError);
+		}
+	});
+
 	it('rejects warehouse quantities above the shift return and unknown ticket items before ledger writes', async () => {
 		const ticket = await ticketRepo.create(
 			{
@@ -524,5 +744,174 @@ describe('reconciliation-workflow', () => {
 			'item:mat'
 		]);
 		expect(result.ticket.items[1].discrepancy_qty).toBe('1');
+	});
+
+	it('recovers A/B receipts and writes only missing C after a partial multi-item failure', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0006',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:a',
+						item_name: 'A',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					},
+					{
+						item_id: 'item:b',
+						item_name: 'B',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					},
+					{
+						item_id: 'item:c',
+						item_name: 'C',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		for (const item of pending.items) {
+			item.distributed_qty = '6';
+			item.returned_qty = '4';
+		}
+		opsRepo.failItemIdOnce = 'item:c';
+
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{
+					verified_returned_quantities: { 'item:a': '4', 'item:b': '3', 'item:c': '2' }
+				},
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		).rejects.toThrow('simulated write failure for item:c');
+		expect(opsRepo.ledger.map((entry) => entry.item_id).sort()).toEqual(['item:a', 'item:b']);
+
+		const retry = await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:a': '4', 'item:b': '3', 'item:c': '2' } },
+			WH_CTX,
+			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+		);
+
+		expect(retry.ledgerEntriesCreated).toBe(1);
+		expect(opsRepo.ledger).toHaveLength(3);
+		expect(retry.ticket.status).toBe('RETURN_COMPLETED');
+	});
+
+	it('keeps historical duplicate warehouse receipts fail-closed', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0007',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+		ticketRepo.failNextTransition = new Error('simulated ticket CAS failure');
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		).rejects.toThrow('simulated ticket CAS failure');
+		opsRepo.ledger.push({
+			...opsRepo.ledger[0],
+			_id: 'stock_ledger:01J00000000000000000000999'
+		});
+
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '4' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		).rejects.toBeInstanceOf(StockIntegrityError);
+		expect(opsRepo.ledger).toHaveLength(2);
+	});
+
+	it('replays RETURN_COMPLETED with verified final quantities without new writes', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-0008',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const pending = ticketRepo.tickets.get(ticket._id)!;
+		pending.status = 'RETURN_PENDING_RECEIPT';
+		pending.items[0].distributed_qty = '6';
+		pending.items[0].returned_qty = '4';
+
+		await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:mat': '4' } },
+			WH_CTX,
+			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+		);
+		const replay = await receiveWarehouseReturns(
+			ticket._id,
+			{ verified_returned_quantities: { 'item:mat': '4' } },
+			WH_CTX,
+			{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+		);
+
+		expect(replay.ledgerEntriesCreated).toBe(0);
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(replay.ticket.status).toBe('RETURN_COMPLETED');
+		await expect(
+			receiveWarehouseReturns(
+				ticket._id,
+				{ verified_returned_quantities: { 'item:mat': '5' } },
+				WH_CTX,
+				{ ticketRepo, operationsRepo: opsRepo as unknown as OperationsRepository }
+			)
+		).rejects.toThrow();
+		expect(opsRepo.ledger).toHaveLength(1);
 	});
 });
