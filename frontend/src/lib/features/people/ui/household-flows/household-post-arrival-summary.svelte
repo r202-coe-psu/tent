@@ -4,6 +4,9 @@
 	import { zoneLabel } from '../../index';
 	import { maskNationalId, type Evacuee, type Household } from '../../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 
@@ -28,6 +31,8 @@
 	// --- Queries for Master Data ---
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	// Resolve municipality_zone label
 	const resolvedMunicipalityZone = $derived.by(() => {
@@ -175,7 +180,9 @@
 			<div>
 				<span class="text-xs text-muted-foreground">โซนที่จัดสรร</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
-					{selectedHead?.current_stay?.zone ? zoneLabel(selectedHead.current_stay.zone) : '—'}
+					{selectedHead?.current_stay?.zone
+						? zoneLabel(selectedHead.current_stay.zone, shelterZones)
+						: '—'}
 				</p>
 			</div>
 			<div>

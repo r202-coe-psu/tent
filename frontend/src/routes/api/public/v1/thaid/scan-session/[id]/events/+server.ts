@@ -23,6 +23,7 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	let isClosed = false;
 	let heartbeatTimer: NodeJS.Timeout | null = null;
+	let cleanupFn: (() => void) | null = null;
 
 	const stream = new ReadableStream({
 		start(controller) {
@@ -77,6 +78,8 @@ export const GET: RequestHandler = async ({ params }) => {
 				session?.emitter.removeListener('expired', handleExpired);
 			}
 
+			cleanupFn = cleanup;
+
 			// If already completed or expired when connecting
 			if (session.status === 'completed' && session.profile) {
 				sendEvent('completed', { status: 'completed', profile: session.profile });
@@ -111,11 +114,7 @@ export const GET: RequestHandler = async ({ params }) => {
 			}
 		},
 		cancel() {
-			isClosed = true;
-			if (heartbeatTimer) {
-				clearInterval(heartbeatTimer);
-				heartbeatTimer = null;
-			}
+			cleanupFn?.();
 		}
 	});
 

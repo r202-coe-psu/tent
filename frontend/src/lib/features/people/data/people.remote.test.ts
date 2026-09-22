@@ -1576,6 +1576,51 @@ describe('createFamilyRegistration', () => {
 			{ species: 'dog', count: 1 }
 		]);
 	});
+
+	it('writes all documents in a single atomic bulkDocs call', async () => {
+		const bulkSpy = vi.spyOn(memoryRepo, 'bulkDocs');
+
+		const result = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'กานต์',
+						last_name: 'ใจสู้',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND'
+					},
+					{
+						first_name: 'แก้ว',
+						last_name: 'ใจสู้',
+						gender: 'female',
+						phone: null,
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '1/2',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'onsite'
+		);
+
+		expect(bulkSpy).toHaveBeenCalledTimes(1);
+		const writtenDocs = bulkSpy.mock.calls[0][0];
+		// 1 household + 2 members = 3 docs
+		expect(writtenDocs).toHaveLength(3);
+		expect(writtenDocs.some((d) => d._id === result.household._id)).toBe(true);
+		expect(writtenDocs.some((d) => d._id === result.members[0]._id)).toBe(true);
+		expect(writtenDocs.some((d) => d._id === result.members[1]._id)).toBe(true);
+	});
 });
 
 describe('submitFamilyReportIn', () => {
@@ -1911,6 +1956,75 @@ describe('submitFamilyReportIn', () => {
 		// 3. Household 1's head has been auto-reassigned to Mr B
 		expect(updatedHh1?.head_evacuee_id).toBe(mrBId);
 		expect(updatedHh1?.label).toBe('ครอบครัวนายบี ลูกบ้าน');
+	});
+
+	it('writes updated household and member records atomically via bulkDocs', async () => {
+		const reg = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'ประเสริฐ',
+						last_name: 'ทองคำ',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '100',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+
+		const bulkSpy = vi.spyOn(memoryRepo, 'bulkDocs');
+
+		await repo.submitFamilyReportIn({
+			householdId: reg.household._id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '100/1',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					_id: reg.members[0]!._id,
+					first_name: 'ประเสริฐ (รายงานตัว)',
+					last_name: 'ทองคำ',
+					gender: 'male',
+					phone: '0812345678',
+					country: 'THAILAND',
+					reporting_in: true
+				},
+				{
+					first_name: 'สมจิต',
+					last_name: 'ทองคำ',
+					gender: 'female',
+					phone: null,
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		expect(bulkSpy).toHaveBeenCalledTimes(1);
+		const writtenDocs = bulkSpy.mock.calls[0][0];
+		// 1 household + 1 existing updated evacuee + 1 new evacuee = 3 docs
+		expect(writtenDocs).toHaveLength(3);
 	});
 });
 

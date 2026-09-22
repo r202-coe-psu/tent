@@ -16,7 +16,6 @@
 	import Bell from '@lucide/svelte/icons/bell';
 	// import Users from '@lucide/svelte/icons/users'; // Volunteer link temporarily disabled
 
-	import { onMount } from 'svelte';
 	// import * as Select from '$lib/components/ui/select';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -31,26 +30,8 @@
 
 	let { announcements: propAnnouncements = [] }: Props = $props();
 
-	let fetchedAnnouncements = $state<Announcement[]>([]);
-
-	const announcements = $derived(
-		propAnnouncements && propAnnouncements.length > 0 ? propAnnouncements : fetchedAnnouncements
-	);
+	const announcements = $derived(propAnnouncements);
 	const announcementsCount = $derived(announcements.length);
-
-	onMount(async () => {
-		if (propAnnouncements.length === 0) {
-			try {
-				const res = await fetch('/api/public/v1/announcements');
-				if (res.ok) {
-					const data = await res.json();
-					fetchedAnnouncements = (data.items as Announcement[]) || [];
-				}
-			} catch (e) {
-				console.error('Failed to fetch announcements in navbar', e);
-			}
-		}
-	});
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -156,7 +137,7 @@
 				<img
 					src="/logo.png"
 					alt="PSU Smart Shelter"
-					class="h-8 w-8 shrink-0 rounded-lg sm:h-9 sm:w-9"
+					class="h-8 w-8 shrink-0 rounded-lg object-contain sm:h-9 sm:w-9"
 				/>
 				<span class="truncate text-sm font-bold tracking-tight text-foreground sm:text-base"
 					>PSU Smart Shelter</span

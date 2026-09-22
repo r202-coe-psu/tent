@@ -49,8 +49,8 @@ DELETE /couch/_session          → logout
 **Staff Google & ThaID MFA + Linked SSO login (CR-124 & CR-ThaID)** — Google และ ThaID (DOPA BORA Digital ID) เป็นปัจจัยเพิ่ม / ทางเข้าสำหรับบัญชีที่ผูกแล้ว ไม่แทนที่ CouchDB เป็น IdP หลัก และไม่เปิด SSO ให้บัญชีที่ยังไม่ enroll:
 
 - **Password path:** Factor 1 = username/password → `POST /couch/_session` ตามเดิม
-- หลัง password login: ถ้า `_users.mfa.providers` มี `type:"google"` หรือ `type:"thaid"` → สถานะแอป `pending_mfa` จนกว่า BFF
-  จะยืนยัน Google/ThaID OIDC `sub` ตรงกับที่ผูกไว้ แล้วตั้ง `mfa_ok` สำหรับรอบ session นั้น (หากผูกทั้งสองตัว ผู้ใช้เลือกยืนยันตัวตนตัวใดตัวหนึ่งได้)
+- หลัง password login: ถ้า `_users.mfa.providers` มี `type:"google"` หรือ `type:"thaid"` → สถานะแอป `pending_mfa` นำทางไปยัง `/mfa-challenge`
+  ซึ่งผู้ใช้สามารถเลือกยืนยัน Google/ThaID เพื่อตั้ง `mfa_ok` หรือกด "ข้ามขั้นตอนนี้" (`POST /api/v1/auth/mfa/skip`) เพื่อเข้าสู่ระบบได้ทันที
 - ถ้ายังไม่ enroll MFA → ไม่บังคับ step-up (opt-in link); ลำดับ gate = force-setup (CR-105) ก่อน แล้วจึง MFA
 - **Linked SSO login path (enrolled-only):** ปุ่ม Google หรือ ThaID บนหน้า login → BFF `mode=login` (ไม่ต้องมี `AuthSession` ก่อน)
   - สำเร็จ: lookup `_users` โดย provider `sub` → **mint** cookie `AuthSession` + ตั้ง `mfa_ok` ในรอบเดียวกัน → redirect `/portal`
@@ -66,10 +66,12 @@ DELETE /couch/_session          → logout
   GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login)
   GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
   POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
+  POST     /api/v1/auth/mfa/clear               → ล้าง cookie mfa_ok เมื่อ login ใหม่ / logout
+  POST     /api/v1/auth/mfa/skip                → ข้ามขั้นตอน MFA challenge ในรอบ session ปัจจุบัน (ตั้ง cookie mfa_ok)
   GET      /api/v1/auth/me                      → รวมสถานะ mfa_enrolled / pending_mfa / providers (ขยายจาก CR-105/CR-124)
   ```
 - `start` modes: `link` | `stepup` ต้องมี `AuthSession`; `login` ไม่ต้องมี session ก่อน
-- `AuthSession` อาจเกิดก่อน MFA เสร็จ (password path) — แอป/BFF ต้อง enforce `pending_mfa` จริงก่อนเข้า `(protected)`
+- `AuthSession` อาจเกิดก่อน MFA เสร็จ (password path) — แอป/BFF enforce `pending_mfa` ผ่าน `/mfa-challenge` ซึ่งผู้ใช้สามารถเลือกยืนยันหรือกดข้ามได้
 - Step-up / OAuth login ต้องมี central + IdP reachable; ช่วง edge-only ถ้า enrolled แล้วแต่ทำไม่ได้ → บล็อกเข้าแอป
   (ไม่ข้าม MFA อัตโนมัติ)
 - แยกจาก Partner OAuth2 `EXT-001` / ADR 0002 ทั้งหมด

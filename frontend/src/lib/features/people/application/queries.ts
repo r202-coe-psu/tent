@@ -290,12 +290,20 @@ export const useRecordMovement = () => {
 		mutationFn: ({
 			evacuee,
 			action,
-			ctx
+			ctx,
+			reason
 		}: {
 			evacuee: Evacuee;
 			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>;
 			ctx: AuthorContext;
-		}) => peopleRepository().recordMovement(evacuee, action, ctx),
+			reason?: string;
+		}) =>
+			peopleRepository().recordMovement(
+				evacuee,
+				action,
+				ctx,
+				reason !== undefined ? { reason } : undefined
+			),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

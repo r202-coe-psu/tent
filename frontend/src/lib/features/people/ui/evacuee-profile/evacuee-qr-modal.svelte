@@ -7,12 +7,14 @@
 	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee } from '$lib/features/people';
 	import { formatPersonName } from '$lib/features/people';
+	import { useMasterData } from '$lib/features/master-data';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
 	let {
 		show,
@@ -79,6 +81,11 @@
 
 	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
 	const phone = $derived(evacuee.phone?.trim() || null);
+	const vulnerableGroups = $derived(evacuee.vulnerable_groups ?? []);
+
+	function vulnerableLabel(code: string): string {
+		return vulnerableGroupQuery.data?.items.find((i) => i.code === code)?.label ?? code;
+	}
 </script>
 
 {#if show}
@@ -142,18 +149,54 @@
 					</div>
 
 					<div
-						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-4 py-5 sm:order-1 sm:px-5"
+						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-start gap-0.5 px-4 py-5 sm:order-1 sm:min-h-44 sm:px-5"
 					>
+						<p class="card-name text-base leading-tight font-bold text-slate-900 sm:text-xl">
+							{formatPersonName(evacuee)}
+						</p>
 						{#if phone}
 							<span
-								class="card-phone font-mono text-2xs font-bold tracking-widest text-slate-400 sm:text-xs"
+								class="card-phone font-mono text-2xs font-bold tracking-widest text-slate-900 sm:text-xs"
 							>
 								{phone}
 							</span>
 						{/if}
-						<p class="card-name text-base leading-tight font-bold text-slate-900 sm:text-xl">
-							{formatPersonName(evacuee)}
-						</p>
+						{#if vulnerableGroups.length > 0}
+							<div class="card-vulnerable mt-1.5 flex flex-wrap gap-1">
+								{#each vulnerableGroups as code (code)}
+									<span
+										class="card-vulnerable-tag inline-flex max-w-full items-center rounded border border-amber-700/40 bg-amber-50 px-1.5 py-0.5 text-2xs font-semibold text-amber-950 sm:text-xs"
+									>
+										{vulnerableLabel(code)}
+									</span>
+								{/each}
+							</div>
+						{/if}
+						<div
+							class="card-checklist mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 text-2xs font-medium text-slate-900 sm:text-xs"
+						>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistCheckIn}
+							</span>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistScreening}
+							</span>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistLodging}
+							</span>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -200,6 +243,7 @@
 
 	:global(.qr-identity-card.print-capture .card-details) {
 		order: 1 !important;
+		justify-content: flex-start !important;
 		padding: 24px 28px !important;
 	}
 
@@ -210,10 +254,36 @@
 
 	:global(.qr-identity-card.print-capture .card-phone) {
 		font-size: 1rem !important;
+		color: #0f172a !important;
 	}
 
 	:global(.qr-identity-card.print-capture .card-name) {
 		font-size: 1.875rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-vulnerable) {
+		margin-top: 0.5rem !important;
+		gap: 0.35rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-vulnerable-tag) {
+		font-size: 0.75rem !important;
+		border-color: #b45309 !important;
+		background-color: #fffbeb !important;
+		color: #451a03 !important;
+		padding: 0.15rem 0.4rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-checklist) {
+		font-size: 0.875rem !important;
+		gap: 1rem !important;
+		padding-top: 1.25rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-check-box) {
+		height: 16px !important;
+		width: 16px !important;
+		border-color: #0f172a !important;
 	}
 
 	@media print {
@@ -246,6 +316,7 @@
 		}
 		:global(.qr-identity-card .card-details) {
 			order: 1 !important;
+			justify-content: flex-start !important;
 			padding: 24px 28px !important;
 		}
 		:global(.qr-identity-card .card-qr-image) {
@@ -254,9 +325,31 @@
 		}
 		:global(.qr-identity-card .card-phone) {
 			font-size: 1rem !important;
+			color: #0f172a !important;
 		}
 		:global(.qr-identity-card .card-name) {
 			font-size: 1.875rem !important;
+		}
+		:global(.qr-identity-card .card-vulnerable) {
+			margin-top: 0.5rem !important;
+			gap: 0.35rem !important;
+		}
+		:global(.qr-identity-card .card-vulnerable-tag) {
+			font-size: 0.75rem !important;
+			border-color: #b45309 !important;
+			background-color: #fffbeb !important;
+			color: #451a03 !important;
+			padding: 0.15rem 0.4rem !important;
+		}
+		:global(.qr-identity-card .card-checklist) {
+			font-size: 0.875rem !important;
+			gap: 1rem !important;
+			padding-top: 1.25rem !important;
+		}
+		:global(.qr-identity-card .card-check-box) {
+			height: 16px !important;
+			width: 16px !important;
+			border-color: #0f172a !important;
 		}
 	}
 </style>

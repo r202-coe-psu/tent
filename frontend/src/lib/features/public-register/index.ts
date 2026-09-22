@@ -70,6 +70,7 @@ export {
 	bookingNationalIdSchema,
 	bookingPhoneSchema,
 	bookingShelterCodeSchema,
+	UNASSIGNED_SHELTER_CODE,
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,

@@ -21,6 +21,7 @@ import {
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
 	matchesEvacueeSearch,
+	zoneLabel,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -1574,5 +1575,27 @@ describe('matchesEvacueeSearch', () => {
 	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
 		const excluded = { ...evacuee, privacy: { search_excluded: true } };
 		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
+	});
+});
+
+describe('zoneLabel', () => {
+	it('returns em dash when zone is missing', () => {
+		expect(zoneLabel(null)).toBe('—');
+		expect(zoneLabel(undefined)).toBe('—');
+		expect(zoneLabel('')).toBe('—');
+	});
+
+	it('resolves name from zones list (case-insensitive code)', () => {
+		const zones = [
+			{ code: 'z1', name: 'โซนชาย' },
+			{ code: 'z2', name: 'โซนหญิง' }
+		];
+		expect(zoneLabel('z1', zones)).toBe('โซนชาย');
+		expect(zoneLabel('Z2', zones)).toBe('โซนหญิง');
+	});
+
+	it('falls back to the raw code when no matching name exists', () => {
+		expect(zoneLabel('z9', [{ code: 'z1', name: 'โซนชาย' }])).toBe('z9');
+		expect(zoneLabel('z1')).toBe('z1');
 	});
 });

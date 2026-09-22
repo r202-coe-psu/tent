@@ -106,6 +106,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
@@ -119,6 +120,16 @@ export {
 	type MovementInput,
 	type ScreeningInput
 } from './domain/people';
+
+export {
+	CR112_HOUSING_TYPE_CODES,
+	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	buildHousingTypeSelectItems,
+	setHousingTypeFromSelect,
+	housingTypeLabelForCode,
+	type HousingTypeSelectItem,
+	type MasterHousingItem
+} from './domain/housing-type-ui';
 
 export {
 	nextQueueLabel,
@@ -140,6 +151,14 @@ export {
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
 } from './domain/scan-lookup';
+
+export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
 
 export {
 	REPORT_IN_CTA_LABEL,
