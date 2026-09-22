@@ -25,9 +25,7 @@ def _ts(value: Any) -> datetime.datetime | None:
         return None
     try:
         return isoparse(str(value))
-    except ValueError:
-        return None
-    except TypeError:
+    except ValueError, TypeError:
         return None
 
 

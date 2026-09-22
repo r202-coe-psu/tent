@@ -1416,24 +1416,29 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 
 ---
 
-### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 2** · **append-only** (CR-039, CR-077)
+### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 3** · **append-only** (CR-039, CR-077)
 
 Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
-เป็น registry doc). เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง.
+เป็น private audit doc). เขียนหลังแต่ละ terminal attempt ของ job เสร็จ; retry จะสร้าง log ใหม่และไม่แก้ย้อนหลัง.
+เอกสารใหม่อยู่ใน database `shelter_import_audit` ซึ่งให้สิทธิ์เฉพาะ CouchDB `_admin`; การอ่านประวัติผ่าน
+SA-only BFF เท่านั้น เพื่อไม่ให้ log ใหม่ถูกอ่านข้ามขอบเขตจาก `registry`. log รุ่นเก่าที่อยู่ใน `registry`
+ยังเป็น legacy data และยังไม่ถูกย้ายในรอบนี้.
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `source` | enum(`shelter`) | req | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ shelter) |
-| `filename` | str | req | ชื่อไฟล์ที่อัปโหลด |
-| `imported_by` | str | req | `name` ของผู้ import (จาก session) |
-| `total_rows` | int | req | จำนวนแถวข้อมูล (ไม่รวม header) |
-| `success_count` | int | req | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
-| `updated_count` | int | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2** |
-| `skipped_count` | int | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2** |
-| `error_count` | int | req | จำนวนแถวที่ล้มเหลว (validation + server) |
-| `results` | array | req | ผลราย row — ดูรูปด้านล่าง |
-| `started_at` | str (ISO) | req | เวลาเริ่ม commit |
-| `finished_at` | str (ISO) | req | เวลาเสร็จ |
+| Field           | ชนิด            | req             | หมายเหตุ                                               |
+| --------------- | --------------- | --------------- | ------------------------------------------------------ |
+| `job_id`        | str             | req             | `_id` เต็มของ `shelter_import_job` ที่เป็นต้นทาง       |
+| `attempt`       | int             | req             | ลำดับ terminal attempt ของ job เริ่มที่ 1              |
+| `source`        | enum(`shelter`) | req             | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ shelter)             |
+| `filename`      | str             | req             | ชื่อไฟล์ที่อัปโหลด                                     |
+| `imported_by`   | str             | req             | `name` ของผู้ import (จาก session)                     |
+| `total_rows`    | int             | req             | จำนวนแถวข้อมูล (ไม่รวม header)                         |
+| `success_count` | int             | req             | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
+| `updated_count` | int             | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2**            |
+| `skipped_count` | int             | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2**                   |
+| `error_count`   | int             | req             | จำนวนแถวที่ล้มเหลว (validation + server)               |
+| `results`       | array           | req             | ผลราย row — ดูรูปด้านล่าง                              |
+| `started_at`    | str (ISO)       | req             | เวลาเริ่ม commit                                       |
+| `finished_at`   | str (ISO)       | req             | เวลาเสร็จ                                              |
 
 `results[]`: `{ row: int, name: str|null, status: 'created'|'updated'|'skipped_duplicate'|
 'validation_error'|'server_error', code?: str (เมื่อ created/updated/skipped), existing_code?: str
@@ -1444,14 +1449,79 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 `total_rows` / counters ยังนับครบทุกแถวเสมอ.
 
 **v1 → v2 (CR-077, additive):** doc รุ่น v1 ไม่มี `updated_count` / `skipped_count` — อ่านกลับได้ตามปกติ
-(Zod ใส่ค่า default 0) **ไม่มี migration script**.
+(Zod ใส่ค่า default 0). **v2 → v3 (async import):** เพิ่ม `job_id` / `attempt` เพื่อผูก log กับ job และ
+แยก retry แต่ละครั้งเป็นเอกสารใหม่. Reader เดิมยังอ่าน log เก่าได้; การจัดการ legacy log เป็นงานแยกต่างหาก.
 
-**เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
-`createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
+**เขียน/อ่าน:** server เท่านั้นผ่าน `adminRaw`; browser อ่านผ่าน
+`GET /api/back-office/shelter-import/logs` ซึ่งตรวจ `system_admin` หรือ CouchDB `_admin` และคืน projection
+สำหรับ history เท่านั้น. ห้ามให้ browser เปิด CouchDB `shelter_import_audit` โดยตรง.
 
----
+### 3.8 `shelter_import_job` — `shelter_import_job:{sha256}` · **schema_v 1** (async import)
 
-### 3.8 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
+เอกสาร durable สำหรับการ import Excel หนึ่งงาน อยู่ใน DB ส่วนตัว `shelter_import_queue` ไม่ใช่
+`registry` เพราะ item มี payload ที่ใช้ประมวลผลต่อและห้ามเปิดให้ client อ่าน. DB นี้ให้สิทธิ์เฉพาะ
+`_admin` เท่านั้น. Item ต้องถูก stage ให้ครบก่อนจึง publish job ให้ worker มองเห็น;
+การ claim/update ใช้ `_rev` แบบ CAS และ lease expiry. `_id` ผูกกับ actor และ `Idempotency-Key`
+ด้วย SHA-256 เพื่อให้ retry คำขอเดิมไม่สร้างงานซ้ำ โดยไม่เก็บ raw key.
+
+| Field                        | ชนิด                                                         | req | หมายเหตุ                                                    |
+| ---------------------------- | ------------------------------------------------------------ | --- | ----------------------------------------------------------- |
+| `filename`                   | str                                                          | req | ชื่อไฟล์ต้นทาง                                              |
+| `imported_by`                | str                                                          | req | actor จาก session ของ system admin (ห้ามรับจาก client)      |
+| `duplicate_action`           | enum(`skip`,`update`)                                        | req | วิธีจัดการชื่อศูนย์ซ้ำ                                      |
+| `total`                      | int                                                          | req | จำนวน item ทั้งหมด                                          |
+| `pending` / `running`        | int                                                          | req | snapshot จำนวน item ที่ยังรอ/กำลังทำ                        |
+| `succeeded`                  | int                                                          | req | รวมสถานะ `created` + `updated`                              |
+| `failed` / `skipped`         | int                                                          | req | รวม validation/server failure และ duplicate skip            |
+| `status`                     | enum(`staging`,`queued`,`running`,`completed`,`completed_with_errors`) | req | `staging` ยังไม่ visible ต่อ worker; state อื่นของ job |
+| `attempt`                    | int                                                          | req | terminal attempt เริ่มที่ 1; retry เพิ่มค่า                 |
+| `audit_log_id`               | str                                                          | opt | `_id` ของ log terminal attempt ที่จะเขียนแบบ append-only    |
+| `audit_logged`               | bool                                                         | opt | `true` เมื่อเขียน audit log สำเร็จ                          |
+| `retry_pending`              | bool                                                         | opt | marker ชั่วคราวระหว่าง requeue เพื่อให้ worker recovery ได้ |
+| `started_at` / `finished_at` | ts                                                           | sys | เวลาเริ่ม/จบงาน                                             |
+
+`created_at`, `updated_at`, `created_by` ใช้ common envelope. Status API อ่านอย่างเดียวและคืน `ETag`
+จาก `_rev`; การสร้าง audit log เป็น state transition ของ worker ไม่ใช่ side effect ของ status GET.
+
+### 3.9 `shelter_import_item` — `shelter_import_item:{job_key}:{row_6_digits}` · **schema_v 1**
+
+หนึ่งแถวของ `shelter_import_job` ใน `shelter_import_queue`; เช่น
+`shelter_import_item:{job_key}:000002`. `input` เก็บไว้ฝั่ง server เท่านั้นและไม่คืนจาก status API.
+`job_id` ต้องเก็บ full job `_id` (`shelter_import_job:{key}`).
+
+| Field              | ชนิด                                                                                | req | หมายเหตุ                                                        |
+| ------------------ | ----------------------------------------------------------------------------------- | --- | --------------------------------------------------------------- |
+| `job_id`           | str                                                                                 | req | job ต้นทางแบบ full `_id`                                        |
+| `row`              | int>0                                                                               | req | เลขแถวใน workbook                                               |
+| `name`             | str\|null                                                                           | req | ชื่อศูนย์จากแถว                                                 |
+| `input`            | object                                                                              | opt | payload ที่ server validate แล้ว; มีเฉพาะ item ที่พร้อมประมวลผล |
+| `status`           | enum(`pending`,`running`,`created`,`updated`,`skipped`,`failed`,`validation_error`) | req | สถานะรายแถว                                                     |
+| `attempts`         | int                                                                                 | req | จำนวนครั้งที่ถูก claim                                          |
+| `max_attempts`     | int                                                                                 | req | ค่าคงที่ปัจจุบัน `3`                                            |
+| `lease_until`      | ts                                                                                  | opt | หมดอายุแล้ว worker อื่น reclaim ได้                             |
+| `worker_id`        | str                                                                                 | opt | worker ที่ถือ lease ปัจจุบัน                                    |
+| `claim_token`      | str                                                                                 | opt | fencing token ของ claim ครั้งนั้น                               |
+| `dead_lettered_at` | ts                                                                                  | opt | เติมเมื่อ attempts ถึง limit แล้วไม่ retry ต่อ                  |
+| `code`             | str                                                                                 | opt | shelter code เมื่อสร้าง/อัปเดต/ข้ามสำเร็จ                       |
+| `errors`           | array                                                                               | opt | `{column,message,sheet?,line?}`                                 |
+
+การ claim และผลลัพธ์ต้องชนะ `_rev` ของ CouchDB และต้องตรง `claim_token`; worker เก่าที่ lease ถูก
+reclaim แล้วจึงเขียนทับผลของ worker ใหม่ไม่ได้.
+
+### 3.10 `shelter_counter` — `counter:shelter` · **schema_v 1**
+
+ตัวนับกลางสำหรับ mint `shelter.code` แบบ sequential อยู่ใน `registry` และเขียนโดย central
+provisioning เท่านั้น. `value` คือเลขล่าสุดที่ allocate แล้ว; การอ่าน/เพิ่มเลขใช้ `_rev` CAS.
+การ initialize ครั้งแรกทำครั้งเดียวภายใต้ bootstrap lock โดยอ่านค่าสูงสุดจาก indexed view
+`_design/app/by_code_number` ไม่ scan registry ทั้งก้อนใน request path. Code ที่ชนจาก legacy data
+จะถูกข้ามด้วย counter ใหม่และ lookup ซ้ำ.
+
+| Field   | ชนิด  | req | หมายเหตุ                          |
+| ------- | ----- | --- | --------------------------------- |
+| `value` | int≥0 | req | เลขที่ allocate ล่าสุด; เริ่ม `0` |
+
+
+### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
 
 ทะเบียนอุปกรณ์เครื่องอ่านบัตรประชาชน Smart Card Kiosk ประจำศูนย์พักพิง (Hardware Registry). เป็น registry doc กลางสำหรับ Authentication ตรวจสอบ API Key/Secret และกำกับสิทธิ์การ Inbound สแกนบัตรเข้าสู่ฐานข้อมูลศูนย์พักพิง.
 
