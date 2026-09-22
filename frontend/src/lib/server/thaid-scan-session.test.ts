@@ -137,4 +137,36 @@ describe('thaid-scan-session', () => {
 
 		expect(getScanSession(fakeId)).toBeNull();
 	});
+
+	it('responds to init action by broadcasting active sessions', () => {
+		const s1 = createScanSession(60);
+		let sentMessage: unknown = null;
+		const originalSend = (process as unknown as { send?: (msg: unknown) => void }).send;
+		(process as unknown as { send?: (msg: unknown) => void }).send = (msg: unknown) => {
+			sentMessage = msg;
+		};
+
+		try {
+			process.emit(
+				'message' as never,
+				{
+					topic: 'thaid-scan-session',
+					action: 'init'
+				} as never
+			);
+
+			expect(sentMessage).toMatchObject({
+				topic: 'thaid-scan-session',
+				action: 'init_sync',
+				sessions: expect.arrayContaining([
+					expect.objectContaining({
+						id: s1.id,
+						status: 'pending'
+					})
+				])
+			});
+		} finally {
+			(process as unknown as { send?: (msg: unknown) => void }).send = originalSend;
+		}
+	});
 });

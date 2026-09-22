@@ -11,6 +11,7 @@ services:
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     volumes:
       - ../deployment/tent/data:/opt/couchdb/data
+      - ./couchdb-session.ini:/opt/couchdb/etc/local.d/session.ini
     ports:
       - "${COUCHDB_BIND_IP:-127.0.0.1}:${COUCHDB_PORT:-5984}:5984"
     healthcheck:

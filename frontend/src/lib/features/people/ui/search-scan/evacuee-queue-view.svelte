@@ -13,17 +13,33 @@
 	import Users from '@lucide/svelte/icons/users';
 	import Zap from '@lucide/svelte/icons/zap';
 
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table';
+	import { paginateItems } from '$lib/db/paginate';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
-	import { formatPersonName, maskNationalId, matchesEvacueeSearch } from '../../domain/people';
+	import {
+		formatPersonName,
+		maskNationalId,
+		matchesEvacueeSearch,
+		zoneLabel
+	} from '../../domain/people';
 	import { nextQueueLabel } from '../../domain/intake-pipeline';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
+
+	const PAGE_SIZE = 10;
+
+	type WorkflowTab = 'pre_registered' | 'arriving' | 'all';
+	type ArrivingSubTab = 'all' | 'medical' | 'zoning';
+	type PreRegChannelFilter = 'all' | 'kiosk' | 'web' | 'other';
 
 	let {
 		enableMedical = false,
@@ -31,6 +47,8 @@
 		canZoning = false,
 		/** Free-text filter applied to every tab (bound to the intake omnibox on Station 1). */
 		filterQuery = '',
+		/** Initial workflow tab; Station 1 keeps `pre_registered`, search-edit uses `all`. */
+		initialTab = 'pre_registered',
 		onOpenRow,
 		onReportIn,
 		onProfile,
@@ -41,6 +59,7 @@
 		canMedical?: boolean;
 		canZoning?: boolean;
 		filterQuery?: string;
+		initialTab?: WorkflowTab;
 		onOpenRow: (evacuee: Evacuee) => void;
 		onReportIn: (evacuee: Evacuee) => void;
 		onProfile: (evacuee: Evacuee) => void;
@@ -52,6 +71,8 @@
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
@@ -65,15 +86,12 @@
 		red: 'แดง'
 	};
 
-	type WorkflowTab = 'pre_registered' | 'arriving' | 'all';
-	type ArrivingSubTab = 'all' | 'medical' | 'zoning';
-	type PreRegChannelFilter = 'all' | 'kiosk' | 'web' | 'other';
-
-	let activeTab = $state<WorkflowTab>('pre_registered');
+	let activeTab = $state<WorkflowTab>(initialTab);
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
 	let preRegChannelFilter = $state<PreRegChannelFilter>('all');
 	let allStatusFilter = $state<string>('all');
 	let allZoneFilter = $state<string>('all');
+	let currentPage = $state(1);
 
 	// Summary KPI counts
 	const preRegisteredEvacuees = $derived(
@@ -146,6 +164,30 @@
 			})
 			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
 	);
+
+	const activeFiltered = $derived(
+		activeTab === 'pre_registered'
+			? preRegisteredFiltered
+			: activeTab === 'arriving'
+				? arrivingFiltered
+				: allFiltered
+	);
+
+	// Hybrid: full `useEvacuees()` for KPI/tab filters; client `paginateItems` for the table.
+	// Back-office `listEvacueesPaginated` uses limited Couch `_all_docs` when unfiltered.
+	const pagedRows = $derived(paginateItems(activeFiltered, currentPage, PAGE_SIZE));
+
+	$effect(() => {
+		void [
+			activeTab,
+			arrivingSubTab,
+			preRegChannelFilter,
+			allStatusFilter,
+			allZoneFilter,
+			filterQuery
+		];
+		currentPage = 1;
+	});
 
 	const availableZones = $derived(
 		Array.from(new Set(allEvacuees.map((e) => e.current_stay?.zone).filter(Boolean))) as string[]
@@ -293,6 +335,21 @@
 		<nav class="flex gap-1 overflow-x-auto" aria-label="แท็บกระบวนการลงทะเบียน">
 			<button
 				type="button"
+				onclick={() => (activeTab = 'all')}
+				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
+				'all'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Users class="size-4" />
+				<span>ผู้ประสบภัยทั้งหมด (All Evacuees)</span>
+				<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
+					{allEvacuees.length}
+				</span>
+			</button>
+
+			<button
+				type="button"
 				onclick={() => (activeTab = 'pre_registered')}
 				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 				'pre_registered'
@@ -324,26 +381,157 @@
 					{arrivingEvacuees.length}
 				</span>
 			</button>
-
-			<button
-				type="button"
-				onclick={() => (activeTab = 'all')}
-				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
-				'all'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
-			>
-				<Users class="size-4" />
-				<span>ผู้ประสบภัยทั้งหมด (All Evacuees)</span>
-				<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
-					{allEvacuees.length}
-				</span>
-			</button>
 		</nav>
 	</div>
 
-	<!-- Tab 1: Pre-registered (รอรายงานตัว) -->
-	{#if activeTab === 'pre_registered'}
+	<!-- Tab 1: All Evacuees (ผู้ประสบภัยทั้งหมด) -->
+	{#if activeTab === 'all'}
+		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+			<div
+				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+			>
+				<div class="flex flex-wrap items-center gap-3">
+					<div class="flex items-center gap-1.5 text-xs text-slate-600">
+						<span class="font-medium">สถานะ:</span>
+						<select
+							bind:value={allStatusFilter}
+							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+						>
+							<option value="all">ทุกสถานะ</option>
+							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
+							<option value="arriving">รอเข้าพัก</option>
+							<option value="active">เข้าพักแล้ว</option>
+							<option value="room_confirmed">ยืนยันถึงโซนแล้ว</option>
+							<option value="temporary_leave">ออกชั่วคราว</option>
+							<option value="transferred">ย้ายศูนย์</option>
+							<option value="checked_out">เช็คเอาต์</option>
+							<option value="deceased">เสียชีวิต</option>
+							<option value="cancelled">ยกเลิก</option>
+						</select>
+					</div>
+
+					{#if availableZones.length > 0}
+						<div class="flex items-center gap-1.5 text-xs text-slate-600">
+							<span class="font-medium">โซน:</span>
+							<select
+								bind:value={allZoneFilter}
+								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+							>
+								<option value="all">ทุกโซน</option>
+								{#each availableZones as z (z)}
+									<option value={z}>โซน {zoneLabel(z, shelterZones)}</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
+				</div>
+				<span class="text-xs text-slate-500">
+					แสดง {allFiltered.length} จาก {allEvacuees.length} รายการ
+				</span>
+			</div>
+
+			{#if allFiltered.length === 0}
+				<div
+					class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
+				>
+					<p class="font-medium text-slate-700">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</p>
+				</div>
+			{:else}
+				<div class="overflow-x-auto">
+					<Table.Root>
+						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
+							<Table.Row class="border-b-0 hover:bg-transparent">
+								<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
+									>ชื่อ-นามสกุล</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">สถานะ</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">โซน</Table.Head>
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>ครอบครัว</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>ความต้องการพิเศษ</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>อัปเดตล่าสุด</Table.Head
+								>
+								<Table.Head class="h-11 pr-5 text-xs font-semibold text-slate-600"
+									>คิวถัดไป</Table.Head
+								>
+								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
+									>การจัดการ</Table.Head
+								>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each pagedRows.items as row (row._id)}
+								{@const next = nextQueueLabel(row, {
+									enableMedicalScreening: enableMedical,
+									hasScreening: screenedIds.has(row._id)
+								})}
+								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
+								<Table.Row
+									class="cursor-pointer hover:bg-slate-50/80"
+									onclick={() => onOpenRow(row)}
+								>
+									<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
+										{formatPersonName(row)}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3">
+										<StayStatusBadge status={row.current_stay?.status} size="sm" />
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3 text-xs font-medium">
+										{row.current_stay?.zone
+											? `โซน ${zoneLabel(row.current_stay.zone, shelterZones)}`
+											: '—'}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3 text-xs text-slate-600">
+										{hh?.label ?? '—'}
+									</Table.Cell>
+									<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
+										{specialNeedsShort(row.special_needs)}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3 text-xs text-slate-500 tabular-nums">
+										{formatUpdated(row.updated_at)}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3">
+										<Badge variant="secondary" class="text-xs">{next}</Badge>
+									</Table.Cell>
+									<Table.Cell class="py-3 pr-5 text-right">
+										<Button
+											size="sm"
+											variant="outline"
+											class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
+											onclick={(e) => {
+												e.stopPropagation();
+												onProfile(row);
+											}}
+										>
+											<Eye class="size-3.5" />
+											<span>ดูโปรไฟล์</span>
+										</Button>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</div>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={allFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
+					</div>
+				{/if}
+			{/if}
+		</div>
+
+		<!-- Tab 2: Pre-registered (รอรายงานตัว) -->
+	{:else if activeTab === 'pre_registered'}
 		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 			<div
 				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
@@ -454,7 +642,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each preRegisteredFiltered as row (row._id)}
+							{#each pagedRows.items as row (row._id)}
 								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 								<Table.Row
 									class="cursor-pointer hover:bg-slate-50/80"
@@ -520,10 +708,19 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={preRegisteredFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
+					</div>
+				{/if}
 			{/if}
 		</div>
 
-		<!-- Tab 2: Arriving (รอส่งต่อเข้าพัก) -->
+		<!-- Tab 3: Arriving (รอส่งต่อเข้าพัก) -->
 	{:else if activeTab === 'arriving'}
 		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 			<div
@@ -604,7 +801,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each arrivingFiltered as row (row._id)}
+							{#each pagedRows.items as row (row._id)}
 								{@const next = nextQueueLabel(row, {
 									enableMedicalScreening: enableMedical,
 									hasScreening: screenedIds.has(row._id)
@@ -690,141 +887,15 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
-			{/if}
-		</div>
-
-		<!-- Tab 3: All Evacuees (ผู้ประสบภัยทั้งหมด) -->
-	{:else}
-		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-			<div
-				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
-			>
-				<div class="flex flex-wrap items-center gap-3">
-					<div class="flex items-center gap-1.5 text-xs text-slate-600">
-						<span class="font-medium">สถานะ:</span>
-						<select
-							bind:value={allStatusFilter}
-							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
-						>
-							<option value="all">ทุกสถานะ</option>
-							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
-							<option value="arriving">รอเข้าพัก</option>
-							<option value="active">เข้าพักแล้ว</option>
-							<option value="room_confirmed">ยืนยันถึงโซนแล้ว</option>
-							<option value="temporary_leave">ออกชั่วคราว</option>
-							<option value="transferred">ย้ายศูนย์</option>
-							<option value="checked_out">เช็คเอาต์</option>
-							<option value="deceased">เสียชีวิต</option>
-							<option value="cancelled">ยกเลิก</option>
-						</select>
+				{#if pagedRows.totalPages > 1}
+					<div class="border-t border-slate-200/80 px-5 py-3">
+						<PaginationControls
+							bind:page={currentPage}
+							count={arrivingFiltered.length}
+							perPage={PAGE_SIZE}
+						/>
 					</div>
-
-					{#if availableZones.length > 0}
-						<div class="flex items-center gap-1.5 text-xs text-slate-600">
-							<span class="font-medium">โซน:</span>
-							<select
-								bind:value={allZoneFilter}
-								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
-							>
-								<option value="all">ทุกโซน</option>
-								{#each availableZones as z (z)}
-									<option value={z}>โซน {z}</option>
-								{/each}
-							</select>
-						</div>
-					{/if}
-				</div>
-				<span class="text-xs text-slate-500">
-					แสดง {allFiltered.length} จาก {allEvacuees.length} รายการ
-				</span>
-			</div>
-
-			{#if allFiltered.length === 0}
-				<div
-					class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
-				>
-					<p class="font-medium text-slate-700">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</p>
-				</div>
-			{:else}
-				<div class="overflow-x-auto">
-					<Table.Root>
-						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
-							<Table.Row class="border-b-0 hover:bg-transparent">
-								<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
-									>ชื่อ-นามสกุล</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">สถานะ</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">โซน</Table.Head>
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ครอบครัว</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ความต้องการพิเศษ</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>อัปเดตล่าสุด</Table.Head
-								>
-								<Table.Head class="h-11 pr-5 text-xs font-semibold text-slate-600"
-									>คิวถัดไป</Table.Head
-								>
-								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
-									>การจัดการ</Table.Head
-								>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each allFiltered as row (row._id)}
-								{@const next = nextQueueLabel(row, {
-									enableMedicalScreening: enableMedical,
-									hasScreening: screenedIds.has(row._id)
-								})}
-								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-								<Table.Row
-									class="cursor-pointer hover:bg-slate-50/80"
-									onclick={() => onOpenRow(row)}
-								>
-									<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
-										{formatPersonName(row)}
-									</Table.Cell>
-									<Table.Cell class="px-3 py-3">
-										<StayStatusBadge status={row.current_stay?.status} size="sm" />
-									</Table.Cell>
-									<Table.Cell class="px-3 py-3 text-xs font-medium">
-										{row.current_stay?.zone ? `โซน ${row.current_stay.zone}` : '—'}
-									</Table.Cell>
-									<Table.Cell class="px-3 py-3 text-xs text-slate-600">
-										{hh?.label ?? '—'}
-									</Table.Cell>
-									<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
-										{specialNeedsShort(row.special_needs)}
-									</Table.Cell>
-									<Table.Cell class="px-3 py-3 text-xs text-slate-500 tabular-nums">
-										{formatUpdated(row.updated_at)}
-									</Table.Cell>
-									<Table.Cell class="px-3 py-3">
-										<Badge variant="secondary" class="text-xs">{next}</Badge>
-									</Table.Cell>
-									<Table.Cell class="py-3 pr-5 text-right">
-										<Button
-											size="sm"
-											variant="outline"
-											class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
-											onclick={(e) => {
-												e.stopPropagation();
-												onProfile(row);
-											}}
-										>
-											<Eye class="size-3.5" />
-											<span>ดูโปรไฟล์</span>
-										</Button>
-									</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				</div>
+				{/if}
 			{/if}
 		</div>
 	{/if}

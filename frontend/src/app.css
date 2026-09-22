@@ -10,7 +10,7 @@
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
 	/*
 	 * Sticky offset for registration section headers (under app / shelter chrome).
-	 * Layouts override: public navbar ≈ 4rem; onsite app bar + shelter nav ≈ 6.75rem.
+	 * Layouts override: public navbar ≈ 4rem; onsite ShelterNavbar ≈ 3.25rem.
 	 * Unified form section jump actions live in the bottom chrome dock (not top).
 	 */
 	--registration-sticky-top: 4rem;

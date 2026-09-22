@@ -7,6 +7,7 @@ import {
 	updateDonationItems,
 	type DonationItemEdit
 } from '../data/public-tracking';
+import { fetchShelterNeeds } from '../data/public-needs';
 
 export const donationTrackingKeys = {
 	all: ['donations', 'tracking'] as const,
@@ -41,6 +42,21 @@ export function useCancelDonation() {
 		mutationFn: (input: { token: string }) => cancelDonation(input.token),
 		onSuccess: (_data, input) =>
 			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
+	}));
+}
+
+/**
+ * Open needs of the shelter a booking belongs to — what the donor may add to it.
+ *
+ * Separate key space from the tracking detail: the board moves as other donors book,
+ * and an edit dialog opening later should see the current list rather than a snapshot
+ * taken with the booking.
+ */
+export function usePublicShelterNeeds(shelterCode: () => string) {
+	return createQuery(() => ({
+		queryKey: ['public-needs', shelterCode()],
+		queryFn: () => fetchShelterNeeds(shelterCode()),
+		enabled: !!shelterCode()
 	}));
 }
 

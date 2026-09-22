@@ -11,6 +11,11 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useDistricts, useProvinces, useSubdistricts } from '$lib/features/shelters';
+	import {
+		buildHousingTypeSelectItems,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 	import { resolveCurrentThaiLocation } from '$lib/utils/nominatim';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -40,7 +45,10 @@
 		postal_code?: string;
 		disabled?: boolean;
 		required?: boolean;
-		/** When false (e.g. public channel), skip back-office master-data and use defaults. */
+		/**
+		 * When false (e.g. public channel without back-office API), skip master fetch.
+		 * Option *values* are always CR-112 codes from defaults either way.
+		 */
 		loadMasterHousingTypes?: boolean;
 		errors?: {
 			housing_type?: string;
@@ -118,14 +126,25 @@
 		{ value: 'homeless', label: t.housingHomeless }
 	]);
 
-	const housingTypeItems = $derived.by(() => {
-		if (!shouldLoadMasterHousingTypes) return DEFAULT_HOUSING_TYPES;
-		const masterItems = (housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: housingLabelForCode(i.code, i.label) }));
-		return masterItems.length > 0 ? masterItems : DEFAULT_HOUSING_TYPES;
-	});
+	/** CR-112 codes as values; master only overlays labels for matching codes (+ orphan). */
+	const housingTypeItems = $derived(
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPES,
+			masterItems: shouldLoadMasterHousingTypes ? (housingTypeQuery.data?.items ?? []) : [],
+			currentValue: housing_type,
+			labelForCode: housingLabelForCode
+		})
+	);
 
+	const housingTypeTriggerLabel = $derived(
+		housing_type
+			? housingTypeLabelForCode(
+					housing_type,
+					housingTypeItems,
+					housingLabelForCode(housing_type, housing_type)
+				)
+			: t.housingTypePlaceholder
+	);
 	const provinceItems = $derived(
 		(provincesQuery.data ?? []).map((value) => ({ value, label: value }))
 	);
@@ -279,12 +298,14 @@
 			</Label>
 			<Select.Root
 				type="single"
-				bind:value={() => housing_type ?? '', (v) => (housing_type = v || null)}
+				bind:value={
+					() => housing_type ?? '',
+					(v) => setHousingTypeFromSelect(v, (next) => (housing_type = next))
+				}
 				{disabled}
 			>
 				<Select.Trigger id="housing-type" class={selectTriggerClass}>
-					{housingTypeItems.find((o) => o.value === housing_type)?.label ??
-						t.housingTypePlaceholder}
+					{housingTypeTriggerLabel}
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}

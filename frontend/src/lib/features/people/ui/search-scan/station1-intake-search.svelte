@@ -45,7 +45,8 @@
 		resolveNewRegistrationCta,
 		resolveShelterHitAction
 	} from '../../domain/intake-search';
-	import { formatPersonName, maskNationalId } from '../../domain/people';
+	import { formatPersonName, maskNationalId, zoneLabel } from '../../domain/people';
+	import { useShelter } from '$lib/features/shelters';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
 
@@ -95,6 +96,8 @@
 		() => !!debouncedQuery
 	);
 	const poolSearch = useUnassignedRegistrationSearch(() => debouncedQuery);
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const localHits = $derived(localSearch.data ?? []);
 	const poolHits = $derived(poolSearch.data?.results ?? []);
 	const localFetching = $derived(!!debouncedQuery && localSearch.isFetching);
@@ -241,7 +244,7 @@
 										<StayStatusBadge status={evacuee.current_stay.status} size="sm" />
 										{#if evacuee.current_stay.zone}
 											<span class="text-xs text-muted-foreground"
-												>· โซน {evacuee.current_stay.zone}</span
+												>· โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}</span
 											>
 										{/if}
 										{#if evacuee.person_id?.number}

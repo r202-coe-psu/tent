@@ -89,6 +89,23 @@ function handleClusterMessage(msg: unknown) {
 				});
 			}
 		}
+	} else if (m.action === 'init') {
+		const activeSessions: ClusterSessionPayload[] = [];
+		const now = Date.now();
+		for (const s of sessions.values()) {
+			if (s.expiresAt > now && s.status === 'pending') {
+				activeSessions.push({
+					id: s.id,
+					createdAt: s.createdAt,
+					expiresAt: s.expiresAt,
+					status: s.status,
+					profile: s.profile
+				});
+			}
+		}
+		if (activeSessions.length > 0) {
+			broadcastCluster({ action: 'init_sync', sessions: activeSessions });
+		}
 	}
 }
 

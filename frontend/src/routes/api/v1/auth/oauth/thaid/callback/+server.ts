@@ -107,14 +107,15 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			dispatchErrorRedirect('invalid_state');
 		}
 
-		const { clientId, clientSecret, tokenUrl } = getThaidOAuthConfig();
+		const { clientId, clientSecret, tokenUrl, userinfoUrl } = getThaidOAuthConfig();
 		const redirectUri = resolveThaidRedirectUri(url);
 		const claims = await exchangeThaidCode({
 			code,
 			redirectUri,
 			clientId,
 			clientSecret,
-			tokenUrl
+			tokenUrl,
+			userinfoUrl
 		});
 
 		if (state.mode === 'register') {

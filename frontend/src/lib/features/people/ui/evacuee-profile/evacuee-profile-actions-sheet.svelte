@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import {
@@ -14,6 +13,9 @@
 		type Screening
 	} from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	interface StatusInfo {
@@ -32,12 +34,7 @@
 		readonly,
 		onOpenZoneModal,
 		onOpenStatusModal,
-		onOpenQrModal,
-		onOpenPersonalEdit,
-		onOpenEmergencyEdit,
-		onOpenHealthEdit,
-		onOpenHouseholdEdit,
-		onOpenAssetsEdit
+		onOpenQrModal
 	}: {
 		open: boolean;
 		evacuee: Evacuee;
@@ -48,14 +45,11 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
-		onOpenPersonalEdit: () => void;
-		onOpenEmergencyEdit: () => void;
-		onOpenHealthEdit: () => void;
-		onOpenHouseholdEdit: () => void;
-		onOpenAssetsEdit: () => void;
 	} = $props();
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	const displayName = $derived(formatPersonName(evacuee));
 	const hasIllnessAlert = $derived(
@@ -109,7 +103,7 @@
 								class="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700"
 							>
 								<MapPin class="size-3 shrink-0 text-[#0A2647]" />
-								โซน {zoneLabel(evacuee.current_stay.zone)}
+								โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}
 							</span>
 						</div>
 
@@ -172,52 +166,6 @@
 						<Printer class="size-4 opacity-75" />
 						พิมพ์ QR
 					</button>
-
-					<p class="pt-1 text-xs font-bold tracking-wide text-slate-500 uppercase">แก้ไข</p>
-					<div
-						class="divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/80 bg-white"
-					>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenPersonalEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							บุคคล
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenEmergencyEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							ฉุกเฉิน
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenHealthEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							สุขภาพ
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenHouseholdEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							ครัวเรือน
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenAssetsEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							สินทรัพย์
-						</button>
-					</div>
 				{:else}
 					<button
 						type="button"

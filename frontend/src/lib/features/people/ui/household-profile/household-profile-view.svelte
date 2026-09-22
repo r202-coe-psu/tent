@@ -16,7 +16,8 @@
 		useHousehold,
 		useHouseholds,
 		useUpdateHousehold,
-		useUpdateEvacuee
+		useUpdateEvacuee,
+		zoneLabel
 	} from '../../index';
 	import type { Evacuee, PetGroup, HouseholdVehicle, HouseholdStatus } from '../../domain/people';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -186,7 +187,7 @@
 			await Promise.all(promises);
 
 			toast.success(
-				`ย้ายโซนสมาชิกทั้ง ${members.length} คนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`
+				`ย้ายโซนสมาชิกทั้ง ${members.length} คนเป็น ${zoneLabel(zoneCode, shelterZones)} เรียบร้อย`
 			);
 			showZoneModal = false;
 		} catch (err: unknown) {

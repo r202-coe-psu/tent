@@ -20,6 +20,12 @@
 		householdPostArrivalAddressFormSchema,
 		type HouseholdPostArrivalAddressForm
 	} from '../../domain/people';
+	import {
+		buildHousingTypeSelectItems,
+		DEFAULT_HOUSING_TYPE_ITEMS_TH,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 
 	let {
 		initialData = null,
@@ -95,9 +101,16 @@
 		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
 	);
 	const housingTypeItems = $derived(
-		(housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPE_ITEMS_TH,
+			masterItems: housingTypeQuery.data?.items ?? [],
+			currentValue: $formData.housingType
+		})
+	);
+	const housingTypeTriggerLabel = $derived(
+		$formData.housingType
+			? housingTypeLabelForCode($formData.housingType, housingTypeItems, $formData.housingType)
+			: '— เลือกประเภทที่อยู่อาศัย —'
 	);
 	const isHomeless = $derived($formData.housingType === 'homeless');
 
@@ -193,12 +206,12 @@
 							<Select.Root
 								type="single"
 								bind:value={
-									() => $formData.housingType ?? '', (v) => ($formData.housingType = v || null)
+									() => $formData.housingType ?? '',
+									(v) => setHousingTypeFromSelect(v, (next) => ($formData.housingType = next))
 								}
 							>
 								<Select.Trigger {...props} class={selectTriggerClass}>
-									{housingTypeItems.find((o) => o.value === $formData.housingType)?.label ??
-										'— เลือกประเภทที่อยู่อาศัย —'}
+									{housingTypeTriggerLabel}
 								</Select.Trigger>
 								<Select.Content>
 									{#each housingTypeItems as opt (opt.value)}
