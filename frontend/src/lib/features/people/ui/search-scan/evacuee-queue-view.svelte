@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { untrack } from 'svelte';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -86,7 +87,7 @@
 		red: 'แดง'
 	};
 
-	let activeTab = $state<WorkflowTab>(initialTab);
+	let activeTab = $state<WorkflowTab>(untrack(() => initialTab));
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
 	let preRegChannelFilter = $state<PreRegChannelFilter>('all');
 	let allStatusFilter = $state<string>('all');

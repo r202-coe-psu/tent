@@ -64,6 +64,7 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
+		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
 		onApplyZoneToAll,
@@ -80,6 +81,7 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
+		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onApplyZoneToAll?: (zoneCode: string) => void;
@@ -627,7 +629,9 @@
 			{hideNoPhone}
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
-				? 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
+				? primaryContactPhone
+					? `หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลัก (${primaryContactPhone}) แทนโดยอัตโนมัติ`
+					: 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
 				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}

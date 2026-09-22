@@ -85,6 +85,25 @@ let memoryRepo: Repository = {
 	},
 	async find<T>(): Promise<T[]> {
 		return [...couchDocs.values()] as unknown as T[];
+	},
+	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+		const saved: T[] = [];
+		for (const doc of docs) {
+			const existing = mockGetDoc<T>(doc._id);
+			if (!existing) {
+				// CouchDB reports a conflict for a create carrying an _rev.
+				saved.push(doc._rev ? doc : mockPutDoc(doc, false));
+				continue;
+			}
+			if (!doc._rev || doc._rev !== existing._rev) {
+				// bulkDocs returns per-document conflicts; the repository wrapper keeps
+				// the original document for idempotent conflict-only batches.
+				saved.push(doc);
+				continue;
+			}
+			saved.push(mockPutDoc(doc, true));
+		}
+		return saved;
 	}
 };
 
@@ -119,9 +138,8 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 // that only need stock on hand still have to name one.
 const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
-// Phase 2A requires the strict batch reference contract (distribution_batch:*),
-// while actual batch persistence/verification is introduced in Phase 3.
-const DISTRIBUTION_BATCH_REF = 'distribution_batch:01JFIXTUREBATCH';
+// Ticket-era canonical distribute reference requires requisition_ticket: (CR-121 / schema §2.1)
+const DISTRIBUTION_BATCH_REF = 'requisition_ticket:01JFIXTURETICKET';
 
 describe('assertReceiveAgainstCatalog', () => {
 	const entry = createReceiveEntry(

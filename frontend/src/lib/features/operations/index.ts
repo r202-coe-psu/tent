@@ -110,6 +110,7 @@ export {
 	receivedItemSchema,
 	type ReceivedItemInput
 } from './domain/operations';
+export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';

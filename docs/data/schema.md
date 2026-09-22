@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-19
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; CR-134 bulk_return_claim (schema_v 1) and bulk_return_pool (schema_v 2)
 ---
 
 # Database Schema v5 — field-level
@@ -328,7 +328,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ |
 | `distribute` | `requisition_ticket:{ulid}` — req | จ่ายพัสดุ/อาหารออกจาก ticket เบิกกลาง; `qty` ลบและต้องมี `lot_ref` (CR-121) |
 | `distribution_return` | `distribution_batch:{request_ulid}` — req | คืนยอดคงเหลือเข้าล็อตเดิม; `qty` บวกและต้องมี `lot_ref` |
-| `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}` หรือ `distribution_log:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง หรือรับของยืมคืน (CR-121) |
+| `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}`, `distribution_log:{ulid}` หรือ `bulk_return_pool:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง, รับของยืมคืน หรือรับของกองรวมเพื่อเปิด `bulk_return_pool` (CR-121) |
 
 **ขอบเขตการบังคับ:** Zod (`stockLedgerInputSchema.superRefine`) และ factory
 `createStockLedger` บังคับ reason/ref/lot contract. `_design/access` ตรวจ append-only, role gate และ
@@ -1059,7 +1059,8 @@ Guard ไม่ใช่ receipt history; receipt history มาจาก commit
 `items[]` = `{item_id:str, item_name:str, category:str?, type_class:enum(CONSUMABLE,DURABLE,EQUIPMENT),
 returnable:bool?, requested_qty:qty_str>0, allocated_qty:qty_str>0,
 distributed_qty:qty_str≥0?, returned_qty:qty_str≥0?, discrepancy_qty:qty_str≥0?}`.
-`category` ใช้ `category_id` เช่น `item_category:ready_meal`; counters ที่เป็น optional เป็น
+`items[].item_id` ต้องไม่ซ้ำภายใน `requisition_ticket` เดียว เพราะเป็น logical line identity สำหรับ
+allocation, dispatch, amendment และ reconciliation. `category` ใช้ `category_id` เช่น `item_category:ready_meal`; counters ที่เป็น optional เป็น
 snapshot เขียนตอน reconcile/ปิดรอบเท่านั้น ไม่เขียนทับตั๋วระหว่างการสแกนหน้างาน.
 
 `amendments[]` = `{amendment_id:ulid, item_id:str, added_qty:qty_str>0, amended_at:ts,
@@ -1103,9 +1104,15 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 **Invariants:** `is_returnable=false` ต้องจบเป็น `fulfilled` หรือ `voided`; `is_returnable=true`
 ต้องใช้สถานะการคืน/การสูญหายตาม lifecycle. การคืนของยืมลง `stock_ledger` เพียงครั้งเดียว
 เมื่อรับของจริงที่เคาน์เตอร์หรือรับกองรวม (`reason='receive'`); การ clear ที่ checkout ไม่เขียน
-ledger ซ้ำ. `bulk_pool_id` จำกัดการ clear ตาม `unclaimed_quota` ของกองรวมนั้น.
+ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที่ยังไม่เริ่มคืนหรือ clear (`fulfilled` หรือ `active` ที่ไม่มี
+`qty_returned>0`, return audit, `clear_reason`, หรือ `bulk_pool_id`); ห้ามใช้ void ลบประวัติ loan ที่
+ได้รับคืน, clear, lost, waived หรือ bulk drop-off แล้ว. `bulk_pool_id` จำกัดการ clear ตาม
+`unclaimed_quota` ของกองรวมนั้น.
 
-### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 1** (CR-121)
+### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 2** (CR-121, CR-134)
+
+> **schema_v 2** (CR-134) — เพิ่ม `claim_ids: [str]` เก็บรายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จเพื่อเป็น durable identity สำหรับ Crash Recovery ข้ามเอกสาร; บังคับตัดโควตาพร้อม append `claim_ids` แบบ Atomic ภายใต้ Pool CAS; ห้ามลด schema_v กลับเป็น 1; รองรับ In-place Lazy Upgrade สำหรับพูล active v1.
+> **schema_v 1** (CR-121) — โครงสร้างเริ่มต้น (aggregate quota).
 
 เอกสารควบคุมโควตารับคืนพัสดุคงทนแบบกองรวม (Hybrid Auto-Pool Guard) ใน `shelter_{shelter_code}`
 สำหรับกรณีประชาชนนำของยืมมาคืนรวมกัน หรือทีมงานกวาดเก็บพื้นที่เข้ามายังคลังกลาง. คลังสินค้าตรวจนับ
@@ -1121,25 +1128,114 @@ ledger ซ้ำ. `bulk_pool_id` จำกัดการ clear ตาม `uncla
 | `total_received_qty` | qty_str>0 | req | จำนวนของจริงที่คลังตรวจรับเข้ากองรวม |
 | `claimed_qty` | qty_str≥0 | req | จำนวนที่ด่าน Check-out กดเคลียร์ตัดสิทธิ์ไปแล้ว; default `"0"` |
 | `unclaimed_quota` | qty_str≥0 | req | โควตาคงเหลือที่ยังกดเคลียร์ได้ (`total_received_qty - claimed_qty`) |
+| `claim_ids` | [str] | req | รายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จ; v2 initialize เป็น `[]`; ห้ามมี ID ซ้ำ (CR-134) |
 | `status` | enum(`ACTIVE`,`EXHAUSTED`,`CLOSED`) | req | `ACTIVE` (ยังมีโควตา), `EXHAUSTED` (โควตาหมดแล้ว), `CLOSED` (ปิดกะกระทบยอดแล้ว) |
 | `closed_at` / `closed_by` | ts / str | opt | เวลาและผู้ปิด Pool เมื่อสิ้นสุดกะ |
 | `notes` | str | opt | หมายเหตุ |
 
 **Concurrency & Invariants:**
-1. **Optimistic Concurrency Control (OCC):** การตัดโควตาที่ด่าน Check-out (`unclaimed_quota - 1`, `claimed_qty + 1`) ต้องส่ง `_rev` ล่าสุดของเอกสาร. หากเกิด HTTP 409 Conflict Client ต้องดึงเอกสารล่าสุดมาตรวจสอบว่า `unclaimed_quota > 0` ก่อน retry เสมอ
-2. **Hard-quota Guard:** ห้ามตัดโควตาเมื่อ `unclaimed_quota <= 0`; ระบบล็อกปุ่มสำหรับเจ้าหน้าที่ทั่วไป ต้องใช้ `shelter_manager` Override หรือปรับเป็น `lost`/`waived`
-3. **Status Lifecycle:** `ACTIVE` → `EXHAUSTED` (เมื่อ `unclaimed_quota == 0`); หรือเปลี่ยนเป็น `CLOSED` โดยตรงเมื่อปิดกะและกระทบยอดเสร็จสิ้น (รองรับทั้ง `ACTIVE → CLOSED` และ `ACTIVE → EXHAUSTED → CLOSED`)
-4. **Audit Reconciliation:** ยอดสูญหายของกะ = `total_received_qty - claimed_qty` ณ เวลาปิด Pool
+1. **Optimistic Concurrency Control (OCC) & Atomicity:** การตัดโควตาที่ด่าน Check-out ต้องส่ง `_rev` ล่าสุดของเอกสาร. ตัวนับ (`claimed_qty`, `unclaimed_quota`, `status`) และ `claim_ids` ต้องเปลี่ยนแปลงพร้อมกันใน CouchDB document update เดียวกันภายใต้ Pool CAS. หากเกิด HTTP 409 Conflict Client ต้องดึงเอกสารล่าสุดมาตรวจสอบว่า `claimId` ปรากฏใน `claim_ids` แล้วหรือไม่ (Replay Recovery) หากยังไม่ปรากฏต้องตรวจว่า `unclaimed_quota > 0` ก่อน retry
+2. **Claim ID Rules:** จัดเก็บ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) เสมอ; ห้ามมี Claim ID ซ้ำซ้อนใน array `claim_ids`; ห้าม downgrade `schema_v` จาก 2 เป็น 1
+3. **Hard-quota Guard:** ห้ามตัดโควตาเมื่อ `unclaimed_quota <= 0`; ระบบล็อกปุ่มสำหรับเจ้าหน้าที่ทั่วไป ต้องใช้ `shelter_manager` Override หรือปรับเป็น `lost`/`waived`
+4. **Status Lifecycle:** `ACTIVE` → `EXHAUSTED` (เมื่อ `unclaimed_quota == 0`); หรือเปลี่ยนเป็น `CLOSED` โดยตรงเมื่อปิดกะและกระทบยอดเสร็จสิ้น (รองรับทั้ง `ACTIVE → CLOSED` และ `ACTIVE → EXHAUSTED → CLOSED`)
+5. **Audit Reconciliation:** ยอดสูญหายของกะ = `total_received_qty - claimed_qty` ณ เวลาปิด Pool
+
+**Migration & Document Compatibility (schema_v 1 → 2):**
+- **Historical CLOSED v1:** พูลประวัติศาสตร์ที่ปิดรอบไปแล้ว (`status='CLOSED'`) และมี `schema_v: 1` ยังคงอ่านได้ตามปกติโดยไม่ต้องเขียนทับหรือรัน Migration Script
+- **ACTIVE v1 (In-place Lazy Upgrade):** พูล v1 ที่เปิดใช้งานอยู่หน้างานก่อน Deploy ระบบใหม่ ได้รับอนุญาตให้เข้าร่วมกระบวนการตัดโควตาได้ โดยการตัดโควตาครั้งแรกที่สำเร็จผ่าน CAS จะทำ Lazy Upgrade เป็น `schema_v: 2` ทันทีในคำสั่งเขียนเดียวกัน:
+  - `schema_v: 1 → 2`
+  - `claim_ids: [claimId]`
+  - `claimed_qty += claim.claimed_qty`
+  - `unclaimed_quota -= claim.claimed_qty`
+  - `status: 'EXHAUSTED'` หากโควตาหมด
+  ทั้งหมดสำเร็จพร้อมกันใน CouchDB Single Document Update เดียวกัน ไม่ต้องใช้ Migration Script
+
+### 2.32 `bulk_return_claim` — `bulk_return_claim:{distributionLogUlid}` · **schema_v 1** (CR-134)
+
+เอกสารประสานงานความคงทนและฟื้นฟูการเคลียร์ของยืมแบบกองรวม (Bulk Return Claim Coordination & Crash Recovery) ใน `shelter_{shelter_code}`
+สร้างขึ้นเพื่อเป็น Durable Coordination Record รับประกัน Idempotency และ Crash Recovery ข้ามเอกสารระหว่าง `bulk_return_pool` (§2.31)
+และ `distribution_log` (§2.30). เอกสารนี้ไม่ใช่บันทึกสต็อกพัสดุ (Physical Inventory) และการดำเนินงานในกระบวนการนี้ **ไม่สร้างแถว `stock_ledger` ซ้ำซ้อน (Stock Ledger Row Count = 0)**
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `bulk_return_claim:{distributionLogUlid}` — ผูกมัดกับรายการยืมรายตัวอย่างถาวร (Loan Obligation Uniqueness) |
+| `type` | str | req | `'bulk_return_claim'` |
+| `schema_v` | int | req | `1` |
+| `shelter_code` | str | req | รหัสศูนย์พักพิง เช่น `SH001` (ตรงกับ DB `shelter_{shelter_code}`) |
+| `operation_id` | str | req | ULID รอบการเรียกของผู้ปฏิบัติงาน/Client (Retry Identity) |
+| `distribution_log_id` | str | req | อ้าง `distribution_log:{distributionLogUlid}` ของรายการยืมที่ถูกเคลียร์ |
+| `bulk_pool_id` | str | req | อ้าง `bulk_return_pool:{ulid}` ของพูลที่ให้โควตา |
+| `item_id` | str | req | อ้าง `item_master:{sku|ulid}` ของพัสดุที่ยืม (ต้องตรงกับ Log) |
+| `claimed_qty` | qty_str>0 | req | ยอดจำนวนที่ตัดโควตาเคลียร์ภาระ (Authoritative Quantity หลังสร้าง Intent) |
+| `status` | enum(`CLAIM_INTENT`,`POOL_CLAIMED`,`COMPLETE`,`ABORTED`) | req | สถานะวงจรการเคลียร์ |
+| `created_at` / `created_by` | ts / str | req | เวลาและผู้สร้างเอกสาร Claim ครั้งแรก |
+| `updated_at` | ts | req | เวลาที่อัปเดตสถานะล่าสุด |
+| `notes` | str | opt | หมายเหตุหรือเหตุผลการปฏิเสธ/ยกเลิก (ถ้ามี) |
+
+#### ฟิลด์และความเปลี่ยนแปลง (Field Mutability Classification)
+1. **Permanently Immutable (ห้ามเปลี่ยนแปลงตลอดชีพ):**
+   `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `item_id`, `created_at`, `created_by`
+2. **Attempt-Scoped Immutable (คงที่ตลอดรอบคำสั่ง ห้ามแก้ระหว่างดำเนินการ):**
+   `operation_id`, `bulk_pool_id`, `claimed_qty`
+   ฟิลด์เหล่านี้ต้องคงที่ตลอดกระบวนการตั้งแต่ `CLAIM_INTENT`, `POOL_CLAIMED`, จนถึง `COMPLETE`
+   จะอนุญาตให้เขียนทับได้ **เฉพาะ** เมื่อเกิดการเปลี่ยนผ่านสถานะ `ABORTED → CLAIM_INTENT` ผ่าน CouchDB CAS เพื่อตั้งต้นรอบคำสั่งใหม่เท่านั้น
+3. **Mutable Lifecycle Fields:**
+   `status`, `updated_at`, `notes` (เปลี่ยนผ่านตาม State Transition Matrix)
+
+#### วงจรสถานะ (State Lifecycle Machine)
+- `CLAIM_INTENT`: ประกาศเจตจำนงเคลียร์ภาระของยืม ยึดสิทธิ์ `distributionLogUlid` ป้องกันการเคลียร์ซ้ำด้วยคำสั่งอื่น
+- `POOL_CLAIMED`: ตัดโควตาใน `bulk_return_pool` สำเร็จและมี Claim ID ปรากฏใน `pool.claim_ids` แล้ว
+- `COMPLETE`: บันทึกปิดภาระใน `distribution_log` เป็น `status='returned'` สำเร็จ สิ้นสุดกระบวนการอย่างสมบูรณ์
+- `ABORTED`: คำสั่งถูกยกเลิกเนื่องจากเงื่อนไขทางธุรกิจไม่ผ่าน **ก่อน** ที่จะมีการตัดโควตาในพูล
+
+#### กฎและข้อกำหนดความถูกต้อง (Canonical Invariants)
+1. **Quantity Contract:**
+   - ก่อนสร้าง Claim Intent: คำนวณ `claimQty = log.qty - (log.qty_returned ?? "0")` และต้องมี `claimQty > 0`
+   - เมื่อสร้าง Claim Intent แล้ว: ค่า `claim.claimed_qty` จะกลายเป็น **Authoritative Quantity** เพียงหนึ่งเดียวของรอบคำสั่งนั้น การ Retry/Recovery ต้องยึดถือยอดนี้เสมอ ห้ามคำนวณใหม่จากสถานะของ Log ที่อาจเปลี่ยนแปลงไปแล้ว
+2. **Strict Final Quantity Invariant on DistributionLog:**
+   ก่อนจะบันทึก `distribution_log.status = 'returned'` ต้องพิสูจน์ด้วย Decimal Helper ว่า:
+   `newReturned = (log.qty_returned ?? 0) + claim.claimed_qty`
+   โดยต้องมีความเท่ากันอย่างเคร่งครัด: **`newReturned == log.qty`**
+   - หาก `newReturned > log.qty`: ถือเป็น Integrity Failure ร้ายแรง ห้ามบันทึก
+   - หาก `newReturned < log.qty`: ห้ามเปลี่ยนสถานะเป็น `returned` (เป็นการคืนบางส่วน)
+   สำหรับการกู้คืนกรณี Log ถูกบันทึกไปแล้ว (Crash-after-Log-update replay) ต้องตรวจสอบ:
+   `log.status == 'returned' && log.qty_returned == log.qty && log.clear_reason == 'bulk_dropoff' && log.bulk_pool_id == claim.bulk_pool_id`
+3. **Deterministic Abort Contract:**
+   - สถานะ `ABORTED` จะเกิดขึ้นได้ **ก่อนเกิดผลกระทบต่อพูล (Pre-pool Effect) เท่านั้น**
+   - อนุญาตเฉพาะ Business Rejection ที่แน่นอน เช่น โควตาไม่พอ (`unclaimed_quota < claimQty`), พูลมีสถานะ `CLOSED` หรือ `EXHAUSTED`
+   - ความขัดข้องชั่วคราว (Transient Errors) เช่น Timeout, Network Error, CouchDB 5xx, CAS Conflict (HTTP 409), การลองซ้ำหมดรอบ (Retry Exhaustion), หรือ Process Crash **ต้องไม่บันทึกเป็น `ABORTED` เด็ดขาด** ให้ส่งข้อผิดพลาดกลับเพื่อให้ Client ลองใหม่
+   - เมื่อมีผลกระทบต่อพูลแล้ว (`claimId` อยู่ใน `pool.claim_ids` หรือสถานะก้าวสู่ `POOL_CLAIMED`): **ห้ามเปลี่ยนเป็น `ABORTED` โดยเด็ดขาด ต้องเดินหน้ากู้คืน (Forward Recovery) ไปสู่ `COMPLETE` เท่านั้น**
+4. **ABORTED Re-initialization Contract:**
+   เมื่อคำสั่งเดิมจบลงด้วย `ABORTED` เอกสาร Claim เดิมสามารถถูกนำกลับมาเริ่มต้นใหม่เป็น `CLAIM_INTENT` ได้ โดยมีเงื่อนไข:
+   - `distribution_log` ยังคงมีสถานะ Active/Partially Returned (`outstanding > 0`)
+   - ต้องอัปเดตผ่าน CouchDB CAS (`_rev`) บนเอกสาร Claim เดิมเท่านั้น (แข่งกันชนะได้เพียง 1 คำสั่ง)
+   - ต้องสร้าง `operation_id` ใหม่
+   - สามารถระบุ `bulk_pool_id` ใหม่ได้ (เช่น สลับไปใช้พูลอื่นที่มีโควตา)
+   - คำนวณ `claimed_qty` ใหม่ตามยอดคงค้างปัจจุบันก่อนตั้งต้น Intent
+   - ฟิลด์ Identity ถาวร (`_id`, `type`, `distribution_log_id`, `item_id`, `created_by`, `created_at`) ต้องคงเดิม
+   - ก่อนจะสร้าง Claim Intent ควรทำ Pre-flight Quota Check เพื่อหลีกเลี่ยงการสร้าง Intent กับพูลที่ใช้ไม่ได้
+5. **Zero StockLedger Row Invariant:**
+   กระบวนการ Bulk Return Claim และการปลดภาระของยืม **สร้างแถวใน `stock_ledger` เท่ากับ 0 แถว** เพราะการตรวจรับของจริงเข้าคลังได้บันทึกรับสต็อก (`reason='receive'`) ไปแล้วตั้งแต่ขั้นตอนสร้าง `bulk_return_pool` (§2.31)
+6. **Actor Replay Contract:**
+   ฟิลด์ `created_by` ในเอกสาร Claim บันทึกผู้สร้างเอกสารในครั้งแรก. การทำ Forward Recovery หรือ Replay สามารถดำเนินการโดยเจ้าหน้าที่หน้างานท่านอื่นที่ได้รับอนุญาตในขณะนั้นได้ ระบบต้องไม่ปฏิเสธการ Replay เพียงเพราะ `ctx.createdBy !== existing.created_by` (แต่ยังต้องตรวจสอบ Authorization ของผู้เรียกปัจจุบันตามปกติ)
+7. **VDU vs Application Enforcement Boundary:**
+   - CouchDB `validate_doc_update` (VDU) ทำหน้าที่ตรวจสอบความสมบูรณ์เชิงโครงสร้างของเอกสารเดี่ยว (Single-document Invariants) ความถูกต้องของ Schema ชนิดข้อมูล ความเป็น Immutable ของฟิลด์ถาวร และ State Transition ภายในเอกสาร
+   - Application Layer (`return-workflow.ts`) ทำหน้าที่ตรวจสอบ Invariant ข้ามเอกสาร (Cross-document Invariants) เช่น การตรวจสอบว่า `claimId` ปรากฏใน `pool.claim_ids` หรือไม่ และความสอดคล้องกับ `distribution_log` เนื่องจาก CouchDB VDU ไม่สามารถ Query ข้อมูลจากเอกสารอื่นได้
 
 ### Stock source of truth
 
 `stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. สำหรับ flow ใหม่
 `requisition_ticket` เป็นต้นเหตุของ outbound `requisition`/`distribute` และ `distribution_log`
 เป็นต้นเหตุของการรับคืนแบบ `receive`; `meal_service` เป็นต้นเหตุของการรับผลผลิต. การรับคืนของยืมแบบกองรวม
-ใช้ `bulk_return_pool` (§2.31) ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว.
+ใช้ `bulk_return_pool` (§2.31) ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว:
+ผู้เรียกสร้าง `operationUlid` ที่เสถียรก่อนเขียน แล้วใช้ suffix เดียวกันกับ `bulk_return_pool:{operationUlid}` และ
+`stock_ledger:{operationUlid}`; แถว receipt ใช้ `reason='receive'`, `ref_id=bulk_return_pool:{operationUlid}` และ Pool
+อ้างกลับผ่าน `stock_ledger_id=stock_ledger:{operationUlid}`. การ retry ต้องใช้ `operationUlid` เดิมและตรวจความเท่ากันของ
+ข้อมูล immutable ก่อนรับเอกสารที่มีอยู่แล้ว. การปลดภาระของยืมที่ด่าน Check-out ใช้ `bulk_return_claim` (§2.32)
+เป็นเอกสารประสานงานความคงทนและฟื้นฟูหลังขัดข้อง (Crash Recovery) โดยไม่สร้างแถว `stock_ledger` ซ้ำซ้อน.
 Allocation, reservation, batch reconciliation และ coordination docs เป็น snapshot/coordination เท่านั้น.
 เอกสาร `distribution_request`–`distribution_issue_gate` ใน §2.21–2.28 ยังคงอ่านได้เพื่อ
-backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.31 เป็น canonical.
+backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.32 เป็น canonical.
 
 ---
 
@@ -2022,7 +2118,8 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 12. `unit_of_measure` ใน `catalog`: `code` เป็น immutable สำหรับทุกเอกสาร; เอกสารที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false` (ตรวจตรงเงื่อนไข `oldDoc.type === 'unit_of_measure' && oldDoc.is_protected === true && newDoc.is_protected !== true`). การเขียน master ทำได้เฉพาะบทบาท `system_admin` ที่ระดับ Application (CouchDB transport อนุญาต role `system_admin` หรือ `_admin` bypass) ตาม CR-125; ฐานข้อมูล `shelter_*` ไม่อนุญาตให้เขียน `unit_of_measure` เด็ดขาด
 13. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
 14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
-15. `bulk_return_pool` อยู่ใน whitelist ของ `shelter_*`; บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`
+15. `bulk_return_pool` (schema_v 1 และ 2) อยู่ใน whitelist ของ `shelter_*`; schema_v 2 ต้องมี `claim_ids` เป็น array ของ string (ห้ามมี ID ซ้ำ และไม่อนุญาตให้ downgrade เป็น v1); บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`; การอัปเกรด lazy upgrade จาก v1 สู่ v2 ต้องกระทำพร้อมกับการตัดโควตาและเพิ่ม claim_id แรกในเอกสารเดียวกัน
+16. `bulk_return_claim` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: bulk_return_claim:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `item_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `bulk_pool_id`, `claimed_qty` เป็น attempt-scoped immutable (ห้ามเปลี่ยนระหว่าง attempt, อนุญาตให้เขียนทับได้เฉพาะในการเปลี่ยนผ่าน `ABORTED` → `CLAIM_INTENT` ผ่าน CAS เท่านั้น); transition อนุญาตเฉพาะ `CLAIM_INTENT` → `POOL_CLAIMED` → `COMPLETE`, `CLAIM_INTENT` → `ABORTED`, และ `ABORTED` → `CLAIM_INTENT` (CAS re-initialization); ห้ามเปลี่ยนเป็น `ABORTED` เมื่อเข้าสู่ `POOL_CLAIMED` หรือ `COMPLETE` แล้ว; การเขียนสร้างหรือเปลี่ยนสถานะกระทำได้โดยบทบาทที่ได้รับอนุญาตหน้างาน (`registration_staff`, `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`)
 
 ---
 
