@@ -82,6 +82,7 @@ class ScannerClientManager:
         self.device_name = ""
 
         # Kiosk Routes on Tent Server
+        self.home_path = "/kiosk"
         self.waiting_path = "/kiosk/scanner/waiting"
         self.reading_path = "/kiosk/scanner/reading"
         self.remove_card_path = "/kiosk/scanner/remove-card"
@@ -108,6 +109,7 @@ class ScannerClientManager:
         return f"{self.tent_base_url}{path}" + (f"?{query}" if query else "")
 
     def _refresh_kiosk_urls(self) -> None:
+        self.home_url = self._kiosk_url(self.home_path)
         self.waiting_url = self._kiosk_url(self.waiting_path)
         self.reading_url = self._kiosk_url(self.reading_path)
         self.remove_card_url = self._kiosk_url(self.remove_card_path)
@@ -260,12 +262,12 @@ class ScannerClientManager:
                 return False, "ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้", None
 
     async def card_reading_loop(self):
-        """Main lifecycle loop: Waiting -> Reading -> Inbound Submit -> Remove Card -> Waiting"""
+        """Main lifecycle loop: Home -> Reading -> Inbound Submit -> Remove Card -> Home"""
         if not self.page:
             logger.error("Page not initialized")
             return
 
-        logger.info(f"Navigating Kiosk display to: {self.waiting_url}")
+        logger.info(f"Navigating Kiosk display to: {self.home_url}")
         # Startup connection retry loop in case network or server is still booting up
         connected = False
         retry_count = 0
@@ -274,12 +276,12 @@ class ScannerClientManager:
                 logger.info("Browser window closed during initial navigation.")
                 return
             try:
-                await self.page.goto(self.waiting_url, timeout=10000)
+                await self.page.goto(self.home_url, timeout=10000)
                 connected = True
-                logger.info(f"Successfully loaded Kiosk display: {self.waiting_url}")
+                logger.info(f"Successfully loaded Kiosk display: {self.home_url}")
             except Exception as e:
                 retry_count += 1
-                logger.warning(f"Waiting for Tent server at {self.waiting_url} (attempt {retry_count}): {e}. Retrying in 3s...")
+                logger.warning(f"Waiting for Tent server at {self.home_url} (attempt {retry_count}): {e}. Retrying in 3s...")
                 await asyncio.sleep(3.0)
 
         await self.init_reader()
@@ -345,8 +347,8 @@ class ScannerClientManager:
                 while self.reader and self.reader.is_card_inserted():
                     await asyncio.sleep(self.poll_interval)
 
-                logger.info("Card removed. Returning to waiting screen.")
-                await self.page.goto(self.waiting_url)
+                logger.info("Card removed. Returning to kiosk home screen.")
+                await self.page.goto(self.home_url)
 
             except Exception as loop_err:
                 del loop_err

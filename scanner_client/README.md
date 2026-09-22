@@ -33,7 +33,7 @@ flowchart LR
     F -->|ดึงข้อมูล Draft อัตโนมัติ| G[👩‍💼 หน้าจอ จนท. จุดคัดกรอง /onsite/people]
 ```
 
-1. **Kiosk UI**: แสดงหน้าจอแนะนำผู้ประสบภัยแบบ Interactive (`/kiosk/scanner/waiting` $\rightarrow$ `reading` $\rightarrow$ `remove-card`)
+1. **Kiosk UI**: แสดงหน้าเลือกวิธีที่ `/kiosk` แล้วจึงเข้าสู่ flow บัตร (`/kiosk/scanner/waiting` $\rightarrow$ `reading` $\rightarrow$ `remove-card`)
 2. **Card Engine**: ดึงข้อมูลเลขบัตร 13 หลัก, ชื่อ-นามสกุล (ไทย/อังกฤษ), วันเกิด, เพศ, ที่อยู่ตามทะเบียนบ้าน และรูปถ่ายใบหน้าความละเอียดสูง
 3. **Inbound Draft Sync**: ส่งข้อมูลไปยัง Tent Server พร้อมยืนยันตัวตนด้วย `X-Device-Id` และ `X-Device-Secret`
 4. **Staff Intake**: เจ้าหน้าที่ค้นหาชื่อหรือเลขบัตร จะพบป้าย `[ 🪪 เสียบบัตรแล้ว (รอคัดกรอง) ]` พร้อม Autofill ข้อมูลและรหัสไปรษณีย์เข้าฟอร์มลงทะเบียนทันที
@@ -47,7 +47,7 @@ flowchart LR
 3. บันทึกลง `scanner_client/.env` บนเครื่อง Kiosk แล้วจำกัดสิทธิ์ไฟล์เป็น `0600`
 4. ตอนเริ่มโปรแกรม Scanner Client จะโหลด `.env` (process environment มีสิทธิ์ override), ตรวจ HTTPS/placeholder และเรียก
    `POST /api/v1/scanner/bootstrap` ก่อนเปิด Playwright หรือเริ่มเครื่องอ่านบัตร
-5. เฉพาะ bootstrap ที่สำเร็จเท่านั้นจึงเปิดหน้า `/kiosk/scanner/waiting`
+5. เฉพาะ bootstrap ที่สำเร็จเท่านั้นจึงเปิดหน้า `/kiosk`
 
 ห้ามกรอก Device ID หรือ Scanner Key บนหน้าจอที่ประชาชนใช้งาน และห้ามใส่ Scanner Key ใน URL, browser storage หรือ log
 
@@ -368,7 +368,7 @@ python main.py
 
 - **Chromium Wayland Native:** ระบบส่ง Flag `--ozone-platform-hint=auto` เพื่อให้ Chromium รันแบบ Wayland แท้บน Labwc / Wayfire ไม่ติดปัญหา Window Border หรือ Taskbar บัง
 - **Kiosk Enforced:** เมื่อโปรแกรมรันผ่าน `start_kiosk.sh` ระบบจะบังคับ `DEBUG=false` ให้เป็น Kiosk เต็มจออัตโนมัติ โดยไม่ถูกจำกัดขนาด Window Size
-- **Auto Reconnect / Retry:** หากเปิดเครื่องแล้วระบบเครือข่าย (Wi-Fi หรือ LAN) ยังเชื่อมต่อไม่เสร็จ ตัวไคลเอนต์จะมี Retry loop คอยตรวจสอบและโหลดหน้าจอ `/kiosk/scanner/waiting` ทุก 3 วินาที ไม่ปล่อยให้ค้างที่หน้าจอ Error ของ Chromium
+- **Auto Reconnect / Retry:** หากเปิดเครื่องแล้วระบบเครือข่าย (Wi-Fi หรือ LAN) ยังเชื่อมต่อไม่เสร็จ ตัวไคลเอนต์จะมี Retry loop คอยตรวจสอบและโหลดหน้าจอ `/kiosk` ทุก 3 วินาที ไม่ปล่อยให้ค้างที่หน้าจอ Error ของ Chromium
 - **สลับโหมดทดสอบ (Windowed Debug):** หากต้องการเปิดเป็นหน้าต่างเพื่อ Debug สามารถสั่งผ่าน Terminal:
   ```bash
   DEBUG=true ./start_kiosk.sh

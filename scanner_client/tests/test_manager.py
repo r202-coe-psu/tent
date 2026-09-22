@@ -76,11 +76,13 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["device"]["device_id"], "kiosk-sh001-01")
         self.assertIsNone(client.page)
-        query = parse_qs(urlparse(client.waiting_url).query)
+        query = parse_qs(urlparse(client.home_url).query)
         self.assertEqual(query["shelter_code"], ["SH001"])
         self.assertEqual(query["shelter_name"], ["ศูนย์พักพิงทดสอบ"])
         self.assertEqual(query["station_name"], ["โต๊ะ 1"])
         self.assertEqual(query["device_name"], ["Kiosk จุดคัดกรอง 1"])
+        self.assertEqual(urlparse(client.home_url).path, "/kiosk")
+        self.assertEqual(urlparse(client.waiting_url).path, "/kiosk/scanner/waiting")
         self.assertEqual(
             FakeClient.requested_headers[-1]["X-Device-Secret"],
             "sk_scan_real_secret_value",
