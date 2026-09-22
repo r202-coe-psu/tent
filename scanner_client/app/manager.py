@@ -79,6 +79,7 @@ class ScannerClientManager:
         self.shelter_code = ""
         self.shelter_name = ""
         self.station_name = ""
+        self.device_name = ""
 
         # Kiosk Routes on Tent Server
         self.waiting_path = "/kiosk/scanner/waiting"
@@ -99,6 +100,7 @@ class ScannerClientManager:
             "shelter_code": self.shelter_code,
             "shelter_name": self.shelter_name,
             "station_name": self.station_name,
+            "device_name": self.device_name,
         }
         if extra_params:
             params.update(extra_params)
@@ -153,6 +155,7 @@ class ScannerClientManager:
                 self.shelter_code = shelter_code.strip()
                 self.shelter_name = str(device.get("shelter_name") or self.shelter_code).strip()
                 self.station_name = str(device.get("station_name") or "").strip()
+                self.device_name = str(device.get("name") or "Kiosk").strip()
                 self._refresh_kiosk_urls()
                 logger.info("Scanner bootstrap succeeded for device %s", self.device_id)
                 return payload

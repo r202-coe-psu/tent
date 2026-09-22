@@ -60,6 +60,7 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "device": {
                         "device_id": "kiosk-sh001-01",
+                        "name": "Kiosk จุดคัดกรอง 1",
                         "shelter_code": "SH001",
                         "shelter_name": "ศูนย์พักพิงทดสอบ",
                         "station_name": "โต๊ะ 1",
@@ -79,6 +80,7 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["shelter_code"], ["SH001"])
         self.assertEqual(query["shelter_name"], ["ศูนย์พักพิงทดสอบ"])
         self.assertEqual(query["station_name"], ["โต๊ะ 1"])
+        self.assertEqual(query["device_name"], ["Kiosk จุดคัดกรอง 1"])
         self.assertEqual(
             FakeClient.requested_headers[-1]["X-Device-Secret"],
             "sk_scan_real_secret_value",

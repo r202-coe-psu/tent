@@ -14,6 +14,7 @@
 	const stationName = $derived(
 		page.url.searchParams.get('station_name')?.trim() || 'จุดคัดกรองทั่วไป'
 	);
+	const kioskName = $derived(page.url.searchParams.get('device_name')?.trim() || 'Kiosk');
 
 	let now = $state(new Date());
 	$effect(() => {
@@ -79,6 +80,12 @@
 						class="mt-2 flex max-w-full flex-wrap items-center gap-2 text-xs font-semibold sm:text-sm"
 						aria-label="ข้อมูลศูนย์พักพิงและจุดบริการ"
 					>
+						<div
+							class="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-indigo-900"
+						>
+							<Cpu class="h-4 w-4 shrink-0 text-indigo-700" />
+							<span class="break-words">Kiosk: {kioskName}</span>
+						</div>
 						<div
 							class="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-sky-900"
 						>
