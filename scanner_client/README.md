@@ -38,6 +38,19 @@ flowchart LR
 3. **Inbound Draft Sync**: ส่งข้อมูลไปยัง Tent Server พร้อมยืนยันตัวตนด้วย `X-Device-Id` และ `X-Device-Secret`
 4. **Staff Intake**: เจ้าหน้าที่ค้นหาชื่อหรือเลขบัตร จะพบป้าย `[ 🪪 เสียบบัตรแล้ว (รอคัดกรอง) ]` พร้อม Autofill ข้อมูลและรหัสไปรษณีย์เข้าฟอร์มลงทะเบียนทันที
 
+### การยืนยันตัวตนเครื่อง Kiosk (Phase 1)
+
+อุปกรณ์ทุกเครื่องต้องได้รับ `DEVICE_ID` และ Scanner Key จาก System Management ก่อนใช้งาน:
+
+1. ผู้ดูแลระบบที่มีสิทธิ์ `system_admin` เปิดเมนูจัดการเครื่องสแกนและสร้างอุปกรณ์ใหม่
+2. คัดลอก `.env` snippet จากหน้าต่างที่แสดงหลังสร้างทันที — Scanner Key จะแสดงเป็น plaintext เพียงครั้งเดียว
+3. บันทึกลง `scanner_client/.env` บนเครื่อง Kiosk แล้วจำกัดสิทธิ์ไฟล์เป็น `0600`
+4. ตอนเริ่มโปรแกรม Scanner Client จะโหลด `.env` (process environment มีสิทธิ์ override), ตรวจ HTTPS/placeholder และเรียก
+   `POST /api/v1/scanner/bootstrap` ก่อนเปิด Playwright หรือเริ่มเครื่องอ่านบัตร
+5. เฉพาะ bootstrap ที่สำเร็จเท่านั้นจึงเปิดหน้า `/kiosk/scanner/waiting`
+
+ห้ามกรอก Device ID หรือ Scanner Key บนหน้าจอที่ประชาชนใช้งาน และห้ามใส่ Scanner Key ใน URL, browser storage หรือ log
+
 ---
 
 ## 🔌 อุปกรณ์ฮาร์ดแวร์ที่แนะนำ (Hardware Requirements)
@@ -224,14 +237,14 @@ cp .env.example .env
 nano .env
 ```
 
-แก้ไขข้อมูลการตั้งค่าให้ตรงกับการใช้งาน:
+แก้ไขข้อมูลการตั้งค่าให้ตรงกับการใช้งาน โดยคัดลอกค่าจริงจาก System Management เท่านั้น:
 ```env
-# URL ของ Tent Server (IP Address ของเครื่องเซิร์ฟเวอร์หลัก)
-TENT_BASE_URL=http://192.168.1.100:5173
+# URL ของ Tent Server (ใช้ HTTPS เมื่อไม่ใช่ loopback development)
+TENT_BASE_URL=https://tent.example.go.th
 
-# Device ID และ Secret ที่ได้รับจากระบบ (หรือสร้างผ่าน seed:scanner)
-DEVICE_ID=kiosk-test
-DEVICE_SECRET=kisok-test-secret
+# ค่าที่แสดงครั้งเดียวจาก System Management scanner-create flow
+DEVICE_ID=kiosk-sh001-01
+DEVICE_SECRET=sk_scan_<one-time-generated-secret>
 
 # กำหนด Path ของ Browser ในระบบ
 BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -246,7 +259,11 @@ WINDOW_HEIGHT=1920
 # ความถี่ในการตรวจสอบสถานะบัตร (วินาที)
 POLL_INTERVAL=0.5
 ```
-*(กด `Ctrl + O` แล้ว `Enter` เพื่อบันทึก และ `Ctrl + X` เพื่อออก)*
+จากนั้นล็อกสิทธิ์ไฟล์ credential:
+```bash
+chmod 600 .env
+```
+อย่า commit หรือส่งไฟล์นี้ให้ผู้อื่น และอย่าใช้ค่าใน `.env.example` เป็น credential จริง
 
 ---
 
@@ -398,5 +415,7 @@ tail -f /tmp/kiosk_autostart.log
 | **`Reader is busy` / `Sharing violation`** | มีโปรเซสอื่นแย่งจองเครื่องอ่านบัตร | ปิดโปรแกรมหรือคำสั่ง `pcsc_scan` หรือ Python script อื่นที่รันค้างอยู่ |
 | **Playwright Browser Crash บน ARM** | ขาด shared libraries ของ Chromium | ใช้ System Chromium โดยกำหนด `BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser` ใน `.env` |
 | **`Missing X server or $DISPLAY`** เมื่อรันผ่าน SSH | เซสชัน SSH ไม่ได้รับค่าตัวแปรการแสดงผลกราฟิก | สั่งรันด้วย `DISPLAY=:0 python main.py` (หรือ `WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 python main.py`) หรือตั้งค่า `HEADLESS=true` ใน `.env` หากต้องการทดสอบโดยไม่เปิดหน้าต่าง UI |
-| **Server ตอบกลับ 401 Unauthorized** | `DEVICE_ID` หรือ `DEVICE_SECRET` ไม่ตรงกับที่ลงทะเบียนใน Tent Central Server | ตรวจสอบค่าใน `.env` หรือรันสคริปต์ `pnpm seed:scanner` บนเซิร์ฟเวอร์เพื่อสร้างอุปกรณ์ `kiosk-test` |
+| **Bootstrap ตอบกลับ 401 Unauthorized** | `DEVICE_ID` หรือ Scanner Key ไม่ตรง/อุปกรณ์ inactive | ตรวจสอบค่าที่คัดลอกจาก System Management และสร้าง `.env` snippet ใหม่หากไม่ได้บันทึก key ตอนสร้าง |
+| **Bootstrap ตอบกลับ 503 หรือเชื่อมต่อไม่ได้** | Tent Server หรือ CouchDB credential service ยังไม่พร้อม | ตรวจสอบเครือข่ายและสถานะ service; client จะ retry แบบจำกัดจำนวนครั้งและ backoff ก่อนหยุด |
+| **โปรแกรมหยุดทันทีด้วย configuration/authentication failure** | ค่าใน `.env` หาย, เป็น placeholder หรือไม่ผ่าน HTTPS policy | ตรวจสอบ `TENT_BASE_URL`, `DEVICE_ID`, `DEVICE_SECRET` และสิทธิ์ไฟล์ด้วย `chmod 600 .env` |
 | **อ่านบัตรแล้วรูปถ่ายไม่ขึ้น** | ขาดไลบรารีประมวลผลรูปภาพ `libjpeg` | รัน `sudo apt install -y libjpeg-dev zlib1g-dev` แล้วติดตั้ง `Pillow` ใหม่: `pip install --upgrade --force-reinstall pillow` |

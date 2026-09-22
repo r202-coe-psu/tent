@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type CatalogDoc, type Timestamp, shelterCodeSchema } from '$lib/db/model';
+import { shelterCodeSchema } from '$lib/db/model';
 
 export const SCANNER_SCHEMA_V = 1;
 export const SCANNER_REGISTRY_DB = 'registry';
@@ -11,34 +11,103 @@ export const SCANNER_DEVICE_DB = SCANNER_REGISTRY_DB;
 export const deviceStatusSchema = z.enum(['active', 'inactive']);
 export type DeviceStatus = z.infer<typeof deviceStatusSchema>;
 
-export const scannerDeviceInputSchema = z.object({
-	device_id: z
-		.string({ error: 'กรุณาระบุ Device ID' })
-		.trim()
-		.min(2, 'Device ID ต้องมีอย่างน้อย 2 ตัวอักษร')
-		.regex(/^[A-Za-z0-9_-]+$/, 'Device ID ใช้ได้เฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข _ และ -'),
-	name: z.string({ error: 'กรุณาระบุชื่อเครื่องสแกน' }).trim().min(1, 'กรุณาระบุชื่อเครื่องสแกน'),
-	shelter_code: shelterCodeSchema,
-	station_name: z.string().trim().default('จุดคัดกรองทั่วไป'),
-	status: deviceStatusSchema.default('active')
-});
+export const scannerDeviceInputSchema = z
+	.object({
+		device_id: z
+			.string({ error: 'กรุณาระบุ Device ID' })
+			.trim()
+			.min(2, 'Device ID ต้องมีอย่างน้อย 2 ตัวอักษร')
+			.regex(/^[A-Za-z0-9_-]+$/, 'Device ID ใช้ได้เฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข _ และ -'),
+		name: z.string({ error: 'กรุณาระบุชื่อเครื่องสแกน' }).trim().min(1, 'กรุณาระบุชื่อเครื่องสแกน'),
+		shelter_code: shelterCodeSchema,
+		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').default('จุดคัดกรองทั่วไป'),
+		status: deviceStatusSchema.default('active')
+	})
+	.strict();
 export type ScannerDeviceInput = z.infer<typeof scannerDeviceInputSchema>;
 
-export interface ScannerDevice extends CatalogDoc {
-	type: 'scanner_device';
-	device_id: string;
-	name: string;
-	shelter_code: string;
-	station_name: string;
-	secret_hash: string;
-	secret_prefix: string;
-	status: DeviceStatus;
-	last_seen_at: Timestamp | null;
+/** The persisted registry document. Keep this type server-only in practice. */
+export const scannerDevicePersistedSchema = z
+	.object({
+		_id: z.string().min(1),
+		_rev: z.string().min(1).optional(),
+		type: z.literal('scanner_device'),
+		schema_v: z.literal(SCANNER_SCHEMA_V),
+		created_at: z.string().min(1),
+		updated_at: z.string().min(1),
+		created_by: z.string().min(1),
+		device_id: scannerDeviceInputSchema.shape.device_id,
+		name: scannerDeviceInputSchema.shape.name,
+		shelter_code: shelterCodeSchema,
+		station_name: scannerDeviceInputSchema.shape.station_name,
+		secret_hash: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid scanner secret hash'),
+		secret_prefix: z.string().regex(/^sk_scan_[0-9a-f]{8}\.\.\.$/, 'Invalid scanner secret prefix'),
+		status: deviceStatusSchema,
+		last_seen_at: z.string().min(1).nullable()
+	})
+	.strict();
+
+export type PersistedScannerDevice = z.infer<typeof scannerDevicePersistedSchema>;
+
+/** Safe browser/API representation. It intentionally has no hash, prefix, revision, or timestamps. */
+export const scannerDeviceSummarySchema = z
+	.object({
+		id: z.string().min(1),
+		device_id: scannerDeviceInputSchema.shape.device_id,
+		name: scannerDeviceInputSchema.shape.name,
+		shelter_code: shelterCodeSchema,
+		station_name: scannerDeviceInputSchema.shape.station_name,
+		status: deviceStatusSchema,
+		last_seen_at: z.string().min(1).nullable()
+	})
+	.strict();
+
+export type ScannerDeviceSummary = z.infer<typeof scannerDeviceSummarySchema>;
+export type ScannerDevice = ScannerDeviceSummary;
+
+/** Device details returned by bootstrap; it does not disclose the registry document id. */
+export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
+	.omit({ id: true })
+	.extend({ shelter_name: z.string().trim().min(1) });
+export type ScannerBootstrapDevice = z.infer<typeof scannerBootstrapDeviceSchema>;
+
+export const scannerCreateResponseSchema = z
+	.object({
+		device: scannerDeviceSummarySchema,
+		plaintext_secret: z.string().min(1)
+	})
+	.strict();
+
+export type ScannerCreateResponse = z.infer<typeof scannerCreateResponseSchema>;
+
+export function toScannerDeviceSummary(doc: PersistedScannerDevice): ScannerDeviceSummary {
+	return {
+		id: doc._id,
+		device_id: doc.device_id,
+		name: doc.name,
+		shelter_code: doc.shelter_code,
+		station_name: doc.station_name,
+		status: doc.status,
+		last_seen_at: doc.last_seen_at
+	};
 }
 
-export interface CreatedScannerDevice extends ScannerDevice {
-	plaintext_secret: string;
+export function toScannerBootstrapDevice(doc: PersistedScannerDevice): ScannerBootstrapDevice {
+	const summary = toScannerDeviceSummary(doc);
+	return {
+		device_id: summary.device_id,
+		name: summary.name,
+		shelter_code: summary.shelter_code,
+		shelter_name: summary.shelter_code,
+		station_name: summary.station_name,
+		status: summary.status,
+		last_seen_at: summary.last_seen_at
+	};
 }
+
+export type CreatedScannerDevice = ScannerDeviceSummary & {
+	plaintext_secret: string;
+};
 
 // ---------------------------------------------------------------- Smart Card Data Schema
 
@@ -74,13 +143,12 @@ export type SmartCardData = z.infer<typeof smartCardDataSchema>;
 
 // ---------------------------------------------------------------- Helpers
 
-export function isScannerDevice(doc: unknown): doc is ScannerDevice {
-	if (!doc || typeof doc !== 'object') return false;
-	const d = doc as Record<string, unknown>;
-	return (
-		d.type === 'scanner_device' && typeof d.device_id === 'string' && typeof d.name === 'string'
-	);
+export function isPersistedScannerDevice(doc: unknown): doc is PersistedScannerDevice {
+	return scannerDevicePersistedSchema.safeParse(doc).success;
 }
+
+/** Backwards-compatible server-side guard; never use it for browser payloads. */
+export const isScannerDevice = isPersistedScannerDevice;
 
 /** Calculate CE birth year and age from Thai Smart Card birth date string YYYYMMDD (พ.ศ.) */
 export function parseThaiSmartCardDate(rawDateStr: string): {

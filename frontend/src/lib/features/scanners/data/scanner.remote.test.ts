@@ -1,18 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateRandomSecret, hashSecret, ScannerRemoteRepository } from './scanner.remote';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ScannerRemoteRepository } from './scanner.remote';
+import type { PersistedScannerDevice } from '../domain/scanner.schema';
 import type { Repository } from '$lib/db/repository';
 
 class MockRepository implements Repository {
 	private store = new Map<string, unknown>();
 
+	seed(doc: PersistedScannerDevice) {
+		this.store.set(doc._id, structuredClone(doc));
+	}
+
 	async put<T extends { _id: string }>(doc: T): Promise<T> {
-		this.store.set(doc._id, JSON.parse(JSON.stringify(doc)));
+		this.store.set(doc._id, structuredClone(doc));
 		return doc;
 	}
 
 	async get<T extends { _id: string }>(id: string): Promise<T | null> {
 		const doc = this.store.get(id);
-		return doc ? JSON.parse(JSON.stringify(doc)) : null;
+		return doc ? structuredClone(doc as T) : null;
 	}
 
 	async remove(doc: { _id: string }): Promise<void> {
@@ -20,7 +25,7 @@ class MockRepository implements Repository {
 	}
 
 	async allByType<T extends { _id: string; type: string }>(
-		type: string,
+		_type: string,
 		guard: (d: unknown) => d is T
 	): Promise<T[]> {
 		return Array.from(this.store.values()).filter(guard);
@@ -47,118 +52,70 @@ class MockRepository implements Repository {
 	}
 }
 
+function persistedDevice(overrides: Partial<PersistedScannerDevice> = {}): PersistedScannerDevice {
+	return {
+		_id: 'scanner_device:SCAN-01',
+		_rev: '1-a',
+		type: 'scanner_device',
+		schema_v: 1,
+		created_at: '2026-08-30T00:00:00Z',
+		updated_at: '2026-08-30T00:00:00Z',
+		created_by: 'admin',
+		device_id: 'SCAN-01',
+		name: 'จุดคัดกรอง 1',
+		shelter_code: 'SH001',
+		station_name: 'โต๊ะ 1',
+		secret_hash: 'a'.repeat(64),
+		secret_prefix: 'sk_scan_aaaaaaaa...',
+		status: 'active',
+		last_seen_at: null,
+		...overrides
+	};
+}
+
 describe('ScannerRemoteRepository', () => {
-	let mockCatalogRepo: MockRepository;
+	let registry: MockRepository;
 	let scannerRepo: ScannerRemoteRepository;
 
 	beforeEach(() => {
-		mockCatalogRepo = new MockRepository();
-		scannerRepo = new ScannerRemoteRepository('catalog', mockCatalogRepo);
+		registry = new MockRepository();
+		scannerRepo = new ScannerRemoteRepository('registry', registry);
 	});
 
-	describe('Secret helpers', () => {
-		it('generates a random secret with sk_scan_ prefix', () => {
-			const secret = generateRandomSecret();
-			expect(secret.startsWith('sk_scan_')).toBe(true);
-			expect(secret.length).toBeGreaterThan(20);
-		});
+	it('redacts secret hash, prefix, revision, and persistence envelope for browser summaries', async () => {
+		registry.seed(persistedDevice());
 
-		it('hashes secret deterministically', async () => {
-			const secret = 'sk_scan_test12345';
-			const hash1 = await hashSecret(secret);
-			const hash2 = await hashSecret(secret);
-			expect(hash1).toBe(hash2);
-			expect(hash1.length).toBe(64);
+		const [device] = await scannerRepo.listDevices();
+		expect(device).toEqual({
+			id: 'scanner_device:SCAN-01',
+			device_id: 'SCAN-01',
+			name: 'จุดคัดกรอง 1',
+			shelter_code: 'SH001',
+			station_name: 'โต๊ะ 1',
+			status: 'active',
+			last_seen_at: null
 		});
-
-		it('throws error when crypto.subtle is not available', async () => {
-			vi.stubGlobal('crypto', { ...globalThis.crypto, subtle: undefined });
-			try {
-				await expect(hashSecret('secret_123')).rejects.toThrow(
-					'Web Crypto API (crypto.subtle) is required for secure hashing'
-				);
-			} finally {
-				vi.unstubAllGlobals();
-			}
-		});
+		expect(device).not.toHaveProperty('secret_hash');
+		expect(device).not.toHaveProperty('_rev');
 	});
 
-	describe('Device Management', () => {
-		it('creates a new scanner device and returns plaintext secret', async () => {
-			const created = await scannerRepo.createDevice(
-				{
-					device_id: 'SCAN-01',
-					name: 'จุดคัดกรอง 1',
-					shelter_code: 'SH001',
-					station_name: 'เคาน์เตอร์ A',
-					status: 'active'
-				},
-				'admin_user'
-			);
+	it('updates a persisted device while returning a redacted summary', async () => {
+		registry.seed(persistedDevice());
 
-			expect(created.type).toBe('scanner_device');
-			expect(created.device_id).toBe('SCAN-01');
-			expect(created.plaintext_secret).toBeDefined();
-			expect(created.plaintext_secret.startsWith('sk_scan_')).toBe(true);
-			expect(created.secret_hash).toBeDefined();
-
-			const fetched = await scannerRepo.getDeviceByDeviceId('SCAN-01');
-			expect(fetched).not.toBeNull();
-			expect(fetched?.name).toBe('จุดคัดกรอง 1');
-			expect(fetched?.secret_hash).toBe(created.secret_hash);
-			expect((fetched as unknown as { secret?: string })?.secret).toBeUndefined();
+		const updated = await scannerRepo.updateDevice('scanner_device:SCAN-01', {
+			name: 'Updated Name',
+			status: 'inactive'
 		});
 
-		it('throws error when creating duplicate device_id', async () => {
-			await scannerRepo.createDevice({
-				device_id: 'SCAN-DUP',
-				name: 'First',
-				shelter_code: 'SH001',
-				station_name: 'A',
-				status: 'active'
-			});
+		expect(updated.name).toBe('Updated Name');
+		expect(updated.status).toBe('inactive');
+		expect(updated).not.toHaveProperty('secret_hash');
+	});
 
-			await expect(
-				scannerRepo.createDevice({
-					device_id: 'SCAN-DUP',
-					name: 'Second',
-					shelter_code: 'SH001',
-					station_name: 'B',
-					status: 'active'
-				})
-			).rejects.toThrow('มีอยู่ในระบบแล้ว');
-		});
+	it('deletes a device by its opaque summary id', async () => {
+		registry.seed(persistedDevice());
 
-		it('updates device attributes', async () => {
-			const created = await scannerRepo.createDevice({
-				device_id: 'SCAN-UPDATE',
-				name: 'Original Name',
-				shelter_code: 'SH001',
-				station_name: 'A',
-				status: 'active'
-			});
-
-			const updated = await scannerRepo.updateDevice(created._id, {
-				name: 'Updated Name',
-				status: 'inactive'
-			});
-
-			expect(updated.name).toBe('Updated Name');
-			expect(updated.status).toBe('inactive');
-		});
-
-		it('deletes device', async () => {
-			const created = await scannerRepo.createDevice({
-				device_id: 'SCAN-DEL',
-				name: 'To Delete',
-				shelter_code: 'SH001',
-				station_name: 'A',
-				status: 'active'
-			});
-
-			await scannerRepo.deleteDevice(created._id);
-			const fetched = await scannerRepo.getDevice(created._id);
-			expect(fetched).toBeNull();
-		});
+		await scannerRepo.deleteDevice('scanner_device:SCAN-01');
+		expect(await scannerRepo.getDevice('scanner_device:SCAN-01')).toBeNull();
 	});
 });

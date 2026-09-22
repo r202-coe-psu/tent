@@ -1,6 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { scannerRepository } from '../data/scanner.remote';
-import type { ScannerDeviceInput, ScannerDevice } from '../domain/scanner.schema';
+import { createScannerDevice } from '../data/scanner.api';
+import type { ScannerDevice } from '../domain/scanner.schema';
 
 export const scannerKeys = {
 	allDevices: ['scanner-devices'] as const,
@@ -16,8 +17,7 @@ export const useScannerDevices = () =>
 export const useCreateScannerDevice = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (input: { input: ScannerDeviceInput; createdBy?: string }) =>
-			scannerRepository.createDevice(input.input, input.createdBy ?? 'admin'),
+		mutationFn: (input: Parameters<typeof createScannerDevice>[0]) => createScannerDevice(input),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
 	}));
 };

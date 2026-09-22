@@ -55,8 +55,10 @@ echo "=== Starting SmartShelter Kiosk at $(date) (PID: $$, Python: $PYTHON_BIN, 
 while true; do
     "$PYTHON_BIN" main.py $EXTRA_ARGS "$@" >> "$LOG_FILE" 2>&1
     EXIT_CODE=$?
-    echo "=== SmartShelter Kiosk process exited (code $EXIT_CODE) at $(date). Restarting in 3s... ===" >> "$LOG_FILE"
-    sleep 3
+    if [ "$EXIT_CODE" -eq 78 ] || [ "$EXIT_CODE" -eq 79 ]; then
+        echo "=== SmartShelter Kiosk stopped: permanent configuration/authentication failure (code $EXIT_CODE). Fix .env and restart. ===" >> "$LOG_FILE"
+        exit "$EXIT_CODE"
+    fi
+    echo "=== SmartShelter Kiosk process exited (code $EXIT_CODE) at $(date). Restarting in ${RESTART_DELAY_SEC:-30}s... ===" >> "$LOG_FILE"
+    sleep "${RESTART_DELAY_SEC:-30}"
 done
-
-

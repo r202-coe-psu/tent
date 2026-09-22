@@ -1,10 +1,19 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import Building2 from '@lucide/svelte/icons/building-2';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { Snippet } from 'svelte';
 	import Tent from '@lucide/svelte/icons/tent';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Cpu from '@lucide/svelte/icons/cpu';
 
 	let { children }: { children: Snippet } = $props();
+
+	const shelterName = $derived(page.url.searchParams.get('shelter_name')?.trim() || 'ศูนย์พักพิง');
+	const shelterCode = $derived(page.url.searchParams.get('shelter_code')?.trim() || '');
+	const stationName = $derived(
+		page.url.searchParams.get('station_name')?.trim() || 'จุดคัดกรองทั่วไป'
+	);
 
 	let now = $state(new Date());
 	$effect(() => {
@@ -66,6 +75,26 @@
 					<p class="text-xs font-semibold text-slate-500 sm:text-sm">
 						จุดบริการสแกนบัตรประชาชน (Smart Card Station)
 					</p>
+					<div
+						class="mt-2 flex max-w-full flex-wrap items-center gap-2 text-xs font-semibold sm:text-sm"
+						aria-label="ข้อมูลศูนย์พักพิงและจุดบริการ"
+					>
+						<div
+							class="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-sky-900"
+						>
+							<Building2 class="h-4 w-4 shrink-0 text-sky-700" />
+							<span class="break-words">{shelterName}</span>
+							{#if shelterCode}
+								<span class="shrink-0 text-sky-700">({shelterCode})</span>
+							{/if}
+						</div>
+						<div
+							class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-700"
+						>
+							<MapPin class="h-4 w-4 shrink-0 text-slate-500" />
+							<span>{stationName}</span>
+						</div>
+					</div>
 				</div>
 			</div>
 

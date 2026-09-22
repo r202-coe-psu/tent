@@ -23,7 +23,7 @@
 
 	function handleDelete(device: ScannerDevice) {
 		if (confirm(`คุณต้องการลบเครื่องสแกน "${device.name}" (${device.device_id}) หรือไม่?`)) {
-			deleteMutation.mutate(device._id, {
+			deleteMutation.mutate(device.id, {
 				onSuccess: () => toast.success('ลบเครื่องสแกนเรียบร้อยแล้ว'),
 				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลบ')
 			});
@@ -33,7 +33,7 @@
 	function handleToggleStatus(device: ScannerDevice) {
 		const nextStatus = device.status === 'active' ? 'inactive' : 'active';
 		updateMutation.mutate(
-			{ id: device._id, patch: { status: nextStatus } },
+			{ id: device.id, patch: { status: nextStatus } },
 			{
 				onSuccess: () => toast.success(`เปลี่ยนสถานะเป็น ${nextStatus} เรียบร้อย`),
 				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด')
@@ -59,7 +59,7 @@
 			<tr>
 				<th class="px-6 py-4">เครื่องสแกน / รหัสอุปกรณ์</th>
 				<th class="px-6 py-4">ศูนย์พักพิง & จุดบริการ</th>
-				<th class="px-6 py-4">API Secret</th>
+				<th class="px-6 py-4">Scanner Key</th>
 				<th class="px-6 py-4">สถานะ</th>
 				<th class="px-6 py-4">การเชื่อมต่อล่าสุด</th>
 				<th class="px-6 py-4 text-right">จัดการ</th>
@@ -75,7 +75,7 @@
 					</td>
 				</tr>
 			{:else}
-				{#each devices as device (device._id)}
+				{#each devices as device (device.id)}
 					<tr class="transition-colors hover:bg-muted/20">
 						<td class="px-6 py-4">
 							<div class="flex items-center gap-3">
@@ -103,11 +103,11 @@
 							<button
 								type="button"
 								onclick={() => onviewsecret?.(device)}
-								class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-								title="คลิกเพื่อดู Device Secret ตัวเต็ม"
+								class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs text-slate-700 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+								title="ดูข้อมูลการติดตั้ง Scanner Key"
 							>
 								<Key class="h-3.5 w-3.5 text-muted-foreground" />
-								<span>{device.secret_prefix}</span>
+								<span>ดูข้อมูลการติดตั้ง</span>
 								<Eye class="ml-1 h-3 w-3 text-muted-foreground" />
 							</button>
 						</td>
@@ -115,7 +115,7 @@
 							{#if device.status === 'active'}
 								<button
 									onclick={() => handleToggleStatus(device)}
-									class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-500/20"
+									class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								>
 									<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 									Active
@@ -123,7 +123,7 @@
 							{:else}
 								<button
 									onclick={() => handleToggleStatus(device)}
-									class="inline-flex items-center gap-1.5 rounded-full border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-0.5 text-xs font-semibold text-zinc-500 hover:bg-zinc-500/20"
+									class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								>
 									<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span>
 									Inactive
@@ -143,19 +143,20 @@
 									size="sm"
 									class="h-8 gap-1 text-xs text-primary hover:bg-primary/10"
 									onclick={() => onviewsecret?.(device)}
-									title="ดู Device Secret"
+									title="ดูข้อมูลการติดตั้ง Scanner Key"
 								>
 									<Key class="h-3.5 w-3.5" />
-									<span class="hidden sm:inline">ดู Secret</span>
+									<span class="hidden sm:inline">ดูข้อมูลติดตั้ง</span>
 								</Button>
 								<Button
 									variant="ghost"
 									size="sm"
-									class="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									class="min-h-11 min-w-11 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
 									onclick={() => handleDelete(device)}
 									title="ลบเครื่องสแกน"
 								>
 									<Trash2 class="h-4 w-4" />
+									<span class="sr-only">ลบเครื่องสแกน {device.name}</span>
 								</Button>
 							</div>
 						</td>

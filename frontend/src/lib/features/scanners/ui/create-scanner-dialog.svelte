@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import { scannerDeviceInputSchema, type CreatedScannerDevice } from '../domain/scanner.schema';
@@ -25,19 +26,17 @@
 
 	let deviceId = $state('');
 	let name = $state('');
-	let shelterCode = $state('SH001');
+	let shelterCode = $state('');
 	let stationName = $state('จุดคัดกรองหลัก');
 
-	$effect(() => {
-		if (shelters.length > 0 && (!shelterCode || !shelters.some((s) => s.code === shelterCode))) {
-			shelterCode = shelters[0].code;
-		}
-	});
+	const selectedShelterCode = $derived(
+		shelters.some((s) => s.code === shelterCode) ? shelterCode : (shelters[0]?.code ?? 'SH001')
+	);
 
 	function resetForm() {
 		deviceId = '';
 		name = '';
-		shelterCode = shelters.length > 0 ? shelters[0].code : 'SH001';
+		shelterCode = '';
 		stationName = 'จุดคัดกรองหลัก';
 	}
 
@@ -50,7 +49,7 @@
 		const parsed = scannerDeviceInputSchema.safeParse({
 			device_id: deviceId,
 			name,
-			shelter_code: shelterCode.toUpperCase(),
+			shelter_code: selectedShelterCode.toUpperCase(),
 			station_name: stationName,
 			status: 'active'
 		});
@@ -61,20 +60,17 @@
 			return;
 		}
 
-		createMutation.mutate(
-			{ input: parsed.data },
-			{
-				onSuccess: (created) => {
-					toast.success('ลงทะเบียนเครื่องสแกนสำเร็จ');
-					open = false;
-					resetForm();
-					oncreated(created as CreatedScannerDevice);
-				},
-				onError: (err) => {
-					toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่อง');
-				}
+		createMutation.mutate(parsed.data, {
+			onSuccess: (created) => {
+				toast.success('ลงทะเบียนเครื่องสแกนสำเร็จ');
+				open = false;
+				resetForm();
+				oncreated({ ...created.device, plaintext_secret: created.plaintext_secret });
+			},
+			onError: (err) => {
+				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่อง');
 			}
-		);
+		});
 	}
 </script>
 
@@ -116,21 +112,27 @@
 				<Label for="shelter-select" class="text-sm font-semibold">
 					ศูนย์พักพิง <span class="text-destructive">*</span>
 				</Label>
-				<select
-					id="shelter-select"
-					bind:value={shelterCode}
-					class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+				<Select.Root
+					type="single"
+					value={selectedShelterCode}
+					onValueChange={(value) => (shelterCode = value ?? '')}
 				>
-					{#if shelters.length === 0}
-						<option value="SH001">ศูนย์พักพิงหลัก (SH001)</option>
-					{:else}
-						{#each shelters as s (s.code)}
-							<option value={s.code}>
-								{s.name} ({s.code}){s.province ? ` — จ.${s.province}` : ''}
-							</option>
-						{/each}
-					{/if}
-				</select>
+					<Select.Trigger id="shelter-select" class="h-11 w-full">
+						<Select.Value placeholder="เลือกศูนย์พักพิง" />
+					</Select.Trigger>
+					<Select.Content>
+						{#if shelters.length === 0}
+							<Select.Item value="SH001" label="ศูนย์พักพิงหลัก (SH001)" />
+						{:else}
+							{#each shelters as s (s.code)}
+								<Select.Item
+									value={s.code}
+									label={`${s.name} (${s.code})${s.province ? ` — จ.${s.province}` : ''}`}
+								/>
+							{/each}
+						{/if}
+					</Select.Content>
+				</Select.Root>
 				<p class="text-xs text-muted-foreground">เลือกศูนย์พักพิงประจำเครื่องสแกน</p>
 			</div>
 

@@ -2,10 +2,8 @@ import { adminFetch } from '$lib/server/couch-admin';
 import { now } from '$lib/db/model';
 import { lookupZipcode } from '$lib/server/thailand-location';
 import {
-	isScannerDevice,
-	SCANNER_REGISTRY_DB,
 	smartCardDataSchema,
-	type ScannerDevice,
+	type PersistedScannerDevice,
 	type SmartCardData
 } from './domain/scanner.schema';
 import {
@@ -15,10 +13,10 @@ import {
 	type CardSnapshot
 } from '$lib/features/people/domain/people';
 
-import { hashSecret } from './data/scanner.remote';
+import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 
-export { hashSecret, smartCardDataSchema };
-export type { ScannerDevice, SmartCardData };
+export { smartCardDataSchema };
+export type { PersistedScannerDevice, SmartCardData };
 
 export type ProcessCardResult =
 	| { status: 'created_pre_registered'; evacuee: Evacuee; message: string }
@@ -29,36 +27,12 @@ export type ProcessCardResult =
 	| { status: 'deceased_record'; evacuee: Evacuee; error: string; message: string };
 
 export class ScannerServerRepository {
-	async getDeviceByDeviceId(deviceId: string): Promise<ScannerDevice | null> {
-		const res = await adminFetch<{ docs: ScannerDevice[] }>(`/${SCANNER_REGISTRY_DB}/_find`, {
-			method: 'POST',
-			body: JSON.stringify({
-				selector: {
-					type: 'scanner_device',
-					device_id: deviceId
-				}
-			})
-		}).catch(() => ({ docs: [] }));
-
-		return res.docs.find((d) => isScannerDevice(d) && d.device_id === deviceId) || null;
+	async getDeviceByDeviceId(deviceId: string): Promise<PersistedScannerDevice | null> {
+		return scannerDeviceRepository.getDeviceByDeviceId(deviceId);
 	}
 
 	async updateDeviceLastSeen(id: string): Promise<void> {
-		const res = await adminFetch<ScannerDevice>(
-			`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`
-		);
-		if (!res || !isScannerDevice(res)) return;
-
-		const updated: ScannerDevice = {
-			...res,
-			last_seen_at: now(),
-			updated_at: now()
-		};
-
-		await adminFetch(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, {
-			method: 'PUT',
-			body: JSON.stringify(updated)
-		});
+		await scannerDeviceRepository.updateDeviceLastSeen(id);
 	}
 
 	/**
