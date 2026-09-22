@@ -20,7 +20,13 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
 	getImportJob: getImportJobMock,
-	toShelterImportItemSummary: toShelterImportItemSummaryMock
+	toShelterImportItemSummary: toShelterImportItemSummaryMock,
+	toShelterImportJobSummary: (job: Record<string, unknown>) => {
+		const copy = { ...job };
+		delete copy.idempotency_key_hash;
+		delete copy.request_fingerprint;
+		return copy;
+	}
 }));
 
 import { GET } from './+server';
@@ -116,5 +122,23 @@ describe('GET /api/back-office/shelter-import/jobs/[jobId]', () => {
 		]) {
 			expect(body.items[0]).not.toHaveProperty(field);
 		}
+	});
+
+	it('does not return server-only job metadata to browser (idempotency hash, fingerprint)', async () => {
+		getImportJobMock.mockResolvedValueOnce({
+			job: {
+				...summary('1-item').job,
+				idempotency_key_hash: 'secret-hash',
+				request_fingerprint: 'secret-fingerprint'
+			},
+			items: summary('1-item').items
+		});
+
+		const response = await call();
+		const body = (await response.json()) as { job: Record<string, unknown> };
+
+		expect(response.status).toBe(200);
+		expect(body.job).not.toHaveProperty('idempotency_key_hash');
+		expect(body.job).not.toHaveProperty('request_fingerprint');
 	});
 });

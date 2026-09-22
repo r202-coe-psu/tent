@@ -4,7 +4,8 @@ import type { RequestHandler } from './$types';
 import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
 import {
 	getImportJob,
-	toShelterImportItemSummary
+	toShelterImportItemSummary,
+	toShelterImportJobSummary
 } from '$lib/features/shelter-import/server/job-store';
 
 export const prerender = false;
@@ -31,7 +32,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		if (etag && ifNoneMatch?.split(',').some((value) => value.trim() === etag)) {
 			return new Response(null, { status: 304, headers });
 		}
-		return json({ job: summary.job, items }, { headers });
+		return json({ job: toShelterImportJobSummary(summary.job), items }, { headers });
 	} catch (e) {
 		return serviceError(e);
 	}

@@ -11,6 +11,7 @@ import {
 	claimNextImportItem,
 	createImportJob,
 	getImportJob,
+	listRunnableImportJobs,
 	recomputeImportJob,
 	renewImportItemClaim,
 	retryFailedImportItems,
@@ -42,6 +43,17 @@ function allDocs(path: string): { rows: { id: string; doc: Record<string, unknow
 	};
 }
 
+function itemMatchesJob(doc: Record<string, unknown>, jobId: string): boolean {
+	if (doc.type !== 'shelter_import_item') return false;
+	const fullJobId = jobId.startsWith('shelter_import_job:') ? jobId : `shelter_import_job:${jobId}`;
+	const docJobId =
+		(doc.job_id as string) ||
+		(typeof doc._id === 'string' && doc._id.startsWith('shelter_import_item:')
+			? `shelter_import_job:${doc._id.split(':')[1]}`
+			: '');
+	return docJobId === fullJobId;
+}
+
 function setupCouchMock(): void {
 	docs.clear();
 	permanentlyConflictingIds.clear();
@@ -71,6 +83,141 @@ function setupCouchMock(): void {
 		) {
 			securityWrites.push(body);
 			return { status: 200, data: { ok: true } };
+		}
+		if (path.includes('/_view/jobs_by_runnable')) {
+			const matching = [...docs.values()]
+				.filter((doc): doc is Record<string, unknown> => {
+					if (doc.type !== 'shelter_import_job') return false;
+					return (
+						doc.retry_pending === true ||
+						doc.status === 'queued' ||
+						doc.status === 'running' ||
+						((doc.status === 'completed' || doc.status === 'completed_with_errors') &&
+							doc.audit_logged !== true)
+					);
+				})
+				.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+			return {
+				status: 200,
+				data: {
+					rows: matching.map((doc) => ({
+						id: doc._id as string,
+						key: [doc.retry_pending ? 'retry_pending' : doc.status, doc.created_at, doc._id],
+						doc
+					}))
+				}
+			};
+		}
+		if (path.includes('/_view/items_by_job_row')) {
+			const url = new URL(`http://test${path}`);
+			const startkey = JSON.parse(url.searchParams.get('startkey') ?? '[]') as [string, number];
+			const jobId = startkey[0];
+			const matching = [...docs.values()]
+				.filter((doc): doc is Record<string, unknown> => {
+					return itemMatchesJob(doc, jobId);
+				})
+				.sort((a, b) => Number(a.row) - Number(b.row));
+			return {
+				status: 200,
+				data: {
+					rows: matching.map((doc) => ({
+						id: doc._id as string,
+						key: [doc.job_id, doc.row],
+						doc
+					}))
+				}
+			};
+		}
+		if (path.includes('/_view/items_by_job_status_row')) {
+			const url = new URL(`http://test${path}`);
+			const startkey = JSON.parse(url.searchParams.get('startkey') ?? '[]') as [
+				string,
+				string,
+				number
+			];
+			const jobId = startkey[0];
+			const status = startkey[1];
+			const limit = parseInt(url.searchParams.get('limit') ?? '1', 10);
+			const matching = [...docs.values()]
+				.filter((doc): doc is Record<string, unknown> => {
+					return itemMatchesJob(doc, jobId) && doc.status === status;
+				})
+				.sort((a, b) => Number(a.row) - Number(b.row))
+				.slice(0, limit);
+			return {
+				status: 200,
+				data: {
+					rows: matching.map((doc) => ({
+						id: doc._id as string,
+						key: [doc.job_id, doc.status, doc.row],
+						doc
+					}))
+				}
+			};
+		}
+		if (path.includes('/_view/running_items_by_lease')) {
+			const url = new URL(`http://test${path}`);
+			const endkey = JSON.parse(url.searchParams.get('endkey') ?? '[]') as [
+				string,
+				string,
+				unknown
+			];
+			const jobId = endkey[0];
+			const cutoffIso = typeof endkey[1] === 'string' ? endkey[1] : '';
+			const limit = parseInt(url.searchParams.get('limit') ?? '1', 10);
+			const matching = [...docs.values()]
+				.filter((doc): doc is Record<string, unknown> => {
+					return (
+						itemMatchesJob(doc, jobId) &&
+						doc.status === 'running' &&
+						Boolean(doc.lease_until && String(doc.lease_until) <= cutoffIso)
+					);
+				})
+				.sort((a, b) => Number(a.row) - Number(b.row))
+				.slice(0, limit);
+			return {
+				status: 200,
+				data: {
+					rows: matching.map((doc) => ({
+						id: doc._id as string,
+						key: [doc.job_id, doc.lease_until, doc.row],
+						doc
+					}))
+				}
+			};
+		}
+		if (path.includes('/_view/items_by_job_status_count')) {
+			const url = new URL(`http://test${path}`);
+			const startkey = JSON.parse(url.searchParams.get('startkey') ?? '[]') as [string, unknown];
+			const jobId = startkey[0];
+			const counts: Record<string, number> = {};
+			for (const doc of docs.values()) {
+				if (itemMatchesJob(doc, jobId)) {
+					const status = doc.status as string;
+					counts[status] = (counts[status] ?? 0) + 1;
+				}
+			}
+			return {
+				status: 200,
+				data: {
+					rows: Object.entries(counts).map(([status, count]) => ({
+						key: [jobId, status],
+						value: count
+					}))
+				}
+			};
+		}
+		if (path.includes('/_design/')) {
+			const id = docId(path);
+			if (method === 'GET') {
+				const doc = docs.get(id);
+				return doc ? { status: 200, data: doc } : { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'PUT') {
+				const incoming = body as Record<string, unknown>;
+				docs.set(id, { ...incoming, _rev: '1-design' });
+				return { status: 201, data: { ok: true, id, rev: '1-design' } };
+			}
 		}
 		if (path.includes('/_all_docs?')) return { status: 200, data: allDocs(path) };
 		const url = new URL(`http://test${path}`);
@@ -179,7 +326,47 @@ describe('shelter import job lifecycle', () => {
 
 		expect(securityWrites.at(-1)).toEqual({
 			admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
-			members: { names: ['legacy-member'], roles: ['shelter:SH001'] }
+			members: { names: [], roles: [] }
+		});
+	});
+
+	it('does not call _all_docs on the worker hot path (list, claim, recompute)', async () => {
+		const { jobId } = await createSingleJob();
+		const calledPaths: string[] = [];
+		const currentImpl = adminRawMock.getMockImplementation()!;
+		adminRawMock.mockImplementation(async (path, method, body) => {
+			calledPaths.push(`${method} ${path}`);
+			return currentImpl(path, method, body);
+		});
+
+		calledPaths.length = 0;
+		// 1. List runnable jobs
+		const jobs = await listRunnableImportJobs();
+		expect(jobs.length).toBeGreaterThan(0);
+
+		// 2. Claim next item
+		const claimed = await claimNextImportItem(jobId, 'worker-1');
+		expect(claimed).not.toBeNull();
+
+		// 3. Recompute job
+		await recomputeImportJob(jobId);
+
+		// Verify none of the calls on the queue db used _all_docs
+		const queueAllDocsCalls = calledPaths.filter((p) =>
+			p.includes(`/${IMPORT_QUEUE_DB}/_all_docs`)
+		);
+		expect(queueAllDocsCalls).toEqual([]);
+	});
+
+	it('fails closed when security ACL setup fails', async () => {
+		adminRawMock.mockImplementation(async (path) => {
+			if (path === `/${IMPORT_QUEUE_DB}/_security`) {
+				return { status: 500, data: { error: 'database_error' } };
+			}
+			return { status: 200, data: {} };
+		});
+		await expect(createSingleJob()).rejects.toMatchObject({
+			code: 'INTERNAL'
 		});
 	});
 

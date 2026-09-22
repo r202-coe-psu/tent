@@ -47,10 +47,6 @@ export function nowIso(): string {
 	return new Date().toISOString();
 }
 
-function normalizedShelterName(name: string): string {
-	return name.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
 /**
  * Read every shelter master doc from the registry. Returns an empty list when
  * the registry db has not been created yet (404) — that is the legitimate
@@ -79,10 +75,10 @@ export async function findMasterByCode(code: string): Promise<ShelterMaster | nu
 		return (rows[0]?.doc as ShelterMaster) ?? null;
 	}
 	if (res.status === 404) {
-		// Missing database vs missing design doc — only the latter is recoverable.
+		// Missing database vs missing design doc: fail closed if the design doc is missing
 		const reason = (res.data as { reason?: string } | null)?.reason ?? '';
 		if (reason === 'Database does not exist.') return null;
-		return findMasterByCodeScan(code);
+		throw new ServiceError('INTERNAL', 'Registry code index is not available');
 	}
 	throw new ServiceError('INTERNAL', 'Could not read registry');
 }
@@ -101,7 +97,7 @@ export async function findMasterByName(name: string): Promise<ShelterMaster | nu
 	if (res.status === 404) {
 		const reason = (res.data as { reason?: string } | null)?.reason ?? '';
 		if (reason === 'Database does not exist.') return null;
-		return findMasterByNameScan(name);
+		throw new ServiceError('INTERNAL', 'Registry shelter name index is not available');
 	}
 	throw new ServiceError('INTERNAL', 'Could not read registry by shelter name');
 }
@@ -122,34 +118,6 @@ export async function findHighestShelterCodeNumber(): Promise<number> {
 		throw new ServiceError('INTERNAL', 'Registry code index is not available');
 	}
 	throw new ServiceError('INTERNAL', 'Could not read highest shelter code');
-}
-
-/** Pre-view fallback for {@link findMasterByCode}; O(registry) — avoid on hot paths. */
-async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null> {
-	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
-	const match = rows.find(
-		(r) => r.id.startsWith('shelter:') && r.doc && (r.doc as { code?: string }).code === code
-	);
-	return (match?.doc as ShelterMaster) ?? null;
-}
-
-/** Pre-view fallback for {@link findMasterByName}; only used during migration. */
-async function findMasterByNameScan(name: string): Promise<ShelterMaster | null> {
-	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const normalized = normalizedShelterName(name);
-	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
-	const match = rows.find(
-		(r) =>
-			r.id.startsWith('shelter:') &&
-			r.doc &&
-			normalizedShelterName(String((r.doc as { name?: unknown }).name ?? '')) === normalized
-	);
-	return (match?.doc as ShelterMaster) ?? null;
 }
 
 /**

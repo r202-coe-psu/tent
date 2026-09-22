@@ -8,6 +8,17 @@ import {
 	type ImportRowResult,
 	type ShelterImportLog
 } from '../domain/import-log';
+import {
+	buildQueueAccessDoc,
+	buildQueueDesignDoc,
+	QUEUE_DESIGN_ACCESS_ID,
+	QUEUE_DESIGN_APP_ID,
+	queueJobsByRunnablePath,
+	queueItemsByJobRowPath,
+	queueItemsByJobStatusCountPath,
+	queueItemsByJobStatusRowPath,
+	queueRunningItemsByLeasePath
+} from '$lib/server/shelter-import-queue-design';
 
 export const IMPORT_JOB_TYPE = 'shelter_import_job' as const;
 export const IMPORT_ITEM_TYPE = 'shelter_import_item' as const;
@@ -130,8 +141,22 @@ export interface ShelterImportJob {
 	request_fingerprint?: string;
 }
 
+export type ShelterImportJobSummary = Omit<
+	ShelterImportJob,
+	'idempotency_key_hash' | 'request_fingerprint'
+>;
+
+export function toShelterImportJobSummary(
+	job: ShelterImportJob | ShelterImportJobSummary
+): ShelterImportJobSummary {
+	const copy = { ...(job as Partial<ShelterImportJob>) };
+	delete copy.idempotency_key_hash;
+	delete copy.request_fingerprint;
+	return copy as ShelterImportJobSummary;
+}
+
 export interface ImportJobSummary {
-	job: ShelterImportJob;
+	job: ShelterImportJobSummary;
 	items: ShelterImportItemSummary[];
 }
 
@@ -185,9 +210,10 @@ async function ensurePrivateDatabase(databaseName: string, label: string): Promi
 			`${label} database setup failed (${database.status}): ${detail(database.data)}`
 		);
 	}
-	// Both databases contain cross-shelter data. Preserve existing principals while
-	// ensuring CouchDB server admins retain access; SvelteKit remains the sole
-	// privileged reader/writer.
+	// Both databases contain cross-shelter data. According to CR-126:322-326,457,
+	// members must be empty ({ names: [], roles: [] }) so that CouchDB member/staff
+	// users cannot read raw job, item, or audit records directly. Only CouchDB server
+	// admins (_admin) have access, and SvelteKit remains the sole privileged reader/writer.
 	const currentSecurity = await adminRaw(`/${databaseName}/_security`, 'GET');
 	if (currentSecurity.status !== 200 && currentSecurity.status !== 404) {
 		throw new ServiceError(
@@ -208,8 +234,8 @@ async function ensurePrivateDatabase(databaseName: string, label: string): Promi
 			roles: [...new Set([...(existing.admins?.roles ?? []), '_admin'])]
 		},
 		members: {
-			names: existing.members?.names ?? [],
-			roles: existing.members?.roles ?? []
+			names: [],
+			roles: []
 		}
 	});
 	if (security.status >= 400) {
@@ -220,8 +246,73 @@ async function ensurePrivateDatabase(databaseName: string, label: string): Promi
 	}
 }
 
+export async function deployQueueDesign(): Promise<void> {
+	// Deploy _design/app
+	const desiredApp = buildQueueDesignDoc();
+	const existingApp = await adminRaw(`/${IMPORT_QUEUE_DB}/${QUEUE_DESIGN_APP_ID}`, 'GET');
+	const currentApp =
+		existingApp.status === 200
+			? (existingApp.data as {
+					_rev?: string;
+					version?: number;
+					views?: Record<string, { map: string }>;
+				} | null)
+			: null;
+
+	const appMatches =
+		currentApp &&
+		currentApp.version === desiredApp.version &&
+		Object.entries(desiredApp.views).every(
+			([name, view]) => currentApp.views?.[name]?.map === view.map
+		);
+
+	if (!appMatches) {
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${QUEUE_DESIGN_APP_ID}`, 'PUT', {
+			...desiredApp,
+			...(currentApp?._rev ? { _rev: currentApp._rev } : {})
+		});
+		if (res.status >= 400 && res.status !== 409) {
+			throw new ServiceError(
+				'INTERNAL',
+				`Deploy queue _design/app failed (${res.status}): ${detail(res.data)}`
+			);
+		}
+	}
+
+	// Deploy _design/access
+	const desiredAccess = buildQueueAccessDoc();
+	const existingAccess = await adminRaw(`/${IMPORT_QUEUE_DB}/${QUEUE_DESIGN_ACCESS_ID}`, 'GET');
+	const currentAccess =
+		existingAccess.status === 200
+			? (existingAccess.data as {
+					_rev?: string;
+					version?: number;
+					validate_doc_update?: string;
+				} | null)
+			: null;
+
+	const accessMatches =
+		currentAccess &&
+		currentAccess.version === desiredAccess.version &&
+		currentAccess.validate_doc_update === desiredAccess.validate_doc_update;
+
+	if (!accessMatches) {
+		const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${QUEUE_DESIGN_ACCESS_ID}`, 'PUT', {
+			...desiredAccess,
+			...(currentAccess?._rev ? { _rev: currentAccess._rev } : {})
+		});
+		if (res.status >= 400 && res.status !== 409) {
+			throw new ServiceError(
+				'INTERNAL',
+				`Deploy queue _design/access failed (${res.status}): ${detail(res.data)}`
+			);
+		}
+	}
+}
+
 async function ensureImportQueueDatabase(): Promise<void> {
 	await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
+	await deployQueueDesign();
 }
 
 async function ensureImportAuditDatabase(): Promise<void> {
@@ -321,19 +412,51 @@ async function ensureImportLog(job: ShelterImportJob, items: ShelterImportItem[]
 	assertOk(saved.status, `write ${logId}`, saved.data);
 }
 
-/** Read the private audit store for the SA-only history BFF. */
-export async function listImportLogs(): Promise<ShelterImportLog[]> {
+/** Read the private audit store for the SA-only history BFF with dual-read from registry (CR-123/CR-126). */
+export async function listImportLogs(options?: {
+	limit?: number;
+	cursor?: string;
+}): Promise<ShelterImportLog[]> {
+	const limit = Math.min(100, Math.max(1, options?.limit ?? 50));
 	const prefix = 'shelter_import_log:';
-	const res = await adminRaw(
-		`/${IMPORT_AUDIT_DB}/_all_docs?include_docs=true&startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(`${prefix}\ufff0`))}`,
-		'GET'
-	);
-	if (res.status === 404) return [];
-	assertOk(res.status, 'list import audit logs', res.data);
-	return ((res.data as { rows?: { doc?: unknown }[] }).rows ?? [])
+	const startkey = options?.cursor ? options.cursor : `${prefix}\ufff0`;
+	const endkey = prefix;
+
+	const [auditRes, registryRes] = await Promise.all([
+		adminRaw(
+			`/${IMPORT_AUDIT_DB}/_all_docs?include_docs=true&descending=true&startkey=${encodeURIComponent(JSON.stringify(startkey))}&endkey=${encodeURIComponent(JSON.stringify(endkey))}&limit=${limit}`,
+			'GET'
+		).catch(() => ({ status: 404, data: null })),
+		adminRaw(
+			`/${REGISTRY_DB}/_all_docs?include_docs=true&descending=true&startkey=${encodeURIComponent(JSON.stringify(startkey))}&endkey=${encodeURIComponent(JSON.stringify(endkey))}&limit=${limit}`,
+			'GET'
+		).catch(() => ({ status: 404, data: null }))
+	]);
+
+	const auditDocs = (
+		auditRes.status === 200 ? ((auditRes.data as { rows?: { doc?: unknown }[] }).rows ?? []) : []
+	)
 		.map((row) => row.doc)
-		.filter(isShelterImportLog)
-		.sort((a, b) => (a._id < b._id ? 1 : -1));
+		.filter(isShelterImportLog);
+
+	const registryDocs = (
+		registryRes.status === 200
+			? ((registryRes.data as { rows?: { doc?: unknown }[] }).rows ?? [])
+			: []
+	)
+		.map((row) => row.doc)
+		.filter(isShelterImportLog);
+
+	const map = new Map<string, ShelterImportLog>();
+	for (const doc of registryDocs) {
+		map.set(doc._id, doc);
+	}
+	for (const doc of auditDocs) {
+		map.set(doc._id, doc);
+	}
+
+	const sorted = Array.from(map.values()).sort((a, b) => (a._id < b._id ? 1 : -1));
+	return sorted.slice(0, limit);
 }
 
 type AuditLogFingerprint = Pick<
@@ -383,39 +506,48 @@ function sameAuditLog(existing: unknown, expected: ShelterImportLog): boolean {
 	);
 }
 
-async function listByPrefix<T>(prefix: string): Promise<T[]> {
-	const end = `${prefix}\ufff0`;
-	const res = await adminRaw(
-		`/${IMPORT_QUEUE_DB}/_all_docs?include_docs=true&startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(end))}`,
-		'GET'
-	);
-	if (res.status === 404) return [];
-	assertOk(res.status, `list ${prefix}`, res.data);
-	return ((res.data as { rows?: { doc?: T }[] }).rows ?? [])
-		.map((row) => row.doc)
-		.filter((doc): doc is T => Boolean(doc));
-}
-
-/** List jobs that may have work available for the import worker. */
-export async function listRunnableImportJobs(): Promise<ShelterImportJob[]> {
-	const jobs = await listByPrefix<ShelterImportJob>('shelter_import_job:');
-	return jobs
-		.filter(
-			(job) =>
-				job.status === 'queued' ||
-				job.status === 'running' ||
-				((job.status === 'completed' || job.status === 'completed_with_errors') &&
-					(job.audit_logged !== true || job.retry_pending === true))
-		)
+/** List jobs that may have work available for the import worker via view (CR-126). */
+export async function listRunnableImportJobs(options?: {
+	limit?: number;
+	cursor?: { key: [string, string, string]; docid: string };
+}): Promise<ShelterImportJob[]> {
+	await ensureImportQueueDatabase();
+	const limit = Math.min(100, Math.max(1, options?.limit ?? 20));
+	const path = queueJobsByRunnablePath({
+		limit,
+		startkey: options?.cursor?.key,
+		startkey_docid: options?.cursor?.docid,
+		skip: options?.cursor ? 1 : 0
+	});
+	const res = await adminRaw(path, 'GET');
+	if (res.status === 404) {
+		throw new ServiceError('INTERNAL', 'Queue runnable jobs view is not available');
+	}
+	assertOk(res.status, 'list runnable import jobs', res.data);
+	const rows = (res.data as { rows?: { doc?: ShelterImportJob }[] }).rows ?? [];
+	return rows
+		.map((r) => r.doc)
+		.filter((doc): doc is ShelterImportJob => Boolean(doc))
 		.sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
 export async function getImportJob(jobId: string): Promise<ImportJobSummary | null> {
-	const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
+	await ensureImportQueueDatabase();
+	const fullJobId = jobDocId(jobId);
+	const job = await getDoc<ShelterImportJob>(fullJobId);
 	if (!job) return null;
-	const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
+	const itemsPath = queueItemsByJobRowPath(fullJobId, 1000);
+	const res = await adminRaw(itemsPath, 'GET');
+	if (res.status === 404) {
+		throw new ServiceError('INTERNAL', 'Queue items by row view is not available');
+	}
+	assertOk(res.status, `list items for ${fullJobId}`, res.data);
+	const items = ((res.data as { rows?: { doc?: ShelterImportItem }[] }).rows ?? [])
+		.map((r) => r.doc)
+		.filter((doc): doc is ShelterImportItem => Boolean(doc));
+
 	return {
-		job,
+		job: toShelterImportJobSummary(job),
 		items: items.sort((a, b) => a.row - b.row).map(toShelterImportItemSummary)
 	};
 }
@@ -670,43 +802,67 @@ async function deadLetterItem(item: ShelterImportItem): Promise<boolean> {
 	return true;
 }
 
-/** Claim one pending item with an MVCC compare-and-swap lease. */
+/** Claim one pending item with an MVCC compare-and-swap lease using views (CR-126). */
 export async function claimNextImportItem(
 	jobId: string,
 	workerId: string,
 	leaseMs = IMPORT_LEASE_MS
 ): Promise<ShelterImportItem | null> {
-	const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
+	await ensureImportQueueDatabase();
+	const fullJobId = jobDocId(jobId);
+	const job = await getDoc<ShelterImportJob>(fullJobId);
 	if (!job || (job.status !== 'queued' && job.status !== 'running')) return null;
-	const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
+
 	const cutoff = Date.now();
-	for (const item of items.sort((a, b) => a.row - b.row)) {
-		const expired = leaseExpired(item.lease_until, cutoff);
-		if (item.status !== 'pending' && !(item.status === 'running' && expired)) continue;
-		if (item.attempts >= maxAttempts(item)) {
-			await deadLetterItem(item);
-			continue;
-		}
-		const claimed: ShelterImportItem = {
-			...item,
-			status: 'running',
-			max_attempts: maxAttempts(item),
-			worker_id: workerId,
-			claim_token: ulid(),
-			lease_until: new Date(cutoff + leaseMs).toISOString(),
-			attempts: Math.min(item.attempts + 1, maxAttempts(item)),
-			updated_at: new Date(cutoff).toISOString()
-		};
-		const res = await adminRaw(
-			`/${IMPORT_QUEUE_DB}/${encodeURIComponent(item._id)}`,
-			'PUT',
-			claimed
-		);
-		if (res.status === 409) continue;
-		assertOk(res.status, `claim ${item._id}`, res.data);
-		return { ...claimed, _rev: (res.data as { rev?: string }).rev };
+	const cutoffIso = new Date(cutoff).toISOString();
+
+	// 1. First look for pending item via view items_by_job_status_row (limit=1)
+	const pendingPath = queueItemsByJobStatusRowPath(fullJobId, 'pending', 1);
+	const pendingRes = await adminRaw(pendingPath, 'GET');
+	if (pendingRes.status === 404) {
+		throw new ServiceError('INTERNAL', 'Queue item status view is not available');
 	}
-	return null;
+	assertOk(pendingRes.status, 'query pending items', pendingRes.data);
+	let candidate =
+		((pendingRes.data as { rows?: { doc?: ShelterImportItem }[] }).rows ?? [])[0]?.doc ?? null;
+
+	// 2. If no pending items, check expired running item via view running_items_by_lease (limit=1)
+	if (!candidate) {
+		const expiredPath = queueRunningItemsByLeasePath(fullJobId, cutoffIso, 1);
+		const expiredRes = await adminRaw(expiredPath, 'GET');
+		if (expiredRes.status === 404) {
+			throw new ServiceError('INTERNAL', 'Queue running items view is not available');
+		}
+		assertOk(expiredRes.status, 'query expired running items', expiredRes.data);
+		candidate =
+			((expiredRes.data as { rows?: { doc?: ShelterImportItem }[] }).rows ?? [])[0]?.doc ?? null;
+	}
+
+	if (!candidate) return null;
+
+	if (candidate.attempts >= maxAttempts(candidate)) {
+		await deadLetterItem(candidate);
+		return null;
+	}
+
+	const claimed: ShelterImportItem = {
+		...candidate,
+		status: 'running',
+		max_attempts: maxAttempts(candidate),
+		worker_id: workerId,
+		claim_token: ulid(),
+		lease_until: new Date(cutoff + leaseMs).toISOString(),
+		attempts: Math.min(candidate.attempts + 1, maxAttempts(candidate)),
+		updated_at: new Date(cutoff).toISOString()
+	};
+	const res = await adminRaw(
+		`/${IMPORT_QUEUE_DB}/${encodeURIComponent(candidate._id)}`,
+		'PUT',
+		claimed
+	);
+	if (res.status === 409) return null;
+	assertOk(res.status, `claim ${candidate._id}`, res.data);
+	return { ...claimed, _rev: (res.data as { rev?: string }).rev };
 }
 
 /** Renew a still-owned item lease using a token- and revision-guarded write. */
@@ -827,25 +983,40 @@ async function markAuditLogged(jobId: string, logId: string): Promise<ShelterImp
 }
 
 export async function recomputeImportJob(jobId: string): Promise<ShelterImportJob> {
+	await ensureImportQueueDatabase();
+	const fullJobId = jobDocId(jobId);
 	for (let attempt = 0; attempt < 3; attempt++) {
-		const job = await getDoc<ShelterImportJob>(jobDocId(jobId));
+		const job = await getDoc<ShelterImportJob>(fullJobId);
 		if (!job) throw new ServiceError('VALIDATION', `Import job ${jobId} not found`);
-		const items = await listByPrefix<ShelterImportItem>(itemPrefix(jobId));
-		if (items.length !== job.total) {
+
+		// Query reduce view items_by_job_status_count with group=true (CR-126)
+		const countPath = queueItemsByJobStatusCountPath(fullJobId);
+		const countRes = await adminRaw(countPath, 'GET');
+		if (countRes.status === 404) {
+			throw new ServiceError('INTERNAL', 'Queue items count view is not available');
+		}
+		assertOk(countRes.status, `count items for ${fullJobId}`, countRes.data);
+		const rows =
+			(countRes.data as { rows?: { key: [string, string]; value: number }[] }).rows ?? [];
+		const counts: Record<string, number> = {};
+		for (const r of rows) {
+			const status = r.key[1];
+			counts[status] = (counts[status] ?? 0) + (typeof r.value === 'number' ? r.value : 0);
+		}
+
+		const pending = counts['pending'] ?? 0;
+		const running = counts['running'] ?? 0;
+		const succeeded = (counts['created'] ?? 0) + (counts['updated'] ?? 0);
+		const skipped = counts['skipped'] ?? 0;
+		const failed = (counts['failed'] ?? 0) + (counts['validation_error'] ?? 0);
+		const stagedTotal = pending + running + succeeded + skipped + failed;
+
+		if (stagedTotal !== job.total) {
 			throw new ServiceError(
 				'CONFLICT',
-				`Import job ${jobId} has ${items.length} staged items; expected ${job.total}`
+				`Import job ${jobId} has ${stagedTotal} staged items; expected ${job.total}`
 			);
 		}
-		const pending = items.filter((item) => item.status === 'pending').length;
-		const running = items.filter((item) => item.status === 'running').length;
-		const succeeded = items.filter(
-			(item) => item.status === 'created' || item.status === 'updated'
-		).length;
-		const skipped = items.filter((item) => item.status === 'skipped').length;
-		const failed = items.filter(
-			(item) => item.status === 'failed' || item.status === 'validation_error'
-		).length;
 		const done = pending === 0 && running === 0;
 
 		// A retry has deliberately marked the job before moving item documents.
@@ -856,7 +1027,22 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 		// Terminal documents are immutable apart from the one-time audit repair.
 		// In particular, a status GET cannot create or overwrite logs.
 		if (done && isTerminal(job.status) && job.audit_logged === true) return job;
+
+		let itemsForAudit: ShelterImportItem[] | null = null;
+		const loadItemsForAudit = async (): Promise<ShelterImportItem[]> => {
+			if (itemsForAudit) return itemsForAudit;
+			const itemsPath = queueItemsByJobRowPath(fullJobId, 1000);
+			const res = await adminRaw(itemsPath, 'GET');
+			assertOk(res.status, `list items for audit ${fullJobId}`, res.data);
+			itemsForAudit = ((res.data as { rows?: { doc?: ShelterImportItem }[] }).rows ?? [])
+				.map((r) => r.doc)
+				.filter((doc): doc is ShelterImportItem => Boolean(doc))
+				.sort((a, b) => a.row - b.row);
+			return itemsForAudit;
+		};
+
 		if (done && isTerminal(job.status) && job.audit_log_id) {
+			const items = await loadItemsForAudit();
 			await ensureImportLog(job, items);
 			return markAuditLogged(job._id, job.audit_log_id);
 		}
@@ -892,6 +1078,7 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 		assertOk(res.status, `recompute ${next._id}`, res.data);
 		const saved = { ...next, _rev: (res.data as { rev?: string }).rev };
 		if (!done || !saved.audit_log_id) return saved;
+		const items = await loadItemsForAudit();
 		await ensureImportLog(saved, items);
 		return markAuditLogged(saved._id, saved.audit_log_id);
 	}

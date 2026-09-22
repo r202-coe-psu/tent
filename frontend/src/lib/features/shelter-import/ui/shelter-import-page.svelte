@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
@@ -117,17 +117,18 @@
 
 	$effect(() => {
 		const job = activeJobQuery.data?.job;
-		if (!job || restoreDialogHandled) return;
-		restoreDialogHandled = true;
-		if (!isImportJobTerminal(job.status)) progressDialogOpen = true;
-	});
-
-	$effect(() => {
-		const job = activeJobQuery.data?.job;
-		if (!job || !isImportJobTerminal(job.status) || invalidatedJobId === job._id) return;
-		invalidatedJobId = job._id;
-		queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-		queryClient.invalidateQueries({ queryKey: ['shelter-import', 'logs'] });
+		if (!job) return;
+		untrack(() => {
+			if (!restoreDialogHandled) {
+				restoreDialogHandled = true;
+				if (!isImportJobTerminal(job.status)) progressDialogOpen = true;
+			}
+			if (isImportJobTerminal(job.status) && invalidatedJobId !== job._id) {
+				invalidatedJobId = job._id;
+				queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+				queryClient.invalidateQueries({ queryKey: ['shelter-import', 'logs'] });
+			}
+		});
 	});
 
 	async function refreshExistingShelters(): Promise<ExistingShelter[] | null> {

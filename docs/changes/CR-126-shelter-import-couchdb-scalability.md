@@ -221,7 +221,7 @@ services:
 
 ## Query และ index contract
 
-> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 ### Design doc ของ queue
 
@@ -284,7 +284,7 @@ GET /shelter_import_queue/_design/app/_view/running_items_by_lease
 
 ## การเปลี่ยนสถานะและความถูกต้องของ counter
 
-> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 Item status เป็น source of truth ส่วน counter ใน job เป็น snapshot ที่สร้างจาก item status:
 
@@ -312,7 +312,7 @@ Item status เป็น source of truth ส่วน counter ใน job เป�
 
 ## Security และขอบเขตการเข้าถึง
 
-> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 ### การแบ่งสิทธิ์
 
@@ -336,7 +336,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 
 ## การเขียนข้อมูลแบบชุดและการจัดการข้อผิดพลาด
 
-> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 - stage item ด้วย `_bulk_docs` ไม่เกิน 100 รายการหรือ 512 KiB ต่อ batch แล้วอ่านผลลัพธ์รายเอกสารทุกตัว
 - `_bulk_docs` ไม่ใช่ transaction: ถ้าบางเอกสารล้ม ให้ retry เฉพาะเอกสารที่ยังไม่ยืนยันผลด้วย deterministic ID; ถ้า response หาย ให้ตรวจ ID เดิมก่อนเขียนซ้ำ
@@ -347,7 +347,7 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 
 ## การย้ายข้อมูลและ rollback
 
-> **สถานะ: เลื่อนออก — ไม่ implement ใน change นี้.** เนื้อหาส่วนนี้เป็น design ที่วิเคราะห์ไว้แล้วสำหรับระยะที่ 1–2 เก็บไว้เป็นฐานของ change ถัดไป ห้ามใช้เป็น requirement ของรอบนี้
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 ### ลำดับ deploy และ cutover
 
@@ -436,9 +436,9 @@ Status API ห้ามส่ง `input`, `lease_until`, `worker_id`, `claim_tok
 - [ ] นำเข้าชุดข้อมูลที่เกินเพดานเดิม (>50 ศูนย์ เช่น 70–100 ศูนย์) ไม่เกิด `EMFILE` หรือ `No DB shards could be opened` และจำนวน descriptor ที่เปิดอยู่ไม่ถึงเพดานตลอดงาน
 - [ ] มี runbook ที่ `docs/sop/couchdb-file-descriptors.md` ตาม FR-0-5
 
-### ของระยะที่ 1–2 — เลื่อนออก ยังไม่ใช้ตัดสิน change นี้
+### ของระยะที่ 1 — นำไปปฏิบัติใน change นี้
 
-> **สถานะ: เลื่อนออก.** รายการด้านล่างเก็บไว้เป็นฐานของ change ถัดไป
+> **สถานะ: นำไปปฏิบัติใน change นี้ (ระยะที่ 1)**
 
 - [ ] ความล้มเหลวระดับ item ปรากฏใน server log พร้อม `job_id`, `row`, `item_id` และ error ต้นทาง โดย response ที่ส่งให้ browser ไม่มีรายละเอียดภายใน (FR-0-4 ที่ย้ายมา)
 - [ ] นำเข้า 1,000 แถวไม่เกิด `EMFILE` และผ่าน target latency ตาม §เป้าหมายที่วัดผลได้ — ทดสอบได้เมื่อ worker pipeline ของ CR-123 พร้อม เพราะเส้นทางปัจจุบัน (browser loop ของ CR-039) จะติด HTTP timeout ก่อนถึงเพดาน descriptor

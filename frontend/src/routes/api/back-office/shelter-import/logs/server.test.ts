@@ -80,14 +80,34 @@ describe('GET /api/back-office/shelter-import/logs', () => {
 			shelterCode: null
 		});
 
+		const url = new URL('http://localhost/api/back-office/shelter-import/logs');
 		const response = await GET({
-			request: new Request('http://localhost/api/back-office/shelter-import/logs', {
+			request: new Request(url, {
 				headers: { cookie: 'session=sa' }
-			})
+			}),
+			url
 		} as unknown as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual([projectedLog]);
 		expect(requireSystemAdminMock).toHaveBeenCalledWith('session=sa');
+	});
+
+	it('supports pagination with limit and cursor', async () => {
+		const url = new URL(
+			'http://localhost/api/back-office/shelter-import/logs?limit=10&cursor=shelter_import_log:01JPREV'
+		);
+		const response = await GET({
+			request: new Request(url, {
+				headers: { cookie: 'session=sa' }
+			}),
+			url
+		} as unknown as Parameters<typeof GET>[0]);
+
+		expect(response.status).toBe(200);
+		expect(listImportLogsMock).toHaveBeenCalledWith({
+			limit: 10,
+			cursor: 'shelter_import_log:01JPREV'
+		});
 	});
 });

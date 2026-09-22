@@ -240,4 +240,33 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			vi.useRealTimers();
 		}
 	});
+
+	it('rejects worker ID with invalid format or excessive length', async () => {
+		const invalidRequest = new Request('http://localhost/api/internal/shelter-import/worker/next', {
+			method: 'POST',
+			headers: {
+				authorization: 'Bearer worker-secret',
+				'x-shelter-import-worker-id': 'invalid worker id with spaces!'
+			}
+		});
+		const response = await POST({ request: invalidRequest } as unknown as Parameters<
+			typeof POST
+		>[0]);
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: { code: 'VALIDATION', message: 'Invalid x-shelter-import-worker-id header' }
+		});
+
+		const tooLongRequest = new Request('http://localhost/api/internal/shelter-import/worker/next', {
+			method: 'POST',
+			headers: {
+				authorization: 'Bearer worker-secret',
+				'x-shelter-import-worker-id': 'a'.repeat(129)
+			}
+		});
+		const responseLong = await POST({ request: tooLongRequest } as unknown as Parameters<
+			typeof POST
+		>[0]);
+		expect(responseLong.status).toBe(400);
+	});
 });

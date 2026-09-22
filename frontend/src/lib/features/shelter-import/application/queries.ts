@@ -120,11 +120,15 @@ async function fetchImportJob(jobId: string): Promise<ImportJobSummary> {
 	}
 	const etag = res.headers.get('etag') ?? (data?.job._rev ? `"${data.job._rev}"` : undefined);
 	const unchanged = Boolean(previous?.etag && etag && previous.etag === etag);
-	jobPollStates.set(jobId, {
-		etag,
-		data: data as ImportJobSummary,
-		delay: unchanged ? Math.min(previous!.delay * 2, MAX_JOB_POLL_MS) : INITIAL_JOB_POLL_MS
-	});
+	if (isImportJobTerminal(data?.job.status)) {
+		jobPollStates.delete(jobId);
+	} else {
+		jobPollStates.set(jobId, {
+			etag,
+			data: data as ImportJobSummary,
+			delay: unchanged ? Math.min(previous!.delay * 2, MAX_JOB_POLL_MS) : INITIAL_JOB_POLL_MS
+		});
+	}
 	return data as ImportJobSummary;
 }
 

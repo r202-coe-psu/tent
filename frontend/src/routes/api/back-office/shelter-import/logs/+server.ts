@@ -10,10 +10,20 @@ export const prerender = false;
  * row-level errors, so the browser must never query their CouchDB database
  * directly, even though the response is safe for an authenticated SA.
  */
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	await requireSystemAdmin(request.headers.get('cookie'));
 	try {
-		const logs = await listImportLogs();
+		const limitParam = url.searchParams.get('limit');
+		const limit = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam, 10) || 50)) : 50;
+		const cursor = url.searchParams.get('cursor') || undefined;
+		const logs = await listImportLogs({ limit, cursor });
+		const nextCursor = logs.length === limit ? logs[logs.length - 1]?._id : undefined;
+		const headers: Record<string, string> = {
+			'cache-control': 'no-store, max-age=0'
+		};
+		if (nextCursor) {
+			headers['x-next-cursor'] = nextCursor;
+		}
 		return json(
 			logs.map((log) => ({
 				_id: log._id,
@@ -36,7 +46,7 @@ export const GET: RequestHandler = async ({ request }) => {
 				started_at: log.started_at,
 				finished_at: log.finished_at
 			})),
-			{ headers: { 'cache-control': 'no-store, max-age=0' } }
+			{ headers }
 		);
 	} catch (e) {
 		return serviceError(e);

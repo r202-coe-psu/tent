@@ -62,7 +62,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		return unauthorized();
 	}
 
-	const workerId = request.headers.get('x-shelter-import-worker-id') || `import-worker-${ulid()}`;
+	const rawWorkerId = request.headers.get('x-shelter-import-worker-id');
+	const WORKER_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
+	if (rawWorkerId !== null && !WORKER_ID_REGEX.test(rawWorkerId)) {
+		return json(
+			{ error: { code: 'VALIDATION', message: 'Invalid x-shelter-import-worker-id header' } },
+			{ status: 400 }
+		);
+	}
+	const workerId = rawWorkerId || `import-worker-${ulid()}`;
 	try {
 		const jobs = await listRunnableImportJobs();
 		for (const job of jobs) {
