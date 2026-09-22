@@ -1,7 +1,17 @@
-import { bulkDocs } from '$lib/db/couch-db';
+import { bulkDocs, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { now, touch, type AuthorContext } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
+import { ConflictError } from '$lib/utils/errors';
+import {
+	makeLotReservationDocId,
+	createStockLotReservation,
+	assertSemanticReservationMatch,
+	InsufficientStockError,
+	type StockLotReservation,
+	type StockLotPendingClaim
+} from '$lib/features/distribution';
 import {
 	createCampaign as buildCampaign,
 	createPurchase as buildPurchase,
@@ -17,6 +27,7 @@ import {
 	createWalkInDonation,
 	createDistributeEntry,
 	createAdjustEntry,
+	projectStockLotBalances,
 	keyPurchaseReceipt,
 	type DonationCampaign,
 	type CampaignInput,
@@ -49,7 +60,7 @@ import {
 	catalogRepository,
 	type ItemMaster
 } from '$lib/features/catalog';
-import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
+import { addQty, persistQty, qtyAbs, qtyGt, qtyGte, qtyLte, subQty } from '$lib/utils/qty';
 
 /**
  * A catalog row a ledger entry can point at. The `catalog` database holds two
@@ -58,6 +69,12 @@ import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
  * pickers already offer both, so both must survive the guards below.
  */
 export type CatalogItem = SupplyItem | ItemMaster;
+
+// A direct distribution is a short-lived browser operation. Claims older than
+// this window with no deterministic ledger row are recoverable abandoned work.
+// Approval claims use different operation IDs and are deliberately left for
+// their own workflow to reconcile.
+const DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS = 15 * 60 * 1000;
 
 /** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
 export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
@@ -183,22 +200,235 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
-		const entry = createDistributeEntry(input, ctx);
-
-		// WARNING (C-1): This read-then-write is not atomic. Concurrent distributes
-		// may both pass the balance check before either write lands, potentially
-		// causing negative stock. Acceptable for single-user shelter scenario;
-		// tracked for future hardening.
-		const balances = await this.getBalance();
-		const currentQty = balances.get(entry.item_id) ?? '0';
-		const requestedQty = qtyAbs(entry.qty);
-
-		if (!qtyGte(currentQty, requestedQty)) {
-			throw new Error(
-				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
-			);
+		const operationId = `op_dist_${ulid()}`;
+		const entry = createDistributeEntry(input, ctx, operationId);
+		const lotRef = entry.lot_ref;
+		if (!lotRef) {
+			throw new Error('Distribute stock requires a physical lot reference');
 		}
-		return this.addLedgerEntry(entry);
+
+		const requestId = `distribution_request:direct-${ulid()}`;
+		const batchId = entry.ref_id ?? `distribution_batch:direct-${ulid()}`;
+		const requestedQty = qtyAbs(entry.qty);
+		const resId = await makeLotReservationDocId(lotRef);
+
+		// Acquire reservation claim with remote CouchDB CAS
+		const maxRetries = 5;
+		let acquired = false;
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			const ledger = await this.listLedger();
+			const lots = projectStockLotBalances(ledger);
+			const selectedLot = lots.find((lot) => lot.lot_ref === lotRef);
+
+			if (!selectedLot) {
+				throw new Error(`Selected stock lot ${lotRef} is not available for item ${entry.item_id}`);
+			}
+			if (selectedLot.item_id !== entry.item_id || selectedLot.unit !== entry.unit) {
+				throw new Error(
+					`Selected stock lot ${lotRef} does not match item ${entry.item_id} and unit ${entry.unit}`
+				);
+			}
+
+			const physicalBalance = selectedLot.qty;
+
+			let resDoc: StockLotReservation;
+			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
+			if (!rawRes) {
+				resDoc = createStockLotReservation(
+					{ lot_ref: lotRef, pending_claims: [] },
+					resId.slice('stock_lot_reservation:'.length),
+					ctx
+				);
+			} else {
+				resDoc = assertSemanticReservationMatch(rawRes, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+			}
+
+			const existingMyClaim = resDoc.pending_claims.find((c) => c.operation_id === operationId);
+			if (existingMyClaim) {
+				acquired = true;
+				break;
+			}
+
+			const recoverableClaimIds = await this.findRecoverableReservationClaims(
+				resDoc,
+				ledger,
+				operationId
+			);
+			if (recoverableClaimIds.size > 0) {
+				try {
+					await putDocStrict<StockLotReservation>(this.dbName, {
+						...resDoc,
+						pending_claims: resDoc.pending_claims.filter(
+							(claim) => !recoverableClaimIds.has(claim.operation_id)
+						),
+						updated_at: now()
+					});
+				} catch (reconcileErr) {
+					if (!(reconcileErr instanceof ConflictError) || attempt === maxRetries) {
+						throw reconcileErr;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
+				}
+				continue;
+			}
+
+			// Only deduct claims whose ledger rows have not yet been committed to the physical ledger,
+			// to prevent double-counting when a concurrent client has already appended its ledger row.
+			const otherUncommittedClaims = resDoc.pending_claims
+				.filter((c) => c.operation_id !== operationId)
+				.filter((c) => !ledger.some((l) => l._id === `stock_ledger:${c.operation_id}`))
+				.reduce((sum, c) => addQty(sum, c.qty), '0');
+
+			const availableForClaim = subQty(physicalBalance, otherUncommittedClaims);
+
+			if (qtyGt(requestedQty, availableForClaim)) {
+				throw new InsufficientStockError(
+					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${availableForClaim})`
+				);
+			}
+
+			const otherPending = resDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+			const myClaim: StockLotPendingClaim = {
+				operation_id: operationId,
+				request_id: requestId,
+				batch_id: batchId,
+				item_id: entry.item_id,
+				lot_ref: lotRef,
+				qty: persistQty(requestedQty),
+				claimed_at: now()
+			};
+
+			const nextResDoc: StockLotReservation = {
+				...resDoc,
+				pending_claims: [...otherPending, myClaim],
+				updated_at: now()
+			};
+
+			try {
+				await putDocStrict(this.dbName, nextResDoc);
+				acquired = true;
+				break;
+			} catch (putErr) {
+				if (!(putErr instanceof ConflictError) || attempt === maxRetries) {
+					throw putErr;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
+			}
+		}
+
+		if (!acquired) {
+			throw new Error(`Failed to acquire reservation for ${lotRef} after retries`);
+		}
+
+		let ledgerResult: StockLedger | undefined;
+		let ledgerError: unknown;
+		try {
+			ledgerResult = await this.addLedgerEntry(entry);
+		} catch (err) {
+			ledgerError = err;
+		}
+
+		try {
+			await this.releaseClaimWithRetry(lotRef, operationId, ctx, 5);
+		} catch (releaseErr) {
+			if (ledgerError) {
+				throw new Error(
+					`Stock distribution ${operationId} could not commit its ledger entry or release its reservation claim; retry after connectivity is restored`,
+					{ cause: releaseErr }
+				);
+			}
+			console.error('Failed to release committed reservation claim for lot', lotRef, releaseErr);
+		}
+
+		if (ledgerError) throw ledgerError;
+		return ledgerResult!;
+	}
+
+	private async findRecoverableReservationClaims(
+		resDoc: StockLotReservation,
+		ledger: readonly StockLedger[],
+		currentOperationId: string
+	): Promise<Set<string>> {
+		const recoverable = new Set<string>();
+		const recoveryCutoff = Date.now() - DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS;
+
+		for (const claim of resDoc.pending_claims) {
+			if (claim.operation_id === currentOperationId) continue;
+
+			// A committed ledger row makes the claim safe to remove immediately. This
+			// repairs the case where the ledger write succeeded but cleanup lost a race.
+			if (ledger.some((entry) => entry._id === `stock_ledger:${claim.operation_id}`)) {
+				recoverable.add(claim.operation_id);
+				continue;
+			}
+
+			if (
+				!claim.operation_id.startsWith('op_dist_') ||
+				Date.parse(claim.claimed_at) > recoveryCutoff
+			) {
+				continue;
+			}
+
+			// Re-check the deterministic ledger ID before releasing an old claim so a
+			// stale projection cannot delete a claim whose write already committed.
+			const committed = await getDoc<{ _id: string }>(
+				this.dbName,
+				`stock_ledger:${claim.operation_id}`
+			);
+			if (!committed) recoverable.add(claim.operation_id);
+		}
+
+		return recoverable;
+	}
+
+	private async releaseClaimWithRetry(
+		lotRef: string,
+		operationId: string,
+		ctx: AuthorContext,
+		maxRetries = 5
+	): Promise<void> {
+		const resId = await makeLotReservationDocId(lotRef);
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				const rawDoc = await getDoc<{ _id: string }>(this.dbName, resId);
+				if (!rawDoc) return;
+
+				const resDoc = assertSemanticReservationMatch(rawDoc, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+
+				const hasMyClaim = resDoc.pending_claims.some((c) => c.operation_id === operationId);
+				if (!hasMyClaim) return;
+
+				const remaining = resDoc.pending_claims.filter((c) => c.operation_id !== operationId);
+				await putDocStrict<StockLotReservation>(this.dbName, {
+					...resDoc,
+					pending_claims: remaining,
+					updated_at: now()
+				});
+				const confirmedRaw = await getDoc<{ _id: string }>(this.dbName, resId);
+				if (!confirmedRaw) return;
+				const confirmed = assertSemanticReservationMatch(confirmedRaw, {
+					_id: resId,
+					lot_ref: lotRef,
+					shelter_code: ctx.shelterCode
+				});
+				if (!confirmed.pending_claims.some((c) => c.operation_id === operationId)) {
+					return;
+				}
+			} catch (err) {
+				if (!(err instanceof ConflictError) || attempt === maxRetries) {
+					throw err;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 20));
+			}
+		}
 	}
 
 	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {

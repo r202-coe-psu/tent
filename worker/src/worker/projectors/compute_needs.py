@@ -35,7 +35,7 @@ _SETTLED_STATUSES = frozenset({"expired", "cancelled", "redirected", "rejected"}
 def _to_float(value: Any) -> float:
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0.0
 
 

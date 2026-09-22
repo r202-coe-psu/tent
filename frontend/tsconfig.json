@@ -30,13 +30,5 @@
 		"scripts/**/*.js",
 		"scripts/**/*.ts"
 	],
-	"exclude": [
-		"node_modules",
-		"dist",
-		"build",
-		"public",
-		"static",
-		"templates",
-		"tests",
-	]
+	"exclude": ["node_modules", "dist", "build", "public", "static", "templates", "tests"]
 }
