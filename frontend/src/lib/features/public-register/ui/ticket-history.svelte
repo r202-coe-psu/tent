@@ -1,38 +1,122 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Calendar from '@lucide/svelte/icons/calendar';
+	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Plus from '@lucide/svelte/icons/plus';
 	import QrCode from '@lucide/svelte/icons/qr-code';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import BookingTicketView from './booking-ticket.svelte';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { getStoredTickets, removeStoredTicket } from '../data/ticket-storage';
+	import { checkTicketStatus } from '../data/public-register.api';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	interface Props {
 		onNewBooking?: () => void;
+		onTicketsChange?: () => void;
 	}
 
-	const { onNewBooking }: Props = $props();
+	const { onNewBooking, onTicketsChange }: Props = $props();
 
 	let tickets = $state<BookingTicket[]>([]);
 	let selectedTicket = $state<BookingTicket | null>(null);
+	let checkingCode = $state<string | null>(null);
 
 	onMount(() => {
 		tickets = getStoredTickets();
+		void syncAllStatus();
 	});
 
-	function handleRemove(code: string, e: MouseEvent) {
-		e.stopPropagation();
+	async function syncAllStatus() {
+		const current = getStoredTickets();
+		let removedAny = false;
+		for (const t of current) {
+			try {
+				const res = await checkTicketStatus(t.code);
+				if (res.verified || res.notFound) {
+					removeStoredTicket(t.code);
+					removedAny = true;
+				}
+			} catch {
+				// skip on network/status error
+			}
+		}
+		if (removedAny) {
+			tickets = getStoredTickets();
+			if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
+				selectedTicket = null;
+			}
+			onTicketsChange?.();
+			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
+		}
+	}
+
+	function handleRemove(code: string, e?: MouseEvent) {
+		e?.stopPropagation();
 		if (confirm('คุณต้องการลบตั๋วการจองนี้ออกจากเครื่องหรือไม่?')) {
 			removeStoredTicket(code);
 			tickets = getStoredTickets();
 			if (selectedTicket?.code === code) {
 				selectedTicket = null;
 			}
+			onTicketsChange?.();
+		}
+	}
+
+	function handleConfirmVerified(code: string, e?: MouseEvent) {
+		e?.stopPropagation();
+		if (
+			confirm(
+				'คุณได้นำตั๋วนี้ไปรายงานตัวยืนยันเข้าพักที่ศูนย์แล้วใช่หรือไม่?\n\nระบบจะลบข้อมูลตั๋วนี้ออกจากอุปกรณ์'
+			)
+		) {
+			removeStoredTicket(code);
+			tickets = getStoredTickets();
+			if (selectedTicket?.code === code) {
+				selectedTicket = null;
+			}
+			onTicketsChange?.();
+			toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลตั๋วนี้ออกจากอุปกรณ์เรียบร้อย');
+		}
+	}
+
+	async function handleCheckStatus(code: string, e?: MouseEvent) {
+		e?.stopPropagation();
+		checkingCode = code;
+		try {
+			const res = await checkTicketStatus(code);
+			if (res.verified) {
+				removeStoredTicket(code);
+				tickets = getStoredTickets();
+				if (selectedTicket?.code === code) {
+					selectedTicket = null;
+				}
+				onTicketsChange?.();
+				toast.success(
+					'ตั๋วนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย'
+				);
+			} else if (res.notFound) {
+				removeStoredTicket(code);
+				tickets = getStoredTickets();
+				if (selectedTicket?.code === code) {
+					selectedTicket = null;
+				}
+				onTicketsChange?.();
+				toast.info(
+					'ไม่พบข้อมูลตั๋วนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) ระบบได้ลบข้อมูลออกจากอุปกรณ์'
+				);
+			} else {
+				toast.info('ตั๋วนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์');
+			}
+		} catch {
+			toast.error('ไม่สามารถตรวจสอบสถานะได้ในขณะนี้');
+		} finally {
+			checkingCode = null;
 		}
 	}
 
@@ -60,7 +144,11 @@
 				<span>กลับไปยังรายการตั๋วทั้งหมด</span>
 			</button>
 
-			<BookingTicketView ticket={selectedTicket} showSuccessHeader={false} />
+			<BookingTicketView
+				ticket={selectedTicket}
+				showSuccessHeader={false}
+				onVerified={(code) => handleConfirmVerified(code)}
+			/>
 		</div>
 	{:else}
 		<div class="flex items-center justify-between">
@@ -147,11 +235,30 @@
 							</div>
 						</div>
 
-						<div class="flex items-center gap-2">
-							<span class="inline-flex items-center gap-1 text-xs font-semibold text-primary">
-								<QrCode class="size-4" />
-								<span>ดู QR</span>
-							</span>
+						<div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								title="ตรวจสอบว่าตั๋วได้รับการยืนยันที่ศูนย์แล้วหรือยัง"
+								class="h-8 gap-1 px-2 text-xs font-semibold"
+								disabled={checkingCode === t.code}
+								onclick={(e) => handleCheckStatus(t.code, e)}
+							>
+								<RefreshCw class="size-3.5 {checkingCode === t.code ? 'animate-spin' : ''}" />
+								<span class="hidden sm:inline">ตรวจสถานะ</span>
+							</Button>
+							<Button
+								type="button"
+								variant="secondary"
+								size="sm"
+								title="ยืนยันว่านำตั๋วไปใช้งานแล้ว และลบออกจากอุปกรณ์"
+								class="h-8 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+								onclick={(e) => handleConfirmVerified(t.code, e)}
+							>
+								<CheckCircle class="size-3.5 text-emerald-600" />
+								<span>ยืนยันแล้ว</span>
+							</Button>
 							<Button
 								type="button"
 								variant="ghost"

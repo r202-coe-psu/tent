@@ -9,11 +9,15 @@
 	import {
 		evacueeAgeYears,
 		formatPersonName,
+		zoneLabel,
 		type Evacuee,
 		type Household,
 		type HouseholdStatus,
 		type StayStatus
 	} from '$lib/features/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		evacuee,
@@ -36,13 +40,16 @@
 	const housingTypeQuery = useMasterData(() => 'housing_type');
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	const HOUSEHOLD_STATUS_LABEL: Record<HouseholdStatus, string> = {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		arriving: 'กำลังเดินทางมา',
 		checked_in: 'เช็คอินแล้ว',
 		checked_out: 'เช็คเอาท์แล้ว',
-		cancelled: 'ยกเลิก'
+		cancelled: 'ยกเลิก',
+		merged: 'รวมแล้ว'
 	};
 
 	const STAY_STATUS_LABEL: Partial<Record<StayStatus, string>> = {
@@ -263,7 +270,7 @@
 										{STAY_STATUS_LABEL[m.current_stay.status] ?? m.current_stay.status}
 										{#if m.current_stay.zone}
 											<span aria-hidden="true"> · </span>
-											โซน {m.current_stay.zone.toUpperCase()}
+											โซน {zoneLabel(m.current_stay.zone, shelterZones)}
 										{/if}
 									</p>
 								</div>

@@ -6,6 +6,7 @@ import {
 	canTransitionDonation,
 	keyDonationReceipt,
 	createStockLedger,
+	createLegacyFlow2StockLedger,
 	stockLedgerInputSchema,
 	parseStockLedger,
 	ledgerReasonSchema,
@@ -17,6 +18,10 @@ import {
 	keyableDonations,
 	isNeedCutOff,
 	forceCutOffNeed,
+	editNeed,
+	buildCampaignNotes,
+	parseCampaignNotes,
+	publicItemAggregate,
 	reopenNeed,
 	isDonationOutstanding,
 	deriveNeedAvailability,
@@ -49,6 +54,7 @@ import {
 	type LedgerReason,
 	type ReceiveSource
 } from './operations';
+import type { DonationCampaign } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
@@ -85,10 +91,10 @@ describe('donation lifecycle (forward-only)', () => {
 
 	// CR-087 — redirecting hands the request to another shelter, and is terminal on
 	// THIS doc: the destination continues on its own `donation_redirect` ticket.
-	it('allows pending_review → redirected only, and never leaves redirected', () => {
+	it('allows pending_review/verifying → redirected, and never leaves redirected', () => {
 		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(true);
 		expect(canTransitionDonation('declared', 'redirected')).toBe(false);
-		expect(canTransitionDonation('verifying', 'redirected')).toBe(false);
 		expect(canTransitionDonation('received', 'redirected')).toBe(false);
 		expect(canTransitionDonation('redirected', 'received')).toBe(false);
 		expect(canTransitionDonation('redirected', 'pending_review')).toBe(false);
@@ -129,7 +135,16 @@ describe('keyDonationReceipt — the only donation→stock path', () => {
 describe('stockBalance', () => {
 	it('sums signed deltas per item', () => {
 		const legacyDistribution = {
-			...createStockLedger({ item_id: 'item:rice', qty: 3, unit: 'kg', reason: 'receive' }, ctx),
+			...createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 3,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
 			_id: 'stock_ledger:legacy-distribution',
 			qty: '-3',
 			reason: 'distribute' as const,
@@ -137,9 +152,27 @@ describe('stockBalance', () => {
 			lot_ref: undefined
 		};
 		const ledger = [
-			createStockLedger({ item_id: 'item:rice', qty: 10, unit: 'kg', reason: 'receive' }, ctx),
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
 			legacyDistribution,
-			createStockLedger({ item_id: 'item:water', qty: 5, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 5,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 		const balance = stockBalance(ledger);
 		expect(balance.get('item:rice')).toBe('7');
@@ -148,8 +181,26 @@ describe('stockBalance', () => {
 
 	it('rounds float residue so 0.1 + 0.2 balances to 0.3', () => {
 		const ledger = [
-			createStockLedger({ item_id: 'item:rice', qty: 0.1, unit: 'kg', reason: 'receive' }, ctx),
-			createStockLedger({ item_id: 'item:rice', qty: 0.2, unit: 'kg', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 0.1,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 0.2,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 		expect(stockBalance(ledger).get('item:rice')).toBe('0.3');
 	});
@@ -166,7 +217,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 	// remains current and every writer continues through `createStockLedger`.
 	it('keeps schema_v 4 for the backward-compatible optional lot_ref field', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 		expect(entry.schema_v).toBe(4);
@@ -193,7 +250,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 
 	it('rejects malformed persisted ledger documents at a signed-sum boundary', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 
@@ -205,7 +268,13 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 
 	it('reads compatible schema_v 2 ledgers but reserves purchase for schema_v 3', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 
@@ -242,9 +311,9 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		transfer_in: { valid: 'stock_transfer:01J', invalid: 'transfer:01J' },
 		transfer_out: { valid: 'stock_transfer:01J', invalid: null },
 		adjust: { valid: null, invalid: 'donation:01J' },
-		distribute: { valid: 'distribution_batch:01J', invalid: null },
+		distribute: { valid: 'requisition_ticket:01J', invalid: 'distribution_batch:01J' },
 		distribution_return: { valid: 'distribution_batch:01J', invalid: 'donation:01J' },
-		receive: { valid: null, invalid: 'donation:01J' }
+		receive: { valid: 'bulk_return_pool:01J', invalid: null }
 	};
 
 	for (const [reason, { valid, invalid }] of Object.entries(cases) as [
@@ -270,10 +339,72 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		expect(result.error?.issues[0].path).toEqual(['ref_id']);
 	});
 
+	it('enforces Ticket-era references on normal writes and isolates legacy Flow 2 compatibility', () => {
+		const ticketRef = 'requisition_ticket:01J00000000000000000000000';
+		const logRef = 'distribution_log:01J00000000000000000000000';
+		const poolRef = 'bulk_return_pool:01J00000000000000000000000';
+
+		expect(() =>
+			createStockLedger({ ...base, reason: 'requisition', ref_id: ticketRef }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'distribution_batch:LEGACY',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).toThrow();
+		expect(() =>
+			createLegacyFlow2StockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'distribution_batch:LEGACY',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: logRef }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: poolRef }, ctx)
+		).not.toThrow();
+		expect(() => createStockLedger({ ...base, reason: 'receive', ref_id: null }, ctx)).toThrow();
+		expect(() =>
+			createStockLedger(
+				{
+					...base,
+					qty: -5,
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:',
+					lot_ref: 'stock_ledger:PHYSICALLOT'
+				},
+				ctx
+			)
+		).toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'receive', ref_id: 'distribution_log:' }, ctx)
+		).toThrow();
+		expect(() =>
+			createLegacyFlow2StockLedger({ ...base, reason: 'receive', ref_id: null }, ctx)
+		).not.toThrow();
+		expect(() =>
+			createStockLedger({ ...base, reason: 'transfer_out', ref_id: ticketRef }, ctx)
+		).not.toThrow();
+	});
+
 	// R5 — the guard is write-only. Rows written before it existed still have to
 	// flow through the read paths untouched.
 	it('still sums a pre-existing row that violates the invariant', () => {
-		const legal = write('receive', null);
+		const legal = write('receive', 'distribution_log:01J');
 		const illegal = {
 			...legal,
 			_id: 'stock_ledger:legacy',
@@ -293,7 +424,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
 		};
 		const malformed = {
-			...write('receive', null),
+			...write('receive', 'distribution_log:fixture'),
 			reason: 'donation' as const,
 			ref_id: 'don:legacy-A'
 		};
@@ -502,7 +633,7 @@ describe('openNeeds', () => {
 			{
 				title: 'น้ำดื่ม',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -528,7 +659,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -536,7 +667,16 @@ describe('openNeeds', () => {
 		);
 
 		const stockLedgers = [
-			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 30,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 
 		const donations: Donation[] = [
@@ -560,7 +700,7 @@ describe('openNeeds', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'closed' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'closed' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -598,7 +738,7 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 				qty: '10',
 				unit: 'kg',
 				reason: 'receive' as LedgerReason,
-				ref_id: null
+				ref_id: 'distribution_log:fixture'
 			},
 			ctx
 		),
@@ -827,7 +967,7 @@ describe('deriveNeedAvailability', () => {
 			{
 				title: 'ของยังชีพ',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
 				]
 			},
@@ -835,7 +975,16 @@ describe('deriveNeedAvailability', () => {
 		);
 
 		const stockLedgers = [
-			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 30,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
 		];
 
 		const donations: Donation[] = [
@@ -983,7 +1132,7 @@ describe('createDistributeEntry', () => {
 				item_id: 'item:water',
 				qty: 5,
 				unit: 'ขวด',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: 'stock_ledger:LOT1',
 				note: 'Zone B'
 			},
@@ -994,7 +1143,7 @@ describe('createDistributeEntry', () => {
 		expect(entry.item_id).toBe('item:water');
 		expect(entry.qty).toBe('-5'); // Must be negative
 		expect(entry.reason).toBe('distribute');
-		expect(entry.ref_id).toBe('distribution_batch:BATCH1');
+		expect(entry.ref_id).toBe('requisition_ticket:TICKET1');
 		expect(entry.lot_ref).toBe('stock_ledger:LOT1');
 		expect(entry.lot).toEqual({ note: 'Zone B' });
 		expect(entry.shelter_code).toBe(ctx.shelterCode);
@@ -1006,7 +1155,7 @@ describe('createDistributeEntry', () => {
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: 'stock_ledger:LOT1'
 			},
 			ctx,
@@ -1025,7 +1174,7 @@ describe('createDistributeEntry', () => {
 					item_id: 'item:water',
 					qty: 0,
 					unit: 'ขวด',
-					ref_id: 'distribution_batch:BATCH1',
+					ref_id: 'requisition_ticket:TICKET1',
 					lot_ref: 'stock_ledger:LOT1'
 				},
 				ctx
@@ -1038,7 +1187,7 @@ describe('createDistributeEntry', () => {
 					item_id: 'item:water',
 					qty: -5,
 					unit: 'ขวด',
-					ref_id: 'distribution_batch:BATCH1',
+					ref_id: 'requisition_ticket:TICKET1',
 					lot_ref: 'stock_ledger:LOT1'
 				},
 				ctx
@@ -1455,7 +1604,7 @@ describe('forceCutOffNeed + reopenNeed (T-22 manual force cut-off)', () => {
 			{
 				title: 'ของใช้จำเป็น',
 				needs: [
-					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
 					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
 				]
 			},
@@ -1569,6 +1718,15 @@ describe('donation statuses that still owe the shelter goods (CR-052)', () => {
 		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
 		expect(canTransitionDonation('pending_review', 'rejected')).toBe(true);
 
+		// Staff open the boxes at the counter, and that is where the expired tin or the
+		// wrong size turns up — so a delivery can still be turned away while `verifying`.
+		expect(canTransitionDonation('verifying', 'rejected')).toBe(true);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(true);
+
+		// Approving does not stop the clock: a donor who never turns up still lapses,
+		// and the worker's expiry job writes exactly this transition (quota/expiry.py).
+		expect(canTransitionDonation('verifying', 'expired')).toBe(true);
+
 		// No skipping the review step, and nothing comes back out of a terminal status.
 		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
 		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
@@ -1641,6 +1799,210 @@ describe('lot numbering (CR-088)', () => {
 	});
 });
 
+// The needs board renders ONE ROW PER NEED, so an edit has to name the item it is
+// for. The first version of the edit form always wrote `needs[0]`, which rewrote a
+// different item than the row the user clicked on any multi-need campaign.
+describe('editNeed (needs board edit)', () => {
+	const campaign = () =>
+		createCampaign(
+			{
+				title: 'ของใช้จำเป็น',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+	it('changes only the named need', () => {
+		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80', unit: 'bag' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')).toMatchObject({
+			qty_target: '80',
+			unit: 'bag'
+		});
+		expect(edited.needs.find((n) => n.item_id === 'item:water')).toMatchObject({
+			qty_target: '100',
+			unit: 'bottle'
+		});
+	});
+
+	it('keeps the unit when the caller sends none', () => {
+		const edited = editNeed(campaign(), 'item:rice', { qty_target: '80' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')?.unit).toBe('kg');
+	});
+
+	it('leaves a hand-closed need closed — reopening is reopenNeed, with its own audit', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:rice', 'คลังเต็ม');
+		const edited = editNeed(closed, 'item:rice', { qty_target: '999' });
+		expect(edited.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('closed');
+	});
+
+	it('refuses a target of zero or less, and an item the campaign does not ask for', () => {
+		expect(() => editNeed(campaign(), 'item:rice', { qty_target: '0' })).toThrow();
+		expect(() => editNeed(campaign(), 'item:rice', { qty_target: '-5' })).toThrow();
+		expect(() => editNeed(campaign(), 'item:soap', { qty_target: '10' })).toThrow(/item:soap/);
+	});
+
+	it('does not mutate the campaign it was handed', () => {
+		const original = campaign();
+		editNeed(original, 'item:rice', { qty_target: '80' });
+		expect(original.needs.find((n) => n.item_id === 'item:rice')?.qty_target).toBe('50');
+	});
+});
+
+// `donation_campaign.notes` is the only place the board form's urgency/category
+// survive (§2.4 has no field for either). Create and edit therefore have to share
+// one encoder — an edit that rebuilt the string by hand silently downgraded every
+// campaign to "normal" and dropped its category.
+describe('campaign notes encode/decode', () => {
+	it('round-trips urgency, category and description', () => {
+		for (const urgency of ['critical', 'important', 'normal'] as const) {
+			const notes = buildCampaignNotes({ urgency, category: 'อาหาร', description: 'ต้องการด่วน' });
+			expect(parseCampaignNotes(notes)).toEqual({
+				urgency,
+				category: 'อาหาร',
+				description: 'ต้องการด่วน'
+			});
+		}
+	});
+
+	it('round-trips a description on its own', () => {
+		const notes = buildCampaignNotes({ description: 'ผู้ป่วยติดเตียง 3 ราย' });
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'normal',
+			description: 'ผู้ป่วยติดเตียง 3 ราย'
+		});
+	});
+
+	it('falls back to the warehouse line when there is no description', () => {
+		expect(buildCampaignNotes({ location: 'คลัง EOC' })).toBe('ประกาศสำหรับคลัง: คลัง EOC');
+	});
+
+	it('reads a blank or plain note as normal urgency', () => {
+		expect(parseCampaignNotes('')).toEqual({ urgency: 'normal' });
+		expect(parseCampaignNotes(null)).toEqual({ urgency: 'normal' });
+		expect(parseCampaignNotes('คลังช่วยเหลือภัยพิบัติ EOC')).toEqual({
+			urgency: 'normal',
+			description: 'คลังช่วยเหลือภัยพิบัติ EOC'
+		});
+	});
+
+	it('drops the placeholder category the create form shows before an item is picked', () => {
+		expect(buildCampaignNotes({ category: 'ถูกกำหนดอัตโนมัติ', description: 'x' })).toBe('x');
+	});
+
+	// The create form had an image URL box whose value was never submitted — staff
+	// typed a link and it vanished on save. It rides in `notes` like urgency and
+	// category do, so the edit form has to read it back or the next save drops it.
+	it('round-trips an image URL alongside everything else', () => {
+		const notes = buildCampaignNotes({
+			urgency: 'critical',
+			category: 'อาหาร',
+			imageUrl: 'https://example.com/rice.png',
+			description: 'ข้าวสารสำหรับครัวกลาง'
+		});
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'critical',
+			category: 'อาหาร',
+			imageUrl: 'https://example.com/rice.png',
+			description: 'ข้าวสารสำหรับครัวกลาง'
+		});
+	});
+
+	it('round-trips an image URL with no category and no description', () => {
+		const notes = buildCampaignNotes({ imageUrl: 'https://example.com/a.png' });
+		expect(parseCampaignNotes(notes)).toEqual({
+			urgency: 'normal',
+			imageUrl: 'https://example.com/a.png'
+		});
+	});
+
+	// A campaign saved before the image part existed must still parse — its whole
+	// note is the description, not a half-read image tag.
+	it('reads a note written before the image part existed', () => {
+		expect(parseCampaignNotes('[ด่วน] หมวด: อาหาร ต้องการด่วน')).toEqual({
+			urgency: 'critical',
+			category: 'อาหาร',
+			description: 'ต้องการด่วน'
+		});
+	});
+
+	// A URL with whitespace cannot be read back as one token, so it is not written
+	// at all rather than corrupting the description on the next edit.
+	it('refuses to encode an image URL containing whitespace', () => {
+		const notes = buildCampaignNotes({
+			imageUrl: 'https://x.test/a b.png',
+			description: 'ปลากระป๋อง'
+		});
+		expect(notes).toBe('ปลากระป๋อง');
+		expect(parseCampaignNotes(notes)).toEqual({ urgency: 'normal', description: 'ปลากระป๋อง' });
+	});
+
+	// The edit form seeds from `parseCampaignNotes` and saves through
+	// `buildCampaignNotes`; a value that does not survive that loop is lost on the
+	// second save even though the first one looked fine.
+	it('survives a parse → build → parse edit cycle', () => {
+		const first = buildCampaignNotes({
+			urgency: 'important',
+			category: 'ยา',
+			imageUrl: 'https://example.com/kit.png',
+			description: 'ชุดปฐมพยาบาล'
+		});
+		const reparsed = parseCampaignNotes(first);
+		expect(buildCampaignNotes(reparsed)).toBe(first);
+	});
+});
+
+// The donor board is keyed per ITEM, not per campaign (schema.md §2.4 / T-60), so a
+// second campaign for the same thing does not appear as a second card — it raises the
+// number on the existing one. Staff filed a campaign, could not find it on `/donate`,
+// and reported it missing; the board row now says how many campaigns are being merged.
+describe('publicItemAggregate (what the donor board really shows)', () => {
+	const campaign = (id: string, qty: number, over: Partial<DonationCampaign> = {}) => ({
+		...createCampaign(
+			{
+				title: `ประกาศ ${id}`,
+				needs: [{ item_id: 'item:water', qty_target: qty, unit: 'bottle' }]
+			},
+			ctx
+		),
+		_id: `donation_campaign:${id}`,
+		...over
+	});
+
+	it('sums every open campaign asking for the item', () => {
+		const result = publicItemAggregate([campaign('a', 100), campaign('b', 999)], 'item:water');
+		expect(result).toEqual({ campaignCount: 2, totalTarget: '1099' });
+	});
+
+	it('counts nothing for an item no campaign asks for', () => {
+		expect(publicItemAggregate([campaign('a', 100)], 'item:rice')).toEqual({
+			campaignCount: 0,
+			totalTarget: '0'
+		});
+	});
+
+	it('leaves out what the public projection leaves out', () => {
+		const closedCampaign = campaign('closed', 50, { status: 'closed' });
+		const hidden = campaign('hidden', 50, { visible_on_home: false });
+		const closedNeed = createCampaign(
+			{
+				title: 'need ปิดเอง',
+				needs: [{ item_id: 'item:water', qty_target: 50, unit: 'bottle' }]
+			},
+			ctx
+		);
+		const withClosedNeed = forceCutOffNeed(closedNeed, 'item:water', 'คลังเต็ม');
+
+		const result = publicItemAggregate(
+			[campaign('open', 100), closedCampaign, hidden, withClosedNeed],
+			'item:water'
+		);
+		expect(result).toEqual({ campaignCount: 1, totalTarget: '100' });
+	});
+});
+
 describe('new inbound physical-lot identity (CR-059)', () => {
 	it('self-references createReceiveEntry, donation receipt, and purchase receipt rows', () => {
 		const received = createReceiveEntry(
@@ -1684,7 +2046,13 @@ describe('new inbound physical-lot identity (CR-059)', () => {
 
 	it('continues parsing a legacy ledger without lot_ref', () => {
 		const modern = createStockLedger(
-			{ item_id: 'item:rice', qty: '5', unit: 'kg', reason: 'receive' },
+			{
+				item_id: 'item:rice',
+				qty: '5',
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture'
+			},
 			ctx
 		);
 		const legacy = { ...modern };
@@ -1707,6 +2075,7 @@ describe('projectStockLotBalances', () => {
 				qty,
 				unit: 'kg',
 				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
 				lot,
 				occurred_at: occurredAt
 			},
@@ -1786,7 +2155,7 @@ describe('projectStockLotBalances', () => {
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: b.lot_ref!
 			},
 			ctx,
@@ -1804,7 +2173,7 @@ describe('projectStockLotBalances', () => {
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
-				ref_id: 'distribution_batch:BATCH1',
+				ref_id: 'requisition_ticket:TICKET1',
 				lot_ref: source.lot_ref!,
 				occurred_at: '2026-02-01T00:00:00Z'
 			},

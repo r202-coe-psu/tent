@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
 	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
@@ -16,37 +15,11 @@
 
 	let { configData }: Props = $props();
 
-	let fetchedConfig = $state<PublicFooterConfig | null>(null);
-
 	const pageConfig = $derived(page.data?.configData as PublicFooterConfig | undefined);
 
 	const effectiveConfig = $derived<PublicFooterConfig>({
-		line_oa_url:
-			configData?.line_oa_url || pageConfig?.line_oa_url || fetchedConfig?.line_oa_url || '',
-		facebook_url:
-			configData?.facebook_url || pageConfig?.facebook_url || fetchedConfig?.facebook_url || ''
-	});
-
-	onMount(async () => {
-		if (
-			!configData?.line_oa_url &&
-			!configData?.facebook_url &&
-			!pageConfig?.line_oa_url &&
-			!pageConfig?.facebook_url
-		) {
-			try {
-				const res = await fetch('/api/public/v1/config/faqs?category=public');
-				if (res.ok) {
-					const data = await res.json();
-					fetchedConfig = {
-						line_oa_url: data.line_oa_url || '',
-						facebook_url: data.facebook_url || ''
-					};
-				}
-			} catch (e) {
-				console.error('Failed to fetch public config in footer', e);
-			}
-		}
+		line_oa_url: configData?.line_oa_url || pageConfig?.line_oa_url || '',
+		facebook_url: configData?.facebook_url || pageConfig?.facebook_url || ''
 	});
 
 	const hasLineOa = $derived(Boolean(effectiveConfig.line_oa_url?.trim()));

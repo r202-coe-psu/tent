@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
 import { shelterStore } from '$lib/stores/shelter.svelte';
-import { clearMfaOk } from '$lib/features/users';
+import { clearMfaOk, invalidateAuthStatusRequest } from '$lib/features/users';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -119,7 +119,9 @@ class AuthStore {
 	}
 
 	async login(input: { name: string; password: string }): Promise<SessionUser> {
+		invalidateAuthStatusRequest();
 		const user = await withDisplayName(await sessionLogin(input));
+		invalidateAuthStatusRequest();
 		this.state.user = user;
 		this.state.needsReauth = false;
 		shelterStore.selectedShelterCode = undefined;
@@ -135,6 +137,7 @@ class AuthStore {
 	}
 
 	async logout(): Promise<void> {
+		invalidateAuthStatusRequest();
 		try {
 			try {
 				await clearMfaOk();
@@ -148,6 +151,7 @@ class AuthStore {
 			shelterStore.selectedShelterCode = undefined;
 			persistUser(null);
 			this.initPromise = null;
+			invalidateAuthStatusRequest();
 		}
 	}
 

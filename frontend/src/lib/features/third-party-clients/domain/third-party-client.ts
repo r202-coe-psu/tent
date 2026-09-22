@@ -1,14 +1,23 @@
 import { z } from 'zod';
 
 /** Scopes a partner client can be granted (EXT-001, ADR 0002). */
-export const GRANTABLE_SCOPES = ['location-read', 'location-stock-read', 'occupancy-read'] as const;
+export const GRANTABLE_SCOPES = [
+	'location-read',
+	'location-stock-read',
+	'occupancy-read',
+	'occupancy-pii-read'
+] as const;
 export type GrantableScope = (typeof GRANTABLE_SCOPES)[number];
 
 export const SCOPE_LABEL: Record<GrantableScope, string> = {
 	'location-read': 'location-read — Location Master (EXT-002/003)',
 	'location-stock-read': 'location-stock-read — Shelter stock (EXT-004)',
-	'occupancy-read': 'occupancy-read — Occupancy breakdown (EXT-005/006)'
+	'occupancy-read': 'occupancy-read — Occupancy breakdown (EXT-005/006)',
+	'occupancy-pii-read': 'occupancy-pii-read — Individual occupant records (EXT-007)'
 };
+
+/** Scopes that expose individual-level PII/sensitive data under PDPA — flagged in the UI. */
+export const SENSITIVE_SCOPES: readonly GrantableScope[] = ['occupancy-pii-read'];
 
 /** Only these two partner systems exist today (ADR 0002 / ext-spec.md) — a closed set. */
 export const PARTNER_MODULES = ['M6', 'M7'] as const;
@@ -17,6 +26,16 @@ export type PartnerModule = (typeof PARTNER_MODULES)[number];
 export const PARTNER_MODULE_LABEL: Record<PartnerModule, string> = {
 	M6: 'M6',
 	M7: 'M7'
+};
+
+/**
+ * Suggested default scopes per module (odt scope table) — pre-checked when a module is
+ * picked in the create form, but still freely toggleable. `occupancy-pii-read` is never
+ * defaulted on.
+ */
+export const DEFAULT_SCOPES_BY_MODULE: Record<PartnerModule, GrantableScope[]> = {
+	M6: ['location-read', 'location-stock-read'],
+	M7: ['location-read', 'location-stock-read', 'occupancy-read']
 };
 
 export interface ThirdPartyClient {

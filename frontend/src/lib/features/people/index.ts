@@ -106,6 +106,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
@@ -119,6 +120,16 @@ export {
 	type MovementInput,
 	type ScreeningInput
 } from './domain/people';
+
+export {
+	CR112_HOUSING_TYPE_CODES,
+	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	buildHousingTypeSelectItems,
+	setHousingTypeFromSelect,
+	housingTypeLabelForCode,
+	type HousingTypeSelectItem,
+	type MasterHousingItem
+} from './domain/housing-type-ui';
 
 export {
 	nextQueueLabel,
@@ -140,6 +151,14 @@ export {
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
 } from './domain/scan-lookup';
+
+export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
 
 export {
 	REPORT_IN_CTA_LABEL,
@@ -172,6 +191,7 @@ export {
 	defaultHouseholdChoice,
 	isLeavingLinkedHousehold,
 	matchesResidenceAddress,
+	normThaiAddressText,
 	suggestHouseholdsByResidence,
 	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
@@ -234,6 +254,7 @@ export {
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
 	useSubmitFamilyReportIn,
+	useMergeHouseholds,
 	usePromoteReportIn,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
@@ -284,6 +305,12 @@ export {
 	type RegisteredViaStyle
 } from './ui/shared/registered-via-badge.svelte';
 export { default as Station1IntakeSearch } from './ui/search-scan/station1-intake-search.svelte';
+export { default as Station1EvacueeQueue } from './ui/search-scan/evacuee-queue-view.svelte';
+export {
+	goToEvacueeReportIn,
+	goToEvacueeProfile,
+	openEvacueeRow
+} from './ui/search-scan/evacuee-queue-navigation';
 export { default as EvacueeProfileView } from './ui/evacuee-profile/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/registration/evacuee-form.svelte';
 export { default as RegistrationShell } from './ui/registration/registration-shell.svelte';
@@ -294,6 +321,12 @@ export { default as HouseholdPostArrival } from './ui/household-flows/household-
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
 export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
+export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
+export { stripThaiTitle } from './domain/thaid-profile';
+export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
+export { default as ThaidMemberScanDialog } from './ui/registration/thaid-member-scan-dialog.svelte';
+export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';
+export { default as UnifiedRegistrationStepper } from './ui/registration/unified-registration-stepper.svelte';
 export { default as PullPreRegisteredDialog } from './ui/registration/pull-pre-registered-dialog.svelte';
 export {
 	default as EvacueeHandoverSlipModal,

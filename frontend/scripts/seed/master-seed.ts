@@ -23,6 +23,7 @@ import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
 import { ITEM, masterCode, type MasterLookup } from './types';
+import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
@@ -92,7 +93,11 @@ export async function seedMasterData(): Promise<MasterLookup> {
 				label: d.label,
 				is_default: d.is_default ?? false,
 				status: 'active',
-				...(d.parent_key ? { parent_code: masterCode(master, def.parent_type!, d.parent_key) } : {})
+				...(d.parent_key
+					? { parent_code: masterCode(master, def.parent_type!, d.parent_key) }
+					: {}),
+				...(d.category ? { category: d.category } : {}),
+				...(d.description ? { description: d.description } : {})
 			};
 			resolved[d.key] = item;
 			return item;
@@ -871,10 +876,49 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		);
 	}
 
+	let uomCount = 0;
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
+		if (status === 200) {
+			const existing = data as Record<string, unknown>;
+			// Idempotent: preserve admin labels while ensuring protected system invariants
+			await putDoc('catalog', {
+				...existing,
+				type: 'unit_of_measure',
+				schema_v: 1,
+				code: def.code,
+				dimension: def.dimension,
+				is_protected: true,
+				updated_at: now()
+			});
+		} else {
+			await putDoc(
+				'catalog',
+				catalogDoc(
+					docId,
+					'unit_of_measure',
+					{
+						code: def.code,
+						label_th: def.label_th,
+						...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
+						label_en: def.label_en,
+						dimension: def.dimension,
+						is_protected: true,
+						sort_order: def.sort_order,
+						deactivated: false
+					},
+					1
+				)
+			);
+		}
+		uomCount++;
+	}
+
 	for (const doc of [...items, ...itemCategories, ...itemMasters, ...recipes])
 		await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${items.length} supply items, ${itemCategories.length} item categories, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: ${uomCount} units of measure, ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

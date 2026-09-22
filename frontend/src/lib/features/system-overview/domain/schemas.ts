@@ -68,6 +68,7 @@ export const overviewFiltersSchema = z.object({
 	q: z.string().trim().optional(),
 	source: z.enum(['all', 'unassigned', 'bound']).optional().default('all'),
 	shelter_code: z.string().trim().optional(),
+	household_id: z.string().trim().optional(),
 	limit: z.coerce.number().int().min(1).max(200).optional().default(50),
 	offset: z.coerce.number().int().min(0).optional().default(0)
 });
@@ -92,6 +93,7 @@ const FILTER_KEYS = [
 	'q',
 	'source',
 	'shelter_code',
+	'household_id',
 	'limit',
 	'offset'
 ] as const;
@@ -246,6 +248,8 @@ export const preRegistrationListItemSchema = z.object({
 	id: z.string(),
 	source: preRegSourceSchema,
 	display_name: z.string(),
+	household_id: z.string().nullable().optional(),
+	household_name: z.string().nullable().optional(),
 	province: z.string().nullable(),
 	district: z.string().nullable(),
 	subdistrict: z.string().nullable(),
@@ -254,6 +258,8 @@ export const preRegistrationListItemSchema = z.object({
 	age: z.number().nullable(),
 	age_band: ageBandSchema,
 	queue_status: z.string(),
+	stay_status: z.string().nullable().optional(),
+	registered_via: z.string().nullable().optional(),
 	shelter_code: z.string().nullable(),
 	shelter_name: z.string().nullable(),
 	registered_at: z.string().nullable(),
@@ -262,6 +268,27 @@ export const preRegistrationListItemSchema = z.object({
 	evacuee_id: z.string().nullable()
 });
 export type PreRegistrationListItem = z.infer<typeof preRegistrationListItemSchema>;
+
+export const householdOptionSchema = z.object({
+	id: z.string(),
+	label: z.string(),
+	status: z.string().optional(),
+	statusLabel: z.string().optional(),
+	shelterCode: z.string().nullable().optional(),
+	shelterName: z.string().nullable().optional(),
+	province: z.string().nullable().optional(),
+	district: z.string().nullable().optional(),
+	subdistrict: z.string().nullable().optional(),
+	memberCount: z.number().int().optional().default(0),
+	memberNames: z.array(z.string()).optional().default([]),
+	scope: z.enum(['universal', 'shelter'])
+});
+export type HouseholdOption = z.infer<typeof householdOptionSchema>;
+
+export const householdOptionsPayloadSchema = z.object({
+	items: z.array(householdOptionSchema)
+});
+export type HouseholdOptionsPayload = z.infer<typeof householdOptionsPayloadSchema>;
 
 export const preRegistrationsListPayloadSchema = z.object({
 	items: z.array(preRegistrationListItemSchema),

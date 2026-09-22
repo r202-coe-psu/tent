@@ -177,8 +177,52 @@ export function isLeavingLinkedHousehold(
 	return choice === 'create' || choice === 'join';
 }
 
+/**
+ * Normalize Thai address text for fuzzy yet robust residence comparison.
+ * - Converts Thai numerals to Arabic digits.
+ * - Expands common Thai street/administrative prefixes (ถ., ซ., ม., etc.).
+ * - Strips whitespace around separators (/ and -).
+ * - Strips Thai thanthakhat / karan (\u0E4C) and its silenced consonant.
+ * - Collapses whitespace.
+ */
+export function normThaiAddressText(value: string | null | undefined): string {
+	if (!value) return '';
+	let s = trimField(value).toLowerCase();
+	if (!s) return '';
+
+	// Thai numerals to Arabic
+	const thaiNums = '๐๑๒๓๔๕๖๗๘๙';
+	for (let i = 0; i < 10; i++) {
+		s = s.replaceAll(thaiNums[i], String(i));
+	}
+
+	// Expand standard abbreviations
+	s = s.replace(/ถ\.\s*/g, 'ถนน');
+	s = s.replace(/ซ\.\s*/g, 'ซอย');
+	s = s.replace(/ม\.\s*/g, 'หมู่');
+	s = s.replace(/หมู่ที่\s*/g, 'หมู่');
+	s = s.replace(/จ\.\s*/g, 'จังหวัด');
+	s = s.replace(/อ\.\s*/g, 'อำเภอ');
+	s = s.replace(/ต\.\s*/g, 'ตำบล');
+
+	// Strip optional leading administrative prefixes (e.g. จ.สงขลา / จังหวัดสงขลา -> สงขลา)
+	s = s.replace(/^(จังหวัด|อำเภอ|ตำบล)\s*/, '');
+
+	// Ensure space between Thai prefixes and digits (e.g. ซอย6 -> ซอย 6, หมู่2 -> หมู่ 2)
+	s = s.replace(/(ถนน|ซอย|หมู่|ตำบล|อำเภอ|จังหวัด)\s*([0-9]+)/g, '$1 $2');
+
+	// Clean slash and dash spacing (e.g. 49 / 12 -> 49/12)
+	s = s.replace(/\s*([/-])\s*/g, '$1');
+
+	// Strip thanthakhat and the silent character it cancels (e.g. นิพัทธ์ -> นิพัท)
+	s = s.replace(/[ก-ฮ]?\u0E4C/g, '');
+
+	// Collapse whitespace
+	return s.replace(/\s+/g, ' ').trim();
+}
+
 function normAddr(value: string | null | undefined): string {
-	return trimField(value).toLowerCase();
+	return normThaiAddressText(value);
 }
 
 /**

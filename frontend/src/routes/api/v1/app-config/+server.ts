@@ -6,7 +6,7 @@ import {
 	appConfigSchema,
 	readAppConfig,
 	type AppConfig
-} from '$lib/features/shared/domain/app-config';
+} from '$lib/features/shared';
 import { adminRaw, authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 
 export const prerender = false;
@@ -76,7 +76,9 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 };
 
-const patchSchema = appConfigSchema.pick({ recaptcha_enabled: true }).partial();
+const patchSchema = appConfigSchema
+	.pick({ recaptcha_enabled: true, thaid_registration_enabled: true })
+	.partial();
 
 /** PUT { recaptcha_enabled? } — SA-only merge into config:app. */
 export const PUT: RequestHandler = async ({ request }) => {

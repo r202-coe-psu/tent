@@ -1,17 +1,12 @@
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import {
-	APP_CONFIG_DEFAULTS,
-	APP_CONFIG_DOC_ID,
-	readAppConfig
-} from '$lib/features/shared/domain/app-config';
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID, readAppConfig } from '$lib/features/shared';
 import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
 import { adminRaw } from '$lib/server/couch-admin';
 import type { CaptchaProvider } from '$lib/server/security/captcha';
 
 export type RecaptchaGate =
-	| { enforce: false; reason: 'unconfigured' | 'disabled' }
-	| { enforce: true };
+	{ enforce: false; reason: 'unconfigured' | 'disabled' } | { enforce: true };
 
 function keysConfigured(): boolean {
 	return (

@@ -8,7 +8,13 @@
 	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		itemMasterUnit,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
@@ -42,6 +48,8 @@
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -666,7 +674,8 @@
 											<Table.Cell class="p-4 text-center">
 												<span class="text-sm font-bold text-foreground">
 													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>
@@ -682,7 +691,8 @@
 															: 'text-[#0b6e4f]'}"
 												>
 													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>
@@ -806,7 +816,9 @@
 					จัดการสต็อก: {item?.name ?? ''}
 				</Dialog.Title>
 				<Dialog.Description class="mt-1 font-mono text-sm text-muted-foreground">
-					ID: {selectedItemId} | หน่วยนับ: {item?.unit ?? ''}
+					ID: {selectedItemId} | หน่วยนับ: {item
+						? formatUnit(item.unit, units, langState.current)
+						: ''}
 				</Dialog.Description>
 			{/if}
 		</Dialog.Header>

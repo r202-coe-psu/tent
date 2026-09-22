@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any
 
 from beanie import Document
 
-T = TypeVar("T", bound=Document)
 
-
-async def apply_document(model: type[T], action: str, payload: dict[str, Any] | None) -> None:
+async def apply_document[T: Document](
+    model: type[T], action: str, payload: dict[str, Any] | None
+) -> None:
     if action == "delete":
         if payload and payload.get("_id"):
             existing = await model.get(payload["_id"])
             if existing:
                 await existing.delete()
         return
-    if payload is None:
+    # "ignore" carries an empty payload, not None — reading `_id` off it raised KeyError
+    # and took the whole bootstrap scan down with it, leaving Mongo half-filled on a
+    # fresh deploy. Anything that is not an upsert has nothing to write.
+    if action != "upsert" or not payload:
         return
     doc_id = payload["_id"]
     existing = await model.get(doc_id)

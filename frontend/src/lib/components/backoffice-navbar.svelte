@@ -98,14 +98,14 @@
 			class="flex items-center gap-3 {collapsed ? 'flex-none justify-center' : 'flex-1'}"
 			aria-label="กลับหน้าเลือกเมนูหลัก"
 		>
-			<div
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"
-			>
-				SS
-			</div>
+			<img
+				src="/logo.png"
+				alt="PSU Smart Shelter"
+				class="h-8 w-8 shrink-0 rounded-lg object-contain"
+			/>
 			{#if !collapsed}
-				<span class="text-xl font-bold tracking-tight text-foreground">
-					Smart<span class="text-primary">Shelter</span>
+				<span class="truncate text-base font-bold tracking-tight text-foreground">
+					PSU Smart Shelter
 				</span>
 			{/if}
 		</a>
@@ -273,14 +273,18 @@
 <div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card lg:hidden">
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a href={backofficeHomePath} class="flex min-h-11 items-center gap-3" onclick={closeMobileMenu}>
-			<div
-				class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"
+			<img
+				src="/logo.png"
+				alt="PSU Smart Shelter"
+				class="h-8 w-8 shrink-0 rounded-lg object-contain"
+			/>
+			<span
+				class="flex min-w-0 items-center gap-1.5 text-base font-bold tracking-tight text-foreground"
 			>
-				SS
-			</div>
-			<span class="text-lg font-bold tracking-tight text-foreground">
-				Smart<span class="text-primary">Shelter</span>
-				<span class="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
+				<span class="truncate">PSU Smart Shelter</span>
+				<span
+					class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary"
+				>
 					Back-Office
 				</span>
 			</span>
@@ -305,8 +309,11 @@
 			class="gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
 		>
 			<Sheet.Header class="border-b border-sidebar-border p-4 pr-14">
-				<Sheet.Title class="text-left text-base font-bold text-foreground">
-					Smart<span class="text-primary">Shelter</span>
+				<Sheet.Title
+					class="flex items-center gap-2.5 text-left text-base font-bold text-foreground"
+				>
+					<img src="/logo.png" alt="" class="h-7 w-7 shrink-0 rounded-md object-contain" />
+					PSU Smart Shelter
 				</Sheet.Title>
 				<Sheet.Description class="text-left text-sm text-muted-foreground">
 					เมนูแบ็กออฟฟิศ

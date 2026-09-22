@@ -4,7 +4,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import type { PreRegistrationListItem } from '../domain/schemas';
+	import { getPreRegStatusInfo, type PreRegistrationListItem } from '../domain';
 
 	let {
 		items,
@@ -58,9 +58,9 @@
 					<Table.Header>
 						<Table.Row>
 							<Table.Head>ชื่อ</Table.Head>
-							<Table.Head>สถานะคิว</Table.Head>
+							<Table.Head>สถานะการเข้าศูนย์</Table.Head>
+							<Table.Head>ศูนย์พักพิง</Table.Head>
 							<Table.Head>ต้นทาง</Table.Head>
-							<Table.Head>ศูนย์</Table.Head>
 							<Table.Head>เวลา</Table.Head>
 						</Table.Row>
 					</Table.Header>
@@ -75,11 +75,37 @@
 										{item.display_name}
 									</a>
 								</Table.Cell>
-								<Table.Cell class="text-sm text-slate-700">{item.queue_status}</Table.Cell>
-								<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
-								<Table.Cell class="text-sm text-slate-700">
-									{item.shelter_name ?? '—'}
+								<Table.Cell>
+									{@const status = getPreRegStatusInfo(
+										item.stay_status,
+										item.queue_status,
+										!!item.shelter_code
+									)}
+									<span
+										class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${status.className}`}
+										title={status.description}
+									>
+										<span class={`size-1.5 rounded-full ${status.dotColor}`}></span>
+										{status.label}
+									</span>
 								</Table.Cell>
+								<Table.Cell>
+									{#if item.shelter_name}
+										<div class="flex flex-col">
+											<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
+											{#if item.shelter_code}
+												<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span>
+											{/if}
+										</div>
+									{:else if item.shelter_code}
+										<span class="font-mono text-sm font-medium text-slate-900"
+											>[{item.shelter_code}]</span
+										>
+									{:else}
+										<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
+									{/if}
+								</Table.Cell>
+								<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
 								<Table.Cell class="text-sm text-slate-700 tabular-nums">
 									{formatWhen(item.registered_at)}
 								</Table.Cell>

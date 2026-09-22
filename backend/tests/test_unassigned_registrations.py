@@ -625,7 +625,70 @@ async def test_residence_match_returns_non_pii_chips(
     assert hit["housing_type"] == "owned_house"
     assert "members" not in hit
     assert "first_name" not in hit
-    assert "phone" not in str(body)
+    assert hit["member_count"] == 1
+    assert hit["primary_contact_name_masked"] is not None
+
+
+async def test_residence_match_by_member_phone(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            members=[
+                {
+                    "first_name": "สมชาย",
+                    "last_name": "ใจดี",
+                    "gender": "male",
+                    "phone": "0811111111",
+                    "person_id": {"cardType": "national_id", "number": "1111111111111"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                },
+                {
+                    "first_name": "สมหญิง",
+                    "last_name": "ใจดี",
+                    "gender": "female",
+                    "phone": "0899999999",
+                    "person_id": {"cardType": "national_id", "number": "2222222222222"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                },
+            ],
+            household={
+                "housing_type": "owned_house",
+                "address_no": "123/45",
+                "residence_landmark": "ข้างโรงเรียน",
+                "subdistrict": "คอหงส์",
+                "district": "หาดใหญ่",
+                "province": "สงขลา",
+                "postal_code": "90110",
+                "pets": [{"species": "dog", "count": 2}],
+            },
+        ),
+    )
+    assert created.status_code == 201
+    reg_id = created.json()["id"]
+
+    # Search using member's phone (089-999-9999)
+    response = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json={"phone": "089-999-9999"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["matches"]) == 1
+    hit = body["matches"][0]
+    assert hit["id"] == reg_id
+    assert hit["member_count"] == 2
+    assert "สมชาย" in hit["primary_contact_name_masked"]
+    assert "คุณส***" in hit["matched_member_masked"]
+    assert len(hit["pets"]) == 1
+    assert hit["pets"][0]["species"] == "dog"
 
 
 async def test_join_appends_members_into_existing_reserved_household(

@@ -7,10 +7,13 @@ import {
 	exchangeThaidCode,
 	getThaidOAuthConfig,
 	OAUTH_THAID_STATE_COOKIE,
+	parseThaidCitizenClaims,
 	parseThaidOAuthState,
 	resolveThaidLoginUser,
-	resolveThaidRedirectUri
+	resolveThaidRedirectUri,
+	setCitizenClaimCookie
 } from '$lib/server/thaid-oauth';
+import { completeScanSession } from '$lib/server/thaid-scan-session';
 import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
@@ -34,6 +37,13 @@ function isRedirect(e: unknown): boolean {
 	);
 }
 
+function sanitizeRegisterReturnTo(raw?: string): string {
+	if (raw && (raw === '/pre-register' || raw.startsWith('/pre-register?'))) {
+		return raw;
+	}
+	return '/pre-register';
+}
+
 function loginErrorRedirect(code: string): never {
 	throw redirect(302, `/login?error=${encodeURIComponent(code)}`);
 }
@@ -42,20 +52,46 @@ function mfaErrorRedirect(code: string): never {
 	throw redirect(302, `/mfa-challenge?error=${encodeURIComponent(code)}`);
 }
 
-/** GET — ThaID OAuth callback: link, step-up, or enrolled login mint. */
-export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
-	try {
-		const cookieState = cookies.get(OAUTH_THAID_STATE_COOKIE);
-		const earlyState = parseThaidOAuthState(cookieState);
-		const isLoginMode = earlyState?.mode === 'login';
+function registerErrorRedirect(code: string, returnTo?: string): never {
+	const base = sanitizeRegisterReturnTo(returnTo);
+	const sep = base.includes('?') ? '&' : '?';
+	throw redirect(302, `${base}${sep}error=${encodeURIComponent(code)}`);
+}
 
+function memberScanErrorRedirect(code: string): never {
+	throw redirect(302, `/thaid-scan-success?error=${encodeURIComponent(code)}`);
+}
+
+/** GET — ThaID OAuth callback: register, link, step-up, or enrolled login mint. */
+export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
+	const cookieState = cookies.get(OAUTH_THAID_STATE_COOKIE);
+	const earlyState = parseThaidOAuthState(cookieState);
+	const paramState = parseThaidOAuthState(url.searchParams.get('state') ?? undefined);
+
+	const detectedMode = earlyState?.mode ?? paramState?.mode;
+	const detectedReturnTo = earlyState?.returnTo ?? paramState?.returnTo;
+	const isRegisterMode = detectedMode === 'register';
+	const isLoginMode = detectedMode === 'login';
+	const isMemberScanMode = detectedMode === 'member_scan';
+
+	function dispatchErrorRedirect(code: string): never {
+		if (isRegisterMode) {
+			registerErrorRedirect(code, detectedReturnTo);
+		}
+		if (isLoginMode) {
+			loginErrorRedirect(code);
+		}
+		if (isMemberScanMode) {
+			memberScanErrorRedirect(code);
+		}
+		mfaErrorRedirect(code);
+	}
+
+	try {
 		const errorParam = url.searchParams.get('error');
 		if (errorParam) {
 			clearThaidOAuthStateCookie(cookies);
-			if (isLoginMode) {
-				loginErrorRedirect(`oauth_${errorParam}`);
-			}
-			mfaErrorRedirect(`oauth_${errorParam}`);
+			dispatchErrorRedirect(`oauth_${errorParam}`);
 		}
 
 		const code = url.searchParams.get('code');
@@ -63,25 +99,44 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		clearThaidOAuthStateCookie(cookies);
 
 		if (!code || !stateParam || stateParam !== cookieState) {
-			if (isLoginMode) loginErrorRedirect('invalid_state');
-			mfaErrorRedirect('invalid_state');
+			dispatchErrorRedirect('invalid_state');
 		}
 
 		const state = parseThaidOAuthState(stateParam);
 		if (!state) {
-			if (isLoginMode) loginErrorRedirect('invalid_state');
-			mfaErrorRedirect('invalid_state');
+			dispatchErrorRedirect('invalid_state');
 		}
 
-		const { clientId, clientSecret, tokenUrl } = getThaidOAuthConfig();
+		const { clientId, clientSecret, tokenUrl, userinfoUrl } = getThaidOAuthConfig();
 		const redirectUri = resolveThaidRedirectUri(url);
 		const claims = await exchangeThaidCode({
 			code,
 			redirectUri,
 			clientId,
 			clientSecret,
-			tokenUrl
+			tokenUrl,
+			userinfoUrl
 		});
+
+		if (state.mode === 'register') {
+			const profile = parseThaidCitizenClaims(claims);
+			setCitizenClaimCookie(cookies, profile);
+			const base = sanitizeRegisterReturnTo(state.returnTo);
+			const sep = base.includes('?') ? '&' : '?';
+			throw redirect(302, `${base}${sep}thaid=autofill`);
+		}
+
+		if (state.mode === 'member_scan') {
+			if (!state.sessionId) {
+				memberScanErrorRedirect('missing_session');
+			}
+			const profile = parseThaidCitizenClaims(claims);
+			const completed = completeScanSession(state.sessionId, profile);
+			if (!completed) {
+				memberScanErrorRedirect('session_expired');
+			}
+			throw redirect(302, '/thaid-scan-success?status=success');
+		}
 
 		if (state.mode === 'login') {
 			const user = await findUserByThaidSubject(claims.sub);
@@ -151,6 +206,12 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		throw redirect(302, '/portal');
 	} catch (e) {
 		if (isRedirect(e)) throw e;
+		if (isRegisterMode) {
+			registerErrorRedirect('oauth_exchange_failed', detectedReturnTo);
+		}
+		if (isMemberScanMode) {
+			memberScanErrorRedirect('oauth_exchange_failed');
+		}
 		return serviceError(e);
 	}
 };

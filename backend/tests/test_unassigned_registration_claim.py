@@ -384,9 +384,7 @@ async def test_claim_copies_nickname_religion_and_emergency_contact(
             country="THAILAND",
             nickname="ชาย",
             religion="buddhist",
-            emergency_contact=EmergencyContact(
-                name="สมหญิง", phone="0899999999", relation="คู่สมรส"
-            ),
+            emergency_contact=EmergencyContact(name="สมหญิง", phone="0899999999", relation="คู่สมรส"),
         )
     ]
     doc = UnassignedRegistration(

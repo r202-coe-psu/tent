@@ -192,7 +192,8 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		medical_allergies: [],
 		medical_medications: [],
 		emergency_contact: { name: '', phone: '', relation: '' },
-		photo: null
+		photo: null,
+		zone: null
 	};
 }
 
@@ -263,7 +264,7 @@ export function planFamilyRegistration(
 	const memberInputs: EvacueeInput[] = parsed.members.map((member) => ({
 		...member,
 		household_id: mode === 'join' ? targetHouseholdId : null,
-		status,
+		status: member.zone ? 'active' : status,
 		registered_via
 	}));
 
@@ -390,6 +391,7 @@ export function evacueeToUnifiedMember(
 		country: evacuee.country ?? 'THAILAND',
 		religion: evacuee.religion ?? 'buddhist',
 		stay_status: evacuee.current_stay.status,
-		reporting_in: isPreReg && isTarget
+		reporting_in: isPreReg && isTarget,
+		zone: evacuee.current_stay.zone ?? null
 	};
 }

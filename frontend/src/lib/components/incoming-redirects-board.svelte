@@ -2,6 +2,8 @@
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Phone from '@lucide/svelte/icons/phone';
 	import type { DonationRedirect } from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	/**
 	 * Requests other shelters handed to this one (R-16.4 · CR-087). Read-only for
@@ -16,11 +18,16 @@
 		redirects: DonationRedirect[];
 		loading?: boolean;
 	} = $props();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	function itemsSummary(r: DonationRedirect): string {
 		if (r.items.length === 0) return '—';
 		return r.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${it.unit}`)
+			.map(
+				(it) =>
+					`${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+			)
 			.join(', ');
 	}
 </script>

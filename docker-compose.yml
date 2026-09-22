@@ -2,6 +2,10 @@ services:
   couchdb:
     container_name: couchdb
     image: couchdb:3.5
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
@@ -95,6 +99,19 @@ services:
       - "9000:9000"
     volumes:
       - ./backend/apiapp:/app/backend/apiapp
+    restart: unless-stopped
+
+  import-worker:
+    image: tent/frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      SHELTER_IMPORT_WORKER_URL: ${SHELTER_IMPORT_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["pnpm", "import-worker"]
     restart: unless-stopped
 
 networks:
