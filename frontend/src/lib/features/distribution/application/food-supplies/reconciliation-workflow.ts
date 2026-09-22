@@ -1,9 +1,9 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { sha256Hex } from '$lib/db/hash';
 import { addQty, parseQty, qtyGt, qtyLte, qtyStrNonNegativeSchema, subQty } from '$lib/utils/qty';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger,
 	operationsRepository
@@ -19,30 +19,6 @@ import {
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
-
-const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-async function warehouseReturnLedgerSuffix(ticketId: string, itemId: string): Promise<string> {
-	const hash = await sha256Hex(`warehouse_return:${ticketId}:${itemId}`);
-	const bytes = Array.from({ length: hash.length / 2 }, (_, index) =>
-		Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16)
-	);
-	let bits = 0;
-	let value = 0;
-	let suffix = '';
-
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-		bits += 8;
-		while (bits >= 5 && suffix.length < 26) {
-			bits -= 5;
-			suffix += CROCKFORD_BASE32[(value >>> bits) & 31];
-		}
-		if (suffix.length === 26) return suffix;
-	}
-
-	throw new StockIntegrityError('Unable to derive deterministic warehouse return ledger identity');
-}
 
 function assertWarehouseReturnLedgerSemantics(
 	actual: StockLedger,
@@ -318,7 +294,11 @@ export async function receiveWarehouseReturns(
 	}
 
 	const buildExpectedLedger = async (item: TicketItem, qty: string): Promise<StockLedger> => {
-		const ledgerSuffix = await warehouseReturnLedgerSuffix(current._id, item.item_id);
+		const ledgerId = await deriveDeterministicLedgerId(
+			'warehouse_return',
+			current._id,
+			item.item_id
+		);
 		return createStockLedger(
 			{
 				item_id: item.item_id,
@@ -330,7 +310,7 @@ export async function receiveWarehouseReturns(
 				occurred_at: now()
 			},
 			ctx,
-			ledgerSuffix
+			ledgerId
 		);
 	};
 

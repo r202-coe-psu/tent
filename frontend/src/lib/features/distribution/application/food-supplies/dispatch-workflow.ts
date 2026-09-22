@@ -1,11 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { sha256Hex } from '$lib/db/hash';
 import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyNeg } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger,
 	operationsRepository
@@ -41,34 +41,6 @@ export interface InFlightAmendmentInput {
 	added_qty: string;
 	reason?: string;
 	lot_ref?: string;
-}
-
-const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-/**
- * Produces a schema-valid ULID suffix from the immutable dispatch effect identity.
- * CouchDB then serializes the irreversible stock deduction through this document ID.
- */
-async function dispatchLedgerSuffix(ticketId: string, itemId: string): Promise<string> {
-	const hash = await sha256Hex(`dispatch:${ticketId}:${itemId}`);
-	const bytes = Array.from({ length: hash.length / 2 }, (_, index) =>
-		Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16)
-	);
-	let bits = 0;
-	let value = 0;
-	let suffix = '';
-
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-		bits += 8;
-		while (bits >= 5 && suffix.length < 26) {
-			bits -= 5;
-			suffix += CROCKFORD_BASE32[(value >>> bits) & 31];
-		}
-		if (suffix.length === 26) return suffix;
-	}
-
-	throw new StockIntegrityError('Unable to derive deterministic dispatch ledger identity');
 }
 
 function assertDispatchLedgerReplay(
@@ -168,8 +140,7 @@ export async function dispatchTicket(
 
 	let createdCount = 0;
 	for (const item of current.items) {
-		const ledgerSuffix = await dispatchLedgerSuffix(current._id, item.item_id);
-		const ledgerId = `stock_ledger:${ledgerSuffix}`;
+		const ledgerId = await deriveDeterministicLedgerId('dispatch', current._id, item.item_id);
 
 		const lotRef =
 			options?.item_lots?.[item.item_id] &&
@@ -188,7 +159,7 @@ export async function dispatchTicket(
 				occurred_at: now()
 			},
 			ctx,
-			ledgerSuffix
+			ledgerId
 		);
 
 		try {

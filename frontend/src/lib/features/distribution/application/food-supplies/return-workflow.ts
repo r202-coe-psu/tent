@@ -1,11 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { sha256Hex } from '$lib/db/hash';
 import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, persistQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger,
 	operationsRepository
@@ -39,37 +39,6 @@ import {
 } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
 import { assertPositiveQty } from './validation';
-
-const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-/**
- * Binds a physical counter receipt to the DistributionLog state it advances.
- * Competing targets from the same prior cumulative quantity must collide on one CouchDB ID.
- */
-async function counterReturnLedgerSuffix(
-	logId: string,
-	previousQtyReturned: string
-): Promise<string> {
-	const hash = await sha256Hex(`counter_return:${logId}:from:${previousQtyReturned}`);
-	const bytes = Array.from({ length: hash.length / 2 }, (_, index) =>
-		Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16)
-	);
-	let bits = 0;
-	let value = 0;
-	let suffix = '';
-
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-		bits += 8;
-		while (bits >= 5 && suffix.length < 26) {
-			bits -= 5;
-			suffix += CROCKFORD_BASE32[(value >>> bits) & 31];
-		}
-		if (suffix.length === 26) return suffix;
-	}
-
-	throw new StockIntegrityError('Unable to derive deterministic counter return ledger identity');
-}
 
 function assertCounterReturnLedgerReplay(
 	actual: StockLedger,
@@ -313,8 +282,12 @@ export async function returnLoanAtCounter(
 		);
 	}
 
-	const ledgerSuffix = await counterReturnLedgerSuffix(logId, previousQtyReturned);
-	const ledgerId = `stock_ledger:${ledgerSuffix}`;
+	const ledgerId = await deriveDeterministicLedgerId(
+		'counter_return',
+		logId,
+		'from',
+		previousQtyReturned
+	);
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: currentLog.item_id,
@@ -326,7 +299,7 @@ export async function returnLoanAtCounter(
 			occurred_at: now()
 		},
 		ctx,
-		ledgerSuffix
+		ledgerId
 	);
 
 	let ledgerEntryCreated = false;
