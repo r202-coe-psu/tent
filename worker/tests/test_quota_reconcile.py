@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import bson
 import pytest
 from tent_model import DonationBuffer, DonationNeedCounter, DonorBuffer, seed_counter
+
 from worker.quota.reconcile import (
     ShelterReconcileReport,
     reconcile_shelter,
@@ -471,7 +472,9 @@ async def test_targets_lowers_a_ceiling_when_nothing_is_reserved(db: None) -> No
     await _seed(qty_target="500")
     couch = _couch_stub([_campaign("100")])
 
-    await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True)
+    await reconcile_shelter(
+        couch, SHELTER, now=datetime.now(UTC), apply=True, targets=True
+    )
 
     assert await _target() == Decimal(100)
 
@@ -482,8 +485,13 @@ async def test_targets_refuses_to_strand_quota_donors_already_hold(db: None) -> 
     couch = _couch_stub(
         [
             _campaign("10"),
-            {"_id": "donation:1", "type": "donation", "campaign_id": CAMPAIGN,
-             "status": "declared", "items": [{"item_id": "item:rice", "qty": "80"}]},
+            {
+                "_id": "donation:1",
+                "type": "donation",
+                "campaign_id": CAMPAIGN,
+                "status": "declared",
+                "items": [{"item_id": "item:rice", "qty": "80"}],
+            },
         ]
     )
 
