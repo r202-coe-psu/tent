@@ -538,10 +538,12 @@ async function mockPublicApi(page: Page, world: World): Promise<void> {
 		// The URL may carry either the per-application `tracking_token` or, on a
 		// volunteer's first-ever application, the permanent per-volunteer
 		// `volunteer_token` the apply handler minted instead (see
-		// `public-quick-apply-modal.svelte`'s redirect logic) — resolve both.
+		// `public-quick-apply-modal.svelte`'s redirect logic) — resolve both. The
+		// volunteer doc only ever carries the token's hash, never the plaintext.
 		let application = world.all('job_application').find((a) => a.tracking_token === token);
 		if (!application) {
-			const volunteer = world.all('volunteer').find((v) => v.tracking_token === token);
+			const tokenHash = await sha256Hex(token);
+			const volunteer = world.all('volunteer').find((v) => v.tracking_token_hash === tokenHash);
 			application = volunteer
 				? world
 						.all('job_application')
