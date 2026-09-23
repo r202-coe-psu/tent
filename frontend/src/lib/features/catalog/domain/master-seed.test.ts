@@ -19,6 +19,7 @@ vi.mock('../../../../../scripts/seed/couch', () => ({
 import {
 	assertItemMasterSeedUomCodes,
 	seedCatalog,
+	seedCatalogFoodSphereParameters,
 	seedCatalogUnitOfMeasures
 } from '../../../../../scripts/seed/master-seed';
 
@@ -265,5 +266,107 @@ describe('master seed unit-of-measure provisioning', () => {
 		for (const itemMaster of itemMasters) {
 			assertItemMasterSeedUomCodes(itemMaster, new Set(['case']));
 		}
+	});
+});
+
+describe('food sphere seed parameters', () => {
+	beforeEach(() => {
+		couch.request.mockReset();
+		couch.ensureDb.mockReset();
+		couch.putDoc.mockReset();
+		couch.setSecurity.mockReset();
+	});
+
+	it('preserves existing document revisions and resolves item master IDs', async () => {
+		const existingRows = [
+			{
+				doc: {
+					_id: 'item_master:01HXYZ1234567890ABCDEFGH01',
+					type: 'item_master',
+					name: 'ข้าวสาร'
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
+					type: 'item_master',
+					name: 'ไข่ไก่'
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01HXYZ1234567890ABCDEFGH03',
+					type: 'item_master',
+					name: 'ปลากระป๋อง'
+				}
+			},
+			{
+				doc: {
+					_id: 'requirement_group:FOOD_PROTEIN',
+					_rev: '5-rev-existing-protein',
+					type: 'requirement_group'
+				}
+			},
+			{
+				doc: {
+					_id: 'food_sphere_standard:ALL:FOOD_PROTEIN',
+					_rev: '2-rev-existing-standard',
+					type: 'food_sphere_standard'
+				}
+			},
+			{
+				doc: {
+					_id: 'replenishment_policy:REQUIREMENT_GROUP:FOOD_ENERGY',
+					_rev: '1-rev-existing-policy',
+					type: 'replenishment_policy'
+				}
+			}
+		];
+
+		couch.request.mockImplementation(async (method: string, path: string) => {
+			if (method === 'GET' && path === '/catalog/_all_docs?include_docs=true') {
+				return { status: 200, data: { rows: existingRows } };
+			}
+			return { status: 404, data: { error: 'not_found' } };
+		});
+		couch.putDoc.mockResolvedValue({ ok: true });
+
+		await seedCatalogFoodSphereParameters();
+
+		const writtenDocs = couch.putDoc.mock.calls.map(([, doc]) => doc as Record<string, unknown>);
+
+		// Verify FOOD_PROTEIN has the updated egg + canned fish item mappings and preserved _rev
+		const proteinGroup = writtenDocs.find((d) => d._id === 'requirement_group:FOOD_PROTEIN');
+		expect(proteinGroup).toBeDefined();
+		expect(proteinGroup?._rev).toBe('5-rev-existing-protein');
+		expect(proteinGroup?.item_maps).toEqual([
+			{
+				item_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
+				base_uom: 'piece',
+				conversion_factor: 6.3,
+				share_percent: 50
+			},
+			{
+				item_id: 'item_master:01HXYZ1234567890ABCDEFGH03',
+				base_uom: 'can',
+				conversion_factor: 17,
+				share_percent: 50
+			}
+		]);
+
+		// Verify standard and policy preserved _rev
+		const proteinStandard = writtenDocs.find(
+			(d) => d._id === 'food_sphere_standard:ALL:FOOD_PROTEIN'
+		);
+		expect(proteinStandard?._rev).toBe('2-rev-existing-standard');
+
+		const energyPolicy = writtenDocs.find(
+			(d) => d._id === 'replenishment_policy:REQUIREMENT_GROUP:FOOD_ENERGY'
+		);
+		expect(energyPolicy?._rev).toBe('1-rev-existing-policy');
+
+		// New documents without prior existence should not have _rev
+		const halalProtein = writtenDocs.find((d) => d._id === 'requirement_group:FOOD_PROTEIN_HALAL');
+		expect(halalProtein?._rev).toBeUndefined();
 	});
 });

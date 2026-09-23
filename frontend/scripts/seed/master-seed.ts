@@ -1219,31 +1219,53 @@ export async function seedCatalogFoodSphereParameters(
 ): Promise<void> {
 	await ensureDb('catalog');
 
-	let idByName = itemMasterIdByName;
-	if (!idByName) {
-		idByName = new Map<string, string>();
-		const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
-		if (status === 200 && data && typeof data === 'object' && 'rows' in data) {
-			for (const row of (
-				data as {
-					rows: Array<{ doc?: { type?: string; name?: string; _id?: string } }>;
-				}
-			).rows) {
-				if (row.doc?.type === 'item_master' && row.doc.name && row.doc._id) {
-					idByName.set(row.doc.name, row.doc._id);
-				}
+	const idByName = itemMasterIdByName ?? new Map<string, string>();
+	const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
+	const existingDocsById = new Map<string, { _rev?: string }>();
+
+	if (status === 200 && data && typeof data === 'object' && 'rows' in data) {
+		for (const row of (
+			data as {
+				rows: Array<{
+					id: string;
+					doc?: { _id: string; _rev?: string; type?: string; name?: string };
+				}>;
+			}
+		).rows) {
+			if (row.doc?._id && row.doc?._rev) {
+				existingDocsById.set(row.doc._id, { _rev: row.doc._rev });
+			}
+			if (
+				!itemMasterIdByName &&
+				row.doc?.type === 'item_master' &&
+				row.doc.name &&
+				row.doc._id &&
+				!idByName.has(row.doc.name)
+			) {
+				idByName.set(row.doc.name, row.doc._id);
 			}
 		}
 	}
 
+	const resolveItemMasterId = (name: string, fallback: string): string => {
+		const resolved = idByName.get(name);
+		if (!resolved) {
+			console.warn(
+				`  ⚠ seedCatalogFoodSphereParameters: item_master "${name}" not found in catalog; falling back to "${fallback}"`
+			);
+			return fallback;
+		}
+		return resolved;
+	};
+
 	const itemNameToId: Record<string, string> = {
-		ข้าวสาร: idByName.get('ข้าวสาร') ?? 'item_master:rice',
-		ไข่ไก่: idByName.get('ไข่ไก่') ?? 'item_master:egg',
-		ปลากระป๋อง: idByName.get('ปลากระป๋อง') ?? 'item_master:canned-fish',
-		เนื้อไก่สด: idByName.get('เนื้อไก่สด') ?? 'item_master:chicken',
-		น้ำมันพืช: idByName.get('น้ำมันพืช') ?? 'item_master:oil',
-		'น้ำดื่ม 600 มล.': idByName.get('น้ำดื่ม 600 มล.') ?? 'item_master:water-600ml',
-		'น้ำดื่มถัง 5 ลิตร': idByName.get('น้ำดื่มถัง 5 ลิตร') ?? 'item_master:water-5l'
+		ข้าวสาร: resolveItemMasterId('ข้าวสาร', 'item_master:rice'),
+		ไข่ไก่: resolveItemMasterId('ไข่ไก่', 'item_master:egg'),
+		ปลากระป๋อง: resolveItemMasterId('ปลากระป๋อง', 'item_master:canned-fish'),
+		เนื้อไก่สด: resolveItemMasterId('เนื้อไก่สด', 'item_master:chicken'),
+		น้ำมันพืช: resolveItemMasterId('น้ำมันพืช', 'item_master:oil'),
+		'น้ำดื่ม 600 มล.': resolveItemMasterId('น้ำดื่ม 600 มล.', 'item_master:water-600ml'),
+		'น้ำดื่มถัง 5 ลิตร': resolveItemMasterId('น้ำดื่มถัง 5 ลิตร', 'item_master:water-5l')
 	};
 
 	const requirementGroups = DEFAULT_REQUIREMENT_GROUPS.map((rg) => {
@@ -1269,13 +1291,16 @@ export async function seedCatalogFoodSphereParameters(
 	});
 
 	for (const doc of requirementGroups) {
-		await putDoc('catalog', doc);
+		const existing = existingDocsById.get(doc._id);
+		await putDoc('catalog', { ...doc, ...(existing?._rev ? { _rev: existing._rev } : {}) });
 	}
 	for (const doc of DEFAULT_FOOD_SPHERE_STANDARDS) {
-		await putDoc('catalog', doc);
+		const existing = existingDocsById.get(doc._id);
+		await putDoc('catalog', { ...doc, ...(existing?._rev ? { _rev: existing._rev } : {}) });
 	}
 	for (const doc of DEFAULT_REPLENISHMENT_POLICIES) {
-		await putDoc('catalog', doc);
+		const existing = existingDocsById.get(doc._id);
+		await putDoc('catalog', { ...doc, ...(existing?._rev ? { _rev: existing._rev } : {}) });
 	}
 
 	console.log(
