@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import urllib.parse
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 
 try:
@@ -14,11 +14,6 @@ try:
 except ImportError:  # pragma: no cover - production installs httpx
     httpx = None  # type: ignore[assignment]
 
-if httpx is not None:
-    HttpxRequestError = httpx.RequestError
-else:  # pragma: no cover - production installs httpx
-    class HttpxRequestError(Exception):
-        pass
 
 try:
     from playwright.async_api import async_playwright, BrowserContext, Page
@@ -46,15 +41,6 @@ class BootstrapAuthError(BootstrapError):
 class BootstrapUnavailableError(BootstrapError):
     pass
 
-
-def safe_server_message(value: Any, fallback: str) -> str:
-    """Keep upstream card messages useful without propagating credentials or CID values."""
-
-    if not isinstance(value, str):
-        return fallback
-    message = re.sub(r"sk_scan_[A-Za-z0-9_-]+", "[redacted]", value)
-    message = re.sub(r"\b\d{13}\b", "[redacted]", message)
-    return message[:300]
 
 
 class ScannerClientManager:
@@ -87,7 +73,6 @@ class ScannerClientManager:
         self.reading_path = "/kiosk/scanner/reading"
         self.remove_card_path = "/kiosk/scanner/remove-card"
         self.error_path = "/kiosk/scanner/error"
-        self.inbound_api_url = f"{self.tent_base_url}/api/v1/scanner/draft"
         self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/scanner/bootstrap"
         self._refresh_kiosk_urls()
 
@@ -214,61 +199,55 @@ class ScannerClientManager:
                 await asyncio.sleep(2.0)
         return False
 
-    async def submit_draft(self, card_data: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
-
-        """Send scanned card payload to Tent Inbound API"""
-        headers = {
-            "Content-Type": "application/json",
-            "X-Device-Id": self.device_id,
-            "X-Device-Secret": self.device_secret,
+    async def _route_kiosk_api(self, route):
+        """Attach the device credential only to same-origin kiosk API requests."""
+        request = route.request
+        request_url = urllib.parse.urlsplit(request.url)
+        configured_url = urllib.parse.urlsplit(self.tent_base_url)
+        configured_origin = f"{configured_url.scheme}://{configured_url.netloc}"
+        request_origin = request.headers.get("origin", "")
+        allowed_paths = {
+            "/api/v1/scanner/kiosk/lookup",
+            "/api/v1/scanner/kiosk/check-in",
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.post(self.inbound_api_url, json={"card_data": card_data}, headers=headers)
-                resp_json = response.json() if response.content else {}
+        headers = dict(request.headers)
+        headers.pop("x-device-id", None)
+        headers.pop("x-device-secret", None)
+        if (
+            request.method != "POST"
+            or request_origin != configured_origin
+            or request_url.scheme != configured_url.scheme
+            or request_url.netloc != configured_url.netloc
+            or request_url.path not in allowed_paths
+        ):
+            await route.continue_(headers=headers)
+            return
 
-                if response.status_code == 200:
-                    msg = safe_server_message(
-                        resp_json.get("message"),
-                        "อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล",
-                    )
-                    status = resp_json.get("status", "created_pre_registered")
-                    logger.info("Successfully processed scan draft (status=%s)", status)
-                    return True, msg, status
-                elif response.status_code == 409:
-                    err_msg = safe_server_message(
-                        resp_json.get("error") or resp_json.get("message"),
-                        "มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่",
-                    )
-                    status = resp_json.get("status", "already_registered")
-                    logger.warning("Inbound API reported an existing scan (status=%s)", status)
-                    return False, err_msg, status
-                else:
-                    err_msg = resp_json.get("error") or "ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้"
-                    if response.status_code == 401:
-                        err_msg = "เครื่องสแกนไม่ได้รับอนุญาตให้ส่งข้อมูล"
-                    elif response.status_code == 503:
-                        err_msg = "บริการยืนยันตัวตนของเครื่องสแกนไม่พร้อมใช้งาน"
-                    elif not isinstance(err_msg, str):
-                        err_msg = "ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้"
-                    logger.error("Inbound API rejected scanner draft (status=%s)", response.status_code)
-                    return False, err_msg, None
-            except (HttpxRequestError, ValueError):
-                logger.error("Failed to connect to Tent API")
-                return False, "เชื่อมต่อระบบส่วนกลางไม่สำเร็จ", None
-            except Exception:
-                logger.error("Scanner draft request failed")
-                return False, "ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้", None
+        headers["x-device-id"] = self.device_id
+        headers["x-device-secret"] = self.device_secret
+        await route.continue_(headers=headers)
+
+    async def _dispatch_card_event(self, event_name: str, citizen_id: Optional[str] = None) -> None:
+        if not self.page or self.page.is_closed():
+            return
+        if citizen_id is None:
+            await self.page.evaluate(
+                "eventName => window.dispatchEvent(new CustomEvent(eventName))", event_name
+            )
+            return
+        await self.page.evaluate(
+            "({ eventName, citizenId }) => window.dispatchEvent(new CustomEvent(eventName, { detail: { citizenId } }))",
+            {"eventName": event_name, "citizenId": citizen_id},
+        )
 
     async def card_reading_loop(self):
-        """Main lifecycle loop: Home -> Reading -> Inbound Submit -> Remove Card -> Home"""
+        """Wait for a card, resolve it through the kiosk flow, then wait for staff completion."""
         if not self.page:
             logger.error("Page not initialized")
             return
 
-        logger.info(f"Navigating Kiosk display to: {self.home_url}")
-        # Startup connection retry loop in case network or server is still booting up
+        logger.info("Navigating Kiosk display to the configured shelter")
         connected = False
         retry_count = 0
         while not connected and self.running:
@@ -278,10 +257,10 @@ class ScannerClientManager:
             try:
                 await self.page.goto(self.home_url, timeout=10000)
                 connected = True
-                logger.info(f"Successfully loaded Kiosk display: {self.home_url}")
-            except Exception as e:
+                logger.info("Kiosk display loaded")
+            except Exception:
                 retry_count += 1
-                logger.warning(f"Waiting for Tent server at {self.home_url} (attempt {retry_count}): {e}. Retrying in 3s...")
+                logger.warning("Waiting for Tent server (attempt %s); retrying in 3s", retry_count)
                 await asyncio.sleep(3.0)
 
         await self.init_reader()
@@ -290,50 +269,33 @@ class ScannerClientManager:
             if self.page.is_closed():
                 logger.info("Browser window closed. Exiting loop.")
                 break
-
             if not self.reader:
                 await self.init_reader()
                 await asyncio.sleep(1.0)
                 continue
 
             try:
-                # Check if card is inserted
                 if not self.reader.is_card_inserted():
                     await asyncio.sleep(self.poll_interval)
                     continue
 
-                logger.info("Card detected! Reading data...")
-                # 1. Show Reading / PDPA screen
+                logger.info("Card detected; reading citizen ID")
                 await self.page.goto(self.reading_url)
                 await asyncio.sleep(0.6)
-
-                # 2. Read APDU data from card
                 try:
                     card_data = self.reader.read_all_data()
-                    logger.info("Smart Card data read successfully")
+                    citizen_id = str(card_data.get("citizen_id") or "").strip()
+                    if not re.fullmatch(r"\d{13}", citizen_id):
+                        raise ValueError("Card did not provide a valid citizen ID")
 
-                    # 3. Submit to Tent Server
-                    success, msg, status = await self.submit_draft(card_data)
-                    if success:
-                        # 4. Show Remove Card screen with message (Green success)
-                        await self.page.goto(
-                            self._kiosk_url(self.remove_card_path, {"message": msg})
-                        )
-                    elif status is not None:
-                        # 4b. Show Yellow Warning screen for existing records / notices (e.g. repeat scans, checked out, temporary leave)
-                        await self.page.goto(
-                            self._kiosk_url(
-                                self.remove_card_path,
-                                {"type": "warning", "status": status, "message": msg},
-                            )
-                        )
-                    else:
-                        # 4d. Show Red Error screen for HTTP 500 / server network failures
-                        await self.page.goto(self._kiosk_url(self.error_path, {"error_msg": msg}))
-
-                except Exception as read_err:
-                    del read_err
-                    logger.error("Error reading smart card data")
+                    await self.page.goto(self.remove_card_url)
+                    await self.page.wait_for_selector(
+                        '[data-kiosk-card-ready="true"]', timeout=15000
+                    )
+                    await self._dispatch_card_event("kiosk:smart-card-read", citizen_id)
+                    logger.info("Smart-card identity sent to the shared kiosk lookup flow")
+                except Exception:
+                    logger.error("Smart-card read or kiosk handoff failed")
                     await self.page.goto(
                         self._kiosk_url(
                             self.error_path,
@@ -341,18 +303,25 @@ class ScannerClientManager:
                         )
                     )
 
-
-                # 5. Wait for card removal
-                logger.info("Waiting for card to be removed...")
-                while self.reader and self.reader.is_card_inserted():
+                logger.info("Waiting for card removal")
+                while self.running and self.reader and self.reader.is_card_inserted():
                     await asyncio.sleep(self.poll_interval)
 
-                logger.info("Card removed. Returning to kiosk home screen.")
-                await self.page.goto(self.home_url)
-
-            except Exception as loop_err:
-                del loop_err
-                logger.error("Polling loop exception")
+                if self.page.is_closed():
+                    break
+                if urllib.parse.urlsplit(self.page.url).path == self.remove_card_path:
+                    await self._dispatch_card_event("kiosk:smart-card-removed")
+                    logger.info("Card removed; waiting for staff to complete check-in")
+                    while (
+                        self.running
+                        and not self.page.is_closed()
+                        and urllib.parse.urlsplit(self.page.url).path != self.home_path
+                    ):
+                        await asyncio.sleep(0.5)
+                else:
+                    await self.page.goto(self.home_url)
+            except Exception:
+                logger.error("Scanner card polling loop failed")
                 await asyncio.sleep(1.0)
 
     def _build_browser_args(self) -> list:
@@ -416,6 +385,7 @@ class ScannerClientManager:
             )
 
             self.context = context
+            await context.route("**/api/v1/scanner/kiosk/**", self._route_kiosk_api)
             self.page = context.pages[0] if context.pages else await context.new_page()
 
             # Attach event listeners to catch crashes or closures
