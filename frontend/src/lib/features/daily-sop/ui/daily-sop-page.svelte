@@ -384,7 +384,13 @@
 
 <svelte:head><title>การประเมินประจำวัน (Daily SOP)</title></svelte:head>
 
-<div class="min-h-full bg-[#f5f7fa] px-3 py-4 sm:px-5 md:px-7 md:py-7">
+<!--
+  Sticky subheaders on this page use --bo-sticky-top from app.css (stacked BO
+  header is 8.5rem below xl, 4rem at xl+).
+-->
+<div
+	class="min-h-full bg-[#f5f7fa] px-3 py-4 sm:px-5 md:px-7 md:py-7"
+>
 	<div class="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
 		{#if endpointStore.status === 'disconnected'}
 			<div
@@ -410,7 +416,7 @@
 		{#if view === 'history'}
 			<section class="overflow-hidden rounded-[28px] border border-black/[0.04] bg-white shadow-sm">
 				<div
-					class="flex flex-col gap-4 border-b border-slate-100 px-5 py-6 sm:flex-row sm:items-center sm:justify-between md:px-8"
+					class="flex flex-col gap-4 border-b border-slate-100 px-4 py-5 sm:px-5 sm:py-6 sm:flex-row sm:items-center sm:justify-between md:px-8"
 				>
 					<div class="flex items-start gap-3">
 						<div class="rounded-xl bg-slate-100 p-2.5 text-[#013365]">
@@ -427,7 +433,7 @@
 					</div>
 					<button
 						type="button"
-						class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#013365] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#002244] focus-visible:ring-2 focus-visible:ring-[#013365] focus-visible:ring-offset-2"
+						class="inline-flex h-11 min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#013365] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#002244] focus-visible:ring-2 focus-visible:ring-[#013365] focus-visible:ring-offset-2 sm:w-auto"
 						onclick={startAssessment}
 					>
 						<Activity class="size-4" /> เริ่มการประเมิน
@@ -445,7 +451,58 @@
 				{:else if history.length === 0}
 					<div class="px-6 py-16 text-center text-sm text-slate-500">ยังไม่มีประวัติการประเมิน</div>
 				{:else}
-					<div class="overflow-x-auto">
+					<!-- Mobile cards (< md) -->
+					<div class="divide-y divide-black/[0.04] md:hidden">
+						{#each history as item (item._id)}
+							<article class="flex flex-col gap-3 px-4 py-4" data-testid="history-row">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<div class="flex flex-wrap items-center gap-2">
+											<CalendarDays class="size-4 shrink-0 text-[#86868b]" />
+											<span class="text-sm font-semibold text-[#1d1d1f]"
+												>{formatDate(item.assessed_at)}</span
+											>
+											<span class="text-xs text-[#86868b]">{formatTime(item.assessed_at)} น.</span>
+										</div>
+										<p class="mt-1 text-sm font-medium text-[#333336]">{shelterName}</p>
+										<div class="mt-1 flex items-start gap-2 text-sm text-[#333336]">
+											<UserRound class="mt-0.5 size-4 shrink-0 text-[#86868b]" />
+											<span>{item.assessor_name}</span>
+										</div>
+									</div>
+									<span
+										class={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold ${assessmentStatusClass(item.status)}`}
+										><CheckCircle2 class="size-3.5" />
+										{assessmentStatusLabel(item.status)}</span
+									>
+								</div>
+								<div
+									class="flex flex-col gap-2"
+									aria-label={`ความคืบหน้า ${item.progress_percent}% — ${historyProgressLabel(item.progress_percent)}`}
+									title={historyProgressLabel(item.progress_percent)}
+								>
+									<div class="flex items-center justify-between text-xs">
+										<span class="font-semibold text-[#1d1d1f]">{item.progress_percent}%</span>
+										<span class="text-[#86868b]">{historyProgressLabel(item.progress_percent)}</span>
+									</div>
+									<div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+										<div
+											class={`h-full rounded-full transition-all ${historyProgressTone(item.progress_percent)}`}
+											style={`width: ${Math.max(0, Math.min(100, item.progress_percent))}%`}
+										></div>
+									</div>
+								</div>
+								<button
+									type="button"
+									class="inline-flex h-11 min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm font-bold text-[#013365] shadow-sm hover:bg-[#013365] hover:text-white"
+									onclick={() => openEdit(item)}>จัดการ</button
+								>
+							</article>
+						{/each}
+					</div>
+
+					<!-- Desktop table (md+) -->
+					<div class="hidden overflow-x-auto md:block">
 						<table class="w-full min-w-[860px] border-collapse text-left text-sm">
 							<thead class="border-b border-black/[0.04] bg-slate-50 text-xs text-[#1d1d1f]">
 								<tr>
@@ -504,7 +561,7 @@
 										<td class="px-6 py-4 text-right">
 											<button
 												type="button"
-												class="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#013365] shadow-sm hover:bg-[#013365] hover:text-white"
+												class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#013365] shadow-sm hover:bg-[#013365] hover:text-white"
 												onclick={() => openEdit(item)}>จัดการ</button
 											>
 										</td>

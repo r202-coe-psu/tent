@@ -7,10 +7,14 @@
 	import {
 		isAppSystemAdmin,
 		isSystemAdmin,
+		isShelterManager,
 		roleDisplayLabel,
 		shelterCodeFromRoles,
 		shelterCodesFromRoles,
-		assignmentsFromRoles
+		parseCompoundCapability,
+		SA_GRANTABLE_CAPABILITIES,
+		SYSTEM_ADMIN,
+		SHELTER_MANAGER
 	} from '$lib/auth/roles';
 	import UserList from './user-list.svelte';
 	import { useUsers, useDeleteUser } from '../application/queries';
@@ -25,10 +29,12 @@
 		usersListBaseFromPathname,
 		withUsersView
 	} from '../domain/user-edit-path';
-	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
+	import { UserPlus, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 
 	let {
@@ -58,13 +64,47 @@
 	let unlinkMfaDialogOpen = $state(false);
 	let unlinkMfaProvider = $state<'google' | 'thaid'>('google');
 
-	let searchQuery = $state('');
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	let usernameFilter = $state('');
+	let phoneFilter = $state('');
+	let nameFilter = $state('');
+	let roleFilter = $state('');
+	let typeFilter = $state('');
+
 	let selectedUser = $state<UserSummary | null>(null);
 	let userToDelete = $state<string | null>(null);
 	let temporaryPassword = $state<string | null>(null);
 	let copied = $state(false);
 	let resetting = $state(false);
 	let unlinkingMfa = $state(false);
+
+	const roleFilterOptions = [
+		{ value: '', label: 'ทั้งหมด' },
+		...SA_GRANTABLE_CAPABILITIES.map((cap) => ({
+			value: cap,
+			label: roleDisplayLabel(cap)
+		}))
+	];
+
+	const typeFilterOptions = [
+		{ value: '', label: 'ทั้งหมด' },
+		{ value: 'staff', label: 'เจ้าหน้าที่' },
+		{ value: 'volunteer', label: 'จิตอาสา' }
+	];
+
+	function resetPageOnFilter() {
+		currentPage = 1;
+	}
+
+	/** Match bare or compound capability — do not use hasStaffCapability (SA would match all). */
+	function userMatchesRoleFilter(userRoles: readonly string[], filter: string): boolean {
+		if (!filter) return true;
+		if (filter === SYSTEM_ADMIN) return isAppSystemAdmin(userRoles);
+		if (filter === SHELTER_MANAGER) return isShelterManager(userRoles);
+		if (userRoles.includes(filter)) return true;
+		return userRoles.some((r) => parseCompoundCapability(r)?.capability === filter);
+	}
 
 	function editHref(user: UserSummary): string {
 		const listBase = usersListBaseFromPathname(page.url.pathname);
@@ -169,20 +209,39 @@
 	const filteredUsers = $derived(
 		usersQuery.data?.filter((u: UserSummary) => {
 			if (effectiveLock && !shelterCodesFromRoles(u.roles).includes(effectiveLock)) return false;
-			if (!searchQuery) return true;
-			const q = searchQuery.toLowerCase();
-			return (
-				u.name.toLowerCase().includes(q) ||
-				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
-				(u.organization && u.organization.toLowerCase().includes(q)) ||
-				u.roles.some(
-					(r: string) =>
-						r.toLowerCase().includes(q) || roleDisplayLabel(r).toLowerCase().includes(q)
-				) ||
-				assignmentsFromRoles(u.roles).some((a) => a.shelter_code.toLowerCase().includes(q))
-			);
+
+			const usernameQ = usernameFilter.trim().toLowerCase();
+			if (usernameQ && !u.name.toLowerCase().includes(usernameQ)) return false;
+
+			const phoneQ = phoneFilter.trim();
+			if (phoneQ) {
+				if (!u.phone) return false;
+				if (!u.phone.includes(phoneQ)) return false;
+			}
+
+			const nameQ = nameFilter.trim().toLowerCase();
+			if (nameQ && !(u.display_name ?? '').toLowerCase().includes(nameQ)) return false;
+
+			if (!userMatchesRoleFilter(u.roles, roleFilter)) return false;
+
+			if (typeFilter) {
+				const personnelType = u.personnel_type ?? 'staff';
+				if (personnelType !== typeFilter) return false;
+			}
+
+			return true;
 		}) ?? []
 	);
+
+	const totalPages = $derived(Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE)));
+	const pagedUsers = $derived(
+		filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	);
+
+	$effect(() => {
+		const normalizedPage = Math.max(1, Math.min(currentPage, totalPages));
+		if (currentPage !== normalizedPage) currentPage = normalizedPage;
+	});
 </script>
 
 <div class={['mx-auto', compact ? 'max-w-none' : 'container max-w-[1200px] p-4 sm:p-6']}>
@@ -212,14 +271,89 @@
 		</Button>
 	</div>
 
-	<div class={['relative max-w-full', compact ? 'mb-4' : 'mb-6']}>
-		<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-		<Input
-			bind:value={searchQuery}
-			type="text"
-			placeholder="ค้นหาชื่อ, เบอร์โทร, สังกัดองค์กร หรือบทบาท..."
-			class="h-12 rounded-xl bg-white pl-11 text-base"
-		/>
+	<div
+		class={[
+			'grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
+			compact ? 'mb-4' : 'mb-6'
+		]}
+	>
+		<div class="w-full min-w-0 space-y-2">
+			<label for="user-username-filter" class="text-xs font-semibold text-foreground"
+				>ชื่อผู้ใช้</label
+			>
+			<Input
+				id="user-username-filter"
+				type="search"
+				placeholder="ค้นหาชื่อผู้ใช้..."
+				bind:value={usernameFilter}
+				oninput={resetPageOnFilter}
+				class="h-11 rounded-xl bg-background shadow-xs"
+			/>
+		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label for="user-phone-filter" class="text-xs font-semibold text-foreground">เบอร์โทร</label>
+			<Input
+				id="user-phone-filter"
+				type="search"
+				placeholder="ค้นหาเบอร์โทร..."
+				bind:value={phoneFilter}
+				oninput={resetPageOnFilter}
+				class="h-11 rounded-xl bg-background shadow-xs"
+			/>
+		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label for="user-name-filter" class="text-xs font-semibold text-foreground">ชื่อที่แสดง</label>
+			<Input
+				id="user-name-filter"
+				type="search"
+				placeholder="ค้นหาชื่อที่แสดง..."
+				bind:value={nameFilter}
+				oninput={resetPageOnFilter}
+				class="h-11 rounded-xl bg-background shadow-xs"
+			/>
+		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
+			<Select.Root type="single" bind:value={roleFilter} onValueChange={resetPageOnFilter}>
+				<Select.Trigger
+					id="user-role-filter"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="บทบาท"
+				>
+					<span class="truncate">
+						{roleFilterOptions.find((option) => option.value === roleFilter)?.label ?? 'ทั้งหมด'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each roleFilterOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
+			<Select.Root type="single" bind:value={typeFilter} onValueChange={resetPageOnFilter}>
+				<Select.Trigger
+					id="user-type-filter"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="ประเภท"
+				>
+					<span class="truncate">
+						{typeFilterOptions.find((option) => option.value === typeFilter)?.label ?? 'ทั้งหมด'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each typeFilterOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 	</div>
 
 	<div class="overflow-hidden rounded-2xl border bg-white shadow-xs">
@@ -231,7 +365,7 @@
 			</div>
 		{:else}
 			<UserList
-				users={filteredUsers}
+				users={pagedUsers}
 				{isSA}
 				{editHref}
 				ondelete={confirmDelete}
@@ -239,6 +373,7 @@
 				onunlinkmfa={handleOpenUnlinkMfa}
 				pending={deleteMutation.isPending || unlinkingMfa}
 			/>
+			<PaginationControls bind:page={currentPage} count={filteredUsers.length} perPage={PAGE_SIZE} />
 		{/if}
 	</div>
 </div>
