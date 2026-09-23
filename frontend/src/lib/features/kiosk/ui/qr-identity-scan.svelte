@@ -283,7 +283,7 @@
 				</div>
 
 				<div
-					class="mx-auto mt-4 w-full max-w-[34rem] overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-xs sm:mt-5"
+					class="qr-camera-frame mx-auto mt-4 w-full max-w-[34rem] overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-xs sm:mt-5"
 				>
 					<div class="relative aspect-[4/3] w-full overflow-hidden">
 						{#key cameraAttempt}
@@ -614,6 +614,10 @@
 </section>
 
 <style>
+	.qr-camera-frame {
+		width: min(100%, 24rem, max(10rem, calc(100svh - 22rem)));
+	}
+
 	:global(#kiosk-booking-qr-camera-reader *) {
 		background: transparent !important;
 		background-color: transparent !important;
