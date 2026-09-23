@@ -100,9 +100,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		if (display_name.length < 1)
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
-		if (personnel_type === 'staff' && !organization) {
-			throw new ServiceError('VALIDATION', 'organization is required for staff');
-		}
 
 		assertCanGrant(caller, roles);
 		const result = await createOrMergeUser(

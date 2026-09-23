@@ -75,8 +75,6 @@ const userProfileFields = {
 
 function refineUserForm(
 	data: {
-		personnel_type?: 'staff' | 'volunteer';
-		organization?: string;
 		is_system_admin?: boolean;
 		assignments?: ShelterAssignmentInput[];
 		capabilities?: Capability[];
@@ -85,14 +83,6 @@ function refineUserForm(
 	},
 	ctx: z.RefinementCtx
 ) {
-	if (data.personnel_type === 'staff' && (!data.organization || data.organization.length === 0)) {
-		ctx.addIssue({
-			code: z.ZodIssueCode.custom,
-			message: 'กรุณาระบุหน่วยงานหรือองค์กรต้นสังกัดสำหรับเจ้าหน้าที่',
-			path: ['organization']
-		});
-	}
-
 	if (data.is_system_admin) return;
 
 	if (data.assignments && data.assignments.length > 0) {

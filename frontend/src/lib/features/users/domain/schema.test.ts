@@ -109,18 +109,17 @@ describe('createUserSchema', () => {
 		expect(parsed.is_system_admin).toBe(true);
 	});
 
-	it('requires organization for staff', () => {
+	it('allows empty/omitted organization for staff', () => {
 		const result = createUserSchema.safeParse({
-			username: '0812345678',
+			username: 'staff01',
 			password: validPassword,
 			display_name: 'สมชาย ใจดี',
 			personnel_type: 'staff',
 			organization: '',
-			phone: '0812345678',
 			capabilities: ['registration_staff'],
 			shelter_id: 'SH001'
 		});
-		expect(result.success).toBe(false);
+		expect(result.success).toBe(true);
 	});
 
 	it('allows empty/omitted organization for volunteer', () => {

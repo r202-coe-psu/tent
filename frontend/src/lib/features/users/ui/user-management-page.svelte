@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
@@ -7,16 +8,12 @@
 		isAppSystemAdmin,
 		isSystemAdmin,
 		roleDisplayLabel,
-		rolesFromAssignments,
 		shelterCodeFromRoles,
 		shelterCodesFromRoles,
-		SYSTEM_ADMIN,
-		assignmentsFromRoles,
-		type ShelterAssignment
+		assignmentsFromRoles
 	} from '$lib/auth/roles';
-	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
-	import { useUsers, useCreateUser, useDeleteUser } from '../application/queries';
+	import { useUsers, useDeleteUser } from '../application/queries';
 	import {
 		adminResetPassword,
 		unlinkGoogleMfa,
@@ -24,8 +21,10 @@
 		type UserSummary
 	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
-	import type { CreateUserInput, ShelterAssignmentInput } from '../domain/schema';
-	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
+	import {
+		usersListBaseFromPathname,
+		withUsersView
+	} from '../domain/user-edit-path';
 	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -34,15 +33,12 @@
 
 	let {
 		lockedShelterCode,
-		compact = false,
-		allowSystemAdminRole = false
+		compact = false
 	}: {
 		/** When set, list and forms are scoped to this shelter — no picker. */
 		lockedShelterCode?: string;
 		/** Embedded in shelter settings: smaller heading so it doesn't clash. */
 		compact?: boolean;
-		/** Portal-only: SA may create/edit `system_admin` users. */
-		allowSystemAdminRole?: boolean;
 	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -54,10 +50,8 @@
 
 	const queryClient = useQueryClient();
 	const usersQuery = useUsers();
-	const createMutation = useCreateUser();
 	const deleteMutation = useDeleteUser();
 
-	let dialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
 	let resetDialogOpen = $state(false);
 	let resetResultDialogOpen = $state(false);
@@ -72,54 +66,6 @@
 	let resetting = $state(false);
 	let unlinkingMfa = $state(false);
 
-	function rolesFromInput(input: {
-		is_system_admin?: boolean;
-		assignments?: ShelterAssignmentInput[];
-		capabilities?: string[];
-		capability?: string;
-		shelter_id?: string;
-	}): string[] | null {
-		if (input.is_system_admin || input.capabilities?.includes(SYSTEM_ADMIN)) {
-			return [SYSTEM_ADMIN];
-		}
-		if (input.assignments && input.assignments.length > 0) {
-			return rolesFromAssignments(input.assignments as ShelterAssignment[]);
-		}
-		const caps = (input.capabilities ?? (input.capability ? [input.capability] : [])).filter(
-			(c) => c !== SYSTEM_ADMIN
-		) as ShelterAssignment['capabilities'];
-		const code = effectiveLock ?? input.shelter_id;
-		if (!code || caps.length === 0) return null;
-		return rolesFromAssignments([{ shelter_code: code, capabilities: caps }]);
-	}
-
-	/** Rejects on failure — UserForm turns the reason into a Superforms error. */
-	async function handleCreate(input: CreateUserInput) {
-		const userRoles = rolesFromInput(input);
-		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
-		const result = await createMutation.mutateAsync({
-			name: input.username,
-			password: input.password,
-			display_name: input.display_name,
-			roles: userRoles,
-			personnel_type: input.personnel_type,
-			organization: input.organization,
-			position: input.position,
-			phone: input.phone,
-			email: input.email,
-			notes: input.notes,
-			volunteer_id: input.volunteer_id,
-			duty_window: input.duty_window,
-			affiliation_tags: input.affiliation_tags
-		});
-		toast.success(
-			result.merged
-				? `เพิ่มสิทธิ์ในศูนย์นี้ให้ "${input.username}" แล้ว (บัญชีมีอยู่เดิม)`
-				: `สร้างผู้ใช้งาน "${input.username}" สำเร็จ`
-		);
-		dialogOpen = false;
-	}
-
 	function editHref(user: UserSummary): string {
 		const listBase = usersListBaseFromPathname(page.url.pathname);
 		const from = withUsersView(page.url.pathname, page.url.search);
@@ -128,6 +74,16 @@
 				? resolve(`/system-management/users/${encodeURIComponent(user.name)}`)
 				: resolve(`/back-office/users/${encodeURIComponent(user.name)}`);
 		return `${path}?from=${encodeURIComponent(from)}`;
+	}
+
+	function goCreate() {
+		const listBase = usersListBaseFromPathname(page.url.pathname);
+		const from = withUsersView(page.url.pathname, page.url.search);
+		const path =
+			listBase === '/system-management/users'
+				? resolve('/system-management/users/new')
+				: resolve('/back-office/users/new');
+		void goto(`${path}?from=${encodeURIComponent(from)}`);
 	}
 
 	function confirmDelete(name: string) {
@@ -229,55 +185,31 @@
 	);
 </script>
 
-<div class={['mx-auto', compact ? 'max-w-none' : 'container max-w-[1200px] p-6']}>
+<div class={['mx-auto', compact ? 'max-w-none' : 'container max-w-[1200px] p-4 sm:p-6']}>
 	<div
 		class={[
-			'flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center',
+			'flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center',
 			compact ? 'mb-4' : 'mb-8'
 		]}
 	>
-		<div class="flex items-center gap-4">
-			<div class="text-blue-900/80">
+		<div class="flex min-w-0 items-center gap-4">
+			<div class="shrink-0 text-blue-900/80">
 				<UserPlus class={compact ? 'h-6 w-6' : 'h-8 w-8'} />
 			</div>
-			<div>
-				<h2 class={compact ? 'text-lg font-bold' : 'text-2xl font-bold text-slate-900'}>
+			<div class="min-w-0">
+				<h2 class={compact ? 'text-lg font-bold' : 'text-xl font-bold text-slate-900 sm:text-2xl'}>
 					จัดการผู้ใช้งาน (User Management)
 				</h2>
 				<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
 			</div>
 		</div>
 
-		<Dialog.Root bind:open={dialogOpen}>
-			<Dialog.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						class="rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f]"
-					>
-						<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
-					</Button>
-				{/snippet}
-			</Dialog.Trigger>
-			<Dialog.Content
-				class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[700px]"
-			>
-				<Dialog.Header class="shrink-0 border-b border-slate-100 p-6 pb-2">
-					<Dialog.Title class="text-xl font-bold text-slate-900">เพิ่มผู้ใช้ใหม่</Dialog.Title>
-					<Dialog.Description class="text-xs text-slate-500">
-						กำหนดบัญชีผู้ใช้งาน สังกัดองค์กร และบทบาทหน้าที่ในศูนย์พักพิง
-					</Dialog.Description>
-				</Dialog.Header>
-				<UserForm
-					onsubmit={handleCreate}
-					oncancel={() => (dialogOpen = false)}
-					{isSA}
-					{allowSystemAdminRole}
-					lockedShelterCode={effectiveLock ?? null}
-					pending={createMutation.isPending}
-				/>
-			</Dialog.Content>
-		</Dialog.Root>
+		<Button
+			class="w-full shrink-0 rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f] sm:w-auto"
+			onclick={goCreate}
+		>
+			<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+		</Button>
 	</div>
 
 	<div class={['relative max-w-full', compact ? 'mb-4' : 'mb-6']}>
@@ -404,7 +336,7 @@
 			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
 				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
 			>
-			<div class="mt-2 font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
+			<div class="mt-2 break-all font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
 				{temporaryPassword}
 			</div>
 		</div>
@@ -414,7 +346,7 @@
 			<span>ผู้ใช้งานจะต้องตั้งรหัสผ่านใหม่ของตนเองทันทีในการเข้าสู่ระบบครั้งถัดไป</span>
 		</div>
 
-		<div class="mt-5 flex justify-end gap-3">
+		<div class="mt-5 flex flex-col-reverse justify-end gap-3 sm:flex-row">
 			<Button type="button" variant="outline" class="gap-1.5" onclick={copyPassword}>
 				{#if copied}
 					<Check class="size-4 text-emerald-600" />
@@ -453,7 +385,7 @@
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
-		<div class="mt-2 flex justify-end gap-4 pt-4">
+		<div class="mt-2 flex flex-col-reverse justify-end gap-3 pt-4 sm:flex-row sm:gap-4">
 			<Button
 				type="button"
 				variant="outline"
