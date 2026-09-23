@@ -5,6 +5,9 @@ import {
 	calculateLoanRemainingQty,
 	calculateNewCumulativeReturned,
 	validateCounterReturnQuantity,
+	validateNonPhysicalClear,
+	shouldResetLoanDialog,
+	NON_PHYSICAL_CLEAR_REASON_OPTIONS,
 	getLoanStatusBadge
 } from './loan-return';
 import type { DistributionLog } from '../../domain/food-supplies';
@@ -171,6 +174,74 @@ describe('loan-return model helpers', () => {
 			const res = validateCounterReturnQuantity('4', '3');
 			expect(res.isValid).toBe(false);
 			expect(res.error).toContain('เกินจำนวนคงค้าง');
+		});
+	});
+
+	describe('5.5C validateNonPhysicalClear & Reason Options', () => {
+		it('exposes exactly canonical lost and waived options', () => {
+			expect(NON_PHYSICAL_CLEAR_REASON_OPTIONS).toHaveLength(2);
+			expect(NON_PHYSICAL_CLEAR_REASON_OPTIONS.map((o) => o.value)).toEqual(['lost', 'waived']);
+		});
+
+		it('accepts valid clear with reason lost and non-empty notes', () => {
+			const res = validateNonPhysicalClear('lost', 'Flood surge swept equipment away');
+			expect(res.isValid).toBe(true);
+			expect(res.error).toBeUndefined();
+		});
+
+		it('accepts valid clear with reason waived and non-empty notes', () => {
+			const res = validateNonPhysicalClear('waived', 'Approved by shelter manager for departure');
+			expect(res.isValid).toBe(true);
+			expect(res.error).toBeUndefined();
+		});
+
+		it('rejects empty or missing reason', () => {
+			expect(validateNonPhysicalClear(null, 'Valid note').isValid).toBe(false);
+			expect(validateNonPhysicalClear(undefined, 'Valid note').isValid).toBe(false);
+			expect(validateNonPhysicalClear('', 'Valid note').isValid).toBe(false);
+		});
+
+		it('strictly rejects non-canonical clear reasons like damaged or routine', () => {
+			expect(validateNonPhysicalClear('damaged', 'Broken in tent').isValid).toBe(false);
+			expect(validateNonPhysicalClear('routine', 'Physical return').isValid).toBe(false);
+			expect(validateNonPhysicalClear('bulk_dropoff', 'Sweep').isValid).toBe(false);
+		});
+
+		it('strictly rejects empty or whitespace-only notes', () => {
+			const emptyRes = validateNonPhysicalClear('lost', '');
+			expect(emptyRes.isValid).toBe(false);
+			expect(emptyRes.error).toContain('กรุณาระบุหมายเหตุ');
+
+			const whitespaceRes = validateNonPhysicalClear('waived', '   ');
+			expect(whitespaceRes.isValid).toBe(false);
+			expect(whitespaceRes.error).toContain('กรุณาระบุหมายเหตุ');
+		});
+	});
+
+	describe('shouldResetLoanDialog', () => {
+		it('returns true on initial open when lastInitializedLogId is null', () => {
+			expect(shouldResetLoanDialog(null, true, 'distribution_log:01')).toBe(true);
+		});
+
+		it('returns false during retry or reactive updates when the same loan remains open', () => {
+			// Critical async retry guarantee: mutation error does not re-initialize or wipe operator input
+			expect(shouldResetLoanDialog('distribution_log:01', true, 'distribution_log:01')).toBe(false);
+		});
+
+		it('returns true when switching to a different loan record while open', () => {
+			expect(shouldResetLoanDialog('distribution_log:01', true, 'distribution_log:02')).toBe(true);
+		});
+
+		it('returns false when dialog is closed', () => {
+			expect(shouldResetLoanDialog(null, false, 'distribution_log:01')).toBe(false);
+			expect(shouldResetLoanDialog('distribution_log:01', false, 'distribution_log:01')).toBe(
+				false
+			);
+		});
+
+		it('returns false when current log id is missing or undefined', () => {
+			expect(shouldResetLoanDialog(null, true, undefined)).toBe(false);
+			expect(shouldResetLoanDialog(null, true, null)).toBe(false);
 		});
 	});
 

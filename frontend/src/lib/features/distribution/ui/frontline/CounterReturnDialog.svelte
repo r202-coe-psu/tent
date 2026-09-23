@@ -11,7 +11,8 @@
 		calculateLoanRemainingQty,
 		calculateNewCumulativeReturned,
 		validateCounterReturnQuantity,
-		RETURN_CONDITION_OPTIONS
+		RETURN_CONDITION_OPTIONS,
+		shouldResetLoanDialog
 	} from '../model/loan-return';
 
 	interface Props {
@@ -36,6 +37,7 @@
 
 	const returnMutation = useReturnLoanAtCounter();
 
+	let lastInitializedLogId = $state<string | null>(null);
 	let returningNowQty = $state('');
 	let condition = $state<ReturnCondition>('READY');
 	let notesInput = $state('');
@@ -49,14 +51,20 @@
 	const validation = $derived(validateCounterReturnQuantity(returningNowQty, remainingQty));
 	const isFullReturn = $derived(validation.isValid && log ? newCumulative === log.qty : false);
 
-	// Reset form when dialog opens or selected log changes, protecting against reset during in-flight mutation
+	// Reset form only when opening a new dialog session or switching to a different loan record,
+	// strictly preserving operator input and error message across retryable mutation failures.
 	$effect(() => {
-		if (open && log && !returnMutation.isPending) {
-			const rem = calculateLoanRemainingQty(log);
-			returningNowQty = rem;
-			condition = 'READY';
-			notesInput = '';
-			localError = null;
+		if (open && log) {
+			if (shouldResetLoanDialog(lastInitializedLogId, open, log._id)) {
+				lastInitializedLogId = log._id;
+				const rem = calculateLoanRemainingQty(log);
+				returningNowQty = rem;
+				condition = 'READY';
+				notesInput = '';
+				localError = null;
+			}
+		} else if (!open) {
+			lastInitializedLogId = null;
 		}
 	});
 

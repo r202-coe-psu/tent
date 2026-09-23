@@ -11,6 +11,7 @@ import {
 	calculateLoanRemainingQty,
 	calculateNewCumulativeReturned,
 	validateCounterReturnQuantity,
+	validateNonPhysicalClear,
 	getLoanStatusBadge
 } from '../model/loan-return';
 
@@ -214,6 +215,68 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 			const newCumulative = calculateNewCumulativeReturned(preciseLog.qty_returned, '6.6667');
 			// persistQty produces compact decimal strings (no trailing zero padding), emitting '10'
 			expect(newCumulative).toBe('10');
+		});
+	});
+
+	describe('Slice 5.5C Non-Physical Loan Clear (Lost / Waived Flow & Invariants)', () => {
+		it('allows registration_staff (REG) to perform non-physical clear while denying physical return', () => {
+			const regCtx = createMockContext(['registration_staff']);
+			expect(canPerformFrontlineDistribution(regCtx)).toBe(true);
+			expect(canReceivePhysicalStock(regCtx)).toBe(false);
+		});
+
+		it('allows warehouse_staff (WH) to perform physical return while denying non-physical clear without frontline role', () => {
+			const whCtx = createMockContext(['warehouse_staff']);
+			expect(canReceivePhysicalStock(whCtx)).toBe(true);
+			expect(canPerformFrontlineDistribution(whCtx)).toBe(false);
+		});
+
+		it('allows supply_coordinator (SC), shelter_manager (SM), and system_admin (SA) both capabilities', () => {
+			for (const role of ['supply_coordinator', 'shelter_manager', 'system_admin']) {
+				const ctx = createMockContext([role]);
+				expect(canPerformFrontlineDistribution(ctx)).toBe(true);
+				expect(canReceivePhysicalStock(ctx)).toBe(true);
+			}
+		});
+
+		it('validates non-physical clear inputs (requires valid reason and non-empty notes)', () => {
+			expect(validateNonPhysicalClear('lost', 'Swept by flash flood').isValid).toBe(true);
+			expect(validateNonPhysicalClear('waived', 'Emergency waiver approved').isValid).toBe(true);
+			expect(validateNonPhysicalClear('damaged', 'Damaged in transit').isValid).toBe(false);
+			expect(validateNonPhysicalClear('lost', '   ').isValid).toBe(false);
+		});
+
+		it('transitions loan to terminal state when cleared as lost, removing it from active candidates', () => {
+			const lostLog: DistributionLog = {
+				...activeLoanLog,
+				status: 'lost',
+				clear_reason: 'lost',
+				notes: 'Lost in disaster surge',
+				returned_at: '2026-09-23T14:00:00.000Z',
+				returned_by: 'staff_test'
+			};
+			expect(isLoanReturnCandidate(lostLog)).toBe(false);
+			const badge = getLoanStatusBadge(lostLog);
+			expect(badge.label).toContain('สูญหาย');
+		});
+
+		it('transitions loan to terminal state when cleared as waived, removing it from active candidates', () => {
+			const waivedLog: DistributionLog = {
+				...partiallyReturnedLog,
+				status: 'waived',
+				clear_reason: 'waived',
+				notes: 'Waived for elderly evacuee',
+				returned_at: '2026-09-23T14:00:00.000Z',
+				returned_by: 'staff_test'
+			};
+			expect(isLoanReturnCandidate(waivedLog)).toBe(false);
+			const badge = getLoanStatusBadge(waivedLog);
+			expect(badge.label).toBe('ยกเว้นการคืน');
+		});
+
+		it('preserves bulk-cleared B1 protection independently from non-physical write-offs', () => {
+			expect(isLoanReturnCandidate(bulkClearedLog)).toBe(false);
+			expect(isBulkClearedLoan(bulkClearedLog)).toBe(true);
 		});
 	});
 });

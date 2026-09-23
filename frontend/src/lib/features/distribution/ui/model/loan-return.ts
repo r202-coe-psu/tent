@@ -87,6 +87,66 @@ export function validateCounterReturnQuantity(
 	return { isValid: true };
 }
 
+export type NonPhysicalClearReason = 'lost' | 'waived';
+
+export interface NonPhysicalClearValidationResult {
+	isValid: boolean;
+	error?: string;
+}
+
+/**
+ * Canonical options for administrative non-physical loan write-offs (Slice 5.5C).
+ * Strictly mirrors NonPhysicalClearInput ('lost' | 'waived') in return-workflow.ts.
+ */
+export const NON_PHYSICAL_CLEAR_REASON_OPTIONS: {
+	value: NonPhysicalClearReason;
+	label: string;
+	description: string;
+}[] = [
+	{
+		value: 'lost',
+		label: 'สูญหาย (Lost)',
+		description: 'ผู้ประสบภัยทำพัสดุสูญหาย ไม่สามารถนำส่งคืนคลังได้'
+	},
+	{
+		value: 'waived',
+		label: 'ยกเว้นการคืน (Waived)',
+		description: 'เจ้าหน้าที่พิจารณาอนุมัติยกเว้นการคืนเป็นกรณีพิเศษ'
+	}
+];
+
+/**
+ * Validates operator input for non-physical loan clearance.
+ * - Reason must be either 'lost' or 'waived'
+ * - Notes are mandatory per workflow and VDU Rule 13 contract
+ */
+export function validateNonPhysicalClear(
+	reason: string | null | undefined,
+	notes: string
+): NonPhysicalClearValidationResult {
+	if (!reason || (reason !== 'lost' && reason !== 'waived')) {
+		return { isValid: false, error: 'กรุณาเลือกเหตุผลในการตัดจำหน่ายรายการ' };
+	}
+	if (!notes || !notes.trim()) {
+		return { isValid: false, error: 'กรุณาระบุหมายเหตุหรือเหตุผลประกอบการตัดจำหน่ายรายการ' };
+	}
+	return { isValid: true };
+}
+
+/**
+ * Determines whether the loan return or clearance dialog form state should be re-initialized.
+ * Only returns true when opening a new dialog session or switching to a different loan record.
+ * Crucially returns false on mutation retry, preserving operator input and error feedback.
+ */
+export function shouldResetLoanDialog(
+	lastInitializedLogId: string | null,
+	isOpen: boolean,
+	currentLogId: string | null | undefined
+): boolean {
+	if (!isOpen || !currentLogId) return false;
+	return lastInitializedLogId !== currentLogId;
+}
+
 export interface LoanStatusBadgeInfo {
 	label: string;
 	badgeClass: string;

@@ -8,6 +8,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Info from '@lucide/svelte/icons/info';
+	import FileX from '@lucide/svelte/icons/file-x';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -28,6 +29,7 @@
 		getLoanStatusBadge
 	} from '../model/loan-return';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
+	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
 
 	interface Props {
 		shelterCode?: string;
@@ -51,6 +53,10 @@
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let selectedLogForReturn = $state<DistributionLog | null>(null);
 	let returnDialogOpen = $state(false);
+
+	let selectedLogForClear = $state<DistributionLog | null>(null);
+	let clearDialogOpen = $state(false);
+
 	let showHistory = $state(false);
 
 	const recipientId = $derived(recipientSelection?.recipientId);
@@ -88,6 +94,11 @@
 		selectedLogForReturn = log;
 		returnDialogOpen = true;
 	}
+
+	function handleOpenClear(log: DistributionLog) {
+		selectedLogForClear = log;
+		clearDialogOpen = true;
+	}
 </script>
 
 <div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
@@ -108,7 +119,9 @@
 					>
 						คืนสิ่งของยืม-คืน
 					</span>
-					<span class="text-2xs font-bold text-slate-500"> Slice 5.5A + 5.5B Counter Return </span>
+					<span class="text-2xs font-bold text-slate-500">
+						Slice 5.5A / 5.5B / 5.5C Loan Returns
+					</span>
 				</div>
 				<h3 class="text-base font-bold text-slate-900">
 					สถานีรับคืนพัสดุและสิ่งของยืม-คืน (Loan Return Counter)
@@ -146,10 +159,11 @@
 			<div>
 				<p class="font-bold">ข้อมูลสิทธิ์การบันทึกตรวจรับของคืน (Counter Return Authorization)</p>
 				<p class="mt-0.5 text-2xs text-amber-800">
-					เจ้าหน้าที่ส่วนหน้า (REG) สามารถค้นหาและตรวจสอบประวัติการยืมของผู้ประสบภัยได้
-					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้า (StockLedger reason='receive') ตามกฎความปลอดภัย
-					ต้องดำเนินการโดยเจ้าหน้าที่คลัง (WH), ผู้ประสานงาน (SC), ผู้จัดการศูนย์ (SM)
-					หรือผู้ดูแลระบบ (SA)
+					เจ้าหน้าที่ส่วนหน้า (REG) สามารถค้นหาและตรวจสอบประวัติการยืม และ<strong
+						>บันทึกตัดจำหน่ายรายการ (สูญหาย/ยกเว้น) ได้</strong
+					>
+					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้า (StockLedger reason='receive') ต้องดำเนินการโดยเจ้าหน้าที่คลัง
+					(WH), ผู้ประสานงาน (SC), ผู้จัดการศูนย์ (SM) หรือผู้ดูแลระบบ (SA)
 				</p>
 			</div>
 		</div>
@@ -260,8 +274,9 @@
 							</div>
 						</div>
 
-						<!-- Action Button -->
-						<div class="mt-4 border-t border-slate-100 pt-3">
+						<!-- Action Buttons (Physical Return & Non-Physical Clear) -->
+						<div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+							<!-- Primary: Physical Counter Return -->
 							<button
 								type="button"
 								onclick={() => handleOpenReturn(loan)}
@@ -270,6 +285,17 @@
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								<span>รับคืนของจริง (Counter Return)</span>
+							</button>
+
+							<!-- Secondary: Non-Physical Administrative Clear (Lost / Waived) -->
+							<button
+								type="button"
+								onclick={() => handleOpenClear(loan)}
+								disabled={!canFrontline}
+								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<FileX class="h-3.5 w-3.5 text-slate-500" />
+								<span>ตัดรายการโดยไม่มีของคืน (สูญหาย/ยกเว้น)</span>
 							</button>
 						</div>
 					</div>
@@ -309,6 +335,18 @@
 									<p class="text-2xs text-purple-700">
 										เคลียร์ผ่านจุดรวบรวม (Bulk Dropoff) · ห้ามรับคืนเข้าคลังซ้ำ (B1 Invariant)
 									</p>
+								{:else if pastLoan.status === 'lost'}
+									<p class="text-2xs text-red-700">
+										ตัดจำหน่ายสูญหาย · ไม่มีของคืนเข้าคลัง{pastLoan.notes
+											? ` (${pastLoan.notes})`
+											: ''}
+									</p>
+								{:else if pastLoan.status === 'waived'}
+									<p class="text-2xs text-slate-600">
+										ยกเว้นการคืนโดยเจ้าหน้าที่ · ไม่มีของคืนเข้าคลัง{pastLoan.notes
+											? ` (${pastLoan.notes})`
+											: ''}
+									</p>
 								{/if}
 							</div>
 
@@ -330,7 +368,7 @@
 	{/if}
 </div>
 
-<!-- Counter Return Modal Dialog -->
+<!-- Counter Return Modal Dialog (Slice 5.5B) -->
 <CounterReturnDialog
 	bind:open={returnDialogOpen}
 	log={selectedLogForReturn}
@@ -339,5 +377,17 @@
 	{canReturnStock}
 	onclose={() => {
 		selectedLogForReturn = null;
+	}}
+/>
+
+<!-- Non-Physical Clear Modal Dialog (Slice 5.5C) -->
+<NonPhysicalClearDialog
+	bind:open={clearDialogOpen}
+	log={selectedLogForClear}
+	itemName={selectedLogForClear ? resolveItemName(selectedLogForClear) : ''}
+	{shelterCode}
+	canClearLoan={canFrontline}
+	onclose={() => {
+		selectedLogForClear = null;
 	}}
 />
