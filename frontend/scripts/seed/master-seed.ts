@@ -22,10 +22,103 @@ import { now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
-import { ITEM, masterCode, type MasterLookup } from './types';
-import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
+import { masterCode, type MasterLookup } from './types';
+import {
+	FALLBACK_UNIT_DEFINITIONS,
+	isCanonicalUnitCode,
+	isLegacyUnitLabel,
+	type FallbackUnitDef
+} from '$lib/features/catalog/domain/unit-of-measure';
 
 const itemCode = () => `item_${ulid().toLowerCase()}`;
+const canonicalUnitCodes = new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code));
+const legacySeedBaseUnits = new Set(['kit', 'tent']);
+
+function isKnownSeedUnitCode(
+	value: unknown,
+	existingUnitCodes: ReadonlySet<string>
+): value is string {
+	if (typeof value !== 'string') return false;
+	const code = value.trim();
+	return canonicalUnitCodes.has(code) || existingUnitCodes.has(code);
+}
+
+function normalizeKnownSeedUnitCode(
+	value: unknown,
+	existingUnitCodes: ReadonlySet<string>
+): string | undefined {
+	return isKnownSeedUnitCode(value, existingUnitCodes) ? value.trim() : undefined;
+}
+
+function normalizeLegacyBaseUnit(value: unknown): string | undefined {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	return isLegacyUnitLabel(trimmed) || legacySeedBaseUnits.has(trimmed) ? trimmed : undefined;
+}
+
+export function assertItemMasterSeedUomCodes(
+	doc: Record<string, unknown>,
+	existingUnitCodes: ReadonlySet<string> = new Set()
+): void {
+	const itemName = typeof doc.name === 'string' ? doc.name : doc._id;
+	const assertCode = (value: unknown, field: string) => {
+		if (value === undefined || value === null || value === '') return;
+		if (isKnownSeedUnitCode(value, existingUnitCodes)) return;
+		if (field === 'base_unit' && normalizeLegacyBaseUnit(value)) return;
+		throw new Error(`Invalid UOM code in ${itemName}.${field}: ${String(value)}`);
+	};
+
+	assertCode(doc.base_unit, 'base_unit');
+	assertCode(doc.default_inventory_uom, 'default_inventory_uom');
+	assertCode(doc.default_issue_uom, 'default_issue_uom');
+	if (doc.conversions === undefined) return;
+	if (!Array.isArray(doc.conversions)) {
+		throw new Error(`Invalid conversions in ${itemName}: expected an array`);
+	}
+	for (const [index, conversion] of doc.conversions.entries()) {
+		if (!isRecord(conversion)) {
+			throw new Error(`Invalid conversion in ${itemName}.conversions[${index}]`);
+		}
+		assertCode(conversion.uom_name, `conversions[${index}].uom_name`);
+	}
+}
+
+type ExistingItemMasterSeedRef = {
+	_id: string;
+	_rev?: string;
+	base_unit?: unknown;
+	default_inventory_uom?: unknown;
+	default_issue_uom?: unknown;
+	conversions?: unknown;
+};
+
+function resolveItemMasterConversions(
+	existing: unknown,
+	configured: unknown,
+	existingUnitCodes: ReadonlySet<string>
+): unknown[] {
+	const existingConversions = Array.isArray(existing) ? existing : [];
+	const configuredConversions = Array.isArray(configured) ? configured : [];
+	const conversions: unknown[] = [];
+
+	for (
+		let index = 0;
+		index < Math.max(existingConversions.length, configuredConversions.length);
+		index++
+	) {
+		const existingConversion = existingConversions[index];
+		const existingCode = isRecord(existingConversion)
+			? normalizeKnownSeedUnitCode(existingConversion.uom_name, existingUnitCodes)
+			: undefined;
+		if (existingCode) {
+			conversions.push({ ...existingConversion, uom_name: existingCode });
+			continue;
+		}
+		if (configuredConversions[index] !== undefined) conversions.push(configuredConversions[index]);
+	}
+
+	return conversions;
+}
 
 function catalogDoc(id: string, type: string, body: Record<string, unknown>, schemaV = 1) {
 	const ts = now();
@@ -215,6 +308,147 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 	);
 }
 
+function buildUnitOfMeasureSeedDoc(
+	def: FallbackUnitDef,
+	existing?: Record<string, unknown>
+): Record<string, unknown> {
+	const docId = `unit_of_measure:${def.code}`;
+
+	if (!existing) {
+		return catalogDoc(
+			docId,
+			'unit_of_measure',
+			{
+				code: def.code,
+				label_th: def.label_th,
+				...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
+				label_en: def.label_en,
+				dimension: def.dimension,
+				is_protected: true,
+				sort_order: def.sort_order,
+				deactivated: def.deactivated ?? false
+			},
+			1
+		);
+	}
+
+	return {
+		...existing,
+		_id: docId,
+		type: 'unit_of_measure',
+		schema_v: 1,
+		code: def.code,
+		label_th:
+			typeof existing.label_th === 'string' && existing.label_th.trim()
+				? existing.label_th
+				: def.label_th,
+		label_en:
+			typeof existing.label_en === 'string' && existing.label_en.trim()
+				? existing.label_en
+				: def.label_en,
+		...(typeof existing.label_th_short === 'string'
+			? { label_th_short: existing.label_th_short }
+			: def.label_th_short
+				? { label_th_short: def.label_th_short }
+				: {}),
+		dimension: def.dimension,
+		is_protected: true,
+		sort_order: typeof existing.sort_order === 'number' ? existing.sort_order : def.sort_order,
+		deactivated: typeof existing.deactivated === 'boolean' ? existing.deactivated : false,
+		updated_at: now()
+	};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateExistingUnitOfMeasure(
+	def: FallbackUnitDef,
+	docId: string,
+	data: unknown
+): Record<string, unknown> {
+	if (!isRecord(data)) {
+		throw new Error(`GET ${docId} → catalog returned an invalid document`);
+	}
+	if (data._id !== docId || data.type !== 'unit_of_measure') {
+		throw new Error(`Cannot seed ${docId}: existing document has the wrong type or ID`);
+	}
+	if (data.code !== def.code) {
+		throw new Error(`Cannot seed ${docId}: existing UOM code is immutable`);
+	}
+	if (typeof data._rev !== 'string' || !data._rev) {
+		throw new Error(`Cannot seed ${docId}: existing document has no CouchDB revision`);
+	}
+	for (const field of ['created_at', 'updated_at', 'created_by'] as const) {
+		if (typeof data[field] !== 'string' || !data[field].trim()) {
+			throw new Error(`Cannot seed ${docId}: existing document has an invalid ${field}`);
+		}
+	}
+	for (const field of ['label_th', 'label_th_short', 'label_en'] as const) {
+		if (field in data && data[field] !== undefined && typeof data[field] !== 'string') {
+			throw new Error(`Cannot seed ${docId}: existing document has an invalid ${field}`);
+		}
+	}
+	if (
+		'sort_order' in data &&
+		data.sort_order !== undefined &&
+		typeof data.sort_order !== 'number'
+	) {
+		throw new Error(`Cannot seed ${docId}: existing document has an invalid sort_order`);
+	}
+	if (
+		'deactivated' in data &&
+		data.deactivated !== undefined &&
+		typeof data.deactivated !== 'boolean'
+	) {
+		throw new Error(`Cannot seed ${docId}: existing document has an invalid deactivated flag`);
+	}
+	if (data.dimension !== def.dimension) {
+		throw new Error(`Cannot seed ${docId}: UOM dimension is immutable`);
+	}
+	return data;
+}
+
+export async function seedCatalogUnitOfMeasures(): Promise<number> {
+	let seededCount = 0;
+	const maxAttempts = 3;
+
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		let written = false;
+
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
+
+			if (status !== 200 && status !== 404) {
+				throw new Error(`GET ${docId} → catalog failed (HTTP ${status})`);
+			}
+
+			const existing = status === 200 ? validateExistingUnitOfMeasure(def, docId, data) : undefined;
+			const next = buildUnitOfMeasureSeedDoc(def, existing);
+			const put = await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, next);
+
+			if (put.status >= 200 && put.status < 300) {
+				written = true;
+				break;
+			}
+			if (put.status !== 409 || attempt === maxAttempts) {
+				throw new Error(`PUT ${docId} → catalog failed (HTTP ${put.status})`);
+			}
+		}
+
+		if (!written) {
+			throw new Error(
+				`PUT ${docId} → catalog conflict did not resolve after ${maxAttempts} attempts`
+			);
+		}
+		seededCount++;
+	}
+
+	return seededCount;
+}
+
 export async function seedCatalog(): Promise<Map<string, string>> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
@@ -254,58 +488,6 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		validate_doc_update: validateFn
 	});
 
-	const items = [
-		catalogDoc(ITEM.rice, 'supply_item', {
-			name: 'ข้าวสาร',
-			category: 'food',
-			unit: 'kg',
-			perishable: false,
-			reorder_level: 50
-		}),
-		catalogDoc(ITEM.water, 'supply_item', {
-			name: 'น้ำดื่ม',
-			category: 'water',
-			unit: 'bottle',
-			perishable: false,
-			reorder_level: 200
-		}),
-		catalogDoc(ITEM.paracetamol, 'supply_item', {
-			name: 'ยาพาราเซตามอล',
-			category: 'medicine',
-			unit: 'tablet',
-			perishable: true,
-			reorder_level: 500
-		}),
-		catalogDoc(ITEM.soap, 'supply_item', {
-			name: 'สบู่ก้อน',
-			category: 'hygiene',
-			unit: 'bar',
-			perishable: false,
-			reorder_level: 100
-		}),
-		catalogDoc(ITEM.blanket, 'supply_item', {
-			name: 'ผ้าห่ม',
-			category: 'bedding',
-			unit: 'piece',
-			perishable: false,
-			reorder_level: 30
-		}),
-		catalogDoc(ITEM.egg, 'supply_item', {
-			name: 'ไข่ไก่',
-			category: 'food',
-			unit: 'piece',
-			perishable: true,
-			reorder_level: 100
-		}),
-		catalogDoc(ITEM.vegetable, 'supply_item', {
-			name: 'ผักรวม',
-			category: 'food',
-			unit: 'kg',
-			perishable: true,
-			reorder_level: 30
-		})
-	];
-
 	const { status: catQueryStatus, data: catAllDocs } = await couchReq(
 		'GET',
 		'/catalog/_all_docs?include_docs=true'
@@ -322,22 +504,41 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 								type?: string;
 								name?: string;
 								label?: string;
+								code?: unknown;
+								base_unit?: unknown;
+								default_inventory_uom?: unknown;
+								default_issue_uom?: unknown;
+								conversions?: unknown;
 							};
 						}>;
 					}
 				).rows
 			: [];
 	const existingCategoriesByName = new Map<string, { _id: string; _rev?: string }>();
-	const existingItemMastersByName = new Map<string, { _id: string; _rev?: string }>();
+	const existingItemMastersByName = new Map<string, ExistingItemMasterSeedRef>();
 	const existingRecipesByLabel = new Map<string, { _id: string; _rev?: string }>();
+	const existingUnitCodes = new Set<string>();
 
 	for (const row of allDocs) {
 		const doc = row.doc;
 		if (!doc) continue;
-		if (doc.type === 'item_category' && doc.name) {
+		if (
+			doc.type === 'unit_of_measure' &&
+			typeof doc.code === 'string' &&
+			isCanonicalUnitCode(doc.code)
+		) {
+			existingUnitCodes.add(doc.code.trim());
+		} else if (doc.type === 'item_category' && doc.name) {
 			existingCategoriesByName.set(doc.name, { _id: doc._id, _rev: doc._rev });
 		} else if (doc.type === 'item_master' && doc.name) {
-			existingItemMastersByName.set(doc.name, { _id: doc._id, _rev: doc._rev });
+			existingItemMastersByName.set(doc.name, {
+				_id: doc._id,
+				_rev: doc._rev,
+				base_unit: doc.base_unit,
+				default_inventory_uom: doc.default_inventory_uom,
+				default_issue_uom: doc.default_issue_uom,
+				conversions: doc.conversions
+			});
 		} else if (doc.type === 'recipe' && doc.label) {
 			existingRecipesByLabel.set(doc.label, { _id: doc._id, _rev: doc._rev });
 		}
@@ -393,10 +594,10 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [
-					{ uom_name: 'ถุง 5 กก.', multiplier: '5' },
-					{ uom_name: 'กระสอบ 50 กก.', multiplier: '50' }
+					{ uom_name: 'bag', multiplier: '5' },
+					{ uom_name: 'bag', multiplier: '50' }
 				],
-				default_inventory_uom: 'กระสอบ 50 กก.',
+				default_inventory_uom: 'bag',
 				default_issue_uom: 'kg',
 				storage_type: 'DRY',
 				shelf_life_days: 365
@@ -408,8 +609,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แผง 30 ฟอง', multiplier: '30' }],
-				default_inventory_uom: 'แผง 30 ฟอง',
+				conversions: [{ uom_name: 'pack', multiplier: '30' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'piece',
 				storage_type: 'DRY',
 				shelf_life_days: 21
@@ -432,10 +633,10 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [
-					{ uom_name: 'แพ็ค 10 กระป๋อง', multiplier: '10' },
-					{ uom_name: 'ลัง 100 กระป๋อง', multiplier: '100' }
+					{ uom_name: 'pack', multiplier: '10' },
+					{ uom_name: 'box', multiplier: '100' }
 				],
-				default_inventory_uom: 'ลัง 100 กระป๋อง',
+				default_inventory_uom: 'box',
 				default_issue_uom: 'can',
 				storage_type: 'DRY',
 				shelf_life_days: 730,
@@ -459,8 +660,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'ลัง 12 ขวด', multiplier: '12' }],
-				default_inventory_uom: 'ลัง 12 ขวด',
+				conversions: [{ uom_name: 'box', multiplier: '12' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'bottle',
 				storage_type: 'DRY',
 				shelf_life_days: 365,
@@ -473,8 +674,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แพ็ค 12 ขวด', multiplier: '12' }],
-				default_inventory_uom: 'แพ็ค 12 ขวด',
+				conversions: [{ uom_name: 'pack', multiplier: '12' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'bottle',
 				storage_type: 'DRY',
 				shelf_life_days: 365
@@ -486,8 +687,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แพ็ค 4 ถัง', multiplier: '4' }],
-				default_inventory_uom: 'แพ็ค 4 ถัง',
+				conversions: [{ uom_name: 'pack', multiplier: '4' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'bottle',
 				storage_type: 'DRY',
 				shelf_life_days: 365
@@ -499,8 +700,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bar',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แพ็ค 4 ก้อน', multiplier: '4' }],
-				default_inventory_uom: 'แพ็ค 4 ก้อน',
+				conversions: [{ uom_name: 'pack', multiplier: '4' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'bar',
 				storage_type: 'DRY',
 				shelf_life_days: 730
@@ -512,8 +713,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'tube',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แพ็ค 6 หลอด', multiplier: '6' }],
-				default_inventory_uom: 'แพ็ค 6 หลอด',
+				conversions: [{ uom_name: 'pack', multiplier: '6' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'tube',
 				storage_type: 'DRY',
 				shelf_life_days: 730
@@ -525,8 +726,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'แพ็ค 12 ด้าม', multiplier: '12' }],
-				default_inventory_uom: 'แพ็ค 12 ด้าม',
+				conversions: [{ uom_name: 'pack', multiplier: '12' }],
+				default_inventory_uom: 'pack',
 				default_issue_uom: 'piece',
 				storage_type: 'DRY'
 			}
@@ -537,8 +738,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'pack',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'ลัง 24 ห่อ', multiplier: '24' }],
-				default_inventory_uom: 'ลัง 24 ห่อ',
+				conversions: [{ uom_name: 'box', multiplier: '24' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'pack',
 				storage_type: 'DRY',
 				shelf_life_days: 1095,
@@ -551,8 +752,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bag',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'ลัง 12 ถุง', multiplier: '12' }],
-				default_inventory_uom: 'ลัง 12 ถุง',
+				conversions: [{ uom_name: 'box', multiplier: '12' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'bag',
 				storage_type: 'DRY',
 				shelf_life_days: 730
@@ -565,10 +766,10 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [
-					{ uom_name: 'แผง 10 เม็ด', multiplier: '10' },
-					{ uom_name: 'กระปุก 100 เม็ด', multiplier: '100' }
+					{ uom_name: 'pack', multiplier: '10' },
+					{ uom_name: 'box', multiplier: '100' }
 				],
-				default_inventory_uom: 'กระปุก 100 เม็ด',
+				default_inventory_uom: 'box',
 				default_issue_uom: 'tablet',
 				storage_type: 'CONTROLLED_MED',
 				shelf_life_days: 730
@@ -577,12 +778,12 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'ชุดทำแผลปฐมพยาบาล',
 			category: 'เวชภัณฑ์และการปฐมพยาบาล',
-			base_unit: 'kit',
+			base_unit: 'set',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'กล่อง 10 ชุด', multiplier: '10' }],
-				default_inventory_uom: 'กล่อง 10 ชุด',
-				default_issue_uom: 'kit',
+				conversions: [{ uom_name: 'box', multiplier: '10' }],
+				default_inventory_uom: 'box',
+				default_issue_uom: 'set',
 				storage_type: 'DRY',
 				shelf_life_days: 730
 			}
@@ -593,8 +794,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'ลัง 24 ขวด', multiplier: '24' }],
-				default_inventory_uom: 'ลัง 24 ขวด',
+				conversions: [{ uom_name: 'box', multiplier: '24' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'bottle',
 				storage_type: 'DRY',
 				shelf_life_days: 1095
@@ -606,8 +807,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'sachet',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'กล่อง 50 ซอง', multiplier: '50' }],
-				default_inventory_uom: 'กล่อง 50 ซอง',
+				conversions: [{ uom_name: 'box', multiplier: '50' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'sachet',
 				storage_type: 'DRY',
 				shelf_life_days: 730
@@ -620,10 +821,10 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [
-					{ uom_name: 'แพ็ค 10 ชิ้น', multiplier: '10' },
-					{ uom_name: 'ลัง 8 แพ็ค', multiplier: '80' }
+					{ uom_name: 'pack', multiplier: '10' },
+					{ uom_name: 'box', multiplier: '80' }
 				],
-				default_inventory_uom: 'ลัง 8 แพ็ค',
+				default_inventory_uom: 'box',
 				default_issue_uom: 'piece',
 				storage_type: 'DRY',
 				shelf_life_days: 1095,
@@ -637,10 +838,10 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [
-					{ uom_name: 'แพ็ค 20 ชิ้น', multiplier: '20' },
-					{ uom_name: 'ลัง 6 แพ็ค', multiplier: '120' }
+					{ uom_name: 'pack', multiplier: '20' },
+					{ uom_name: 'box', multiplier: '120' }
 				],
-				default_inventory_uom: 'ลัง 6 แพ็ค',
+				default_inventory_uom: 'box',
 				default_issue_uom: 'piece',
 				storage_type: 'DRY',
 				shelf_life_days: 1095,
@@ -653,8 +854,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'can',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [{ uom_name: 'ลัง 12 กระป๋อง', multiplier: '12' }],
-				default_inventory_uom: 'ลัง 12 กระป๋อง',
+				conversions: [{ uom_name: 'box', multiplier: '12' }],
+				default_inventory_uom: 'box',
 				default_issue_uom: 'can',
 				storage_type: 'DRY',
 				shelf_life_days: 365,
@@ -700,8 +901,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'piece',
 			type_class: 'DURABLE',
 			extra: {
-				conversions: [{ uom_name: 'มัด 10 ผืน', multiplier: '10' }],
-				default_inventory_uom: 'มัด 10 ผืน',
+				conversions: [{ uom_name: 'bundle', multiplier: '10' }],
+				default_inventory_uom: 'bundle',
 				default_issue_uom: 'piece',
 				returnable: true,
 				qty_per_person: 1,
@@ -714,8 +915,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			base_unit: 'piece',
 			type_class: 'DURABLE',
 			extra: {
-				conversions: [{ uom_name: 'มัด 10 ผืน', multiplier: '10' }],
-				default_inventory_uom: 'มัด 10 ผืน',
+				conversions: [{ uom_name: 'bundle', multiplier: '10' }],
+				default_inventory_uom: 'bundle',
 				default_issue_uom: 'piece',
 				returnable: true,
 				qty_per_person: 1,
@@ -725,9 +926,15 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'เต็นท์ครอบครัว',
 			category: 'เครื่องนอนและที่พักพิง',
-			base_unit: 'tent',
+			base_unit: 'piece',
 			type_class: 'DURABLE',
-			extra: { returnable: true, qty_per_person: 1, distribution_type: 'one_time' }
+			extra: {
+				default_inventory_uom: 'piece',
+				default_issue_uom: 'piece',
+				returnable: true,
+				qty_per_person: 1,
+				distribution_type: 'one_time'
+			}
 		},
 		{
 			name: 'ถังแก๊สหุงต้ม LPG 15 กก.',
@@ -744,9 +951,15 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'ถุงยังชีพธารน้ำใจ',
 			category: 'ชุดพัสดุยังชีพรวม',
-			base_unit: 'kit',
+			base_unit: 'set',
 			type_class: 'CONSUMABLE',
-			extra: { storage_type: 'DRY', shelf_life_days: 180, distribution_type: 'one_time' }
+			extra: {
+				default_inventory_uom: 'set',
+				default_issue_uom: 'set',
+				storage_type: 'DRY',
+				shelf_life_days: 180,
+				distribution_type: 'one_time'
+			}
 		}
 	];
 
@@ -771,20 +984,73 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		}
 
 		itemMasterIdByName.set(def.name, id);
-		return catalogDoc(
+		const isStockItem = def.type_class !== 'EQUIPMENT';
+		const configuredInventoryUom =
+			typeof def.extra?.default_inventory_uom === 'string'
+				? def.extra.default_inventory_uom
+				: def.base_unit;
+		const configuredIssueUom =
+			typeof def.extra?.default_issue_uom === 'string'
+				? def.extra.default_issue_uom
+				: def.base_unit;
+		const existingInventoryUom =
+			normalizeKnownSeedUnitCode(existing?.default_inventory_uom, existingUnitCodes) ??
+			configuredInventoryUom;
+		const existingIssueUom =
+			normalizeKnownSeedUnitCode(existing?.default_issue_uom, existingUnitCodes) ??
+			configuredIssueUom;
+		const existingBaseUnit =
+			normalizeKnownSeedUnitCode(existing?.base_unit, existingUnitCodes) ??
+			normalizeLegacyBaseUnit(existing?.base_unit);
+		const conversions = resolveItemMasterConversions(
+			existing?.conversions,
+			def.extra?.conversions,
+			existingUnitCodes
+		);
+		const preservedEquipmentUoms = !isStockItem
+			? {
+					...(normalizeKnownSeedUnitCode(existing?.default_inventory_uom, existingUnitCodes)
+						? {
+								default_inventory_uom: normalizeKnownSeedUnitCode(
+									existing?.default_inventory_uom,
+									existingUnitCodes
+								)
+							}
+						: {}),
+					...(normalizeKnownSeedUnitCode(existing?.default_issue_uom, existingUnitCodes)
+						? {
+								default_issue_uom: normalizeKnownSeedUnitCode(
+									existing?.default_issue_uom,
+									existingUnitCodes
+								)
+							}
+						: {})
+				}
+			: {};
+		const itemMasterDoc = catalogDoc(
 			id,
 			'item_master',
 			{
 				name: def.name,
 				category: def.category,
-				base_unit: def.base_unit,
+				base_unit: existingBaseUnit ?? def.base_unit,
 				type_class: def.type_class,
 				...itemMasterBase,
 				...(def.extra ?? {}),
+				conversions,
+				...(isStockItem
+					? {
+							default_inventory_uom: existingInventoryUom,
+							default_issue_uom: existingIssueUom
+						}
+					: {}),
+				...preservedEquipmentUoms,
 				...(rev ? { _rev: rev } : {})
 			},
 			4
 		);
+		assertItemMasterSeedUomCodes(itemMasterDoc, existingUnitCodes);
+		return itemMasterDoc;
 	});
 
 	const recipesDef = [
@@ -869,6 +1135,8 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		);
 	});
 
+	const uomCount = await seedCatalogUnitOfMeasures();
+
 	for (const legacy of [...legacyItemMasterDocsToDelete, ...legacyRecipeDocsToDelete]) {
 		await couchReq(
 			'DELETE',
@@ -876,49 +1144,9 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		);
 	}
 
-	let uomCount = 0;
-	for (const def of FALLBACK_UNIT_DEFINITIONS) {
-		const docId = `unit_of_measure:${def.code}`;
-		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
-		if (status === 200) {
-			const existing = data as Record<string, unknown>;
-			// Idempotent: preserve admin labels while ensuring protected system invariants
-			await putDoc('catalog', {
-				...existing,
-				type: 'unit_of_measure',
-				schema_v: 1,
-				code: def.code,
-				dimension: def.dimension,
-				is_protected: true,
-				updated_at: now()
-			});
-		} else {
-			await putDoc(
-				'catalog',
-				catalogDoc(
-					docId,
-					'unit_of_measure',
-					{
-						code: def.code,
-						label_th: def.label_th,
-						...(def.label_th_short ? { label_th_short: def.label_th_short } : {}),
-						label_en: def.label_en,
-						dimension: def.dimension,
-						is_protected: true,
-						sort_order: def.sort_order,
-						deactivated: false
-					},
-					1
-				)
-			);
-		}
-		uomCount++;
-	}
-
-	for (const doc of [...items, ...itemCategories, ...itemMasters, ...recipes])
-		await putDoc('catalog', doc);
+	for (const doc of [...itemCategories, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${uomCount} units of measure, ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: ${uomCount} units of measure, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

@@ -1,0 +1,269 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FALLBACK_UNIT_DEFINITIONS } from './unit-of-measure';
+
+const couch = vi.hoisted(() => ({
+	request: vi.fn(),
+	ensureDb: vi.fn(),
+	putDoc: vi.fn(),
+	setSecurity: vi.fn()
+}));
+
+vi.mock('../../../../../scripts/seed/couch', () => ({
+	bulkDocs: vi.fn(),
+	couchReq: couch.request,
+	ensureDb: couch.ensureDb,
+	putDoc: couch.putDoc,
+	setSecurity: couch.setSecurity
+}));
+
+import {
+	assertItemMasterSeedUomCodes,
+	seedCatalog,
+	seedCatalogUnitOfMeasures
+} from '../../../../../scripts/seed/master-seed';
+
+describe('master seed unit-of-measure provisioning', () => {
+	beforeEach(() => {
+		couch.request.mockReset();
+		couch.ensureDb.mockReset();
+		couch.putDoc.mockReset();
+		couch.setSecurity.mockReset();
+	});
+
+	it('creates all canonical units when the catalog is missing them', async () => {
+		const writes: Record<string, unknown>[] = [];
+		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
+			if (method === 'GET') return { status: 404, data: { error: 'not_found' } };
+			writes.push(body as Record<string, unknown>);
+			return { status: 201, data: { ok: true } };
+		});
+
+		expect(await seedCatalogUnitOfMeasures()).toBe(27);
+		expect(writes).toHaveLength(27);
+		expect(writes.map((doc) => doc._id)).toEqual(
+			FALLBACK_UNIT_DEFINITIONS.map((unit) => `unit_of_measure:${unit.code}`)
+		);
+		expect(writes.every((doc) => doc.type === 'unit_of_measure' && doc.schema_v === 1)).toBe(true);
+	});
+
+	it('preserves operator metadata while enforcing canonical protected fields', async () => {
+		const first = FALLBACK_UNIT_DEFINITIONS[0];
+		const existing = {
+			_id: `unit_of_measure:${first.code}`,
+			_rev: '3-test',
+			type: 'unit_of_measure',
+			code: first.code,
+			created_at: '2026-09-22T00:00:00.000Z',
+			updated_at: '2026-09-22T00:00:00.000Z',
+			created_by: 'system_admin',
+			label_th: 'ชื่อที่ผู้ดูแลแก้ไข',
+			label_en: 'custom label',
+			dimension: first.dimension,
+			is_protected: false,
+			sort_order: 99,
+			deactivated: true
+		};
+		const writes: Record<string, unknown>[] = [];
+		let firstRead = true;
+		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
+			if (method === 'GET') {
+				if (firstRead) {
+					firstRead = false;
+					return { status: 200, data: existing };
+				}
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			writes.push(body as Record<string, unknown>);
+			return { status: 201, data: { ok: true } };
+		});
+
+		await seedCatalogUnitOfMeasures();
+
+		expect(writes[0]).toMatchObject({
+			_id: existing._id,
+			_rev: existing._rev,
+			label_th: existing.label_th,
+			label_en: existing.label_en,
+			sort_order: existing.sort_order,
+			deactivated: existing.deactivated,
+			code: first.code,
+			dimension: first.dimension,
+			is_protected: true
+		});
+	});
+
+	it('retries a conflicting write with the latest revision', async () => {
+		const first = FALLBACK_UNIT_DEFINITIONS[0];
+		const winner = {
+			_id: `unit_of_measure:${first.code}`,
+			_rev: '4-test',
+			type: 'unit_of_measure',
+			code: first.code,
+			created_at: '2026-09-22T00:00:00.000Z',
+			updated_at: '2026-09-22T00:00:00.000Z',
+			created_by: 'system_admin',
+			label_th: first.label_th,
+			label_en: first.label_en,
+			dimension: first.dimension,
+			is_protected: true
+		};
+		const queuedResponses = [
+			{ status: 404, data: { error: 'not_found' } },
+			{ status: 409, data: { error: 'conflict' } },
+			{ status: 200, data: winner },
+			{ status: 201, data: { ok: true } }
+		];
+		const writes: Record<string, unknown>[] = [];
+		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
+			if (method === 'PUT') writes.push(body as Record<string, unknown>);
+			return (
+				queuedResponses.shift() ??
+				(method === 'GET'
+					? { status: 404, data: { error: 'not_found' } }
+					: { status: 201, data: { ok: true } })
+			);
+		});
+
+		await seedCatalogUnitOfMeasures();
+
+		expect(writes[1]).toMatchObject({ _rev: winner._rev, _id: winner._id });
+	});
+
+	it('fails without writing when a UOM read returns an unexpected status', async () => {
+		couch.request.mockResolvedValue({ status: 503, data: { error: 'unavailable' } });
+
+		await expect(seedCatalogUnitOfMeasures()).rejects.toThrow('HTTP 503');
+		expect(couch.request).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects an existing UOM with a malformed common envelope', async () => {
+		const first = FALLBACK_UNIT_DEFINITIONS[0];
+		couch.request.mockResolvedValue({
+			status: 200,
+			data: {
+				_id: `unit_of_measure:${first.code}`,
+				_rev: '5-test',
+				type: 'unit_of_measure',
+				code: first.code,
+				dimension: first.dimension,
+				created_by: 'system_admin'
+			}
+		});
+
+		await expect(seedCatalogUnitOfMeasures()).rejects.toThrow('invalid created_at');
+		expect(couch.request).toHaveBeenCalledTimes(1);
+	});
+
+	it('validates canonical, custom, and unsupported item-master UOM values', () => {
+		expect(() =>
+			assertItemMasterSeedUomCodes(
+				{
+					_id: 'item_master:test',
+					name: 'ข้าวสาร',
+					base_unit: 'kg',
+					default_inventory_uom: 'case',
+					default_issue_uom: 'kg',
+					conversions: [{ uom_name: 'bag', multiplier: '50' }]
+				},
+				new Set(['case'])
+			)
+		).not.toThrow();
+
+		expect(() =>
+			assertItemMasterSeedUomCodes({
+				_id: 'item_master:test',
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				default_inventory_uom: 'กระสอบ 50 กก.'
+			})
+		).toThrow('Invalid UOM code');
+	});
+
+	it('writes item-master packaging as UOM codes and normalizes legacy defaults', async () => {
+		const existingRows = [
+			{
+				doc: {
+					_id: 'unit_of_measure:case',
+					type: 'unit_of_measure',
+					code: 'case'
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+					_rev: '2-rice',
+					type: 'item_master',
+					name: 'ข้าวสาร',
+					base_unit: 'กิโลกรัม',
+					default_inventory_uom: 'กระสอบ 50 กก.',
+					default_issue_uom: 'kg',
+					conversions: [
+						{ uom_name: 'ถุง 5 กก.', multiplier: '5' },
+						{ uom_name: 'กระสอบ 50 กก.', multiplier: '50' }
+					]
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01ARZ3NDEKTSV4RRFFQ69G5FAW',
+					_rev: '3-egg',
+					type: 'item_master',
+					name: 'ไข่ไก่',
+					base_unit: 'piece',
+					default_inventory_uom: 'case',
+					default_issue_uom: 'piece',
+					conversions: [{ uom_name: ' case ', multiplier: '30' }]
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01ARZ3NDEKTSV4RRFFQ69G5FAX',
+					_rev: '4-vest',
+					type: 'item_master',
+					name: 'เสื้อกั๊กสะท้อนแสง',
+					base_unit: 'piece',
+					default_inventory_uom: 'case',
+					default_issue_uom: 'case'
+				}
+			}
+		];
+		couch.request.mockImplementation(async (method: string, path: string) => {
+			if (method === 'GET' && path === '/catalog/_all_docs?include_docs=true') {
+				return { status: 200, data: { rows: existingRows } };
+			}
+			if (method === 'GET') return { status: 404, data: { error: 'not_found' } };
+			return { status: 201, data: { ok: true } };
+		});
+		couch.putDoc.mockResolvedValue({ ok: true });
+
+		await seedCatalog();
+
+		const itemMasters = couch.putDoc.mock.calls
+			.map(([, doc]) => doc as Record<string, unknown>)
+			.filter((doc) => doc.type === 'item_master');
+		expect(itemMasters).toHaveLength(29);
+		const rice = itemMasters.find((doc) => doc.name === 'ข้าวสาร');
+		const eggs = itemMasters.find((doc) => doc.name === 'ไข่ไก่');
+		const vest = itemMasters.find((doc) => doc.name === 'เสื้อกั๊กสะท้อนแสง');
+		expect(rice).toMatchObject({
+			base_unit: 'กิโลกรัม',
+			default_inventory_uom: 'bag',
+			default_issue_uom: 'kg',
+			conversions: [
+				{ uom_name: 'bag', multiplier: '5' },
+				{ uom_name: 'bag', multiplier: '50' }
+			]
+		});
+		expect(eggs).toMatchObject({
+			default_inventory_uom: 'case',
+			conversions: [{ uom_name: 'case', multiplier: '30' }]
+		});
+		expect(vest).toMatchObject({
+			default_inventory_uom: 'case',
+			default_issue_uom: 'case'
+		});
+		for (const itemMaster of itemMasters) {
+			assertItemMasterSeedUomCodes(itemMaster, new Set(['case']));
+		}
+	});
+});
