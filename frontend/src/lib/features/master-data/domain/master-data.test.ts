@@ -43,9 +43,7 @@ describe('CR-112 vulnerable_group active set', () => {
 		]);
 		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('elderly');
 		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('disabled');
-		expect(CR112_VULNERABLE_GROUP_ACTIVE.filter((i) => i.is_default)).toEqual([
-			expect.objectContaining({ code: 'elderly_dependent' })
-		]);
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.filter((i) => i.is_default)).toEqual([]);
 	});
 });
 
@@ -60,7 +58,8 @@ describe('masterTypeSchema', () => {
 			'house_damage',
 			'municipality_zone',
 			'community',
-			'shelter_type'
+			'shelter_type',
+			'volunteer_skills'
 		] as const) {
 			expect(masterTypeSchema.parse(t)).toBe(t);
 		}
@@ -327,6 +326,13 @@ describe('applyItemOp', () => {
 		const out = applyItemOp(items, { kind: 'setStatus', code: 'elderly', status: 'inactive' });
 		expect(out.find((i) => i.code === 'elderly')?.status).toBe('inactive');
 		expect(out.find((i) => i.code === 'b')?.status).toBe('active');
+	});
+
+	it('delete removes the item by code', () => {
+		const items = [makeItem({ code: 'a' }), makeItem({ code: 'b' })];
+		const out = applyItemOp(items, { kind: 'delete', code: 'a' });
+		expect(out).toHaveLength(1);
+		expect(out[0].code).toBe('b');
 	});
 });
 

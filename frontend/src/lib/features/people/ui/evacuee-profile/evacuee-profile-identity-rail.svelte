@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import {
 		evacueeAgeYears,
 		formatPersonName,
@@ -18,6 +16,9 @@
 		type Screening
 	} from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { COUNTRIES } from '$lib/utils/country';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
@@ -40,11 +41,7 @@
 		onOpenStatusModal,
 		onOpenQrModal,
 		onOpenPersonalEdit,
-		onOpenEmergencyEdit,
-		onOpenHealthEdit,
-		onOpenHouseholdEdit,
-		onOpenAssetsEdit,
-		onOpenActions
+		onOpenEmergencyEdit
 	}: {
 		evacuee: Evacuee;
 		medical: Medical | null;
@@ -59,16 +56,13 @@
 		onOpenQrModal: () => void;
 		onOpenPersonalEdit: () => void;
 		onOpenEmergencyEdit: () => void;
-		onOpenHealthEdit?: () => void;
-		onOpenHouseholdEdit?: () => void;
-		onOpenAssetsEdit?: () => void;
-		/** Compact mobile header: open actions sheet */
-		onOpenActions?: () => void;
 	} = $props();
 
 	const isCompact = $derived(variant === 'compact');
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	const ageYears = $derived(evacueeAgeYears(evacuee));
 	const displayName = $derived(formatPersonName(evacuee));
@@ -102,19 +96,32 @@
 <aside
 	class="min-w-0 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs {isCompact
 		? 'space-y-3'
-		: 'space-y-3 lg:sticky lg:top-[var(--registration-sticky-top,6.75rem)] lg:z-10 lg:self-start'}"
+		: 'space-y-3 lg:sticky lg:top-[var(--registration-sticky-top,3.25rem)] lg:z-10 lg:self-start'}"
 >
 	<!-- Identity row: photo + name / status / zone -->
 	<div class="flex min-w-0 items-start gap-3">
 		<EvacueePhoto photoId={evacuee.photo} alt={displayName} size={isCompact ? 'md' : 'lg'} />
 
 		<div class="min-w-0 flex-1 space-y-1.5">
-			<h2 class="text-base font-bold break-words text-slate-900 lg:text-lg">
-				{displayName}
-				{#if evacuee.nickname}
-					<span class="text-sm font-medium text-slate-500">({evacuee.nickname})</span>
+			<div class="flex items-start gap-1.5">
+				<h2 class="min-w-0 flex-1 text-base font-bold break-words text-slate-900 lg:text-lg">
+					{displayName}
+					{#if evacuee.nickname}
+						<span class="text-sm font-medium text-slate-500">({evacuee.nickname})</span>
+					{/if}
+				</h2>
+				{#if !readonly}
+					<button
+						type="button"
+						aria-label="แก้ไขข้อมูลส่วนบุคคล"
+						title="แก้ไขข้อมูลส่วนบุคคล"
+						onclick={onOpenPersonalEdit}
+						class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						<Pencil class="size-3.5" />
+					</button>
 				{/if}
-			</h2>
+			</div>
 			<p class="font-mono text-xs tracking-wider break-all text-slate-500">
 				{maskNationalId(evacuee.person_id?.number)}
 			</p>
@@ -133,7 +140,7 @@
 					class="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700"
 				>
 					<MapPin class="size-3 shrink-0 text-[#0A2647]" />
-					โซน {zoneLabel(evacuee.current_stay.zone)}
+					โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}
 				</span>
 			</div>
 
@@ -186,7 +193,7 @@
 				<span class="font-semibold text-amber-900">ฉุกเฉิน:</span>
 				{emergencyLine}
 			</p>
-			{#if !readonly && !isCompact}
+			{#if !readonly}
 				<button
 					type="button"
 					aria-label="แก้ไขข้อมูลติดต่อฉุกเฉิน"
@@ -200,104 +207,56 @@
 		</div>
 	</div>
 
-	{#if !isCompact}
-		<!-- Desktop: actions as dropdown — keeps sticky card short -->
-		<div class="border-t border-slate-200/80 pt-3">
-			{#if !readonly}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger
-						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-					>
-						การดำเนินการ
-						<ChevronDown class="size-4 opacity-80" />
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-56" align="end">
-						<DropdownMenu.Group>
-							<DropdownMenu.GroupHeading>ปฏิบัติการ</DropdownMenu.GroupHeading>
-							<DropdownMenu.Item onSelect={() => onOpenZoneModal()}>ย้ายโซน</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => onOpenStatusModal()}>
-								เปลี่ยนสถานะ
-								{#if statusInfo}
-									<span class="ml-auto text-xs text-muted-foreground">{statusInfo.shortLabel}</span>
-								{/if}
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => onOpenQrModal()}>
-								<Printer class="size-4" />
-								พิมพ์ QR
-							</DropdownMenu.Item>
-						</DropdownMenu.Group>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Group>
-							<DropdownMenu.GroupHeading>แก้ไขข้อมูล</DropdownMenu.GroupHeading>
-							<DropdownMenu.Item onSelect={() => onOpenPersonalEdit()}>
-								<Pencil class="size-4" />
-								บุคคล
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => onOpenEmergencyEdit()}>
-								<Pencil class="size-4" />
-								ฉุกเฉิน
-							</DropdownMenu.Item>
-							{#if onOpenHealthEdit}
-								<DropdownMenu.Item onSelect={() => onOpenHealthEdit?.()}>
-									<Pencil class="size-4" />
-									สุขภาพ
-								</DropdownMenu.Item>
-							{/if}
-							{#if onOpenHouseholdEdit}
-								<DropdownMenu.Item onSelect={() => onOpenHouseholdEdit?.()}>
-									<Pencil class="size-4" />
-									ครัวเรือน
-								</DropdownMenu.Item>
-							{/if}
-							{#if onOpenAssetsEdit}
-								<DropdownMenu.Item onSelect={() => onOpenAssetsEdit?.()}>
-									<Pencil class="size-4" />
-									สินทรัพย์
-								</DropdownMenu.Item>
-							{/if}
-						</DropdownMenu.Group>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{:else}
+	<!-- Ops actions (both rail + compact) -->
+	<div class="border-t border-slate-200/80 pt-3">
+		{#if !readonly}
+			<div class={isCompact ? 'grid grid-cols-1 gap-2 sm:grid-cols-3' : 'grid grid-cols-1 gap-2'}>
 				<button
 					type="button"
-					onclick={() =>
-						goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
-					class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					onclick={onOpenZoneModal}
+					class="inline-flex {isCompact
+						? 'min-h-11'
+						: 'min-h-10'} w-full cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
-					<ExternalLink class="size-4 opacity-75" />
-					ดูข้อมูลเต็ม
+					ย้ายโซน
 				</button>
-			{/if}
-		</div>
-	{:else}
-		<div class="border-t border-slate-200/80 pt-3">
-			{#if !readonly}
-				<div class="grid grid-cols-2 gap-2">
-					<button
-						type="button"
-						onclick={onOpenZoneModal}
-						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-					>
-						ย้ายโซน
-					</button>
-					<button
-						type="button"
-						onclick={() => onOpenActions?.()}
-						class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-					>
-						การดำเนินการ
-					</button>
-				</div>
-			{:else}
 				<button
 					type="button"
-					onclick={() => onOpenActions?.()}
-					class="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl bg-[#0A2647] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					onclick={onOpenStatusModal}
+					class="inline-flex {isCompact
+						? 'min-h-11'
+						: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors hover:brightness-95 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {statusInfo?.colorClass}"
 				>
-					การดำเนินการ
+					{#if statusInfo}
+						<span class="size-1.5 shrink-0 rounded-full {statusInfo.dotClass}"></span>
+					{/if}
+					เปลี่ยนสถานะ
+					{#if statusInfo}
+						<span class="text-xs opacity-80">({statusInfo.shortLabel})</span>
+					{/if}
 				</button>
-			{/if}
-		</div>
-	{/if}
+				<button
+					type="button"
+					onclick={onOpenQrModal}
+					class="inline-flex {isCompact
+						? 'min-h-11'
+						: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				>
+					<Printer class="size-4 opacity-75" />
+					พิมพ์ QR
+				</button>
+			</div>
+		{:else}
+			<button
+				type="button"
+				onclick={() => goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
+				class="inline-flex {isCompact
+					? 'min-h-11'
+					: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+			>
+				<ExternalLink class="size-4 opacity-75" />
+				ดูข้อมูลเต็ม
+			</button>
+		{/if}
+	</div>
 </aside>

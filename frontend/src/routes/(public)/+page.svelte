@@ -517,12 +517,6 @@
 							<span>{t.allMissionsBtn}</span>
 							<span aria-hidden="true">➔</span>
 						</button>
-						<!-- <button
-							type="button"
-							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-emerald-800 transition-colors hover:bg-emerald-100/70 sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
-						>
-							<span>{t.hostHouseBtn}</span>
-						</button> -->
 					</div>
 					{#if urgentVolunteers.length > 1}
 						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>

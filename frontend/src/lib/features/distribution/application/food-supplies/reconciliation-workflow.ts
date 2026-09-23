@@ -3,9 +3,12 @@ import { now } from '$lib/db/model';
 import { addQty, parseQty, qtyGt, qtyLte, qtyStrNonNegativeSchema, subQty } from '$lib/utils/qty';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
+	type StockLedger,
 	operationsRepository
 } from '$lib/features/operations';
+import { ConflictError } from '$lib/utils/errors';
 import type { RequisitionTicket, TicketItem } from '../../domain/food-supplies';
 import {
 	DistributionLogRemoteRepository,
@@ -15,6 +18,34 @@ import {
 } from '../../data/food-supplies';
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
+import { assertLedgerReplayBase } from './ledger-replay';
+
+function assertWarehouseReturnLedgerSemantics(
+	actual: StockLedger,
+	expected: StockLedger,
+	ctx: AuthorContext,
+	expectedId: string,
+	expectedLotRef: string | undefined = expected.lot_ref
+): void {
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expectedId,
+			schemaVersion: expected.schema_v,
+			shelterCode: ctx.shelterCode,
+			reason: 'receive',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expectedLotRef
+		},
+		`Warehouse return ledger replay mismatch for ${expected._id}`
+	);
+	if (actual.lot?.note !== 'distribution_return') {
+		throw new StockIntegrityError(`Warehouse return ledger replay mismatch for ${expected._id}`);
+	}
+}
 
 export interface ReconciliationDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -203,7 +234,8 @@ export async function receiveWarehouseReturns(
 	if (!current) {
 		throw new TicketStateError(`Ticket ${ticketId} not found`);
 	}
-	if (current.status !== 'RETURN_PENDING_RECEIPT') {
+	const isCompletedReplay = current.status === 'RETURN_COMPLETED';
+	if (current.status !== 'RETURN_PENDING_RECEIPT' && !isCompletedReplay) {
 		throw new TicketStateError(
 			`Cannot receive warehouse returns for ticket ${ticketId} in status '${current.status}'; expected RETURN_PENDING_RECEIPT`
 		);
@@ -261,6 +293,74 @@ export async function receiveWarehouseReturns(
 		existingByItem.set(entry.item_id, itemEntries);
 	}
 
+	const buildExpectedLedger = async (item: TicketItem, qty: string): Promise<StockLedger> => {
+		const ledgerId = await deriveDeterministicLedgerId(
+			'warehouse_return',
+			current._id,
+			item.item_id
+		);
+		return createStockLedger(
+			{
+				item_id: item.item_id,
+				qty,
+				unit: 'ชิ้น',
+				reason: 'receive',
+				ref_id: current._id,
+				lot: { note: 'distribution_return' },
+				occurred_at: now()
+			},
+			ctx,
+			ledgerId
+		);
+	};
+
+	if (isCompletedReplay) {
+		for (const item of current.items) {
+			const verifiedReturned = verifiedByItem.get(item.item_id)!;
+			const discrepancy = subQty(
+				subQty(item.allocated_qty, item.distributed_qty || '0'),
+				verifiedReturned
+			);
+			if (
+				item.returned_qty === undefined ||
+				!parseQty(item.returned_qty).eq(verifiedReturned) ||
+				item.discrepancy_qty === undefined ||
+				!parseQty(item.discrepancy_qty).eq(discrepancy)
+			) {
+				throw new StockIntegrityError(
+					`Completed warehouse return reconciliation for ${item.item_id} does not match the requested final quantities`
+				);
+			}
+
+			const existingItemEntries = existingByItem.get(item.item_id) ?? [];
+			if (existingItemEntries.length > 1) {
+				throw new StockIntegrityError(
+					`Multiple warehouse return ledger rows exist for ticket item ${item.item_id}`
+				);
+			}
+			if (qtyGt(verifiedReturned, 0)) {
+				if (existingItemEntries.length !== 1) {
+					throw new StockIntegrityError(
+						`Completed warehouse return receipt for ${item.item_id} is missing`
+					);
+				}
+				const expectedLedger = await buildExpectedLedger(item, verifiedReturned);
+				assertWarehouseReturnLedgerSemantics(
+					existingItemEntries[0],
+					expectedLedger,
+					ctx,
+					expectedLedger._id
+				);
+			} else if (existingItemEntries.length !== 0) {
+				throw new StockIntegrityError(
+					`Zero-quantity warehouse return for ${item.item_id} cannot have a receipt ledger row`
+				);
+			}
+		}
+
+		return { ticket: current, ledgerEntriesCreated: 0 };
+	}
+
 	let ledgerEntriesCreated = 0;
 	const updatedItems: TicketItem[] = [];
 
@@ -278,27 +378,39 @@ export async function receiveWarehouseReturns(
 			);
 		}
 		if (existingItemEntries.length === 1) {
-			const [existingEntry] = existingItemEntries;
-			if (!existingEntry || !parseQty(existingEntry.qty).eq(verifiedReturned)) {
+			if (!qtyGt(verifiedReturned, 0)) {
 				throw new StockIntegrityError(
-					`Warehouse return ledger quantity for ${item.item_id} does not match the verified return`
+					`Zero-quantity warehouse return for ${item.item_id} cannot have a receipt ledger row`
 				);
 			}
-		} else if (qtyGt(verifiedReturned, 0)) {
-			const ledgerEntry = createStockLedger(
-				{
-					item_id: item.item_id,
-					qty: verifiedReturned,
-					unit: 'ชิ้น',
-					reason: 'receive',
-					ref_id: current._id,
-					lot: { note: 'distribution_return' },
-					occurred_at: now()
-				},
-				ctx
+			const [existingEntry] = existingItemEntries;
+			if (!existingEntry) {
+				throw new StockIntegrityError(`Warehouse return ledger for ${item.item_id} is missing`);
+			}
+			const expectedLedger = await buildExpectedLedger(item, verifiedReturned);
+
+			assertWarehouseReturnLedgerSemantics(
+				existingEntry,
+				expectedLedger,
+				ctx,
+				existingEntry._id,
+				existingEntry.lot_ref
 			);
-			await operationsRepo.addLedgerEntry(ledgerEntry);
-			ledgerEntriesCreated++;
+		} else if (qtyGt(verifiedReturned, 0)) {
+			const ledgerEntry = await buildExpectedLedger(item, verifiedReturned);
+			try {
+				await operationsRepo.addLedgerEntry(ledgerEntry);
+				ledgerEntriesCreated++;
+			} catch (error) {
+				if (!(error instanceof ConflictError)) throw error;
+				const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerEntry._id);
+				if (!recoveredLedger) {
+					throw new StockIntegrityError(
+						`ConflictError on ${ledgerEntry._id} but existing warehouse return ledger could not be fetched`
+					);
+				}
+				assertWarehouseReturnLedgerSemantics(recoveredLedger, ledgerEntry, ctx, ledgerEntry._id);
+			}
 		}
 
 		updatedItems.push({

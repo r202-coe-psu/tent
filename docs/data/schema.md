@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-18
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; CR-134 bulk_return_claim (schema_v 1) and bulk_return_pool (schema_v 2)
+updated: 2026-09-23
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer
 ---
 
 # Database Schema v5 — field-level
@@ -568,9 +568,10 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 ข้อมูลเดิม. `reason='consumption'` ถูกเขียนร่วมกับ `stock_ledger` ของวัตถุดิบใน `bulkDocs`
 เดียวกัน และต้อง reject ทั้ง transaction หากแก๊สไม่พอ.
 
-### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 3**
+### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 4**
 
-> **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). บันทึก `phone` เป็น Mandatory Key (เบอร์โทรศัพท์สำหรับระบุตัวตนและดึงตั๋ว), `national_id` เป็น Optional, เพิ่ม `personnel_type` ('volunteer' | 'staff'), `checked_in` สถานะปฏิบัติงานสด, `current_shelter_code`, และลิงก์ไปยัง `user_name` กรณีเป็น Staff-Capable Volunteer.
+> **schema_v 4** — เพิ่ม `tracking_token_hash` สำหรับ role-card token ถาวรของอาสาสมัคร (สร้างครั้งเดียวต่อ volunteer และใช้ซ้ำกับ digital pass, portal login และ on-site check-in); เก็บเฉพาะ hash ใน CouchDB สำหรับเอกสารใหม่. เอกสาร `schema_v 3` เดิมยังอ่านได้แบบ additive compatibility.
+> **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). เพิ่ม `phone`, `national_id`, `personnel_type`, `checked_in`, `current_shelter_code`, `volunteer_code`, `identity_verified`, `source` และลิงก์ `user_name` กรณีเป็น Staff-Capable Volunteer.
 > schema_v 2 — ปรับปรุงฟิลด์กะงาน.
 > schema_v 1 — baseline โปรไฟล์อาสาสมัคร (CR-041).
 
@@ -578,21 +579,39 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | --- | --- | --- | --- |
 | `first_name` | str | req | ชื่อจริง (ตัดช่องว่างหัวท้าย) |
 | `last_name` | str | req | นามสกุล |
-| `phone` | str | req | เบอร์โทรศัพท์สำหรับติดต่อและระบุตัวตน (ตัวเลขล้วน เช่น `"0812345678"`) |
+| `nickname` | str | opt | ชื่อเล่น (ตัดช่องว่างหัวท้าย) |
+| `phone` | str\|null | req | เบอร์โทรศัพท์สำหรับติดต่อและระบุตัวตน; public apply ต้องมีค่า แต่เอกสาร legacy/staff entry อาจเป็น `null` |
 | `phone_hash` | str\|null | opt | SHA-256 hash ของเบอร์โทรเพื่อค้นหาแบบไม่เปิดเผยตัวตน / deduplication |
+| `email` | str\|null | opt | อีเมลติดต่อ |
+| `organization` | str\|null | opt | หน่วยงาน/องค์กรต้นสังกัด |
+| `tracking_token` | str\|null | opt | ค่า legacy สำหรับเอกสารเก่า/เอกสารที่เจ้าหน้าที่สร้าง; **ห้ามเขียน plaintext ใน public apply ใหม่** และห้ามส่งออก public |
+| `tracking_token_hash` | str\|null | opt/sys | SHA-256 ของ permanent role-card token; public apply ใหม่ต้องมีค่าเมื่อออก token และใช้ lookup สำหรับ portal/digital pass/on-site check-in |
 | `national_id` | str\|null | opt | เลขประจำตัวประชาชน 13 หลัก (ทางเลือกเสริม ไม่บังคับ) |
+| `national_id_hash` | str\|null | opt/sys | SHA-256 ของ `national_id` สำหรับ deduplication/lookup; ไม่เปิดเผยบน public plane |
+| `skills` | [str] | req | รหัส/ค่าทักษะจาก master data (default `[]`); ไม่ใช้แทนผลรับรองทักษะ |
 | `personnel_type` | enum(`volunteer`,`staff`) | req | แยกประเภท: `'volunteer'` (อาสาสมัครทั่วไป) หรือ `'staff'` (เจ้าหน้าที่ประจำศูนย์) |
-| `skills` | [str] | req | ทักษะความสามารถ เช่น `["ครัว", "ยกของ", "คอมพิวเตอร์", "ปฐมพยาบาล"]` (default `[]`) |
 | `checked_in` | bool | req | สถานะกำลังปฏิบัติงานสดหน้างาน ณ ปัจจุบัน (default `false`) |
 | `current_shelter_code` | str\|null | opt | รหัสศูนย์ที่กำลังปฏิบัติงานอยู่ในปัจจุบัน |
+| `volunteer_code` | str | req | รหัสอ่านง่ายต่อศูนย์ เช่น `V-001` |
 | `user_name` | str\|null | opt | ชื่อผู้ใช้ใน `_users` (เฉพาะอาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์ชั่วคราว) |
+| `central_profile_id` | str\|null | opt | ลิงก์ไปยัง profile กลาง/SSOT identity ถ้ามี |
+| `identity_verified` | bool | req | compatibility flag เดิมสำหรับ gate เข้างาน; sync จาก `identity_verification.status` เมื่อผ่านการตรวจ |
+| `identity_verification` | {`status`,`reviewed_at?`,`reviewed_by?`,`notes?`,`credential_reference?`}\|null | opt | ผลตรวจตัวตนระดับ volunteer: `pending` / `verified` / `rejected` |
+| `skill_verifications` | map<skill_code, {`status`,`reviewed_at?`,`reviewed_by?`,`notes?`,`credential_reference?`}> | opt | ผลรับรองทักษะควบคุมระดับ volunteer พร้อมเลขใบอนุญาต/เลข ว./เลขอ้างอิงเอกสาร; ไม่เปลี่ยนรายการ `skills` |
+| `source` | enum(`public_apply`,`walk_in`,`staff_entry`,`transfer`) | req | ช่องทางที่สร้าง profile; ใช้ใน roster/filter และ audit |
 | `status` | enum(`active`,`inactive`) | req | default `active` |
 
-**Index:** `(phone)` · `(phone_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
+**Additive migration:** เอกสารเก่าที่ไม่มี review fields เติม `identity_verification` จาก `identity_verified` และเติม `skill_verifications: {}`; ไม่เปลี่ยน `identity_verified` และไม่ลบทักษะเดิม. ใช้ `pnpm migrate:volunteer-review --write --confirm` ใน `frontend/`.
 
-### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 3**
+**Index:** `(phone)` · `(phone_hash)` · `(tracking_token_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
-> **schema_v 3** — การมอบหมายกะงานจิตอาสาและการเช็คอิน (CR-104). ผูกกับ `job_id` และ `shift_id` ภายในกะย่อยรายวัน `job.shifts[]`, บันทึก `duty_window` หน้าต่างเวลาจริง, `check_in_at`, `check_out_at`, `check_in_by` (เจ้าหน้าที่ผู้รับรายงานตัว หรือ `'self_service'`), ตัดฟิลด์ `dispatched` และ `response_code` ทิ้งทั้งหมด (Job Board Model เท่านั้น).
+**Soft-delete policy:** การกด “ปิดใช้งาน” ต้องทำแบบ read-modify-write โดยเปลี่ยน `status` เป็น `inactive` และเก็บเอกสารกับ references ที่เกี่ยวข้องไว้ ห้าม hard-delete เอกสาร volunteer; หากต้องเปิดใช้งานอีกครั้งให้เปลี่ยนสถานะกลับเป็น `active` ผ่าน mutation ที่ตรวจสิทธิ์แล้ว
+
+### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 5**
+
+> **schema_v 5** — เพิ่ม actor/method/reason สำหรับ checkout และ manual override ให้ audit ได้ครบ (CR-108). `check_out_by` ระบุเจ้าหน้าที่หรือ `'self_service'`; เมื่อใช้ `manual_override` ต้องมีเหตุผล.
+> **schema_v 4** — การมอบหมายกะงานจิตอาสาและการเช็คอิน (CR-107). ผูกกับ `job_id` และ `shift_id` ภายในกะย่อยรายวัน `job.shifts[]`, บันทึก `duty_window` หน้าต่างเวลาจริง, `check_in_at`, `check_out_at`, `check_in_by`, `check_in_method` และ `check_in_reason`, ตัดฟิลด์ `dispatched` และ `response_code` ทิ้งทั้งหมด (Job Board Model เท่านั้น).
+> แถว schema_v 3 ที่ไม่มี `shift_id` ยังอ่านได้ด้วย compatibility fallback บน `duty_window`; assignment ใหม่ต้องผ่านการตรวจว่า `shift_id` เป็น child ของ `job_id` เดียวกัน. รอบนี้ไม่มี production migration runner — seed ใหม่ใช้สำหรับ local/dev.
 > schema_v 2 — baseline ผูก `job_id` (CR-041).
 > schema_v 1 — baseline `(volunteer_id, date, shift, station)`.
 
@@ -601,15 +620,28 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `job_id` | str | req | → `job:{ulid}` (§2.17) |
 | `shift_id` | str | req | อ้างอิง `shift_id` ภายใน `job.shifts[]` |
 | `volunteer_id` | str | req | → `volunteer:{ulid}` (§2.8) |
+| `date` | date | req | วันที่ของกะ (เขตเวลา Asia/Bangkok) |
+| `shift` | enum(`morning`,`afternoon`,`night`,`flex`,`custom`) | req | ประเภทกะ |
+| `station` | str | req | จุดปฏิบัติงาน |
 | `duty_window` | {`start_ts`:ts, `end_ts`:ts} | req | หน้าต่างเวลาปฏิบัติงานจริง (ใช้สำหรับ Time-Bound Dynamic Role Sweeper) |
 | `check_in_at` | ts\|null | opt | เวลาที่สแกนรายงานตัวเข้างาน |
 | `check_out_at` | ts\|null | opt | เวลาที่สแกนเช็คเอาต์ออกงาน |
 | `check_in_by` | str\|null | opt | username ของเจ้าหน้าที่ผู้รับรายงานตัว หรือ `'self_service'` (กรณีสแกนป้ายหน้าศูนย์) |
+| `check_out_by` | str\|null | opt | username ของเจ้าหน้าที่ผู้ทำรายการเช็คเอาต์ หรือ `'self_service'` |
 | `status` | enum(`assigned`,`checked_in`,`completed`,`no_show`,`cancelled`) | req | default `assigned` |
+| `dispatch_status` | enum(`dispatched`,`accepted`,`declined`)\|null | opt | สถานะข้อเสนอเวรเดิม; ใช้เฉพาะข้อมูลที่ยังอยู่ในช่วง compatibility |
+| `check_in_method` | enum(`qr`,`manual_override`,`portal`) | req | ช่องทางเช็คอิน; default `qr` |
+| `check_in_reason` | str\|null | req | ต้องมีเมื่อ `check_in_method = manual_override` |
+| `check_out_method` | enum(`qr`,`manual_override`,`portal`) | req | ช่องทางเช็คเอาต์; default `qr` |
+| `check_out_reason` | str\|null | req | ต้องมีเมื่อ `check_out_method = manual_override` |
 
 **Index:** `(job_id, shift_id)` · `(volunteer_id, status)` · `(status)` · `(duty_window.start_ts, duty_window.end_ts)`
 
 **Migration (schema_v 2 → 3):** additive & cleanup — ตัด `dispatched_at`, `dispatched_by`, `response_code` ทิ้ง, เติม `shift_id` ให้ตรงกับกะย่อยของ job.
+
+**Migration (schema_v 4 → 5):** เอกสารใหม่เขียนเป็น v5; เติม `check_out_by`, `check_out_method`, `check_out_reason` แบบ default `null`/`qr`/`null` ให้เอกสารเก่าเมื่ออ่าน และไม่ทำ batch backfill ในรอบนี้.
+
+**Migration (schema_v 2 → 3):** rename ค่า `status: done → completed`; เติม `check_in_method='qr'`, `dispatch_status=null`; **ไม่แปลงเวลา `duty_window` ของแถวเดิม** (แถวเดิมยังใช้เวลาที่บันทึกไว้) — เวลามาตรฐานใหม่ 8 ชม. ใช้กับกะที่สร้างหลัง deploy เท่านั้น ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
 
 ### 2.10 `shelter_report` — `shelter_report:{ulid}` · state machine (forward-only) · **schema_v 1**
 
@@ -767,7 +799,16 @@ open → escalated
 | `quota` | int>0 | req | โควตารวมทั้งภารกิจ (คำนวณอัตโนมัติจากผลรวมของ `shifts[].quota`) |
 | `slots_confirmed` | int≥0 | req | ยอดรับรวมทั้งภารกิจ (คำนวณอัตโนมัติจากผลรวมของ `shifts[].slots_confirmed`) |
 | `slots_remaining` | int≥0 | req | ยอดยังขาดรวมทั้งภารกิจ (คำนวณอัตโนมัติจากผลรวมของ `shifts[].slots_remaining`) |
-| `status` | enum(`draft`,`open`,`almost_full`,`full`,`paused`,`closed`,`cancelled`) | req | default `open` |
+| `status` | enum(`draft`,`open`,`full`,`paused`,`closed`,`cancelled`) | req | default `open` |
+
+> **`almost_full` ถูกถอดออก (owner decision 2026-09-04).** เดิมระบบ derive `almost_full`
+> อัตโนมัติเมื่อ `slots_remaining <= max(1, ceil(quota * 0.2))` ซึ่งทำให้เจ้าหน้าที่แก้ `status`
+> เองไม่ได้ — ค่าที่เลือกถูกเขียนทับในการ save ครั้งเดียวกัน
+> **Migration (ไม่บัมพ์ `schema_v`; ยังเป็น 3):** เอกสารเดิมที่มี `status: "almost_full"` อ่านเป็น
+> `"open"` ที่ read boundary (`withNormalizedJobStatus` ฝั่ง client, `_LEGACY_STATUS_ALIASES`
+> ฝั่ง worker projector) และจะถูกเขียนกลับเป็น `"open"` ในการ save ครั้งถัดไป
+> **`full` ยังคง derive อัตโนมัติ** แต่เฉพาะตอน dispatch/accept/decline/release เท่านั้น —
+> การแก้ข้อมูลงานธรรมดาจะบันทึก `status` ตามที่เจ้าหน้าที่เลือกเสมอ
 
 #### โครงสร้างย่อย `JobShiftItem`
 * `shift_id`: `str` (req) — ไอดีเฉพาะของกะ เช่น `"sft_01J6M..."`
@@ -781,22 +822,33 @@ open → escalated
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(status)` · `(tier, status)` · `(shelter_code, status)`
 
-### 2.18 `job_application` — `job_application:{ulid}` · **schema_v 2**
+**Runtime compatibility (CR-107):** เอกสาร job ที่สร้างโดย frontend รุ่นปัจจุบันยังเก็บ key ของแถวเป็น `shifts[].id`; worker public projector normalize เป็น `shifts[].shift_id` ก่อนส่งต่อให้ public API และ assignment/application ใช้ค่า normalized นี้เป็น reference เดียวกัน.
 
-> **schema_v 2** — ใบสมัครงานอาสาสมัครและตั๋วดิจิทัล (CR-104). รองรับการเลือกสมัครกะย่อย `shift_ids[]` หลายกะ, บันทึกข้อมูลผู้สมัคร `applicant` (ชื่อ-นามสกุล, เบอร์โทร, เลข ปชช. ทางเลือก), และออก `tracking_token` สำหรับสร้าง Digital Ticket QR Code.
+### 2.18 `job_application` — `job_application:{ulid}` · **schema_v 3**
+
+> **schema_v 3** — ใบสมัครงานอาสาสมัครและตั๋วดิจิทัล (CR-107). ใบสมัครหนึ่งใบเลือกกะ concrete เดียวผ่าน `shift_id` และเก็บ `selected_shift` เป็น display snapshot; `shift_ids[]` จาก CR-104 ยังเป็นเอกสารเก่าที่ต้อง migrate/อ่านแบบ compatibility.
 > schema_v 1 — baseline ใบสมัครงาน (CR-041).
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `job_id` | str | req | → `job:{ulid}` (§2.17) |
-| `shift_ids` | [str] | req | รายการ `shift_id` ภายใน `job.shifts[]` ที่เลือกสมัคร |
+| `shift_id` | str | req (v3) | อ้างอิง concrete `shift_id` ภายใน `job.shifts[]` |
+| `selected_shift` | {`shift_id`, `date`, `start_time`, `end_time`, `station`} | req | snapshot สำหรับ ticket; ห้ามใช้ date/time แทน identity เมื่อมี `shift_id` |
 | `volunteer_id` | str\|null | opt | → `volunteer:{ulid}` (§2.8) |
 | `applicant` | `{ first_name:str, last_name:str, phone:str, national_id?:str|null, skills:[str] }` | req | ข้อมูลผู้สมัคร (ไม่มีการเปิดเผย national_id บน public tier) |
-| `tracking_token` | str | req | CSPRNG token สุ่มสำหรับเปิดดูตั๋วดิจิทัล QR Code |
+| `tracking_token` | str | opt | token แบบ plaintext สำหรับเอกสารเก่า/เอกสารที่เจ้าหน้าที่สร้าง; public apply ใหม่ไม่เก็บค่านี้ใน CouchDB |
+| `tracking_token_hash` | str | req (public apply) | SHA-256 ของ token สำหรับค้นหาตั๋วโดยไม่เปิดเผย bearer token |
 | `status` | enum(`confirmed`,`pending_review`,`cancelled`) | req | default `confirmed` (เมื่อ auto_accept=true) |
+| `review_reasons` | [enum(`identity`,`skill_certification`,`job_fit`,`legacy_review`)] | opt | เหตุผลที่ใบสมัครต้องพิจารณา; เป็นสถานะระดับงาน แยกจาก review ของ volunteer |
 
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(job_id, status)` · `(tracking_token)` · `(volunteer_id, status)`
+
+**Migration (schema_v 1 → 2):** `pending → pending_review` · `accepted → confirmed` · `rejected`/`cancelled` คงเดิม ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
+
+**Migration (schema_v 2 → 3):** เอกสารใหม่เขียน `shift_id` และ `selected_shift.shift_id`; เอกสารเก่ายังอ่านได้โดยไม่มี batch migration ในรอบนี้.
+
+**Additive review migration:** เติม `review_reasons` จาก `job.tier`, `job.auto_accept` และทักษะควบคุมเท่าที่อนุมานได้; ถ้าอนุมานไม่ได้ให้ `legacy_review` เฉพาะใบสมัครที่ `pending_review`.
 
 ### 2.19 `donation_redirect` — `donation_redirect:{ulid}` · **schema_v 1**
 
@@ -856,6 +908,27 @@ Stock snapshot ชุดเดียวกันถูกใช้ทั้ง C
 > **Index:** `_id` (ULID). สิทธิ์บันทึกจำกัด `shelter_manager` ในศูนย์ตนเองและ `system_admin`
 > ตามศูนย์ที่เลือก. Public HTTP API, forecast ที่ occupancy เปลี่ยนรายวัน, chart, export,
 > sharing และ edit history ไม่อยู่ใน schema/Scope ของ CR-079.
+
+### 2.20 `volunteer_transfer` — `volunteer_transfer:{ulid}` · **schema_v 1**
+
+> **schema_v 1** — doc type ใหม่ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.5, FR-VOL-12). คำขอโอนย้ายอาสาสมัครข้ามศูนย์ที่เกิดจากปุ่ม "ขอโอนย้ายศูนย์" ในแท็บ 3 ของ back-office. เมื่อ `status=accepted` ต้องอัปเดต `volunteer.current_shelter_code` (§2.8) และ revoke role grant ของศูนย์ต้นทางทันที (FR-VOL-12.3).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `volunteer_id` | str | req | → `volunteer:{ulid}` (§2.8) |
+| `from_shelter_code` / `to_shelter_code` | str | req | — |
+| `reason` | str\|null | opt | — |
+| `status` | enum(`pending`,`accepted`,`rejected`,`cancelled`) | req | default `pending` |
+| `requested_by` | str | req | username ผู้ยื่นคำขอ |
+| `decided_by` | str\|null | opt | username ผู้อนุมัติ/ปฏิเสธ |
+| `decided_at` | ts\|null | opt | — |
+
+> ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
+> **Index:** `(to_shelter_code, status)` · `(volunteer_id, status)`
+
+**Migration:** doc type ใหม่ ไม่มีของเดิมต้อง migrate
+
+> **[NEEDS DECISION — CR-094 §7 D-VOL-TRANSFER-APPROVE]:** เอกสารนี้ยังไม่เคาะว่า `shelter_code` (DB ที่ doc นี้ถูกสร้าง/อยู่) ควรเป็นศูนย์ต้นทางหรือปลายทาง เพราะขึ้นกับว่าใครเป็นผู้อนุมัติ (ปลายทาง / ต้นทาง / two-phase) ซึ่งยังไม่เคาะใน CR-094 — ห้าม implement ฝั่งที่ต้องอ่าน/เขียนข้าม shelter scope จนกว่าจะมี CR แก้ปิดข้อนี้
 
 ---
 
@@ -1250,7 +1323,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(8 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` \| `housing_type` |
+| `master_type` | enum(10 types) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` \| `shelter_type` \| `housing_type` \| `volunteer_skills` |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?}] | req | ≥1 item; `code` = ULID (`item_{ulid}`) สำหรับ item ที่สร้างใหม่ — immutable; item เดิม (seed) ที่เป็น slug/semantic code (เช่น `municipality_zone` เดิม `zone_1`) ยังใช้ได้ต่อ ไม่ rewrite; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
 
@@ -1343,24 +1416,29 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 
 ---
 
-### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 2** · **append-only** (CR-039, CR-077)
+### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 3** · **append-only** (CR-039, CR-077)
 
 Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
-เป็น registry doc). เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง.
+เป็น private audit doc). เขียนหลังแต่ละ terminal attempt ของ job เสร็จ; retry จะสร้าง log ใหม่และไม่แก้ย้อนหลัง.
+เอกสารใหม่อยู่ใน database `shelter_import_audit` ซึ่งให้สิทธิ์เฉพาะ CouchDB `_admin`; การอ่านประวัติผ่าน
+SA-only BFF เท่านั้น เพื่อไม่ให้ log ใหม่ถูกอ่านข้ามขอบเขตจาก `registry`. log รุ่นเก่าที่อยู่ใน `registry`
+ยังเป็น legacy data และยังไม่ถูกย้ายในรอบนี้.
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `source` | enum(`shelter`) | req | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ shelter) |
-| `filename` | str | req | ชื่อไฟล์ที่อัปโหลด |
-| `imported_by` | str | req | `name` ของผู้ import (จาก session) |
-| `total_rows` | int | req | จำนวนแถวข้อมูล (ไม่รวม header) |
-| `success_count` | int | req | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
-| `updated_count` | int | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2** |
-| `skipped_count` | int | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2** |
-| `error_count` | int | req | จำนวนแถวที่ล้มเหลว (validation + server) |
-| `results` | array | req | ผลราย row — ดูรูปด้านล่าง |
-| `started_at` | str (ISO) | req | เวลาเริ่ม commit |
-| `finished_at` | str (ISO) | req | เวลาเสร็จ |
+| Field           | ชนิด            | req             | หมายเหตุ                                               |
+| --------------- | --------------- | --------------- | ------------------------------------------------------ |
+| `job_id`        | str             | req             | `_id` เต็มของ `shelter_import_job` ที่เป็นต้นทาง       |
+| `attempt`       | int             | req             | ลำดับ terminal attempt ของ job เริ่มที่ 1              |
+| `source`        | enum(`shelter`) | req             | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ shelter)             |
+| `filename`      | str             | req             | ชื่อไฟล์ที่อัปโหลด                                     |
+| `imported_by`   | str             | req             | `name` ของผู้ import (จาก session)                     |
+| `total_rows`    | int             | req             | จำนวนแถวข้อมูล (ไม่รวม header)                         |
+| `success_count` | int             | req             | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
+| `updated_count` | int             | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2**            |
+| `skipped_count` | int             | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2**                   |
+| `error_count`   | int             | req             | จำนวนแถวที่ล้มเหลว (validation + server)               |
+| `results`       | array           | req             | ผลราย row — ดูรูปด้านล่าง                              |
+| `started_at`    | str (ISO)       | req             | เวลาเริ่ม commit                                       |
+| `finished_at`   | str (ISO)       | req             | เวลาเสร็จ                                              |
 
 `results[]`: `{ row: int, name: str|null, status: 'created'|'updated'|'skipped_duplicate'|
 'validation_error'|'server_error', code?: str (เมื่อ created/updated/skipped), existing_code?: str
@@ -1371,14 +1449,79 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 `total_rows` / counters ยังนับครบทุกแถวเสมอ.
 
 **v1 → v2 (CR-077, additive):** doc รุ่น v1 ไม่มี `updated_count` / `skipped_count` — อ่านกลับได้ตามปกติ
-(Zod ใส่ค่า default 0) **ไม่มี migration script**.
+(Zod ใส่ค่า default 0). **v2 → v3 (async import):** เพิ่ม `job_id` / `attempt` เพื่อผูก log กับ job และ
+แยก retry แต่ละครั้งเป็นเอกสารใหม่. Reader เดิมยังอ่าน log เก่าได้; การจัดการ legacy log เป็นงานแยกต่างหาก.
 
-**เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
-`createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
+**เขียน/อ่าน:** server เท่านั้นผ่าน `adminRaw`; browser อ่านผ่าน
+`GET /api/back-office/shelter-import/logs` ซึ่งตรวจ `system_admin` หรือ CouchDB `_admin` และคืน projection
+สำหรับ history เท่านั้น. ห้ามให้ browser เปิด CouchDB `shelter_import_audit` โดยตรง.
 
----
+### 3.8 `shelter_import_job` — `shelter_import_job:{sha256}` · **schema_v 1** (async import)
 
-### 3.8 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
+เอกสาร durable สำหรับการ import Excel หนึ่งงาน อยู่ใน DB ส่วนตัว `shelter_import_queue` ไม่ใช่
+`registry` เพราะ item มี payload ที่ใช้ประมวลผลต่อและห้ามเปิดให้ client อ่าน. DB นี้ให้สิทธิ์เฉพาะ
+`_admin` เท่านั้น. Item ต้องถูก stage ให้ครบก่อนจึง publish job ให้ worker มองเห็น;
+การ claim/update ใช้ `_rev` แบบ CAS และ lease expiry. `_id` ผูกกับ actor และ `Idempotency-Key`
+ด้วย SHA-256 เพื่อให้ retry คำขอเดิมไม่สร้างงานซ้ำ โดยไม่เก็บ raw key.
+
+| Field                        | ชนิด                                                         | req | หมายเหตุ                                                    |
+| ---------------------------- | ------------------------------------------------------------ | --- | ----------------------------------------------------------- |
+| `filename`                   | str                                                          | req | ชื่อไฟล์ต้นทาง                                              |
+| `imported_by`                | str                                                          | req | actor จาก session ของ system admin (ห้ามรับจาก client)      |
+| `duplicate_action`           | enum(`skip`,`update`)                                        | req | วิธีจัดการชื่อศูนย์ซ้ำ                                      |
+| `total`                      | int                                                          | req | จำนวน item ทั้งหมด                                          |
+| `pending` / `running`        | int                                                          | req | snapshot จำนวน item ที่ยังรอ/กำลังทำ                        |
+| `succeeded`                  | int                                                          | req | รวมสถานะ `created` + `updated`                              |
+| `failed` / `skipped`         | int                                                          | req | รวม validation/server failure และ duplicate skip            |
+| `status`                     | enum(`staging`,`queued`,`running`,`completed`,`completed_with_errors`) | req | `staging` ยังไม่ visible ต่อ worker; state อื่นของ job |
+| `attempt`                    | int                                                          | req | terminal attempt เริ่มที่ 1; retry เพิ่มค่า                 |
+| `audit_log_id`               | str                                                          | opt | `_id` ของ log terminal attempt ที่จะเขียนแบบ append-only    |
+| `audit_logged`               | bool                                                         | opt | `true` เมื่อเขียน audit log สำเร็จ                          |
+| `retry_pending`              | bool                                                         | opt | marker ชั่วคราวระหว่าง requeue เพื่อให้ worker recovery ได้ |
+| `started_at` / `finished_at` | ts                                                           | sys | เวลาเริ่ม/จบงาน                                             |
+
+`created_at`, `updated_at`, `created_by` ใช้ common envelope. Status API อ่านอย่างเดียวและคืน `ETag`
+จาก `_rev`; การสร้าง audit log เป็น state transition ของ worker ไม่ใช่ side effect ของ status GET.
+
+### 3.9 `shelter_import_item` — `shelter_import_item:{job_key}:{row_6_digits}` · **schema_v 1**
+
+หนึ่งแถวของ `shelter_import_job` ใน `shelter_import_queue`; เช่น
+`shelter_import_item:{job_key}:000002`. `input` เก็บไว้ฝั่ง server เท่านั้นและไม่คืนจาก status API.
+`job_id` ต้องเก็บ full job `_id` (`shelter_import_job:{key}`).
+
+| Field              | ชนิด                                                                                | req | หมายเหตุ                                                        |
+| ------------------ | ----------------------------------------------------------------------------------- | --- | --------------------------------------------------------------- |
+| `job_id`           | str                                                                                 | req | job ต้นทางแบบ full `_id`                                        |
+| `row`              | int>0                                                                               | req | เลขแถวใน workbook                                               |
+| `name`             | str\|null                                                                           | req | ชื่อศูนย์จากแถว                                                 |
+| `input`            | object                                                                              | opt | payload ที่ server validate แล้ว; มีเฉพาะ item ที่พร้อมประมวลผล |
+| `status`           | enum(`pending`,`running`,`created`,`updated`,`skipped`,`failed`,`validation_error`) | req | สถานะรายแถว                                                     |
+| `attempts`         | int                                                                                 | req | จำนวนครั้งที่ถูก claim                                          |
+| `max_attempts`     | int                                                                                 | req | ค่าคงที่ปัจจุบัน `3`                                            |
+| `lease_until`      | ts                                                                                  | opt | หมดอายุแล้ว worker อื่น reclaim ได้                             |
+| `worker_id`        | str                                                                                 | opt | worker ที่ถือ lease ปัจจุบัน                                    |
+| `claim_token`      | str                                                                                 | opt | fencing token ของ claim ครั้งนั้น                               |
+| `dead_lettered_at` | ts                                                                                  | opt | เติมเมื่อ attempts ถึง limit แล้วไม่ retry ต่อ                  |
+| `code`             | str                                                                                 | opt | shelter code เมื่อสร้าง/อัปเดต/ข้ามสำเร็จ                       |
+| `errors`           | array                                                                               | opt | `{column,message,sheet?,line?}`                                 |
+
+การ claim และผลลัพธ์ต้องชนะ `_rev` ของ CouchDB และต้องตรง `claim_token`; worker เก่าที่ lease ถูก
+reclaim แล้วจึงเขียนทับผลของ worker ใหม่ไม่ได้.
+
+### 3.10 `shelter_counter` — `counter:shelter` · **schema_v 1**
+
+ตัวนับกลางสำหรับ mint `shelter.code` แบบ sequential อยู่ใน `registry` และเขียนโดย central
+provisioning เท่านั้น. `value` คือเลขล่าสุดที่ allocate แล้ว; การอ่าน/เพิ่มเลขใช้ `_rev` CAS.
+การ initialize ครั้งแรกทำครั้งเดียวภายใต้ bootstrap lock โดยอ่านค่าสูงสุดจาก indexed view
+`_design/app/by_code_number` ไม่ scan registry ทั้งก้อนใน request path. Code ที่ชนจาก legacy data
+จะถูกข้ามด้วย counter ใหม่และ lookup ซ้ำ.
+
+| Field   | ชนิด  | req | หมายเหตุ                          |
+| ------- | ----- | --- | --------------------------------- |
+| `value` | int≥0 | req | เลขที่ allocate ล่าสุด; เริ่ม `0` |
+
+
+### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
 
 ทะเบียนอุปกรณ์เครื่องอ่านบัตรประชาชน Smart Card Kiosk ประจำศูนย์พักพิง (Hardware Registry). เป็น registry doc กลางสำหรับ Authentication ตรวจสอบ API Key/Secret และกำกับสิทธิ์การ Inbound สแกนบัตรเข้าสู่ฐานข้อมูลศูนย์พักพิง.
 
@@ -1903,14 +2046,14 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `name` | str | req | CouchDB username — เบอร์โทรศัพท์มือถือ 10 หลัก (สำหรับเจ้าหน้าที่/อาสา) หรือ alphanumeric (สำหรับ `sa01`/System Admin) |
+| `name` | str | req | CouchDB username — alphanumeric (`sa01`, `staff01`, …) หรือเบอร์ 10 หลักก็ได้; ไม่บังคับให้เท่ากับ `phone` |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
 | `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) |
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
-| `organization` | str\|null | opt/req | หน่วยงานต้นสังกัด (**Required** สำหรับ staff, **Optional** สำหรับ volunteer) |
+| `organization` | str\|null | opt | หน่วยงานต้นสังกัด — optional สำหรับทั้ง staff และ volunteer |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |
-| `phone` | str | req | เบอร์โทรศัพท์ติดต่อ 10 หลัก |
+| `phone` | str\|null | opt | เบอร์โทรศัพท์ติดต่อ 10 หลัก — optional; ถ้ามีค่าใช้เป็น alternate login identifier ได้ (unique ข้ามบัญชี; ห้ามชน `name` ของบัญชีอื่น) |
 | `email` | str\|null | opt | อีเมลติดต่อ |
 | `notes` | str\|null | opt | หมายเหตุเพิ่มเติม |
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |
@@ -1950,7 +2093,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (status), (personnel_type) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee: name, phone, household_id, stay.status · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
@@ -2038,7 +2181,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `quota` | int | req | โควตารวม |
 | `slots_confirmed` | int | req | ยอดรับแล้วรวม (🟢) |
 | `slots_remaining` | int | req | ยอดยังขาดรวม (⚪) |
-| `status` | enum(`open`,`almost_full`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร |
+| `status` | enum(`open`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร (projector map `almost_full` เดิม → `open`) |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**

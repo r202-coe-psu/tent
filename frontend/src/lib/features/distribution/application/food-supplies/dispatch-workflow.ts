@@ -1,10 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { isUlid, ulid } from '$lib/db/ulid';
+import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyNeg } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger,
 	operationsRepository
@@ -40,6 +41,28 @@ export interface InFlightAmendmentInput {
 	added_qty: string;
 	reason?: string;
 	lot_ref?: string;
+}
+
+function assertDispatchLedgerReplay(
+	actual: StockLedger,
+	expected: StockLedger,
+	ctx: AuthorContext
+): void {
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expected._id,
+			schemaVersion: expected.schema_v,
+			shelterCode: ctx.shelterCode,
+			reason: 'distribute',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expected.lot_ref
+		},
+		`Dispatch ledger replay mismatch for ${expected._id}`
+	);
 }
 
 function assertAmendmentLedgerReplay(
@@ -115,25 +138,15 @@ export async function dispatchTicket(
 		}
 	}
 
-	// Retrieve existing ledger rows for this ticket to guarantee idempotent retry
-	const existingLedger = await operationsRepo.listLedger();
-	const existingTicketEntries = existingLedger.filter(
-		(entry) => entry.ref_id === current._id && entry.reason === 'distribute'
-	);
-	const existingItemIds = new Set(existingTicketEntries.map((e) => e.item_id));
-
 	let createdCount = 0;
 	for (const item of current.items) {
-		if (existingItemIds.has(item.item_id)) {
-			// Already deducted on an earlier retry attempt
-			continue;
-		}
+		const ledgerId = await deriveDeterministicLedgerId('dispatch', current._id, item.item_id);
 
 		const lotRef =
 			options?.item_lots?.[item.item_id] &&
 			options.item_lots[item.item_id].startsWith('stock_ledger:')
 				? options.item_lots[item.item_id]
-				: `stock_ledger:${ulid()}`;
+				: ledgerId;
 
 		const ledgerEntry = createStockLedger(
 			{
@@ -145,11 +158,26 @@ export async function dispatchTicket(
 				lot_ref: lotRef,
 				occurred_at: now()
 			},
-			ctx
+			ctx,
+			ledgerId
 		);
 
-		await operationsRepo.addLedgerEntry(ledgerEntry);
-		createdCount++;
+		try {
+			const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+			assertDispatchLedgerReplay(persistedLedger, ledgerEntry, ctx);
+			createdCount++;
+		} catch (error) {
+			if (!(error instanceof ConflictError)) {
+				throw error;
+			}
+			const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+			if (!recoveredLedger) {
+				throw new StockIntegrityError(
+					`ConflictError on ${ledgerId} but existing dispatch ledger could not be fetched`
+				);
+			}
+			assertDispatchLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+		}
 	}
 
 	const updatedTicket = await ticketRepo.transitionTicket(ticketId, 'IN_TRANSIT', ctx, {

@@ -17,6 +17,8 @@
 	import { toast } from 'svelte-sonner';
 	import { useEvacuees, zoneLabel } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelter } from '$lib/features/shelters';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
 	import type { ReferralBatchFailure } from '../data/referral.repository';
 	import { canTransition } from '../domain/referral.transitions';
@@ -55,6 +57,8 @@
 	const queryClient = useQueryClient();
 	const transitionMutation = useTransitionReferral(queryClient);
 	const evacueesQuery = useEvacuees();
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const actorShelter = $derived(getShelterCode());
 
 	/** Local status overrides after transitions (avoids $effect ↔ $state write). */
@@ -151,7 +155,7 @@
 
 	function evacueeZone(evacueeId: string): string {
 		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		return zoneLabel(found?.current_stay?.zone);
+		return zoneLabel(found?.current_stay?.zone, shelterZones);
 	}
 
 	async function runBatchTransition(

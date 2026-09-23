@@ -46,7 +46,6 @@ export {
 	receiveInputSchema,
 	walkInDonationInputSchema,
 	campaignInputSchema,
-	specialRequestSchema,
 	createStockLedger,
 	createWalkInDonation,
 	createCampaign,
@@ -72,17 +71,21 @@ export {
 	isNeedCutOff,
 	forceCutOffNeed,
 	reopenNeed,
+	editNeed,
+	buildCampaignNotes,
+	parseCampaignNotes,
+	type CampaignNotesParts,
 	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,
 	isDonationSlot,
 	mapNeedItemHeuristic,
+	publicItemAggregate,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
-	type SpecialRequestInput,
 	receiveSourceSchema,
 	createReceiveEntry,
 	distributeInputSchema,
@@ -107,6 +110,7 @@ export {
 	receivedItemSchema,
 	type ReceivedItemInput
 } from './domain/operations';
+export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';

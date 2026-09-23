@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+
+vi.mock('$env/dynamic/private', () => ({
+	env: { COUCHDB_ADMIN_URL: 'http://admin:password@couchdb.test' }
+}));
 import {
 	assertCanGrant,
 	isProtectedBootstrapAdmin,
+	requireSystemAdmin,
 	ServiceError,
 	serviceError,
 	serviceErrorFromCouch,
@@ -91,6 +96,48 @@ describe('assertCanGrant', () => {
 			shelterCode: null
 		};
 		expect(grantError(noScope, ['registration_staff'])?.code).toBe('VALIDATION');
+	});
+});
+
+describe('requireSystemAdmin', () => {
+	const fetchMock = vi.fn();
+
+	beforeEach(() => {
+		vi.stubGlobal('fetch', fetchMock);
+		fetchMock.mockReset();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it.each([
+		['app system admin', ['system_admin']],
+		['CouchDB server admin', ['_admin']]
+	])('accepts %s', async (_label, roles) => {
+		fetchMock.mockResolvedValue({
+			json: async () => ({ userCtx: { name: 'operator', roles } })
+		});
+
+		await expect(requireSystemAdmin('session=operator')).resolves.toMatchObject({
+			name: 'operator',
+			roles,
+			isSA: true
+		});
+		expect(fetchMock).toHaveBeenCalledWith(
+			'http://couchdb.test/_session',
+			expect.objectContaining({ headers: expect.objectContaining({ Cookie: 'session=operator' }) })
+		);
+	});
+
+	it('rejects a scoped staff session', async () => {
+		fetchMock.mockResolvedValue({
+			json: async () => ({
+				userCtx: { name: 'staff', roles: ['shelter:SH001', 'registration_staff'] }
+			})
+		});
+
+		await expect(requireSystemAdmin('session=staff')).rejects.toMatchObject({ status: 403 });
 	});
 });
 

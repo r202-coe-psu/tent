@@ -210,6 +210,7 @@
 	let hasAutofilled = $state(false);
 	let activeSection = $state<FormSectionId>('address');
 	let scrollSpyPaused = $state(false);
+	let isVirtualKeyboardOpen = $state(false);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -554,6 +555,27 @@
 		};
 	}
 
+	$effect(() => {
+		if (typeof window === 'undefined' || !window.visualViewport) return;
+		const vv = window.visualViewport;
+		const checkViewport = () => {
+			if (window.innerWidth < 640) {
+				const heightDiff = window.innerHeight - vv.height;
+				isVirtualKeyboardOpen = heightDiff > 150;
+			} else {
+				isVirtualKeyboardOpen = false;
+			}
+		};
+
+		vv.addEventListener('resize', checkViewport);
+		vv.addEventListener('scroll', checkViewport);
+
+		return () => {
+			vv.removeEventListener('resize', checkViewport);
+			vv.removeEventListener('scroll', checkViewport);
+		};
+	});
+
 	function scrollToSection(sectionId: FormSectionId) {
 		scrollSpyPaused = true;
 		activeSection = sectionId;
@@ -646,8 +668,8 @@
 			head.last_name = profile.last_name;
 			head.nickname = profile.nickname;
 			head.gender = profile.gender;
-			head.birth_year = profile.birth_year;
-			head.age = profile.age;
+			head.birth_year = profile.birth_year > 0 ? profile.birth_year : undefined;
+			head.age = profile.age > 0 ? profile.age : undefined;
 			if (profile.phone) head.phone = profile.phone;
 			head.person_id = { cardType: 'national_id', number: profile.person_id };
 			head.vulnerable_groups = profile.vulnerable_groups;
@@ -656,13 +678,16 @@
 			members = [...members]; // trigger reactivity
 		}
 
-		// Fill address from ThaiD
-		household.address_no = profile.address.address_no;
-		household.village_no = profile.address.village_no;
-		household.subdistrict = profile.address.subdistrict;
-		household.district = profile.address.district;
-		household.province = profile.address.province;
-		household.postal_code = profile.address.postal_code;
+		// Fill address from ThaiD — reassign object to trigger reactive cascading selects
+		household = {
+			...household,
+			address_no: profile.address.address_no || household.address_no,
+			village_no: profile.address.village_no || household.village_no,
+			province: profile.address.province || household.province,
+			district: profile.address.district || household.district,
+			subdistrict: profile.address.subdistrict || household.subdistrict,
+			postal_code: profile.address.postal_code || household.postal_code
+		};
 
 		markDirty();
 		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อย`);
@@ -1228,6 +1253,7 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
+				primaryContactPhone={members[0]?.phone ?? null}
 				onDirty={markDirty}
 			/>
 
@@ -1273,25 +1299,30 @@
 				</div>
 			{/if}
 
-			<div class="unified-reg-bottom-chrome">
-				<div class="lg:hidden">
-					<UnifiedRegistrationStickyNav
-						sections={formSectionNav}
-						{activeSection}
-						ariaLabel={t.sectionNavAria}
-						onNavigate={(id) => scrollToSection(id as FormSectionId)}
-					/>
+			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
+				<div class="flex items-center gap-2">
+					<div class="lg:hidden">
+						<UnifiedRegistrationStickyNav
+							compact={true}
+							sections={formSectionNav}
+							{activeSection}
+							ariaLabel={t.sectionNavAria}
+							onNavigate={(id) => scrollToSection(id as FormSectionId)}
+						/>
+					</div>
+					{#if !readOnly}
+						<div class="min-w-0 flex-1">
+							<UnifiedRegistrationSubmitBar
+								{pending}
+								{submitDisabled}
+								label={effectiveSubmitLabel}
+								submittingLabel={t.submitting}
+								align={submitAlign}
+								sticky={false}
+							/>
+						</div>
+					{/if}
 				</div>
-				{#if !readOnly}
-					<UnifiedRegistrationSubmitBar
-						{pending}
-						{submitDisabled}
-						label={effectiveSubmitLabel}
-						submittingLabel={t.submitting}
-						align={submitAlign}
-						sticky={false}
-					/>
-				{/if}
 			</div>
 		</div>
 	</div>

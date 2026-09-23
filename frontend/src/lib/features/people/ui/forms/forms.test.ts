@@ -334,6 +334,19 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			});
 			expect(homeless.body).toContain('ไร้ที่อยู่อาศัยเป็นหลักแหล่ง');
 		});
+
+		it('shows pre-reg semantic housing_type label even without master data', () => {
+			// Regression: claim → onsite must keep CR-112 code display when master
+			// is unavailable or ULID-only (see housing-type-ui.test.ts for master mismatch).
+			const result = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'condo',
+					loadMasterHousingTypes: false
+				}
+			});
+			expect(result.body).toContain('คอนโด');
+			expect(result.body).not.toContain('— เลือกประเภทที่อยู่อาศัย —');
+		});
 	});
 
 	describe('Pet Asset Vehicle Fields (pet-asset-vehicle-fields.svelte)', () => {

@@ -103,12 +103,60 @@ class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	ledger: StockLedger[] = [];
 	throwConflictOnNext = false;
 	throwNonConflictErrorOnNext: Error | null = null;
+	throwNonConflictForItemOnce: string | null = null;
+	beforeAdd: ((entry: StockLedger) => void) | null = null;
+	getLedgerEntryCalls: string[] = [];
+	dispatchWriteBarrier: {
+		target: number;
+		arrived: number;
+		release: () => void;
+		resolveAllArrived: () => void;
+		waitForRelease: Promise<void>;
+		allArrived: Promise<void>;
+	} | null = null;
+
+	holdDispatchWrites(target = 2): { allArrived: Promise<void>; release: () => void } {
+		let release = () => {};
+		let resolveAllArrived = () => {};
+		const waitForRelease = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const allArrived = new Promise<void>((resolve) => {
+			resolveAllArrived = resolve;
+		});
+		this.dispatchWriteBarrier = {
+			target,
+			arrived: 0,
+			release,
+			resolveAllArrived,
+			waitForRelease,
+			allArrived
+		};
+		return { allArrived, release };
+	}
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
+		const barrier = this.dispatchWriteBarrier;
+		if (barrier) {
+			barrier.arrived++;
+			if (barrier.arrived === barrier.target) {
+				barrier.resolveAllArrived();
+			}
+			await barrier.waitForRelease;
+		}
+		if (this.beforeAdd) {
+			const beforeAdd = this.beforeAdd;
+			this.beforeAdd = null;
+			beforeAdd(entry);
+		}
 		if (this.throwNonConflictErrorOnNext) {
 			const err = this.throwNonConflictErrorOnNext;
 			this.throwNonConflictErrorOnNext = null;
 			throw err;
+		}
+		if (this.throwNonConflictForItemOnce === entry.item_id) {
+			this.throwNonConflictForItemOnce = null;
+			throw new Error(`Transient write failure for ${entry.item_id}`);
 		}
 		if (this.throwConflictOnNext) {
 			this.throwConflictOnNext = false;
@@ -123,6 +171,7 @@ class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	}
 
 	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		this.getLedgerEntryCalls.push(id);
 		return this.ledger.find((entry) => entry._id === id) ?? null;
 	}
 
@@ -322,6 +371,182 @@ describe('dispatch-workflow', () => {
 		});
 		expect(retryResult.ledgerEntriesCreated).toBe(0); // Detected existing ledger row
 		expect(opsRepo.ledger).toHaveLength(1); // No duplicate ledger entry
+		expect(opsRepo.getLedgerEntryCalls).toEqual([opsRepo.ledger[0]._id]);
+	});
+
+	it('serializes concurrent dispatches through one deterministic ledger identity', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-CONCURRENT-0001',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:blanket',
+						item_name: 'Blanket',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '25',
+						allocated_qty: '25'
+					}
+				]
+			},
+			WH_CTX
+		);
+		const barrier = opsRepo.holdDispatchWrites();
+
+		const first = dispatchTicket(ticket._id, undefined, WH_CTX, {
+			ticketRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository
+		});
+		const second = dispatchTicket(ticket._id, undefined, WH_CTX, {
+			ticketRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository
+		});
+
+		await barrier.allArrived;
+		barrier.release();
+		await Promise.allSettled([first, second]);
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0]).toMatchObject({
+			item_id: 'item:blanket',
+			qty: '-25',
+			reason: 'distribute',
+			ref_id: ticket._id
+		});
+		expect(opsRepo.ledger[0]._id).toMatch(/^stock_ledger:[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('IN_TRANSIT');
+	});
+
+	it('fails closed when a deterministic dispatch ledger has a mismatched quantity', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-MISMATCH-0001',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			WH_CTX
+		);
+		opsRepo.beforeAdd = (entry) => {
+			opsRepo.ledger.push({ ...entry, qty: '-9' });
+		};
+
+		await expect(
+			dispatchTicket(ticket._id, undefined, WH_CTX, {
+				ticketRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository
+			})
+		).rejects.toThrow(StockIntegrityError);
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0].qty).toBe('-9');
+		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
+	});
+
+	it('fails closed when a deterministic dispatch replay changes lot_ref', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-LOT-0001',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:lamp',
+						item_name: 'Lamp',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '5',
+						allocated_qty: '5'
+					}
+				]
+			},
+			WH_CTX
+		);
+		opsRepo.beforeAdd = (entry) => {
+			opsRepo.ledger.push({ ...entry, lot_ref: 'stock_ledger:01JOTHERLOT000000000000000' });
+		};
+
+		await expect(
+			dispatchTicket(ticket._id, undefined, WH_CTX, {
+				ticketRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository
+			})
+		).rejects.toThrow(StockIntegrityError);
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
+	});
+
+	it('recovers a partial multi-item dispatch without duplicating completed deductions', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-PARTIAL-0001',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:a',
+						item_name: 'Item A',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '2',
+						allocated_qty: '2'
+					},
+					{
+						item_id: 'item:b',
+						item_name: 'Item B',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '3',
+						allocated_qty: '3'
+					},
+					{
+						item_id: 'item:c',
+						item_name: 'Item C',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '4',
+						allocated_qty: '4'
+					}
+				]
+			},
+			WH_CTX
+		);
+		opsRepo.throwNonConflictForItemOnce = 'item:c';
+
+		await expect(
+			dispatchTicket(ticket._id, undefined, WH_CTX, {
+				ticketRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository
+			})
+		).rejects.toThrow('Transient write failure for item:c');
+		expect(opsRepo.ledger.map((entry) => entry.item_id)).toEqual(['item:a', 'item:b']);
+		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
+
+		const recovered = await dispatchTicket(ticket._id, undefined, WH_CTX, {
+			ticketRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository
+		});
+
+		expect(recovered.ledgerEntriesCreated).toBe(1);
+		expect(opsRepo.ledger).toHaveLength(3);
+		expect(new Set(opsRepo.ledger.map((entry) => entry._id)).size).toBe(3);
+		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('IN_TRANSIT');
 	});
 
 	it('amends active ticket with in-flight top-up deduction and amendment record', async () => {

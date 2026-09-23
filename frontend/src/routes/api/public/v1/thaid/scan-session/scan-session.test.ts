@@ -44,6 +44,7 @@ describe('Scan Session API endpoints', () => {
 		const data = await res.json();
 		expect(data.sessionId).toBeDefined();
 		expect(data.expiresAt).toBeGreaterThan(Date.now());
+		expect(data.ttlSeconds).toBe(900);
 		expect(data.qrUrl).toBe(
 			`https://shelter.test/api/v1/auth/oauth/thaid/start?mode=member_scan&session_id=${data.sessionId}`
 		);

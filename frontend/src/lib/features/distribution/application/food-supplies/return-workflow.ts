@@ -1,10 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';
-import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { addQty, parseQty, persistQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger,
 	operationsRepository
@@ -38,6 +39,55 @@ import {
 } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
 import { assertPositiveQty } from './validation';
+
+function assertCounterReturnLedgerReplay(
+	actual: StockLedger,
+	expected: StockLedger,
+	ctx: AuthorContext
+): void {
+	assertLedgerReplayBase(
+		actual,
+		{
+			id: expected._id,
+			schemaVersion: expected.schema_v,
+			shelterCode: ctx.shelterCode,
+			reason: 'receive',
+			refId: expected.ref_id,
+			itemId: expected.item_id,
+			qty: expected.qty,
+			unit: expected.unit,
+			lotRef: expected.lot_ref
+		},
+		`Counter return ledger replay mismatch for ${expected._id}`
+	);
+	if (actual.lot?.note !== 'counter_loan_return') {
+		throw new StockIntegrityError(`Counter return ledger replay mismatch for ${expected._id}`);
+	}
+}
+
+function assertRoutineCounterReceiptAccounting(
+	entries: StockLedger[],
+	log: DistributionLog,
+	ctx: AuthorContext
+): void {
+	for (const entry of entries) {
+		if (
+			entry.type !== 'stock_ledger' ||
+			entry.shelter_code !== ctx.shelterCode ||
+			entry.reason !== 'receive' ||
+			entry.ref_id !== log._id ||
+			entry.item_id !== log.item_id ||
+			entry.unit !== 'ชิ้น' ||
+			!qtyGt(entry.qty, 0) ||
+			(entry.lot_ref !== undefined && entry.lot_ref !== entry._id) ||
+			(entry.lot?.note !== undefined && entry.lot.note !== 'counter_loan_return')
+		) {
+			throw new StockIntegrityError(
+				`Invalid routine counter receipt accounting for distribution log ${log._id}`
+			);
+		}
+	}
+}
 
 export interface ReturnWorkflowDependencies {
 	logRepo?: DistributionLogRepository;
@@ -159,7 +209,20 @@ export async function returnLoanAtCounter(
 			`Distribution log ${logId} is already closed as ${currentLog.status}`
 		);
 	}
-	if (currentLog.status === 'returned' && currentLog.qty_returned !== input.qty_returned) {
+	if (currentLog.status === 'returned' && currentLog.clear_reason === 'bulk_dropoff') {
+		throw new WorkflowValidationError(
+			`Distribution log ${logId} was resolved through bulk_dropoff and cannot receive a counter return`
+		);
+	}
+	if (currentLog.status === 'returned' && currentLog.clear_reason !== 'routine') {
+		throw new StockIntegrityError(
+			`Distribution log ${logId} has unsupported returned clear_reason ${currentLog.clear_reason ?? 'missing'}`
+		);
+	}
+	if (
+		currentLog.status === 'returned' &&
+		!parseQty(currentLog.qty_returned ?? '0').eq(input.qty_returned)
+	) {
 		throw new WorkflowValidationError(
 			`Distribution log ${logId} is already closed as ${currentLog.status}`
 		);
@@ -184,6 +247,7 @@ export async function returnLoanAtCounter(
 		(acc, entry) => addQty(acc, entry.qty),
 		'0'
 	);
+	assertRoutineCounterReceiptAccounting(logReceiveEntries, currentLog, ctx);
 
 	if (qtyGt(totalPreviouslyReceived, input.qty_returned)) {
 		throw new StockIntegrityError(
@@ -191,42 +255,97 @@ export async function returnLoanAtCounter(
 		);
 	}
 
-	// 2. Compute missing delta to receive into physical inventory
-	const deltaToReceive = subQty(input.qty_returned, totalPreviouslyReceived);
+	if (currentLog.status === 'returned') {
+		if (!parseQty(totalPreviouslyReceived).eq(input.qty_returned)) {
+			throw new StockIntegrityError(
+				`Routine returned distribution log ${logId} does not match its physical receipt accounting`
+			);
+		}
+		return { log: currentLog, ledgerEntryCreated: false };
+	}
+
+	const previousQtyReturned = persistQty(currentLog.qty_returned ?? '0');
+	const isAlreadyAtTarget = parseQty(previousQtyReturned).eq(input.qty_returned);
+	if (isAlreadyAtTarget) {
+		if (!parseQty(totalPreviouslyReceived).eq(previousQtyReturned)) {
+			throw new StockIntegrityError(
+				`Distribution log ${logId} has mismatched returned and physical receipt quantities`
+			);
+		}
+		return { log: currentLog, ledgerEntryCreated: false };
+	}
+
+	const deltaToReceive = subQty(input.qty_returned, previousQtyReturned);
+	if (!qtyGt(deltaToReceive, 0)) {
+		throw new WorkflowValidationError(
+			`qty_returned (${input.qty_returned}) must advance previously returned qty (${previousQtyReturned})`
+		);
+	}
+
+	const ledgerId = await deriveDeterministicLedgerId(
+		'counter_return',
+		logId,
+		'from',
+		previousQtyReturned
+	);
+	const ledgerEntry = createStockLedger(
+		{
+			item_id: currentLog.item_id,
+			qty: deltaToReceive,
+			unit: 'ชิ้น',
+			reason: 'receive',
+			ref_id: logId,
+			lot: { note: 'counter_loan_return' },
+			occurred_at: now()
+		},
+		ctx,
+		ledgerId
+	);
+
 	let ledgerEntryCreated = false;
-
-	if (qtyGt(deltaToReceive, 0)) {
-		const ledgerEntry = createStockLedger(
-			{
-				item_id: currentLog.item_id,
-				qty: deltaToReceive,
-				unit: 'ชิ้น',
-				reason: 'receive',
-				ref_id: logId,
-				lot: { note: 'counter_loan_return' },
-				occurred_at: now()
-			},
-			ctx
+	// A new receipt may proceed only when prior physical accounting matches the log state.
+	// If it already equals the target, the deterministic ledger proves LEDGER_ONLY recovery.
+	if (parseQty(totalPreviouslyReceived).eq(previousQtyReturned)) {
+		try {
+			const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+			assertCounterReturnLedgerReplay(persistedLedger, ledgerEntry, ctx);
+			ledgerEntryCreated = true;
+		} catch (error) {
+			if (!(error instanceof ConflictError)) {
+				throw error;
+			}
+			const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+			if (!recoveredLedger) {
+				throw new StockIntegrityError(
+					`ConflictError on ${ledgerId} but existing counter return ledger could not be fetched`
+				);
+			}
+			assertCounterReturnLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+		}
+	} else if (parseQty(totalPreviouslyReceived).eq(input.qty_returned)) {
+		const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
+		if (!recoveredLedger) {
+			throw new StockIntegrityError(
+				`Distribution log ${logId} has unverified physical receipt accounting for counter return recovery`
+			);
+		}
+		assertCounterReturnLedgerReplay(recoveredLedger, ledgerEntry, ctx);
+	} else {
+		throw new StockIntegrityError(
+			`Distribution log ${logId} has mismatched prior return and physical receipt quantities`
 		);
-		await operationsRepo.addLedgerEntry(ledgerEntry);
-		ledgerEntryCreated = true;
 	}
 
-	// 3. Complete DistributionLog lifecycle transition if not already in target state
-	let updatedLog = currentLog;
-	const isAlreadyAtTarget = currentLog.qty_returned === input.qty_returned;
-	if (!isAlreadyAtTarget) {
-		updatedLog = await logRepo.recordReturn(
-			logId,
-			{
-				qty_returned: input.qty_returned,
-				condition_on_return: input.condition_on_return,
-				clear_reason: 'routine',
-				notes: input.notes
-			},
-			ctx
-		);
-	}
+	const updatedLog = await logRepo.recordReturn(
+		logId,
+		{
+			qty_returned: input.qty_returned,
+			condition_on_return: input.condition_on_return,
+			clear_reason: 'routine',
+			notes: input.notes
+		},
+		ctx
+	);
 
 	return {
 		log: updatedLog,

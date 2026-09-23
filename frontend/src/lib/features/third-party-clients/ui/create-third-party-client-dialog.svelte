@@ -5,12 +5,15 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { toast } from 'svelte-sonner';
 	import {
+		DEFAULT_SCOPES_BY_MODULE,
 		GRANTABLE_SCOPES,
 		PARTNER_MODULES,
 		PARTNER_MODULE_LABEL,
 		SCOPE_LABEL,
+		SENSITIVE_SCOPES,
 		createThirdPartyClientSchema,
 		type CreatedThirdPartyClient,
 		type GrantableScope,
@@ -41,6 +44,13 @@
 	function handleOpenChange(next: boolean) {
 		open = next;
 		if (!next) resetForm();
+	}
+
+	function handleModuleChange(next: string) {
+		moduleName = next as PartnerModule;
+		selectedScopes = DEFAULT_SCOPES_BY_MODULE[moduleName]
+			? [...DEFAULT_SCOPES_BY_MODULE[moduleName]]
+			: [];
 	}
 
 	function toggleScope(scope: GrantableScope, checked: boolean) {
@@ -99,7 +109,7 @@
 				<Label for="tpc-module-name" class="text-sm font-semibold"
 					>Name <span class="text-destructive">*</span></Label
 				>
-				<Select.Root type="single" bind:value={moduleName}>
+				<Select.Root type="single" value={moduleName} onValueChange={handleModuleChange}>
 					<Select.Trigger id="tpc-module-name" class="w-full">
 						{moduleName ? PARTNER_MODULE_LABEL[moduleName] : '-- เลือกหน่วยงาน --'}
 					</Select.Trigger>
@@ -114,21 +124,28 @@
 				<span class="text-sm font-semibold">Scopes <span class="text-destructive">*</span></span>
 				<div class="grid gap-2">
 					{#each GRANTABLE_SCOPES as scope (scope)}
-						<label
-							class="flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm"
-						>
-							<Checkbox
-								checked={selectedScopes.includes(scope)}
-								onCheckedChange={(v) => toggleScope(scope, v === true)}
-							/>
-							<span>{SCOPE_LABEL[scope]}</span>
-						</label>
+						<div class="rounded-lg border border-border bg-background text-sm">
+							<label class="flex items-center gap-3 p-3">
+								<Checkbox
+									checked={selectedScopes.includes(scope)}
+									onCheckedChange={(v) => toggleScope(scope, v === true)}
+								/>
+								<span>{SCOPE_LABEL[scope]}</span>
+							</label>
+							{#if SENSITIVE_SCOPES.includes(scope)}
+								<div
+									class="flex items-start gap-2 rounded-b-lg border-t border-amber-200 bg-amber-50 p-3 text-amber-900"
+								>
+									<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+									<p class="text-xs leading-normal">
+										Grants access to individual occupant records (PDPA-sensitive). Grant only with
+										written approval on file for this module.
+									</p>
+								</div>
+							{/if}
+						</div>
 					{/each}
 				</div>
-				<p class="text-xs text-muted-foreground">
-					<code class="rounded bg-muted px-1">occupancy-pii-read</code> is never grantable here stays
-					denied by default.
-				</p>
 			</div>
 		</div>
 		<div class="flex items-center justify-end gap-2 border-t border-border bg-muted/30 p-4">
