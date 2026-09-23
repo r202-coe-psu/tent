@@ -65,7 +65,9 @@ async def _all_shelter_codes(couch: CouchClient) -> list[str]:
     return sorted(codes)
 
 
-async def _seed_open_campaigns(couch: CouchClient, shelter_code: str, *, apply: bool) -> int:
+async def _seed_open_campaigns(
+    couch: CouchClient, shelter_code: str, *, apply: bool
+) -> int:
     database = shelter_db_name(shelter_code)
     if not await couch.database_exists(database):
         return 0
@@ -101,7 +103,9 @@ def _print_report(report: ShelterReconcileReport, *, apply: bool) -> None:
     for (campaign_id, item_id), qty in report.missing_counters:
         print(f"    + no counter yet: {campaign_id} / {item_id} outstanding qty {qty}")
     for campaign_id, item_id in report.conflicts:
-        print(f"    !! CONFLICT {campaign_id} / {item_id} — raced a live booking, not written")
+        print(
+            f"    !! CONFLICT {campaign_id} / {item_id} — raced a live booking, not written"
+        )
     for line in report.unattributed_items:
         print(f"    ~ unattributed (no counter): {line}")
 
@@ -152,7 +156,9 @@ async def _run(args: argparse.Namespace) -> int:
             print(f"  on_hand_qty refreshed: {on_hand_total}")
         print(f"  reserved_qty {'changed' if apply else 'to change'}: {changed}")
         if args.targets:
-            print(f"  qty_target {'changed' if apply else 'to change'}: {targets_changed}")
+            print(
+                f"  qty_target {'changed' if apply else 'to change'}: {targets_changed}"
+            )
             print(f"  qty_target refused (below reserved): {targets_refused}")
         print(f"  conflicts: {conflicts}")
         print(f"  unattributed items (need manual review): {unattributed}")

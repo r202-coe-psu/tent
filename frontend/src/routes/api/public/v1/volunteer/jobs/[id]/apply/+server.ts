@@ -5,6 +5,7 @@ import type { RequestHandler } from './$types';
 import { volunteerApplySchema } from '$lib/features/volunteer-portal/server';
 import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import {
 	volunteerApplyIpLimiter,
 	volunteerApplyPhoneLimiter
@@ -16,7 +17,9 @@ import {
 
 export const prerender = false;
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 const noStore = { 'Cache-Control': 'no-store' };
 
 /**
@@ -24,12 +27,11 @@ const noStore = { 'Cache-Control': 'no-store' };
  *
  * No account and no SMS OTP, so spam control is the whole guard: 3 attempts per 10
  * minutes on the IP *and* on the phone number (a phone budget alone is defeated by a
- * new number, an IP budget alone by a phone farm), plus reCAPTCHA v3.
+ * new number, an IP budget alone by a phone farm), plus reCAPTCHA Enterprise.
  *
- * CAPTCHA fails OPEN only when `dev` and no real key is configured, so a developer
- * without Google keys can still run the flow; production fails CLOSED, so a deploy that
- * forgets the secret is rejected rather than silently unguarded — same rule as
- * `/api/public/v1/registrations`.
+ * CAPTCHA verification uses the shared gate, so the project ID + service-account
+ * deployment configuration, operator kill-switch, and production fail-closed behavior
+ * match the login and other public BFF routes.
  *
  * The quota move, ticket mint, auto-accept decision and persistence happen through
  * the public CouchDB writer. The captcha token is consumed here and never sent on.
@@ -46,8 +48,8 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 	const { captchaToken, ...application } = parsed.data;
 
 	const ip = getClientAddress();
-	const captchaConfigured = isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
-	const skipDevGuards = dev && !captchaConfigured;
+	const skipDevGuards =
+		dev && !isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY);
 	if (
 		!skipDevGuards &&
 		(!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(application.phone))
@@ -55,22 +57,17 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 
-	if (!captchaConfigured) {
-		if (!dev) {
-			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
-			return json(
-				{ success: false, error: 'SERVER_MISCONFIGURED' },
-				{ status: 500, headers: noStore }
-			);
-		}
-		console.warn('[dev] SECRET_RECAPTCHA_KEY not configured — skipping CAPTCHA verification');
-	} else {
-		if (!captchaToken) {
-			return json({ success: false, error: 'CAPTCHA_REQUIRED' }, { status: 400, headers: noStore });
-		}
-		if (!(await captchaProvider.verifyToken(captchaToken, ip, 'volunteer_apply'))) {
-			return json({ success: false, error: 'CAPTCHA_FAILED' }, { status: 403, headers: noStore });
-		}
+	const captcha = await verifyRecaptchaOrSkip({
+		token: captchaToken ?? '',
+		ip,
+		action: 'volunteer_apply',
+		provider: captchaProvider
+	});
+	if (!captcha.ok) {
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	try {

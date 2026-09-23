@@ -1253,6 +1253,7 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
+				primaryContactPhone={members[0]?.phone ?? null}
 				onDirty={markDirty}
 			/>
 

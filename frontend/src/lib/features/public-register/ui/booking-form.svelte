@@ -52,6 +52,7 @@
 				if (stored) return stored;
 			} catch {
 				// ignore storage exceptions
+				return '';
 			}
 		}
 		return UNASSIGNED_SHELTER_CODE;
@@ -134,6 +135,7 @@
 					return await win.grecaptcha.execute(siteKey, { action });
 				}
 			} catch {
+				// ignore reCAPTCHA execution failure
 				return null;
 			}
 		}

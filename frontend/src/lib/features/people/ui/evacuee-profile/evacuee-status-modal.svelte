@@ -55,9 +55,7 @@
 		pendingStatus === 'temporary_leave' || pendingStatus === 'checked_out'
 	);
 
-	const confirmDisabled = $derived(
-		saving || pendingStatus === evacuee.current_stay.status
-	);
+	const confirmDisabled = $derived(saving || pendingStatus === evacuee.current_stay.status);
 
 	function selectStatus(statusKey: StayStatus) {
 		if (saving) return;

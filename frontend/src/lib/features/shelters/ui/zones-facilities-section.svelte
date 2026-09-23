@@ -46,8 +46,7 @@
 	let confirmReason = $state<string>('');
 	let confirmOpen = $derived(confirmAction !== null);
 	const confirmZoneName = $derived(
-		($formData.zones ?? []).find((z) => z.code === confirmZoneCode)?.name?.trim() ||
-			confirmZoneCode
+		($formData.zones ?? []).find((z) => z.code === confirmZoneCode)?.name?.trim() || confirmZoneCode
 	);
 
 	function openConfirm(action: 'close' | 'reopen', zoneCode: string) {

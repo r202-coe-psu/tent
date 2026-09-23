@@ -28,6 +28,7 @@
 		shelterCode = '',
 		membersSectionDesc,
 		isJoiningExistingHousehold = false,
+		primaryContactPhone = null,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -39,6 +40,7 @@
 		shelterCode?: string;
 		membersSectionDesc: string;
 		isJoiningExistingHousehold?: boolean;
+		primaryContactPhone?: string | null;
 		onDirty?: () => void;
 	} = $props();
 
@@ -176,6 +178,9 @@
 				excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 				fieldErrors={memberFieldErrors[index]}
 				isJoiningExistingHousehold={isJoiningExistingHousehold && index > 0}
+				primaryContactPhone={isJoiningExistingHousehold
+					? primaryContactPhone
+					: (members[0]?.phone ?? null)}
 				onApplyZoneToAll={applyZoneToAll}
 				onRemove={() => removeMember(index)}
 				onScanThaiD={() => handleOpenScanForMember(index)}
