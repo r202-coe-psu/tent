@@ -4,6 +4,8 @@ import {
 	createUnitOfMeasure,
 	isUnitOfMeasure,
 	formatUnit,
+	FALLBACK_UNIT_DEFINITIONS,
+	unitCodeSchema,
 	type UnitOfMeasure
 } from './unit-of-measure';
 
@@ -103,6 +105,74 @@ describe('unit-of-measure domain', () => {
 			expect(doc.created_at).toBeDefined();
 			expect(doc.updated_at).toBeDefined();
 			expect(isUnitOfMeasure(doc)).toBe(true);
+		});
+	});
+
+	describe('canonical seed definitions', () => {
+		it('contains the 27 canonical units with deterministic IDs and valid dimensions', () => {
+			const expectedCodes = [
+				'piece',
+				'unit',
+				'item',
+				'set',
+				'pair',
+				'box',
+				'pack',
+				'bag',
+				'sachet',
+				'bottle',
+				'can',
+				'tablet',
+				'bar',
+				'tube',
+				'roll',
+				'sheet',
+				'cloth',
+				'bundle',
+				'egg',
+				'fruit',
+				'gallon',
+				'cylinder',
+				'g',
+				'kg',
+				'ml',
+				'l',
+				'm'
+			];
+			const expectedDimensions = [
+				...Array.from({ length: 20 }, () => 'count'),
+				'volume',
+				'count',
+				'mass',
+				'mass',
+				'volume',
+				'volume',
+				'length'
+			];
+
+			expect(FALLBACK_UNIT_DEFINITIONS).toHaveLength(27);
+			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).size).toBe(27);
+			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).toEqual(expectedCodes);
+			expect(
+				FALLBACK_UNIT_DEFINITIONS.every((unit) => unitCodeSchema.safeParse(unit.code).success)
+			).toBe(true);
+			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => `unit_of_measure:${unit.code}`)).toEqual(
+				expectedCodes.map((code) => `unit_of_measure:${code}`)
+			);
+			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.dimension)).toEqual(expectedDimensions);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'count')).toHaveLength(
+				21
+			);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'mass')).toHaveLength(2);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'volume')).toHaveLength(
+				3
+			);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'length')).toHaveLength(
+				1
+			);
+			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.sort_order)).toEqual(
+				Array.from({ length: 27 }, (_, index) => index + 1)
+			);
 		});
 	});
 
