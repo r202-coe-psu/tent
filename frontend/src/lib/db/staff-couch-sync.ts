@@ -6,7 +6,6 @@ import { startPeopleLiveQuery } from '$lib/features/people';
 import { startPeopleImportLiveQuery } from '$lib/features/people-import';
 import { startReferralsLiveQuery } from '$lib/features/referrals';
 import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
-import { startShelterImportLiveQuery } from '$lib/features/shelter-import';
 import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 import { CATALOG_DB, startCatalogLiveQuery } from '$lib/features/supply';
@@ -31,7 +30,6 @@ type LiveQueryStarter = (queryClient: QueryClient) => Stoppable;
  */
 export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startSheltersLiveQuery,
-	startShelterImportLiveQuery,
 	startCatalogLiveQuery,
 	startCatalogMasterLiveQuery,
 	startPeopleLiveQuery,
@@ -47,6 +45,17 @@ export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 export interface StartStaffCouchSyncOptions {
 	liveQueryStarters?: readonly LiveQueryStarter[];
 	changesStartDelayMs?: number;
+}
+
+/**
+ * Refetch active TanStack queries after a Couch `_session` cookie is restored.
+ *
+ * Queries that failed with 401/403 while `needsReauth` was set stay in the
+ * error cache; live `_changes` only invalidates on document events, so the
+ * protected layout must call this when reauth succeeds (see CR-033 sync restart).
+ */
+export function invalidateQueriesAfterReauth(queryClient: QueryClient): void {
+	void queryClient.invalidateQueries();
 }
 
 /**

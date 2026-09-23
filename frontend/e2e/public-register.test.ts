@@ -190,7 +190,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		await openBooking(page);
 
-		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
 		// Unassigned + one open shelter (closed shelters omitted).
 		await expect(page.getByRole('option')).toHaveCount(2);
 		await page.getByRole('option', { name: /เทศบาลนครหาดใหญ่/ }).click();
@@ -445,7 +445,7 @@ test.describe('Public unassigned registration (#255 / CR-113)', () => {
 		await page.waitForURL('**/pre-register');
 		await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
 
-		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
 		await page.getByRole('option', { name: /ไม่ระบุศูนย์พักพิง/ }).click();
 
 		await fillAddress(page);

@@ -50,6 +50,13 @@ class MockRepository implements Repository {
 	async find<T>(): Promise<T[]> {
 		return [];
 	}
+
+	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+		for (const doc of docs) {
+			this.store.set(doc._id, JSON.parse(JSON.stringify(doc)));
+		}
+		return docs;
+	}
 }
 
 function persistedDevice(overrides: Partial<PersistedScannerDevice> = {}): PersistedScannerDevice {

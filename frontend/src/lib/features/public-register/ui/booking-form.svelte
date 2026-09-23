@@ -48,12 +48,14 @@
 		if (initialShelterCode) return initialShelterCode;
 		if (typeof sessionStorage !== 'undefined') {
 			try {
-				return sessionStorage.getItem('pre_register_shelter') ?? '';
+				const stored = sessionStorage.getItem('pre_register_shelter');
+				if (stored) return stored;
 			} catch {
+				// ignore storage exceptions
 				return '';
 			}
 		}
-		return '';
+		return UNASSIGNED_SHELTER_CODE;
 	}
 
 	let selectedShelterCode = $state(untrack(() => resolveInitialShelter()));
@@ -133,6 +135,7 @@
 					return await win.grecaptcha.execute(siteKey, { action });
 				}
 			} catch {
+				// ignore reCAPTCHA execution failure
 				return null;
 			}
 		}

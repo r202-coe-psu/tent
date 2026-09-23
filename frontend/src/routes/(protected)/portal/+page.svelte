@@ -88,18 +88,7 @@
 		return labels.length > 0 ? labels : ['ผู้ใช้งานทั่วไป'];
 	});
 
-	// onsite + public + volunteer are always shown; system-management is SA-only; back-office
-	// is SA/SM — size the grid to the number of visible cards.
-	const visibleCards = $derived(3 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
-	const gridCols = $derived(
-		visibleCards >= 5
-			? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
-			: visibleCards === 4
-				? 'sm:grid-cols-2 lg:grid-cols-4'
-				: visibleCards === 3
-					? 'sm:grid-cols-2 lg:grid-cols-3'
-					: 'sm:grid-cols-2'
-	);
+	const cardShellClass = 'w-full sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]';
 </script>
 
 <svelte:head>
@@ -254,66 +243,14 @@
 			</div>
 		</section>
 
-		<main class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 {gridCols}">
-			<HomePortalCard
-				icon={Users}
-				accent="brand"
-				title="ระบบส่วนหน้า ณ ศูนย์พักพิง"
-				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พัก สำหรับผู้ปฏิบัติงานหน้างาน"
-				href={resolve('/onsite')}
-			>
-				{#snippet actions()}
-					{#if currentShelter}
-						<div
-							class="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
-						>
-							<Building2 class="size-3.5 text-primary" />
-							<span class="max-w-[200px] truncate font-medium text-foreground">
-								{currentShelter.name}
-							</span>
-						</div>
-					{/if}
-				{/snippet}
-			</HomePortalCard>
-
-			<HomePortalCard
-				icon={Compass}
-				accent="neutral"
-				title="เว็บไซต์สำหรับประชาชน"
-				badge="ประชาชน / อาสาสมัคร"
-				badgeVariant="neutral"
-				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
-				href={resolve('/')}
-			/>
-
-			{#if isSA}
+		<main class="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-6">
+			<div class={cardShellClass}>
 				<HomePortalCard
-					icon={Building2}
-					accent="accent-purple"
-					title="เมนูผู้ดูแลระบบ"
-					badge="เฉพาะผู้ดูแลระบบ"
-					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
-					href={resolve('/system-management')}
-				/>
-			{/if}
-
-			<HomePortalCard
-				icon={HeartHandshake}
-				accent="success"
-				title="ระบบบริการจิตอาสา"
-				badge="สำหรับอาสาสมัคร"
-				badgeVariant="success"
-				description="ตารางงานจิตอาสาประจำตัว (My Schedule), อัปเดตความพร้อมปฏิบัติงาน, รายงานตัวปฏิบัติภารกิจ และดูงานด่วน"
-				href={resolve('/volunteers/portal')}
-			/>
-
-			{#if canSeeBackoffice}
-				<HomePortalCard
-					icon={Boxes}
-					accent="muted"
-					title="ระบบส่วนหลัง (Back-End)"
-					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
-					href={resolve('/back-office')}
+					icon={Users}
+					accent="brand"
+					title="ปฏิบัติการหน้างาน"
+					description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พัก สำหรับผู้ปฏิบัติงานหน้างาน"
+					href={resolve('/onsite')}
 				>
 					{#snippet actions()}
 						{#if currentShelter}
@@ -328,6 +265,68 @@
 						{/if}
 					{/snippet}
 				</HomePortalCard>
+			</div>
+
+			{#if canSeeBackoffice}
+				<div class={cardShellClass}>
+					<HomePortalCard
+						icon={Boxes}
+						accent="muted"
+						title="ระบบหลังบ้าน"
+						description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
+						href={resolve('/back-office')}
+					>
+						{#snippet actions()}
+							{#if currentShelter}
+								<div
+									class="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+								>
+									<Building2 class="size-3.5 text-primary" />
+									<span class="max-w-[200px] truncate font-medium text-foreground">
+										{currentShelter.name}
+									</span>
+								</div>
+							{/if}
+						{/snippet}
+					</HomePortalCard>
+				</div>
+			{/if}
+
+			<div class={cardShellClass}>
+				<HomePortalCard
+					icon={HeartHandshake}
+					accent="success"
+					title="ระบบบริการจิตอาสา"
+					badge="สำหรับอาสาสมัคร"
+					badgeVariant="success"
+					description="ตารางงานจิตอาสาประจำตัว (My Schedule), อัปเดตความพร้อมปฏิบัติงาน, รายงานตัวปฏิบัติภารกิจ และดูงานด่วน"
+					href={resolve('/volunteers/portal')}
+				/>
+			</div>
+
+			<div class={cardShellClass}>
+				<HomePortalCard
+					icon={Compass}
+					accent="neutral"
+					title="เว็บไซต์บริการประชาชน"
+					badge="ประชาชน / อาสาสมัคร"
+					badgeVariant="neutral"
+					description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
+					href={resolve('/')}
+				/>
+			</div>
+
+			{#if isSA}
+				<div class={cardShellClass}>
+					<HomePortalCard
+						icon={Building2}
+						accent="accent-purple"
+						title="เมนูผู้ดูแลระบบ"
+						badge="เฉพาะผู้ดูแลระบบ"
+						description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
+						href={resolve('/system-management')}
+					/>
+				</div>
 			{/if}
 		</main>
 	</div>

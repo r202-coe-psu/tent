@@ -1,3 +1,4 @@
+import { paginateItems } from './paginate';
 import type { PaginatedResult, Repository } from './repository';
 
 /** In-memory {@link Repository} for unit tests — no network. */
@@ -37,17 +38,7 @@ export function createInMemoryRepository(): Repository {
 			pageSize: number
 		): Promise<PaginatedResult<T>> {
 			const matched = await this.allByType(type, guard);
-			const total = matched.length;
-			const totalPages = Math.max(1, Math.ceil(total / pageSize));
-			const safePage = Math.max(1, Math.min(page, totalPages));
-			const start = (safePage - 1) * pageSize;
-			return {
-				items: matched.slice(start, start + pageSize),
-				total,
-				page: safePage,
-				pageSize,
-				totalPages
-			};
+			return paginateItems(matched, page, pageSize);
 		},
 
 		async find<T>(query: {
@@ -84,6 +75,14 @@ export function createInMemoryRepository(): Repository {
 			return docs.filter((d) =>
 				matchesSelector(d as Record<string, unknown>, query.selector)
 			) as unknown as T[];
+		},
+
+		async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+			const savedDocs: T[] = [];
+			for (const doc of docs) {
+				savedDocs.push(await this.put(doc));
+			}
+			return savedDocs;
 		}
 	};
 }

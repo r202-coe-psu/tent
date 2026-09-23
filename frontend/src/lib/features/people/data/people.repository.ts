@@ -237,7 +237,8 @@ export interface PeopleRepository {
 	recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		opts?: { reason?: string }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade

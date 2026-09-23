@@ -5,8 +5,7 @@ import {
 	completeScanSession,
 	_resetSessionsForTest
 } from './thaid-scan-session';
-// eslint-disable-next-line no-restricted-imports
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const SAMPLE_PROFILE: ThaiDAutofillProfile = {
 	id: 'thaid-1234567890123',
@@ -136,5 +135,37 @@ describe('thaid-scan-session', () => {
 		);
 
 		expect(getScanSession(fakeId)).toBeNull();
+	});
+
+	it('responds to init action by broadcasting active sessions', () => {
+		const s1 = createScanSession(60);
+		let sentMessage: unknown = null;
+		const originalSend = (process as unknown as { send?: (msg: unknown) => void }).send;
+		(process as unknown as { send?: (msg: unknown) => void }).send = (msg: unknown) => {
+			sentMessage = msg;
+		};
+
+		try {
+			process.emit(
+				'message' as never,
+				{
+					topic: 'thaid-scan-session',
+					action: 'init'
+				} as never
+			);
+
+			expect(sentMessage).toMatchObject({
+				topic: 'thaid-scan-session',
+				action: 'init_sync',
+				sessions: expect.arrayContaining([
+					expect.objectContaining({
+						id: s1.id,
+						status: 'pending'
+					})
+				])
+			});
+		} finally {
+			(process as unknown as { send?: (msg: unknown) => void }).send = originalSend;
+		}
 	});
 });
