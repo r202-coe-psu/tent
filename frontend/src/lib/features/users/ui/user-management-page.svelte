@@ -21,10 +21,7 @@
 		type UserSummary
 	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
-	import {
-		usersListBaseFromPathname,
-		withUsersView
-	} from '../domain/user-edit-path';
+	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
 	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -336,7 +333,9 @@
 			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
 				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
 			>
-			<div class="mt-2 break-all font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
+			<div
+				class="mt-2 font-mono text-2xl font-extrabold tracking-wide break-all text-slate-900 select-all"
+			>
 				{temporaryPassword}
 			</div>
 		</div>

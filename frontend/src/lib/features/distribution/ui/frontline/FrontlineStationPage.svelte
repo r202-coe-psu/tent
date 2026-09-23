@@ -7,6 +7,7 @@
 	import Layers from '@lucide/svelte/icons/layers';
 	import Loader from '@lucide/svelte/icons/loader';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { resolve } from '$app/paths';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -19,9 +20,10 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
+	import LoanReturnCard from './LoanReturnCard.svelte';
 
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies';
+		initialTab?: 'receive' | 'food' | 'supplies' | 'returns';
 	}
 
 	let { initialTab = 'food' }: Props = $props();
@@ -43,7 +45,7 @@
 	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
 	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
 	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies'>(
+	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns'>(
 		(function () {
 			return initialTab;
 		})()
@@ -168,13 +170,13 @@
 				class="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 shadow-2xs"
 			>
 				<Layers class="h-3.5 w-3.5 text-sky-600" />
-				Slice 5.4 Frontline Handover
+				Slice 5.5 Frontline Station
 			</span>
 		</div>
 	</header>
 
-	<!-- Station Tabs (Only Slice 5.3 & 5.4 operational modes — no future placeholders) -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+	<!-- Station Tabs (Slice 5.3, 5.4 & 5.5 operational modes) -->
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 		<!-- Tab 1: Receive Cargo -->
 		<button
 			type="button"
@@ -262,6 +264,30 @@
 					เปิดแจก {distributingSuppliesTickets.length}
 				</span>
 			{/if}
+		</button>
+
+		<!-- Tab 4: Return Loans -->
+		<button
+			type="button"
+			onclick={() => (activeTab = 'returns')}
+			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			'returns'
+				? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
+				: 'border-slate-200 bg-white hover:border-slate-300'}"
+		>
+			<div class="flex items-center gap-3">
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'returns'
+						? 'bg-emerald-600 text-white'
+						: 'bg-slate-100 text-slate-600'}"
+				>
+					<RotateCcw class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-xs font-bold text-slate-900">4. รับคืนสิ่งของ</p>
+					<p class="text-2xs text-slate-500">Loan Return Counter</p>
+				</div>
+			</div>
 		</button>
 	</div>
 
@@ -470,5 +496,8 @@
 				{/if}
 			{/if}
 		</div>
+	{:else if activeTab === 'returns'}
+		<!-- TAB 4: Loan Return Surface (Slice 5.5A + 5.5B) -->
+		<LoanReturnCard shelterCode={currentShelterCode} />
 	{/if}
 </div>
