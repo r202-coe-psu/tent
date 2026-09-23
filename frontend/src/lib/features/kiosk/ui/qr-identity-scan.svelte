@@ -492,7 +492,7 @@
 							type="tel"
 							inputmode="numeric"
 							autocomplete="tel"
-							maxlength="10"
+							maxlength={10}
 							pattern="[0-9]{10}"
 							placeholder="กรอกเบอร์โทรศัพท์ 10 หลัก"
 							bind:value={phone}
