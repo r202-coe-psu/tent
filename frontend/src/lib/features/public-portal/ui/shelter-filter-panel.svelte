@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -90,7 +90,7 @@
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
 	let hideFullToggle = $state(false);
-	let hydrating = $state(false);
+	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastProvince: string | null = null;
@@ -159,30 +159,43 @@
 	}
 
 	$effect(() => {
-		hydrating = true;
-		searchQuery = filters.search ?? '';
-		selectedProvince = filters.province ?? '';
-		selectedDistrict = filters.district ?? '';
-		selectedSubdistrict = filters.subdistrict ?? '';
-		selectedSiteKind = filters.site_kind ?? '';
-		selectedType = filters.type ?? '';
-		const nextDistance = filters.distance || '5';
-		distanceValue = nextDistance;
-		customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
-		customDistanceError = false;
-		hideFullToggle =
-			filters.hide_full === true ||
-			filters.hide_full === 'true' ||
-			page.url.searchParams.get('hide_full') === 'true';
+		const f = filters;
+		void [
+			f.search,
+			f.province,
+			f.district,
+			f.subdistrict,
+			f.site_kind,
+			f.type,
+			f.distance,
+			f.user_lat,
+			f.user_lng,
+			f.hide_full
+		];
 
-		if (filters.user_lat) userLat = filters.user_lat.toString();
-		if (filters.user_lng) userLng = filters.user_lng.toString();
+		untrack(() => {
+			hydrating = true;
+			searchQuery = f.search ?? '';
+			selectedProvince = f.province ?? '';
+			selectedDistrict = f.district ?? '';
+			selectedSubdistrict = f.subdistrict ?? '';
+			selectedSiteKind = f.site_kind ?? '';
+			selectedType = f.type ?? '';
+			const nextDistance = f.distance || '5';
+			distanceValue = nextDistance;
+			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
+			customDistanceError = false;
+			hideFullToggle = f.hide_full === true || f.hide_full === 'true';
 
-		lastProvince = selectedProvince;
-		lastDistrict = selectedDistrict;
+			if (f.user_lat) userLat = f.user_lat.toString();
+			if (f.user_lng) userLng = f.user_lng.toString();
 
-		void tick().then(() => {
-			hydrating = false;
+			lastProvince = f.province ?? '';
+			lastDistrict = f.district ?? '';
+
+			void tick().then(() => {
+				hydrating = false;
+			});
 		});
 	});
 
@@ -229,6 +242,19 @@
 	// Immediate live sync for all other controls (and bindable lat/lng).
 	// Readings happen inside commitFilters → buildFilterParams.
 	$effect(() => {
+		// Explicitly read all filter states FIRST to ensure Svelte tracks reactive dependencies
+		void [
+			selectedProvince,
+			selectedDistrict,
+			selectedSubdistrict,
+			selectedSiteKind,
+			selectedType,
+			distanceValue,
+			userLat,
+			userLng,
+			hideFullToggle
+		];
+
 		if (hydrating) return;
 		commitFilters();
 	});
@@ -236,6 +262,7 @@
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
+	let loadingLocations = $state(true);
 
 	let provincesList = $derived([
 		{ label: t.provincePlaceholder, value: '' },
@@ -333,6 +360,9 @@
 			})
 			.catch(() => {
 				/* province/district selects stay empty */
+			})
+			.finally(() => {
+				loadingLocations = false;
 			});
 
 		// First visit: request GPS so the map can show the user marker without a distance click.
@@ -471,6 +501,7 @@
 						placeholder={t.provincePlaceholder}
 						bind:value={selectedProvince}
 						options={provincesList}
+						loading={loadingLocations}
 					/>
 				</div>
 
@@ -484,6 +515,7 @@
 						placeholder={t.districtPlaceholder}
 						bind:value={selectedDistrict}
 						options={districtsList}
+						loading={loadingLocations}
 					/>
 				</div>
 
@@ -497,6 +529,7 @@
 						placeholder={t.subdistrictPlaceholder}
 						bind:value={selectedSubdistrict}
 						options={subdistrictsList}
+						loading={loadingLocations}
 					/>
 				</div>
 
@@ -506,7 +539,7 @@
 						>{t.siteKindLabel}</Label
 					>
 					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
-						<Select.Trigger class="w-full rounded-xl">
+						<Select.Trigger id="site_kind" class="w-full rounded-xl">
 							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -522,7 +555,7 @@
 					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" bind:value={selectedType}>
-						<Select.Trigger class="w-full rounded-xl">
+						<Select.Trigger id="type" class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>

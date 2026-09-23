@@ -115,7 +115,7 @@
 				if (item.code === editingItem?.code) {
 					return {
 						...item,
-						code: data.code,
+						code: editingItem.code,
 						label: data.label,
 						category: data.category,
 						description: data.description,

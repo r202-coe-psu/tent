@@ -133,7 +133,7 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: '7. อาสาสมัคร',
+						label: 'อาสาสมัคร',
 						href: resolve(`${base}/volunteer-config`),
 						icon: Users,
 						requiresAdmin: true
