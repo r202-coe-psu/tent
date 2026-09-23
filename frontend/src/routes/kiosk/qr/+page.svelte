@@ -17,4 +17,4 @@
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 </script>
 
-<KioskQrIdentityScan {contextQuery} />
+<KioskQrIdentityScan {contextQuery} displayShelterCode={displayContext.shelterCode} />
