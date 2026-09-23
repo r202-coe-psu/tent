@@ -36,6 +36,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { useShelters } from '$lib/features/shelters';
 
 	let {
 		lockedShelterCode,
@@ -57,6 +58,7 @@
 	const queryClient = useQueryClient();
 	const usersQuery = useUsers();
 	const deleteMutation = useDeleteUser();
+	const sheltersQuery = useShelters();
 
 	let deleteDialogOpen = $state(false);
 	let resetDialogOpen = $state(false);
@@ -66,9 +68,20 @@
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
+
+	// draft (bound to inputs)
+	let usernameDraft = $state('');
+	let phoneDraft = $state('');
+	let nameDraft = $state('');
+	let shelterDraft = $state('');
+	let roleDraft = $state('');
+	let typeDraft = $state('');
+
+	// applied (used by filteredUsers)
 	let usernameFilter = $state('');
 	let phoneFilter = $state('');
 	let nameFilter = $state('');
+	let shelterFilter = $state('');
 	let roleFilter = $state('');
 	let typeFilter = $state('');
 
@@ -78,6 +91,14 @@
 	let copied = $state(false);
 	let resetting = $state(false);
 	let unlinkingMfa = $state(false);
+
+	const shelterFilterOptions = $derived([
+		{ value: '', label: 'ทั้งหมด' },
+		...(sheltersQuery.data ?? []).map((s) => ({
+			value: s.code,
+			label: `${s.code} — ${s.name}`
+		}))
+	]);
 
 	const roleFilterOptions = [
 		{ value: '', label: 'ทั้งหมด' },
@@ -93,7 +114,13 @@
 		{ value: 'volunteer', label: 'จิตอาสา' }
 	];
 
-	function resetPageOnFilter() {
+	function applyFilters() {
+		usernameFilter = usernameDraft;
+		phoneFilter = phoneDraft;
+		nameFilter = nameDraft;
+		shelterFilter = shelterDraft;
+		roleFilter = roleDraft;
+		typeFilter = typeDraft;
 		currentPage = 1;
 	}
 
@@ -210,6 +237,14 @@
 		usersQuery.data?.filter((u: UserSummary) => {
 			if (effectiveLock && !shelterCodesFromRoles(u.roles).includes(effectiveLock)) return false;
 
+			if (
+				!effectiveLock &&
+				shelterFilter &&
+				!shelterCodesFromRoles(u.roles).includes(shelterFilter)
+			) {
+				return false;
+			}
+
 			const usernameQ = usernameFilter.trim().toLowerCase();
 			if (usernameQ && !u.name.toLowerCase().includes(usernameQ)) return false;
 
@@ -271,90 +306,128 @@
 		</Button>
 	</div>
 
-	<div
-		class={[
-			'grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
-			compact ? 'mb-4' : 'mb-6'
-		]}
+	<form
+		class={compact ? 'mb-4' : 'mb-6'}
+		onsubmit={(e) => {
+			e.preventDefault();
+			applyFilters();
+		}}
 	>
-		<div class="w-full min-w-0 space-y-2">
-			<label for="user-username-filter" class="text-xs font-semibold text-foreground"
-				>ชื่อผู้ใช้</label
+		<div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+			<div class="w-full min-w-0 space-y-2">
+				<label for="user-username-filter" class="text-xs font-semibold text-foreground"
+					>ชื่อผู้ใช้</label
+				>
+				<Input
+					id="user-username-filter"
+					type="search"
+					placeholder="ค้นหาชื่อผู้ใช้..."
+					bind:value={usernameDraft}
+					class="h-11 rounded-xl bg-background shadow-xs"
+				/>
+			</div>
+
+			<div class="w-full min-w-0 space-y-2">
+				<label for="user-phone-filter" class="text-xs font-semibold text-foreground"
+					>เบอร์โทร</label
+				>
+				<Input
+					id="user-phone-filter"
+					type="search"
+					placeholder="ค้นหาเบอร์โทร..."
+					bind:value={phoneDraft}
+					class="h-11 rounded-xl bg-background shadow-xs"
+				/>
+			</div>
+
+			<div class="w-full min-w-0 space-y-2">
+				<label for="user-name-filter" class="text-xs font-semibold text-foreground"
+					>ชื่อ-นามสกุล</label
+				>
+				<Input
+					id="user-name-filter"
+					type="search"
+					placeholder="ค้นหาชื่อ-นามสกุล..."
+					bind:value={nameDraft}
+					class="h-11 rounded-xl bg-background shadow-xs"
+				/>
+			</div>
+
+			{#if !effectiveLock}
+				<div class="w-full min-w-0 space-y-2">
+					<label for="user-shelter-filter" class="text-xs font-semibold text-foreground"
+						>ศูนย์อพยพ</label
+					>
+					<Select.Root type="single" bind:value={shelterDraft}>
+						<Select.Trigger
+							id="user-shelter-filter"
+							class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+							aria-label="ศูนย์อพยพ"
+						>
+							<span class="truncate">
+								{shelterFilterOptions.find((option) => option.value === shelterDraft)?.label ??
+									'ทั้งหมด'}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each shelterFilterOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
+
+			<div class="w-full min-w-0 space-y-2">
+				<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
+				<Select.Root type="single" bind:value={roleDraft}>
+					<Select.Trigger
+						id="user-role-filter"
+						class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+						aria-label="บทบาท"
+					>
+						<span class="truncate">
+							{roleFilterOptions.find((option) => option.value === roleDraft)?.label ?? 'ทั้งหมด'}
+						</span>
+					</Select.Trigger>
+					<Select.Content>
+						{#each roleFilterOptions as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
+
+			<div class="w-full min-w-0 space-y-2">
+				<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
+				<Select.Root type="single" bind:value={typeDraft}>
+					<Select.Trigger
+						id="user-type-filter"
+						class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+						aria-label="ประเภท"
+					>
+						<span class="truncate">
+							{typeFilterOptions.find((option) => option.value === typeDraft)?.label ?? 'ทั้งหมด'}
+						</span>
+					</Select.Trigger>
+					<Select.Content>
+						{#each typeFilterOptions as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
+		</div>
+
+		<div class="mt-3 flex justify-end">
+			<Button
+				type="submit"
+				class="h-11 w-full rounded-xl bg-[#0f2d5c] px-6 font-semibold text-white hover:bg-[#0a1e3f] sm:w-auto"
 			>
-			<Input
-				id="user-username-filter"
-				type="search"
-				placeholder="ค้นหาชื่อผู้ใช้..."
-				bind:value={usernameFilter}
-				oninput={resetPageOnFilter}
-				class="h-11 rounded-xl bg-background shadow-xs"
-			/>
+				ค้นหา
+			</Button>
 		</div>
-
-		<div class="w-full min-w-0 space-y-2">
-			<label for="user-phone-filter" class="text-xs font-semibold text-foreground">เบอร์โทร</label>
-			<Input
-				id="user-phone-filter"
-				type="search"
-				placeholder="ค้นหาเบอร์โทร..."
-				bind:value={phoneFilter}
-				oninput={resetPageOnFilter}
-				class="h-11 rounded-xl bg-background shadow-xs"
-			/>
-		</div>
-
-		<div class="w-full min-w-0 space-y-2">
-			<label for="user-name-filter" class="text-xs font-semibold text-foreground">ชื่อที่แสดง</label>
-			<Input
-				id="user-name-filter"
-				type="search"
-				placeholder="ค้นหาชื่อที่แสดง..."
-				bind:value={nameFilter}
-				oninput={resetPageOnFilter}
-				class="h-11 rounded-xl bg-background shadow-xs"
-			/>
-		</div>
-
-		<div class="w-full min-w-0 space-y-2">
-			<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
-			<Select.Root type="single" bind:value={roleFilter} onValueChange={resetPageOnFilter}>
-				<Select.Trigger
-					id="user-role-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
-					aria-label="บทบาท"
-				>
-					<span class="truncate">
-						{roleFilterOptions.find((option) => option.value === roleFilter)?.label ?? 'ทั้งหมด'}
-					</span>
-				</Select.Trigger>
-				<Select.Content>
-					{#each roleFilterOptions as option (option.value)}
-						<Select.Item value={option.value} label={option.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-
-		<div class="w-full min-w-0 space-y-2">
-			<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
-			<Select.Root type="single" bind:value={typeFilter} onValueChange={resetPageOnFilter}>
-				<Select.Trigger
-					id="user-type-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
-					aria-label="ประเภท"
-				>
-					<span class="truncate">
-						{typeFilterOptions.find((option) => option.value === typeFilter)?.label ?? 'ทั้งหมด'}
-					</span>
-				</Select.Trigger>
-				<Select.Content>
-					{#each typeFilterOptions as option (option.value)}
-						<Select.Item value={option.value} label={option.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-	</div>
+	</form>
 
 	<div class="overflow-hidden rounded-2xl border bg-white shadow-xs">
 		{#if usersQuery.isLoading}
