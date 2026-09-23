@@ -70,17 +70,13 @@
 	let currentPage = $state(1);
 
 	// draft (bound to inputs)
-	let usernameDraft = $state('');
-	let phoneDraft = $state('');
-	let nameDraft = $state('');
+	let queryDraft = $state('');
 	let shelterDraft = $state('');
 	let roleDraft = $state('');
 	let typeDraft = $state('');
 
 	// applied (used by filteredUsers)
-	let usernameFilter = $state('');
-	let phoneFilter = $state('');
-	let nameFilter = $state('');
+	let queryFilter = $state('');
 	let shelterFilter = $state('');
 	let roleFilter = $state('');
 	let typeFilter = $state('');
@@ -115,9 +111,7 @@
 	];
 
 	function applyFilters() {
-		usernameFilter = usernameDraft;
-		phoneFilter = phoneDraft;
-		nameFilter = nameDraft;
+		queryFilter = queryDraft;
 		shelterFilter = shelterDraft;
 		roleFilter = roleDraft;
 		typeFilter = typeDraft;
@@ -245,17 +239,14 @@
 				return false;
 			}
 
-			const usernameQ = usernameFilter.trim().toLowerCase();
-			if (usernameQ && !u.name.toLowerCase().includes(usernameQ)) return false;
-
-			const phoneQ = phoneFilter.trim();
-			if (phoneQ) {
-				if (!u.phone) return false;
-				if (!u.phone.includes(phoneQ)) return false;
+			const q = queryFilter.trim();
+			if (q) {
+				const qLower = q.toLowerCase();
+				const matchesUsername = u.name.toLowerCase().includes(qLower);
+				const matchesPhone = Boolean(u.phone?.includes(q));
+				const matchesDisplayName = (u.display_name ?? '').toLowerCase().includes(qLower);
+				if (!matchesUsername && !matchesPhone && !matchesDisplayName) return false;
 			}
-
-			const nameQ = nameFilter.trim().toLowerCase();
-			if (nameQ && !(u.display_name ?? '').toLowerCase().includes(nameQ)) return false;
 
 			if (!userMatchesRoleFilter(u.roles, roleFilter)) return false;
 
@@ -313,43 +304,20 @@
 			applyFilters();
 		}}
 	>
-		<div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-			<div class="w-full min-w-0 space-y-2">
-				<label for="user-username-filter" class="text-xs font-semibold text-foreground"
-					>ชื่อผู้ใช้</label
-				>
+		<div
+			class={[
+				'grid w-full grid-cols-1 gap-3 sm:grid-cols-2',
+				!effectiveLock ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+			]}
+		>
+			<div class="w-full min-w-0 space-y-2 sm:col-span-2">
+				<label for="user-query-filter" class="text-xs font-semibold text-foreground">ค้นหา</label>
 				<Input
-					id="user-username-filter"
+					id="user-query-filter"
 					type="search"
-					placeholder="ค้นหาชื่อผู้ใช้..."
-					bind:value={usernameDraft}
-					class="h-11 rounded-xl bg-background shadow-xs"
-				/>
-			</div>
-
-			<div class="w-full min-w-0 space-y-2">
-				<label for="user-phone-filter" class="text-xs font-semibold text-foreground"
-					>เบอร์โทร</label
-				>
-				<Input
-					id="user-phone-filter"
-					type="search"
-					placeholder="ค้นหาเบอร์โทร..."
-					bind:value={phoneDraft}
-					class="h-11 rounded-xl bg-background shadow-xs"
-				/>
-			</div>
-
-			<div class="w-full min-w-0 space-y-2">
-				<label for="user-name-filter" class="text-xs font-semibold text-foreground"
-					>ชื่อ-นามสกุล</label
-				>
-				<Input
-					id="user-name-filter"
-					type="search"
-					placeholder="ค้นหาชื่อ-นามสกุล..."
-					bind:value={nameDraft}
-					class="h-11 rounded-xl bg-background shadow-xs"
+					placeholder="ชื่อผู้ใช้, เบอร์โทร หรือชื่อ-นามสกุล"
+					bind:value={queryDraft}
+					class="h-11 min-h-11 rounded-xl border-input bg-background px-3 shadow-xs"
 				/>
 			</div>
 
@@ -361,7 +329,7 @@
 					<Select.Root type="single" bind:value={shelterDraft}>
 						<Select.Trigger
 							id="user-shelter-filter"
-							class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+							class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
 							aria-label="ศูนย์อพยพ"
 						>
 							<span class="truncate">
@@ -383,7 +351,7 @@
 				<Select.Root type="single" bind:value={roleDraft}>
 					<Select.Trigger
 						id="user-role-filter"
-						class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+						class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
 						aria-label="บทบาท"
 					>
 						<span class="truncate">
@@ -403,7 +371,7 @@
 				<Select.Root type="single" bind:value={typeDraft}>
 					<Select.Trigger
 						id="user-type-filter"
-						class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+						class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
 						aria-label="ประเภท"
 					>
 						<span class="truncate">
