@@ -3,7 +3,6 @@ import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import { hashScannerSecret } from '$lib/server/scanners/device-credentials';
-import type { Evacuee } from '$lib/features/people';
 
 vi.mock('$lib/features/scanners/server', async () => {
 	const actual = await vi.importActual<typeof import('$lib/features/scanners/server')>(
@@ -122,7 +121,7 @@ describe('POST /api/v1/scanner/draft', () => {
 		expect(data.error.code).toBe('DEVICE_AUTH_FAILED');
 	});
 
-	it('returns 200 on successful scan with valid headers and payload', async () => {
+	it('returns 410 for authenticated requests because legacy card drafts are disabled', async () => {
 		const secret = 'sk_scan_correct_secret';
 		const secretHash = hashScannerSecret(secret);
 
@@ -143,15 +142,6 @@ describe('POST /api/v1/scanner/draft', () => {
 			last_seen_at: null
 		});
 
-		mockProcessScan.mockResolvedValue({
-			status: 'created_pre_registered',
-			evacuee: {
-				_id: 'evacuee:01',
-				created_at: '2026-08-30T00:00:00Z'
-			} as unknown as Evacuee,
-			message: 'อ่านบัตรสำเร็จ'
-		});
-
 		const request = new Request('http://localhost/api/v1/scanner/draft', {
 			method: 'POST',
 			headers: {
@@ -163,14 +153,13 @@ describe('POST /api/v1/scanner/draft', () => {
 		});
 
 		const res = await POST({ request } as unknown as RequestEvent);
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(410);
 		const data = await res.json();
-		expect(data.ok).toBe(true);
-		expect(data.status).toBe('created_pre_registered');
-		expect(data.evacuee_id).toBe('evacuee:01');
+		expect(data.error.code).toBe('KIOSK_DRAFT_DISABLED');
+		expect(mockProcessScan).not.toHaveBeenCalled();
 	});
 
-	it('derives shelter and station from the authenticated device, not the card request body', async () => {
+	it('does not process card data or trust location fields in the request body', async () => {
 		const secret = 'sk_scan_correct_secret';
 		mockGetDevice.mockResolvedValue({
 			_id: 'device:01',
@@ -188,12 +177,6 @@ describe('POST /api/v1/scanner/draft', () => {
 			status: 'active',
 			last_seen_at: null
 		});
-		mockProcessScan.mockResolvedValue({
-			status: 'created_pre_registered',
-			evacuee: { _id: 'evacuee:02', created_at: '2026-08-30T00:00:00Z' } as unknown as Evacuee,
-			message: 'อ่านบัตรสำเร็จ'
-		});
-
 		const request = new Request('http://localhost/api/v1/scanner/draft', {
 			method: 'POST',
 			headers: {
@@ -209,7 +192,7 @@ describe('POST /api/v1/scanner/draft', () => {
 		});
 
 		const response = await POST({ request } as unknown as RequestEvent);
-		expect(response.status).toBe(200);
-		expect(mockProcessScan).toHaveBeenCalledWith('SH001', 'DEV-01', 'โต๊ะ 1', expect.anything());
+		expect(response.status).toBe(410);
+		expect(mockProcessScan).not.toHaveBeenCalled();
 	});
 });
