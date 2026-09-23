@@ -12,9 +12,7 @@ export async function fetchAppConfig(fetchFn: typeof fetch = fetch): Promise<App
 		credentials: 'include'
 	});
 	const body = (await res.json().catch(() => null)) as
-		| AppConfigResponse
-		| { error?: { message?: string } }
-		| null;
+		AppConfigResponse | { error?: { message?: string } } | null;
 	if (!res.ok) {
 		const message =
 			body && typeof body === 'object' && 'error' in body && body.error?.message
@@ -26,7 +24,7 @@ export async function fetchAppConfig(fetchFn: typeof fetch = fetch): Promise<App
 }
 
 export async function updateAppConfig(
-	patch: Pick<AppConfig, 'recaptcha_enabled'>,
+	patch: Partial<Pick<AppConfig, 'recaptcha_enabled' | 'thaid_registration_enabled'>>,
 	fetchFn: typeof fetch = fetch
 ): Promise<AppConfig> {
 	const res = await fetchFn('/api/v1/app-config', {
@@ -36,9 +34,7 @@ export async function updateAppConfig(
 		body: JSON.stringify(patch)
 	});
 	const body = (await res.json().catch(() => null)) as
-		| { config: AppConfig; ok?: boolean }
-		| { error?: { message?: string } }
-		| null;
+		{ config: AppConfig; ok?: boolean } | { error?: { message?: string } } | null;
 	if (!res.ok) {
 		const message =
 			body && typeof body === 'object' && 'error' in body && body.error?.message

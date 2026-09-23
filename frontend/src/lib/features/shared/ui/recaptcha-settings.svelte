@@ -38,8 +38,10 @@
 					เปิดใช้งาน reCAPTCHA
 				</label>
 				<p class="text-xs text-muted-foreground">
-					ป้องกันสแปมบนหน้าเข้าสู่ระบบ ลงทะเบียนสาธารณะ และบริจาค เมื่อเปิด ต้องมีคีย์ใน env
-					(<code class="rounded bg-muted px-1">PUBLIC_RECAPTCHA_SITE_KEY</code> /
+					ป้องกันสแปมบนหน้าเข้าสู่ระบบ ลงทะเบียนสาธารณะ และบริจาค เมื่อเปิด ต้องมีคีย์ใน env (<code
+						class="rounded bg-muted px-1">PUBLIC_RECAPTCHA_SITE_KEY</code
+					>
+					/
 					<code class="rounded bg-muted px-1">RECAPTCHA_PROJECT_ID</code>) ด้วย
 				</p>
 			</div>

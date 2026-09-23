@@ -1,16 +1,21 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { onMount, untrack } from 'svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Download from '@lucide/svelte/icons/download';
 	import Upload from '@lucide/svelte/icons/upload';
 	import FileSpreadsheet from '@lucide/svelte/icons/file-spreadsheet';
+	import Activity from '@lucide/svelte/icons/activity';
 	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { useMasterData } from '$lib/features/master-data';
-	import { useShelters } from '$lib/features/shelters';
+	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
+		orphanFoodDistributionRows,
 		orphanZoneRows,
 		validateWorkbook,
 		type Lookups,
@@ -23,12 +28,23 @@
 		type EnumChoice,
 		type MasterColumn
 	} from '../domain/columns';
-	import { findExistingDuplicates, type DuplicateMatch } from '../domain/duplicates';
+	import {
+		findExistingDuplicates,
+		type DuplicateMatch,
+		type ExistingShelter
+	} from '../domain/duplicates';
 	import { buildShelterTemplateBlob, type TemplateMasters } from '../data/template';
 	import { parseShelterWorkbook } from '../data/parse';
-	import { useImportShelters, type DuplicateAction } from '../application/queries';
+	import {
+		useImportJob,
+		useImportShelters,
+		useRetryImportJob,
+		isImportJobTerminal,
+		type DuplicateAction
+	} from '../application/queries';
 	import ImportPreviewTable from './import-preview-table.svelte';
 	import ImportLogHistory from './import-log-history.svelte';
+	import ImportProgress from './import-progress.svelte';
 
 	let { basePath }: { basePath?: string } = $props();
 	const resolvedBasePath = $derived(basePath ?? resolve('/system-management/shelters'));
@@ -45,7 +61,12 @@
 		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
 	);
 
-	let workbook = $state<ParsedWorkbook>({ shelters: [], zones: [] });
+	let workbook = $state<ParsedWorkbook>({
+		shelters: [],
+		zones: [],
+		foodDistributionPoints: [],
+		hasFoodDistributionPointsSheet: false
+	});
 	let filename = $state('');
 	let parsing = $state(false);
 
@@ -55,12 +76,15 @@
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
 	const orphanZones = $derived(workbook.shelters.length ? orphanZoneRows(workbook) : []);
-	const zoneCount = $derived(workbook.zones.length);
-
-	const sheltersQuery = useShelters();
-	const existingShelters = $derived(
-		(sheltersQuery.data ?? []).map((s) => ({ code: s.code, name: s.name }))
+	const orphanFoodPoints = $derived(
+		workbook.shelters.length ? orphanFoodDistributionRows(workbook) : []
 	);
+	const zoneCount = $derived(workbook.zones.length);
+	const foodPointCount = $derived(workbook.foodDistributionPoints.length);
+
+	let existingShelters = $state<ExistingShelter[]>([]);
+	let duplicateCheckReady = $state(false);
+	let duplicateCheckLoading = $state(false);
 	const duplicates = $derived(
 		workbook.shelters.length
 			? findExistingDuplicates(validations, existingShelters)
@@ -72,6 +96,57 @@
 	let duplicateAction = $state<DuplicateAction>('skip');
 
 	const importMutation = useImportShelters();
+	const retryMutation = useRetryImportJob();
+	const queryClient = useQueryClient();
+	let activeJobId = $state<string | null>(null);
+	const activeJobQuery = useImportJob(() => activeJobId);
+	const activeJob = $derived(activeJobQuery.data);
+	const jobRunning = $derived(
+		Boolean(activeJob && !isImportJobTerminal(activeJob.job.status)) || importMutation.isPending
+	);
+	let progressDialogOpen = $state(false);
+	let importSubmitted = $state(false);
+	let importIdempotencyKey = $state<string | null>(null);
+	let restoreDialogHandled = $state(false);
+	let invalidatedJobId = $state<string | null>(null);
+
+	onMount(() => {
+		activeJobId = sessionStorage.getItem('shelter-import-active-job');
+		if (!activeJobId) restoreDialogHandled = true;
+	});
+
+	$effect(() => {
+		const job = activeJobQuery.data?.job;
+		if (!job) return;
+		untrack(() => {
+			if (!restoreDialogHandled) {
+				restoreDialogHandled = true;
+				if (!isImportJobTerminal(job.status)) progressDialogOpen = true;
+			}
+			if (isImportJobTerminal(job.status) && invalidatedJobId !== job._id) {
+				invalidatedJobId = job._id;
+				queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+				queryClient.invalidateQueries({ queryKey: ['shelter-import', 'logs'] });
+			}
+		});
+	});
+
+	async function refreshExistingShelters(): Promise<ExistingShelter[] | null> {
+		duplicateCheckLoading = true;
+		duplicateCheckReady = false;
+		try {
+			const shelters = await listShelters({ cache: 'no-store' });
+			existingShelters = shelters.map((s) => ({ code: s.code, name: s.name }));
+			duplicateCheckReady = true;
+			return existingShelters;
+		} catch {
+			existingShelters = [];
+			toast.error('ตรวจสอบศูนย์พักพิงในระบบไม่สำเร็จ — กรุณาลองใหม่');
+			return null;
+		} finally {
+			duplicateCheckLoading = false;
+		}
+	}
 
 	async function downloadTemplate(withSample: boolean) {
 		try {
@@ -99,15 +174,29 @@
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		// A newly selected file starts a new import attempt. A transport failure
+		// leaves this key intact so the next click replays the same durable job.
+		importIdempotencyKey = null;
 		parsing = true;
 		try {
-			workbook = await parseShelterWorkbook(file);
+			const parsed = await parseShelterWorkbook(file);
+			workbook = parsed;
 			filename = file.name;
+			importSubmitted = false;
 			if (workbook.shelters.length === 0) toast.warning('ไม่พบข้อมูลในไฟล์');
+			else await refreshExistingShelters();
 		} catch {
 			toast.error('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง');
-			workbook = { shelters: [], zones: [] };
+			workbook = {
+				shelters: [],
+				zones: [],
+				foodDistributionPoints: [],
+				hasFoodDistributionPointsSheet: false
+			};
 			filename = '';
+			existingShelters = [];
+			duplicateCheckReady = false;
+			importSubmitted = false;
 		} finally {
 			parsing = false;
 			input.value = '';
@@ -115,12 +204,31 @@
 	}
 
 	function clearFile() {
-		workbook = { shelters: [], zones: [] };
+		workbook = {
+			shelters: [],
+			zones: [],
+			foodDistributionPoints: [],
+			hasFoodDistributionPointsSheet: false
+		};
 		filename = '';
+		existingShelters = [];
+		duplicateCheckReady = false;
+		importSubmitted = false;
+		importIdempotencyKey = null;
+	}
+
+	function setDuplicateAction(value: string) {
+		if (value === 'skip' || value === 'update') {
+			if (duplicateAction !== value) importIdempotencyKey = null;
+			duplicateAction = value;
+		}
 	}
 
 	const importDisabled = $derived(
-		newCount === 0 && !(duplicateAction === 'update' && dupCount > 0)
+		!duplicateCheckReady ||
+			duplicateCheckLoading ||
+			jobRunning ||
+			(newCount === 0 && !(duplicateAction === 'update' && dupCount > 0))
 	);
 
 	const importLabel = $derived(
@@ -131,33 +239,65 @@
 				: `นำเข้า ${newCount} ศูนย์ (ข้าม ${dupCount})`
 	);
 
-	function runImport() {
+	async function runImport() {
 		if (importDisabled) return;
+		if (!(await refreshExistingShelters())) return;
+		importIdempotencyKey ??= crypto.randomUUID();
+		importSubmitted = true;
 		importMutation.mutate(
 			{
 				filename,
-				importedBy: authStore.user?.name ?? 'unknown',
 				rows: validations,
-				duplicates,
-				duplicateAction
+				duplicateAction,
+				idempotencyKey: importIdempotencyKey
 			},
-			{ onSuccess: () => clearFile() }
+			{
+				onSuccess: (result) => {
+					activeJobId = result.jobId;
+					sessionStorage.setItem('shelter-import-active-job', result.jobId);
+					progressDialogOpen = true;
+				},
+				onError: () => {
+					importSubmitted = false;
+				}
+			}
 		);
 	}
+
+	function retryFailed() {
+		if (activeJobId) retryMutation.mutate(activeJobId);
+	}
+
+	const hasRetryableFailures = $derived(
+		Boolean(
+			activeJob?.job.status === 'completed_with_errors' &&
+			activeJob?.items.some(
+				(item) => item.status === 'failed' && item.attempts < (item.max_attempts ?? 3)
+			)
+		)
+	);
 </script>
 
-<div class="flex w-full flex-1 flex-col gap-6 p-6">
+<div class="flex w-full flex-1 flex-col gap-6 bg-[#F8FAFC] p-4 sm:p-6">
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>
-			<h2 class="text-2xl font-bold tracking-tight text-foreground">นำเข้าศูนย์พักพิงจาก Excel</h2>
-			<p class="mt-1 text-sm text-muted-foreground">
+			<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647]">
+				นำเข้าศูนย์พักพิงจาก Excel
+			</h1>
+			<p class="mt-2 text-base text-slate-700">
 				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน
 			</p>
-			<p class="mt-1 text-xs text-muted-foreground">
+			<p class="mt-1 text-sm text-slate-500">
 				{APP_ONLY_FIELDS.join(' · ')} ไม่มีในไฟล์ — ตั้งค่าในหน้าแก้ไขศูนย์พักพิงหลังนำเข้าเสร็จ
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
+			{#if activeJobId}
+				<Button variant="outline" onclick={() => (progressDialogOpen = true)}>
+					<Activity class="mr-2 h-4 w-4" aria-hidden="true" />
+					ดูความคืบหน้างานล่าสุด
+				</Button>
+			{/if}
 			<Button
 				variant="outline"
 				onclick={() => downloadTemplate(false)}
@@ -172,20 +312,18 @@
 	</div>
 
 	<!-- Upload -->
-	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
 		{#if filename}
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div class="flex items-center gap-2 text-sm">
 					<FileSpreadsheet class="h-5 w-5 text-muted-foreground" />
 					<span class="font-medium">{filename}</span>
 					<span class="text-muted-foreground">
-						· {validations.length} ศูนย์ · {zoneCount} โซน · พร้อมนำเข้า {validCount} · ผิดพลาด {errorCount}{dupCount >
-						0
-							? ` · ชื่อซ้ำ ${dupCount}`
-							: ''}
+						· {validations.length} ศูนย์ · {zoneCount} โซน · {foodPointCount} จุดแจกอาหาร · พร้อมนำเข้า
+						{validCount} · ผิดพลาด {errorCount}{dupCount > 0 ? ` · ชื่อซ้ำ ${dupCount}` : ''}
 					</span>
 				</div>
-				<Button variant="ghost" size="sm" onclick={clearFile}>
+				<Button variant="ghost" size="sm" onclick={clearFile} disabled={jobRunning}>
 					<X class="mr-1 h-4 w-4" /> ล้างไฟล์
 				</Button>
 			</div>
@@ -206,7 +344,7 @@
 					type="file"
 					accept=".xlsx"
 					class="sr-only"
-					disabled={parsing}
+					disabled={parsing || jobRunning}
 					onchange={onFileChange}
 				/>
 			</label>
@@ -214,13 +352,13 @@
 	</div>
 
 	<!-- Preview + commit -->
-	{#if validations.length > 0}
-		<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+	{#if validations.length > 0 && !importMutation.isPending && !importSubmitted}
+		<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>
-				<Button onclick={runImport} disabled={importDisabled || importMutation.isPending}>
+				<Button onclick={runImport} disabled={importDisabled}>
 					<Upload class="mr-2 h-4 w-4" />
-					{importMutation.isPending ? 'กำลังนำเข้า...' : importLabel}
+					{importMutation.isPending ? 'กำลังสร้างงาน...' : importLabel}
 				</Button>
 			</div>
 			{#if errorCount > 0}
@@ -244,30 +382,20 @@
 							<li>{dup.name} → {dup.existingCode}</li>
 						{/each}
 					</ul>
-					<div class="mt-3 space-y-2">
-						<label class="flex items-center space-x-3 text-sm">
-							<input
-								type="radio"
-								name="duplicate-action"
-								value="skip"
-								checked={duplicateAction === 'skip'}
-								onchange={() => (duplicateAction = 'skip')}
-								class="h-4 w-4 accent-shelter-blue-text"
-							/>
+					<RadioGroup.Root
+						value={duplicateAction}
+						onValueChange={setDuplicateAction}
+						class="mt-3 gap-2"
+					>
+						<label for="duplicate-action-skip" class="flex items-center gap-3 text-sm">
+							<RadioGroup.Item value="skip" id="duplicate-action-skip" />
 							<span>ข้ามศูนย์ที่ซ้ำ (ไม่แก้ไขข้อมูลเดิม)</span>
 						</label>
-						<label class="flex items-center space-x-3 text-sm">
-							<input
-								type="radio"
-								name="duplicate-action"
-								value="update"
-								checked={duplicateAction === 'update'}
-								onchange={() => (duplicateAction = 'update')}
-								class="h-4 w-4 accent-shelter-blue-text"
-							/>
+						<label for="duplicate-action-update" class="flex items-center gap-3 text-sm">
+							<RadioGroup.Item value="update" id="duplicate-action-update" />
 							<span>อัปเดตข้อมูลเดิมทับด้วยค่าจากไฟล์</span>
 						</label>
-					</div>
+					</RadioGroup.Root>
 					{#if duplicateAction === 'update'}
 						<p class="mt-2 text-sm text-amber-700">
 							คำเตือน: ข้อมูลศูนย์ที่มีอยู่เดิมจะถูกเขียนทับด้วยค่าจากไฟล์นี้ทั้งหมด
@@ -280,8 +408,62 @@
 	{/if}
 
 	<!-- History -->
-	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
-		<h3 class="mb-4 text-lg font-semibold text-foreground">ประวัติการนำเข้า</h3>
-		<ImportLogHistory basePath={resolvedBasePath} />
+	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
+		<div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+			<div>
+				<h2 class="text-2xl font-bold tracking-tight text-slate-900">ประวัติการนำเข้า</h2>
+				<p class="mt-1 text-sm text-slate-500">ติดตามสถานะงานและเปิดดูผลลัพธ์รายศูนย์เมื่อจำเป็น</p>
+			</div>
+		</div>
+		<ImportLogHistory
+			basePath={resolvedBasePath}
+			{activeJob}
+			onprogress={() => (progressDialogOpen = true)}
+		/>
 	</div>
+
+	{#if activeJobId}
+		<Dialog.Root bind:open={progressDialogOpen}>
+			<Dialog.Content class="max-h-[90vh] overflow-y-auto shadow-md sm:max-w-5xl">
+				<Dialog.Header>
+					<Dialog.Title class="text-xl font-bold text-slate-900">ความคืบหน้าการนำเข้า</Dialog.Title>
+					<Dialog.Description>
+						ติดตามการประมวลผลทีละศูนย์และส่งรายการที่ล้มเหลวกลับเข้าคิวได้จากหน้านี้
+					</Dialog.Description>
+				</Dialog.Header>
+
+				{#if activeJob}
+					<ImportProgress
+						data={activeJob}
+						retrying={retryMutation.isPending}
+						onretry={hasRetryableFailures ? retryFailed : undefined}
+					/>
+				{:else if activeJobQuery.isLoading}
+					<div
+						class="rounded-xl border border-slate-200/80 bg-slate-50 p-8 text-center text-sm text-slate-600"
+					>
+						กำลังโหลดสถานะงานล่าสุด...
+					</div>
+				{:else}
+					<div
+						class="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center text-sm text-amber-900"
+					>
+						ไม่พบข้อมูลงานนำเข้านี้แล้ว
+					</div>
+				{/if}
+				{#if orphanFoodPoints.length > 0}
+					<p class="mb-3 text-sm text-amber-600">
+						ชีต "จุดแจกอาหาร" มี {orphanFoodPoints.length} แถวที่ "รหัสศูนย์พักพิง" ไม่ตรงกับศูนย์ใดเลย
+						(แถวที่ {orphanFoodPoints.map((point) => point.line).join(', ')}) —
+						แถวเหล่านี้จะไม่ถูกนำเข้า
+					</p>
+				{/if}
+
+				<Dialog.Footer>
+					<Button variant="outline" onclick={() => (progressDialogOpen = false)}>ปิดหน้าต่าง</Button
+					>
+				</Dialog.Footer>
+			</Dialog.Content>
+		</Dialog.Root>
+	{/if}
 </div>

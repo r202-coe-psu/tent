@@ -10,8 +10,5 @@ export const prerender = false;
  */
 export const GET: RequestHandler = async () => {
 	const enabled = await isRecaptchaClientEnabled();
-	return json(
-		{ enabled },
-		{ headers: { 'Cache-Control': 'no-store' } }
-	);
+	return json({ enabled }, { headers: { 'Cache-Control': 'no-store' } });
 };

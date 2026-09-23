@@ -3,6 +3,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Compass from '@lucide/svelte/icons/compass';
+	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import User from '@lucide/svelte/icons/user';
@@ -26,7 +27,6 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const canSeeBackoffice = $derived(isSA || isShelterManager(roles));
-
 	// Query shelters
 	const sheltersQuery = useShelters();
 	const userShelterCodes = $derived(shelterCodesFromRoles(roles));
@@ -88,12 +88,7 @@
 		return labels.length > 0 ? labels : ['ผู้ใช้งานทั่วไป'];
 	});
 
-	// onsite + public are always shown; system-management is SA-only; back-office
-	// is SA/SM — size the grid to the number of visible cards.
-	const visibleCards = $derived(2 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
-	const xlCols = $derived(
-		visibleCards >= 4 ? 'xl:grid-cols-4' : visibleCards === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'
-	);
+	const cardShellClass = 'w-full sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]';
 </script>
 
 <svelte:head>
@@ -101,7 +96,7 @@
 </svelte:head>
 
 <div class="flex flex-1 flex-col justify-start p-4 sm:p-6 lg:justify-center">
-	<div class="mx-auto w-full min-w-0 max-w-7xl px-4 sm:px-0">
+	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<header class="mb-8 text-center">
 			<h1 class="mb-2 text-3xl font-bold tracking-wide sm:text-4xl">
 				Smart<span class="text-primary">Shelter</span> Thailand
@@ -248,55 +243,14 @@
 			</div>
 		</section>
 
-		<main class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 {xlCols}">
-			<HomePortalCard
-				icon={Users}
-				accent="brand"
-				title="ฝ่ายทะเบียน"
-				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พักสำหรับผู้ปฏิบัติงานหน้างาน"
-				href={resolve('/onsite')}
-			>
-				{#snippet actions()}
-					{#if currentShelter}
-						<div
-							class="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
-						>
-							<Building2 class="size-3.5 text-primary" />
-							<span class="max-w-[200px] truncate font-medium text-foreground">
-								{currentShelter.name}
-							</span>
-						</div>
-					{/if}
-				{/snippet}
-			</HomePortalCard>
-
-			<HomePortalCard
-				icon={Compass}
-				accent="neutral"
-				title="เว็บไซต์สำหรับประชาชน"
-				badge="ประชาชน / อาสาสมัคร"
-				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
-				href={resolve('/')}
-			/>
-
-			{#if isSA}
+		<main class="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-6">
+			<div class={cardShellClass}>
 				<HomePortalCard
-					icon={Building2}
-					accent="accent-purple"
-					title="เมนูผู้ดูแลระบบ"
-					badge="เฉพาะผู้ดูแลระบบ"
-					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
-					href={resolve('/system-management')}
-				/>
-			{/if}
-
-			{#if canSeeBackoffice}
-				<HomePortalCard
-					icon={Boxes}
-					accent="muted"
-					title="ระบบจัดการศูนย์พักพิง (Back-office)"
-					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
-					href={resolve('/back-office')}
+					icon={Users}
+					accent="brand"
+					title="ปฏิบัติการหน้างาน"
+					description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พัก สำหรับผู้ปฏิบัติงานหน้างาน"
+					href={resolve('/onsite')}
 				>
 					{#snippet actions()}
 						{#if currentShelter}
@@ -311,6 +265,68 @@
 						{/if}
 					{/snippet}
 				</HomePortalCard>
+			</div>
+
+			{#if canSeeBackoffice}
+				<div class={cardShellClass}>
+					<HomePortalCard
+						icon={Boxes}
+						accent="muted"
+						title="ระบบหลังบ้าน"
+						description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
+						href={resolve('/back-office')}
+					>
+						{#snippet actions()}
+							{#if currentShelter}
+								<div
+									class="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+								>
+									<Building2 class="size-3.5 text-primary" />
+									<span class="max-w-[200px] truncate font-medium text-foreground">
+										{currentShelter.name}
+									</span>
+								</div>
+							{/if}
+						{/snippet}
+					</HomePortalCard>
+				</div>
+			{/if}
+
+			<div class={cardShellClass}>
+				<HomePortalCard
+					icon={HeartHandshake}
+					accent="success"
+					title="ระบบบริการจิตอาสา"
+					badge="สำหรับอาสาสมัคร"
+					badgeVariant="success"
+					description="ตารางงานจิตอาสาประจำตัว (My Schedule), อัปเดตความพร้อมปฏิบัติงาน, รายงานตัวปฏิบัติภารกิจ และดูงานด่วน"
+					href={resolve('/volunteers/portal')}
+				/>
+			</div>
+
+			<div class={cardShellClass}>
+				<HomePortalCard
+					icon={Compass}
+					accent="neutral"
+					title="เว็บไซต์บริการประชาชน"
+					badge="ประชาชน / อาสาสมัคร"
+					badgeVariant="neutral"
+					description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
+					href={resolve('/')}
+				/>
+			</div>
+
+			{#if isSA}
+				<div class={cardShellClass}>
+					<HomePortalCard
+						icon={Building2}
+						accent="accent-purple"
+						title="เมนูผู้ดูแลระบบ"
+						badge="เฉพาะผู้ดูแลระบบ"
+						description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
+						href={resolve('/system-management')}
+					/>
+				</div>
 			{/if}
 		</main>
 	</div>

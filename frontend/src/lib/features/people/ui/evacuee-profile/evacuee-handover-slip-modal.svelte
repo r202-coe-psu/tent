@@ -285,7 +285,9 @@
 					variant="outline"
 					onclick={handlePrint}
 					disabled={isExportingPdf}
-					class={!dismissible ? 'w-full gap-2 text-sm font-semibold' : 'gap-2 text-sm font-semibold'}
+					class={!dismissible
+						? 'w-full gap-2 text-sm font-semibold'
+						: 'gap-2 text-sm font-semibold'}
 				>
 					<Printer class="size-4" />
 					{t.print}

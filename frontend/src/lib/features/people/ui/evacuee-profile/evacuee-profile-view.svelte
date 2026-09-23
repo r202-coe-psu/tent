@@ -29,7 +29,8 @@
 		normalizeCheckoutRemark,
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
-		formatPersonName
+		formatPersonName,
+		zoneLabel
 	} from '$lib/features/people';
 	import {
 		hasStaffCapability,
@@ -94,14 +95,14 @@
 		Record<StayStatus, { label: string; shortLabel: string; colorClass: string; dotClass: string }>
 	> = {
 		active: {
-			label: 'พักพิงในศูนย์ (Active)',
-			shortLabel: 'พักพิงในศูนย์',
+			label: 'เช็คอิน / พักพิงในศูนย์ (Check-in)',
+			shortLabel: 'เช็คอิน',
 			colorClass:
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
 			dotClass: 'bg-green-500'
 		},
 		room_confirmed: {
-			label: 'ยืนยันถึงโซนแล้ว (Zone Arrival Confirmed)',
+			label: 'ยืนยันถึงโซน (Zone Arrival Confirmed)',
 			shortLabel: 'ยืนยันถึงโซน',
 			colorClass:
 				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
@@ -387,7 +388,7 @@
 					patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
 				});
 			}
-			toast.success(`ย้ายโซนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`);
+			toast.success(`ย้ายโซนเป็น ${zoneLabel(zoneCode, shelterZones)} เรียบร้อย`);
 			showZoneModal = false;
 		} catch (err: unknown) {
 			toast.error(`ไม่สามารถย้ายโซนได้: ${err instanceof Error ? err.message : String(err)}`);
@@ -397,7 +398,7 @@
 	// Status changes go through the movement stream — current_stay is only a
 	// snapshot of it (schema.md §1.1) — so every transition here records a
 	// movement doc instead of patching current_stay directly.
-	async function updateStatus(status: StayStatus) {
+	async function updateStatus(status: StayStatus, reason?: string) {
 		if (!evacuee) return;
 		try {
 			const action = resolveStatusChangeAction(evacuee.current_stay.status, status);
@@ -417,14 +418,26 @@
 				}
 				await checkInMutation.mutateAsync({ evacuee, ctx, zone });
 			} else if (kind === 'check_out') {
-				const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
-				if (entered === null) return;
-				const reason = normalizeCheckoutRemark(entered);
-				await checkOutMutation.mutateAsync({ evacuee, ctx, reason });
+				const normalized = normalizeCheckoutRemark(reason);
+				await checkOutMutation.mutateAsync({ evacuee, ctx, reason: normalized });
 			} else if (kind === 'confirm_room') {
 				await confirmRoomMutation.mutateAsync({ evacuee, ctx });
 			} else if (action !== 'check_in' && action !== 'check_out' && action !== 'confirm_room') {
-				await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
+				if (action === 'leave_temporary') {
+					const trimmed = (reason ?? '').trim();
+					if (!trimmed) {
+						toast.error('การออกชั่วคราวต้องระบุเหตุผล');
+						return;
+					}
+					await recordMovementMutation.mutateAsync({
+						evacuee,
+						action,
+						ctx,
+						reason: trimmed
+					});
+				} else {
+					await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
+				}
 			}
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
 			showStatusModal = false;
@@ -761,7 +774,6 @@
 				onOpenQrModal={() => (showQrModal = true)}
 				onOpenPersonalEdit={() => (showPersonalModal = true)}
 				onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-				onOpenActions={() => (showActionsSheet = true)}
 			/>
 		</div>
 
@@ -780,9 +792,6 @@
 					onOpenQrModal={() => (showQrModal = true)}
 					onOpenPersonalEdit={() => (showPersonalModal = true)}
 					onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-					onOpenHealthEdit={() => (showHealthModal = true)}
-					onOpenHouseholdEdit={() => (showHouseholdModal = true)}
-					onOpenAssetsEdit={() => (showAssetModal = true)}
 				/>
 			</div>
 
@@ -842,7 +851,7 @@
 										{movementLabels[m.action].label}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
-												· โซน {m.zone.toUpperCase()}
+												· โซน {zoneLabel(m.zone, shelterZones)}
 											</span>
 										{/if}
 									</div>
@@ -900,11 +909,6 @@
 		onOpenZoneModal={() => (showZoneModal = true)}
 		onOpenStatusModal={() => (showStatusModal = true)}
 		onOpenQrModal={() => (showQrModal = true)}
-		onOpenPersonalEdit={() => (showPersonalModal = true)}
-		onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-		onOpenHealthEdit={() => (showHealthModal = true)}
-		onOpenHouseholdEdit={() => (showHouseholdModal = true)}
-		onOpenAssetsEdit={() => (showAssetModal = true)}
 	/>
 
 	<!-- Modals (edit mode only) -->
@@ -918,13 +922,17 @@
 			onUpdateZone={updateZone}
 		/>
 
-		<EvacueeStatusModal
-			show={showStatusModal}
-			{evacuee}
-			{statusConfig}
-			onClose={() => (showStatusModal = false)}
-			onUpdateStatus={updateStatus}
-		/>
+		{#if showStatusModal}
+			{#key evacuee._id}
+				<EvacueeStatusModal
+					show={true}
+					{evacuee}
+					{statusConfig}
+					onClose={() => (showStatusModal = false)}
+					onUpdateStatus={updateStatus}
+				/>
+			{/key}
+		{/if}
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
 

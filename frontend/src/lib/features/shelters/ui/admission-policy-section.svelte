@@ -169,11 +169,12 @@
 </script>
 
 <section
-	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-amber-bg/20 p-6"
+	id="admission-policy"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<PawPrint class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-sm font-bold text-black">6.</span>
+		<span class="text-sm font-bold text-black">7.</span>
 		<h2 class="text-base font-bold text-black">นโยบายการรับผู้อพยพและกลุ่มเปราะบาง</h2>
 	</div>
 
@@ -187,7 +188,7 @@
 				ยังไม่มีข้อมูลกลุ่มเปราะบาง — เพิ่มได้ที่หน้า “ตั้งค่าข้อมูลลงทะเบียน”
 			</p>
 		{:else}
-			<div class="space-y-2">
+			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each vulnerableGroups as group (group.value)}
 					<label
 						class="flex items-center space-x-3 rounded-lg border border-shelter-border bg-background p-3 text-sm"

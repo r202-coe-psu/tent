@@ -140,7 +140,8 @@ export const householdStatusSchema = z.enum([
 	'arriving',
 	'checked_in',
 	'checked_out',
-	'cancelled'
+	'cancelled',
+	'merged'
 ]);
 export type HouseholdStatus = z.infer<typeof householdStatusSchema>;
 
@@ -153,11 +154,12 @@ export const ACTIVE_HOUSEHOLD_STATUSES: readonly HouseholdStatus[] = [
 export const HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	Record<HouseholdStatus, readonly HouseholdStatus[]>
 > = {
-	pre_registered: ['arriving', 'checked_in', 'cancelled'],
-	arriving: ['checked_in'],
-	checked_in: ['checked_out'],
+	pre_registered: ['arriving', 'checked_in', 'cancelled', 'merged'],
+	arriving: ['checked_in', 'merged'],
+	checked_in: ['checked_out', 'merged'],
 	checked_out: [],
-	cancelled: []
+	cancelled: [],
+	merged: []
 };
 
 /**
@@ -172,7 +174,8 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	arriving: [],
 	checked_in: [],
 	checked_out: [],
-	cancelled: []
+	cancelled: [],
+	merged: []
 };
 
 export const checkoutDestinationSchema = z.object({
@@ -367,6 +370,9 @@ export interface Household extends BaseDoc {
 	district: string | null;
 	province: string | null;
 	postal_code: string | null;
+	linked_shelter_code?: string | null;
+	origin_household_id?: string | null;
+	merged_to_household_id?: string | null;
 }
 
 export type EvacueeHouseholdConflict = {
@@ -636,6 +642,7 @@ export const evacueeInputSchema = z.object({
 	photo: z.string().nullable().optional().default(null),
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
+	zone: z.string().trim().nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -742,7 +749,10 @@ const householdInputFieldsSchema = z.object({
 	subdistrict: z.string().trim().nullable().default(null),
 	district: z.string().trim().nullable().default(null),
 	province: z.string().trim().nullable().default(null),
-	postal_code: z.string().trim().nullable().default(null)
+	postal_code: z.string().trim().nullable().default(null),
+	linked_shelter_code: z.string().trim().nullable().optional().default(null),
+	origin_household_id: z.string().trim().nullable().optional().default(null),
+	merged_to_household_id: z.string().trim().nullable().optional().default(null)
 });
 
 export const householdInputSchema = householdInputFieldsSchema.superRefine((data, ctx) => {
@@ -1184,7 +1194,7 @@ export function replacePersonId(evacuee: Evacuee, personId: PersonId): Evacuee {
 	};
 }
 
-export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee {
+export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
@@ -1207,11 +1217,12 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			...(d.photo ? { photo: d.photo } : {}),
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
-			current_stay: { status: d.status, zone: null, since: now() },
+			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
@@ -1262,7 +1273,7 @@ export function createKioskEvacueeFromCard(
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
-export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical {
+export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);
 	return makeDoc(
 		'medical',
@@ -1276,11 +1287,12 @@ export function createMedical(input: MedicalInput, ctx: AuthorContext): Medical 
 			track: d.track,
 			...(d.notes ? { notes: d.notes } : {})
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
-export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Household {
+export function createHousehold(input: HouseholdInput, ctx: AuthorContext, id?: string): Household {
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
@@ -1305,7 +1317,8 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			province: d.province || null,
 			postal_code: d.postal_code || null
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
@@ -1759,9 +1772,29 @@ export function evacueeAgeYears(doc: {
 	return null;
 }
 
-export function zoneLabel(zone: string | null | undefined): string {
+/** Minimal zone shape for display lookup (shelter living zones). */
+export type ZoneLabelSource = {
+	code: string;
+	name?: string | null;
+};
+
+/**
+ * Display label for a stay-zone code. Prefer the shelter zone `name` when a
+ * lookup list is provided; never surface internal codes like `z1` when a name
+ * exists. Falls back to the raw code only when no name is available.
+ */
+export function zoneLabel(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string {
 	if (!zone) return '—';
-	return zone.toUpperCase();
+	if (zones?.length) {
+		const lower = zone.toLowerCase();
+		const match = zones.find((z) => z.code.toLowerCase() === lower);
+		const name = match?.name?.trim();
+		if (name) return name;
+	}
+	return zone;
 }
 
 // ---------------------------------------------------------------- type guards

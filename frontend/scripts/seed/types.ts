@@ -7,6 +7,8 @@ export type SeedItemDef = {
 	is_default?: boolean;
 	/** `key` of the owning item in `parent_type` (community → municipality zone). */
 	parent_key?: string;
+	category?: 'operational' | 'controlled' | 'GENERAL' | 'CONTROLLED';
+	description?: string;
 };
 
 export type MasterTypeDef = {

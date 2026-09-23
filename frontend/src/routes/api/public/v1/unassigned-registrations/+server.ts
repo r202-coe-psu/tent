@@ -57,12 +57,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 		provider: captchaProvider
 	});
 	if (!captcha.ok) {
-		return json({ success: false, error: captcha.error }, { status: captcha.status, headers: noStore });
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	try {
 		const created = await executeUnassignedRegistration(
-			{ members: input.members, household: input.household },
+			{
+				members: input.members,
+				household: input.household,
+				...(input.join_match_token ? { join_match_token: input.join_match_token } : {})
+			},
 			{ fetch }
 		);
 		return json({ ...created, success: true }, { status: 201, headers: noStore });

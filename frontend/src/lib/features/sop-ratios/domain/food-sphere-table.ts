@@ -198,7 +198,7 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 					name: master?.name ?? map.item_id,
 					sku: master?.sku,
 					category: master?.category ?? 'food',
-					baseUom: map.base_uom || master?.base_unit || master?.unit || 'ชิ้น',
+					baseUom: map.base_uom || master?.base_unit || master?.unit || 'piece',
 					conversionFactor,
 					sharePercent,
 					groupDailyDemand: totalGroupDemand,
@@ -250,7 +250,7 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 			name: im.name,
 			sku: im.sku,
 			category: im.category ?? 'other',
-			baseUom: im.base_unit || im.unit || 'ชิ้น',
+			baseUom: im.base_unit || im.unit || 'piece',
 			conversionFactor: 1,
 			sharePercent: 100,
 			groupDailyDemand: 0,
@@ -274,7 +274,7 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 		groups.push({
 			id: 'GENERAL',
 			name: 'รายการทั่วไป',
-			standardUom: 'ชิ้น',
+			standardUom: 'piece',
 			totalGroupDemand: 0,
 			items: unmappedItems
 		});

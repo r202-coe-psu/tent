@@ -3,12 +3,14 @@ import {
 	createItemMaster,
 	isItemMaster,
 	itemMasterInputSchema,
+	itemMasterUpdateInputSchema,
 	createItemCategory,
 	isItemCategory,
 	itemCategoryInputSchema,
 	createRecipe,
 	isRecipe,
-	recipeInputSchema
+	recipeInputSchema,
+	mergeCatalogGenerations
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -71,7 +73,7 @@ describe('catalog domain', () => {
 			label: 'ข้าวผัดไข่มาตรฐาน',
 			ingredients: [
 				{ item_master_id: 'item_master_rice_123', quantity: 10, uom: 'kg' },
-				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'ชิ้น' }
+				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'piece' }
 			],
 			standard_portions: 100,
 			standard_duration_hours: 1.5
@@ -85,7 +87,7 @@ describe('catalog domain', () => {
 	it('should create recipe doc with recipe: prefix', () => {
 		const input = {
 			label: 'แกงจืดเต้าหู้หมูสับ',
-			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
+			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'tube' }],
 			standard_portions: '50',
 			standard_duration_hours: '0.5'
 		};
@@ -214,7 +216,7 @@ describe('catalog domain', () => {
 		// Consumable
 		const consumableInput = {
 			name: 'นมสด',
-			base_unit: 'ขวด',
+			base_unit: 'bottle',
 			distribution_type: 'recurring' as const,
 			type_class: 'CONSUMABLE' as const,
 			shelf_life_days: 7,
@@ -231,7 +233,7 @@ describe('catalog domain', () => {
 		// Durable
 		const durableInput = {
 			name: 'เต็นท์พักแรม',
-			base_unit: 'หลัง',
+			base_unit: 'unit',
 			distribution_type: 'one_time' as const,
 			type_class: 'DURABLE' as const,
 			qty_per_person: 0.5,
@@ -257,10 +259,10 @@ describe('catalog domain', () => {
 
 		const equipmentDoc = createItemMaster(equipmentInput, ctx);
 		expect(equipmentDoc.asset_status).toBe('READY');
-		expect(equipmentDoc.base_unit).toBe('ชิ้น');
+		expect(equipmentDoc.base_unit).toBe('piece');
 	});
 
-	it('should enforce required fields conditionally', () => {
+	it('should enforce required fields conditionally and reject non-code base_unit', () => {
 		// For Consumable/Durable, base_unit is required
 		expect(() =>
 			itemMasterInputSchema.parse({
@@ -270,11 +272,30 @@ describe('catalog domain', () => {
 			})
 		).toThrow();
 
+		// base_unit must be lowercase English code (reject Thai labels)
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'กิโลกรัม',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'ชิ้น',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
 		// For Consumable/Durable, distribution_type is required
 		expect(() =>
 			itemMasterInputSchema.parse({
 				name: 'นมสด',
-				base_unit: 'ขวด',
+				base_unit: 'bottle',
 				type_class: 'CONSUMABLE' as const
 			})
 		).toThrow();
@@ -286,5 +307,79 @@ describe('catalog domain', () => {
 				type_class: 'EQUIPMENT' as const
 			})
 		).toThrow();
+	});
+
+	it('allows known legacy base_unit labels only for updates', () => {
+		const legacy = itemMasterUpdateInputSchema.parse({
+			name: 'ข้าวสารเดิม',
+			base_unit: 'กิโลกรัม',
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
+		});
+		expect(legacy.base_unit).toBe('กิโลกรัม');
+
+		expect(() =>
+			itemMasterUpdateInputSchema.parse({
+				name: 'ข้าวสารใหม่',
+				base_unit: 'หน่วยเดิมที่ไม่รู้จัก',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+	});
+});
+
+// `item_master` replaces `supply_item` (schema.md §4.2) but the migration has not
+// run, so the seed carries both generations of the same goods. Item pickers listed
+// the two sources back to back and showed "ข้าวสาร (kg)" twice — with no way to see
+// which id was being bound.
+describe('mergeCatalogGenerations', () => {
+	const supply = [
+		{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg', category: 'food', perishable: false },
+		{ _id: 'item:water', name: 'น้ำดื่ม', unit: 'bottle', category: 'water', perishable: false }
+	];
+	const masters = [
+		{ _id: 'item_master:rice', name: 'ข้าวสาร', base_unit: 'kg', category: 'food' },
+		{ _id: 'item_master:canned-fish', name: 'ปลากระป๋อง', base_unit: 'can', category: 'food' }
+	];
+
+	it('lists each item once', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.map((m) => m.name)).toEqual(['ข้าวสาร', 'น้ำดื่ม', 'ปลากระป๋อง']);
+	});
+
+	// Every stock_ledger row and campaign need in the data is an `item:` id; binding a
+	// new campaign to `item_master:rice` would open a second donor card for rice.
+	it('keeps the legacy id when the same item exists in both generations', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ข้าวสาร')?._id).toBe('item:rice');
+	});
+
+	it('keeps an item_master that has no legacy twin', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?._id).toBe('item_master:canned-fish');
+	});
+
+	it('resolves the item_master unit through base_unit', () => {
+		const merged = mergeCatalogGenerations([], masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?.unit).toBe('can');
+	});
+
+	it('drops deactivated item masters', () => {
+		const merged = mergeCatalogGenerations(
+			[],
+			[{ _id: 'item_master:old', name: 'เลิกใช้', base_unit: 'ชิ้น', deactivated: true }]
+		);
+		expect(merged).toEqual([]);
+	});
+
+	// Names arrive from two different seeds; a stray space must not defeat the match.
+	it('matches names ignoring case and surrounding space', () => {
+		const merged = mergeCatalogGenerations(
+			[{ _id: 'item:soap', name: ' สบู่ก้อน ', unit: 'bar', category: 'hygiene' }],
+			[{ _id: 'item_master:soap', name: 'สบู่ก้อน', base_unit: 'bar' }]
+		);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]._id).toBe('item:soap');
 	});
 });

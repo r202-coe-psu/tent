@@ -42,9 +42,7 @@ export function pickActiveSectionId(
 
 export function isScrollNearEnd(scrollRoot: Element | null, thresholdPx = 24): boolean {
 	if (scrollRoot) {
-		return (
-			scrollRoot.scrollTop + scrollRoot.clientHeight >= scrollRoot.scrollHeight - thresholdPx
-		);
+		return scrollRoot.scrollTop + scrollRoot.clientHeight >= scrollRoot.scrollHeight - thresholdPx;
 	}
 	const el = document.scrollingElement ?? document.documentElement;
 	return el.scrollTop + el.clientHeight >= el.scrollHeight - thresholdPx;

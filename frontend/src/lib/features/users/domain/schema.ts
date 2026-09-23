@@ -56,7 +56,8 @@ const userProfileFields = {
 	personnel_type: personnelTypeSchema.default('staff'),
 	organization: z.string().trim().optional(),
 	position: z.string().trim().optional(),
-	phone: phoneSchema,
+	/** Optional contact phone — may also be used as an alternate login identifier. */
+	phone: z.union([phoneSchema, z.literal('')]).optional(),
 	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
 	notes: z.string().trim().optional(),
 	/** System admin exclusive — mutually exclusive with assignments. */
@@ -74,8 +75,6 @@ const userProfileFields = {
 
 function refineUserForm(
 	data: {
-		personnel_type?: 'staff' | 'volunteer';
-		organization?: string;
 		is_system_admin?: boolean;
 		assignments?: ShelterAssignmentInput[];
 		capabilities?: Capability[];
@@ -84,14 +83,6 @@ function refineUserForm(
 	},
 	ctx: z.RefinementCtx
 ) {
-	if (data.personnel_type === 'staff' && (!data.organization || data.organization.length === 0)) {
-		ctx.addIssue({
-			code: z.ZodIssueCode.custom,
-			message: 'กรุณาระบุหน่วยงานหรือองค์กรต้นสังกัดสำหรับเจ้าหน้าที่',
-			path: ['organization']
-		});
-	}
-
 	if (data.is_system_admin) return;
 
 	if (data.assignments && data.assignments.length > 0) {

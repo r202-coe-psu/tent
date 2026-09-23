@@ -7,7 +7,8 @@ import {
 	bookingCodeFrom,
 	isForecastCapacityExceeded,
 	publicBookingInputSchema,
-	executePublicFamilyRegistration
+	executePublicFamilyRegistration,
+	PublicRegistrationWriteError
 } from '$lib/features/public-register/server';
 import {
 	findConflictingHold,
@@ -62,6 +63,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				shelter_code: z.string().trim().min(1, 'กรุณาระบุศูนย์พักพิง'),
 				captchaToken: z.string().optional(),
 				disclaimerAcknowledged: z.boolean().optional(),
+				join_match_token: z.string().trim().min(1).nullable().optional(),
 				members: unifiedRegistrationInputSchema.shape.members,
 				household: unifiedRegistrationInputSchema.shape.household
 			})
@@ -91,7 +93,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		nationalId = parsed.data.members[0].person_id?.number?.trim() || null;
 		unifiedInput = {
 			members: parsed.data.members,
-			household: parsed.data.household
+			household: parsed.data.household,
+			...(parsed.data.join_match_token ? { join_match_token: parsed.data.join_match_token } : {})
 		};
 	} else {
 		// Legacy booking shape (for backward compatibility with tests)
@@ -192,7 +195,10 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		provider: captchaProvider
 	});
 	if (!captcha.ok) {
-		return json({ success: false, error: captcha.error }, { status: captcha.status, headers: noStore });
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	// 4. Trust nothing from the browser about the shelter.
@@ -223,20 +229,51 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'CAPACITY_EXCEEDED' }, { status: 409, headers: noStore });
 	}
 
-	// 5. Execute CouchDB write via dedicated public executor (#254)
+	// 5. Resolve optional residence-join token → join_household_id (never trust client ids)
+	let resolvedInput = unifiedInput;
+	const rawToken = unifiedInput.join_match_token?.trim();
+	let originShelterCode: string | undefined;
+	if (rawToken) {
+		const { verifyResidenceMatchToken } =
+			await import('$lib/features/public-register/residence-match-token.server');
+		const tokenPayload = verifyResidenceMatchToken(rawToken);
+		if (!tokenPayload || tokenPayload.kind !== 'shelter') {
+			return json(
+				{ success: false, error: 'INVALID_JOIN_TOKEN' },
+				{ status: 400, headers: noStore }
+			);
+		}
+		if (tokenPayload.shelterCode !== shelterCode) {
+			originShelterCode = tokenPayload.shelterCode;
+		}
+		resolvedInput = {
+			...unifiedInput,
+			join_match_token: null,
+			join_household_id: tokenPayload.householdId
+		};
+	}
+
+	// 6. Execute CouchDB write via dedicated public executor (#254)
 	let writeResult: Awaited<ReturnType<typeof executePublicFamilyRegistration>>;
 	try {
-		writeResult = await executePublicFamilyRegistration(unifiedInput, {
+		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
-			createdBy: 'public'
+			createdBy: 'public',
+			originShelterCode
 		});
-	} catch {
+	} catch (err) {
+		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {
+			return json(
+				{ success: false, error: 'JOIN_TARGET_NOT_FOUND' },
+				{ status: 404, headers: noStore }
+			);
+		}
 		return json({ success: false, error: 'WRITE_FAILED' }, { status: 502, headers: noStore });
 	}
 
 	const { household, evacuees } = writeResult;
 
-	// 6. Ticket payload — no person_id, no medical, no full phone (Public DoD).
+	// 7. Ticket payload — no person_id, no medical, no full phone (Public DoD).
 	return json(
 		{
 			success: true,

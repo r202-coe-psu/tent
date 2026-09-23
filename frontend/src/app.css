@@ -10,11 +10,31 @@
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
 	/*
 	 * Sticky offset for registration section headers (under app / shelter chrome).
-	 * Layouts override: public navbar ≈ 4rem; onsite app bar + shelter nav ≈ 6.75rem.
+	 * Layouts override: public navbar ≈ 4rem; onsite ShelterNavbar ≈ 3.25rem.
 	 * Unified form section jump actions live in the bottom chrome dock (not top).
 	 */
 	--registration-sticky-top: 4rem;
 	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
+	/*
+	 * Shelter form sticky offset: BO chrome (`--bo-sticky-top`) + form title bar (~4rem).
+	 * Form title bar uses `top-[var(--bo-sticky-top)]` under the BO page header.
+	 */
+	--shelter-form-sticky-top: calc(var(--bo-sticky-top) + 4rem);
+	--shelter-form-scroll-mt: calc(var(--shelter-form-sticky-top) + 0.5rem);
+	/*
+	 * Back-office sticky chrome offsets (consumers: `top-[var(--bo-sticky-top)]`).
+	 *
+	 * --bo-mobile-nav-height: hamburger bar (h-16 / 4rem) + notch safe-area.
+	 *   Page header sticks below this on < lg; unused for positioning at lg+ (sidebar).
+	 * --bo-page-header-height: title-only bar (h-16 / 4rem). Shelter select lives in
+	 *   the sidebar / mobile Sheet; offline/reauth banner is conditional and not
+	 *   included in this offset. Keep in sync with back-office/+layout.svelte.
+	 * --bo-sticky-top: cumulative sticky chrome above page subheaders (evacuee tabs,
+	 *   shelter form title bar, etc.). Mobile = nav + header; lg+ = header only.
+	 */
+	--bo-mobile-nav-height: calc(4rem + env(safe-area-inset-top, 0px));
+	--bo-page-header-height: 4rem;
+	--bo-sticky-top: calc(var(--bo-mobile-nav-height) + var(--bo-page-header-height));
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -141,6 +161,13 @@
 	--ops-inventory-bg: #f0fdfa;
 	--ops-inventory-border: #99f6e4;
 	--ops-inventory-text: #115e59;
+}
+
+/* lg+: sidebar chrome — only the page header sticks; drop mobile-nav from offset */
+@media (min-width: 1024px) {
+	:root {
+		--bo-sticky-top: var(--bo-page-header-height);
+	}
 }
 
 .dark {
@@ -446,12 +473,26 @@
 	.unified-reg-scroll-mt {
 		scroll-margin-top: var(--registration-scroll-mt);
 	}
+	.shelter-form-scroll-mt {
+		scroll-margin-top: var(--shelter-form-scroll-mt);
+	}
 	.unified-reg-section-header {
-		@apply sticky z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/95 p-3.5 shadow-xs backdrop-blur-md sm:p-4;
-		top: var(--registration-sticky-top);
+		/* Do not set `top` here: with `relative` it offsets headers into the body on mobile. */
+		@apply relative flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-xs sm:sticky sm:z-20 sm:bg-card/95 sm:p-4 sm:backdrop-blur-md;
+	}
+	@media (min-width: 640px) {
+		.unified-reg-section-header {
+			top: var(--registration-sticky-top);
+		}
 	}
 	.unified-reg-bottom-chrome {
-		@apply sticky bottom-0 z-30 -mx-1 space-y-2 border-t border-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
+		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+	}
+	/* Always-reachable Save dock (registration-shell fixed pattern; sits above testing banner). */
+	.shelter-form-bottom-chrome {
+		@apply fixed inset-x-0 z-30 space-y-2 border-t border-shelter-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+		bottom: var(--testing-banner-height);
 	}
 	.sticky-section-nav {
 		/* Top scroll-spy chips (registration-shell / ewar) — not used by unified form */

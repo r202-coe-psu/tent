@@ -1,17 +1,40 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import ShieldCheck from '@lucide/svelte/icons/shield-check';
-	import Search from '@lucide/svelte/icons/search';
 	import ScanLine from '@lucide/svelte/icons/scan-line';
+	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
+	import {
+		Station1EvacueeQueue,
+		goToEvacueeProfile,
+		goToEvacueeReportIn,
+		openEvacueeRow,
+		type Evacuee
+	} from '$lib/features/people';
 	import EvacueeQrSearchModal from './evacuee-qr-search-modal.svelte';
+
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const enableMedical = $derived(
+		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
+	);
+	const roles = $derived(authStore.user?.roles ?? []);
+	const canMedical = $derived(canAccessMedicalScreening(roles) && enableMedical);
+	const canZoning = $derived(canAccessZoning(roles));
 
 	let queryText = $state('');
 	let showQrModal = $state(false);
+
+	/** Origin path so the evacuee profile can offer a correct back link. */
+	const listOrigin = $derived(`${page.url.pathname}${page.url.search}`);
 
 	function submitSearch() {
 		const query = queryText.trim();
@@ -24,99 +47,104 @@
 		const from = resolve('/onsite/search-edit');
 		goto(resolve(`/onsite/people/evacuee-profile-view/${id}?from=${encodeURIComponent(from)}`));
 	}
+
+	function goProfile(evacuee: Evacuee) {
+		goToEvacueeProfile(evacuee, listOrigin);
+	}
+
+	/** Row click — report-in for `pre_registered`, profile for every other status. */
+	function handleOpenRow(evacuee: Evacuee) {
+		openEvacueeRow(evacuee, listOrigin);
+	}
+
+	function goMedical(evacuee: Evacuee) {
+		goto(
+			resolve(`/onsite/medical-screening/${evacuee._id}` as `/onsite/medical-screening/${string}`)
+		);
+	}
+
+	function goZoning(evacuee: Evacuee) {
+		goto(resolve(`/onsite/zoning/${evacuee._id}` as `/onsite/zoning/${string}`));
+	}
 </script>
 
-<div class="mx-auto w-full max-w-2xl px-4 py-8">
-	<div class="mb-6 flex items-center gap-4">
-		<Button
-			variant="secondary"
-			size="icon"
-			onclick={() => goto(resolve('/onsite'))}
-			class="h-10 w-10 rounded-full"
-			title="กลับ"
+<svelte:head>
+	<title>ค้นหาและแก้ไขข้อมูล | SmartShelter Thailand</title>
+</svelte:head>
+
+<div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
+	<header class="flex items-center gap-3">
+		<a
+			href={resolve('/onsite')}
+			class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
+			aria-label="กลับหน้าหลักระบบส่วนหน้า"
 		>
-			<ArrowLeft class="size-5" />
-		</Button>
+			<ArrowLeft class="size-4" />
+		</a>
 		<div>
-			<h1 class="flex items-center gap-2 text-xl font-bold text-foreground md:text-2xl">
-				<Search class="size-5 text-primary md:size-6" />
-				ค้นหาและแก้ไขข้อมูลผู้พักพิง
-			</h1>
-			<p class="mt-0.5 text-xs font-semibold text-muted-foreground">Search &amp; Update</p>
+			<div class="flex items-center gap-2">
+				<Search class="size-6 text-[#0A2647]" />
+				<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+					ค้นหาและแก้ไขข้อมูลผู้พักพิง
+				</h1>
+			</div>
+			<p class="mt-0.5 text-xs text-slate-500">
+				Search &amp; Update — ค้นหาด้วยชื่อ เลขบัตร เบอร์โทร หรือสแกน QR
+			</p>
 		</div>
-	</div>
+	</header>
 
-	<Card.Root class="rounded-3xl border-border shadow-sm">
-		<Card.Content class="flex flex-col items-center gap-5 px-6 py-10 text-center">
-			<div
-				class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-muted text-primary"
-			>
-				<ShieldCheck class="size-8" />
-			</div>
-
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full bg-primary-muted px-3 py-1 text-xs font-bold text-primary"
-			>
-				ระบบค้นหาข้อมูลผู้พักพิง (PDPA Protected)
-			</span>
-
-			<div>
-				<h2 class="text-2xl font-bold text-foreground">ค้นหาและแก้ไขข้อมูลผู้พักพิง</h2>
-				<p class="mt-1.5 text-sm text-muted-foreground">
-					กรุณาระบุเลขประจำตัวประชาชน, เบอร์โทรศัพท์ หรือสแกน QR Code ประจำตัว
-				</p>
-			</div>
-
+	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+		<Card.Content class="px-5 py-5">
 			<form
 				onsubmit={(e) => {
 					e.preventDefault();
 					submitSearch();
 				}}
-				class="w-full space-y-3"
+				class="flex flex-col gap-3 sm:flex-row"
 			>
-				<div class="relative">
+				<div class="relative flex-1">
 					<Search class="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						type="text"
 						placeholder="ระบุเลขบัตรประชาชน / เบอร์โทรศัพท์ / ชื่อ-นามสกุล..."
 						bind:value={queryText}
-						class="h-12 rounded-xl bg-muted/50 pl-11 text-sm focus-visible:border-primary"
+						class="h-12 rounded-xl bg-slate-50 pl-11 text-sm focus-visible:border-primary"
 					/>
 				</div>
 
-				<div class="flex flex-col gap-3 sm:flex-row">
-					<Button
-						type="submit"
-						disabled={!queryText.trim()}
-						class="h-12 flex-1 gap-2 rounded-xl font-bold"
-					>
-						<Search class="size-4" />
-						ค้นหาข้อมูล
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						onclick={() => (showQrModal = true)}
-						class="h-12 flex-1 gap-2 rounded-xl font-bold"
-					>
-						<ScanLine class="size-4" />
-						สแกน QR Code ตั๋ว
-					</Button>
-				</div>
+				<Button
+					type="submit"
+					disabled={!queryText.trim()}
+					class="h-12 shrink-0 gap-2 rounded-xl px-6 font-bold"
+				>
+					<Search class="size-4" />
+					ค้นหาข้อมูล
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => (showQrModal = true)}
+					class="h-12 shrink-0 gap-2 rounded-xl px-6 font-bold"
+				>
+					<ScanLine class="size-4" />
+					สแกน QR Code ตั๋ว
+				</Button>
 			</form>
 		</Card.Content>
 	</Card.Root>
 
-	<div
-		class="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-	>
-		<ShieldCheck class="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-		<p class="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300">
-			<span class="font-bold">มาตรการคุ้มครองข้อมูลส่วนบุคคล (PDPA):</span>
-			ระบบจะไม่แสดงรายชื่อผู้พักพิงทั้งหมดบนหน้าจอสาธารณะ ข้อมูลจะปรากฏเฉพาะเมื่อเจ้าหน้าที่ทำการค้นหาเจาะจงเท่านั้น
-			เพื่อความปลอดภัยและความเป็นส่วนตัวสูงสุดของผู้ประสบภัย
-		</p>
-	</div>
+	<Station1EvacueeQueue
+		initialTab="all"
+		{enableMedical}
+		{canMedical}
+		{canZoning}
+		onOpenRow={handleOpenRow}
+		onReportIn={goToEvacueeReportIn}
+		onProfile={goProfile}
+		onGoMedical={goMedical}
+		onGoZoning={goZoning}
+	/>
 </div>
 
 <EvacueeQrSearchModal

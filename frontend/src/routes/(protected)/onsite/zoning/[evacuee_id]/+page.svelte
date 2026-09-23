@@ -29,6 +29,7 @@
 		canChangeEvacueeZone,
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
+		zoneLabel,
 		type Evacuee,
 		type Screening
 	} from '$lib/features/people';
@@ -46,6 +47,7 @@
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
@@ -216,8 +218,8 @@
 			}
 			toast.success(
 				isRezone
-					? `ย้ายโซนเป็น ${selectedZone} เรียบร้อย`
-					: `จัดที่พักโซน ${selectedZone} และเช็คอินเรียบร้อย`
+					? `ย้ายโซนเป็น ${zoneLabel(selectedZone, shelterZones)} เรียบร้อย`
+					: `จัดที่พักโซน ${zoneLabel(selectedZone, shelterZones)} และเช็คอินเรียบร้อย`
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
@@ -331,7 +333,7 @@
 								<p class="text-2xs text-muted-foreground">
 									{member.current_stay.status}
 									{#if member.current_stay.zone}
-										· {member.current_stay.zone}{/if}
+										· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
 								</p>
 							</div>
 						</label>
