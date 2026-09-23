@@ -1,5 +1,6 @@
 export { default as KioskShell } from './ui/kiosk-shell.svelte';
 export { default as IdentityMethodSelector } from './ui/identity-method-selector.svelte';
+export { default as KioskQrIdentityScan } from './ui/qr-identity-scan.svelte';
 export {
 	buildKioskContextQuery,
 	getKioskDisplayContext,

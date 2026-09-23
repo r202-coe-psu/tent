@@ -19,8 +19,8 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 		id: 'qr',
 		icon: 'qr',
 		title: 'สแกน QR Code',
-		description: 'สแกน QR Code ที่ได้จากการจองล่วงหน้า ระบบจะดึงข้อมูลครัวเรือนให้อัตโนมัติ',
-		facts: ['ใช้เวลาประมาณ 1 นาที', 'เตรียม QR จากอีเมลหรือ SMS'],
+		description: 'สแกน QR จากการจอง แล้วกรอกเบอร์โทรศัพท์ที่ใช้จองเพื่อยืนยันข้อมูล',
+		facts: ['เตรียม QR จากอีเมลหรือ SMS', 'ใช้เบอร์โทรศัพท์ที่ลงทะเบียน'],
 		buttonLabel: 'สแกน QR Code',
 		enabled: true,
 		href: KIOSK_QR_PATH
