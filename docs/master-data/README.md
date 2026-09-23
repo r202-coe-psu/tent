@@ -1,7 +1,8 @@
 ---
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
-updated: 2026-09-22
+created: 2026-09-17
+updated: 2026-09-23
 language: th
 ---
 
@@ -17,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 9 เอกสาร รวมรายการ seed 75 รายการ                                                |
+| `registry` | global `master_data` 10 เอกสาร รวมรายการ seed 84 รายการ                                                |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 29, `recipe` 6                               |
@@ -60,8 +61,8 @@ language: th
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 9                                  |
-| จำนวนรายการใน canonical seed set | 75                                 |
+| จำนวน master types               | 10                                 |
+| จำนวนรายการใน canonical seed set | 84                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -75,6 +76,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `pet_types`                                                                                                  | ใช้ key เดิมแบบ stable                                        |
 | `housing_type`                                                                                               | ใช้ key เดิมแบบ stable                                        |
 | `health_condition`, `dietary_restrictions`, `house_damage`, `shelter_type`, `municipality_zone`, `community` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
+| `volunteer_skills` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
 
 `community.parent_key` อ้างถึง key ของ `municipality_zone` ระหว่างการ seed จากนั้นระบบจะแปลงเป็น `parent_code` ของ zone ที่บันทึกจริง
 
@@ -201,6 +203,22 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `chok_saman`            | ชุมชนโชคสมาน                | `zone_4`   | —       |
 | `rat_uthit`             | ชุมชนราษฎร์อุทิศ            | `zone_4`   | —       |
 | `hua_phan_rotfai`       | ชุมชนหัวพานรถไฟ             | `zone_4`   | —       |
+
+#### `volunteer_skills` — ทักษะมาตรฐานจิตอาสา
+
+Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายการ โดยมี `category: operational` 8 รายการ และ `category: controlled` 1 รายการ (`medical`)
+
+| key | label | category | description | default |
+| --- | --- | --- | --- | --- |
+| `cooking` | ประกอบอาหาร / ครัวสนาม | `operational` | ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง | **ใช่** |
+| `logistics` | ขนย้ายสิ่งของ / พลาธิการ | `operational` | ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก | — |
+| `screening` | คัดกรองและสแกนประวัติ | `operational` | ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น | — |
+| `medical` | การแพทย์ / ปฐมพยาบาล | `controlled` | ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ) | — |
+| `reception` | ประสานงาน / ต้อนรับ | `operational` | ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ | — |
+| `distribution` | แจกจ่ายของยังชีพ | `operational` | แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค | — |
+| `sanitation` | ทำความสะอาด / สุขอนามัย | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
+| `childcare` | สันทนาการ / ดูแลเด็ก | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
+| `transport` | ขับขี่ยานพาหนะ / ขนส่ง | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
