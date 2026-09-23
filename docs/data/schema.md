@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-19
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog
+updated: 2026-09-23
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF)
 ---
 
 # Database Schema v5 — field-level
@@ -1880,14 +1880,14 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `name` | str | req | CouchDB username — เบอร์โทรศัพท์มือถือ 10 หลัก (สำหรับเจ้าหน้าที่/อาสา) หรือ alphanumeric (สำหรับ `sa01`/System Admin) |
+| `name` | str | req | CouchDB username — alphanumeric (`sa01`, `staff01`, …) หรือเบอร์ 10 หลักก็ได้; ไม่บังคับให้เท่ากับ `phone` |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
 | `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) |
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
 | `organization` | str\|null | opt/req | หน่วยงานต้นสังกัด (**Required** สำหรับ staff, **Optional** สำหรับ volunteer) |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |
-| `phone` | str | req | เบอร์โทรศัพท์ติดต่อ 10 หลัก |
+| `phone` | str\|null | opt | เบอร์โทรศัพท์ติดต่อ 10 หลัก — optional; ถ้ามีค่าใช้เป็น alternate login identifier ได้ (unique ข้ามบัญชี; ห้ามชน `name` ของบัญชีอื่น) |
 | `email` | str\|null | opt | อีเมลติดต่อ |
 | `notes` | str\|null | opt | หมายเหตุเพิ่มเติม |
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |

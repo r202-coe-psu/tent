@@ -127,7 +127,7 @@
 						personnel_type: (editing.personnel_type ?? 'staff') as PersonnelType,
 						organization: editing.organization ?? '',
 						position: editing.position ?? '',
-						phone: editing.phone ?? editing.name,
+						phone: editing.phone ?? '',
 						email: editing.email ?? '',
 						notes: editing.notes ?? '',
 						is_system_admin: isAppSystemAdmin(editing.roles),
@@ -310,14 +310,6 @@
 		return ($formData.assignments?.[index]?.capabilities ?? []).includes(
 			roleId as ShelterCapability
 		);
-	}
-
-	/** Create mode: phone is the username (including System Admin — username field is hidden). */
-	function setPhone(phone: string) {
-		$formData.phone = phone;
-		if (!editing && $formData.username !== phone) {
-			$formData.username = phone;
-		}
 	}
 
 	/** `label` is what the trigger shows once picked — the name, not the raw code. */
@@ -532,17 +524,43 @@
 			</h4>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-				<!-- Phone (Username) -->
+				<!-- Username (CouchDB name) -->
+				<Form.Field {form} name="username">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="font-bold">
+								Username
+								<span class="text-red-500">*</span>
+								{#if editing}
+									<span class="text-xs font-normal text-slate-500">(แก้ไม่ได้)</span>
+								{/if}
+							</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.username}
+								class="h-11 bg-white"
+								placeholder="เช่น staff01 หรือ 0812345678"
+								readonly={Boolean(editing)}
+								autocomplete="username"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<!-- Phone (optional alternate login) -->
 				<Form.Field {form} name="phone">
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="flex items-center gap-1 font-bold">
-								<Phone class="size-3.5" /> เบอร์โทรศัพท์ (ใช้เป็น Username)
-								<span class="text-red-500">*</span>
+								<Phone class="size-3.5" /> เบอร์โทรศัพท์
+								<span class="text-xs font-normal text-slate-500">(ไม่บังคับ — ใช้ login ได้)</span>
 							</Form.Label>
 							<Input
 								{...props}
-								bind:value={() => $formData.phone ?? '', setPhone}
+								bind:value={
+									() => $formData.phone ?? '', (v) => ($formData.phone = v)
+								}
 								type="tel"
 								maxlength={10}
 								class="h-11 bg-white"
@@ -552,25 +570,25 @@
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
-
-				<!-- Display Name -->
-				<Form.Field {form} name="display_name">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label class="font-bold"
-								>ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label
-							>
-							<Input
-								{...props}
-								bind:value={$formData.display_name}
-								class="h-11 bg-white"
-								placeholder="นาย สมชาย ใจดี"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
 			</div>
+
+			<!-- Display Name -->
+			<Form.Field {form} name="display_name">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label class="font-bold"
+							>ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label
+						>
+						<Input
+							{...props}
+							bind:value={$formData.display_name}
+							class="h-11 bg-white"
+							placeholder="นาย สมชาย ใจดี"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<!-- Organization -->

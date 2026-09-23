@@ -56,7 +56,8 @@ const userProfileFields = {
 	personnel_type: personnelTypeSchema.default('staff'),
 	organization: z.string().trim().optional(),
 	position: z.string().trim().optional(),
-	phone: phoneSchema,
+	/** Optional contact phone — may also be used as an alternate login identifier. */
+	phone: z.union([phoneSchema, z.literal('')]).optional(),
 	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
 	notes: z.string().trim().optional(),
 	/** System admin exclusive — mutually exclusive with assignments. */

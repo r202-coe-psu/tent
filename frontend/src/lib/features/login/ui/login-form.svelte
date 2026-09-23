@@ -9,6 +9,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '../domain/schema';
+	import { resolveLoginIdentifier } from '../data/resolve-login';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -122,8 +123,9 @@
 						}
 					}
 
+					const name = await resolveLoginIdentifier(form.data.username);
 					await authStore.login({
-						name: form.data.username,
+						name,
 						password: form.data.password
 					});
 					reset();
@@ -168,12 +170,12 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label class="text-sm font-semibold text-slate-700"
-							>ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label
+							>Username หรือเบอร์โทรศัพท์</Form.Label
 						>
 						<Input
 							{...props}
 							bind:value={$formData.username}
-							placeholder="เช่น 0812345678"
+							placeholder="เช่น staff01 หรือ 0812345678"
 							autocomplete="username"
 							class="h-11"
 						/>

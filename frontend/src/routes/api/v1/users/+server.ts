@@ -73,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				? body.position.trim()
 				: null;
 		const phone =
-			typeof body.phone === 'string' && body.phone.trim().length > 0 ? body.phone.trim() : name;
+			typeof body.phone === 'string' && body.phone.trim().length > 0 ? body.phone.trim() : null;
 		const email =
 			typeof body.email === 'string' && body.email.trim().length > 0 ? body.email.trim() : null;
 		const notes =
@@ -151,7 +151,12 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const organization =
 			typeof body.organization === 'string' ? body.organization.trim() : undefined;
 		const position = typeof body.position === 'string' ? body.position.trim() : undefined;
-		const phone = typeof body.phone === 'string' ? body.phone.trim() : undefined;
+		const phone =
+			typeof body.phone === 'string'
+				? body.phone.trim().length > 0
+					? body.phone.trim()
+					: null
+				: undefined;
 		const email = typeof body.email === 'string' ? body.email.trim() : undefined;
 		const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
 		const volunteer_id =
