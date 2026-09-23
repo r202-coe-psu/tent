@@ -33,6 +33,7 @@
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
@@ -236,6 +237,8 @@
 	let publicMatchChips = $state<ResidenceMatchChip[]>([]);
 	let residenceSuggestPending = $state(false);
 	let residenceSuggestCheckedEmpty = $state(false);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	let thaidEnabled = $state(false);
 
 	const enableResidenceJoin = $derived(mode === 'create');
 	/** Same as `useHouseholds`, but `enabled` only for onsite create (no Couch fetch on public). */
@@ -437,6 +440,10 @@
 		}
 
 		if (channel === 'public' && typeof window !== 'undefined') {
+			void fetchThaidRegistrationStatus().then((s) => {
+				thaidEnabled = s.enabled;
+			});
+
 			const params = new URLSearchParams(window.location.search);
 			const errorParam = params.get('error');
 			if (errorParam) {
@@ -930,7 +937,7 @@
 				icon={Home}
 			>
 				<!-- ThaiD Action Button: Public Pre-Register -->
-				{#if channel === 'public'}
+				{#if channel === 'public' && thaidEnabled}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
@@ -1253,6 +1260,8 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
+				primaryContactPhone={members[0]?.phone ?? null}
+				thaidEnabled={channel === 'public' && thaidEnabled}
 				onDirty={markDirty}
 			/>
 

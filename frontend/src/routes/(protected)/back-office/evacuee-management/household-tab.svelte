@@ -191,9 +191,9 @@
 	}
 </script>
 
-<div class="flex flex-col gap-6 p-6">
+<div class="flex flex-col gap-6 p-4 sm:p-6">
 	<!-- Header -->
-	<div class="flex items-start justify-between gap-4">
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 		<div class="space-y-1">
 			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนครัวเรือน</h2>
 			<p class="text-sm text-muted-foreground">
@@ -203,10 +203,11 @@
 				>
 			</p>
 		</div>
-		<div class="flex gap-2">
+		<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
 			<Button
 				variant="outline"
 				size="sm"
+				class="min-h-11 w-full sm:w-auto"
 				onclick={() => goto(resolve('/back-office/households/import'))}
 			>
 				<Upload class="h-3.5 w-3.5" />
@@ -215,12 +216,17 @@
 			<Button
 				variant="outline"
 				size="sm"
+				class="min-h-11 w-full sm:w-auto"
 				onclick={() => goto(resolve('/back-office/households/pre-register'))}
 			>
 				<Plus class="h-3.5 w-3.5" />
 				ลงทะเบียนล่วงหน้า
 			</Button>
-			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
+			<Button
+				size="sm"
+				class="min-h-11 w-full sm:w-auto"
+				onclick={() => goto(resolve('/back-office/households/new'))}
+			>
 				<Plus class="h-3.5 w-3.5" />
 				จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน
 			</Button>
@@ -239,7 +245,7 @@
 					placeholder="ค้นหาชื่อครัวเรือน, เขต หรือ หัวหน้า..."
 					bind:value={search}
 					oninput={resetPageOnFilter}
-					class="rounded-full pl-9"
+					class="h-11 rounded-xl bg-background pl-9 shadow-xs"
 				/>
 			</div>
 		</div>
@@ -269,7 +275,7 @@
 
 	{#if selectedIds.length > 0}
 		<div
-			class="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur"
+			class="sticky top-[var(--bo-evacuee-selection-top,var(--bo-sticky-top))] z-10 flex flex-col gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur supports-backdrop-filter:bg-card/80 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
 		>
 			<p class="text-sm font-medium text-foreground">
 				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> ครัวเรือน
@@ -279,20 +285,24 @@
 					>
 				{/if}
 			</p>
-			<div class="flex flex-wrap gap-2">
+			<div class="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
 				<Button
 					variant="outline"
 					size="sm"
+					class="min-h-11 w-full sm:w-auto"
 					onclick={selectAllMatching}
 					disabled={isSelectingAllMatching || total === 0}
 				>
 					{isSelectingAllMatching ? 'กำลังเลือก...' : 'เลือกทั้งหมดตามตัวกรอง'}
 				</Button>
-				<Button variant="ghost" size="sm" onclick={clearSelection}>ล้างการเลือก</Button>
+				<Button variant="ghost" size="sm" class="min-h-11 w-full sm:w-auto" onclick={clearSelection}
+					>ล้างการเลือก</Button
+				>
 				{#if canCancel}
 					<Button
 						variant="destructive"
 						size="sm"
+						class="min-h-11 w-full sm:w-auto"
 						onclick={handleBulkCancel}
 						disabled={isBulkCancelling || selectedIds.length === 0}
 					>
@@ -303,7 +313,7 @@
 		</div>
 	{/if}
 
-	<!-- Table -->
+	<!-- List -->
 	{#if householdsQuery.isLoading}
 		<div class="flex items-center justify-center py-16">
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
@@ -322,7 +332,115 @@
 			<p class="text-sm text-muted-foreground">ไม่พบข้อมูลครัวเรือนในระบบ</p>
 		</div>
 	{:else}
-		<div class="overflow-hidden rounded-xl border border-border shadow-sm">
+		<!-- Mobile card list (< md) -->
+		<div class="space-y-3 md:hidden">
+			<div
+				class="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs"
+			>
+				<Checkbox
+					checked={allPageSelected}
+					indeterminate={somePageSelected}
+					onCheckedChange={toggleSelectPage}
+					aria-label="เลือกทั้งหน้า"
+				/>
+				<span class="text-sm font-semibold text-slate-700">เลือกทั้งหน้า</span>
+			</div>
+
+			{#each items as h (h._id)}
+				{@const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id)}
+				{@const headName = head ? `${head.first_name} ${head.last_name}` : '—'}
+				{@const members = allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}
+				{@const config = statusConfig[h.status]}
+				<article
+					class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-colors"
+				>
+					<div class="flex items-start gap-3">
+						<Checkbox
+							class="mt-1"
+							checked={selectedIds.includes(h._id)}
+							onCheckedChange={(checked) => toggleId(h._id, checked)}
+							aria-label={`เลือก ${h.label}`}
+						/>
+						<div class="min-w-0 flex-1 space-y-3">
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h3 class="text-base font-bold text-slate-900">{h.label}</h3>
+									<p class="mt-1 text-sm text-slate-500">
+										หัวหน้า <span class="font-semibold text-slate-700">{headName}</span>
+									</p>
+								</div>
+								<span
+									class="inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {config.colorClass}"
+								>
+									{config.label}
+								</span>
+							</div>
+
+							<div class="space-y-1.5">
+								<p class="text-xs font-semibold text-slate-500">สมาชิก</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#if members.length > 0}
+										{#each members as m (m._id)}
+											<span
+												class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+												>{m.first_name} {m.last_name}</span
+											>
+										{/each}
+									{:else}
+										<span class="text-sm text-slate-500 italic">ไม่มีสมาชิก</span>
+									{/if}
+								</div>
+							</div>
+
+							<div class="flex flex-wrap gap-1.5">
+								{#if h.municipality_zone || h.community}
+									{#if h.municipality_zone}
+										<span
+											class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-900"
+											>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+										>
+									{/if}
+									{#if h.community}
+										<span
+											class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-900"
+											>{communityLabels[h.community] ?? h.community}</span
+										>
+									{/if}
+								{:else}
+									<span class="text-sm text-slate-500 italic">ไม่ระบุเขต/ชุมชน</span>
+								{/if}
+							</div>
+
+							{#if h.pets && h.pets.length > 0}
+								<div class="flex flex-wrap gap-1.5">
+									{#each h.pets as p, i (`${h._id}-pet-${i}`)}
+										{@const petLabel =
+											p.species === 'dog' ? 'สุนัข' : p.species === 'cat' ? 'แมว' : 'สัตว์เลี้ยง'}
+										<span
+											class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+											>{petLabel} {p.count}</span
+										>
+									{/each}
+								</div>
+							{/if}
+
+							<Button
+								variant="outline"
+								size="sm"
+								class="min-h-11 w-full"
+								onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
+							>
+								<Pencil class="h-3.5 w-3.5" />
+								แก้ไข
+							</Button>
+						</div>
+					</div>
+				</article>
+			{/each}
+		</div>
+
+		<!-- Desktop table (md+) -->
+		<div class="hidden overflow-x-auto rounded-xl border border-border shadow-sm md:block">
 			<Table.Root>
 				<Table.Header>
 					<Table.Row class="bg-muted/40 hover:bg-muted/40">
@@ -395,7 +513,7 @@
 							<Table.Cell>
 								<div class="flex flex-wrap gap-1">
 									{#if h.pets && h.pets.length > 0}
-										{#each h.pets as p, i (i)}
+										{#each h.pets as p, i (`${h._id}-pet-${i}`)}
 											{@const petEmoji =
 												p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : '🐾'}
 											<span

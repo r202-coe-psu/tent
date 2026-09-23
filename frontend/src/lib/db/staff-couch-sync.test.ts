@@ -32,10 +32,6 @@ vi.mock('$lib/features/shelters', () => ({
 	startSheltersLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
-vi.mock('$lib/features/shelter-import', () => ({
-	startShelterImportLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
-}));
-
 vi.mock('$lib/features/supply', () => ({
 	CATALOG_DB: 'catalog',
 	startCatalogLiveQuery: vi.fn(() => ({ stop: vi.fn() }))

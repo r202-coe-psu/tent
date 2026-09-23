@@ -57,6 +57,7 @@ import {
 } from '../domain/reconciliation';
 import { isEvacuee, type Evacuee } from '$lib/features/people/domain/people';
 import {
+	createLegacyFlow2StockLedger,
 	createStockLedger,
 	isStockLedger,
 	projectStockLotBalances,
@@ -964,7 +965,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			const ledgerId = `stock_ledger:${ledgerIdSuffix}`;
 			const reqItem = req.items.find((i) => i.item_id === alloc.item_id)!;
 
-			const ledgerEntry = createStockLedger(
+			const ledgerEntry = createLegacyFlow2StockLedger(
 				{
 					item_id: alloc.item_id,
 					qty: qtyNeg(alloc.qty),

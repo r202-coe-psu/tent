@@ -35,6 +35,19 @@ function parseMode(raw: string | null): ThaidOAuthMode {
 export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	try {
 		const mode = parseMode(url.searchParams.get('mode'));
+
+		// Operator kill-switch: hide/block new ThaiD entry points (not MFA step-up).
+		// Run before getThaidOAuthConfig so disabled still redirects cleanly when keys are missing.
+		if (mode === 'login' || mode === 'link' || mode === 'register' || mode === 'member_scan') {
+			const thaidStatus = await isThaidRegistrationEnabled();
+			if (!thaidStatus.enabled) {
+				if (mode === 'login') throw redirect(302, '/login?error=thaid_disabled');
+				if (mode === 'link') throw redirect(302, '/me?mfa=thaid_disabled');
+				if (mode === 'register') throw redirect(302, '/pre-register?error=thaid_disabled');
+				throw redirect(302, '/thaid-scan-success?error=thaid_disabled');
+			}
+		}
+
 		const { clientId, authUrl } = getThaidOAuthConfig();
 		const redirectUri = resolveThaidRedirectUri(url);
 
@@ -49,10 +62,6 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			}
 			name = session.name;
 		} else if (mode === 'register') {
-			const thaidStatus = await isThaidRegistrationEnabled();
-			if (!thaidStatus.enabled) {
-				throw redirect(302, '/pre-register?error=thaid_disabled');
-			}
 			const returnParam = url.searchParams.get('return_to');
 			if (
 				returnParam &&
@@ -63,10 +72,6 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 				returnTo = '/pre-register';
 			}
 		} else if (mode === 'member_scan') {
-			const thaidStatus = await isThaidRegistrationEnabled();
-			if (!thaidStatus.enabled) {
-				throw redirect(302, '/thaid-scan-success?error=thaid_disabled');
-			}
 			const sidParam = url.searchParams.get('session_id')?.trim();
 			if (!sidParam) {
 				throw new ServiceError('VALIDATION', 'Missing session_id for member_scan');

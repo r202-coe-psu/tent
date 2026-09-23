@@ -202,7 +202,7 @@
 				<Button
 					type="button"
 					onclick={onAddRequest}
-					class="h-10 gap-2 rounded-xl bg-[#002D5B] px-5 text-xs font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+					class="h-11 w-full gap-2 rounded-xl bg-[#0A2647] px-5 text-sm font-bold text-white shadow-2xs hover:bg-[#051930] sm:w-auto"
 				>
 					<Plus class="h-4 w-4" />
 					สร้างประกาศแบบกำหนดเอง (Special Request)
@@ -259,8 +259,147 @@
 			</div>
 		</div>
 
-		<!-- Table -->
-		<div class="overflow-x-auto">
+		<!-- Mobile cards (< md) -->
+		<div class="space-y-3 p-4 md:hidden">
+			{#if flatRows.length === 0}
+				<div
+					class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
+				>
+					ไม่พบรายการความต้องการที่ค้นหา
+				</div>
+			{:else}
+				{#each pagedRows as row (row.compoundId + row.itemId)}
+					<article
+						class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs {row.isCutOff
+							? 'opacity-70'
+							: ''}"
+					>
+						<div class="space-y-1.5">
+							<div class="flex flex-wrap items-center gap-2 text-base font-bold text-slate-900">
+								{#if row.isCutOff}
+									<Badge variant="destructive" class="text-xs font-extrabold">CUT-OFF</Badge>
+								{/if}
+								{row.title}
+							</div>
+							{#if row.description}
+								<p class="line-clamp-2 text-sm break-words text-slate-500" title={row.description}>
+									{row.description}
+								</p>
+							{/if}
+							{#if row.sharedCampaigns > 1}
+								<Badge
+									class="mt-1 h-auto border border-sky-200 bg-sky-50 py-0.5 text-xs font-bold whitespace-normal text-sky-900"
+									title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
+								>
+									รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
+										row.publicTotal
+									)}
+									{formatUnit(row.unit, units, langState.current)}
+								</Badge>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-3 gap-2">
+							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
+								<p class="text-xs font-semibold text-slate-500">จองแล้ว</p>
+								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
+									{roundQty(row.reserved || '0')}
+								</p>
+							</div>
+							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
+								<p class="text-xs font-semibold text-slate-500">ในคลัง</p>
+								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
+									{roundQty(row.onHand || '0')}
+								</p>
+							</div>
+							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
+								<p class="text-xs font-semibold text-slate-500">เป้าหมาย</p>
+								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
+									{roundQty(row.target || '0')}
+									<span class="text-xs font-medium text-slate-500"
+										>{formatUnit(row.unit, units, langState.current)}</span
+									>
+								</p>
+							</div>
+						</div>
+
+						<div class="space-y-1.5">
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-xs font-semibold text-slate-500">ความคืบหน้า</span>
+								<span class="text-xs font-bold text-slate-800 tabular-nums"
+									>{row.progressPercent}%</span
+								>
+							</div>
+							<div class="relative h-2.5 overflow-hidden rounded-full bg-slate-100">
+								<div
+									class="h-full rounded-full transition-all duration-300 {row.isCutOff
+										? 'bg-red-600'
+										: 'bg-[#0A2647]'}"
+									style="width: {row.progressPercent}%"
+								></div>
+							</div>
+						</div>
+
+						<div class="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
+							<Button
+								variant="outline"
+								type="button"
+								onclick={() => onToggleShowOnHome(row.compoundId)}
+								disabled={row.originalItem.isCutOff}
+								class="min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto
+								{row.showOnHome && !row.originalItem.isCutOff
+									? 'border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100'
+									: 'border-slate-200 bg-slate-100 text-slate-500 opacity-70'}"
+							>
+								{row.showOnHome && !row.originalItem.isCutOff
+									? 'กำลังโชว์บนหน้าเว็บ'
+									: 'ซ่อนจากหน้าเว็บ'}
+							</Button>
+
+							{#if onEdit && row.itemId}
+								<Button
+									variant="outline"
+									type="button"
+									onclick={() => onEdit(row.originalItem, row.itemId)}
+									class="min-h-11 w-full gap-1 rounded-xl border-sky-200 bg-sky-50 px-3 text-sm font-bold text-sky-900 hover:bg-sky-100 sm:w-auto"
+								>
+									<SlidersHorizontal class="h-3.5 w-3.5" />
+									แก้ไข
+								</Button>
+							{/if}
+
+							{#if row.itemId}
+								{#if row.isCutOff && !row.isManualClosed}
+									<Button
+										variant="outline"
+										type="button"
+										disabled
+										class="min-h-11 w-full rounded-xl border-slate-200 bg-slate-100 px-3 text-sm font-bold text-slate-500 sm:w-auto"
+									>
+										ปิดอัตโนมัติ (ครบเป้า)
+									</Button>
+								{:else}
+									<Button
+										variant="outline"
+										type="button"
+										onclick={() => onToggleCutOff(row.compoundId, row.itemId)}
+										class="min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto
+										{row.isManualClosed
+											? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+											: 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'}"
+									>
+										{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off'}
+									</Button>
+								{/if}
+							{/if}
+						</div>
+					</article>
+				{/each}
+			{/if}
+		</div>
+
+		<!-- Desktop table (md+) -->
+		<div class="hidden overflow-x-auto md:block">
 			<Table.Root class="w-full border-collapse text-left">
 				<Table.Header>
 					<Table.Row
@@ -343,10 +482,7 @@
 									</Badge>
 								</Table.Cell>
 
-								<!-- On-hand. Shown because the progress bar and the automatic
-								     cut-off both count it: a need can close with almost no
-								     bookings if the warehouse already holds the goods, and staff
-								     had no way to see that from this table. -->
+								<!-- On-hand -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<Badge variant="secondary" class="px-2.5 text-xs">
 										{roundQty(row.onHand || '0')}
@@ -399,7 +535,6 @@
 								<!-- Actions -->
 								<Table.Cell class="px-6 py-4 text-right">
 									<div class="flex items-center justify-end gap-2">
-										<!-- Edit Button -->
 										{#if onEdit && row.itemId}
 											<Button
 												variant="outline"
@@ -412,9 +547,6 @@
 											</Button>
 										{/if}
 
-										<!-- Force Cut-off. A need that filled up on its own is already
-										     closed by the derived rule (T-22) — forcing it by hand would
-										     write a manual close plus an audit reason for nothing. -->
 										{#if row.itemId}
 											{#if row.isCutOff && !row.isManualClosed}
 												<Button

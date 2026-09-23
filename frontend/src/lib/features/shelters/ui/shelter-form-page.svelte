@@ -249,7 +249,7 @@
 
 <main class="text-xs text-foreground">
 	<div
-		class="sticky top-16 z-20 flex items-center justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm"
+		class="sticky top-[var(--bo-sticky-top)] z-20 flex items-center justify-between border-b border-shelter-border bg-background/95 px-4 py-4 sm:px-6 backdrop-blur-sm"
 	>
 		<div class="flex items-center space-x-2">
 			<a

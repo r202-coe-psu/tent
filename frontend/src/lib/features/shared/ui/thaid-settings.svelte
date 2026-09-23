@@ -16,9 +16,7 @@
 			await updateMutation.mutateAsync({ thaid_registration_enabled: next });
 			clearThaidStatusCache();
 			toast.success(
-				next
-					? 'เปิดใช้งาน ThaiD ในหน้าลงทะเบียนล่วงหน้าแล้ว'
-					: 'ปิดใช้งาน ThaiD ในหน้าลงทะเบียนล่วงหน้าแล้ว'
+				next ? 'เปิดใช้งาน ThaiD Digital ID ในระบบแล้ว' : 'ปิดใช้งาน ThaiD Digital ID ในระบบแล้ว'
 			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'บันทึกการตั้งค่าไม่สำเร็จ');
@@ -39,12 +37,11 @@
 		>
 			<div class="min-w-0 flex-1 space-y-1">
 				<label for="thaid-registration-enabled" class="text-sm font-medium text-card-foreground">
-					เปิดใช้งานการลงทะเบียนด้วย ThaiD Digital ID
+					เปิดใช้งาน ThaiD Digital ID
 				</label>
 				<p class="text-xs text-muted-foreground">
-					อนุญาตให้ประชาชนดึงข้อมูลบัตรประชาชนและที่อยู่อัตโนมัติในหน้าลงทะเบียนล่วงหน้า (<code
-						class="rounded bg-muted px-1">/pre-register</code
-					>) ผ่านระบบ ThaiD (BORA Digital ID)
+					ควบคุมการแสดง ThaiD ทั้งระบบ: ปุ่มเข้าสู่ระบบด้วย ThaiD, การผูกบัญชีในหน้าโปรไฟล์พนักงาน
+					(/me), และการดึงข้อมูลบัตรประชาชน/ที่อยู่ในหน้าลงทะเบียนล่วงหน้าสาธารณะ
 				</p>
 			</div>
 			<Switch
@@ -52,7 +49,7 @@
 				checked={enabled}
 				onCheckedChange={(v) => void setThaidRegistrationEnabled(v === true)}
 				disabled={busy}
-				aria-label="เปิดใช้งานการลงทะเบียนด้วย ThaiD Digital ID"
+				aria-label="เปิดใช้งาน ThaiD Digital ID"
 			/>
 		</div>
 	{/if}

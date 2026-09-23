@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GET } from './+server';
 import type { Cookies } from '@sveltejs/kit';
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const mockProfile: ThaiDAutofillProfile = {
 	id: 'thaid-1234567890123',

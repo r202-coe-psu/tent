@@ -18,7 +18,9 @@ import {
 	listUsers,
 	touchGoogleMfaVerified,
 	findUserByGoogleSubject,
-	updateOwnProfile
+	updateOwnProfile,
+	resolveLoginName,
+	findUserNameByPhone
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
@@ -109,6 +111,86 @@ describe('user-service', () => {
 		const saved = fakeUsersDb['org.couchdb.user:volunteer%40example.com'];
 		expect(saved.password).toBe('0812345678');
 		expect(saved.must_change_password).toBe(true);
+	});
+
+	it('stores null phone when omitted (username-only account)', async () => {
+		await createUser({
+			name: 'staff01',
+			password: 'Password123!',
+			display_name: 'Staff One',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:staff01'];
+		expect(saved.phone).toBeNull();
+	});
+
+	it('rejects phone that collides with another user phone', async () => {
+		await createUser({
+			name: 'staff_a',
+			password: 'Password123!',
+			display_name: 'A',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0811111111',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		await expect(
+			createUser({
+				name: 'staff_b',
+				password: 'Password123!',
+				display_name: 'B',
+				personnel_type: 'staff',
+				organization: 'ปภ.',
+				phone: '0811111111',
+				roles: ['shelter:SH001', 'registration_staff']
+			})
+		).rejects.toMatchObject({ code: 'CONFLICT' });
+	});
+
+	it('rejects phone that collides with another username', async () => {
+		await createUser({
+			name: '0812222222',
+			password: 'Password123!',
+			display_name: 'Phone User',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: null,
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		await expect(
+			createUser({
+				name: 'staff_c',
+				password: 'Password123!',
+				display_name: 'C',
+				personnel_type: 'staff',
+				organization: 'ปภ.',
+				phone: '0812222222',
+				roles: ['shelter:SH001', 'registration_staff']
+			})
+		).rejects.toMatchObject({ code: 'CONFLICT' });
+	});
+
+	it('resolveLoginName returns username for matching phone', async () => {
+		await createUser({
+			name: 'staff01',
+			password: 'Password123!',
+			display_name: 'Staff',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0899998888',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		await expect(resolveLoginName('0899998888')).resolves.toBe('staff01');
+		await expect(resolveLoginName('staff01')).resolves.toBe('staff01');
+		await expect(resolveLoginName('0810000000')).resolves.toBe('0810000000');
+		await expect(findUserNameByPhone('0899998888')).resolves.toBe('staff01');
+		await expect(findUserNameByPhone('0810000000')).resolves.toBeNull();
 	});
 
 	it('getCurrentUserProfile returns display_name from _users when present', async () => {
@@ -205,6 +287,37 @@ describe('user-service', () => {
 		const updated = fakeUsersDb['org.couchdb.user:0811112222'];
 		expect(updated.password).toBe('BrandNewPass123!');
 		expect(updated.must_change_password).toBe(false);
+	});
+
+	it('resolves forgot-password challenge by contact phone when name differs', async () => {
+		const { answer_hash, salt } = hashSecurityAnswer('แม่น้ำเจ้าพระยา');
+		await createUser({
+			name: 'staff_recover',
+			password: 'InitialPassword1!',
+			display_name: 'Recover',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0877776666',
+			roles: ['shelter:SH001', 'registration_staff'],
+			security_question: {
+				question_id: 'birth_province',
+				answer_hash,
+				salt,
+				set_at: new Date().toISOString()
+			}
+		});
+
+		const challenge = await getSecurityQuestionChallenge('0877776666');
+		expect(challenge.found).toBe(true);
+		expect(challenge.question_id).toBe('birth_province');
+
+		await verifySecurityQuestionAndResetPassword(
+			'0877776666',
+			'birth_province',
+			'แม่น้ำเจ้าพระยา',
+			'NewPassword1!'
+		);
+		expect(fakeUsersDb['org.couchdb.user:staff_recover'].must_change_password).toBe(false);
 	});
 
 	it('supports setupSecurityQuestionAndResetPassword for first login', async () => {

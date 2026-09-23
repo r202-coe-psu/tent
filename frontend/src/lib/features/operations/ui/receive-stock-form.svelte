@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { ulid } from '$lib/db/ulid';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -187,6 +191,20 @@
 		isDropdownOpen = false;
 	}
 
+	let expiryDate = $state('');
+
+	// Keep expiryDate and $formData.lot.expiry in sync
+	$effect(() => {
+		const val = expiryDate.trim();
+		if (!$formData.lot) {
+			if (val) {
+				$formData.lot = { expiry: val, note: '' };
+			}
+		} else if ($formData.lot.expiry !== val) {
+			$formData.lot.expiry = val || undefined;
+		}
+	});
+
 	function clearSelection() {
 		selectedItem = null;
 		$formData.item_id = '';
@@ -194,6 +212,7 @@
 		searchQuery = '';
 		isDropdownOpen = false;
 		clearDonation();
+		expiryDate = '';
 	}
 
 	function selectDonation(donation: Donation) {
@@ -210,29 +229,10 @@
 		isDonationDropdownOpen = false;
 	}
 
-	/**
-	 * Drop the donation when the source stops being a donation.
-	 *
-	 * The picker is hidden for `manual`, but hiding a field does not empty it:
-	 * a leftover `ref_id` maps to `reason: 'adjust'`, which R2 requires to be
-	 * null, so the submit would fail against a field the user can no longer see.
-	 * The schema rejects the stale value — it cannot clear it, so the form must.
-	 */
-	function handleSourceChange(e: Event & { currentTarget: HTMLSelectElement }) {
-		if (e.currentTarget.value !== 'donation') {
-			clearDonation();
-			resetWalkIn();
-		}
-	}
-
 	// Quick expiry date buttons (+3d / +7d)
 	function setQuickExpiry(days: number) {
 		const formatted = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-		if (!$formData.lot) {
-			$formData.lot = { expiry: formatted, note: '' };
-		} else {
-			$formData.lot.expiry = formatted;
-		}
+		expiryDate = formatted;
 	}
 
 	// Submit handler
@@ -367,8 +367,9 @@
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground"
-						>ค้นหาและเลือกรายการสิ่งของ</Form.Label
+					<Form.Label
+						>ค้นหาและเลือกรายการสิ่งของ <span class="font-bold text-destructive">*</span
+						></Form.Label
 					>
 					<div bind:this={container} class="relative w-full">
 						<Input
@@ -383,21 +384,19 @@
 							aria-haspopup="listbox"
 							autocomplete="off"
 							disabled={!!preselectedItemId}
-							class={[
-								'h-10 w-full rounded-xl border border-border/80 bg-background px-3 shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
-								preselectedItemId
-									? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-									: ''
-							]}
+							class={preselectedItemId
+								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
+								: ''}
 						/>
 						{#if selectedItem && !preselectedItemId}
-							<button
+							<Button
 								type="button"
-								class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+								variant="ghost"
+								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={clearSelection}
 							>
 								ล้างค่า
-							</button>
+							</Button>
 						{/if}
 
 						{#if isDropdownOpen}
@@ -420,7 +419,7 @@
 											type="button"
 											role="option"
 											aria-selected={selectedItem?._id === item._id}
-											class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
+											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
 											onclick={() => selectItem(item)}
 										>
 											<span class="font-semibold text-foreground">{item.name}</span>
@@ -444,7 +443,7 @@
 		<Form.Field {form} name="qty" class="col-span-1">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">จำนวนที่รับเข้า</Form.Label>
+					<Form.Label>จำนวนที่รับเข้า <span class="font-bold text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
 						type="number"
@@ -452,7 +451,7 @@
 						min="0.01"
 						step="any"
 						bind:value={$formData.qty}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+						class="font-mono font-bold"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -463,13 +462,13 @@
 		<Form.Field {form} name="unit" class="col-span-1">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">หน่วยนับ</Form.Label>
+					<Form.Label>หน่วยนับ</Form.Label>
 					<Input
 						{...props}
 						placeholder="ระบบจะล็อกอัตโนมัติ"
 						bind:value={$formData.unit}
 						readonly
-						class="h-10 w-full cursor-not-allowed rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm"
+						disabled
 					/>
 				{/snippet}
 			</Form.Control>
@@ -480,7 +479,7 @@
 		<Form.Field {form} name="source" class="col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">แหล่งที่มา</Form.Label>
+					<Form.Label>แหล่งที่มา <span class="font-bold text-destructive">*</span></Form.Label>
 					<!--
 						`transfer_in` stays in `receiveSourceSchema` and `ledgerReasonSchema`
 						but is deliberately absent here (CR-055 D-3): R2 requires a
@@ -488,15 +487,29 @@
 						lands, so offering the option would only produce submissions that
 						can never validate.
 					-->
-					<select
-						{...props}
+					<Select.Root
+						type="single"
 						bind:value={$formData.source}
-						onchange={handleSourceChange}
-						class="h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
+						onValueChange={(val) => {
+							if (val && val !== 'donation') {
+								clearDonation();
+								resetWalkIn();
+							}
+						}}
 					>
-						<option value="donation">ของบริจาค (Donation)</option>
-						<option value="manual">กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)</option>
-					</select>
+						<Select.Trigger
+							{...props}
+							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+						>
+							{$formData.source === 'manual'
+								? 'กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)'
+								: 'ของบริจาค (Donation)'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="donation" label="ของบริจาค (Donation)" />
+							<Select.Item value="manual" label="กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)" />
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -507,7 +520,9 @@
 			<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="text-xs font-bold text-foreground">ใบบริจาคที่รับของเข้า</Form.Label>
+						<Form.Label
+							>ใบบริจาคที่รับของเข้า <span class="font-bold text-destructive">*</span></Form.Label
+						>
 						<div bind:this={donationContainer} class="relative w-full">
 							<Input
 								{...props}
@@ -528,16 +543,17 @@
 								aria-controls="donation-listbox"
 								aria-haspopup="listbox"
 								autocomplete="off"
-								class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 							/>
 							{#if selectedDonation}
-								<button
+								<Button
 									type="button"
-									class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+									variant="ghost"
+									size="xs"
+									class="absolute top-1/2 right-2 -translate-y-1/2"
 									onclick={clearDonation}
 								>
 									ล้างค่า
-								</button>
+								</Button>
 							{/if}
 
 							{#if isDonationDropdownOpen}
@@ -560,7 +576,7 @@
 												type="button"
 												role="option"
 												aria-selected={selectedDonation?._id === donation._id}
-												class="flex w-full flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted"
+												class="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted"
 												onclick={() => selectDonation(donation)}
 											>
 												<span class="text-sm font-semibold text-foreground">
@@ -595,42 +611,61 @@
 					>
 						<div class="flex items-center justify-between">
 							<span class="text-xs font-bold text-foreground">บริจาคหน้างาน (Walk-in)</span>
-							<button
+							<Button
 								type="button"
-								class="text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+								variant="ghost"
+								class="min-h-11 min-w-11 px-4 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={resetWalkIn}
 							>
 								เลือกจากใบบริจาคแทน
-							</button>
+							</Button>
 						</div>
 						<p class="text-xs text-muted-foreground">
 							ระบบจะสร้างใบบริจาคจากรายการด้านบนพร้อมกับบันทึกของเข้าคลังในขั้นตอนเดียว
 						</p>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-							<Input
-								placeholder="ชื่อผู้บริจาค *"
-								bind:value={walkInDonorName}
-								class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm shadow-sm"
-							/>
-							<Input
-								placeholder="เบอร์โทร (ไม่บังคับ)"
-								inputmode="numeric"
-								bind:value={walkInDonorPhone}
-								class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm shadow-sm"
-							/>
+							<div>
+								<Label
+									for="walkin-donor-name"
+									class="mb-1.5 block text-xs font-medium text-foreground"
+								>
+									ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
+								</Label>
+								<Input
+									id="walkin-donor-name"
+									placeholder="ระบุชื่อผู้บริจาค"
+									bind:value={walkInDonorName}
+								/>
+							</div>
+							<div>
+								<Label
+									for="walkin-donor-phone"
+									class="mb-1.5 block text-xs font-medium text-foreground"
+								>
+									เบอร์โทร (ไม่บังคับ)
+								</Label>
+								<Input
+									id="walkin-donor-phone"
+									placeholder="ระบุเบอร์โทร"
+									inputmode="numeric"
+									bind:value={walkInDonorPhone}
+								/>
+							</div>
 						</div>
 					</div>
 				{:else}
-					<button
+					<Button
 						type="button"
-						class="cursor-pointer text-xs font-bold text-primary underline-offset-2 transition hover:underline"
+						variant="link"
+						size="sm"
+						class="h-auto p-0 text-xs font-bold text-primary underline-offset-2 hover:underline"
 						onclick={() => {
 							clearDonation();
 							isWalkInOpen = true;
 						}}
 					>
 						ไม่มีใบจอง? บันทึกบริจาคหน้างาน
-					</button>
+					</Button>
 				{/if}
 			</div>
 		{/if}
@@ -639,26 +674,39 @@
 		<Form.Field {form} name="lot.note" class="col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground"
-						>สถานที่จัดเก็บในคลัง (โซน/ชั้นวาง)</Form.Label
-					>
-					<select
-						{...props}
+					<Form.Label>สถานที่จัดเก็บในคลัง (โซน/ชั้นวาง)</Form.Label>
+					<Select.Root
+						type="single"
 						value={$formData.lot?.note ?? ''}
-						onchange={(e) => {
+						onValueChange={(val) => {
 							if (!$formData.lot) {
-								$formData.lot = { expiry: '', note: e.currentTarget.value };
+								$formData.lot = { expiry: '', note: val ?? '' };
 							} else {
-								$formData.lot.note = e.currentTarget.value;
+								$formData.lot.note = val ?? '';
 							}
 						}}
-						class="h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 					>
-						<option value="">เลือกโซนที่เก็บ</option>
-						<option value="Zone A">Zone A (ของใช้ทั่วไป)</option>
-						<option value="Zone B">Zone B (ของที่เน่าเสียได้)</option>
-						<option value="Zone C">Zone C (ยาและเวชภัณฑ์)</option>
-					</select>
+						<Select.Trigger
+							{...props}
+							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+						>
+							{$formData.lot?.note
+								? $formData.lot.note === 'Zone A'
+									? 'Zone A (ของใช้ทั่วไป)'
+									: $formData.lot.note === 'Zone B'
+										? 'Zone B (ของที่เน่าเสียได้)'
+										: $formData.lot.note === 'Zone C'
+											? 'Zone C (ยาและเวชภัณฑ์)'
+											: $formData.lot.note
+								: 'เลือกโซนที่เก็บ'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="" label="เลือกโซนที่เก็บ" />
+							<Select.Item value="Zone A" label="Zone A (ของใช้ทั่วไป)" />
+							<Select.Item value="Zone B" label="Zone B (ของที่เน่าเสียได้)" />
+							<Select.Item value="Zone C" label="Zone C (ยาและเวชภัณฑ์)" />
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -669,43 +717,35 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<div class="mb-1 flex items-center justify-between">
-						<Form.Label class="text-xs font-bold text-foreground">
+						<Form.Label>
 							วันหมดอายุ
 							{#if selectedItem?.perishable}
-								<span class="font-bold text-rose-600 dark:text-rose-400"
-									>* (ของเสียได้ บังคับกรอก)</span
-								>
+								<span class="font-bold text-destructive">* (ของเสียได้ บังคับกรอก)</span>
 							{/if}
 						</Form.Label>
-						<div class="flex gap-1.5">
-							<button
+						<div class="flex gap-2">
+							<Button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								variant="outline"
+								class="min-h-11 min-w-[48px] rounded-lg px-3.5 text-xs font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={() => setQuickExpiry(3)}
 							>
 								+3 วัน
-							</button>
-							<button
+							</Button>
+							<Button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								variant="outline"
+								class="min-h-11 min-w-[48px] rounded-lg px-3.5 text-xs font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 								onclick={() => setQuickExpiry(7)}
 							>
 								+7 วัน
-							</button>
+							</Button>
 						</div>
 					</div>
-					<Input
+					<DatePicker
 						{...props}
-						type="date"
-						value={$formData.lot?.expiry ?? ''}
-						oninput={(e) => {
-							if (!$formData.lot) {
-								$formData.lot = { expiry: e.currentTarget.value, note: '' };
-							} else {
-								$formData.lot.expiry = e.currentTarget.value;
-							}
-						}}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+						bind:value={expiryDate}
+						placeholder="วว/ดด/ปปปป (เช่น 23/07/2026)"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -714,10 +754,7 @@
 
 		<!-- Submit Button -->
 		<div class="col-span-1 pt-3 sm:col-span-2">
-			<Form.Button
-				disabled={$submitting}
-				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98]"
-			>
+			<Form.Button size="lg" disabled={$submitting} class="w-full font-bold">
 				{$submitting ? 'กำลังบันทึกรายการ...' : 'ลงทะเบียนบันทึกของเข้าคลัง'}
 			</Form.Button>
 		</div>

@@ -210,11 +210,7 @@
 	<!-- Ops actions (both rail + compact) -->
 	<div class="border-t border-slate-200/80 pt-3">
 		{#if !readonly}
-			<div
-				class={isCompact
-					? 'grid grid-cols-1 gap-2 sm:grid-cols-3'
-					: 'grid grid-cols-1 gap-2'}
-			>
+			<div class={isCompact ? 'grid grid-cols-1 gap-2 sm:grid-cols-3' : 'grid grid-cols-1 gap-2'}>
 				<button
 					type="button"
 					onclick={onOpenZoneModal}
@@ -253,8 +249,7 @@
 		{:else}
 			<button
 				type="button"
-				onclick={() =>
-					goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
+				onclick={() => goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
 				class="inline-flex {isCompact
 					? 'min-h-11'
 					: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
