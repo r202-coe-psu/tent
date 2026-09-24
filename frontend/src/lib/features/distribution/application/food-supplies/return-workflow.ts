@@ -1,8 +1,9 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { isUlid } from '$lib/db/ulid';
+import { ulid, isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, persistQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
+import { endpointStore } from '$lib/stores/endpoint.svelte';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
@@ -15,12 +16,17 @@ import type {
 	BulkReturnPool,
 	BulkReturnPoolInput,
 	DistributionLog,
+	LoanReturnReservation,
+	LoanReturnReservationMode,
+	NonPhysicalClearReason,
 	ReturnCondition
 } from '../../domain/food-supplies';
 import {
 	createBulkReturnClaim,
 	createBulkReturnPool as createBulkReturnPoolDocument,
-	deriveClaimIdFromDistributionLog
+	createLoanReturnReservation,
+	deriveClaimIdFromDistributionLog,
+	deriveReservationIdFromDistributionLog
 } from '../../domain/food-supplies';
 import {
 	BulkReturnClaimRemoteRepository,
@@ -28,12 +34,19 @@ import {
 	BulkReturnPoolRemoteRepository,
 	type BulkReturnPoolRepository,
 	DistributionLogRemoteRepository,
-	type DistributionLogRepository
+	type DistributionLogRepository,
+	LoanReturnReservationRemoteRepository,
+	type LoanReturnReservationRepository
 } from '../../data/food-supplies';
-import { assertCanPerformFrontlineDistribution, assertCanReceivePhysicalStock } from './auth';
+import {
+	assertCanPerformFrontlineDistribution,
+	assertCanReceivePhysicalStock,
+	assertReservationModeAuthority
+} from './auth';
 import {
 	ConcurrencyCollisionError,
 	InsufficientPoolQuotaError,
+	ReservationSemanticMismatchError,
 	StockIntegrityError,
 	WorkflowValidationError
 } from './errors';
@@ -94,17 +107,21 @@ export interface ReturnWorkflowDependencies {
 	operationsRepo?: OperationsRepository;
 	poolRepo?: BulkReturnPoolRepository;
 	claimRepo?: BulkReturnClaimRepository;
+	reservationRepo?: LoanReturnReservationRepository;
+	endpointStore?: { active: string; isWritable: boolean };
 }
 
 export interface CounterReturnInput {
 	qty_returned: string;
 	condition_on_return?: ReturnCondition;
 	notes?: string;
+	operationUlid?: string;
 }
 
 export interface NonPhysicalClearInput {
 	clear_reason: 'lost' | 'waived';
 	notes: string;
+	operationUlid?: string;
 }
 
 export interface CreateBulkPoolInput {
@@ -164,21 +181,554 @@ function assertBulkPoolReplay(actual: BulkReturnPool, expected: BulkReturnPool):
 	}
 }
 
+function isDistributionLogRepository(
+	deps: ReturnWorkflowDependencies | DistributionLogRepository | undefined
+): deps is DistributionLogRepository {
+	return Boolean(
+		deps &&
+		'get' in deps &&
+		'recordClear' in deps &&
+		typeof (deps as { get: unknown }).get === 'function' &&
+		typeof (deps as { recordClear: unknown }).recordClear === 'function'
+	);
+}
+
 function resolveDependencies(
-	deps: ReturnWorkflowDependencies | undefined,
+	deps: ReturnWorkflowDependencies | DistributionLogRepository | undefined,
 	ctx: AuthorContext
 ): {
 	logRepo: DistributionLogRepository;
 	operationsRepo: OperationsRepository;
 	poolRepo: BulkReturnPoolRepository;
 	claimRepo: BulkReturnClaimRepository;
+	reservationRepo: LoanReturnReservationRepository;
+	endpointStore: { active: string; isWritable: boolean };
 } {
+	const actualDeps: ReturnWorkflowDependencies | undefined = isDistributionLogRepository(deps)
+		? { logRepo: deps }
+		: deps;
+
 	return {
-		logRepo: deps?.logRepo ?? new DistributionLogRemoteRepository(ctx.shelterCode),
-		operationsRepo: deps?.operationsRepo ?? operationsRepository(ctx.shelterCode),
-		poolRepo: deps?.poolRepo ?? new BulkReturnPoolRemoteRepository(ctx.shelterCode),
-		claimRepo: deps?.claimRepo ?? new BulkReturnClaimRemoteRepository(ctx.shelterCode)
+		logRepo: actualDeps?.logRepo ?? new DistributionLogRemoteRepository(ctx.shelterCode),
+		operationsRepo: actualDeps?.operationsRepo ?? operationsRepository(ctx.shelterCode),
+		poolRepo: actualDeps?.poolRepo ?? new BulkReturnPoolRemoteRepository(ctx.shelterCode),
+		claimRepo: actualDeps?.claimRepo ?? new BulkReturnClaimRemoteRepository(ctx.shelterCode),
+		reservationRepo:
+			actualDeps?.reservationRepo ?? new LoanReturnReservationRemoteRepository(ctx.shelterCode),
+		endpointStore:
+			actualDeps?.endpointStore ??
+			(typeof endpointStore !== 'undefined'
+				? { active: endpointStore.active, isWritable: endpointStore.status === 'connected' }
+				: { active: 'central', isWritable: true })
 	};
+}
+
+export function assertCentralWriteAuthority(endpoint?: {
+	active: string;
+	isWritable: boolean;
+}): void {
+	if (!endpoint || endpoint.active !== 'central' || !endpoint.isWritable) {
+		throw new WorkflowValidationError(
+			'Authoritative central connectivity is required for loan resolution mutations; edge or disconnected endpoint is not authoritative'
+		);
+	}
+}
+
+/**
+ * Authoritatively acquires the shared mutual-exclusion reservation for a return operation.
+ * Deterministic per DistributionLog: loan_return_reservation:{distributionLogUlid}.
+ * CAS-guarded: enforces single-owner mutual exclusion between PHYSICAL and BULK workflows.
+ */
+export interface AcquireReturnReservationInput {
+	logId: string;
+	mode: LoanReturnReservationMode;
+	operationId: string;
+	operationBy?: string;
+	qty_returned?: string;
+	return_condition?: ReturnCondition;
+	bulk_pool_id?: string;
+	claimed_qty?: string;
+	clear_reason?: NonPhysicalClearReason;
+	notes?: string;
+}
+
+export async function acquireReturnReservation(
+	input: AcquireReturnReservationInput,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<LoanReturnReservation> {
+	assertReservationModeAuthority(input.mode, ctx);
+	const { reservationRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
+	const resId = deriveReservationIdFromDistributionLog(input.logId);
+
+	let existing = await reservationRepo.get(resId);
+	if (!existing) {
+		const newDoc = createLoanReturnReservation(
+			{
+				distribution_log_id: input.logId,
+				mode: input.mode,
+				operation_id: input.operationId,
+				operation_by: input.operationBy ?? ctx.createdBy,
+				qty_returned: input.qty_returned,
+				return_condition: input.return_condition,
+				bulk_pool_id: input.bulk_pool_id,
+				claimed_qty: input.claimed_qty,
+				clear_reason: input.clear_reason,
+				notes: input.notes
+			},
+			ctx
+		);
+		try {
+			return await reservationRepo.create(newDoc);
+		} catch (err) {
+			if (err instanceof ConflictError) {
+				existing = await reservationRepo.get(resId);
+				if (!existing) throw err;
+			} else {
+				throw err;
+			}
+		}
+	}
+
+	if (existing.status === 'RESERVED' || existing.status === 'FENCED') {
+		if (existing.operation_id === input.operationId) {
+			if (existing.mode !== input.mode) {
+				throw new ConcurrencyCollisionError(
+					`Distribution log ${input.logId} is currently reserved in ${existing.mode} mode, cannot switch to ${input.mode}`
+				);
+			}
+			// Semantic intent validation for replay
+			if (input.mode === 'PHYSICAL') {
+				if (input.qty_returned && existing.qty_returned !== input.qty_returned) {
+					throw new ReservationSemanticMismatchError(
+						`Physical return quantity cannot be modified within the same operation attempt: expected ${existing.qty_returned}, got ${input.qty_returned}`
+					);
+				}
+				if (input.return_condition && existing.return_condition !== input.return_condition) {
+					throw new ReservationSemanticMismatchError(
+						`Physical return condition cannot be modified within the same operation attempt: expected ${existing.return_condition}, got ${input.return_condition}`
+					);
+				}
+			} else if (input.mode === 'BULK') {
+				if (input.bulk_pool_id && existing.bulk_pool_id !== input.bulk_pool_id) {
+					throw new ReservationSemanticMismatchError(
+						`Bulk pool ID cannot be modified within the same operation attempt: expected ${existing.bulk_pool_id}, got ${input.bulk_pool_id}`
+					);
+				}
+				if (input.claimed_qty && existing.claimed_qty !== input.claimed_qty) {
+					throw new ReservationSemanticMismatchError(
+						`Bulk claimed quantity cannot be modified within the same operation attempt: expected ${existing.claimed_qty}, got ${input.claimed_qty}`
+					);
+				}
+			} else if (input.mode === 'NON_PHYSICAL') {
+				if (input.clear_reason && existing.clear_reason !== input.clear_reason) {
+					throw new ReservationSemanticMismatchError(
+						`Non-physical clear reason cannot be modified within the same operation attempt: expected ${existing.clear_reason}, got ${input.clear_reason}`
+					);
+				}
+			}
+			return existing;
+		}
+		throw new ConcurrencyCollisionError(
+			`Distribution log ${input.logId} is currently reserved for ${existing.mode} return by operation ${existing.operation_id}`
+		);
+	}
+
+	// Existing reservation is in COMMITTED or ABORTED status; reinitialize for new attempt
+	try {
+		return await reservationRepo.reinitializeCAS(
+			resId,
+			{
+				operation_id: input.operationId,
+				mode: input.mode,
+				operation_by: ctx.createdBy,
+				qty_returned: input.qty_returned,
+				return_condition: input.return_condition,
+				bulk_pool_id: input.bulk_pool_id,
+				claimed_qty: input.claimed_qty,
+				clear_reason: input.clear_reason,
+				notes: input.notes
+			},
+			ctx
+		);
+	} catch (err) {
+		const reloaded = await reservationRepo.get(resId);
+		if (
+			reloaded &&
+			(reloaded.status === 'RESERVED' || reloaded.status === 'FENCED') &&
+			(reloaded.mode !== input.mode || reloaded.operation_id !== input.operationId)
+		) {
+			throw new ConcurrencyCollisionError(
+				`Distribution log ${input.logId} was concurrently reserved for ${reloaded.mode} return by operation ${reloaded.operation_id}`
+			);
+		}
+		throw err;
+	}
+}
+
+/**
+ * Authoritatively CAS-fences the reservation right before an irreversible side effect.
+ * Freezes ownership and transitions reservation from RESERVED -> FENCED.
+ * Guarantees that stale owners or aborted reservations cannot proceed across the effect boundary.
+ */
+export async function fenceReturnReservation(
+	logId: string,
+	operationId: string,
+	expectedMode: LoanReturnReservationMode,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<LoanReturnReservation> {
+	assertReservationModeAuthority(expectedMode, ctx);
+	const { reservationRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	return reservationRepo.mutateCAS(resId, (current) => {
+		if (current.status === 'FENCED') {
+			if (current.operation_id === operationId && current.mode === expectedMode) {
+				return current;
+			}
+			throw new ConcurrencyCollisionError(
+				`Reservation ${resId} is already fenced by operation ${current.operation_id}`
+			);
+		}
+		if (current.status !== 'RESERVED') {
+			throw new ConcurrencyCollisionError(
+				`Cannot fence reservation ${resId} in status ${current.status}; expected RESERVED`
+			);
+		}
+		if (current.operation_id !== operationId) {
+			throw new ConcurrencyCollisionError(
+				`Cannot fence reservation ${resId}: owned by operation ${current.operation_id}, expected ${operationId}`
+			);
+		}
+		if (current.mode !== expectedMode) {
+			throw new ConcurrencyCollisionError(
+				`Cannot fence reservation ${resId}: mode is ${current.mode}, expected ${expectedMode}`
+			);
+		}
+		return {
+			...current,
+			status: 'FENCED',
+			updated_at: now()
+		};
+	});
+}
+
+/**
+ * Commits the return reservation upon successful conclusion of all workflow mutations.
+ */
+export async function commitReturnReservation(
+	logId: string,
+	operationId: string,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<LoanReturnReservation> {
+	const { reservationRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	return reservationRepo.mutateCAS(resId, (current) => {
+		if (current.status === 'COMMITTED') {
+			return current;
+		}
+		if (current.status !== 'FENCED') {
+			throw new WorkflowValidationError(
+				`Cannot commit reservation ${resId} in status ${current.status}; must be FENCED`
+			);
+		}
+		if (current.operation_id !== operationId) {
+			throw new ConcurrencyCollisionError(
+				`Cannot commit reservation ${resId}: owned by operation ${current.operation_id}, expected ${operationId}`
+			);
+		}
+		assertReservationModeAuthority(current.mode, ctx);
+		return {
+			...current,
+			status: 'COMMITTED',
+			updated_at: now()
+		};
+	});
+}
+
+/**
+ * Aborts a reservation before irreversible side effects occur.
+ */
+export async function abortReturnReservation(
+	logId: string,
+	operationId: string,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<LoanReturnReservation> {
+	const { reservationRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	return reservationRepo.mutateCAS(resId, (current) => {
+		if (current.status === 'ABORTED') {
+			return current;
+		}
+		if (current.status === 'FENCED') {
+			throw new ConcurrencyCollisionError(
+				`Cannot abort reservation ${resId}: operation is FENCED for execution; must proceed forward`
+			);
+		}
+		if (current.status !== 'RESERVED') {
+			return current;
+		}
+		if (current.operation_id !== operationId) {
+			return current;
+		}
+		assertReservationModeAuthority(current.mode, ctx);
+		return {
+			...current,
+			status: 'ABORTED',
+			updated_at: now()
+		};
+	});
+}
+
+/**
+ * Returns authoritative operation state and inspects whether in-flight operation is
+ * PRE_EFFECT_ABORTABLE or IRREVERSIBLE_FORWARD_ONLY.
+ */
+export async function getReturnOperationState(
+	logId: string,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<{
+	reservation: LoanReturnReservation | null;
+	claim: BulkReturnClaim | null;
+	canAbort: boolean;
+	canResume: boolean;
+	phase: 'NONE' | 'PRE_EFFECT_ABORTABLE' | 'IRREVERSIBLE_FORWARD_ONLY' | 'TERMINAL';
+}> {
+	const { reservationRepo, operationsRepo, poolRepo, claimRepo, logRepo } = resolveDependencies(
+		deps,
+		ctx
+	);
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	const reservation = await reservationRepo.get(resId);
+	const claimId = deriveClaimIdFromDistributionLog(logId);
+	const claim = await claimRepo.get(claimId);
+	const log = await logRepo.get(logId);
+
+	const actorName = ctx.createdBy;
+	const isOwner = reservation
+		? reservation.operation_by === actorName || reservation.created_by === actorName
+		: false;
+	const isManagerOrAdmin = Boolean(
+		ctx.roles?.some(
+			(r) =>
+				r === 'shelter_manager' ||
+				r === 'system_admin' ||
+				r.endsWith(':shelter_manager') ||
+				r.endsWith(':system_admin')
+		)
+	);
+	const canAbortPreEffect = isOwner || isManagerOrAdmin;
+
+	if (reservation?.status === 'FENCED') {
+		return {
+			reservation,
+			claim,
+			canAbort: false,
+			canResume: true,
+			phase: 'IRREVERSIBLE_FORWARD_ONLY'
+		};
+	}
+
+	if (reservation?.status === 'RESERVED') {
+		if (reservation.mode === 'PHYSICAL') {
+			const existingLedger = await operationsRepo.listLedger();
+			const receipts = existingLedger.filter((e) => e.ref_id === logId && e.reason === 'receive');
+			if (receipts.length > 0 || (log && log.status === 'returned')) {
+				return {
+					reservation,
+					claim,
+					canAbort: false,
+					canResume: true,
+					phase: 'IRREVERSIBLE_FORWARD_ONLY'
+				};
+			}
+			return {
+				reservation,
+				claim,
+				canAbort: canAbortPreEffect,
+				canResume: true,
+				phase: 'PRE_EFFECT_ABORTABLE'
+			};
+		}
+
+		if (reservation.mode === 'NON_PHYSICAL') {
+			if (log && ['lost', 'waived'].includes(log.status)) {
+				return {
+					reservation,
+					claim,
+					canAbort: false,
+					canResume: true,
+					phase: 'IRREVERSIBLE_FORWARD_ONLY'
+				};
+			}
+			return {
+				reservation,
+				claim,
+				canAbort: canAbortPreEffect,
+				canResume: true,
+				phase: 'PRE_EFFECT_ABORTABLE'
+			};
+		}
+
+		// BULK mode
+		if (claim) {
+			if (
+				claim.status === 'POOL_CLAIMED' ||
+				claim.status === 'COMPLETE' ||
+				(log && log.status === 'returned')
+			) {
+				return {
+					reservation,
+					claim,
+					canAbort: false,
+					canResume: true,
+					phase: 'IRREVERSIBLE_FORWARD_ONLY'
+				};
+			}
+			const pool = await poolRepo.get(claim.bulk_pool_id);
+			if (pool && (pool.claim_ids ?? []).includes(claimId)) {
+				return {
+					reservation,
+					claim,
+					canAbort: false,
+					canResume: true,
+					phase: 'IRREVERSIBLE_FORWARD_ONLY'
+				};
+			}
+		}
+		return {
+			reservation,
+			claim,
+			canAbort: canAbortPreEffect,
+			canResume: true,
+			phase: 'PRE_EFFECT_ABORTABLE'
+		};
+	}
+
+	if (log && ['returned', 'lost', 'waived', 'voided'].includes(log.status)) {
+		return { reservation, claim, canAbort: false, canResume: false, phase: 'TERMINAL' };
+	}
+
+	return { reservation, claim, canAbort: false, canResume: false, phase: 'NONE' };
+}
+
+/**
+ * Aborts an abandoned reservation safely. Rejects if irreversible side effects already exist.
+ */
+export async function abortAbandonedReturnReservation(
+	logId: string,
+	ctx: AuthorContext,
+	deps?: ReturnWorkflowDependencies
+): Promise<LoanReturnReservation> {
+	const {
+		reservationRepo,
+		operationsRepo,
+		poolRepo,
+		claimRepo,
+		logRepo,
+		endpointStore: epStore
+	} = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	const reservation = await reservationRepo.get(resId);
+	if (!reservation || reservation.status !== 'RESERVED') {
+		if (reservation?.status === 'FENCED') {
+			throw new WorkflowValidationError(
+				`Cannot abort reservation for log ${logId}: operation is FENCED for ${reservation.mode} execution; must be recovered forward`
+			);
+		}
+		return reservation!;
+	}
+
+	// Verify objective abandonment or caller authorization:
+	// Allowed if:
+	// 1. Caller is the operator who initiated this attempt (operation_by or created_by)
+	// 2. Caller is shelter_manager or system_admin
+	const abortActorName = ctx.createdBy;
+	const isAbortOwner =
+		reservation.operation_by === abortActorName || reservation.created_by === abortActorName;
+	const isAbortManagerOrAdmin = Boolean(
+		ctx.roles?.some(
+			(r) =>
+				r === 'shelter_manager' ||
+				r === 'system_admin' ||
+				r.endsWith(':shelter_manager') ||
+				r.endsWith(':system_admin')
+		)
+	);
+
+	if (!isAbortOwner && !isAbortManagerOrAdmin) {
+		throw new WorkflowValidationError(
+			`Cannot abort active reservation ${resId} owned by ${reservation.operation_by ?? reservation.created_by}; caller is not the owner or a manager/admin`
+		);
+	}
+
+	if (!isAbortManagerOrAdmin) {
+		assertReservationModeAuthority(reservation.mode, ctx);
+	}
+
+	if (reservation.mode === 'PHYSICAL') {
+		const existingLedger = await operationsRepo.listLedger();
+		const receipts = existingLedger.filter((e) => e.ref_id === logId && e.reason === 'receive');
+		if (receipts.length > 0) {
+			throw new WorkflowValidationError(
+				`Cannot abort physical return for log ${logId}: irreversible StockLedger receipt already exists; operation must be recovered forward`
+			);
+		}
+	} else if (reservation.mode === 'BULK') {
+		const claimId = deriveClaimIdFromDistributionLog(logId);
+		const claim = await claimRepo.get(claimId);
+		if (claim) {
+			if (claim.status === 'POOL_CLAIMED' || claim.status === 'COMPLETE') {
+				throw new WorkflowValidationError(
+					`Cannot abort bulk return for log ${logId}: irreversible pool quota deduction already exists; operation must be recovered forward`
+				);
+			}
+			const pool = await poolRepo.get(claim.bulk_pool_id);
+			if (pool && (pool.claim_ids ?? []).includes(claimId)) {
+				throw new WorkflowValidationError(
+					`Cannot abort bulk return for log ${logId}: pool ${pool._id} already contains claim ${claimId}; operation must be recovered forward`
+				);
+			}
+			if (claim.status === 'CLAIM_INTENT') {
+				try {
+					await claimRepo.mutateStatusCAS(claimId, 'ABORTED', ctx);
+				} catch {
+					// Best-effort claim cleanup; the reservation state remains authoritative.
+				}
+			}
+		}
+	} else if (reservation.mode === 'NON_PHYSICAL') {
+		const currentLog = await logRepo.get(logId);
+		if (currentLog && ['lost', 'waived', 'returned', 'voided'].includes(currentLog.status)) {
+			throw new WorkflowValidationError(
+				`Cannot abort non-physical clear for log ${logId}: log is already closed as ${currentLog.status}; operation must be recovered forward`
+			);
+		}
+	}
+
+	return reservationRepo.mutateCAS(resId, (current) => {
+		if (current.status === 'ABORTED') {
+			return current;
+		}
+		if (current.status !== 'RESERVED') {
+			throw new ConcurrencyCollisionError(
+				`Cannot abort reservation ${resId}: status is ${current.status}; must be RESERVED`
+			);
+		}
+		return {
+			...current,
+			status: 'ABORTED',
+			updated_at: now()
+		};
+	});
 }
 
 /**
@@ -196,7 +746,15 @@ export async function returnLoanAtCounter(
 
 	assertPositiveQty(input.qty_returned, 'qty_returned');
 
-	const { logRepo, operationsRepo } = resolveDependencies(deps, ctx);
+	const resolvedDeps = resolveDependencies(deps, ctx);
+	const {
+		logRepo,
+		operationsRepo,
+		claimRepo,
+		reservationRepo,
+		endpointStore: epStore
+	} = resolvedDeps;
+	assertCentralWriteAuthority(epStore);
 	const currentLog = await logRepo.get(logId);
 	if (!currentLog) {
 		throw new WorkflowValidationError(`Distribution log ${logId} not found`);
@@ -238,6 +796,18 @@ export async function returnLoanAtCounter(
 		);
 	}
 
+	// Fail closed if an in-flight bulk return claim exists for this log
+	const claimId = deriveClaimIdFromDistributionLog(logId);
+	const activeClaim = await claimRepo.get(claimId);
+	if (
+		activeClaim &&
+		(activeClaim.status === 'CLAIM_INTENT' || activeClaim.status === 'POOL_CLAIMED')
+	) {
+		throw new ConcurrencyCollisionError(
+			`Distribution log ${logId} is currently undergoing bulk gate clearance (claim status: ${activeClaim.status})`
+		);
+	}
+
 	// 1. Determine previously credited stock entries for this exact log
 	const existingLedger = await operationsRepo.listLedger();
 	const logReceiveEntries = existingLedger.filter(
@@ -255,11 +825,33 @@ export async function returnLoanAtCounter(
 		);
 	}
 
+	// Derive/determine operation ID and inspect existing reservation
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	const existingRes = await reservationRepo.get(resId);
+	const operationId =
+		input.operationUlid ??
+		((existingRes?.status === 'RESERVED' || existingRes?.status === 'FENCED') &&
+		existingRes.mode === 'PHYSICAL'
+			? existingRes.operation_id
+			: ulid());
+
 	if (currentLog.status === 'returned') {
 		if (!parseQty(totalPreviouslyReceived).eq(input.qty_returned)) {
 			throw new StockIntegrityError(
 				`Routine returned distribution log ${logId} does not match its physical receipt accounting`
 			);
+		}
+		if (
+			existingRes &&
+			existingRes.mode === 'PHYSICAL' &&
+			existingRes.operation_id === operationId
+		) {
+			if (existingRes.status === 'RESERVED') {
+				await fenceReturnReservation(logId, operationId, 'PHYSICAL', ctx, resolvedDeps);
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			} else if (existingRes.status === 'FENCED') {
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			}
 		}
 		return { log: currentLog, ledgerEntryCreated: false };
 	}
@@ -272,6 +864,18 @@ export async function returnLoanAtCounter(
 				`Distribution log ${logId} has mismatched returned and physical receipt quantities`
 			);
 		}
+		if (
+			existingRes &&
+			existingRes.mode === 'PHYSICAL' &&
+			existingRes.operation_id === operationId
+		) {
+			if (existingRes.status === 'RESERVED') {
+				await fenceReturnReservation(logId, operationId, 'PHYSICAL', ctx, resolvedDeps);
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			} else if (existingRes.status === 'FENCED') {
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			}
+		}
 		return { log: currentLog, ledgerEntryCreated: false };
 	}
 
@@ -281,6 +885,19 @@ export async function returnLoanAtCounter(
 			`qty_returned (${input.qty_returned}) must advance previously returned qty (${previousQtyReturned})`
 		);
 	}
+
+	await acquireReturnReservation(
+		{
+			logId,
+			mode: 'PHYSICAL',
+			operationId,
+			notes: input.notes,
+			qty_returned: input.qty_returned,
+			return_condition: input.condition_on_return
+		},
+		ctx,
+		resolvedDeps
+	);
 
 	const ledgerId = await deriveDeterministicLedgerId(
 		'counter_return',
@@ -306,6 +923,7 @@ export async function returnLoanAtCounter(
 	// A new receipt may proceed only when prior physical accounting matches the log state.
 	// If it already equals the target, the deterministic ledger proves LEDGER_ONLY recovery.
 	if (parseQty(totalPreviouslyReceived).eq(previousQtyReturned)) {
+		await fenceReturnReservation(logId, operationId, 'PHYSICAL', ctx, resolvedDeps);
 		try {
 			const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
 			assertCounterReturnLedgerReplay(persistedLedger, ledgerEntry, ctx);
@@ -323,6 +941,7 @@ export async function returnLoanAtCounter(
 			assertCounterReturnLedgerReplay(recoveredLedger, ledgerEntry, ctx);
 		}
 	} else if (parseQty(totalPreviouslyReceived).eq(input.qty_returned)) {
+		await fenceReturnReservation(logId, operationId, 'PHYSICAL', ctx, resolvedDeps);
 		const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
 		if (!recoveredLedger) {
 			throw new StockIntegrityError(
@@ -331,6 +950,14 @@ export async function returnLoanAtCounter(
 		}
 		assertCounterReturnLedgerReplay(recoveredLedger, ledgerEntry, ctx);
 	} else {
+		const currentReservation = await reservationRepo.get(resId);
+		if (currentReservation?.status === 'RESERVED') {
+			try {
+				await abortReturnReservation(logId, operationId, ctx, resolvedDeps);
+			} catch {
+				// Best-effort pre-effect cleanup; preserve the stock-integrity error.
+			}
+		}
 		throw new StockIntegrityError(
 			`Distribution log ${logId} has mismatched prior return and physical receipt quantities`
 		);
@@ -347,6 +974,8 @@ export async function returnLoanAtCounter(
 		ctx
 	);
 
+	await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+
 	return {
 		log: updatedLog,
 		ledgerEntryCreated
@@ -355,13 +984,14 @@ export async function returnLoanAtCounter(
 
 /**
  * Clears a loan non-physically as lost or waived (FR-LON-04).
- * Requires notes. Does NOT create any physical stock receipt.
+ * Serialized through the shared loan_return_reservation coordinator (NON_PHYSICAL mode).
+ * Requires notes. Does NOT create any physical stock receipt or consume bulk pool quota.
  */
 export async function clearLoanNonPhysical(
 	logId: string,
 	input: NonPhysicalClearInput,
 	ctx: AuthorContext,
-	logRepo?: DistributionLogRepository
+	deps?: ReturnWorkflowDependencies | DistributionLogRepository
 ): Promise<DistributionLog> {
 	assertCanPerformFrontlineDistribution(ctx);
 
@@ -370,9 +1000,94 @@ export async function clearLoanNonPhysical(
 			`notes are required when clearing a loan as ${input.clear_reason}`
 		);
 	}
+	if (input.clear_reason !== 'lost' && input.clear_reason !== 'waived') {
+		throw new WorkflowValidationError(
+			`Invalid non-physical clear reason '${String(input.clear_reason)}'; must be 'lost' or 'waived'`
+		);
+	}
 
-	const repository = logRepo ?? new DistributionLogRemoteRepository(ctx.shelterCode);
-	return repository.recordClear(
+	const resolvedDeps = resolveDependencies(deps, ctx);
+	const { logRepo, reservationRepo, claimRepo, endpointStore: epStore } = resolvedDeps;
+	assertCentralWriteAuthority(epStore);
+
+	const currentLog = await logRepo.get(logId);
+	if (!currentLog) {
+		throw new WorkflowValidationError(`Distribution log ${logId} not found`);
+	}
+	if (currentLog.shelter_code !== ctx.shelterCode) {
+		throw new WorkflowValidationError(
+			`Distribution log ${logId} belongs to shelter ${currentLog.shelter_code}, expected ${ctx.shelterCode}`
+		);
+	}
+	if (!currentLog.is_returnable) {
+		throw new WorkflowValidationError(`Cannot clear non-returnable distribution log ${logId}`);
+	}
+
+	const resId = deriveReservationIdFromDistributionLog(logId);
+	const existingRes = await reservationRepo.get(resId);
+	const operationId =
+		input.operationUlid ??
+		((existingRes?.status === 'RESERVED' || existingRes?.status === 'FENCED') &&
+		existingRes.mode === 'NON_PHYSICAL'
+			? existingRes.operation_id
+			: ulid());
+
+	// Crash recovery: if already cleared in this operation, commit and return
+	if (currentLog.status === input.clear_reason) {
+		if (
+			existingRes &&
+			existingRes.operation_id === operationId &&
+			existingRes.mode === 'NON_PHYSICAL'
+		) {
+			if (existingRes.status === 'RESERVED') {
+				await fenceReturnReservation(logId, operationId, 'NON_PHYSICAL', ctx, resolvedDeps);
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			} else if (existingRes.status === 'FENCED') {
+				await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+			}
+			return currentLog;
+		}
+		throw new WorkflowValidationError(
+			`Distribution log ${logId} is already closed as ${currentLog.status}`
+		);
+	}
+
+	if (['returned', 'lost', 'waived', 'voided'].includes(currentLog.status)) {
+		throw new WorkflowValidationError(
+			`Distribution log ${logId} is already closed as ${currentLog.status}`
+		);
+	}
+
+	// Fail closed if an active bulk claim exists
+	const claimId = deriveClaimIdFromDistributionLog(logId);
+	const activeClaim = await claimRepo.get(claimId);
+	if (
+		activeClaim &&
+		(activeClaim.status === 'CLAIM_INTENT' || activeClaim.status === 'POOL_CLAIMED')
+	) {
+		throw new ConcurrencyCollisionError(
+			`Distribution log ${logId} is currently undergoing bulk gate clearance (claim status: ${activeClaim.status})`
+		);
+	}
+
+	// 1. Acquire shared reservation in NON_PHYSICAL mode
+	await acquireReturnReservation(
+		{
+			logId,
+			mode: 'NON_PHYSICAL',
+			operationId,
+			notes: input.notes,
+			clear_reason: input.clear_reason
+		},
+		ctx,
+		resolvedDeps
+	);
+
+	// 2. Fenced ownership transition before irreversible DistributionLog clear
+	await fenceReturnReservation(logId, operationId, 'NON_PHYSICAL', ctx, resolvedDeps);
+
+	// 3. Irreversible DistributionLog clear
+	const updatedLog = await logRepo.recordClear(
 		logId,
 		{
 			clear_reason: input.clear_reason,
@@ -380,6 +1095,11 @@ export async function clearLoanNonPhysical(
 		},
 		ctx
 	);
+
+	// 4. Commit reservation
+	await commitReturnReservation(logId, operationId, ctx, resolvedDeps);
+
+	return updatedLog;
 }
 
 /**
@@ -481,7 +1201,14 @@ export async function clearLoanViaBulkPool(
 
 	assertCanPerformFrontlineDistribution(ctx);
 
-	const { logRepo, poolRepo, claimRepo } = resolveDependencies(deps, ctx);
+	const {
+		logRepo,
+		poolRepo,
+		claimRepo,
+		reservationRepo,
+		endpointStore: epStore
+	} = resolveDependencies(deps, ctx);
+	assertCentralWriteAuthority(epStore);
 
 	// Step 0a: Read DistributionLog and target BulkReturnPool
 	const currentLog = await logRepo.get(logId);
@@ -498,6 +1225,7 @@ export async function clearLoanViaBulkPool(
 	}
 
 	const claimId = deriveClaimIdFromDistributionLog(logId);
+	const reservationId = deriveReservationIdFromDistributionLog(logId);
 
 	// Step 19 recovery check: Crash after Log update but before Claim COMPLETE.
 	let existingClaim = await claimRepo.get(claimId);
@@ -522,6 +1250,20 @@ export async function clearLoanViaBulkPool(
 				throw new WorkflowValidationError(
 					`Bulk return pool ${existingClaim.bulk_pool_id} not found during complete recovery`
 				);
+			}
+			const resId = deriveReservationIdFromDistributionLog(logId);
+			const existingRes = await reservationRepo.get(resId);
+			if (
+				existingRes &&
+				existingRes.mode === 'BULK' &&
+				existingRes.operation_id === operationUlid
+			) {
+				if (existingRes.status === 'RESERVED') {
+					await fenceReturnReservation(logId, operationUlid, 'BULK', ctx, deps);
+					await commitReturnReservation(logId, operationUlid, ctx, deps);
+				} else if (existingRes.status === 'FENCED') {
+					await commitReturnReservation(logId, operationUlid, ctx, deps);
+				}
 			}
 			return { log: currentLog, pool, claim: existingClaim };
 		}
@@ -559,9 +1301,44 @@ export async function clearLoanViaBulkPool(
 		);
 	}
 
+	// Step 0c: Acquire shared BULK reservation via CAS BEFORE claim doc or pool quota deduction
+	await acquireReturnReservation(
+		{
+			logId,
+			mode: 'BULK',
+			operationId: operationUlid,
+			notes,
+			bulk_pool_id: poolId,
+			claimed_qty: outstanding
+		},
+		ctx,
+		deps
+	);
+
+	// Validation failures may clean up only a still-RESERVED attempt. Once the
+	// reservation is FENCED, recovery must continue forward and the original
+	// workflow error must not be replaced by an abort-transition error.
+	const abortReservationIfPreEffect = async (cleanupClaim?: () => Promise<void>): Promise<void> => {
+		const current = await reservationRepo.get(reservationId);
+		if (!current || current.status !== 'RESERVED') return;
+		if (cleanupClaim) {
+			try {
+				await cleanupClaim();
+			} catch {
+				// Best-effort claim cleanup; preserve the original workflow error.
+			}
+		}
+		try {
+			await abortReturnReservation(logId, operationUlid, ctx, deps);
+		} catch {
+			// Best-effort pre-effect cleanup; preserve the original workflow error.
+		}
+	};
+
 	// Step 0b: Pre-flight Quota Check (Optimization — reject BEFORE creating Claim Doc if pool unusable)
 	if (!existingClaim) {
 		if (targetPool.status !== 'ACTIVE' || qtyGt(outstanding, targetPool.unclaimed_quota)) {
+			await abortReservationIfPreEffect();
 			throw new InsufficientPoolQuotaError(
 				`Bulk return pool ${poolId} has insufficient quota (${targetPool.unclaimed_quota} < ${outstanding}) or status is ${targetPool.status}`
 			);
@@ -598,6 +1375,7 @@ export async function clearLoanViaBulkPool(
 	if (existingClaim.status === 'ABORTED') {
 		// If same operation was already aborted, fail closed
 		if (existingClaim.operation_id === operationUlid) {
+			await abortReservationIfPreEffect();
 			throw new InsufficientPoolQuotaError(
 				`Claim for distribution log ${logId} was aborted in operation ${operationUlid}`
 			);
@@ -605,6 +1383,7 @@ export async function clearLoanViaBulkPool(
 
 		// New operation attempting controlled CAS re-initialization
 		if (targetPool.status !== 'ACTIVE' || qtyGt(outstanding, targetPool.unclaimed_quota)) {
+			await abortReservationIfPreEffect();
 			throw new InsufficientPoolQuotaError(
 				`Target pool ${poolId} has insufficient quota or is unusable for re-initialization`
 			);
@@ -624,6 +1403,7 @@ export async function clearLoanViaBulkPool(
 		} catch (err) {
 			const reloaded = await claimRepo.get(claimId);
 			if (reloaded && reloaded.operation_id !== operationUlid && reloaded.status !== 'ABORTED') {
+				await abortReservationIfPreEffect();
 				throw new ConcurrencyCollisionError(
 					`Another operation ${reloaded.operation_id} claimed distribution log ${logId} during re-initialization`
 				);
@@ -632,6 +1412,7 @@ export async function clearLoanViaBulkPool(
 		}
 	} else if (existingClaim.operation_id !== operationUlid) {
 		// Different operation collision on active/effective claim
+		await abortReservationIfPreEffect();
 		throw new ConcurrencyCollisionError(
 			`Distribution log ${logId} is already being processed by operation ${existingClaim.operation_id}`
 		);
@@ -651,6 +1432,56 @@ export async function clearLoanViaBulkPool(
 	const poolEffectDone = poolClaimIds.includes(claim._id);
 
 	if (!poolEffectDone) {
+		// Category B: Error Precedence Guard
+		const freshLog = await logRepo.get(logId);
+		if (!freshLog) {
+			await abortReservationIfPreEffect(async () => {
+				claim = await claimRepo.mutateStatusCAS(claim._id, 'ABORTED', ctx);
+			});
+			throw new WorkflowValidationError(`Distribution log ${logId} not found`);
+		}
+
+		// Freshness check: verify DistributionLog state has not changed concurrently
+		const isFresh =
+			freshLog.is_returnable &&
+			(freshLog.status === 'active' || freshLog.status === 'partially_returned') &&
+			freshLog.item_id === claim.item_id &&
+			parseQty(freshLog.qty).eq(currentLog.qty) &&
+			parseQty(freshLog.qty_returned ?? '0').eq(currentLog.qty_returned ?? '0');
+
+		if (!isFresh) {
+			await abortReservationIfPreEffect(async () => {
+				claim = await claimRepo.mutateStatusCAS(claim._id, 'ABORTED', ctx);
+			});
+			throw new ConcurrencyCollisionError(
+				`Distribution log ${logId} state changed concurrently before pool quota deduction (claim aborted)`
+			);
+		}
+
+		const newReturned = addQty(freshLog.qty_returned ?? '0', authoritativeClaimQty);
+
+		// Category B: Over-return check (throws StockIntegrityError)
+		if (qtyGt(newReturned, freshLog.qty)) {
+			await abortReservationIfPreEffect(async () => {
+				claim = await claimRepo.mutateStatusCAS(claim._id, 'ABORTED', ctx);
+			});
+			throw new StockIntegrityError(
+				`Over-return detected: resulting returned qty ${newReturned} exceeds issued qty ${freshLog.qty}`
+			);
+		}
+
+		// Category B: Under-return check (throws WorkflowValidationError)
+		if (newReturned !== freshLog.qty) {
+			await abortReservationIfPreEffect(async () => {
+				claim = await claimRepo.mutateStatusCAS(claim._id, 'ABORTED', ctx);
+			});
+			throw new WorkflowValidationError(
+				`Under-return rejected: resulting returned qty ${newReturned} does not equal issued qty ${freshLog.qty}`
+			);
+		}
+
+		await fenceReturnReservation(logId, operationUlid, 'BULK', ctx, deps);
+
 		try {
 			targetPool = await poolRepo.claimQuota(
 				claim.bulk_pool_id,
@@ -669,11 +1500,6 @@ export async function clearLoanViaBulkPool(
 						err.message.includes('EXHAUSTED')));
 
 			if (isDeterministicRejection) {
-				try {
-					claim = await claimRepo.mutateStatusCAS(claim._id, 'ABORTED', ctx);
-				} catch {
-					// If abort CAS conflicts, leave claim as is
-				}
 				throw new InsufficientPoolQuotaError(
 					err instanceof Error ? err.message : 'Pool quota exhausted'
 				);
@@ -681,6 +1507,8 @@ export async function clearLoanViaBulkPool(
 			// Transient errors (5xx, network timeout, ConflictError) leave Claim in CLAIM_INTENT for retry
 			throw err;
 		}
+	} else {
+		await fenceReturnReservation(logId, operationUlid, 'BULK', ctx, deps);
 	}
 
 	// Step 3: Advance Claim towards POOL_CLAIMED
@@ -737,6 +1565,9 @@ export async function clearLoanViaBulkPool(
 	if (claim.status !== 'COMPLETE') {
 		claim = await claimRepo.mutateStatusCAS(claim._id, 'COMPLETE', ctx);
 	}
+
+	// Step 6: Commit shared reservation
+	await commitReturnReservation(logId, operationUlid, ctx, deps);
 
 	return {
 		log: updatedLog,

@@ -155,3 +155,32 @@ export function assertCanReceiveWarehouseReturns(ctx: AuthorContext): void {
 		);
 	}
 }
+
+export function canOperateReservationMode(
+	mode: 'PHYSICAL' | 'BULK' | 'NON_PHYSICAL',
+	ctx: AuthorContext
+): boolean {
+	if (mode === 'PHYSICAL') {
+		return canReceivePhysicalStock(ctx);
+	}
+	return canPerformFrontlineDistribution(ctx);
+}
+
+export function assertReservationModeAuthority(
+	mode: 'PHYSICAL' | 'BULK' | 'NON_PHYSICAL',
+	ctx: AuthorContext
+): void {
+	if (mode === 'PHYSICAL') {
+		if (!canReceivePhysicalStock(ctx)) {
+			throw new WorkflowAuthorizationError(
+				'Unauthorized: PHYSICAL return reservation requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
+			);
+		}
+	} else {
+		if (!canPerformFrontlineDistribution(ctx)) {
+			throw new WorkflowAuthorizationError(
+				`Unauthorized: ${mode} return reservation requires registration_staff, supply_coordinator, shelter_manager, or system_admin role`
+			);
+		}
+	}
+}

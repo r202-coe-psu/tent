@@ -2809,6 +2809,349 @@ describe('buildValidateDocUpdate', () => {
 			});
 		});
 
+		describe('bulk_return_claim VDU validation (Rule 15)', () => {
+			const STAFF_A: UserCtx = { name: 'staff_a', roles: ['shelter:SH001', 'registration_staff'] };
+			const STAFF_B: UserCtx = { name: 'staff_b', roles: ['shelter:SH001', 'supply_coordinator'] };
+
+			const claimFor = (creator: UserCtx, over: Doc = {}): Doc => ({
+				_id: 'bulk_return_claim:01J00000000000000000000002',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: creator.name,
+				operation_id: '01J00000000000000000000001',
+				distribution_log_id: 'distribution_log:01J00000000000000000000002',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+				item_id: 'item:wheelchair',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				...over
+			});
+
+			it('allows claim create when created_by matches userCtx.name', () => {
+				const claim = claimFor(STAFF_A);
+				expect(() => compile()(claim, null, STAFF_A)).not.toThrow();
+			});
+
+			it('rejects claim create when created_by is forged', () => {
+				const claim = claimFor(STAFF_A);
+				expectForbidden(
+					() => compile()(claim, null, STAFF_B),
+					/bulk_return_claim\.created_by must match the current actor/
+				);
+			});
+
+			it('allows recovery/advance by Staff B while preserving original created_by', () => {
+				const originalClaim = claimFor(STAFF_A);
+				const advancedClaim = {
+					...originalClaim,
+					status: 'POOL_CLAIMED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expect(() => compile()(advancedClaim, originalClaim, STAFF_B)).not.toThrow();
+			});
+
+			it('rejects modifying created_by during claim update', () => {
+				const originalClaim = claimFor(STAFF_A);
+				const hijackedClaim = {
+					...originalClaim,
+					created_by: STAFF_B.name,
+					status: 'POOL_CLAIMED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(hijackedClaim, originalClaim, STAFF_B),
+					/bulk_return_claim\.created_by is permanently immutable/
+				);
+			});
+		});
+
+		describe('loan_return_reservation VDU validation (Rule 16)', () => {
+			const WAREHOUSE_ACTOR: UserCtx = { name: 'wh1', roles: ['shelter:SH001', 'warehouse_staff'] };
+			const REG_ACTOR: UserCtx = { name: 'reg1', roles: ['shelter:SH001', 'registration_staff'] };
+			const COORD_ACTOR: UserCtx = {
+				name: 'coord1',
+				roles: ['shelter:SH001', 'supply_coordinator']
+			};
+			const MGR_ACTOR: UserCtx = { name: 'mgr1', roles: ['shelter:SH001', 'shelter_manager'] };
+			const ADMIN_ACTOR: UserCtx = { name: 'admin1', roles: ['system_admin'] };
+			const UNAUTH_ACTOR: UserCtx = { name: 'unauth1', roles: ['shelter:SH001', 'kitchen_staff'] };
+
+			const resFor = (
+				creator: UserCtx,
+				mode: 'PHYSICAL' | 'BULK' | 'NON_PHYSICAL' = 'PHYSICAL',
+				over: Doc = {}
+			): Doc => ({
+				_id: 'loan_return_reservation:01J00000000000000000000002',
+				type: 'loan_return_reservation',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: creator.name,
+				operation_by: creator.name,
+				operation_id: '01J00000000000000000000001',
+				distribution_log_id: 'distribution_log:01J00000000000000000000002',
+				mode,
+				status: 'RESERVED',
+				...(mode === 'PHYSICAL'
+					? { qty_returned: '1', return_condition: 'READY' }
+					: mode === 'BULK'
+						? { bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001', claimed_qty: '1' }
+						: { clear_reason: 'lost' }),
+				...over
+			});
+
+			it('enforces mode-specific RBAC for PHYSICAL reservation create (WH/SC/SM/SA allowed; REG rejected)', () => {
+				for (const actor of [WAREHOUSE_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'PHYSICAL');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const regRes = resFor(REG_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(regRes, null, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('enforces mode-specific RBAC for BULK reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
+				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'BULK');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const whRes = resFor(WAREHOUSE_ACTOR, 'BULK');
+				expectForbidden(
+					() => compile()(whRes, null, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in BULK mode/
+				);
+			});
+
+			it('enforces mode-specific RBAC for NON_PHYSICAL reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
+				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'NON_PHYSICAL');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const whRes = resFor(WAREHOUSE_ACTOR, 'NON_PHYSICAL');
+				expectForbidden(
+					() => compile()(whRes, null, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in NON_PHYSICAL mode/
+				);
+			});
+
+			it('rejects reservation create when created_by is forged', () => {
+				const res = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(res, null, COORD_ACTOR),
+					/loan_return_reservation\.created_by must match the current actor/
+				);
+			});
+
+			it('rejects reservation create from unauthorized role', () => {
+				const res = resFor(UNAUTH_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(res, null, UNAUTH_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('allows cross-actor advance to FENCED and COMMITTED while preserving original created_by', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expect(() => compile()(fenced, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				const committed = {
+					...fenced,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expect(() => compile()(committed, fenced, COORD_ACTOR)).not.toThrow();
+			});
+
+			it('enforces mode RBAC on FENCE and COMMIT transitions', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				// REG actor cannot FENCE a PHYSICAL reservation
+				expectForbidden(
+					() => compile()(fenced, original, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+
+				// WH actor can FENCE
+				expect(() => compile()(fenced, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				const committed = {
+					...fenced,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				// REG actor cannot COMMIT a PHYSICAL reservation
+				expectForbidden(
+					() => compile()(committed, fenced, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('forbids aborting a FENCED reservation (must proceed forward)', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()({ ...fenced, status: 'ABORTED' }, fenced, WAREHOUSE_ACTOR),
+					/Invalid loan_return_reservation transition from FENCED to ABORTED/
+				);
+			});
+
+			it('rejects mutating created_by during reservation transition', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const hijacked = {
+					...original,
+					created_by: COORD_ACTOR.name,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(hijacked, original, COORD_ACTOR),
+					/loan_return_reservation\.created_by is permanently immutable/
+				);
+			});
+
+			it('rejects changing mode or operation_id while reservation is active', () => {
+				const original = resFor(COORD_ACTOR, 'PHYSICAL');
+				const modeChanged = {
+					...original,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(modeChanged, original, COORD_ACTOR),
+					/loan_return_reservation\.mode cannot be changed while active/
+				);
+
+				const opIdChanged = {
+					...original,
+					operation_id: '01J00000000000000000000099',
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(opIdChanged, original, COORD_ACTOR),
+					/loan_return_reservation\.operation_id cannot be changed while active/
+				);
+			});
+
+			it('enforces valid status transitions and allows reinitialization from ABORTED and COMMITTED with mode-specific RBAC', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const committed = {
+					...original,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				// COMMITTED -> ABORTED is invalid
+				expectForbidden(
+					() => compile()({ ...committed, status: 'ABORTED' }, committed, WAREHOUSE_ACTOR),
+					/Invalid loan_return_reservation transition from COMMITTED to ABORTED/
+				);
+
+				// COMMITTED -> RESERVED as BULK is valid for REG_ACTOR
+				const reinitFromCommitted = {
+					...committed,
+					operation_id: '01J00000000000000000000099',
+					operation_by: REG_ACTOR.name,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'RESERVED',
+					updated_at: '2026-09-01T02:00:00.000Z'
+				};
+				expect(() => compile()(reinitFromCommitted, committed, REG_ACTOR)).not.toThrow();
+
+				// COMMITTED -> RESERVED as BULK is rejected for WAREHOUSE_ACTOR (WH cannot do BULK)
+				const whReinitBulk = {
+					...committed,
+					operation_id: '01J00000000000000000000099',
+					operation_by: WAREHOUSE_ACTOR.name,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'RESERVED',
+					updated_at: '2026-09-01T02:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(whReinitBulk, committed, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in BULK mode/
+				);
+			});
+
+			it('validates canonical return_condition (READY, MAINTENANCE, BROKEN) and rejects legacy conditions', () => {
+				for (const cond of ['READY', 'MAINTENANCE', 'BROKEN']) {
+					const valid = resFor(WAREHOUSE_ACTOR, 'PHYSICAL', { return_condition: cond });
+					expect(() => compile()(valid, null, WAREHOUSE_ACTOR)).not.toThrow();
+				}
+				for (const legacy of ['good', 'damaged', 'unusable', 'OTHER']) {
+					const invalid = resFor(WAREHOUSE_ACTOR, 'PHYSICAL', { return_condition: legacy });
+					expectForbidden(
+						() => compile()(invalid, null, WAREHOUSE_ACTOR),
+						/PHYSICAL loan_return_reservation requires valid return_condition/
+					);
+				}
+			});
+
+			it('allows pre-effect abort from RESERVED only by operation owner, shelter_manager, or system_admin', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const aborted = {
+					...original,
+					status: 'ABORTED',
+					updated_at: '2026-09-01T00:15:00.000Z'
+				};
+
+				// Original creator/operation owner can abort
+				expect(() => compile()(aborted, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				// Shelter manager can abort
+				expect(() => compile()(aborted, original, MGR_ACTOR)).not.toThrow();
+
+				// System admin can abort
+				expect(() => compile()(aborted, original, ADMIN_ACTOR)).not.toThrow();
+
+				// Another warehouse staff (different actor, not manager/admin) cannot abort
+				const otherWhActor: UserCtx = { name: 'wh2', roles: ['shelter:SH001', 'warehouse_staff'] };
+				expectForbidden(
+					() => compile()(aborted, original, otherWhActor),
+					/Only operation owner, shelter_manager, or system_admin can abort a RESERVED reservation/
+				);
+
+				// Supply coordinator (not manager/admin, not owner) cannot abort
+				expectForbidden(
+					() => compile()(aborted, original, COORD_ACTOR),
+					/Only operation owner, shelter_manager, or system_admin can abort a RESERVED reservation/
+				);
+			});
+
+			it('rejects deleting loan_return_reservation documents', () => {
+				const doc = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()({ _id: doc._id, _deleted: true }, doc, ADMIN_ACTOR),
+					/Cannot delete loan_return_reservation documents/
+				);
+			});
+		});
+
 		describe('stock_ledger reason/ref VDU alignment (Rule 13)', () => {
 			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
 			const SHELTER_MGR: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };

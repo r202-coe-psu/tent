@@ -248,7 +248,7 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
-    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool')) {
+    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool' || oldDoc.type === 'loan_return_reservation')) {
       throw { forbidden: 'Cannot delete ' + oldDoc.type + ' documents' };
     }
     if (wasAppendOnly || protectedCoordinationDelete) {
@@ -306,7 +306,7 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment',
-    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim'
+    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -1732,6 +1732,141 @@ export function buildValidateDocUpdate(code: string): string {
     } else {
       if (newDoc.status !== 'CLAIM_INTENT') {
         throw { forbidden: 'Initial bulk_return_claim status must be CLAIM_INTENT' };
+      }
+      if (newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'bulk_return_claim.created_by must match the current actor' };
+      }
+    }
+  }
+  // 16. CR-134 R4: loan_return_reservation validation (Rule 16)
+  if (newDoc.type === 'loan_return_reservation') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported loan_return_reservation schema version' };
+    }
+    if (!/^loan_return_reservation:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'loan_return_reservation id must be loan_return_reservation:{ulid}' };
+    }
+    if (typeof newDoc.operation_id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.operation_id)) {
+      throw { forbidden: 'loan_return_reservation requires operation_id ULID' };
+    }
+    if (typeof newDoc.distribution_log_id !== 'string' || !/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.distribution_log_id)) {
+      throw { forbidden: 'loan_return_reservation requires distribution_log_id' };
+    }
+    if (newDoc._id !== 'loan_return_reservation:' + newDoc.distribution_log_id.replace('distribution_log:', '')) {
+      throw { forbidden: 'loan_return_reservation id must derive from distribution_log_id' };
+    }
+    if (newDoc.mode !== 'PHYSICAL' && newDoc.mode !== 'BULK' && newDoc.mode !== 'NON_PHYSICAL') {
+      throw { forbidden: 'Invalid loan_return_reservation mode: ' + newDoc.mode };
+    }
+    var validResStatuses = ['RESERVED', 'FENCED', 'COMMITTED', 'ABORTED'];
+    if (validResStatuses.indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Invalid loan_return_reservation status: ' + newDoc.status };
+    }
+    if (typeof newDoc.operation_by !== 'string' || !newDoc.operation_by) {
+      throw { forbidden: 'loan_return_reservation requires operation_by' };
+    }
+
+    // Mode-specific RBAC enforced on EVERY write/transition
+    var canReservePhysical = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
+    var canReserveBulk = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
+    var canReserveNonPhysical = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
+
+    if (newDoc.mode === 'PHYSICAL' && !canReservePhysical) {
+      throw { forbidden: 'Role cannot manage loan return reservations in PHYSICAL mode' };
+    }
+    if (newDoc.mode === 'BULK' && !canReserveBulk) {
+      throw { forbidden: 'Role cannot manage loan return reservations in BULK mode' };
+    }
+    if (newDoc.mode === 'NON_PHYSICAL' && !canReserveNonPhysical) {
+      throw { forbidden: 'Role cannot manage loan return reservations in NON_PHYSICAL mode' };
+    }
+
+    // Mode-specific durable intent validation
+    if (newDoc.mode === 'PHYSICAL') {
+      if (typeof newDoc.qty_returned !== 'string' || !/^\\d+(\\.\\d+)?$/.test(newDoc.qty_returned)) {
+        throw { forbidden: 'PHYSICAL loan_return_reservation requires valid qty_returned' };
+      }
+      if (newDoc.return_condition !== 'READY' && newDoc.return_condition !== 'MAINTENANCE' && newDoc.return_condition !== 'BROKEN') {
+        throw { forbidden: 'PHYSICAL loan_return_reservation requires valid return_condition' };
+      }
+    } else if (newDoc.mode === 'BULK') {
+      if (typeof newDoc.bulk_pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id)) {
+        throw { forbidden: 'BULK loan_return_reservation requires valid bulk_pool_id' };
+      }
+      if (typeof newDoc.claimed_qty !== 'string' || !/^\\d+(\\.\\d+)?$/.test(newDoc.claimed_qty)) {
+        throw { forbidden: 'BULK loan_return_reservation requires valid claimed_qty' };
+      }
+    } else if (newDoc.mode === 'NON_PHYSICAL') {
+      if (newDoc.clear_reason !== 'lost' && newDoc.clear_reason !== 'waived') {
+        throw { forbidden: 'NON_PHYSICAL loan_return_reservation requires valid clear_reason' };
+      }
+    }
+
+    if (oldDoc) {
+      var permImmutableRes = [
+        '_id', 'type', 'schema_v', 'shelter_code', 'distribution_log_id', 'created_at', 'created_by'
+      ];
+      for (var ri = 0; ri < permImmutableRes.length; ri++) {
+        var riName = permImmutableRes[ri];
+        if (newDoc[riName] !== oldDoc[riName]) {
+          throw { forbidden: 'loan_return_reservation.' + riName + ' is permanently immutable' };
+        }
+      }
+
+      var oldResStatus = oldDoc.status;
+      var newResStatus = newDoc.status;
+
+      var validResTransitions = {
+        RESERVED: ['FENCED', 'ABORTED'],
+        FENCED: ['COMMITTED'],
+        COMMITTED: ['RESERVED'],
+        ABORTED: ['RESERVED']
+      };
+
+      if (oldResStatus !== newResStatus) {
+        var allowedNextRes = validResTransitions[oldResStatus] || [];
+        if (allowedNextRes.indexOf(newResStatus) === -1) {
+          throw { forbidden: 'Invalid loan_return_reservation transition from ' + oldResStatus + ' to ' + newResStatus };
+        }
+      }
+
+      if (oldResStatus === 'RESERVED' && newResStatus === 'ABORTED') {
+        var isAbortOwner = oldDoc.operation_by === userCtx.name || oldDoc.created_by === userCtx.name;
+        var isAbortAdmin = isRole('shelter_manager') || isRole('system_admin');
+        if (!isAbortOwner && !isAbortAdmin) {
+          throw { forbidden: 'Only operation owner, shelter_manager, or system_admin can abort a RESERVED reservation' };
+        }
+      }
+
+      var isResReinitialization =
+        (oldResStatus === 'ABORTED' || oldResStatus === 'COMMITTED') &&
+        newResStatus === 'RESERVED';
+
+      if (isResReinitialization) {
+        if (newDoc.operation_by !== userCtx.name) {
+          throw { forbidden: 'loan_return_reservation.operation_by must match the current actor on reinitialization' };
+        }
+      } else {
+        var attemptScopedFields = [
+          'operation_id', 'mode', 'operation_by',
+          'qty_returned', 'return_condition', 'bulk_pool_id', 'claimed_qty', 'clear_reason'
+        ];
+        for (var af = 0; af < attemptScopedFields.length; af++) {
+          var afName = attemptScopedFields[af];
+          if (newDoc[afName] !== oldDoc[afName]) {
+            throw { forbidden: 'loan_return_reservation.' + afName + ' cannot be changed while active' };
+          }
+        }
+      }
+    } else {
+      if (newDoc.status !== 'RESERVED') {
+        throw { forbidden: 'Initial loan_return_reservation status must be RESERVED' };
+      }
+      if (newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'loan_return_reservation.created_by must match the current actor' };
+      }
+      if (newDoc.operation_by !== userCtx.name) {
+        throw { forbidden: 'loan_return_reservation.operation_by must match the current actor' };
       }
     }
   }
