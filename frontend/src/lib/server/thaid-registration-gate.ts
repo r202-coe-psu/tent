@@ -7,18 +7,19 @@ export function isThaidConfigured(): boolean {
 	return Boolean(env.THAID_OAUTH_CLIENT_ID?.trim() && env.THAID_OAUTH_CLIENT_SECRET?.trim());
 }
 
+/**
+ * Whether ThaiD should be offered in the UI / OAuth start (login, /me link, pre-register).
+ *
+ * Operator flag `config:app.thaid_registration_enabled` always wins when OFF.
+ * When ON: enabled if OAuth keys are configured, or DEV mock when keys are missing.
+ * MFA step-up for already-linked accounts is gated separately by the caller.
+ */
 export async function isThaidRegistrationEnabled(): Promise<{
 	enabled: boolean;
 	isDev: boolean;
 	mode: 'mock' | 'real';
 }> {
-	if (dev) {
-		return { enabled: true, isDev: true, mode: 'mock' };
-	}
-
-	if (!isThaidConfigured()) {
-		return { enabled: false, isDev: false, mode: 'real' };
-	}
+	const configured = isThaidConfigured();
 
 	try {
 		const { status, data } = await adminRaw(
@@ -26,13 +27,27 @@ export async function isThaidRegistrationEnabled(): Promise<{
 			'GET'
 		);
 		const config = status === 200 ? readAppConfig(data) : APP_CONFIG_DEFAULTS;
-		return {
-			enabled: config.thaid_registration_enabled !== false,
-			isDev: false,
-			mode: 'real'
-		};
+		const flagOn = config.thaid_registration_enabled !== false;
+
+		if (!flagOn) {
+			return { enabled: false, isDev: dev, mode: configured ? 'real' : 'mock' };
+		}
+
+		if (configured) {
+			return { enabled: true, isDev: false, mode: 'real' };
+		}
+		if (dev) {
+			return { enabled: true, isDev: true, mode: 'mock' };
+		}
+		return { enabled: false, isDev: false, mode: 'real' };
 	} catch (err) {
-		console.warn('[ThaiD] Failed to read config:app — defaulting to enabled', err);
-		return { enabled: true, isDev: false, mode: 'real' };
+		console.warn('[ThaiD] Failed to read config:app — defaulting to enabled when possible', err);
+		if (configured) {
+			return { enabled: true, isDev: false, mode: 'real' };
+		}
+		if (dev) {
+			return { enabled: true, isDev: true, mode: 'mock' };
+		}
+		return { enabled: false, isDev: false, mode: 'real' };
 	}
 }

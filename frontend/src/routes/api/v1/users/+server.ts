@@ -73,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				? body.position.trim()
 				: null;
 		const phone =
-			typeof body.phone === 'string' && body.phone.trim().length > 0 ? body.phone.trim() : name;
+			typeof body.phone === 'string' && body.phone.trim().length > 0 ? body.phone.trim() : null;
 		const email =
 			typeof body.email === 'string' && body.email.trim().length > 0 ? body.email.trim() : null;
 		const notes =
@@ -100,9 +100,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		if (display_name.length < 1)
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
-		if (personnel_type === 'staff' && !organization) {
-			throw new ServiceError('VALIDATION', 'organization is required for staff');
-		}
 
 		assertCanGrant(caller, roles);
 		const result = await createOrMergeUser(
@@ -151,7 +148,12 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const organization =
 			typeof body.organization === 'string' ? body.organization.trim() : undefined;
 		const position = typeof body.position === 'string' ? body.position.trim() : undefined;
-		const phone = typeof body.phone === 'string' ? body.phone.trim() : undefined;
+		const phone =
+			typeof body.phone === 'string'
+				? body.phone.trim().length > 0
+					? body.phone.trim()
+					: null
+				: undefined;
 		const email = typeof body.email === 'string' ? body.email.trim() : undefined;
 		const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
 		const volunteer_id =

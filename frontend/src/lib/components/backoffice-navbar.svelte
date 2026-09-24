@@ -6,6 +6,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
+	import BackofficeShelterSelect from '$lib/components/backoffice-shelter-select.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { afterNavigate } from '$app/navigation';
 	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
@@ -249,14 +250,16 @@
 		</div>
 	</div>
 
-	<!-- Desktop Sidebar Footer -->
+	<!-- Desktop Sidebar Footer: shelter context + account -->
 	<div class="mt-auto border-t border-sidebar-border bg-card p-4">
 		{#if collapsed}
-			<div class="flex justify-center">
+			<div class="flex flex-col items-center gap-3">
+				<BackofficeShelterSelect compact />
 				<StaffAccountMenu compact side="right" align="end" />
 			</div>
 		{:else}
-			<div class="flex flex-col gap-2">
+			<div class="flex flex-col gap-3">
+				<BackofficeShelterSelect />
 				<span
 					class="max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
 					title={formatRoleList(roles)}
@@ -269,8 +272,10 @@
 	</div>
 </aside>
 
-<!-- Mobile Navigation -->
-<div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card lg:hidden">
+<!-- Mobile Navigation — sticky so hamburger stays reachable while scrolling -->
+<div
+	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
+>
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a href={backofficeHomePath} class="flex min-h-11 items-center gap-3" onclick={closeMobileMenu}>
 			<img
@@ -321,7 +326,7 @@
 			</Sheet.Header>
 
 			<div class="no-scrollbar flex-1 overflow-y-auto">
-				<div class="border-b border-sidebar-border p-4 pb-3">
+				<div class="space-y-3 border-b border-sidebar-border p-4 pb-3">
 					<a
 						href={backofficeHomePath}
 						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
@@ -331,6 +336,7 @@
 						<House class="h-4 w-4 shrink-0 text-muted-foreground" />
 						<span>กลับหน้าเลือกเมนูหลัก</span>
 					</a>
+					<BackofficeShelterSelect />
 				</div>
 
 				<div class="space-y-6 p-4 text-xs font-medium text-muted-foreground">
@@ -438,7 +444,9 @@
 				</div>
 			</div>
 
-			<Sheet.Footer class="border-t border-sidebar-border bg-card p-4">
+			<Sheet.Footer
+				class="border-t border-sidebar-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+			>
 				<div class="flex flex-col gap-2">
 					<span
 						class="max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"

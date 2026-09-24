@@ -5,7 +5,8 @@ import { isThaidRegistrationEnabled } from '$lib/server/thaid-registration-gate'
 export const prerender = false;
 
 /**
- * GET /api/public/v1/thaid/status — whether the browser should show/enable ThaiD registration.
+ * GET /api/public/v1/thaid/status — whether the browser should show ThaiD
+ * (login, staff /me link, public pre-register).
  */
 export const GET: RequestHandler = async () => {
 	const status = await isThaidRegistrationEnabled();

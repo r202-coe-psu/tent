@@ -16,11 +16,25 @@
 	--registration-sticky-top: 4rem;
 	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	/*
-	 * Shelter form sticky offset: app shell header (h-16 / 4rem) + form title bar (~4rem).
-	 * Form title bar uses `top-16` so it sticks under the layout header.
+	 * Shelter form sticky offset: BO chrome (`--bo-sticky-top`) + form title bar (~4rem).
+	 * Form title bar uses `top-[var(--bo-sticky-top)]` under the BO page header.
 	 */
-	--shelter-form-sticky-top: 8rem;
+	--shelter-form-sticky-top: calc(var(--bo-sticky-top) + 4rem);
 	--shelter-form-scroll-mt: calc(var(--shelter-form-sticky-top) + 0.5rem);
+	/*
+	 * Back-office sticky chrome offsets (consumers: `top-[var(--bo-sticky-top)]`).
+	 *
+	 * --bo-mobile-nav-height: hamburger bar (h-16 / 4rem) + notch safe-area.
+	 *   Page header sticks below this on < lg; unused for positioning at lg+ (sidebar).
+	 * --bo-page-header-height: title-only bar (h-16 / 4rem). Shelter select lives in
+	 *   the sidebar / mobile Sheet; offline/reauth banner is conditional and not
+	 *   included in this offset. Keep in sync with back-office/+layout.svelte.
+	 * --bo-sticky-top: cumulative sticky chrome above page subheaders (evacuee tabs,
+	 *   shelter form title bar, etc.). Mobile = nav + header; lg+ = header only.
+	 */
+	--bo-mobile-nav-height: calc(4rem + env(safe-area-inset-top, 0px));
+	--bo-page-header-height: 4rem;
+	--bo-sticky-top: calc(var(--bo-mobile-nav-height) + var(--bo-page-header-height));
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -147,6 +161,13 @@
 	--ops-inventory-bg: #f0fdfa;
 	--ops-inventory-border: #99f6e4;
 	--ops-inventory-text: #115e59;
+}
+
+/* lg+: sidebar chrome — only the page header sticks; drop mobile-nav from offset */
+@media (min-width: 1024px) {
+	:root {
+		--bo-sticky-top: var(--bo-page-header-height);
+	}
 }
 
 .dark {
