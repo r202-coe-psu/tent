@@ -123,5 +123,58 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[redacted]", safe)
 
 
+class FakePage:
+    def __init__(self, url, *, client_nav_fails=False):
+        self.url = url
+        self.client_nav_fails = client_nav_fails
+        self.evaluated = []
+        self.gotos = []
+
+    def is_closed(self):
+        return False
+
+    async def evaluate(self, _script, arg=None):
+        if self.client_nav_fails:
+            raise RuntimeError("router not ready")
+        self.evaluated.append(arg)
+        self.url = arg
+
+    async def wait_for_url(self, predicate, **_kwargs):
+        if not predicate(self.url):
+            raise TimeoutError()
+
+    async def goto(self, url, **_kwargs):
+        self.gotos.append(url)
+        self.url = url
+
+
+class KioskNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_same_origin_screen_change_uses_client_router_not_full_reload(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = FakePage(client.waiting_url)
+
+        await client._navigate(client.reading_url)
+
+        self.assertEqual(client.page.evaluated, [client.reading_url])
+        self.assertEqual(client.page.gotos, [])
+
+    async def test_client_router_failure_falls_back_to_full_load(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = FakePage(client.waiting_url, client_nav_fails=True)
+
+        await client._navigate(client.reading_url)
+
+        self.assertEqual(client.page.gotos, [client.reading_url])
+
+    async def test_other_origin_uses_full_load(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = FakePage("about:blank")
+
+        await client._navigate(client.home_url)
+
+        self.assertEqual(client.page.evaluated, [])
+        self.assertEqual(client.page.gotos, [client.home_url])
+
+
 if __name__ == "__main__":
     unittest.main()

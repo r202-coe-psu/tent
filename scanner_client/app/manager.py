@@ -56,6 +56,8 @@ class ScannerClientManager:
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.is_headless = str(config.get("HEADLESS", "false")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
+        self.min_reading_display = 0.6
+        self.client_nav_timeout_ms = 5000
         self.window_width = int(config.get("WINDOW_WIDTH", "540"))
         self.window_height = int(config.get("WINDOW_HEIGHT", "960"))
         self.device_scale_factor = str(config.get("DEVICE_SCALE_FACTOR") or config.get("SCALE_FACTOR") or config.get("ZOOM") or "").strip() or None
@@ -241,6 +243,42 @@ class ScannerClientManager:
             {"eventName": event_name, "citizenId": citizen_id},
         )
 
+    async def _navigate(self, url: str) -> None:
+        """Switch kiosk screens without a white flash.
+
+        `page.goto` reloads the SPA (ssr=false) and paints a blank page until it re-boots.
+        Clicking a same-origin anchor lets the SvelteKit router swap routes in place;
+        a full load is only the fallback when the app is not on the kiosk origin yet.
+        """
+        if not self.page or self.page.is_closed():
+            return
+
+        target = urllib.parse.urlsplit(url)
+        current = urllib.parse.urlsplit(self.page.url)
+        if (current.scheme, current.netloc) == (target.scheme, target.netloc):
+            try:
+                await self.page.evaluate(
+                    """href => {
+                        const link = document.createElement('a');
+                        link.href = href;
+                        link.hidden = true;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                    }""",
+                    url,
+                )
+                await self.page.wait_for_url(
+                    lambda current_url: urllib.parse.urlsplit(current_url).path == target.path,
+                    wait_until="commit",
+                    timeout=self.client_nav_timeout_ms,
+                )
+                return
+            except Exception:
+                logger.warning("Client-side kiosk navigation failed; falling back to full load")
+
+        await self.page.goto(url)
+
     async def card_reading_loop(self):
         """Wait for a card, resolve it through the kiosk flow, then wait for staff completion."""
         if not self.page:
@@ -280,15 +318,20 @@ class ScannerClientManager:
                     continue
 
                 logger.info("Card detected; reading citizen ID")
-                await self.page.goto(self.reading_url)
-                await asyncio.sleep(0.6)
+                await self._navigate(self.reading_url)
                 try:
-                    card_data = self.reader.read_all_data()
-                    citizen_id = str(card_data.get("citizen_id") or "").strip()
+                    # Read off the event loop so Playwright stays responsive, and keep the
+                    # reading loader up for a minimum time so fast reads don't flicker.
+                    loop = asyncio.get_running_loop()
+                    started_at = loop.time()
+                    citizen_id = str(await asyncio.to_thread(self.reader.read_citizen_id)).strip()
                     if not re.fullmatch(r"\d{13}", citizen_id):
                         raise ValueError("Card did not provide a valid citizen ID")
+                    remaining = self.min_reading_display - (loop.time() - started_at)
+                    if remaining > 0:
+                        await asyncio.sleep(remaining)
 
-                    await self.page.goto(self.remove_card_url)
+                    await self._navigate(self.remove_card_url)
                     await self.page.wait_for_selector(
                         '[data-kiosk-card-ready="true"]', timeout=15000
                     )
@@ -296,7 +339,7 @@ class ScannerClientManager:
                     logger.info("Smart-card identity sent to the shared kiosk lookup flow")
                 except Exception:
                     logger.error("Smart-card read or kiosk handoff failed")
-                    await self.page.goto(
+                    await self._navigate(
                         self._kiosk_url(
                             self.error_path,
                             {"error_msg": "อ่านข้อมูลบัตรไม่สำเร็จ กรุณาลองใหม่"},
@@ -319,7 +362,7 @@ class ScannerClientManager:
                     ):
                         await asyncio.sleep(0.5)
                 else:
-                    await self.page.goto(self.home_url)
+                    await self._navigate(self.home_url)
             except Exception:
                 logger.error("Scanner card polling loop failed")
                 await asyncio.sleep(1.0)

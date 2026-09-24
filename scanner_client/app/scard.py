@@ -172,6 +172,16 @@ class ThaiSmartCardReader:
             logger.error(f"Error extracting photo: {e}")
             return None
 
+    def read_citizen_id(self) -> str:
+        """Read only the 13-digit citizen ID — skips names, address and the 20-chunk photo"""
+        if not self.connect():
+            raise RuntimeError("Failed to connect to smart card")
+
+        cid = self.get_citizen_id()
+        if not cid:
+            raise ValueError("Could not read Citizen ID (CID)")
+        return cid
+
     def read_all_data(self) -> Dict[str, Any]:
         """Read all available data from the card and return a structured dictionary"""
         if not self.connect():
