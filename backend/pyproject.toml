@@ -24,6 +24,7 @@ dependencies = [
     "grapheme>=0.6.0",
     "pyjwt>=2.13.0",
     "tent-model",
+    "cryptography>=50.0.1",
 ]
 
 [tool.uv.sources]

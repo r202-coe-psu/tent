@@ -1,7 +1,11 @@
 /**
- * SA-only BFF for third-party OAuth2 client management (EXT-001, ADR 0002).
- * Proxies to FastAPI `/v1/admin/thirdparty-clients` with `EXTERNAL_API_SECRET` (server-only).
- * Caller must be `system_admin` (or Couch `_admin`) via Couch `_session`.
+ * SA-only BFF — edit scopes / soft-delete a third-party OAuth2 client (EXT-001,
+ * ADR 0002; draft-partner-client-secret-reveal-edit-delete).
+ *
+ * PATCH { allowed_scopes } → FastAPI `PATCH /v1/admin/thirdparty-clients/{id}`
+ *   (refused 409 once the client is revoked).
+ * DELETE → FastAPI `DELETE /v1/admin/thirdparty-clients/{id}` (soft-delete; refused
+ *   409 unless the client is already revoked).
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
@@ -9,16 +13,6 @@ import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couc
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 export const prerender = false;
-
-const ADMIN_CLIENTS = '/v1/admin/thirdparty-clients';
-
-async function requireSystemAdmin(cookie: string | null) {
-	const caller = await authorizeUserWrite(cookie);
-	if (!caller.isSA) {
-		throw new ServiceError('FORBIDDEN', 'Only system admins can manage third-party clients');
-	}
-	return caller;
-}
 
 function fastapiErrorMessage(body: unknown, fallback: string): string {
 	if (typeof body !== 'object' || body === null) return fallback;
@@ -38,6 +32,7 @@ function fastapiErrorMessage(body: unknown, fallback: string): string {
 function serviceCodeForStatus(status: number): ServiceError['code'] {
 	if (status === 401) return 'UNAUTHENTICATED';
 	if (status === 403) return 'FORBIDDEN';
+	if (status === 404) return 'VALIDATION';
 	if (status === 409) return 'CONFLICT';
 	if (status === 422 || status === 400) return 'VALIDATION';
 	return 'INTERNAL';
@@ -55,59 +50,63 @@ async function proxyJson(res: Response): Promise<Response> {
 	return json(body, { status: res.status });
 }
 
-/** GET — list third-party clients (metadata only; no secrets). */
-export const GET: RequestHandler = async ({ request }) => {
+function requireId(params: { id?: string }): string {
+	const id = typeof params.id === 'string' ? params.id.trim() : '';
+	if (!id) throw new ServiceError('VALIDATION', 'id is required');
+	return id;
+}
+
+interface UpdateBody {
+	allowed_scopes?: unknown;
+}
+
+/** PATCH { allowed_scopes } — edit scopes while the client is still active. */
+export const PATCH: RequestHandler = async ({ request, params }) => {
 	try {
-		await requireSystemAdmin(request.headers.get('cookie'));
-		const res = await fetch(`${fastapiBaseUrl()}${ADMIN_CLIENTS}`, {
-			headers: fastapiServiceHeaders({ Accept: 'application/json' })
-		});
+		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		if (!caller.isSA) {
+			throw new ServiceError('FORBIDDEN', 'Only system admins can manage third-party clients');
+		}
+		const id = requireId(params);
+
+		const body = (await request.json().catch(() => ({}))) as UpdateBody;
+		const allowed_scopes = Array.isArray(body.allowed_scopes)
+			? body.allowed_scopes.filter((s): s is string => typeof s === 'string')
+			: [];
+		if (allowed_scopes.length === 0) {
+			throw new ServiceError('VALIDATION', 'allowed_scopes must have at least one scope');
+		}
+
+		const res = await fetch(
+			`${fastapiBaseUrl()}/v1/admin/thirdparty-clients/${encodeURIComponent(id)}`,
+			{
+				method: 'PATCH',
+				headers: fastapiServiceHeaders({
+					Accept: 'application/json',
+					'Content-Type': 'application/json'
+				}),
+				body: JSON.stringify({ allowed_scopes })
+			}
+		);
 		return proxyJson(res);
 	} catch (e) {
 		return serviceError(e);
 	}
 };
 
-interface CreateBody {
-	name?: unknown;
-	description?: unknown;
-	module_name?: unknown;
-	allowed_scopes?: unknown;
-}
-
-/**
- * POST { name, description?, module_name, allowed_scopes } — FastAPI generates `client_id`
- * (`tpc_…`); response includes plaintext `client_secret` once.
- */
-export const POST: RequestHandler = async ({ request }) => {
+/** DELETE — soft-delete; only once the client has already been revoked. */
+export const DELETE: RequestHandler = async ({ request, params }) => {
 	try {
-		await requireSystemAdmin(request.headers.get('cookie'));
-		const body = (await request.json().catch(() => ({}))) as CreateBody;
-
-		const name = typeof body.name === 'string' ? body.name.trim() : '';
-		const description =
-			typeof body.description === 'string' && body.description.trim()
-				? body.description.trim()
-				: null;
-		const module_name = typeof body.module_name === 'string' ? body.module_name.trim() : '';
-		const allowed_scopes = Array.isArray(body.allowed_scopes)
-			? body.allowed_scopes.filter((s): s is string => typeof s === 'string')
-			: [];
-
-		if (!name) throw new ServiceError('VALIDATION', 'name is required');
-		if (!module_name) throw new ServiceError('VALIDATION', 'module_name is required');
-		if (allowed_scopes.length === 0) {
-			throw new ServiceError('VALIDATION', 'allowed_scopes must have at least one scope');
+		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		if (!caller.isSA) {
+			throw new ServiceError('FORBIDDEN', 'Only system admins can manage third-party clients');
 		}
+		const id = requireId(params);
 
-		const res = await fetch(`${fastapiBaseUrl()}${ADMIN_CLIENTS}`, {
-			method: 'POST',
-			headers: fastapiServiceHeaders({
-				Accept: 'application/json',
-				'Content-Type': 'application/json'
-			}),
-			body: JSON.stringify({ name, description, module_name, allowed_scopes })
-		});
+		const res = await fetch(
+			`${fastapiBaseUrl()}/v1/admin/thirdparty-clients/${encodeURIComponent(id)}`,
+			{ method: 'DELETE', headers: fastapiServiceHeaders({ Accept: 'application/json' }) }
+		);
 		return proxyJson(res);
 	} catch (e) {
 		return serviceError(e);

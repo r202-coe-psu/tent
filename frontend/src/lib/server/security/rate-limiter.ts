@@ -83,6 +83,14 @@ export const loginCaptchaIpLimiter = new RateLimiter(60_000, 10);
  */
 export const loginResolveIpLimiter = new RateLimiter(60_000, 10);
 
+/**
+ * Third-party client secret reveal — own-password re-auth against CouchDB `_session`
+ * (draft-partner-client-secret-reveal-edit-delete). Same budget as login captcha: it's
+ * an already-authenticated SA, not an anonymous credential-stuffing surface, but a
+ * wrong-password guess still shouldn't be unlimited.
+ */
+export const thirdPartyClientSecretRevealLimiter = new RateLimiter(60_000, 10);
+
 /** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
 export const donationIpLimiter = new RateLimiter(60000, 3);
 /** Same, per phone number, so one abuser cannot spread across IPs. */

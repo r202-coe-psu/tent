@@ -147,9 +147,8 @@ class SmokeTestRunner:
 
         # 1.1 Create Third-party Client via Admin API
         ts = int(time.time())
-        self.created_client_id = f"smoke-m6-{ts}"
         payload = {
-            "client_id": self.created_client_id,
+            "name": f"smoke-m6-{ts}",
             "module_name": "M6",
             "allowed_scopes": [
                 "location-read",
@@ -166,6 +165,7 @@ class SmokeTestRunner:
 
         if status == 201 and data.get("client_secret"):
             self.created_client_row_id = data.get("id")
+            self.created_client_id = data.get("client_id")
             self.client_secret = data.get("client_secret")
             self.record_result(
                 "#215",

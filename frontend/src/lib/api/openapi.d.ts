@@ -460,6 +460,52 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/v1/admin/thirdparty-clients/{client_row_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Client
+		 * @description Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.
+		 */
+		delete: operations['delete_client_v1_admin_thirdparty_clients__client_row_id__delete'];
+		options?: never;
+		head?: never;
+		/**
+		 * Update Client Scopes
+		 * @description Edit `allowed_scopes` — refused (409) once the client is revoked.
+		 */
+		patch: operations['update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch'];
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/secret': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Reveal Client Secret
+		 * @description Decrypt and return the plaintext secret. The BFF gates this behind the caller
+		 *     re-entering their own CouchDB password — this endpoint itself only enforces the
+		 *     same `EXTERNAL_API_SECRET` bearer as every other route on this router.
+		 */
+		get: operations['reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/locations': {
 		parameters: {
 			query?: never;
@@ -616,6 +662,26 @@ export interface paths {
 		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
 		 */
 		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/residence-match': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Match Unassigned Residence
+		 * @description Service-to-service Residence match — ids + landmark/housing_type only (no member PII).
+		 */
+		post: operations['match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1851,6 +1917,11 @@ export interface components {
 			unit: string;
 			/** Status */
 			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
 			/** Category */
 			category?: string | null;
 		};
@@ -2617,10 +2688,15 @@ export interface components {
 			/** Locations */
 			locations: components['schemas']['SummaryLocationItem'][];
 		};
-		/** ThirdPartyClientCreateRequest */
+		/**
+		 * ThirdPartyClientCreateRequest
+		 * @description ``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller.
+		 */
 		ThirdPartyClientCreateRequest: {
-			/** Client Id */
-			client_id: string;
+			/** Name */
+			name: string;
+			/** Description */
+			description?: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
@@ -2635,12 +2711,18 @@ export interface components {
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2654,6 +2736,15 @@ export interface components {
 			/** Client Secret */
 			client_secret: string;
 		};
+		/** ThirdPartyClientDeleteResponse */
+		ThirdPartyClientDeleteResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			client: components['schemas']['ThirdPartyClientPublic'];
+		};
 		/** ThirdPartyClientListResponse */
 		ThirdPartyClientListResponse: {
 			/** Clients */
@@ -2663,19 +2754,25 @@ export interface components {
 		};
 		/**
 		 * ThirdPartyClientPublic
-		 * @description Client metadata without the secret hash.
+		 * @description Client metadata without the secret hash/ciphertext.
 		 */
 		ThirdPartyClientPublic: {
 			/** Id */
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2695,6 +2792,23 @@ export interface components {
 			 */
 			success: boolean;
 			client: components['schemas']['ThirdPartyClientPublic'];
+		};
+		/**
+		 * ThirdPartyClientSecretResponse
+		 * @description Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's
+		 *     own-password re-auth (draft-partner-client-secret-reveal-edit-delete).
+		 */
+		ThirdPartyClientSecretResponse: {
+			/** Client Secret */
+			client_secret: string;
+		};
+		/**
+		 * ThirdPartyClientUpdateRequest
+		 * @description ``PATCH`` body — scopes only. Refused (409) once the client is revoked.
+		 */
+		ThirdPartyClientUpdateRequest: {
+			/** Allowed Scopes */
+			allowed_scopes: string[];
 		};
 		/** TicketFindItem */
 		TicketFindItem: {
@@ -2928,6 +3042,11 @@ export interface components {
 			 * @enum {string}
 			 */
 			registered_via: 'web' | 'staff';
+			/**
+			 * Join Registration Id
+			 * @description Append members (and pets) into this open registration's reserved household.
+			 */
+			join_registration_id?: string | null;
 		};
 		/** UnassignedRegistrationCreateResponse */
 		UnassignedRegistrationCreateResponse: {
@@ -3038,6 +3157,71 @@ export interface components {
 			open_registrations: number;
 			/** Open Members */
 			open_members: number;
+		};
+		/** UnassignedResidenceMatchHit */
+		UnassignedResidenceMatchHit: {
+			/** Id */
+			id: string;
+			/** Landmark */
+			landmark?: string | null;
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Claimed Shelter Code */
+			claimed_shelter_code?: string | null;
+			/** Claimed Household Id */
+			claimed_household_id?: string | null;
+			/**
+			 * Status
+			 * @default open
+			 */
+			status: string;
+			/** Primary Contact Name Masked */
+			primary_contact_name_masked?: string | null;
+			/** Matched Member Masked */
+			matched_member_masked?: string | null;
+			/**
+			 * Member Count
+			 * @default 0
+			 */
+			member_count: number;
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Household Address */
+			household_address?: {
+				[key: string]: unknown;
+			} | null;
+		};
+		/**
+		 * UnassignedResidenceMatchRequest
+		 * @description Service-to-service residence match — no member PII in response.
+		 */
+		UnassignedResidenceMatchRequest: {
+			/** Housing Type */
+			housing_type?:
+				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			/** Phone */
+			phone?: string | null;
+		};
+		/** UnassignedResidenceMatchResponse */
+		UnassignedResidenceMatchResponse: {
+			/** Matches */
+			matches: components['schemas']['UnassignedResidenceMatchHit'][];
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -4264,6 +4448,103 @@ export interface operations {
 			};
 		};
 	};
+	delete_client_v1_admin_thirdparty_clients__client_row_id__delete: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientDeleteResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ThirdPartyClientUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientPublic'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientSecretResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	list_locations_external_locations_get: {
 		parameters: {
 			query?: {
@@ -4580,6 +4861,39 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedResidenceMatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
 				};
 			};
 			/** @description Validation Error */

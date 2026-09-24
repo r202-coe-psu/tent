@@ -2253,3 +2253,32 @@ SoR ของคิวกลางจน claim = Mongo collection นี้ · �
 **Photo (GridFS):** bucket `unassigned_registration_photos` · `POST /public/v1/unassigned-registrations/photos` · สมาชิกเก็บ `photo: gfs:{oid}` · สัตว์เลี้ยงเก็บ `pets[].image_url: gfs:{oid}` · claim อ่าน GridFS → birth Couch `image:{ulid}` (+ attachments) แล้วตั้ง `evacuee.photo` / `household.pets[].image_url`
 
 **Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+
+### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **draft-partner-client-name-module-preset**, **draft-partner-client-secret-reveal-edit-delete**)
+
+Credential ของระบบพันธมิตร (M6/M7) สำหรับ `POST /external/token` (`grant_type=client_credentials`) ·
+สร้าง/แก้ไข/เพิกถอน/ลบโดย `system_admin` ผ่านหน้า **System Management → API Keys** (BFF
+`/api/v1/thirdparty-clients` → FastAPI `/v1/admin/thirdparty-clients`) · ไม่มี `schema_v` (Beanie
+document, เพิ่ม field แบบ additive)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | ULID |
+| `client_id` | str | sys | **ระบบ generate** ตอนสร้าง: `tpc_` + `secrets.token_urlsafe(16)` (≤64 ตัวอักษร ตาม `TokenRequest.client_id`) — ไม่รับจาก request body · client เดิมที่ตั้งชื่อเอง (เช่น `m6-warehouse-logistics`) ยังใช้ได้ตามเดิม |
+| `client_secret_hash` | str | sys | SHA-256 ของ plaintext `tps_…` — ใช้ตรวจ `/external/token` เท่านั้น (unchanged) |
+| `client_secret_encrypted` | str\|null | sys | **ใหม่** — Fernet (AES-128-CBC + HMAC, nonce สุ่มต่อครั้ง) ของ plaintext เดียวกัน คีย์ถอดคือ `THIRDPARTY_SECRET_ENCRYPTION_KEY` (server-only env var, ไม่ใช่ DB) · มีไว้ให้ "ดู secret ซ้ำ" เท่านั้น ไม่ใช้ในเส้นทาง auth · `null` สำหรับ client ที่สร้างก่อน field นี้ (ดูซ้ำไม่ได้ — ต้อง revoke แล้วสร้างใหม่) |
+| `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์** (ซ้ำ → `409`) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
+| `description` | str\|null | opt | คำอธิบายเพิ่มเติมของคีย์, trim, ≤500 ตัวอักษร; ว่าง → `null` |
+| `module_name` | enum(`M6`,`M7`) | req | โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
+| `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`)] | req | ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
+| `is_active` | bool | req | default `true`; revoke → `false` (ไม่ลบ doc) |
+| `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |
+| `created_at` / `updated_at` | ts | sys | — |
+
+**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string) collation `{locale: "en", strength: 2}`
+
+**Reveal secret (view again):** `POST /api/v1/thirdparty-clients/{id}/secret` body `{password}` — BFF
+verify `password` ของ **ผู้ใช้ที่ login อยู่เอง** กับ CouchDB `_session` (ไม่สร้าง cookie ใหม่, ไม่กระทบ
+session ปัจจุบัน) ก่อน แล้วค่อยเรียก FastAPI `GET .../{id}/secret` เพื่อถอด `client_secret_encrypted`
+— รหัสผ่านผิด → `401`; client ไม่มี `client_secret_encrypted` (สร้างก่อน field นี้ หรือถูกลบ) → `404`.
+ไม่มี step-up token ข้ามคำขอ — ต้องกรอกรหัสผ่านทุกครั้งที่ต้องการดู

@@ -19,6 +19,8 @@ def settings() -> Settings:
         settings.DATABASE_URI = "mongodb://localhost:27017/tentdb_test"
     if not settings.EXTERNAL_API_SECRET:
         settings.EXTERNAL_API_SECRET = "test-external-secret"
+    if not settings.THIRDPARTY_SECRET_ENCRYPTION_KEY:
+        settings.THIRDPARTY_SECRET_ENCRYPTION_KEY = "P7wksa6PZrosX_XIscMHnvsndPvVkPWgrOMv-k9Tvhc="
     return settings
 
 

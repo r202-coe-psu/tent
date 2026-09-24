@@ -4,11 +4,14 @@
  */
 import { serviceFetch } from '$lib/api/service';
 import {
+	normalizeDeletedThirdPartyClient,
+	normalizeRevealedSecret,
 	normalizeRevokedThirdPartyClient,
 	normalizeThirdPartyClientList,
 	type CreatedThirdPartyClient,
 	type CreateThirdPartyClientInput,
-	type ThirdPartyClient
+	type ThirdPartyClient,
+	type UpdateThirdPartyClientScopesInput
 } from '../domain/third-party-client';
 
 const BASE = '/api/v1/thirdparty-clients';
@@ -30,4 +33,30 @@ export function revokeThirdPartyClient(id: string): Promise<ThirdPartyClient> {
 	return serviceFetch<unknown>(`${BASE}/${encodeURIComponent(id)}/revoke`, {
 		method: 'POST'
 	}).then(normalizeRevokedThirdPartyClient);
+}
+
+/** Edit scopes — refused (409) once the client has been revoked. */
+export function updateThirdPartyClientScopes(
+	id: string,
+	input: UpdateThirdPartyClientScopesInput
+): Promise<ThirdPartyClient> {
+	return serviceFetch<ThirdPartyClient>(`${BASE}/${encodeURIComponent(id)}`, {
+		method: 'PATCH',
+		body: JSON.stringify(input)
+	});
+}
+
+/** Soft-delete — refused (409) unless the client is already revoked. */
+export function deleteThirdPartyClient(id: string): Promise<ThirdPartyClient> {
+	return serviceFetch<unknown>(`${BASE}/${encodeURIComponent(id)}`, {
+		method: 'DELETE'
+	}).then(normalizeDeletedThirdPartyClient);
+}
+
+/** Re-verify the caller's own password, then return the client's plaintext secret again. */
+export function revealThirdPartyClientSecret(id: string, password: string): Promise<string> {
+	return serviceFetch<unknown>(`${BASE}/${encodeURIComponent(id)}/secret`, {
+		method: 'POST',
+		body: JSON.stringify({ password })
+	}).then(normalizeRevealedSecret);
 }
