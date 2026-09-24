@@ -3,6 +3,7 @@
 		CreateThirdPartyClientDialog,
 		DeleteThirdPartyClientDialog,
 		EditThirdPartyClientScopesDialog,
+		RegenerateThirdPartyClientSecretDialog,
 		RevealThirdPartyClientSecretDialog,
 		RevokeThirdPartyClientDialog,
 		ThirdPartyClientList,
@@ -30,11 +31,13 @@
 	let editScopesOpen = $state(false);
 	let viewSecretOpen = $state(false);
 	let deleteClientOpen = $state(false);
+	let regenerateClientOpen = $state(false);
 	let revealedClient = $state.raw<CreatedThirdPartyClient | null>(null);
 	let revokeClientTarget = $state.raw<ThirdPartyClient | null>(null);
 	let editScopesTarget = $state.raw<ThirdPartyClient | null>(null);
 	let viewSecretTarget = $state.raw<ThirdPartyClient | null>(null);
 	let deleteClientTarget = $state.raw<ThirdPartyClient | null>(null);
+	let regenerateClientTarget = $state.raw<ThirdPartyClient | null>(null);
 
 	const clients = $derived(clientsQuery.data ?? []);
 
@@ -61,6 +64,16 @@
 	function handleClientDelete(thirdPartyClient: ThirdPartyClient) {
 		deleteClientTarget = thirdPartyClient;
 		deleteClientOpen = true;
+	}
+
+	function handleClientRegenerate(thirdPartyClient: ThirdPartyClient) {
+		regenerateClientTarget = thirdPartyClient;
+		regenerateClientOpen = true;
+	}
+
+	function handleClientRegenerated(regenerated: CreatedThirdPartyClient) {
+		revealedClient = regenerated;
+		revealClientOpen = true;
 	}
 </script>
 
@@ -127,6 +140,7 @@
 						onrevoke={handleClientRevoke}
 						onedit={handleClientEdit}
 						onviewsecret={handleClientViewSecret}
+						onregenerate={handleClientRegenerate}
 						ondelete={handleClientDelete}
 					/>
 				{/if}
@@ -141,3 +155,8 @@
 <EditThirdPartyClientScopesDialog bind:open={editScopesOpen} target={editScopesTarget} />
 <ViewThirdPartyClientSecretDialog bind:open={viewSecretOpen} target={viewSecretTarget} />
 <DeleteThirdPartyClientDialog bind:open={deleteClientOpen} target={deleteClientTarget} />
+<RegenerateThirdPartyClientSecretDialog
+	bind:open={regenerateClientOpen}
+	target={regenerateClientTarget}
+	onregenerated={handleClientRegenerated}
+/>

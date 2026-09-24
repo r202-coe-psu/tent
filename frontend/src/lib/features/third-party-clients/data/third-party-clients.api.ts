@@ -60,3 +60,14 @@ export function revealThirdPartyClientSecret(id: string, password: string): Prom
 		body: JSON.stringify({ password })
 	}).then(normalizeRevealedSecret);
 }
+
+/**
+ * Issue a new secret for this client_id — the old secret stops working immediately.
+ * Refused (409) once the client has been revoked (same rule as editing scopes).
+ */
+export function regenerateThirdPartyClientSecret(id: string): Promise<CreatedThirdPartyClient> {
+	return serviceFetch<CreatedThirdPartyClient>(
+		`${BASE}/${encodeURIComponent(id)}/regenerate-secret`,
+		{ method: 'POST' }
+	);
+}

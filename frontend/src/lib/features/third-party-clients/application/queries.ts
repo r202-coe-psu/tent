@@ -3,6 +3,7 @@ import {
 	createThirdPartyClient,
 	deleteThirdPartyClient,
 	listThirdPartyClients,
+	regenerateThirdPartyClientSecret,
 	revealThirdPartyClientSecret,
 	revokeThirdPartyClient,
 	updateThirdPartyClientScopes
@@ -62,3 +63,12 @@ export const useRevealThirdPartyClientSecret = () =>
 		mutationFn: ({ id, password }: { id: string; password: string }) =>
 			revealThirdPartyClientSecret(id, password)
 	}));
+
+/** Invalidated — `updated_at` changes and the old secret stops working. */
+export const useRegenerateThirdPartyClientSecret = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => regenerateThirdPartyClientSecret(id),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: thirdPartyClientsKeys.all })
+	}));
+};

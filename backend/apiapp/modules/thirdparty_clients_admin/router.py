@@ -66,6 +66,23 @@ async def revoke_client(
     return await use_case.revoke(client_row_id)
 
 
+@router.post(
+    "/{client_row_id}/regenerate-secret",
+    response_model=ThirdPartyClientCreateResponse,
+)
+async def regenerate_client_secret(
+    client_row_id: str,
+    response: Response,
+    use_case: ThirdPartyClientsAdminUseCase = Depends(  # noqa: B008
+        get_thirdparty_clients_admin_use_case
+    ),
+) -> ThirdPartyClientCreateResponse:
+    """Issue a new secret for this `client_id`, invalidating the old one immediately.
+    Refused (409) once the client is revoked — same as scope edits."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.regenerate_secret(client_row_id)
+
+
 @router.patch("/{client_row_id}", response_model=ThirdPartyClientPublic)
 async def update_client_scopes(
     client_row_id: str,

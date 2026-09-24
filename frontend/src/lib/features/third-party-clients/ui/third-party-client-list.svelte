@@ -6,6 +6,7 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Pencil from '@lucide/svelte/icons/pencil';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import {
 		partnerModuleLabel,
@@ -19,6 +20,7 @@
 		onrevoke,
 		onedit,
 		onviewsecret,
+		onregenerate,
 		ondelete
 	}: {
 		clients: ThirdPartyClient[];
@@ -26,6 +28,7 @@
 		onrevoke: (client: ThirdPartyClient) => void;
 		onedit: (client: ThirdPartyClient) => void;
 		onviewsecret: (client: ThirdPartyClient) => void;
+		onregenerate: (client: ThirdPartyClient) => void;
 		ondelete: (client: ThirdPartyClient) => void;
 	} = $props();
 
@@ -60,7 +63,7 @@
 				<Table.Head class="font-semibold text-foreground">Scopes</Table.Head>
 				<Table.Head class="font-semibold text-foreground">Created</Table.Head>
 				<Table.Head class="font-semibold text-foreground">Status</Table.Head>
-				<Table.Head class="text-right font-semibold text-foreground">จัดการ</Table.Head>
+				<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>
 			</Table.Row>
 		</Table.Header>
 		<Table.Body>
@@ -127,6 +130,15 @@
 									aria-label="Edit scopes"
 								>
 									<Pencil class="h-3.5 w-3.5" />
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon"
+									disabled={pending}
+									onclick={() => onregenerate(thirdPartyClient)}
+									aria-label="Generate new secret"
+								>
+									<RefreshCw class="h-3.5 w-3.5" />
 								</Button>
 								<Button
 									variant="outline"

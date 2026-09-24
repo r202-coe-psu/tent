@@ -68,9 +68,10 @@ class ThirdPartyClientsAdminUseCase:
     ) -> ThirdPartyClientCreateResponse:
         name = payload.name
         # Case-insensitive pre-check for a clean 409; the unique collation index on `name`
-        # still backstops a concurrent create.
+        # still backstops a concurrent create. Only checked against rows still in the
+        # list — a soft-deleted client's name is free to reuse.
         existing = await ThirdPartyClient.find_one(
-            {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+            {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "deleted_at": None}
         )
         if existing is not None:
             raise _duplicate_name(name)
@@ -151,6 +152,32 @@ class ThirdPartyClientsAdminUseCase:
                 detail="THIRDPARTY_SECRET_ENCRYPTION_KEY is not configured or does not match",
             ) from exc
         return ThirdPartyClientSecretResponse(client_secret=plaintext)
+
+    async def regenerate_secret(self, client_row_id: str) -> ThirdPartyClientCreateResponse:
+        """Issue a brand-new secret for the same `client_id` — the old secret stops
+        working the instant this saves (its hash is overwritten). Only while active;
+        a revoked client's secret can't authenticate anyway (409 CONFLICT otherwise)."""
+        doc = await _get_not_deleted(client_row_id)
+        if not doc.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot regenerate the secret of a revoked client",
+            )
+        plaintext = generate_client_secret()
+        try:
+            encrypted = encrypt_secret(plaintext)
+        except SecretEncryptionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="THIRDPARTY_SECRET_ENCRYPTION_KEY is not configured",
+            ) from exc
+        doc.client_secret_hash = sha256_hex(plaintext)
+        doc.client_secret_encrypted = encrypted
+        doc.updated_at = datetime.now(UTC)
+        await doc.save()
+
+        public = _to_public(doc)
+        return ThirdPartyClientCreateResponse(**public.model_dump(), client_secret=plaintext)
 
     async def delete(self, client_row_id: str) -> ThirdPartyClientDeleteResponse:
         doc = await _get_not_deleted(client_row_id)

@@ -21,6 +21,7 @@ export {
 	createThirdPartyClient,
 	deleteThirdPartyClient,
 	listThirdPartyClients,
+	regenerateThirdPartyClientSecret,
 	revealThirdPartyClientSecret,
 	revokeThirdPartyClient,
 	updateThirdPartyClientScopes
@@ -29,6 +30,7 @@ export {
 	thirdPartyClientsKeys,
 	useCreateThirdPartyClient,
 	useDeleteThirdPartyClient,
+	useRegenerateThirdPartyClientSecret,
 	useRevealThirdPartyClientSecret,
 	useRevokeThirdPartyClient,
 	useThirdPartyClients,
@@ -41,3 +43,4 @@ export { default as RevokeThirdPartyClientDialog } from './ui/revoke-third-party
 export { default as EditThirdPartyClientScopesDialog } from './ui/edit-third-party-client-scopes-dialog.svelte';
 export { default as ViewThirdPartyClientSecretDialog } from './ui/view-third-party-client-secret-dialog.svelte';
 export { default as DeleteThirdPartyClientDialog } from './ui/delete-third-party-client-dialog.svelte';
+export { default as RegenerateThirdPartyClientSecretDialog } from './ui/regenerate-third-party-client-secret-dialog.svelte';

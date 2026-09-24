@@ -51,6 +51,9 @@ class ThirdPartyClient(Document):
 				name="name_unique_ci",
 				unique=True,
 				collation={"locale": "en", "strength": 2},
-				partialFilterExpression={"name": {"$type": "string"}},
+				# Only among rows still in the list — a soft-deleted client's name doesn't
+				# block reusing it (deleted_at is always present, never absent, so this must
+				# be an equality match on None rather than $exists).
+				partialFilterExpression={"name": {"$type": "string"}, "deleted_at": None},
 			),
 		]

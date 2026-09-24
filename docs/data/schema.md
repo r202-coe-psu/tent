@@ -2267,7 +2267,7 @@ document, เพิ่ม field แบบ additive)
 | `client_id` | str | sys | **ระบบ generate** ตอนสร้าง: `tpc_` + `secrets.token_urlsafe(16)` (≤64 ตัวอักษร ตาม `TokenRequest.client_id`) — ไม่รับจาก request body · client เดิมที่ตั้งชื่อเอง (เช่น `m6-warehouse-logistics`) ยังใช้ได้ตามเดิม |
 | `client_secret_hash` | str | sys | SHA-256 ของ plaintext `tps_…` — ใช้ตรวจ `/external/token` เท่านั้น (unchanged) |
 | `client_secret_encrypted` | str\|null | sys | **ใหม่** — Fernet (AES-128-CBC + HMAC, nonce สุ่มต่อครั้ง) ของ plaintext เดียวกัน คีย์ถอดคือ `THIRDPARTY_SECRET_ENCRYPTION_KEY` (server-only env var, ไม่ใช่ DB) · มีไว้ให้ "ดู secret ซ้ำ" เท่านั้น ไม่ใช้ในเส้นทาง auth · `null` สำหรับ client ที่สร้างก่อน field นี้ (ดูซ้ำไม่ได้ — ต้อง revoke แล้วสร้างใหม่) |
-| `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์** (ซ้ำ → `409`) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
+| `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์เฉพาะกับแถวที่ยังไม่ถูกลบ** (`deleted_at = null`) — ซ้ำ → `409`; client ที่ถูก soft-delete แล้วไม่นับกันชื่อ (ใช้ชื่อเดิมสร้างใหม่ได้) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
 | `description` | str\|null | opt | คำอธิบายเพิ่มเติมของคีย์, trim, ≤500 ตัวอักษร; ว่าง → `null` |
 | `module_name` | enum(`M6`,`M7`) | req | โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
 | `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`)] | req | ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
@@ -2275,10 +2275,16 @@ document, เพิ่ม field แบบ additive)
 | `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |
 | `created_at` / `updated_at` | ts | sys | — |
 
-**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string) collation `{locale: "en", strength: 2}`
+**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string **และ** `deleted_at = null`) collation `{locale: "en", strength: 2}` — deployment ที่มี index เก่า (ก่อน draft-partner-client-secret-reveal-edit-delete รอบล่าสุด) ต้อง `db.third_party_clients.dropIndex("name_unique_ci")` ก่อน ไม่งั้น Beanie จะ error `IndexKeySpecsConflict` ตอน startup (Mongo ไม่ auto-update partialFilterExpression ของ index ที่มีอยู่แล้ว)
 
 **Reveal secret (view again):** `POST /api/v1/thirdparty-clients/{id}/secret` body `{password}` — BFF
 verify `password` ของ **ผู้ใช้ที่ login อยู่เอง** กับ CouchDB `_session` (ไม่สร้าง cookie ใหม่, ไม่กระทบ
 session ปัจจุบัน) ก่อน แล้วค่อยเรียก FastAPI `GET .../{id}/secret` เพื่อถอด `client_secret_encrypted`
 — รหัสผ่านผิด → `401`; client ไม่มี `client_secret_encrypted` (สร้างก่อน field นี้ หรือถูกลบ) → `404`.
 ไม่มี step-up token ข้ามคำขอ — ต้องกรอกรหัสผ่านทุกครั้งที่ต้องการดู
+
+**Regenerate secret:** `POST /v1/admin/thirdparty-clients/{id}/regenerate-secret` — ออก
+`client_secret` ใหม่ให้ `client_id` เดิม (เขียนทับ `client_secret_hash` + `client_secret_encrypted`
+ทั้งคู่); secret เก่าใช้ authenticate ไม่ได้ทันทีที่สำเร็จ ไม่มี grace period · เฉพาะตอน `is_active = true`
+(revoke แล้ว → `409`) · UI ต้องผ่าน confirm dialog เตือนก่อนเสมอ (draft-partner-client-secret-reveal-
+edit-delete §D)

@@ -131,6 +131,28 @@ async def test_create_rejects_duplicate_name_case_insensitive(
     assert await ThirdPartyClient.find_all().count() == 1
 
 
+async def test_create_allows_reusing_a_soft_deleted_clients_name(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Name uniqueness is scoped to rows still in the list — delete frees the name."""
+    payload = {"name": "EOC Songkhla", "module_name": "M7", "allowed_scopes": ["location-read"]}
+    first = await client.post("/v1/admin/thirdparty-clients", headers=auth_headers, json=payload)
+    assert first.status_code == 201
+    first_id = first.json()["id"]
+
+    await client.post(f"/v1/admin/thirdparty-clients/{first_id}/revoke", headers=auth_headers)
+    deleted = await client.delete(f"/v1/admin/thirdparty-clients/{first_id}", headers=auth_headers)
+    assert deleted.status_code == 200
+
+    second = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={"name": "eoc songkhla", "module_name": "M6", "allowed_scopes": ["location-read"]},
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] != first_id
+
+
 async def test_create_rejects_blank_name(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     response = await client.post(
         "/v1/admin/thirdparty-clients",
@@ -371,5 +393,91 @@ async def test_delete_unknown_client_returns_404(
 ) -> None:
     response = await client.delete(
         f"/v1/admin/thirdparty-clients/{new_ulid()}", headers=auth_headers
+    )
+    assert response.status_code == 404
+
+
+async def test_regenerate_secret_issues_new_secret_same_client_id(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_client(client, auth_headers)
+
+    regenerated = await client.post(
+        f"/v1/admin/thirdparty-clients/{created['id']}/regenerate-secret",
+        headers=auth_headers,
+    )
+    assert regenerated.status_code == 200
+    body = regenerated.json()
+    assert body["client_id"] == created["client_id"]
+    assert body["client_secret"].startswith("tps_")
+    assert body["client_secret"] != created["client_secret"]
+
+
+async def test_regenerate_secret_invalidates_old_secret(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_client(client, auth_headers)
+    regenerated = await client.post(
+        f"/v1/admin/thirdparty-clients/{created['id']}/regenerate-secret",
+        headers=auth_headers,
+    )
+    new_secret = regenerated.json()["client_secret"]
+
+    old_token = await client.post(
+        "/external/token",
+        json={
+            "grant_type": "client_credentials",
+            "client_id": created["client_id"],
+            "client_secret": created["client_secret"],
+        },
+    )
+    assert old_token.status_code == 401
+
+    new_token = await client.post(
+        "/external/token",
+        json={
+            "grant_type": "client_credentials",
+            "client_id": created["client_id"],
+            "client_secret": new_secret,
+        },
+    )
+    assert new_token.status_code == 200
+
+
+async def test_regenerate_secret_reveal_matches_new_secret(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_client(client, auth_headers)
+    regenerated = await client.post(
+        f"/v1/admin/thirdparty-clients/{created['id']}/regenerate-secret",
+        headers=auth_headers,
+    )
+    new_secret = regenerated.json()["client_secret"]
+
+    revealed = await client.get(
+        f"/v1/admin/thirdparty-clients/{created['id']}/secret", headers=auth_headers
+    )
+    assert revealed.json()["client_secret"] == new_secret
+
+
+async def test_regenerate_secret_refused_once_revoked(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_client(client, auth_headers)
+    await client.post(f"/v1/admin/thirdparty-clients/{created['id']}/revoke", headers=auth_headers)
+
+    response = await client.post(
+        f"/v1/admin/thirdparty-clients/{created['id']}/regenerate-secret",
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+async def test_regenerate_secret_unknown_client_returns_404(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        f"/v1/admin/thirdparty-clients/{new_ulid()}/regenerate-secret",
+        headers=auth_headers,
     )
     assert response.status_code == 404

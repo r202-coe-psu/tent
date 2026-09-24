@@ -1,7 +1,7 @@
 ---
 id: draft
-title: Partner OAuth2 clients — password-gated secret reveal (reversible encryption), editable scopes, soft-delete after revoke
-status: draft
+title: Partner OAuth2 clients — password-gated secret reveal (reversible encryption), editable scopes, soft-delete after revoke, regenerate secret
+status: proposed
 date: 2026-09-24
 requested_by: Dev Team B
 decided_by: 
@@ -13,24 +13,25 @@ affects:
   - backend/apiapp/core/config.py (+`THIRDPARTY_SECRET_ENCRYPTION_KEY`)
   - backend/apiapp/utils/secret_crypto.py (ใหม่ — Fernet encrypt/decrypt)
   - packages/tent-model/src/tent_model/third_party_client.py (+`client_secret_encrypted`, +`deleted_at`)
-  - backend/apiapp/modules/thirdparty_clients_admin/{schemas,use_case,router}.py (PATCH scopes, GET secret, DELETE)
+  - backend/apiapp/modules/thirdparty_clients_admin/{schemas,use_case,router}.py (PATCH scopes, GET secret, DELETE, POST regenerate-secret)
   - backend/tests/test_thirdparty_clients_admin.py
   - frontend/src/routes/api/v1/thirdparty-clients/[id]/+server.ts (ใหม่ — PATCH, DELETE)
   - frontend/src/routes/api/v1/thirdparty-clients/[id]/secret/+server.ts (ใหม่ — POST, password re-auth ต่อ CouchDB `_session`)
+  - frontend/src/routes/api/v1/thirdparty-clients/[id]/regenerate-secret/+server.ts (ใหม่ — POST)
   - frontend/src/lib/server/couch-admin.ts (+`verifyOwnPassword`)
-  - frontend/src/lib/features/third-party-clients/** (domain schemas, data, application, ui — edit-scopes dialog, view-secret dialog, delete dialog)
+  - frontend/src/lib/features/third-party-clients/** (domain schemas, data, application, ui — edit-scopes, view-secret, delete, regenerate-secret dialogs)
   - frontend/src/routes/(protected)/system-management/api-keys/+page.svelte
-  - .env.example, docker-compose.yml (+`THIRDPARTY_SECRET_ENCRYPTION_KEY`)
-why: admin เก็บ client_secret ตอนสร้างพลาด/หาย ต้องดูซ้ำได้; scope ของ client ต้องปรับได้โดยไม่ต้องสร้างใหม่; client ที่ revoke แล้วต้องลบออกจากรายการได้ (audit trail ยังอยู่ใน DB)
+  - .env.example, docker-compose*.yml (+`THIRDPARTY_SECRET_ENCRYPTION_KEY`)
+why: admin เก็บ client_secret ตอนสร้างพลาด/หาย ต้องดูซ้ำได้; scope ของ client ต้องปรับได้โดยไม่ต้องสร้างใหม่; client ที่ revoke แล้วต้องลบออกจากรายการได้ (audit trail ยังอยู่ใน DB); secret ที่สงสัยว่าหลุด/รั่วต้องเปลี่ยนได้โดยไม่เสีย client_id เดิม
 migration: additive — client เดิมไม่มี `client_secret_encrypted`/`deleted_at` (อ่านเป็น `null`); reveal ของ client เดิมทำไม่ได้ (ต้อง revoke + สร้างใหม่ถ้าจำเป็น) — ไม่มี backfill เพราะ plaintext เดิมไม่ได้เก็บไว้แต่แรก
 ---
 
-# Partner OAuth2 clients — reveal secret, edit scope, delete after revoke
+# Partner OAuth2 clients — reveal secret, edit scope, delete after revoke, regenerate secret
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** (1) secret เก็บแบบถอดกลับได้ (Fernet) เพิ่มจาก hash เดิม เพื่อ "ดูซ้ำ" ได้ — gate ด้วยรหัสผ่านของผู้ใช้ที่ login อยู่เองทุกครั้ง (2) ปุ่ม Edit ปรับ `allowed_scopes` ได้ต่อเนื่องขณะยัง active (3) ปุ่ม Delete โผล่หลัง revoke แล้วเท่านั้น — soft-delete (ซ่อนจาก list ไม่ hard-delete)
-> - **เพื่อใคร/ทำไม:** `system_admin` — แก้ปัญหาเก็บ secret พลาดกู้ไม่ได้, ต้องสร้าง client ใหม่ทุกครั้งที่ scope เปลี่ยน, client ที่ revoke แล้วเก็บกวาดออกจากรายการไม่ได้
+> - **เปลี่ยนอะไร:** (1) secret เก็บแบบถอดกลับได้ (Fernet) เพิ่มจาก hash เดิม เพื่อ "ดูซ้ำ" ได้ — gate ด้วยรหัสผ่านของผู้ใช้ที่ login อยู่เองทุกครั้ง (2) ปุ่ม Edit ปรับ `allowed_scopes` ได้ต่อเนื่องขณะยัง active (3) ปุ่ม Delete โผล่หลัง revoke แล้วเท่านั้น — soft-delete (ซ่อนจาก list ไม่ hard-delete) (4) ปุ่ม "Generate new secret" ออก secret ใหม่ให้ client_id เดิม โดยมี confirm dialog เตือนก่อนว่า secret เก่าจะใช้ไม่ได้ทันที
+> - **เพื่อใคร/ทำไม:** `system_admin` — แก้ปัญหาเก็บ secret พลาดกู้ไม่ได้, ต้องสร้าง client ใหม่ทุกครั้งที่ scope เปลี่ยน, client ที่ revoke แล้วเก็บกวาดออกจากรายการไม่ได้, secret สงสัยรั่วต้องเปลี่ยนได้โดยไม่เสีย client_id เดิม
 > - **กระทบ schema/scope:** `docs/data/schema.md` §9.6 (additive) · **`layer: stable`** เพราะแตะการเก็บ credential ของ auth plane (EXT-001) — เส้นทาง `/external/token` **ไม่เปลี่ยน** (ยังตรวจด้วย `client_secret_hash` เดิม)
 
 ## Why
@@ -38,6 +39,7 @@ migration: additive — client เดิมไม่มี `client_secret_encryp
 - Admin ทำ secret ที่คัดลอกไว้หาย/เก็บพลาด — ปัจจุบันมีแต่ hash ทางเดียว ต้อง revoke + สร้าง client ใหม่ทั้งที่ scope/name เดิมยังถูกต้อง เสีย client_id ที่พันธมิตรอาจ hardcode ไว้
 - Scope ที่ให้ตอนแรกอาจต้องขยาย/ลดภายหลัง — ปัจจุบันต้อง revoke + สร้างใหม่ ได้ credential ใหม่ทุกครั้ง กระทบพันธมิตรที่ deploy ของเดิมไว้แล้ว
 - Client ที่ revoke แล้วสะสมในรายการตลอดไป ไม่มีทางเก็บกวาดโดยไม่เสีย audit trail
+- Secret ที่สงสัยว่ารั่ว/หลุด ต้องเปลี่ยนได้ทันทีโดยไม่กระทบ client_id/name/scope ที่พันธมิตร config ไว้แล้ว — revoke+create ใหม่ทั้งชุดหนักเกินไปสำหรับแค่ต้องการ secret ใหม่
 
 ## Change
 
@@ -57,6 +59,13 @@ migration: additive — client เดิมไม่มี `client_secret_encryp
 - FR-9 — FastAPI `DELETE /v1/admin/thirdparty-clients/{id}` ตั้ง `deleted_at = now()` (ไม่ hard-delete) เฉพาะตอน `is_active = false`; ยัง active → `409`
 - FR-10 — List กรอง `deleted_at = null` เสมอ — ซ่อนจาก UI แต่ยังอยู่ใน Mongo (audit)
 - FR-11 — UI: ปุ่ม Delete (แดง) เห็นเฉพาะแถวที่ revoke แล้ว — confirm dialog แล้ว `DELETE`
+- FR-11.1 — unique index ของ `name` (§9.6) ต้องนับเฉพาะแถว `deleted_at = null` — client ที่ถูกลบแล้วไม่กันชื่อ สร้าง client ใหม่ด้วยชื่อเดิมได้ (ทั้ง pre-check ระดับ use-case และ partial index ระดับ Mongo)
+
+**D. Regenerate secret**
+- FR-12 — FastAPI `POST /v1/admin/thirdparty-clients/{id}/regenerate-secret` — สร้าง secret ใหม่ (`generate_client_secret()`), เขียนทับทั้ง `client_secret_hash` และ `client_secret_encrypted`; `client_id`/`name`/`scopes` **ไม่เปลี่ยน**; คืน response ทรงเดียวกับตอนสร้าง (`client_secret` plaintext ครั้งเดียว)
+- FR-13 — เฉพาะตอน `is_active = true` เท่านั้น (เหมือน Edit scope) — revoke แล้ว → `409`
+- FR-14 — secret เก่าใช้ authenticate ไม่ได้ทันทีที่ regenerate สำเร็จ (`client_secret_hash` ถูกเขียนทับ) — ไม่มี grace period
+- FR-15 — UI: ปุ่ม "Generate new secret" (เห็นเฉพาะแถว active) → **confirm dialog เตือนก่อนเสมอ** ว่าจะทำให้ secret เดิมใช้งานไม่ได้ทันที ต้องกดยืนยันอีกครั้งจึงจะเรียก API จริง — สำเร็จแล้วเปิด dialog เดียวกับตอนสร้าง client แสดง secret ใหม่ครั้งเดียว
 
 ### Before → after
 
@@ -65,6 +74,7 @@ migration: additive — client เดิมไม่มี `client_secret_encryp
 | ดู secret หลังปิด create dialog | ทำไม่ได้ | `POST .../{id}/secret` + รหัสผ่านตัวเอง |
 | แก้ scope | ต้อง revoke + สร้างใหม่ | `PATCH .../{id}` ได้ขณะ active |
 | Client ที่ revoke แล้ว | ค้างใน list ตลอดไป | ปุ่ม Delete → soft-delete, หายจาก list |
+| Secret สงสัยรั่ว | revoke + สร้าง client ใหม่ทั้งชุด (เสีย client_id เดิม) | ปุ่ม Generate new secret (มี confirm) → client_id เดิม, secret ใหม่ |
 
 ## Acceptance
 
@@ -74,15 +84,24 @@ migration: additive — client เดิมไม่มี `client_secret_encryp
 - AC-4 — Edit scope ขณะ active → save → list อัปเดต; token เก่าที่ mint แล้วคง scope เดิมจนหมดอายุ (ไม่ revoke token ที่ออกไปแล้ว)
 - AC-5 — client ที่ revoke แล้ว: ปุ่ม Edit หาย, `PATCH` ตรง → `409`
 - AC-6 — client active: ปุ่ม Delete ไม่แสดง; revoke ก่อน → ปุ่ม Delete โผล่ → กด → หายจาก list, doc ยังอยู่ใน Mongo พร้อม `deleted_at`
-- AC-7 — `pnpm lint` / `pnpm check` / `pnpm test` / `pytest tests/test_thirdparty_clients_admin.py` ผ่าน
+- AC-6.1 — สร้าง client ชื่อ X → revoke + delete → สร้าง client ใหม่ชื่อ X (case ต่างกันก็ได้) → สำเร็จ `201`; ระหว่างที่ X ตัวแรกยัง active สร้างซ้ำชื่อ X → `409`
+- AC-7 — กด "Generate new secret" → เห็น confirm dialog เตือนก่อน; ยืนยัน → `client_id` เดิม, `client_secret` ใหม่ (คนละค่ากับตอนสร้าง)
+- AC-8 — ลอง `/external/token` ด้วย secret เก่าหลัง regenerate → `401`; ด้วย secret ใหม่ → สำเร็จ
+- AC-9 — client ที่ revoke แล้ว: ปุ่ม Generate new secret หาย, เรียก endpoint ตรง → `409`
+- AC-10 — `pnpm lint` / `pnpm check` / `pnpm test` / `pytest tests/test_thirdparty_clients_admin.py` ผ่าน
 
 ## Impact
 
-- **Backend:** `ThirdPartyClient` (+2 field), dependency `cryptography` ใหม่, env var ใหม่, 3 endpoint ใหม่
-- **Frontend:** feature `third-party-clients` (+3 dialog), 2 BFF route ใหม่, `couch-admin.ts` +1 helper
-- **ไม่กระทบ:** `/external/token` verify flow, `third_party_access_logs`
+- **Backend:** `ThirdPartyClient` (+2 field), dependency `cryptography` ใหม่, env var ใหม่, 4 endpoint ใหม่ (`GET .../secret`, `PATCH`, `DELETE`, `POST .../regenerate-secret`)
+- **Frontend:** feature `third-party-clients` (+4 dialog), 3 BFF route ใหม่, `couch-admin.ts` +1 helper
+- **ไม่กระทบ:** `/external/token` verify flow (ยกเว้นว่า secret ที่ถูก regenerate จะใช้ไม่ได้ทันที — ตามที่ตั้งใจ), `third_party_access_logs`
 
 ## Migration
 
 - N/A สำหรับ `schema_v`; client เดิม `client_secret_encrypted`/`deleted_at` = `null` โดย default — ไม่ backfill (plaintext เดิมไม่เคยถูกเก็บไว้) → ดูซ้ำไม่ได้ถาวร ต้อง revoke + สร้างใหม่หากต้องการ
-- `THIRDPARTY_SECRET_ENCRYPTION_KEY` เป็น secret
+- `THIRDPARTY_SECRET_ENCRYPTION_KEY` เป็น production secret (รั่ว = ถอด secret ทุก client ได้) — ยังไม่มี key-rotation policy/ที่เก็บ key จริงใน production กำหนดแยกก่อน deploy
+- **Index migration (manual, ทุก environment ที่เคย deploy CR นี้มาก่อนรอบล่าสุด):** `name_unique_ci` เปลี่ยน `partialFilterExpression` (เพิ่ม `deleted_at: null`) — Mongo ไม่ auto-update index ที่มีอยู่แล้ว ต้องรันก่อน deploy โค้ดใหม่ ไม่งั้น Beanie startup จะ error `IndexKeySpecsConflict`:
+  ```js
+  db.third_party_clients.dropIndex("name_unique_ci")
+  ```
+  (Beanie สร้าง index ใหม่ให้อัตโนมัติตอน startup ครั้งถัดไป)
