@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
 
-export const dimensionSchema = z.enum(['count', 'mass', 'volume', 'length']);
+export const dimensionSchema = z.enum(['count', 'mass', 'volume', 'length', 'energy']);
 export type Dimension = z.infer<typeof dimensionSchema>;
 
 export const unitCodeSchema = z
@@ -162,6 +162,30 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_en: 'm',
 		dimension: 'length',
 		sort_order: 27
+	},
+	{
+		code: 'mg',
+		label_th: 'มิลลิกรัม',
+		label_th_short: 'มก.',
+		label_en: 'mg',
+		dimension: 'mass',
+		sort_order: 28
+	},
+	{
+		code: 'mcg',
+		label_th: 'ไมโครกรัม',
+		label_th_short: 'มคก.',
+		label_en: 'mcg',
+		dimension: 'mass',
+		sort_order: 29
+	},
+	{
+		code: 'kcal',
+		label_th: 'กิโลแคลอรี',
+		label_th_short: 'กิโลแคลอรี',
+		label_en: 'kcal',
+		dimension: 'energy',
+		sort_order: 30
 	}
 ];
 
@@ -175,9 +199,6 @@ export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: strin
 	pcs: { th: 'ชิ้น', en: 'pcs' },
 	gram: { th: 'กรัม', th_short: 'ก.', en: 'g' },
 	litre: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
-	mg: { th: 'มิลลิกรัม', th_short: 'มก.', en: 'mg' },
-	mcg: { th: 'ไมโครกรัม', th_short: 'มคก.', en: 'mcg' },
-	kcal: { th: 'กิโลแคลอรี', th_short: 'กิโลแคลอรี', en: 'kcal' },
 	// Legacy Thai labels backward-compat mapping
 	ชิ้น: { th: 'ชิ้น', en: 'pcs' },
 	หน่วย: { th: 'หน่วย', en: 'unit' },

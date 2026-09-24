@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-23
+updated: 2026-09-24
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer
 ---
 
@@ -1838,7 +1838,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `label_th` | str | req | ชื่อหน่วยภาษาไทย; ห้ามว่างเปล่า |
 | `label_th_short` | str | opt | ชื่อย่อภาษาไทย เช่น `กก.` หรือ `มล.` |
 | `label_en` | str | req | ชื่อหน่วยภาษาอังกฤษ/สัญลักษณ์; ห้ามว่างเปล่า |
-| `dimension` | enum(`count`,`mass`,`volume`,`length`) | req | มิติของหน่วย ใช้ตรวจความสอดคล้องของข้อมูล master |
+| `dimension` | enum(`count`,`mass`,`volume`,`length`,`energy`) | req | มิติของหน่วย ใช้ตรวจความสอดคล้องของข้อมูล master; `energy` เพิ่มสำหรับหน่วยโภชนาการ (`kcal`) ตามมติเจ้าของโครงการ 2026-09-24 |
 | `is_protected` | bool | opt | default `false`; หน่วยระบบที่ seed ต้องเป็น `true` |
 | `sort_order` | num | opt | ลำดับแสดงผลในรายการหน่วย |
 | `deactivated` | bool | opt | default `false`; หน่วยที่ปิดใช้งานไม่ควรปรากฏในตัวเลือกใหม่ |
@@ -1857,11 +1857,12 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | Dimension | Codes |
 | --- | --- |
 | `count` | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `cylinder` |
-| `mass` | `g`, `kg` |
+| `mass` | `g`, `kg`, `mg`, `mcg` |
 | `volume` | `gallon`, `ml`, `l` |
 | `length` | `m` |
+| `energy` | `kcal` |
 
-รวม 27 หน่วย. Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
+รวม 30 หน่วย (`mg`, `mcg`, `kcal` เพิ่ม 2026-09-24 เพื่อรองรับหน่วยของ `requirement_group.standard_uom`). Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
 `schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้.
 
 **Migration/compatibility (CR-125):** เพิ่ม doc type ใหม่แบบ additive ที่ `schema_v: 1`; ไม่ต้อง bump
