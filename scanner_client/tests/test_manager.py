@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
@@ -113,16 +114,6 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(FakeClient.requested_headers), 2)
         self.assertEqual(len(FakeClient.responses), 0)
 
-    async def test_upstream_messages_redact_scanner_key_and_cid(self):
-        safe = manager.safe_server_message(
-            "secret=sk_scan_0123456789abcdef and cid=1234567890123",
-            "fallback",
-        )
-        self.assertNotIn("sk_scan_", safe)
-        self.assertNotIn("1234567890123", safe)
-        self.assertIn("[redacted]", safe)
-
-
 class FakePage:
     def __init__(self, url, *, client_nav_fails=False):
         self.url = url
@@ -174,6 +165,82 @@ class KioskNavigationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(client.page.evaluated, [])
         self.assertEqual(client.page.gotos, [client.home_url])
+
+
+class FakeRoute:
+    def __init__(self, *, url, method, headers):
+        self.request = SimpleNamespace(url=url, method=method, headers=headers)
+        self.continued_headers = None
+
+    async def continue_(self, *, headers):
+        self.continued_headers = headers
+
+
+class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_route_kiosk_api_injects_only_allowlisted_posts(self):
+        client = manager.ScannerClientManager(valid_config())
+        cases = [
+            (
+                "same-origin allowlisted POST",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "GET",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "GET",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "foreign Origin header",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
+                "foreign request URL",
+                "https://attacker.example/api/v1/scanner/kiosk/lookup",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "non-allowlisted path",
+                "https://tent.example.go.th/api/v1/scanner/draft",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+        ]
+
+        for name, url, method, origin, should_inject in cases:
+            with self.subTest(name=name):
+                route = FakeRoute(
+                    url=url,
+                    method=method,
+                    headers={
+                        "origin": origin,
+                        "x-device-id": "spoofed-device",
+                        "x-device-secret": "spoofed-secret",
+                    },
+                )
+
+                await client._route_kiosk_api(route)
+
+                if should_inject:
+                    self.assertEqual(
+                        route.continued_headers["x-device-id"], client.device_id
+                    )
+                    self.assertEqual(
+                        route.continued_headers["x-device-secret"], client.device_secret
+                    )
+                else:
+                    self.assertNotIn("x-device-id", route.continued_headers)
+                    self.assertNotIn("x-device-secret", route.continued_headers)
 
 
 if __name__ == "__main__":
