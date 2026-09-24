@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # third-party OAuth2 client-credentials
     THIRDPARTY_JWT_SIGNING_KEY: str = "thirdparty_jwt_signing_key_change_me_in_env"
     THIRDPARTY_JWT_EXPIRE_SECONDS: int = 3600
-    # Fernet key (urlsafe-base64, 32 bytes) for reversible client_secret
-    THIRDPARTY_SECRET_ENCRYPTION_KEY: str = ""
+    # HMAC salt for deterministic client_secret derivation (see utils/secret_derivation.py)
+    THIRDPARTY_SECRET_SALT: str = ""
 
     API_PREFIX: str = ""
 

@@ -10,9 +10,9 @@ from pymongo.errors import DuplicateKeyError
 from tent_model.third_party_client import ThirdPartyClient
 
 from ...utils.masking import sha256_hex
-from ...utils.secret_crypto import SecretEncryptionError, decrypt_secret, encrypt_secret
+from ...utils.secret_derivation import SecretDerivationError, derive_secret, new_issued_at
 from ...utils.ulid import new_ulid
-from ..thirdparty_auth.provisioning import generate_client_id, generate_client_secret
+from ..thirdparty_auth.provisioning import generate_client_id
 from .schemas import (
     ThirdPartyClientCreateRequest,
     ThirdPartyClientCreateResponse,
@@ -76,20 +76,20 @@ class ThirdPartyClientsAdminUseCase:
         if existing is not None:
             raise _duplicate_name(name)
 
-        now = datetime.now(UTC)
-        plaintext = generate_client_secret()
+        now = new_issued_at()
+        client_id = generate_client_id()
         try:
-            encrypted = encrypt_secret(plaintext)
-        except SecretEncryptionError as exc:
+            plaintext = derive_secret(client_id, now)
+        except SecretDerivationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="THIRDPARTY_SECRET_ENCRYPTION_KEY is not configured",
+                detail="THIRDPARTY_SECRET_SALT is not configured",
             ) from exc
         doc = ThirdPartyClient(
             id=new_ulid(),
-            client_id=generate_client_id(),
+            client_id=client_id,
             client_secret_hash=sha256_hex(plaintext),
-            client_secret_encrypted=encrypted,
+            secret_issued_at=now,
             name=name,
             description=payload.description,
             module_name=payload.module_name.strip(),
@@ -136,7 +136,7 @@ class ThirdPartyClientsAdminUseCase:
 
     async def reveal_secret(self, client_row_id: str) -> ThirdPartyClientSecretResponse:
         doc = await _get_not_deleted(client_row_id)
-        if doc.client_secret_encrypted is None:
+        if doc.secret_issued_at is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=(
@@ -145,11 +145,11 @@ class ThirdPartyClientsAdminUseCase:
                 ),
             )
         try:
-            plaintext = decrypt_secret(doc.client_secret_encrypted)
-        except SecretEncryptionError as exc:
+            plaintext = derive_secret(doc.client_id, doc.secret_issued_at)
+        except SecretDerivationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="THIRDPARTY_SECRET_ENCRYPTION_KEY is not configured or does not match",
+                detail="THIRDPARTY_SECRET_SALT is not configured",
             ) from exc
         return ThirdPartyClientSecretResponse(client_secret=plaintext)
 
@@ -163,17 +163,17 @@ class ThirdPartyClientsAdminUseCase:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot regenerate the secret of a revoked client",
             )
-        plaintext = generate_client_secret()
+        now = new_issued_at()
         try:
-            encrypted = encrypt_secret(plaintext)
-        except SecretEncryptionError as exc:
+            plaintext = derive_secret(doc.client_id, now)
+        except SecretDerivationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="THIRDPARTY_SECRET_ENCRYPTION_KEY is not configured",
+                detail="THIRDPARTY_SECRET_SALT is not configured",
             ) from exc
         doc.client_secret_hash = sha256_hex(plaintext)
-        doc.client_secret_encrypted = encrypted
-        doc.updated_at = datetime.now(UTC)
+        doc.secret_issued_at = now
+        doc.updated_at = now
         await doc.save()
 
         public = _to_public(doc)

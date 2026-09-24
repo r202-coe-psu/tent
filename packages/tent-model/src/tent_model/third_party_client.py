@@ -24,11 +24,13 @@ class ThirdPartyClient(Document):
 	id: str = Field(alias="_id")
 	client_id: str
 	client_secret_hash: str
-	# Reversible (Fernet) encryption of the same plaintext, for the admin "view again"
-	# feature only — never read on the `/external/token` verify path. `None` on docs
+	# Timestamp the current secret was (re)issued at — the plaintext is derived
+	# deterministically from `client_id` + `secret_issued_at` (see
+	# utils/secret_derivation.py), so the admin "view again" feature recomputes it
+	# instead of decrypting a stored ciphertext. Rotated on regenerate. `None` on docs
 	# created before this field existed (schema.md §9.6, draft-partner-client-secret-
 	# reveal-edit-delete) — those secrets cannot be recovered.
-	client_secret_encrypted: str | None = None
+	secret_issued_at: datetime | None = None
 	# Admin-chosen display name, unique case-insensitively. `None` only on docs created
 	# before the field existed (schema.md §9.6).
 	name: str | None = None

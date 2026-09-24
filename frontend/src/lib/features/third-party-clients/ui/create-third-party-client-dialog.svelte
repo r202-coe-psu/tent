@@ -96,8 +96,8 @@
 		<div class="border-b border-border bg-muted/30 p-6 pb-4">
 			<Dialog.Title class="text-xl">Create partner OAuth2 client</Dialog.Title>
 			<Dialog.Description class="mt-1.5">
-				The client ID and secret are generated for you. The full secret is shown once after creation
-				— store it securely, it cannot be recovered.
+				The client ID and secret are generated for you. Store them securely; you can also view the
+				secret again later by confirming your password.
 			</Dialog.Description>
 		</div>
 		<div class="grid max-h-[70vh] gap-5 overflow-y-auto p-6">

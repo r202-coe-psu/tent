@@ -47,13 +47,12 @@ async def test_create_list_revoke_thirdparty_client(
     assert body["is_active"] is True
     assert body["client_secret"].startswith("tps_")
     assert "client_secret_hash" not in body
-    assert "client_secret_encrypted" not in body
+    assert "secret_issued_at" not in body
 
     stored = await ThirdPartyClient.get(body["id"])
     assert stored is not None
     assert stored.client_secret_hash == sha256_hex(body["client_secret"])
-    assert stored.client_secret_encrypted is not None
-    assert stored.client_secret_encrypted != body["client_secret"]
+    assert stored.secret_issued_at is not None
 
     listed = await client.get("/v1/admin/thirdparty-clients", headers=auth_headers)
     assert listed.status_code == 200
@@ -283,7 +282,7 @@ async def test_reveal_secret_unknown_client_returns_404(
     assert response.status_code == 404
 
 
-async def test_reveal_secret_legacy_client_without_encrypted_secret_returns_404(
+async def test_reveal_secret_legacy_client_without_issued_at_returns_404(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     now = datetime.now(UTC)
