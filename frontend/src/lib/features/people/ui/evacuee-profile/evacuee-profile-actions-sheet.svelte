@@ -12,7 +12,6 @@
 		type Medical,
 		type Screening
 	} from '$lib/features/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -47,7 +46,6 @@
 		onOpenQrModal: () => void;
 	} = $props();
 
-	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
@@ -57,12 +55,7 @@
 			(screening !== null && screening.symptoms.length > 0) ||
 			medical?.track === 'fast_track'
 	);
-	const vulnerableGroups = $derived(evacuee.vulnerable_groups ?? []);
 	const specialNeeds = $derived(evacuee.special_needs ?? []);
-
-	function vulnerableLabel(code: string): string {
-		return vulnerableGroupQuery.data?.items.find((i) => i.code === code)?.label ?? code;
-	}
 
 	function runAction(action: () => void) {
 		open = false;
@@ -107,34 +100,25 @@
 							</span>
 						</div>
 
-						<!-- Row 2: vulnerable + special needs tags -->
-						<div class="flex flex-wrap items-center gap-1.5">
-							{#if hasIllnessAlert}
-								<span
-									class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
-								>
-									เฝ้าระวังสุขภาพ
-								</span>
-							{/if}
-							{#each vulnerableGroups as code (code)}
-								<span
-									class="inline-flex max-w-full items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
-								>
-									{vulnerableLabel(code)}
-								</span>
-							{/each}
-							{#each specialNeeds as need (need)}
-								<span
-									class="inline-flex max-w-full items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
-								>
-									{need}
-								</span>
-							{/each}
-							{#if !hasIllnessAlert && vulnerableGroups.length === 0 && specialNeeds.length === 0}
-								<span class="text-xs text-slate-400 italic">ไม่ระบุกลุ่มเปราะบาง / ความต้องการ</span
-								>
-							{/if}
-						</div>
+						<!-- Row 2: health alert + special needs (vulnerable groups live on health card) -->
+						{#if hasIllnessAlert || specialNeeds.length > 0}
+							<div class="flex flex-wrap items-center gap-1.5">
+								{#if hasIllnessAlert}
+									<span
+										class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+									>
+										เฝ้าระวังสุขภาพ
+									</span>
+								{/if}
+								{#each specialNeeds as need (need)}
+									<span
+										class="inline-flex max-w-full items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
+									>
+										{need}
+									</span>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				</div>
 			</section>
