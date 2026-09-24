@@ -85,6 +85,11 @@ let memoryRepo: Repository = {
 	},
 	async find<T>(): Promise<T[]> {
 		return [...couchDocs.values()] as unknown as T[];
+	},
+	// Nothing under test batches yet, but the mock has to satisfy the whole
+	// `Repository` contract — one write per doc is what `_bulk_docs` does.
+	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+		return docs.map((doc) => mockPutDoc(doc, false));
 	}
 };
 
