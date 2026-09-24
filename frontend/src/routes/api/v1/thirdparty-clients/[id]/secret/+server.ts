@@ -6,7 +6,6 @@
  * POST { password } → verify against CouchDB `_session` (no new cookie set), then
  * FastAPI `GET /v1/admin/thirdparty-clients/{id}/secret` (decrypts server-side).
  */
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	authorizeUserWrite,
@@ -14,34 +13,10 @@ import {
 	ServiceError,
 	verifyOwnPassword
 } from '$lib/server/couch-admin';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { fastapiBaseUrl, fastapiServiceHeaders, proxyFastapiJson } from '$lib/server/fastapi';
 import { thirdPartyClientSecretRevealLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
-
-function fastapiErrorMessage(body: unknown, fallback: string): string {
-	if (typeof body !== 'object' || body === null) return fallback;
-	const envelope = body as { errors?: unknown[]; detail?: unknown; error?: unknown };
-	const first = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
-	if (typeof first === 'string' && first.trim()) return first;
-	if (typeof first === 'object' && first !== null) {
-		const msg =
-			(first as { message?: unknown; msg?: unknown }).message ?? (first as { msg?: unknown }).msg;
-		if (typeof msg === 'string' && msg.trim()) return msg;
-	}
-	if (typeof envelope.detail === 'string' && envelope.detail.trim()) return envelope.detail;
-	if (typeof envelope.error === 'string' && envelope.error.trim()) return envelope.error;
-	return fallback;
-}
-
-function serviceCodeForStatus(status: number): ServiceError['code'] {
-	if (status === 401) return 'UNAUTHENTICATED';
-	if (status === 403) return 'FORBIDDEN';
-	if (status === 404) return 'VALIDATION';
-	if (status === 409) return 'CONFLICT';
-	if (status === 422 || status === 400) return 'VALIDATION';
-	return 'INTERNAL';
-}
 
 interface RevealBody {
 	password?: unknown;
@@ -74,15 +49,7 @@ export const POST: RequestHandler = async ({ request, params, getClientAddress }
 			`${fastapiBaseUrl()}/v1/admin/thirdparty-clients/${encodeURIComponent(id)}/secret`,
 			{ headers: fastapiServiceHeaders({ Accept: 'application/json' }) }
 		);
-		const respBody = await res.json().catch(() => null);
-		if (!res.ok) {
-			const message = fastapiErrorMessage(respBody, `Upstream request failed (${res.status})`);
-			return json(
-				{ error: { code: serviceCodeForStatus(res.status), message } },
-				{ status: res.status >= 400 && res.status < 600 ? res.status : 502 }
-			);
-		}
-		return json(respBody, { status: res.status });
+		return proxyFastapiJson(res);
 	} catch (e) {
 		return serviceError(e);
 	}

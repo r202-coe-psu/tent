@@ -238,6 +238,23 @@ async def test_create_rejects_unknown_module_name(
     assert await ThirdPartyClient.find_one(ThirdPartyClient.name == "mystery-client") is None
 
 
+async def test_create_rejects_ungrantable_scope(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Only scopes in THIRD_PARTY_SCOPES are grantable — same validator as PATCH."""
+    response = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={
+            "name": "scope-ghost",
+            "module_name": "M6",
+            "allowed_scopes": ["not-a-real-scope"],
+        },
+    )
+    assert response.status_code == 422
+    assert await ThirdPartyClient.find_one(ThirdPartyClient.name == "scope-ghost") is None
+
+
 async def test_revoke_unknown_client_returns_404(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

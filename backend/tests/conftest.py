@@ -45,7 +45,7 @@ async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient]:
 async def app(settings: Settings) -> AsyncGenerator[FastAPI]:
     """Create a FastAPI application instance for a single test."""
     _app = create_app()
-    async with LifespanManager(_app):
+    async with LifespanManager(_app, startup_timeout=30):
         yield _app
 
 
