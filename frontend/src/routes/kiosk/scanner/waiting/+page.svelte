@@ -13,8 +13,21 @@
 	<title>เสียบบัตรประชาชน — SmartShelter Kiosk</title>
 </svelte:head>
 
-<section class="mx-auto flex w-full max-w-3xl flex-col gap-4" aria-labelledby="waiting-title">
+<section
+	class="waiting-page mx-auto flex w-full max-w-3xl flex-col gap-3"
+	aria-labelledby="waiting-title"
+>
 	<KioskCheckInWizard currentStep={2} />
+	<div class="waiting-back flex justify-start">
+		<Button
+			href={backUrl}
+			variant="ghost"
+			aria-label="กลับหน้าเริ่มต้น"
+			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
+		>
+			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
+		</Button>
+	</div>
 
 	<header class="text-center">
 		<h1
@@ -26,11 +39,14 @@
 		<p class="mt-1 text-base font-semibold text-slate-700">หงายชิปขึ้น</p>
 	</header>
 
-	<main class="mx-auto flex w-full max-w-md flex-col items-center">
+	<main class="waiting-card-stage mx-auto flex w-full flex-col items-center">
 		<div
-			class="w-full overflow-hidden rounded-2xl border-2 border-[#0A2647] bg-[#0A2647] shadow-2xs"
+			class="waiting-card flex w-full flex-col overflow-hidden rounded-2xl border-2 border-[#0A2647] bg-[#0A2647] shadow-2xs"
 		>
-			<div class="bg-white p-4 sm:p-6" aria-label="ตัวอย่างบัตรประชาชน หงายชิปขึ้น">
+			<div
+				class="waiting-card-body flex min-h-0 flex-1 flex-col bg-white p-4 sm:p-6"
+				aria-label="ตัวอย่างบัตรประชาชน หงายชิปขึ้น"
+			>
 				<div class="flex items-center justify-between">
 					<div
 						class="flex h-3 w-14 overflow-hidden rounded border border-slate-200"
@@ -44,7 +60,7 @@
 					</div>
 					<CreditCard class="h-5 w-5 text-[#0A2647]" aria-hidden="true" />
 				</div>
-				<div class="flex min-h-28 items-center gap-4 sm:min-h-36">
+				<div class="waiting-card-details flex min-h-0 flex-1 items-center gap-4">
 					<div
 						class="flex h-14 w-[4.5rem] shrink-0 items-center justify-center rounded-lg border-2 border-amber-400 bg-amber-300"
 						aria-label="ชิปสีทอง"
@@ -67,7 +83,7 @@
 			</div>
 
 			<div
-				class="flex min-h-16 w-full items-center justify-center gap-3 px-4 py-3 text-base font-bold text-white"
+				class="waiting-card-action flex min-h-16 w-full items-center justify-center gap-3 px-4 py-3 text-base font-bold text-white"
 			>
 				<ArrowDown
 					class="h-5 w-5 animate-bounce motion-reduce:animate-none"
@@ -77,7 +93,7 @@
 		</div>
 
 		<div
-			class="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700"
+			class="waiting-status mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700"
 			role="status"
 			aria-live="polite"
 		>
@@ -88,15 +104,38 @@
 			รออ่านบัตร · อย่าถอดบัตร
 		</div>
 	</main>
-
-	<div class="flex justify-center">
-		<Button
-			href={backUrl}
-			variant="ghost"
-			aria-label="กลับหน้าเริ่มต้น"
-			class="min-h-12 gap-2 px-4 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-		>
-			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-		</Button>
-	</div>
 </section>
+
+<style>
+	.waiting-card-stage {
+		width: min(100%, 24rem, max(17rem, calc((100svh - 18rem) * 1.55)));
+	}
+
+	.waiting-card {
+		aspect-ratio: 1.55 / 1;
+	}
+
+	@media (max-height: 650px) {
+		.waiting-page {
+			gap: 0.25rem;
+		}
+
+		.waiting-back :global(a) {
+			min-height: 2.5rem;
+		}
+
+		.waiting-card-body {
+			padding: 0.75rem;
+		}
+
+		.waiting-card-action {
+			min-height: 2.75rem;
+			padding-block: 0.375rem;
+		}
+
+		.waiting-status {
+			margin-top: 0.5rem;
+			min-height: 2.75rem;
+		}
+	}
+</style>

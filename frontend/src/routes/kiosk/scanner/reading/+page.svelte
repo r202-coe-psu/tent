@@ -1,7 +1,12 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import { KioskCheckInWizard } from '$lib/features/kiosk';
+
+	const backUrl = $derived(`/kiosk${page.url.search}`);
 </script>
 
 <svelte:head>
@@ -10,6 +15,16 @@
 
 <main class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-1" aria-labelledby="reading-title">
 	<KioskCheckInWizard currentStep={2} />
+	<div class="flex justify-start">
+		<Button
+			href={backUrl}
+			variant="ghost"
+			aria-label="กลับหน้าเริ่มต้น"
+			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
+		>
+			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
+		</Button>
+	</div>
 
 	<section
 		class="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-2xs sm:p-10"

@@ -201,6 +201,16 @@
 
 <section class="mx-auto flex w-full max-w-5xl flex-col gap-3" aria-labelledby="check-in-title">
 	<KioskCheckInWizard currentStep={wizardStep} />
+	<div class="no-print flex justify-start">
+		<Button
+			href={homeUrl}
+			variant="ghost"
+			aria-label="กลับหน้าเริ่มต้น"
+			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
+		>
+			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
+		</Button>
+	</div>
 
 	<header class="text-center">
 		<h1
@@ -224,7 +234,7 @@
 		{:else if results.some((result) => result.status === 'already_checked_in')}
 			<p class="mt-1 text-base text-slate-700">พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ</p>
 		{:else if results.length > 0}
-			<p class="mt-1 text-base text-slate-700">ตรวจผล แล้วพิมพ์สายรัดข้อมือ</p>
+			<p class="mt-1 text-base text-slate-700">ตรวจผล แล้วพิมพ์ QR Code</p>
 		{/if}
 	</header>
 
@@ -409,7 +419,7 @@
 					>
 						<Printer class="h-5 w-5" aria-hidden="true" />{printBusy || isSubmitting
 							? 'กำลังเตรียม QR…'
-							: 'พิมพ์สายรัดข้อมือ'}
+							: 'พิมพ์ QR Code'}
 					</Button>
 					<Button
 						type="button"
@@ -488,17 +498,6 @@
 		<ShieldCheck class="h-4 w-4 shrink-0 text-[#0A2647]" aria-hidden="true" />QR
 		ไม่มีข้อมูลส่วนบุคคล
 	</p>
-
-	<div class="no-print mt-1 flex justify-center">
-		<Button
-			href={homeUrl}
-			variant="ghost"
-			aria-label="กลับหน้าเริ่มต้น"
-			class="min-h-12 gap-2 px-4 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-		>
-			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-		</Button>
-	</div>
 </section>
 
 <style>

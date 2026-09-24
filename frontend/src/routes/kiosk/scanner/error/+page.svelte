@@ -20,6 +20,16 @@
 
 <section class="mx-auto flex w-full max-w-3xl flex-col gap-4" aria-labelledby="scanner-error-title">
 	<KioskCheckInWizard currentStep={2} />
+	<div class="flex justify-start">
+		<Button
+			href={homeUrl}
+			variant="ghost"
+			aria-label="กลับหน้าเริ่มต้น"
+			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
+		>
+			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
+		</Button>
+	</div>
 
 	<section class="rounded-2xl border border-red-200 bg-white p-5 shadow-2xs sm:p-7">
 		<header class="flex items-center gap-3">
@@ -58,14 +68,4 @@
 			</li>
 		</ol>
 	</section>
-
-	<div class="flex justify-center">
-		<Button
-			href={homeUrl}
-			variant="ghost"
-			class="min-h-12 gap-2 px-4 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-		>
-			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-		</Button>
-	</div>
 </section>

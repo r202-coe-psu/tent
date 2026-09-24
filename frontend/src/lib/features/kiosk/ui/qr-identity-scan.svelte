@@ -98,6 +98,16 @@
 		aria-labelledby="qr-title"
 	>
 		<KioskCheckInWizard currentStep={2} />
+		<div class="qr-scan-back flex justify-start">
+			<Button
+				href={backUrl}
+				variant="ghost"
+				aria-label="กลับหน้าเริ่มต้น"
+				class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
+			>
+				<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
+			</Button>
+		</div>
 
 		<header class="text-center">
 			<h1 id="qr-title" class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl">
@@ -167,40 +177,29 @@
 				</div>
 			{/if}
 		</section>
-
-		<div class="qr-scan-back mt-1 flex justify-center">
-			<Button
-				href={backUrl}
-				variant="ghost"
-				aria-label="กลับหน้าเริ่มต้น"
-				class="min-h-12 gap-2 px-4 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-			>
-				<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-			</Button>
-		</div>
 	</section>
 {/if}
 
 <style>
 	.qr-camera-frame {
-		width: min(100%, 24rem, max(10rem, calc(100svh - 22rem)));
+		width: min(100%, 24rem, max(10rem, calc(100svh - 20rem)));
 	}
 
 	@media (max-height: 650px) {
 		.qr-scan-page {
-			gap: 0.5rem;
+			gap: 0.25rem;
 		}
 
 		.qr-scan-card {
-			padding: 0.5rem;
+			padding: 0.25rem;
 		}
 
 		.qr-scan-hint {
-			margin-top: 0.5rem;
+			margin-top: 0.25rem;
 		}
 
 		.qr-scan-back {
-			margin-top: 0;
+			margin-top: -0.125rem;
 		}
 	}
 
