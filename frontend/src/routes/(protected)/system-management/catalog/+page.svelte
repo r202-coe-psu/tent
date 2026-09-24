@@ -1,11 +1,11 @@
 <script lang="ts">
-	import ConsoleBanner from '$lib/components/console-banner.svelte';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import StaffHub from '$lib/components/staff-hub.svelte';
+	import StaffSideNav, { type StaffSideNavItem } from '$lib/components/staff-side-nav.svelte';
 	import ItemCategoryTab from '../../back-office/catalog/components/item-category-tab.svelte';
 	import ItemMasterTab from '../../back-office/catalog/components/item-master-tab.svelte';
 	import RecipeTab from '../../back-office/catalog/components/recipe-tab.svelte';
 	import UnitOfMeasureTab from '../../back-office/catalog/components/unit-of-measure-tab.svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		useItemCategories,
 		useItemMasters,
@@ -26,11 +26,9 @@
 	const totalRecipes = $derived(recipesQuery.data?.length ?? 0);
 	const totalUnitsOfMeasure = $derived(unitsOfMeasureQuery.data?.length ?? 0);
 
-	let activeTab = $state<'item_category' | 'item_master' | 'recipe' | 'unit_of_measure'>(
-		'item_category'
-	);
+	type CatalogTab = 'item_category' | 'item_master' | 'recipe' | 'unit_of_measure';
 
-	$effect(() => {
+	const activeTab = $derived.by((): CatalogTab => {
 		const tabParam = page.url.searchParams.get('tab');
 		if (
 			tabParam === 'item_category' ||
@@ -38,72 +36,65 @@
 			tabParam === 'recipe' ||
 			tabParam === 'unit_of_measure'
 		) {
-			activeTab = tabParam;
+			return tabParam;
 		}
+		return 'item_category';
 	});
 
 	const basePath = resolve('/system-management/catalog');
 
-	function selectTab(tab: 'item_category' | 'item_master' | 'recipe' | 'unit_of_measure') {
-		activeTab = tab;
+	function selectTab(tab: CatalogTab) {
 		goto(`${basePath}?tab=${tab}`, { replaceState: true, noScroll: true, keepFocus: true });
 	}
+
+	const items = $derived<StaffSideNavItem[]>([
+		{
+			id: 'item_category',
+			label: 'หมวดหมู่สิ่งของ',
+			count: totalItemCategories,
+			onclick: () => selectTab('item_category')
+		},
+		{
+			id: 'item_master',
+			label: 'รายการสิ่งของ',
+			count: totalItemMasters,
+			onclick: () => selectTab('item_master')
+		},
+		{
+			id: 'recipe',
+			label: 'สูตรอาหารมาตรฐาน',
+			count: totalRecipes,
+			onclick: () => selectTab('recipe')
+		},
+		{
+			id: 'unit_of_measure',
+			label: 'หน่วยนับมาตรฐาน',
+			count: totalUnitsOfMeasure,
+			onclick: () => selectTab('unit_of_measure')
+		}
+	]);
 </script>
 
 <svelte:head>
 	<title>จัดการคลังสินค้า · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-	<ConsoleBanner
-		title="4. หมวดคลังสินค้าและทรัพยากร (Inventory & Resource)"
-		description="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
-	/>
+<StaffPageShell
+	title="หมวดคลังสินค้าและทรัพยากร"
+	description="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
+	maxWidth="7xl"
+>
+	<StaffHub>
+		{#snippet nav()}
+			<StaffSideNav
+				{items}
+				activeId={activeTab}
+				sectionLabel="ประเภทคลัง"
+				ariaLabel="ประเภทคลังสินค้า"
+			/>
+		{/snippet}
 
-	<div class="item-start mt-2 grid w-full grid-cols-1 gap-6 lg:grid-cols-3">
-		<div class="border-md flex h-fit flex-col rounded-xl border bg-card p-4 shadow-xs">
-			<span class="text-sm font-semibold text-muted-foreground">ประเภทพารามิเตอร์มาสเตอร์</span>
-			<Separator class="my-3" />
-			<div class="flex flex-col gap-2">
-				<Button
-					size="lg"
-					variant={activeTab === 'item_category' ? 'default' : 'outline'}
-					onclick={() => selectTab('item_category')}
-					class="w-full justify-between py-6"
-				>
-					<span>หมวดหมู่สิ่งของ (Item Category)</span>
-					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalItemCategories}</span>
-				</Button>
-				<Button
-					size="lg"
-					variant={activeTab === 'item_master' ? 'default' : 'outline'}
-					onclick={() => selectTab('item_master')}
-					class="w-full justify-between py-6"
-				>
-					<span>รายการสิ่งของ (Item Master)</span>
-					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalItemMasters}</span>
-				</Button>
-				<Button
-					size="lg"
-					variant={activeTab === 'recipe' ? 'default' : 'outline'}
-					onclick={() => selectTab('recipe')}
-					class="w-full justify-between py-6"
-				>
-					<span>สูตรอาหารมาตรฐาน</span>
-					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalRecipes}</span>
-				</Button>
-				<Button
-					size="lg"
-					variant={activeTab === 'unit_of_measure' ? 'default' : 'outline'}
-					onclick={() => selectTab('unit_of_measure')}
-					class="w-full justify-between py-6"
-				>
-					<span>หน่วยนับมาตรฐาน (Unit of Measure)</span>
-					<span class="rounded-sm bg-white/20 p-1 whitespace-nowrap">{totalUnitsOfMeasure}</span>
-				</Button>
-			</div>
-		</div>
-		<div class="col-span-1 flex lg:col-span-2">
+		<div class="min-w-0 p-4 sm:p-6">
 			{#if activeTab === 'item_category'}
 				<ItemCategoryTab {basePath} />
 			{:else if activeTab === 'item_master'}
@@ -114,5 +105,5 @@
 				<UnitOfMeasureTab {basePath} />
 			{/if}
 		</div>
-	</div>
-</div>
+	</StaffHub>
+</StaffPageShell>

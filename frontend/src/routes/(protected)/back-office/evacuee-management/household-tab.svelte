@@ -22,7 +22,6 @@
 		householdStatusSchema,
 		type HouseholdStatus
 	} from '$lib/features/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canCancelHold } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -76,23 +75,10 @@
 	}));
 
 	const allEvacueesQuery = useEvacuees();
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 	const cancelHousehold = useCancelPreRegistration();
 
-	const municipalityZoneLabels = $derived(
-		Object.fromEntries(
-			(municipalityZoneQuery.data?.items ?? []).map((item) => [item.code, item.label])
-		)
-	);
-	const communityLabels = $derived(
-		Object.fromEntries((communityQuery.data?.items ?? []).map((item) => [item.code, item.label]))
-	);
-
-	const searchLabels = $derived({
-		municipalityZone: municipalityZoneLabels,
-		community: communityLabels
-	});
+	/** Free-text zone/community — search matches stored strings directly (CR-137). */
+	const searchLabels = { municipalityZone: {}, community: {} };
 
 	const filters = $derived({
 		status: (selectedStatus || undefined) as HouseholdStatus | undefined
@@ -397,13 +383,13 @@
 									{#if h.municipality_zone}
 										<span
 											class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-900"
-											>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+											>{h.municipality_zone}</span
 										>
 									{/if}
 									{#if h.community}
 										<span
 											class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-900"
-											>{communityLabels[h.community] ?? h.community}</span
+											>{h.community}</span
 										>
 									{/if}
 								{:else}
@@ -496,13 +482,13 @@
 										{#if h.municipality_zone}
 											<span
 												class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs font-medium text-blue-700"
-												>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+												>{h.municipality_zone}</span
 											>
 										{/if}
 										{#if h.community}
 											<span
 												class="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-2xs font-medium text-green-700"
-												>{communityLabels[h.community] ?? h.community}</span
+												>{h.community}</span
 											>
 										{/if}
 									{:else}

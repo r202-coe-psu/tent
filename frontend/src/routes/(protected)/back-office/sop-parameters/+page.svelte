@@ -29,6 +29,7 @@
 	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { toast } from 'svelte-sonner';
 	import ConsoleBanner from '$lib/components/console-banner.svelte';
+	import StaffHub from '$lib/components/staff-hub.svelte';
 
 	// Tab and context state
 	let activeTab = $state<SopTabType>('sphere_standard');
@@ -175,84 +176,86 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
-		<SopTypeList
-			bind:activeTab
-			foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
-			reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
-			replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
-			sphereCount={20}
-			alertCount={8}
-		/>
+	<StaffHub>
+		{#snippet nav()}
+			<SopTypeList
+				bind:activeTab
+				foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
+				reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
+				replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
+				sphereCount={20}
+				alertCount={8}
+			/>
+		{/snippet}
 
-		{#if activeTab === 'food_sphere_standard'}
-			<FoodSphereStandardTab {shelterCode} {isSA} {canEditOverride} />
-		{:else if activeTab === 'requirement_group'}
-			<RequirementGroupTab {shelterCode} {isSA} {canEditOverride} />
-		{:else if activeTab === 'replenishment_policy'}
-			<ReplenishmentPolicyTab {shelterCode} {isSA} {canEditOverride} />
-		{:else if activeTab === 'sphere_standard'}
-			{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
-				<div
-					class="flex min-h-160 items-center justify-center rounded-xl border bg-card p-6 shadow-sm"
-				>
-					<div
-						class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
-					></div>
-				</div>
-			{:else}
-				<!-- Keep the master toolbar and ratios panel in the same grid column. -->
-				<div class="flex min-w-0 flex-col gap-3">
-					{#if isSA}
-						<div class="flex flex-wrap items-center gap-2">
-							<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
-							<select
-								id="master-profile"
-								value={effectiveSelectedMasterSlug}
-								onchange={selectMaster}
-								class="rounded-md border bg-background px-3 py-2 text-sm"
-							>
-								{#each masterQuery.data ?? [] as profile (profile._id)}
-									<option value={profile.slug ?? createProfileSlug(profile.name)}
-										>{profile.active ? '[ใช้งาน] ' : ''}{profile.name} (v{profile.version})</option
-									>
-								{/each}
-							</select>
-							<button
-								class="rounded-md border px-3 py-2 text-sm font-semibold"
-								onclick={() => (createMasterOpen = true)}>สร้าง Master Profile</button
-							>
-							{#if selectedMaster}
-								<button
-									type="button"
-									class="rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50"
-									disabled={disabled || selectedMaster.active}
-									onclick={setMasterActive}
+		<div class="min-w-0 p-4 sm:p-6">
+			{#if activeTab === 'food_sphere_standard'}
+				<FoodSphereStandardTab {shelterCode} {isSA} {canEditOverride} />
+			{:else if activeTab === 'requirement_group'}
+				<RequirementGroupTab {shelterCode} {isSA} {canEditOverride} />
+			{:else if activeTab === 'replenishment_policy'}
+				<ReplenishmentPolicyTab {shelterCode} {isSA} {canEditOverride} />
+			{:else if activeTab === 'sphere_standard'}
+				{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
+					<div class="flex min-h-160 items-center justify-center py-12">
+						<div
+							class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
+						></div>
+					</div>
+				{:else}
+					<!-- Keep the master toolbar and ratios panel in the same grid column. -->
+					<div class="flex min-w-0 flex-col gap-3">
+						{#if isSA}
+							<div class="flex flex-wrap items-center gap-2">
+								<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
+								<select
+									id="master-profile"
+									value={effectiveSelectedMasterSlug}
+									onchange={selectMaster}
+									class="rounded-md border bg-background px-3 py-2 text-sm"
 								>
-									{selectedMaster.active ? 'กำลังใช้งาน' : 'ตั้งเป็น Master หลัก'}
-								</button>
-							{/if}
-						</div>
-					{/if}
-					<SopRatioTab
-						profile={activeProfile}
-						bind:activeContext
-						hasOverride={!!activeOverride}
-						{isSA}
-						{canEditOverride}
-						{shelterCode}
-						{disabled}
-						onEditAll={handleEditAll}
-						onCreateOverride={createInitialOverride}
-						onDeactivateOverride={deactivateOverride}
-						onViewHistory={handleViewHistory}
-					/>
-				</div>
+									{#each masterQuery.data ?? [] as profile (profile._id)}
+										<option value={profile.slug ?? createProfileSlug(profile.name)}
+											>{profile.active ? '[ใช้งาน] ' : ''}{profile.name} (v{profile.version})</option
+										>
+									{/each}
+								</select>
+								<button
+									class="rounded-md border px-3 py-2 text-sm font-semibold"
+									onclick={() => (createMasterOpen = true)}>สร้าง Master Profile</button
+								>
+								{#if selectedMaster}
+									<button
+										type="button"
+										class="rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+										disabled={disabled || selectedMaster.active}
+										onclick={setMasterActive}
+									>
+										{selectedMaster.active ? 'กำลังใช้งาน' : 'ตั้งเป็น Master หลัก'}
+									</button>
+								{/if}
+							</div>
+						{/if}
+						<SopRatioTab
+							profile={activeProfile}
+							bind:activeContext
+							hasOverride={!!activeOverride}
+							{isSA}
+							{canEditOverride}
+							{shelterCode}
+							{disabled}
+							onEditAll={handleEditAll}
+							onCreateOverride={createInitialOverride}
+							onDeactivateOverride={deactivateOverride}
+							onViewHistory={handleViewHistory}
+						/>
+					</div>
+				{/if}
+			{:else if activeTab === 'alert_threshold'}
+				<AlertThresholdEditor />
 			{/if}
-		{:else if activeTab === 'alert_threshold'}
-			<AlertThresholdEditor />
-		{/if}
-	</div>
+		</div>
+	</StaffHub>
 </main>
 
 {#if bulkEditOpen && activeProfile}

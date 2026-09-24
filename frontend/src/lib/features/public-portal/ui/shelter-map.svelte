@@ -11,7 +11,7 @@
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
-	import { resolveMasterLabel } from '../domain/master-labels';
+	import { resolveMasterLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap } from '../application/queries';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
@@ -82,7 +82,8 @@
 		onLocationPick?: (lat: number, lng: number) => void;
 	} = $props();
 
-	const shelterTypeLabels = useShelterTypeLabelMap();
+	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
+	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
 	const SEARCH_RADIUS_FILL = 'search-radius-fill';
@@ -262,7 +263,7 @@
 						unspecified: 'Unspecified'
 					}
 				: { unspecified: '' };
-		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
+		return resolveMasterLabel(type, shelterTypeLabels, legacyEn);
 	}
 
 	onMount(async () => {
@@ -361,7 +362,8 @@
 		const map = mapInstance;
 
 		// Re-render popups when master-data labels arrive.
-		void shelterTypeLabels.data;
+		void shelterTypeLabelsQuery.data;
+		void shelterTypeLabels;
 
 		closeActivePopup();
 		// Clear old markers

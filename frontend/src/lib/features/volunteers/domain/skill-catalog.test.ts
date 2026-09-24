@@ -13,15 +13,28 @@ import {
 } from './skill-catalog';
 
 const MASTER: MasterSkillItem[] = [
-	{ code: 'kitchen', label: 'ประกอบอาหาร / ครัวสนาม', category: 'operational', status: 'active' },
+	{
+		code: 'kitchen',
+		label_th: 'ประกอบอาหาร / ครัวสนาม',
+		label_en: 'Kitchen / field kitchen',
+		category: 'operational',
+		status: 'active'
+	},
 	{
 		code: 'medical',
-		label: 'การแพทย์ / ปฐมพยาบาล',
+		label_th: 'การแพทย์ / ปฐมพยาบาล',
+		label_en: 'Medical / first aid',
 		category: 'controlled',
 		description: 'ต้องตรวจใบประกอบวิชาชีพ',
 		status: 'active'
 	},
-	{ code: 'retired', label: 'ทักษะที่เลิกใช้', category: 'operational', status: 'inactive' }
+	{
+		code: 'retired',
+		label_th: 'ทักษะที่เลิกใช้',
+		label_en: 'Retired skill',
+		category: 'operational',
+		status: 'inactive'
+	}
 ];
 
 const OPTIONS = skillOptionsFromMaster(MASTER);
@@ -34,12 +47,19 @@ describe('skillOptionsFromMaster', () => {
 	it('marks controlled items from `category` (both casings)', () => {
 		expect(OPTIONS.find((o) => o.code === 'medical')?.controlled).toBe(true);
 		expect(OPTIONS.find((o) => o.code === 'kitchen')?.controlled).toBe(false);
-		const upper = skillOptionsFromMaster([{ code: 'm', label: 'M', category: 'CONTROLLED' }]);
+		const upper = skillOptionsFromMaster([
+			{ code: 'm', label_th: 'M', label_en: 'M', category: 'CONTROLLED' }
+		]);
 		expect(upper[0].controlled).toBe(true);
 	});
 
 	it('defaults description to an empty string rather than undefined', () => {
 		expect(OPTIONS.find((o) => o.code === 'kitchen')?.description).toBe('');
+	});
+
+	it('formats labels by language', () => {
+		const en = skillOptionsFromMaster(MASTER, 'en');
+		expect(en.find((o) => o.code === 'medical')?.label).toBe('Medical / first aid');
 	});
 });
 

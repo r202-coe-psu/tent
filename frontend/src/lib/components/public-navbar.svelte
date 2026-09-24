@@ -355,7 +355,9 @@
 			</div>
 
 			<!-- Language Switcher (Desktop) -->
-			<div class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3">
+			<div
+				class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3"
+			>
 				<button
 					type="button"
 					onclick={toggleLanguage}

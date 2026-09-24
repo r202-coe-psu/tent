@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { SITE_KIND_LABELS } from '../domain/schema';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -28,7 +28,8 @@
 		// Still loading — show the raw code rather than falsely reporting it as deleted.
 		if (!items) return code;
 		// Not found once the master list has loaded means it was deleted upstream.
-		return items.find((i) => i.code === code)?.label ?? '—';
+		const item = items.find((i) => i.code === code);
+		return item ? formatMasterLabel(item, 'th') : '—';
 	};
 
 	const projectLevelLabel: Record<ProjectLevel, string> = {

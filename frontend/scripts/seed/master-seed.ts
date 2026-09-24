@@ -22,7 +22,7 @@ import { now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
-import { masterCode, type MasterLookup } from './types';
+import { type MasterLookup } from './types';
 import {
 	FALLBACK_UNIT_DEFINITIONS,
 	isCanonicalUnitCode,
@@ -30,9 +30,12 @@ import {
 	type FallbackUnitDef
 } from '$lib/features/catalog/domain/unit-of-measure';
 
-const itemCode = () => `item_${ulid().toLowerCase()}`;
 const canonicalUnitCodes = new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code));
 const legacySeedBaseUnits = new Set(['kit', 'tent']);
+
+function itemLabelTh(item: { label_th?: string; label?: string }): string {
+	return (item.label_th ?? item.label ?? '').trim();
+}
 
 function isKnownSeedUnitCode(
 	value: unknown,
@@ -155,16 +158,22 @@ export async function seedMasterData(): Promise<MasterLookup> {
 			`/registry/${encodeURIComponent(id)}`
 		);
 		const existing = getStatus === 200 ? (data as MasterData) : null;
-		const persistedByLabel = new Map((existing?.items ?? []).map((i) => [i.label, i]));
+		const existingItems = existing?.items ?? [];
+		const persistedByLabel = new Map(
+			existingItems.map((i) => [itemLabelTh(i as { label_th?: string; label?: string }), i])
+		);
+		const persistedByCode = new Map(existingItems.map((i) => [i.code, i]));
 		if (def.type === 'vulnerable_group' && existing?.items) {
 			for (const item of existing.items) {
-				const migratedKey = VG_LEGACY_LABEL_TO_KEY[item.label] ?? VG_CODE_MIGRATE[item.code];
+				const th = itemLabelTh(item as { label_th?: string; label?: string });
+				const migratedKey = VG_LEGACY_LABEL_TO_KEY[th] ?? VG_CODE_MIGRATE[item.code];
 				if (migratedKey) {
 					const target = def.items.find((d) => d.key === migratedKey);
-					if (target && !persistedByLabel.has(target.label)) {
-						persistedByLabel.set(target.label, {
+					if (target && !persistedByLabel.has(target.label_th)) {
+						persistedByLabel.set(target.label_th, {
 							...item,
-							label: target.label,
+							label_th: target.label_th,
+							label_en: target.label_en,
 							code: migratedKey
 						});
 					}
@@ -172,23 +181,33 @@ export async function seedMasterData(): Promise<MasterLookup> {
 			}
 		}
 
+		const takenCodes = new Set<string>();
 		const resolved: Record<string, MasterDataItem> = {};
 		const seeded: MasterDataItem[] = def.items.map((d) => {
-			const reuse = persistedByLabel.get(d.label);
+			const reuseByLabel = persistedByLabel.get(d.label_th);
+			const reuseByKey = persistedByCode.get(d.key);
+			const reuse = reuseByLabel ?? reuseByKey;
+			// Prefer semantic `d.key`. Rewrite seed-owned legacy `item_*` codes on re-seed
+			// when the target key is free.
+			let code = d.key;
+			if (reuse) {
+				const reuseCode = reuse.code;
+				const isLegacyUlid = /^item_/i.test(reuseCode);
+				if (!isLegacyUlid) {
+					code = reuseCode;
+				} else if (takenCodes.has(d.key) || (persistedByCode.has(d.key) && !reuseByKey)) {
+					code = reuseCode;
+				} else {
+					code = d.key;
+				}
+			}
+			takenCodes.add(code);
 			const item: MasterDataItem = {
-				code:
-					reuse?.code ??
-					(def.type === 'vulnerable_group' ||
-					def.type === 'housing_type' ||
-					def.type === 'pet_types'
-						? d.key
-						: itemCode()),
-				label: d.label,
+				code,
+				label_th: d.label_th,
+				label_en: d.label_en,
 				is_default: d.is_default ?? false,
 				status: 'active',
-				...(d.parent_key
-					? { parent_code: masterCode(master, def.parent_type!, d.parent_key) }
-					: {}),
 				...(d.category ? { category: d.category } : {}),
 				...(d.description ? { description: d.description } : {})
 			};
@@ -197,20 +216,20 @@ export async function seedMasterData(): Promise<MasterLookup> {
 		});
 		master[def.type] = resolved;
 
-		const seededLabels = new Set(def.items.map((d) => d.label));
+		const seededLabels = new Set(def.items.map((d) => d.label_th));
+		const seededKeys = new Set(def.items.map((d) => d.key));
 		const seededCodes = new Set(seeded.map((i) => i.code));
-		const extras = (existing?.items ?? []).filter((i) => {
-			if (seededLabels.has(i.label) || seededCodes.has(i.code)) return false;
+		const extras = existingItems.filter((i) => {
+			const th = itemLabelTh(i as { label_th?: string; label?: string });
+			if (seededLabels.has(th) || seededCodes.has(i.code) || seededKeys.has(i.code)) {
+				return false;
+			}
 			if (def.type === 'vulnerable_group') {
-				const migrated = VG_CODE_MIGRATE[i.code] ?? VG_LEGACY_LABEL_TO_KEY[i.label];
+				const migrated = VG_CODE_MIGRATE[i.code] ?? VG_LEGACY_LABEL_TO_KEY[th];
 				if (migrated) return false;
 			}
-			if (def.type === 'pet_types' && (i.code === 'bird' || i.label === 'นก')) return false;
-			if (
-				def.type === 'dietary_restrictions' &&
-				(i.label === 'มังสวิรัติ' || i.label === 'อาหารอ่อน')
-			)
-				return false;
+			// Drop seed-owned legacy ULID rows that were rewritten to d.key above
+			if (/^item_/i.test(i.code) && seededKeys.has(dKeyForLegacy(def, i))) return false;
 			return true;
 		});
 		const items = enforceOneDefault([...seeded, ...extras]);
@@ -219,14 +238,16 @@ export async function seedMasterData(): Promise<MasterLookup> {
 			_id: id,
 			...(existing?._rev ? { _rev: existing._rev } : {}),
 			type: 'master_data',
-			schema_v: 3,
+			schema_v: 4,
 			master_type: def.type,
 			items,
 			created_at: existing?.created_at ?? ts,
 			updated_at: ts,
 			created_by: 'seed'
 		});
-		const reused = seeded.filter((i) => persistedByLabel.has(i.label)).length;
+		const reused = seeded.filter(
+			(i) => persistedByLabel.has(i.label_th) || persistedByCode.has(i.code)
+		).length;
 		console.log(
 			`  ✓ registry: master_data ${def.type} (${seeded.length} seeded, ${reused} codes reused` +
 				`${extras.length ? `, ${extras.length} existing kept` : ''})`
@@ -234,6 +255,14 @@ export async function seedMasterData(): Promise<MasterLookup> {
 	}
 
 	return master;
+}
+
+function dKeyForLegacy(
+	def: (typeof MASTER_DATA_DEFS)[number],
+	item: { label_th?: string; label?: string; code: string }
+): string {
+	const th = itemLabelTh(item);
+	return def.items.find((d) => d.label_th === th)?.key ?? '';
 }
 
 export async function seedAppConfig(): Promise<void> {

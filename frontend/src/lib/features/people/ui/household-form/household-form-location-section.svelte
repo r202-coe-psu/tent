@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { fromStore } from 'svelte/store';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -18,19 +17,11 @@
 	let {
 		form,
 		mzVal = $bindable(),
-		commVal = $bindable(),
-		municipalityZoneItems,
-		communityItems,
-		mzPending,
-		commPending
+		commVal = $bindable()
 	}: {
 		form: SuperForm<HouseholdFormData>;
 		mzVal: string;
 		commVal: string;
-		municipalityZoneItems: { value: string; label: string }[];
-		communityItems: { value: string; label: string }[];
-		mzPending: boolean;
-		commPending: boolean;
 	} = $props();
 
 	/** SuperForm `.form` is a store — `fromStore` exposes rune-friendly `.current`. */
@@ -75,15 +66,7 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>เขตเทศบาล</Form.Label>
-					<SearchSelect
-						items={municipalityZoneItems}
-						bind:value={mzVal}
-						placeholder="เลือกเขต..."
-						emptyText="ไม่พบเขตที่ค้นหา"
-						loading={mzPending}
-						controlProps={props}
-						class="h-9 w-full"
-					/>
+					<Input {...props} bind:value={mzVal} placeholder="ระบุเขตเทศบาล..." class="h-9 w-full" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -93,15 +76,7 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ชุมชน</Form.Label>
-					<SearchSelect
-						items={communityItems}
-						bind:value={commVal}
-						placeholder="เลือกชุมชน..."
-						emptyText="ไม่พบชุมชนที่ค้นหา"
-						loading={commPending}
-						controlProps={props}
-						class="h-9 w-full"
-					/>
+					<Input {...props} bind:value={commVal} placeholder="ระบุชุมชน..." class="h-9 w-full" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

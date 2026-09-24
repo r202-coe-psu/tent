@@ -17,8 +17,6 @@ import {
 	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
-	Tent,
-	Home,
 	FlaskConical
 } from '@lucide/svelte/icons';
 
@@ -129,19 +127,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Database,
 				children: [
 					{
-						label: '1. ข้อมูลบุคคล',
-						href: resolve('/back-office/registration-config'),
-						icon: Users
-					},
-					{
-						label: '2. ตั้งค่าศูนย์พักพิง',
-						href: resolve('/back-office/shelter-config'),
-						icon: Tent
-					},
-					{
-						label: '3. ตั้งค่าครัวเรือน',
-						href: resolve('/back-office/household-master-data'),
-						icon: Home
+						label: 'Master Data',
+						href: resolve('/back-office/master-data'),
+						icon: Database
 					},
 					{
 						label: '4. คลังสินค้า',
@@ -152,11 +140,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: '5. พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
-					},
-					{
-						label: '6. ทักษะอาสาสมัคร',
-						href: resolve('/back-office/volunteer-skills'),
-						icon: HandHeart
 					},
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

@@ -3,7 +3,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { zoneLabel } from '../../index';
 	import { maskNationalId, type Evacuee, type Household } from '../../domain/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -28,28 +27,8 @@
 		onFinish: () => void;
 	} = $props();
 
-	// --- Queries for Master Data ---
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
-
-	// Resolve municipality_zone label
-	const resolvedMunicipalityZone = $derived.by(() => {
-		const code = createdHousehold.municipality_zone;
-		if (!code) return null;
-		const item = (municipalityZoneQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
-
-	// Resolve community label
-	const resolvedCommunity = $derived.by(() => {
-		const code = createdHousehold.community;
-		if (!code) return null;
-		const item = (communityQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
-
 	// --- Copy functionality ---
 	let copied = $state(false);
 	let copyTimeout: ReturnType<typeof setTimeout>;
@@ -188,9 +167,9 @@
 			<div>
 				<span class="text-xs text-muted-foreground">เขตพื้นที่ / ชุมชน</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
-					{resolvedMunicipalityZone || 'ไม่ได้ระบุ'}
-					{#if resolvedCommunity}
-						· ชุมชน {resolvedCommunity}
+					{createdHousehold.municipality_zone || 'ไม่ได้ระบุ'}
+					{#if createdHousehold.community}
+						· ชุมชน {createdHousehold.community}
 					{/if}
 					{#if createdHousehold.subdistrict}
 						· ต.{createdHousehold.subdistrict}
