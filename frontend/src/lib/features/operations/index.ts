@@ -111,6 +111,7 @@ export {
 	receivedItemSchema,
 	type ReceivedItemInput
 } from './domain/operations';
+export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 
 // Domain — donation queue slots (DN-5 · schema.md §2.13)
 export {

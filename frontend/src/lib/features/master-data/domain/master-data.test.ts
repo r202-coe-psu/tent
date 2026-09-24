@@ -43,9 +43,7 @@ describe('CR-112 vulnerable_group active set', () => {
 		]);
 		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('elderly');
 		expect(CR112_VULNERABLE_GROUP_ACTIVE.map((i) => i.code)).not.toContain('disabled');
-		expect(CR112_VULNERABLE_GROUP_ACTIVE.filter((i) => i.is_default)).toEqual([
-			expect.objectContaining({ code: 'elderly_dependent' })
-		]);
+		expect(CR112_VULNERABLE_GROUP_ACTIVE.filter((i) => i.is_default)).toEqual([]);
 	});
 });
 

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { untrack } from 'svelte';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -24,7 +25,12 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
-	import { formatPersonName, maskNationalId, matchesEvacueeSearch, zoneLabel } from '../../domain/people';
+	import {
+		formatPersonName,
+		maskNationalId,
+		matchesEvacueeSearch,
+		zoneLabel
+	} from '../../domain/people';
 	import { nextQueueLabel } from '../../domain/intake-pipeline';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
@@ -81,7 +87,7 @@
 		red: 'แดง'
 	};
 
-	let activeTab = $state<WorkflowTab>(initialTab);
+	let activeTab = $state<WorkflowTab>(untrack(() => initialTab));
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
 	let preRegChannelFilter = $state<PreRegChannelFilter>('all');
 	let allStatusFilter = $state<string>('all');

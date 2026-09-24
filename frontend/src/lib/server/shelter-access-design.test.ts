@@ -29,6 +29,7 @@ function expectForbidden(run: () => void, match: RegExp): void {
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
+const MANAGER: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
 const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 
 const envelope = {
@@ -1973,6 +1974,969 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(mutated, validGuard, REGISTRATION),
 				/Cannot change evacuee_id on one-time guard/
 			);
+		});
+	});
+
+	describe('Ticket-era Flow 2 VDU rules (Rules 12-14 / CR-121)', () => {
+		const validTicket = {
+			_id: 'requisition_ticket:01J00000000000000000000001',
+			type: 'requisition_ticket',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: WAREHOUSE.name,
+			ticket_no: 'TKT-FOOD-0001',
+			requisition_type: 'food',
+			status: 'PENDING_PICK',
+			meal: 'lunch',
+			source_location: 'warehouse:main',
+			destination_location: 'distribution_point:tent_a',
+			requested_by: WAREHOUSE.name,
+			items: [
+				{
+					item_id: 'item:cooked_rice',
+					item_name: 'Rice',
+					type_class: 'CONSUMABLE',
+					requested_qty: '50',
+					allocated_qty: '50'
+				}
+			]
+		};
+
+		const validFoodLog = {
+			_id: 'distribution_log:01J00000000000000000000001',
+			type: 'distribution_log',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: REGISTRATION.name,
+			ticket_id: 'requisition_ticket:01J00000000000000000000001',
+			item_id: 'item:cooked_rice',
+			qty: '2',
+			recipient_type: 'evacuee',
+			recipient_id: 'evacuee:01J00000000000000000000001',
+			household_id: 'household:01J00000000000000000000001',
+			meal: 'lunch',
+			is_returnable: false,
+			status: 'fulfilled',
+			is_override: false,
+			distributed_at: '2026-09-01T00:00:00.000Z',
+			distributed_by: REGISTRATION.name
+		};
+
+		const validReturnableLog = {
+			...validFoodLog,
+			_id: 'distribution_log:01J00000000000000000000002',
+			item_id: 'item:wheelchair',
+			is_returnable: true,
+			status: 'active'
+		};
+
+		const validPool = {
+			_id: 'bulk_return_pool:01J00000000000000000000001',
+			type: 'bulk_return_pool',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'user:wh1',
+			item_id: 'item:cot',
+			stock_ledger_id: 'stock_ledger:01J00000000000000000000001',
+			total_received_qty: '20',
+			claimed_qty: '0',
+			unclaimed_quota: '20',
+			status: 'ACTIVE'
+		};
+
+		describe('requisition_ticket VDU validation', () => {
+			const ticketFor = (creator: UserCtx, over: Doc = {}): Doc => ({
+				...validTicket,
+				created_by: creator.name,
+				requested_by: creator.name,
+				...over
+			});
+
+			it('allows creating valid requisition_ticket in PENDING_PICK', () => {
+				expect(() => compile()(validTicket, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects creating ticket with non-PENDING_PICK status', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, status: 'DISTRIBUTING' }, null, WAREHOUSE),
+					/Initial requisition_ticket status must be PENDING_PICK/
+				);
+			});
+
+			it('rejects invalid requisition_type or empty items', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, requisition_type: 'invalid' }, null, WAREHOUSE),
+					/Invalid requisition_type/
+				);
+				expectForbidden(
+					() => compile()({ ...validTicket, items: [] }, null, WAREHOUSE),
+					/must have at least one item/
+				);
+			});
+
+			it('rejects duplicate item_id lines', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...validTicket,
+								items: [
+									validTicket.items[0],
+									{ ...validTicket.items[0], item_name: 'Rice duplicate' }
+								]
+							},
+							null,
+							WAREHOUSE
+						),
+					/requisition_ticket item_id values must be unique/
+				);
+			});
+
+			it('allows legal status transition and rejects illegal transition', () => {
+				const ready = { ...validTicket, status: 'READY_FOR_DISPATCH', approved_by: MANAGER.name };
+				expect(() => compile()(ready, validTicket, MANAGER)).not.toThrow();
+
+				const illegal = { ...validTicket, status: 'DISTRIBUTING' };
+				expectForbidden(
+					() => compile()(illegal, validTicket, WAREHOUSE),
+					/Illegal requisition_ticket transition/
+				);
+			});
+
+			it('rejects mutating immutable ticket fields', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, ticket_no: 'FORGED' }, validTicket, WAREHOUSE),
+					/requisition_ticket.ticket_no is immutable/
+				);
+				expectForbidden(
+					() => compile()({ ...validTicket, requisition_type: 'supplies' }, validTicket, WAREHOUSE),
+					/requisition_ticket.requisition_type is immutable/
+				);
+			});
+
+			it('rejects decreasing requested_qty post DISTRIBUTING', () => {
+				const distributing = { ...validTicket, status: 'DISTRIBUTING' };
+				const decreased = {
+					...distributing,
+					items: [{ ...distributing.items[0], requested_qty: '20' }]
+				};
+				expectForbidden(
+					() => compile()(decreased, distributing, WAREHOUSE),
+					/requested_qty cannot be decreased or removed after DISTRIBUTING/
+				);
+			});
+
+			it('allows only allocation changes during a PENDING_PICK self-update', () => {
+				const allocated = {
+					...validTicket,
+					items: [{ ...validTicket.items[0], allocated_qty: '40' }]
+				};
+				expect(() => compile()(allocated, validTicket, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...allocated, items: [{ ...allocated.items[0], requested_qty: '40' }] },
+							validTicket,
+							WAREHOUSE
+						),
+					/PENDING_PICK allocation cannot change ticket item content/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...allocated, destination_location: 'distribution_point:other' },
+							validTicket,
+							WAREHOUSE
+						),
+					/PENDING_PICK self-updates may only change item allocation quantities/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...allocated,
+								items: [{ ...allocated.items[0], item_id: 'item:other' }]
+							},
+							validTicket,
+							WAREHOUSE
+						),
+					/PENDING_PICK allocation cannot change ticket item content/
+				);
+			});
+
+			it('enforces ticket-create roles and binds both creation actors', () => {
+				expect(() => compile()(ticketFor(MANAGER), null, MANAGER)).not.toThrow();
+				expect(() => compile()(ticketFor(ADMIN), null, ADMIN)).not.toThrow();
+				expectForbidden(
+					() => compile()(ticketFor(REGISTRATION), null, REGISTRATION),
+					/can create requisition_tickets/
+				);
+				expectForbidden(
+					() => compile()(ticketFor(KITCHEN), null, KITCHEN),
+					/can create requisition_tickets/
+				);
+				expectForbidden(
+					() => compile()({ ...ticketFor(WAREHOUSE), created_by: 'mallory' }, null, WAREHOUSE),
+					/created_by and requested_by must match/
+				);
+			});
+
+			it('gates ticket transitions, binds newly introduced actors, and preserves prior provenance', () => {
+				const pending = ticketFor(WAREHOUSE);
+				const ready = { ...pending, status: 'READY_FOR_DISPATCH', approved_by: MANAGER.name };
+				expect(() => compile()(ready, pending, MANAGER)).not.toThrow();
+				expectForbidden(
+					() => compile()(ready, pending, WAREHOUSE),
+					/can approve requisition_tickets/
+				);
+				expectForbidden(
+					() => compile()({ ...ready, approved_by: 'mallory' }, pending, MANAGER),
+					/approved_by must match/
+				);
+				expectForbidden(
+					() => compile()({ ...ready, created_by: 'mallory' }, pending, MANAGER),
+					/created_by is immutable/
+				);
+
+				const inTransit = { ...ready, status: 'IN_TRANSIT', dispatched_by: WAREHOUSE.name };
+				expect(() => compile()(inTransit, ready, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() => compile()(inTransit, ready, REGISTRATION),
+					/can dispatch requisition_tickets/
+				);
+				expectForbidden(
+					() => compile()({ ...inTransit, dispatched_by: 'mallory' }, ready, WAREHOUSE),
+					/dispatched_by must match/
+				);
+
+				const distributing = {
+					...inTransit,
+					status: 'DISTRIBUTING',
+					received_by: REGISTRATION.name
+				};
+				expect(() => compile()(distributing, inTransit, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()(distributing, inTransit, WAREHOUSE),
+					/can receive requisition_tickets at distribution points/
+				);
+				expectForbidden(
+					() => compile()({ ...distributing, received_by: 'mallory' }, inTransit, REGISTRATION),
+					/received_by must match/
+				);
+				expect(() =>
+					compile()(
+						{ ...pending, status: 'READY_FOR_DISPATCH', approved_by: ADMIN.name },
+						pending,
+						ADMIN
+					)
+				).not.toThrow();
+			});
+
+			it('keeps amendment history append-only and binds appended amendment actors', () => {
+				const distributing = {
+					...ticketFor(WAREHOUSE, { status: 'DISTRIBUTING' }),
+					approved_by: MANAGER.name,
+					dispatched_by: WAREHOUSE.name,
+					received_by: REGISTRATION.name,
+					items: [{ ...validTicket.items[0], allocated_qty: '51' }],
+					amendments: [
+						{
+							amendment_id: '01J00000000000000000000002',
+							item_id: 'item:cooked_rice',
+							added_qty: '1',
+							amended_at: '2026-09-01T01:00:00.000Z',
+							amended_by: WAREHOUSE.name
+						}
+					]
+				};
+				const appended = {
+					...distributing,
+					items: [{ ...distributing.items[0], allocated_qty: '52' }],
+					amendments: [
+						...distributing.amendments,
+						{
+							amendment_id: '01J00000000000000000000003',
+							item_id: 'item:cooked_rice',
+							added_qty: '1',
+							amended_at: '2026-09-01T02:00:00.000Z',
+							amended_by: WAREHOUSE.name
+						}
+					]
+				};
+				expect(() => compile()(appended, distributing, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...appended,
+								amendments: [{ ...appended.amendments[0], added_qty: '2' }, appended.amendments[1]]
+							},
+							distributing,
+							WAREHOUSE
+						),
+					/amendment history is immutable/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...appended,
+								amendments: [
+									...distributing.amendments,
+									{ ...appended.amendments[1], amended_by: 'mallory' }
+								]
+							},
+							distributing,
+							WAREHOUSE
+						),
+					/New requisition_ticket amendments must bind/
+				);
+				const noAmendment = {
+					...distributing,
+					items: [{ ...distributing.items[0], allocated_qty: '53' }]
+				};
+				expectForbidden(
+					() => compile()(noAmendment, distributing, WAREHOUSE),
+					/must append exactly one amendment/
+				);
+				const mismatchedDelta = {
+					...distributing,
+					items: [{ ...distributing.items[0], allocated_qty: '53' }],
+					amendments: [...distributing.amendments, { ...appended.amendments[1], added_qty: '1' }]
+				};
+				expectForbidden(
+					() => compile()(mismatchedDelta, distributing, WAREHOUSE),
+					/allocated_qty delta must equal appended amendment added_qty/
+				);
+				expectForbidden(
+					() => compile()({ ...appended, amendments: [] }, distributing, WAREHOUSE),
+					/amendments must be append-only/
+				);
+			});
+
+			it('authorizes warehouse return and transfer completion with the physical-receipt capability', () => {
+				const distributing = ticketFor(WAREHOUSE, { status: 'DISTRIBUTING' });
+				const shiftClosed = { ...distributing, status: 'SHIFT_CLOSED' };
+				expect(() => compile()(shiftClosed, distributing, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()(shiftClosed, distributing, WAREHOUSE),
+					/can close requisition_ticket shifts/
+				);
+				const returnPending = { ...shiftClosed, status: 'RETURN_PENDING_RECEIPT' };
+				expect(() => compile()(returnPending, shiftClosed, REGISTRATION)).not.toThrow();
+				const pendingReceipt = ticketFor(WAREHOUSE, { status: 'RETURN_PENDING_RECEIPT' });
+				const receiptComplete = { ...pendingReceipt, status: 'RETURN_COMPLETED' };
+				expect(() => compile()(receiptComplete, pendingReceipt, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() => compile()(receiptComplete, pendingReceipt, REGISTRATION),
+					/can receive warehouse returns/
+				);
+				const transfer = ticketFor(WAREHOUSE, {
+					requisition_type: 'transfer',
+					status: 'IN_TRANSIT'
+				});
+				expect(() =>
+					compile()({ ...transfer, status: 'COMPLETED' }, transfer, WAREHOUSE)
+				).not.toThrow();
+				expectForbidden(
+					() => compile()({ ...transfer, status: 'COMPLETED' }, transfer, REGISTRATION),
+					/can complete transfer requisition_tickets/
+				);
+				expect(() =>
+					compile()({ ...receiptComplete, status: 'COMPLETED' }, receiptComplete, WAREHOUSE)
+				).not.toThrow();
+			});
+		});
+
+		describe('distribution_log VDU validation', () => {
+			const logFor = (issuer: UserCtx, over: Doc = {}): Doc => ({
+				...validFoodLog,
+				created_by: issuer.name,
+				distributed_by: issuer.name,
+				...over
+			});
+
+			it('allows valid consumable and returnable distribution_log creation', () => {
+				expect(() => compile()(validFoodLog, null, REGISTRATION)).not.toThrow();
+				expect(() => compile()(validReturnableLog, null, REGISTRATION)).not.toThrow();
+			});
+
+			it('rejects hard-delete of distribution_log', () => {
+				expectForbidden(
+					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, REGISTRATION),
+					/Cannot delete distribution_log documents/
+				);
+			});
+
+			it('rejects mutating immutable issuance fields', () => {
+				expectForbidden(
+					() => compile()({ ...validFoodLog, qty: '5' }, validFoodLog, REGISTRATION),
+					/distribution_log.qty is immutable after issuance/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validFoodLog, ticket_id: 'requisition_ticket:01J99999999999999999999999' },
+							validFoodLog,
+							REGISTRATION
+						),
+					/distribution_log.ticket_id is immutable after issuance/
+				);
+			});
+
+			it('allows valid return on returnable log and rejects invalid return', () => {
+				const returned = {
+					...validReturnableLog,
+					status: 'returned',
+					qty_returned: '2',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: WAREHOUSE.name
+				};
+				expect(() => compile()(returned, validReturnableLog, WAREHOUSE)).not.toThrow();
+
+				// Missing returned_at
+				expectForbidden(
+					() => compile()({ ...returned, returned_at: undefined }, validReturnableLog, WAREHOUSE),
+					/Loan clear status requires return audit fields/
+				);
+			});
+
+			it('allows void with audit fields and rejects void without audit fields', () => {
+				const voided = {
+					...validFoodLog,
+					status: 'voided',
+					voided_at: '2026-09-01T01:00:00.000Z',
+					voided_by: REGISTRATION.name
+				};
+				expect(() => compile()(voided, validFoodLog, REGISTRATION)).not.toThrow();
+
+				expectForbidden(
+					() => compile()({ ...voided, voided_at: undefined }, validFoodLog, REGISTRATION),
+					/Voided logs require void audit fields/
+				);
+			});
+
+			it('rejects voiding loans once return or clear activity has begun', () => {
+				const partiallyReturned = {
+					...validReturnableLog,
+					status: 'partially_returned',
+					qty_returned: '1',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: WAREHOUSE.name
+				};
+				const voided = {
+					...partiallyReturned,
+					status: 'voided',
+					voided_at: '2026-09-01T02:00:00.000Z',
+					voided_by: 'user:staff1'
+				};
+				expectForbidden(
+					() => compile()(voided, partiallyReturned, REGISTRATION),
+					/Cannot void a distribution_log after return or clear activity has begun/
+				);
+			});
+
+			it('enforces log creation roles and issuance actor binding', () => {
+				expect(() => compile()(logFor(ADMIN), null, ADMIN)).not.toThrow();
+				expectForbidden(
+					() => compile()(logFor(WAREHOUSE), null, WAREHOUSE),
+					/can create distribution logs/
+				);
+				expectForbidden(
+					() =>
+						compile()({ ...logFor(REGISTRATION), distributed_by: 'mallory' }, null, REGISTRATION),
+					/created_by and distributed_by must match/
+				);
+			});
+
+			it('enforces transition-specific log roles and preserves issuance actors', () => {
+				const active = logFor(REGISTRATION, {
+					_id: 'distribution_log:01J00000000000000000000003',
+					item_id: 'item:wheelchair',
+					is_returnable: true,
+					status: 'active'
+				});
+				const routineReturn = {
+					...active,
+					status: 'returned',
+					qty_returned: '2',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: WAREHOUSE.name
+				};
+				expect(() => compile()(routineReturn, active, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() => compile()({ ...routineReturn, returned_by: REGISTRATION.name }, active, WAREHOUSE),
+					/returned_by must match/
+				);
+				expectForbidden(
+					() => compile()(routineReturn, active, REGISTRATION),
+					/record routine physical returns/
+				);
+				expectForbidden(
+					() => compile()({ ...routineReturn, created_by: 'mallory' }, active, WAREHOUSE),
+					/created_by is immutable after issuance/
+				);
+
+				const bulkReturned = {
+					...active,
+					status: 'returned',
+					qty_returned: '2',
+					clear_reason: 'bulk_dropoff',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: REGISTRATION.name
+				};
+				expect(() => compile()(bulkReturned, active, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()(bulkReturned, active, WAREHOUSE),
+					/can clear distribution logs/
+				);
+			});
+
+			it('allows successive partial returns by different physical-receipt actors only when quantity advances', () => {
+				const partial = logFor(REGISTRATION, {
+					_id: 'distribution_log:01J00000000000000000000004',
+					item_id: 'item:wheelchair',
+					is_returnable: true,
+					status: 'partially_returned',
+					qty_returned: '1',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: 'previous-warehouse-user'
+				});
+				const advanced = {
+					...partial,
+					qty_returned: '1.5',
+					returned_at: '2026-09-01T02:00:00.000Z',
+					returned_by: WAREHOUSE.name
+				};
+				expect(() => compile()(advanced, partial, WAREHOUSE)).not.toThrow();
+				expectForbidden(
+					() => compile()({ ...partial, returned_by: WAREHOUSE.name }, partial, WAREHOUSE),
+					/qty_returned must increase/
+				);
+			});
+
+			it('rejects forged void actors and terminal reopens', () => {
+				const forgedVoided = {
+					...logFor(REGISTRATION),
+					status: 'voided',
+					voided_at: '2026-09-01T01:00:00.000Z',
+					voided_by: 'mallory'
+				};
+				expectForbidden(
+					() => compile()(forgedVoided, validFoodLog, REGISTRATION),
+					/voided_by must match/
+				);
+				const voided = { ...forgedVoided, voided_by: REGISTRATION.name };
+				const returned = {
+					...logFor(REGISTRATION, { is_returnable: true, status: 'active' }),
+					status: 'returned',
+					qty_returned: '2',
+					clear_reason: 'routine',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: WAREHOUSE.name
+				};
+				expectForbidden(
+					() => compile()({ ...returned, status: 'active' }, returned, WAREHOUSE),
+					/Illegal distribution_log transition/
+				);
+				const lost = {
+					...logFor(REGISTRATION, { is_returnable: true, status: 'active' }),
+					status: 'lost',
+					clear_reason: 'lost',
+					returned_at: '2026-09-01T01:00:00.000Z',
+					returned_by: REGISTRATION.name,
+					notes: 'Not returned'
+				};
+				expect(() =>
+					compile()(
+						lost,
+						{
+							...lost,
+							status: 'active',
+							clear_reason: undefined,
+							returned_at: undefined,
+							returned_by: undefined,
+							notes: undefined
+						},
+						REGISTRATION
+					)
+				).not.toThrow();
+				expectForbidden(
+					() =>
+						compile()(
+							lost,
+							{
+								...lost,
+								status: 'active',
+								clear_reason: undefined,
+								returned_at: undefined,
+								returned_by: undefined,
+								notes: undefined
+							},
+							WAREHOUSE
+						),
+					/can clear distribution logs/
+				);
+				expectForbidden(
+					() => compile()({ ...lost, status: 'active' }, lost, REGISTRATION),
+					/Illegal distribution_log transition/
+				);
+				expectForbidden(
+					() => compile()({ ...voided, status: 'fulfilled' }, voided, REGISTRATION),
+					/Illegal distribution_log transition/
+				);
+				const waived = {
+					...lost,
+					status: 'waived',
+					clear_reason: 'waived',
+					notes: 'Approved waiver'
+				};
+				expectForbidden(
+					() => compile()({ ...waived, status: 'partially_returned' }, waived, REGISTRATION),
+					/Illegal distribution_log transition/
+				);
+			});
+		});
+
+		describe('bulk_return_pool VDU validation', () => {
+			const firstClaimId = 'bulk_return_claim:01J00000000000000000000003';
+			const secondClaimId = 'bulk_return_claim:01J00000000000000000000004';
+			const activeV2Pool = {
+				...validPool,
+				schema_v: 2,
+				claimed_qty: '4',
+				unclaimed_quota: '16',
+				claim_ids: [firstClaimId]
+			};
+
+			it('allows creating valid bulk_return_pool with status ACTIVE', () => {
+				expect(() => compile()(validPool, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects pool creation by a role without physical receipt authority', () => {
+				expectForbidden(
+					() => compile()(validPool, null, REGISTRATION),
+					/Only warehouse staff, supply coordinator, or shelter manager can create bulk return pool/
+				);
+			});
+
+			it('rejects creating pool with invalid equation', () => {
+				expectForbidden(
+					() => compile()({ ...validPool, unclaimed_quota: '15' }, null, WAREHOUSE),
+					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
+				);
+			});
+
+			it('enforces ACTIVE and EXHAUSTED quota states', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validPool, claimed_qty: '20', unclaimed_quota: '0', status: 'ACTIVE' },
+							null,
+							WAREHOUSE
+						),
+					/ACTIVE bulk_return_pool must have remaining quota/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...validPool, claimed_qty: '4', unclaimed_quota: '16', status: 'EXHAUSTED' },
+							null,
+							WAREHOUSE
+						),
+					/EXHAUSTED bulk_return_pool must have zero unclaimed quota/
+				);
+			});
+
+			it('rejects mutating immutable pool fields', () => {
+				expectForbidden(
+					() => compile()({ ...validPool, total_received_qty: '30' }, validPool, WAREHOUSE),
+					/bulk_return_pool.total_received_qty is immutable/
+				);
+			});
+
+			it('allows a canonical ACTIVE to EXHAUSTED quota claim', () => {
+				const exhausted = {
+					...activeV2Pool,
+					claimed_qty: '20',
+					unclaimed_quota: '0',
+					claim_ids: [firstClaimId, secondClaimId],
+					status: 'EXHAUSTED'
+				};
+				expect(() => compile()(exhausted, activeV2Pool, REGISTRATION)).not.toThrow();
+			});
+
+			it('rejects reopening EXHAUSTED capacity', () => {
+				const exhausted = {
+					...activeV2Pool,
+					claimed_qty: '20',
+					unclaimed_quota: '0',
+					claim_ids: [firstClaimId, secondClaimId],
+					status: 'EXHAUSTED'
+				};
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...exhausted, claimed_qty: '19', unclaimed_quota: '1', status: 'ACTIVE' },
+							exhausted,
+							REGISTRATION
+						),
+					/Invalid bulk_return_pool status transition EXHAUSTED -> ACTIVE/
+				);
+			});
+
+			it('rejects reversing claimed or unclaimed accounting', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claimed_qty: '2', unclaimed_quota: '18' },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/bulk_return_pool claimed_qty cannot decrease/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claimed_qty: '4', unclaimed_quota: '17' },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
+				);
+			});
+
+			it('allows an authorized append-only v2 quota claim and rejects unauthorized claim updates', () => {
+				const claimed = {
+					...activeV2Pool,
+					claimed_qty: '5',
+					unclaimed_quota: '15',
+					claim_ids: [firstClaimId, secondClaimId]
+				};
+				expect(() => compile()(claimed, activeV2Pool, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()(claimed, activeV2Pool, KITCHEN),
+					/Only frontline distribution staff can claim bulk return pool quota/
+				);
+			});
+
+			it('preserves v1 to v2 lazy upgrade only when it carries the first quota claim', () => {
+				const lazyUpgrade = {
+					...validPool,
+					schema_v: 2,
+					claimed_qty: '4',
+					unclaimed_quota: '16',
+					claim_ids: [firstClaimId]
+				};
+				expect(() => compile()(lazyUpgrade, validPool, REGISTRATION)).not.toThrow();
+				expectForbidden(
+					() => compile()({ ...validPool, schema_v: 2, claim_ids: [] }, validPool, REGISTRATION),
+					/bulk_return_pool v1 to v2 upgrade must include the first quota claim and claim_id/
+				);
+				expectForbidden(
+					() => compile()({ ...validPool, schema_v: 1 }, lazyUpgrade, REGISTRATION),
+					/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+				);
+			});
+
+			it('requires v2 claim_ids to remain unique and append-only', () => {
+				expectForbidden(
+					() => compile()({ ...activeV2Pool, claim_ids: [] }, activeV2Pool, REGISTRATION),
+					/Cannot remove claim_ids from bulk_return_pool/
+				);
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...activeV2Pool, claim_ids: [firstClaimId, firstClaimId] },
+							activeV2Pool,
+							REGISTRATION
+						),
+					/Duplicate claim_id in bulk_return_pool/
+				);
+			});
+
+			it('allows closing pool by warehouse_staff with audit fields and rejects non-authorized staff', () => {
+				const closed = {
+					...validPool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expect(() => compile()(closed, validPool, WAREHOUSE)).not.toThrow();
+
+				expectForbidden(
+					() => compile()(closed, validPool, REGISTRATION),
+					/Only warehouse staff, supply coordinator, or shelter manager can close bulk return pool/
+				);
+			});
+
+			it('rejects reopening a CLOSED bulk_return_pool', () => {
+				const closed = {
+					...validPool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expectForbidden(
+					() => compile()({ ...closed, status: 'ACTIVE' }, closed, WAREHOUSE),
+					/Invalid bulk_return_pool status transition CLOSED -> ACTIVE/
+				);
+			});
+
+			it('rejects changing accounting after a pool is CLOSED', () => {
+				const closed = {
+					...activeV2Pool,
+					status: 'CLOSED',
+					closed_at: '2026-09-01T02:00:00.000Z',
+					closed_by: 'user:wh1'
+				};
+				expectForbidden(
+					() =>
+						compile()({ ...closed, claimed_qty: '5', unclaimed_quota: '15' }, closed, WAREHOUSE),
+					/CLOSED bulk_return_pool accounting is immutable/
+				);
+			});
+		});
+
+		describe('stock_ledger reason/ref VDU alignment (Rule 13)', () => {
+			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+			const SHELTER_MGR: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
+			const SYS_ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+
+			it.each([
+				['warehouse_staff', WAREHOUSE],
+				['supply_coordinator', SUPPLY_COORD],
+				['shelter_manager', SHELTER_MGR],
+				['system_admin', SYS_ADMIN]
+			])('allows distribute referencing requisition_ticket from %s', (_role, userCtx) => {
+				const distTicket = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expect(() => compile()(distTicket, null, userCtx)).not.toThrow();
+			});
+
+			it('rejects distribute referencing requisition_ticket from unauthorized role', () => {
+				const distTicket = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expectForbidden(
+					() => compile()(distTicket, null, REGISTRATION),
+					/Only warehouse staff or managers can write stock ledger/
+				);
+			});
+
+			it('preserves legacy distribute authorization for distribution_batch', () => {
+				const distBatch = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'distribution_batch:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expect(() => compile()(distBatch, null, WAREHOUSE)).not.toThrow();
+				expect(() => compile()(distBatch, null, SYS_ADMIN)).not.toThrow();
+
+				expectForbidden(
+					() => compile()(distBatch, null, SUPPLY_COORD),
+					/Only warehouse staff or system admin can write distribute stock ledger/
+				);
+				expectForbidden(
+					() => compile()(distBatch, null, SHELTER_MGR),
+					/Only warehouse staff or system admin can write distribute stock ledger/
+				);
+			});
+
+			it('allows requisition referencing requisition_ticket or kitchen_requisition', () => {
+				const reqTicket = ledger({
+					qty: '-10',
+					reason: 'requisition',
+					ref_id: 'requisition_ticket:01J00000000000000000000001'
+				});
+				expect(() => compile()(reqTicket, null, WAREHOUSE)).not.toThrow();
+
+				const reqKitchen = ledger({
+					qty: '-10',
+					reason: 'requisition',
+					ref_id: 'kitchen_requisition:01J00000000000000000000001'
+				});
+				expect(() => compile()(reqKitchen, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('allows receive referencing meal_service, requisition_ticket, distribution_log, or bulk_return_pool', () => {
+				const receiveMeal = ledger({
+					qty: '50',
+					reason: 'receive',
+					ref_id: 'meal_service:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveMeal, null, WAREHOUSE)).not.toThrow();
+
+				const receiveTicket = ledger({
+					qty: '10',
+					reason: 'receive',
+					ref_id: 'requisition_ticket:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveTicket, null, WAREHOUSE)).not.toThrow();
+
+				const receiveLog = ledger({
+					qty: '1',
+					reason: 'receive',
+					ref_id: 'distribution_log:01J00000000000000000000001'
+				});
+				expect(() => compile()(receiveLog, null, WAREHOUSE)).not.toThrow();
+
+				const receivePool = ledger({
+					qty: '1',
+					reason: 'receive',
+					ref_id: 'bulk_return_pool:01J00000000000000000000001'
+				});
+				expect(() => compile()(receivePool, null, WAREHOUSE)).not.toThrow();
+			});
+
+			it('rejects distribute with invalid ref_id', () => {
+				const invalid = ledger({
+					qty: '-5',
+					reason: 'distribute',
+					ref_id: 'donation:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
+				});
+				expectForbidden(
+					() => compile()(invalid, null, WAREHOUSE),
+					/Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id/
+				);
+			});
+		});
+
+		describe('Tenancy isolation', () => {
+			it('rejects cross-shelter documents', () => {
+				expectForbidden(
+					() => compile()({ ...validTicket, shelter_code: 'SH002' }, null, WAREHOUSE),
+					/shelter_code must be SH001/
+				);
+				expectForbidden(
+					() => compile()({ ...validFoodLog, shelter_code: 'SH002' }, null, REGISTRATION),
+					/shelter_code must be SH001/
+				);
+				expectForbidden(
+					() => compile()({ ...validPool, shelter_code: 'SH002' }, null, WAREHOUSE),
+					/shelter_code must be SH001/
+				);
+			});
 		});
 	});
 });

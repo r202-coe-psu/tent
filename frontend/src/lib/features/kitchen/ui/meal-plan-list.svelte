@@ -268,10 +268,162 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4 p-4">
+{#snippet stageBadge(stage: PlanStage)}
+	{#if stage === 'draft'}
+		<span
+			class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900"
+		>
+			<Clock class="h-3 w-3" />
+			รอยืนยัน
+		</span>
+	{:else if stage === 'awaiting_requisition'}
+		<span
+			class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-900"
+		>
+			<Clock class="h-3 w-3" />
+			รอเบิก
+		</span>
+	{:else if stage === 'awaiting_service'}
+		<span
+			class="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-900"
+		>
+			<Clock class="h-3 w-3" />
+			รอบันทึก
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-900"
+		>
+			<CheckCircle class="h-3 w-3" />
+			สำเร็จ
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet planRecipes(plan: MealPlan)}
+	<p class="text-sm font-medium">
+		{plan.label ?? MEAL_PERIOD_LABELS[plan.meal]}
+	</p>
+	{#each plan.recipes ?? [] as recipe (recipe.recipe_id)}
+		{@const meta = recipeLabel(recipe.recipe_id)}
+		{@const unresolved = recipe.recipe_id.startsWith('item_master:')}
+		{@const shortfall = stockShortfall(recipe)}
+		<p
+			class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+			title={unresolved
+				? 'ชื่อวัตถุดิบในสูตรไม่ตรงกับชื่อในคลัง — แก้ชื่อให้ตรงกันเพื่อให้เบิกได้'
+				: shortfall > 0
+					? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
+					: recipe.recipe_id === RICE_RECIPE_ID
+						? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
+						: undefined}
+		>
+			{#if unresolved || shortfall > 0}
+				<TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+			{/if}
+			{meta.label}: {recipe.planned_qty.toLocaleString()}
+			{meta.unit}
+			{#if unresolved}
+				<span class="text-amber-600">(ยังไม่เชื่อมกับสต็อกจริง — ชื่อไม่ตรงกับคลัง)</span>
+			{:else if shortfall > 0}
+				<span class="text-amber-600">(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span>
+			{/if}
+		</p>
+	{/each}
+	{#each gasShortfalls(plan) as g (g.name)}
+		<p
+			class="mt-0.5 flex items-center gap-1 text-xs text-amber-600"
+			title="ถังแก๊สเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เติมแก๊สหรือแก้แผนก่อนเบิก"
+		>
+			<TriangleAlert class="h-3 w-3 shrink-0" />
+			แก๊ส {g.name}: เหลือ {g.remaining} kg (ต้องใช้ {g.consumption_kg} kg)
+		</p>
+	{/each}
+	{#if plan.override_reason}
+		<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
+			⚑ แก้ยอด: {plan.override_reason}
+		</p>
+	{/if}
+{/snippet}
+
+{#snippet planActions(plan: MealPlan, stage: PlanStage, stacked = false)}
+	{#if stage === 'draft'}
+		{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
+		<div class={stacked ? 'flex w-full flex-col gap-2' : 'flex items-center justify-center gap-1.5'}>
+			<Button
+				size="sm"
+				variant="outline"
+				class={stacked ? 'min-h-11 w-full' : ''}
+				onclick={() => handleConfirm(plan)}
+				disabled={confirm.isPending || blocked}
+				title={blocked
+					? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก หรือแก๊สไม่พอ) — แก้ก่อนยืนยัน'
+					: undefined}
+			>
+				ยืนยันแผน
+			</Button>
+			<div class={stacked ? 'flex w-full gap-2' : 'contents'}>
+				<Button
+					size="sm"
+					variant="outline"
+					class={stacked ? 'min-h-11 min-w-11 flex-1' : ''}
+					title="แก้ไขแผน (draft)"
+					onclick={() => openEdit(plan)}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					{#if stacked}<span class="sr-only">แก้ไข</span>{/if}
+				</Button>
+				<Button
+					size="sm"
+					variant="outline"
+					title="ลบแผน (draft)"
+					class="text-destructive hover:text-destructive {stacked ? 'min-h-11 min-w-11 flex-1' : ''}"
+					onclick={() => openDeleteConfirm(plan)}
+					disabled={deletePlan.isPending}
+				>
+					<Trash2 class="h-3.5 w-3.5" />
+					{#if stacked}<span class="sr-only">ลบ</span>{/if}
+				</Button>
+			</div>
+		</div>
+	{:else if stage === 'awaiting_requisition'}
+		<div class={stacked ? 'flex w-full flex-col gap-1' : 'flex flex-col items-center gap-1'}>
+			<Button
+				size="sm"
+				variant="outline"
+				class={stacked ? 'min-h-11 w-full' : ''}
+				onclick={() => openRequisition(plan)}
+				disabled={isBomSourced(plan)}
+				title={isBomSourced(plan)
+					? 'แผนนี้มีวัตถุดิบจากสูตร BOM ที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) เบิกไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน'
+					: undefined}
+			>
+				<PackageCheck class="mr-1 h-3.5 w-3.5" />
+				เบิกวัตถุดิบ
+			</Button>
+			{#if isBomSourced(plan)}
+				<p class="max-w-[220px] text-center text-2xs text-amber-600">
+					มีวัตถุดิบยังไม่เชื่อมกับสต็อกจริง (ชื่อไม่ตรงกับคลัง)
+				</p>
+			{/if}
+		</div>
+	{:else if stage === 'awaiting_service'}
+		<Button
+			size="sm"
+			variant="outline"
+			class={stacked ? 'min-h-11 w-full' : ''}
+			onclick={() => openService(plan)}
+		>
+			<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
+			บันทึกบริการ
+		</Button>
+	{/if}
+{/snippet}
+
+<div class="flex flex-col gap-4 p-4 sm:p-6">
 	<!-- SOP setup notice — master profiles are seeded by system_admin, not from here (CR-006) -->
 	{#if !sopProfile.isPending && !sopProfile.data}
-		<Card.Root class="border-amber-300 bg-amber-50">
+		<Card.Root class="border border-amber-200 bg-amber-50 shadow-2xs">
 			<Card.Content class="pt-4">
 				<p class="font-semibold text-amber-800">ยังไม่มีค่ามาตรฐาน SOP ในระบบ</p>
 				<p class="mt-0.5 text-xs text-amber-700">
@@ -282,12 +434,14 @@
 		</Card.Root>
 	{/if}
 
-	<!-- Table section -->
-	<Card.Root class="border-0 shadow-sm">
-		<Card.Header class="flex flex-row items-center justify-between py-4">
+	<!-- Table / card list -->
+	<Card.Root class="border border-slate-200/80 shadow-2xs">
+		<Card.Header
+			class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div class="flex items-start gap-3">
-				<div class="rounded-lg bg-blue-50 p-2">
-					<ClipboardList class="h-4 w-4 text-blue-500" />
+				<div class="rounded-lg border border-sky-200 bg-sky-50 p-2">
+					<ClipboardList class="h-4 w-4 text-sky-600" />
 				</div>
 				<div>
 					<Card.Title class="text-sm font-bold">
@@ -298,12 +452,16 @@
 					</Card.Description>
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				<Button onclick={() => openCreate('recipe')} class="rounded-full px-5">
+			<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+				<Button onclick={() => openCreate('recipe')} class="min-h-11 w-full rounded-lg px-5 sm:w-auto">
 					<Play class="mr-1.5 h-3.5 w-3.5" />
 					เพิ่มสูตรมาตรฐาน (BOM)
 				</Button>
-				<Button variant="outline" onclick={() => openCreate('custom')} class="rounded-full px-4">
+				<Button
+					variant="outline"
+					onclick={() => openCreate('custom')}
+					class="min-h-11 w-full rounded-lg px-4 sm:w-auto"
+				>
 					<FileText class="mr-1.5 h-3.5 w-3.5" />
 					กำหนดสูตรเอง (Custom)
 				</Button>
@@ -316,7 +474,41 @@
 			{:else if !plans.data?.length}
 				<p class="p-6 text-center text-sm text-muted-foreground">ยังไม่มีแผนอาหาร</p>
 			{:else}
-				<div class="overflow-x-auto">
+				<!-- Mobile cards (< md) -->
+				<div class="divide-y divide-border/60 md:hidden">
+					{#each paginatedPlans as plan (plan._id)}
+						{@const stage = planStage(plan)}
+						<article class="flex flex-col gap-3 p-4">
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<p class="font-mono text-xs font-semibold text-foreground">{planRef(plan)}</p>
+									<p class="text-xs text-muted-foreground">
+										{new Date(plan.created_at).toLocaleDateString('th-TH', {
+											day: '2-digit',
+											month: '2-digit',
+											year: 'numeric'
+										})}
+										· {formatTime(plan.created_at)} น.
+									</p>
+								</div>
+								{@render stageBadge(stage)}
+							</div>
+							<div>
+								{@render planRecipes(plan)}
+							</div>
+							<div class="flex items-baseline justify-between gap-2 border-t border-border/40 pt-2">
+								<span class="text-xs text-muted-foreground">ยอดจัดสรร</span>
+								<span class="text-sm font-semibold tabular-nums"
+									>{plan.headcount.total.toLocaleString()} คน</span
+								>
+							</div>
+							{@render planActions(plan, stage, true)}
+						</article>
+					{/each}
+				</div>
+
+				<!-- Desktop table (md+) -->
+				<div class="hidden overflow-x-auto md:block">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row class="text-xs">
@@ -329,6 +521,7 @@
 						</Table.Header>
 						<Table.Body>
 							{#each paginatedPlans as plan (plan._id)}
+								{@const stage = planStage(plan)}
 								<Table.Row>
 									<Table.Cell class="px-6 font-mono text-xs">
 										<p class="font-semibold text-foreground">{planRef(plan)}</p>
@@ -342,150 +535,17 @@
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
-										<p class="text-sm font-medium">
-											{plan.label ?? MEAL_PERIOD_LABELS[plan.meal]}
-										</p>
-										{#each plan.recipes ?? [] as recipe (recipe.recipe_id)}
-											{@const meta = recipeLabel(recipe.recipe_id)}
-											{@const unresolved = recipe.recipe_id.startsWith('item_master:')}
-											{@const shortfall = stockShortfall(recipe)}
-											<p
-												class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
-												title={unresolved
-													? 'ชื่อวัตถุดิบในสูตรไม่ตรงกับชื่อในคลัง — แก้ชื่อให้ตรงกันเพื่อให้เบิกได้'
-													: shortfall > 0
-														? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
-														: recipe.recipe_id === RICE_RECIPE_ID
-															? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
-															: undefined}
-											>
-												{#if unresolved || shortfall > 0}
-													<TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-												{/if}
-												{meta.label}: {recipe.planned_qty.toLocaleString()}
-												{meta.unit}
-												{#if unresolved}
-													<span class="text-amber-600"
-														>(ยังไม่เชื่อมกับสต็อกจริง — ชื่อไม่ตรงกับคลัง)</span
-													>
-												{:else if shortfall > 0}
-													<span class="text-amber-600"
-														>(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span
-													>
-												{/if}
-											</p>
-										{/each}
-										{#each gasShortfalls(plan) as g (g.name)}
-											<p
-												class="mt-0.5 flex items-center gap-1 text-xs text-amber-600"
-												title="ถังแก๊สเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เติมแก๊สหรือแก้แผนก่อนเบิก"
-											>
-												<TriangleAlert class="h-3 w-3 shrink-0" />
-												แก๊ส {g.name}: เหลือ {g.remaining} kg (ต้องใช้ {g.consumption_kg} kg)
-											</p>
-										{/each}
-										{#if plan.override_reason}
-											<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
-												⚑ แก้ยอด: {plan.override_reason}
-											</p>
-										{/if}
+										{@render planRecipes(plan)}
 									</Table.Cell>
 									<Table.Cell class="px-6 text-right">
-										<p class="font-semibold">{plan.headcount.total.toLocaleString()}</p>
+										<p class="font-semibold tabular-nums">{plan.headcount.total.toLocaleString()}</p>
 										<p class="text-xs text-muted-foreground">คน</p>
 									</Table.Cell>
-									{@const stage = planStage(plan)}
 									<Table.Cell class="px-6 text-center">
-										{#if stage === 'draft'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800"
-											>
-												<Clock class="h-3 w-3" />
-												รอยืนยัน
-											</span>
-										{:else if stage === 'awaiting_requisition'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
-											>
-												<Clock class="h-3 w-3" />
-												รอเบิก
-											</span>
-										{:else if stage === 'awaiting_service'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-xs font-medium text-purple-800"
-											>
-												<Clock class="h-3 w-3" />
-												รอบันทึก
-											</span>
-										{:else}
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
-											>
-												<CheckCircle class="h-3 w-3" />
-												สำเร็จ
-											</span>
-										{/if}
+										{@render stageBadge(stage)}
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
-										{#if stage === 'draft'}
-											{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
-											<div class="flex items-center justify-center gap-1.5">
-												<Button
-													size="sm"
-													variant="outline"
-													onclick={() => handleConfirm(plan)}
-													disabled={confirm.isPending || blocked}
-													title={blocked
-														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก หรือแก๊สไม่พอ) — แก้ก่อนยืนยัน'
-														: undefined}
-												>
-													ยืนยันแผน
-												</Button>
-												<Button
-													size="sm"
-													variant="outline"
-													title="แก้ไขแผน (draft)"
-													onclick={() => openEdit(plan)}
-												>
-													<Pencil class="h-3.5 w-3.5" />
-												</Button>
-												<Button
-													size="sm"
-													variant="outline"
-													title="ลบแผน (draft)"
-													class="text-destructive hover:text-destructive"
-													onclick={() => openDeleteConfirm(plan)}
-													disabled={deletePlan.isPending}
-												>
-													<Trash2 class="h-3.5 w-3.5" />
-												</Button>
-											</div>
-										{:else if stage === 'awaiting_requisition'}
-											<div class="flex flex-col items-center gap-1">
-												<Button
-													size="sm"
-													variant="outline"
-													onclick={() => openRequisition(plan)}
-													disabled={isBomSourced(plan)}
-													title={isBomSourced(plan)
-														? 'แผนนี้มีวัตถุดิบจากสูตร BOM ที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) เบิกไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน'
-														: undefined}
-												>
-													<PackageCheck class="mr-1 h-3.5 w-3.5" />
-													เบิกวัตถุดิบ
-												</Button>
-												{#if isBomSourced(plan)}
-													<p class="max-w-[220px] text-center text-2xs text-amber-600">
-														มีวัตถุดิบยังไม่เชื่อมกับสต็อกจริง (ชื่อไม่ตรงกับคลัง)
-													</p>
-												{/if}
-											</div>
-										{:else if stage === 'awaiting_service'}
-											<Button size="sm" variant="outline" onclick={() => openService(plan)}>
-												<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
-												บันทึกบริการ
-											</Button>
-										{/if}
+										{@render planActions(plan, stage)}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -493,7 +553,7 @@
 					</Table.Root>
 				</div>
 				{#if (plans.data?.length ?? 0) > PAGE_SIZE}
-					<div class="flex justify-end p-4">
+					<div class="flex justify-center p-4 sm:justify-end">
 						<Pagination.Root
 							bind:page={currentPage}
 							count={plans.data?.length ?? 0}

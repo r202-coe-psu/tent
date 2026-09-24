@@ -319,43 +319,90 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase
  *
  * Exported so the audit script checks the same table it enforces.
  */
-export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | null> = {
+type LedgerRefPrefix = string | null;
+export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
+
+export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	purchase: 'purchase:',
-	requisition: 'kitchen_requisition:',
+	requisition: ['requisition_ticket:', 'kitchen_requisition:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',
-	transfer_out: 'stock_transfer:',
+	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
-	distribute: 'distribution_batch:',
+	distribute: 'requisition_ticket:',
 	distribution_return: 'distribution_batch:',
-	receive: null // CR-055 Q-2: orphan enum value, kept but pinned to null
+	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
+
+function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {
+	return refId.startsWith(prefix) && refId.length > prefix.length;
+}
+
+/** Current schema.md §2.1 reference predicate for Ticket-era ledger writes. */
+export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	const rule = REF_PREFIX_BY_REASON[reason];
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (refId === null) return accepted.includes(null);
+	return accepted.some(
+		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
+	);
+}
 
 /**
  * Shared by the write guard (R1, below) and the receive form's pre-validation
  * (R9, `receiveInputSchema`) so both read the same table — the form only mirrors
  * the rule for the user's benefit; this schema is where it is enforced.
  */
-function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
-	const expected = REF_PREFIX_BY_REASON[reason];
-	if (expected === null) {
-		if (refId !== null) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['ref_id'],
-				message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
-			});
-		}
-		return;
-	}
-	if (!refId?.startsWith(expected)) {
+function checkRefIdAgainstRule(
+	reason: LedgerReason,
+	refId: string | null,
+	rule: LedgerRefRule,
+	ctx: z.RefinementCtx
+): void {
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['ref_id'],
-			message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${expected}'`
+			message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
 		});
+		return;
 	}
+	const prefixes = accepted.filter((value): value is string => typeof value === 'string');
+	ctx.addIssue({
+		code: 'custom',
+		path: ['ref_id'],
+		message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${prefixes.join("' หรือ '")}'`
+	});
+}
+
+/** Enforces the current schema.md §2.1 mapping for every new stock_ledger write. */
+function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
+	checkRefIdAgainstRule(reason, refId, REF_PREFIX_BY_REASON[reason], ctx);
+}
+
+/**
+ * Historical rows may carry these pre-Ticket Flow 2 references. They are never
+ * canonical Ticket-era writes; callers must opt into this compatibility path.
+ */
+export function isLegacyFlow2LedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	return (
+		(reason === 'distribute' &&
+			refId !== null &&
+			matchesLedgerRefPrefix(refId, 'distribution_batch:')) ||
+		(reason === 'receive' && refId === null)
+	);
+}
+
+function checkLegacyFlow2RefId(
+	reason: LedgerReason,
+	refId: string | null,
+	ctx: z.RefinementCtx
+): void {
+	if (isLegacyFlow2LedgerRef(reason, refId)) return;
+	checkRefId(reason, refId, ctx);
 }
 
 /**
@@ -364,22 +411,25 @@ function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.Refinemen
  * (`stockBalance`, `calculateReserved`, `LedgerTable`) must keep tolerating
  * older rows that predate this rule (CR-055 R5).
  */
-export const stockLedgerInputSchema = z
-	.object({
-		item_id: z.string().min(1),
-		qty: qtyStrCoerceSignedNonZeroSchema,
-		unit: z.string().trim().min(1),
-		reason: ledgerReasonSchema,
-		ref_id: z.string().nullable().default(null),
-		lot_ref: z
-			.string()
-			.regex(/^stock_ledger:.+/)
-			.optional(),
-		lot: stockLotSchema.optional(),
-		occurred_at: z.string().optional()
-	})
-	.superRefine((d, ctx) => {
-		checkRefId(d.reason, d.ref_id, ctx);
+const stockLedgerInputBaseSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceSignedNonZeroSchema,
+	unit: z.string().trim().min(1),
+	reason: ledgerReasonSchema,
+	ref_id: z.string().nullable().default(null),
+	lot_ref: z
+		.string()
+		.regex(/^stock_ledger:.+/)
+		.optional(),
+	lot: stockLotSchema.optional(),
+	occurred_at: z.string().optional()
+});
+
+function stockLedgerInputSchemaWith(
+	validateRefId: (reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx) => void
+) {
+	return stockLedgerInputBaseSchema.superRefine((d, ctx) => {
+		validateRefId(d.reason, d.ref_id, ctx);
 		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
 			ctx.addIssue({
 				code: 'custom',
@@ -388,7 +438,12 @@ export const stockLedgerInputSchema = z
 			});
 		}
 	});
+}
+
+export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+
+const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
 /** Full persisted stock_ledger contract used before signed-sum calculations. */
 export const stockLedgerDocSchema = z
@@ -430,21 +485,20 @@ export function parseStockLedger(input: unknown): StockLedger {
 }
 
 /**
- * The single factory every `stock_ledger` writer must go through (CR-055 R7) —
- * it is where the `reason` ↔ `ref_id` invariant is enforced, so a writer that
- * assembles the doc by hand silently escapes it.
+ * Canonical factory every new `stock_ledger` writer must go through (CR-055 R7) —
+ * it is where the current `reason` ↔ `ref_id` invariant is enforced. The only
+ * exception is the explicitly named legacy Flow 2 compatibility factory below.
  *
  * `id` exists for callers that need the `_id` BEFORE the write, so they can
  * store it on another doc in the same `bulkDocs` batch — kitchen
  * `issueRequisition` puts them on `kitchen_requisition.ledger_ids`. Omit it and
  * `makeDoc` mints a ULID as usual.
  */
-export function createStockLedger(
-	input: StockLedgerInput,
+function createParsedStockLedger(
+	d: z.output<typeof stockLedgerInputBaseSchema>,
 	ctx: AuthorContext,
 	id?: string
 ): StockLedger {
-	const d = stockLedgerInputSchema.parse(input);
 	const entry = makeDoc(
 		'stock_ledger',
 		4,
@@ -471,6 +525,27 @@ export function createStockLedger(
 		throw new Error('New inbound stock ledger lot_ref must equal its own _id');
 	}
 	return { ...entry, lot_ref: entry._id };
+}
+
+export function createStockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(stockLedgerInputSchema.parse(input), ctx, id);
+}
+
+/**
+ * Explicit compatibility writer for the still-supported legacy Flow 2 runtime.
+ * New Ticket-era code must call createStockLedger and therefore use the
+ * canonical schema.md mapping above.
+ */
+export function createLegacyFlow2StockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(legacyFlow2StockLedgerInputSchema.parse(input), ctx, id);
 }
 
 export const receiveSourceSchema = z.enum([
@@ -548,7 +623,7 @@ export const distributeInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z.string().regex(/^requisition_ticket:.+/, 'ref_id must reference a requisition ticket'),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	note: z.string().trim().optional(), // Used to store destination in lot.note
 	occurred_at: z.string().optional()

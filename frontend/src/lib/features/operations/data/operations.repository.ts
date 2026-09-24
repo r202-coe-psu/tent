@@ -34,6 +34,13 @@ export interface OperationsRepository {
 	addLedgerEntry(entry: StockLedger): Promise<StockLedger>;
 
 	/**
+	 * Fetch a single stock ledger entry by exact document ID.
+	 * Returns null if not found. Used for deterministic LEDGER_ONLY recovery
+	 * after a ConflictError from addLedgerEntry.
+	 */
+	getLedgerEntry(id: string): Promise<StockLedger | null>;
+
+	/**
 	 * Retrieve all stock ledger entries in the current shelter database.
 	 */
 	listLedger(): Promise<StockLedger[]>;

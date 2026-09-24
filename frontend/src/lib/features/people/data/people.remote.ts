@@ -86,12 +86,7 @@ function matchesHouseholdSearch(
 }
 
 function hasEvacueeClientFilters(search?: string, filters?: EvacueeFilters): boolean {
-	return !!(
-		search?.trim() ||
-		filters?.specialNeed ||
-		filters?.zone ||
-		filters?.status
-	);
+	return !!(search?.trim() || filters?.specialNeed || filters?.zone || filters?.status);
 }
 
 function hasHouseholdClientFilters(search?: string, filters?: HouseholdFilters): boolean {

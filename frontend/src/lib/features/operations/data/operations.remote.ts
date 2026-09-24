@@ -134,6 +134,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return this.repo.put(entry);
 	}
 
+	async getLedgerEntry(id: string): Promise<StockLedger | null> {
+		return this.repo.get<StockLedger>(id);
+	}
+
 	async listLedger(): Promise<StockLedger[]> {
 		return this.repo.allByType('stock_ledger', isStockLedger);
 	}
@@ -208,7 +212,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		}
 
 		const requestId = `distribution_request:direct-${ulid()}`;
-		const batchId = entry.ref_id ?? `distribution_batch:direct-${ulid()}`;
+		// Ticket-era ledger rows point at the requisition ticket, while reservation
+		// claims retain the distribution_batch namespace required by their schema.
+		// Keep those identities separate for direct distribution operations.
+		const batchId = entry.ref_id?.startsWith('distribution_batch:')
+			? entry.ref_id
+			: `distribution_batch:direct-${operationId}`;
 		const requestedQty = qtyAbs(entry.qty);
 		const resId = await makeLotReservationDocId(lotRef);
 

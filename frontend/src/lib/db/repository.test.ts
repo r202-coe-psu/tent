@@ -50,9 +50,7 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 				const id = (doc as { _id: string })._id;
 				return id >= startkey && id <= endkey;
 			})
-			.sort((a, b) =>
-				(a as { _id: string })._id.localeCompare((b as { _id: string })._id)
-			);
+			.sort((a, b) => (a as { _id: string })._id.localeCompare((b as { _id: string })._id));
 
 		if (skip > 0) docs = docs.slice(skip);
 		if (limit != null && Number.isFinite(limit)) docs = docs.slice(0, limit);

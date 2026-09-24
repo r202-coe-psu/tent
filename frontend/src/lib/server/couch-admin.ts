@@ -114,6 +114,26 @@ export async function requireAdmin(cookie: string | null): Promise<string> {
 }
 
 /**
+ * Authorize a cross-shelter back-office operation as an app system admin or
+ * CouchDB server admin. Unlike {@link requireAdmin}, this accepts the app's
+ * `system_admin` role as well as CouchDB's `_admin` role.
+ */
+export async function requireSystemAdmin(cookie: string | null): Promise<Caller> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+	});
+	const data = (await res.json().catch(() => null)) as {
+		userCtx?: { name: string | null; roles: string[] };
+	} | null;
+	const name = data?.userCtx?.name;
+	const roles = data?.userCtx?.roles ?? [];
+	if (!name) throw error(401, 'Authentication required');
+	if (!isSystemAdmin(roles)) throw error(403, 'System admin privileges required');
+	return { name, roles, isSA: true, shelterCode: shelterCodeFromRoles(roles) };
+}
+
+/**
  * Authorize a shelter-scoped write: SA can edit any shelter; shelter_manager
  * may only edit shelters matching their own `shelterCode` scope. Resolves the
  * caller from the session cookie and returns the {@link Caller} so the handler

@@ -1,5 +1,6 @@
 /** Public API of the `login` feature. */
 export { loginSchema, type LoginInput } from './domain/schema';
+export { resolveLoginIdentifier } from './data/resolve-login';
 export { default as LoginForm } from './ui/login-form.svelte';
 export { default as GoogleSignInButton } from './ui/google-sign-in-button.svelte';
 export { default as ThaIdSignInButton } from './ui/thaid-sign-in-button.svelte';

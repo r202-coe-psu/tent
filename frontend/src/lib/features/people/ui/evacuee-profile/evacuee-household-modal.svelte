@@ -118,9 +118,7 @@
 	);
 
 	const householdHits = $derived(
-		searchResults.filter(
-			(hit) => !!hit.household_id && joinableHouseholdIds.has(hit.household_id)
-		)
+		searchResults.filter((hit) => !!hit.household_id && joinableHouseholdIds.has(hit.household_id))
 	);
 
 	const selectedHousehold = $derived(
@@ -288,9 +286,7 @@
 													: 'border-border'}"
 												onclick={() => selectHit(hit)}
 											>
-												<span class="font-semibold text-foreground"
-													>{formatPersonName(hit)}</span
-												>
+												<span class="font-semibold text-foreground">{formatPersonName(hit)}</span>
 												{#if hit.phone}
 													<span class="text-muted-foreground"> · {hit.phone}</span>
 												{/if}

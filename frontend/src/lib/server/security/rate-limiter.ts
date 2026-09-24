@@ -77,6 +77,12 @@ export class RateLimiter {
  */
 export const loginCaptchaIpLimiter = new RateLimiter(60_000, 10);
 
+/**
+ * Staff login identifier resolve (username ↔ phone). Enumeration-ish surface —
+ * same budget as captcha verify so a script cannot walk the phone book.
+ */
+export const loginResolveIpLimiter = new RateLimiter(60_000, 10);
+
 /** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
 export const donationIpLimiter = new RateLimiter(60000, 3);
 /** Same, per phone number, so one abuser cannot spread across IPs. */

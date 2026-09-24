@@ -33,6 +33,7 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Check from '@lucide/svelte/icons/check';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
@@ -41,6 +42,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
@@ -64,6 +66,9 @@
 		useSkillOptions,
 		useUpdateJob
 	} from '../application/queries';
+
+	/** Phone / tablet portrait — Sheet instead of the wide dialog. */
+	const isMobile = new IsMobile();
 
 	/** Superforms holds the schema's OUTPUT shape — defaults already materialised. */
 	type JobFormValues = z.output<typeof jobInputSchema>;
@@ -464,20 +469,15 @@
 	}
 </script>
 
-<Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
-		<div class="flex items-center gap-2 border-b border-border px-4 py-4 pr-12 sm:px-6">
-			<Dialog.Title class="flex items-center gap-2 text-lg font-semibold">
-				<Briefcase class="size-5 text-primary" />
-				{isEdit ? 'แก้ไขภารกิจงานอาสา' : 'ประกาศภารกิจงานอาสาใหม่'}
-			</Dialog.Title>
-		</div>
+{#snippet jobFormTitle()}
+	<span class="flex items-center gap-2 text-lg font-semibold">
+		<Briefcase class="size-5 text-primary" />
+		{isEdit ? 'แก้ไขภารกิจงานอาสา' : 'ประกาศภารกิจงานอาสาใหม่'}
+	</span>
+{/snippet}
 
-		<form
-			method="POST"
-			use:form.enhance
-			class="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5 sm:px-6"
-		>
+{#snippet jobFormFields()}
+	<form method="POST" use:form.enhance class="space-y-6 px-4 py-5 sm:px-6">
 			<Form.Field {form} name="title">
 				<Form.Control>
 					{#snippet children({ props })}
@@ -516,7 +516,7 @@
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center gap-1 {!$formData.is_urgent
+						class="min-h-11 justify-center gap-1 {!$formData.is_urgent
 							? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
 							: ''}"
 						aria-pressed={!$formData.is_urgent}
@@ -527,7 +527,7 @@
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center gap-1 {$formData.is_urgent
+						class="min-h-11 justify-center gap-1 {$formData.is_urgent
 							? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
 							: ''}"
 						aria-pressed={$formData.is_urgent}
@@ -540,13 +540,13 @@
 
 			<div class="space-y-2">
 				<span class="text-sm font-medium">สถานะการรับสมัคร (LIFECYCLE STATUS)</span>
-				<div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+				<div class="grid grid-cols-2 gap-2 md:grid-cols-5">
 					{#each STATUS_OPTIONS as option (option.value)}
 						{@const selected = $formData.status === option.value}
 						<Button
 							type="button"
 							variant="outline"
-							class="!h-11 justify-center {selected ? option.selectedClass : ''}"
+							class="min-h-11 justify-center {selected ? option.selectedClass : ''}"
 							aria-pressed={selected}
 							onclick={() => ($formData.status = option.value)}
 						>
@@ -554,7 +554,7 @@
 						</Button>
 					{/each}
 				</div>
-				<p class="text-[11px] text-muted-foreground">
+				<p class="text-xs text-muted-foreground">
 					ค่าที่เลือกที่นี่จะถูกบันทึกตามที่เลือก — ระบบจะปรับเป็น "เต็มโควตา" ให้เองก็ต่อเมื่อ
 					โควตาถูกจองครบจริงในการมอบหมาย/ตอบรับครั้งถัดไป
 				</p>
@@ -574,13 +574,13 @@
 					คลิกเพื่อเลือกทักษะที่อ้างอิงจาก Master List
 					(ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
 				</p>
-				<div class="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-2">
+				<div class="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 md:grid-cols-2">
 					{#each skillsList as skill (skill.code)}
 						{@const checked = $formData.skills_required.some(
 							(v) => toSkillCode(v, skillsList) === skill.code
 						)}
 						<label
-							class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
+							class="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
 								? 'border-primary bg-primary/5'
 								: 'border-border hover:bg-muted/40'}"
 						>
@@ -590,7 +590,7 @@
 									<span aria-hidden="true">{skill.icon}</span>
 									<span class="truncate">{skill.label}</span>
 									{#if skill.controlled}
-										<Badge variant="outline" class="shrink-0 text-[10px]">🔒 ควบคุม</Badge>
+										<Badge variant="outline" class="shrink-0 text-xs">🔒 ควบคุม</Badge>
 									{/if}
 								</span>
 								<span class="mt-0.5 block text-muted-foreground">{skill.description}</span>
@@ -613,12 +613,12 @@
 					</div>
 					<!-- Full-width 2-up on narrow screens; the English suffixes are the
 					     first thing to go, since they only restate the Thai label. -->
-					<div class="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:flex sm:w-auto">
+					<div class="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1 md:flex md:w-auto">
 						<Button
 							type="button"
 							size="sm"
 							variant={shiftMode === 'single' ? 'default' : 'ghost'}
-							class="w-full justify-center text-xs sm:w-auto"
+							class="min-h-11 w-full justify-center text-xs md:w-auto"
 							onclick={() => (shiftMode = 'single')}
 						>
 							<Plus class="mr-1 size-3.5 shrink-0" />
@@ -630,7 +630,7 @@
 							type="button"
 							size="sm"
 							variant={shiftMode === 'batch' ? 'default' : 'ghost'}
-							class="w-full justify-center text-xs sm:w-auto"
+							class="min-h-11 w-full justify-center text-xs md:w-auto"
 							onclick={() => (shiftMode = 'batch')}
 						>
 							<Zap class="mr-1 size-3.5 shrink-0" />
@@ -642,30 +642,30 @@
 				</div>
 
 				{#if shiftMode === 'single'}
-					<div class="grid items-end gap-3 rounded-lg border border-border p-3 sm:grid-cols-12">
-						<label class="space-y-1 sm:col-span-3">
+					<div class="grid grid-cols-1 items-end gap-3 rounded-lg border border-border p-3 md:grid-cols-12">
+						<label class="space-y-1 md:col-span-3">
 							<span class="text-xs font-medium">วันที่ทำงาน</span>
 							<DatePicker bind:value={singleDate} />
 						</label>
-						<label class="space-y-1 sm:col-span-3">
+						<label class="space-y-1 md:col-span-3">
 							<span class="text-xs font-medium">วันที่สิ้นสุดกะ</span>
 							<DatePicker bind:value={singleEndDate} />
 						</label>
-						<label class="space-y-1 sm:col-span-2">
+						<label class="space-y-1 md:col-span-2">
 							<span class="text-xs font-medium">เวลาเข้ากะ</span>
 							<TimePicker bind:value={singleStart} />
 						</label>
-						<label class="space-y-1 sm:col-span-2">
+						<label class="space-y-1 md:col-span-2">
 							<span class="text-xs font-medium">เวลาออกกะ</span>
 							<TimePicker bind:value={singleEnd} />
 						</label>
-						<label class="space-y-1 sm:col-span-2">
+						<label class="space-y-1 md:col-span-2">
 							<span class="text-xs font-medium">จำนวนรับ (คน)</span>
 							<Input type="number" min="1" bind:value={singleSeats} class="!h-11" />
 						</label>
 						<Button
 							type="button"
-							class="!h-11 sm:col-span-2 sm:col-start-11"
+							class="min-h-11 w-full md:col-span-2 md:col-start-11 md:w-auto"
 							disabled={!canAddSingle}
 							onclick={addSingleShift}
 						>
@@ -674,7 +674,7 @@
 					</div>
 				{:else}
 					<div class="space-y-3 rounded-lg border border-border p-3">
-						<div class="grid gap-3 sm:grid-cols-2">
+						<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 							<label class="space-y-1">
 								<span class="text-xs font-medium">📅 วันที่เริ่มสร้างกะ (Start Date)</span>
 								<DatePicker bind:value={batchStart} />
@@ -684,7 +684,7 @@
 								<DatePicker bind:value={batchEnd} />
 							</label>
 						</div>
-						<div class="grid gap-3 sm:grid-cols-3">
+						<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 							<label class="space-y-1">
 								<span class="text-xs font-medium">⏰ เวลาเข้ากะ (Start)</span>
 								<TimePicker bind:value={batchStartTime} />
@@ -707,7 +707,7 @@
 										type="button"
 										size="sm"
 										variant="ghost"
-										class="text-primary"
+										class="min-h-11 text-primary"
 										onclick={() => (batchWeekdays = [...ALL_WEEKDAYS])}
 									>
 										ทุกวัน
@@ -716,7 +716,7 @@
 										type="button"
 										size="sm"
 										variant="ghost"
-										class="text-primary"
+										class="min-h-11 text-primary"
 										onclick={() => (batchWeekdays = [...WEEKDAYS_MON_FRI])}
 									>
 										จันทร์ - ศุกร์
@@ -725,14 +725,14 @@
 										type="button"
 										size="sm"
 										variant="ghost"
-										class="text-amber-600"
+										class="min-h-11 text-amber-600"
 										onclick={() => (batchWeekdays = [...WEEKENDS])}
 									>
 										เสาร์ - อาทิตย์
 									</Button>
 								</div>
 							</div>
-							<div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+							<div class="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
 								{#each WEEKDAYS as day (day.value)}
 									{@const active = batchWeekdays.includes(day.value)}
 									<Button
@@ -740,7 +740,7 @@
 										size="sm"
 										variant={active ? 'default' : 'outline'}
 										aria-pressed={active}
-										class="w-full justify-center px-1 text-xs"
+										class="min-h-11 w-full justify-center px-1 text-xs"
 										onclick={() => toggleWeekday(day.value)}
 									>
 										{#if active}<Check class="mr-1 size-3" />{/if}
@@ -752,13 +752,13 @@
 
 						<Button
 							type="button"
-							class="!h-11 w-full"
+							class="min-h-11 w-full"
 							disabled={!canGenerateBatch}
 							onclick={generateBatch}
 						>
 							<Zap class="mr-1 size-4 shrink-0" />
-							<span class="sm:hidden">สร้างชุดกะย่อย</span>
-							<span class="hidden sm:inline">ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)</span>
+							<span class="md:hidden">สร้างชุดกะย่อย</span>
+							<span class="hidden md:inline">ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)</span>
 						</Button>
 					</div>
 				{/if}
@@ -769,7 +769,7 @@
 						{#if shifts.length > 0}
 							<button
 								type="button"
-								class="text-xs font-medium text-destructive hover:underline"
+								class="min-h-11 text-xs font-medium text-destructive hover:underline"
 								onclick={clearShifts}
 							>
 								ลบทั้งหมด ({shifts.length})
@@ -795,22 +795,22 @@
 										{index + 1}
 									</span>
 									<span class="font-semibold text-primary">📅 {shift.date}</span>
-									<span class="hidden text-muted-foreground/50 sm:inline">|</span>
+									<span class="hidden text-muted-foreground/50 md:inline">|</span>
 									<span class="font-semibold text-destructive">
 										⏰ {shift.start_time} - {shift.end_time}
 									</span>
 									{#if shift.end_date !== shift.date}
-										<Badge variant="outline" class="shrink-0 text-[10px]">
+										<Badge variant="outline" class="shrink-0 text-xs">
 											ถึง {shift.end_date}
 										</Badge>
 									{/if}
-									<span class="hidden text-muted-foreground/50 sm:inline">|</span>
+									<span class="hidden text-muted-foreground/50 md:inline">|</span>
 									<span class="font-semibold text-emerald-600">👥 รับ {shift.quota} คน</span>
 									<Button
 										type="button"
 										variant="ghost"
 										size="icon"
-										class="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+										class="ml-auto min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-foreground"
 										aria-label={`แก้ไขกะวันที่ ${shift.date}`}
 										onclick={() => openEditShift(shift)}
 									>
@@ -820,7 +820,7 @@
 										type="button"
 										variant="ghost"
 										size="icon"
-										class="shrink-0 text-muted-foreground hover:text-destructive"
+										class="min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-destructive"
 										aria-label={`ลบกะวันที่ ${shift.date}`}
 										onclick={() => removeShift(shift.id)}
 									>
@@ -843,37 +843,72 @@
 				<p class="text-sm font-medium text-destructive">{$errors._errors.join(', ')}</p>
 			{/if}
 		</form>
+{/snippet}
 
-		<div
-			class="flex flex-col-reverse gap-2 border-t border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6"
+{#snippet jobFormActions()}
+	<div
+		class="flex flex-col-reverse gap-2 border-t border-border px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-end sm:px-6"
+	>
+		<Button
+			type="button"
+			variant="ghost"
+			class="min-h-11 w-full sm:w-auto"
+			onclick={() => handleOpenChange(false)}
 		>
-			<Button
-				type="button"
-				variant="ghost"
-				class="w-full sm:w-auto"
-				onclick={() => handleOpenChange(false)}
-			>
-				ยกเลิก
-			</Button>
-			<Button
-				type="submit"
-				class="!h-11 w-full sm:w-auto sm:min-w-[220px]"
-				disabled={isPending}
-				onclick={() => form.submit()}
-			>
-				{#if isPending}
-					กำลังบันทึก...
-				{:else}
-					<Check class="mr-1 size-4" />
-					<span class="sm:hidden">{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่'}</span>
-					<span class="hidden sm:inline"
-						>{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่ (Save & Post)'}</span
-					>
-				{/if}
-			</Button>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
+			ยกเลิก
+		</Button>
+		<Button
+			type="submit"
+			class="min-h-11 w-full sm:w-auto sm:min-w-[220px]"
+			disabled={isPending}
+			onclick={() => form.submit()}
+		>
+			{#if isPending}
+				กำลังบันทึก...
+			{:else}
+				<Check class="mr-1 size-4" />
+				<span class="sm:hidden">{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่'}</span>
+				<span class="hidden sm:inline"
+					>{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่ (Save & Post)'}</span
+				>
+			{/if}
+		</Button>
+	</div>
+{/snippet}
+
+{#if isMobile.current}
+	<Sheet.Root bind:open onOpenChange={handleOpenChange}>
+		<Sheet.Content
+			side="bottom"
+			class="flex h-[min(92dvh,100%)] max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0"
+		>
+			<Sheet.Header class="shrink-0 border-b border-border px-4 py-4 pr-12 text-left sm:px-6">
+				<Sheet.Title>{@render jobFormTitle()}</Sheet.Title>
+				<Sheet.Description class="sr-only">
+					แบบฟอร์ม{isEdit ? 'แก้ไข' : 'ประกาศ'}ภารกิจงานอาสา
+				</Sheet.Description>
+			</Sheet.Header>
+			<div class="min-h-0 flex-1 overflow-y-auto">
+				{@render jobFormFields()}
+			</div>
+			<div class="shrink-0">
+				{@render jobFormActions()}
+			</div>
+		</Sheet.Content>
+	</Sheet.Root>
+{:else}
+	<Dialog.Root bind:open onOpenChange={handleOpenChange}>
+		<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+			<div class="flex shrink-0 items-center gap-2 border-b border-border px-4 py-4 pr-12 sm:px-6">
+				<Dialog.Title>{@render jobFormTitle()}</Dialog.Title>
+			</div>
+			<div class="min-h-0 max-h-[70vh] overflow-y-auto">
+				{@render jobFormFields()}
+			</div>
+			{@render jobFormActions()}
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}
 
 <JobShiftEditDialog
 	bind:open={editShiftOpen}
