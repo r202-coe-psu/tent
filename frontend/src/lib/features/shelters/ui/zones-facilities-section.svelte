@@ -45,6 +45,9 @@
 	let confirmZoneCode = $state<string>('');
 	let confirmReason = $state<string>('');
 	let confirmOpen = $derived(confirmAction !== null);
+	const confirmZoneName = $derived(
+		($formData.zones ?? []).find((z) => z.code === confirmZoneCode)?.name?.trim() || confirmZoneCode
+	);
 
 	function openConfirm(action: 'close' | 'reopen', zoneCode: string) {
 		if (!shelterCode) {
@@ -73,7 +76,13 @@
 
 		if (action === 'close') {
 			closeZoneMutation.mutate(
-				{ code: shelterCode, zoneCode, reason: reason || undefined, closedBy: actor ?? undefined },
+				{
+					code: shelterCode,
+					zoneCode,
+					zoneName: confirmZoneName,
+					reason: reason || undefined,
+					closedBy: actor ?? undefined
+				},
 				{
 					onSuccess: () => {
 						$formData.zones = $formData.zones.map((z) =>
@@ -86,7 +95,12 @@
 			);
 		} else {
 			reopenZoneMutation.mutate(
-				{ code: shelterCode, zoneCode, reopenedBy: actor ?? undefined },
+				{
+					code: shelterCode,
+					zoneCode,
+					zoneName: confirmZoneName,
+					reopenedBy: actor ?? undefined
+				},
 				{
 					onSuccess: () => {
 						$formData.zones = $formData.zones.map((z) =>
@@ -186,7 +200,8 @@
 </script>
 
 <section
-	class="border-shelter-amber mt-6 mb-6 space-y-6 rounded-2xl border bg-shelter-amber-bg/30 p-6"
+	id="zones-facilities"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Users class="text-shelter-orange-text h-5 w-5" />
@@ -201,144 +216,139 @@
 		onSyncFromZones={syncCapacityFromZones}
 	/>
 
-	<!-- 3a. Living Zones -->
-
-	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">
-		<div
-			class="z-10 -mx-5 -mt-5 mb-4 flex items-center justify-between rounded-t-xl border-b border-shelter-border bg-background/95 p-5 backdrop-blur-sm"
+	<!-- 3a. Living Zones — section shell + row borders only (≤2 card layers) -->
+	<div class="flex items-center justify-between gap-3">
+		<h3 class="text-sm font-bold text-card-foreground">การตั้งค่าโซนที่พัก (Living Zones)</h3>
+		<Button
+			variant="outline"
+			size="sm"
+			onclick={addNewZone}
+			{disabled}
+			class="rounded-full border-orange-200 bg-orange-50 text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700"
 		>
-			<h3 class="text-sm font-bold text-card-foreground">การตั้งค่าโซนที่พัก (Living Zones)</h3>
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={addNewZone}
-				{disabled}
-				class="rounded-full border-orange-200 bg-orange-50 text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700"
-			>
-				<Plus class="mr-1 h-4 w-4" /> เพิ่มโซน
-			</Button>
-		</div>
+			<Plus class="mr-1 h-4 w-4" /> เพิ่มโซน
+		</Button>
+	</div>
 
-		<div class="space-y-3">
-			{#each $formData.zones ?? [] as zone, index (zone.code)}
-				<div class="space-y-2 rounded-xl border border-shelter-border bg-muted/30 p-2">
-					<div class="flex items-center gap-3">
-						<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
-							<Form.Control>
-								{#snippet children({ props })}
+	<div class="space-y-2">
+		{#each $formData.zones ?? [] as zone, index (zone.code)}
+			<div class="space-y-2 rounded-lg border border-shelter-border p-3">
+				<div class="flex items-center gap-3">
+					<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Input
+									{...props}
+									bind:value={zone.name}
+									placeholder="ชื่อโซน"
+									class="bg-white"
+									{disabled}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Select.Root type="single" bind:value={zone.type} {disabled}>
+						<Select.Trigger
+							class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+						>
+							{zoneTypeOptions.find((o) => o.value === zone.type)?.label ?? '— เลือก —'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each zoneTypeOptions as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+					<Form.Field {form} name={`zones[${index}].capacity`} class="w-[140px] space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<div class="relative">
 									<Input
 										{...props}
-										bind:value={zone.name}
-										placeholder="ชื่อโซน"
-										class="bg-white"
+										type="number"
+										bind:value={zone.capacity}
+										class="bg-white pr-10 text-right"
 										{disabled}
 									/>
-								{/snippet}
-							</Form.Control>
-							<Form.FieldErrors />
-						</Form.Field>
-						<Select.Root type="single" bind:value={zone.type} {disabled}>
-							<Select.Trigger
-								class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-							>
-								{zoneTypeOptions.find((o) => o.value === zone.type)?.label ?? '— เลือก —'}
-							</Select.Trigger>
-							<Select.Content>
-								{#each zoneTypeOptions as opt (opt.value)}
-									<Select.Item value={opt.value} label={opt.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-						<Form.Field {form} name={`zones[${index}].capacity`} class="w-[140px] space-y-0">
-							<Form.Control>
-								{#snippet children({ props })}
-									<div class="relative">
-										<Input
-											{...props}
-											type="number"
-											bind:value={zone.capacity}
-											class="bg-white pr-10 text-right"
-											{disabled}
-										/>
-										<span
-											class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground"
-											>คน</span
-										>
-									</div>
-								{/snippet}
-							</Form.Control>
-							<Form.FieldErrors />
-						</Form.Field>
+									<span
+										class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground"
+										>คน</span
+									>
+								</div>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Button
+						variant="ghost"
+						size="icon"
+						class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+						onclick={() => deleteZone(zone.code)}
+						{disabled}
+						title="ลบโซน"
+					>
+						<Trash2 class="h-4 w-4" />
+					</Button>
+					{#if zone.status === 'closed'}
 						<Button
 							variant="ghost"
 							size="icon"
-							class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-							onclick={() => deleteZone(zone.code)}
-							{disabled}
-							title="ลบโซน"
+							class="text-green-600 hover:bg-green-50 hover:text-green-700"
+							onclick={() => openConfirm('reopen', zone.code)}
+							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
+							title="เปิดโซนอีกครั้ง"
 						>
-							<Trash2 class="h-4 w-4" />
+							<RotateCcw class="h-4 w-4" />
 						</Button>
-						{#if zone.status === 'closed'}
-							<Button
-								variant="ghost"
-								size="icon"
-								class="text-green-600 hover:bg-green-50 hover:text-green-700"
-								onclick={() => openConfirm('reopen', zone.code)}
-								disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
-								title="เปิดโซนอีกครั้ง"
-							>
-								<RotateCcw class="h-4 w-4" />
-							</Button>
-						{:else}
-							<Button
-								variant="ghost"
-								size="icon"
-								class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
-								onclick={() => openConfirm('close', zone.code)}
-								disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
-								title="ปิดโซน"
-							>
-								<Power class="h-4 w-4" />
-							</Button>
-						{/if}
-					</div>
-					<div class="grid grid-cols-1 gap-2 px-1 md:grid-cols-[160px_1fr]">
-						<div class="relative">
-							<Input
-								type="number"
-								min="0"
-								step="any"
-								value={zone.area_m2 ?? ''}
-								oninput={(e) =>
-									(zone.area_m2 =
-										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-								class="bg-white pr-12 text-right"
-								placeholder="ขนาดพื้นที่"
-								{disabled}
-							/>
-							<span class="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground"
-								>ตร.ม.</span
-							>
-						</div>
+					{:else}
+						<Button
+							variant="ghost"
+							size="icon"
+							class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+							onclick={() => openConfirm('close', zone.code)}
+							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
+							title="ปิดโซน"
+						>
+							<Power class="h-4 w-4" />
+						</Button>
+					{/if}
+				</div>
+				<div class="grid grid-cols-1 gap-2 md:grid-cols-[160px_1fr]">
+					<div class="relative">
 						<Input
-							value={zone.specifics ?? ''}
-							oninput={(e) => (zone.specifics = e.currentTarget.value || null)}
-							class="bg-white"
-							placeholder="ข้อจำกัด/สิ่งอำนวยความสะดวกเฉพาะโซน (Zone Specifics)"
+							type="number"
+							min="0"
+							step="any"
+							value={zone.area_m2 ?? ''}
+							oninput={(e) =>
+								(zone.area_m2 =
+									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+							class="bg-white pr-12 text-right"
+							placeholder="ขนาดพื้นที่"
 							{disabled}
 						/>
+						<span class="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground"
+							>ตร.ม.</span
+						>
 					</div>
+					<Input
+						value={zone.specifics ?? ''}
+						oninput={(e) => (zone.specifics = e.currentTarget.value || null)}
+						class="bg-white"
+						placeholder="ข้อจำกัด/สิ่งอำนวยความสะดวกเฉพาะโซน (Zone Specifics)"
+						{disabled}
+					/>
 				</div>
-			{/each}
-			{#if ($formData.zones ?? []).length === 0}
-				<p class="py-4 text-center text-sm text-muted-foreground">ยังไม่มีโซน กรุณาเพิ่มโซนใหม่</p>
-			{/if}
-		</div>
+			</div>
+		{/each}
+		{#if ($formData.zones ?? []).length === 0}
+			<p class="py-4 text-center text-sm text-muted-foreground">ยังไม่มีโซน กรุณาเพิ่มโซนใหม่</p>
+		{/if}
 	</div>
 
 	<!-- 3b. WASH Facilities -->
-	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">
+	<div class="space-y-4">
 		<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 			ข้อมูลห้องน้ำและสุขอนามัย (WASH Facilities)
 		</h3>
@@ -499,7 +509,7 @@
 	</div>
 
 	<!-- 3c. Common Areas -->
-	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">
+	<div class="space-y-4">
 		<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 			ข้อมูลพื้นที่ส่วนกลาง (Common Areas)
 		</h3>
@@ -677,8 +687,8 @@
 			<Dialog.Header>
 				<Dialog.Title>
 					{confirmAction === 'close'
-						? `ปิดโซน ${confirmZoneCode}`
-						: `เปิดโซน ${confirmZoneCode} อีกครั้ง`}
+						? `ปิดโซน ${confirmZoneName}`
+						: `เปิดโซน ${confirmZoneName} อีกครั้ง`}
 				</Dialog.Title>
 				<Dialog.Description>
 					{confirmAction === 'close'

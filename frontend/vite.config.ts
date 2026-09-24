@@ -47,6 +47,7 @@ export default defineConfig(({ mode }) => {
 			noExternal: ['decimal.js', 'jsonwebtoken', 'openapi-fetch', 'qrcode']
 		},
 		server: {
+			allowedHosts: ['host.docker.internal'],
 			proxy: {
 				'/couch': {
 					target: couchTarget,
@@ -60,7 +61,8 @@ export default defineConfig(({ mode }) => {
 		test: {
 			globals: true,
 			environment: 'node',
-			include: ['src/**/*.{test,spec}.{ts,js}']
+			include: ['src/**/*.{test,spec}.{ts,js}'],
+			setupFiles: ['./src/lib/testing/vitest-setup.ts']
 		}
 	};
 });

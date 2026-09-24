@@ -61,6 +61,7 @@ export function createUser(input: {
 		start_ts: string;
 		end_ts: string;
 	} | null;
+	must_change_password?: boolean;
 	affiliation_tags?: string[];
 }): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
@@ -178,8 +179,28 @@ export function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> 
 }
 
 /** Check security setup status of currently authenticated user */
+let authStatusRequest: Promise<AuthStatus> | null = null;
+
+/** Forget an in-flight status request when the browser session changes. */
+export function invalidateAuthStatusRequest(): void {
+	authStatusRequest = null;
+}
+
 export function fetchAuthStatus(): Promise<AuthStatus> {
-	return serviceFetch<AuthStatus>('/api/v1/auth/me');
+	if (authStatusRequest) return authStatusRequest;
+
+	const request = serviceFetch<AuthStatus>('/api/v1/auth/me');
+	authStatusRequest = request;
+	void request.then(
+		() => {
+			if (authStatusRequest === request) authStatusRequest = null;
+		},
+		() => {
+			if (authStatusRequest === request) authStatusRequest = null;
+		}
+	);
+
+	return request;
 }
 
 /** Self-service PATCH for soft profile fields on `/api/v1/auth/me`. */
@@ -193,6 +214,11 @@ export function updateOwnProfile(input: OwnProfileUpdateInput): Promise<OwnProfi
 /** Clear BFF `mfa_ok` cookie (after password login / logout). */
 export function clearMfaOk(): Promise<{ ok: true }> {
 	return serviceFetch('/api/v1/auth/mfa/clear', { method: 'POST', body: '{}' });
+}
+
+/** Skip BFF MFA challenge for the current session (sets `mfa_ok` cookie). */
+export function skipMfa(): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/mfa/skip', { method: 'POST', body: '{}' });
 }
 
 /**

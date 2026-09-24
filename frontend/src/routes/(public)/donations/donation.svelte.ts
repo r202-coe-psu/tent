@@ -1,4 +1,5 @@
 import { setContext, getContext } from 'svelte';
+import { ulid } from '$lib/db/ulid';
 
 export interface DonationItem {
 	id: string;
@@ -6,7 +7,19 @@ export interface DonationItem {
 	category?: string;
 	name: string;
 	amount: number;
+	/**
+	 * What the donor SEES and, for a walk-in donation, types themselves — a Thai label
+	 * such as "กก." or "ก้อน". Never sent as the donation's `unit` when the line came
+	 * from the catalog: see `unit_code` (R-15.4).
+	 */
 	unit: string;
+	/**
+	 * `item_master.base_unit` of the picked need card (e.g. `kg`, `bar`), set together
+	 * with `item_id`. `schema.md §2.1` requires `items[].unit` to equal this whenever
+	 * `item_id` is present, and the intake counter rejects anything else with
+	 * `CATALOG_MISMATCH` — so the payload takes this, not the label above (R-15.4).
+	 */
+	unit_code?: string;
 	condition?: string;
 	remark?: string;
 	image?: string;
@@ -36,11 +49,11 @@ class DonationStore {
 
 	items = $state<DonationItem[]>([
 		{
-			id: crypto.randomUUID(),
+			id: ulid(),
 			category: 'food',
 			name: '',
 			amount: 1,
-			unit: 'ชิ้น',
+			unit: 'piece',
 			condition: 'new',
 			remark: '',
 			image: ''
@@ -61,11 +74,11 @@ class DonationStore {
 
 	addItem() {
 		this.items.push({
-			id: crypto.randomUUID(),
+			id: ulid(),
 			category: 'food',
 			name: '',
 			amount: 1,
-			unit: 'ชิ้น',
+			unit: 'piece',
 			condition: 'new',
 			remark: '',
 			image: ''
@@ -99,11 +112,11 @@ class DonationStore {
 		this.deliveryDate = '';
 		this.items = [
 			{
-				id: crypto.randomUUID(),
+				id: ulid(),
 				category: 'food',
 				name: '',
 				amount: 1,
-				unit: 'ชิ้น',
+				unit: 'piece',
 				condition: 'new',
 				remark: '',
 				image: ''

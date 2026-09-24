@@ -4,7 +4,6 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -16,6 +15,7 @@
 		BasicInfoSection,
 		CapacitySection,
 		ZonesFacilitiesSection,
+		FoodDistributionSection,
 		UtilitiesSection,
 		RiskSection,
 		AdmissionPolicySection,
@@ -27,20 +27,14 @@
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
 	import { UserManagementPage } from '$lib/features/users';
-	import {
-		SHELTER_STEP_FIELDS,
-		collectErrorMessages,
-		collectErrorMessagesForFields,
-		findInvalidStepIndexes,
-		stepHasFieldErrors
-	} from './shelter-form-validation';
+	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
+	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
+	import { createScrollSpy } from '$lib/utils/scroll-spy';
 	import X from '@lucide/svelte/icons/x';
-	import Save from '@lucide/svelte/icons/save';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Users from '@lucide/svelte/icons/users';
+	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import Zap from '@lucide/svelte/icons/zap';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
@@ -48,6 +42,8 @@
 	import Car from '@lucide/svelte/icons/car';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import UserCog from '@lucide/svelte/icons/user-cog';
+	import Save from '@lucide/svelte/icons/save';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	let {
 		id = '',
@@ -67,26 +63,38 @@
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
 
-	// Wizard steps (CR-023 Addendum A — tab/sidebar navigation).
-	const steps = [
-		{ label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
-		{ label: 'ข้อมูลความจุเชิงพื้นที่', icon: Building2 },
-		{ label: 'โซนและสิ่งอำนวยความสะดวก', icon: Users },
-		{ label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
-		{ label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
-		{ label: 'นโยบายการรับผู้อพยพ', icon: PawPrint },
-		{ label: 'นโยบายทรัพย์สิน / สัมภาระ', icon: Briefcase },
-		{ label: 'นโยบายยานพาหนะ', icon: Car }
+	const sections = [
+		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
+		{ id: 'capacity', label: 'ข้อมูลความจุเชิงพื้นที่', icon: Building2 },
+		{ id: 'zones-facilities', label: 'โซนและสิ่งอำนวยความสะดวก', icon: Users },
+		{ id: 'food-distribution', label: 'จุดแจกอาหาร', icon: UtensilsCrossed },
+		{ id: 'utilities', label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
+		{ id: 'risk', label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
+		{ id: 'admission-policy', label: 'นโยบายการรับผู้อพยพ', icon: PawPrint },
+		{ id: 'luggage-policy', label: 'นโยบายทรัพย์สิน / สัมภาระ', icon: Briefcase },
+		{ id: 'parking-policy', label: 'นโยบายยานพาหนะ', icon: Car }
 	];
-	let step = $state(0);
-	let showValidationSummary = $state(false);
-	/** View switch (not a wizard step): users for this shelter. */
-	let usersViewActive = $state(page.url.searchParams.get('view') === 'users');
-	const isLastStep = $derived(!usersViewActive && step === steps.length - 1);
+	const sectionIds = sections.map((s) => s.id);
 
-	function selectStep(i: number) {
+	let activeSection = $state('basic-info');
+	let showValidationSummary = $state(false);
+	/** View switch (not a form section): users for this shelter. */
+	let usersViewActive = $state(page.url.searchParams.get('view') === 'users');
+
+	const scrollSpy = createScrollSpy({
+		sectionIds: () => sectionIds,
+		prefix: '',
+		stickyVar: '--shelter-form-sticky-top',
+		onActiveChange: (id) => {
+			activeSection = id;
+		}
+	});
+
+	function navigateToSection(id: string) {
 		usersViewActive = false;
-		step = i;
+		activeSection = id;
+		scrollSpy.pause();
+		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
 	const form = superForm(defaults(zod4(shelterSchema)), {
@@ -105,31 +113,33 @@
 			const data = validated.data;
 
 			if (isEdit) {
-				updateMutation.mutate(
-					{ code: id, input: data },
-					{ onSuccess: () => goto(resolvedBasePath) }
-				);
+				// Stay on the edit form; success toast comes from useUpdateShelter.
+				updateMutation.mutate({ code: id, input: data });
 			} else {
 				createMutation.mutate(data, {
-					onSuccess: () => goto(resolvedBasePath)
+					onSuccess: (result) => {
+						// Deep-link to edit so further saves are updates and users unlock.
+						// Success toast comes from useCreateShelter.
+						if (result?.code) {
+							goto(`${resolvedBasePath}/edit/${encodeURIComponent(result.code)}`);
+						}
+					}
 				});
 			}
 		}
 	});
 
-	const { form: formData, submitting, enhance, validateForm, errors } = form;
+	const { form: formData, submitting, enhance, errors } = form;
 
-	const stepsWithErrors = $derived.by(() => {
-		if (!showValidationSummary) return [] as number[];
-		return findInvalidStepIndexes($errors);
-	});
+	const invalidSectionIds = $derived.by(() =>
+		showValidationSummary ? findInvalidSectionIds($errors) : []
+	);
+	const sectionsWithErrorsSet = $derived(new Set(invalidSectionIds));
 
 	const validationMessages = $derived.by(() => {
 		if (!showValidationSummary) return [] as string[];
 		return collectErrorMessages($errors);
 	});
-
-	const stepsWithErrorsSet = $derived(new Set(stepsWithErrors));
 
 	// Ensure nested optional objects exist so child sections can bind safely.
 	// Done synchronously at form-init time (not inside $effect) to avoid the
@@ -142,6 +152,7 @@
 	if (!$formData.luggage_policy) $formData.luggage_policy = { ...EMPTY_LUGGAGE_POLICY };
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
 	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
+	if (!$formData.food_distribution_points) $formData.food_distribution_points = [];
 
 	$effect(() => {
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
@@ -176,6 +187,7 @@
 				utilities: d.utilities ?? { communications: [] },
 				risk: d.risk ?? {},
 				zones: d.zones ?? [],
+				food_distribution_points: d.food_distribution_points ?? [],
 				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
@@ -192,16 +204,12 @@
 	const isError = $derived(isEdit ? shelterQuery.isError : false);
 	const errorMessage = $derived(isEdit ? (shelterQuery.error?.message ?? '') : '');
 
-	function goPrev() {
-		if (step > 0) step -= 1;
-	}
-
 	async function revealValidationIssues(formErrors: unknown) {
-		const invalidSteps = findInvalidStepIndexes(formErrors);
+		const invalidIds = findInvalidSectionIds(formErrors);
 		const messages = collectErrorMessages(formErrors);
 
-		if (invalidSteps.length > 0 && invalidSteps[0] !== step) {
-			step = invalidSteps[0]!;
+		if (invalidIds.length > 0) {
+			navigateToSection(invalidIds[0]!);
 			await tick();
 		}
 
@@ -209,7 +217,9 @@
 		firstInvalid?.focus();
 		firstInvalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-		const categoryLabels = invalidSteps.map((i) => steps[i]?.label).filter(Boolean);
+		const categoryLabels = invalidIds
+			.map((id) => sections.find((s) => s.id === id)?.label)
+			.filter(Boolean);
 		const descriptionParts: string[] = [];
 		if (categoryLabels.length > 0) {
 			descriptionParts.push(`หมวดที่ต้องแก้: ${categoryLabels.join(', ')}`);
@@ -227,38 +237,11 @@
 		});
 	}
 
-	async function goNext() {
-		if (step >= steps.length - 1) return;
-
-		const result = await validateForm({ update: true, focusOnError: false });
-		if (stepHasFieldErrors(step, result.errors)) {
-			await tick();
-			const firstInvalid = document.querySelector<HTMLElement>(
-				'#shelter-form [aria-invalid="true"]'
-			);
-			firstInvalid?.focus();
-			firstInvalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-			const stepMessages = collectErrorMessagesForFields(
-				result.errors,
-				SHELTER_STEP_FIELDS[step] ?? []
-			);
-			toast.error('กรุณากรอกข้อมูลในขั้นตอนนี้ให้ครบถ้วนและถูกต้อง', {
-				description: stepMessages.slice(0, 3).join('\n') || undefined,
-				duration: 6000
-			});
-			return;
-		}
-
-		step += 1;
-	}
-
-	// Guard native implicit submit: Enter in a text input must not save/redirect
-	// mid-wizard. Only allow the form to submit from the last step (where the
-	// real "บันทึกข้อมูล" button lives). Enter inside a <textarea> is left alone.
+	// Guard native implicit submit: Enter in a text input must not save/redirect.
+	// Enter inside a <textarea> is left alone.
 	function onFormKeydown(event: KeyboardEvent) {
 		const target = event.target as HTMLElement | null;
-		if (event.key === 'Enter' && !isLastStep && target?.tagName !== 'TEXTAREA') {
+		if (event.key === 'Enter' && target?.tagName !== 'TEXTAREA') {
 			event.preventDefault();
 		}
 	}
@@ -266,7 +249,7 @@
 
 <main class="text-xs text-foreground">
 	<div
-		class="sticky top-0 z-10 flex items-center justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm"
+		class="sticky top-[var(--bo-sticky-top)] z-20 flex items-center justify-between border-b border-slate-200/80 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6"
 	>
 		<div class="flex items-center space-x-2">
 			<a
@@ -276,7 +259,7 @@
 			>
 				<X class="h-4 w-4 text-muted-foreground" />
 			</a>
-			<h1 class="text-2xl font-bold tracking-tight text-foreground">
+			<h1 class="text-2xl font-bold tracking-tight text-[#0A2647]">
 				{isEdit ? 'แก้ไขข้อมูลศูนย์พักพิง' : 'สร้างศูนย์พักพิงใหม่'}
 			</h1>
 		</div>
@@ -288,7 +271,12 @@
 				ยกเลิก
 			</a>
 			{#if !usersViewActive}
-				<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
+				<Button
+					type="submit"
+					form="shelter-form"
+					disabled={$submitting || isPending}
+					class="hidden gap-2 md:inline-flex"
+				>
 					<Save class="h-4 w-4" />
 					<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
 				</Button>
@@ -307,44 +295,39 @@
 			<a href={resolvedBasePath} class="text-muted-foreground underline">กลับหน้ารวม</a>
 		</div>
 	{:else}
-		<div class="flex flex-col gap-6 p-6 md:flex-row">
-			<!-- Sidebar category nav -->
+		<div class="flex flex-col gap-6 p-6 md:flex-row" class:pb-28={!usersViewActive}>
+			<!-- Desktop sticky section nav -->
 			<nav
-				class="shrink-0 md:sticky md:top-20 md:max-h-[calc(100dvh-6rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-2xl md:border md:border-shelter-border md:bg-background/90 md:p-3 md:shadow-sm md:backdrop-blur-sm"
+				class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+0.5rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-1.5rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-xl md:border md:border-slate-200/80 md:bg-white md:p-3 md:shadow-2xs"
 			>
-				<div class="mb-3 flex items-center justify-between gap-3 px-2">
+				<div class="mb-3 px-2">
 					<p class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 						หมวดหมู่ข้อมูล
 					</p>
-					{#if !usersViewActive}
-						<span class="text-2xs font-semibold text-muted-foreground tabular-nums">
-							{step + 1} / {steps.length}
-						</span>
-					{/if}
 				</div>
-				<ul class="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
-					{#each steps as s, i (s.label)}
+				<ul class="flex flex-col gap-2">
+					{#each sections as s (s.id)}
 						{@const Icon = s.icon}
-						{@const hasError = stepsWithErrorsSet.has(i)}
-						{@const stepActive = !usersViewActive && step === i}
-						<li class="shrink-0">
+						{@const hasError = sectionsWithErrorsSet.has(s.id)}
+						{@const sectionActive = !usersViewActive && activeSection === s.id}
+						<li>
 							<button
 								type="button"
-								onclick={() => selectStep(i)}
-								aria-current={stepActive ? 'step' : undefined}
+								onclick={() => navigateToSection(s.id)}
+								aria-current={sectionActive ? 'true' : undefined}
 								class={[
-									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
-									stepActive
+									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									sectionActive
 										? hasError
-											? 'bg-destructive text-white shadow-sm'
-											: 'bg-primary text-white shadow-sm'
+											? 'border-red-200 bg-red-50 font-semibold text-red-900'
+											: 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
 										: hasError
-											? 'bg-destructive/10 text-destructive hover:-translate-y-px hover:bg-destructive/15'
-											: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
+											? 'border-transparent bg-destructive/10 text-destructive hover:-translate-y-px hover:bg-destructive/15'
+											: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
 								]}
 							>
 								<Icon class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal">{s.label}</span>
+								<span class="min-w-0 flex-1">{s.label}</span>
 								{#if hasError}
 									<AlertCircle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 									<span class="sr-only">มีข้อมูลที่ต้องแก้ไข</span>
@@ -352,23 +335,21 @@
 							</button>
 						</li>
 					{/each}
-					<li class="shrink-0">
+					<li>
 						{#if isEdit}
 							<button
 								type="button"
 								onclick={() => (usersViewActive = true)}
 								aria-current={usersViewActive ? 'true' : undefined}
 								class={[
-									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
 									usersViewActive
-										? 'bg-primary text-white shadow-sm'
-										: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
+										? 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
+										: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
 								]}
 							>
 								<UserCog class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal"
-									>ผู้ใช้งานและสิทธิ์</span
-								>
+								<span class="min-w-0 flex-1">ผู้ใช้งานและสิทธิ์</span>
 							</button>
 						{:else}
 							<button
@@ -378,9 +359,7 @@
 								class="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground/60"
 							>
 								<UserCog class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal"
-									>ผู้ใช้งานและสิทธิ์</span
-								>
+								<span class="min-w-0 flex-1">ผู้ใช้งานและสิทธิ์</span>
 							</button>
 							<p class="mt-1 px-3 text-2xs text-muted-foreground">
 								บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้
@@ -390,12 +369,12 @@
 				</ul>
 			</nav>
 
-			<!-- Step content -->
+			<!-- Form / users content -->
 			<div class="min-w-0 flex-1">
 				{#if usersViewActive && isEdit}
 					<UserManagementPage lockedShelterCode={id} compact />
 				{:else}
-					{#if showValidationSummary && (stepsWithErrors.length > 0 || validationMessages.length > 0)}
+					{#if showValidationSummary && (invalidSectionIds.length > 0 || validationMessages.length > 0)}
 						<div
 							class="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
 							role="alert"
@@ -404,21 +383,23 @@
 								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
 								<div class="min-w-0 flex-1 space-y-2">
 									<p class="font-semibold">ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข</p>
-									{#if stepsWithErrors.length > 0}
+									{#if invalidSectionIds.length > 0}
 										<ul class="flex flex-wrap gap-2">
-											{#each stepsWithErrors as i (steps[i].label)}
+											{#each invalidSectionIds as sectionId (sectionId)}
+												{@const label =
+													sections.find((s) => s.id === sectionId)?.label ?? sectionId}
 												<li>
 													<button
 														type="button"
-														onclick={() => selectStep(i)}
+														onclick={() => navigateToSection(sectionId)}
 														class={[
 															'rounded-md border px-2.5 py-1 text-xs font-medium transition',
-															step === i
+															activeSection === sectionId
 																? 'border-destructive bg-destructive text-white'
 																: 'border-destructive/30 bg-background text-destructive hover:bg-destructive/10'
 														]}
 													>
-														{steps[i].label}
+														{label}
 													</button>
 												</li>
 											{/each}
@@ -437,50 +418,38 @@
 					{/if}
 
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-					<!-- keydown guards native implicit submit (Enter) to the last wizard step only -->
-					<form id="shelter-form" method="POST" use:enhance onkeydown={onFormKeydown}>
-						<div class={[step !== 0 && 'hidden']}>
-							<BasicInfoSection {form} {formData} />
-						</div>
-						<div class={[step !== 1 && 'hidden']}>
-							<CapacitySection {form} {formData} />
-						</div>
-						<div class={[step !== 2 && 'hidden']}>
-							<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
-						</div>
-						<div class={[step !== 3 && 'hidden']}>
-							<UtilitiesSection {form} {formData} />
-						</div>
-						<div class={[step !== 4 && 'hidden']}>
-							<RiskSection {form} {formData} />
-						</div>
-						<div class={[step !== 5 && 'hidden']}>
-							<AdmissionPolicySection {formData} />
-						</div>
-						<div class={[step !== 6 && 'hidden']}>
-							<LuggagePolicySection {formData} />
-						</div>
-						<div class={[step !== 7 && 'hidden']}>
-							<ParkingPolicySection {formData} />
-						</div>
-
-						<!-- Bottom navigation -->
-						<div class="mt-6 flex items-center justify-between border-t border-shelter-border pt-6">
-							<Button type="button" variant="outline" onclick={goPrev} disabled={step === 0}>
-								<ArrowLeft class="h-4 w-4" />
-								<span>ก่อนหน้า</span>
-							</Button>
-
-							{#if !isLastStep}
-								<Button type="button" onclick={goNext}>
-									<span>ถัดไป</span>
-									<ArrowRight class="h-4 w-4" />
-								</Button>
-							{/if}
-						</div>
+					<!-- keydown guards native implicit submit (Enter) except inside textarea -->
+					<form
+						id="shelter-form"
+						method="POST"
+						use:enhance
+						onkeydown={onFormKeydown}
+						{@attach scrollSpy}
+					>
+						<BasicInfoSection {form} {formData} />
+						<CapacitySection {form} {formData} />
+						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
+						<FoodDistributionSection {form} {formData} />
+						<UtilitiesSection {form} {formData} />
+						<RiskSection {form} {formData} />
+						<AdmissionPolicySection {formData} />
+						<LuggagePolicySection {formData} />
+						<ParkingPolicySection {formData} />
 					</form>
 				{/if}
 			</div>
 		</div>
+
+		{#if !usersViewActive}
+			<ShelterFormStickyNav
+				{sections}
+				{activeSection}
+				sectionsWithErrors={sectionsWithErrorsSet}
+				ariaLabel="นำทางหมวดหมู่ฟอร์มศูนย์พักพิง"
+				onNavigate={navigateToSection}
+				savePending={isPending}
+				saveDisabled={$submitting || isPending}
+			/>
+		{/if}
 	{/if}
 </main>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
 		useStockBalance,
@@ -8,13 +9,20 @@
 	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		itemMasterUnit,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import LedgerTable from './ledger-table.svelte';
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
@@ -24,6 +32,7 @@
 	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
 	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 
 	// Icon
 	import Plus from '@lucide/svelte/icons/plus';
@@ -42,6 +51,8 @@
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -98,6 +109,14 @@
 	let selectedItemId = $state<string | null>(null);
 	let isManageModalOpen = $state(false);
 	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('checkin');
+	/** Below md: full-height Sheet; md+: capped Dialog (Phase 2b). */
+	const isMobileViewport = new IsMobile();
+
+	function openManage(itemId: string, tab: typeof activeModalTab) {
+		selectedItemId = itemId;
+		activeModalTab = tab;
+		isManageModalOpen = true;
+	}
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const items = $derived.by(() => {
@@ -436,10 +455,10 @@
 					Standard เท่านั้น
 				</p>
 			</div>
-			<div>
+			<div class="w-full md:w-auto">
 				<a
-					href="/back-office/catalog?tab=item_master&action=create"
-					class="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-md transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
+					href={resolve('/back-office/catalog?tab=item_master&action=create')}
+					class="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-xs transition-all duration-200 hover:bg-primary-strong active:scale-[0.97] md:w-auto"
 				>
 					<Plus class="h-4 w-4" />
 					เพิ่มของใหม่
@@ -561,8 +580,147 @@
 				</p>
 			</div>
 		{:else}
+			<!-- Mobile cards (< md) -->
+			<div class="space-y-3 md:hidden">
+				{#if displayedItems.length === 0}
+					<div
+						class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm font-medium text-slate-500 shadow-2xs"
+					>
+						ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
+					</div>
+				{:else}
+					{#each groupedDisplayedItems as group (group.category)}
+						<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+							<button
+								type="button"
+								onclick={() => toggleGroup(group.category)}
+								class="flex min-h-12 w-full cursor-pointer items-center gap-3 bg-slate-50 px-4 py-3 text-left transition-colors hover:bg-slate-100"
+							>
+								<span
+									class="flex items-center text-slate-500 transition-transform duration-200 {collapsedGroups.has(
+										group.category
+									)
+										? ''
+										: 'rotate-90'}"
+								>
+									<ChevronRight class="h-4 w-4" />
+								</span>
+								<span class="text-sm font-bold text-slate-900">
+									กลุ่ม{group.label} ({group.labelEn})
+								</span>
+								<span
+									class="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900 tabular-nums"
+								>
+									{group.totalCount} รายการ
+								</span>
+							</button>
+
+							{#if !collapsedGroups.has(group.category)}
+								<ul class="divide-y divide-slate-200/80">
+									{#each group.items as item (item._id)}
+										{@const qty = item.qtyOnHand}
+										{@const status = item.status}
+										{@const lot = latestLotByItem[item._id]}
+										{@const expired = isExpired(lot?.expiry)}
+										<li class="space-y-3 p-4">
+											<div class="flex flex-col gap-1">
+												<span class="text-base font-semibold text-slate-900">{item.name}</span>
+												<span class="text-xs text-slate-500 tabular-nums">ID: {item._id}</span>
+											</div>
+											<div class="flex flex-wrap items-center gap-2">
+												<span
+													class="rounded-md border px-2.5 py-1 text-center text-xs font-bold whitespace-nowrap {getCategoryStyle(
+														item.category
+													)}"
+												>
+													{getCategoryLabel(item.category)}
+												</span>
+												{#if lot?.note}
+													<span
+														class="inline-flex items-center gap-1 text-xs text-slate-600"
+													>
+														<MapPin class="h-3.5 w-3.5 shrink-0" />
+														{lot.note}
+													</span>
+												{/if}
+											</div>
+											<div class="grid grid-cols-2 gap-3">
+												<div
+													class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3"
+												>
+													<p class="text-xs font-semibold text-slate-500">สต็อกทั้งหมด</p>
+													<p class="mt-1 text-lg font-bold text-slate-900 tabular-nums">
+														{qty}
+														<span class="text-xs font-normal text-slate-500"
+															>{formatUnit(item.unit, units, langState.current)}</span
+														>
+													</p>
+												</div>
+												<div
+													class="rounded-lg border border-slate-200/80 bg-white p-3 {expired ||
+													status === 'empty'
+														? 'border-red-200'
+														: status === 'low'
+															? 'border-amber-200'
+															: 'border-emerald-200'}"
+												>
+													<p class="text-xs font-semibold text-slate-500">ใช้งานได้จริง</p>
+													<p
+														class="mt-1 text-lg font-bold tabular-nums {expired ||
+														status === 'empty'
+															? 'text-red-700'
+															: status === 'low'
+																? 'text-amber-800'
+																: 'text-emerald-800'}"
+													>
+														{qty}
+														<span class="text-xs font-normal text-slate-500"
+															>{formatUnit(item.unit, units, langState.current)}</span
+														>
+													</p>
+													{#if status === 'empty'}
+														<p class="mt-1 text-xs font-semibold text-red-700">วิกฤตสต๊อก</p>
+													{:else if status === 'low'}
+														<p class="mt-1 text-xs font-semibold text-amber-800">เฝ้าระวัง</p>
+													{:else if expired}
+														<p class="mt-1 text-xs font-semibold text-red-700">หมดอายุ</p>
+													{:else}
+														<p class="mt-1 text-xs font-semibold text-emerald-800">ปกติ</p>
+													{/if}
+												</div>
+											</div>
+											{#if showOverall}
+												<p class="text-xs font-semibold text-slate-500 italic">(ดูภาพรวม)</p>
+											{:else}
+												<div class="flex flex-col-reverse gap-2 sm:flex-row">
+													<button
+														type="button"
+														onclick={() => openManage(item._id, 'history')}
+														class="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-2xs transition-all hover:bg-slate-50 active:scale-[0.97] sm:flex-1"
+													>
+														<Eye class="h-4 w-4 text-slate-500" /> ดูรายสิน
+													</button>
+													<button
+														type="button"
+														onclick={() => openManage(item._id, 'adjust')}
+														class="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#0A2647] px-3 py-2 text-sm font-bold text-white shadow-2xs transition-all hover:bg-[#051930] active:scale-[0.97] sm:flex-1"
+													>
+														<Pencil class="h-4 w-4" /> ปรับปรุงยอด
+													</button>
+												</div>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
+					{/each}
+				{/if}
+			</div>
+
+			<!-- Desktop table (md+) -->
 			<div
-				class="flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm"
+				class="hidden flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm md:block"
 			>
 				<Table.Root class="min-w-[900px] text-xs whitespace-nowrap">
 					<Table.Header class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
@@ -666,7 +824,8 @@
 											<Table.Cell class="p-4 text-center">
 												<span class="text-sm font-bold text-foreground">
 													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>
@@ -682,7 +841,8 @@
 															: 'text-[#0b6e4f]'}"
 												>
 													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>
@@ -696,21 +856,15 @@
 												{:else}
 													<div class="flex items-center justify-center gap-2">
 														<button
-															onclick={() => {
-																selectedItemId = item._id;
-																activeModalTab = 'history';
-																isManageModalOpen = true;
-															}}
+															type="button"
+															onclick={() => openManage(item._id, 'history')}
 															class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.97]"
 														>
 															<Eye class="h-3.5 w-3.5 text-muted-foreground" /> ดูรายสิน
 														</button>
 														<button
-															onclick={() => {
-																selectedItemId = item._id;
-																activeModalTab = 'adjust';
-																isManageModalOpen = true;
-															}}
+															type="button"
+															onclick={() => openManage(item._id, 'adjust')}
 															class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
 														>
 															<Pencil class="h-3.5 w-3.5" /> ปรับปรุงยอด
@@ -759,13 +913,13 @@
 				{@const emptyCount = itemsWithCalculatedStatus.filter((i) => i.status === 'empty').length}
 				{@const lowCount = itemsWithCalculatedStatus.filter((i) => i.status === 'low').length}
 				<div
-					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
+					class="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm sm:flex-row sm:items-center sm:justify-between"
 				>
 					<span
 						>แสดง {displayedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
 						{items.length} รายการ)</span
 					>
-					<div class="flex gap-3">
+					<div class="flex flex-wrap gap-3">
 						{#if emptyCount > 0}
 							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
 						{/if}
@@ -793,114 +947,135 @@
 	</div>
 </div>
 
-<!-- Manage / History Modal (Dialog) -->
-<Dialog.Root bind:open={isManageModalOpen}>
-	<Dialog.Content
-		class="max-h-[92vh] w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-7xl"
-	>
-		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
-			{#if selectedItemId}
-				{@const item = items.find((i) => i._id === selectedItemId)}
-				<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
-					<Boxes class="h-5 w-5 text-primary" />
-					จัดการสต็อก: {item?.name ?? ''}
-				</Dialog.Title>
-				<Dialog.Description class="mt-1 font-mono text-sm text-muted-foreground">
-					ID: {selectedItemId} | หน่วยนับ: {item?.unit ?? ''}
-				</Dialog.Description>
-			{/if}
-		</Dialog.Header>
+<!-- Manage / History: Sheet below md, Dialog (≤ max-w-2xl / lg:max-w-5xl) on md+ -->
+{#snippet manageHeader()}
+	{#if selectedItemId}
+		{@const item = items.find((i) => i._id === selectedItemId)}
+		<div class="flex items-center gap-2 text-xl font-bold text-foreground">
+			<Boxes class="h-5 w-5 text-primary" />
+			จัดการสต็อก: {item?.name ?? ''}
+		</div>
+		<p class="mt-1 font-mono text-sm text-muted-foreground">
+			ID: {selectedItemId} | หน่วยนับ: {item ? formatUnit(item.unit, units, langState.current) : ''}
+		</p>
+	{/if}
+{/snippet}
 
-		<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-			<!-- Left Panel: Actions (5 cols) -->
-			<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-border/60 lg:pr-6">
-				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
-					<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
-				</div>
-
-				<!-- Action Card Tabs -->
-				<div class="grid grid-cols-3 gap-3">
-					<button
-						type="button"
-						onclick={() => (activeModalTab = 'distribute')}
-						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-						'distribute'
-							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-					>
-						<MinusCircle
-							class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}"
-						/>
-						<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
-					</button>
-					<button
-						type="button"
-						onclick={() => (activeModalTab = 'checkin')}
-						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-						'checkin'
-							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-					>
-						<PlusCircle
-							class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}"
-						/>
-						<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
-					</button>
-					<button
-						type="button"
-						onclick={() => (activeModalTab = 'adjust')}
-						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-						'adjust'
-							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-					>
-						<Settings
-							class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}"
-						/>
-						<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
-					</button>
-				</div>
-
-				<div class="mt-2 flex-1">
-					{#if selectedItemId}
-						{#if activeModalTab === 'checkin'}
-							<ReceiveStockForm
-								preselectedItemId={selectedItemId}
-								onsuccess={() => {
-									// Stay open so the user can see the ledger update on the right!
-								}}
-							/>
-						{:else if activeModalTab === 'distribute'}
-							<DistributeStockForm
-								preselectedItemId={selectedItemId}
-								onsuccess={() => {
-									// Stay open so the user can see the ledger update on the right!
-								}}
-							/>
-						{:else if activeModalTab === 'adjust'}
-							<AdjustStockForm
-								preselectedItemId={selectedItemId}
-								onsuccess={() => {
-									// Stay open so the user can see the ledger update on the right!
-								}}
-							/>
-						{/if}
-					{/if}
-				</div>
+{#snippet manageBody()}
+	<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+		<!-- Left Panel: Actions -->
+		<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-border/60 lg:pr-6">
+			<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+				<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
 			</div>
 
-			<!-- Right Panel: Ledger (7 cols) -->
-			<div class="flex flex-col gap-4 lg:col-span-7">
-				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
-					<Clock class="h-4 w-4 text-muted-foreground" />
-					<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
-				</div>
-				<div class="max-h-[60vh] overflow-y-auto">
-					{#if selectedItemId}
-						<LedgerTable filterItemId={selectedItemId} />
+			<!-- Action tabs: stack below sm, 3-col from sm -->
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+				<button
+					type="button"
+					onclick={() => (activeModalTab = 'distribute')}
+					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+					'distribute'
+						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+				>
+					<MinusCircle
+						class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}"
+					/>
+					<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
+				</button>
+				<button
+					type="button"
+					onclick={() => (activeModalTab = 'checkin')}
+					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+					'checkin'
+						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+				>
+					<PlusCircle
+						class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}"
+					/>
+					<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
+				</button>
+				<button
+					type="button"
+					onclick={() => (activeModalTab = 'adjust')}
+					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+					'adjust'
+						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+				>
+					<Settings
+						class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}"
+					/>
+					<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
+				</button>
+			</div>
+
+			<div class="mt-2 flex-1">
+				{#if selectedItemId}
+					{#if activeModalTab === 'checkin'}
+						<ReceiveStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
+					{:else if activeModalTab === 'distribute'}
+						<DistributeStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
+					{:else if activeModalTab === 'adjust'}
+						<AdjustStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
 					{/if}
-				</div>
+				{/if}
 			</div>
 		</div>
-	</Dialog.Content>
-</Dialog.Root>
+
+		<!-- Right Panel: Ledger -->
+		<div class="flex flex-col gap-4 lg:col-span-7">
+			<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+				<Clock class="h-4 w-4 text-muted-foreground" />
+				<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
+			</div>
+			<div class="max-h-[60vh] overflow-y-auto">
+				{#if selectedItemId}
+					<LedgerTable filterItemId={selectedItemId} />
+				{/if}
+			</div>
+		</div>
+	</div>
+{/snippet}
+
+{#if isMobileViewport.current}
+	<Sheet.Root bind:open={isManageModalOpen}>
+		<Sheet.Content
+			side="bottom"
+			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
+		>
+			<Sheet.Header class="shrink-0 border-b border-border/60 px-4 py-4 text-left pr-12">
+				<Sheet.Title class="sr-only">จัดการสต็อก</Sheet.Title>
+				<Sheet.Description class="sr-only">รับเข้า เบิกจ่าย หรือปรับปรุงยอดสต็อก</Sheet.Description>
+				{@render manageHeader()}
+			</Sheet.Header>
+			<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+				{@render manageBody()}
+			</div>
+		</Sheet.Content>
+	</Sheet.Root>
+{:else}
+	<Dialog.Root bind:open={isManageModalOpen}>
+		<Dialog.Content
+			class="max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-md sm:max-w-2xl sm:p-6 lg:max-w-5xl"
+		>
+			<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
+				{#if selectedItemId}
+					{@const item = items.find((i) => i._id === selectedItemId)}
+					<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
+						<Boxes class="h-5 w-5 text-primary" />
+						จัดการสต็อก: {item?.name ?? ''}
+					</Dialog.Title>
+					<Dialog.Description class="mt-1 font-mono text-sm text-muted-foreground">
+						ID: {selectedItemId} | หน่วยนับ: {item
+							? formatUnit(item.unit, units, langState.current)
+							: ''}
+					</Dialog.Description>
+				{/if}
+			</Dialog.Header>
+			{@render manageBody()}
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}

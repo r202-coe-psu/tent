@@ -6,7 +6,6 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { householdInputSchema, formatPersonName } from '../../domain/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import type {
 		Household,
 		Evacuee,
@@ -22,7 +21,8 @@
 		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
 		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
 		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
-		cancelled: { label: 'ยกเลิก', variant: 'destructive' }
+		cancelled: { label: 'ยกเลิก', variant: 'destructive' },
+		merged: { label: 'รวมแล้ว', variant: 'secondary' }
 	};
 	import HouseholdFormHeadSection from './household-form-head-section.svelte';
 	import HouseholdFormMembersSection from './household-form-members-section.svelte';
@@ -51,26 +51,6 @@
 		households?: Household[];
 		initialMemberIds?: string[];
 	} = $props();
-
-	// --- Master data queries ---
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
-
-	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? [])
-			.filter((z) => z.status === 'active')
-			.map((z) => ({ value: z.code, label: z.label }))
-	);
-	const communityItems = $derived(
-		(communityQuery.data?.items ?? [])
-			.filter((c) => c.status === 'active')
-			.map((c) => ({ value: c.code, label: c.label }))
-	);
-
-	/** Code of the single active `is_default` item, or '' when none is configured. */
-	function defaultCodeOf(items: readonly { code: string; is_default: boolean; status: string }[]) {
-		return items.find((i) => i.is_default && i.status === 'active')?.code ?? '';
-	}
 
 	// --- Superform ---
 	const form = superForm(defaults(zod4(householdInputSchema)), {
@@ -183,41 +163,6 @@
 				membersInitialized = true;
 				initialized = true;
 			}
-		}
-	});
-
-	// Seed the configured defaults (master_data `is_default`) for เขต / ชุมชน —
-	// CREATE ONLY. Editing an existing household must never gain a zone it did
-	// not have: there, an empty value is a deliberate blank, not "unset yet", and
-	// seeding it would silently persist on the next save.
-	//
-	// Declared AFTER the prefill effect on purpose: on a cache hit the master
-	// queries already hold data on the first flush, and the prefill effect resets
-	// both combobox values — seeding earlier would be wiped straight away.
-	// `initialized` means prefill has run, so an empty value here really is
-	// "operator has not chosen". (CR-049)
-	//
-	// Each field is seeded independently: one query failing (or being disabled
-	// because no shelter is selected) must not suppress the other's default.
-	let mzSeeded = false;
-	let commSeeded = false;
-	$effect(() => {
-		if (!initialized || initialData) return;
-		const mzItems = municipalityZoneQuery.data?.items;
-		const commItems = communityQuery.data?.items;
-		if (mzItems && !mzSeeded) {
-			mzSeeded = true;
-			if (!mzVal) mzVal = defaultCodeOf(mzItems);
-		}
-		if (commItems && !commSeeded) {
-			commSeeded = true;
-			// Keep the pair coherent: a default ชุมชน that belongs to a different
-			// เขต would pre-fill an address that contradicts itself, so fall back to
-			// no community rather than a mismatched one.
-			const zone = mzVal;
-			const candidate = commItems.find((i) => i.is_default && i.status === 'active');
-			const coherent = !candidate?.parent_code || !zone || candidate.parent_code === zone;
-			if (!commVal && candidate && coherent) commVal = candidate.code;
 		}
 	});
 
@@ -405,15 +350,7 @@
 		<div class="space-y-6">
 			<!-- Location Section -->
 			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-				<HouseholdFormLocationSection
-					{form}
-					bind:mzVal
-					bind:commVal
-					{municipalityZoneItems}
-					{communityItems}
-					mzPending={municipalityZoneQuery.isPending}
-					commPending={communityQuery.isPending}
-				/>
+				<HouseholdFormLocationSection {form} bind:mzVal bind:commVal />
 			</div>
 
 			<!-- Assets Section -->

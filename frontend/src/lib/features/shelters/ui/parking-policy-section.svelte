@@ -73,10 +73,13 @@
 	const availability = $derived($formData.parking_policy?.availability ?? null);
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
+<section
+	id="parking-policy"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+>
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Car class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">8.</span>
+		<span class="text-sm font-bold text-black">9.</span>
 		<h2 class="text-base font-bold text-black">
 			นโยบายยานพาหนะและการจอดรถ (Vehicle &amp; Parking Policy)
 		</h2>

@@ -3,7 +3,6 @@ import {
 	createBooking,
 	createUnassignedRegistration,
 	fetchDistricts,
-	fetchPetTypes,
 	fetchProvinces,
 	fetchShelterPolicy,
 	fetchSubdistricts,
@@ -16,7 +15,6 @@ import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/boo
 export const publicRegisterKeys = {
 	all: ['public-register'] as const,
 	booking: (code: string) => [...publicRegisterKeys.all, 'booking', code] as const,
-	petTypes: (shelterCode: string) => [...publicRegisterKeys.all, 'pet-types', shelterCode] as const,
 	shelterPolicy: (shelterCode: string) =>
 		[...publicRegisterKeys.all, 'shelter-policy', shelterCode] as const,
 	provinces: () => [...publicRegisterKeys.all, 'provinces'] as const,
@@ -45,24 +43,6 @@ export function useBookingLookup() {
 export function useCreateUnassignedRegistration() {
 	return createMutation(() => ({
 		mutationFn: (input: PublicUnassignedRegistrationPayload) => createUnassignedRegistration(input)
-	}));
-}
-
-/**
- * Pet species offered by the shelter currently selected in the booking form.
- * `shelterCode` is a getter, not a plain string — the shelter is picked
- * *inside* the form (unlike `vulnerableGroups`, loaded once by the modal
- * before the form even mounts), so this must re-run reactively as the citizen
- * changes their selection. TanStack Query keys the cache by the resolved
- * shelter code, so re-selecting a shelter already picked earlier in the same
- * session is served from cache instead of refetched.
- */
-export function usePetTypes(shelterCode: () => string) {
-	return createQuery(() => ({
-		queryKey: publicRegisterKeys.petTypes(shelterCode()),
-		queryFn: () => fetchPetTypes(shelterCode()),
-		enabled: Boolean(shelterCode().trim()),
-		staleTime: 5 * 60 * 1000
 	}));
 }
 

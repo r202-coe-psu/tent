@@ -114,6 +114,26 @@ export async function requireAdmin(cookie: string | null): Promise<string> {
 }
 
 /**
+ * Authorize a cross-shelter back-office operation as an app system admin or
+ * CouchDB server admin. Unlike {@link requireAdmin}, this accepts the app's
+ * `system_admin` role as well as CouchDB's `_admin` role.
+ */
+export async function requireSystemAdmin(cookie: string | null): Promise<Caller> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+	});
+	const data = (await res.json().catch(() => null)) as {
+		userCtx?: { name: string | null; roles: string[] };
+	} | null;
+	const name = data?.userCtx?.name;
+	const roles = data?.userCtx?.roles ?? [];
+	if (!name) throw error(401, 'Authentication required');
+	if (!isSystemAdmin(roles)) throw error(403, 'System admin privileges required');
+	return { name, roles, isSA: true, shelterCode: shelterCodeFromRoles(roles) };
+}
+
+/**
  * Authorize a shelter-scoped write: SA can edit any shelter; shelter_manager
  * may only edit shelters matching their own `shelterCode` scope. Resolves the
  * caller from the session cookie and returns the {@link Caller} so the handler
@@ -294,6 +314,34 @@ export async function requireShelterScopeOrSA(
 }
 
 /**
+ * Re-verify the CALLER'S OWN password against central CouchDB `_session` — a step-up
+ * gate for a sensitive action while already logged in (e.g. revealing a partner client
+ * secret), distinct from {@link requireAdmin}/{@link authorizeUserWrite} which only
+ * check the existing session cookie. The username always comes from that existing
+ * session, never from the request body, so this can only confirm "you are who your
+ * cookie says" — never let a caller probe a different account's password.
+ *
+ * Deliberately does not forward CouchDB's `Set-Cookie` response back to the browser:
+ * this is a one-off confirmation, not a new login, and must not disturb the caller's
+ * active session.
+ *
+ * Throws {@link ServiceError} (`UNAUTHENTICATED`) on a missing session or wrong
+ * password. Callers should rate-limit this — a real password oracle otherwise.
+ */
+export async function verifyOwnPassword(cookie: string | null, password: string): Promise<void> {
+	const caller = await authorizeUserWrite(cookie);
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ name: caller.name, password })
+	});
+	if (!res.ok) {
+		throw new ServiceError('UNAUTHENTICATED', 'Incorrect password');
+	}
+}
+
+/**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
  *  - Minting `system_admin`: caller must be SA-equivalent (`system_admin` or
@@ -339,7 +387,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant staff capabilities in their own shelter'
+			'A manager may only grant staff capabilities in their own shelter, not shelter_manager or system_admin'
 		);
 	}
 }

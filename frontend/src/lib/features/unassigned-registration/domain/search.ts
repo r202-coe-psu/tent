@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
+import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 
 /** Full Station 1 badge copy for Unassigned Registration hits (#250 / CR-113). */
 export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยังไม่ระบุศูนย์';
@@ -85,7 +85,7 @@ export function formatOpenMemberCardType(cardType: PersonIdHit['cardType']): str
 
 export function formatOpenMemberVulnerableGroup(code: string): string {
 	const hit = CR112_VULNERABLE_GROUP_ACTIVE.find((item) => item.code === code);
-	return hit?.label ?? code;
+	return hit ? formatMasterLabel(hit, 'th') : code;
 }
 
 /** Phone · card type · ID number for claim-dialog identity line. */

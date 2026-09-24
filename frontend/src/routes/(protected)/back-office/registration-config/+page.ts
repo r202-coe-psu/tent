@@ -1,6 +1,8 @@
-import { requireManager } from '$lib/guards/auth';
+import { redirect } from '@sveltejs/kit';
+import { resolve } from '$app/paths';
 import type { PageLoad } from './$types';
 
-export const load = (async () => {
-	await requireManager();
+/** Legacy URL → Master Data hub */
+export const load = (() => {
+	redirect(302, resolve('/back-office/master-data?type=vulnerable_group'));
 }) satisfies PageLoad;

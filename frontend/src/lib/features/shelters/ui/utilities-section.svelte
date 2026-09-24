@@ -50,10 +50,13 @@
 	const showVhfChannel = $derived(($formData.utilities.communications ?? []).includes('vhf_radio'));
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
+<section
+	id="utilities"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+>
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Zap class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">4.</span>
+		<span class="text-sm font-bold text-black">5.</span>
 		<h2 class="text-base font-bold text-black">สถานะสาธารณูปโภคพื้นฐาน</h2>
 	</div>
 

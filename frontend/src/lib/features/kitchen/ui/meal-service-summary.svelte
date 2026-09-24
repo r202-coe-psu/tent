@@ -61,10 +61,10 @@
 	});
 </script>
 
-<Card.Root class="border-0 shadow-sm">
-	<Card.Header class="flex flex-row items-start gap-3 py-4">
-		<div class="rounded-lg bg-indigo-50 p-2">
-			<ClipboardCheck class="h-4 w-4 text-indigo-600" />
+<Card.Root class="border border-slate-200/80 shadow-2xs">
+	<Card.Header class="flex flex-row items-start gap-3 p-4 sm:p-6 sm:py-4">
+		<div class="rounded-lg border border-orange-200 bg-orange-50 p-2">
+			<ClipboardCheck class="h-4 w-4 text-orange-700" />
 		</div>
 		<div>
 			<Card.Title class="text-sm font-bold">
@@ -82,7 +82,74 @@
 		{:else if !rows.length}
 			<p class="p-6 text-center text-sm text-muted-foreground">ยังไม่มีการบันทึกผลบริการ</p>
 		{:else}
-			<div class="overflow-x-auto">
+			<!-- Mobile cards (< md) -->
+			<div class="divide-y divide-border/60 md:hidden">
+				{#each paginatedRows as { svc, plan, v } (svc._id)}
+					<article class="flex flex-col gap-3 p-4">
+						<div class="flex items-start justify-between gap-2">
+							<div class="min-w-0">
+								<p class="text-sm font-medium">
+									{plan?.label ?? MEAL_PERIOD_LABELS[svc.meal]}
+								</p>
+								<p class="text-xs text-muted-foreground">
+									{#if plan?.label}{MEAL_PERIOD_LABELS[svc.meal]} ·
+									{/if}<span class="font-mono tabular-nums">{svc.date}</span>
+								</p>
+								{#if !plan}
+									<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>
+								{/if}
+							</div>
+							<div class="shrink-0 text-right">
+								<Badge variant="outline" class={STATUS_CLASS[v.status]}
+									>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
+								>
+								<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+									{v.variance_pct === null
+										? '—'
+										: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
+								</p>
+							</div>
+						</div>
+						<div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-center text-xs">
+							<div>
+								<p class="text-muted-foreground">วางแผน</p>
+								<p class="font-semibold tabular-nums">
+									{v.planned === null ? '—' : v.planned.toLocaleString()}
+								</p>
+							</div>
+							<div>
+								<p class="text-muted-foreground">ทำได้จริง</p>
+								<p class="font-semibold tabular-nums">
+									{v.actual_yield === null ? '—' : v.actual_yield.toLocaleString()}
+								</p>
+								{#if v.yield_variance !== null}
+									<p class="text-muted-foreground">
+										{v.yield_variance >= 0 ? '+' : ''}{v.yield_variance.toLocaleString()}
+									</p>
+								{/if}
+							</div>
+							<div>
+								<p class="text-muted-foreground">ในศูนย์</p>
+								<p class="font-semibold tabular-nums">{v.served.toLocaleString()}</p>
+							</div>
+							<div>
+								<p class="text-muted-foreground">นอกศูนย์</p>
+								<p class="font-semibold tabular-nums">{v.external.toLocaleString()}</p>
+							</div>
+							<div class="col-span-2 {v.waste > 0 ? 'text-amber-700' : ''}">
+								<p class="text-muted-foreground">เหลือทิ้ง</p>
+								<p class="font-semibold tabular-nums">{v.waste.toLocaleString()}</p>
+							</div>
+						</div>
+						<p class="text-xs text-muted-foreground">
+							{svc.created_by} · {formatTime(svc.created_at)}
+						</p>
+					</article>
+				{/each}
+			</div>
+
+			<!-- Desktop table (md+) -->
+			<div class="hidden overflow-x-auto md:block">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="text-xs">
@@ -108,13 +175,13 @@
 										{/if}<span class="font-mono">{svc.date}</span>
 									</p>
 									{#if !plan}
-										<p class="text-xs text-gray-500">ไม่มีแผนอ้างอิง</p>
+										<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>
 									{/if}
 								</Table.Cell>
-								<Table.Cell class="px-6 text-right text-sm">
+								<Table.Cell class="px-6 text-right text-sm tabular-nums">
 									{v.planned === null ? '—' : v.planned.toLocaleString()}
 								</Table.Cell>
-								<Table.Cell class="px-6 text-right text-sm">
+								<Table.Cell class="px-6 text-right text-sm tabular-nums">
 									{v.actual_yield === null ? '—' : v.actual_yield.toLocaleString()}
 									{#if v.yield_variance !== null}
 										<p class="text-xs text-muted-foreground">
@@ -122,20 +189,22 @@
 										</p>
 									{/if}
 								</Table.Cell>
-								<Table.Cell class="px-6 text-right text-sm font-semibold">
+								<Table.Cell class="px-6 text-right text-sm font-semibold tabular-nums">
 									{v.served.toLocaleString()}
 								</Table.Cell>
-								<Table.Cell class="px-6 text-right text-sm">
+								<Table.Cell class="px-6 text-right text-sm tabular-nums">
 									{v.external.toLocaleString()}
 								</Table.Cell>
-								<Table.Cell class="px-6 text-right text-sm {v.waste > 0 ? 'text-amber-700' : ''}">
+								<Table.Cell
+									class="px-6 text-right text-sm tabular-nums {v.waste > 0 ? 'text-amber-700' : ''}"
+								>
 									{v.waste.toLocaleString()}
 								</Table.Cell>
 								<Table.Cell class="px-6">
 									<Badge variant="outline" class={STATUS_CLASS[v.status]}
 										>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
 									>
-									<p class="mt-0.5 text-xs text-muted-foreground">
+									<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
 										{v.variance_pct === null
 											? '—'
 											: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
@@ -151,7 +220,7 @@
 				</Table.Root>
 			</div>
 			{#if rows.length > PAGE_SIZE}
-				<div class="flex justify-end p-4">
+				<div class="flex justify-center p-4 sm:justify-end">
 					<Pagination.Root bind:page={currentPage} count={rows.length} perPage={PAGE_SIZE}>
 						{#snippet children({ pages })}
 							<Pagination.Content>

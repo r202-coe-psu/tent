@@ -1013,6 +1013,117 @@
 				}
 			}
 		},
+		"/v1/admin/thirdparty-clients/{client_row_id}": {
+			"patch": {
+				"tags": ["External"],
+				"summary": "Update Client Scopes",
+				"description": "Edit `allowed_scopes` — refused (409) once the client is revoked.",
+				"operationId": "update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ThirdPartyClientUpdateRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["External"],
+				"summary": "Delete Client",
+				"description": "Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.",
+				"operationId": "delete_client_v1_admin_thirdparty_clients__client_row_id__delete",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientDeleteResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/secret": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Reveal Client Secret",
+				"description": "Decrypt and return the plaintext secret. The BFF gates this behind the caller\nre-entering their own CouchDB password — this endpoint itself only enforces the\nsame `EXTERNAL_API_SECRET` bearer as every other route on this router.",
+				"operationId": "reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientSecretResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/external/locations": {
 			"get": {
 				"tags": ["External"],
@@ -1422,6 +1533,41 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/unassigned-registrations/residence-match": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Match Unassigned Residence",
+				"description": "Service-to-service Residence match — ids + landmark/housing_type only (no member PII).",
+				"operationId": "match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/staff/v1/unassigned-registrations/search": {
 			"get": {
 				"tags": ["Unassigned Registrations (Staff)"],
@@ -1753,6 +1899,441 @@
 					}
 				}
 			}
+		},
+		"/public/v1/jobs": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "List Jobs",
+				"operationId": "list_jobs_public_v1_jobs_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "shelter_code",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Shelter Code"
+						}
+					},
+					{
+						"name": "skill",
+						"in": "query",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Skill" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/PublicJobListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/jobs/{job_id}/preflight": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Preflight Job Application",
+				"operationId": "preflight_job_application_public_v1_jobs__job_id__preflight_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "job_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Job Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/VolunteerPreflightRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerPreflightResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/jobs/{job_id}/apply": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Apply To Job",
+				"operationId": "apply_to_job_public_v1_jobs__job_id__apply_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "job_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Job Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/VolunteerApplyRequest" }
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerApplyResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/ticket/{token}": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "Get Ticket",
+				"operationId": "get_ticket_public_v1_volunteer_ticket__token__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Token" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerTicketResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/ticket/find": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Find Tickets",
+				"operationId": "find_tickets_public_v1_volunteer_ticket_find_post",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/TicketFindRequest" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/TicketFindResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/ticket/{token}/cancel": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Cancel Ticket",
+				"operationId": "cancel_ticket_public_v1_volunteer_ticket__token__cancel_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Token" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerCancelResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/volunteer/schedule": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Schedule",
+				"description": "ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).",
+				"operationId": "volunteer_schedule_public_v1_volunteer_schedule_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ScheduleLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerScheduleResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/schedule/respond": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Respond To Dispatch",
+				"description": "Accept or decline an offered shift with the code a manager read out.",
+				"operationId": "respond_to_dispatch_public_v1_volunteer_schedule_respond_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DispatchRespondRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DispatchRespondResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/schedule/action": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Schedule Action",
+				"description": "Check in, check out, or withdraw from the caller's own assigned shift.",
+				"operationId": "volunteer_schedule_action_public_v1_volunteer_schedule_action_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ScheduleActionRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ScheduleActionResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/access/resolve": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Resolve Volunteer Access",
+				"description": "Resolve a portal credential before a browser session is created.",
+				"operationId": "resolve_volunteer_access_public_v1_volunteer_access_resolve_post",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/TicketFindRequest" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerProfileResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/profile": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Profile",
+				"description": "The volunteer's own profile, for the Access Portal's edit screen.",
+				"operationId": "volunteer_profile_public_v1_volunteer_profile_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ScheduleLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerProfileResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/profile/update": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Update Volunteer Profile",
+				"description": "Change the parts of the profile the volunteer owns (skills, for now).",
+				"operationId": "update_volunteer_profile_public_v1_volunteer_profile_update_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/VolunteerProfileUpdateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerProfileUpdateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
 		}
 	},
 	"components": {
@@ -1951,6 +2532,44 @@
 				"type": "object",
 				"required": ["name_th", "quantity_on_hand", "unit_label", "level"],
 				"title": "CriticalItem"
+			},
+			"DispatchRespondRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"portal_id": {
+						"anyOf": [{ "type": "string", "maxLength": 120, "minLength": 1 }, { "type": "null" }],
+						"title": "Portal Id"
+					},
+					"assignment_id": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Assignment Id"
+					},
+					"code": { "type": "string", "maxLength": 20, "minLength": 4, "title": "Code" },
+					"action": { "type": "string", "enum": ["accepted", "declined"], "title": "Action" }
+				},
+				"type": "object",
+				"required": ["assignment_id", "code", "action"],
+				"title": "DispatchRespondRequest",
+				"description": "Answering an offered shift — two factors, neither enough alone.\n\nThe credential is whatever the portal signed in with and must resolve to the\nassignment's own volunteer; ``code`` is the short code a manager read out. A\nsix-character code is only safe because the caller has to know whose shift it is\nas well."
+			},
+			"DispatchRespondResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"assignment_id": { "type": "string", "title": "Assignment Id" },
+					"dispatch_status": { "type": "string", "title": "Dispatch Status" }
+				},
+				"type": "object",
+				"required": ["assignment_id", "dispatch_status"],
+				"title": "DispatchRespondResponse"
 			},
 			"DonationCancelResponse": {
 				"properties": {
@@ -2272,6 +2891,16 @@
 				},
 				"type": "object",
 				"title": "HouseholdOut"
+			},
+			"JobShiftTemplate": {
+				"properties": {
+					"shift_name": { "type": "string", "title": "Shift Name", "default": "" },
+					"start_time": { "type": "string", "title": "Start Time", "default": "" },
+					"end_time": { "type": "string", "title": "End Time", "default": "" },
+					"days": { "items": { "type": "string" }, "type": "array", "title": "Days" }
+				},
+				"type": "object",
+				"title": "JobShiftTemplate"
 			},
 			"LocationDetailEnvelope": {
 				"properties": {
@@ -2740,8 +3369,13 @@
 					"item_id": { "type": "string", "title": "Item Id" },
 					"name": { "type": "string", "title": "Name" },
 					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
 					"unit": { "type": "string", "title": "Unit" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
@@ -2982,6 +3616,171 @@
 				"required": ["_id", "title", "description", "severity", "is_active", "updated_at"],
 				"title": "PublicAnnouncement",
 				"description": "Public snapshot of a system announcement, stored in MongoDB `public_announcements`.\nSourced from `announcement` docs in CouchDB `registry`."
+			},
+			"PublicJobItem": {
+				"properties": {
+					"job_id": { "type": "string", "title": "Job Id" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shelter_name": { "type": "string", "title": "Shelter Name", "default": "" },
+					"title": { "type": "string", "title": "Title" },
+					"description": { "type": "string", "title": "Description" },
+					"tier": { "type": "string", "title": "Tier" },
+					"skills_required": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Skills Required"
+					},
+					"shift_template": { "$ref": "#/components/schemas/JobShiftTemplate" },
+					"shifts": {
+						"items": { "$ref": "#/components/schemas/PublicJobShift" },
+						"type": "array",
+						"title": "Shifts"
+					},
+					"quota": { "type": "integer", "title": "Quota" },
+					"slots_confirmed": { "type": "integer", "title": "Slots Confirmed" },
+					"slots_remaining": { "type": "integer", "title": "Slots Remaining" },
+					"applicants_count": { "type": "integer", "title": "Applicants Count", "default": 0 },
+					"status": { "type": "string", "title": "Status" },
+					"requires_review": { "type": "boolean", "title": "Requires Review", "default": false }
+				},
+				"type": "object",
+				"required": [
+					"job_id",
+					"shelter_code",
+					"title",
+					"description",
+					"tier",
+					"quota",
+					"slots_confirmed",
+					"slots_remaining",
+					"status"
+				],
+				"title": "PublicJobItem",
+				"description": "One card on the board (CR-092 screen 1).\n\nCarries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,\n``dispatched``, is a back-office state and is folded into \"not available\" here\nrather than shown to the public."
+			},
+			"PublicJobListResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"jobs": {
+						"items": { "$ref": "#/components/schemas/PublicJobItem" },
+						"type": "array",
+						"title": "Jobs"
+					}
+				},
+				"type": "object",
+				"title": "PublicJobListResponse"
+			},
+			"PublicJobShift": {
+				"properties": {
+					"shift_id": { "type": "string", "title": "Shift Id" },
+					"date": { "type": "string", "title": "Date", "default": "" },
+					"end_date": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "End Date" },
+					"start_time": { "type": "string", "title": "Start Time", "default": "" },
+					"end_time": { "type": "string", "title": "End Time", "default": "" },
+					"station": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Station" },
+					"quota": { "type": "integer", "title": "Quota", "default": 0 },
+					"slots_confirmed": { "type": "integer", "title": "Slots Confirmed", "default": 0 },
+					"slots_dispatched": { "type": "integer", "title": "Slots Dispatched", "default": 0 },
+					"slots_remaining": { "type": "integer", "title": "Slots Remaining", "default": 0 },
+					"applicants_count": { "type": "integer", "title": "Applicants Count", "default": 0 }
+				},
+				"type": "object",
+				"required": ["shift_id"],
+				"title": "PublicJobShift",
+				"description": "Concrete shift identity plus renderable snapshot fields."
+			},
+			"ScheduleActionRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"portal_id": {
+						"anyOf": [{ "type": "string", "maxLength": 120, "minLength": 1 }, { "type": "null" }],
+						"title": "Portal Id"
+					},
+					"assignment_id": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Assignment Id"
+					},
+					"action": {
+						"type": "string",
+						"enum": ["check_in", "check_out", "withdraw"],
+						"title": "Action"
+					}
+				},
+				"type": "object",
+				"required": ["assignment_id", "action"],
+				"title": "ScheduleActionRequest",
+				"description": "A state change requested by the volunteer who owns a schedule row."
+			},
+			"ScheduleActionResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"assignment_id": { "type": "string", "title": "Assignment Id" },
+					"status": { "type": "string", "title": "Status" },
+					"requested_at": { "type": "string", "title": "Requested At" }
+				},
+				"type": "object",
+				"required": ["assignment_id", "status", "requested_at"],
+				"title": "ScheduleActionResponse"
+			},
+			"ScheduleLookupRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"portal_id": {
+						"anyOf": [{ "type": "string", "maxLength": 120, "minLength": 1 }, { "type": "null" }],
+						"title": "Portal Id"
+					}
+				},
+				"type": "object",
+				"title": "ScheduleLookupRequest",
+				"description": "Same key as the ticket lookup — the portal signs in by phone or by token."
+			},
+			"ScheduleShift": {
+				"properties": {
+					"assignment_id": { "type": "string", "title": "Assignment Id" },
+					"job_id": { "type": "string", "title": "Job Id" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
+					"job_title": { "type": "string", "title": "Job Title", "default": "" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shelter_name": { "type": "string", "title": "Shelter Name", "default": "" },
+					"date": { "type": "string", "title": "Date", "default": "" },
+					"shift": { "type": "string", "title": "Shift", "default": "" },
+					"station": { "type": "string", "title": "Station", "default": "" },
+					"start_ts": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Start Ts" },
+					"end_ts": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "End Ts" },
+					"check_in_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Check In At"
+					},
+					"check_out_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Check Out At"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"dispatch_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dispatch Status"
+					}
+				},
+				"type": "object",
+				"required": ["assignment_id", "job_id", "shelter_code", "status"],
+				"title": "ScheduleShift",
+				"description": "One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).\n\nDistinct from a ticket: a ticket is the application they filed, this is the roster\nentry a manager put them on, with the duty window the Time-Bound access guard reads\nand the check-in stamps the tablet station writes."
 			},
 			"SearchRequest": {
 				"properties": {
@@ -3400,7 +4199,11 @@
 			},
 			"ThirdPartyClientCreateRequest": {
 				"properties": {
-					"client_id": { "type": "string", "minLength": 1, "title": "Client Id" },
+					"name": { "type": "string", "maxLength": 100, "minLength": 1, "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string", "maxLength": 500 }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -3410,13 +4213,19 @@
 					}
 				},
 				"type": "object",
-				"required": ["client_id", "module_name", "allowed_scopes"],
-				"title": "ThirdPartyClientCreateRequest"
+				"required": ["name", "module_name", "allowed_scopes"],
+				"title": "ThirdPartyClientCreateRequest",
+				"description": "``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller."
 			},
 			"ThirdPartyClientCreateResponse": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -3424,6 +4233,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
 					"client_secret": { "type": "string", "title": "Client Secret" }
@@ -3432,15 +4245,27 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at",
 					"client_secret"
 				],
 				"title": "ThirdPartyClientCreateResponse",
 				"description": "Create response — plaintext ``client_secret`` is returned once."
+			},
+			"ThirdPartyClientDeleteResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"client": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+				},
+				"type": "object",
+				"required": ["client"],
+				"title": "ThirdPartyClientDeleteResponse"
 			},
 			"ThirdPartyClientListResponse": {
 				"properties": {
@@ -3459,6 +4284,11 @@
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -3466,6 +4296,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -3473,14 +4307,17 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at"
 				],
 				"title": "ThirdPartyClientPublic",
-				"description": "Client metadata without the secret hash."
+				"description": "Client metadata without the secret hash/ciphertext."
 			},
 			"ThirdPartyClientRevokeResponse": {
 				"properties": {
@@ -3490,6 +4327,87 @@
 				"type": "object",
 				"required": ["client"],
 				"title": "ThirdPartyClientRevokeResponse"
+			},
+			"ThirdPartyClientSecretResponse": {
+				"properties": { "client_secret": { "type": "string", "title": "Client Secret" } },
+				"type": "object",
+				"required": ["client_secret"],
+				"title": "ThirdPartyClientSecretResponse",
+				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (CR-136)."
+			},
+			"ThirdPartyClientUpdateRequest": {
+				"properties": {
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Allowed Scopes"
+					}
+				},
+				"type": "object",
+				"required": ["allowed_scopes"],
+				"title": "ThirdPartyClientUpdateRequest",
+				"description": "``PATCH`` body — scopes only. Refused (409) once the client is revoked."
+			},
+			"TicketFindItem": {
+				"properties": {
+					"job_id": { "type": "string", "title": "Job Id" },
+					"applicant_name": { "type": "string", "title": "Applicant Name", "default": "" },
+					"status": { "type": "string", "title": "Status" },
+					"job_title": { "type": "string", "title": "Job Title", "default": "" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shift_date": { "type": "string", "title": "Shift Date", "default": "" },
+					"end_date": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "End Date" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
+					"start_time": { "type": "string", "title": "Start Time", "default": "" },
+					"end_time": { "type": "string", "title": "End Time", "default": "" }
+				},
+				"type": "object",
+				"required": ["job_id", "status", "shelter_code"],
+				"title": "TicketFindItem"
+			},
+			"TicketFindRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"portal_id": {
+						"anyOf": [{ "type": "string", "maxLength": 120, "minLength": 1 }, { "type": "null" }],
+						"title": "Portal Id"
+					}
+				},
+				"type": "object",
+				"title": "TicketFindRequest",
+				"description": "Tab 2 — \"ค้นหาตั๋วของฉัน\", by phone or by a token already in hand."
+			},
+			"TicketFindResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"tickets": {
+						"items": { "$ref": "#/components/schemas/TicketFindItem" },
+						"type": "array",
+						"title": "Tickets"
+					},
+					"phone_masked": { "type": "string", "title": "Phone Masked", "default": "" }
+				},
+				"type": "object",
+				"title": "TicketFindResponse"
+			},
+			"TicketShift": {
+				"properties": {
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
+					"date": { "type": "string", "title": "Date", "default": "" },
+					"start_time": { "type": "string", "title": "Start Time", "default": "" },
+					"end_time": { "type": "string", "title": "End Time", "default": "" },
+					"station": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Station" }
+				},
+				"type": "object",
+				"title": "TicketShift"
 			},
 			"TokenErrorDetail": {
 				"properties": {
@@ -3668,6 +4586,11 @@
 						"enum": ["web", "staff"],
 						"title": "Registered Via",
 						"default": "web"
+					},
+					"join_registration_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Join Registration Id",
+						"description": "Append members (and pets) into this open registration's reserved household."
 					}
 				},
 				"type": "object",
@@ -3834,6 +4757,98 @@
 				"required": ["open_registrations", "open_members"],
 				"title": "UnassignedRegistrationStatsResponse"
 			},
+			"UnassignedResidenceMatchHit": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"landmark": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Landmark" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_household_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Household Id"
+					},
+					"status": { "type": "string", "title": "Status", "default": "open" },
+					"primary_contact_name_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Primary Contact Name Masked"
+					},
+					"matched_member_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Matched Member Masked"
+					},
+					"member_count": { "type": "integer", "title": "Member Count", "default": 0 },
+					"pets": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"household_address": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Household Address"
+					}
+				},
+				"type": "object",
+				"required": ["id"],
+				"title": "UnassignedResidenceMatchHit"
+			},
+			"UnassignedResidenceMatchRequest": {
+				"properties": {
+					"housing_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"]
+							},
+							{ "type": "null" }
+						],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" }
+				},
+				"type": "object",
+				"title": "UnassignedResidenceMatchRequest",
+				"description": "Service-to-service residence match — no member PII in response."
+			},
+			"UnassignedResidenceMatchResponse": {
+				"properties": {
+					"matches": {
+						"items": { "$ref": "#/components/schemas/UnassignedResidenceMatchHit" },
+						"type": "array",
+						"title": "Matches"
+					}
+				},
+				"type": "object",
+				"required": ["matches"],
+				"title": "UnassignedResidenceMatchResponse"
+			},
 			"ValidationError": {
 				"properties": {
 					"loc": {
@@ -3854,6 +4869,246 @@
 				"properties": { "status": { "type": "string", "title": "Status", "default": "ok" } },
 				"type": "object",
 				"title": "VerifyResponse"
+			},
+			"VolunteerApplyRequest": {
+				"properties": {
+					"first_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "First Name"
+					},
+					"last_name": { "type": "string", "maxLength": 100, "minLength": 1, "title": "Last Name" },
+					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" },
+					"national_id": {
+						"anyOf": [{ "type": "string", "maxLength": 20 }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"email": {
+						"anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }],
+						"title": "Email"
+					},
+					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
+					"shift_date": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shift Date"
+					},
+					"station": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Station" }
+				},
+				"type": "object",
+				"required": ["first_name", "last_name", "phone"],
+				"title": "VolunteerApplyRequest",
+				"description": "The 4-field quick-apply form (FR-VOL-02.2).\n\n``national_id`` is optional here even though CR-092 lists it as a main field: a\nvolunteer with a passport or a pink card has no 13-digit number, and refusing them\nat the form would be a worse failure than a profile that dedupes on phone alone."
+			},
+			"VolunteerApplyResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"tracking_token": { "type": "string", "title": "Tracking Token" },
+					"status": { "type": "string", "title": "Status" },
+					"job_id": { "type": "string", "title": "Job Id" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" }
+				},
+				"type": "object",
+				"required": ["tracking_token", "status", "job_id"],
+				"title": "VolunteerApplyResponse"
+			},
+			"VolunteerCancelResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"message": { "type": "string", "title": "Message", "default": "Application cancelled" }
+				},
+				"type": "object",
+				"title": "VolunteerCancelResponse"
+			},
+			"VolunteerPreflightProfile": {
+				"properties": {
+					"volunteer_code": { "type": "string", "title": "Volunteer Code", "default": "" },
+					"display_name": { "type": "string", "title": "Display Name", "default": "" },
+					"identity_status": {
+						"type": "string",
+						"enum": ["verified", "pending", "rejected"],
+						"title": "Identity Status",
+						"default": "pending"
+					},
+					"existing_skills": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Existing Skills"
+					},
+					"new_skills": { "items": { "type": "string" }, "type": "array", "title": "New Skills" },
+					"new_controlled_skills": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "New Controlled Skills"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerPreflightProfile"
+			},
+			"VolunteerPreflightRequest": {
+				"properties": {
+					"shelter_code": {
+						"type": "string",
+						"maxLength": 80,
+						"minLength": 1,
+						"title": "Shelter Code"
+					},
+					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" },
+					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" }
+				},
+				"type": "object",
+				"required": ["shelter_code", "phone"],
+				"title": "VolunteerPreflightRequest",
+				"description": "Read-only identity preview; it never reserves a slot or writes a document."
+			},
+			"VolunteerPreflightResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"match": {
+						"type": "string",
+						"enum": ["no_match", "matched_one", "ambiguous_match"],
+						"title": "Match"
+					},
+					"existing_profile": {
+						"anyOf": [
+							{ "$ref": "#/components/schemas/VolunteerPreflightProfile" },
+							{ "type": "null" }
+						]
+					},
+					"message": { "type": "string", "title": "Message", "default": "" }
+				},
+				"type": "object",
+				"required": ["match"],
+				"title": "VolunteerPreflightResponse"
+			},
+			"VolunteerProfile": {
+				"properties": {
+					"first_name": { "type": "string", "title": "First Name", "default": "" },
+					"last_name": { "type": "string", "title": "Last Name", "default": "" },
+					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
+					"phone_masked": { "type": "string", "title": "Phone Masked", "default": "" },
+					"email": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Email" },
+					"volunteer_code": { "type": "string", "title": "Volunteer Code", "default": "" },
+					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"organization": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Organization"
+					},
+					"identity_verified": {
+						"type": "boolean",
+						"title": "Identity Verified",
+						"default": false
+					},
+					"personnel_type": { "type": "string", "title": "Personnel Type", "default": "volunteer" },
+					"shelter_codes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Shelter Codes"
+					},
+					"portal_id": { "type": "string", "title": "Portal Id", "default": "" }
+				},
+				"type": "object",
+				"title": "VolunteerProfile",
+				"description": "The volunteer's own profile, merged across every shelter they hold one at.\n\n``volunteer`` is a per-shelter document, so someone who has helped at two centres has\ntwo of them. The portal shows one person, so the newest document supplies the\nidentity and the shelters are listed alongside — and an edit made here is applied to\nall of them (see ``VolunteerProfileUpdateBuffer``).\n\nNo ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4)."
+			},
+			"VolunteerProfileResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"profile": {
+						"anyOf": [{ "$ref": "#/components/schemas/VolunteerProfile" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileResponse"
+			},
+			"VolunteerProfileUpdateRequest": {
+				"properties": {
+					"phone": {
+						"anyOf": [{ "type": "string", "maxLength": 30, "minLength": 6 }, { "type": "null" }],
+						"title": "Phone"
+					},
+					"token": {
+						"anyOf": [{ "type": "string", "maxLength": 200, "minLength": 6 }, { "type": "null" }],
+						"title": "Token"
+					},
+					"portal_id": {
+						"anyOf": [{ "type": "string", "maxLength": 120, "minLength": 1 }, { "type": "null" }],
+						"title": "Portal Id"
+					},
+					"skills": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Skills"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateRequest",
+				"description": "What a volunteer may change about themselves.\n\nSkills only, for now. They are self-declared and carry no authority on their own: a\ncontrolled job still routes to review, and ``identity_verified`` stays a staff badge\n— so this cannot be used to unlock work the shelter has not approved."
+			},
+			"VolunteerProfileUpdateResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"updated": { "type": "integer", "title": "Updated", "default": 0 },
+					"profile": {
+						"anyOf": [{ "$ref": "#/components/schemas/VolunteerProfile" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"title": "VolunteerProfileUpdateResponse"
+			},
+			"VolunteerScheduleResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"shifts": {
+						"items": { "$ref": "#/components/schemas/ScheduleShift" },
+						"type": "array",
+						"title": "Shifts"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerScheduleResponse"
+			},
+			"VolunteerTicket": {
+				"properties": {
+					"token": { "type": "string", "title": "Token" },
+					"can_cancel": { "type": "boolean", "title": "Can Cancel", "default": true },
+					"status": { "type": "string", "title": "Status" },
+					"job_id": { "type": "string", "title": "Job Id" },
+					"shift_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Shift Id" },
+					"job_title": { "type": "string", "title": "Job Title", "default": "" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shelter_name": { "type": "string", "title": "Shelter Name", "default": "" },
+					"applicant_name": { "type": "string", "title": "Applicant Name" },
+					"phone_masked": { "type": "string", "title": "Phone Masked" },
+					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"selected_shift": { "$ref": "#/components/schemas/TicketShift" },
+					"applied_at": { "type": "string", "title": "Applied At" },
+					"qr_payload": { "type": "string", "title": "Qr Payload" }
+				},
+				"type": "object",
+				"required": [
+					"token",
+					"status",
+					"job_id",
+					"shelter_code",
+					"applicant_name",
+					"phone_masked",
+					"applied_at",
+					"qr_payload"
+				],
+				"title": "VolunteerTicket",
+				"description": "What the Digital Pass may show.\n\nNo ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed\nbecause the pass displays it as the human-readable ticket id."
+			},
+			"VolunteerTicketResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"ticket": { "$ref": "#/components/schemas/VolunteerTicket" }
+				},
+				"type": "object",
+				"required": ["ticket"],
+				"title": "VolunteerTicketResponse"
 			}
 		},
 		"securitySchemes": {

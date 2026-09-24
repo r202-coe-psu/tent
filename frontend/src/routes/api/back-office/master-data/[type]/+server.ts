@@ -2,9 +2,9 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	adminRaw,
-	requireAdmin,
 	requireShelterManagerOrSA,
 	requireShelterScopeOrSA,
+	requireSystemAdmin,
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
@@ -96,7 +96,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		const caller =
 			scope.mode === 'shelter'
 				? (await requireShelterManagerOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
-				: await requireAdmin(request.headers.get('cookie'));
+				: (await requireSystemAdmin(request.headers.get('cookie'))).name;
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}
@@ -136,7 +136,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			doc = existing
 				? {
 						...existing,
-						schema_v: 3,
+						schema_v: 4,
 						shelter_code: scope.shelterCode,
 						items: cleaned,
 						updated_at: now
@@ -144,7 +144,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 				: {
 						_id: id,
 						type: 'master_data',
-						schema_v: 3,
+						schema_v: 4,
 						master_type: type,
 						shelter_code: scope.shelterCode,
 						items: cleaned,
@@ -156,14 +156,14 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			doc = existing
 				? {
 						...existing,
-						schema_v: 3,
+						schema_v: 4,
 						items: cleaned,
 						updated_at: now
 					}
 				: {
 						_id: id,
 						type: 'master_data',
-						schema_v: 3,
+						schema_v: 4,
 						master_type: type,
 						items: cleaned,
 						created_at: now,
@@ -176,7 +176,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			delete doc.default_global_code;
 		}
 		// Spreading `...existing` can carry a leftover `excluded_codes` from a v2
-		// doc — strip it so the persisted shape is clean schema_v 3 (CR-049).
+		// doc — strip it so the persisted shape is clean schema_v 4.
 		delete (doc as MasterData & { excluded_codes?: string[] }).excluded_codes;
 
 		// Per-shelter disable list (CR-049 amendment): only when the client sends

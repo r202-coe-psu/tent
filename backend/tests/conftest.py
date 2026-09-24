@@ -19,6 +19,8 @@ def settings() -> Settings:
         settings.DATABASE_URI = "mongodb://localhost:27017/tentdb_test"
     if not settings.EXTERNAL_API_SECRET:
         settings.EXTERNAL_API_SECRET = "test-external-secret"
+    if not settings.THIRDPARTY_SECRET_SALT:
+        settings.THIRDPARTY_SECRET_SALT = "test-thirdparty-secret-salt"
     return settings
 
 
@@ -43,7 +45,7 @@ async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient]:
 async def app(settings: Settings) -> AsyncGenerator[FastAPI]:
     """Create a FastAPI application instance for a single test."""
     _app = create_app()
-    async with LifespanManager(_app):
+    async with LifespanManager(_app, startup_timeout=30):
         yield _app
 
 

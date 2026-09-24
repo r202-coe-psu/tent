@@ -625,8 +625,7 @@ describe('POST /api/public/v1/donations', () => {
 			const registryReads = vi
 				.mocked(adminRaw)
 				.mock.calls.filter(
-					(c) =>
-						String(c[0]).includes('/registry') && !String(c[0]).includes('config%3Aapp')
+					(c) => String(c[0]).includes('/registry') && !String(c[0]).includes('config%3Aapp')
 				);
 			expect(registryReads).toHaveLength(0);
 		});

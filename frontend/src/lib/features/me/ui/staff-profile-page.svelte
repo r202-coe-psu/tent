@@ -14,7 +14,7 @@
 		type AuthStatus
 	} from '$lib/features/users';
 	import { ownProfileSchema, type OwnProfileInput } from '../domain/profile-schema';
-	import * as Card from '$lib/components/ui/card/index.js';
+	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -28,6 +28,8 @@
 	let profile = $state<AuthStatus | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
+	let thaidEnabled = $state(false);
 
 	let editing = $state(false);
 	let saving = $state(false);
@@ -192,6 +194,10 @@
 	}
 
 	onMount(async () => {
+		void fetchThaidRegistrationStatus().then((s) => {
+			thaidEnabled = s.enabled;
+		});
+
 		const mfa = page.url.searchParams.get('mfa');
 		if (mfa === 'linked') {
 			toast.success('ผูกบัญชี Google สำหรับ MFA สำเร็จ');
@@ -201,6 +207,8 @@
 			toast.success('ผูกบัญชี ThaID สำหรับ MFA สำเร็จ');
 		} else if (mfa === 'thaid_conflict') {
 			toast.error('บัญชี ThaID นี้ถูกผูกกับผู้ใช้อื่นแล้ว');
+		} else if (mfa === 'thaid_disabled') {
+			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
 		}
 		await refreshProfile();
 	});
@@ -402,175 +410,219 @@
 				{/if}
 			</section>
 
-			<!-- Security / Google MFA -->
-			<section>
-				<Card.Root
-					class={hasGoogle
-						? 'rounded-2xl border border-emerald-200 bg-white shadow-2xs'
-						: 'rounded-2xl border border-slate-200/80 bg-white shadow-2xs'}
-				>
-					<Card.Header>
-						<Card.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
-							<ShieldCheck
-								class={hasGoogle ? 'size-5 text-emerald-700' : 'size-5 text-[#0A2647]'}
-							/>
-							ความปลอดภัย — Google MFA
-						</Card.Title>
-						<Card.Description class="text-base text-slate-600">
-							ผูกบัญชี Google เพื่อยืนยันตัวตนหลังเข้าสู่ระบบด้วยรหัสผ่าน (เลือกได้ — Phase 1)
-						</Card.Description>
-					</Card.Header>
-					<Card.Content class="space-y-4">
-						{#if hasGoogle}
-							<div
-								class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-base text-emerald-900"
-							>
-								ผูกแล้ว
-								{#if profile.mfa_provider_email}
-									— <span class="font-medium">{profile.mfa_provider_email}</span>
-								{/if}
-							</div>
-							<Dialog.Root bind:open={unlinkOpen}>
-								<Dialog.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="outline"
-											class="min-h-11 w-full gap-2 text-red-700 sm:w-auto"
-										>
-											<Unlink class="size-4" />
-											ถอดการผูก Google
-										</Button>
-									{/snippet}
-								</Dialog.Trigger>
-								<Dialog.Content class="sm:max-w-md">
-									<Dialog.Header>
-										<Dialog.Title>ถอดการผูก Google MFA?</Dialog.Title>
-										<Dialog.Description>
-											หลังถอดแล้ว จะไม่ต้องยืนยัน Google ตอนเข้าสู่ระบบ จนกว่าจะผูกใหม่
-										</Dialog.Description>
-									</Dialog.Header>
-									<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-										<Button variant="outline" class="min-h-11" onclick={() => (unlinkOpen = false)}>
-											ยกเลิก
-										</Button>
-										<Button
-											variant="destructive"
-											class="min-h-11"
-											disabled={unlinking}
-											onclick={handleUnlink}
-										>
-											{unlinking ? 'กำลังถอด...' : 'ยืนยันถอดการผูก'}
-										</Button>
-									</div>
-								</Dialog.Content>
-							</Dialog.Root>
-						{:else if isImmutable}
-							<p class="text-base text-slate-500">
-								บัญชีผู้ดูแลระบบเซิร์ฟเวอร์ (CouchDB Admin)
-								ได้รับการจัดการผ่านไฟล์การตั้งค่าเซิร์ฟเวอร์ และไม่รองรับ Google MFA
-							</p>
-						{:else}
-							<p class="text-base text-slate-500">ยังไม่ได้ผูกบัญชี Google</p>
-							<Button
-								href={googleOAuthStartHref('link')}
-								class="min-h-11 w-full gap-2 bg-[#0A2647] text-white hover:bg-[#051930] sm:w-auto"
-							>
-								<Link2 class="size-4" />
-								ผูกบัญชี Google
-							</Button>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			</section>
+			<!-- Security / MFA Linked Accounts -->
+			<section class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs sm:p-6">
+				<div class="mb-4">
+					<h2 class="flex items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl">
+						<ShieldCheck class="size-5 text-[#0A2647]" />
+						ความปลอดภัย — การผูกบัญชี (MFA)
+					</h2>
+					<p class="text-sm text-slate-500">ผูกบัญชีเพื่อยืนยันตัวตนแบบหลายขั้นตอน</p>
+				</div>
 
-			<!-- Security / ThaID MFA -->
-			<section>
-				<Card.Root
-					class={hasThaid
-						? 'rounded-2xl border border-emerald-200 bg-white shadow-2xs'
-						: 'rounded-2xl border border-slate-200/80 bg-white shadow-2xs'}
-				>
-					<Card.Header>
-						<Card.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
-							<ShieldCheck class={hasThaid ? 'size-5 text-emerald-700' : 'size-5 text-[#0A2647]'} />
-							ความปลอดภัย — ThaID (Digital ID กรมการปกครอง BORA)
-						</Card.Title>
-						<Card.Description class="text-base text-slate-600">
-							ผูกบัญชี ThaID เพื่อยืนยันตัวตนระดับราชการหลังเข้าสู่ระบบด้วยรหัสผ่าน
-							หรือใช้เข้าสู่ระบบโดยตรง
-						</Card.Description>
-					</Card.Header>
-					<Card.Content class="space-y-4">
-						{#if hasThaid}
+				<div class="grid max-w-sm grid-cols-2 gap-3 sm:max-w-md sm:gap-4">
+					<!-- Google MFA Card -->
+					<div
+						class="flex aspect-square flex-col items-center justify-between rounded-2xl border p-3.5 text-center shadow-2xs transition-all sm:p-4 {hasGoogle
+							? 'border-emerald-200 bg-emerald-50/20'
+							: 'border-slate-200/80 bg-white'}"
+					>
+						<!-- Top: Icon & Name -->
+						<div class="flex flex-col items-center gap-1.5 pt-0.5">
 							<div
-								class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-base text-emerald-900"
+								class="flex size-11 items-center justify-center rounded-xl border border-slate-100 bg-white p-2 shadow-2xs"
 							>
-								ผูกแล้ว
-								{#if profile.mfa_thaid_name || profile.mfa_thaid_pid_masked}
-									— <span class="font-medium"
-										>{[profile.mfa_thaid_name, profile.mfa_thaid_pid_masked]
-											.filter(Boolean)
-											.join(' • ')}</span
+								<svg class="size-7" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+									<path
+										d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+										fill="#4285F4"
+									/>
+									<path
+										d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+										fill="#34A853"
+									/>
+									<path
+										d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+										fill="#FBBC05"
+									/>
+									<path
+										d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+										fill="#EA4335"
+									/>
+								</svg>
+							</div>
+							<span class="text-sm font-bold text-slate-800">Google</span>
+						</div>
+
+						<!-- Center: Status & Linked Info -->
+						<div class="flex w-full min-w-0 flex-col items-center gap-0.5 px-1">
+							{#if hasGoogle}
+								<span
+									class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+								>
+									<span class="size-1.5 rounded-full bg-emerald-500"></span>
+									ผูกบัญชีแล้ว
+								</span>
+								<p
+									class="w-full truncate text-xs text-slate-600"
+									title={profile.mfa_provider_email || ''}
+								>
+									{profile.mfa_provider_email || 'เชื่อมต่อแล้ว'}
+								</p>
+							{:else if isImmutable}
+								<span class="text-xs text-slate-400">ไม่รองรับ</span>
+							{:else}
+								<span
+									class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+								>
+									ยังไม่ได้ผูก
+								</span>
+								<p class="text-xs text-slate-400">—</p>
+							{/if}
+						</div>
+
+						<!-- Bottom: Action Button -->
+						<div class="w-full">
+							{#if hasGoogle}
+								<Button
+									variant="outline"
+									class="h-8 w-full border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+									onclick={() => (unlinkOpen = true)}
+								>
+									<Unlink class="mr-1 size-3.5" />
+									ยกเลิกการผูก
+								</Button>
+							{:else if !isImmutable}
+								<Button
+									href={googleOAuthStartHref('link')}
+									class="h-8 w-full bg-[#0A2647] text-xs font-semibold text-white hover:bg-[#051930]"
+								>
+									<Link2 class="mr-1 size-3.5" />
+									ผูกบัญชี
+								</Button>
+							{/if}
+						</div>
+					</div>
+
+					<!-- ThaID MFA Card: show when feature ON, or when already linked (status + unlink only) -->
+					{#if thaidEnabled || hasThaid}
+						<div
+							class="flex aspect-square flex-col items-center justify-between rounded-2xl border p-3.5 text-center shadow-2xs transition-all sm:p-4 {hasThaid
+								? 'border-emerald-200 bg-emerald-50/20'
+								: 'border-slate-200/80 bg-white'}"
+						>
+							<!-- Top: Icon & Name -->
+							<div class="flex flex-col items-center gap-1.5 pt-0.5">
+								<div
+									class="flex size-11 items-center justify-center rounded-xl border border-slate-100 bg-white p-1 shadow-2xs"
+								>
+									<img src="/thaid-logo.png" alt="ThaID" class="size-9 rounded-lg object-contain" />
+								</div>
+								<span class="text-sm font-bold text-slate-800">ThaID</span>
+							</div>
+
+							<!-- Center: Status & Linked Info -->
+							<div class="flex w-full min-w-0 flex-col items-center gap-0.5 px-1">
+								{#if hasThaid}
+									<span
+										class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
 									>
+										<span class="size-1.5 rounded-full bg-emerald-500"></span>
+										ผูกบัญชีแล้ว
+									</span>
+									<p
+										class="w-full truncate text-xs text-slate-600"
+										title={[profile.mfa_thaid_name, profile.mfa_thaid_pid_masked]
+											.filter(Boolean)
+											.join(' • ')}
+									>
+										{profile.mfa_thaid_pid_masked || profile.mfa_thaid_name || 'เชื่อมต่อแล้ว'}
+									</p>
+								{:else if isImmutable}
+									<span class="text-xs text-slate-400">ไม่รองรับ</span>
+								{:else}
+									<span
+										class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+									>
+										ยังไม่ได้ผูก
+									</span>
+									<p class="text-xs text-slate-400">—</p>
 								{/if}
 							</div>
-							<Dialog.Root bind:open={unlinkThaidOpen}>
-								<Dialog.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="outline"
-											class="min-h-11 w-full gap-2 text-red-700 sm:w-auto"
-										>
-											<Unlink class="size-4" />
-											ถอดการผูก ThaID
-										</Button>
-									{/snippet}
-								</Dialog.Trigger>
-								<Dialog.Content class="sm:max-w-md">
-									<Dialog.Header>
-										<Dialog.Title>ถอดการผูก ThaID MFA?</Dialog.Title>
-										<Dialog.Description>
-											หลังถอดแล้ว จะไม่ต้องยืนยัน ThaID ตอนเข้าสู่ระบบ จนกว่าจะผูกใหม่
-										</Dialog.Description>
-									</Dialog.Header>
-									<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-										<Button
-											variant="outline"
-											class="min-h-11"
-											onclick={() => (unlinkThaidOpen = false)}
-										>
-											ยกเลิก
-										</Button>
-										<Button
-											variant="destructive"
-											class="min-h-11"
-											disabled={unlinkingThaid}
-											onclick={handleUnlinkThaid}
-										>
-											{unlinkingThaid ? 'กำลังถอด...' : 'ยืนยันถอดการผูก'}
-										</Button>
-									</div>
-								</Dialog.Content>
-							</Dialog.Root>
-						{:else if isImmutable}
-							<p class="text-base text-slate-500">
-								บัญชีผู้ดูแลระบบเซิร์ฟเวอร์ (CouchDB Admin)
-								ได้รับการจัดการผ่านไฟล์การตั้งค่าเซิร์ฟเวอร์ และไม่รองรับ ThaID MFA
-							</p>
-						{:else}
-							<p class="text-base text-slate-500">ยังไม่ได้ผูกบัญชี ThaID</p>
-							<Button
-								href={thaidOAuthStartHref('link')}
-								class="min-h-11 w-full gap-2 bg-[#0A2647] text-white hover:bg-[#051930] sm:w-auto"
-							>
-								<Link2 class="size-4" />
-								ผูกบัญชี ThaID
+
+							<!-- Bottom: Action Button -->
+							<div class="w-full">
+								{#if hasThaid}
+									<Button
+										variant="outline"
+										class="h-8 w-full border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+										onclick={() => (unlinkThaidOpen = true)}
+									>
+										<Unlink class="mr-1 size-3.5" />
+										ยกเลิกการผูก
+									</Button>
+								{:else if !isImmutable && thaidEnabled}
+									<Button
+										href={thaidOAuthStartHref('link')}
+										class="h-8 w-full bg-[#0A2647] text-xs font-semibold text-white hover:bg-[#051930]"
+									>
+										<Link2 class="mr-1 size-3.5" />
+										ผูกบัญชี
+									</Button>
+								{/if}
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Unlink Confirmation Dialogs -->
+				<Dialog.Root bind:open={unlinkOpen}>
+					<Dialog.Content class="sm:max-w-md">
+						<Dialog.Header>
+							<Dialog.Title>ถอดการผูก Google MFA?</Dialog.Title>
+							<Dialog.Description>
+								หลังถอดแล้ว จะไม่ต้องยืนยัน Google ตอนเข้าสู่ระบบ จนกว่าจะผูกใหม่
+							</Dialog.Description>
+						</Dialog.Header>
+						<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+							<Button variant="outline" class="min-h-11" onclick={() => (unlinkOpen = false)}>
+								ยกเลิก
 							</Button>
-						{/if}
-					</Card.Content>
-				</Card.Root>
+							<Button
+								variant="destructive"
+								class="min-h-11"
+								disabled={unlinking}
+								onclick={handleUnlink}
+							>
+								{unlinking ? 'กำลังถอด...' : 'ยืนยันถอดการผูก'}
+							</Button>
+						</div>
+					</Dialog.Content>
+				</Dialog.Root>
+
+				<Dialog.Root bind:open={unlinkThaidOpen}>
+					<Dialog.Content class="sm:max-w-md">
+						<Dialog.Header>
+							<Dialog.Title>ถอดการผูก ThaID MFA?</Dialog.Title>
+							<Dialog.Description>
+								หลังถอดแล้ว จะไม่ต้องยืนยัน ThaID ตอนเข้าสู่ระบบ จนกว่าจะผูกใหม่
+							</Dialog.Description>
+						</Dialog.Header>
+						<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+							<Button variant="outline" class="min-h-11" onclick={() => (unlinkThaidOpen = false)}>
+								ยกเลิก
+							</Button>
+							<Button
+								variant="destructive"
+								class="min-h-11"
+								disabled={unlinkingThaid}
+								onclick={handleUnlinkThaid}
+							>
+								{unlinkingThaid ? 'กำลังถอด...' : 'ยืนยันถอดการผูก'}
+							</Button>
+						</div>
+					</Dialog.Content>
+				</Dialog.Root>
 			</section>
 
 			<!-- Read-only note -->

@@ -112,25 +112,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		phone = legacy.phone;
 		nationalId = legacy.national_id ?? null;
 
-		const LEGACY_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 		const pets = legacy.pets.map((pet) => {
-			const isBird = pet.species === 'bird';
-			const isKnown = LEGACY_PET_SPECIES.has(pet.species);
-			const species = (isKnown ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isBird
-				? rawNotes || 'นก'
-				: isKnown
-					? rawNotes || undefined
-					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
-
 			return {
-				species,
+				species: pet.species,
 				count: 1,
-				notes,
+				notes: rawNotes || undefined,
 				has_cage: pet.has_cage
 			};
 		});
@@ -232,19 +222,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	// 5. Resolve optional residence-join token → join_household_id (never trust client ids)
 	let resolvedInput = unifiedInput;
 	const rawToken = unifiedInput.join_match_token?.trim();
+	let originShelterCode: string | undefined;
 	if (rawToken) {
 		const { verifyResidenceMatchToken } =
 			await import('$lib/features/public-register/residence-match-token.server');
 		const tokenPayload = verifyResidenceMatchToken(rawToken);
-		if (
-			!tokenPayload ||
-			tokenPayload.kind !== 'shelter' ||
-			tokenPayload.shelterCode !== shelterCode
-		) {
+		if (!tokenPayload || tokenPayload.kind !== 'shelter') {
 			return json(
 				{ success: false, error: 'INVALID_JOIN_TOKEN' },
 				{ status: 400, headers: noStore }
 			);
+		}
+		if (tokenPayload.shelterCode !== shelterCode) {
+			originShelterCode = tokenPayload.shelterCode;
 		}
 		resolvedInput = {
 			...unifiedInput,
@@ -258,7 +248,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	try {
 		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
-			createdBy: 'public'
+			createdBy: 'public',
+			originShelterCode
 		});
 	} catch (err) {
 		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {

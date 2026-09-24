@@ -17,8 +17,6 @@ import {
 	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
-	Tent,
-	Home,
 	FlaskConical
 } from '@lucide/svelte/icons';
 
@@ -50,7 +48,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
 			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
-			{ label: 'จัดการอาสาสมัคร', href: null, icon: HeartHandshake },
+			{
+				label: 'จัดการอาสาสมัคร',
+				href: resolve('/back-office/volunteers'),
+				icon: HeartHandshake
+			},
 			{
 				label: 'การส่งต่อผู้ประสบภัย',
 				href: resolve('/back-office/referrals'),
@@ -125,19 +127,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Database,
 				children: [
 					{
-						label: '1. ข้อมูลบุคคล',
-						href: resolve('/back-office/registration-config'),
-						icon: Users
-					},
-					{
-						label: '2. ตั้งค่าศูนย์พักพิง',
-						href: resolve('/back-office/shelter-config'),
-						icon: Tent
-					},
-					{
-						label: '3. ตั้งค่าครัวเรือน',
-						href: resolve('/back-office/household-master-data'),
-						icon: Home
+						label: 'Master Data',
+						href: resolve('/back-office/master-data'),
+						icon: Database
 					},
 					{
 						label: '4. คลังสินค้า',
@@ -149,7 +141,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { toast } from 'svelte-sonner';
@@ -67,7 +67,7 @@
 	$effect(() => {
 		if (!show) return;
 		qrUrl = null;
-		QRCode.toDataURL(evacuee._id, {
+		generateQrDataUrl(evacuee._id, {
 			// Generate a larger source image so the QR remains crisp at every responsive size.
 			width: 384,
 			margin: 1,
@@ -142,18 +142,43 @@
 					</div>
 
 					<div
-						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-4 py-5 sm:order-1 sm:px-5"
+						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-start gap-0.5 px-4 py-5 sm:order-1 sm:min-h-44 sm:px-5"
 					>
+						<p class="card-name text-base leading-tight font-bold text-slate-900 sm:text-xl">
+							{formatPersonName(evacuee)}
+						</p>
 						{#if phone}
 							<span
-								class="card-phone font-mono text-2xs font-bold tracking-widest text-slate-400 sm:text-xs"
+								class="card-phone font-mono text-2xs font-bold tracking-widest text-slate-900 sm:text-xs"
 							>
 								{phone}
 							</span>
 						{/if}
-						<p class="card-name text-base leading-tight font-bold text-slate-900 sm:text-xl">
-							{formatPersonName(evacuee)}
-						</p>
+						<div
+							class="card-checklist mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 text-2xs font-medium text-slate-900 sm:text-xs"
+						>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistCheckIn}
+							</span>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistScreening}
+							</span>
+							<span class="inline-flex items-center gap-1.5">
+								<span
+									class="card-check-box size-3.5 shrink-0 border border-slate-900 sm:size-4"
+									aria-hidden="true"
+								></span>
+								{t.checklistLodging}
+							</span>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -200,6 +225,7 @@
 
 	:global(.qr-identity-card.print-capture .card-details) {
 		order: 1 !important;
+		justify-content: flex-start !important;
 		padding: 24px 28px !important;
 	}
 
@@ -210,10 +236,23 @@
 
 	:global(.qr-identity-card.print-capture .card-phone) {
 		font-size: 1rem !important;
+		color: #0f172a !important;
 	}
 
 	:global(.qr-identity-card.print-capture .card-name) {
 		font-size: 1.875rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-checklist) {
+		font-size: 0.875rem !important;
+		gap: 1rem !important;
+		padding-top: 1.25rem !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-check-box) {
+		height: 16px !important;
+		width: 16px !important;
+		border-color: #0f172a !important;
 	}
 
 	@media print {
@@ -246,6 +285,7 @@
 		}
 		:global(.qr-identity-card .card-details) {
 			order: 1 !important;
+			justify-content: flex-start !important;
 			padding: 24px 28px !important;
 		}
 		:global(.qr-identity-card .card-qr-image) {
@@ -254,9 +294,20 @@
 		}
 		:global(.qr-identity-card .card-phone) {
 			font-size: 1rem !important;
+			color: #0f172a !important;
 		}
 		:global(.qr-identity-card .card-name) {
 			font-size: 1.875rem !important;
+		}
+		:global(.qr-identity-card .card-checklist) {
+			font-size: 0.875rem !important;
+			gap: 1rem !important;
+			padding-top: 1.25rem !important;
+		}
+		:global(.qr-identity-card .card-check-box) {
+			height: 16px !important;
+			width: 16px !important;
+			border-color: #0f172a !important;
 		}
 	}
 </style>

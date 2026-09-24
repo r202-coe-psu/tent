@@ -20,7 +20,12 @@ from tent_model.unassigned_registration import (
 
 from ...core.staff_session import StaffSession
 from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
-from ...utils.masking import normalize_national_id, normalize_phone
+from ...utils.masking import (
+    mask_last_name,
+    mask_phone,
+    normalize_national_id,
+    normalize_phone,
+)
 from ...utils.ulid import new_ulid
 from .couch_birth import (
     CouchBirthError,
@@ -208,7 +213,26 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
 
 
 def _norm_addr(value: str | None) -> str:
-    return (value or "").strip().lower()
+    if not value:
+        return ""
+    s = value.strip().lower()
+    if not s:
+        return ""
+    thai_nums = "๐๑๒๓๔๕๖๗๘๙"
+    for i, ch in enumerate(thai_nums):
+        s = s.replace(ch, str(i))
+    s = re.sub(r"ถ\.\s*", "ถนน", s)
+    s = re.sub(r"ซ\.\s*", "ซอย", s)
+    s = re.sub(r"ม\.\s*", "หมู่", s)
+    s = re.sub(r"หมู่ที่\s*", "หมู่", s)
+    s = re.sub(r"จ\.\s*", "จังหวัด", s)
+    s = re.sub(r"อ\.\s*", "อำเภอ", s)
+    s = re.sub(r"ต\.\s*", "ตำบล", s)
+    s = re.sub(r"^(จังหวัด|อำเภอ|ตำบล)\s*", "", s)
+    s = re.sub(r"(ถนน|ซอย|หมู่|ตำบล|อำเภอ|จังหวัด)\s*([0-9]+)", r"\1 \2", s)
+    s = re.sub(r"\s*([/\-])\s*", r"\1", s)
+    s = re.sub(r"[ก-ฮ]?\u0E4C", "", s)
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def _residence_matches(
@@ -411,23 +435,80 @@ class UnassignedRegistrationsUseCase:
     async def match_by_residence(
         self, payload: UnassignedResidenceMatchRequest
     ) -> UnassignedResidenceMatchResponse:
-        """Return open registrations whose Residence matches — ids + non-PII chips only."""
+        """Return registrations whose Residence matches — ids + non-PII chips only."""
         try:
-            docs = await UnassignedRegistration.find({"status": "open"}).to_list()
+            docs = await UnassignedRegistration.find(
+                {"status": {"$in": ["open", "claimed", "partial_claim"]}}
+            ).to_list()
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
             raise _mongo_unavailable("residence_match") from exc
 
+        query_phone = normalize_phone(payload.phone) if payload.phone else None
+
         matches: list[UnassignedResidenceMatchHit] = []
         for doc in docs:
-            if not _residence_matches(payload, doc.household):
+            phone_match = False
+            matched_member_str: str | None = None
+            if query_phone and query_phone in doc.open_phones:
+                phone_match = True
+                head = doc.members[0] if doc.members else None
+                head_phone = normalize_phone(head.phone) if (head and head.phone) else ""
+                if head_phone != query_phone:
+                    for m in doc.members:
+                        if m.phone and normalize_phone(m.phone) == query_phone:
+                            first_char = m.first_name[0] if m.first_name else ""
+                            masked_p = mask_phone(m.phone)
+                            matched_member_str = f"คุณ{first_char}*** ({masked_p})"
+                            break
+
+            residence_match = _residence_matches(payload, doc.household)
+            if not phone_match and not residence_match:
                 continue
+
             landmark = (doc.household.residence_landmark or "").strip() or None
             housing = doc.household.housing_type
+            claimed_shelter = None
+            for m in doc.members:
+                if m.claimed_shelter_code:
+                    claimed_shelter = m.claimed_shelter_code
+                    break
+
+            primary_masked = None
+            if doc.members:
+                head = doc.members[0]
+                masked_last = mask_last_name(head.last_name) if head.last_name else ""
+                primary_masked = f"{head.first_name} {masked_last}".strip()
+
+            pets_list = [
+                p.model_dump() if hasattr(p, "model_dump") else p
+                for p in (doc.household.pets or [])
+            ]
+            hh_addr = {
+                "housing_type": doc.household.housing_type,
+                "residence_landmark": doc.household.residence_landmark,
+                "address_no": doc.household.address_no,
+                "village_no": doc.household.village_no,
+                "subdistrict": doc.household.subdistrict,
+                "district": doc.household.district,
+                "province": doc.household.province,
+                "postal_code": doc.household.postal_code,
+                "latitude": doc.household.geo.coordinates[1] if doc.household.geo else None,
+                "longitude": doc.household.geo.coordinates[0] if doc.household.geo else None,
+            }
+
             matches.append(
                 UnassignedResidenceMatchHit(
                     id=doc.id,
                     landmark=landmark,
                     housing_type=housing,
+                    claimed_shelter_code=claimed_shelter,
+                    claimed_household_id=doc.reserved_household_id if claimed_shelter else None,
+                    status=doc.status,
+                    primary_contact_name_masked=primary_masked,
+                    matched_member_masked=matched_member_str,
+                    member_count=len(doc.members),
+                    pets=pets_list,
+                    household_address=hh_addr,
                 )
             )
             if len(matches) >= 25:

@@ -70,15 +70,21 @@ test.describe('Household Pre-registration', () => {
 	async function setupPage(page: Page) {
 		await mockCouchRoutes(page, { withRegistryShelter: true });
 
-		// Mock master data routes for municipality_zone and community
+		// Mock master data (housing_type optional for address step)
 		await page.route('**/api/back-office/master-data/*', async (route) => {
 			const type = new URL(route.request().url()).pathname.split('/').pop();
 			const items =
-				type === 'municipality_zone'
-					? [{ code: 'zone_1', label: 'โซน 1' }]
-					: type === 'community'
-						? [{ code: 'community_1', label: 'ชุมชน 1' }]
-						: [];
+				type === 'housing_type'
+					? [
+							{
+								code: 'house',
+								label_th: 'บ้านเดี่ยว',
+								label_en: 'บ้านเดี่ยว',
+								is_default: true,
+								status: 'active'
+							}
+						]
+					: [];
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -151,13 +157,9 @@ test.describe('Household Pre-registration', () => {
 			page.getByRole('heading', { name: 'ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)' })
 		).toBeVisible({ timeout: 10_000 });
 
-		// Select municipality_zone
-		await page.getByRole('button', { name: 'เลือกเขตการปกครอง...' }).click();
-		await page.getByRole('button', { name: 'โซน 1' }).click();
-
-		// Select community
-		await page.getByRole('button', { name: 'เลือกชุมชน...' }).click();
-		await page.getByRole('button', { name: 'ชุมชน 1' }).click();
+		// Fill free-text municipality_zone / community (CR-137)
+		await page.getByPlaceholder('ระบุเขตเทศบาล...').fill('โซน 1');
+		await page.getByPlaceholder('ระบุชุมชน...').fill('ชุมชน 1');
 
 		if (data.addressNo !== undefined) {
 			await page.getByPlaceholder('เช่น 12/3').fill(data.addressNo);

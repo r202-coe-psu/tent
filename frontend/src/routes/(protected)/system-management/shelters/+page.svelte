@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -13,7 +15,6 @@
 		type SiteKind
 	} from '$lib/features/shelters';
 
-	const basePath = resolve('/system-management/shelters');
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let siteKindFilter = $state<SiteKind | 'all'>('all');
@@ -39,7 +40,7 @@
 
 	function handleCreateNew() {
 		const query = siteKindFilter === 'all' ? '' : `?site_kind=${siteKindFilter}`;
-		goto(`${basePath}/create${query}`);
+		goto(resolve(`/system-management/shelters/create${query}`));
 	}
 
 	function selectSiteKind(filter: SiteKind | 'all') {
@@ -48,11 +49,11 @@
 	}
 
 	function handleEdit(shelter: ShelterSummary) {
-		goto(`${basePath}/edit/${encodeURIComponent(shelter.code)}`);
+		goto(resolve(`/system-management/shelters/edit/${encodeURIComponent(shelter.code)}`));
 	}
 
 	function handleImport() {
-		goto(`${basePath}/import`);
+		goto(resolve('/system-management/shelters/import'));
 	}
 </script>
 
@@ -60,25 +61,20 @@
 	<title>จัดการศูนย์พักพิง · SmartShelter</title>
 </svelte:head>
 
-<div class="flex w-full flex-1 flex-col gap-6 p-6">
-	<div class="flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<h2 class="text-2xl font-bold tracking-tight text-foreground">
-				จัดการศูนย์พักพิงและบ้านพี่เลี้ยง
-			</h2>
-			<p class="mt-1 text-sm text-muted-foreground">รายชื่อสถานที่ทั้งหมดในระบบและสถานะความจุ</p>
-		</div>
-		<div class="flex flex-wrap gap-2">
-			<Button variant="outline" onclick={handleImport}>
-				<Upload class="mr-2 h-4 w-4" /> นำเข้าจาก Excel
-			</Button>
-			<Button onclick={handleCreateNew}>
-				<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
-			</Button>
-		</div>
-	</div>
+<StaffPageShell
+	title="จัดการศูนย์พักพิงและบ้านพี่เลี้ยง"
+	description="รายชื่อสถานที่ทั้งหมดในระบบและสถานะความจุ"
+>
+	{#snippet actions()}
+		<Button variant="outline" onclick={handleImport}>
+			<Upload class="mr-2 h-4 w-4" /> นำเข้าจาก Excel
+		</Button>
+		<Button onclick={handleCreateNew} class="btn-primary-brand">
+			<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
+		</Button>
+	{/snippet}
 
-	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+	<div class="{spatial.container.staffPageCard} p-4 md:p-6">
 		<div class="mb-4 flex flex-wrap gap-2" aria-label="กรองตามชนิดสถานที่">
 			{#each [{ value: 'all' as const, label: 'ทั้งหมด' }, { value: 'evacuation_center' as const, label: SITE_KIND_LABELS.evacuation_center }, { value: 'host_house' as const, label: SITE_KIND_LABELS.host_house }] as option (option.value)}
 				<button
@@ -88,8 +84,8 @@
 					class={[
 						'rounded-lg border px-3 py-2 text-sm font-medium transition',
 						siteKindFilter === option.value
-							? 'border-primary bg-primary text-primary-foreground'
-							: 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+							? 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
+							: 'border-slate-200/80 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
 					]}
 				>
 					{option.label}
@@ -111,7 +107,7 @@
 			/>
 
 			{#if totalPages > 1}
-				<div class="mt-4 flex justify-center border-t border-shelter-border pt-4">
+				<div class="mt-4 flex justify-center border-t border-slate-200/80 pt-4">
 					<Pagination.Root
 						bind:page={() => clampedPage, (p) => (currentPage = p)}
 						count={total}
@@ -137,4 +133,4 @@
 			{/if}
 		{/if}
 	</div>
-</div>
+</StaffPageShell>

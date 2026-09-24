@@ -1,7 +1,8 @@
 <script lang="ts">
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
-	import Cpu from '@lucide/svelte/icons/cpu';
 	import {
 		CreateScannerDialog,
 		RevealScannerSecretDialog,
@@ -37,28 +38,18 @@
 	<title>จัดการเครื่องสแกนบัตร (Scanners) — SmartShelter</title>
 </svelte:head>
 
-<div class="mx-6 flex flex-1 flex-col gap-8 p-6 md:p-8">
-	<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-		<div>
-			<h2 class="flex items-center gap-3 text-3xl font-bold tracking-tight text-foreground">
-				<Cpu class="h-8 w-8 text-primary" />
-				เครื่องสแกนบัตรประชาชน (Smart Card Scanners)
-			</h2>
-			<p class="mt-2 text-muted-foreground">
-				บริหารจัดการเครื่องอ่านบัตรประชาชน Smart Card Reader ประจำจุดคัดกรองและศูนย์พักพิง — สร้าง
-				Device Secret เพื่อเชื่อมต่อกับ <code>scanner_client</code>
-			</p>
-		</div>
-		<Button
-			onclick={() => (createOpen = true)}
-			class="shrink-0 gap-2 bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90"
-		>
+<StaffPageShell
+	title="เครื่องสแกนบัตรประชาชน (Smart Card Scanners)"
+	description="บริหารจัดการเครื่องอ่านบัตรประชาชน Smart Card Reader ประจำจุดคัดกรองและศูนย์พักพิง — สร้าง Device Secret เพื่อเชื่อมต่อกับ scanner_client"
+>
+	{#snippet actions()}
+		<Button onclick={() => (createOpen = true)} class="btn-primary-brand shrink-0 gap-2">
 			<Plus class="h-4 w-4" />
 			ลงทะเบียนเครื่องสแกนใหม่
 		</Button>
-	</div>
+	{/snippet}
 
-	<div class="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+	<div class={spatial.container.staffPageCard}>
 		{#if devicesQuery.isLoading}
 			<div class="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
 				<div
@@ -76,7 +67,7 @@
 			<ScannerList {devices} onviewsecret={handleViewSecret} />
 		{/if}
 	</div>
-</div>
+</StaffPageShell>
 
 <CreateScannerDialog bind:open={createOpen} oncreated={handleCreated} />
 <RevealScannerSecretDialog bind:open={revealOpen} device={selectedDevice} isNew={isNewCreated} />

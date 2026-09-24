@@ -11,7 +11,7 @@ import {
 	mergeShelterAssignment,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
-import { validatePassword } from '$lib/server/password-policy';
+import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
 	hashSecurityAnswer,
 	verifySecurityAnswer,
@@ -162,7 +162,7 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		personnel_type: doc.personnel_type ?? 'staff',
 		organization: doc.organization ?? null,
 		position: doc.position ?? null,
-		phone: doc.phone ?? doc.name,
+		phone: doc.phone ?? null,
 		email: doc.email ?? null,
 		notes: doc.notes ?? null,
 		volunteer_id: doc.volunteer_id ?? null,
@@ -219,6 +219,71 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 	return got.data as CouchUserDoc;
 }
 
+const PHONE_LOGIN_RE = /^0\d{9}$/;
+
+function normalizePhone(value: string | null | undefined): string | null {
+	if (value == null) return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * When phone is set it must be unique across `_users.phone` and must not collide
+ * with another account's CouchDB `name` (so alternate login stays unambiguous).
+ */
+async function assertPhoneAvailable(
+	phone: string | null,
+	excludeName?: string
+): Promise<string | null> {
+	const normalized = normalizePhone(phone);
+	if (!normalized) return null;
+	if (!PHONE_LOGIN_RE.test(normalized)) {
+		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	}
+
+	const docs = await fetchAllUserDocs();
+	for (const doc of docs) {
+		if (excludeName && doc.name === excludeName) continue;
+		if (doc.name === normalized) {
+			throw new ServiceError(
+				'CONFLICT',
+				`เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`
+			);
+		}
+		if (doc.phone === normalized) {
+			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ถูกใช้โดยบัญชีอื่นแล้ว`);
+		}
+	}
+	return normalized;
+}
+
+/** Resolve a login identifier to CouchDB `name` (username or contact phone). */
+export async function resolveLoginName(identifier: string): Promise<string> {
+	const raw = identifier.trim();
+	if (!raw) return raw;
+
+	try {
+		await readUserDoc(raw, 'resolve login');
+		return raw;
+	} catch (e) {
+		if (!(e instanceof ServiceError) || e.code !== 'VALIDATION') throw e;
+	}
+
+	if (!PHONE_LOGIN_RE.test(raw)) return raw;
+
+	const docs = await fetchAllUserDocs();
+	const match = docs.find((d) => d.phone === raw);
+	return match?.name ?? raw;
+}
+
+/** Find CouchDB username whose contact `phone` matches (or null). */
+export async function findUserNameByPhone(phone: string): Promise<string | null> {
+	const normalized = normalizePhone(phone);
+	if (!normalized || !PHONE_LOGIN_RE.test(normalized)) return null;
+	const docs = await fetchAllUserDocs();
+	return docs.find((d) => d.phone === normalized)?.name ?? null;
+}
+
 /** Create a `_users` login. Caller authorization + role validation happen first. */
 export async function createUser(input: {
 	name: string;
@@ -267,7 +332,12 @@ export async function createUser(input: {
 	if (isProtectedBootstrapAdmin({ name, roles }, bootstrap)) {
 		throw new ServiceError('FORBIDDEN', 'Cannot create a user with the bootstrap admin name');
 	}
-	const password = validatePassword(input.password);
+	const password = validateProvisionedPassword(input.password, {
+		phone,
+		personnelType: personnel_type,
+		mustChangePassword: must_change_password
+	});
+	const normalizedPhone = await assertPhoneAvailable(phone ?? null, name);
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,
@@ -278,7 +348,7 @@ export async function createUser(input: {
 		personnel_type,
 		organization: organization ?? null,
 		position: position ?? null,
-		phone: phone ?? name,
+		phone: normalizedPhone,
 		email: email ?? null,
 		notes: notes ?? null,
 		volunteer_id: volunteer_id ?? null,
@@ -454,7 +524,9 @@ export async function updateUser(
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
-		...(input.phone !== undefined ? { phone: input.phone } : {}),
+		...(input.phone !== undefined
+			? { phone: await assertPhoneAvailable(input.phone, name) }
+			: {}),
 		...(input.email !== undefined ? { email: input.email } : {}),
 		...(input.notes !== undefined ? { notes: input.notes } : {}),
 		...(input.volunteer_id !== undefined ? { volunteer_id: input.volunteer_id } : {}),
@@ -533,7 +605,7 @@ export async function updateOwnProfile(
 		patch.display_name = displayName;
 	}
 	if ('phone' in fields) {
-		patch.phone = normalizeOptionalText(fields.phone);
+		patch.phone = await assertPhoneAvailable(normalizeOptionalText(fields.phone), name);
 	}
 	if ('email' in fields) {
 		patch.email = normalizeOptionalText(fields.email);
@@ -602,7 +674,7 @@ export async function getSecurityQuestionChallenge(phoneOrUsername: string): Pro
 	question_id?: string;
 	question_label?: string;
 }> {
-	const name = phoneOrUsername.trim();
+	const name = await resolveLoginName(phoneOrUsername);
 	try {
 		const doc = await readUserDoc(name, 'get security question');
 		if (!doc.security_question?.question_id) {
@@ -629,7 +701,7 @@ export async function verifySecurityQuestionAndResetPassword(
 	rawAnswer: string,
 	newPassword: string
 ): Promise<void> {
-	const name = phoneOrUsername.trim();
+	const name = await resolveLoginName(phoneOrUsername);
 	const doc = await readUserDoc(name, 'verify security question');
 
 	if (!doc.security_question || doc.security_question.question_id !== question_id) {

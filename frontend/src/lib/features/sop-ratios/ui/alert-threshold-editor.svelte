@@ -135,15 +135,12 @@
 	}
 </script>
 
-<section
-	class="min-w-0 rounded-[24px] border border-border bg-card p-6 text-card-foreground shadow-md"
-	aria-label="ตั้งค่าเกณฑ์เตือนภัยเฉพาะศูนย์"
->
+<section class="min-w-0" aria-label="ตั้งค่าเกณฑ์เตือนภัยเฉพาะศูนย์">
 	<header
 		class="mb-6 flex flex-col gap-4 border-b border-border/60 pb-6 lg:flex-row lg:items-center lg:justify-between"
 	>
 		<div>
-			<h2 class="text-xl font-bold">
+			<h2 class="text-lg font-bold">
 				กำหนดเกณฑ์เตือนภัยคลังสินค้าเฉพาะศูนย์ ({filteredItems.length})
 			</h2>
 			<p class="mt-1.5 text-xs text-muted-foreground">

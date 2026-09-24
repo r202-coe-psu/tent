@@ -237,7 +237,8 @@ export interface PeopleRepository {
 	recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		opts?: { reason?: string }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade
@@ -276,5 +277,17 @@ export interface PeopleRepository {
 	submitFamilyReportIn(payload: FamilyReportInPayload): Promise<{
 		household: Household;
 		members: Evacuee[];
+	}>;
+	/**
+	 * Merge source household into target household:
+	 * moves all source members to target, merges pets/vehicles, and marks source as 'merged'.
+	 */
+	mergeHouseholds(
+		sourceHouseholdId: string,
+		targetHouseholdId: string,
+		ctx: AuthorContext
+	): Promise<{
+		targetHousehold: Household;
+		mergedMembers: Evacuee[];
 	}>;
 }

@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		LANDING_ROUTE,
@@ -12,11 +13,17 @@
 		FORCE_SETUP_ROUTE,
 		resolvePostLoginDestination
 	} from '$lib/guards/auth';
-	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
+	import {
+		fetchAuthStatus,
+		googleOAuthStartHref,
+		thaidOAuthStartHref,
+		skipMfa
+	} from '$lib/features/users';
 	import { GoogleSignInButton, ThaIdSignInButton } from '$lib/features/login';
 	import { ShieldCheck } from '@lucide/svelte';
 
 	let loading = $state(true);
+	let skipping = $state(false);
 	let hasGoogle = $state(false);
 	let hasThaid = $state(false);
 	let providerEmail = $state<string | null>(null);
@@ -68,6 +75,18 @@
 			loading = false;
 		}
 	});
+
+	async function handleSkip() {
+		skipping = true;
+		try {
+			await skipMfa();
+			await goto(resolve(LANDING_ROUTE));
+		} catch {
+			toast.error('ไม่สามารถข้ามการยืนยันตัวตนได้ กรุณาลองใหม่อีกครั้ง');
+		} finally {
+			skipping = false;
+		}
+	}
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-slate-50 p-4">
@@ -111,9 +130,18 @@
 					{#if hasThaid}
 						<ThaIdSignInButton href={thaidOAuthStartHref('stepup')} label="ยืนยันตัวตนด้วย ThaID" />
 					{/if}
+					<Button
+						variant="outline"
+						class="h-11 w-full text-sm font-medium text-slate-700 hover:bg-slate-100"
+						disabled={skipping}
+						onclick={handleSkip}
+					>
+						{skipping ? 'กำลังเข้าสู่ระบบ...' : 'ข้ามขั้นตอนนี้และเข้าสู่ระบบ'}
+					</Button>
 				</div>
 				<p class="text-center text-xs text-muted-foreground">
-					หากระบบยืนยันตัวตนภายนอกหรือเซิร์ฟเวอร์กลางเข้าไม่ถึง จะไม่สามารถข้ามขั้นตอนนี้ได้
+					การยืนยันตัวตนขั้นที่สอง (MFA) ช่วยเพิ่มความปลอดภัยให้กับบัญชีของคุณ
+					คุณสามารถเลือกยืนยันตัวตนหรือกดข้ามเพื่อเข้าสู่ระบบได้
 				</p>
 			{/if}
 		</Card.Content>

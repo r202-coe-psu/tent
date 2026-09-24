@@ -1,20 +1,22 @@
 <script lang="ts">
-	import ConsoleBanner from '$lib/components/console-banner.svelte';
-	import { RecaptchaSettings } from '$lib/features/shared';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
+	import { RecaptchaSettings, ThaidSettings } from '$lib/features/shared';
 </script>
 
 <svelte:head>
 	<title>ความปลอดภัย — SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-3xl space-y-4 p-4 sm:p-6">
-	<ConsoleBanner
-		title="ความปลอดภัย"
-		description="ตั้งค่าการป้องกันสแปมและเกตสาธารณะของระบบ"
-	/>
-
-	<section class="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
-		<h2 class="text-base font-semibold">reCAPTCHA</h2>
-		<RecaptchaSettings />
-	</section>
-</div>
+<StaffPageShell title="ความปลอดภัย" maxWidth="3xl">
+	<div class={spatial.container.staffPageCard}>
+		<div class="divide-y divide-slate-200/80">
+			<div class="px-5 py-4 sm:px-6">
+				<RecaptchaSettings />
+			</div>
+			<div class="px-5 py-4 sm:px-6">
+				<ThaidSettings />
+			</div>
+		</div>
+	</div>
+</StaffPageShell>

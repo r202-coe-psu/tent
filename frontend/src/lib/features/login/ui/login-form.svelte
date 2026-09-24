@@ -9,6 +9,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '../domain/schema';
+	import { resolveLoginIdentifier } from '../data/resolve-login';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -16,6 +17,7 @@
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import ThaIdSignInButton from './thaid-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -36,6 +38,8 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	/** Stay false until GET /api/public/v1/recaptcha confirms ON — avoids injecting enterprise.js early. */
 	let captchaEnabled = $state(false);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
+	let thaidEnabled = $state(false);
 
 	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
 	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
@@ -66,6 +70,9 @@
 		void fetchRecaptchaEnabled().then((enabled) => {
 			captchaEnabled = enabled;
 		});
+		void fetchThaidRegistrationStatus().then((s) => {
+			thaidEnabled = s.enabled;
+		});
 
 		const err = page.url.searchParams.get('error');
 		if (!err) return;
@@ -80,6 +87,8 @@
 			);
 		} else if (err === 'thaid_login_failed') {
 			toast.error('ไม่สามารถเข้าสู่ระบบด้วย ThaID ได้ กรุณาลองอีกครั้ง');
+		} else if (err === 'thaid_disabled') {
+			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
 		} else if (err === 'invalid_state' || err === 'google_login_failed') {
 			toast.error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง');
 		} else if (err.startsWith('oauth_')) {
@@ -122,8 +131,9 @@
 						}
 					}
 
+					const name = await resolveLoginIdentifier(form.data.username);
 					await authStore.login({
-						name: form.data.username,
+						name,
 						password: form.data.password
 					});
 					reset();
@@ -168,12 +178,12 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label class="text-sm font-semibold text-slate-700"
-							>ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label
+							>Username หรือเบอร์โทรศัพท์</Form.Label
 						>
 						<Input
 							{...props}
 							bind:value={$formData.username}
-							placeholder="เช่น 0812345678"
+							placeholder="เช่น staff01 หรือ 0812345678"
 							autocomplete="username"
 							class="h-11"
 						/>
@@ -252,7 +262,9 @@
 
 		<div class="flex flex-col gap-2.5">
 			<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
-			<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{#if thaidEnabled}
+				<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{/if}
 		</div>
 	</form>
 {/snippet}

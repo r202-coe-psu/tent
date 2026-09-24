@@ -15,6 +15,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Pencil from '@lucide/svelte/icons/pencil';
 
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
@@ -37,14 +38,17 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import {
 		buildMedicalScreeningPath,
 		classifyScreeningQueueTab,
 		matchesMedicalScreeningSearch,
 		type ScreeningQueueTab
 	} from './medical-screening.utils';
+
+	const PAGE_SIZE = 10;
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const enableMedical = $derived(
@@ -66,6 +70,7 @@
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
 	let activeTab = $state<ScreeningQueueTab>('pending');
+	let currentPage = $state(1);
 	let claimOpen = $state(false);
 	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 	let lookupInFlight = $state(false);
@@ -85,6 +90,13 @@
 			return matchesMedicalScreeningSearch(evacuee, searchQuery, household);
 		})
 	);
+
+	const pagedRows = $derived(paginateItems(filteredQueue, currentPage, PAGE_SIZE));
+
+	$effect(() => {
+		void [activeTab, searchQuery];
+		currentPage = 1;
+	});
 
 	const isLoading = $derived(
 		allEvacueesQuery.isPending || screeningsQuery.isPending || householdsQuery.isPending
@@ -172,8 +184,8 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		const fromLegacy = SPECIAL_NEED_LABELS[need];
 		if (fromLegacy) return fromLegacy;
 		if (need.startsWith('item_')) return '—';
@@ -401,7 +413,7 @@
 									</Table.TableRow>
 								</Table.TableHeader>
 								<Table.TableBody>
-									{#each filteredQueue as evacuee (evacuee._id)}
+									{#each pagedRows.items as evacuee (evacuee._id)}
 										<Table.TableRow
 											class="cursor-pointer transition-colors hover:bg-muted/50"
 											onclick={() => openScreeningForm(evacuee._id)}
@@ -470,6 +482,15 @@
 								</Table.TableBody>
 							</Table.Root>
 						</div>
+						{#if pagedRows.totalPages > 1}
+							<div class="border-t border-border px-5 py-3">
+								<PaginationControls
+									bind:page={currentPage}
+									count={filteredQueue.length}
+									perPage={PAGE_SIZE}
+								/>
+							</div>
+						{/if}
 					{/if}
 				</Card.Content>
 			</Card.Root>

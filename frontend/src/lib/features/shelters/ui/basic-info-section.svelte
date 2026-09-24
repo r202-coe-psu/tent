@@ -20,7 +20,8 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 	import LocationMapPicker from './location-map-picker.svelte';
 
@@ -52,44 +53,30 @@
 		{ value: 'provincial', label: 'ระดับเมือง/จังหวัด (ศูนย์บัญชาการขนาดใหญ่/จุดยุทธศาสตร์)' }
 	];
 
-	// Master data (live query) — shelter_type + structured address (CR-019/CR-011 pattern).
+	// Master data (live query) — shelter_type (CR-019/CR-011 pattern).
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 
 	const shelterTypeItems = $derived(
 		(shelterTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
-	);
-	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
-	);
-	const communityItems = $derived(
-		(communityQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+			.map((i) => ({
+				value: i.code,
+				label: formatMasterLabel(i, langState.current)
+			}))
 	);
 
-	// Seed configured defaults (master_data `is_default`) when a field is untouched.
+	// Seed configured default (master_data `is_default`) for shelter_type when untouched.
 	// A new shelter starts empty → gets the default; an existing shelter already
 	// has values (superForm initialises synchronously) so the once/only-when-empty
 	// guard leaves them alone. (CR-049)
 	let defaultsSeeded = false;
 	$effect(() => {
 		const stItems = shelterTypeQuery.data?.items;
-		const mzItems = municipalityZoneQuery.data?.items;
-		if (!stItems || !mzItems || defaultsSeeded) return;
+		if (!stItems || defaultsSeeded) return;
 		defaultsSeeded = true;
 		if (!$formData.shelter_type) {
 			const d = stItems.find((i) => i.is_default && i.status === 'active');
 			if (d) $formData.shelter_type = d.code;
-		}
-		if (!$formData.municipality_zone) {
-			const d = mzItems.find((i) => i.is_default && i.status === 'active');
-			if (d) $formData.municipality_zone = d.code;
 		}
 	});
 
@@ -190,7 +177,10 @@
 	}
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
+<section
+	id="basic-info"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+>
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<MapPin class="h-5 w-5 text-shelter-blue-text" />
 		<span class="text-sm font-bold text-black">1.</span>
@@ -314,17 +304,17 @@
 		คุณสมบัติการปฏิบัติการ (Feature Flags)
 	</h3>
 
-	<div class="space-y-3">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
 			<div class="min-w-0 flex-1 space-y-1">
 				<label for="accepts-pre-registration" class="text-sm font-medium text-card-foreground">
 					รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ
 				</label>
 				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด: ศูนย์ยังปรากฏในรายการ
-					แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
+					เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด:
+					ศูนย์ยังปรากฏในรายการ แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
 				</p>
 			</div>
 			<Switch
@@ -337,17 +327,14 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="enable-medical-screening" class="text-sm font-medium text-card-foreground">
-					เปิดคัดกรองการแพทย์ (Station 2)
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: ท่อลงทะเบียน S1→S2→S3 — แสดง Station 2 และ Handover Slip หลังลงทะเบียน · ปิด: S1→S3
-					(ข้ามแพทย์) โดยยังแยกโต๊ะจัดโซนจากทะเบียน
-				</p>
-			</div>
+			<label
+				for="enable-medical-screening"
+				class="min-w-0 flex-1 text-sm font-medium text-card-foreground"
+			>
+				เปิดคัดกรองการแพทย์ (Station 2)
+			</label>
 			<Switch
 				id="enable-medical-screening"
 				checked={$formData.feature_flags?.enable_medical_screening ?? false}
@@ -358,17 +345,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-pets" class="text-sm font-medium text-card-foreground">
-					บันทึกสัตว์เลี้ยงตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนสัตว์เลี้ยงในฟอร์มลงทะเบียน และตั้งนโยบายรับสัตว์เป็น “อนุญาตภายใต้เงื่อนไข”
-					· ปิด: ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่อนุญาตสัตว์เลี้ยง”
-				</p>
-			</div>
+			<label for="allow-pets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกสัตว์เลี้ยงตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-pets"
 				checked={$formData.feature_flags?.allow_pets ?? false}
@@ -379,17 +360,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-assets" class="text-sm font-medium text-card-foreground">
-					บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนทรัพย์สินในฟอร์มลงทะเบียน และเปิดนโยบายสัมภาระ · ปิด: ซ่อนส่วนลงทะเบียน
-					และล้างนโยบายสัมภาระ
-				</p>
-			</div>
+			<label for="allow-assets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-assets"
 				checked={$formData.feature_flags?.allow_assets ?? false}
@@ -400,17 +375,11 @@
 		</div>
 
 		<div
-			class="flex items-start justify-between gap-4 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
 		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="allow-vehicles" class="text-sm font-medium text-card-foreground">
-					บันทึกยานพาหนะตอนลงทะเบียน
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงส่วนยานพาหนะในฟอร์มลงทะเบียน และตั้งนโยบายจอดรถเป็น “มีพื้นที่จอด” · ปิด:
-					ซ่อนส่วนลงทะเบียน และตั้งเป็น “ไม่มีที่จอด”
-				</p>
-			</div>
+			<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+				บันทึกยานพาหนะตอนลงทะเบียน
+			</label>
 			<Switch
 				id="allow-vehicles"
 				checked={$formData.feature_flags?.allow_vehicles ?? false}
@@ -470,24 +439,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>โซนเทศบาล (Municipality Zone)</Form.Label>
-					<Select.Root
-						type="single"
-						bind:value={
-							() => $formData.municipality_zone ?? '',
-							(v) => ($formData.municipality_zone = v || null)
-						}
+					<Input
+						{...props}
+						value={$formData.municipality_zone ?? ''}
+						oninput={(e) => ($formData.municipality_zone = e.currentTarget.value || null)}
 						{disabled}
-					>
-						<Select.Trigger {...props} class={selectTriggerClass}>
-							{municipalityZoneItems.find((o) => o.value === $formData.municipality_zone)?.label ??
-								'— เลือกโซน —'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each municipalityZoneItems as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+						placeholder="ระบุเขตเทศบาล..."
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -497,21 +455,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ชุมชน (Community)</Form.Label>
-					<Select.Root
-						type="single"
-						bind:value={() => $formData.community ?? '', (v) => ($formData.community = v || null)}
+					<Input
+						{...props}
+						value={$formData.community ?? ''}
+						oninput={(e) => ($formData.community = e.currentTarget.value || null)}
 						{disabled}
-					>
-						<Select.Trigger {...props} class={selectTriggerClass}>
-							{communityItems.find((o) => o.value === $formData.community)?.label ??
-								'— เลือกชุมชน —'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each communityItems as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+						placeholder="ระบุชุมชน..."
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

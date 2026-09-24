@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Pencil from '@lucide/svelte/icons/pencil';
+	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import type { Household, HouseholdStatus } from '../../domain/people';
 	import { MANUAL_HOUSEHOLD_STATUS_TRANSITIONS } from '../../domain/people';
 
@@ -8,6 +9,7 @@
 		statusConfig,
 		onOpenStatusModal,
 		onOpenZoneModal,
+		onOpenMergeModal,
 		onCancelPreRegistration,
 		isCancelling = false,
 		canCancel = false
@@ -16,6 +18,7 @@
 		statusConfig: Record<HouseholdStatus, { label: string; colorClass: string; dotClass: string }>;
 		onOpenStatusModal: () => void;
 		onOpenZoneModal: () => void;
+		onOpenMergeModal?: () => void;
 		onCancelPreRegistration: () => void;
 		isCancelling?: boolean;
 		canCancel?: boolean;
@@ -35,6 +38,20 @@
 			<h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-50">
 				{household.label}
 			</h2>
+			{#if household.linked_shelter_code}
+				<span
+					class="rounded-lg border border-amber-400/60 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-300"
+				>
+					ครอบครัวเชื่อมโยง: ศูนย์ {household.linked_shelter_code}
+				</span>
+			{/if}
+			{#if household.status === 'merged'}
+				<span
+					class="rounded-lg border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700 dark:border-purple-500/40 dark:bg-purple-950/40 dark:text-purple-300"
+				>
+					รวมเข้ากับครอบครัวอื่นแล้ว
+				</span>
+			{/if}
 		</div>
 		<p class="font-mono text-xs text-muted-foreground">ID: {household._id}</p>
 		{#if household.notes}
@@ -46,6 +63,17 @@
 	</div>
 
 	<div class="flex flex-wrap items-center gap-2">
+		{#if onOpenMergeModal && household.status !== 'merged' && household.status !== 'cancelled'}
+			<button
+				type="button"
+				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-transparent px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+				onclick={onOpenMergeModal}
+			>
+				<GitMerge class="size-4" />
+				<span>รวมครอบครัว</span>
+			</button>
+		{/if}
+
 		{#if canCancel && household.status === 'pre_registered'}
 			<button
 				class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-destructive bg-transparent px-4 py-2 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
