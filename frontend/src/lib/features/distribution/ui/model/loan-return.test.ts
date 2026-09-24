@@ -8,9 +8,14 @@ import {
 	validateNonPhysicalClear,
 	shouldResetLoanDialog,
 	NON_PHYSICAL_CLEAR_REASON_OPTIONS,
-	getLoanStatusBadge
+	getLoanStatusBadge,
+	isEligibleBulkPool,
+	validateBulkGateClear,
+	validateBulkForwardRecovery,
+	resolveCounterRecoveryHydration,
+	resolveNonPhysicalRecoveryHydration
 } from './loan-return';
-import type { DistributionLog } from '../../domain/food-supplies';
+import type { DistributionLog, LoanReturnReservation } from '../../domain/food-supplies';
 
 describe('loan-return model helpers', () => {
 	const baseLoanLog: DistributionLog = {
@@ -268,6 +273,273 @@ describe('loan-return model helpers', () => {
 			expect(getLoanStatusBadge({ ...baseLoanLog, status: 'lost' }).label).toContain('สูญหาย');
 			expect(getLoanStatusBadge({ ...baseLoanLog, status: 'waived' }).label).toBe('ยกเว้นการคืน');
 			expect(getLoanStatusBadge({ ...baseLoanLog, status: 'voided' }).label).toBe('ยกเลิกรายการ');
+		});
+	});
+
+	describe('isEligibleBulkPool', () => {
+		const basePool = {
+			item_id: 'item_master:blanket',
+			status: 'ACTIVE',
+			unclaimed_quota: '10'
+		};
+
+		it('accepts pool matching item_id, ACTIVE status, and positive quota', () => {
+			expect(isEligibleBulkPool(basePool, 'item_master:blanket')).toBe(true);
+		});
+
+		it('accepts pool when requiredQty is less than or equal to unclaimed_quota', () => {
+			expect(isEligibleBulkPool(basePool, 'item_master:blanket', '5')).toBe(true);
+			expect(isEligibleBulkPool(basePool, 'item_master:blanket', '10')).toBe(true);
+		});
+
+		it('rejects pool when requiredQty exceeds unclaimed_quota', () => {
+			expect(isEligibleBulkPool(basePool, 'item_master:blanket', '11')).toBe(false);
+		});
+
+		it('rejects pool when item_id does not match', () => {
+			expect(isEligibleBulkPool(basePool, 'item_master:cot')).toBe(false);
+		});
+
+		it('rejects pool when status is EXHAUSTED', () => {
+			expect(
+				isEligibleBulkPool(
+					{ ...basePool, status: 'EXHAUSTED', unclaimed_quota: '0' },
+					'item_master:blanket'
+				)
+			).toBe(false);
+		});
+
+		it('rejects pool when status is CLOSED', () => {
+			expect(
+				isEligibleBulkPool(
+					{ ...basePool, status: 'CLOSED', unclaimed_quota: '5' },
+					'item_master:blanket'
+				)
+			).toBe(false);
+		});
+
+		it('rejects pool when unclaimed_quota is 0', () => {
+			expect(isEligibleBulkPool({ ...basePool, unclaimed_quota: '0' }, 'item_master:blanket')).toBe(
+				false
+			);
+		});
+	});
+
+	describe('validateBulkGateClear', () => {
+		const activePool = {
+			status: 'ACTIVE',
+			unclaimed_quota: '5'
+		};
+
+		it('validates successfully when pool is selected, ACTIVE, and quota >= required', () => {
+			expect(validateBulkGateClear(activePool, '3').isValid).toBe(true);
+			expect(validateBulkGateClear(activePool, '5').isValid).toBe(true);
+		});
+
+		it('rejects when no pool is selected', () => {
+			const res = validateBulkGateClear(null, '3');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('เลือกจุดรวมคืน');
+		});
+
+		it('rejects when selected pool is not ACTIVE', () => {
+			const res = validateBulkGateClear({ status: 'EXHAUSTED', unclaimed_quota: '0' }, '3');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('ไม่อยู่ในสถานะใช้งานได้');
+		});
+
+		it('rejects when selected pool has zero quota', () => {
+			const res = validateBulkGateClear({ status: 'ACTIVE', unclaimed_quota: '0' }, '3');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('ไม่มีโควตาคงเหลือ');
+		});
+
+		it('rejects when requiredQty exceeds unclaimed_quota', () => {
+			const res = validateBulkGateClear(activePool, '6');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('ไม่เพียงพอกับยอดคงค้าง');
+		});
+	});
+
+	describe('validateBulkForwardRecovery', () => {
+		it('allows forward recovery when pool is EXHAUSTED because quota was already consumed', () => {
+			const res = validateBulkForwardRecovery(
+				{ item_id: 'item:fan', status: 'EXHAUSTED' },
+				'item:fan'
+			);
+			expect(res.isValid).toBe(true);
+			expect(res.error).toBeUndefined();
+		});
+
+		it('allows forward recovery when pool is ACTIVE', () => {
+			const res = validateBulkForwardRecovery(
+				{ item_id: 'item:fan', status: 'ACTIVE' },
+				'item:fan'
+			);
+			expect(res.isValid).toBe(true);
+		});
+
+		it('rejects when recovery pool is null/missing', () => {
+			const res = validateBulkForwardRecovery({ pool: null, expectedItemId: 'item:fan' });
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('ไม่พบข้อมูลจุดรวมคืน');
+		});
+
+		it('returns loading error when isLoading is true', () => {
+			const res = validateBulkForwardRecovery({ pool: null, isLoading: true });
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('กำลังโหลดข้อมูลจุดรวมคืน');
+		});
+
+		it('rejects when recovery pool is CLOSED', () => {
+			const res = validateBulkForwardRecovery(
+				{ item_id: 'item:fan', status: 'CLOSED' },
+				'item:fan'
+			);
+			expect(res.isValid).toBe(false);
+			expect(res.error).toContain('ถูกปิดแล้ว');
+		});
+	});
+
+	describe('resolveCounterRecoveryHydration', () => {
+		const physicalRes: LoanReturnReservation = {
+			_id: 'loan_return_reservation:01J00000000000000000000002',
+			type: 'loan_return_reservation',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-24T10:00:00.000Z',
+			updated_at: '2026-09-24T10:00:00.000Z',
+			created_by: 'staff_1',
+			operation_by: 'staff_1',
+			operation_id: '01J00000000000000000000099',
+			distribution_log_id: 'distribution_log:01J00000000000000000000002',
+			mode: 'PHYSICAL',
+			status: 'FENCED',
+			qty_returned: '3',
+			return_condition: 'READY',
+			notes: 'Recovered item'
+		};
+
+		it('hydrates form state when matching PHYSICAL reservation arrives asynchronously', () => {
+			const hydrated = resolveCounterRecoveryHydration({
+				open: true,
+				logId: 'distribution_log:01J00000000000000000000002',
+				reservation: physicalRes,
+				hydratedOperationId: null
+			});
+
+			expect(hydrated).not.toBeNull();
+			expect(hydrated?.operationUlid).toBe('01J00000000000000000000099');
+			expect(hydrated?.qtyInput).toBe('3');
+			expect(hydrated?.returnCondition).toBe('READY');
+			expect(hydrated?.notes).toBe('Recovered item');
+		});
+
+		it('hydrates exactly once per operation_id and ignores subsequent query ticks', () => {
+			const hydratedAgain = resolveCounterRecoveryHydration({
+				open: true,
+				logId: 'distribution_log:01J00000000000000000000002',
+				reservation: physicalRes,
+				hydratedOperationId: '01J00000000000000000000099'
+			});
+			expect(hydratedAgain).toBeNull();
+		});
+
+		it('does not hydrate when dialog is closed or logId is null', () => {
+			expect(
+				resolveCounterRecoveryHydration({
+					open: false,
+					logId: 'distribution_log:01J00000000000000000000002',
+					reservation: physicalRes,
+					hydratedOperationId: null
+				})
+			).toBeNull();
+
+			expect(
+				resolveCounterRecoveryHydration({
+					open: true,
+					logId: null,
+					reservation: physicalRes,
+					hydratedOperationId: null
+				})
+			).toBeNull();
+		});
+
+		it('cross-mode safety: ignores non-PHYSICAL reservations (BULK or NON_PHYSICAL)', () => {
+			const bulkRes: LoanReturnReservation = {
+				...physicalRes,
+				mode: 'BULK',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+				claimed_qty: '1'
+			};
+			expect(
+				resolveCounterRecoveryHydration({
+					open: true,
+					logId: 'distribution_log:01J00000000000000000000002',
+					reservation: bulkRes,
+					hydratedOperationId: null
+				})
+			).toBeNull();
+		});
+	});
+
+	describe('resolveNonPhysicalRecoveryHydration', () => {
+		const nonPhysicalRes: LoanReturnReservation = {
+			_id: 'loan_return_reservation:01J00000000000000000000003',
+			type: 'loan_return_reservation',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-09-24T10:00:00.000Z',
+			updated_at: '2026-09-24T10:00:00.000Z',
+			created_by: 'staff_1',
+			operation_by: 'staff_1',
+			operation_id: '01J00000000000000000000100',
+			distribution_log_id: 'distribution_log:01J00000000000000000000003',
+			mode: 'NON_PHYSICAL',
+			status: 'FENCED',
+			clear_reason: 'waived',
+			notes: 'Executive waiver approved'
+		};
+
+		it('hydrates form state when matching NON_PHYSICAL reservation arrives asynchronously', () => {
+			const hydrated = resolveNonPhysicalRecoveryHydration({
+				open: true,
+				logId: 'distribution_log:01J00000000000000000000003',
+				reservation: nonPhysicalRes,
+				hydratedOperationId: null
+			});
+
+			expect(hydrated).not.toBeNull();
+			expect(hydrated?.operationUlid).toBe('01J00000000000000000000100');
+			expect(hydrated?.reason).toBe('waived');
+			expect(hydrated?.notes).toBe('Executive waiver approved');
+		});
+
+		it('hydrates exactly once and does not overwrite modified form with defaults', () => {
+			const secondTick = resolveNonPhysicalRecoveryHydration({
+				open: true,
+				logId: 'distribution_log:01J00000000000000000000003',
+				reservation: nonPhysicalRes,
+				hydratedOperationId: '01J00000000000000000000100'
+			});
+			expect(secondTick).toBeNull();
+		});
+
+		it('cross-mode safety: ignores PHYSICAL or BULK reservations in NON_PHYSICAL dialog', () => {
+			const physicalRes: LoanReturnReservation = {
+				...nonPhysicalRes,
+				mode: 'PHYSICAL',
+				qty_returned: '1',
+				return_condition: 'READY'
+			};
+			expect(
+				resolveNonPhysicalRecoveryHydration({
+					open: true,
+					logId: 'distribution_log:01J00000000000000000000003',
+					reservation: physicalRes,
+					hydratedOperationId: null
+				})
+			).toBeNull();
 		});
 	});
 });

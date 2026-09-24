@@ -9,6 +9,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Info from '@lucide/svelte/icons/info';
 	import FileX from '@lucide/svelte/icons/file-x';
+	import Archive from '@lucide/svelte/icons/archive';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -30,6 +31,7 @@
 	} from '../model/loan-return';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
+	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
 
 	interface Props {
 		shelterCode?: string;
@@ -56,6 +58,9 @@
 
 	let selectedLogForClear = $state<DistributionLog | null>(null);
 	let clearDialogOpen = $state(false);
+
+	let selectedLogForBulkClear = $state<DistributionLog | null>(null);
+	let bulkClearDialogOpen = $state(false);
 
 	let showHistory = $state(false);
 
@@ -99,6 +104,11 @@
 		selectedLogForClear = log;
 		clearDialogOpen = true;
 	}
+
+	function handleOpenBulkClear(log: DistributionLog) {
+		selectedLogForBulkClear = log;
+		bulkClearDialogOpen = true;
+	}
 </script>
 
 <div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
@@ -120,7 +130,7 @@
 						คืนสิ่งของยืม-คืน
 					</span>
 					<span class="text-2xs font-bold text-slate-500">
-						Slice 5.5A / 5.5B / 5.5C Loan Returns
+						Slice 5.5A / 5.5B / 5.5C / 5.5D Loan Returns
 					</span>
 				</div>
 				<h3 class="text-base font-bold text-slate-900">
@@ -297,6 +307,17 @@
 								<FileX class="h-3.5 w-3.5 text-slate-500" />
 								<span>ตัดรายการโดยไม่มีของคืน (สูญหาย/ยกเว้น)</span>
 							</button>
+
+							<!-- Tertiary: CR-134 Bulk Gate Clearance -->
+							<button
+								type="button"
+								onclick={() => handleOpenBulkClear(loan)}
+								disabled={!canFrontline}
+								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 shadow-2xs transition-colors hover:border-purple-300 hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<Archive class="h-3.5 w-3.5 text-purple-600" />
+								<span>เคลียร์จากจุดรวมคืน (CR-134 Gate Clearance)</span>
+							</button>
 						</div>
 					</div>
 				{/each}
@@ -389,5 +410,17 @@
 	canClearLoan={canFrontline}
 	onclose={() => {
 		selectedLogForClear = null;
+	}}
+/>
+
+<!-- Bulk Gate Clearance Modal Dialog (Slice 5.5D) -->
+<BulkGateClearDialog
+	bind:open={bulkClearDialogOpen}
+	log={selectedLogForBulkClear}
+	itemName={selectedLogForBulkClear ? resolveItemName(selectedLogForBulkClear) : ''}
+	{shelterCode}
+	canClearLoan={canFrontline}
+	onclose={() => {
+		selectedLogForBulkClear = null;
 	}}
 />

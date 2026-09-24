@@ -161,3 +161,25 @@ export const useShiftReconciliation = (
 			enabled: isEnabled
 		};
 	});
+
+/** Reads authoritative in-flight or recovery operation state for a loan return (CR-134 R4). */
+export const useReturnOperationState = (
+	logId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(logId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && id && shelterCode);
+		return {
+			queryKey: ['return-operation-state', shelterCode, id],
+			queryFn: async () => {
+				const { getReturnOperationState } = await import('../food-supplies/return-workflow');
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return getReturnOperationState(id!, ctx);
+			},
+			enabled: isEnabled,
+			refetchInterval: 3000
+		};
+	});

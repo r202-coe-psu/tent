@@ -12,7 +12,9 @@ import {
 	calculateNewCumulativeReturned,
 	validateCounterReturnQuantity,
 	validateNonPhysicalClear,
-	getLoanStatusBadge
+	getLoanStatusBadge,
+	isEligibleBulkPool,
+	validateBulkGateClear
 } from '../model/loan-return';
 
 const createMockContext = (
@@ -277,6 +279,104 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 		it('preserves bulk-cleared B1 protection independently from non-physical write-offs', () => {
 			expect(isLoanReturnCandidate(bulkClearedLog)).toBe(false);
 			expect(isBulkClearedLoan(bulkClearedLog)).toBe(true);
+		});
+	});
+
+	describe('CR-134 Bulk Gate Clearance Flow (Slice 5.5D)', () => {
+		const mockPool = {
+			_id: 'bulk_return_pool:01J00000000000000000000010',
+			item_id: 'item_master:blanket_01',
+			status: 'ACTIVE',
+			total_received_qty: '20',
+			claimed_qty: '5',
+			unclaimed_quota: '15'
+		};
+
+		describe('Role Authorization Matrix for Bulk Gate Clearance', () => {
+			it('allows registration_staff (REG) to execute bulk gate clearance', () => {
+				const regCtx = createMockContext(['registration_staff']);
+				expect(canPerformFrontlineDistribution(regCtx)).toBe(true);
+			});
+
+			it('allows supply_coordinator (SC), shelter_manager (SM), and system_admin (SA) to execute bulk gate clearance', () => {
+				const scCtx = createMockContext(['supply_coordinator']);
+				const smCtx = createMockContext(['shelter_manager']);
+				const saCtx = createMockContext(['system_admin']);
+
+				expect(canPerformFrontlineDistribution(scCtx)).toBe(true);
+				expect(canPerformFrontlineDistribution(smCtx)).toBe(true);
+				expect(canPerformFrontlineDistribution(saCtx)).toBe(true);
+			});
+
+			it('disallows warehouse_staff (WH) alone from executing bulk gate clearance (frontline gate role required)', () => {
+				const whCtx = createMockContext(['warehouse_staff']);
+				expect(canPerformFrontlineDistribution(whCtx)).toBe(false);
+			});
+		});
+
+		describe('Pool Eligibility & Candidate Filtering', () => {
+			it('identifies matching active pool with available quota as eligible for loan', () => {
+				const remaining = calculateLoanRemainingQty(activeLoanLog); // 5
+				expect(isEligibleBulkPool(mockPool, activeLoanLog.item_id, remaining)).toBe(true);
+			});
+
+			it('rejects pool when item does not match', () => {
+				expect(isEligibleBulkPool(mockPool, 'item_master:other_item', '5')).toBe(false);
+			});
+
+			it('rejects pool when status is EXHAUSTED or CLOSED', () => {
+				const exhaustedPool = { ...mockPool, status: 'EXHAUSTED', unclaimed_quota: '0' };
+				const closedPool = { ...mockPool, status: 'CLOSED', unclaimed_quota: '15' };
+
+				expect(isEligibleBulkPool(exhaustedPool, activeLoanLog.item_id)).toBe(false);
+				expect(isEligibleBulkPool(closedPool, activeLoanLog.item_id)).toBe(false);
+			});
+
+			it('rejects pool when loan remaining balance exceeds pool unclaimed quota', () => {
+				const smallPool = { ...mockPool, unclaimed_quota: '3' };
+				const remaining = calculateLoanRemainingQty(activeLoanLog); // 5
+				expect(isEligibleBulkPool(smallPool, activeLoanLog.item_id, remaining)).toBe(false);
+			});
+		});
+
+		describe('Validation & State Invariants', () => {
+			it('validates successfully when an eligible pool is selected with adequate quota', () => {
+				const remaining = calculateLoanRemainingQty(activeLoanLog);
+				const validation = validateBulkGateClear(mockPool, remaining);
+				expect(validation.isValid).toBe(true);
+			});
+
+			it('rejects submission when no pool is selected', () => {
+				const validation = validateBulkGateClear(null, '5');
+				expect(validation.isValid).toBe(false);
+				expect(validation.error).toContain('เลือกจุดรวมคืน');
+			});
+
+			it('rejects submission when selected pool has insufficient quota', () => {
+				const smallPool = { ...mockPool, unclaimed_quota: '2' };
+				const validation = validateBulkGateClear(smallPool, '5');
+				expect(validation.isValid).toBe(false);
+				expect(validation.error).toContain('ไม่เพียงพอกับยอดคงค้าง');
+			});
+		});
+
+		describe('Zero-Second-Restock & B1 Invariant Preservation', () => {
+			it('marks loan as returned with clear_reason bulk_dropoff and links bulk_pool_id', () => {
+				const clearedViaBulk: DistributionLog = {
+					...activeLoanLog,
+					status: 'returned',
+					qty_returned: '5',
+					clear_reason: 'bulk_dropoff',
+					bulk_pool_id: mockPool._id,
+					returned_at: '2026-09-24T00:00:00.000Z',
+					returned_by: 'staff_test'
+				};
+
+				expect(isLoanReturnCandidate(clearedViaBulk)).toBe(false);
+				expect(isBulkClearedLoan(clearedViaBulk)).toBe(true);
+				const badge = getLoanStatusBadge(clearedViaBulk);
+				expect(badge.label).toContain('Bulk');
+			});
 		});
 	});
 });

@@ -6,13 +6,19 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import type { DistributionLog } from '../../domain/food-supplies';
-	import { useClearLoanNonPhysical } from '../../application/queries';
+	import {
+		useClearLoanNonPhysical,
+		useReturnOperationState,
+		useAbortAbandonedReturnReservation
+	} from '../../application/queries';
+	import { ulid } from '$lib/db/ulid';
 	import {
 		calculateLoanRemainingQty,
 		type NonPhysicalClearReason,
 		NON_PHYSICAL_CLEAR_REASON_OPTIONS,
 		validateNonPhysicalClear,
-		shouldResetLoanDialog
+		resolveNonPhysicalRecoveryHydration,
+		isReturnReservationModeCollision
 	} from '../model/loan-return';
 
 	interface Props {
@@ -36,8 +42,18 @@
 	}: Props = $props();
 
 	const clearMutation = useClearLoanNonPhysical();
+	const abortMutation = useAbortAbandonedReturnReservation();
+
+	const operationStateQuery = useReturnOperationState(
+		() => log?._id,
+		() => shelterCode,
+		() => Boolean(open && log?._id)
+	);
+	const operationState = $derived(operationStateQuery.data);
 
 	let lastInitializedLogId = $state<string | null>(null);
+	let hydratedOperationId = $state<string | null>(null);
+	let operationUlid = $state<string>(ulid());
 	let selectedReason = $state<NonPhysicalClearReason>('lost');
 	let notesInput = $state('');
 	let localError = $state<string | null>(null);
@@ -48,26 +64,79 @@
 
 	const validation = $derived(validateNonPhysicalClear(selectedReason, notesInput));
 
+	const isCrossModeCollision = $derived(
+		Boolean(
+			operationState?.reservation &&
+			(operationState.phase === 'PRE_EFFECT_ABORTABLE' ||
+				operationState.phase === 'IRREVERSIBLE_FORWARD_ONLY') &&
+			isReturnReservationModeCollision(operationState.reservation, 'NON_PHYSICAL')
+		)
+	);
+
+	const isForwardRecovery = $derived(
+		Boolean(
+			operationState?.phase === 'IRREVERSIBLE_FORWARD_ONLY' &&
+			operationState.reservation?.mode === 'NON_PHYSICAL'
+		)
+	);
+
 	// Reset form only when opening a new dialog session or switching to a different loan record,
 	// strictly preserving operator input and error message across retryable mutation failures.
+	// When active reservation in NON_PHYSICAL mode exists, adopt persisted durable intent asynchronously once.
 	$effect(() => {
-		if (open && log) {
-			if (shouldResetLoanDialog(lastInitializedLogId, open, log._id)) {
-				lastInitializedLogId = log._id;
-				selectedReason = 'lost';
-				notesInput = '';
-				localError = null;
-			}
-		} else if (!open) {
+		if (!open || !log) {
 			lastInitializedLogId = null;
+			hydratedOperationId = null;
+			return;
+		}
+
+		if (lastInitializedLogId !== log._id) {
+			lastInitializedLogId = log._id;
+			hydratedOperationId = null;
+			operationUlid = ulid();
+			selectedReason = 'lost';
+			notesInput = '';
+			localError = null;
+		}
+
+		const hydrated = resolveNonPhysicalRecoveryHydration({
+			open,
+			logId: log._id,
+			reservation: operationState?.reservation,
+			hydratedOperationId
+		});
+		if (hydrated) {
+			operationUlid = hydrated.operationUlid;
+			selectedReason = hydrated.reason;
+			notesInput = hydrated.notes;
+			hydratedOperationId = hydrated.hydratedOperationId;
 		}
 	});
 
 	function handleClose() {
-		if (clearMutation.isPending) return;
+		if (clearMutation.isPending || abortMutation.isPending) return;
 		open = false;
 		localError = null;
 		onclose?.();
+	}
+
+	async function handleAbortAndRestart() {
+		if (!log) return;
+		localError = null;
+		try {
+			await abortMutation.mutateAsync({
+				logId: log._id,
+				shelterCode,
+				ticketId: log.ticket_id
+			});
+			operationUlid = ulid();
+			hydratedOperationId = null;
+			selectedReason = 'lost';
+			notesInput = '';
+			toast.info('ยกเลิกรายการเดิมที่ค้างอยู่แล้ว เริ่มต้นรายการใหม่');
+		} catch (err) {
+			localError = `ไม่สามารถยกเลิกรายการเดิมได้: ${(err as Error).message}`;
+		}
 	}
 
 	async function handleSubmit(e: SubmitEvent) {
@@ -76,6 +145,11 @@
 
 		if (!log) {
 			localError = 'ไม่พบข้อมูลรายการยืม';
+			return;
+		}
+
+		if (isCrossModeCollision) {
+			localError = `รายการนี้กำลังถูกดำเนินการในโหมด ${operationState?.reservation?.mode} โดย ${operationState?.reservation?.operation_by ?? 'ไม่ระบุ'} ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด`;
 			return;
 		}
 
@@ -97,7 +171,8 @@
 			ticketId: log.ticket_id,
 			itemName: itemName || log.item_id,
 			clearReason: selectedReason,
-			remainingQty
+			remainingQty,
+			operationUlid
 		};
 
 		try {
@@ -105,7 +180,8 @@
 				logId: submitted.logId,
 				input: {
 					clear_reason: submitted.clearReason,
-					notes: notesInput.trim()
+					notes: notesInput.trim(),
+					operationUlid: submitted.operationUlid
 				},
 				shelterCode,
 				ticketId: submitted.ticketId
@@ -185,6 +261,75 @@
 				</div>
 			</div>
 
+			<!-- Authoritative In-Flight Recovery Callout (CR-134 R4) -->
+			{#if isCrossModeCollision}
+				<div
+					class="mt-3 flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-950"
+					role="alert"
+				>
+					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+					<div>
+						<p class="font-bold">
+							รายการนี้กำลังถูกดำเนินการในโหมดอื่น ({operationState?.reservation?.mode})
+						</p>
+						<p class="mt-0.5 text-2xs text-red-800">
+							ผู้ทำรายการ: <strong>{operationState?.reservation?.operation_by ?? 'ไม่ระบุ'}</strong>
+							ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด กรุณาใช้หน้าต่างสำหรับโหมด {operationState
+								?.reservation?.mode} หรือรอจนกว่ารายการเดิมจะสิ้นสุด
+						</p>
+					</div>
+				</div>
+			{:else if operationState?.phase === 'PRE_EFFECT_ABORTABLE'}
+				<div
+					class="mt-3 flex items-start justify-between gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"
+					role="status"
+				>
+					<div class="flex items-start gap-2">
+						<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+						<div>
+							<p class="font-bold">พบรายการที่อยู่ระหว่างดำเนินการ (In-Flight Pending)</p>
+							<p class="mt-0.5 text-2xs text-amber-800">
+								โหมด: <strong>{operationState.reservation?.mode}</strong> · ผู้ทำรายการ:
+								<strong
+									>{operationState.reservation?.operation_by ??
+										operationState.reservation?.created_by ??
+										'ไม่ระบุ'}</strong
+								>
+								· คุณสามารถทำรายการต่อ หรือยกเลิกรายการเพื่อเริ่มต้นใหม่
+							</p>
+						</div>
+					</div>
+					{#if operationState.canAbort}
+						<button
+							type="button"
+							onclick={handleAbortAndRestart}
+							disabled={abortMutation.isPending || clearMutation.isPending}
+							class="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-2xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 disabled:opacity-50"
+						>
+							{#if abortMutation.isPending}
+								<Loader class="inline h-3 w-3 animate-spin" />
+							{:else}
+								ยกเลิกและเริ่มใหม่
+							{/if}
+						</button>
+					{/if}
+				</div>
+			{:else if operationState?.phase === 'IRREVERSIBLE_FORWARD_ONLY'}
+				<div
+					class="mt-3 flex items-start gap-2.5 rounded-xl border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950"
+					role="status"
+				>
+					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+					<div>
+						<p class="font-bold">รายการผ่านจุดล็อกแล้ว (Irreversible Forward Recovery)</p>
+						<p class="mt-0.5 text-2xs text-blue-800">
+							รายการนี้ถูกล็อก (FENCED) แล้ว กำลังรอปิดสถานะรายการตัดจำหน่ายให้สมบูรณ์
+							(ข้อมูลถูกล็อคตามรายการเดิม)
+						</p>
+					</div>
+				</div>
+			{/if}
+
 			<!-- Dialog Body Form -->
 			<form onsubmit={handleSubmit} class="mt-4 space-y-4">
 				<!-- Loan Balance Summary Box -->
@@ -228,7 +373,10 @@
 									value={opt.value}
 									bind:group={selectedReason}
 									class="mt-0.5 text-slate-900 focus:ring-slate-900"
-									disabled={clearMutation.isPending || !canClearLoan}
+									disabled={clearMutation.isPending ||
+										!canClearLoan ||
+										isForwardRecovery ||
+										isCrossModeCollision}
 								/>
 								<div>
 									<p class="text-xs font-bold text-slate-900">{opt.label}</p>
@@ -253,7 +401,10 @@
 						bind:value={notesInput}
 						placeholder="ระบุรายละเอียด เช่น พัดลมสูญหายระหว่างเหตุอุทกภัย, ได้รับอนุมัติยกเว้นโดยผู้จัดการศูนย์..."
 						class="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-slate-800 focus:ring-1 focus:ring-slate-800 focus:outline-none"
-						disabled={clearMutation.isPending || !canClearLoan}
+						disabled={clearMutation.isPending ||
+							!canClearLoan ||
+							isForwardRecovery ||
+							isCrossModeCollision}
 						required
 					></textarea>
 					<p class="text-2xs text-slate-400">
@@ -277,7 +428,7 @@
 					<button
 						type="button"
 						onclick={handleClose}
-						disabled={clearMutation.isPending}
+						disabled={clearMutation.isPending || abortMutation.isPending}
 						class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						ยกเลิก
@@ -285,12 +436,18 @@
 
 					<button
 						type="submit"
-						disabled={clearMutation.isPending || !validation.isValid || !canClearLoan}
+						disabled={clearMutation.isPending ||
+							!validation.isValid ||
+							!canClearLoan ||
+							isCrossModeCollision}
 						class="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if clearMutation.isPending}
 							<Loader class="h-4 w-4 animate-spin" />
 							<span>กำลังตัดจำหน่ายรายการ...</span>
+						{:else if isForwardRecovery}
+							<AlertCircle class="h-4 w-4" />
+							<span>ดำเนินการต่อให้สมบูรณ์ (Resume Forward)</span>
 						{:else}
 							<FileX class="h-4 w-4" />
 							<span>ยืนยันตัดจำหน่ายรายการ</span>

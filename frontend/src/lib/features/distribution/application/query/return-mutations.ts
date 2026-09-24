@@ -13,12 +13,18 @@ import {
 	invalidateBulkClaims,
 	invalidateInventoryQueries
 } from './invalidation';
-import type { DistributionLog, BulkReturnPool, BulkReturnClaim } from '../../domain/food-supplies';
+import type {
+	DistributionLog,
+	BulkReturnPool,
+	BulkReturnClaim,
+	LoanReturnReservation
+} from '../../domain/food-supplies';
 import {
 	returnLoanAtCounter,
 	clearLoanNonPhysical,
 	createBulkReturnPool,
 	clearLoanViaBulkPool,
+	abortAbandonedReturnReservation,
 	type CounterReturnInput,
 	type NonPhysicalClearInput,
 	type CreateBulkPoolInput,
@@ -154,9 +160,47 @@ export const useClearLoanViaBulkPool = () => {
 			invalidateBulkPools(queryClient, shelterCode, variables.input.poolId);
 			invalidateDistributionLogs(queryClient, shelterCode, variables.input.logId);
 			invalidateBulkClaims(queryClient, shelterCode);
+			queryClient.invalidateQueries({
+				queryKey: ['return-operation-state', shelterCode, variables.input.logId]
+			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
 				invalidateShiftReconciliation(queryClient, shelterCode, variables.ticketId);
+			}
+		}
+	}));
+};
+
+export interface AbortAbandonedReservationMutationInput {
+	logId: string;
+	ticketId?: string;
+	shelterCode?: string;
+}
+
+/**
+ * Aborts an abandoned return reservation (CR-134 R4).
+ * Enforces objective abandonment lease / caller authority and checks for irreversible side effects.
+ */
+export const useAbortAbandonedReturnReservation = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			logId,
+			shelterCode
+		}: AbortAbandonedReservationMutationInput): Promise<LoanReturnReservation> => {
+			const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+			return abortAbandonedReturnReservation(logId, ctx);
+		},
+		retry: false,
+		onSuccess: (_data, variables) => {
+			const shelterCode = resolveShelterCode(variables.shelterCode);
+			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
+			invalidateBulkClaims(queryClient, shelterCode);
+			queryClient.invalidateQueries({
+				queryKey: ['return-operation-state', shelterCode, variables.logId]
+			});
+			if (variables.ticketId) {
+				invalidateTicket(queryClient, shelterCode, variables.ticketId);
 			}
 		}
 	}));

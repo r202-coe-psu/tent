@@ -46,7 +46,8 @@ export {
 	useBulkReturnPools,
 	useBulkReturnPool,
 	useBulkReturnClaim,
-	useShiftReconciliation
+	useShiftReconciliation,
+	useReturnOperationState
 } from './query/read-queries';
 
 // Ticket lifecycle mutations (Workflows 1–7)
@@ -82,10 +83,12 @@ export {
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
 	useClearLoanViaBulkPool,
+	useAbortAbandonedReturnReservation,
 	type ReturnLoanMutationInput,
 	type ClearLoanMutationInput,
 	type CreateBulkPoolMutationInput,
-	type ClearLoanViaBulkPoolMutationInput
+	type ClearLoanViaBulkPoolMutationInput,
+	type AbortAbandonedReservationMutationInput
 } from './query/return-mutations';
 
 // Shift reconciliation & warehouse return mutations (Workflows 16–19)

@@ -1,5 +1,11 @@
 import { addQty, qtyGt, qtyLte, qtyStrPositiveSchema, subQty } from '$lib/utils/qty';
-import type { DistributionLog, ReturnCondition } from '../../domain/food-supplies';
+import type {
+	DistributionLog,
+	ReturnCondition,
+	NonPhysicalClearReason
+} from '../../domain/food-supplies';
+
+export type { NonPhysicalClearReason };
 
 /**
  * Pure predicate identifying whether a distribution log is currently an open, returnable loan.
@@ -86,8 +92,6 @@ export function validateCounterReturnQuantity(
 
 	return { isValid: true };
 }
-
-export type NonPhysicalClearReason = 'lost' | 'waived';
 
 export interface NonPhysicalClearValidationResult {
 	isValid: boolean;
@@ -225,3 +229,184 @@ export const RETURN_CONDITION_OPTIONS: {
 		description: 'พัสดุชำรุด ใช้งานไม่ได้ตามปกติ'
 	}
 ];
+
+export interface BulkGateClearValidationResult {
+	isValid: boolean;
+	error?: string;
+}
+
+/**
+ * Pure predicate identifying whether a BulkReturnPool is eligible to clear a given loan obligation (CR-134).
+ * - Matching item_id
+ * - Status must be ACTIVE
+ * - unclaimed_quota > 0
+ * - If requiredQty is specified, pool unclaimed_quota must be >= requiredQty
+ */
+export function isEligibleBulkPool(
+	pool: { item_id: string; status: string; unclaimed_quota: string },
+	itemId: string,
+	requiredQty?: string
+): boolean {
+	if (pool.item_id !== itemId) return false;
+	if (pool.status !== 'ACTIVE') return false;
+	if (!qtyGt(pool.unclaimed_quota, '0')) return false;
+	if (requiredQty && !qtyLte(requiredQty, pool.unclaimed_quota)) return false;
+	return true;
+}
+
+/**
+ * Validates operator input for CR-134 bulk gate clearance.
+ * - Pool must be selected
+ * - Pool must be ACTIVE
+ * - Pool must have unclaimed_quota >= required loan outstanding balance
+ */
+export function validateBulkGateClear(
+	selectedPool: { status: string; unclaimed_quota: string } | null | undefined,
+	requiredQty: string
+): BulkGateClearValidationResult {
+	if (!selectedPool) {
+		return { isValid: false, error: 'กรุณาเลือกจุดรวมคืน (Bulk Return Pool) ที่ต้องการเคลียร์' };
+	}
+	if (selectedPool.status !== 'ACTIVE') {
+		return {
+			isValid: false,
+			error: `จุดรวมคืนนี้ไม่อยู่ในสถานะใช้งานได้ (สถานะ: ${selectedPool.status})`
+		};
+	}
+	if (!qtyGt(selectedPool.unclaimed_quota, '0')) {
+		return { isValid: false, error: 'จุดรวมคืนนี้ไม่มีโควตาคงเหลือแล้ว' };
+	}
+	if (!qtyLte(requiredQty, selectedPool.unclaimed_quota)) {
+		return {
+			isValid: false,
+			error: `โควตาคงเหลือของจุดรวมคืน (${selectedPool.unclaimed_quota}) ไม่เพียงพอกับยอดคงค้าง (${requiredQty})`
+		};
+	}
+	return { isValid: true };
+}
+
+export interface BulkForwardRecoveryInput {
+	pool: { item_id?: string; status: string } | null | undefined;
+	expectedItemId?: string;
+	isLoading?: boolean;
+}
+
+/**
+ * Validates forward recovery for a bulk operation.
+ * Permits EXHAUSTED pools if this operation is recovering its existing quota claim.
+ */
+export function validateBulkForwardRecovery(
+	inputOrPool: BulkForwardRecoveryInput | { item_id?: string; status: string } | null | undefined,
+	maybeExpectedItemId?: string
+): BulkGateClearValidationResult {
+	const isObjectConfig =
+		inputOrPool !== null && typeof inputOrPool === 'object' && 'pool' in inputOrPool;
+
+	const pool = isObjectConfig
+		? (inputOrPool as BulkForwardRecoveryInput).pool
+		: (inputOrPool as { item_id?: string; status: string } | null | undefined);
+
+	const expectedItemId = isObjectConfig
+		? (inputOrPool as BulkForwardRecoveryInput).expectedItemId
+		: maybeExpectedItemId;
+
+	const isLoading = isObjectConfig
+		? Boolean((inputOrPool as BulkForwardRecoveryInput).isLoading)
+		: false;
+
+	if (isLoading) {
+		return { isValid: false, error: 'กำลังโหลดข้อมูลจุดรวมคืนสำหรับกู้คืนรายการ' };
+	}
+	if (!pool) {
+		return { isValid: false, error: 'ไม่พบข้อมูลจุดรวมคืนสำหรับกู้คืนรายการ' };
+	}
+	if (pool.status === 'CLOSED') {
+		return { isValid: false, error: 'จุดรวมคืนนี้ถูกปิดแล้ว (CLOSED) ไม่สามารถกู้คืนรายการได้' };
+	}
+	if (expectedItemId && pool.item_id && pool.item_id !== expectedItemId) {
+		return {
+			isValid: false,
+			error: `จุดรวมคืนที่กู้คืน (${pool.item_id}) ไม่ตรงกับสินค้าในรายการยืม (${expectedItemId})`
+		};
+	}
+	return { isValid: true };
+}
+
+export interface CounterRecoveryHydrationInput {
+	open: boolean;
+	logId: string | null | undefined;
+	reservation?: {
+		mode: string;
+		operation_id: string;
+		qty_returned?: string;
+		return_condition?: ReturnCondition;
+		notes?: string;
+	} | null;
+	hydratedOperationId: string | null;
+}
+
+export interface CounterRecoveryHydration {
+	operationUlid: string;
+	qtyInput: string;
+	returnCondition: ReturnCondition;
+	notes: string;
+	hydratedOperationId: string;
+}
+
+export function resolveCounterRecoveryHydration(
+	input: CounterRecoveryHydrationInput
+): CounterRecoveryHydration | null {
+	if (!input.open || !input.logId || !input.reservation) return null;
+	if (input.reservation.mode !== 'PHYSICAL') return null;
+	if (input.hydratedOperationId === input.reservation.operation_id) return null;
+
+	return {
+		operationUlid: input.reservation.operation_id,
+		qtyInput: input.reservation.qty_returned ?? '',
+		returnCondition: input.reservation.return_condition ?? 'READY',
+		notes: input.reservation.notes ?? '',
+		hydratedOperationId: input.reservation.operation_id
+	};
+}
+
+export interface NonPhysicalRecoveryHydrationInput {
+	open: boolean;
+	logId: string | null | undefined;
+	reservation?: {
+		mode: string;
+		operation_id: string;
+		clear_reason?: NonPhysicalClearReason;
+		notes?: string;
+	} | null;
+	hydratedOperationId: string | null;
+}
+
+export interface NonPhysicalRecoveryHydration {
+	operationUlid: string;
+	reason: NonPhysicalClearReason;
+	notes: string;
+	hydratedOperationId: string;
+}
+
+export function resolveNonPhysicalRecoveryHydration(
+	input: NonPhysicalRecoveryHydrationInput
+): NonPhysicalRecoveryHydration | null {
+	if (!input.open || !input.logId || !input.reservation) return null;
+	if (input.reservation.mode !== 'NON_PHYSICAL') return null;
+	if (input.hydratedOperationId === input.reservation.operation_id) return null;
+
+	return {
+		operationUlid: input.reservation.operation_id,
+		reason: input.reservation.clear_reason ?? 'lost',
+		notes: input.reservation.notes ?? '',
+		hydratedOperationId: input.reservation.operation_id
+	};
+}
+
+export function isReturnReservationModeCollision(
+	reservation: { mode: string } | null | undefined,
+	expectedMode: string
+): boolean {
+	if (!reservation) return false;
+	return reservation.mode !== expectedMode;
+}
