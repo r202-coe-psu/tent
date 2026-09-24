@@ -18,7 +18,7 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 		id: 'qr',
 		icon: 'qr',
 		title: 'QR ลงทะเบียน',
-		description: 'สแกน QR จากอีเมลหรือ SMS',
+		description: 'สแกน QR ที่ได้รับจากการลงทะเบียนล่วงหน้า',
 		buttonLabel: 'สแกน QR',
 		enabled: true,
 		href: KIOSK_QR_PATH

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import type { Component } from 'svelte';
+	import { resolve } from '$app/paths';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Phone from '@lucide/svelte/icons/phone';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Smartphone from '@lucide/svelte/icons/smartphone';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import { IDENTITY_METHODS, type IdentityMethodDefinition } from '../domain/identity-method';
 
@@ -13,10 +13,6 @@
 	}
 
 	let { contextQuery }: Props = $props();
-
-	function hrefFor(method: IdentityMethodDefinition): string | undefined {
-		return method.href ? `${method.href}${contextQuery}` : undefined;
-	}
 
 	function iconFor(icon: IdentityMethodDefinition['icon']) {
 		if (icon === 'qr') return QrCode;
@@ -38,10 +34,6 @@
 		if (id === 'phone') return 'bg-white text-amber-800';
 		return 'bg-white text-[#1E3A8A]';
 	}
-
-	function buttonTone(id: IdentityMethodDefinition['id']): string {
-		return id === 'qr' ? 'bg-[#0284C7] hover:bg-sky-800' : 'bg-[#0A2647] hover:bg-[#051930]';
-	}
 </script>
 
 <section
@@ -57,50 +49,46 @@
 		<p class="mt-1 text-base font-medium text-slate-700">เลือกวิธีค้นหา</p>
 	</header>
 
+	{#snippet methodDetails(method: IdentityMethodDefinition, MethodIcon: Component)}
+		<div class="flex flex-col items-center justify-center gap-3 text-center">
+			<div
+				class={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconTone(method.id)}`}
+				aria-hidden="true"
+			>
+				<MethodIcon class="h-6 w-6" />
+			</div>
+			<div class="min-w-0">
+				<h2 class="text-lg leading-snug font-bold text-slate-900 sm:text-xl">
+					{method.title}
+				</h2>
+				{#if method.description}
+					<p class="method-description mt-1 text-base leading-snug text-slate-700">
+						{method.description}
+					</p>
+				{/if}
+			</div>
+		</div>
+	{/snippet}
+
 	<div class="method-grid grid grid-cols-2 gap-3 sm:gap-4" aria-label="วิธีค้นหาข้อมูล">
 		{#each IDENTITY_METHODS as method (method.id)}
 			{@const MethodIcon = iconFor(method.icon)}
-			<article
-				class={`method-card flex flex-col justify-between rounded-xl border p-3 shadow-2xs sm:p-4 ${cardTone(method.id)}`}
-			>
-				<div class="flex items-center gap-3">
-					<div
-						class={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconTone(method.id)}`}
-						aria-hidden="true"
-					>
-						<MethodIcon class="h-6 w-6" />
-					</div>
-					<div class="min-w-0">
-						<h2 class="text-lg leading-snug font-bold text-slate-900 sm:text-xl">
-							{method.title}
-						</h2>
-						{#if method.description}
-							<p class="method-description mt-1 text-base leading-snug text-slate-700">
-								{method.description}
-							</p>
-						{/if}
-					</div>
-				</div>
-
-				{#if method.enabled}
-					<Button
-						href={hrefFor(method)}
-						aria-label={method.buttonLabel}
-						class={`method-action mt-3 min-h-12 w-full justify-between gap-2 px-3 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none sm:px-4 ${buttonTone(method.id)}`}
-					>
-						<span>{method.buttonLabel}</span>
-						<ArrowRight class="h-5 w-5" aria-hidden="true" />
-					</Button>
-				{:else}
-					<button
-						type="button"
-						disabled
-						class="method-action mt-3 min-h-12 w-full cursor-not-allowed rounded-lg border border-slate-300 bg-white/70 px-3 text-base font-bold text-slate-700 opacity-100 sm:px-4"
-					>
-						ยังไม่เปิดใช้
-					</button>
-				{/if}
-			</article>
+			{#if method.enabled && method.href}
+				<a
+					href={resolve(`${method.href}${contextQuery as `?${string}`}`)}
+					aria-label={`${method.title}${method.description ? ` · ${method.description}` : ''} · ${method.buttonLabel}`}
+					class={`method-card flex flex-col items-center justify-center gap-3 rounded-xl border p-3 text-center no-underline shadow-2xs transition-transform duration-150 ease-out hover:z-10 hover:scale-[1.02] focus-visible:z-10 focus-visible:scale-[1.02] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:focus-visible:scale-100 sm:p-4 ${cardTone(method.id)}`}
+				>
+					{@render methodDetails(method, MethodIcon)}
+				</a>
+			{:else}
+				<article
+					class={`method-card flex flex-col items-center justify-center gap-3 rounded-xl border p-3 text-center shadow-2xs sm:p-4 ${cardTone(method.id)}`}
+				>
+					{@render methodDetails(method, MethodIcon)}
+					<p class="text-sm font-semibold text-slate-600">{method.buttonLabel}</p>
+				</article>
+			{/if}
 		{/each}
 	</div>
 </section>
@@ -129,10 +117,6 @@
 		.method-card {
 			min-height: 9.5rem;
 			padding: 0.75rem;
-		}
-
-		.method-action {
-			margin-top: 0.5rem;
 		}
 	}
 </style>
