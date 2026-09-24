@@ -246,6 +246,8 @@ export {
 /** Ticket-era Food & Supplies UI components & models (Slice 5.1). */
 export { default as TicketStatusBadge } from './ui/common/TicketStatusBadge.svelte';
 export { default as TicketManagementPage } from './ui/back-office/TicketManagementPage.svelte';
+export { default as BulkPoolManager } from './ui/back-office/BulkPoolManager.svelte';
+export { default as CreateBulkPoolDialog } from './ui/back-office/CreateBulkPoolDialog.svelte';
 export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
 export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
 export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
