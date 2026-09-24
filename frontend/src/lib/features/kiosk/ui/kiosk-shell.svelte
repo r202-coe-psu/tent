@@ -107,7 +107,7 @@
 	{/if}
 
 	<main class="kiosk-main flex w-full flex-1 flex-col items-center px-3 sm:px-5">
-		<div class="w-full max-w-5xl">
+		<div class="flex min-h-0 w-full max-w-5xl flex-1 flex-col">
 			{@render children?.()}
 		</div>
 	</main>

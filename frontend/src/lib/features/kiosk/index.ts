@@ -3,13 +3,19 @@ export { default as IdentityMethodSelector } from './ui/identity-method-selector
 export { default as KioskQrIdentityScan } from './ui/qr-identity-scan.svelte';
 export { default as KioskPreRegisteredCheckIn } from './ui/kiosk-pre-registered-check-in.svelte';
 export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte';
+export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
+export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
+export { default as PhoneHouseholdPicker } from './ui/phone-household-picker.svelte';
 export type {
 	GateInput,
+	KioskHouseholdCandidate,
+	KioskLookupResponse,
 	KioskLookupResult,
 	KioskEvacueeSummary,
 	KioskCheckInResult,
 	KioskCheckInMemberResult
 } from './data/kiosk-check-in.api';
+export { KioskRequestError } from './data/kiosk-check-in.api';
 export {
 	buildKioskContextQuery,
 	getKioskDisplayContext,
@@ -21,6 +27,7 @@ export {
 export {
 	IDENTITY_METHODS,
 	KIOSK_CARD_PATH,
+	KIOSK_PHONE_PATH,
 	KIOSK_QR_PATH,
 	type IdentityMethodDefinition,
 	type IdentityMethodId

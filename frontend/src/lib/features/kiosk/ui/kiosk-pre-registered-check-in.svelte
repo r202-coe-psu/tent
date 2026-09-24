@@ -10,15 +10,19 @@
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import { isAlreadyCheckedInStatus } from '../domain/check-in-status';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
+		KioskPartialCheckInError,
+		KioskRequestError,
 		lookupPreRegisteredEvacuee,
 		type GateInput,
 		type KioskCheckInMemberResult,
+		type KioskHouseholdCandidate,
 		type KioskEvacueeSummary,
-		type KioskLookupResult
+		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
 
 	interface Props {
@@ -27,6 +31,8 @@
 		displayShelterCode: string;
 		cardMode?: boolean;
 		cardRemoved?: boolean;
+		backHref?: string;
+		onprintbusychange?: (busy: boolean) => void;
 		onreset: () => void;
 	}
 
@@ -36,25 +42,37 @@
 		displayShelterCode,
 		cardMode = false,
 		cardRemoved = true,
+		backHref,
+		onprintbusychange,
 		onreset
 	}: Props = $props();
 
-	let lookup = $state<KioskLookupResult | null>(null);
+	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
+	let candidates = $state<KioskHouseholdCandidate[]>([]);
+	let candidateShelterCode = $state('');
 	let lookupError = $state('');
+	let lookupErrorCode = $state<string | null>(null);
+	let retryAfterSeconds = $state(0);
 	let isLookingUp = $state(false);
 	let isSubmitting = $state(false);
 	let selectedIds = $state<string[]>([]);
 	let results = $state<KioskCheckInMemberResult[]>([]);
+	let retryableIds = $state<string[]>([]);
 	let qrImages = $state<Record<string, string>>({});
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
 	let lookupKey = '';
+	let retryGate = $state<GateInput | null>(null);
+	let lookupGeneration = 0;
 
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
+	const backUrl = $derived(backHref ?? homeUrl);
 	const centerMatches = $derived(
-		Boolean(displayShelterCode) && displayShelterCode === lookup?.shelter_code
+		Boolean(displayShelterCode) &&
+			displayShelterCode === (lookup?.shelter_code ?? candidateShelterCode)
 	);
+	const isPhoneGate = $derived(input?.source === 'phone');
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
 	);
@@ -67,7 +85,13 @@
 		)
 	);
 	const wizardStep = $derived(
-		results.length > 0 ? 5 : lookupError || isLookingUp ? 3 : lookup ? 4 : 2
+		results.length > 0
+			? 5
+			: candidates.length > 0 || lookupError || isLookingUp
+				? 3
+				: lookup
+					? 4
+					: 2
 	);
 	const selectedMembers = $derived(
 		lookup?.members.filter((member) => selectedIds.includes(member.evacuee_id)) ?? []
@@ -83,18 +107,55 @@
 		void performLookup(nextInput);
 	});
 
+	$effect(() => {
+		if (retryAfterSeconds <= 0) return;
+		const timer = window.setTimeout(() => {
+			retryAfterSeconds = Math.max(0, retryAfterSeconds - 1);
+		}, 1000);
+		return () => window.clearTimeout(timer);
+	});
+
 	async function performLookup(gate: GateInput): Promise<void> {
+		const generation = ++lookupGeneration;
+		retryGate = gate;
 		lookup = null;
+		candidates = [];
+		candidateShelterCode = '';
 		lookupError = '';
+		lookupErrorCode = null;
+		retryAfterSeconds = 0;
 		results = [];
+		retryableIds = [];
 		qrImages = {};
 		selectedIds = [];
 		isLookingUp = true;
 		try {
 			const found = await lookupPreRegisteredEvacuee(gate);
-			lookup = found;
+			if (generation !== lookupGeneration) return;
 			if (!centerMatchesFor(found.shelter_code)) {
 				lookupError = 'ข้อมูลศูนย์ของเครื่องสแกนไม่ตรงกัน กรุณาติดต่อผู้ดูแลเครื่อง';
+				return;
+			}
+			if (found.kind === 'candidates') {
+				candidateShelterCode = found.shelter_code;
+				candidates = found.candidates;
+				return;
+			}
+			lookup = found;
+			if (gate.source === 'phone') {
+				const selectableMembers = found.members.filter((member) => member.selectable);
+				if (selectableMembers.length === 0) {
+					results = found.members
+						.filter((member) => isAlreadyCheckedInStatus(member.status))
+						.map((member) => ({
+							evacuee_id: member.evacuee_id,
+							status: 'already_checked_in' as const,
+							stay_status: member.status,
+							...(member.status === 'arriving' ? { qr_payload: member.evacuee_id } : {})
+						}));
+					return;
+				}
+				selectedIds = selectableMembers.map((member) => member.evacuee_id);
 				return;
 			}
 			const scannedMember = found.members.find((member) => member.is_primary);
@@ -113,10 +174,17 @@
 				.filter((member) => member.is_primary && member.selectable)
 				.map((member) => member.evacuee_id);
 		} catch (error) {
-			lookupError =
-				error instanceof Error ? error.message : 'ค้นหาข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง';
+			if (generation !== lookupGeneration) return;
+			if (error instanceof KioskRequestError) {
+				lookupErrorCode = error.code;
+				lookupError = error.message;
+				if (error.status === 429) retryAfterSeconds = 60;
+			} else {
+				lookupError =
+					error instanceof Error ? error.message : 'ค้นหาข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง';
+			}
 		} finally {
-			isLookingUp = false;
+			if (generation === lookupGeneration) isLookingUp = false;
 		}
 	}
 
@@ -131,21 +199,64 @@
 			: selectedIds.filter((id) => id !== member.evacuee_id);
 	}
 
+	function chooseHousehold(primaryEvacueeId: string): void {
+		if (input?.source !== 'phone') return;
+		void performLookup({ ...input, primary_evacuee_id: primaryEvacueeId });
+	}
+
+	function retryLookup(): void {
+		if (!retryGate || isLookingUp || retryAfterSeconds > 0) return;
+		void performLookup(retryGate);
+	}
+
 	async function submitCheckIn(): Promise<void> {
-		if (!lookup || !centerMatches || selectedIds.length === 0 || isSubmitting) return;
+		return submitCheckInIds(selectedIds);
+	}
+
+	async function submitCheckInIds(ids: string[]): Promise<void> {
+		if (!lookup || !centerMatches || ids.length === 0 || isSubmitting || printBusy) return;
 		if (cardMode && !cardRemoved) return;
 		isSubmitting = true;
 		actionError = '';
 		printError = '';
 		try {
-			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, selectedIds);
-			results = response.members;
-			await prepareQrImages(response.members);
+			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
+				batchLimit: 20
+			});
+			results = mergeCheckInResults(results, response.members);
+			retryableIds = response.retryable_evacuee_ids;
+			if (retryableIds.length > 0) {
+				actionError =
+					'บางรายการยังรายงานตัวไม่สำเร็จ ตรวจผลด้านล่างและลองเฉพาะรายการที่เหลืออีกครั้ง';
+			}
+			await prepareQrImages(results);
 		} catch (error) {
-			actionError = error instanceof Error ? error.message : 'บันทึกการรายงานตัวไม่สำเร็จ';
+			if (error instanceof KioskPartialCheckInError) {
+				results = mergeCheckInResults(results, error.result.members);
+				retryableIds = error.result.retryable_evacuee_ids;
+				actionError = error.message;
+				await prepareQrImages(results);
+			} else {
+				actionError = error instanceof Error ? error.message : 'บันทึกการรายงานตัวไม่สำเร็จ';
+			}
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	function mergeCheckInResults(
+		current: KioskCheckInMemberResult[],
+		incoming: KioskCheckInMemberResult[]
+	): KioskCheckInMemberResult[] {
+		const merged = [...current];
+		for (const result of incoming) {
+			const existingIndex = merged.findIndex(
+				(existing) => existing.evacuee_id === result.evacuee_id
+			);
+			if (existingIndex === -1) merged.push(result);
+			else merged[existingIndex] = result;
+		}
+		return merged;
 	}
 
 	async function prepareQrImages(items: KioskCheckInMemberResult[]): Promise<boolean> {
@@ -172,12 +283,17 @@
 	async function printWristbands(): Promise<void> {
 		if (successfulResults.length === 0 || printBusy) return;
 		printBusy = true;
-		const allReady = await prepareQrImages(successfulResults);
-		if (allReady) {
-			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-			window.print();
+		onprintbusychange?.(true);
+		try {
+			const allReady = await prepareQrImages(successfulResults);
+			if (allReady) {
+				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+				window.print();
+			}
+		} finally {
+			printBusy = false;
+			onprintbusychange?.(false);
 		}
-		printBusy = false;
 	}
 
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
@@ -203,9 +319,10 @@
 	<KioskCheckInWizard currentStep={wizardStep} />
 	<div class="no-print flex justify-start">
 		<Button
-			href={homeUrl}
+			href={backUrl}
 			variant="ghost"
-			aria-label="กลับหน้าเริ่มต้น"
+			onclick={isPhoneGate ? onreset : undefined}
+			aria-label={isPhoneGate ? 'กลับไปกรอกเบอร์' : 'กลับหน้าเริ่มต้น'}
 			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
 		>
 			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
@@ -219,11 +336,13 @@
 		>
 			{results.length > 0
 				? 'ผลรายงานตัว'
-				: lookup
-					? 'เลือกสมาชิก'
-					: cardMode && !input
-						? 'รอเสียบบัตร'
-						: 'กำลังค้นหา'}
+				: candidates.length > 0
+					? 'เลือกครัวเรือน'
+					: lookup
+						? 'เลือกสมาชิก'
+						: cardMode && !input
+							? 'รอเสียบบัตร'
+							: 'กำลังค้นหา'}
 		</h1>
 		{#if cardMode && !cardRemoved && input && results.length === 0}
 			<p class="mt-1 text-base font-semibold text-slate-700">ถอดบัตรเพื่อยืนยัน</p>
@@ -231,6 +350,8 @@
 			<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
 		{:else if lookup && results.length === 0}
 			<p class="mt-1 text-base text-slate-700">เลือกผู้ที่มาถึง</p>
+		{:else if candidates.length > 0}
+			<p class="mt-1 text-base text-slate-700">เลือกครัวเรือนของท่าน</p>
 		{:else if results.some((result) => result.status === 'already_checked_in')}
 			<p class="mt-1 text-base text-slate-700">พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ</p>
 		{:else if results.length > 0}
@@ -282,9 +403,46 @@
 				<div>
 					<h2 class="text-base font-bold">ค้นหาไม่สำเร็จ</h2>
 					<p class="mt-1 text-base leading-relaxed">{lookupError}</p>
+					<div class="mt-4 flex flex-col gap-2 sm:flex-row">
+						{#if isPhoneGate && (lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' || lookupErrorCode === 'KIOSK_TOO_MANY_MATCHES')}
+							<Button
+								type="button"
+								onclick={onreset}
+								class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+								>กรอกเบอร์ใหม่</Button
+							>
+						{:else}
+							<Button
+								type="button"
+								disabled={isLookingUp || retryAfterSeconds > 0}
+								onclick={retryLookup}
+								class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+							>
+								{#if retryAfterSeconds > 0}
+									ลองอีกครั้งใน {retryAfterSeconds} วินาที
+								{:else if isLookingUp}
+									กำลังค้นหา…
+								{:else}
+									ลองอีกครั้ง
+								{/if}
+							</Button>
+						{/if}
+						<Button
+							href={backUrl}
+							variant="outline"
+							onclick={onreset}
+							class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]">กลับ</Button
+						>
+					</div>
 				</div>
 			</div>
 		</div>
+	{/if}
+
+	{#if candidates.length > 0 && !lookupError && !isLookingUp}
+		<section class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6">
+			<PhoneHouseholdPicker {candidates} onselect={chooseHousehold} />
+		</section>
 	{/if}
 
 	{#if lookup && centerMatches && results.length === 0}
@@ -304,6 +462,11 @@
 					<p class="text-sm text-slate-600">ศูนย์ {lookup.shelter_code}</p>
 				</div>
 			</div>
+			{#if lookup.name_masked}
+				<p class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-950">
+					ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
+				</p>
+			{/if}
 
 			<div class="space-y-3">
 				{#each lookup.members as member (member.evacuee_id)}
@@ -325,9 +488,9 @@
 								class="truncate text-base font-bold text-slate-950 sm:text-lg"
 							>
 								{fullName(member)}
-								{#if member.is_primary}<span
+								{#if input?.source === 'phone' ? member.phone_matched : member.is_primary}<span
 										class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-xs font-bold text-[#0A2647]"
-										>ผู้ลงทะเบียน</span
+										>{input?.source === 'phone' ? 'เบอร์ตรง' : 'ผู้ลงทะเบียน'}</span
 									>{/if}
 							</p>
 							<p class="mt-1 text-sm text-slate-600">
@@ -399,18 +562,42 @@
 					</div>
 					<div>
 						<h2 id="result-title" class="text-xl font-extrabold text-[#0A2647] sm:text-2xl">
-							{results.some((result) => result.status === 'already_checked_in')
-								? 'รายงานตัวแล้ว'
-								: successfulResults.length > 0
-									? 'บันทึกผลรายงานตัวแล้ว'
-									: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
+							{retryableIds.length > 0
+								? 'รายงานตัวได้บางส่วน'
+								: results.some((result) => result.status === 'already_checked_in')
+									? 'รายงานตัวแล้ว'
+									: successfulResults.length > 0
+										? 'บันทึกผลรายงานตัวแล้ว'
+										: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
 						</h2>
 						<p class="mt-1 text-sm leading-relaxed text-slate-700">
-							รายงานตัวแล้ว {reportedResults.length} จาก {results.length} คน · ศูนย์ {lookup?.shelter_code}
+							{#if retryableIds.length > 0}
+								รายงานตัวแล้ว {reportedResults.length} คน · ยังเหลือ {retryableIds.length} คนที่ต้องตรวจผลหรือทำรายการซ้ำ
+								· ศูนย์ {lookup?.shelter_code}
+							{:else}
+								รายงานตัวแล้ว {reportedResults.length} จาก {results.length} คน · ศูนย์ {lookup?.shelter_code}
+							{/if}
 						</p>
+						{#if lookup?.name_masked}
+							<p class="mt-2 text-sm font-medium text-slate-700">
+								ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
+							</p>
+						{/if}
 					</div>
 				</div>
 				<div class="flex flex-col gap-2 sm:flex-row">
+					{#if retryableIds.length > 0}
+						<Button
+							type="button"
+							disabled={!centerMatches || isSubmitting || printBusy}
+							onclick={() => void submitCheckInIds(retryableIds)}
+							class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]"
+						>
+							{isSubmitting
+								? 'กำลังบันทึก…'
+								: `ลองรายการที่เหลืออีกครั้ง · ${retryableIds.length} คน`}
+						</Button>
+					{/if}
 					<Button
 						type="button"
 						disabled={successfulResults.length === 0 || printBusy || isSubmitting}
@@ -430,6 +617,14 @@
 					>
 				</div>
 			</div>
+			{#if actionError}
+				<p
+					class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950"
+					role="alert"
+				>
+					{actionError}
+				</p>
+			{/if}
 			{#if printError}<p
 					class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950"
 					role="alert"

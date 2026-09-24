@@ -1,17 +1,18 @@
 <script lang="ts">
 	interface Props {
 		currentStep: 1 | 2 | 3 | 4 | 5;
+		step2Label?: string;
 	}
 
-	let { currentStep }: Props = $props();
+	let { currentStep, step2Label = 'สแกน' }: Props = $props();
 
-	const steps = [
+	const steps = $derived([
 		{ id: 1, label: 'วิธีค้นหา' },
-		{ id: 2, label: 'สแกน' },
+		{ id: 2, label: step2Label },
 		{ id: 3, label: 'ค้นหา' },
 		{ id: 4, label: 'สมาชิก' },
 		{ id: 5, label: 'เสร็จสิ้น' }
-	] as const;
+	]);
 	const currentLabel = $derived(steps[currentStep - 1].label);
 </script>
 
