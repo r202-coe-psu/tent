@@ -146,6 +146,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'เลือกวันที่',
 		slotFull: 'คิวเต็ม (งด)',
 		slotAvailable: 'ว่าง',
+		slotChecking: 'กำลังตรวจสอบคิว...',
+		slotsPickupUnavailable:
+			'ศูนย์นี้ยังไม่เปิดรอบรถเข้ารับของในวันที่เลือก — เลือกวันอื่น หรือเปลี่ยนเป็นนำของมาส่งเอง',
 		backBtn: 'กลับ',
 		submitting: 'กำลังดำเนินการ...',
 		processingBtn: 'กำลังดำเนินการ...',
@@ -507,6 +510,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'Select Date',
 		slotFull: 'Full',
 		slotAvailable: 'Available',
+		slotChecking: 'Checking queue...',
+		slotsPickupUnavailable:
+			'This shelter has no pickup runs scheduled on the selected date — pick another date or drop the donation off yourself.',
 		backBtn: 'Back',
 		submitting: 'Submitting...',
 		processingBtn: 'Submitting...',
