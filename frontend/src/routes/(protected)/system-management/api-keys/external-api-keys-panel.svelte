@@ -8,6 +8,7 @@
 		type ApiKey,
 		type CreatedApiKey
 	} from '$lib/features/api-keys';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
 
@@ -33,21 +34,18 @@
 </script>
 
 <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-	<p class="text-sm text-muted-foreground">
+	<p class="text-sm text-slate-600">
 		จัดการคีย์สำหรับหน่วยงานภายนอกที่เรียก
 		<code class="rounded bg-muted px-1.5 py-0.5 text-sm">/external/v1/*</code>
 		— คีย์เต็มแสดงครั้งเดียวตอนสร้างเท่านั้น
 	</p>
-	<Button
-		onclick={() => (createOpen = true)}
-		class="shrink-0 bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90"
-	>
+	<Button onclick={() => (createOpen = true)} class="btn-primary-brand shrink-0">
 		<Plus class="mr-2 h-4 w-4" />
 		Create API key
 	</Button>
 </div>
 
-<div class="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+<div class={spatial.container.staffPageCard}>
 	{#if keysQuery.isLoading}
 		<div class="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
 			<div
