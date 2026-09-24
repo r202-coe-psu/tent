@@ -10,6 +10,7 @@
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import { isAlreadyCheckedInStatus } from '../domain/check-in-status';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
@@ -57,6 +58,14 @@
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
 	);
+	const reportedResults = $derived(
+		results.filter(
+			(result) =>
+				result.status === 'checked_in' ||
+				result.status === 'already_checked_in' ||
+				result.qr_payload
+		)
+	);
 	const wizardStep = $derived(
 		results.length > 0 ? 5 : lookupError || isLookingUp ? 3 : lookup ? 4 : 2
 	);
@@ -86,6 +95,18 @@
 			lookup = found;
 			if (!centerMatchesFor(found.shelter_code)) {
 				lookupError = 'ข้อมูลศูนย์ของเครื่องสแกนไม่ตรงกัน กรุณาติดต่อผู้ดูแลเครื่อง';
+				return;
+			}
+			const scannedMember = found.members.find((member) => member.is_primary);
+			if (scannedMember && isAlreadyCheckedInStatus(scannedMember.status)) {
+				results = [
+					{
+						evacuee_id: scannedMember.evacuee_id,
+						status: 'already_checked_in',
+						stay_status: scannedMember.status,
+						...(scannedMember.status === 'arriving' ? { qr_payload: scannedMember.evacuee_id } : {})
+					}
+				];
 				return;
 			}
 			selectedIds = found.members
@@ -166,6 +187,8 @@
 	function statusLabel(status: string): string {
 		if (status === 'pre_registered') return 'ลงทะเบียนล่วงหน้า';
 		if (status === 'arriving') return 'รายงานตัวแล้ว · รอคัดกรอง';
+		if (status === 'room_confirmed') return 'ยืนยันที่พักแล้ว';
+		if (status === 'temporary_leave') return 'ออกไปชั่วคราว';
 		if (status === 'active') return 'เข้าพักแล้ว';
 		if (status === 'cancelled') return 'ยกเลิก';
 		return 'ไม่พร้อมรายงานตัว';
@@ -192,18 +215,20 @@
 						? 'รอเสียบบัตร'
 						: 'กำลังค้นหา'}
 		</h1>
-		{#if cardMode && !cardRemoved && input}
+		{#if cardMode && !cardRemoved && input && results.length === 0}
 			<p class="mt-1 text-base font-semibold text-slate-700">ถอดบัตรเพื่อยืนยัน</p>
 		{:else if cardMode && !input}
 			<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
 		{:else if lookup && results.length === 0}
 			<p class="mt-1 text-base text-slate-700">เลือกผู้ที่มาถึง</p>
+		{:else if results.some((result) => result.status === 'already_checked_in')}
+			<p class="mt-1 text-base text-slate-700">พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ</p>
 		{:else if results.length > 0}
 			<p class="mt-1 text-base text-slate-700">ตรวจผล แล้วพิมพ์สายรัดข้อมือ</p>
 		{/if}
 	</header>
 
-	{#if cardMode && !cardRemoved && input}
+	{#if cardMode && !cardRemoved && input && results.length === 0}
 		<div
 			class="no-print flex items-center gap-4 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-950"
 			role="status"
@@ -364,12 +389,14 @@
 					</div>
 					<div>
 						<h2 id="result-title" class="text-xl font-extrabold text-[#0A2647] sm:text-2xl">
-							{successfulResults.length > 0
-								? 'บันทึกผลรายงานตัวแล้ว'
-								: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
+							{results.some((result) => result.status === 'already_checked_in')
+								? 'รายงานตัวแล้ว'
+								: successfulResults.length > 0
+									? 'บันทึกผลรายงานตัวแล้ว'
+									: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
 						</h2>
 						<p class="mt-1 text-sm leading-relaxed text-slate-700">
-							สำเร็จ {successfulResults.length} จาก {results.length} คน · ศูนย์ {lookup?.shelter_code}
+							รายงานตัวแล้ว {reportedResults.length} จาก {results.length} คน · ศูนย์ {lookup?.shelter_code}
 						</p>
 					</div>
 				</div>
@@ -405,11 +432,12 @@
 						(member) => member.evacuee_id === result.evacuee_id
 					)}
 					<div
-						class="flex items-center gap-3 rounded-xl border {result.qr_payload
+						class="flex items-center gap-3 rounded-xl border {result.qr_payload ||
+						result.status === 'already_checked_in'
 							? 'border-emerald-200 bg-emerald-50'
 							: 'border-amber-200 bg-amber-50'} p-4"
 					>
-						{#if result.qr_payload}<CheckCircle2
+						{#if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
 								class="h-6 w-6 shrink-0 text-emerald-800"
 								aria-hidden="true"
 							/>{:else}<CircleAlert
@@ -426,7 +454,7 @@
 									: result.qr_payload
 										? 'รายงานตัวแล้ว · ใช้ QR เดิมเพื่อพิมพ์ซ้ำได้'
 										: result.status === 'already_checked_in'
-											? `มีสถานะ ${statusLabel(result.stay_status ?? 'unknown')} แล้ว`
+											? statusLabel(result.stay_status ?? 'unknown')
 											: 'ไม่สามารถรายงานตัวได้ กรุณาให้เจ้าหน้าที่ตรวจสอบ'}
 							</p>
 						</div>

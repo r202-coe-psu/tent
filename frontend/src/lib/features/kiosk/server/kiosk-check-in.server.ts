@@ -2,6 +2,7 @@ import { dev } from '$app/environment';
 import { z } from 'zod';
 import { now } from '$lib/db/model';
 import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
+import { isAlreadyCheckedInStatus } from '../domain/check-in-status';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 
@@ -99,7 +100,7 @@ async function getById(dbName: string, id: string): Promise<EvacueeDoc | null> {
 	}
 }
 
-/** Resolve a public pre-registration only inside the authenticated scanner's shelter. */
+/** Resolve a pre-registration or prior check-in only within the authenticated scanner's shelter. */
 export async function lookupPreRegisteredEvacuee(
 	shelterCode: string,
 	input: z.infer<typeof kioskGateInputSchema>
@@ -118,7 +119,13 @@ export async function lookupPreRegisteredEvacuee(
 					type: 'evacuee',
 					shelter_code: shelterCode,
 					registered_via: 'web',
-					current_stay_status: 'pre_registered'
+					current_stay_status: [
+						'pre_registered',
+						'arriving',
+						'active',
+						'room_confirmed',
+						'temporary_leave'
+					]
 				}
 			});
 		}
@@ -135,7 +142,16 @@ export async function lookupPreRegisteredEvacuee(
 					'person_id.number': `•••••••••${input.citizen_id.slice(-4)}`,
 					shelter_code: shelterCode
 				},
-				post_filter: { registered_via: 'web', 'current_stay.status': 'pre_registered' },
+				post_filter: {
+					registered_via: 'web',
+					'current_stay.status': [
+						'pre_registered',
+						'arriving',
+						'active',
+						'room_confirmed',
+						'temporary_leave'
+					]
+				},
 				limit: 100
 			});
 		}
@@ -157,7 +173,8 @@ export async function lookupPreRegisteredEvacuee(
 		(doc) =>
 			doc.shelter_code === shelterCode &&
 			doc.registered_via === 'web' &&
-			doc.current_stay?.status === 'pre_registered'
+			(doc.current_stay?.status === 'pre_registered' ||
+				isAlreadyCheckedInStatus(doc.current_stay?.status))
 	);
 	if (dev) {
 		console.info('[Kiosk lookup] Match result', {
@@ -245,9 +262,7 @@ export async function checkInSelectedMembers(
 			const stayStatus = member.current_stay?.status ?? 'unknown';
 			results.push({
 				evacuee_id: evacueeId,
-				status: ['arriving', 'active', 'room_confirmed', 'temporary_leave'].includes(stayStatus)
-					? 'already_checked_in'
-					: 'not_eligible',
+				status: isAlreadyCheckedInStatus(stayStatus) ? 'already_checked_in' : 'not_eligible',
 				stay_status: stayStatus,
 				...(stayStatus === 'arriving' ? { qr_payload: evacueeId } : {})
 			});
