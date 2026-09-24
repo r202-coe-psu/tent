@@ -243,6 +243,28 @@ class ScannerClientManager:
             {"eventName": event_name, "citizenId": citizen_id},
         )
 
+    def _card_inserted_safely(self) -> bool:
+        """Reader errors must not trap the kiosk on a result screen."""
+        try:
+            return bool(self.reader and self.reader.is_card_inserted())
+        except Exception:
+            logger.warning("Card reader poll failed while waiting for kiosk home")
+            return False
+
+    async def _wait_for_home_or_new_card(self) -> bool:
+        """Wait for the result screen to close, or restart promptly for the next card."""
+        while (
+            self.running
+            and self.page
+            and not self.page.is_closed()
+            and urllib.parse.urlsplit(self.page.url).path != self.home_path
+        ):
+            if self._card_inserted_safely():
+                logger.info("New card inserted before returning home; restarting card flow")
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
     async def _navigate(self, url: str) -> None:
         """Switch kiosk screens without a white flash.
 
@@ -355,12 +377,7 @@ class ScannerClientManager:
                 if urllib.parse.urlsplit(self.page.url).path == self.remove_card_path:
                     await self._dispatch_card_event("kiosk:smart-card-removed")
                     logger.info("Card removed; waiting for staff to complete check-in")
-                    while (
-                        self.running
-                        and not self.page.is_closed()
-                        and urllib.parse.urlsplit(self.page.url).path != self.home_path
-                    ):
-                        await asyncio.sleep(0.5)
+                    await self._wait_for_home_or_new_card()
                 else:
                     await self._navigate(self.home_url)
             except Exception:

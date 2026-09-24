@@ -167,6 +167,54 @@ class KioskNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.page.gotos, [client.home_url])
 
 
+class FakeReader:
+    def __init__(self, *, inserted=False, raises=False, states=None):
+        self.inserted = inserted
+        self.raises = raises
+        self.states = list(states or [])
+
+    def is_card_inserted(self):
+        if self.raises:
+            raise OSError("reader unavailable")
+        if self.states:
+            return self.states.pop(0)
+        return self.inserted
+
+
+class CardRescanTests(unittest.IsolatedAsyncioTestCase):
+    async def test_wait_for_home_breaks_when_new_card_is_inserted(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = FakePage(client.remove_card_url)
+        client.reader = FakeReader(states=[False, True])
+        sleeps = []
+
+        async def keep_waiting(seconds):
+            sleeps.append(seconds)
+
+        with patch.object(asyncio, "sleep", new=keep_waiting):
+            saw_new_card = await client._wait_for_home_or_new_card()
+
+        self.assertTrue(saw_new_card)
+        self.assertEqual(urlparse(client.page.url).path, client.remove_card_path)
+        self.assertEqual(sleeps, [0.5])
+
+    async def test_wait_for_home_survives_reader_error(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = FakePage(client.remove_card_url)
+        client.reader = FakeReader(raises=True)
+        sleeps = []
+
+        async def return_home_after_poll(seconds):
+            sleeps.append(seconds)
+            client.page.url = client.home_url
+
+        with patch.object(asyncio, "sleep", new=return_home_after_poll):
+            saw_new_card = await client._wait_for_home_or_new_card()
+
+        self.assertFalse(saw_new_card)
+        self.assertEqual(sleeps, [0.5])
+
+
 class FakeRoute:
     def __init__(self, *, url, method, headers):
         self.request = SimpleNamespace(url=url, method=method, headers=headers)
