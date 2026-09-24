@@ -13,7 +13,6 @@ export function isAlreadyCheckedInStatus(status: string | null | undefined): boo
 
 /** Members a kiosk may list: expected or present, unless they opted out of search. */
 export function isListedHouseholdMember(doc: {
-	registered_via?: string;
 	current_stay?: { status?: string };
 	privacy?: { search_excluded?: boolean };
 }): boolean {

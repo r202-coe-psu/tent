@@ -3,11 +3,10 @@ import { isListedHouseholdMember } from './check-in-status';
 
 describe('isListedHouseholdMember', () => {
 	it.each(['pre_registered', 'arriving', 'active', 'room_confirmed', 'temporary_leave'])(
-		'lists household members with status %s, including staff-created records',
+		'lists household members with status %s',
 		(status) => {
 			expect(
 				isListedHouseholdMember({
-					registered_via: 'staff',
 					current_stay: { status }
 				})
 			).toBe(true);

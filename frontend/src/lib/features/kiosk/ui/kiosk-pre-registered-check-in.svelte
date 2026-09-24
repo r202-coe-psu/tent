@@ -96,6 +96,9 @@
 	const selectedMembers = $derived(
 		lookup?.members.filter((member) => selectedIds.includes(member.evacuee_id)) ?? []
 	);
+	const selectableMemberCount = $derived(
+		lookup?.members.filter((member) => member.selectable).length ?? 0
+	);
 
 	// A gate arrives after camera/card events; this effect owns that async lookup side effect.
 	$effect(() => {
@@ -145,7 +148,8 @@
 			const selectableMembers = found.members.filter((member) => member.selectable);
 			if (selectableMembers.length === 0) {
 				results = toExistingReportResults(found.members);
-				await prepareQrImages(results);
+				await prepareQrImages(results, generation);
+				if (generation !== lookupGeneration) return;
 				return;
 			}
 			selectedIds = initialSelection(gate.source, selectableMembers);
@@ -235,7 +239,10 @@
 		return merged;
 	}
 
-	async function prepareQrImages(items: KioskCheckInMemberResult[]): Promise<boolean> {
+	async function prepareQrImages(
+		items: KioskCheckInMemberResult[],
+		generation?: number
+	): Promise<boolean> {
 		printError = '';
 		const nextImages: Record<string, string> = { ...qrImages };
 		try {
@@ -247,9 +254,11 @@
 					color: { dark: '#0A2647', light: '#FFFFFF' }
 				});
 			}
+			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
 			return true;
 		} catch {
+			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
 			printError = 'สร้าง QR สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
 			return false;
@@ -482,7 +491,7 @@
 				{/each}
 			</div>
 
-			{#if selectedMembers.length > 0 && selectedMembers.length < lookup.members.filter((member) => member.selectable).length}
+			{#if selectedMembers.length > 0 && selectedMembers.length < selectableMemberCount}
 				<p class="mt-4 text-sm leading-relaxed text-slate-600">
 					เลือก {selectedMembers.length} คน · รายงานตัวแล้วเลือกซ้ำไม่ได้
 				</p>

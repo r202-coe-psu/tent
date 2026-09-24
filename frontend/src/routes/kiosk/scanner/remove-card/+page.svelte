@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
@@ -24,8 +25,8 @@
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
 	$effect(() => {
-		if (!gate) return;
-		idleTimeout.start();
+		if (!gate || !cardRemoved) return;
+		untrack(() => idleTimeout.start());
 		return () => idleTimeout.stop();
 	});
 

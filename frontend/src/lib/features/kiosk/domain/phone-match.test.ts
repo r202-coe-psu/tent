@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	EXCLUDE_SEARCH_OPT_OUT,
-	groupPhoneMatches,
-	isPhoneMatchEligible,
-	type PhoneMatchDoc
-} from './phone-match';
+import { groupPhoneMatches, isPhoneMatchEligible, type PhoneMatchDoc } from './phone-match';
 
 function evacuee(overrides: Partial<PhoneMatchDoc> & Pick<PhoneMatchDoc, '_id'>): PhoneMatchDoc {
 	return {
@@ -89,7 +84,6 @@ describe('groupPhoneMatches', () => {
 		expect(
 			isPhoneMatchEligible(evacuee({ _id: 'evacuee:staff', registered_via: 'staff' }), 'SH001')
 		).toBe(false);
-		expect(EXCLUDE_SEARCH_OPT_OUT).toBe(true);
 		expect(
 			isPhoneMatchEligible(
 				evacuee({ _id: 'evacuee:hidden', privacy: { search_excluded: true } }),

@@ -1,7 +1,6 @@
-import { isAlreadyCheckedInStatus } from './check-in-status';
+import { isListedHouseholdMember } from './check-in-status';
 
 export const KIOSK_PHONE_MAX_CANDIDATES = 5;
-export const EXCLUDE_SEARCH_OPT_OUT = true;
 
 export type PhoneMatchDoc = {
 	_id: string;
@@ -23,14 +22,8 @@ export type PhoneMatchGroup = {
 };
 
 export function isPhoneMatchEligible(doc: PhoneMatchDoc, shelterCode: string): boolean {
-	const status = doc.current_stay?.status;
-	const eligibleStay = status === 'pre_registered' || isAlreadyCheckedInStatus(status);
-	const excludedByPrivacy = EXCLUDE_SEARCH_OPT_OUT && doc.privacy?.search_excluded === true;
 	return (
-		doc.shelter_code === shelterCode &&
-		doc.registered_via === 'web' &&
-		eligibleStay &&
-		!excludedByPrivacy
+		doc.shelter_code === shelterCode && doc.registered_via === 'web' && isListedHouseholdMember(doc)
 	);
 }
 

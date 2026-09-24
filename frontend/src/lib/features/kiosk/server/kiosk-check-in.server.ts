@@ -338,9 +338,7 @@ async function lookupByPhone(
 	if (!group) return { kind: 'not_found' };
 	const primary = await getById(dbName, group.primary._id);
 	if (!primary || !isPhoneMatchEligible(primary, shelterCode)) return { kind: 'not_found' };
-	const members = (await expandHousehold(dbName, primary, shelterCode)).filter(
-		isListedHouseholdMember
-	);
+	const members = await expandHousehold(dbName, primary, shelterCode);
 	const matchedPhoneIds = new Set(group.matched.map((matched) => matched._id));
 	return {
 		kind: 'household',
@@ -385,9 +383,7 @@ export async function lookupPreRegisteredEvacuee(
 		(doc) =>
 			doc.shelter_code === shelterCode &&
 			doc.registered_via === 'web' &&
-			doc.privacy?.search_excluded !== true &&
-			(doc.current_stay?.status === 'pre_registered' ||
-				isAlreadyCheckedInStatus(doc.current_stay?.status))
+			isListedHouseholdMember(doc)
 	);
 	if (dev) {
 		console.info('[Kiosk lookup] Match result', {
@@ -405,7 +401,7 @@ export async function lookupPreRegisteredEvacuee(
 		name_masked: true,
 		shelter_code: shelterCode,
 		primary_evacuee_id: primary._id,
-		members: members.filter(isListedHouseholdMember).map((member) => toSummary(member, primary._id))
+		members: members.map((member) => toSummary(member, primary._id))
 	};
 }
 
@@ -421,7 +417,12 @@ export async function checkInSelectedMembers(
 		(id) => `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`
 	);
 	const primary = await getById(dbName, normalizedPrimaryId);
-	if (!primary || primary.shelter_code !== shelterCode || primary.registered_via !== 'web') {
+	if (
+		!primary ||
+		primary.shelter_code !== shelterCode ||
+		primary.registered_via !== 'web' ||
+		!isListedHouseholdMember(primary)
+	) {
 		return normalizedEvacueeIds.map((evacueeId) => ({
 			evacuee_id: evacueeId,
 			status: 'not_eligible'
@@ -445,7 +446,11 @@ export async function checkInSelectedMembers(
 		const belongsToHousehold =
 			member._id === primary._id ||
 			(Boolean(primary.household_id) && member.household_id === primary.household_id);
-		if (!belongsToHousehold || member.registered_via !== 'web') {
+		if (
+			!belongsToHousehold ||
+			member.registered_via !== 'web' ||
+			!isListedHouseholdMember(member)
+		) {
 			results.push({ evacuee_id: evacueeId, status: 'not_eligible' });
 			continue;
 		}

@@ -584,6 +584,27 @@ describe('checkInSelectedMembers', () => {
 		expect(householdBody).toMatchObject({ _rev: '1-household', status: 'arriving' });
 	});
 
+	it('rejects opted-out members even when their IDs are submitted directly', async () => {
+		const primary = evacuee(0);
+		const hidden = evacuee(1, { privacy: { search_excluded: true } });
+		setHousehold([primary, hidden], primary);
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [hidden._id]);
+
+		expect(results).toEqual([{ evacuee_id: hidden._id, status: 'not_eligible' }]);
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+	});
+
+	it('rejects an opted-out primary before processing selected members', async () => {
+		const primary = evacuee(0, { privacy: { search_excluded: true } });
+		setHousehold([primary]);
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+
+		expect(results).toEqual([{ evacuee_id: primary._id, status: 'not_eligible' }]);
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+	});
+
 	it('re-reads after a CouchDB conflict and returns the already committed QR result', async () => {
 		const primary = evacuee(0);
 		setHousehold([primary]);

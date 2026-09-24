@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -34,7 +35,7 @@
 
 	$effect(() => {
 		if (!gate) return;
-		idleTimeout.start();
+		untrack(() => idleTimeout.start());
 		return () => idleTimeout.stop();
 	});
 
