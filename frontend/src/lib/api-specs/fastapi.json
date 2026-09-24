@@ -4333,7 +4333,7 @@
 				"type": "object",
 				"required": ["client_secret"],
 				"title": "ThirdPartyClientSecretResponse",
-				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (draft-partner-client-secret-reveal-edit-delete)."
+				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (CR-136)."
 			},
 			"ThirdPartyClientUpdateRequest": {
 				"properties": {

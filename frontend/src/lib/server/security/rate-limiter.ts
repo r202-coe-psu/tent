@@ -85,7 +85,7 @@ export const loginResolveIpLimiter = new RateLimiter(60_000, 10);
 
 /**
  * Third-party client secret reveal — own-password re-auth against CouchDB `_session`
- * (draft-partner-client-secret-reveal-edit-delete). Same budget as login captcha: it's
+ * (CR-136). Same budget as login captcha: it's
  * an already-authenticated SA, not an anonymous credential-stuffing surface, but a
  * wrong-password guess still shouldn't be unlimited.
  */

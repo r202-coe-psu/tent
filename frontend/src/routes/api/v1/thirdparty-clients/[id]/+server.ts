@@ -1,6 +1,6 @@
 /**
  * SA-only BFF — edit scopes / soft-delete a third-party OAuth2 client (EXT-001,
- * ADR 0002; draft-partner-client-secret-reveal-edit-delete).
+ * ADR 0002; CR-136).
  *
  * PATCH { allowed_scopes } → FastAPI `PATCH /v1/admin/thirdparty-clients/{id}`
  *   (refused 409 once the client is revoked).

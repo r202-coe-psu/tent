@@ -1,7 +1,7 @@
 /**
  * SA-only BFF — reveal a third-party OAuth2 client's plaintext secret again, gated
  * behind the caller re-entering their own CouchDB password (EXT-001, ADR 0002;
- * draft-partner-client-secret-reveal-edit-delete).
+ * CR-136).
  *
  * POST { password } → verify against CouchDB `_session` (no new cookie set), then
  * FastAPI `GET /v1/admin/thirdparty-clients/{id}/secret` (decrypts server-side).

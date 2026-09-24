@@ -28,8 +28,8 @@ class ThirdPartyClient(Document):
 	# deterministically from `client_id` + `secret_issued_at` (see
 	# utils/secret_derivation.py), so the admin "view again" feature recomputes it
 	# instead of decrypting a stored ciphertext. Rotated on regenerate. `None` on docs
-	# created before this field existed (schema.md §9.6, draft-partner-client-secret-
-	# reveal-edit-delete) — those secrets cannot be recovered.
+	# created before this field existed (schema.md §9.6, CR-136) — those secrets
+	# cannot be recovered.
 	secret_issued_at: datetime | None = None
 	# Admin-chosen display name, unique case-insensitively. `None` only on docs created
 	# before the field existed (schema.md §9.6).

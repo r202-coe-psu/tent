@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-136
 title: Partner OAuth2 clients — password-gated secret reveal (deterministic HMAC derivation), editable scopes, soft-delete after revoke, regenerate secret
-status: proposed
+status: approved
 date: 2026-09-24
 requested_by: Dev Team B
-decided_by: 
+decided_by: Project Owner (Jakee)
 layer: stable
 affects:
   - docs/data/schema.md §9.6 (`third_party_clients` — +`secret_issued_at`, +`deleted_at`)
@@ -28,7 +28,7 @@ migration: additive — client เดิมไม่มี `secret_issued_at`/`d
 revision note (2026-09-24): เปลี่ยนกลไก FR-1 จาก **reversible encryption (Fernet)** เป็น **deterministic derivation (HMAC-SHA256)** ก่อน CR นี้เคย merge เข้า main — ยังไม่เคยขึ้น production จึงแก้ไฟล์นี้ตรงๆ แทนการเปิด CR ใหม่ (ตามที่เจ้าของโครงการเลือก). เหตุผลของ Dev Team B ที่ขอเปลี่ยน: ไม่อยากพึ่ง `cryptography` dependency; เหตุผลด้าน security ที่ยอมรับ trade-off นี้ (แจ้งไว้ระหว่างพัฒนา): ถ้า `THIRDPARTY_SECRET_SALT` รั่ว จะ derive secret ของ**ทุก** client ได้ทันทีจาก `client_id` + `secret_issued_at` ที่เป็น plaintext ใน Mongo อยู่แล้ว — กว้างกว่าความเสี่ยงเดิมของ Fernet key รั่ว (ซึ่งยังต้องมี ciphertext ต่อ client ประกอบด้วย) ยังไม่มี key-rotation policy เหมือนเดิม
 ---
 
-# Partner OAuth2 clients — reveal secret, edit scope, delete after revoke, regenerate secret
+# CR-136: Partner OAuth2 clients — reveal secret, edit scope, delete after revoke, regenerate secret
 
 > **สรุป (TL;DR):**
 >
@@ -107,3 +107,8 @@ revision note (2026-09-24): เปลี่ยนกลไก FR-1 จาก **r
   db.third_party_clients.dropIndex("name_unique_ci")
   ```
   (Beanie สร้าง index ใหม่ให้อัตโนมัติตอน startup ครั้งถัดไป)
+
+## History
+
+- 2026-09-24 — proposed as `draft-partner-client-secret-reveal-edit-delete` (รวม revision เปลี่ยน Fernet → HMAC ก่อนขึ้น production)
+- 2026-09-24 — **approved** — Project Owner (Jakee); รันเลข **CR-136** (ถัดจาก CR-135 บน `develop`)

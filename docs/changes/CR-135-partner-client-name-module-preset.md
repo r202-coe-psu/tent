@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-135
 title: Partner OAuth2 clients — ตั้ง name เอง (unique) + description + module radio preset scope + generated tpc_ client_id; ซ่อนแท็บ External API Keys ชั่วคราว
-status: proposed
+status: approved
 date: 2026-09-24
 requested_by: Dev Team B
-decided_by: 
+decided_by: Project Owner (Jakee)
 layer: volatile
 affects:
   - docs/data/schema.md §9.6 (ใหม่ — `third_party_clients`: +`name`, +`description`, `client_id` generated)
@@ -22,7 +22,7 @@ why: ชื่อ client ปัจจุบันเป็นแค่ dropdown 
 migration: additive — doc เดิมไม่มี `name`/`description` (อ่านได้เป็น `null`, UI fallback เป็น `client_id`); `client_id` เดิมใช้ต่อได้ ไม่ rotate
 ---
 
-# Partner OAuth2 clients — name / description / module preset / generated client_id
+# CR-135: Partner OAuth2 clients — name / description / module preset / generated client_id
 
 > **สรุป (TL;DR):**
 >
@@ -77,3 +77,8 @@ migration: additive — doc เดิมไม่มี `name`/`description` (�
 ## Migration
 
 - N/A สำหรับ `schema_v`; ไม่ backfill doc เดิม (`name`/`description` = `null`); `client_id` เดิมไม่ rotate
+
+## History
+
+- 2026-09-24 — proposed as `draft-partner-client-name-module-preset`
+- 2026-09-24 — **approved** — Project Owner (Jakee); รันเลข **CR-135** (ถัดจาก CR-134 บน `develop`)

@@ -2796,7 +2796,7 @@ export interface components {
 		/**
 		 * ThirdPartyClientSecretResponse
 		 * @description Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's
-		 *     own-password re-auth (draft-partner-client-secret-reveal-edit-delete).
+		 *     own-password re-auth (CR-136).
 		 */
 		ThirdPartyClientSecretResponse: {
 			/** Client Secret */

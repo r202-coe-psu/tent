@@ -19,7 +19,7 @@
 
 	/**
 	 * External API Keys (`/external/v1/*`, CR-062) tab is hidden and unmounted for now
-	 * (draft-partner-client-name-module-preset FR-1/FR-2) — flip to re-enable.
+	 * (CR-135 FR-1/FR-2) — flip to re-enable.
 	 */
 	const EXTERNAL_API_KEYS_ENABLED = false;
 

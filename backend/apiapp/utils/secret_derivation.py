@@ -5,7 +5,7 @@ Storage-at-rest only — the `/external/token` verify path still uses
 exists solely so a `system_admin` who lost the plaintext can view it again from the
 API Keys screen, gated behind re-entering their own CouchDB password (BFF
 `POST /api/v1/thirdparty-clients/{id}/secret`). See
-draft-partner-client-secret-reveal-edit-delete.
+CR-136.
 
 Unlike the earlier Fernet-based design, nothing is encrypted or stored as ciphertext:
 the secret is `HMAC-SHA256(key=THIRDPARTY_SECRET_SALT, msg=client_id + issued_at)`, so

@@ -33,6 +33,8 @@
 		"seed:delete-daily-sop": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-staging.ts --delete-daily-sop",
 		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
+		"unseed:master": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master",
+		"unseed:master-data": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master-data",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"migrate:volunteer-review": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-review.ts",

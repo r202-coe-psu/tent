@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-23
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer
+updated: 2026-09-24
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete
 ---
 
 # Database Schema v5 — field-level
@@ -2254,7 +2254,7 @@ SoR ของคิวกลางจน claim = Mongo collection นี้ · �
 
 **Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
 
-### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **draft-partner-client-name-module-preset**, **draft-partner-client-secret-reveal-edit-delete**)
+### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **CR-135**, **CR-136**)
 
 Credential ของระบบพันธมิตร (M6/M7) สำหรับ `POST /external/token` (`grant_type=client_credentials`) ·
 สร้าง/แก้ไข/เพิกถอน/ลบโดย `system_admin` ผ่านหน้า **System Management → API Keys** (BFF
@@ -2275,7 +2275,7 @@ document, เพิ่ม field แบบ additive)
 | `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |
 | `created_at` / `updated_at` | ts | sys | — |
 
-**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string **และ** `deleted_at = null`) collation `{locale: "en", strength: 2}` — deployment ที่มี index เก่า (ก่อน draft-partner-client-secret-reveal-edit-delete รอบล่าสุด) ต้อง `db.third_party_clients.dropIndex("name_unique_ci")` ก่อน ไม่งั้น Beanie จะ error `IndexKeySpecsConflict` ตอน startup (Mongo ไม่ auto-update partialFilterExpression ของ index ที่มีอยู่แล้ว)
+**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string **และ** `deleted_at = null`) collation `{locale: "en", strength: 2}` — deployment ที่มี index เก่า (ก่อน CR-136 รอบล่าสุด) ต้อง `db.third_party_clients.dropIndex("name_unique_ci")` ก่อน ไม่งั้น Beanie จะ error `IndexKeySpecsConflict` ตอน startup (Mongo ไม่ auto-update partialFilterExpression ของ index ที่มีอยู่แล้ว)
 
 **Reveal secret (view again):** `POST /api/v1/thirdparty-clients/{id}/secret` body `{password}` — BFF
 verify `password` ของ **ผู้ใช้ที่ login อยู่เอง** กับ CouchDB `_session` (ไม่สร้าง cookie ใหม่, ไม่กระทบ
@@ -2286,5 +2286,4 @@ session ปัจจุบัน) ก่อน แล้วค่อยเรี
 **Regenerate secret:** `POST /v1/admin/thirdparty-clients/{id}/regenerate-secret` — ออก
 `client_secret` ใหม่ให้ `client_id` เดิม (เขียนทับ `client_secret_hash` และตั้ง `secret_issued_at` ใหม่);
 secret เก่าใช้ authenticate ไม่ได้ทันทีที่สำเร็จ ไม่มี grace period · เฉพาะตอน `is_active = true` (revoke
-แล้ว → `409`) · UI ต้องผ่าน confirm dialog เตือนก่อนเสมอ (draft-partner-client-secret-reveal-
-edit-delete §D)
+แล้ว → `409`) · UI ต้องผ่าน confirm dialog เตือนก่อนเสมอ (CR-136 §D)

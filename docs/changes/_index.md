@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-18 # Ratified CR-127 volunteer permanent tracking_token_hash / QR check-in; CR-128 shelter food_distribution_points + single-page form
+updated: 2026-09-24 # Approved CR-135 partner-client name/module preset; CR-136 partner-client secret reveal/edit/delete
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -147,3 +147,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-127](CR-127-volunteer-permanent-tracking-token.md) | Volunteer — permanent per-volunteer `tracking_token_hash` for portal / QR check-in | approved | volatile | 2026-09-18 | docs/data/schema.md §2.8 volunteer (schema_v 3 → 4), volunteers public-application + check-in, PublicVolunteer projector, FastAPI volunteer credential resolution |
 | [CR-128](CR-128-shelter-food-distribution-points-and-single-page-form.md) | shelter — เพิ่ม `food_distribution_points` (จุดแจกอาหาร, staff-only, schema_v 5 → 6) + ฟอร์มสร้าง/แก้ศูนย์จาก 8-step wizard เป็น single-page scroll-spy (UX, ไม่ใช่ schema change) | approved | volatile | 2026-09-18 | docs/data/schema.md §3.1 (schema_v shelter 5 → 6), docs/data/schema-er-diagram.md SHELTER block, frontend/src/lib/features/shelters/{domain,ui}, docs/uat/smart-shelter-uat-checklist.csv |
 | [CR-134](CR-134-bulk-return-claim-recovery.md) | ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery) — bulk_return_claim (schema_v 1) + bulk_return_pool (schema_v 1 → 2) claim_ids | proposed | stable | 2026-09-17 (proposed) | docs/data/schema.md §2.31/§2.32, CR-121, frontend/src/lib/features/distribution/**, server/shelter-access-design.ts |
+| [CR-135](CR-135-partner-client-name-module-preset.md) | Partner OAuth2 clients — ตั้ง name เอง (unique) + description + module radio preset scope + generated `tpc_` client_id; ซ่อนแท็บ External API Keys ชั่วคราว | approved | volatile | 2026-09-24 | docs/data/schema.md §9.6, packages/tent-model third_party_client, backend thirdparty_clients_admin, frontend third-party-clients feature |
+| [CR-136](CR-136-partner-client-secret-reveal-edit-delete.md) | Partner OAuth2 clients — password-gated secret reveal (HMAC derivation), editable scopes, soft-delete after revoke, regenerate secret | approved | stable | 2026-09-24 | docs/data/schema.md §9.6 (+`secret_issued_at`, +`deleted_at`), backend secret_derivation / thirdparty_clients_admin, frontend third-party-clients + BFF secret/regenerate routes |
