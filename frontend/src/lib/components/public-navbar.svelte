@@ -145,8 +145,8 @@
 			</a>
 		</div>
 
-		<!-- Compact controls: phone + tablet (hamburger through lg) -->
-		<div class="flex shrink-0 items-center gap-1 sm:gap-2 lg:hidden">
+		<!-- Compact controls: phone + tablet + iPad Pro mid-range (hamburger through xl) -->
+		<div class="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
 			<!-- Notification Bell Button (Mobile) -->
 			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
 
@@ -174,11 +174,11 @@
 			</button>
 		</div>
 
-		<!-- Full horizontal nav: desktop lg+ only (avoids tablet wrap over form CTAs) -->
-		<nav class="hidden flex-nowrap items-center gap-1 lg:flex">
+		<!-- Full horizontal nav: desktop xl+ only (hamburger through tablet + iPad Pro mid-range) -->
+		<nav class="hidden flex-nowrap items-center gap-0.5 xl:flex 2xl:gap-1">
 			<a
 				href={resolve('/')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isHomePage()
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -188,7 +188,7 @@
 
 			<a
 				href={resolve('/shelters')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
@@ -200,7 +200,7 @@
 
 			<a
 				href={resolve('/pre-register')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/pre-register'
 				)
 					? 'bg-primary-muted text-primary'
@@ -212,7 +212,7 @@
 
 			<a
 				href={resolve('/search')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/search'
 				)
 					? 'bg-primary-muted text-primary'
@@ -230,7 +230,7 @@
 					aria-haspopup="menu"
 					aria-expanded={donationsMenuOpen}
 					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
-					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					class="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-1.5 2xl:px-3 {isDonationsSection() ||
 					donationsMenuOpen
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -283,7 +283,7 @@
 					aria-haspopup="menu"
 					aria-expanded={volunteersMenuOpen}
 					aria-controls={volunteersMenuOpen ? 'volunteers-menu' : undefined}
-					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					class="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium transition-colors hover:bg-muted/50 2xl:gap-1.5 2xl:px-3 {isActive(
 						'/volunteers'
 					) || volunteersMenuOpen
 						? 'bg-primary-muted text-primary'
@@ -335,7 +335,7 @@
 
 			<a
 				href={resolve('/login')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/login'
 				)
 					? 'bg-primary-muted text-primary'
@@ -346,7 +346,7 @@
 			</a>
 
 			<!-- Notification Bell Button (Desktop) -->
-			<div class="ml-1 flex shrink-0 items-center">
+			<div class="ml-0.5 flex shrink-0 items-center 2xl:ml-1">
 				<PublicNotificationMenu
 					variant="navbar"
 					{announcements}
@@ -355,11 +355,11 @@
 			</div>
 
 			<!-- Language Switcher (Desktop) -->
-			<div class="ml-2 flex shrink-0 items-center border-l border-slate-200 pl-3">
+			<div class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3">
 				<button
 					type="button"
 					onclick={toggleLanguage}
-					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3.5 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
+					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
 					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
 				>
 					{langState.current === 'th' ? 'EN' : 'TH'}
@@ -368,7 +368,7 @@
 		</nav>
 	</div>
 
-	<!-- Compact menu sheet (phone + tablet) -->
+	<!-- Compact menu sheet (phone + tablet + iPad Pro mid-range) -->
 	<Sheet.Root bind:open={mobileMenuOpen}>
 		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
 			<Sheet.Header class="border-b p-4 pr-14">
