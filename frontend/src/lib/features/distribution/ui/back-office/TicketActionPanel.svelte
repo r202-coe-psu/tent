@@ -3,19 +3,22 @@
 	import {
 		resolveAuthenticatedAuthorContext,
 		useApproveTicketForDispatch,
-		useReceiveTicketAtDistributionPoint
+		useReceiveTicketAtDistributionPoint,
+		useCompleteTicket
 	} from '../../application/queries';
 	import {
 		canAllocateTicket,
 		canApproveTicket,
 		canCancelTicket,
 		canDispatchTicket,
-		canPerformFrontlineDistribution
+		canPerformFrontlineDistribution,
+		canReceiveWarehouseReturns
 	} from '../../application/food-supplies/auth';
 	import { isTicketReadyForApproval } from '../model/ticket-lifecycle';
 	import TicketAllocationDialog from './TicketAllocationDialog.svelte';
 	import CancelTicketDialog from './CancelTicketDialog.svelte';
 	import DispatchTicketDialog from './DispatchTicketDialog.svelte';
+	import WarehouseReturnDialog from './WarehouseReturnDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import Boxes from '@lucide/svelte/icons/boxes';
@@ -42,9 +45,12 @@
 	let isApproveConfirmOpen = $state(false);
 	let isDispatchOpen = $state(false);
 	let isReceiveConfirmOpen = $state(false);
+	let isWarehouseReturnOpen = $state(false);
+	let isCompleteConfirmOpen = $state(false);
 
 	const approveMutation = useApproveTicketForDispatch();
 	const receiveMutation = useReceiveTicketAtDistributionPoint();
+	const completeMutation = useCompleteTicket();
 
 	// Authoritative capabilities derived from session
 	const authContext = $derived.by(() => {
@@ -60,11 +66,30 @@
 	const canCancel = $derived(authContext ? canCancelTicket(authContext) : false);
 	const canDispatch = $derived(authContext ? canDispatchTicket(authContext) : false);
 	const canReceive = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
+	const canReceiveReturns = $derived(authContext ? canReceiveWarehouseReturns(authContext) : false);
 
 	// Approval readiness check
 	const approvalReadiness = $derived(isTicketReadyForApproval(ticket));
 
-	const isAnyPending = $derived(approveMutation.isPending || receiveMutation.isPending);
+	const isAnyPending = $derived(
+		approveMutation.isPending || receiveMutation.isPending || completeMutation.isPending
+	);
+
+	async function handleConfirmComplete() {
+		try {
+			await completeMutation.mutateAsync({
+				ticketId: ticket._id,
+				shelterCode
+			});
+
+			toast.success(`ปิดตั๋วใบเบิกจ่าย ${ticket.ticket_no} เสร็จสมบูรณ์แล้ว`);
+			isCompleteConfirmOpen = false;
+			onActionSuccess?.();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปิดตั๋ว';
+			toast.error(msg);
+		}
+	}
 
 	async function handleConfirmApprove() {
 		try {
@@ -291,27 +316,69 @@
 				</div>
 			</div>
 		{:else if ticket.status === 'RETURN_PENDING_RECEIPT'}
-			<div
-				class="flex items-center gap-2.5 rounded-lg border border-orange-200 bg-orange-50/60 p-3 text-xs text-orange-900"
-			>
-				<Info class="h-4 w-4 shrink-0 text-orange-600" />
-				<div>
-					<strong>รอคลังตรวจรับคืน (Returns Pending Receipt)</strong>
-					<p class="mt-0.5 text-slate-600">
-						ของเหลือถูกส่งกลับมาที่คลังแล้ว รอเจ้าหน้าที่คลังตรวจนับและรับเข้าสต็อก
-					</p>
+			<div class="space-y-4">
+				<div class="flex flex-wrap items-center gap-3">
+					{#if canReceiveReturns}
+						<button
+							type="button"
+							disabled={isAnyPending}
+							onclick={() => (isWarehouseReturnOpen = true)}
+							class="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<PackageCheck class="h-4 w-4" />
+							<span>ตรวจรับของคืนเข้าคลังสินค้า</span>
+						</button>
+					{/if}
+				</div>
+
+				<div
+					class="flex items-center gap-2.5 rounded-lg border border-orange-200 bg-orange-50/60 p-3 text-xs text-orange-900"
+				>
+					<Info class="h-4 w-4 shrink-0 text-orange-600" />
+					<div>
+						<strong>รอคลังตรวจรับคืน (Returns Pending Receipt)</strong>
+						<p class="mt-0.5 text-slate-600">
+							ของเหลือถูกส่งกลับมาที่คลังแล้ว
+							{#if canReceiveReturns}
+								เจ้าหน้าที่คลังสามารถกดปุ่มตรวจรับเพื่อยืนยันจำนวนของจริงเข้าสต็อกคลัง
+							{:else}
+								รอเจ้าหน้าที่คลังตรวจนับและรับเข้าสต็อก
+							{/if}
+						</p>
+					</div>
 				</div>
 			</div>
 		{:else if ticket.status === 'RETURN_COMPLETED'}
-			<div
-				class="flex items-center gap-2.5 rounded-lg border border-teal-200 bg-teal-50/60 p-3 text-xs text-teal-900"
-			>
-				<Info class="h-4 w-4 shrink-0 text-teal-600" />
-				<div>
-					<strong>ตรวจรับคืนเรียบร้อยแล้ว (Return Completed)</strong>
-					<p class="mt-0.5 text-slate-600">
-						คลังบันทึกยอดรับคืนเข้าคลังเรียบร้อยแล้ว รอการปิดตั๋วอย่างสมบูรณ์
-					</p>
+			<div class="space-y-4">
+				<div class="flex flex-wrap items-center gap-3">
+					{#if canReceiveReturns}
+						<button
+							type="button"
+							disabled={isAnyPending}
+							onclick={() => (isCompleteConfirmOpen = true)}
+							class="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-800 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<CheckCircle2 class="h-4 w-4" />
+							<span>ปิดตั๋วใบเบิกจ่าย (Complete Ticket)</span>
+						</button>
+					{/if}
+				</div>
+
+				<div
+					class="flex items-center gap-2.5 rounded-lg border border-teal-200 bg-teal-50/60 p-3 text-xs text-teal-900"
+				>
+					<Info class="h-4 w-4 shrink-0 text-teal-600" />
+					<div>
+						<strong>ตรวจรับคืนเรียบร้อยแล้ว (Return Completed)</strong>
+						<p class="mt-0.5 text-slate-600">
+							คลังบันทึกยอดรับคืนเข้าคลังเรียบร้อยแล้ว
+							{#if canReceiveReturns}
+								สามารถดำเนินการปิดตั๋วเพื่อสิ้นสุดกระบวนการเบิกจ่าย
+							{:else}
+								รอเจ้าหน้าที่ที่ได้รับมอบหมายทำการปิดตั๋วอย่างสมบูรณ์
+							{/if}
+						</p>
+					</div>
 				</div>
 			</div>
 		{:else if ticket.status === 'COMPLETED'}
@@ -489,6 +556,76 @@
 					<span>กำลังบันทึก...</span>
 				{:else}
 					<span>ยืนยันรับของ</span>
+				{/if}
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Modal 4: Warehouse Return Verification Dialog -->
+<WarehouseReturnDialog
+	bind:open={isWarehouseReturnOpen}
+	{ticket}
+	{shelterCode}
+	onSuccess={onActionSuccess}
+	onClose={() => (isWarehouseReturnOpen = false)}
+/>
+
+<!-- Modal 5: Complete Ticket Confirmation Dialog -->
+<Dialog.Root bind:open={isCompleteConfirmOpen}>
+	<Dialog.Content class="sm:max-w-[480px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-base font-bold text-slate-900">
+				<CheckCircle2 class="h-5 w-5 text-teal-700" />
+				<span>ยืนยันการปิดตั๋วใบเบิกจ่าย</span>
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-slate-500">
+				ต้องการปิดตั๋วใบเบิกจ่าย <strong class="font-mono text-slate-800">{ticket.ticket_no}</strong
+				>
+				ให้เปลี่ยนสถานะเป็น "เสร็จสมบูรณ์" (COMPLETED) ใช่หรือไม่?
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div
+			class="my-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"
+		>
+			<div class="flex justify-between">
+				<span class="text-slate-500">เลขที่ตั๋ว:</span>
+				<span class="font-mono font-bold text-slate-900">{ticket.ticket_no}</span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-slate-500">จุดหมาย:</span>
+				<span class="font-semibold text-slate-800">{ticket.destination_location}</span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-slate-500">สถานะปัจจุบัน:</span>
+				<span class="font-semibold text-teal-800">ตรวจรับคืนเรียบร้อย (RETURN_COMPLETED)</span>
+			</div>
+			<div class="flex justify-between border-t border-slate-200/80 pt-2">
+				<span class="text-slate-500">ผู้ดำเนินการ (Session):</span>
+				<span class="font-mono text-slate-800">{authContext?.createdBy ?? '-'}</span>
+			</div>
+		</div>
+
+		<Dialog.Footer class="flex items-center justify-end gap-2">
+			<button
+				type="button"
+				onclick={() => (isCompleteConfirmOpen = false)}
+				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+			>
+				ยกเลิก
+			</button>
+			<button
+				type="button"
+				onclick={handleConfirmComplete}
+				disabled={completeMutation.isPending}
+				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-800 px-4 text-xs font-semibold text-white shadow-2xs hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				{#if completeMutation.isPending}
+					<Loader2 class="h-3.5 w-3.5 animate-spin" />
+					<span>กำลังปิดตั๋ว...</span>
+				{:else}
+					<span>ยืนยันปิดตั๋ว</span>
 				{/if}
 			</button>
 		</Dialog.Footer>

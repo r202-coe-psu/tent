@@ -322,3 +322,35 @@ export {
 
 /** Ticket-era Food & Supplies UI components & models (Slice 5.4 — Frontline Handover). */
 export { default as FrontlineStationPage } from './ui/frontline/FrontlineStationPage.svelte';
+
+/** Ticket-era Food & Supplies UI components & models (Frontline Shift Reconciliation). */
+export { default as ShiftReconciliationCard } from './ui/frontline/ShiftReconciliationCard.svelte';
+export {
+	initializeReturnedQuantities,
+	validateReturnedQuantity,
+	validateShiftCloseForm,
+	computeItemPreview,
+	computeShiftClosePreview,
+	buildCloseShiftOptions,
+	type ItemReconciliationPreview,
+	type ShiftClosePreview,
+	type ReturnedQtyValidationResult,
+	type ShiftCloseFormValidationResult
+} from './ui/model/shift-reconciliation';
+
+/** Ticket-era Food & Supplies UI components & models (Warehouse Return Verification & Ticket Completion). */
+export { default as WarehouseReturnDialog } from './ui/back-office/WarehouseReturnDialog.svelte';
+export {
+	initializeVerifiedQuantities,
+	validateVerifiedQuantity,
+	validateWarehouseReturnForm,
+	computeWarehouseItemPreview,
+	computeWarehouseReturnSummary,
+	buildVerifiedReturnsPayload,
+	canShowWarehouseReceiveAction,
+	canShowCompleteTicketAction,
+	type WarehouseReturnItemPreview,
+	type WarehouseReturnSummaryPreview,
+	type VerifiedQtyValidationResult,
+	type WarehouseReturnFormValidationResult
+} from './ui/model/warehouse-return';

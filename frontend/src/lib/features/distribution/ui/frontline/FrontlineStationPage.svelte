@@ -17,13 +17,16 @@
 		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
+	import Lock from '@lucide/svelte/icons/lock';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
+	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies' | 'returns';
+		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
 	}
 
 	let { initialTab = 'food' }: Props = $props();
@@ -45,7 +48,7 @@
 	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
 	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
 	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns'>(
+	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation'>(
 		(function () {
 			return initialTab;
 		})()
@@ -94,6 +97,47 @@
 	);
 	const activeSuppliesTicket = $derived(
 		distributingSuppliesTickets.find((t) => t._id === selectedSuppliesTicketId) ?? null
+	);
+
+	// Reconciliation eligible tickets (DISTRIBUTING or post-distribution tickets needing close or submit)
+	const reconciliationEligibleTickets = $derived(
+		allTickets.filter(
+			(t) =>
+				t.status === 'DISTRIBUTING' ||
+				t.status === 'SHIFT_CLOSED' ||
+				t.status === 'RETURN_PENDING_RECEIPT' ||
+				t.status === 'RETURN_COMPLETED' ||
+				t.status === 'COMPLETED'
+		)
+	);
+
+	let selectedReconciliationTicketId = $state<string>('');
+
+	$effect(() => {
+		if (reconciliationEligibleTickets.length > 0) {
+			if (
+				!selectedReconciliationTicketId ||
+				!reconciliationEligibleTickets.some((t) => t._id === selectedReconciliationTicketId)
+			) {
+				if (
+					activeFoodTicket &&
+					reconciliationEligibleTickets.some((t) => t._id === activeFoodTicket._id)
+				) {
+					selectedReconciliationTicketId = activeFoodTicket._id;
+				} else if (
+					activeSuppliesTicket &&
+					reconciliationEligibleTickets.some((t) => t._id === activeSuppliesTicket._id)
+				) {
+					selectedReconciliationTicketId = activeSuppliesTicket._id;
+				} else {
+					selectedReconciliationTicketId = reconciliationEligibleTickets[0]._id;
+				}
+			}
+		}
+	});
+
+	const activeReconciliationTicket = $derived(
+		reconciliationEligibleTickets.find((t) => t._id === selectedReconciliationTicketId) ?? null
 	);
 
 	// Mutation for receiving cargo (IN_TRANSIT -> DISTRIBUTING)
@@ -175,8 +219,8 @@
 		</div>
 	</header>
 
-	<!-- Station Tabs (Slice 5.3, 5.4 & 5.5 operational modes) -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+	<!-- Station Tabs (Operational modes) -->
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
 		<!-- Tab 1: Receive Cargo -->
 		<button
 			type="button"
@@ -286,6 +330,30 @@
 				<div>
 					<p class="text-xs font-bold text-slate-900">4. รับคืนสิ่งของ</p>
 					<p class="text-2xs text-slate-500">Loan Return Counter</p>
+				</div>
+			</div>
+		</button>
+
+		<!-- Tab 5: Shift Close & Returns -->
+		<button
+			type="button"
+			onclick={() => (activeTab = 'reconciliation')}
+			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			'reconciliation'
+				? 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20'
+				: 'border-slate-200 bg-white hover:border-slate-300'}"
+		>
+			<div class="flex items-center gap-3">
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'reconciliation'
+						? 'bg-teal-600 text-white'
+						: 'bg-slate-100 text-slate-600'}"
+				>
+					<Lock class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-xs font-bold text-slate-900">5. ปิดรอบ & คืนของ</p>
+					<p class="text-2xs text-slate-500">Shift Close & Returns</p>
 				</div>
 			</div>
 		</button>
@@ -418,19 +486,35 @@
 						<label for="food-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
 							เลือกตั๋วอาหารที่ใช้งาน:
 						</label>
-						<select
-							id="food-ticket-select"
-							bind:value={selectedFoodTicketId}
-							class="h-8 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus:border-amber-500 focus:outline-none"
-						>
-							{#each distributingFoodTickets as t (t._id)}
-								<option value={t._id}>
-									{t.ticket_no} - {t.destination_location} ({t.items
-										.map((i) => i.item_name)
-										.join(', ')})
-								</option>
-							{/each}
-						</select>
+						<div class="min-w-0 flex-1">
+							<Select.Root type="single" bind:value={selectedFoodTicketId}>
+								<Select.Trigger
+									id="food-ticket-select"
+									aria-label="เลือกตั๋วอาหารที่ใช้งาน"
+									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+								>
+									<span class="truncate">
+										{#if activeFoodTicket}
+											{activeFoodTicket.ticket_no} - {activeFoodTicket.destination_location} ({activeFoodTicket.items
+												.map((i) => i.item_name)
+												.join(', ')})
+										{:else}
+											เลือกตั๋วอาหาร
+										{/if}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each distributingFoodTickets as t (t._id)}
+										<Select.Item
+											value={t._id}
+											label={`${t.ticket_no} - ${t.destination_location} (${t.items
+												.map((i) => i.item_name)
+												.join(', ')})`}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
 					</div>
 				{/if}
 
@@ -472,19 +556,35 @@
 						<label for="supplies-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
 							เลือกตั๋วพัสดุที่ใช้งาน:
 						</label>
-						<select
-							id="supplies-ticket-select"
-							bind:value={selectedSuppliesTicketId}
-							class="h-8 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus:border-indigo-500 focus:outline-none"
-						>
-							{#each distributingSuppliesTickets as t (t._id)}
-								<option value={t._id}>
-									{t.ticket_no} - {t.destination_location} ({t.items
-										.map((i) => i.item_name)
-										.join(', ')})
-								</option>
-							{/each}
-						</select>
+						<div class="min-w-0 flex-1">
+							<Select.Root type="single" bind:value={selectedSuppliesTicketId}>
+								<Select.Trigger
+									id="supplies-ticket-select"
+									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
+									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500"
+								>
+									<span class="truncate">
+										{#if activeSuppliesTicket}
+											{activeSuppliesTicket.ticket_no} - {activeSuppliesTicket.destination_location} ({activeSuppliesTicket.items
+												.map((i) => i.item_name)
+												.join(', ')})
+										{:else}
+											เลือกตั๋วพัสดุ
+										{/if}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each distributingSuppliesTickets as t (t._id)}
+										<Select.Item
+											value={t._id}
+											label={`${t.ticket_no} - ${t.destination_location} (${t.items
+												.map((i) => i.item_name)
+												.join(', ')})`}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
 					</div>
 				{/if}
 
@@ -499,5 +599,70 @@
 	{:else if activeTab === 'returns'}
 		<!-- TAB 4: Loan Return Surface (Slice 5.5A + 5.5B) -->
 		<LoanReturnCard shelterCode={currentShelterCode} />
+	{:else if activeTab === 'reconciliation'}
+		<!-- TAB 5: Shift Reconciliation & Close Surface -->
+		<div class="space-y-4">
+			{#if reconciliationEligibleTickets.length === 0}
+				<div
+					class="flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs"
+				>
+					<Lock class="mb-3 h-12 w-12 text-slate-300" />
+					<h3 class="text-sm font-bold text-slate-800">
+						ไม่มีตั๋วที่เปิดแจกจ่ายหรือรอส่งคืนในขณะนี้
+					</h3>
+					<p class="mt-1 max-w-md text-xs text-slate-500">
+						เมื่อตั๋วได้รับการตรวจรับเข้าจุดแจก (สถานะ DISTRIBUTING)
+						จะสามารถปิดรอบและกระทบยอดได้ที่แท็บนี้
+					</p>
+				</div>
+			{:else}
+				<!-- Reconciliation Ticket Selector Bar -->
+				{#if reconciliationEligibleTickets.length > 1}
+					<div
+						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+					>
+						<label
+							for="reconciliation-ticket-select"
+							class="shrink-0 text-xs font-bold text-slate-700"
+						>
+							เลือกตั๋วที่ต้องการปิดรอบ / กระทบยอด:
+						</label>
+						<div class="min-w-0 flex-1">
+							<Select.Root type="single" bind:value={selectedReconciliationTicketId}>
+								<Select.Trigger
+									id="reconciliation-ticket-select"
+									aria-label="เลือกตั๋วที่ต้องการปิดรอบหรือกระทบยอด"
+									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-teal-500"
+								>
+									<span class="truncate">
+										{#if activeReconciliationTicket}
+											{activeReconciliationTicket.ticket_no} [{activeReconciliationTicket.status}] - {activeReconciliationTicket.destination_location}
+											({activeReconciliationTicket.items.map((i) => i.item_name).join(', ')})
+										{:else}
+											เลือกตั๋วเพื่อกระทบยอด
+										{/if}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each reconciliationEligibleTickets as t (t._id)}
+										<Select.Item
+											value={t._id}
+											label={`${t.ticket_no} [${t.status}] - ${t.destination_location} (${t.items
+												.map((i) => i.item_name)
+												.join(', ')})`}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+					</div>
+				{/if}
+
+				<ShiftReconciliationCard
+					ticket={activeReconciliationTicket}
+					shelterCode={currentShelterCode}
+				/>
+			{/if}
+		</div>
 	{/if}
 </div>
