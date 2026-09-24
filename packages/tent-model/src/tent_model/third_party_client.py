@@ -24,9 +24,23 @@ class ThirdPartyClient(Document):
 	id: str = Field(alias="_id")
 	client_id: str
 	client_secret_hash: str
+	# Timestamp the current secret was (re)issued at — the plaintext is derived
+	# deterministically from `client_id` + `secret_issued_at` (see
+	# utils/secret_derivation.py), so the admin "view again" feature recomputes it
+	# instead of decrypting a stored ciphertext. Rotated on regenerate. `None` on docs
+	# created before this field existed (schema.md §9.6, draft-partner-client-secret-
+	# reveal-edit-delete) — those secrets cannot be recovered.
+	secret_issued_at: datetime | None = None
+	# Admin-chosen display name, unique case-insensitively. `None` only on docs created
+	# before the field existed (schema.md §9.6).
+	name: str | None = None
+	description: str | None = None
 	module_name: str
 	allowed_scopes: list[str] = Field(default_factory=list)
 	is_active: bool = True
+	# Soft-delete timestamp — set only once `is_active` is False (revoke first). `find_all`
+	# use-case queries filter this out; the doc itself is never hard-deleted (audit trail).
+	deleted_at: datetime | None = None
 	created_at: datetime
 	updated_at: datetime
 
@@ -34,4 +48,14 @@ class ThirdPartyClient(Document):
 		name = "third_party_clients"
 		indexes = [
 			IndexModel([("client_id", 1)], unique=True),
+			IndexModel(
+				[("name", 1)],
+				name="name_unique_ci",
+				unique=True,
+				collation={"locale": "en", "strength": 2},
+				# Only among rows still in the list — a soft-deleted client's name doesn't
+				# block reusing it (deleted_at is always present, never absent, so this must
+				# be an equality match on None rather than $exists).
+				partialFilterExpression={"name": {"$type": "string"}, "deleted_at": None},
+			),
 		]
